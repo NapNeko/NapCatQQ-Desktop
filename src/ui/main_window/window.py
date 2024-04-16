@@ -44,12 +44,12 @@ class MainWindow(MSFluentWindow):
         # 标题栏部分
         self.setTitleBar(CustomTitleBar(self))
         # 窗体大小以及设置打开时居中
-        self.setMinimumSize(900, 580)
+        self.setMinimumSize(900, 560)
         desktop = QApplication.screens()[0].availableGeometry()
         width, height = desktop.width(), desktop.height()
         self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)
         # 创建 Splash Screen
-        self.splashScreen = SplashScreen(MainWindowIcon.LOGO, self, True)
+        self.splashScreen = SplashScreen(":Global/logo.png", self, True)
         self.splashScreen.setIconSize(QSize(128, 128))
         self.splashScreen.raise_()
         # 显示窗体

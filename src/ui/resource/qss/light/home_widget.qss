@@ -2,7 +2,6 @@ HomeWidget {
     background-color: transparent;
 }
 
-
-#view {
+ViewWidget {
     background-color: transparent;
 }

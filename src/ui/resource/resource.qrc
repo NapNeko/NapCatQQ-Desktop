@@ -1,7 +1,15 @@
 <RCC>
+    <qresource prefix="Global">
+        <file>logo.png</file>
+    </qresource>
+
     <qresource  prefix="MainWindow">
         <file>image/MainWindow/Logo_black.svg</file>
         <file>image/MainWindow/Logo_white.svg</file>
+    </qresource>
+
+    <qresource prefix="HomePage">
+        <file>image/HomePage/home_page_bg.png</file>
     </qresource>
 
     <qresource prefix="QSS">

@@ -10,12 +10,13 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPixmap, QPainter, QColor, QBrush, QPainterPath
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from qfluentwidgets.components import ScrollArea
 from creart import add_creator, exists_module, create
 from creart.creator import AbstractCreator, CreateTargetInfo
 
 from src.ui.StyleSheet import StyleSheet
+from src.ui.home_page.view import ViewWidget
 
 if TYPE_CHECKING:
     from src.ui.main_window import MainWindow
@@ -30,20 +31,51 @@ class HomeWidget(ScrollArea):
         """
         初始化
         """
-        # 创建显示控件和布局
-        self.view = QWidget()
-        self.view.setObjectName("view")
-        self.vBoxLayout = QVBoxLayout(self.view)
+        # 背景 QPixmap
+        self.bg_pixmap = QPixmap(":HomePage/image/HomePage/home_page_bg.png")
+        self.update_bg_image()
+
+        # 创建显示控件
+        self.view = ViewWidget()
 
         # 设置 ScrollArea
         self.setParent(parent)
         self.setObjectName("HomePage")
+        self.setWidgetResizable(True)
         self.setWidget(self.view)
 
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
         return self
+
+    def update_bg_image(self) -> None:
+        """
+        用于更新图片大小
+        """
+        # 重新加载图片保证缩放后清晰
+        self.bg_pixmap = QPixmap(":HomePage/image/HomePage/home_page_bg.png")
+        self.bg_pixmap = self.bg_pixmap.scaled(
+            self.size(),
+            aspectMode=Qt.AspectRatioMode.KeepAspectRatioByExpanding,  # 等比缩放
+            mode=Qt.TransformationMode.SmoothTransformation  # 平滑效果
+        )
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        """
+        重写绘制事件绘制背景图片
+        """
+        painter = QPainter(self.viewport())
+        painter.drawPixmap(self.rect(), self.bg_pixmap)
+        super().paintEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        """
+        重写缩放事件
+        """
+        self.update_bg_image()
+        super().resizeEvent(event)
 
 
 class HomeWidgetClassCreator(AbstractCreator, ABC):
