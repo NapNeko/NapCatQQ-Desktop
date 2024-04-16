@@ -37,6 +37,11 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
+5. 编译资源文件(此处需要找到你pyside6-rcc.exe路径)
+```bush
+pyside6-rcc.exe src/ui/resource/resource.qrc -o src/ui/resource/resource.py
+```
+
 ### 启动
 
 ```bash

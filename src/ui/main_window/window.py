@@ -60,7 +60,7 @@ class MainWindow(MSFluentWindow):
         """
         设置侧边栏
         """
-        self.home_widget = HomeWidget()
+        self.home_widget = it(HomeWidget).initialize(self)
         self.test_widget2 = QWidget()
         self.test_widget2.setObjectName("2")
         self.test_widget3 = QWidget()
