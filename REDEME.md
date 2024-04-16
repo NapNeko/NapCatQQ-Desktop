@@ -1,0 +1,58 @@
+![NapCat-Desktop](https://socialify.git.ci/ruixiaotian/NapCat-Desktop/image?font=Raleway&logo=https%3A%2F%2Fraw.githubusercontent.com%2FNapNeko%2FNapCatQQ%2Fmain%2Flogo.png&name=1&pattern=Plus&theme=Light)
+
+
+## 关于项目
+
+这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供的图形用户界面（GUI），目的是让用户能够更快速、更直观地创建配置文件和启动脚本
+
+## 开始上手
+
+### 前置需求
+目前还在开发阶段,暂不提供编译完成的exe程序,如想运行请确保你包括以下环境:
+
+- Python 3.9以上版本
+- 想了一下好像没了
+
+### 安装
+1. 克隆仓库到你本地
+
+```bash
+git clone https://github.com/ruixiaotian/NapCat-Desktop.git
+```
+
+2. 进入项目目录
+```bash
+cd NapCat-Desktop
+```
+
+3. 创建虚拟环境(可选,此处使用venv)
+
+```bash
+python -m venv venv
+```
+
+4. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 启动
+
+```bash
+python src/main.py
+```
+
+## 许可证
+
+这个项目遵循 GPLv3 许可证，详情见[LICENSE](LICENSE)文件
+
+## 声明
+
+- 此项目仅用于学习 PySide6
+
+## 鸣谢
+- [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+- [PySide6](https://wiki.qt.io/Qt_for_Python)
+- [PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
+- [GraiaProject - creart](https://github.com/GraiaProject/creart)
