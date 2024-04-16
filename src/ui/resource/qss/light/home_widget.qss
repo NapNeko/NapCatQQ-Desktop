@@ -1,0 +1,8 @@
+HomeWidget {
+    background-color: transparent;
+}
+
+
+#view {
+    background-color: transparent;
+}

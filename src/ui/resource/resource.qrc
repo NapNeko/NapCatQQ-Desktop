@@ -1,0 +1,11 @@
+<RCC>
+    <qresource  prefix="MainWindow">
+        <file>image/MainWindow/Logo_black.svg</file>
+        <file>image/MainWindow/Logo_white.svg</file>
+    </qresource>
+
+    <qresource prefix="QSS">
+        <file>qss/dark/home_widget.qss</file>
+        <file>qss/light/home_widget.qss</file>
+    </qresource>
+</RCC>
