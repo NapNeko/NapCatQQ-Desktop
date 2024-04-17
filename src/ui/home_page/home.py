@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPixmap, QPainter, QColor, QBrush, QPainterPath
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from qfluentwidgets.components import ScrollArea
-from qfluentwidgets.common import Theme
+from qfluentwidgets.common import Theme, isDarkTheme
 from creart import add_creator, exists_module, create
 from creart.creator import AbstractCreator, CreateTargetInfo
 
@@ -66,7 +66,7 @@ class HomeWidget(ScrollArea):
         用于更新图片大小
         """
         # 重新加载图片保证缩放后清晰
-        if cfg.get(cfg.themeMode) == Theme.LIGHT:
+        if not isDarkTheme():
             self.bg_pixmap = QPixmap(":Global/image/Global/page_bg_light.png")
         else:
             self.bg_pixmap = QPixmap(":Global/image/Global/page_bg_dark.png")

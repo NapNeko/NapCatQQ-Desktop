@@ -7,7 +7,7 @@ from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QWidget
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor, Theme
+from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor, Theme, isDarkTheme
 from qfluentwidgets.components import (
     InfoBar,
     ScrollArea,
@@ -158,7 +158,7 @@ class SetupWidget(ScrollArea):
         用于更新图片大小
         """
         # 重新加载图片保证缩放后清晰
-        if cfg.get(cfg.themeMode) == Theme.LIGHT:
+        if not isDarkTheme():
             self.bg_pixmap = QPixmap(":Global/image/Global/page_bg_light.png")
         else:
             self.bg_pixmap = QPixmap(":Global/image/Global/page_bg_dark.png")
