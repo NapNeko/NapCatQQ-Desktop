@@ -2,4 +2,9 @@ HomeWidget,
 DisplayViewWidget,
 ButtonGroup {
     background-color: transparent;
+    border-color: transparent;
+}
+
+HomeWidget {
+    border-top-left-radius: 16px;
 }

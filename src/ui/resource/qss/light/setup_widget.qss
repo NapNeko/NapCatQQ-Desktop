@@ -1,0 +1,8 @@
+SetupWidget,
+#SetupView {
+    background-color: transparent;
+}
+
+SetupWidget {
+    border-top-left-radius: 16px;
+}

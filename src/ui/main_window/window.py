@@ -18,9 +18,10 @@ from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
 
 from src.ui.resource import resource
-from src.ui.icon import MainWindowIcon
+from src.ui.icon import NapCatDesktopIcon
 from src.ui.main_window.title_bar import CustomTitleBar
 from src.ui.home_page import HomeWidget
+from src.ui.setup_page import SetupWidget
 
 
 class MainWindow(MSFluentWindow):
@@ -65,8 +66,8 @@ class MainWindow(MSFluentWindow):
         self.test_widget2.setObjectName("2")
         self.test_widget3 = QWidget()
         self.test_widget3.setObjectName("3")
-        self.test_widget4 = QWidget()
-        self.test_widget4.setObjectName("4")
+        self.setup_widget = it(SetupWidget).initialize(self)
+
         # 添加子页面
         self.addSubInterface(
             interface=self.home_widget,
@@ -89,7 +90,7 @@ class MainWindow(MSFluentWindow):
         )
 
         self.addSubInterface(
-            interface=self.test_widget4,
+            interface=self.setup_widget,
             icon=FluentIcon.SETTING,
             text=self.tr("Setup"),
             position=NavigationItemPosition.BOTTOM

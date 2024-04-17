@@ -7,12 +7,13 @@ from loguru import logger
 from typing import TYPE_CHECKING
 from qfluentwidgets.window import MSFluentTitleBar
 from qframelesswindow.titlebar import MaximizeButton, MinimizeButton, CloseButton
+from qfluentwidgets.common import Theme
 
 from PySide6.QtCore import Qt, QUrl, QSize, QPoint, QRectF, QPointF
 from PySide6.QtGui import QIcon, QDesktopServices, QColor, QPainter, QPaintEvent, QPen, QPainterPath
 from PySide6.QtSvg import QSvgRenderer
 
-from src.ui.icon import MainWindowIcon
+from src.ui.icon import NapCatDesktopIcon
 
 if TYPE_CHECKING:
     from src.ui.main_window import MainWindow
@@ -34,7 +35,7 @@ class CustomTitleBar(MSFluentTitleBar):
 
     def set_title(self) -> None:
         self.setTitle("NapCat Desktop")
-        self.setIcon(MainWindowIcon.LOGO.path())
+        self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
 
     def set_buttons(self) -> None:
         """配置窗口控制按钮并初始化槽连接"""

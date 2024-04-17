@@ -12,11 +12,14 @@ from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPixmap, QPainter, QColor, QBrush, QPainterPath
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from qfluentwidgets.components import ScrollArea
+from qfluentwidgets.common import Theme
 from creart import add_creator, exists_module, create
 from creart.creator import AbstractCreator, CreateTargetInfo
 
-from src.ui.StyleSheet import StyleSheet
+from src.ui.style_sheet import StyleSheet
 from src.ui.home_page.display_view import DisplayViewWidget
+from src.ui.home_page.content_view import ContentViewWidget
+from src.core.config import cfg
 
 if TYPE_CHECKING:
     from src.ui.main_window import MainWindow
@@ -31,12 +34,8 @@ class HomeWidget(ScrollArea):
         """
         初始化
         """
-        # 背景 QPixmap
-        self.bg_pixmap = QPixmap(":HomePage/image/HomePage/home_page_bg.png")
-        self.update_bg_image()
-
         # 创建显示控件
-        self.view = DisplayViewWidget()
+        self.view = self.judge_view()
 
         # 设置 ScrollArea
         self.setParent(parent)
@@ -44,17 +43,34 @@ class HomeWidget(ScrollArea):
         self.setWidgetResizable(True)
         self.setWidget(self.view)
 
+        # 调用方法
+        self.update_bg_image()
+
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
         return self
+
+    @staticmethod
+    def judge_view():
+        """
+        用于判断加载哪个 Widget
+        """
+        if cfg.get(cfg.start_open_display_view):
+            return DisplayViewWidget()
+        else:
+            return ContentViewWidget()
 
     def update_bg_image(self) -> None:
         """
         用于更新图片大小
         """
         # 重新加载图片保证缩放后清晰
-        self.bg_pixmap = QPixmap(":HomePage/image/HomePage/home_page_bg.png")
+        if cfg.get(cfg.themeMode) == Theme.LIGHT:
+            self.bg_pixmap = QPixmap(":Global/image/Global/page_bg_light.png")
+        else:
+            self.bg_pixmap = QPixmap(":Global/image/Global/page_bg_dark.png")
+
         self.bg_pixmap = self.bg_pixmap.scaled(
             self.size(),
             aspectMode=Qt.AspectRatioMode.KeepAspectRatioByExpanding,  # 等比缩放

@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication
 from creart import it
 from loguru import logger
 
-from ui.main_window import MainWindow
+from src.ui.main_window import MainWindow
 
 NAPCAT_DESKTOP_LOGO = r"""
 

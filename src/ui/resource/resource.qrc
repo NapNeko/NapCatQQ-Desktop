@@ -1,19 +1,27 @@
 <RCC>
     <qresource prefix="Global">
         <file>logo.png</file>
+        <file>image/Global/page_bg_dark.png</file>
+        <file>image/Global/page_bg_light.png</file>
+    </qresource>
+
+    <qresource prefix="Icon">
+        <file>image/Icon/dark/Logo.svg</file>
+        <file>image/Icon/light/Logo.svg</file>
     </qresource>
 
     <qresource  prefix="MainWindow">
-        <file>image/MainWindow/Logo_black.svg</file>
-        <file>image/MainWindow/Logo_white.svg</file>
+
     </qresource>
 
     <qresource prefix="HomePage">
-        <file>image/HomePage/home_page_bg.png</file>
+
     </qresource>
 
     <qresource prefix="QSS">
         <file>qss/dark/home_widget.qss</file>
         <file>qss/light/home_widget.qss</file>
+        <file>qss/dark/setup_widget.qss</file>
+        <file>qss/light/setup_widget.qss</file>
     </qresource>
 </RCC>
