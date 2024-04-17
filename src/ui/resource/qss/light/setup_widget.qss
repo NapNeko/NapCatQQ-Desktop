@@ -1,0 +1,4 @@
+SetupWidget,
+#SetupView {
+    background-color: transparent;
+}

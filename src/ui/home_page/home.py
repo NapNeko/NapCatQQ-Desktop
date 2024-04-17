@@ -15,8 +15,10 @@ from qfluentwidgets.components import ScrollArea
 from creart import add_creator, exists_module, create
 from creart.creator import AbstractCreator, CreateTargetInfo
 
-from src.ui.StyleSheet import StyleSheet
+from src.ui.style_sheet import StyleSheet
 from src.ui.home_page.display_view import DisplayViewWidget
+from src.ui.home_page.content_view import ContentViewWidget
+from src.core.config import cfg
 
 if TYPE_CHECKING:
     from src.ui.main_window import MainWindow
@@ -32,11 +34,11 @@ class HomeWidget(ScrollArea):
         初始化
         """
         # 背景 QPixmap
-        self.bg_pixmap = QPixmap(":HomePage/image/HomePage/home_page_bg.png")
-        self.update_bg_image()
+        # self.bg_pixmap = QPixmap(":HomePage/image/HomePage/home_page_bg.png")
+        # self.update_bg_image()
 
         # 创建显示控件
-        self.view = DisplayViewWidget()
+        self.view = self.judge_view()
 
         # 设置 ScrollArea
         self.setParent(parent)
@@ -48,6 +50,16 @@ class HomeWidget(ScrollArea):
         StyleSheet.HOME_WIDGET.apply(self)
 
         return self
+
+    @staticmethod
+    def judge_view():
+        """
+        用于判断加载哪个 Widget
+        """
+        if cfg.get(cfg.start_open_display_view):
+            return DisplayViewWidget()
+        else:
+            return ContentViewWidget()
 
     def update_bg_image(self) -> None:
         """

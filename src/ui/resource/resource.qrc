@@ -15,5 +15,7 @@
     <qresource prefix="QSS">
         <file>qss/dark/home_widget.qss</file>
         <file>qss/light/home_widget.qss</file>
+        <file>qss/dark/setup_widget.qss</file>
+        <file>qss/light/setup_widget.qss</file>
     </qresource>
 </RCC>
