@@ -1,7 +1,5 @@
-HomeWidget {
-    background-color: transparent;
-}
-
-ViewWidget {
+HomeWidget,
+DisplayViewWidget,
+ButtonGroup {
     background-color: transparent;
 }

@@ -16,7 +16,7 @@ from creart import add_creator, exists_module, create
 from creart.creator import AbstractCreator, CreateTargetInfo
 
 from src.ui.StyleSheet import StyleSheet
-from src.ui.home_page.view import ViewWidget
+from src.ui.home_page.display_view import DisplayViewWidget
 
 if TYPE_CHECKING:
     from src.ui.main_window import MainWindow
@@ -36,7 +36,7 @@ class HomeWidget(ScrollArea):
         self.update_bg_image()
 
         # 创建显示控件
-        self.view = ViewWidget()
+        self.view = DisplayViewWidget()
 
         # 设置 ScrollArea
         self.setParent(parent)
