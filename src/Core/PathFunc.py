@@ -22,11 +22,11 @@ class PathFunc:
         self.config_dir_path = self.base_path / "config"
         self.config_path = self.config_dir_path / "config.json"
         self.tmp_path = self.base_path / "tmp"
-        self.napcat_path = self.base_path / "NapCat"
+        self.NapCatPath = self.base_path / "NapCat"
 
-        self.path_velidator()
+        self.pathVelidator()
 
-    def path_velidator(self) -> None:
+    def pathVelidator(self) -> None:
         """
         验证路径
         """
@@ -50,47 +50,47 @@ class PathFunc:
 
         logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 
-    def get_qq_path(self) -> Path | bool:
+    def getQQPath(self) -> Path | bool:
         """
         获取QQ路径
         :return: Path
         """
-        from src.core.config import cfg
+        from src.Core.Config import cfg
         try:
-            if Path(cfg.get(cfg.qq_path)) == Path.cwd():
+            if Path(cfg.get(cfg.QQPath)) == Path.cwd():
                 key = winreg.OpenKey(
                     key=winreg.HKEY_LOCAL_MACHINE,
                     sub_key=r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\QQ"
                 )
                 self.qq_path = Path(winreg.QueryValueEx(key, "UninstallString")[0]).parent
-                cfg.set(item=cfg.qq_path, value=str(self.qq_path), save=True)
+                cfg.set(item=cfg.QQPath, value=str(self.qq_path), save=True)
                 return self.qq_path
             else:
-                self.qq_path = cfg.get(cfg.qq_path)
+                self.qq_path = cfg.get(cfg.QQPath)
                 return self.qq_path
         except FileNotFoundError:
-            return False
+            return "No path found"
 
-    def get_napcat_path(self) -> Path:
+    def getNapCatPath(self) -> Path:
         """
         获取 NapCat 路径
         """
-        from src.core.config import cfg
-        if Path(cfg.get(cfg.napcat_path)) == Path.cwd():
-            cfg.set(item=cfg.napcat_path, value=str(self.napcat_path), save=True)
-            return self.napcat_path
-        return self.napcat_path
+        from src.Core.Config import cfg
+        if Path(cfg.get(cfg.NapCatPath)) == Path.cwd():
+            cfg.set(item=cfg.NapCatPath, value=str(self.NapCatPath), save=True)
+            return self.NapCatPath
+        return self.NapCatPath
 
 
 class PathFuncClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
     # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.core.path_func", "PathFunc"),)
+    targets = (CreateTargetInfo("src.Core.PathFunc", "PathFunc"),)
 
     # 静态方法available()，用于检查模块"PathFunc"是否存在，返回值为布尔型。
     @staticmethod
     def available() -> bool:
-        return exists_module("src.core.path_func")
+        return exists_module("src.Core.PathFunc")
 
     # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
     @staticmethod

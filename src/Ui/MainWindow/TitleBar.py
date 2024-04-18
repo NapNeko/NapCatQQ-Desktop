@@ -13,10 +13,10 @@ from PySide6.QtCore import Qt, QUrl, QSize, QPoint, QRectF, QPointF
 from PySide6.QtGui import QIcon, QDesktopServices, QColor, QPainter, QPaintEvent, QPen, QPainterPath
 from PySide6.QtSvg import QSvgRenderer
 
-from src.ui.icon import NapCatDesktopIcon
+from src.Ui.Icon import NapCatDesktopIcon
 
 if TYPE_CHECKING:
-    from src.ui.main_window import MainWindow
+    from src.Ui.MainWindow import MainWindow
 
 
 class CustomTitleBar(MSFluentTitleBar):

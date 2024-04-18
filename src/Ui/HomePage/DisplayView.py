@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets.common import setFont, FluentIcon
 from qfluentwidgets.components import ImageLabel, TitleLabel, PushButton, PrimaryPushButton
 
-from src.ui.style_sheet import StyleSheet
+from src.Ui.StyleSheet import StyleSheet
 
 
 class DisplayViewWidget(QWidget):
@@ -31,12 +31,12 @@ class DisplayViewWidget(QWidget):
         self.button_group.go_btn_signal.connect(self.go_btn_signal.emit)
 
         # 进行布局
-        self.set_layout()
+        self.__setlayout_()
 
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
-    def set_layout(self) -> None:
+    def __setlayout_(self) -> None:
         """
         对 ViewWidget 内控件进行布局
         """

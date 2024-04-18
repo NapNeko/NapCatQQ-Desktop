@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import sys
 from enum import Enum
 
 from PySide6.QtCore import QLocale
@@ -10,11 +9,7 @@ from qfluentwidgets.common import (
     ConfigSerializer, ColorConfigItem
 )
 
-from src.core.path_func import PathFunc
-
-
-def is_win11():
-    return sys.platform == 'win32' and sys.getwindowsversion().build >= 22000
+from src.Core.PathFunc import PathFunc
 
 
 class Language(Enum):
@@ -45,13 +40,13 @@ class Config(QConfig):
 
     # 路径项
     # 注意: default 为空字符串则默认以程序根目录为路径
-    qq_path = ConfigItem(
+    QQPath = ConfigItem(
         group="Path",
         name="QQPath",
         default="",
         validator=FolderValidator()
     )
-    napcat_path = ConfigItem(
+    NapCatPath = ConfigItem(
         group="Path",
         name="NapCatPath",
         default="",
@@ -59,7 +54,7 @@ class Config(QConfig):
     )
 
     # 启动项
-    start_open_display_view = ConfigItem(
+    StartOpenDisplayView = ConfigItem(
         group="StartupItem",
         name="StartOpenDisplayView",
         default=True,
@@ -67,7 +62,7 @@ class Config(QConfig):
     )
 
     # 新手引导配置项
-    beginner_guidance = ConfigItem(
+    BeginnerGuidance = ConfigItem(
         group="others",
         name="BeginnerGuidanceState",
         default=False,
@@ -75,13 +70,6 @@ class Config(QConfig):
     )
 
     # 个性化项目
-    micaEnabled = ConfigItem(
-        group="Personalize",
-        name="MicaEnabled",
-        default=is_win11(),
-        validator=BoolValidator()
-    )
-
     language = OptionsConfigItem(
         group="Personalize",
         name="Language",

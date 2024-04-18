@@ -17,11 +17,11 @@ from qfluentwidgets.window import MSFluentWindow, SplashScreen
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
 
-from src.ui.resource import resource
-from src.ui.icon import NapCatDesktopIcon
-from src.ui.main_window.title_bar import CustomTitleBar
-from src.ui.home_page import HomeWidget
-from src.ui.setup_page import SetupWidget
+from src.Ui.resource import resource
+from src.Ui.Icon import NapCatDesktopIcon
+from src.Ui.MainWindow.TitleBar import CustomTitleBar
+from src.Ui.HomePage import HomeWidget
+from src.Ui.SetupPage import SetupWidget
 
 
 class MainWindow(MSFluentWindow):
@@ -31,14 +31,14 @@ class MainWindow(MSFluentWindow):
         程序的主窗体
         """
         super().__init__()
-        self.set_window()
-        self.set_item()
+        self.setWindow()
+        self.setItem()
 
         # 组件加载完成结束 SplashScreen
         self.splashScreen.finish()
         logger.success("窗体构建完成")
 
-    def set_window(self) -> None:
+    def setWindow(self) -> None:
         """
         设置窗体
         """
@@ -57,7 +57,7 @@ class MainWindow(MSFluentWindow):
         self.show()
         logger.success("窗体设置完成")
 
-    def set_item(self) -> None:
+    def setItem(self) -> None:
         """
         设置侧边栏
         """
@@ -102,12 +102,12 @@ class MainWindow(MSFluentWindow):
 class MainWindowClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
     # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.ui.main_window.window", "MainWindow"),)
+    targets = (CreateTargetInfo("src.Ui.MainWindow.Window", "MainWindow"),)
 
     # 静态方法available()，用于检查模块"MainWindow"是否存在，返回值为布尔型。
     @staticmethod
     def available() -> bool:
-        return exists_module("src.ui.main_window.window")
+        return exists_module("src.Ui.MainWindow.Window")
 
     # 静态方法create()，用于创建MainWindow类的实例，返回值为MainWindow对象。
     @staticmethod

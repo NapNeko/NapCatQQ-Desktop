@@ -2,12 +2,12 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QStandardPaths, Signal
 from PySide6.QtGui import QPixmap, QPainter
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QFileDialog
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor, Theme, isDarkTheme
+from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor, isDarkTheme
 from qfluentwidgets.components import (
     InfoBar,
     ScrollArea,
@@ -20,13 +20,13 @@ from qfluentwidgets.components import (
     PushSettingCard,
 )
 
-from src.core.config import cfg
-from src.core.path_func import PathFunc
-from src.ui.style_sheet import StyleSheet
-from src.ui.icon import NapCatDesktopIcon
+from src.Core.Config import cfg
+from src.Core.PathFunc import PathFunc
+from src.Ui.Icon import NapCatDesktopIcon
+from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
-    from src.ui.main_window import MainWindow
+    from src.Ui.MainWindow import MainWindow
 
 
 class SetupWidget(ScrollArea):
@@ -53,120 +53,146 @@ class SetupWidget(ScrollArea):
         self.view.setObjectName("SetupView")
 
         # 调用方法
-        self.update_bg_image()
-        self.create_config_cards()
-        self.connect_signal()
-        self.set_layout()
+        self.updateBgImage()
+        self.__createConfigCards()
+        self.__connect_signal()
+        self.__setLayout_()
 
         # 应用样式表
         StyleSheet.SETUP_WIDGET.apply(self)
 
         return self
 
-    def create_config_cards(self) -> None:
+    def __createConfigCards(self) -> None:
         """
         创建配置项卡片
         """
 
         # 创建组 - 个性化
-        self.personal_group = SettingCardGroup(
+        self.personalGroup = SettingCardGroup(
             title=self.tr("Personalize"), parent=self.view
         )
         # 创建项
-        self.mica_card = SwitchSettingCard(
-            configItem=cfg.micaEnabled,
-            icon=FluentIcon.TRANSPARENT,
-            title=self.tr('Mica effect'),
-            content=self.tr('Apply semi transparent to windows and surfaces'),
-            parent=self.personal_group
-        )
-        self.theme_card = OptionsSettingCard(
+        self.themeCard = OptionsSettingCard(
             configItem=cfg.themeMode,
             icon=FluentIcon.BRUSH,
             title=self.tr("Switch themes"),
             content=self.tr("Switch the theme of the app"),
             texts=[self.tr("Light"), self.tr("Dark"), self.tr("Auto")],
-            parent=self.personal_group
+            parent=self.personalGroup
         )
-        self.theme_color_card = CustomColorSettingCard(
+        self.themeColorCard = CustomColorSettingCard(
             configItem=cfg.themeColor,
             icon=FluentIcon.PALETTE,
             title=self.tr("Theme Color"),
             content=self.tr("Choose a theme color"),
-            parent=self.personal_group
+            parent=self.personalGroup
         )
-        self.language_card = ComboBoxSettingCard(
+        self.languageCard = ComboBoxSettingCard(
             configItem=cfg.language,
             icon=FluentIcon.LANGUAGE,
             title=self.tr("Language"),
             content=self.tr("Set your preferred language for UI"),
             texts=["简体中文", "繁體中文", "English", self.tr("Use system setting")],
-            parent=self.personal_group
+            parent=self.personalGroup
         )
 
         # 创建组 - 路径
-        self.path_group = SettingCardGroup(
+        self.pathGroup = SettingCardGroup(
             title=self.tr("Path"), parent=self.view
         )
-        self.qq_path_card = PushSettingCard(
+        self.QQPathCard = PushSettingCard(
             icon=NapCatDesktopIcon.QQ,
             title=self.tr("QQ installation path"),
-            content=str(it(PathFunc).get_qq_path()),
+            content=str(it(PathFunc).getQQPath()),
             text=self.tr("Choose folder"),
-            parent=self.path_group
+            parent=self.pathGroup
         )
-
-        self.napcat_path_card = PushSettingCard(
+        self.NapCatPathCard = PushSettingCard(
             icon=FluentIcon.GITHUB,
             title=self.tr("NapCat path"),
-            content=str(it(PathFunc).get_napcat_path()),
+            content=str(it(PathFunc).getNapCatPath()),
             text=self.tr("Choose folder"),
-            parent=self.path_group
+            parent=self.pathGroup
         )
 
-    def set_layout(self) -> None:
+    def __setLayout_(self) -> None:
         """
         控件布局
         """
         # 将卡片添加到组
-        self.personal_group.addSettingCard(self.mica_card)
-        self.personal_group.addSettingCard(self.theme_card)
-        self.personal_group.addSettingCard(self.theme_color_card)
-        self.personal_group.addSettingCard(self.language_card)
+        self.personalGroup.addSettingCard(self.themeCard)
+        self.personalGroup.addSettingCard(self.themeColorCard)
+        self.personalGroup.addSettingCard(self.languageCard)
 
-        self.path_group.addSettingCard(self.qq_path_card)
-        self.path_group.addSettingCard(self.napcat_path_card)
+        self.pathGroup.addSettingCard(self.QQPathCard)
+        self.pathGroup.addSettingCard(self.NapCatPathCard)
 
         # 添加到布局
-        self.expand_layout.addWidget(self.personal_group)
-        self.expand_layout.addWidget(self.path_group)
+        self.expand_layout.addWidget(self.personalGroup)
+        self.expand_layout.addWidget(self.pathGroup)
         self.expand_layout.setContentsMargins(15, 5, 15, 5)
         self.view.setLayout(self.expand_layout)
 
-    def connect_signal(self) -> None:
+    def __connect_signal(self) -> None:
         """
         信号处理
         """
         # 连接重启提示
-        cfg.appRestartSig.connect(self.show_restart_tooltip)
+        cfg.appRestartSig.connect(self.__showRestartTooltip)
 
         # 连接个性化相关
-        self.theme_card.optionChanged.connect(self.theme_mode_changed)
-        self.theme_color_card.colorChanged.connect(
+        self.themeCard.optionChanged.connect(self.__themeModeChanged)
+        self.themeColorCard.colorChanged.connect(
             lambda color: setThemeColor(color, save=True, lazy=True)
         )
 
+        # 连接路径相关
+        self.QQPathCard.clicked.connect(self.__onQQFolderCardClicked)
+        self.NapCatPathCard.clicked.connect(self.__onNapCatFolderCardClicked)
+
+    def __onQQFolderCardClicked(self) -> None:
+        """
+        选择 QQ 路径的设置卡槽函数
+        """
+        folder = self.__selectFolder()
+        if folder:
+            cfg.set(cfg.QQPath, folder, save=True)
+            self.QQPathCard.setContent(folder)
+
+    def __onNapCatFolderCardClicked(self) -> None:
+        """
+        选择 NapCat 路径的设置卡槽函数
+        """
+        folder = self.__selectFolder()
+        if folder:
+            cfg.set(cfg.NapCatPath, folder, save=True)
+            self.NapCatPathCard.setContent(folder)
+
+    def __selectFolder(self) -> str:
+        """
+        选择文件夹的槽函数
+        """
+        folder = QFileDialog.getExistingDirectory(
+            parent=self,
+            caption=self.tr("Chosse folder"),
+            dir=QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.DesktopLocation
+            )
+        )
+        return folder
+
     @staticmethod
-    def theme_mode_changed(theme) -> None:
+    def __themeModeChanged(theme) -> None:
         """
         主题切换槽函数
         """
-        from src.ui.main_window import MainWindow
+        from src.Ui.MainWindow import MainWindow
         setTheme(cfg.get(theme), save=True, lazy=True)
-        it(MainWindow).home_widget.update_bg_image()
-        it(MainWindow).setup_widget.update_bg_image()
+        it(MainWindow).home_widget.updateBgImage()
+        it(MainWindow).setup_widget.updateBgImage()
 
-    def show_restart_tooltip(self) -> None:
+    def __showRestartTooltip(self) -> None:
         """
         显示重启提示
         """
@@ -178,7 +204,7 @@ class SetupWidget(ScrollArea):
             parent=self
         )
 
-    def update_bg_image(self) -> None:
+    def updateBgImage(self) -> None:
         """
         用于更新图片大小
         """
@@ -207,19 +233,19 @@ class SetupWidget(ScrollArea):
         """
         重写缩放事件
         """
-        self.update_bg_image()
+        self.updateBgImage()
         super().resizeEvent(event)
 
 
 class SetupWidgetClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
     # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.ui.setup_page.setup_widget", "SetupWidget"),)
+    targets = (CreateTargetInfo("src.Ui.SetupPage.SetupWidget", "SetupWidget"),)
 
     # 静态方法available()，用于检查模块"SetupWidget"是否存在，返回值为布尔型。
     @staticmethod
     def available() -> bool:
-        return exists_module("src.ui.setup_page.setup_widget")
+        return exists_module("src.Ui.SetupPage.SetupWidget")
 
     # 静态方法create()，用于创建SetupWidget类的实例，返回值为SetupWidget对象。
     @staticmethod
