@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from abc import ABC
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QPainter
@@ -21,7 +21,9 @@ from qfluentwidgets.components import (
 )
 
 from src.core.config import cfg
+from src.core.path_func import PathFunc
 from src.ui.style_sheet import StyleSheet
+from src.ui.icon import NapCatDesktopIcon
 
 if TYPE_CHECKING:
     from src.ui.main_window import MainWindow
@@ -35,7 +37,7 @@ class SetupWidget(ScrollArea):
         """
         super().__init__()
 
-    def initialize(self, parent: "MainWindow") -> "SetupWidget":
+    def initialize(self, parent: "MainWindow") -> Self:
         """
         初始化
         """
@@ -103,6 +105,24 @@ class SetupWidget(ScrollArea):
         )
 
         # 创建组 - 路径
+        self.path_group = SettingCardGroup(
+            title=self.tr("Path"), parent=self.view
+        )
+        self.qq_path_card = PushSettingCard(
+            icon=NapCatDesktopIcon.QQ,
+            title=self.tr("QQ installation path"),
+            content=str(it(PathFunc).get_qq_path()),
+            text=self.tr("Choose folder"),
+            parent=self.path_group
+        )
+
+        self.napcat_path_card = PushSettingCard(
+            icon=FluentIcon.GITHUB,
+            title=self.tr("NapCat path"),
+            content=str(it(PathFunc).get_napcat_path()),
+            text=self.tr("Choose folder"),
+            parent=self.path_group
+        )
 
     def set_layout(self) -> None:
         """
@@ -114,12 +134,16 @@ class SetupWidget(ScrollArea):
         self.personal_group.addSettingCard(self.theme_color_card)
         self.personal_group.addSettingCard(self.language_card)
 
+        self.path_group.addSettingCard(self.qq_path_card)
+        self.path_group.addSettingCard(self.napcat_path_card)
+
         # 添加到布局
         self.expand_layout.addWidget(self.personal_group)
+        self.expand_layout.addWidget(self.path_group)
         self.expand_layout.setContentsMargins(15, 5, 15, 5)
         self.view.setLayout(self.expand_layout)
 
-    def connect_signal(self):
+    def connect_signal(self) -> None:
         """
         信号处理
         """
@@ -133,7 +157,7 @@ class SetupWidget(ScrollArea):
         )
 
     @staticmethod
-    def theme_mode_changed(theme):
+    def theme_mode_changed(theme) -> None:
         """
         主题切换槽函数
         """
@@ -142,13 +166,14 @@ class SetupWidget(ScrollArea):
         it(MainWindow).home_widget.update_bg_image()
         it(MainWindow).setup_widget.update_bg_image()
 
-    def show_restart_tooltip(self):
+    def show_restart_tooltip(self) -> None:
         """
         显示重启提示
         """
         InfoBar.success(
             self.tr('Updated successfully'),
             self.tr('Configuration takes effect after restart'),
+            orient=Qt.Orientation.Vertical,
             duration=1500,
             parent=self
         )

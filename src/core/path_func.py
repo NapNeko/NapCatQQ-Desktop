@@ -22,6 +22,7 @@ class PathFunc:
         self.config_dir_path = self.base_path / "config"
         self.config_path = self.config_dir_path / "config.json"
         self.tmp_path = self.base_path / "tmp"
+        self.napcat_path = self.base_path / "NapCat"
 
         self.path_velidator()
 
@@ -47,9 +48,9 @@ class PathFunc:
             logger.warning("存在一个名为 tmp 的文件, 请检查")
         logger.success("Tmp Path 验证完成")
 
-        logger.success(f"{'-' * 10}路径验证完成{'-' * 10}")
+        logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 
-    def get_qq_path(self) -> Path:
+    def get_qq_path(self) -> Path | bool:
         """
         获取QQ路径
         :return: Path
@@ -62,13 +63,23 @@ class PathFunc:
                     sub_key=r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\QQ"
                 )
                 self.qq_path = Path(winreg.QueryValueEx(key, "UninstallString")[0]).parent
-                cfg.set(item=cfg.qq_path, value=str(path), save=True)
+                cfg.set(item=cfg.qq_path, value=str(self.qq_path), save=True)
                 return self.qq_path
             else:
                 self.qq_path = cfg.get(cfg.qq_path)
                 return self.qq_path
         except FileNotFoundError:
             return False
+
+    def get_napcat_path(self) -> Path:
+        """
+        获取 NapCat 路径
+        """
+        from src.core.config import cfg
+        if Path(cfg.get(cfg.napcat_path)) == Path.cwd():
+            cfg.set(item=cfg.napcat_path, value=str(self.napcat_path), save=True)
+            return self.napcat_path
+        return self.napcat_path
 
 
 class PathFuncClassCreator(AbstractCreator, ABC):

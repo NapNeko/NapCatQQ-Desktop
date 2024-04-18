@@ -6,8 +6,10 @@
     </qresource>
 
     <qresource prefix="Icon">
-        <file>image/Icon/dark/Logo.svg</file>
-        <file>image/Icon/light/Logo.svg</file>
+        <file>image/Icon/black/Logo.svg</file>
+        <file>image/Icon/white/Logo.svg</file>
+        <file>image/Icon/black/QQ.svg</file>
+        <file>image/Icon/white/QQ.svg</file>
     </qresource>
 
     <qresource  prefix="MainWindow">

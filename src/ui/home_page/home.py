@@ -6,7 +6,7 @@
 
 from abc import ABC
 from loguru import logger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPixmap, QPainter, QColor, QBrush, QPainterPath
@@ -30,7 +30,7 @@ class HomeWidget(ScrollArea):
     def __init__(self):
         super().__init__()
 
-    def initialize(self, parent: "MainWindow") -> "HomeWidget":
+    def initialize(self, parent: "MainWindow") -> Self:
         """
         初始化
         """
