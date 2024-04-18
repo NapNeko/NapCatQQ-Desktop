@@ -91,6 +91,14 @@ class Config(QConfig):
         restart=True
     )
 
+    # 隐藏提示项
+    HideUsGoBtnTips = ConfigItem(
+        group="HideTips",
+        name="HideUsingGoBtnTips",
+        default=False,
+        validator=BoolValidator()
+    )
+
 
 cfg = Config()
 qconfig.load(it(PathFunc).config_path, cfg)

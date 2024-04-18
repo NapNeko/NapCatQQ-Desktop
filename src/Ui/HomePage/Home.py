@@ -5,22 +5,22 @@
 """
 
 from abc import ABC
-from loguru import logger
 from typing import TYPE_CHECKING, Self
 
-from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QPixmap, QPainter, QColor, QBrush, QPainterPath
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
-from qfluentwidgets.components import ScrollArea
-from qfluentwidgets.common import Theme, isDarkTheme
-from creart import add_creator, exists_module, create
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QPainter
+from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
+from qfluentwidgets.common import isDarkTheme
+from qfluentwidgets.components import (
+    ScrollArea, InfoBar, InfoBarIcon, InfoBarPosition, PushButton
+)
 
-from src.Ui.StyleSheet import StyleSheet
-from src.Ui.HomePage.DisplayView import DisplayViewWidget
-from src.Ui.HomePage.ContentView import ContentViewWidget
-from src.Core.Config import cfg
 from src.Core.Config import StartOpenHomePageViewEnum as SE
+from src.Core.Config import cfg
+from src.Ui.HomePage.ContentView import ContentViewWidget
+from src.Ui.HomePage.DisplayView import DisplayViewWidget
+from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
@@ -36,9 +36,12 @@ class HomeWidget(ScrollArea):
         初始化
         """
         # 创建显示控件
-        self.view = self.judgeView()
+        self.view = self.__judgeView()
 
-        # 设置 ScrollArea
+        # 设置 View 和 ScrollArea
+        if isinstance(self.view, DisplayViewWidget):
+            self.view.go_btn_signal.connect(self.__goBtnSlot)
+
         self.setParent(parent)
         self.setObjectName("HomePage")
         self.setWidgetResizable(True)
@@ -52,16 +55,48 @@ class HomeWidget(ScrollArea):
 
         return self
 
+    def __goBtnSlot(self):
+        """
+        Start Using 的槽函数
+        """
+        self.view.deleteLater()
+        self.view = ContentViewWidget()
+        self.takeWidget()
+        self.setWidget(self.view)
+
+        if cfg.get(cfg.HideUsGoBtnTips):
+            # 是否隐藏提示
+            return
+
+        info = InfoBar(
+            icon=InfoBarIcon.INFORMATION,
+            title="Tips",
+            content=self.tr(
+                "You can choose the page to display at \n"
+                "startup in the settings page"
+            ),
+            orient=Qt.Orientation.Vertical,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            duration=10000,
+            parent=self
+        )
+        info_button = PushButton(self.tr("Don't show again"))
+        info_button.clicked.connect(
+            lambda: cfg.set(cfg.HideUsGoBtnTips, True, True)
+        )
+        info_button.clicked.connect(info.close)
+        info.addWidget(info_button)
+        info.show()
+
     @staticmethod
-    def judgeView():
+    def __judgeView():
         """
         用于判断加载哪个 Widget
         """
         star_page = cfg.get(cfg.StartOpenHomePageView)
-        if star_page == SE.DISPLAY_VIEW:
-            return DisplayViewWidget()
-        else:
-            return ContentViewWidget()
+        judge = star_page == SE.DISPLAY_VIEW
+        iDisplayViewWidget() if judge else ContentViewWidget()
 
     def updateBgImage(self) -> None:
         """
