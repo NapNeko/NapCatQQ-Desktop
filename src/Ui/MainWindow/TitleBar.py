@@ -3,15 +3,15 @@
 """
 构建标题栏
 """
-from loguru import logger
 from typing import TYPE_CHECKING
+
+from PySide6.QtCore import Qt, QRectF, QPointF
+from PySide6.QtGui import QPainter, QPaintEvent, QPen, QPainterPath
+from PySide6.QtSvg import QSvgRenderer
+from loguru import logger
+from qfluentwidgets.common import Theme
 from qfluentwidgets.window import MSFluentTitleBar
 from qframelesswindow.titlebar import MaximizeButton, MinimizeButton, CloseButton
-from qfluentwidgets.common import Theme
-
-from PySide6.QtCore import Qt, QUrl, QSize, QPoint, QRectF, QPointF
-from PySide6.QtGui import QIcon, QDesktopServices, QColor, QPainter, QPaintEvent, QPen, QPainterPath
-from PySide6.QtSvg import QSvgRenderer
 
 from src.Ui.Icon import NapCatDesktopIcon
 

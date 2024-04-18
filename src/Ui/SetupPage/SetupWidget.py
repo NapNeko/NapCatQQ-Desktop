@@ -2,7 +2,7 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
-from PySide6.QtCore import Qt, QStandardPaths, Signal
+from PySide6.QtCore import Qt, QStandardPaths
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QWidget, QFileDialog
 from creart import add_creator, exists_module, it
@@ -16,7 +16,6 @@ from qfluentwidgets.components import (
     OptionsSettingCard,
     CustomColorSettingCard,
     ComboBoxSettingCard,
-    SwitchSettingCard,
     PushSettingCard,
 )
 

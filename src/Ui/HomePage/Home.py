@@ -90,13 +90,13 @@ class HomeWidget(ScrollArea):
         info.show()
 
     @staticmethod
-    def __judgeView():
+    def __judge_view() -> DisplayViewWidget | ContentViewWidget:
         """
-        用于判断加载哪个 Widget
+        判断并加载相应的 Widget。
+        根据配置确定是打开首页视图还是内容视图。
         """
-        star_page = cfg.get(cfg.StartOpenHomePageView)
-        judge = star_page == SE.DISPLAY_VIEW
-        iDisplayViewWidget() if judge else ContentViewWidget()
+        start_page = cfg.get(cfg.StartOpenHomePageView)
+        return DisplayViewWidget() if start_page == SE.DISPLAY_VIEW else ContentViewWidget()
 
     def updateBgImage(self) -> None:
         """

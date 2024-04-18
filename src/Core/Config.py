@@ -5,8 +5,7 @@ from PySide6.QtCore import QLocale
 from creart import it
 from qfluentwidgets.common import (
     qconfig, QConfig, ConfigItem, BoolValidator, FolderValidator,
-    OptionsConfigItem, OptionsValidator, EnumSerializer, Theme,
-    ConfigSerializer, ColorConfigItem
+    OptionsConfigItem, OptionsValidator, EnumSerializer, ConfigSerializer
 )
 
 from src.Core.PathFunc import PathFunc

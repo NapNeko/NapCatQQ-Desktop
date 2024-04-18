@@ -7,9 +7,6 @@ from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
 
-from PySide6.QtCore import Qt
-from qfluentwidgets.components import InfoBar
-
 
 class PathFunc:
 

@@ -5,22 +5,18 @@
 """
 
 from abc import ABC
+
+from PySide6.QtCore import QSize
+from PySide6.QtWidgets import QApplication, QWidget
 from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
-
-from PySide6.QtWidgets import QApplication, QWidget
-from PySide6.QtCore import QSize
-from PySide6.QtGui import QDesktopServices
-
-from qfluentwidgets.window import MSFluentWindow, SplashScreen
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
+from qfluentwidgets.window import MSFluentWindow, SplashScreen
 
-from src.Ui.resource import resource
-from src.Ui.Icon import NapCatDesktopIcon
-from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.HomePage import HomeWidget
+from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.SetupPage import SetupWidget
 
 
