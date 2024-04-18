@@ -90,7 +90,7 @@ class HomeWidget(ScrollArea):
         info.show()
 
     @staticmethod
-    def __judge_view() -> DisplayViewWidget | ContentViewWidget:
+    def __judgeView() -> DisplayViewWidget | ContentViewWidget:
         """
         判断并加载相应的 Widget。
         根据配置确定是打开首页视图还是内容视图。
