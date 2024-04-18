@@ -15,6 +15,7 @@ from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
 from qfluentwidgets.window import MSFluentWindow, SplashScreen
 
+from src.Ui.resource import resource
 from src.Ui.HomePage import HomeWidget
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.SetupPage import SetupWidget
