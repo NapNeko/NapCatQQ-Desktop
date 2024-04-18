@@ -20,6 +20,7 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Core.Config import cfg
+from src.Core.Config import StartOpenHomePageViewEnum as SE
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
@@ -56,7 +57,8 @@ class HomeWidget(ScrollArea):
         """
         用于判断加载哪个 Widget
         """
-        if cfg.get(cfg.StartOpenDisplayView):
+        star_page = cfg.get(cfg.StartOpenHomePageView)
+        if star_page == SE.DISPLAY_VIEW:
             return DisplayViewWidget()
         else:
             return ContentViewWidget()

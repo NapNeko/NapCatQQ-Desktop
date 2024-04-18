@@ -1,5 +1,6 @@
 HomeWidget,
 DisplayViewWidget,
+ContentViewWidget,
 ButtonGroup {
     background-color: transparent;
     border-color: transparent;

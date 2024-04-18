@@ -68,6 +68,23 @@ class SetupWidget(ScrollArea):
         创建配置项卡片
         """
 
+        # 创建组 - 启动项
+        self.startGroup = SettingCardGroup(
+            title=self.tr("Startup Item"), parent=self.view
+        )
+        self.startOpenHomePageViewCard = OptionsSettingCard(
+            configItem=cfg.StartOpenHomePageView,
+            icon=FluentIcon.COPY,
+            title=self.tr("Switch HomePage View"),
+            content=self.tr(
+                "Select the page on your homepage when you start"
+            ),
+            texts=[
+                self.tr("A useless display page"), self.tr("Function page")
+            ],
+            parent=self.startGroup
+        )
+
         # 创建组 - 个性化
         self.personalGroup = SettingCardGroup(
             title=self.tr("Personalize"), parent=self.view
@@ -121,6 +138,8 @@ class SetupWidget(ScrollArea):
         控件布局
         """
         # 将卡片添加到组
+        self.startGroup.addSettingCard(self.startOpenHomePageViewCard)
+
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.themeColorCard)
         self.personalGroup.addSettingCard(self.languageCard)
@@ -129,6 +148,7 @@ class SetupWidget(ScrollArea):
         self.pathGroup.addSettingCard(self.NapCatPathCard)
 
         # 添加到布局
+        self.expand_layout.addWidget(self.startGroup)
         self.expand_layout.addWidget(self.personalGroup)
         self.expand_layout.addWidget(self.pathGroup)
         self.expand_layout.setContentsMargins(15, 5, 15, 5)
@@ -140,6 +160,11 @@ class SetupWidget(ScrollArea):
         """
         # 连接重启提示
         cfg.appRestartSig.connect(self.__showRestartTooltip)
+
+        # 连接启动相关
+        self.startOpenHomePageViewCard.optionChanged.connect(
+            lambda value: cfg.set(cfg.StartOpenHomePageView, value.value, True)
+        )
 
         # 连接个性化相关
         self.themeCard.optionChanged.connect(self.__themeModeChanged)

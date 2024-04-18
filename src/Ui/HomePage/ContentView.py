@@ -10,7 +10,7 @@ from src.Ui.StyleSheet import StyleSheet
 
 class ContentViewWidget(QWidget):
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         初始化
         """
@@ -18,4 +18,5 @@ class ContentViewWidget(QWidget):
         super().__init__()
         self.setObjectName("content_view")
 
-        #
+        # 应用样式表
+        StyleSheet.HOME_WIDGET.apply(self)

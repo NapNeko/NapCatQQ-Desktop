@@ -12,6 +12,16 @@ from qfluentwidgets.common import (
 from src.Core.PathFunc import PathFunc
 
 
+class StartOpenHomePageViewEnum(Enum):
+    """启动页面枚举"""
+    DISPLAY_VIEW = "DisplayView"
+    CONTENT_VIEW = "ContentView"
+
+    @staticmethod
+    def values():
+        return [value.value for value in StartOpenHomePageViewEnum]
+
+
 class Language(Enum):
     """语言枚举"""
 
@@ -54,11 +64,13 @@ class Config(QConfig):
     )
 
     # 启动项
-    StartOpenDisplayView = ConfigItem(
+    StartOpenHomePageView = OptionsConfigItem(
         group="StartupItem",
-        name="StartOpenDisplayView",
-        default=True,
-        validator=BoolValidator()
+        name="StartOpenHomePageView",
+        default=StartOpenHomePageViewEnum.DISPLAY_VIEW,
+        validator=OptionsValidator(StartOpenHomePageViewEnum),
+        serializer=EnumSerializer(StartOpenHomePageViewEnum),
+        restart=True
     )
 
     # 新手引导配置项
