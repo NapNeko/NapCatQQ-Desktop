@@ -16,9 +16,11 @@ from qfluentwidgets.components import NavigationItemPosition
 from qfluentwidgets.window import MSFluentWindow, SplashScreen
 
 from src.Ui.resource import resource
-from src.Ui.HomePage import HomeWidget
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.SetupPage import SetupWidget
+from src.Ui.HomePage import HomeWidget
+from src.Ui.AddPage import AddWidget
+from src.Ui.BotListPage import BotListWidget
 
 
 class MainWindow(MSFluentWindow):
@@ -58,12 +60,10 @@ class MainWindow(MSFluentWindow):
         """
         设置侧边栏
         """
-        self.home_widget = it(HomeWidget).initialize(self)
-        self.test_widget2 = QWidget()
-        self.test_widget2.setObjectName("2")
-        self.test_widget3 = QWidget()
-        self.test_widget3.setObjectName("3")
         self.setup_widget = it(SetupWidget).initialize(self)
+        self.home_widget = it(HomeWidget).initialize(self)
+        self.add_widget = it(AddWidget).initialize(self)
+        self.bot_list_widget = it(BotListWidget).initialize(self)
 
         # 添加子页面
         self.addSubInterface(
@@ -74,13 +74,13 @@ class MainWindow(MSFluentWindow):
         )
 
         self.addSubInterface(
-            interface=self.test_widget2,
+            interface=self.add_widget,
             icon=FluentIcon.ADD_TO,
             text=self.tr("Add Bot"),
             position=NavigationItemPosition.TOP
         )
         self.addSubInterface(
-            interface=self.test_widget3,
+            interface=self.bot_list_widget,
             icon=FluentIcon.MENU,
             text=self.tr("Bot List"),
             position=NavigationItemPosition.TOP

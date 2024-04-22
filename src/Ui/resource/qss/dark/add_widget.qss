@@ -1,0 +1,9 @@
+AddWidget {
+    background: transparent;
+    border-color: transparent;
+}
+
+AddWidget {
+    border-top-left-radius: 16px;
+}
+

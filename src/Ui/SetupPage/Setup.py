@@ -3,14 +3,12 @@ from abc import ABC
 from typing import TYPE_CHECKING, Self
 
 from PySide6.QtCore import Qt, QStandardPaths
-from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QWidget, QFileDialog
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor, isDarkTheme
+from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor
 from qfluentwidgets.components import (
     InfoBar,
-    ScrollArea,
     ExpandLayout,
     SettingCardGroup,
     OptionsSettingCard,
@@ -21,6 +19,7 @@ from qfluentwidgets.components import (
 
 from src.Core.Config import cfg
 from src.Core.PathFunc import PathFunc
+from src.Ui import PageBase
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.StyleSheet import StyleSheet
 
@@ -28,7 +27,7 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class SetupWidget(ScrollArea):
+class SetupWidget(PageBase):
 
     def __init__(self) -> None:
         """
@@ -228,48 +227,16 @@ class SetupWidget(ScrollArea):
             parent=self
         )
 
-    def updateBgImage(self) -> None:
-        """
-        用于更新图片大小
-        """
-        # 重新加载图片保证缩放后清晰
-        if not isDarkTheme():
-            self.bg_pixmap = QPixmap(":Global/image/Global/page_bg_light.png")
-        else:
-            self.bg_pixmap = QPixmap(":Global/image/Global/page_bg_dark.png")
-
-        self.bg_pixmap = self.bg_pixmap.scaled(
-            self.size(),
-            aspectMode=Qt.AspectRatioMode.KeepAspectRatioByExpanding,  # 等比缩放
-            mode=Qt.TransformationMode.SmoothTransformation  # 平滑效果
-        )
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        """
-        重写绘制事件绘制背景图片
-        """
-        painter = QPainter(self.viewport())
-        painter.drawPixmap(self.rect(), self.bg_pixmap)
-        super().paintEvent(event)
-
-    def resizeEvent(self, event) -> None:
-        """
-        重写缩放事件
-        """
-        self.updateBgImage()
-        super().resizeEvent(event)
-
 
 class SetupWidgetClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
     # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Ui.SetupPage.SetupWidget", "SetupWidget"),)
+    targets = (CreateTargetInfo("src.Ui.SetupPage.Setup", "SetupWidget"),)
 
-    # 静态方法available()，用于检查模块"SetupWidget"是否存在，返回值为布尔型。
+    # 静态方法available()，用于检查模块"Setup"是否存在，返回值为布尔型。
     @staticmethod
     def available() -> bool:
-        return exists_module("src.Ui.SetupPage.SetupWidget")
+        return exists_module("src.Ui.SetupPage.Setup")
 
     # 静态方法create()，用于创建SetupWidget类的实例，返回值为SetupWidget对象。
     @staticmethod

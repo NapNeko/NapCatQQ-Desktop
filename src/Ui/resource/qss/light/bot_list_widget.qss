@@ -1,0 +1,8 @@
+BotListWidget {
+    background: transparent;
+    border-color: transparent;
+}
+
+BotListWidget {
+    border-top-left-radius: 16px;
+}
