@@ -54,6 +54,8 @@ class MainWindow(MSFluentWindow):
         self.splashScreen.raise_()
         # 显示窗体
         self.show()
+        # 挂起
+        QApplication.processEvents()
         logger.success("窗体设置完成")
 
     def setItem(self) -> None:
