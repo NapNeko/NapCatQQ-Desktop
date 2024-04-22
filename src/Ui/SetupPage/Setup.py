@@ -149,7 +149,7 @@ class SetupWidget(PageBase):
         self.expand_layout.addWidget(self.startGroup)
         self.expand_layout.addWidget(self.personalGroup)
         self.expand_layout.addWidget(self.pathGroup)
-        self.expand_layout.setContentsMargins(15, 5, 15, 5)
+        self.expand_layout.setContentsMargins(20, 10, 30, 10)
         self.view.setLayout(self.expand_layout)
 
     def __connect_signal(self) -> None:
@@ -213,6 +213,8 @@ class SetupWidget(PageBase):
         from src.Ui.MainWindow import MainWindow
         setTheme(cfg.get(theme), save=True, lazy=True)
         it(MainWindow).home_widget.updateBgImage()
+        it(MainWindow).add_widget.updateBgImage()
+        it(MainWindow).bot_list_widget.updateBgImage()
         it(MainWindow).setup_widget.updateBgImage()
 
     def __showRestartTooltip(self) -> None:

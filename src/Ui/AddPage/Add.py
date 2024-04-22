@@ -138,6 +138,7 @@ class AddWidget(PageBase):
 
         # 添加到布局
         self.expand_layout.addWidget(self.botGroup)
+        self.expand_layout.setContentsMargins(20, 10, 30, 10)
         self.view.setLayout(self.expand_layout)
 
 
