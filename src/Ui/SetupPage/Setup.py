@@ -54,7 +54,7 @@ class SetupWidget(PageBase):
         self.updateBgImage()
         self.__createConfigCards()
         self.__connect_signal()
-        self.__setLayout_()
+        self.__setLayout()
 
         # 应用样式表
         StyleSheet.SETUP_WIDGET.apply(self)
@@ -131,7 +131,7 @@ class SetupWidget(PageBase):
             parent=self.pathGroup
         )
 
-    def __setLayout_(self) -> None:
+    def __setLayout(self) -> None:
         """
         控件布局
         """

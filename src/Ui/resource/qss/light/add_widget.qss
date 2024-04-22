@@ -1,4 +1,5 @@
-AddWidget {
+AddWidget,
+#AddView {
     background: transparent;
     border-color: transparent;
 }
