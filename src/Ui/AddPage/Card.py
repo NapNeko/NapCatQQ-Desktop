@@ -1,13 +1,107 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QHBoxLayout
-from qfluentwidgets.common import FluentIconBase, FluentIcon
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import Qt, Signal, QStandardPaths
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFileDialog
+from creart import it
+from qfluentwidgets.common import FluentIconBase, FluentIcon, Action
 from qfluentwidgets.components import (
-    SwitchButton, BodyLabel, ComboBox, LineEdit, IndicatorPosition
+    PushButton, PrimarySplitPushButton, SwitchButton, BodyLabel,
+    ComboBox, LineEdit, IndicatorPosition, TitleLabel, CaptionLabel,
+    RoundMenu, MessageBox
 )
 from qfluentwidgets.components.settings import (
     SettingCard, ExpandGroupSettingCard
 )
+
+from src.Core.PathFunc import PathFunc
+
+if TYPE_CHECKING:
+    from src.Ui.AddPage.Add import AddWidget
+
+
+class ConfigTopCard(QWidget):
+    createPsScript = Signal(bool)
+    createBatScript = Signal(bool)
+
+    def __init__(self, parent: "AddWidget"):
+        super().__init__(parent=parent)
+        self.titleLabel = TitleLabel(self.tr("Add bot"))
+        self.subtitleLabel = CaptionLabel(
+            self.tr("Before adding a robot, you need to do some configuration")
+        )
+        self.clearConfigButton = PushButton(
+            icon=FluentIcon.DELETE,
+            text=self.tr("Clear config")
+        )
+        self.psPushButton = PrimarySplitPushButton(
+            icon=FluentIcon.ADD,
+            text=self.tr("Add to bot list")
+        )
+        self.menu = RoundMenu()
+        self.menu.addAction(
+            Action(
+                icon=FluentIcon.COMMAND_PROMPT,
+                text=self.tr("Create .ps1 script"),
+                triggered=self.createPsScript.emit
+            )
+        )
+        self.menu.addAction(
+            Action(
+                icon=FluentIcon.COMMAND_PROMPT,
+                text=self.tr("Create .bat script"),
+                triggered=self.createBatScript.emit
+            )
+        )
+        self.psPushButton.setFlyout(self.menu)
+
+        self.hBoxLayout = QHBoxLayout()
+        self.labelLayout = QVBoxLayout()
+        self.buttonLayout = QHBoxLayout()
+
+        self.__setLayout()
+        self.__connectSignal()
+
+    def __setLayout(self):
+        self.labelLayout.setSpacing(0)
+        self.labelLayout.setContentsMargins(0, 0, 0, 0)
+        self.labelLayout.addWidget(self.titleLabel)
+        self.labelLayout.addSpacing(1)
+        self.labelLayout.addWidget(self.subtitleLabel)
+
+        self.buttonLayout.setSpacing(4)
+        self.buttonLayout.setContentsMargins(0, 0, 0, 0)
+        self.buttonLayout.addWidget(self.clearConfigButton),
+        self.buttonLayout.addSpacing(2)
+        self.buttonLayout.addWidget(self.psPushButton)
+        self.buttonLayout.setAlignment(
+            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft
+        )
+
+        self.hBoxLayout.addLayout(self.labelLayout)
+        self.hBoxLayout.addStretch(1)
+        self.hBoxLayout.addLayout(self.buttonLayout)
+        self.hBoxLayout.addSpacing(20)
+
+        self.setLayout(self.hBoxLayout)
+
+    def __connectSignal(self):
+        self.clearConfigButton.clicked.connect(self.clearBtnSlot)
+
+    def clearBtnSlot(self):
+        from src.Ui.AddPage.Add import AddWidget
+        msg = MessageBox(
+            title=self.tr("Confirm clearing configuration"),
+            content=self.tr(
+                "After clearing, all configuration items on this page "
+                "will be cleared, and this operation cannot be undone"
+            ),
+            parent=it(AddWidget)
+        )
+
+        if msg.exec():
+            for card in it(AddWidget).cardList:
+                card.clear()
 
 
 class LineEditConfigCard(SettingCard):
@@ -27,6 +121,9 @@ class LineEditConfigCard(SettingCard):
     def getValue(self) -> str:
         return self.lineEdit.text()
 
+    def clear(self):
+        self.lineEdit.clear()
+
 
 class ComboBoxConfigCard(SettingCard):
 
@@ -44,11 +141,14 @@ class ComboBoxConfigCard(SettingCard):
     def getValue(self) -> str:
         return self.comboBox.currentText()
 
+    def clear(self):
+        self.comboBox.setCurrentIndex(0)
+
 
 class SwitchConfigCard(SettingCard):
 
     def __init__(
-            self, icon: FluentIconBase, title: str, 
+            self, icon: FluentIconBase, title: str,
             content=None, parent=None
     ):
         super().__init__(icon, title, content, parent)
@@ -59,6 +159,46 @@ class SwitchConfigCard(SettingCard):
 
     def getValue(self):
         return self.swichButton.isChecked()
+
+    def clear(self):
+        self.swichButton.setChecked(False)
+
+
+class FolderConfigCard(SettingCard):
+
+    def __init__(
+            self, icon: FluentIconBase, title: str,
+            content=None, parent=None
+    ):
+        super().__init__(icon, title, content, parent)
+        self.default = content
+        self.chooseFolderButton = PushButton(
+            icon=FluentIcon.FOLDER,
+            text=self.tr("Choose Folder")
+        )
+        self.chooseFolderButton.clicked.connect(self.chooseFolder)
+
+        self.hBoxLayout.addWidget(
+            self.chooseFolderButton, 0, Qt.AlignmentFlag.AlignRight
+        )
+        self.hBoxLayout.addSpacing(16)
+
+    def chooseFolder(self):
+        folder = QFileDialog.getExistingDirectory(
+            parent=self,
+            caption=self.tr("Choose folder"),
+            dir=QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.DesktopLocation
+            )
+        )
+        if folder:
+            self.contentLabel.setText(folder)
+
+    def getValue(self):
+        return self.contentLabel.text()
+
+    def clear(self):
+        self.contentLabel.setText(self.default)
 
 
 class GroupCardBase(ExpandGroupSettingCard):
@@ -102,6 +242,10 @@ class HttpConfigCard(GroupCardBase):
         self.add(self.httpServiceLabel, self.httpServiceButton)
         self.add(self.httpPortLabel, self.httpPortLineEidt)
 
+    def clear(self):
+        self.httpServiceButton.setChecked(False)
+        self.httpPortLineEidt.clear()
+
 
 class HttpReportConfigCard(GroupCardBase):
 
@@ -123,8 +267,8 @@ class HttpReportConfigCard(GroupCardBase):
 
         # http 上报 token
         self.httpRpTokenLabel = BodyLabel(self.tr("Set HTTP reporting token"))
-        self.httpRpTokenButton = LineEdit()
-        self.httpRpTokenButton.setPlaceholderText(self.tr("Optional filling"))
+        self.httpRpTokenLineEdit = LineEdit()
+        self.httpRpTokenLineEdit.setPlaceholderText(self.tr("Optional filling"))
 
         # http上报 ip
         self.httpRpIpLabel = BodyLabel(self.tr("Set HTTP reporting IP"))
@@ -144,10 +288,18 @@ class HttpReportConfigCard(GroupCardBase):
         # 添加到设置卡
         self.add(self.httpRpLabel, self.httpRpButton)
         self.add(self.httpRpHeartLabel, self.httpRpHeartButton)
-        self.add(self.httpRpTokenLabel, self.httpRpTokenButton)
+        self.add(self.httpRpTokenLabel, self.httpRpTokenLineEdit)
         self.add(self.httpRpIpLabel, self.httpRpIpLineEdit)
         self.add(self.httpRpPortLabel, self.httpRpPortLineEdit)
         self.add(self.httpRpPathLabel, self.httpRpPathLineEdit)
+
+    def clear(self):
+        self.httpRpButton.setChecked(False)
+        self.httpRpHeartButton.setChecked(False)
+        self.httpRpTokenLineEdit.clear()
+        self.httpRpIpLineEdit.clear()
+        self.httpRpPortLineEdit.clear()
+        self.httpRpPathLineEdit.clear()
 
 
 class WsConfigCard(GroupCardBase):
@@ -173,6 +325,10 @@ class WsConfigCard(GroupCardBase):
         self.add(self.wsServiceLabel, self.wsServiceButton)
         self.add(self.wsPortLabel, self.wsPortLineEdit)
 
+    def clear(self):
+        self.wsServiceButton.setChecked(False),
+        self.wsPortLineEdit.clear()
+
 
 class WsReverseConfigCard(GroupCardBase):
 
@@ -197,17 +353,22 @@ class WsReverseConfigCard(GroupCardBase):
 
         # 反向 Ws 端口
         self.wsRePortLable = BodyLabel(self.tr("Set WebSocketReverse port"))
-        self.wsRePortButton = LineEdit()
-        self.wsRePortButton.setPlaceholderText("8080")
+        self.wsRePortLineEdit = LineEdit()
+        self.wsRePortLineEdit.setPlaceholderText("8080")
 
         # 反向 Ws 地址
         self.wsRePathLable = BodyLabel(self.tr("Set WebSocketReverse path"))
-        self.wsRePathButton = LineEdit()
-        self.wsRePathButton.setPlaceholderText("/onebot/v11/ws")
+        self.wsRePathLineEidt = LineEdit()
+        self.wsRePathLineEidt.setPlaceholderText("/onebot/v11/ws")
 
         # 添加到设置卡
         self.add(self.wsReServiceLable, self.wsReServiceButton)
         self.add(self.wsReIpLabel, self.wsReIpLineEdit)
-        self.add(self.wsRePortLable, self.wsRePortButton)
-        self.add(self.wsRePathLable, self.wsRePathButton)
+        self.add(self.wsRePortLable, self.wsRePortLineEdit)
+        self.add(self.wsRePathLable, self.wsRePathLineEidt)
 
+    def clear(self):
+        self.wsReServiceButton.setChecked(False)
+        self.wsReIpLineEdit.clear()
+        self.wsRePortLineEdit.clear()
+        self.wsReIpLineEdit.clear()
