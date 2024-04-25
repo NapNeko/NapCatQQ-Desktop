@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, Signal, QStandardPaths
+from PySide6.QtCore import Qt, Signal, QStandardPaths, QEasingCurve
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFileDialog
 from creart import it
 from qfluentwidgets.common import FluentIconBase, FluentIcon, Action
@@ -24,7 +24,7 @@ class ConfigTopCard(QWidget):
     createPsScript = Signal(bool)
     createBatScript = Signal(bool)
 
-    def __init__(self, parent: "AddWidget"):
+    def __init__(self, parent: "AddWidget") -> None:
         super().__init__(parent=parent)
         self.titleLabel = TitleLabel(self.tr("Add bot"))
         self.subtitleLabel = CaptionLabel(
@@ -62,7 +62,7 @@ class ConfigTopCard(QWidget):
         self.__setLayout()
         self.__connectSignal()
 
-    def __setLayout(self):
+    def __setLayout(self) -> None:
         self.labelLayout.setSpacing(0)
         self.labelLayout.setContentsMargins(0, 0, 0, 0)
         self.labelLayout.addWidget(self.titleLabel)
@@ -85,10 +85,10 @@ class ConfigTopCard(QWidget):
 
         self.setLayout(self.hBoxLayout)
 
-    def __connectSignal(self):
+    def __connectSignal(self) -> None:
         self.clearConfigButton.clicked.connect(self.clearBtnSlot)
 
-    def clearBtnSlot(self):
+    def clearBtnSlot(self) -> None:
         from src.Ui.AddPage.Add import AddWidget
         msg = MessageBox(
             title=self.tr("Confirm clearing configuration"),
@@ -107,7 +107,7 @@ class ConfigTopCard(QWidget):
 class LineEditConfigCard(SettingCard):
 
     def __init__(
-            self, icon: FluentIconBase, title: str,
+            self, icon: FluentIconBase, title: str, required=True,
             placeholder_text="", content=None, parent=None
     ) -> None:
         super().__init__(icon, title, content, parent)
@@ -121,7 +121,7 @@ class LineEditConfigCard(SettingCard):
     def getValue(self) -> str:
         return self.lineEdit.text()
 
-    def clear(self):
+    def clear(self) -> None:
         self.lineEdit.clear()
 
 
@@ -141,7 +141,7 @@ class ComboBoxConfigCard(SettingCard):
     def getValue(self) -> str:
         return self.comboBox.currentText()
 
-    def clear(self):
+    def clear(self) -> None:
         self.comboBox.setCurrentIndex(0)
 
 
@@ -157,10 +157,10 @@ class SwitchConfigCard(SettingCard):
         self.hBoxLayout.addWidget(self.swichButton, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
-    def getValue(self):
+    def getValue(self) -> bool:
         return self.swichButton.isChecked()
 
-    def clear(self):
+    def clear(self) -> None:
         self.swichButton.setChecked(False)
 
 
@@ -194,19 +194,21 @@ class FolderConfigCard(SettingCard):
         if folder:
             self.contentLabel.setText(folder)
 
-    def getValue(self):
+    def getValue(self) -> str:
         return self.contentLabel.text()
 
-    def clear(self):
+    def clear(self) -> None:
         self.contentLabel.setText(self.default)
 
 
 class GroupCardBase(ExpandGroupSettingCard):
 
-    def __init__(self, icon: FluentIconBase, title, content, parent=None):
+    def __init__(self, icon: FluentIconBase, title, content, parent=None) -> None:
         super().__init__(icon, title, content, parent)
+        self.expandAni.setDuration(100)
+        self.expandAni.setEasingCurve(QEasingCurve.Type.InQuint)
 
-    def add(self, label, widget):
+    def add(self, label, widget) -> None:
         view = QWidget()
 
         layout = QHBoxLayout(view)
@@ -218,6 +220,40 @@ class GroupCardBase(ExpandGroupSettingCard):
 
         # 添加组件到设置卡
         self.addGroupWidget(view)
+
+    def wheelEvent(self, event):
+        # 不知道为什么ExpandGroupSettingCard把wheelEvent屏蔽了
+        # 检查是否在展开状态下，如果是，则传递滚轮事件给父级窗体
+        if self.isExpand:
+            self.parent().wheelEvent(event)
+        else:
+            super().wheelEvent(event)
+
+    def setExpand(self, isExpand: bool):
+        """ 重写方法优化下性能 """
+        if self.isExpand == isExpand:
+            return
+
+        self.isExpand = isExpand
+        self.setProperty('isExpand', isExpand)
+        self.setUpdatesEnabled(False)
+
+        if isExpand:
+            h = self.viewLayout.sizeHint().height()
+            self.verticalScrollBar().setValue(h)
+            self.expandAni.setStartValue(h)
+            self.expandAni.setEndValue(0)
+        else:
+            self.expandAni.setStartValue(0)
+            self.expandAni.setEndValue(self.verticalScrollBar().maximum())
+
+        self.expandAni.start()
+
+    def _onExpandValueChanged(self):
+        vh = self.viewLayout.sizeHint().height()
+        h = self.viewportMargins().top()
+        self.setFixedHeight(max(h + vh - self.verticalScrollBar().value(), h))
+        self.setUpdatesEnabled(True)
 
 
 class HttpConfigCard(GroupCardBase):
