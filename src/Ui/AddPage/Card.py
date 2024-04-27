@@ -107,7 +107,7 @@ class ConfigTopCard(QWidget):
 class LineEditConfigCard(SettingCard):
 
     def __init__(
-            self, icon: FluentIconBase, title: str, required=True,
+            self, icon: FluentIconBase, title: str,
             placeholder_text="", content=None, parent=None
     ) -> None:
         super().__init__(icon, title, content, parent)
@@ -130,7 +130,7 @@ class ComboBoxConfigCard(SettingCard):
     def __init__(
             self, icon: FluentIconBase, title: str,
             texts=None, content=None, parent=None
-    ):
+    ) -> None:
         super().__init__(icon, title, content, parent)
         self.texts = texts or []
         self.comboBox = ComboBox(self)
@@ -150,7 +150,7 @@ class SwitchConfigCard(SettingCard):
     def __init__(
             self, icon: FluentIconBase, title: str,
             content=None, parent=None
-    ):
+    ) -> None:
         super().__init__(icon, title, content, parent)
         self.swichButton = SwitchButton(self, IndicatorPosition.RIGHT)
 
@@ -169,7 +169,7 @@ class FolderConfigCard(SettingCard):
     def __init__(
             self, icon: FluentIconBase, title: str,
             content=None, parent=None
-    ):
+    ) -> None:
         super().__init__(icon, title, content, parent)
         self.default = content
         self.chooseFolderButton = PushButton(
@@ -183,7 +183,7 @@ class FolderConfigCard(SettingCard):
         )
         self.hBoxLayout.addSpacing(16)
 
-    def chooseFolder(self):
+    def chooseFolder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             parent=self,
             caption=self.tr("Choose folder"),
@@ -221,7 +221,7 @@ class GroupCardBase(ExpandGroupSettingCard):
         # 添加组件到设置卡
         self.addGroupWidget(view)
 
-    def wheelEvent(self, event):
+    def wheelEvent(self, event) -> None:
         # 不知道为什么ExpandGroupSettingCard把wheelEvent屏蔽了
         # 检查是否在展开状态下，如果是，则传递滚轮事件给父级窗体
         if self.isExpand:
@@ -229,7 +229,7 @@ class GroupCardBase(ExpandGroupSettingCard):
         else:
             super().wheelEvent(event)
 
-    def setExpand(self, isExpand: bool):
+    def setExpand(self, isExpand: bool) -> None:
         """ 重写方法优化下性能 """
         if self.isExpand == isExpand:
             return
@@ -249,7 +249,7 @@ class GroupCardBase(ExpandGroupSettingCard):
 
         self.expandAni.start()
 
-    def _onExpandValueChanged(self):
+    def _onExpandValueChanged(self) -> None:
         vh = self.viewLayout.sizeHint().height()
         h = self.viewportMargins().top()
         self.setFixedHeight(max(h + vh - self.verticalScrollBar().value(), h))
@@ -258,7 +258,7 @@ class GroupCardBase(ExpandGroupSettingCard):
 
 class HttpConfigCard(GroupCardBase):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(
             icon=FluentIcon.SCROLL,
             title=self.tr("HTTP service"),
@@ -278,14 +278,20 @@ class HttpConfigCard(GroupCardBase):
         self.add(self.httpServiceLabel, self.httpServiceButton)
         self.add(self.httpPortLabel, self.httpPortLineEidt)
 
-    def clear(self):
+    def getValue(self) -> dict:
+        return {
+            "enable": self.httpServiceButton.isChecked(),
+            "port": self.httpPortLineEidt.text()
+        }
+
+    def clear(self) -> None:
         self.httpServiceButton.setChecked(False)
         self.httpPortLineEidt.clear()
 
 
 class HttpReportConfigCard(GroupCardBase):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(
             icon=FluentIcon.SCROLL,
             title=self.tr("HTTP report"),
@@ -329,7 +335,17 @@ class HttpReportConfigCard(GroupCardBase):
         self.add(self.httpRpPortLabel, self.httpRpPortLineEdit)
         self.add(self.httpRpPathLabel, self.httpRpPathLineEdit)
 
-    def clear(self):
+    def getValue(self) -> dict:
+        return {
+            "enable": self.httpRpButton.isChecked(),
+            "enableHeart": self.httpRpHeartButton.isChecked(),
+            "token": self.httpRpTokenLineEdit.text(),
+            "ip": self.httpRpIpLineEdit.text(),
+            "port": self.httpRpPortLineEdit.text(),
+            "path": self.httpRpPathLineEdit.text()
+        }
+
+    def clear(self) -> None:
         self.httpRpButton.setChecked(False)
         self.httpRpHeartButton.setChecked(False)
         self.httpRpTokenLineEdit.clear()
@@ -340,7 +356,7 @@ class HttpReportConfigCard(GroupCardBase):
 
 class WsConfigCard(GroupCardBase):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(
             icon=FluentIcon.SCROLL,
             title=self.tr("WebSocket service"),
@@ -361,6 +377,12 @@ class WsConfigCard(GroupCardBase):
         self.add(self.wsServiceLabel, self.wsServiceButton)
         self.add(self.wsPortLabel, self.wsPortLineEdit)
 
+    def getValue(self) -> dict:
+        return {
+            "enable": self.wsServiceButton.isChecked(),
+            "port": self.wsPortLineEdit.text()
+        }
+
     def clear(self):
         self.wsServiceButton.setChecked(False),
         self.wsPortLineEdit.clear()
@@ -368,7 +390,7 @@ class WsConfigCard(GroupCardBase):
 
 class WsReverseConfigCard(GroupCardBase):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(
             icon=FluentIcon.SCROLL,
             title=self.tr("WebSocketReverse service"),
@@ -403,7 +425,15 @@ class WsReverseConfigCard(GroupCardBase):
         self.add(self.wsRePortLable, self.wsRePortLineEdit)
         self.add(self.wsRePathLable, self.wsRePathLineEidt)
 
-    def clear(self):
+    def getValue(self):
+        return {
+            "enable": self.wsReServiceButton.isChecked(),
+            "ip": self.wsReIpLineEdit.text(),
+            "port": self.wsRePortLineEdit.text(),
+            "path": self.wsRePathLineEidt.text()
+        }
+
+    def clear(self) -> None:
         self.wsReServiceButton.setChecked(False)
         self.wsReIpLineEdit.clear()
         self.wsRePortLineEdit.clear()

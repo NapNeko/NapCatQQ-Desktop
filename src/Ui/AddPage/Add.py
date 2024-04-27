@@ -31,6 +31,9 @@ class AddWidget(PageBase):
 
     def __init__(self):
         super().__init__()
+        self.viewLayout = None
+        self.expandLayout = None
+        self.view = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -42,7 +45,7 @@ class AddWidget(PageBase):
         self.viewLayout = QVBoxLayout()
 
         # 设置 ScrollArea
-        self.setParent(parent),
+        self.setParent(parent)
         self.setObjectName("AddPage")
         self.setWidget(self.view)
         self.setWidgetResizable(True)
@@ -99,24 +102,6 @@ class AddWidget(PageBase):
             content=self.tr("Whether to report the bot's own message"),
             parent=self
         )
-        self.debugModeCard = SwitchConfigCard(
-            icon=FluentIcon.COMMAND_PROMPT,
-            title=self.tr("Debug"),
-            content=self.tr(
-                "The message will carry a raw field, "
-                "which is the original message content"
-            ),
-            parent=self
-        )
-        self.localFile2UrlCard = SwitchConfigCard(
-            icon=FluentIcon.SHARE,
-            title=self.tr("LocalFile2Url"),
-            content=self.tr(
-                "If the URL cannot be obtained when calling the get file interface, "
-                "use the base 64 field to return the file content"
-            ),
-            parent=self
-        )
         self.heartIntervalCard = LineEditConfigCard(
             icon=FluentIcon.HEART,
             title=self.tr("Heart interval"),
@@ -138,7 +123,25 @@ class AddWidget(PageBase):
         self.QQPathCard = FolderConfigCard(
             icon=FluentIcon.FOLDER,
             title=self.tr("Specify QQ path"),
-            content=it(PathFunc).getQQPath(),
+            content=str(it(PathFunc).getQQPath()),
+        )
+        self.debugModeCard = SwitchConfigCard(
+            icon=FluentIcon.COMMAND_PROMPT,
+            title=self.tr("Debug"),
+            content=self.tr(
+                "The message will carry a raw field, "
+                "which is the original message content"
+            ),
+            parent=self
+        )
+        self.localFile2UrlCard = SwitchConfigCard(
+            icon=FluentIcon.SHARE,
+            title=self.tr("LocalFile2Url"),
+            content=self.tr(
+                "If the URL cannot be obtained when calling the get file interface, "
+                "use the base 64 field to return the file content"
+            ),
+            parent=self
         )
 
     def __setLayout(self):
@@ -156,11 +159,10 @@ class AddWidget(PageBase):
             self.botNameCard, self.botQQIdCard, self.httpCard,
             self.httpReportCard, self.wsCard, self.wsReverseCard,
             self.messageFormatCard, self.reportSelfMessageCard,
-            self.debugModeCard, self.localFile2UrlCard, self.heartIntervalCard,
-            self.accessTokenCard
+            self.heartIntervalCard, self.accessTokenCard
         ]
         self.advancedGroupCardList = [
-            self.QQPathCard
+            self.QQPathCard, self.debugModeCard, self.localFile2UrlCard,
         ]
         # 将卡片添加到组
         for card in self.botGroupCardList:
@@ -180,6 +182,28 @@ class AddWidget(PageBase):
         self.viewLayout.addLayout(self.expandLayout)
 
         self.view.setLayout(self.viewLayout)
+
+    def getConfig(self):
+        # 就这样吧, 毁灭吧累了
+        return {
+            "bot": {
+                "name": self.botNameCard.getValue(),
+                "QQID": self.botQQIdCard.getValue(),
+                "http": self.httpCard.getValue(),
+                "httpReport": self.httpReportCard.getValue(),
+                "ws": self.wsCard.getValue(),
+                "wsReverse": self.wsReverseCard.getValue(),
+                "msgFormat": self.messageFormatCard.getValue(),
+                "reportSelfMsg": self.reportSelfMessageCard.getValue(),
+                "heartInterval": self.heartIntervalCard.getValue(),
+                "accessToken": self.accessTokenCard.getValue()
+            },
+            "advanced": {
+                "QQPath": self.QQPathCard.getValue(),
+                "debug": self.debugModeCard.getValue(),
+                "localFile2url": self.localFile2UrlCard.getValue()
+            }
+        }
 
 
 class AddWidgetClassCreator(AbstractCreator, ABC):
