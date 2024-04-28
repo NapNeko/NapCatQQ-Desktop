@@ -1,4 +1,4 @@
-![NapCat-Desktop](https://socialify.git.ci/ruixiaotian/NapCat-Desktop/image?font=Raleway&logo=https%3A%2F%2Fraw.githubusercontent.com%2FNapNeko%2FNapCatQQ%2Fmain%2Flogo.png&name=1&pattern=Plus&theme=Light)
+![NapCatQQ-Desktop](https://socialify.git.ci/HeartfeltJoy/NapCatQQ-Desktop/image?font=Raleway&logo=https%3A%2F%2Fraw.githubusercontent.com%2FNapNeko%2FNapCatQQ%2Fmain%2Flogo.png&name=1&pattern=Circuit%20Board&theme=Auto)
 
 
 ## 关于项目
