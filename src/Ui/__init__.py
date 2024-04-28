@@ -36,7 +36,7 @@ class PageBase(ScrollArea):
         self.bg_pixmap = self.bg_pixmap.scaled(
             self.size(),
             aspectMode=Qt.AspectRatioMode.KeepAspectRatioByExpanding,  # 等比缩放
-            mode=Qt.TransformationMode.SmoothTransformation  # 平滑效果
+            mode=Qt.TransformationMode.SmoothTransformation,  # 平滑效果
         )
         self.update()
 

@@ -32,29 +32,3 @@ class GroupCardBase(ExpandGroupSettingCard):
             self.parent().wheelEvent(event)
         else:
             super().wheelEvent(event)
-
-    def setExpand(self, isExpand: bool) -> None:
-        """重写方法优化下性能"""
-        if self.isExpand == isExpand:
-            return
-
-        self.isExpand = isExpand
-        self.setProperty("isExpand", isExpand)
-        self.setUpdatesEnabled(False)
-
-        if isExpand:
-            h = self.viewLayout.sizeHint().height()
-            self.verticalScrollBar().setValue(h)
-            self.expandAni.setStartValue(h)
-            self.expandAni.setEndValue(0)
-        else:
-            self.expandAni.setStartValue(0)
-            self.expandAni.setEndValue(self.verticalScrollBar().maximum())
-
-        self.expandAni.start()
-
-    def _onExpandValueChanged(self) -> None:
-        vh = self.viewLayout.sizeHint().height()
-        h = self.viewportMargins().top()
-        self.setFixedHeight(max(h + vh - self.verticalScrollBar().value(), h))
-        self.setUpdatesEnabled(True)

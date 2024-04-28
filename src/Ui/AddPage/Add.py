@@ -21,7 +21,7 @@ from src.Ui.AddPage.Card import (
     HttpConfigCard,
     SwitchConfigCard,
     HttpReportConfigCard,
-    HttpReportUrlCard,
+    UrlCard,
     WsConfigCard,
     WsReverseConfigCard,
     ConfigTopCard,
@@ -92,7 +92,12 @@ class AddWidget(PageBase):
         )
         self.httpCard = HttpConfigCard(self)
         self.httpReportCard = HttpReportConfigCard(self)
-        self.httpReportUrlCard = HttpReportUrlCard(self)
+        self.httpReportUrlCard = UrlCard(
+            icon=FluentIcon.SCROLL,
+            title=self.tr("Http Report URL"),
+            content=self.tr("Set the URL for reporting HTTP"),
+            parent=self
+        )
         self.wsCard = WsConfigCard(self)
         self.wsReverseCard = WsReverseConfigCard(self)
         self.messageFormatCard = ComboBoxConfigCard(
@@ -221,6 +226,7 @@ class AddWidget(PageBase):
                 "QQID": self.botQQIdCard.getValue(),
                 "http": self.httpCard.getValue(),
                 "httpReport": self.httpReportCard.getValue(),
+                "httpReportUrls": self.httpReportUrlCard.getValue(),
                 "ws": self.wsCard.getValue(),
                 "wsReverse": self.wsReverseCard.getValue(),
                 "msgFormat": self.messageFormatCard.getValue(),
