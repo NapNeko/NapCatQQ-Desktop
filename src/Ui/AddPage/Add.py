@@ -16,9 +16,16 @@ from qfluentwidgets.components import SettingCardGroup, ExpandLayout
 from src.Core.PathFunc import PathFunc
 from src.Ui import PageBase
 from src.Ui.AddPage.Card import (
-    LineEditConfigCard, ComboBoxConfigCard, HttpConfigCard,
-    SwitchConfigCard, HttpReportConfigCard, WsConfigCard,
-    WsReverseConfigCard, ConfigTopCard, FolderConfigCard
+    LineEditConfigCard,
+    ComboBoxConfigCard,
+    HttpConfigCard,
+    SwitchConfigCard,
+    HttpReportConfigCard,
+    HttpReportUrlCard,
+    WsConfigCard,
+    WsReverseConfigCard,
+    ConfigTopCard,
+    FolderConfigCard,
 )
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.StyleSheet import StyleSheet
@@ -81,10 +88,11 @@ class AddWidget(PageBase):
             icon=NapCatDesktopIcon.QQ,
             title=self.tr("Bot QQ"),
             content=self.tr("Set your bot QQ"),
-            placeholder_text=self.tr("123456")
+            placeholder_text=self.tr("123456"),
         )
         self.httpCard = HttpConfigCard(self)
         self.httpReportCard = HttpReportConfigCard(self)
+        self.httpReportUrlCard = HttpReportUrlCard(self)
         self.wsCard = WsConfigCard(self)
         self.wsReverseCard = WsReverseConfigCard(self)
         self.messageFormatCard = ComboBoxConfigCard(
@@ -94,26 +102,26 @@ class AddWidget(PageBase):
                 "Array is the message group, and string is the cq code string"
             ),
             texts=["array", "string"],
-            parent=self
+            parent=self,
         )
         self.reportSelfMessageCard = SwitchConfigCard(
             icon=FluentIcon.ROBOT,
             title=self.tr("Report self message"),
             content=self.tr("Whether to report the bot's own message"),
-            parent=self
+            parent=self,
         )
         self.heartIntervalCard = LineEditConfigCard(
             icon=FluentIcon.HEART,
             title=self.tr("Heart interval"),
             content=self.tr("WebSocket heartbeat interval, in milliseconds"),
             placeholder_text="30000",
-            parent=self
+            parent=self,
         )
         self.accessTokenCard = LineEditConfigCard(
             icon=FluentIcon.CERTIFICATE,
             title=self.tr("Access Token"),
             content=self.tr("Access Token, can be empty"),
-            parent=self
+            parent=self,
         )
 
         # 创建组 - 高级设置
@@ -125,6 +133,10 @@ class AddWidget(PageBase):
             title=self.tr("Specify QQ path"),
             content=str(it(PathFunc).getQQPath()),
         )
+        self.ffmpegPathCard = FolderConfigCard(
+            icon=FluentIcon.MUSIC_FOLDER,
+            title=self.tr("Set the ffmpeg path"),
+        )
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Debug"),
@@ -132,7 +144,7 @@ class AddWidget(PageBase):
                 "The message will carry a raw field, "
                 "which is the original message content"
             ),
-            parent=self
+            parent=self,
         )
         self.localFile2UrlCard = SwitchConfigCard(
             icon=FluentIcon.SHARE,
@@ -141,28 +153,47 @@ class AddWidget(PageBase):
                 "If the URL cannot be obtained when calling the get file interface, "
                 "use the base 64 field to return the file content"
             ),
-            parent=self
+            parent=self,
         )
 
-    def __setLayout(self):
+    def __setLayout(self) -> None:
         """
         控件布局
         """
         self.cardList = [
-            self.botNameCard, self.botQQIdCard, self.httpCard,
-            self.httpReportCard, self.wsCard, self.wsReverseCard,
-            self.messageFormatCard, self.reportSelfMessageCard,
-            self.debugModeCard, self.localFile2UrlCard, self.heartIntervalCard,
-            self.accessTokenCard, self.QQPathCard
+            self.botNameCard,
+            self.botQQIdCard,
+            self.httpCard,
+            self.httpReportCard,
+            self.httpReportUrlCard,
+            self.wsCard,
+            self.wsReverseCard,
+            self.messageFormatCard,
+            self.reportSelfMessageCard,
+            self.debugModeCard,
+            self.localFile2UrlCard,
+            self.heartIntervalCard,
+            self.accessTokenCard,
+            self.QQPathCard,
         ]
         self.botGroupCardList = [
-            self.botNameCard, self.botQQIdCard, self.httpCard,
-            self.httpReportCard, self.wsCard, self.wsReverseCard,
-            self.messageFormatCard, self.reportSelfMessageCard,
-            self.heartIntervalCard, self.accessTokenCard
+            self.botNameCard,
+            self.botQQIdCard,
+            self.httpCard,
+            self.httpReportCard,
+            self.httpReportUrlCard,
+            self.wsCard,
+            self.wsReverseCard,
+            self.messageFormatCard,
+            self.reportSelfMessageCard,
+            self.heartIntervalCard,
+            self.accessTokenCard,
         ]
         self.advancedGroupCardList = [
-            self.QQPathCard, self.debugModeCard, self.localFile2UrlCard,
+            self.QQPathCard,
+            self.ffmpegPathCard,
+            self.debugModeCard,
+            self.localFile2UrlCard,
         ]
         # 将卡片添加到组
         for card in self.botGroupCardList:
@@ -183,8 +214,7 @@ class AddWidget(PageBase):
 
         self.view.setLayout(self.viewLayout)
 
-    def getConfig(self):
-        # 就这样吧, 毁灭吧累了
+    def getConfig(self) -> dict:
         return {
             "bot": {
                 "name": self.botNameCard.getValue(),
@@ -196,13 +226,14 @@ class AddWidget(PageBase):
                 "msgFormat": self.messageFormatCard.getValue(),
                 "reportSelfMsg": self.reportSelfMessageCard.getValue(),
                 "heartInterval": self.heartIntervalCard.getValue(),
-                "accessToken": self.accessTokenCard.getValue()
+                "accessToken": self.accessTokenCard.getValue(),
             },
             "advanced": {
                 "QQPath": self.QQPathCard.getValue(),
+                "ffmpegPath": self.ffmpegPathCard.getValue(),
                 "debug": self.debugModeCard.getValue(),
-                "localFile2url": self.localFile2UrlCard.getValue()
-            }
+                "localFile2url": self.localFile2UrlCard.getValue(),
+            },
         }
 
 
