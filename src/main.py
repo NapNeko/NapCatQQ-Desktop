@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import sys
 
-from PySide6.QtWidgets import QApplication
 from creart import it
 from loguru import logger
+from PySide6.QtWidgets import QApplication
 
 from src.Ui.MainWindow import MainWindow
 

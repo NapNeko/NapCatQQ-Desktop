@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import re
 from enum import Enum
-from pydantic import BaseModel, field_validator, HttpUrl, ValidationError
+from typing import List
+
+from pydantic import BaseModel, field_validator
 from PySide6.QtCore import QObject
 
 
@@ -15,7 +17,7 @@ class ScriptType(Enum):
     SH = "sh"
 
 
-class HttpConfig(BaseModel):
+class ServerConfig(BaseModel):
     enable: bool
     port: str
 
@@ -40,9 +42,6 @@ class HttpReportConfig(BaseModel):
     enable: bool
     enableHeart: bool
     token: str
-    ip: str
-    port: str
-    path: str
 
     @classmethod
     @field_validator("token")
@@ -63,25 +62,16 @@ class HttpReportConfig(BaseModel):
             )
         return value
 
-class WsConfig(BaseModel):
-    enable: bool
-    port: str
-
-
-class WsReverseConfig(BaseModel):
-    enable: bool
-    ip: str
-    port: str
-    path: str
-
 
 class BotConfig(BaseModel):
     name: str
     QQID: str
-    http: HttpConfig
+    http: ServerConfig
     httpReport: HttpReportConfig
-    ws: WsConfig
-    wsReverse: WsReverseConfig
+    httpReportUrls: List[str]
+    ws: ServerConfig
+    wsReverse: bool
+    wsReverseUrls: List[str]
     msgFormat: str
     reportSelfMsg: bool
     heartInterval: str
