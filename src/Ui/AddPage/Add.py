@@ -18,8 +18,8 @@ from src.Ui.AddPage.Card import (
     ComboBoxConfigCard,
     ConfigTopCard,
     FolderConfigCard,
-    HttpConfigCardBase,
-    HttpReportConfigCardBase,
+    HttpConfigCard,
+    HttpReportConfigCard,
     LineEditConfigCard,
     SwitchConfigCard,
     UrlCard,
@@ -88,8 +88,8 @@ class AddWidget(PageBase):
             content=self.tr("Set your bot QQ"),
             placeholder_text=self.tr("123456"),
         )
-        self.httpCard = HttpConfigCardBase(self)
-        self.httpReportCard = HttpReportConfigCardBase(self)
+        self.httpCard = HttpConfigCard(self)
+        self.httpReportCard = HttpReportConfigCard(self)
         self.httpReportUrlCard = UrlCard(
             icon=FluentIcon.SCROLL,
             title=self.tr("Http Report address"),

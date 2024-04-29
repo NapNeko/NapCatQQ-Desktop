@@ -1,26 +1,26 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
-from qfluentwidgets.common import FluentIcon, Action
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from qfluentwidgets.common import Action, FluentIcon
 from qfluentwidgets.components import (
-    PushButton,
-    PrimarySplitPushButton,
-    TitleLabel,
     CaptionLabel,
-    RoundMenu,
-    MessageBox,
     InfoBar,
     InfoBarPosition,
+    MessageBox,
+    PrimarySplitPushButton,
+    PushButton,
+    RoundMenu,
+    TitleLabel,
 )
 
 from src.Core.CreateScript import ScriptType
 
 if TYPE_CHECKING:
-    from src.Ui.AddPage.Add import AddWidget
     from src.Core.CreateScript import CreateScript
+    from src.Ui.AddPage.Add import AddWidget
 
 
 class ConfigTopCard(QWidget):
@@ -98,22 +98,15 @@ class ConfigTopCard(QWidget):
         from src.Core.CreateScript import CreateScript
         from src.Ui.AddPage.Add import AddWidget
 
-        try:
-            create = CreateScript(
-                config=it(AddWidget).getConfig(), scriptType=scriptType
-            )
-        except TypeError as msg:
-            InfoBar.error(
-                title=self.tr("Unable to create scripts"),
-                content=msg.args[0],
-                orient=Qt.Orientation.Vertical,
-                duration=5000,
-                position=InfoBarPosition.BOTTOM_RIGHT,
-                parent=self.parent().parent(),
-            )
+        return CreateScript(
+            config=it(AddWidget).getConfig(),
+            scriptType=scriptType,
+            infoBarParent=self.parent().parent(),
+        )
 
     def _createPs1ScriptSlot(self) -> None:
         create = self.__initCreateScript(ScriptType.PS1)
+        create.createPs1Script()
 
     def _createBatScriptSlot(self) -> None:
         create = self.__initCreateScript(ScriptType.BAT)

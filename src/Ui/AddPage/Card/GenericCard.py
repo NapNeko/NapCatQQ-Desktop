@@ -26,7 +26,7 @@ class LineEditConfigCard(SettingCard):
         self.lineEdit = LineEdit(self)
         self.lineEdit.setClearButtonEnabled(True)
         self.lineEdit.setPlaceholderText(placeholder_text)
-
+        self.lineEdit.setFixedWidth(165)
         self.hBoxLayout.addWidget(self.lineEdit, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
@@ -100,7 +100,8 @@ class FolderConfigCard(SettingCard):
             ),
         )
         if folder:
-            self.contentLabel.setText(folder)
+            self.setContent(folder)
+            self.setFixedHeight(70)
 
     def getValue(self) -> str:
         return self.contentLabel.text()

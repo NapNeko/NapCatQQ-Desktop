@@ -10,6 +10,7 @@ from qfluentwidgets import (
     LineEdit,
     SwitchButton,
 )
+from qfluentwidgets.components.settings.expand_setting_card import GroupSeparator
 
 
 class ItemBase(QWidget):
@@ -24,7 +25,7 @@ class ItemBase(QWidget):
         """
         super().__init__(parent=parent)
         self.label = BodyLabel(title)
-        self.setFixedHeight(55)
+        self.setFixedHeight(65)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.hBoxLayout = QHBoxLayout(self)
 
@@ -83,6 +84,10 @@ class GroupCardBase(ExpandSettingCard):
         """
         self.itemList.append(item)
         self.viewLayout.addWidget(item)
+
+        if self.viewLayout.count() >= 1:
+            self.viewLayout.addWidget(GroupSeparator(self.view))
+
         item.show()
         self._adjustViewSize()
 

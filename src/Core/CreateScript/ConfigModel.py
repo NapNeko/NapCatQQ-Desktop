@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-import re
+import random
+import string
 from enum import Enum
 from typing import List
 
-from pydantic import BaseModel, field_validator
-from PySide6.QtCore import QObject
+from pydantic import BaseModel, HttpUrl, ValidationError, WebsocketUrl, field_validator
 
 
 class ScriptType(Enum):
@@ -17,25 +17,16 @@ class ScriptType(Enum):
     SH = "sh"
 
 
-class ServerConfig(BaseModel):
+class httpConfig(BaseModel):
     enable: bool
+    addresses: str
     port: str
 
-    @classmethod
-    @field_validator("port")
-    def validate_port(cls, value):
-        """校验 port 输入是否为阿拉伯数字
 
-        ### 参数
-            - cls: 类对象
-            - value: 输入值
-
-        """
-        try:
-            int(value)
-        except ValueError:
-            raise ValueError(QObject.tr("The port must be an Arabic numeral"))
-        return value
+class wsConfig(BaseModel):
+    enable: bool
+    addresses: str
+    port: str
 
 
 class HttpReportConfig(BaseModel):
@@ -43,39 +34,35 @@ class HttpReportConfig(BaseModel):
     enableHeart: bool
     token: str
 
-    @classmethod
-    @field_validator("token")
-    def validate_token(cls, value):
-        """校验 token 输入是否为字符串
-
-        ### 参数
-            - cls: 类对象
-            - value: 输入值
-
-        """
-        if not re.match(r"^[a-zA-Z0-9]+$", value):
-            # 限制范围为 ASCII 内，防止发生意外
-            raise ValueError(
-                QObject.tr(
-                    "The token must be a string containing only ASCII characters"
-                )
-            )
-        return value
-
 
 class BotConfig(BaseModel):
     name: str
     QQID: str
-    http: ServerConfig
+    http: httpConfig
     httpReport: HttpReportConfig
-    httpReportUrls: List[str]
-    ws: ServerConfig
+    httpReportUrls: List[HttpUrl]
+    ws: wsConfig
     wsReverse: bool
-    wsReverseUrls: List[str]
+    wsReverseUrls: List[WebsocketUrl]
     msgFormat: str
     reportSelfMsg: bool
     heartInterval: str
     accessToken: str
+
+    @field_validator("name")
+    @staticmethod
+    def name_validator(name: str) -> str:
+        if not name:
+            # 如果 name 没有输入则自动生成一个name
+            name = random.choices(string.ascii_letters + string.digits, k=16)
+        return name
+
+    @field_validator("QQID")
+    @staticmethod
+    def QQID_validator(QQID: str) -> str:
+        if not QQID:
+            raise ValueError("QQID It can't be empty")
+        return QQID
 
 
 class AdvancedConfig(BaseModel):

@@ -6,7 +6,7 @@ from src.Ui.AddPage.Card.BaseClass import GroupCardBase
 from src.Ui.AddPage.Card.Item import LineEditItem, SwitchItem
 
 
-class HttpReportConfigCardBase(GroupCardBase):
+class HttpReportConfigCard(GroupCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(
