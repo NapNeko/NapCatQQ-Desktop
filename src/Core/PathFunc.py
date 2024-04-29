@@ -21,9 +21,9 @@ class PathFunc:
         self.tmp_path = self.base_path / "tmp"
         self.NapCatPath = self.base_path / "NapCat"
 
-        self.pathVelidator()
+        self.pathValidator()
 
-    def pathVelidator(self) -> None:
+    def pathValidator(self) -> None:
         """
         验证路径
         """

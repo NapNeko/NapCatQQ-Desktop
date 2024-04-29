@@ -1,24 +1,22 @@
 # -*- coding: utf-8 -*-
 from typing import List
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from creart import it
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 from qfluentwidgets import (
+    BodyLabel,
+    ExpandSettingCard,
+    FluentIcon,
+    FluentIconBase,
     InfoBar,
     InfoBarPosition,
+    LineEdit,
     MessageBox,
-    TransparentPushButton,
-    TransparentToolButton,
     MessageBoxBase,
     TitleLabel,
-    LineEdit,
-    BodyLabel,
-    FluentIcon,
-)
-
-from qfluentwidgets.components.settings.expand_setting_card import (
-    ExpandSettingCard,
+    TransparentPushButton,
+    TransparentToolButton,
 )
 
 
@@ -61,7 +59,9 @@ class UrlCard(ExpandSettingCard):
     ## 上报 Url 列表卡片
     """
 
-    def __init__(self, icon: FluentIcon, title: str, content: str, parent=None) -> None:
+    def __init__(
+        self, icon: FluentIconBase, title: str, content: str, parent=None
+    ) -> None:
         """
         ## 初始化卡片
 
@@ -177,6 +177,10 @@ class UrlCard(ExpandSettingCard):
         if not len(self.urls):
             self.card.expandButton.clicked.emit()
             self.card.expandButton.setEnabled(False)
+
+    def wheelEvent(self, event) -> None:
+        if self.isExpand:
+            self.parent().wheelEvent(event)
 
 
 class UrlInputBox(MessageBoxBase):

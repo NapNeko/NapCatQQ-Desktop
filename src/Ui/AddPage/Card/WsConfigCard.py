@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
 
 from qfluentwidgets.common import FluentIcon
-from qfluentwidgets.components import (
-    SwitchButton,
-    BodyLabel,
-    LineEdit,
-    IndicatorPosition,
-)
 
 from src.Ui.AddPage.Card.BaseClass import GroupCardBase
+from src.Ui.AddPage.Card.Item import LineEditItem, SwitchItem
 
 
 class WsConfigCard(GroupCardBase):
@@ -22,24 +17,20 @@ class WsConfigCard(GroupCardBase):
         )
 
         # 正向 Ws 服务开关
-        self.wsServiceLabel = BodyLabel(self.tr("Enable WebSocket service"))
-        self.wsServiceButton = SwitchButton(self, IndicatorPosition.RIGHT)
-
+        self.wsEnableItem = SwitchItem(self.tr("Enable WebSockets"), self)
         # 正向 Ws 服务 端口
-        self.wsPortLabel = BodyLabel(self.tr("Set WebSocket Port"))
-        self.wsPortLineEdit = LineEdit()
-        self.wsPortLineEdit.setPlaceholderText("3001")
+        self.wsPortItem = LineEditItem(self.tr("WebSockets Port"), "3001", self)
 
-        # 添加到设置卡
-        self.add(self.wsServiceLabel, self.wsServiceButton)
-        self.add(self.wsPortLabel, self.wsPortLineEdit)
+        # 添加 item
+        self.addItem(self.wsEnableItem)
+        self.addItem(self.wsPortItem)
 
     def getValue(self) -> dict:
         return {
-            "enable": self.wsServiceButton.isChecked(),
-            "port": self.wsPortLineEdit.text(),
+            "enable": self.wsEnableItem.getValue(),
+            "port": self.wsPortItem.getValue(),
         }
 
     def clear(self):
-        self.wsServiceButton.setChecked(False),
-        self.wsPortLineEdit.clear()
+        self.wsEnableItem.clear(),
+        self.wsPortItem.clear()

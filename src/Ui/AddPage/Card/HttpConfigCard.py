@@ -1,17 +1,12 @@
 # -*- coding: utf-8 -*-
 
 from qfluentwidgets.common import FluentIcon
-from qfluentwidgets.components import (
-    SwitchButton,
-    BodyLabel,
-    LineEdit,
-    IndicatorPosition,
-)
 
 from src.Ui.AddPage.Card.BaseClass import GroupCardBase
+from src.Ui.AddPage.Card.Item import LineEditItem, SwitchItem
 
 
-class HttpConfigCard(GroupCardBase):
+class HttpConfigCardBase(GroupCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(
@@ -20,25 +15,18 @@ class HttpConfigCard(GroupCardBase):
             content=self.tr("Configure HTTP related services"),
             parent=parent,
         )
-        # http服务开关
-        self.httpServiceLabel = BodyLabel(self.tr("Enable HTTP service"))
-        self.httpServiceButton = SwitchButton(self, IndicatorPosition.RIGHT)
+        self.httpEnableItem = SwitchItem(self.tr("Enable HTTP"), self)
+        self.httpPortItem = LineEditItem(self.tr("HTTP Port"), "8080", self)
 
-        # http服务端口
-        self.httpPortLabel = BodyLabel(self.tr("HTTP service port"))
-        self.httpPortLineEdit = LineEdit()
-        self.httpPortLineEdit.setPlaceholderText("8080")
-
-        # 添加到设置卡
-        self.add(self.httpServiceLabel, self.httpServiceButton)
-        self.add(self.httpPortLabel, self.httpPortLineEdit)
+        self.addItem(self.httpEnableItem)
+        self.addItem(self.httpPortItem)
 
     def getValue(self) -> dict:
         return {
-            "enable": self.httpServiceButton.isChecked(),
-            "port": self.httpPortLineEdit.text(),
+            "enable": self.httpEnableItem.getValue(),
+            "port": self.httpPortItem.getValue(),
         }
 
     def clear(self) -> None:
-        self.httpServiceButton.setChecked(False)
-        self.httpPortLineEdit.clear()
+        self.httpEnableItem.clear()
+        self.httpPortItem.clear()

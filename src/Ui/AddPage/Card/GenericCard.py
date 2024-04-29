@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt, QStandardPaths
+from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtWidgets import QFileDialog
-from qfluentwidgets.common import FluentIconBase, FluentIcon
+from qfluentwidgets.common import FluentIcon, FluentIconBase
 from qfluentwidgets.components import (
+    ComboBox,
+    IndicatorPosition,
+    LineEdit,
     PushButton,
     SwitchButton,
-    ComboBox,
-    LineEdit,
-    IndicatorPosition,
 )
 from qfluentwidgets.components.settings import SettingCard
 
@@ -62,16 +62,16 @@ class SwitchConfigCard(SettingCard):
         self, icon: FluentIconBase, title: str, content=None, parent=None
     ) -> None:
         super().__init__(icon, title, content, parent)
-        self.swichButton = SwitchButton(self, IndicatorPosition.RIGHT)
+        self.switchButton = SwitchButton(self, IndicatorPosition.RIGHT)
 
-        self.hBoxLayout.addWidget(self.swichButton, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addWidget(self.switchButton, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
     def getValue(self) -> bool:
-        return self.swichButton.isChecked()
+        return self.switchButton.isChecked()
 
     def clear(self) -> None:
-        self.swichButton.setChecked(False)
+        self.switchButton.setChecked(False)
 
 
 class FolderConfigCard(SettingCard):

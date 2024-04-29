@@ -1,22 +1,12 @@
 # -*- coding: utf-8 -*-
-from typing import TYPE_CHECKING
 
 from qfluentwidgets.common import FluentIcon
-from qfluentwidgets.components import (
-    SwitchButton,
-    BodyLabel,
-    LineEdit,
-    IndicatorPosition,
-)
 
 from src.Ui.AddPage.Card.BaseClass import GroupCardBase
-
-if TYPE_CHECKING:
-    pass
+from src.Ui.AddPage.Card.Item import LineEditItem, SwitchItem
 
 
-# noinspection PyTypeChecker
-class HttpReportConfigCard(GroupCardBase):
+class HttpReportConfigCardBase(GroupCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(
@@ -26,32 +16,30 @@ class HttpReportConfigCard(GroupCardBase):
             parent=parent,
         )
 
-        # http 上报服务开关
-        self.httpRpLabel = BodyLabel(self.tr("Enable HTTP reporting service"))
-        self.httpRpButton = SwitchButton(self, IndicatorPosition.RIGHT)
-
-        # http 上报心跳开关
-        self.httpRpHeartLabel = BodyLabel(self.tr("Enable HTTP reporting heart"))
-        self.httpRpHeartButton = SwitchButton(self, IndicatorPosition.RIGHT)
-
+        # http 上报服务
+        self.ReportEnableItem = SwitchItem(
+            self.tr("Enable HTTP reporting service"), self
+        )
+        # http 上报心跳
+        self.HeartEnableItem = SwitchItem(self.tr("Enable HTTP reporting heart"), self)
         # http 上报 token
-        self.httpRpTokenLabel = BodyLabel(self.tr("Set HTTP reporting token"))
-        self.httpRpTokenLineEdit = LineEdit()
-        self.httpRpTokenLineEdit.setPlaceholderText(self.tr("Optional filling"))
+        self.ReportTokenItem = LineEditItem(
+            self.tr("Set HTTP reporting token"), "Can be empty", self
+        )
 
-        # 添加到设置卡
-        self.add(self.httpRpLabel, self.httpRpButton)
-        self.add(self.httpRpHeartLabel, self.httpRpHeartButton)
-        self.add(self.httpRpTokenLabel, self.httpRpTokenLineEdit)
+        # 添加 Item
+        self.addItem(self.ReportEnableItem)
+        self.addItem(self.HeartEnableItem)
+        self.addItem(self.ReportTokenItem)
 
     def getValue(self) -> dict:
         return {
-            "enable": self.httpRpButton.isChecked(),
-            "enableHeart": self.httpRpHeartButton.isChecked(),
-            "token": self.httpRpTokenLineEdit.text(),
+            "enable": self.ReportEnableItem.getValue(),
+            "enableHeart": self.HeartEnableItem.getValue(),
+            "token": self.ReportTokenItem.getValue(),
         }
 
     def clear(self) -> None:
-        self.httpRpButton.setChecked(False)
-        self.httpRpHeartButton.setChecked(False)
-        self.httpRpTokenLineEdit.clear()
+        self.ReportEnableItem.clear()
+        self.HeartEnableItem.clear()
+        self.ReportTokenItem.clear()

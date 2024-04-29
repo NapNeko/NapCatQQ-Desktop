@@ -6,26 +6,24 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout
-from creart import add_creator, exists_module
-from creart import it
+from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 from qfluentwidgets.common import FluentIcon
-from qfluentwidgets.components import SettingCardGroup, ExpandLayout
+from qfluentwidgets.components import ExpandLayout, SettingCardGroup
 
 from src.Core.PathFunc import PathFunc
 from src.Ui import PageBase
 from src.Ui.AddPage.Card import (
-    LineEditConfigCard,
     ComboBoxConfigCard,
-    HttpConfigCard,
-    SwitchConfigCard,
-    HttpReportConfigCard,
-    UrlCard,
-    WsConfigCard,
-    WsReverseConfigCard,
     ConfigTopCard,
     FolderConfigCard,
+    HttpConfigCardBase,
+    HttpReportConfigCardBase,
+    LineEditConfigCard,
+    SwitchConfigCard,
+    UrlCard,
+    WsConfigCard,
 )
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.StyleSheet import StyleSheet
@@ -60,15 +58,15 @@ class AddWidget(PageBase):
 
         # 调用方法
         self.updateBgImage()
-        self.__createConfigCards()
-        self.__setLayout()
+        self._createConfigCards()
+        self._setLayout()
 
         # 应用样式表
         StyleSheet.ADD_WIDGET.apply(self)
 
         return self
 
-    def __createConfigCards(self) -> None:
+    def _createConfigCards(self) -> None:
         """
         创建配置卡片
         """
@@ -90,16 +88,26 @@ class AddWidget(PageBase):
             content=self.tr("Set your bot QQ"),
             placeholder_text=self.tr("123456"),
         )
-        self.httpCard = HttpConfigCard(self)
-        self.httpReportCard = HttpReportConfigCard(self)
+        self.httpCard = HttpConfigCardBase(self)
+        self.httpReportCard = HttpReportConfigCardBase(self)
         self.httpReportUrlCard = UrlCard(
             icon=FluentIcon.SCROLL,
-            title=self.tr("Http Report URL"),
-            content=self.tr("Set the URL for reporting HTTP"),
-            parent=self
+            title=self.tr("Http Report address"),
+            content=self.tr("Set the address for reporting HTTP"),
+            parent=self,
         )
         self.wsCard = WsConfigCard(self)
-        self.wsReverseCard = WsReverseConfigCard(self)
+        self.wsReverseCard = SwitchConfigCard(
+            icon=FluentIcon.SCROLL,
+            title=self.tr("Enable WebSocket Reverse"),
+            content=self.tr("Enable the reverse web socket service"),
+            parent=self,
+        )
+        self.wsReverseUrlCard = UrlCard(
+            icon=FluentIcon.SCROLL,
+            title=self.tr("WebSocket Reverse address"),
+            content=self.tr("Reverse WebSocket reporting address"),
+        )
         self.messageFormatCard = ComboBoxConfigCard(
             icon=FluentIcon.MESSAGE,
             title=self.tr("Message format"),
@@ -161,7 +169,7 @@ class AddWidget(PageBase):
             parent=self,
         )
 
-    def __setLayout(self) -> None:
+    def _setLayout(self) -> None:
         """
         控件布局
         """
@@ -173,6 +181,7 @@ class AddWidget(PageBase):
             self.httpReportUrlCard,
             self.wsCard,
             self.wsReverseCard,
+            self.wsReverseUrlCard,
             self.messageFormatCard,
             self.reportSelfMessageCard,
             self.debugModeCard,
@@ -189,6 +198,7 @@ class AddWidget(PageBase):
             self.httpReportUrlCard,
             self.wsCard,
             self.wsReverseCard,
+            self.wsReverseUrlCard,
             self.messageFormatCard,
             self.reportSelfMessageCard,
             self.heartIntervalCard,
@@ -229,6 +239,7 @@ class AddWidget(PageBase):
                 "httpReportUrls": self.httpReportUrlCard.getValue(),
                 "ws": self.wsCard.getValue(),
                 "wsReverse": self.wsReverseCard.getValue(),
+                "wsReverseUrls": self.wsReverseUrlCard.getValue(),
                 "msgFormat": self.messageFormatCard.getValue(),
                 "reportSelfMsg": self.reportSelfMessageCard.getValue(),
                 "heartInterval": self.heartIntervalCard.getValue(),
