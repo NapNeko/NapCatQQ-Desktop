@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-from pathlib import Path
 import json
 import textwrap
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QOperatingSystemVersion, Qt
 from creart import it

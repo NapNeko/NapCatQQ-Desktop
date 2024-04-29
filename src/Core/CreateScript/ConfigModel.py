@@ -4,7 +4,7 @@ import string
 from enum import Enum
 from typing import List
 
-from pydantic import BaseModel, HttpUrl, ValidationError, WebsocketUrl, field_validator
+from pydantic import BaseModel, HttpUrl, WebsocketUrl, field_validator
 
 
 class ScriptType(Enum):
