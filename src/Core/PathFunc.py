@@ -3,6 +3,7 @@ import winreg
 from abc import ABC
 from pathlib import Path
 
+from PySide6.QtCore import QOperatingSystemVersion
 from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
@@ -15,6 +16,7 @@ class PathFunc:
         初始化
         """
         # 软件路径
+        self.qq_path = None
         self.base_path = Path.cwd()
         self.config_dir_path = self.base_path / "config"
         self.config_path = self.config_dir_path / "config.json"
@@ -56,27 +58,31 @@ class PathFunc:
 
         logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 
-    def getQQPath(self) -> Path | bool:
+    def getQQPath(self) -> Path | str:
         """
         获取QQ路径
-        :return: Path
         """
         from src.Core.Config import cfg
 
         try:
-            if Path(cfg.get(cfg.QQPath)) == Path.cwd():
-                key = winreg.OpenKey(
-                    key=winreg.HKEY_LOCAL_MACHINE,
-                    sub_key=r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\QQ",
-                )
-                self.qq_path = Path(
-                    winreg.QueryValueEx(key, "UninstallString")[0]
-                ).parent
+            if QOperatingSystemVersion.currentType() == QOperatingSystemVersion.OSType.Windows:
+                # 当系统为 Windows 时执行以下操作
+                if Path(cfg.get(cfg.QQPath)) == Path.cwd():
+                    key = winreg.OpenKey(
+                        key=winreg.HKEY_LOCAL_MACHINE,
+                        sub_key=r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\QQ",
+                    )
+                    self.qq_path = Path(winreg.QueryValueEx(key, "UninstallString")[0]).parent
 
-                cfg.set(item=cfg.QQPath, value=str(self.qq_path), save=True)
-                return self.qq_path
+                    cfg.set(item=cfg.QQPath, value=str(self.qq_path), save=True)
+                    return self.qq_path
+                else:
+                    self.qq_path = cfg.get(cfg.QQPath)
+                    return self.qq_path
             else:
-                self.qq_path = cfg.get(cfg.QQPath)
+                # 暂时没有适配 MacOS 的打算，故直接返回 Linux QQ 安装的默认路径
+                self.qq_path = Path("/opt/QQ/qq")
+                cfg.set(item=cfg.QQPath, value=str(self.qq_path), save=True)
                 return self.qq_path
         except FileNotFoundError:
             return "No path found"

@@ -110,9 +110,11 @@ class ConfigTopCard(QWidget):
 
     def _createBatScriptSlot(self) -> None:
         create = self.__initCreateScript(ScriptType.BAT)
+        create.createBatScript()
 
     def _createShScriptSlot(self) -> None:
         create = self.__initCreateScript(ScriptType.SH)
+        create.createShScript()
 
     def clearBtnSlot(self) -> None:
         from src.Ui.AddPage.Add import AddWidget
