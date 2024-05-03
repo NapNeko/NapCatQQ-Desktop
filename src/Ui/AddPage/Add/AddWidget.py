@@ -6,26 +6,16 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
-from PySide6.QtWidgets import QVBoxLayout, QWidget
-from creart import add_creator, exists_module, it
+from PySide6.QtWidgets import QVBoxLayout, QStackedWidget
+from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from qfluentwidgets import ScrollArea
-from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import ExpandLayout, SettingCardGroup
 
-from src.Core.PathFunc import PathFunc
 from src.Ui.AddPage.Add.ConfigTopCard import ConfigTopCard
-from src.Ui.AddPage.Card import (
-    ComboBoxConfigCard,
-    FolderConfigCard,
-    HttpConfigCard,
-    HttpReportConfigCard,
-    LineEditConfigCard,
-    SwitchConfigCard,
-    UrlCard,
-    WsConfigCard,
-)
-from src.Ui.Icon import NapCatDesktopIcon
+from src.Ui.AddPage.Add.BotWidget import BotWidget
+from src.Ui.AddPage.Add.Connect import ConnectWidget
+from src.Ui.AddPage.Add.Advanced import AdvancedWidget
 from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
@@ -33,23 +23,22 @@ if TYPE_CHECKING:
 
 
 class AddWidget(ScrollArea):
+    """
+    ## 窗体中 Add Bot 对应的 Widget
+    """
 
     def __init__(self):
         super().__init__()
         self.topCard: ConfigTopCard = None
-        self.viewLayout: QVBoxLayout = None
-        self.expandLayout: ExpandLayout = None
-        self.view: QWidget = None
+        self.view: QStackedWidget = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
-        初始化
+        ## 初始化 Widget 所需要的控件并进行配置
         """
         # 创建控件
-        self.view = QWidget()
-        self.expandLayout = ExpandLayout()
-        self.viewLayout = QVBoxLayout()
         self.topCard = ConfigTopCard(self)
+        self._createView()
 
         # 设置 ScrollArea
         self.setParent(parent)
@@ -59,185 +48,55 @@ class AddWidget(ScrollArea):
         self.setViewportMargins(0, self.topCard.height(), 0, 0)
         self.view.setObjectName("AddView")
 
-        # 调用方法
-        self._createConfigCards()
-        self._setLayout()
-
         # 应用样式表
         StyleSheet.ADD_WIDGET.apply(self)
 
         return self
 
-    def _createConfigCards(self) -> None:
+    def _createView(self) -> None:
         """
-        创建配置卡片
+        ## 创建并配置 QStackedWidget
+        :return:
         """
-        # 创建组 - 机器人设置
-        self.botGroup = SettingCardGroup(title=self.tr("Robot settings"), parent=self.view)
-        self.botNameCard = LineEditConfigCard(
-            icon=FluentIcon.ROBOT,
-            title=self.tr("Bot name"),
-            content=self.tr("Set your bot name"),
-            placeholder_text=self.tr("Bot 1"),
+        self.view = QStackedWidget()
+        self.botWidget = BotWidget(self)
+        self.connectWidget = ConnectWidget(self)
+        self.advancedWidget = AdvancedWidget(self)
+
+        self.view.addWidget(self.botWidget)
+        self.view.addWidget(self.connectWidget)
+        self.view.addWidget(self.advancedWidget)
+
+        self.topCard.pivot.addItem(
+            routeKey=self.botWidget.objectName(),
+            text=self.tr("Bot"),
+            onClick=lambda: self.view.setCurrentWidget(self.botWidget)
         )
-        self.botQQIdCard = LineEditConfigCard(
-            icon=NapCatDesktopIcon.QQ,
-            title=self.tr("Bot QQ"),
-            content=self.tr("Set your bot QQ"),
-            placeholder_text=self.tr("123456"),
+        self.topCard.pivot.addItem(
+            routeKey=self.connectWidget.objectName(),
+            text=self.tr("Connect"),
+            onClick=lambda: self.view.setCurrentWidget(self.connectWidget)
         )
-        self.httpCard = HttpConfigCard(self)
-        self.httpReportCard = HttpReportConfigCard(self)
-        self.httpReportUrlCard = UrlCard(
-            icon=FluentIcon.SCROLL,
-            title=self.tr("Http Report address"),
-            content=self.tr("Set the address for reporting HTTP"),
-            parent=self,
-        )
-        self.wsCard = WsConfigCard(self)
-        self.wsReverseCard = SwitchConfigCard(
-            icon=FluentIcon.SCROLL,
-            title=self.tr("Enable WebSocket Reverse"),
-            content=self.tr("Enable the reverse web socket service"),
-            parent=self,
-        )
-        self.wsReverseUrlCard = UrlCard(
-            icon=FluentIcon.SCROLL,
-            title=self.tr("WebSocket Reverse address"),
-            content=self.tr("Reverse WebSocket reporting address"),
-        )
-        self.messageFormatCard = ComboBoxConfigCard(
-            icon=FluentIcon.MESSAGE,
-            title=self.tr("Message format"),
-            content=self.tr("Array is the message group, and string is the cq code string"),
-            texts=["array", "string"],
-            parent=self,
-        )
-        self.reportSelfMessageCard = SwitchConfigCard(
-            icon=FluentIcon.ROBOT,
-            title=self.tr("Report self message"),
-            content=self.tr("Whether to report the bot's own message"),
-            parent=self,
-        )
-        self.heartIntervalCard = LineEditConfigCard(
-            icon=FluentIcon.HEART,
-            title=self.tr("Heart interval"),
-            content=self.tr("WebSocket heartbeat interval, in milliseconds"),
-            placeholder_text="30000",
-            parent=self,
-        )
-        self.accessTokenCard = LineEditConfigCard(
-            icon=FluentIcon.CERTIFICATE,
-            title=self.tr("Access Token"),
-            content=self.tr("Access Token, can be empty"),
-            parent=self,
+        self.topCard.pivot.addItem(
+            routeKey=self.advancedWidget.objectName(),
+            text=self.tr("Advanced"),
+            onClick=lambda: self.view.setCurrentWidget(self.advancedWidget)
         )
 
-        # 创建组 - 高级设置
-        self.advancedGroup = SettingCardGroup(title=self.tr("Advanced setting"), parent=self.view)
-        self.QQPathCard = FolderConfigCard(
-            icon=FluentIcon.FOLDER,
-            title=self.tr("Specify QQ path"),
-            content=str(it(PathFunc).getQQPath()),
-        )
-        self.ffmpegPathCard = FolderConfigCard(
-            icon=FluentIcon.MUSIC_FOLDER,
-            title=self.tr("Set the ffmpeg path"),
-        )
-        self.debugModeCard = SwitchConfigCard(
-            icon=FluentIcon.COMMAND_PROMPT,
-            title=self.tr("Debug"),
-            content=self.tr("The message will carry a raw field, " "which is the original message content"),
-            parent=self,
-        )
-        self.localFile2UrlCard = SwitchConfigCard(
-            icon=FluentIcon.SHARE,
-            title=self.tr("LocalFile2Url"),
-            content=self.tr(
-                "If the URL cannot be obtained when calling the get file interface, "
-                "use the base 64 field to return the file content"
-            ),
-            parent=self,
-        )
-
-    def _setLayout(self) -> None:
-        """
-        控件布局
-        """
-        self.cardList = [
-            self.botNameCard,
-            self.botQQIdCard,
-            self.httpCard,
-            self.httpReportCard,
-            self.httpReportUrlCard,
-            self.wsCard,
-            self.wsReverseCard,
-            self.wsReverseUrlCard,
-            self.messageFormatCard,
-            self.reportSelfMessageCard,
-            self.debugModeCard,
-            self.localFile2UrlCard,
-            self.heartIntervalCard,
-            self.accessTokenCard,
-            self.QQPathCard,
-        ]
-        self.botGroupCardList = [
-            self.botNameCard,
-            self.botQQIdCard,
-            self.httpCard,
-            self.httpReportCard,
-            self.httpReportUrlCard,
-            self.wsCard,
-            self.wsReverseCard,
-            self.wsReverseUrlCard,
-            self.messageFormatCard,
-            self.reportSelfMessageCard,
-            self.heartIntervalCard,
-            self.accessTokenCard,
-        ]
-        self.advancedGroupCardList = [
-            self.QQPathCard,
-            self.ffmpegPathCard,
-            self.debugModeCard,
-            self.localFile2UrlCard,
-        ]
-        # 将卡片添加到组
-        self.botGroup.addSettingCards(self.botGroupCardList)
-        self.advancedGroup.addSettingCards(self.advancedGroupCardList)
-
-        # 添加到布局
-        self.expandLayout.addWidget(self.botGroup)
-        self.expandLayout.addWidget(self.advancedGroup)
-        self.expandLayout.setContentsMargins(30, 0, 40, 10)
-
-        self.viewLayout.addSpacing(5)
-        self.viewLayout.addLayout(self.expandLayout)
-
-        self.view.setLayout(self.viewLayout)
+        # 连接信号并初始化当前标签页
+        self.view.currentChanged.connect(self.onCurrentIndexChanged)
+        self.view.setCurrentWidget(self.botWidget)
+        self.topCard.pivot.setCurrentItem(self.botWidget.objectName())
 
     def getConfig(self) -> dict:
-        return {
-            "bot": {
-                "name": self.botNameCard.getValue(),
-                "QQID": self.botQQIdCard.getValue(),
-                "http": self.httpCard.getValue(),
-                "httpReport": self.httpReportCard.getValue(),
-                "httpReportUrls": self.httpReportUrlCard.getValue(),
-                "ws": self.wsCard.getValue(),
-                "wsReverse": self.wsReverseCard.getValue(),
-                "wsReverseUrls": self.wsReverseUrlCard.getValue(),
-                "msgFormat": self.messageFormatCard.getValue(),
-                "reportSelfMsg": self.reportSelfMessageCard.getValue(),
-                "heartInterval": self.heartIntervalCard.getValue(),
-                "accessToken": self.accessTokenCard.getValue(),
-            },
-            "advanced": {
-                "QQPath": self.QQPathCard.getValue(),
-                "ffmpegPath": self.ffmpegPathCard.getValue(),
-                "debug": self.debugModeCard.getValue(),
-                "localFile2url": self.localFile2UrlCard.getValue(),
-            },
-        }
+        """
+        ## 返回配置结果
+        """
+        return {}
+
+    def onCurrentIndexChanged(self, index):
+        widget = self.view.widget(index)
+        self.topCard.pivot.setCurrentItem(widget.objectName())
 
     def resizeEvent(self, event) -> None:
         """

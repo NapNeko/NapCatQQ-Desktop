@@ -29,7 +29,7 @@
 1. 克隆仓库到你本地
 
 ```bash
-git clone https://github.com/ruixiaotian/NapCat-Desktop.git
+git clone https://github.com/HeartfeltJoy/NapCatQQ-Desktop.git
 ```
 
 2. 进入项目目录

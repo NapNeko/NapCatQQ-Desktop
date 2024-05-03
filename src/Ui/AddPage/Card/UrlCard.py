@@ -180,6 +180,7 @@ class UrlCard(ExpandSettingCard):
 
     def wheelEvent(self, event) -> None:
         if self.isExpand:
+            # 如果是展开状态则将滚轮事件向上传递
             self.parent().wheelEvent(event)
 
 

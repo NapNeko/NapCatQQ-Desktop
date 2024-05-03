@@ -30,6 +30,7 @@ class HomeWidget(ScrollArea):
         super().__init__()
 
         # 加载背景图片
+        self.view = None
         self.bg_pixmap = None
         self._bg_pixmap_light = QPixmap(":Global/image/Global/page_bg_light.png")
         self._bg_pixmap_dark = QPixmap(":Global/image/Global/page_bg_dark.png")

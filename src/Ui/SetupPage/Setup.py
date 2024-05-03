@@ -187,7 +187,7 @@ class SetupWidget(ScrollArea):
         """
         folder = QFileDialog.getExistingDirectory(
             parent=self,
-            caption=self.tr("Chosse folder"),
+            caption=self.tr("Choose folder"),
             dir=QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation),
         )
         return folder
