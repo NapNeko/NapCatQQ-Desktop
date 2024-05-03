@@ -6,17 +6,17 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from qfluentwidgets import ScrollArea
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import ExpandLayout, SettingCardGroup
 
 from src.Core.PathFunc import PathFunc
-from src.Ui import PageBase
+from src.Ui.AddPage.Add.ConfigTopCard import ConfigTopCard
 from src.Ui.AddPage.Card import (
     ComboBoxConfigCard,
-    ConfigTopCard,
     FolderConfigCard,
     HttpConfigCard,
     HttpReportConfigCard,
@@ -32,13 +32,14 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class AddWidget(PageBase):
+class AddWidget(ScrollArea):
 
     def __init__(self):
         super().__init__()
-        self.viewLayout = None
-        self.expandLayout = None
-        self.view = None
+        self.topCard: ConfigTopCard = None
+        self.viewLayout: QVBoxLayout = None
+        self.expandLayout: ExpandLayout = None
+        self.view: QWidget = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -48,16 +49,17 @@ class AddWidget(PageBase):
         self.view = QWidget()
         self.expandLayout = ExpandLayout()
         self.viewLayout = QVBoxLayout()
+        self.topCard = ConfigTopCard(self)
 
         # 设置 ScrollArea
         self.setParent(parent)
         self.setObjectName("AddPage")
         self.setWidget(self.view)
         self.setWidgetResizable(True)
+        self.setViewportMargins(0, self.topCard.height(), 0, 0)
         self.view.setObjectName("AddView")
 
         # 调用方法
-        self.updateBgImage()
         self._createConfigCards()
         self._setLayout()
 
@@ -70,12 +72,8 @@ class AddWidget(PageBase):
         """
         创建配置卡片
         """
-        # 创建顶部栏
-        self.topCard = ConfigTopCard(self)
         # 创建组 - 机器人设置
-        self.botGroup = SettingCardGroup(
-            title=self.tr("Robot settings"), parent=self.view
-        )
+        self.botGroup = SettingCardGroup(title=self.tr("Robot settings"), parent=self.view)
         self.botNameCard = LineEditConfigCard(
             icon=FluentIcon.ROBOT,
             title=self.tr("Bot name"),
@@ -111,9 +109,7 @@ class AddWidget(PageBase):
         self.messageFormatCard = ComboBoxConfigCard(
             icon=FluentIcon.MESSAGE,
             title=self.tr("Message format"),
-            content=self.tr(
-                "Array is the message group, and string is the cq code string"
-            ),
+            content=self.tr("Array is the message group, and string is the cq code string"),
             texts=["array", "string"],
             parent=self,
         )
@@ -138,9 +134,7 @@ class AddWidget(PageBase):
         )
 
         # 创建组 - 高级设置
-        self.advancedGroup = SettingCardGroup(
-            title=self.tr("Advanced setting"), parent=self.view
-        )
+        self.advancedGroup = SettingCardGroup(title=self.tr("Advanced setting"), parent=self.view)
         self.QQPathCard = FolderConfigCard(
             icon=FluentIcon.FOLDER,
             title=self.tr("Specify QQ path"),
@@ -153,10 +147,7 @@ class AddWidget(PageBase):
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Debug"),
-            content=self.tr(
-                "The message will carry a raw field, "
-                "which is the original message content"
-            ),
+            content=self.tr("The message will carry a raw field, " "which is the original message content"),
             parent=self,
         )
         self.localFile2UrlCard = SwitchConfigCard(
@@ -211,19 +202,14 @@ class AddWidget(PageBase):
             self.localFile2UrlCard,
         ]
         # 将卡片添加到组
-        for card in self.botGroupCardList:
-            self.botGroup.addSettingCard(card)
-
-        for card in self.advancedGroupCardList:
-            self.advancedGroup.addSettingCard(card)
+        self.botGroup.addSettingCards(self.botGroupCardList)
+        self.advancedGroup.addSettingCards(self.advancedGroupCardList)
 
         # 添加到布局
         self.expandLayout.addWidget(self.botGroup)
         self.expandLayout.addWidget(self.advancedGroup)
         self.expandLayout.setContentsMargins(30, 0, 40, 10)
 
-        self.viewLayout.setSpacing(0)
-        self.viewLayout.addWidget(self.topCard)
         self.viewLayout.addSpacing(5)
         self.viewLayout.addLayout(self.expandLayout)
 
@@ -253,16 +239,23 @@ class AddWidget(PageBase):
             },
         }
 
+    def resizeEvent(self, event) -> None:
+        """
+        ## 重写缩放事件对 topCard 进行大小调整
+        """
+        super().resizeEvent(event)
+        self.topCard.resize(self.width(), self.topCard.height())
+
 
 class AddWidgetClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
     # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Ui.AddPage.Add", "AddWidget"),)
+    targets = (CreateTargetInfo("src.Ui.AddPage.Add.AddWidget", "AddWidget"),)
 
     # 静态方法available()，用于检查模块"Add"是否存在，返回值为布尔型。
     @staticmethod
     def available() -> bool:
-        return exists_module("src.Ui.AddPage.Add")
+        return exists_module("src.Ui.AddPage.Add.AddWidget")
 
     # 静态方法create()，用于创建AddWidget类的实例，返回值为AddWidget对象。
     @staticmethod

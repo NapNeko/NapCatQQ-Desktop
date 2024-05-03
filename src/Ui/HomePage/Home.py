@@ -8,15 +8,14 @@ from abc import ABC
 from typing import TYPE_CHECKING, Self
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QPainter
 from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets.components import (
-    InfoBar, InfoBarIcon, InfoBarPosition, PushButton
-)
+from qfluentwidgets import ScrollArea, isDarkTheme
+from qfluentwidgets.components import InfoBar, InfoBarIcon, InfoBarPosition, PushButton
 
 from src.Core.Config import StartOpenHomePageViewEnum as SE
 from src.Core.Config import cfg
-from src.Ui import PageBase
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
 from src.Ui.StyleSheet import StyleSheet
@@ -25,21 +24,26 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class HomeWidget(PageBase):
+class HomeWidget(ScrollArea):
 
     def __init__(self):
         super().__init__()
+
+        # 加载背景图片
+        self.bg_pixmap = None
+        self._bg_pixmap_light = QPixmap(":Global/image/Global/page_bg_light.png")
+        self._bg_pixmap_dark = QPixmap(":Global/image/Global/page_bg_dark.png")
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
         初始化
         """
         # 创建显示控件
-        self.view = self.__judgeView()
+        self.view = self._judgeView()
 
         # 设置 View 和 ScrollArea
         if isinstance(self.view, DisplayViewWidget):
-            self.view.go_btn_signal.connect(self.__goBtnSlot)
+            self.view.go_btn_signal.connect(self._goBtnSlot)
 
         self.setParent(parent)
         self.setObjectName("HomePage")
@@ -54,7 +58,7 @@ class HomeWidget(PageBase):
 
         return self
 
-    def __goBtnSlot(self):
+    def _goBtnSlot(self):
         """
         Start Using 的槽函数
         """
@@ -70,32 +74,59 @@ class HomeWidget(PageBase):
         info = InfoBar(
             icon=InfoBarIcon.INFORMATION,
             title="Tips",
-            content=self.tr(
-                "You can choose the page to display at \n"
-                "startup in the settings page"
-            ),
+            content=self.tr("You can choose the page to display at \n" "startup in the settings page"),
             orient=Qt.Orientation.Vertical,
             isClosable=True,
             position=InfoBarPosition.BOTTOM_RIGHT,
             duration=10000,
-            parent=self
+            parent=self,
         )
         info_button = PushButton(self.tr("Don't show again"))
-        info_button.clicked.connect(
-            lambda: cfg.set(cfg.HideUsGoBtnTips, True, True)
-        )
+        info_button.clicked.connect(lambda: cfg.set(cfg.HideUsGoBtnTips, True, True))
         info_button.clicked.connect(info.close)
         info.addWidget(info_button)
         info.show()
 
     @staticmethod
-    def __judgeView() -> DisplayViewWidget | ContentViewWidget:
+    def _judgeView() -> DisplayViewWidget | ContentViewWidget:
         """
         判断并加载相应的 Widget。
         根据配置确定是打开首页视图还是内容视图。
         """
         start_page = cfg.get(cfg.StartOpenHomePageView)
         return DisplayViewWidget() if start_page == SE.DISPLAY_VIEW else ContentViewWidget()
+
+    def updateBgImage(self) -> None:
+        """
+        用于更新图片大小
+        """
+        # 重新加载图片保证缩放后清晰
+        if not isDarkTheme():
+            self.bg_pixmap = self._bg_pixmap_light
+        else:
+            self.bg_pixmap = self._bg_pixmap_dark
+
+        self.bg_pixmap = self.bg_pixmap.scaled(
+            self.size(),
+            aspectMode=Qt.AspectRatioMode.KeepAspectRatioByExpanding,  # 等比缩放
+            mode=Qt.TransformationMode.SmoothTransformation,  # 平滑效果
+        )
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        """
+        重写绘制事件绘制背景图片
+        """
+        painter = QPainter(self.viewport())
+        painter.drawPixmap(self.rect(), self.bg_pixmap)
+        super().paintEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        """
+        重写缩放事件
+        """
+        self.updateBgImage()
+        super().resizeEvent(event)
 
 
 class HomeWidgetClassCreator(AbstractCreator, ABC):

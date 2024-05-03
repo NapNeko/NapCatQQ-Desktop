@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, QStandardPaths
 from PySide6.QtWidgets import QWidget, QFileDialog
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
+from qfluentwidgets import ScrollArea
 from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor
 from qfluentwidgets.components import (
     InfoBar,
@@ -19,7 +20,6 @@ from qfluentwidgets.components import (
 
 from src.Core.Config import cfg
 from src.Core.PathFunc import PathFunc
-from src.Ui import PageBase
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.StyleSheet import StyleSheet
 
@@ -27,13 +27,15 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class SetupWidget(PageBase):
+class SetupWidget(ScrollArea):
 
     def __init__(self) -> None:
         """
         初始化
         """
         super().__init__()
+        self.expand_layout = None
+        self.view = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -51,9 +53,8 @@ class SetupWidget(PageBase):
         self.view.setObjectName("SetupView")
 
         # 调用方法
-        self.updateBgImage()
         self.__createConfigCards()
-        self.__connect_signal()
+        self._connect_signal()
         self.__setLayout()
 
         # 应用样式表
@@ -67,26 +68,18 @@ class SetupWidget(PageBase):
         """
 
         # 创建组 - 启动项
-        self.startGroup = SettingCardGroup(
-            title=self.tr("Startup Item"), parent=self.view
-        )
+        self.startGroup = SettingCardGroup(title=self.tr("Startup Item"), parent=self.view)
         self.startOpenHomePageViewCard = OptionsSettingCard(
             configItem=cfg.StartOpenHomePageView,
             icon=FluentIcon.COPY,
             title=self.tr("Switch HomePage View"),
-            content=self.tr(
-                "Select the page on your homepage when you start"
-            ),
-            texts=[
-                self.tr("A useless display page"), self.tr("Function page")
-            ],
-            parent=self.startGroup
+            content=self.tr("Select the page on your homepage when you start"),
+            texts=[self.tr("A useless display page"), self.tr("Function page")],
+            parent=self.startGroup,
         )
 
         # 创建组 - 个性化
-        self.personalGroup = SettingCardGroup(
-            title=self.tr("Personalize"), parent=self.view
-        )
+        self.personalGroup = SettingCardGroup(title=self.tr("Personalize"), parent=self.view)
         # 创建项
         self.themeCard = OptionsSettingCard(
             configItem=cfg.themeMode,
@@ -94,14 +87,14 @@ class SetupWidget(PageBase):
             title=self.tr("Switch themes"),
             content=self.tr("Switch the theme of the app"),
             texts=[self.tr("Light"), self.tr("Dark"), self.tr("Auto")],
-            parent=self.personalGroup
+            parent=self.personalGroup,
         )
         self.themeColorCard = CustomColorSettingCard(
             configItem=cfg.themeColor,
             icon=FluentIcon.PALETTE,
             title=self.tr("Theme Color"),
             content=self.tr("Choose a theme color"),
-            parent=self.personalGroup
+            parent=self.personalGroup,
         )
         self.languageCard = ComboBoxSettingCard(
             configItem=cfg.language,
@@ -109,26 +102,24 @@ class SetupWidget(PageBase):
             title=self.tr("Language"),
             content=self.tr("Set your preferred language for UI"),
             texts=["简体中文", "繁體中文", "English", self.tr("Use system setting")],
-            parent=self.personalGroup
+            parent=self.personalGroup,
         )
 
         # 创建组 - 路径
-        self.pathGroup = SettingCardGroup(
-            title=self.tr("Path"), parent=self.view
-        )
+        self.pathGroup = SettingCardGroup(title=self.tr("Path"), parent=self.view)
         self.QQPathCard = PushSettingCard(
             icon=NapCatDesktopIcon.QQ,
             title=self.tr("QQ installation path"),
             content=str(it(PathFunc).getQQPath()),
             text=self.tr("Choose folder"),
-            parent=self.pathGroup
+            parent=self.pathGroup,
         )
         self.NapCatPathCard = PushSettingCard(
             icon=FluentIcon.GITHUB,
             title=self.tr("NapCat path"),
             content=str(it(PathFunc).getNapCatPath()),
             text=self.tr("Choose folder"),
-            parent=self.pathGroup
+            parent=self.pathGroup,
         )
 
     def __setLayout(self) -> None:
@@ -152,12 +143,12 @@ class SetupWidget(PageBase):
         self.expand_layout.setContentsMargins(20, 10, 30, 10)
         self.view.setLayout(self.expand_layout)
 
-    def __connect_signal(self) -> None:
+    def _connect_signal(self) -> None:
         """
         信号处理
         """
         # 连接重启提示
-        cfg.appRestartSig.connect(self.__showRestartTooltip)
+        cfg.appRestartSig.connect(self._showRestartTooltip)
 
         # 连接启动相关
         self.startOpenHomePageViewCard.optionChanged.connect(
@@ -165,68 +156,64 @@ class SetupWidget(PageBase):
         )
 
         # 连接个性化相关
-        self.themeCard.optionChanged.connect(self.__themeModeChanged)
-        self.themeColorCard.colorChanged.connect(
-            lambda color: setThemeColor(color, save=True, lazy=True)
-        )
+        self.themeCard.optionChanged.connect(self._themeModeChanged)
+        self.themeColorCard.colorChanged.connect(lambda color: setThemeColor(color, save=True, lazy=True))
 
         # 连接路径相关
-        self.QQPathCard.clicked.connect(self.__onQQFolderCardClicked)
-        self.NapCatPathCard.clicked.connect(self.__onNapCatFolderCardClicked)
+        self.QQPathCard.clicked.connect(self._onQQFolderCardClicked)
+        self.NapCatPathCard.clicked.connect(self._onNapCatFolderCardClicked)
 
-    def __onQQFolderCardClicked(self) -> None:
+    def _onQQFolderCardClicked(self) -> None:
         """
         选择 QQ 路径的设置卡槽函数
         """
-        folder = self.__selectFolder()
+        folder = self._selectFolder()
         if folder:
             cfg.set(cfg.QQPath, folder, save=True)
             self.QQPathCard.setContent(folder)
 
-    def __onNapCatFolderCardClicked(self) -> None:
+    def _onNapCatFolderCardClicked(self) -> None:
         """
         选择 NapCat 路径的设置卡槽函数
         """
-        folder = self.__selectFolder()
+        folder = self._selectFolder()
         if folder:
             cfg.set(cfg.NapCatPath, folder, save=True)
             self.NapCatPathCard.setContent(folder)
 
-    def __selectFolder(self) -> str:
+    def _selectFolder(self) -> str:
         """
         选择文件夹的槽函数
         """
         folder = QFileDialog.getExistingDirectory(
             parent=self,
             caption=self.tr("Chosse folder"),
-            dir=QStandardPaths.writableLocation(
-                QStandardPaths.StandardLocation.DesktopLocation
-            )
+            dir=QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation),
         )
         return folder
 
     @staticmethod
-    def __themeModeChanged(theme) -> None:
+    def _themeModeChanged(theme) -> None:
         """
         主题切换槽函数
         """
+        # 最好还是重启下吧，不然有些地方不生效，修也不好修，就很烦
+        cfg.appRestartSig.emit()
         from src.Ui.MainWindow import MainWindow
-        setTheme(cfg.get(theme), save=True, lazy=True)
-        it(MainWindow).home_widget.updateBgImage()
-        it(MainWindow).add_widget.updateBgImage()
-        it(MainWindow).bot_list_widget.updateBgImage()
-        it(MainWindow).setup_widget.updateBgImage()
 
-    def __showRestartTooltip(self) -> None:
+        setTheme(cfg.get(theme), save=True)
+        it(MainWindow).home_widget.updateBgImage()
+
+    def _showRestartTooltip(self) -> None:
         """
         显示重启提示
         """
         InfoBar.success(
-            self.tr('Updated successfully'),
-            self.tr('Configuration takes effect after restart'),
+            self.tr("Updated successfully"),
+            self.tr("Configuration takes effect after restart"),
             orient=Qt.Orientation.Vertical,
-            duration=1500,
-            parent=self
+            duration=3000,
+            parent=self,
         )
 
 

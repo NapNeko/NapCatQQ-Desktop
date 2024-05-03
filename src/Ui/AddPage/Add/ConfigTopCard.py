@@ -3,8 +3,9 @@ from typing import TYPE_CHECKING
 
 from creart import it
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets.common import Action, FluentIcon
+from qfluentwidgets.common import Action, FluentIcon, isDarkTheme
 from qfluentwidgets.components import (
     CaptionLabel,
     InfoBar,
@@ -14,9 +15,11 @@ from qfluentwidgets.components import (
     PushButton,
     RoundMenu,
     TitleLabel,
+    SegmentedWidget
 )
 
 from src.Core.CreateScript import ScriptType
+from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
     from src.Core.CreateScript import CreateScript
@@ -65,10 +68,12 @@ class ConfigTopCard(QWidget):
         self.labelLayout = QVBoxLayout()
         self.buttonLayout = QHBoxLayout()
 
-        self.__setLayout()
-        self.__connectSignal()
+        self._setLayout()
+        self._connectSignal()
 
-    def __setLayout(self) -> None:
+    def _setLayout(self) -> None:
+        self.setFixedHeight(80)
+
         self.labelLayout.setSpacing(0)
         self.labelLayout.setContentsMargins(0, 0, 0, 0)
         self.labelLayout.addWidget(self.titleLabel)
@@ -88,13 +93,14 @@ class ConfigTopCard(QWidget):
         self.hBoxLayout.addStretch(1)
         self.hBoxLayout.addLayout(self.buttonLayout)
         self.hBoxLayout.addSpacing(20)
+        self.hBoxLayout.setContentsMargins(20, 20, 20, 10)
 
         self.setLayout(self.hBoxLayout)
 
-    def __connectSignal(self) -> None:
+    def _connectSignal(self) -> None:
         self.clearConfigButton.clicked.connect(self.clearBtnSlot)
 
-    def __initCreateScript(self, scriptType) -> "CreateScript":
+    def _initCreateScript(self, scriptType) -> "CreateScript":
         from src.Core.CreateScript import CreateScript
         from src.Ui.AddPage.Add import AddWidget
 
@@ -105,15 +111,15 @@ class ConfigTopCard(QWidget):
         )
 
     def _createPs1ScriptSlot(self) -> None:
-        create = self.__initCreateScript(ScriptType.PS1)
+        create = self._initCreateScript(ScriptType.PS1)
         create.createPs1Script()
 
     def _createBatScriptSlot(self) -> None:
-        create = self.__initCreateScript(ScriptType.BAT)
+        create = self._initCreateScript(ScriptType.BAT)
         create.createBatScript()
 
     def _createShScriptSlot(self) -> None:
-        create = self.__initCreateScript(ScriptType.SH)
+        create = self._initCreateScript(ScriptType.SH)
         create.createShScript()
 
     def clearBtnSlot(self) -> None:

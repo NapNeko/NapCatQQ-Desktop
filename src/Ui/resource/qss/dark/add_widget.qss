@@ -1,4 +1,5 @@
 AddWidget,
+ConfigTopCard,
 #AddView {
     background: transparent;
     border-color: transparent;

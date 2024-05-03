@@ -8,15 +8,14 @@ from typing import TYPE_CHECKING, Self
 
 from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
-
-from src.Ui import PageBase
+from qfluentwidgets import ScrollArea
 from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class BotListWidget(PageBase):
+class BotListWidget(ScrollArea):
 
     def __init__(self):
         super().__init__()
@@ -30,9 +29,6 @@ class BotListWidget(PageBase):
         self.setParent(parent),
         self.setObjectName("BotListPage")
         self.setWidgetResizable(True)
-
-        # 调用方法
-        self.updateBgImage()
 
         # 应用样式表
         StyleSheet.BOT_LIST_WIDGET.apply(self)
