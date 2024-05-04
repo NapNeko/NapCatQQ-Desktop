@@ -5,6 +5,16 @@ ConfigTopCard,
     border-color: transparent;
 }
 
+BotWidget,
+AdvancedWidget,
+ConnectWidget,
+#BotWidgetView,
+#ConnectWidgetView,
+#AdvanceWidgetView {
+    background: transparent;
+    border: none;
+}
+
 AddWidget {
     border-top-left-radius: 16px;
 }

@@ -58,6 +58,10 @@ class UrlCard(ExpandSettingCard):
     """
     ## 上报 Url 列表卡片
     """
+    # 成功添加 url 的信号
+    addSignal = Signal()
+    # 当用户删除了所有 url 的信号
+    emptiedSignal = Signal()
 
     def __init__(
         self, icon: FluentIconBase, title: str, content: str, parent=None
@@ -133,6 +137,7 @@ class UrlCard(ExpandSettingCard):
         self.urls.append(box.urlLineEdit.text())
         self._addUrlItem(box.urlLineEdit.text())
         self.setExpand(True)
+        self.addSignal.emit()
 
     def _addUrlItem(self, url: str) -> None:
         """
@@ -178,6 +183,7 @@ class UrlCard(ExpandSettingCard):
         if not len(self.urls):
             self.card.expandButton.clicked.emit()
             self.card.expandButton.setEnabled(False)
+            self.emptiedSignal.emit()
 
     def wheelEvent(self, event) -> None:
         if self.isExpand:

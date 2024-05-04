@@ -18,7 +18,7 @@ from qfluentwidgets.components import (
 from src.Core.CreateScript import ScriptType
 
 if TYPE_CHECKING:
-    from src.Core.CreateScript import CreateScript
+    from src.Core import CreateScript
     from src.Ui.AddPage.Add import AddWidget
 
 
@@ -88,14 +88,13 @@ class ConfigTopCard(QWidget):
         """
         ## 对内部进行布局
         """
-        self.setFixedHeight(128)
 
         self.labelLayout.setSpacing(0)
         self.labelLayout.setContentsMargins(0, 0, 0, 0)
         self.labelLayout.addWidget(self.titleLabel)
-        self.labelLayout.addSpacing(1)
+        self.labelLayout.addSpacing(5)
         self.labelLayout.addWidget(self.subtitleLabel)
-        self.labelLayout.addSpacing(1)
+        self.labelLayout.addSpacing(4)
         self.labelLayout.addWidget(self.pivot)
 
         self.buttonLayout.setSpacing(4)
@@ -108,8 +107,7 @@ class ConfigTopCard(QWidget):
         self.hBoxLayout.addLayout(self.labelLayout)
         self.hBoxLayout.addStretch(1)
         self.hBoxLayout.addLayout(self.buttonLayout)
-        self.hBoxLayout.addSpacing(20)
-        self.hBoxLayout.setContentsMargins(25, 20, 17, 10)
+        self.hBoxLayout.setContentsMargins(1, 0, 1, 5)
 
         self.setLayout(self.hBoxLayout)
 

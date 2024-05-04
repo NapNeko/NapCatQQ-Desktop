@@ -8,7 +8,7 @@ from PySide6.QtGui import QDesktopServices
 from creart import it
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox, TransparentPushButton, FluentIcon
 
-from src.Core.CreateScript.ConfigModel import Config, ScriptType
+from src.Core.Config.ConfigModel import Config, ScriptType
 from src.Core.PathFunc import PathFunc
 
 

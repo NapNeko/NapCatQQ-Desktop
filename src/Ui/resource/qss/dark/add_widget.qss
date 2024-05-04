@@ -1,8 +1,19 @@
 AddWidget,
 ConfigTopCard,
+ScrollArea,
 #AddView {
     background: transparent;
     border-color: transparent;
+}
+
+BotWidget,
+AdvancedWidget,
+ConnectWidget,
+#BotWidgetView,
+#ConnectWidgetView,
+#AdvanceWidgetView {
+    background: transparent;
+    border: none;
 }
 
 AddWidget {

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 from creart import it
-from qfluentwidgets import ExpandLayout, FluentIcon
+from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Core.PathFunc import PathFunc
 from src.Ui.AddPage.Card import (
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from src.Ui.AddPage.Add.AddWidget import AddWidget
 
 
-class AdvancedWidget(QWidget):
+class AdvancedWidget(ScrollArea):
     """
     ## Advance Item 项对应的 QWidget
     """
@@ -24,7 +25,14 @@ class AdvancedWidget(QWidget):
     def __init__(self, parent: "AddWidget") -> None:
         super().__init__(parent=parent)
         self.setObjectName("AdvanceWidget")
-        self.cardLayout = ExpandLayout(self)
+        self.view = QWidget()
+        self.cardLayout = ExpandLayout(self.view)
+
+        # 设置 ScrollArea
+        self.setWidget(self.view)
+        self.setWidgetResizable(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setObjectName("AdvanceWidgetView")
 
         # 调用方法
         self._initWidget()
@@ -39,24 +47,24 @@ class AdvancedWidget(QWidget):
             icon=FluentIcon.FOLDER,
             title=self.tr("Specify QQ path"),
             content=str(it(PathFunc).getQQPath()),
-            parent=self,
+            parent=self.view,
         )
         self.startScriptPathCard = FolderConfigCard(
             icon=FluentIcon.FOLDER,
             title=self.tr("Specifies the path created by the script"),
             content=str(it(PathFunc).getStartScriptPath()),
-            parent=self,
+            parent=self.view,
         )
         self.ffmpegPathCard = FolderConfigCard(
             icon=FluentIcon.MUSIC_FOLDER,
             title=self.tr("Specifies ffmpeg path"),
-            parent=self,
+            parent=self.view,
         )
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Debug"),
             content=self.tr("The message will carry a raw field, " "which is the original message content"),
-            parent=self,
+            parent=self.view,
         )
         self.localFile2UrlCard = SwitchConfigCard(
             icon=FluentIcon.SHARE,
@@ -65,33 +73,33 @@ class AdvancedWidget(QWidget):
                 "If the URL cannot be obtained when calling the get file interface, "
                 "use the base 64 field to return the file content"
             ),
-            parent=self,
+            parent=self.view,
         )
         self.fillLogCard = SwitchConfigCard(
             icon=FluentIcon.SAVE_AS,
             title=self.tr("Whether to enable file logging"),
             content=self.tr("Log to a file(It is off by default)"),
-            parent=self,
+            parent=self.view,
         )
         self.consoleLogCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Whether to enable console logging"),
             content=self.tr("Log to a console(It is off by default)"),
-            parent=self,
+            parent=self.view,
         )
         self.fileLogLevelCard = ComboBoxConfigCard(
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             title=self.tr("File log level"),
             content=self.tr("Set the log level when the output file is output (default debug)"),
-            texts=['debug', 'info', 'error'],
-            parent=self,
+            texts=["debug", "info", "error"],
+            parent=self.view,
         )
         self.consoleLevelCard = ComboBoxConfigCard(
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             title=self.tr("Console log level"),
             content=self.tr("Setting the Console Output Log Level (Default Info)"),
-            texts=['info', 'debug', 'error'],
-            parent=self,
+            texts=["info", "debug", "error"],
+            parent=self.view,
         )
 
         self.cards = [
@@ -110,11 +118,13 @@ class AdvancedWidget(QWidget):
         """
         ## 将 QWidget 内部的 Card 添加到布局中
         """
-        self.cardLayout.setContentsMargins(25, 0, 35, 10)
+        self.cardLayout.setContentsMargins(0, 0, 0, 0)
         self.cardLayout.setSpacing(2)
         for card in self.cards:
             self.cardLayout.addWidget(card)
             self.adjustSize()
+
+        self.view.setLayout(self.cardLayout)
 
     def getValue(self) -> dict:
         """

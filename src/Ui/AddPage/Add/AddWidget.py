@@ -6,11 +6,9 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QStackedWidget
+from PySide6.QtWidgets import QStackedWidget, QWidget, QVBoxLayout
 from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets import ScrollArea
 
 from src.Ui.AddPage.Add.Advanced import AdvancedWidget
 from src.Ui.AddPage.Add.BotWidget import BotWidget
@@ -22,32 +20,33 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class AddWidget(ScrollArea):
+class AddWidget(QWidget):
     """
     ## 窗体中 Add Bot 对应的 Widget
     """
 
     def __init__(self):
         super().__init__()
-        self.topCard: ConfigTopCard = None
         self.view: QStackedWidget = None
+        self.topCard: ConfigTopCard = None
+        self.vBoxLayout: QVBoxLayout = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
         ## 初始化 Widget 所需要的控件并进行配置
         """
         # 创建控件
+        self.vBoxLayout = QVBoxLayout(self)
         self.topCard = ConfigTopCard(self)
         self._createView()
 
-        # 设置 ScrollArea
+        # 设置 QWidget
         self.setParent(parent)
         self.setObjectName("AddPage")
-        self.setWidget(self.view)
-        self.setWidgetResizable(True)
-        self.setViewportMargins(0, self.topCard.height(), 0, 10)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view.setObjectName("AddView")
+
+        # 调用方法
+        self._setLayout()
 
         # 应用样式表
         StyleSheet.ADD_WIDGET.apply(self)
@@ -71,23 +70,32 @@ class AddWidget(ScrollArea):
         self.topCard.pivot.addItem(
             routeKey=self.botWidget.objectName(),
             text=self.tr("Bot"),
-            onClick=lambda: self.view.setCurrentWidget(self.botWidget)
+            onClick=lambda: self.view.setCurrentWidget(self.botWidget),
         )
         self.topCard.pivot.addItem(
             routeKey=self.connectWidget.objectName(),
             text=self.tr("Connect"),
-            onClick=lambda: self.view.setCurrentWidget(self.connectWidget)
+            onClick=lambda: self.view.setCurrentWidget(self.connectWidget),
         )
         self.topCard.pivot.addItem(
             routeKey=self.advancedWidget.objectName(),
             text=self.tr("Advanced"),
-            onClick=lambda: self.view.setCurrentWidget(self.advancedWidget)
+            onClick=lambda: self.view.setCurrentWidget(self.advancedWidget),
         )
 
         # 连接信号并初始化当前标签页
         self.view.currentChanged.connect(self.onCurrentIndexChanged)
         self.view.setCurrentWidget(self.botWidget)
         self.topCard.pivot.setCurrentItem(self.botWidget.objectName())
+
+    def _setLayout(self):
+        """
+        ## 布局内部控件
+        """
+        self.vBoxLayout.addWidget(self.topCard)
+        self.vBoxLayout.addWidget(self.view)
+        self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
+        self.setLayout(self.vBoxLayout)
 
     def getConfig(self) -> dict:
         """
@@ -96,7 +104,7 @@ class AddWidget(ScrollArea):
         return {
             "bot": self.botWidget.getValue(),
             "connect": self.connectWidget.getValue(),
-            "advanced": self.advancedWidget.getValue()
+            "advanced": self.advancedWidget.getValue(),
         }
 
     def onCurrentIndexChanged(self, index):
@@ -105,13 +113,6 @@ class AddWidget(ScrollArea):
         """
         widget = self.view.widget(index)
         self.topCard.pivot.setCurrentItem(widget.objectName())
-
-    def resizeEvent(self, event) -> None:
-        """
-        ## 重写缩放事件对 topCard 进行大小调整
-        """
-        super().resizeEvent(event)
-        self.topCard.resize(self.width(), self.topCard.height())
 
 
 class AddWidgetClassCreator(AbstractCreator, ABC):
