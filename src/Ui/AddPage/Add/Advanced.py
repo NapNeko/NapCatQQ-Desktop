@@ -9,6 +9,7 @@ from src.Core.PathFunc import PathFunc
 from src.Ui.AddPage.Card import (
     SwitchConfigCard,
     FolderConfigCard,
+    ComboBoxConfigCard,
 )
 
 if TYPE_CHECKING:
@@ -38,10 +39,18 @@ class AdvancedWidget(QWidget):
             icon=FluentIcon.FOLDER,
             title=self.tr("Specify QQ path"),
             content=str(it(PathFunc).getQQPath()),
+            parent=self,
+        )
+        self.startScriptPathCard = FolderConfigCard(
+            icon=FluentIcon.FOLDER,
+            title=self.tr("Specifies the path created by the script"),
+            content=str(it(PathFunc).getStartScriptPath()),
+            parent=self,
         )
         self.ffmpegPathCard = FolderConfigCard(
             icon=FluentIcon.MUSIC_FOLDER,
-            title=self.tr("Set the ffmpeg path"),
+            title=self.tr("Specifies ffmpeg path"),
+            parent=self,
         )
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
@@ -58,12 +67,43 @@ class AdvancedWidget(QWidget):
             ),
             parent=self,
         )
+        self.fillLogCard = SwitchConfigCard(
+            icon=FluentIcon.SAVE_AS,
+            title=self.tr("Whether to enable file logging"),
+            content=self.tr("Log to a file(It is off by default)"),
+            parent=self,
+        )
+        self.consoleLogCard = SwitchConfigCard(
+            icon=FluentIcon.COMMAND_PROMPT,
+            title=self.tr("Whether to enable console logging"),
+            content=self.tr("Log to a console(It is off by default)"),
+            parent=self,
+        )
+        self.fileLogLevelCard = ComboBoxConfigCard(
+            icon=FluentIcon.EMOJI_TAB_SYMBOLS,
+            title=self.tr("File log level"),
+            content=self.tr("Set the log level when the output file is output (default debug)"),
+            texts=['debug', 'info', 'error'],
+            parent=self,
+        )
+        self.consoleLevelCard = ComboBoxConfigCard(
+            icon=FluentIcon.EMOJI_TAB_SYMBOLS,
+            title=self.tr("Console log level"),
+            content=self.tr("Setting the Console Output Log Level (Default Info)"),
+            texts=['info', 'debug', 'error'],
+            parent=self,
+        )
 
         self.cards = [
             self.QQPathCard,
+            self.startScriptPathCard,
             self.ffmpegPathCard,
             self.debugModeCard,
             self.localFile2UrlCard,
+            self.fillLogCard,
+            self.consoleLogCard,
+            self.fileLogLevelCard,
+            self.consoleLevelCard,
         ]
 
     def _setLayout(self):
@@ -82,10 +122,22 @@ class AdvancedWidget(QWidget):
         """
         return {
             "QQPath": self.QQPathCard.getValue(),
+            "startScriptPath": self.startScriptPathCard.getValue(),
             "ffmpegPath": self.ffmpegPathCard.getValue(),
             "debug": self.debugModeCard.getValue(),
             "localFile2url": self.localFile2UrlCard.getValue(),
+            "fileLog": self.fillLogCard.getValue(),
+            "consoleLog": self.consoleLogCard.getValue(),
+            "fileLogLevel": self.fileLogLevelCard.getValue(),
+            "consoleLogLevel": self.consoleLevelCard.getValue(),
         }
+
+    def clearValues(self) -> None:
+        """
+        ## 清空(还原)内部卡片的配置
+        """
+        for card in self.cards:
+            card.clear()
 
     def adjustSize(self):
         h = self.cardLayout.heightForWidth(self.width()) + 46

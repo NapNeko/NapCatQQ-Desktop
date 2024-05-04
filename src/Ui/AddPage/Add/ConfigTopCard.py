@@ -158,7 +158,7 @@ class ConfigTopCard(QWidget):
         """
         from src.Ui.AddPage.Add import AddWidget
 
-        msg = MessageBox(
+        box = MessageBox(
             title=self.tr("Confirm clearing configuration"),
             content=self.tr(
                 "After clearing, all configuration items on this page "
@@ -166,3 +166,8 @@ class ConfigTopCard(QWidget):
             ),
             parent=it(AddWidget),
         )
+
+        if box.exec():
+            it(AddWidget).botWidget.clearValues()
+            it(AddWidget).connectWidget.clearValues()
+            it(AddWidget).advancedWidget.clearValues()

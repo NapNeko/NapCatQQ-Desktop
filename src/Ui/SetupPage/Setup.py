@@ -53,16 +53,16 @@ class SetupWidget(ScrollArea):
         self.view.setObjectName("SetupView")
 
         # 调用方法
-        self.__createConfigCards()
+        self._createConfigCards()
         self._connect_signal()
-        self.__setLayout()
+        self._setLayout()
 
         # 应用样式表
         StyleSheet.SETUP_WIDGET.apply(self)
 
         return self
 
-    def __createConfigCards(self) -> None:
+    def _createConfigCards(self) -> None:
         """
         创建配置项卡片
         """
@@ -121,8 +121,15 @@ class SetupWidget(ScrollArea):
             text=self.tr("Choose folder"),
             parent=self.pathGroup,
         )
+        self.StartScriptPath = PushSettingCard(
+            icon=FluentIcon.COMMAND_PROMPT,
+            title=self.tr("Start script path"),
+            content=str(it(PathFunc).getStartScriptPath()),
+            text=self.tr("Choose folder"),
+            parent=self.pathGroup
+        )
 
-    def __setLayout(self) -> None:
+    def _setLayout(self) -> None:
         """
         控件布局
         """
@@ -135,6 +142,7 @@ class SetupWidget(ScrollArea):
 
         self.pathGroup.addSettingCard(self.QQPathCard)
         self.pathGroup.addSettingCard(self.NapCatPathCard)
+        self.pathGroup.addSettingCard(self.StartScriptPath)
 
         # 添加到布局
         self.expand_layout.addWidget(self.startGroup)
@@ -178,7 +186,7 @@ class SetupWidget(ScrollArea):
         """
         folder = self._selectFolder()
         if folder:
-            cfg.set(cfg.NapCatPath, folder, save=True)
+            cfg.set(cfg.napcat_path, folder, save=True)
             self.NapCatPathCard.setContent(folder)
 
     def _selectFolder(self) -> str:

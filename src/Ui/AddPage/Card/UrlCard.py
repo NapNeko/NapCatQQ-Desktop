@@ -89,7 +89,7 @@ class UrlCard(ExpandSettingCard):
         清空卡片内容
         """
         for item in self.urlItemList:
-            self.__removeUrl(item)
+            self._removeUrl(item)
         self.urls.clear()
 
     def _initWidget(self):
@@ -131,22 +131,23 @@ class UrlCard(ExpandSettingCard):
             return
 
         self.urls.append(box.urlLineEdit.text())
-        self.__addUrlItem(box.urlLineEdit.text())
+        self._addUrlItem(box.urlLineEdit.text())
+        self.setExpand(True)
 
-    def __addUrlItem(self, url: str) -> None:
+    def _addUrlItem(self, url: str) -> None:
         """
         添加 Url Item
         """
         if not self.card.expandButton.isEnabled():
             self.card.expandButton.setEnabled(True)
         item = UrlItem(url, self.view)
-        item.removed.connect(self.__showConfirmDialog)
+        item.removed.connect(self._showConfirmDialog)
         self.urlItemList.append(item)
         self.viewLayout.addWidget(item)
         item.show()
         self._adjustViewSize()
 
-    def __showConfirmDialog(self, item: UrlItem) -> None:
+    def _showConfirmDialog(self, item: UrlItem) -> None:
         """
         显示确认对话框
         """
@@ -159,10 +160,10 @@ class UrlCard(ExpandSettingCard):
             ),
             parent=it(AddWidget),
         )
-        box.yesSignal.connect(lambda: self.__removeUrl(item))
+        box.yesSignal.connect(lambda: self._removeUrl(item))
         box.exec()
 
-    def __removeUrl(self, item: UrlItem):
+    def _removeUrl(self, item: UrlItem):
         """
         移除 Url Item
         """

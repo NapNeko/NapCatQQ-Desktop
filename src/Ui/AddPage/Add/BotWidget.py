@@ -109,6 +109,13 @@ class BotWidget(QWidget):
             "accessToken": self.accessTokenCard.getValue(),
         }
 
+    def clearValues(self) -> None:
+        """
+        ## 清空(还原)内部卡片的配置
+        """
+        for card in self.cards:
+            card.clear()
+
     def adjustSize(self):
         h = self.cardLayout.heightForWidth(self.width()) + 46
         return self.resize(self.width(), h)

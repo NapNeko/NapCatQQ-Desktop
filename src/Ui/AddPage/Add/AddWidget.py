@@ -6,16 +6,16 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
-from PySide6.QtWidgets import QVBoxLayout, QStackedWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QStackedWidget
 from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from qfluentwidgets import ScrollArea
-from qfluentwidgets.components import ExpandLayout, SettingCardGroup
 
-from src.Ui.AddPage.Add.ConfigTopCard import ConfigTopCard
-from src.Ui.AddPage.Add.BotWidget import BotWidget
-from src.Ui.AddPage.Add.Connect import ConnectWidget
 from src.Ui.AddPage.Add.Advanced import AdvancedWidget
+from src.Ui.AddPage.Add.BotWidget import BotWidget
+from src.Ui.AddPage.Add.ConfigTopCard import ConfigTopCard
+from src.Ui.AddPage.Add.Connect import ConnectWidget
 from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
@@ -45,7 +45,8 @@ class AddWidget(ScrollArea):
         self.setObjectName("AddPage")
         self.setWidget(self.view)
         self.setWidgetResizable(True)
-        self.setViewportMargins(0, self.topCard.height(), 0, 0)
+        self.setViewportMargins(0, self.topCard.height(), 0, 10)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view.setObjectName("AddView")
 
         # 应用样式表
@@ -92,9 +93,16 @@ class AddWidget(ScrollArea):
         """
         ## 返回配置结果
         """
-        return {}
+        return {
+            "bot": self.botWidget.getValue(),
+            "connect": self.connectWidget.getValue(),
+            "advanced": self.advancedWidget.getValue()
+        }
 
     def onCurrentIndexChanged(self, index):
+        """
+        ## 切换 Pivot 和 view 的槽函数
+        """
         widget = self.view.widget(index)
         self.topCard.pivot.setCurrentItem(widget.objectName())
 

@@ -57,7 +57,13 @@ class Config(QConfig):
     )
     NapCatPath = ConfigItem(
         group="Path",
-        name="NapCatPath",
+        name="napcat_path",
+        default="",
+        validator=FolderValidator()
+    )
+    StartScriptPath = ConfigItem(
+        group="Path",
+        name="StartScriptPath",
         default="",
         validator=FolderValidator()
     )

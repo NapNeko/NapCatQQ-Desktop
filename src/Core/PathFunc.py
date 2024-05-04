@@ -13,22 +13,21 @@ class PathFunc:
 
     def __init__(self):
         """
-        初始化
+        ## 初始化
         """
-        # 软件路径
         self.qq_path = None
         self.base_path = Path.cwd()
         self.config_dir_path = self.base_path / "config"
         self.config_path = self.config_dir_path / "config.json"
         self.tmp_path = self.base_path / "tmp"
-        self.start_script = self.base_path / "start_script"
-        self.NapCatPath = self.base_path / "NapCat"
+        self.napcat_path = self.base_path / "NapCat"
+        self.start_script = self.base_path / "StartScript"
 
         self.pathValidator()
 
     def pathValidator(self) -> None:
         """
-        验证路径
+        ## 验证一系列路径
         """
         logger.info(f"{'-' * 10}开始验证路径{'-' * 10}")
 
@@ -89,14 +88,31 @@ class PathFunc:
 
     def getNapCatPath(self) -> Path:
         """
-        获取 NapCat 路径
+        ## 获取 NapCat 路径
+        会验证路径是否为 default
         """
         from src.Core.Config import cfg
 
         if Path(cfg.get(cfg.NapCatPath)) == Path.cwd():
-            cfg.set(item=cfg.NapCatPath, value=str(self.NapCatPath), save=True)
-            return self.NapCatPath
-        return self.NapCatPath
+            # 如果为 default 路径则写入类内部定义的路径
+            cfg.set(item=cfg.NapCatPath, value=str(self.napcat_path), save=True)
+        else:
+            self.napcat_path = Path(cfg.get(item=cfg.NapCatPath))
+        return self.napcat_path
+
+    def getStartScriptPath(self) -> Path:
+        """
+        ## 获取启动脚本路径
+        会验证路径是否为 default
+        """
+        from src.Core.Config import cfg
+
+        if Path(cfg.get(cfg.StartScriptPath)) == Path.cwd():
+            # 如果为 default 路径则写入类内部定义的路径
+            cfg.set(item=cfg.StartScriptPath, value=str(self.start_script), save=True)
+        else:
+            self.start_script = Path(cfg.get(item=cfg.StartScriptPath))
+        return self.start_script
 
 
 class PathFuncClassCreator(AbstractCreator, ABC):

@@ -44,7 +44,7 @@ class MainWindow(MSFluentWindow):
         # 标题栏部分
         self.setTitleBar(CustomTitleBar(self))
         # 窗体大小以及设置打开时居中
-        self.setMinimumSize(900, 560)
+        self.setMinimumSize(930, 630)
         desktop = QApplication.screens()[0].availableGeometry()
         width, height = desktop.width(), desktop.height()
         self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)

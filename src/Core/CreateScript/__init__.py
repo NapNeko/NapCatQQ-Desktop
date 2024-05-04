@@ -55,6 +55,7 @@ class CreateScript:
                 self.infoBarParent.tr("Unable to create scripts"),
                 self.infoBarParent.tr("Currently, the system does not support the creation of bat, ps1 scripts"),
             )
+            return None
         else:
             if systemType == QOperatingSystemVersion.OSType.Windows:
                 # QOperatingSystemVersion 没有 Linux Type
@@ -62,16 +63,19 @@ class CreateScript:
                     self.infoBarParent.tr("Unable to create scripts"),
                     self.infoBarParent.tr(".sh scripts are not supported by the current system"),
                 )
+                return None
             return scriptType
 
     def createPs1Script(self) -> None:
         """
         创建 ps1 脚本
         """
-        if self.config is None:
+        if self.config is None or self.scriptType is None:
+            # 如果为 None 则中断创建
             return
-        start_script_path, config_path = self._pathVerify(ScriptType.PS1.value)
+        start_script_path, bot_config_path, napcat_config_path = self._pathVerify(ScriptType.PS1.value)
         if start_script_path is None:
+            # 如果为 None 则中断创建
             return
 
         # 脚本内容
@@ -89,7 +93,7 @@ class CreateScript:
         Start-Process powershell -ArgumentList "-noexit", "-noprofile", "-command", $command
         """
         # 创建配置文件
-        self._createConfig(config_path)
+        self._createConfig(bot_config_path, napcat_config_path)
 
         # 写入脚本
         self._createScript(start_script_path, ps1_script)
@@ -99,10 +103,12 @@ class CreateScript:
         创建 Bat 脚本
         """
         # 验证路径和配置文件
-        if self.config is None:
+        if self.config is None or self.scriptType is None:
+            # 如果为 None 则中断创建
             return
-        start_script_path, config_path = self._pathVerify(ScriptType.BAT.value)
+        start_script_path, bot_config_path, napcat_config_path = self._pathVerify(ScriptType.BAT.value)
         if start_script_path is None:
+            # 如果为 None 则中断创建
             return
 
         # 脚本内容
@@ -122,7 +128,7 @@ class CreateScript:
         """
 
         # 创建配置文件
-        self._createConfig(config_path)
+        self._createConfig(bot_config_path, napcat_config_path)
 
         # 写入脚本
         self._createScript(start_script_path, bat_script)
@@ -132,10 +138,12 @@ class CreateScript:
         创建 sh 脚本（暂未进行测试,当 windows 环境下功能完成开发后再进行测试）
         """
         # 验证路径和配置文件
-        if self.config is None:
+        if self.config is None or self.scriptType is None:
+            # 如果为 None 则中断创建
             return
-        start_script_path, config_path = self._pathVerify(ScriptType.SH.value)
+        start_script_path, bot_config_path, napcat_config_path = self._pathVerify(ScriptType.SH.value)
         if start_script_path is None:
+            # 如果为 None 则中断创建
             return
 
         # 脚本内容
@@ -150,7 +158,7 @@ class CreateScript:
         """
 
         # 创建配置文件
-        self._createConfig(config_path)
+        self._createConfig(bot_config_path, napcat_config_path)
 
         # 写入脚本
         self._createScript(start_script_path, sh_script)
@@ -159,21 +167,28 @@ class CreateScript:
         """
         检查所需路径是否存在
         """
-        path = it(PathFunc).start_script / self.config.bot.QQID
+        # 指定脚本创建位置和 NapCatQQ 的配置文件路径
+        path = Path(self.config.advanced.startScriptPath) / self.config.bot.QQID
         config_path = it(PathFunc).getNapCatPath() / "config"
+
+        # 验证路径是否存在
         if not path.exists() or path.is_dir():
             path.mkdir(parents=True, exist_ok=True)
         if not config_path.exists() or path.is_dir():
             path.mkdir(parents=True, exist_ok=True)
 
+        # 指定脚本文件路径, bot配置文件路径, napcat配置文件路径
         start_script_path = path / f"start.{scriptType}"
-        config_path = config_path / f"onebot11_{self.config.bot.QQID}.json"
+        bot_config_path = config_path / f"onebot11_{self.config.bot.QQID}.json"
+        napcat_config_path = config_path / f"napcat_{self.config.bot.QQID}.json"
 
+        # 如果脚本文件已经存在则提示用户是否需要覆盖
         if start_script_path.exists():
             if not self._showOverlayPrompts(start_script_path):
+                # 如果不覆盖则返回 None 后续用于结束创建
                 start_script_path = None
 
-        return start_script_path, config_path
+        return start_script_path, bot_config_path, napcat_config_path
 
     def _createScript(self, start_script_path: Path, script: str) -> None:
         """
@@ -185,26 +200,32 @@ class CreateScript:
         # 写入脚本成功后提示
         self._showSuccessBar(start_script_path)
 
-    def _createConfig(self, config_path: Path) -> None:
+    def _createConfig(self, bot_config_path: Path, napcat_config_path: Path) -> None:
         """
         创建 napcat 的配置文件
         """
-        if self._showOverlayPrompts(config_path) is None:
-            return
+        # 如果 bot 配置文件或者 napcat 配置文件已经存在
+        # 询问用户是否需要覆盖, 不覆盖则直接返回
+        if bot_config_path.exists():
+            if self._showOverlayPrompts(bot_config_path) is None:
+                return
+        if napcat_config_path.exists():
+            if self._showOverlayPrompts(napcat_config_path) is None:
+                return
 
-        config = {
-            "httpHost": self.config.bot.http.addresses,
-            "enableHttp": self.config.bot.http.enable,
-            "httpPort": self.config.bot.http.port,
-            "enableHttpPost": self.config.bot.httpReport.enable,
-            "enableHttpHeart": self.config.bot.httpReport.enableHeart,
-            "httpSecret": self.config.bot.httpReport.token,
-            "httpPostUrls": self.config.bot.httpReportUrls,
-            "enableWs": self.config.bot.ws.enable,
-            "wsHost": self.config.bot.ws.addresses,
-            "wsPort": self.config.bot.ws.port,
-            "enableWsReverse": self.config.bot.wsReverse,
-            "wsReverseUrls": self.config.bot.wsReverseUrls,
+        bot_config = {
+            "httpHost": self.config.connect.http.addresses,
+            "enableHttp": self.config.connect.http.enable,
+            "httpPort": self.config.connect.http.port,
+            "enableHttpPost": self.config.connect.httpReport.enable,
+            "enableHttpHeart": self.config.connect.httpReport.enableHeart,
+            "httpSecret": self.config.connect.httpReport.token,
+            "httpPostUrls": [str(url) for url in self.config.connect.httpReportUrls],
+            "enableWs": self.config.connect.ws.enable,
+            "wsHost": self.config.connect.ws.addresses,
+            "wsPort": self.config.connect.ws.port,
+            "enableWsReverse": self.config.connect.wsReverse,
+            "wsReverseUrls": [str(url) for url in self.config.connect.wsReverseUrls],
             "messagePostFormat": self.config.bot.msgFormat,
             "reportSelfMessage": self.config.bot.reportSelfMsg,
             "debug": self.config.advanced.debug,
@@ -213,9 +234,18 @@ class CreateScript:
             "token": self.config.bot.accessToken,
         }
 
+        napcat_config = {
+            "fileLog": self.config.advanced.fileLog,
+            "consoleLog": self.config.advanced.consoleLog,
+            "fileLogLevel": self.config.advanced.fileLogLevel,
+            "consoleLogLevel": self.config.advanced.consoleLogLevel,
+        }
+
         # 写入配置文件
-        with open(str(config_path), "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4)
+        with open(str(bot_config_path), "w", encoding="utf-8") as f:
+            json.dump(bot_config, f, indent=4)
+        with open(str(napcat_config_path), "w", encoding="utf-8") as f:
+            json.dump(napcat_config, f, indent=4)
 
     def _showOverlayPrompts(self, path: str) -> None:
         """
