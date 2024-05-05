@@ -1,7 +1,7 @@
 import random
 import string
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, HttpUrl, WebsocketUrl, field_validator
 
@@ -23,14 +23,14 @@ class BotConfig(BaseModel):
     msgFormat: str
     reportSelfMsg: bool
     heartInterval: str
-    accessToken: str
+    accessToken: Optional[str]
 
     @field_validator("name")
     @staticmethod
     def validate_name(value):
         # 验证 name 如果为空则生成一个
         if not value:
-            return random.choices(string.ascii_letters, k=8)
+            return "".join(random.choices(string.ascii_letters, k=8))
         return value
 
     @field_validator("QQID")
@@ -73,7 +73,7 @@ class HttpConfig(BaseModel):
 class HttpReportConfig(BaseModel):
     enable: bool
     enableHeart: bool
-    token: str
+    token: Optional[str]
 
 
 class ConnectConfig(BaseModel):

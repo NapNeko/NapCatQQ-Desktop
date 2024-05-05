@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-from typing import TYPE_CHECKING
+import json
+from typing import TYPE_CHECKING, List
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
+from qfluentwidgets import InfoBar, InfoBarPosition
 from qfluentwidgets.common import Action, FluentIcon
 from qfluentwidgets.components import (
     CaptionLabel,
@@ -115,7 +117,50 @@ class ConfigTopCard(QWidget):
         """
         ## 链接所需信号
         """
-        self.clearConfigButton.clicked.connect(self.clearBtnSlot)
+        self.clearConfigButton.clicked.connect(self._clearBtnSlot)
+        self.psPushButton.clicked.connect(self._addBotListBtnSlot)
+
+    def _addBotListBtnSlot(self) -> None:
+        """
+        ## 添加到机器人列表
+        先保存到配置文件，然后执行 update 进行刷新
+        """
+        from src.Core.PathFunc import PathFunc
+        from src.Ui.AddPage.Add.AddWidget import AddWidget
+        from src.Core.Config.ConfigModel import Config
+
+        bot_config_path = it(PathFunc).bot_config_path
+        try:
+            # 读取配置文件并追加, 判断是否存在相同的 QQID
+            config = Config(**it(AddWidget).getConfig())
+            with open(str(bot_config_path), "r", encoding="utf-8") as f:
+                bot_configs: List[dict] = json.load(f)
+
+            for bot_config in bot_configs:
+                # 遍历验证是否存在相同的机器人
+                _ = Config(**bot_config)
+                if config.bot.QQID == _.bot.QQID:
+                    self._showErrorBox(
+                        self.tr("Bots can't be added"),
+                        self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly")
+                    )
+                    return
+            # 追加到配置文件
+            bot_configs.append(config.dict())
+
+            with open(str(bot_config_path), "w", encoding="utf-8") as f:
+                json.dump(bot_configs, f, indent=4)
+
+        except FileNotFoundError:
+            # 如果 json 文件没有被创建则创建一个并写入
+            config = Config(**it(AddWidget).getConfig())
+            config = [config.dict()]
+            with open(str(bot_config_path), "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=4)
+
+        except ValueError as e:
+            # 如果用户没有输入必须值，则提示
+            self._showErrorBox(self.tr("Bots can't be added"), str(e))
 
     def _initCreateScript(self, scriptType) -> "CreateScript":
         """
@@ -148,7 +193,7 @@ class ConfigTopCard(QWidget):
         create = self._initCreateScript(ScriptType.SH)
         create.createShScript()
 
-    def clearBtnSlot(self) -> None:
+    def _clearBtnSlot(self) -> None:
         """
         ## 清理按钮的槽函数
 
@@ -169,3 +214,19 @@ class ConfigTopCard(QWidget):
             it(AddWidget).botWidget.clearValues()
             it(AddWidget).connectWidget.clearValues()
             it(AddWidget).advancedWidget.clearValues()
+
+    @staticmethod
+    def _showErrorBox(title: str, content: str):
+        """
+        ## 显示错误消息条
+        """
+        from src.Ui.AddPage.Add.AddWidget import AddWidget
+        InfoBar.error(
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Vertical,
+            duration=50000,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            parent=it(AddWidget),
+        )
