@@ -19,6 +19,7 @@ class PathFunc:
         self.base_path = Path.cwd()
         self.config_dir_path = self.base_path / "config"
         self.config_path = self.config_dir_path / "config.json"
+        self.bot_config_path = self.config_dir_path / "bot.json"
         self.tmp_path = self.base_path / "tmp"
         self.napcat_path = self.base_path / "NapCat"
         self.start_script = self.base_path / "StartScript"
