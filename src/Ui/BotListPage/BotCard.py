@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QUrl, QUrlQuery, Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtNetwork import QNetworkRequest, QNetworkReply
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
-from qfluentwidgets import CardWidget, ImageLabel, InfoBar, InfoBarPosition, BodyLabel, setFont
+from qfluentwidgets import CardWidget, ImageLabel, InfoBar, InfoBarPosition, BodyLabel, setFont, ToolTipFilter
 
 from src.Core.Config.ConfigModel import Config
 from src.Core.NetworkFunc import Urls, NetworkFunc
@@ -39,6 +39,8 @@ class BotCard(CardWidget):
         self.setFixedSize(190, 230)
         self.vBoxLayout = QVBoxLayout(self)
 
+        self.clicked.connect(self._clickSlot)
+
     def _setLayout(self):
         """
         ## 布局卡片控件
@@ -47,7 +49,7 @@ class BotCard(CardWidget):
         self.vBoxLayout.addWidget(
             self.QQAvatarLabel, alignment=Qt.AlignmentFlag.AlignCenter,
         )
-        self.vBoxLayout.addSpacing(20)
+        self.vBoxLayout.addSpacing(25)
         self.vBoxLayout.addWidget(
             self.idLabel, alignment=Qt.AlignmentFlag.AlignHCenter
         )
@@ -60,6 +62,9 @@ class BotCard(CardWidget):
         ## 卡片展示的一些 Label
         """
         self.idLabel = BodyLabel(f"{self.config.bot.name}", self)
+        self.idLabel.setToolTip(self.idLabel.text())
+        self.idLabel.setToolTipDuration(1000)
+        self.idLabel.installEventFilter(ToolTipFilter(self.idLabel))
         setFont(self.idLabel, 16)
 
     def _QQAvatar(self):
@@ -95,6 +100,17 @@ class BotCard(CardWidget):
             self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
         else:
             self._showErrorBar(self.tr("Failed to get the QQ avatar"), replay.errorString())
+
+    def _clickSlot(self):
+        """
+        当自身被点击时
+        """
+        from src.Ui.BotListPage.BotListWidget import BotListWidget
+        it(BotListWidget).topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
+        widget = QWidget()
+        it(BotListWidget).view.addWidget(widget)
+        it(BotListWidget).view.setCurrentWidget(widget)
+
 
     @staticmethod
     def _showErrorBar(title: str, content: str):

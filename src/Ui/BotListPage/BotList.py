@@ -57,7 +57,7 @@ class BotList(ScrollArea):
         self._parseList()
         # 卸载掉原有的 card
         if self.cardLayout.count() != 0:
-            [self.cardLayout.itemAt(i).deleteLater() for i in range(self.cardLayout.count())]
+            self.cardLayout.takeAllWidgets()
 
         # 重新添加到布局中
         for bot in self.bot_list:
