@@ -34,7 +34,7 @@ class CustomTitleBar(MSFluentTitleBar):
         logger.success("标题栏构建完成")
 
     def set_title(self) -> None:
-        self.setTitle("NapCat Desktop")
+        self.setTitle("NapCatQQ Desktop")
         self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
 
     def set_buttons(self) -> None:

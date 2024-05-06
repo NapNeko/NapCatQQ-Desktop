@@ -1,75 +1,97 @@
 # -*- coding: utf-8 -*-
+import json
+from typing import List, TYPE_CHECKING
 
-"""
-机器人列表
-"""
-from abc import ABC
-from typing import TYPE_CHECKING, Self
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout
+from creart import it
+from qfluentwidgets import ScrollArea, InfoBar, InfoBarPosition, FlowLayout
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
-from creart import add_creator, exists_module
-from creart.creator import AbstractCreator, CreateTargetInfo
-
-from src.Ui.BotListPage.BotTopCard import BotTopCard
-from src.Ui.StyleSheet import StyleSheet
+from src.Core.Config.ConfigModel import Config
+from src.Core.PathFunc import PathFunc
+from src.Ui.BotListPage.BotCard import BotCard
 
 if TYPE_CHECKING:
-    from src.Ui.MainWindow import MainWindow
+    from src.Ui.BotListPage import BotListWidget
 
 
-class BotListWidget(QWidget):
+class BotList(ScrollArea):
+    """
+    ## BotListWidget 内部的机器人列表
 
-    def __init__(self):
-        super().__init__()
-        self.view: QStackedWidget = None
-        self.topCard: BotTopCard = None
-        self.vBoxLayout: QVBoxLayout = None
+    自动读取配置文件中已有的的机器人配置
+    """
 
-    def initialize(self, parent: "MainWindow") -> Self:
+    def __init__(self, parent: "BotListWidget"):
         """
-        初始化
+        ## 初始化
         """
-        self.vBoxLayout = QVBoxLayout(self)
+        super().__init__(parent=parent)
+        self._createView()
+        self.updateList()
+        self._initWidget()
 
-        self.topCard = BotTopCard(self)
-        self.view = QStackedWidget(self)
-
-        # 设置 ScrollArea
-        self.setParent(parent),
-        self.setObjectName("BotListPage")
-
-        # 调用方法
-        self._setLayout()
-
-        # 应用样式表
-        StyleSheet.BOT_LIST_WIDGET.apply(self)
-
-        return self
-
-    def _setLayout(self):
+    def _initWidget(self):
         """
-        ## 对内部进行布局
+        ## 设置 ScrollArea
         """
-        self.vBoxLayout.addWidget(self.topCard)
-        self.vBoxLayout.addWidget(self.view)
-        self.vBoxLayout.setContentsMargins(15, 10, 17, 10)
-        self.setLayout(self.vBoxLayout)
+        self.setWidget(self.view)
+        self.setWidgetResizable(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
+    def _createView(self):
+        """
+        ## 构建并设置 ScrollArea 所需的 widget
+        """
+        self.view = QWidget(self)
+        self.cardLayout = FlowLayout(self.view)
+        self.cardLayout.setContentsMargins(0, 0, 0, 0)
+        self.cardLayout.setSpacing(4)
+        self.view.setObjectName("BotListView")
+        self.view.setLayout(self.cardLayout)
 
-class BotListWidgetClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Ui.BotListPage.BotList", "BotListWidget"),)
+    def updateList(self):
+        """
+        ## 更新机器人列表
+        """
+        self._parseList()
+        # 卸载掉原有的 card
+        if self.cardLayout.count() != 0:
+            [self.cardLayout.itemAt(i).deleteLater() for i in range(self.cardLayout.count())]
 
-    # 静态方法available()，用于检查模块"BotList"是否存在，返回值为布尔型。
-    @staticmethod
-    def available() -> bool:
-        return exists_module("src.Ui.BotListPage.BotList")
+        # 重新添加到布局中
+        for bot in self.bot_list:
+            card = BotCard(bot)
+            self.cardLayout.addWidget(card)
 
-    # 静态方法create()，用于创建BotListWidget类的实例，返回值为BotListWidget对象。
-    @staticmethod
-    def create(create_type: [BotListWidget]) -> BotListWidget:
-        return BotListWidget()
+    def _parseList(self):
+        """
+        ## 解析机器人配置(如果有)
+        """
+        try:
+            # 读取配置列表
+            with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
+                bot_configs = json.load(f)
+            self.bot_list: List[Config] = [Config(**config) for config in bot_configs]
 
+        except FileNotFoundError:
+            # 如果文件不存在则创建一个
+            with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
+                json.dump([], f, indent=4)
 
-add_creator(BotListWidgetClassCreator)
+        except ValueError as e:
+            # 如果配置文件解析失败则提示错误信息
+            self._showErrorBar(self.tr("Unable to load bot list"), str(e))
+
+    def _showErrorBar(self, title: str, content: str):
+        """
+        ## 显示错误消息条
+        """
+        InfoBar.error(
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Vertical,
+            duration=50000,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            parent=self.parent().parent(),  # 应该是 BotListWidget
+        )

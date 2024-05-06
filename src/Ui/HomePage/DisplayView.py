@@ -22,7 +22,7 @@ class DisplayViewWidget(QWidget):
         # 创建控件
         self.v_box_layout = QVBoxLayout(self)
         self.logo_image = ImageLabel(self)
-        self.logo_label = TitleLabel("NapCat-Desktop", self)
+        self.logo_label = TitleLabel("NapCatQQ-Desktop", self)
         self.button_group = ButtonGroup(self)
 
         # 设置控件

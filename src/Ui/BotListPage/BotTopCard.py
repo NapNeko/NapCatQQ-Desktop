@@ -10,7 +10,7 @@ from qfluentwidgets.components import (
 )
 
 if TYPE_CHECKING:
-    from src.Ui.BotListPage.BotList import BotListWidget
+    from src.Ui.BotListPage.BotListWidget import BotListWidget
 
 
 class BotTopCard(QWidget):
@@ -47,5 +47,6 @@ class BotTopCard(QWidget):
         self.labelLayout.addWidget(self.subtitleLabel)
 
         self.hBoxLayout.addLayout(self.labelLayout)
+        self.hBoxLayout.setContentsMargins(0, 0, 0, 10)
 
         self.setLayout(self.hBoxLayout)
