@@ -126,8 +126,9 @@ class ConfigTopCard(QWidget):
         先保存到配置文件，然后执行 update 进行刷新
         """
         from src.Core.PathFunc import PathFunc
-        from src.Ui.AddPage.Add.AddWidget import AddWidget
         from src.Core.Config.ConfigModel import Config
+        from src.Ui.AddPage.Add.AddWidget import AddWidget
+        from src.Ui.BotListPage.BotListWidget import BotListWidget
 
         bot_config_path = it(PathFunc).bot_config_path
         try:
@@ -145,16 +146,20 @@ class ConfigTopCard(QWidget):
                         self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly")
                     )
                     return
-            # 追加到配置文件
-            bot_configs.append(config.dict())
+            # 追加到配置文件, 使用json方法将内部转为json对象, 再用loads方法转为dict对象, 以确保列表内数据一致性
+            # 不可以直接使用 dict方法 转为 dict对象, 内部 WebsocketUrl 和 HttpUrl 不会自动转为 str
+            bot_configs.append(json.loads(config.json()))
 
             with open(str(bot_config_path), "w", encoding="utf-8") as f:
                 json.dump(bot_configs, f, indent=4)
 
+            # 执行刷新
+            it(BotListWidget).botList.updateList()
+
         except FileNotFoundError:
             # 如果 json 文件没有被创建则创建一个并写入
             config = Config(**it(AddWidget).getConfig())
-            config = [config.dict()]
+            config = [json.loads(config.json())]
             with open(str(bot_config_path), "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=4)
 

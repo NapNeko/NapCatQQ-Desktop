@@ -42,7 +42,7 @@ class LineEditItem(ItemBase):
         """
         super().__init__(title, parent=parent)
         self.lineEdit = LineEdit(self)
-        self.lineEdit.setFixedWidth(165)
+        self.lineEdit.setFixedWidth(200)
         self.lineEdit.setPlaceholderText(placeholders)
         self.lineEdit.setClearButtonEnabled(True)
 

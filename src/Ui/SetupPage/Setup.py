@@ -170,6 +170,7 @@ class SetupWidget(ScrollArea):
         # 连接路径相关
         self.QQPathCard.clicked.connect(self._onQQFolderCardClicked)
         self.NapCatPathCard.clicked.connect(self._onNapCatFolderCardClicked)
+        self.StartScriptPath.clicked.connect(self._onStartScriptFolderCardClicked)
 
     def _onQQFolderCardClicked(self) -> None:
         """
@@ -186,8 +187,17 @@ class SetupWidget(ScrollArea):
         """
         folder = self._selectFolder()
         if folder:
-            cfg.set(cfg.napcat_path, folder, save=True)
+            cfg.set(cfg.NapCatPath, folder, save=True)
             self.NapCatPathCard.setContent(folder)
+
+    def _onStartScriptFolderCardClicked(self) -> None:
+        """
+        选择启动脚本存放路径的槽函数
+        """
+        folder = self._selectFolder()
+        if folder:
+            cfg.set(cfg.StartScriptPath, folder, save=True)
+            self.StartScriptPath.setContent(folder)
 
     def _selectFolder(self) -> str:
         """

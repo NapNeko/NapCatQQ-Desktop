@@ -20,8 +20,9 @@ class BotConfig(BaseModel):
     # 需要验证的值
     name: str
     QQID: str
-    msgFormat: str
+    messagePostFormat: str
     reportSelfMsg: bool
+    musicSignUrl: str
     heartInterval: str
     accessToken: Optional[str]
 
@@ -55,8 +56,12 @@ class BotConfig(BaseModel):
 
 class HttpConfig(BaseModel):
     enable: bool
-    addresses: str
+    host: str
     port: str
+    secret: str
+    enableHeart: bool
+    enablePost: bool
+    postUrls: List[HttpUrl]
 
     @field_validator("port")
     @staticmethod
@@ -70,19 +75,21 @@ class HttpConfig(BaseModel):
         return value
 
 
-class HttpReportConfig(BaseModel):
+class WsConfig(BaseModel):
     enable: bool
-    enableHeart: bool
-    token: Optional[str]
+    host: str
+    port: str
+
+
+class ReverseWsConfig(BaseModel):
+    enable: bool
+    urls: List[WebsocketUrl]
 
 
 class ConnectConfig(BaseModel):
     http: HttpConfig
-    httpReport: HttpReportConfig
-    httpReportUrls: List[HttpUrl]
-    ws: HttpConfig
-    wsReverse: bool
-    wsReverseUrls: List[WebsocketUrl]
+    ws: WsConfig
+    reverseWs: ReverseWsConfig
 
 
 class AdvancedConfig(BaseModel):

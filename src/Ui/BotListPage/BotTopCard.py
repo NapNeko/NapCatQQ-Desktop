@@ -71,13 +71,7 @@ class BotTopCard(QWidget):
         """
         from src.Ui.BotListPage.BotListWidget import BotListWidget
         it(BotListWidget).botList.updateList()
-        InfoBar.success(
-            title=self.tr("The refresh was successful"),
-            content=self.tr("The bot list was successfully refreshed"),
-            orient=Qt.Orientation.Vertical,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=it(BotListWidget)
-        )
+
 
     def _setLayout(self):
         """

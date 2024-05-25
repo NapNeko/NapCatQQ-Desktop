@@ -7,7 +7,6 @@ from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Ui.AddPage.Card import (
     HttpConfigCard,
-    HttpReportConfigCard,
     SwitchConfigCard,
     UrlCard,
     WsConfigCard,
@@ -43,9 +42,8 @@ class ConnectWidget(ScrollArea):
         ## 初始化 QWidget 所需要的控件并配置
         创建 Card
         """
-        self.httpCard = HttpConfigCard(self.view)
-        self.httpReportCard = HttpReportConfigCard(self.view)
-        self.httpReportUrlCard = UrlCard(
+        self.httpConfigCard = HttpConfigCard(self.view)
+        self.httpPostUrlCard = UrlCard(
             icon=FluentIcon.SCROLL,
             title=self.tr("Http Report address"),
             content=self.tr("Set the address for reporting HTTP"),
@@ -65,34 +63,26 @@ class ConnectWidget(ScrollArea):
             parent=self.view,
         )
 
-        # 当 HTTP 地址添加时, 自动展开 httpReportCard 并将 ReportEnableItem 设置为 True
-        # 当 HTTP 地址被删除至空时, 自动关闭并设置为 False
-        self.httpReportUrlCard.addSignal.connect(
-            lambda: self.httpReportCard.setExpand(True)
-        )
-        self.httpReportUrlCard.addSignal.connect(
-            lambda: self.httpReportCard.ReportEnableItem.button.setChecked(True)
-        )
-        self.httpReportUrlCard.emptiedSignal.connect(
-            lambda: self.httpReportCard.setExpand(False)
-        )
-        self.httpReportUrlCard.emptiedSignal.connect(
-            lambda: self.httpReportCard.ReportEnableItem.button.setChecked(False)
-        )
-
-        # 当 反向WS 地址添加时, 自动将 wsReverseCard 设置为 True
         # 当 反向WS 地址被删除至空时, 设置为 False
-        self.wsReverseUrlCard.addSignal.connect(
-            lambda: self.wsReverseCard.switchButton.setChecked(True)
-        )
         self.wsReverseUrlCard.emptiedSignal.connect(
             lambda: self.wsReverseCard.switchButton.setChecked(False)
         )
 
+        # 隐藏卡片，并设置条件显示
+        self.httpPostUrlCard.hide()
+        self.wsReverseUrlCard.hide()
+        self.wsReverseUrlCard.hide()
+
+        self.httpConfigCard.httpEnablePost.button.checkedChanged.connect(
+            lambda checked: self.httpPostUrlCard.show() if checked else self.httpPostUrlCard.hide()
+        )
+        self.wsReverseCard.switchButton.checkedChanged.connect(
+            lambda checked: self.wsReverseUrlCard.show() if checked else self.wsReverseUrlCard.hide()
+        )
+
         self.cards = [
-            self.httpCard,
-            self.httpReportCard,
-            self.httpReportUrlCard,
+            self.httpConfigCard,
+            self.httpPostUrlCard,
             self.wsCard,
             self.wsReverseCard,
             self.wsReverseUrlCard,
@@ -114,13 +104,18 @@ class ConnectWidget(ScrollArea):
         """
         ## 返回内部卡片的配置结果
         """
+        http = self.httpConfigCard.getValue()
+        http["postUrls"] = self.httpPostUrlCard.getValue()
+        ws = self.wsCard.getValue()  # 单纯为了下面字典整齐)
+        reverseWs = {
+            "enable": self.wsReverseCard.getValue(),
+            "urls": self.wsReverseUrlCard.getValue()
+        }
+
         return {
-            "http": self.httpCard.getValue(),
-            "httpReport": self.httpReportCard.getValue(),
-            "httpReportUrls": self.httpReportUrlCard.getValue(),
-            "ws": self.wsCard.getValue(),
-            "wsReverse": self.wsReverseCard.getValue(),
-            "wsReverseUrls": self.wsReverseUrlCard.getValue(),
+            "http": http,
+            "ws": ws,
+            "reverseWs": reverseWs,
         }
 
     def clearValues(self) -> None:

@@ -69,6 +69,13 @@ class BotWidget(ScrollArea):
             content=self.tr("Whether to report the bot's own message"),
             parent=self.view,
         )
+        self.musicSignUrl = LineEditConfigCard(
+            icon=FluentIcon.MUSIC,
+            title=self.tr("Music signature URL"),
+            content=self.tr("Used to handle music-related requests"),
+            placeholder_text=self.tr("Can be empty"),
+            parent=self.view
+        )
         self.heartIntervalCard = LineEditConfigCard(
             icon=FluentIcon.HEART,
             title=self.tr("Heart interval"),
@@ -88,6 +95,7 @@ class BotWidget(ScrollArea):
             self.botQQIdCard,
             self.messageFormatCard,
             self.reportSelfMessageCard,
+            self.musicSignUrl,
             self.heartIntervalCard,
             self.accessTokenCard,
         ]
@@ -111,8 +119,9 @@ class BotWidget(ScrollArea):
         return {
             "name": self.botNameCard.getValue(),
             "QQID": self.botQQIdCard.getValue(),
-            "msgFormat": self.messageFormatCard.getValue(),
+            "messagePostFormat": self.messageFormatCard.getValue(),
             "reportSelfMsg": self.reportSelfMessageCard.getValue(),
+            "musicSignUrl": self.musicSignUrl.getValue(),
             "heartInterval": self.heartIntervalCard.getValue(),
             "accessToken": self.accessTokenCard.getValue(),
         }

@@ -15,13 +15,16 @@ class Urls(Enum):
     """
     ## 软件内部可能用的到的 Url
     """
-    # 仓库以及下载地址
+    # NapCat 仓库地址
     NAPCATQQ_REPO = QUrl("https://github.com/NapNeko/NapCatQQ")
     NAPCATQQ_REPO_API = QUrl("https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest")
+
+    # 直接写入下载地址, 不请求 API 获取, 期望达到节省时间的目的
     NAPCAT_ARM64_LINUX = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.linux.arm64.zip")
     NAPCAT_64_LINUX = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.linux.x64.zip")
     NAPCAT_WIN = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.win32.x64.zip")
 
+    # QQ 相关的 API
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
 
 

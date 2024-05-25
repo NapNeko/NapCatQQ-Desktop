@@ -5,7 +5,7 @@ from typing import List, TYPE_CHECKING
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from creart import it
-from qfluentwidgets import ScrollArea, InfoBar, InfoBarPosition, FlowLayout
+from qfluentwidgets import ScrollArea, InfoBar, InfoBarPosition, FlowLayout, PushButton
 
 from src.Core.Config.ConfigModel import Config
 from src.Core.PathFunc import PathFunc
@@ -72,16 +72,50 @@ class BotList(ScrollArea):
             # 读取配置列表
             with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
                 bot_configs = json.load(f)
-            self.bot_list: List[Config] = [Config(**config) for config in bot_configs]
+            if bot_configs:
+                # 如果从文件加载的 bot_config 不为空则执行使用Config和列表表达式解析
+                self.bot_list: List[Config] = [Config(**config) for config in bot_configs]
+                InfoBar.success(
+                    title=self.tr("Load the list of bots"),
+                    content=self.tr("The list of bots was successfully loaded"),
+                    orient=Qt.Orientation.Vertical,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    parent=self.parent()
+                )
+            else:
+                # 如果加载内容为空则提示为空并给出添加机器人按钮
+                from src.Ui.MainWindow.Window import MainWindow
+                from src.Ui.AddPage.Add.AddWidget import AddWidget
+                # 创建跳转按钮并链接槽函数
+                toAddBotButton = PushButton(self.tr("Click me to jump"))
+                toAddBotButton.clicked.connect(
+                    lambda: it(MainWindow).stackedWidget.setCurrentWidget(it(AddWidget))
+                )
+                # 创建信息条并添加跳转按钮
+                _ = InfoBar.info(
+                    title=self.tr("There are no bot configuration items"),
+                    content=self.tr("You'll need to add it in the Add bot page"),
+                    orient=Qt.Orientation.Vertical,
+                    position=InfoBarPosition.BOTTOM_RIGHT,
+                    duration=5000,
+                    parent=self.parent().parent()
+                )
+                _.addWidget(toAddBotButton)
+                _.show()
+                self.bot_list = []
 
         except FileNotFoundError:
             # 如果文件不存在则创建一个
             with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
                 json.dump([], f, indent=4)
+            self.bot_list = []
 
         except ValueError as e:
-            # 如果配置文件解析失败则提示错误信息
+            # 如果配置文件解析失败则提示错误信息并覆盖原有文件
             self._showErrorBar(self.tr("Unable to load bot list"), str(e))
+            with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
+                json.dump([], f, indent=4)
+            self.bot_list = []
 
     def _showErrorBar(self, title: str, content: str):
         """

@@ -2,6 +2,7 @@
 import json
 import textwrap
 from pathlib import Path
+from typing import Tuple
 
 from PySide6.QtCore import QObject, QOperatingSystemVersion, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
@@ -38,7 +39,7 @@ class CreateScript:
             # 后续可能会细化 Error
             self._showErrorBar(self.infoBarParent.tr("Unable to create scripts"), str(e))
 
-    def _verifySystemSupports(self, scriptType: ScriptType) -> ScriptType:
+    def _verifySystemSupports(self, scriptType: ScriptType) -> ScriptType | None:
         """验证系统是否支持脚本
 
         Windows 平台不支持 sh 脚本
@@ -87,7 +88,7 @@ class CreateScript:
         }
         $params = "-q {self.config.bot.QQID}"
         $QQpath = "{Path(self.config.advanced.QQPath) / 'QQ.exe'}"
-        $Bootfile = "{it(PathFunc).getNapCatPath() / "napcat.cjs"}"
+        $Bootfile = "{it(PathFunc).getNapCatPath() / "napcat.mjs"}"
         $command = "chcp 65001; &'$QQpath' $Bootfile $params"
         $env:ELECTRON_RUN_AS_NODE = 1
         Start-Process powershell -ArgumentList "-noexit", "-noprofile", "-command", $command
@@ -121,7 +122,7 @@ class CreateScript:
         if self.config.advanced.ffmpegPath else ''
         }
         set QQPath="{Path(self.config.advanced.QQPath) / 'QQ.exe'}"
-        set NapCatPath="{it(PathFunc).getNapCatPath() / "napcat.cjs"}"
+        set NapCatPath="{it(PathFunc).getNapCatPath() / "napcat.mjs"}"
         set QQID="{self.config.bot.QQID}"
         set ELECTRON_RUN_AS_NODE=1
         !QQpath! !NapCatPath! -q !QQID!
@@ -154,7 +155,7 @@ class CreateScript:
         if self.config.advanced.ffmpegPath else ''
         }
         export ELECTRON_RUN_AS_NODE=1
-        {self.config.advanced.QQPath} {it(PathFunc).getNapCatPath() / "napcat.cjs"} -q {self.config.bot.QQID}
+        {self.config.advanced.QQPath} {it(PathFunc).getNapCatPath() / "napcat.mjs"} -q {self.config.bot.QQID}
         """
 
         # 创建配置文件
@@ -163,7 +164,7 @@ class CreateScript:
         # 写入脚本
         self._createScript(start_script_path, sh_script)
 
-    def _pathVerify(self, scriptType: str) -> Path | None:
+    def _pathVerify(self, scriptType: str) -> Tuple[Path | None, Path, Path]:
         """
         检查所需路径是否存在
         """
@@ -214,23 +215,30 @@ class CreateScript:
                 return
 
         bot_config = {
-            "httpHost": self.config.connect.http.addresses,
-            "enableHttp": self.config.connect.http.enable,
-            "httpPort": self.config.connect.http.port,
-            "enableHttpPost": self.config.connect.httpReport.enable,
-            "enableHttpHeart": self.config.connect.httpReport.enableHeart,
-            "httpSecret": self.config.connect.httpReport.token,
-            "httpPostUrls": [str(url) for url in self.config.connect.httpReportUrls],
-            "enableWs": self.config.connect.ws.enable,
-            "wsHost": self.config.connect.ws.addresses,
-            "wsPort": self.config.connect.ws.port,
-            "enableWsReverse": self.config.connect.wsReverse,
-            "wsReverseUrls": [str(url) for url in self.config.connect.wsReverseUrls],
-            "messagePostFormat": self.config.bot.msgFormat,
-            "reportSelfMessage": self.config.bot.reportSelfMsg,
+            "http": {
+                "enable": self.config.connect.http.enable,
+                "host": self.config.connect.http.host,
+                "port": self.config.connect.http.port,
+                "secret": self.config.connect.http.secret,
+                "enableHeart": self.config.connect.http.enableHeart,
+                "enablePost": self.config.connect.http.enablePost,
+                "postUrls": [str(url) for url in self.config.connect.http.postUrls],
+            },
+            "ws": {
+                "enable": self.config.connect.ws.enable,
+                "host": self.config.connect.ws.host,
+                "port": self.config.connect.ws.port,
+            },
+            "reverseWs": {
+                "enable": self.config.connect.reverseWs.enable,
+                "urls": [str(url) for url in self.config.connect.reverseWs.urls],
+            },
             "debug": self.config.advanced.debug,
-            "enableLocalFile2Url": self.config.advanced.localFile2url,
             "heartInterval": self.config.bot.heartInterval,
+            "messagePostFormat": self.config.bot.messagePostFormat,
+            "enableLocalFile2Url": self.config.advanced.localFile2url,
+            "musicSignUrl": self.config.bot.musicSignUrl,
+            "reportSelfMessage": self.config.bot.reportSelfMsg,
             "token": self.config.bot.accessToken,
         }
 
@@ -247,7 +255,7 @@ class CreateScript:
         with open(str(napcat_config_path), "w", encoding="utf-8") as f:
             json.dump(napcat_config, f, indent=4)
 
-    def _showOverlayPrompts(self, path: str) -> None:
+    def _showOverlayPrompts(self, path: str | Path) -> int:
         """
         提示用户已经存在文件,是否覆盖
         """
