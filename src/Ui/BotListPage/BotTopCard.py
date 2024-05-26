@@ -7,10 +7,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
 from qfluentwidgets import CaptionLabel, InfoBar, InfoBarPosition, ToolTipFilter
 from qfluentwidgets.common import setFont, FluentIcon
-from qfluentwidgets.components import (
-    BreadcrumbBar,
-    TransparentToolButton,
-)
+from qfluentwidgets.components import BreadcrumbBar, TransparentToolButton
 
 if TYPE_CHECKING:
     from src.Ui.BotListPage.BotListWidget import BotListWidget
@@ -29,16 +26,11 @@ class BotTopCard(QWidget):
         # 创建所需控件
         self.breadcrumbBar = BreadcrumbBar(self)
         self.subtitleLabel = CaptionLabel(self.tr("All the bots you've added are here"))
-        self.updateListButton = TransparentToolButton(FluentIcon.SYNC)
+        self.updateListButton = TransparentToolButton(FluentIcon.SYNC)  # 刷新列表按钮
 
         self.hBoxLayout = QHBoxLayout()
         self.labelLayout = QVBoxLayout()
         self.buttonLayout = QHBoxLayout()
-
-        # 添加提示
-        self.updateListButton.setToolTip(self.tr("Click to refresh the list"))
-        self.updateListButton.setToolTipDuration(800)
-        self.updateListButton.installEventFilter(ToolTipFilter(self.updateListButton))
 
         # 设置控件
         setFont(self.breadcrumbBar, 28, QFont.Weight.DemiBold)
@@ -47,6 +39,7 @@ class BotTopCard(QWidget):
         self.updateListButton.clicked.connect(self._updateListButtonSolt)
         self.breadcrumbBar.currentIndexChanged.connect(self._breadcrumbBarSolt)
 
+        self._addTooltips()
         self._setLayout()
 
     def addItem(self, routeKey: str):
@@ -55,8 +48,15 @@ class BotTopCard(QWidget):
         """
         self.breadcrumbBar.addItem(routeKey, routeKey)
 
-    @staticmethod
-    def _breadcrumbBarSolt(index: int):
+    def _addTooltips(self):
+        """
+        ## 为按钮添加悬停提示
+        """
+        # 添加提示
+        self.updateListButton.setToolTip(self.tr("Click to refresh the list"))
+        self.updateListButton.installEventFilter(ToolTipFilter(self.updateListButton))
+
+    def _breadcrumbBarSolt(self, index: int):
         """
         ## 判断用户是否点击的是 Bot List
         如果是则返回 Bot List 页面
@@ -64,14 +64,15 @@ class BotTopCard(QWidget):
         if index == 0:
             from src.Ui.BotListPage.BotListWidget import BotListWidget
             it(BotListWidget).view.setCurrentIndex(index)
+            self.updateListButton.show()
 
-    def _updateListButtonSolt(self):
+    @staticmethod
+    def _updateListButtonSolt():
         """
         ## 更新列表按钮的槽函数
         """
         from src.Ui.BotListPage.BotListWidget import BotListWidget
         it(BotListWidget).botList.updateList()
-
 
     def _setLayout(self):
         """
@@ -90,6 +91,6 @@ class BotTopCard(QWidget):
 
         self.hBoxLayout.addLayout(self.labelLayout)
         self.hBoxLayout.addLayout(self.buttonLayout)
-        self.hBoxLayout.setContentsMargins(0, 0, 20, 10)
+        self.hBoxLayout.setContentsMargins(0, 0, 20, 0)
 
         self.setLayout(self.hBoxLayout)

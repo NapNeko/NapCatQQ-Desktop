@@ -80,7 +80,8 @@ class BotList(ScrollArea):
                     content=self.tr("The list of bots was successfully loaded"),
                     orient=Qt.Orientation.Vertical,
                     position=InfoBarPosition.BOTTOM_RIGHT,
-                    parent=self.parent()
+                    duration=2000,
+                    parent=self.parent().parent()
                 )
             else:
                 # 如果加载内容为空则提示为空并给出添加机器人按钮

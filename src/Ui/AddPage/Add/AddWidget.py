@@ -56,7 +56,6 @@ class AddWidget(QWidget):
     def _createView(self) -> None:
         """
         ## 创建并配置 QStackedWidget
-        :return:
         """
         self.view = QStackedWidget()
         self.botWidget = BotWidget(self)

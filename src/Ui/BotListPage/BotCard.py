@@ -106,11 +106,12 @@ class BotCard(CardWidget):
         当自身被点击时
         """
         from src.Ui.BotListPage.BotListWidget import BotListWidget
+        from src.Ui.BotListPage.BotWidget import BotWidget
         it(BotListWidget).topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
-        widget = QWidget()
+        it(BotListWidget).topCard.updateListButton.hide()
+        widget = BotWidget(self.config)
         it(BotListWidget).view.addWidget(widget)
         it(BotListWidget).view.setCurrentWidget(widget)
-
 
     @staticmethod
     def _showErrorBar(title: str, content: str):
