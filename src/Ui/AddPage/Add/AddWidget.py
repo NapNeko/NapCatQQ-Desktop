@@ -12,8 +12,9 @@ from creart.creator import AbstractCreator, CreateTargetInfo
 
 from src.Ui.AddPage.Add.Advanced import AdvancedWidget
 from src.Ui.AddPage.Add.BotWidget import BotWidget
-from src.Ui.AddPage.Add.ConfigTopCard import ConfigTopCard
 from src.Ui.AddPage.Add.Connect import ConnectWidget
+
+from src.Ui.AddPage.Add.ConfigTopCard import ConfigTopCard
 from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:

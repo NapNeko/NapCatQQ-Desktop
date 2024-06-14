@@ -27,6 +27,7 @@ class BotCard(CardWidget):
     def __init__(self, config: Config, parent: "BotList" = None):
         super().__init__(parent=parent)
         self.config = config
+        self.botWidget = None
         self._initWidget()
         self._QQAvatar()
         self._infoLabel()
@@ -109,9 +110,13 @@ class BotCard(CardWidget):
         from src.Ui.BotListPage.BotWidget import BotWidget
         it(BotListWidget).topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
         it(BotListWidget).topCard.updateListButton.hide()
-        widget = BotWidget(self.config)
-        it(BotListWidget).view.addWidget(widget)
-        it(BotListWidget).view.setCurrentWidget(widget)
+
+        if self.botWidget is None:
+            self.botWidget = BotWidget(self.config)
+            it(BotListWidget).view.addWidget(self.botWidget)
+            it(BotListWidget).view.setCurrentWidget(self.botWidget)
+        else:
+            it(BotListWidget).view.setCurrentWidget(self.botWidget)
 
     @staticmethod
     def _showErrorBar(title: str, content: str):

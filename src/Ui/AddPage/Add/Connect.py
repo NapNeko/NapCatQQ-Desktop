@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
+from src.Core.Config.ConfigModel import ConnectConfig
 from src.Ui.AddPage.Card import (
     HttpConfigCard,
     SwitchConfigCard,
@@ -21,7 +22,7 @@ class ConnectWidget(ScrollArea):
     ## Connect Item 项对应的 QWidget
     """
 
-    def __init__(self, parent: "AddWidget") -> None:
+    def __init__(self, parent=None, config: ConnectConfig = None) -> None:
         super().__init__(parent=parent)
         self.setObjectName("ConnectWidget")
         self.view = QWidget()
@@ -36,6 +37,11 @@ class ConnectWidget(ScrollArea):
         # 调用方法
         self._initWidget()
         self._setLayout()
+
+        if config is not None:
+            # 如果传入了 config 则进行解析并填充内部卡片
+            self.config = config
+            self.fillValue()
 
     def _initWidget(self):
         """
@@ -87,6 +93,16 @@ class ConnectWidget(ScrollArea):
             self.wsReverseCard,
             self.wsReverseUrlCard,
         ]
+
+    def fillValue(self) -> None:
+        """
+        ## 如果传入了 config 则对其内部卡片的值进行填充
+        """
+        self.httpConfigCard.fillValue(self.config.http)
+        self.httpPostUrlCard.fillValue(self.config.http.postUrls)
+        self.wsCard.fillValue(self.config.ws)
+        self.wsReverseCard.fillValue(self.config.reverseWs.enable)
+        self.wsReverseUrlCard.fillValue(self.config.reverseWs.urls)
 
     def _setLayout(self):
         """

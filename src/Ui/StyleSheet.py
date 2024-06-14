@@ -11,6 +11,7 @@ class StyleSheet(StyleSheetBase, Enum):
     SETUP_WIDGET = "setup_widget"
     ADD_WIDGET = "add_widget"
     BOT_LIST_WIDGET = "bot_list_widget"
+    BOT_WIDGET = "bot_widget"
 
     def path(self, theme=Theme.AUTO):
         theme = qconfig.theme if theme == Theme.AUTO else theme

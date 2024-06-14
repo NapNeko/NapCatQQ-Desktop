@@ -5,6 +5,8 @@ from qfluentwidgets.common import FluentIcon
 from src.Ui.AddPage.Card.BaseClass import GroupCardBase
 from src.Ui.AddPage.Card.Item import LineEditItem, SwitchItem
 
+from src.Core.Config.ConfigModel import WsConfig
+
 
 class WsConfigCard(GroupCardBase):
     """
@@ -31,6 +33,11 @@ class WsConfigCard(GroupCardBase):
         self.addItem(self.wsHostItem)
         self.addItem(self.wsPortItem)
 
+    def fillValue(self, values: WsConfig) -> None:
+        self.wsEnableItem.fillValue(values.enable)
+        self.wsHostItem.fillValue(values.host)
+        self.wsPortItem.fillValue(values.port)
+
     def getValue(self) -> dict:
         return {
             "enable": self.wsEnableItem.getValue(),
@@ -39,6 +46,6 @@ class WsConfigCard(GroupCardBase):
         }
 
     def clear(self) -> None:
-        self.wsEnableItem.clear(),
-        self.wsHostItem.clear(),
+        self.wsEnableItem.clear()
+        self.wsHostItem.clear()
         self.wsPortItem.clear()

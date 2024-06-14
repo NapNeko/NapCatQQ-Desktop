@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 import sys
+from pathlib import Path
 
 from creart import it
 from loguru import logger
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtGui import QFontDatabase, QFont
 
 from src.Ui.MainWindow import MainWindow
 
@@ -16,6 +18,7 @@ NAPCATQQ_DESKTOP_LOGO = r"""
              /_/                                                                                    /_/    
 
 """
+
 
 if __name__ == "__main__":
     logger.opt(colors=True).info(f"<blue>{NAPCATQQ_DESKTOP_LOGO}</>")

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from typing import List
+from pydantic import HttpUrl, WebsocketUrl
+from typing import List, TypeVar
 
 from creart import it
 from PySide6.QtCore import Qt, Signal
@@ -18,6 +19,9 @@ from qfluentwidgets import (
     TransparentPushButton,
     TransparentToolButton,
 )
+
+
+T = TypeVar("T", HttpUrl, WebsocketUrl)
 
 
 class UrlItem(QWidget):
@@ -85,6 +89,10 @@ class UrlCard(ExpandSettingCard):
         # 调用方法
         self._initWidget()
 
+    def fillValue(self, values: List[T]) -> None:
+        self.urls = values
+        [self._addUrlItem(str(url)) for url in self.urls]
+
     def getValue(self) -> List[str]:
         return self.urls
 
@@ -96,7 +104,7 @@ class UrlCard(ExpandSettingCard):
             self._removeUrl(item)
         self.urls.clear()
 
-    def _initWidget(self):
+    def _initWidget(self) -> None:
         """
         设置卡片内部控件
         """
@@ -109,9 +117,9 @@ class UrlCard(ExpandSettingCard):
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
 
         # 连接信号
-        self.addUrlButton.clicked.connect(self.__showUrlInputBox)
+        self.addUrlButton.clicked.connect(self._showUrlInputBox)
 
-    def __showUrlInputBox(self):
+    def _showUrlInputBox(self) -> None:
         """
         显示 URL 输入框
         """
