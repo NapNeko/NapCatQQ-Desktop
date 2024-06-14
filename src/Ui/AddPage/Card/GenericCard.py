@@ -30,6 +30,9 @@ class LineEditConfigCard(SettingCard):
         self.hBoxLayout.addWidget(self.lineEdit, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
+    def fillValue(self, value: str | int) -> None:
+        self.lineEdit.setText(value)
+
     def getValue(self) -> str:
         return self.lineEdit.text()
 
@@ -49,6 +52,9 @@ class ComboBoxConfigCard(SettingCard):
         self.hBoxLayout.addWidget(self.comboBox, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
+    def fillValue(self, value: str) -> None:
+        self.comboBox.setCurrentIndex(self.texts.index(value))
+
     def getValue(self) -> str:
         return self.comboBox.currentText()
 
@@ -66,6 +72,9 @@ class SwitchConfigCard(SettingCard):
 
         self.hBoxLayout.addWidget(self.switchButton, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
+
+    def fillValue(self, value: bool) -> None:
+        self.switchButton.setChecked(value)
 
     def getValue(self) -> bool:
         return self.switchButton.isChecked()
@@ -102,6 +111,9 @@ class FolderConfigCard(SettingCard):
         if folder:
             self.setContent(folder)
             self.setFixedHeight(70)
+
+    def fillValue(self, value: str) -> None:
+        self.setContent(value)
 
     def getValue(self) -> str:
         return self.contentLabel.text()

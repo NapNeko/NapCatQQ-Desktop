@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
+from pathlib import Path
 
 from creart import it
 from loguru import logger
@@ -16,6 +17,7 @@ NAPCATQQ_DESKTOP_LOGO = r"""
              /_/                                                                                    /_/    
 
 """
+
 
 if __name__ == "__main__":
     logger.opt(colors=True).info(f"<blue>{NAPCATQQ_DESKTOP_LOGO}</>")

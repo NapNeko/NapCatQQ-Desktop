@@ -21,6 +21,9 @@ class SwitchItem(ItemBase):
 
         self._setLayout(self.button)
 
+    def fillValue(self, value: bool) -> None:
+        self.button.setChecked(value)
+
     def getValue(self) -> bool:
         return self.button.isChecked()
 
@@ -47,6 +50,9 @@ class LineEditItem(ItemBase):
         self.lineEdit.setClearButtonEnabled(True)
 
         self._setLayout(self.lineEdit)
+
+    def fillValue(self, value: str | int) -> None:
+        self.lineEdit.setText(value)
 
     def getValue(self) -> str:
         return self.lineEdit.text()

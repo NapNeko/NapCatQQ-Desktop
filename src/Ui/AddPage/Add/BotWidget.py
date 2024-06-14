@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
+from src.Core.Config.ConfigModel import BotConfig
 from src.Ui.AddPage.Card import (
     ComboBoxConfigCard,
     LineEditConfigCard,
@@ -21,7 +22,7 @@ class BotWidget(ScrollArea):
     ## Bot Item 项对应的 QWidget
     """
 
-    def __init__(self, parent: "AddWidget") -> None:
+    def __init__(self, parent=None, config: BotConfig = None) -> None:
         super().__init__(parent=parent)
         self.setObjectName("BotWidget")
         self.view = QWidget()
@@ -37,7 +38,12 @@ class BotWidget(ScrollArea):
         self._initWidget()
         self._setLayout()
 
-    def _initWidget(self):
+        if config is not None:
+            # 如果传入了 config 则进行解析并填充内部卡片
+            self.config = config
+            self.fillValue()
+
+    def _initWidget(self) -> None:
         """
         ## 初始化 QWidget 所需要的控件并配置
         创建 Card
@@ -100,7 +106,19 @@ class BotWidget(ScrollArea):
             self.accessTokenCard,
         ]
 
-    def _setLayout(self):
+    def fillValue(self) -> None:
+        """
+        ## 如果传入了 config 则对其内部卡片的值进行填充
+        """
+        self.botNameCard.fillValue(self.config.name)
+        self.botQQIdCard.fillValue(self.config.QQID)
+        self.messageFormatCard.fillValue(self.config.messagePostFormat)
+        self.reportSelfMessageCard.fillValue(self.config.reportSelfMsg)
+        self.musicSignUrl.fillValue(self.config.musicSignUrl)
+        self.heartIntervalCard.fillValue(self.config.heartInterval)
+        self.accessTokenCard.fillValue(self.config.accessToken)
+
+    def _setLayout(self) -> None:
         """
         ## 将 QWidget 内部的 Card 添加到布局中
         """
@@ -133,6 +151,6 @@ class BotWidget(ScrollArea):
         for card in self.cards:
             card.clear()
 
-    def adjustSize(self):
+    def adjustSize(self) -> None:
         h = self.cardLayout.heightForWidth(self.width()) + 46
         return self.resize(self.width(), h)

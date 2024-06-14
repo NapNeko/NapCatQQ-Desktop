@@ -5,6 +5,8 @@ from qfluentwidgets.common import FluentIcon
 from src.Ui.AddPage.Card.BaseClass import GroupCardBase
 from src.Ui.AddPage.Card.Item import LineEditItem, SwitchItem
 
+from src.Core.Config.ConfigModel import HttpConfig
+
 
 class HttpConfigCard(GroupCardBase):
     """
@@ -40,6 +42,14 @@ class HttpConfigCard(GroupCardBase):
         self.addItem(self.httpSecretItem)
         self.addItem(self.httpEnableHeart)
         self.addItem(self.httpEnablePost)
+
+    def fillValue(self, values: HttpConfig) -> None:
+        self.httpEnableItem.fillValue(values.enable)
+        self.httpHostItem.fillValue(values.host)
+        self.httpPortItem.fillValue(values.port)
+        self.httpSecretItem.fillValue(values.secret)
+        self.httpEnableHeart.fillValue(values.enableHeart)
+        self.httpEnablePost.fillValue(values.enablePost)
 
     def getValue(self) -> dict:
         return {

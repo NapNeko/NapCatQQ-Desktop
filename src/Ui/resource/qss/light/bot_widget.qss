@@ -1,0 +1,14 @@
+#BotView {
+    background: transparent;
+    border-color: transparent;
+}
+
+BotWidget,
+AdvancedWidget,
+ConnectWidget,
+#BotListBotSetupView,
+#BotListConnectSetupView,
+#BotListAdvancedSetupView {
+    background: transparent;
+    border: none;
+}

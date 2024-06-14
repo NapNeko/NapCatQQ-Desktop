@@ -7,6 +7,7 @@ from creart import it
 from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Core.PathFunc import PathFunc
+from src.Core.Config.ConfigModel import AdvancedConfig
 from src.Ui.AddPage.Card import (
     SwitchConfigCard,
     FolderConfigCard,
@@ -22,7 +23,7 @@ class AdvancedWidget(ScrollArea):
     ## Advance Item 项对应的 QWidget
     """
 
-    def __init__(self, parent: "AddWidget") -> None:
+    def __init__(self, parent=None, config: AdvancedConfig = None) -> None:
         super().__init__(parent=parent)
         self.setObjectName("AdvanceWidget")
         self.view = QWidget()
@@ -37,6 +38,11 @@ class AdvancedWidget(ScrollArea):
         # 调用方法
         self._initWidget()
         self._setLayout()
+
+        if config is not None:
+            # 如果传入了 config 则进行解析并填充内部卡片
+            self.config = config
+            self.fillValue()
 
     def _initWidget(self):
         """
@@ -75,7 +81,7 @@ class AdvancedWidget(ScrollArea):
             ),
             parent=self.view,
         )
-        self.fillLogCard = SwitchConfigCard(
+        self.fileLogCard = SwitchConfigCard(
             icon=FluentIcon.SAVE_AS,
             title=self.tr("Whether to enable file logging"),
             content=self.tr("Log to a file(It is off by default)"),
@@ -108,11 +114,25 @@ class AdvancedWidget(ScrollArea):
             self.ffmpegPathCard,
             self.debugModeCard,
             self.localFile2UrlCard,
-            self.fillLogCard,
+            self.fileLogCard,
             self.consoleLogCard,
             self.fileLogLevelCard,
             self.consoleLevelCard,
         ]
+
+    def fillValue(self) -> None:
+        """
+        ## 如果传入了 config 则对其内部卡片的值进行填充
+        """
+        self.QQPathCard.fillValue(self.config.QQPath)
+        self.startScriptPathCard.fillValue(self.config.startScriptPath)
+        self.ffmpegPathCard.fillValue(self.config.ffmpegPath)
+        self.debugModeCard.fillValue(self.config.debug)
+        self.localFile2UrlCard.fillValue(self.config.localFile2url)
+        self.fileLogCard.fillValue(self.config.fileLog)
+        self.consoleLogCard.fillValue(self.config.consoleLog)
+        self.fileLogLevelCard.fillValue(self.config.fileLogLevel)
+        self.consoleLevelCard.fillValue(self.config.consoleLogLevel)
 
     def _setLayout(self):
         """
@@ -136,7 +156,7 @@ class AdvancedWidget(ScrollArea):
             "ffmpegPath": self.ffmpegPathCard.getValue(),
             "debug": self.debugModeCard.getValue(),
             "localFile2url": self.localFile2UrlCard.getValue(),
-            "fileLog": self.fillLogCard.getValue(),
+            "fileLog": self.fileLogCard.getValue(),
             "consoleLog": self.consoleLogCard.getValue(),
             "fileLogLevel": self.fileLogLevelCard.getValue(),
             "consoleLogLevel": self.consoleLevelCard.getValue(),

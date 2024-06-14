@@ -29,5 +29,7 @@
         <file>qss/light/add_widget.qss</file>
         <file>qss/dark/bot_list_widget.qss</file>
         <file>qss/light/bot_list_widget.qss</file>
+        <file>qss/dark/bot_widget.qss</file>
+        <file>qss/light/bot_widget.qss</file>
     </qresource>
 </RCC>
