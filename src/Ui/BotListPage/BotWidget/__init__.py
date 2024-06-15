@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List
 
 from PySide6.QtCore import Qt, QProcess
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QTextCursor, QPixmap
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
 from creart import it
 from qfluentwidgets import (
     SegmentedWidget, TransparentToolButton, FluentIcon, ToolTipFilter, PrimaryPushButton, InfoBar, InfoBarPosition,
-    PushButton, StateToolTip
+    PushButton, StateToolTip, MessageBox, MessageBoxBase, SubtitleLabel, ImageLabel
 )
 
 from src.Core.Config.ConfigModel import Config
@@ -31,6 +31,7 @@ class BotWidget(QWidget):
         super().__init__()
         self.config = config
         self.isRun = False  # 用于标记机器人是否在运行
+        self.isLogin = False  # 用于标记机器人是否登录
         # 创建所需控件
         self._createView()
         self._createPivot()
@@ -100,6 +101,7 @@ class BotWidget(QWidget):
         self.runButton = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("Startup"))
         self.stopButton = PushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"))
         self.rebootButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Reboot"))
+        self.showQRCodeButton = TransparentToolButton(FluentIcon.QRCODE)
         self.updateConfigButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Update config"))  # 更新配置按钮
         self.returnListButton = TransparentToolButton(FluentIcon.RETURN)  # 返回到列表按钮
         self.botSetupSubPageReturnButton = TransparentToolButton(FluentIcon.RETURN)  # 返回到 BotSetup 按钮
@@ -108,6 +110,7 @@ class BotWidget(QWidget):
         self.runButton.clicked.connect(self._runButtonSolt)
         self.stopButton.clicked.connect(self._stopButtonSolt)
         self.rebootButton.clicked.connect(self._rebootButtonSolt)
+        self.showQRCodeButton.clicked.connect(lambda: self.qrcodeMsgBox.show())
         self.updateConfigButton.clicked.connect(self._updateButtonSolt)
         self.botSetupSubPageReturnButton.clicked.connect(self._botSetupSubPageReturnButtonSolt)
         self.returnListButton.clicked.connect(self._returnListButtonSolt)
@@ -116,6 +119,7 @@ class BotWidget(QWidget):
         self.stopButton.hide()
         self.rebootButton.hide()
         self.updateConfigButton.hide()
+        self.showQRCodeButton.hide()
         self.botSetupSubPageReturnButton.hide()
 
     def _addTooltips(self) -> None:
@@ -145,9 +149,11 @@ class BotWidget(QWidget):
             - 连接日志输出管道
             - 连接结束函数
             - 设置日志高亮
+            - 创建登录二维码消息盒
         # 启动 QProcess
             - 进度条设置完成
             - 切换到 botLogPage
+        # 切换按钮显示
         """
         self.botLogPage.clear()
 
@@ -162,21 +168,18 @@ class BotWidget(QWidget):
         )
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
+        self.process.readyReadStandardOutput.connect(self._showQRCode)
         self.process.finished.connect(self._process_finished)
         self.highlighter = LogHighlighter(self.botLogPage.document())
-        # self.stateTooltip = StateToolTip(
-        #     self.tr("starting"),
-        #     self.tr("I can't eat hot tofu in a hurry"),
-        #     self.parent().parent()
-        # )
-        # self.show()
+        self.qrcodeMsgBox = QRCodeMessageBox(self.parent().parent())
         self.process.start()
-        # self.process.waitForStarted()
-        # self.stateTooltip.setContent(self.tr("Successful start!"))
-        # self.stateTooltip.setState(True)
+        self.process.waitForStarted()
 
         self.isRun = True
         self.view.setCurrentWidget(self.botLogPage)
+        self.runButton.setVisible(False)
+        self.stopButton.setVisible(True)
+        self.rebootButton.setVisible(True)
 
     def _stopButtonSolt(self):
         """
@@ -193,7 +196,9 @@ class BotWidget(QWidget):
         self.stateTooltip.setState(True)
 
         self.isRun = False
+        self.isLogin = False
         self.view.setCurrentWidget(self.botInfoPage)
+        self.showQRCodeButton.hide()
 
     def _rebootButtonSolt(self):
         """
@@ -204,7 +209,7 @@ class BotWidget(QWidget):
 
     def _handle_stdout(self):
         """
-        ## 日志管道
+        ## 日志管道并检测内部信息执行操作
         """
         # 获取所有输出
         data = self.process.readAllStandardOutput().data().decode()
@@ -216,6 +221,59 @@ class BotWidget(QWidget):
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(data)
         self.botLogPage.setTextCursor(cursor)
+
+        # 执行一些操作
+        self._showQRCode(data)
+
+    def _showQRCode(self, data=""):
+        """
+        ## 显示二维码
+        """
+        if self.isLogin:
+            # 如果是已经登录成功的状态,则直接跳过
+            return
+
+        if "[ERROR] () | 快速登录错误: 当前账号存在安全风险，请修改密码后登录或使用手机QQ扫码登录。" in data:
+            # 引发此错误时自动重启
+            self._rebootButtonSolt()
+            InfoBar.info(
+                title=self.tr("Sign-in error"),
+                content=self.tr(
+                    "Quick login error, NapCat has been automatically restarted, "
+                    "the following is the error message\n"
+                    "快速登录错误: 当前账号存在安全风险，请修改密码后登录或使用手机QQ扫码登录"
+                ),
+                orient=Qt.Orientation.Vertical,
+                isClosable=True,
+                duration=5000,
+                position=InfoBarPosition.BOTTOM_RIGHT,
+                parent=self.parent().parent()
+            )
+            return
+
+        if match := re.search(r"二维码已保存到\s(.+)", data):
+            # 如果已经显示了则关闭
+            self.qrcodeMsgBox.cancelButton.click()
+            # 提取匹配的路径
+            qrcodePath = match.group(1).strip()
+            self.qrcodeMsgBox.setQRCode(qrcodePath)
+            self.showQRCodeButton.show()
+            self.showQRCodeButton.click()
+            return
+
+        if f"[INFO] ({self.config.bot.QQID}) | 登录成功! " in data:
+            # 如果登录成功
+            self.qrcodeMsgBox.cancelButton.click()
+            self.showQRCodeButton.hide()
+            self.isLogin = True
+            InfoBar.success(
+                title=self.tr("Login successful!"),
+                content=self.tr(f"Account {self.config.bot.QQID} login successful!"),
+                orient=Qt.Orientation.Vertical,
+                duration=2000,
+                position=InfoBarPosition.BOTTOM_RIGHT,
+                parent=self.parent().parent()
+            )
 
     def _process_finished(self, exit_code, exit_status):
         cursor = self.botLogPage.textCursor()
@@ -333,6 +391,7 @@ class BotWidget(QWidget):
         self.buttonLayout.addWidget(self.runButton)
         self.buttonLayout.addWidget(self.stopButton)
         self.buttonLayout.addWidget(self.rebootButton)
+        self.buttonLayout.addWidget(self.showQRCodeButton)
         self.buttonLayout.addWidget(self.updateConfigButton)
         self.buttonLayout.addWidget(self.returnListButton)
         self.buttonLayout.addWidget(self.botSetupSubPageReturnButton)
@@ -350,3 +409,35 @@ class BotWidget(QWidget):
         self.vBoxLayout.addWidget(self.view)
 
         self.setLayout(self.vBoxLayout)
+
+
+class QRCodeMessageBox(MessageBoxBase):
+    """
+    ## 用于展示登录用的 QRCode
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.titleLabel = SubtitleLabel(self.tr('Scan the QR code to log in'))
+        self.qrcodeLabel = ImageLabel(self)
+        self.qrcodePath = None
+
+        # 设置图片宽高
+        self.qrcodeLabel.setFixedSize(100, 100)
+
+        # 将组件添加到布局中
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addWidget(self.qrcodeLabel, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        # 设置对话框
+        self.widget.setMinimumWidth(350)
+        self.yesButton.setText(self.tr("Refresh the QR code"))
+        self.yesButton.clicked.disconnect()
+        self.yesButton.clicked.connect(
+            lambda: self.setQRCode(self.qrcodePath) if self.qrcodePath else None
+        )
+
+    def setQRCode(self, qrcodePath: str):
+        QRCode = QPixmap(qrcodePath)
+        self.qrcodeLabel.setImage(QRCode)
+        self.qrcodePath = qrcodePath
