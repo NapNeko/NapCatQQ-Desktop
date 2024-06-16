@@ -132,6 +132,9 @@ class BotWidget(QWidget):
         self.botSetupSubPageReturnButton.setToolTip(self.tr("Click Back to BotSetup"))
         self.botSetupSubPageReturnButton.installEventFilter(ToolTipFilter(self.botSetupSubPageReturnButton))
 
+        self.showQRCodeButton.setToolTip(self.tr("Click to show the login QR code"))
+        self.showQRCodeButton.installEventFilter(ToolTipFilter(self.showQRCodeButton))
+
     def _runButtonSolt(self):
         """
         ## 启动按钮槽函数
@@ -155,6 +158,7 @@ class BotWidget(QWidget):
             - 切换到 botLogPage
         # 切换按钮显示
         """
+        from src.Ui.BotListPage import BotListWidget
         self.botLogPage.clear()
 
         self.env = QProcess.systemEnvironment()
@@ -163,9 +167,7 @@ class BotWidget(QWidget):
         self.process = QProcess(self)
         self.process.setEnvironment(self.env)
         self.process.setProgram(str(Path(self.config.advanced.QQPath) / "QQ.exe"))
-        self.process.setArguments(
-            [str(Path(cfg.NapCatPath.value) / "napcat.mjs"), "-q", self.config.bot.QQID]
-        )
+        self.process.setArguments([str(Path(cfg.NapCatPath.value) / "napcat.mjs"), "-q", self.config.bot.QQID])
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
         self.process.readyReadStandardOutput.connect(self._showQRCode)
@@ -175,6 +177,10 @@ class BotWidget(QWidget):
         self.process.start()
         self.process.waitForStarted()
 
+        it(BotListWidget).showInfo(
+            title=self.tr("运行命令已执行"),
+            content=self.tr("If there is no output for a long time, check the QQ path and NapCat path")
+        )
         self.isRun = True
         self.view.setCurrentWidget(self.botLogPage)
         self.runButton.setVisible(False)
@@ -185,15 +191,8 @@ class BotWidget(QWidget):
         """
         ## 停止按钮槽函数
         """
-        self.stateTooltip = StateToolTip(
-            self.tr("Suspended"),
-            self.tr("I can't eat hot tofu in a hurry"),
-            self.parent().parent()
-        )
         self.process.kill()
         self.process.waitForFinished()
-        self.stateTooltip.setContent(self.tr("Stop Successful!"))
-        self.stateTooltip.setState(True)
 
         self.isRun = False
         self.isLogin = False
@@ -233,21 +232,18 @@ class BotWidget(QWidget):
             # 如果是已经登录成功的状态,则直接跳过
             return
 
+        from src.Ui.BotListPage import BotListWidget
         if "[ERROR] () | 快速登录错误: 当前账号存在安全风险，请修改密码后登录或使用手机QQ扫码登录。" in data:
+
             # 引发此错误时自动重启
             self._rebootButtonSolt()
-            InfoBar.info(
+            it(BotListWidget).showInfo(
                 title=self.tr("Sign-in error"),
                 content=self.tr(
                     "Quick login error, NapCat has been automatically restarted, "
                     "the following is the error message\n"
                     "快速登录错误: 当前账号存在安全风险，请修改密码后登录或使用手机QQ扫码登录"
-                ),
-                orient=Qt.Orientation.Vertical,
-                isClosable=True,
-                duration=5000,
-                position=InfoBarPosition.BOTTOM_RIGHT,
-                parent=self.parent().parent()
+                )
             )
             return
 
@@ -266,13 +262,9 @@ class BotWidget(QWidget):
             self.qrcodeMsgBox.cancelButton.click()
             self.showQRCodeButton.hide()
             self.isLogin = True
-            InfoBar.success(
+            it(BotListWidget).showSuccess(
                 title=self.tr("Login successful!"),
-                content=self.tr(f"Account {self.config.bot.QQID} login successful!"),
-                orient=Qt.Orientation.Vertical,
-                duration=2000,
-                position=InfoBarPosition.BOTTOM_RIGHT,
-                parent=self.parent().parent()
+                content=self.tr(f"Account {self.config.bot.QQID} login successful!")
             )
 
     def _process_finished(self, exit_code, exit_status):
@@ -285,12 +277,13 @@ class BotWidget(QWidget):
         """
         ## 更新按钮的槽函数
         """
+        from src.Ui.BotListPage import BotListWidget
         self.newConfig = Config(**self.botSetupPage.getValue())
 
         # 读取配置列表
         with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
-            bot_configs = json.load(f)
-            bot_configs = [Config(**config) for config in bot_configs]
+            bot_configs = [Config(**config) for config in json.load(f)]
+
         if bot_configs:
             # 如果从文件加载的 bot_config 不为空则进行更新(为空怎么办呢,我能怎么办,崩了呗bushi
             for index, config in enumerate(bot_configs):
@@ -303,24 +296,15 @@ class BotWidget(QWidget):
             with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
                 json.dump(bot_configs, f, indent=4)
             # 更新成功提示
-            InfoBar.success(
+            it(BotListWidget).showSuccess(
                 title=self.tr("Update success"),
-                content=self.tr("The updated configuration is successful"),
-                orient=Qt.Orientation.Vertical,
-                position=InfoBarPosition.BOTTOM_RIGHT,
-                duration=2000,
-                parent=self.parent().parent()
+                content=self.tr("The updated configuration is successful")
             )
         else:
             # 为空报错
-            InfoBar.error(
+            it(BotListWidget).showError(
                 title=self.tr("Update error"),
-                content=self.tr("Data loss within the profile"),
-                orient=Qt.Orientation.Vertical,
-                position=InfoBarPosition.BOTTOM_RIGHT,
-                duration=50000,
-                isClosable=True,
-                parent=self.parent().parent()
+                content=self.tr("Data loss within the profile")
             )
 
     @staticmethod

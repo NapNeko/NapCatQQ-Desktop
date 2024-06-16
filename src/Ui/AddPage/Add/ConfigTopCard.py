@@ -141,7 +141,7 @@ class ConfigTopCard(QWidget):
                 # 遍历验证是否存在相同的机器人
                 _ = Config(**bot_config)
                 if config.bot.QQID == _.bot.QQID:
-                    self._showErrorBox(
+                    it(AddWidget).showError(
                         self.tr("Bots can't be added"),
                         self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly")
                     )
@@ -156,6 +156,11 @@ class ConfigTopCard(QWidget):
             # 执行刷新
             it(BotListWidget).botList.updateList()
 
+            it(AddWidget).showSuccess(
+                self.tr("Bot addition success!"),
+                self.tr(f"Bot({config.bot.QQID}) it has been successfully added, you can view it in BotList")
+            )
+
         except FileNotFoundError:
             # 如果 json 文件没有被创建则创建一个并写入
             config = Config(**it(AddWidget).getConfig())
@@ -165,7 +170,7 @@ class ConfigTopCard(QWidget):
 
         except ValueError as e:
             # 如果用户没有输入必须值，则提示
-            self._showErrorBox(self.tr("Bots can't be added"), str(e))
+            it(AddWidget).showError(self.tr("Bots can't be added"), str(e))
 
     def _initCreateScript(self, scriptType) -> "CreateScript":
         """
@@ -219,19 +224,3 @@ class ConfigTopCard(QWidget):
             it(AddWidget).botWidget.clearValues()
             it(AddWidget).connectWidget.clearValues()
             it(AddWidget).advancedWidget.clearValues()
-
-    @staticmethod
-    def _showErrorBox(title: str, content: str):
-        """
-        ## 显示错误消息条
-        """
-        from src.Ui.AddPage.Add.AddWidget import AddWidget
-        InfoBar.error(
-            title=title,
-            content=content,
-            orient=Qt.Orientation.Vertical,
-            duration=50000,
-            isClosable=True,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=it(AddWidget),
-        )

@@ -101,7 +101,11 @@ class BotCard(CardWidget):
             self.QQAvatarLabel.scaledToHeight(115)
             self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
         else:
-            self._showErrorBar(self.tr("Failed to get the QQ avatar"), replay.errorString())
+            from src.Ui.BotListPage import BotListWidget
+            it(BotListWidget).showError(
+                title=self.tr("Failed to get the QQ avatar"),
+                content=replay.errorString()
+            )
 
     def _clickSlot(self):
         """
@@ -118,18 +122,3 @@ class BotCard(CardWidget):
             it(BotListWidget).view.setCurrentWidget(self.botWidget)
         else:
             it(BotListWidget).view.setCurrentWidget(self.botWidget)
-
-    @staticmethod
-    def _showErrorBar(title: str, content: str):
-        """
-        ## 显示错误信息
-        """
-        from src.Ui.BotListPage.BotListWidget import BotListWidget
-        InfoBar.error(
-            title=title,
-            content=content,
-            orient=Qt.Orientation.Vertical,
-            duration=50000,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=it(BotListWidget)
-        )

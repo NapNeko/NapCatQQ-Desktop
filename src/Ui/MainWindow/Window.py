@@ -5,12 +5,14 @@
 """
 
 from abc import ABC
+from typing import Self
 
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, Qt, QObject
 from PySide6.QtWidgets import QApplication, QWidget
 from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
+from qfluentwidgets import InfoBar, InfoBarPosition
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
 from qfluentwidgets.window import MSFluentWindow, SplashScreen
@@ -24,14 +26,21 @@ from src.Ui.BotListPage import BotListWidget
 
 
 class MainWindow(MSFluentWindow):
+    """
+    ## 程序的主窗体
+    """
 
     def __init__(self) -> None:
-        """
-        程序的主窗体
-        """
         super().__init__()
+
+    def initialize(self) -> None:
+        """
+        ## 初始化程序, 并显示窗体
+        :return:
+        """
         self.setWindow()
         self.setItem()
+        self.setPage()
 
         # 组件加载完成结束 SplashScreen
         self.splashScreen.finish()
@@ -96,6 +105,69 @@ class MainWindow(MSFluentWindow):
         )
 
         logger.success("侧边栏构建完成")
+
+    def setPage(self) -> None:
+        """
+        ## 窗口创建完成进行一些处理
+        """
+        self.bot_list_widget.botList.updateList()
+
+    @staticmethod
+    def showInfo(title: str, content: str, showcasePage: QWidget) -> None:
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        InfoBar.info(
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Vertical,
+            duration=2000,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            parent=showcasePage
+        )
+
+    @staticmethod
+    def showError(title: str, content: str, showcasePage: QWidget) -> None:
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        InfoBar.error(
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Vertical,
+            duration=50000,
+            isClosable=True,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            parent=showcasePage
+        )
+
+    @staticmethod
+    def showWarning(title: str, content: str, showcasePage: QWidget) -> None:
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        InfoBar.warning(
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Vertical,
+            duration=5000,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            parent=showcasePage
+        )
+
+    @staticmethod
+    def showSuccess(title: str, content: str, showcasePage: QWidget) -> None:
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        InfoBar.success(
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Vertical,
+            duration=2000,
+            position=InfoBarPosition.BOTTOM_RIGHT,
+            parent=showcasePage
+        )
 
 
 class MainWindowClassCreator(AbstractCreator, ABC):

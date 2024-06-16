@@ -23,6 +23,6 @@ if __name__ == "__main__":
     # 创建app实例
     app = QApplication(sys.argv)
     # 显示窗体
-    it(MainWindow)
+    it(MainWindow).initialize()
     # 进入循环
     app.exec()

@@ -7,7 +7,7 @@ from abc import ABC
 from typing import TYPE_CHECKING, Self
 
 from PySide6.QtWidgets import QStackedWidget, QWidget, QVBoxLayout
-from creart import add_creator, exists_module
+from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
 
 from src.Ui.AddPage.Add.Advanced import AdvancedWidget
@@ -113,6 +113,50 @@ class AddWidget(QWidget):
         """
         widget = self.view.widget(index)
         self.topCard.pivot.setCurrentItem(widget.objectName())
+
+    def showInfo(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showInfo(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showError(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showError(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showWarning(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showWarning(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showSuccess(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showSuccess(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
 
 
 class AddWidgetClassCreator(AbstractCreator, ABC):

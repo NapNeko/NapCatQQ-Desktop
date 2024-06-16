@@ -4,11 +4,12 @@
 机器人列表
 """
 from abc import ABC
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, Optional
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
-from creart import add_creator, exists_module
+from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
+from qfluentwidgets import InfoBarPosition
 
 from src.Ui.BotListPage.BotList import BotList
 from src.Ui.BotListPage.BotTopCard import BotTopCard
@@ -22,10 +23,10 @@ class BotListWidget(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.view: QStackedWidget = None
-        self.topCard: BotTopCard = None
-        self.botList: BotList = None
-        self.vBoxLayout: QVBoxLayout = None
+        self.view: Optional[QStackedWidget] = None
+        self.topCard: Optional[BotTopCard] = None
+        self.botList: Optional[BotList] = None
+        self.vBoxLayout: Optional[QVBoxLayout] = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -60,6 +61,50 @@ class BotListWidget(QWidget):
         self.vBoxLayout.addWidget(self.view)
         self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
         self.setLayout(self.vBoxLayout)
+
+    def showInfo(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showInfo(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showError(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showError(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showWarning(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showWarning(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showSuccess(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showSuccess(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
 
 
 class BotListWidgetClassCreator(AbstractCreator, ABC):
