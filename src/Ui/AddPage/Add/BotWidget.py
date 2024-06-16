@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Core.Config.ConfigModel import BotConfig
-from src.Ui.AddPage.Card import (
+from src.Ui.common.Card import (
     ComboBoxConfigCard,
     LineEditConfigCard,
     SwitchConfigCard,
@@ -14,7 +14,7 @@ from src.Ui.AddPage.Card import (
 from src.Ui.Icon import NapCatDesktopIcon
 
 if TYPE_CHECKING:
-    from src.Ui.AddPage.Add.AddWidget import AddWidget
+    pass
 
 
 class BotWidget(ScrollArea):

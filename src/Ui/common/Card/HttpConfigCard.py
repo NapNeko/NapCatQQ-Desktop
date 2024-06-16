@@ -2,8 +2,8 @@
 
 from qfluentwidgets.common import FluentIcon
 
-from src.Ui.AddPage.Card.BaseClass import GroupCardBase
-from src.Ui.AddPage.Card.Item import LineEditItem, SwitchItem
+from src.Ui.common.Card.BaseClass import GroupCardBase
+from src.Ui.common.Card.Item import LineEditItem, SwitchItem
 
 from src.Core.Config.ConfigModel import HttpConfig
 

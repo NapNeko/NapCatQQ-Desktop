@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Core.Config.ConfigModel import ConnectConfig
-from src.Ui.AddPage.Card import (
+from src.Ui.common.Card import (
     HttpConfigCard,
     SwitchConfigCard,
     UrlCard,
@@ -14,7 +14,7 @@ from src.Ui.AddPage.Card import (
 )
 
 if TYPE_CHECKING:
-    from src.Ui.AddPage.Add.AddWidget import AddWidget
+    pass
 
 
 class ConnectWidget(ScrollArea):

@@ -8,14 +8,14 @@ from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Core.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import AdvancedConfig
-from src.Ui.AddPage.Card import (
+from src.Ui.common.Card import (
     SwitchConfigCard,
     FolderConfigCard,
     ComboBoxConfigCard,
 )
 
 if TYPE_CHECKING:
-    from src.Ui.AddPage.Add.AddWidget import AddWidget
+    pass
 
 
 class AdvancedWidget(ScrollArea):

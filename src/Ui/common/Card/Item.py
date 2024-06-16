@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-from qfluentwidgets import BodyLabel, IndicatorPosition, LineEdit, SwitchButton
+from qfluentwidgets import IndicatorPosition, LineEdit, SwitchButton
 
-from src.Ui.AddPage.Card.BaseClass import ItemBase
+from src.Ui.common.Card.BaseClass import ItemBase
 
 
 class SwitchItem(ItemBase):
