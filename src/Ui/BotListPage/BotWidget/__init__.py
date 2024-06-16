@@ -350,6 +350,7 @@ class BotWidget(QWidget):
                 'updateConfigButton': 'hide',
                 'deleteConfigButton': 'hide',
                 'botSetupSubPageReturnButton': 'hide',
+                'showQRCodeButton': 'hide',
                 'runButton': 'hide' if self.isRun else 'show',
                 'stopButton': 'show' if self.isRun else 'hide',
                 'rebootButton': 'show' if self.isRun else 'hide'
@@ -358,6 +359,7 @@ class BotWidget(QWidget):
                 'updateConfigButton': 'show',
                 'deleteConfigButton': 'show',
                 'botSetupSubPageReturnButton': 'hide',
+                'showQRCodeButton': 'hide',
                 'returnListButton': 'show',
                 'runButton': 'hide',
                 'stopButton': 'hide',
@@ -370,7 +372,8 @@ class BotWidget(QWidget):
                 'botSetupSubPageReturnButton': 'hide',
                 'runButton': 'hide' if self.isRun else 'show',
                 'stopButton': 'show' if self.isRun else 'hide',
-                'rebootButton': 'show' if self.isRun else 'hide'
+                'rebootButton': 'show' if self.isRun else 'hide',
+                'showQRCodeButton': 'show' if not self.isLogin and self.isRun else 'hide'
             }
         }
 
