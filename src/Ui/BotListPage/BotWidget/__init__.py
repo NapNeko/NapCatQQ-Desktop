@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
 from creart import it
 from qfluentwidgets import (
     SegmentedWidget, TransparentToolButton, FluentIcon, ToolTipFilter, PrimaryPushButton, InfoBar, InfoBarPosition,
-    PushButton, StateToolTip, MessageBox, MessageBoxBase, SubtitleLabel, ImageLabel
+    PushButton, StateToolTip, MessageBox, MessageBoxBase, SubtitleLabel, ImageLabel, ToolButton, BodyLabel
 )
 
 from src.Core.Config.ConfigModel import Config
@@ -98,11 +98,12 @@ class BotWidget(QWidget):
         ## 创建按钮并设置
         """
         # 创建按钮
-        self.runButton = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("Startup"))
-        self.stopButton = PushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"))
-        self.rebootButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Reboot"))
-        self.showQRCodeButton = TransparentToolButton(FluentIcon.QRCODE)
+        self.runButton = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("Startup"))  # 启动按钮
+        self.stopButton = PushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"))  # 停止按钮
+        self.rebootButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Reboot"))  # 重启按钮
+        self.showQRCodeButton = TransparentToolButton(FluentIcon.QRCODE)  # 显示登录二维码按钮
         self.updateConfigButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Update config"))  # 更新配置按钮
+        self.deleteConfigButton = ToolButton(FluentIcon.DELETE)  # 删除配置按钮
         self.returnListButton = TransparentToolButton(FluentIcon.RETURN)  # 返回到列表按钮
         self.botSetupSubPageReturnButton = TransparentToolButton(FluentIcon.RETURN)  # 返回到 BotSetup 按钮
 
@@ -112,6 +113,7 @@ class BotWidget(QWidget):
         self.rebootButton.clicked.connect(self._rebootButtonSolt)
         self.showQRCodeButton.clicked.connect(lambda: self.qrcodeMsgBox.show())
         self.updateConfigButton.clicked.connect(self._updateButtonSolt)
+        self.deleteConfigButton.clicked.connect(self._deleteButtonSolt)
         self.botSetupSubPageReturnButton.clicked.connect(self._botSetupSubPageReturnButtonSolt)
         self.returnListButton.clicked.connect(self._returnListButtonSolt)
 
@@ -119,6 +121,7 @@ class BotWidget(QWidget):
         self.stopButton.hide()
         self.rebootButton.hide()
         self.updateConfigButton.hide()
+        self.deleteConfigButton.hide()
         self.showQRCodeButton.hide()
         self.botSetupSubPageReturnButton.hide()
 
@@ -134,6 +137,9 @@ class BotWidget(QWidget):
 
         self.showQRCodeButton.setToolTip(self.tr("Click to show the login QR code"))
         self.showQRCodeButton.installEventFilter(ToolTipFilter(self.showQRCodeButton))
+
+        self.deleteConfigButton.setToolTip(self.tr("Click Delete bot configuration"))
+        self.deleteConfigButton.installEventFilter(ToolTipFilter(self.deleteConfigButton))
 
     def _runButtonSolt(self):
         """
@@ -306,6 +312,14 @@ class BotWidget(QWidget):
                 content=self.tr("Data loss within the profile")
             )
 
+    def _deleteButtonSolt(self) -> None:
+        """
+        ## 删除机器人配置按钮
+        """
+        from src.Ui.BotListPage import BotListWidget
+        msgBox = DeleteConfigMessageBox(self.isRun, self, it(BotListWidget))
+        msgBox.exec()
+
     @staticmethod
     def _returnListButtonSolt() -> None:
         """
@@ -336,6 +350,7 @@ class BotWidget(QWidget):
             self.botInfoPage.objectName(): {
                 'returnListButton': 'show',
                 'updateConfigButton': 'hide',
+                'deleteConfigButton': 'hide',
                 'botSetupSubPageReturnButton': 'hide',
                 'runButton': 'hide' if self.isRun else 'show',
                 'stopButton': 'show' if self.isRun else 'hide',
@@ -343,6 +358,7 @@ class BotWidget(QWidget):
             },
             self.botSetupPage.objectName(): {
                 'updateConfigButton': 'show',
+                'deleteConfigButton': 'show',
                 'botSetupSubPageReturnButton': 'hide',
                 'returnListButton': 'show',
                 'runButton': 'hide',
@@ -352,6 +368,7 @@ class BotWidget(QWidget):
             self.botLogPage.objectName(): {
                 'returnListButton': 'show',
                 'updateConfigButton': 'hide',
+                'deleteConfigButton': 'hide',
                 'botSetupSubPageReturnButton': 'hide',
                 'runButton': 'hide' if self.isRun else 'show',
                 'stopButton': 'show' if self.isRun else 'hide',
@@ -376,6 +393,7 @@ class BotWidget(QWidget):
         self.buttonLayout.addWidget(self.rebootButton)
         self.buttonLayout.addWidget(self.showQRCodeButton)
         self.buttonLayout.addWidget(self.updateConfigButton)
+        self.buttonLayout.addWidget(self.deleteConfigButton)
         self.buttonLayout.addWidget(self.returnListButton)
         self.buttonLayout.addWidget(self.botSetupSubPageReturnButton)
         self.buttonLayout.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -400,7 +418,7 @@ class QRCodeMessageBox(MessageBoxBase):
     """
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent=parent)
         self.titleLabel = SubtitleLabel(self.tr('Scan the QR code to log in'))
         self.qrcodeLabel = ImageLabel(self)
         self.qrcodePath = None
@@ -424,3 +442,61 @@ class QRCodeMessageBox(MessageBoxBase):
         QRCode = QPixmap(qrcodePath)
         self.qrcodeLabel.setImage(QRCode)
         self.qrcodePath = qrcodePath
+
+
+class DeleteConfigMessageBox(MessageBoxBase):
+    """
+    ## 删除机器人配置对话框
+    """
+
+    def __init__(self, isRun: bool, parent: BotWidget, displayLocation) -> None:
+        super().__init__(parent=displayLocation)
+        self.titleLabel = SubtitleLabel()
+        self.contentLabel = BodyLabel()
+
+        if isRun:
+            # 如果正在运行, 则提示停止运行
+            self.titleLabel.setText(self.tr("Deletion failed"))
+            self.contentLabel.setText(
+                self.tr("NapCat is currently running, please stop running and delete the configuration")
+            )
+            self.yesButton.setText(self.tr("Stop NapCat operation"))
+            self.yesButton.clicked.connect(lambda: parent.stopButton.click())
+        else:
+            # 不在运行则确认删除
+            self.titleLabel.setText(self.tr("Confirm the deletion"))
+            self.contentLabel.setText(
+                self.tr(
+                    f"Are you sure you want to delete {parent.config.bot.QQID}? \n\n"
+                    f"This operation cannot be undone, please proceed with caution"
+                )
+            )
+            self.yesButton.setText(self.tr("Confirm the deletion"))
+            self.yesButton.clicked.connect(lambda: self._deleteConfig(parent))
+
+        # 将组件添加到布局中
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addWidget(self.contentLabel)
+
+        # 设置对话框
+        self.widget.setMinimumWidth(350)
+
+    @staticmethod
+    def _deleteConfig(parent: BotWidget):
+        """
+        ## 执行删除配置
+            - 返回到列表, 删除配置并保存, 刷新列表
+        """
+        from src.Ui.BotListPage import BotListWidget
+
+        it(BotListWidget).botList.bot_list.remove(parent.config)
+        with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
+            bot_configs = json.load(f)
+
+        bot_configs = [json.loads(config.json()) for config in it(BotListWidget).botList.bot_list]
+
+        with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
+            json.dump(bot_configs, f, indent=4)
+
+        parent.returnListButton.click()
+        it(BotListWidget).botList.updateList()
