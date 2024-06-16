@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
+import json
+import re
 from abc import ABC
 from enum import Enum
-from functools import partial
 
-from PySide6.QtCore import QUrl, QUrlQuery
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QApplication
-from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
-
+from PySide6.QtCore import QUrl, QEventLoop
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
 
 
 class Urls(Enum):
@@ -59,18 +57,77 @@ class NetworkFuncClassCreator(AbstractCreator, ABC):
 add_creator(NetworkFuncClassCreator)
 
 
-if __name__ == '__main__':
+class GetNewVersion:
+    """
+    ## 获取最新版本信息
+    """
 
-    def handle_response(reply: QNetworkReply):
-        if reply.error() == QNetworkReply.NetworkError.NoError:
-            data = reply.readAll()
-            print("Received data:", data)
-        else:
-            print("Error:", reply.errorString())
-        reply.deleteLater()
-        QApplication.quit()
+    @staticmethod
+    def fetchApiResponse(url):
+        """
+        ## 通用的API请求方法
+        """
+        # 创建事件循环以及请求
+        loop = QEventLoop()
+        request = QNetworkRequest(url)
+        # 发送请求
+        reply = it(NetworkFunc).manager.get(request)
+        # 连接信号槽，响应完成时退出事件循环
+        reply.finished.connect(loop.quit)
+        # 进入事件循环，等待响应完成
+        loop.exec()
 
-    app = QApplication([])
-    net = NetworkFunc()
-    net.get(Urls.NAPCATQQ_REPO.value, handle_response)
-    app.exec()
+        # 如果请求失败返回 None
+        if reply.error() != QNetworkReply.NetworkError.NoError:
+            return None
+
+        # 解析响应数据为 JSON 对象
+        return json.loads(reply.readAll().data().decode().strip())
+
+    def getNapCatVersion(self):
+        """
+        ## 获取 NapCat 的版本信息
+        """
+        response_dict = self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)
+        if response_dict is None:
+            return None
+
+        # 返回版本信息
+        return response_dict.get("tag_name", None)
+
+    def getQQVersion(self):
+        """
+        ## 获取 NapCat 所适配的 最新QQ版本
+        """
+        response_dict = self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)
+        if response_dict is None:
+            return None
+
+        # 正则表达式解析 QQ Version 信息
+        windows_match = re.search(r'Windows\s([\d.]+-\d+)', response_dict.get("body"))
+        linux_match = re.search(r'Linux\s([\d.]+-\d+)', response_dict.get("body"))
+
+        # 返回版本信息
+        return {
+            "windows_version": windows_match.group(1) if windows_match else None,
+            "linux_version": linux_match.group(1) if linux_match else None
+        }
+
+
+class GetNewVersionClassCreator(AbstractCreator, ABC):
+    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
+    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
+    targets = (CreateTargetInfo("src.Core.NetworkFunc", "GetNewVersion"),)
+
+    # 静态方法available()，用于检查模块"PathFunc"是否存在，返回值为布尔型。
+    @staticmethod
+    def available() -> bool:
+        return exists_module("src.Core.NetworkFunc")
+
+    # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
+    @staticmethod
+    def create(create_type: [GetNewVersion]) -> GetNewVersion:
+        return GetNewVersion()
+
+
+add_creator(GetNewVersionClassCreator)
