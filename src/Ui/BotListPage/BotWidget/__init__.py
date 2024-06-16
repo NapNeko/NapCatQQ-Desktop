@@ -237,7 +237,7 @@ class BotWidget(QWidget):
             return
 
         from src.Ui.BotListPage import BotListWidget
-        if "[ERROR] () | 快速登录错误: 当前账号存在安全风险，请修改密码后登录或使用手机QQ扫码登录。" in data:
+        if "[ERROR] () | 快速登录错误" in data:
             # 引发此错误时自动重启
             self._rebootButtonSolt()
             it(BotListWidget).showInfo(
@@ -245,7 +245,7 @@ class BotWidget(QWidget):
                 content=self.tr(
                     "Quick login error, NapCat has been automatically restarted, "
                     "the following is the error message\n"
-                    "快速登录错误: 当前账号存在安全风险，请修改密码后登录或使用手机QQ扫码登录"
+                    "Quick login error"
                 )
             )
             return
