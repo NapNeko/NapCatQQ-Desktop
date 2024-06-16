@@ -234,7 +234,6 @@ class BotWidget(QWidget):
 
         from src.Ui.BotListPage import BotListWidget
         if "[ERROR] () | 快速登录错误: 当前账号存在安全风险，请修改密码后登录或使用手机QQ扫码登录。" in data:
-
             # 引发此错误时自动重启
             self._rebootButtonSolt()
             it(BotListWidget).showInfo(
@@ -344,8 +343,8 @@ class BotWidget(QWidget):
             },
             self.botSetupPage.objectName(): {
                 'updateConfigButton': 'show',
-                'botSetupSubPageReturnButton': 'show',
-                'returnListButton': 'hide',
+                'botSetupSubPageReturnButton': 'hide',
+                'returnListButton': 'show',
                 'runButton': 'hide',
                 'stopButton': 'hide',
                 'rebootButton': 'hide'

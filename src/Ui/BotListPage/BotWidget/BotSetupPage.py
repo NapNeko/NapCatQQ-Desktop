@@ -108,6 +108,14 @@ class BotSetupPage(QWidget):
         self.connectSetupCard.clicked.connect(lambda: self.view.view.setCurrentWidget(self.connectWidget))
         self.advancedSetupCard.clicked.connect(lambda: self.view.view.setCurrentWidget(self.advancedWidget))
 
+        self.botSetupCard.clicked.connect(lambda: self.view.botSetupSubPageReturnButton.show())
+        self.connectSetupCard.clicked.connect(lambda: self.view.botSetupSubPageReturnButton.show())
+        self.advancedSetupCard.clicked.connect(lambda: self.view.botSetupSubPageReturnButton.show())
+
+        self.botSetupCard.clicked.connect(lambda: self.view.returnListButton.hide())
+        self.connectSetupCard.clicked.connect(lambda: self.view.returnListButton.hide())
+        self.advancedSetupCard.clicked.connect(lambda: self.view.returnListButton.hide())
+
     def _createSubPages(self) -> None:
         """
         ## 创建子页面, 并添加到 view 中
