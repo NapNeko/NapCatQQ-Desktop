@@ -344,6 +344,7 @@ class BotWidget(QWidget):
         self.pivot.setCurrentItem(widget.objectName())
 
         # 定义页面对应的操作字典
+        # 塞一大堆 if-else 是及其不专业的行为(
         page_actions = {
             self.botInfoPage.objectName(): {
                 'returnListButton': 'show',

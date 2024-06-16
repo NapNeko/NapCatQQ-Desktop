@@ -121,7 +121,7 @@ class MainWindow(MSFluentWindow):
             title=title,
             content=content,
             orient=Qt.Orientation.Vertical,
-            duration=2000,
+            duration=5000,
             position=InfoBarPosition.BOTTOM_RIGHT,
             parent=showcasePage
         )
@@ -150,7 +150,7 @@ class MainWindow(MSFluentWindow):
             title=title,
             content=content,
             orient=Qt.Orientation.Vertical,
-            duration=5000,
+            duration=10000,
             position=InfoBarPosition.BOTTOM_RIGHT,
             parent=showcasePage
         )
@@ -164,7 +164,7 @@ class MainWindow(MSFluentWindow):
             title=title,
             content=content,
             orient=Qt.Orientation.Vertical,
-            duration=2000,
+            duration=5000,
             position=InfoBarPosition.BOTTOM_RIGHT,
             parent=showcasePage
         )
