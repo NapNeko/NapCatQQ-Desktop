@@ -178,7 +178,7 @@ class BotWidget(QWidget):
         self.process.waitForStarted()
 
         it(BotListWidget).showInfo(
-            title=self.tr("运行命令已执行"),
+            title=self.tr("The run command has been executed"),
             content=self.tr("If there is no output for a long time, check the QQ path and NapCat path")
         )
         self.isRun = True
