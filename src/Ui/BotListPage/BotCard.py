@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from PySide6.QtCore import QUrl, QUrlQuery, Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtNetwork import QNetworkRequest, QNetworkReply
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QVBoxLayout
 from creart import it
 from qfluentwidgets import CardWidget, ImageLabel, InfoBar, InfoBarPosition, BodyLabel, setFont, ToolTipFilter
 
@@ -13,6 +13,7 @@ from src.Core.NetworkFunc import Urls, NetworkFunc
 
 if TYPE_CHECKING:
     from src.Ui.BotListPage.BotList import BotList
+    from src.Ui.BotListPage.BotWidget import BotWidget
 
 
 class BotCard(CardWidget):
@@ -27,7 +28,7 @@ class BotCard(CardWidget):
     def __init__(self, config: Config, parent: "BotList" = None):
         super().__init__(parent=parent)
         self.config = config
-        self.botWidget = None
+        self.botWidget: Optional[BotWidget] = None
         self._initWidget()
         self._QQAvatar()
         self._infoLabel()

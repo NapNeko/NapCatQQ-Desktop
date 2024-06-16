@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
-from typing import List, TYPE_CHECKING
+from typing import List, Tuple, TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout
@@ -27,6 +27,11 @@ class BotList(ScrollArea):
         ## 初始化
         """
         super().__init__(parent=parent)
+        # 创建属性
+        self.bot_list: List[Config] = []
+        self.botCardList: List[BotCard] = []
+
+        # 调用方法
         self._createView()
         self.updateList()
         self._initWidget()
@@ -44,7 +49,7 @@ class BotList(ScrollArea):
         ## 构建并设置 ScrollArea 所需的 widget
         """
         self.view = QWidget(self)
-        self.cardLayout = FlowLayout(self.view)
+        self.cardLayout = FlowLayout(self.view, True)
         self.cardLayout.setContentsMargins(0, 0, 0, 0)
         self.cardLayout.setSpacing(4)
         self.view.setObjectName("BotListView")
@@ -55,14 +60,40 @@ class BotList(ScrollArea):
         ## 更新机器人列表
         """
         self._parseList()
-        # 卸载掉原有的 card
-        if self.cardLayout.count() != 0:
-            self.cardLayout.takeAllWidgets()
 
-        # 重新添加到布局中
-        for bot in self.bot_list:
-            card = BotCard(bot)
+        if not self.botCardList:
+            # 如果是首次运行, 则直接添加到布局和 botCardList
+            for bot in self.bot_list:
+                card = BotCard(bot)
+                self.cardLayout.addWidget(card)
+                self.botCardList.append(card)
+            return
+
+        QQList = [card.config.bot.QQID for card in self.botCardList]
+        for bot_config in self.bot_list:
+            # 遍历并判断是否有新增的 bot
+            if bot_config.bot.QQID in QQList:
+                # 如果属于则直接跳过
+                continue
+
+            # 不属于则就属于新增, 创建 card 并 添加到布局
+            card = BotCard(bot_config)
             self.cardLayout.addWidget(card)
+            self.botCardList.append(card)
+
+        for card in self.botCardList:
+            # 遍历并判断是否有减少的 bot
+            if card.config in self.bot_list:
+                # 属于则就是没有被删除, 跳过
+                continue
+
+            # 移除出布局并删除
+            self.botCardList.remove(card)
+            self.cardLayout.removeWidget(card)
+            card.deleteLater()
+
+        # 刷新一次布局
+        self.cardLayout.update()
 
     def _parseList(self):
         """
