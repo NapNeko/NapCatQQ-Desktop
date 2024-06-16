@@ -2,24 +2,22 @@
 import json
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, List
 
 from PySide6.QtCore import Qt, QProcess
 from PySide6.QtGui import QTextCursor, QPixmap
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
 from creart import it
 from qfluentwidgets import (
-    SegmentedWidget, TransparentToolButton, FluentIcon, ToolTipFilter, PrimaryPushButton, InfoBar, InfoBarPosition,
-    PushButton, StateToolTip, MessageBox, MessageBoxBase, SubtitleLabel, ImageLabel, ToolButton, BodyLabel
+    SegmentedWidget, TransparentToolButton, FluentIcon, ToolTipFilter, PrimaryPushButton, PushButton, MessageBoxBase,
+    SubtitleLabel, ImageLabel, ToolButton, BodyLabel
 )
 
+from src.Core.Config import cfg
 from src.Core.Config.ConfigModel import Config
 from src.Core.PathFunc import PathFunc
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common import CodeEditor, LogHighlighter
-
-from src.Core.Config import cfg
 
 
 class BotWidget(QWidget):
@@ -490,8 +488,6 @@ class DeleteConfigMessageBox(MessageBoxBase):
         from src.Ui.BotListPage import BotListWidget
 
         it(BotListWidget).botList.bot_list.remove(parent.config)
-        with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
-            bot_configs = json.load(f)
 
         bot_configs = [json.loads(config.json()) for config in it(BotListWidget).botList.bot_list]
 
