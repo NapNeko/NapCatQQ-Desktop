@@ -68,7 +68,7 @@ class UrlCard(ExpandSettingCard):
     emptiedSignal = Signal()
 
     def __init__(
-        self, icon: FluentIconBase, title: str, content: str, parent=None
+        self, icon: FluentIcon | FluentIconBase, title: str, content: str, parent=None
     ) -> None:
         """
         ## 初始化卡片
@@ -203,7 +203,7 @@ class UrlInputBox(MessageBoxBase):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.titleLabel = TitleLabel(self.tr("Enter the URL"))
+        self.titleLabel = TitleLabel(self.tr("Enter the URL"), self)
         self.urlLineEdit = LineEdit()
 
         self.urlLineEdit.setPlaceholderText(self.tr("Enter the URL..."))

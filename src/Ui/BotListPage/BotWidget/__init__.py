@@ -99,11 +99,11 @@ class BotWidget(QWidget):
         self.runButton = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("Startup"))  # 启动按钮
         self.stopButton = PushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"))  # 停止按钮
         self.rebootButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Reboot"))  # 重启按钮
-        self.showQRCodeButton = TransparentToolButton(FluentIcon.QRCODE)  # 显示登录二维码按钮
+        self.showQRCodeButton = TransparentToolButton(FluentIcon.QRCODE, self)  # 显示登录二维码按钮
         self.updateConfigButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Update config"))  # 更新配置按钮
-        self.deleteConfigButton = ToolButton(FluentIcon.DELETE)  # 删除配置按钮
-        self.returnListButton = TransparentToolButton(FluentIcon.RETURN)  # 返回到列表按钮
-        self.botSetupSubPageReturnButton = TransparentToolButton(FluentIcon.RETURN)  # 返回到 BotSetup 按钮
+        self.deleteConfigButton = ToolButton(FluentIcon.DELETE, self)  # 删除配置按钮
+        self.returnListButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回到列表按钮
+        self.botSetupSubPageReturnButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回到 BotSetup 按钮
 
         # 连接槽函数
         self.runButton.clicked.connect(self._runButtonSolt)

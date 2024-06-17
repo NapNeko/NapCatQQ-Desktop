@@ -8,7 +8,7 @@ from qfluentwidgets import (
     ExpandSettingCard,
     FluentIconBase,
     LineEdit,
-    SwitchButton,
+    SwitchButton, FluentIcon,
 )
 from qfluentwidgets.components.settings.expand_setting_card import GroupSeparator
 
@@ -24,7 +24,7 @@ class ItemBase(QWidget):
 
         """
         super().__init__(parent=parent)
-        self.label = BodyLabel(title)
+        self.label = BodyLabel(title, self)
         self.setFixedHeight(65)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.hBoxLayout = QHBoxLayout(self)
@@ -49,7 +49,7 @@ class ItemBase(QWidget):
 class GroupCardBase(ExpandSettingCard):
 
     def __init__(
-        self, icon: FluentIconBase, title: str, content: str, parent=None
+        self, icon: FluentIcon | FluentIconBase, title: str, content: str, parent=None
     ) -> None:
         """
         ## 初始化卡片

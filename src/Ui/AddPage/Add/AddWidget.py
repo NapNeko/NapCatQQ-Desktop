@@ -4,7 +4,7 @@
 添加机器人
 """
 from abc import ABC
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, Optional
 
 from PySide6.QtWidgets import QStackedWidget, QWidget, QVBoxLayout
 from creart import add_creator, exists_module, it
@@ -28,9 +28,9 @@ class AddWidget(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.view: QStackedWidget = None
-        self.topCard: ConfigTopCard = None
-        self.vBoxLayout: QVBoxLayout = None
+        self.view: Optional[QStackedWidget] = None
+        self.topCard: Optional[ConfigTopCard] = None
+        self.vBoxLayout: Optional[QVBoxLayout] = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """

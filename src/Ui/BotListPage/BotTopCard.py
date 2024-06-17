@@ -25,8 +25,8 @@ class BotTopCard(QWidget):
 
         # 创建所需控件
         self.breadcrumbBar = BreadcrumbBar(self)
-        self.subtitleLabel = CaptionLabel(self.tr("All the bots you've added are here"))
-        self.updateListButton = TransparentToolButton(FluentIcon.SYNC)  # 刷新列表按钮
+        self.subtitleLabel = CaptionLabel(self.tr("All the bots you've added are here"), self)
+        self.updateListButton = TransparentToolButton(FluentIcon.SYNC, self)  # 刷新列表按钮
 
         self.hBoxLayout = QHBoxLayout()
         self.labelLayout = QVBoxLayout()

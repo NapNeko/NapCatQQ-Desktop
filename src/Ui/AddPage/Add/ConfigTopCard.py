@@ -50,8 +50,8 @@ class ConfigTopCard(QWidget):
 
     def _createLabel(self) -> None:
         # 构建 Label 并配置
-        self.titleLabel = TitleLabel(self.tr("Add bot"))
-        self.subtitleLabel = CaptionLabel(self.tr("Before adding a robot, you need to do some configuration"))
+        self.titleLabel = TitleLabel(self.tr("Add bot"), self)
+        self.subtitleLabel = CaptionLabel(self.tr("Before adding a robot, you need to do some configuration"), self)
 
     def _createButton(self) -> None:
         # 构建 Button 并配置
