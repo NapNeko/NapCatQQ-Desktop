@@ -162,12 +162,12 @@ class AddWidget(QWidget):
 class AddWidgetClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
     # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Ui.AddPage.Add.AddWidget", "AddWidget"),)
+    targets = (CreateTargetInfo("src.Ui.AddPage.AddWidget", "AddWidget"),)
 
     # 静态方法available()，用于检查模块"Add"是否存在，返回值为布尔型。
     @staticmethod
     def available() -> bool:
-        return exists_module("src.Ui.AddPage.Add.AddWidget")
+        return exists_module("src.Ui.AddPage.AddWidget")
 
     # 静态方法create()，用于创建AddWidget类的实例，返回值为AddWidget对象。
     @staticmethod
