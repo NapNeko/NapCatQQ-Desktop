@@ -13,51 +13,36 @@ class GetVersion:
     ## 提供两个方法, 分别获取本地的 NapCat 和 QQ 的版本
     """
 
-    def __init__(self):
-        self.napcat_update = False
-        self.qq_update = False
-        self.qq_version: Optional[int] = None
-        self.napcat_version: Optional[int] = None
-
-    def getNapCatVersion(self):
+    @staticmethod
+    def getNapCatVersion():
         """
         ## 获取 NapCat 的版本信息
         """
         try:
-            if self.napcat_update or self.napcat_version is None:
-                # 如果有更新或者初始化, 则获取 package.json 路径并读取
-                package_file_path = it(PathFunc).getNapCatPath() / "package.json"
-                with open(str(package_file_path), "r", encoding="utf-8") as f:
-                    # 读取到参数返回版本信息
-                    self.napcat_version = json.loads(f.read())['version']
-                    return f"v{self.napcat_version}"
-            else:
-                # 如果无更新, 则直接返回
-                return f"v{self.napcat_version}"
+            # 获取 package.json 路径并读取
+            package_file_path = it(PathFunc).getNapCatPath() / "package.json"
+            with open(str(package_file_path), "r", encoding="utf-8") as f:
+                # 读取到参数返回版本信息
+                return f"v{json.loads(f.read())['version']}"
 
         except FileNotFoundError:
             # 文件不存在则返回 None
             return None
 
-    def getQQVersion(self):
+    @staticmethod
+    def getQQVersion():
         """
         ## 获取 QQ 的版本信息
         """
         try:
-            if self.qq_update or self.qq_version is None:
-                # 如果有更新或者初始化, 则获取 package.json 路径并读取
-                # 获取 package.json 路径并读取
-                package_file_path = it(PathFunc).getQQPath() / "resources/app/package.json"
-                with open(str(package_file_path), "r", encoding="utf-8") as f:
-                    # 读取参数并返回版本信息
-                    package = json.loads(f.read())
-                # 拼接字符串返回版本信息
-                platform = "Windows" if package["platform"] == "win32" else "Linux"
-                self.qq_version = f"{platform} {package['version']}"
-                return self.qq_version
-            else:
-                # 如果无更新, 则直接返回
-                return self.qq_version
+            # 获取 package.json 路径并读取
+            package_file_path = it(PathFunc).getQQPath() / "resources/app/package.json"
+            with open(str(package_file_path), "r", encoding="utf-8") as f:
+                # 读取参数并返回版本信息
+                package = json.loads(f.read())
+            # 拼接字符串返回版本信息
+            platform = "Windows" if package["platform"] == "win32" else "Linux"
+            return f"{platform} {package['version']}"
 
         except FileNotFoundError:
             # 文件不存在则返回 None
