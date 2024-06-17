@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 class ConfigTopCard(QWidget):
     """
-    ## AddWidget 顶部展示的 Card
+    ## AddWidget 顶部展示的 InputCard
 
     用于展示切换 view 的 SegmentedWidget
     包括清空配置项的按钮, 添加到列表的按钮, 创建脚本的按钮

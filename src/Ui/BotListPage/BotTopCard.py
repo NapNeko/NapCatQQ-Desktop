@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 class BotTopCard(QWidget):
     """
-    ## BotListWidget 顶部展示的 Card
+    ## BotListWidget 顶部展示的 InputCard
 
     用于展示 Breadcrumb navigation 以及一些操作按钮
     """

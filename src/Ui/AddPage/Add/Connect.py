@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Core.Config.ConfigModel import ConnectConfig
-from src.Ui.common.Card import (
+from src.Ui.common.InputCard import (
     HttpConfigCard,
     SwitchConfigCard,
     UrlCard,
@@ -46,7 +46,7 @@ class ConnectWidget(ScrollArea):
     def _initWidget(self):
         """
         ## 初始化 QWidget 所需要的控件并配置
-        创建 Card
+        创建 InputCard
         """
         self.httpConfigCard = HttpConfigCard(self.view)
         self.httpPostUrlCard = UrlCard(
@@ -106,7 +106,7 @@ class ConnectWidget(ScrollArea):
 
     def _setLayout(self):
         """
-        ## 将 QWidget 内部的 Card 添加到布局中
+        ## 将 QWidget 内部的 InputCard 添加到布局中
         """
         self.cardLayout.setContentsMargins(0, 0, 0, 0)
         self.cardLayout.setSpacing(2)

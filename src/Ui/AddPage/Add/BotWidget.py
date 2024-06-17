@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Core.Config.ConfigModel import BotConfig
-from src.Ui.common.Card import (
+from src.Ui.common.InputCard import (
     ComboBoxConfigCard,
     LineEditConfigCard,
     SwitchConfigCard,
@@ -46,7 +46,7 @@ class BotWidget(ScrollArea):
     def _initWidget(self) -> None:
         """
         ## 初始化 QWidget 所需要的控件并配置
-        创建 Card
+        创建 InputCard
         """
         self.botNameCard = LineEditConfigCard(
             icon=FluentIcon.ROBOT,
@@ -120,7 +120,7 @@ class BotWidget(ScrollArea):
 
     def _setLayout(self) -> None:
         """
-        ## 将 QWidget 内部的 Card 添加到布局中
+        ## 将 QWidget 内部的 InputCard 添加到布局中
         """
         self.cardLayout.setContentsMargins(0, 0, 0, 0)
         self.cardLayout.setSpacing(2)

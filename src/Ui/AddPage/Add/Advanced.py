@@ -8,7 +8,7 @@ from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
 from src.Core.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import AdvancedConfig
-from src.Ui.common.Card import (
+from src.Ui.common.InputCard import (
     SwitchConfigCard,
     FolderConfigCard,
     ComboBoxConfigCard,
@@ -47,7 +47,7 @@ class AdvancedWidget(ScrollArea):
     def _initWidget(self):
         """
         ## 初始化 QWidget 所需要的控件并配置
-        创建 Card
+        创建 InputCard
         """
         self.QQPathCard = FolderConfigCard(
             icon=FluentIcon.FOLDER,
@@ -136,7 +136,7 @@ class AdvancedWidget(ScrollArea):
 
     def _setLayout(self):
         """
-        ## 将 QWidget 内部的 Card 添加到布局中
+        ## 将 QWidget 内部的 InputCard 添加到布局中
         """
         self.cardLayout.setContentsMargins(0, 0, 0, 0)
         self.cardLayout.setSpacing(2)
