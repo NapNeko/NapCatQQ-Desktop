@@ -183,7 +183,7 @@ class MemoryDashboard(DashboardBase):
 
 
 @InfoBadgeManager.register('SystemInfo')
-class NewVersionInfoBadgeManager(InfoBadgeManager):
+class DashboardInfoBadgeManager(InfoBadgeManager):
     """
     ## 更新图标显示位置调整
     """
