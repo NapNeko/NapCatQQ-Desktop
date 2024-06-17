@@ -10,11 +10,11 @@ from PySide6.QtWidgets import QStackedWidget, QWidget, QVBoxLayout
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
 
-from src.Ui.AddPage.Add.Advanced import AdvancedWidget
-from src.Ui.AddPage.Add.BotWidget import BotWidget
-from src.Ui.AddPage.Add.Connect import ConnectWidget
+from src.Ui.AddPage.Advanced import AdvancedWidget
+from src.Ui.AddPage.BotWidget import BotWidget
+from src.Ui.AddPage.Connect import ConnectWidget
 
-from src.Ui.AddPage.Add.ConfigTopCard import ConfigTopCard
+from src.Ui.AddPage.ConfigTopCard import ConfigTopCard
 from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:

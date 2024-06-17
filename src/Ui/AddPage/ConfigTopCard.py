@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, List
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
-from qfluentwidgets import InfoBar, InfoBarPosition
 from qfluentwidgets.common import Action, FluentIcon
 from qfluentwidgets.components import (
     CaptionLabel,
@@ -127,7 +126,7 @@ class ConfigTopCard(QWidget):
         """
         from src.Core.PathFunc import PathFunc
         from src.Core.Config.ConfigModel import Config
-        from src.Ui.AddPage.Add.AddWidget import AddWidget
+        from src.Ui.AddPage.AddWidget import AddWidget
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
         bot_config_path = it(PathFunc).bot_config_path
