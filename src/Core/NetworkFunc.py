@@ -126,7 +126,11 @@ class GetNewVersion:
             # 如果获取不到远程版本, 则返回 None, Gui那边做ui处理
             return None
 
-        return remoteVersion != localVersion
+        return {
+            "result": remoteVersion != localVersion,
+            "localVersion": localVersion,
+            "remoteVersion": remoteVersion
+        }
 
 
 class GetNewVersionClassCreator(AbstractCreator, ABC):
