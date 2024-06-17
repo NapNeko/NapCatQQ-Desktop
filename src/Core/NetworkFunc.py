@@ -8,6 +8,8 @@ from PySide6.QtCore import QUrl, QEventLoop
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
 
+from src.Core.GetVersion import GetVersion
+
 
 class Urls(Enum):
     """
@@ -112,6 +114,19 @@ class GetNewVersion:
             "windows_version": windows_match.group(1) if windows_match else None,
             "linux_version": linux_match.group(1) if linux_match else None
         }
+
+    def checkUpdate(self):
+        """
+        ## 检查 NapCat 是否有新版本, QQ暂时不支持检测(没有合理的下载指定版本的 api, 直接无脑最新版完事儿了)
+        """
+        remoteVersion = self.getNapCatVersion()
+        localVersion = it(GetVersion).getNapCatVersion()
+
+        if remoteVersion is None:
+            # 如果获取不到远程版本, 则返回 None, Gui那边做ui处理
+            return None
+
+        return remoteVersion != localVersion
 
 
 class GetNewVersionClassCreator(AbstractCreator, ABC):
