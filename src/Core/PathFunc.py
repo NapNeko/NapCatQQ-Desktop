@@ -78,7 +78,7 @@ class PathFunc:
                     return self.qq_path
                 else:
                     self.qq_path = cfg.get(cfg.QQPath)
-                    return self.qq_path
+                    return Path(self.qq_path)
             else:
                 # 暂时没有适配 MacOS 的打算，故直接返回 Linux QQ 安装的默认路径
                 self.qq_path = Path("/opt/QQ/qq")
