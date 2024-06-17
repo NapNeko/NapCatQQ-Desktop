@@ -31,9 +31,9 @@ class HomeWidget(ScrollArea):
 
         # 加载背景图片
         self.view = None
-        self.bg_pixmap = None
-        self._bg_pixmap_light = QPixmap(":Global/image/Global/page_bg_light.png")
-        self._bg_pixmap_dark = QPixmap(":Global/image/Global/page_bg_dark.png")
+        self.bgPixmap = None
+        self._bgPixmapLight = QPixmap(":Global/image/Global/page_bg_light.png")
+        self._bgPixmapDark = QPixmap(":Global/image/Global/page_bg_dark.png")
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -44,7 +44,7 @@ class HomeWidget(ScrollArea):
 
         # 设置 View 和 ScrollArea
         if isinstance(self.view, DisplayViewWidget):
-            self.view.go_btn_signal.connect(self._goBtnSlot)
+            self.view.goBtnSignal.connect(self._goBtnSlot)
 
         self.setParent(parent)
         self.setObjectName("HomePage")
@@ -82,7 +82,7 @@ class HomeWidget(ScrollArea):
             duration=10000,
             parent=self,
         )
-        info_button = PushButton(self.tr("Don't show again"))
+        info_button = PushButton(self.tr("Don't show again"), self)
         info_button.clicked.connect(lambda: cfg.set(cfg.HideUsGoBtnTips, True, True))
         info_button.clicked.connect(info.close)
         info.addWidget(info_button)
@@ -103,11 +103,11 @@ class HomeWidget(ScrollArea):
         """
         # 重新加载图片保证缩放后清晰
         if not isDarkTheme():
-            self.bg_pixmap = self._bg_pixmap_light
+            self.bgPixmap = self._bgPixmapLight
         else:
-            self.bg_pixmap = self._bg_pixmap_dark
+            self.bgPixmap = self._bgPixmapDark
 
-        self.bg_pixmap = self.bg_pixmap.scaled(
+        self.bgPixmap = self.bgPixmap.scaled(
             self.size(),
             aspectMode=Qt.AspectRatioMode.KeepAspectRatioByExpanding,  # 等比缩放
             mode=Qt.TransformationMode.SmoothTransformation,  # 平滑效果
@@ -119,7 +119,7 @@ class HomeWidget(ScrollArea):
         重写绘制事件绘制背景图片
         """
         painter = QPainter(self.viewport())
-        painter.drawPixmap(self.rect(), self.bg_pixmap)
+        painter.drawPixmap(self.rect(), self.bgPixmap)
         super().paintEvent(event)
 
     def resizeEvent(self, event) -> None:
