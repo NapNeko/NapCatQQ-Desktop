@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import Optional
 
-from PySide6.QtCore import Qt, QPoint, QSize, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, QPoint, QTimer
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
 from qfluentwidgets import (
@@ -39,7 +38,7 @@ class VersionCardBase(QWidget):
         self.vBoxLayout = QVBoxLayout()
 
         # 设置 标签 以及 SimpleCardWidget 的一些属性
-        self.view.setFixedSize(260, 90)
+        self.view.setFixedSize(245, 90)
         self.setFixedSize(self.view.width() + 10, self.view.height() + 10)
         self.view.move(0, self.height() - self.view.height())
         self.iconLabel.setFixedSize(48, 48)
@@ -90,6 +89,8 @@ class NapCatVersionCard(VersionCardBase):
         super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version")
         self.contentsLabel.setText(self.getLocalVersion())
         self.onCheckUpdates()
+        # 启动时触发一次检查更新
+        self._checkUpdates()
 
     def onCheckUpdates(self) -> None:
         """
