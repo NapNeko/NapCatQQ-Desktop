@@ -4,9 +4,9 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from qfluentwidgets import ToolButton, FluentIcon
 
 from src.Ui.common.InfoCard import (
-    NapCatVersionCard, QQVersionCard, CPUDashboard, MemoryDashboard, SystemInfoCard
+    NapCatVersionCard, QQVersionCard, CPUDashboard, MemoryDashboard, SystemInfoCard,
+    BotListCard
 )
-from src.Ui.common.CodeEditor import CodeEditor
 
 
 class DashboardWidget(QWidget):
@@ -29,7 +29,7 @@ class DashboardWidget(QWidget):
         self.reposButton = ToolButton(FluentIcon.GITHUB, self)
         self.feedbackButton = ToolButton(FluentIcon.HELP, self)
         self.systemInfoCard = SystemInfoCard(self)
-        self.logCard = CodeEditor(self)
+        self.botList = BotListCard(self)
 
         # 设置控件
         self.documentButton.setFixedSize(60, 60)
@@ -68,7 +68,7 @@ class DashboardWidget(QWidget):
 
         self.infoLayout.addWidget(self.systemInfoCard)
         self.infoLayout.addSpacing(4)
-        self.infoLayout.addWidget(self.logCard)
+        self.infoLayout.addWidget(self.botList)
         self.infoLayout.setContentsMargins(0, 0, 8, 0)
 
         self.vBoxLayout.addLayout(self.hBoxLayout)
