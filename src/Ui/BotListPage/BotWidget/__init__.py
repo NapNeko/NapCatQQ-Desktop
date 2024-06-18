@@ -491,9 +491,9 @@ class DeleteConfigMessageBox(MessageBoxBase):
         """
         from src.Ui.BotListPage import BotListWidget
 
-        it(BotListWidget).botList.bot_list.remove(parent.config)
+        it(BotListWidget).botList.botList.remove(parent.config)
 
-        bot_configs = [json.loads(config.json()) for config in it(BotListWidget).botList.bot_list]
+        bot_configs = [json.loads(config.json()) for config in it(BotListWidget).botList.botList]
 
         with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
             json.dump(bot_configs, f, indent=4)

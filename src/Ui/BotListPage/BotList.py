@@ -28,7 +28,7 @@ class BotList(ScrollArea):
         """
         super().__init__(parent=parent)
         # 创建属性
-        self.bot_list: List[Config] = []
+        self.botList: List[Config] = []
         self.botCardList: List[BotCard] = []
 
         # 调用方法
@@ -62,14 +62,14 @@ class BotList(ScrollArea):
 
         if not self.botCardList:
             # 如果是首次运行, 则直接添加到布局和 botCardList
-            for bot in self.bot_list:
+            for bot in self.botList:
                 card = BotCard(bot, self)
                 self.cardLayout.addWidget(card)
                 self.botCardList.append(card)
             return
 
         QQList = [card.config.bot.QQID for card in self.botCardList]
-        for bot_config in self.bot_list:
+        for bot_config in self.botList:
             # 遍历并判断是否有新增的 bot
             if bot_config.bot.QQID in QQList:
                 # 如果属于则直接跳过
@@ -82,7 +82,7 @@ class BotList(ScrollArea):
 
         for card in self.botCardList:
             # 遍历并判断是否有减少的 bot
-            if card.config in self.bot_list:
+            if card.config in self.botList:
                 # 属于则就是没有被删除, 跳过
                 continue
 
@@ -104,7 +104,7 @@ class BotList(ScrollArea):
                 bot_configs = json.load(f)
             if bot_configs:
                 # 如果从文件加载的 bot_config 不为空则执行使用Config和列表表达式解析
-                self.bot_list: List[Config] = [Config(**config) for config in bot_configs]
+                self.botList: List[Config] = [Config(**config) for config in bot_configs]
                 self.parent().parent().showSuccess(
                     title=self.tr("Load the list of bots"),
                     content=self.tr("The list of bots was successfully loaded"),
@@ -115,17 +115,17 @@ class BotList(ScrollArea):
                     title=self.tr("There are no bot configuration items"),
                     content=self.tr("You'll need to add it in the Add bot page"),
                 )
-                self.bot_list = []
+                self.botList = []
 
         except FileNotFoundError:
             # 如果文件不存在则创建一个
             with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
                 json.dump([], f, indent=4)
-            self.bot_list = []
+            self.botList = []
 
         except ValueError as e:
             # 如果配置文件解析失败则提示错误信息并覆盖原有文件
             self.parent().parent().showError(self.tr("Unable to load bot list"), str(e))
             with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
                 json.dump([], f, indent=4)
-            self.bot_list = []
+            self.botList = []
