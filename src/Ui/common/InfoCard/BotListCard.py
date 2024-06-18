@@ -39,10 +39,19 @@ class BotListCard(HeaderCardWidget):
         # 设置控件
         self.setTitle(self.tr("Bot List"))
         self.botList.hide()
+        self.toAddBot.clicked.connect(self._toAddBotSolt)
 
         # 调用方法
         self._setLayout()
         self.onMonitorBots()
+
+    @staticmethod
+    def _toAddBotSolt():
+        """
+        ## 跳转到 AddPage 页面
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).add_widget_button.click()
 
     def onMonitorBots(self):
         """
@@ -52,13 +61,12 @@ class BotListCard(HeaderCardWidget):
         self.timer = QTimer()
         # 将计时器超时信号连接到槽函数
         self.timer.timeout.connect(self._monitorBots)
-        # 设置计时器每隔 5000 毫秒（即 1 秒）超时一次
-        self.timer.start(5000)
+        # 设置计时器每隔 2000 毫秒（即 2 秒）超时一次
+        self.timer.start(2000)
 
     def _monitorBots(self):
         """
         ## 监控机器人列表
-        :return:
         """
         if not it(BotListWidget).botList.botCardList:
             # 如果为空则代表没有机器人, 显示提示
@@ -183,10 +191,72 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         self.QQAvatarLabel = ImageLabel(":Global/logo.png", self)
         self.botNameLabel = BodyLabel(f"{self.config.bot.name}({self.config.bot.QQID})", self)
         self.runButton = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("Start"), self)
+        self.stopButton = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"), self)
+
+        # 连接信号以及设置控件
+        self.runButton.clicked.connect(self._runButtonSolt)
+        self.stopButton.clicked.connect(self._stopButtonSolt)
+        self.stopButton.hide()
 
         # 调用方法
         self._QQAvatar()
         self._setLayout()
+        self.onMonitorBots()
+
+    def onMonitorBots(self):
+        """
+        ## 启动监视器 监视卡片对应的机器人是否有在运行
+        """
+        # 创建 QTimer 对象
+        self.timer = QTimer()
+        # 将计时器超时信号连接到槽函数
+        self.timer.timeout.connect(self._monitorBots)
+        # 设置计时器每隔 2000 毫秒（即 2 秒）超时一次
+        self.timer.start(2000)
+
+    def _monitorBots(self):
+        """
+        ## 监控机器人列表
+        """
+        from src.Ui.BotListPage.BotListWidget import BotListWidget
+        for card in it(BotListWidget).botList.botCardList:
+            if self.config.bot.QQID != card.config.bot.QQID:
+                continue
+            else:
+                if card.botWidget is None:
+                    return
+                if card.botWidget.isRun:
+                    self.runButton.hide()
+                    self.stopButton.show()
+                else:
+                    self.runButton.show()
+                    self.stopButton.hide()
+
+    def _runButtonSolt(self):
+        """
+        ## 运行按钮
+        """
+        from src.Ui.MainWindow import MainWindow
+        from src.Ui.BotListPage.BotListWidget import BotListWidget
+        for card in it(BotListWidget).botList.botCardList:
+            if self.config.bot.QQID == card.config.bot.QQID:
+                it(MainWindow).bot_list_widget_button.click()
+                card.clicked.emit()
+                card.botWidget.runButton.click()
+                break
+        self.runButton.hide()
+        self.stopButton.show()
+
+    def _stopButtonSolt(self):
+        """
+        ## 停止按钮
+        """
+        from src.Ui.BotListPage.BotListWidget import BotListWidget
+        for card in it(BotListWidget).botList.botCardList:
+            if self.config.bot.QQID == card.config.bot.QQID:
+                card.botWidget.stopButton.click()
+            self.runButton.show()
+            self.stopButton.hide()
 
     def _QQAvatar(self):
         """
@@ -234,5 +304,6 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         self.hBoxLayout.addWidget(self.botNameLabel)
         self.hBoxLayout.addStretch(1)
         self.hBoxLayout.addWidget(self.runButton)
+        self.hBoxLayout.addWidget(self.stopButton)
 
         self.setLayout(self.hBoxLayout)
