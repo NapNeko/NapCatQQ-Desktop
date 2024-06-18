@@ -10,7 +10,7 @@ from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QFormLayout
 from qfluentwidgets import (
     BodyLabel, setFont, SimpleCardWidget, HeaderCardWidget, InfoBadgeManager,
-    IconInfoBadge, FluentIcon
+    IconInfoBadge, FluentIcon, ToolTipFilter, themeColor, isDarkTheme
 )
 
 from src.Core.Config import cfg
@@ -37,6 +37,7 @@ class DashboardBase(QWidget):
         self.progressBar.setInfo(info)
         self.setFixedSize(self.view.width() + 10, self.view.height() + 10)
         self.view.move(0, self.height() - self.view.height())
+        self.installEventFilter(ToolTipFilter(self))
         self.warningBadge.hide()
 
         # 调用方法
@@ -78,8 +79,6 @@ class SemiCircularProgressBar(QWidget):
         super().__init__(parent)
         self._value: int | float = 0
         self._max_value = 100
-        self._bar_color = QColor("#009FAA")
-        self._background_color = QColor("#D0D2D4")
         self._pen_width = 12
 
         # 创建QLabel来显示进度数字和类型文本
@@ -125,8 +124,8 @@ class SemiCircularProgressBar(QWidget):
         # 绘制背景弧线
         # 设置画笔，颜色为背景色，宽度为_pen_width，实线，圆形线帽实现圆角
         pen = QPen(
-            self._background_color, self._pen_width,
-            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap
+            QColor(255, 255, 255, 13) if isDarkTheme() else QColor(208, 210, 212, 170),
+            self._pen_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap
         )
         painter.setPen(pen)
         # 在rect区域内，从start_angle开始，绘制跨度为span_angle的弧线
@@ -135,7 +134,7 @@ class SemiCircularProgressBar(QWidget):
         progress_span_angle = int(span_angle * (self._value / self._max_value))
 
         # 绘制进度弧线
-        pen.setColor(self._bar_color)  # 设置画笔颜色为进度条颜色
+        pen.setColor(themeColor())  # 设置画笔颜色为进度条颜色
         painter.setPen(pen)  # 将画笔设置为当前画笔
         # 在rect区域内，从start_angle开始，绘制跨度为progress_span_angle的弧线
         painter.drawArc(rect, start_angle, progress_span_angle)
@@ -161,6 +160,25 @@ class CPUDashboard(DashboardBase):
         ## 实现监控 CPU 信息
         """
         self.setValue(psutil.cpu_percent(interval=0))
+        # 获取每个 CPU 核心的使用率
+        cpu_usages = psutil.cpu_percent(interval=0, percpu=True)
+        # 获取总 CPU 数
+        total_cpus = len(cpu_usages)
+        max_rows = (total_cpus + 8 - 1) // 8
+        lines = []
+        for i in range(max_rows):
+            line = []
+            for j in range(i, total_cpus, max_rows):
+                core_num = j + 1
+                usage = cpu_usages[j]
+                if usage < 10:
+                    line.append(f"CPU {core_num:03d} Usage rate:  {usage:5.0f}%")
+                elif usage < 100:
+                    line.append(f"CPU {core_num:03d} Usage rate: {usage:5.0f}%")
+                else:
+                    line.append(f"CPU {core_num:03d} Usage rate:{usage:5.0f}%")
+            lines.append(str(" " * 10).join(line))
+        self.setToolTip(self.tr("CPU Occupancy:\n\n{}".format('\n'.join(lines))))
 
 
 class MemoryDashboard(DashboardBase):
@@ -180,6 +198,19 @@ class MemoryDashboard(DashboardBase):
         ## 实现监控 Memory 信息
         """
         self.setValue(psutil.virtual_memory().percent)
+        # 获取系统内存信息
+        virtual_mem = psutil.virtual_memory()
+        total_mem = virtual_mem.total / (1024 ** 3)
+        used_mem = virtual_mem.used / (1024 ** 3)
+
+        # 构建输出字符串
+        toolTipStr = self.tr(
+            f"Memory Size: {used_mem:.0f}G/{total_mem:.0f}G\n"
+            f"Memory Usage: \n"
+            f"{' ' * 8}NapCat Desktop: {psutil.Process().memory_info().rss / (1024 ** 2):.2f} MB"
+        )
+
+        self.setToolTip(toolTipStr)
 
     def paintEvent(self, event):
         """
@@ -277,12 +308,12 @@ class SystemInfoCard(HeaderCardWidget):
         self.labelLayout.addRow(self.startTimeNameLabel, self.startTimeLabel)
         self.labelLayout.addRow(self.runningTimeNameLabel, self.runningTimeLabel)
         self.labelLayout.setHorizontalSpacing(30)
-        self.labelLayout.setVerticalSpacing(15)
+        self.labelLayout.setVerticalSpacing(20)
         self.labelLayout.setContentsMargins(0, 0, 0, 0)
 
         self.viewLayout.addLayout(self.labelLayout)
-        self.viewLayout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.viewLayout.setContentsMargins(20, 20, 20, 20)
+        self.viewLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.viewLayout.setContentsMargins(25, 20, 20, 15)
 
 
 if __name__ == "__main__":
