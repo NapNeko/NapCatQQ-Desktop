@@ -20,7 +20,7 @@ from src.Core.CreateScript import ScriptType
 
 if TYPE_CHECKING:
     from src.Core import CreateScript
-    from src.Ui.AddPage.Add import AddWidget
+    from src.Ui.AddPage import AddWidget
 
 
 class ConfigTopCard(QWidget):
@@ -179,7 +179,7 @@ class ConfigTopCard(QWidget):
             - scriptType 传入需要创建的脚本类型
         """
         from src.Core.CreateScript import CreateScript
-        from src.Ui.AddPage.Add import AddWidget
+        from src.Ui.AddPage import AddWidget
 
         return CreateScript(
             config=it(AddWidget).getConfig(),
@@ -208,7 +208,7 @@ class ConfigTopCard(QWidget):
 
         用于提示用户是否确认清空(还原)所有已有配置项
         """
-        from src.Ui.AddPage.Add import AddWidget
+        from src.Ui.AddPage import AddWidget
 
         box = MessageBox(
             title=self.tr("Confirm clearing configuration"),
