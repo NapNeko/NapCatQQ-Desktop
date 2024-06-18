@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 import json
-import re
 from abc import ABC
 from enum import Enum
 
-from PySide6.QtCore import QUrl, QEventLoop
+from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
 
@@ -106,13 +105,13 @@ class GetNewVersion:
             return None
 
         # 正则表达式解析 QQ Version 信息
-        windows_match = re.search(r'Windows\s([\d.]+-\d+)', response_dict.get("body"))
-        linux_match = re.search(r'Linux\s([\d.]+-\d+)', response_dict.get("body"))
+        windows_match = QRegularExpression(r'Windows\s([\d.]+-\d+)').match(response_dict.get("body"))
+        linux_match = QRegularExpression(r'Linux\s([\d.]+-\d+)').match(response_dict.get("body"))
 
         # 返回版本信息
         return {
-            "windows_version": windows_match.group(1) if windows_match else None,
-            "linux_version": linux_match.group(1) if linux_match else None
+            "windows_version": windows_match.captured(1) if windows_match.hasMatch() else None,
+            "linux_version": linux_match.captured(1) if linux_match.hasMatch() else None
         }
 
     def checkUpdate(self):
