@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Self
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtWidgets import QStackedWidget
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets import ScrollArea, isDarkTheme
-from qfluentwidgets.components import InfoBar, InfoBarIcon, InfoBarPosition, PushButton
+from qfluentwidgets import isDarkTheme, InfoBar, InfoBarIcon, InfoBarPosition, PushButton
 
 from src.Core.Config import StartOpenHomePageViewEnum as SE
 from src.Core.Config import cfg
@@ -23,13 +23,14 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class HomeWidget(ScrollArea):
+class HomeWidget(QStackedWidget):
 
     def __init__(self):
         super().__init__()
+        self.contentView = None
+        self.displayView = None
 
         # 加载背景图片
-        self.view = None
         self.bgPixmap = None
         self._bgPixmapLight = QPixmap(":Global/image/Global/page_bg_light.png")
         self._bgPixmapDark = QPixmap(":Global/image/Global/page_bg_dark.png")
@@ -38,19 +39,19 @@ class HomeWidget(ScrollArea):
         """
         初始化
         """
-        # 创建显示控件
-        self.view = self._judgeView()
+        # 创建控件
+        self.displayView = DisplayViewWidget()
+        self.contentView = ContentViewWidget()
 
-        # 设置 View 和 ScrollArea
-        if isinstance(self.view, DisplayViewWidget):
-            self.view.goBtnSignal.connect(self._goBtnSlot)
-
+        # 设置控件
         self.setParent(parent)
         self.setObjectName("HomePage")
-        self.setWidgetResizable(True)
-        self.setWidget(self.view)
+        self.addWidget(self.displayView)
+        self.addWidget(self.contentView)
+        self.displayView.goBtnSignal.connect(self._goBtnSlot)
 
         # 调用方法
+        self._chooseView()
         self.updateBgImage()
 
         # 应用样式表
@@ -60,12 +61,9 @@ class HomeWidget(ScrollArea):
 
     def _goBtnSlot(self):
         """
-        Start Using 的槽函数
+        ## Start Using 的槽函数
         """
-        self.view.deleteLater()
-        self.view = ContentViewWidget()
-        self.takeWidget()
-        self.setWidget(self.view)
+        self.setCurrentWidget(self.contentView)
 
         if cfg.get(cfg.HideUsGoBtnTips):
             # 是否隐藏提示
@@ -87,14 +85,16 @@ class HomeWidget(ScrollArea):
         info.addWidget(info_button)
         info.show()
 
-    @staticmethod
-    def _judgeView() -> DisplayViewWidget | ContentViewWidget:
+    def _chooseView(self) -> None:
         """
         判断并加载相应的 Widget。
         根据配置确定是打开首页视图还是内容视图。
         """
-        start_page = cfg.get(cfg.StartOpenHomePageView)
-        return DisplayViewWidget() if start_page == SE.DISPLAY_VIEW else ContentViewWidget()
+        match cfg.get(cfg.StartOpenHomePageView):
+            case SE.DISPLAY_VIEW:
+                self.setCurrentWidget(self.displayView)
+            case SE.CONTENT_VIEW:
+                self.setCurrentWidget(self.contentView)
 
     def updateBgImage(self) -> None:
         """
@@ -161,7 +161,7 @@ class HomeWidget(ScrollArea):
         """
         重写绘制事件绘制背景图片
         """
-        painter = QPainter(self.viewport())
+        painter = QPainter(self)
         painter.drawPixmap(self.rect(), self.bgPixmap)
         super().paintEvent(event)
 
