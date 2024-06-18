@@ -1,14 +1,7 @@
 # -*- coding: utf-8 -*-
-from typing import TYPE_CHECKING
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import CaptionLabel, ToolTipFilter, TitleLabel
-from qfluentwidgets.common import FluentIcon
-from qfluentwidgets.components import TransparentToolButton
-
-if TYPE_CHECKING:
-    pass
 
 
 class ContentTopCard(QWidget):
