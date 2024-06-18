@@ -123,7 +123,7 @@ class UrlCard(ExpandSettingCard):
         """
         显示 URL 输入框
         """
-        from src.Ui.AddPage.Add import AddWidget
+        from src.Ui.AddPage import AddWidget
 
         box = UrlInputBox(it(AddWidget))
         if not box.exec() or not box.urlLineEdit.text():

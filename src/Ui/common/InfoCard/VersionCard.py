@@ -19,11 +19,11 @@ class VersionCardBase(QWidget):
     ## 用于显示版本信息和比对最新版本
     """
 
-    def __init__(self, icon: FluentIconBase, name: str, contents: str):
+    def __init__(self, icon: FluentIconBase, name: str, contents: str, parent=None):
         """
         ## 初始化控件
         """
-        super().__init__()
+        super().__init__(parent=parent)
         self.timer: Optional[QTimer] = None
 
         # 创建要显示的标签和布局
@@ -38,7 +38,7 @@ class VersionCardBase(QWidget):
         self.vBoxLayout = QVBoxLayout()
 
         # 设置 标签 以及 SimpleCardWidget 的一些属性
-        self.view.setFixedSize(245, 90)
+        self.view.setFixedSize(310, 95)
         self.setFixedSize(self.view.width() + 10, self.view.height() + 10)
         self.view.move(0, self.height() - self.view.height())
         self.iconLabel.setFixedSize(48, 48)
@@ -72,7 +72,7 @@ class VersionCardBase(QWidget):
         self.vBoxLayout.addWidget(self.contentsLabel, 0, Qt.AlignmentFlag.AlignLeft)
 
         self.hBoxLayout.setSpacing(15)
-        self.hBoxLayout.setContentsMargins(20, 5, 15, 5)
+        self.hBoxLayout.setContentsMargins(30, 5, 15, 5)
         self.hBoxLayout.addWidget(self.iconLabel, 0, Qt.AlignmentFlag.AlignLeft)
         self.hBoxLayout.addLayout(self.vBoxLayout, 0)
         self.hBoxLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
@@ -85,8 +85,8 @@ class NapCatVersionCard(VersionCardBase):
     ## 实现 NapCat 的版本小卡片
     """
 
-    def __init__(self):
-        super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version")
+    def __init__(self, parent=None):
+        super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version", parent)
         self.contentsLabel.setText(self.getLocalVersion())
         self.onCheckUpdates()
         # 启动时触发一次检查更新
@@ -143,8 +143,8 @@ class QQVersionCard(VersionCardBase):
     ## 实现显示 QQ版本 小卡片
     """
 
-    def __init__(self):
-        super().__init__(NCIcon.QQ, "QQ Version", "Unknown Version")
+    def __init__(self, parent=None):
+        super().__init__(NCIcon.QQ, "QQ Version", "Unknown Version", parent)
         self.contentsLabel.setText(self.getLocalVersion())
 
     def getLocalVersion(self) -> str:

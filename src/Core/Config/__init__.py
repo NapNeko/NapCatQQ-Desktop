@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import time
 from enum import Enum
 
 from PySide6.QtCore import QLocale
@@ -46,6 +47,18 @@ class LanguageSerializer(ConfigSerializer):
 
 class Config(QConfig):
     """程序配置"""
+
+    # 信息项
+    NCDVersion = ConfigItem(
+        group="Info",
+        name="NCDVersion",
+        default="beta_0.0.1"
+    )
+    StartTime = ConfigItem(
+        group="Info",
+        name="StartTime",
+        default=time.time()
+    )
 
     # 路径项
     # 注意: default 为空字符串则默认以程序根目录为路径

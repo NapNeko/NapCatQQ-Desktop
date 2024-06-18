@@ -12,9 +12,9 @@ from qfluentwidgets import (
 )
 
 from src.Core.Config.ConfigModel import Config
-from src.Ui.AddPage.Add.Advanced import AdvancedWidget
-from src.Ui.AddPage.Add.BotWidget import BotWidget
-from src.Ui.AddPage.Add.Connect import ConnectWidget
+from src.Ui.AddPage.Advanced import AdvancedWidget
+from src.Ui.AddPage.BotWidget import BotWidget
+from src.Ui.AddPage.Connect import ConnectWidget
 
 if TYPE_CHECKING:
     from src.Ui.BotListPage.BotWidget import BotWidget
