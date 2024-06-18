@@ -215,7 +215,7 @@ class SystemInfoCard(HeaderCardWidget):
         super().__init__(parent=parent)
         self.timer: Optional[QTimer] = None
         self.setTitle(self.tr("System info"))
-        self.setMinimumWidth(310)
+        self.setFixedSize(310, 267)
 
         # 创建标签和布局
         self.systemVersionNameLabel = BodyLabel(self.tr("System type"), self)
