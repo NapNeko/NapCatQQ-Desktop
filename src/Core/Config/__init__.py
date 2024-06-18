@@ -52,12 +52,12 @@ class Config(QConfig):
     NCDVersion = ConfigItem(
         group="Info",
         name="NCDVersion",
-        default="beta_0.0.1"
+        default=""
     )
     StartTime = ConfigItem(
         group="Info",
         name="StartTime",
-        default=time.time()
+        default=""
     )
 
     # 路径项
@@ -120,3 +120,5 @@ class Config(QConfig):
 
 cfg = Config()
 qconfig.load(it(PathFunc).config_path, cfg)
+cfg.set(cfg.StartTime, time.time(), True)
+cfg.set(cfg.NCDVersion, "bate_v0.0.1", True)
