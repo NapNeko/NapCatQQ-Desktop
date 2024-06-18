@@ -35,7 +35,6 @@ class ContentTopCard(QWidget):
 
         self.buttonLayout.setSpacing(0)
         self.buttonLayout.setContentsMargins(0, 0, 0, 0)
-        self.buttonLayout.addWidget(self.returnButton)
         self.buttonLayout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         self.hBoxLayout.addLayout(self.labelLayout)
