@@ -72,9 +72,9 @@ class MainWindow(MSFluentWindow):
         设置侧边栏
         """
         self.setup_widget = it(SetupWidget).initialize(self)
-        self.home_widget = it(HomeWidget).initialize(self)
         self.add_widget = it(AddWidget).initialize(self)
         self.bot_list_widget = it(BotListWidget).initialize(self)
+        self.home_widget = it(HomeWidget).initialize(self)
 
         # 添加子页面
         self.addSubInterface(
