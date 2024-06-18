@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Self
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QPainter
-from creart import add_creator, exists_module
+from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
 from qfluentwidgets import ScrollArea, isDarkTheme
 from qfluentwidgets.components import InfoBar, InfoBarIcon, InfoBarPosition, PushButton
@@ -112,6 +112,50 @@ class HomeWidget(ScrollArea):
             mode=Qt.TransformationMode.SmoothTransformation,  # 平滑效果
         )
         self.update()
+
+    def showInfo(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showInfo(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showError(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showError(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showWarning(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showWarning(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showSuccess(self, title: str, content: str):
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showSuccess(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
 
     def paintEvent(self, event) -> None:
         """
