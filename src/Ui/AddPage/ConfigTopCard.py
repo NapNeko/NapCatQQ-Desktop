@@ -75,13 +75,14 @@ class ConfigTopCard(QWidget):
                 triggered=self._createBatScriptSlot,
             )
         )
-        self.menu.addAction(
-            Action(
-                icon=FluentIcon.COMMAND_PROMPT,
-                text=self.tr("Create .sh script"),
-                triggered=self._createShScriptSlot,
-            )
-        )
+        # 暂时不对 Linux 系进行适配
+        # self.menu.addAction(
+        #     Action(
+        #         icon=FluentIcon.COMMAND_PROMPT,
+        #         text=self.tr("Create .sh script"),
+        #         triggered=self._createShScriptSlot,
+        #     )
+        # )
 
         self.psPushButton.setFlyout(self.menu)
 
