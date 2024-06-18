@@ -5,3 +5,4 @@ from src.Ui.common.InfoCard.VersionCard import (
 from src.Ui.common.InfoCard.SystemInfoCard import (
     DashboardBase, CPUDashboard, MemoryDashboard, SystemInfoCard
 )
+from src.Ui.common.InfoCard.BotListCard import BotListCard
