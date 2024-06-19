@@ -5,14 +5,14 @@
 """
 
 from abc import ABC
-from typing import Self
+from typing import Optional
 
 from PySide6.QtCore import QSize, Qt, QObject
 from PySide6.QtWidgets import QApplication, QWidget
 from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
-from qfluentwidgets import InfoBar, InfoBarPosition
+from qfluentwidgets import InfoBar, InfoBarPosition, NavigationBarPushButton
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
 from qfluentwidgets.window import MSFluentWindow, SplashScreen
@@ -32,6 +32,17 @@ class MainWindow(MSFluentWindow):
 
     def __init__(self) -> None:
         super().__init__()
+
+        self.splashScreen: Optional[SplashScreen] = None
+        self.setup_widget: Optional[SetupWidget] = None
+        self.add_widget: Optional[AddWidget] = None
+        self.bot_list_widget: Optional[BotListWidget] = None
+        self.home_widget: Optional[HomeWidget] = None
+
+        self.home_widget_button: Optional[NavigationBarPushButton] = None
+        self.add_widget_button: Optional[NavigationBarPushButton] = None
+        self.bot_list_widget_button: Optional[NavigationBarPushButton] = None
+        self.setup_widget_button: Optional[NavigationBarPushButton] = None
 
     def initialize(self) -> None:
         """
