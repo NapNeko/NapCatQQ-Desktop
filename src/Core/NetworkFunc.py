@@ -79,51 +79,62 @@ class GetNewVersion:
         """
         ## 通用的API请求方法
         """
-        # 创建事件循环以及请求
+        # 创建事件循环和请求, 等待数据返回
         loop = QEventLoop()
-        request = QNetworkRequest(url)
-        # 发送请求
-        reply = it(NetworkFunc).manager.get(request)
-        # 连接信号槽，响应完成时退出事件循环
+        reply = it(NetworkFunc).manager.get(QNetworkRequest(url))
         reply.finished.connect(loop.quit)
-        # 进入事件循环，等待响应完成
         loop.exec()
 
         # 如果请求失败返回 None
         if reply.error() != QNetworkReply.NetworkError.NoError:
             return None
 
-        # 解析响应数据为 JSON 对象
-        return json.loads(reply.readAll().data().decode().strip())
+        # 返回响应数据
+        return reply.readAll().data().decode().strip()
 
     def getNapCatVersion(self):
         """
         ## 获取 NapCat 的版本信息
         """
-        response_dict = self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)
-        if response_dict is None:
+        if (response_dict := self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)) is None:
             return None
-
         # 返回版本信息
-        return response_dict.get("tag_name", None)
+        return json.loads(self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)).get("tag_name", None)
 
     def getQQVersion(self):
         """
-        ## 获取 NapCat 所适配的 最新QQ版本
+        ## 获取 QQ 最新版本版本号
         """
-        response_dict = self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)
-        if response_dict is None:
+        response_data = self.fetchApiResponse(Urls.QQ_WIN_DOWNLOAD.value)
+        if response_data is None:
             return None
 
-        # 正则表达式解析 QQ Version 信息
-        windows_match = QRegularExpression(r'Windows\s([\d.]+-\d+)').match(response_dict.get("body"))
-        linux_match = QRegularExpression(r'Linux\s([\d.]+-\d+)').match(response_dict.get("body"))
+        # 定义正则表达式并匹配
+        version = QRegularExpression(r'"version":\s*"([^"]+)"').match(response_data).captured(1)
+        return version if version else None
 
-        # 返回版本信息
-        return {
-            "windows_version": windows_match.captured(1) if windows_match.hasMatch() else None,
-            "linux_version": linux_match.captured(1) if linux_match.hasMatch() else None
+    def getQQNewVersionUrl(self):
+        """
+        ## 获取最新QQ版本下载连接
+        """
+        response_data = self.fetchApiResponse(Urls.QQ_WIN_DOWNLOAD.value)
+        if response_data is None:
+            return None
+
+        # 定义正则表达式并匹配
+        match_x64 = QRegularExpression(r'"ntDownloadX64Url":\s*"([^"]+)"').match(response_data)
+        match_arm = QRegularExpression(r'"ntDownloadARMUrl":\s*"([^"]+)"').match(response_data)
+
+        # 提取所需的下载链接
+        url_dict = {
+            "x86_64": match_x64.captured(1),
+            "AMD64": match_x64.captured(1),
+            "ARM64": match_arm.captured(1),
+            "aarch64": match_arm.captured(1)
         }
+
+        # 根据系统架构返回对应的下载链接
+        return url_dict.get(cfg.get(cfg.PlatformType), None)
 
     def checkUpdate(self):
         """
