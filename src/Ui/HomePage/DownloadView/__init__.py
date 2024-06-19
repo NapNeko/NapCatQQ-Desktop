@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 from src.Ui.HomePage.DownloadView.DownloadTopCard import DownloadTopCard
 from src.Ui.StyleSheet import StyleSheet
 
-from src.Ui.common.NetWrokCard import NapCatDownloadCard, QQDownloadCard
+from src.Ui.common.Netwrok import NapCatDownloadCard, QQDownloadCard
 
 
 class DownloadViewWidget(QWidget):

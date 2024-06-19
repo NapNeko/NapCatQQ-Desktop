@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
-import platform
+import shutil
+import zipfile
+from pathlib import Path
 
 from creart import it
+from typing import Optional
 
-from PySide6.QtCore import Qt, QSize, QUrl, Slot
+from PySide6.QtCore import Qt, QSize, QUrl, Slot, QThread, Signal
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import (
@@ -12,9 +15,11 @@ from qfluentwidgets import (
     FlyoutView, Flyout, VerticalSeparator, PushButton
 )
 
-from src.Core.NetworkFunc import Urls, GetNewVersion
+from src.Core.NetworkFunc import Urls, GetNewVersion, Downloader
 from src.Core.GetVersion import GetVersion
 from src.Core.PathFunc import PathFunc
+from src.Core.Config import cfg
+from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
 from src.Ui.Icon import NapCatDesktopIcon as NCDIcon
 
 
@@ -29,11 +34,15 @@ class DownloadCardBase(SimpleCardWidget):
         ## 初始化控件
         """
         super().__init__(parent=parent)
+        # 创建属性
+        self.isInstall = False
+        self.isRun = False
+
         # 创建控件
         self.iconLabel = ImageLabel(":Global/logo.png", self)
         self.nameLabel = TitleLabel(self)
         self.openInstallPathButton = PushButton(self.tr("Open file path"), self)
-        self.installButton = PrimaryPushButton(self.tr("Install"), self)
+        self.installButton = ProgressBarButton(self)
         self.companyLabel = HyperlinkLabel(self)
         self.descriptionLabel = BodyLabel(self)
         self.shareButton = TransparentToolButton(FluentIcon.SHARE, self)
@@ -41,7 +50,6 @@ class DownloadCardBase(SimpleCardWidget):
         # 设置控件样式
         self.setFixedHeight(225)
         self.iconLabel.scaledToWidth(100),
-        self.installButton.setFixedWidth(140)
         self.openInstallPathButton.setFixedWidth(140)
         self.descriptionLabel.setWordWrap(True)
         self.shareButton.setFixedSize(32, 32)
@@ -123,9 +131,22 @@ class NapCatDownloadCard(DownloadCardBase):
         ## 初始化控件
         """
         super().__init__(parent=parent)
+        self.zipFilePath: Optional[Path] = None
         self.isInstall = False
+        self.ncInstallPath = it(PathFunc).getNapCatPath()
+
+        # 创建控件
+        self.downloader = Downloader(self._getNCDownloadUrl(), it(PathFunc).tmp_path)
+        if (version := it(GetNewVersion).getNapCatVersion()) is None:
+            version = self.tr("Unknown")
+        self.versionWidget = InfoWidget(self.tr("Version"), version, self)
+        self.platformWidget = InfoWidget(self.tr("Platform"), cfg.get(cfg.PlatformType), self)
+        self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
         # 调整控件
+        self.installButton.clicked.connect(self._installButtonSlot)
+        self.downloader.downloadProgress.connect(self.installButton.setValue)
+        self.downloader.finished.connect(self._install)
         self.nameLabel.setText("NapCatQQ")
         self.companyLabel.setUrl(Urls.NAPCATQQ_REPO.value)
         self.companyLabel.setText(self.tr("Project repositories"))
@@ -140,17 +161,10 @@ class NapCatDownloadCard(DownloadCardBase):
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(it(PathFunc).getNapCatPath())))
         )
 
-        # 创建控件
-        if (version := it(GetNewVersion).getNapCatVersion()) is None:
-            version = self.tr("Unknown")
-        self.versionWidget = InfoWidget(self.tr("Version"), version, self)
-        self.commentWidget = InfoWidget(self.tr("Platform"), platform.machine(), self)
-        self.systemWidget = InfoWidget(self.tr("System"), platform.system(), self)
-
         # 设置布局
         self.infoLayout.addWidget(self.versionWidget)
         self.infoLayout.addWidget(VerticalSeparator(self))
-        self.infoLayout.addWidget(self.commentWidget)
+        self.infoLayout.addWidget(self.platformWidget)
         self.infoLayout.addWidget(VerticalSeparator(self))
         self.infoLayout.addWidget(self.systemWidget)
         self.infoLayout.addStretch(1)
@@ -158,6 +172,64 @@ class NapCatDownloadCard(DownloadCardBase):
 
         self._checkInstall()
         self._setLayout()
+
+    @staticmethod
+    def _getNCDownloadUrl():
+        """
+        ## 通过系统,平台,匹配下载连接并返回
+        """
+        download_links = {
+            ("Linux", "aarch64"): Urls.NAPCAT_ARM64_LINUX.value,
+            ("Linux", "x86_64"): Urls.NAPCAT_64_LINUX.value,
+            ("Linux", "AMD64"): Urls.NAPCAT_64_LINUX.value,
+            ("Windows", "x86_64"): Urls.NAPCAT_WIN.value,
+            ("Windows", "AMD64"): Urls.NAPCAT_WIN.value
+        }
+        return download_links.get((cfg.get(cfg.SystemType), cfg.get(cfg.PlatformType)))
+
+    @Slot()
+    def _installButtonSlot(self):
+        """
+        ## 安装按钮槽函数
+        """
+        if self.isRun:
+            # 如果正在下载/安装再点击则是取消操作
+            self.downloader.stop()  # 先停止下载
+            self.installButton.setValue(0)
+            self.installButton.setProgressBarState(False)
+            self.installButton.setTestVisible(True)
+            self.isRun = False
+        else:
+            # 反之则开始下载等操作
+            self.downloader.start()
+            self.zipFilePath = it(PathFunc).tmp_path / self.downloader.url.fileName()
+            self.installButton.setProgressBarState(False)
+            self.installButton.setTestVisible(False)
+            self.isRun = True
+
+    @Slot(bool)
+    def _install(self, value: bool):
+        """
+        ## 下载完成后的安装操作
+            - value 用于判断是否下载成功
+        """
+        if value:
+            self.isRun = False
+            self.installButton.setProgressBarState(True)
+            self.installWorker = NapCatInstallWorker(self.ncInstallPath, self.zipFilePath)
+            self.installWorker.finished.connect(self._installationFinished)
+            self.installWorker.start()
+
+    @Slot(bool)
+    def _installationFinished(self, value: bool):
+        """
+        ## 下载完成后的安装操作
+            - value 用于判断是否下载成功
+        """
+        if value:
+            self.installButton.setProgressBarState(False)
+            self.installButton.hide()
+            self.openInstallPathButton.show()
 
     def _checkInstall(self):
         """
@@ -187,6 +259,74 @@ class NapCatDownloadCard(DownloadCardBase):
         shareView.closed.connect(view.close)
 
 
+class NapCatInstallWorker(QThread):
+    finished = Signal(bool)
+
+    def __init__(self, ncInstallPath, zipFilePath, parent=None):
+        super().__init__(parent)
+        self.ncInstallPath = ncInstallPath
+        self.zipFilePath = zipFilePath
+
+    def run(self):
+        try:
+            self._rmOldFile()
+            self._unzipFile()
+            self.finished.emit(True)
+        except Exception as e:
+            print(f'Error: {e}')
+            self.finished.emit(False)
+
+    def _rmOldFile(self):
+        """
+        ## 移除老文件(如果有)
+        """
+        if not self.ncInstallPath.exists():
+            # 检查路径是否存在, 不存在则创建
+            self.ncInstallPath.mkdir(parents=True, exist_ok=True)
+
+        # 遍历目录中的所有项
+        for item in self.ncInstallPath.iterdir():
+            # 如果是config目录，则跳过
+            if item.is_dir() and item.name == 'config':
+                continue
+            # 如果是文件或其他目录，则删除
+            shutil.rmtree(item) if item.is_dir() else item.unlink()
+
+    def _unzipFile(self):
+        """
+        ## 解压到临时目录并移动到安装目录
+        """
+        # 解压缩文件到临时目录
+        with zipfile.ZipFile(str(self.zipFilePath), 'r') as zip_ref:
+            zip_ref.extractall(str(it(PathFunc).tmp_path))
+
+        # 记录没有被移动的文件和文件夹
+        skipped_items = []
+
+        # 获取临时目录中所有文件和文件夹
+        for item in (self.zipFilePath.parent / self.zipFilePath.stem).iterdir():
+            target_path = self.ncInstallPath / item.name
+
+            if target_path.exists():
+                # 跳过同名文件或文件夹
+                skipped_items.append(item)
+                continue
+
+            # 移动文件或文件夹
+            shutil.move(str(item), str(self.ncInstallPath))
+
+        # 删除未移动的文件和文件夹
+        for item in skipped_items:
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+
+        # 删除下载文件和解压出来的文件夹
+        shutil.rmtree(self.zipFilePath.parent / self.zipFilePath.stem)
+        self.zipFilePath.unlink()
+
+
 class QQDownloadCard(DownloadCardBase):
     """
     ## 实现 QQ 的下载卡片
@@ -211,16 +351,16 @@ class QQDownloadCard(DownloadCardBase):
         self.shareButton.clicked.connect(self._shareButtonSlot)
 
         # 创建控件
-        if (version := it(GetNewVersion).getQQVersion()["windows_version"]) is None:
+        if (version := it(GetNewVersion).getQQVersion()) is None:
             version = self.tr("Unknown")
         self.versionWidget = InfoWidget(self.tr("Version"), version, self)
-        self.commentWidget = InfoWidget(self.tr("Platform"), platform.machine(), self)
-        self.systemWidget = InfoWidget(self.tr("System"), platform.system(), self)
+        self.platformWidget = InfoWidget(self.tr("Platform"), cfg.get(cfg.PlatformType), self)
+        self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
         # 设置布局
         self.infoLayout.addWidget(self.versionWidget)
         self.infoLayout.addWidget(VerticalSeparator(self))
-        self.infoLayout.addWidget(self.commentWidget)
+        self.infoLayout.addWidget(self.platformWidget)
         self.infoLayout.addWidget(VerticalSeparator(self))
         self.infoLayout.addWidget(self.systemWidget)
         self.infoLayout.addStretch(1)
