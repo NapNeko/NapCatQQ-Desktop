@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import sys
-import platform
 import time
 from typing import Optional
 
@@ -290,8 +289,8 @@ class SystemInfoCard(HeaderCardWidget):
         """
         ## 更新系统信息
         """
-        self.systemVersionLabel.setText(self.tr(f"{platform.system()}"))
-        self.platformArchitectureLabel.setText(self.tr(f"{platform.machine()}"))
+        self.systemVersionLabel.setText(self.tr(f"{cfg.get(cfg.SystemType)}"))
+        self.platformArchitectureLabel.setText(self.tr(f"{cfg.get(cfg.PlatformType)}"))
         self.napcatDesktopVersionLabel.setText(self.tr(f"{cfg.get(cfg.NCDVersion)}"))
 
         start_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cfg.get(cfg.StartTime)))
