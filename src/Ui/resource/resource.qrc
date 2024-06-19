@@ -3,6 +3,7 @@
         <file>logo.png</file>
         <file>image/Global/page_bg_dark.png</file>
         <file>image/Global/page_bg_light.png</file>
+        <file>image/Global/image_1.jpg</file>
     </qresource>
 
     <qresource prefix="Icon">
