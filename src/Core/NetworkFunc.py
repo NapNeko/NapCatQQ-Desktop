@@ -2,8 +2,10 @@
 import json
 from abc import ABC
 from enum import Enum
+from pathlib import Path
+from typing import Optional, IO
 
-from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression
+from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression, Signal, Slot
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
 
@@ -29,7 +31,8 @@ class Urls(Enum):
     NAPCAT_64_LINUX = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.linux.x64.zip")
     NAPCAT_WIN = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.win32.x64.zip")
 
-    # QQ 相关的 API
+    # QQ 相关
+    QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
 
 
@@ -155,3 +158,72 @@ class GetNewVersionClassCreator(AbstractCreator, ABC):
 
 
 add_creator(GetNewVersionClassCreator)
+
+
+class Downloader:
+    """
+    ## 执行下载任务
+    """
+    downloadProgress = Signal(int)
+    finished = Signal()
+    errorOccurred = Signal(str, int)
+
+    def __init__(self, url: QUrl, path: Path):
+        """
+        ## 初始化下载器
+            - url 下载连接
+            - path 下载路径
+        """
+        self.url: QUrl = url
+        self.path: Path = path
+
+        self.request = QNetworkRequest(self.url)
+        self.reply: Optional[QNetworkReply] = None
+        self.file: Optional[IO[bytes]] = None
+
+    def start(self):
+        """
+        ## 启动下载
+        """
+        # 打开文件以写入下载数据
+        self.file = open(str(self.path / self.url.fileName()), 'wb')
+        # 执行下载任务并连接信号
+        self.reply = it(NetworkFunc).manager.get(self.request)
+        self.reply.downloadProgress.connect(self._downloadProgressSolt)
+        self.reply.finished.connect(self._finished)
+        self.reply.errorOccurred.connect(self._error)
+
+    @Slot()
+    def _downloadProgressSolt(self, bytes_received: int, bytes_total: int):
+        """
+        ## 下载进度槽函数
+            - bytes_received 接收的字节数
+            - bytes_total 总字节数
+        """
+        self.downloadProgress.emit(int((bytes_received / bytes_total) * 100))
+
+    @Slot()
+    def _read2File(self):
+        """
+        ## 读取数据并写入文件
+        """
+        self.file.write(self.reply.readAll()) if self.file else None
+
+    @Slot()
+    def _finished(self):
+        """
+        ## 下载结束并发送信号
+        """
+        if self.file:
+            # 防止文件中途丢失导致关闭一个没有打开的文件引发报错
+            self.file.close()
+            self.file = None
+        self.finished.emit()
+
+    @Slot()
+    def _error(self, error_code):
+        if self.file:
+            self.file.close()
+            self.file = None
+        self.finished.emit()
+        self.errorOccurred.emit(self.reply.errorString(), error_code)
