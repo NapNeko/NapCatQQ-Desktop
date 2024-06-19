@@ -5,11 +5,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, IO
 
-from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression, Signal, Slot
+from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression, Signal, Slot, QObject
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
 
 from src.Core.GetVersion import GetVersion
+from src.Core.Config import cfg
 
 
 class Urls(Enum):
@@ -161,13 +162,13 @@ class GetNewVersionClassCreator(AbstractCreator, ABC):
 add_creator(GetNewVersionClassCreator)
 
 
-class Downloader:
+class Downloader(QObject):
     """
     ## 执行下载任务
     """
     downloadProgress = Signal(int)
-    finished = Signal()
-    errorOccurred = Signal(str, int)
+    finished = Signal(bool)
+    errorOccurred = Signal(str, str)
 
     def __init__(self, url: QUrl, path: Path):
         """
@@ -175,6 +176,7 @@ class Downloader:
             - url 下载连接
             - path 下载路径
         """
+        super().__init__()
         self.url: QUrl = url
         self.path: Path = path
 
@@ -190,25 +192,35 @@ class Downloader:
         self.file = open(str(self.path / self.url.fileName()), 'wb')
         # 执行下载任务并连接信号
         self.reply = it(NetworkFunc).manager.get(self.request)
-        self.reply.downloadProgress.connect(self._downloadProgressSolt)
+        self.reply.downloadProgress.connect(self._downloadProgressSlot)
+        self.reply.readyRead.connect(self._read2File)
         self.reply.finished.connect(self._finished)
         self.reply.errorOccurred.connect(self._error)
 
+    def stop(self):
+        """
+        ## 停止下载
+        """
+        self.reply.abort() if self.reply else None
+
     @Slot()
-    def _downloadProgressSolt(self, bytes_received: int, bytes_total: int):
+    def _downloadProgressSlot(self, bytes_received: int, bytes_total: int):
         """
         ## 下载进度槽函数
             - bytes_received 接收的字节数
             - bytes_total 总字节数
         """
-        self.downloadProgress.emit(int((bytes_received / bytes_total) * 100))
+        if bytes_total > 0:
+            # 防止发生零除以零的情况
+            self.downloadProgress.emit(int((bytes_received / bytes_total) * 100))
 
     @Slot()
     def _read2File(self):
         """
         ## 读取数据并写入文件
         """
-        self.file.write(self.reply.readAll()) if self.file else None
+        if self.file:
+            self.file.write(self.reply.readAll())
 
     @Slot()
     def _finished(self):
@@ -219,12 +231,16 @@ class Downloader:
             # 防止文件中途丢失导致关闭一个没有打开的文件引发报错
             self.file.close()
             self.file = None
-        self.finished.emit()
+        if self.reply.error() != QNetworkReply.NetworkError.NoError:
+            self.finished.emit(False)
+            return
+
+        self.finished.emit(True)
 
     @Slot()
     def _error(self, error_code):
         if self.file:
             self.file.close()
             self.file = None
-        self.finished.emit()
-        self.errorOccurred.emit(self.reply.errorString(), error_code)
+        self.finished.emit(False)
+        self.errorOccurred.emit(self.reply.errorString(), str(error_code))
