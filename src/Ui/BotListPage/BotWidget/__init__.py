@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QProcess
+from PySide6.QtCore import Qt, QProcess, Slot
 from PySide6.QtGui import QTextCursor, QPixmap
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
 from creart import it
@@ -89,7 +89,7 @@ class BotWidget(QWidget):
         self.view.addWidget(self.botLogPage)
         self.view.setObjectName("BotView")
         self.view.setCurrentWidget(self.botInfoPage)
-        self.view.currentChanged.connect(self._pivotSolt)
+        self.view.currentChanged.connect(self._pivotSlot)
 
     def _createButton(self) -> None:
         """
@@ -106,14 +106,14 @@ class BotWidget(QWidget):
         self.botSetupSubPageReturnButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回到 BotSetup 按钮
 
         # 连接槽函数
-        self.runButton.clicked.connect(self._runButtonSolt)
-        self.stopButton.clicked.connect(self._stopButtonSolt)
-        self.rebootButton.clicked.connect(self._rebootButtonSolt)
+        self.runButton.clicked.connect(self._runButtonSlot)
+        self.stopButton.clicked.connect(self._stopButtonSlot)
+        self.rebootButton.clicked.connect(self._rebootButtonSlot)
         self.showQRCodeButton.clicked.connect(lambda: self.qrcodeMsgBox.show())
-        self.updateConfigButton.clicked.connect(self._updateButtonSolt)
-        self.deleteConfigButton.clicked.connect(self._deleteButtonSolt)
-        self.botSetupSubPageReturnButton.clicked.connect(self._botSetupSubPageReturnButtonSolt)
-        self.returnListButton.clicked.connect(self._returnListButtonSolt)
+        self.updateConfigButton.clicked.connect(self._updateButtonSlot)
+        self.deleteConfigButton.clicked.connect(self._deleteButtonSlot)
+        self.botSetupSubPageReturnButton.clicked.connect(self._botSetupSubPageReturnButtonSlot)
+        self.returnListButton.clicked.connect(self._returnListButtonSlot)
 
         # 隐藏按钮
         self.stopButton.hide()
@@ -139,7 +139,8 @@ class BotWidget(QWidget):
         self.deleteConfigButton.setToolTip(self.tr("Click Delete bot configuration"))
         self.deleteConfigButton.installEventFilter(ToolTipFilter(self.deleteConfigButton))
 
-    def _runButtonSolt(self):
+    @Slot()
+    def _runButtonSlot(self):
         """
         ## 启动按钮槽函数
 
@@ -191,7 +192,8 @@ class BotWidget(QWidget):
         self.stopButton.setVisible(True)
         self.rebootButton.setVisible(True)
 
-    def _stopButtonSolt(self):
+    @Slot()
+    def _stopButtonSlot(self):
         """
         ## 停止按钮槽函数
         """
@@ -203,12 +205,13 @@ class BotWidget(QWidget):
         self.view.setCurrentWidget(self.botInfoPage)
         self.showQRCodeButton.hide()
 
-    def _rebootButtonSolt(self):
+    @Slot()
+    def _rebootButtonSlot(self):
         """
         ## 重启机器人, 直接调用函数吧
         """
-        self._stopButtonSolt()
-        self._runButtonSolt()
+        self._stopButtonSlot()
+        self._runButtonSlot()
 
     def _handle_stdout(self):
         """
@@ -239,7 +242,7 @@ class BotWidget(QWidget):
         from src.Ui.BotListPage import BotListWidget
         if "[ERROR] () | 快速登录错误" in data:
             # 引发此错误时自动重启
-            self._rebootButtonSolt()
+            self._rebootButtonSlot()
             it(BotListWidget).showInfo(
                 title=self.tr("Sign-in error"),
                 content=self.tr(
@@ -276,7 +279,8 @@ class BotWidget(QWidget):
         cursor.insertText(f"进程结束，退出码为 {exit_code}，状态为 {exit_status}")
         self.botLogPage.setTextCursor(cursor)
 
-    def _updateButtonSolt(self) -> None:
+    @Slot()
+    def _updateButtonSlot(self) -> None:
         """
         ## 更新按钮的槽函数
         """
@@ -310,7 +314,8 @@ class BotWidget(QWidget):
                 content=self.tr("Data loss within the profile")
             )
 
-    def _deleteButtonSolt(self) -> None:
+    @Slot()
+    def _deleteButtonSlot(self) -> None:
         """
         ## 删除机器人配置按钮
         """
@@ -319,7 +324,8 @@ class BotWidget(QWidget):
         msgBox.exec()
 
     @staticmethod
-    def _returnListButtonSolt() -> None:
+    @Slot()
+    def _returnListButtonSlot() -> None:
         """
         ## 返回列表按钮的槽函数
         """
@@ -328,7 +334,8 @@ class BotWidget(QWidget):
         it(BotListWidget).topCard.breadcrumbBar.setCurrentIndex(0)
         it(BotListWidget).topCard.updateListButton.show()
 
-    def _botSetupSubPageReturnButtonSolt(self) -> None:
+    @Slot()
+    def _botSetupSubPageReturnButtonSlot(self) -> None:
         """
         ## BotSetup 页面中子页面返回按钮的槽函数
         """
@@ -336,7 +343,8 @@ class BotWidget(QWidget):
         self.returnListButton.show()
         self.view.setCurrentWidget(self.botSetupPage)
 
-    def _pivotSolt(self, index: int) -> None:
+    @Slot()
+    def _pivotSlot(self, index: int) -> None:
         """
         ## pivot 切换槽函数
         """
@@ -421,7 +429,7 @@ class QRCodeMessageBox(MessageBoxBase):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self.titleLabel = SubtitleLabel(self.tr('Scan the QR code to log in'))
+        self.titleLabel = SubtitleLabel(self.tr('Scan the QR code to log in'), self)
         self.qrcodeLabel = ImageLabel(self)
         self.qrcodePath = None
 

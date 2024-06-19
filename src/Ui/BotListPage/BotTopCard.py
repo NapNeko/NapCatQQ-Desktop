@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
@@ -36,8 +36,8 @@ class BotTopCard(QWidget):
         setFont(self.breadcrumbBar, 28, QFont.Weight.DemiBold)
         self.breadcrumbBar.addItem(routeKey="BotTopCardTitle", text=self.tr("Bot List"))
         self.breadcrumbBar.setSpacing(15)
-        self.updateListButton.clicked.connect(self._updateListButtonSolt)
-        self.breadcrumbBar.currentIndexChanged.connect(self._breadcrumbBarSolt)
+        self.updateListButton.clicked.connect(self._updateListButtonSlot)
+        self.breadcrumbBar.currentIndexChanged.connect(self._breadcrumbBarSlot)
 
         self._addTooltips()
         self._setLayout()
@@ -56,7 +56,8 @@ class BotTopCard(QWidget):
         self.updateListButton.setToolTip(self.tr("Click to refresh the list"))
         self.updateListButton.installEventFilter(ToolTipFilter(self.updateListButton))
 
-    def _breadcrumbBarSolt(self, index: int):
+    @Slot()
+    def _breadcrumbBarSlot(self, index: int):
         """
         ## 判断用户是否点击的是 Bot List
         如果是则返回 Bot List 页面
@@ -67,7 +68,8 @@ class BotTopCard(QWidget):
             self.updateListButton.show()
 
     @staticmethod
-    def _updateListButtonSolt():
+    @Slot()
+    def _updateListButtonSlot():
         """
         ## 更新列表按钮的槽函数
         """

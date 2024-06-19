@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import Optional, List
 
-from PySide6.QtCore import Qt, QTimer, QUrl, QUrlQuery
+from PySide6.QtCore import Qt, QTimer, QUrl, QUrlQuery, Slot
 from PySide6.QtGui import QPixmap
 from PySide6.QtNetwork import QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame
@@ -39,14 +39,15 @@ class BotListCard(HeaderCardWidget):
         # 设置控件
         self.setTitle(self.tr("Bot List"))
         self.botList.hide()
-        self.toAddBot.clicked.connect(self._toAddBotSolt)
+        self.toAddBot.clicked.connect(self._toAddBotSlot)
 
         # 调用方法
         self._setLayout()
         self.onMonitorBots()
 
     @staticmethod
-    def _toAddBotSolt():
+    @Slot()
+    def _toAddBotSlot():
         """
         ## 跳转到 AddPage 页面
         """
@@ -194,8 +195,8 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         self.stopButton = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"), self)
 
         # 连接信号以及设置控件
-        self.runButton.clicked.connect(self._runButtonSolt)
-        self.stopButton.clicked.connect(self._stopButtonSolt)
+        self.runButton.clicked.connect(self._runButtonSlot)
+        self.stopButton.clicked.connect(self._stopButtonSlot)
         self.stopButton.hide()
 
         # 调用方法
@@ -232,7 +233,8 @@ class BotCard(BackgroundAnimationWidget, QFrame):
                     self.runButton.show()
                     self.stopButton.hide()
 
-    def _runButtonSolt(self):
+    @Slot()
+    def _runButtonSlot(self):
         """
         ## 运行按钮
         """
@@ -247,7 +249,8 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         self.runButton.hide()
         self.stopButton.show()
 
-    def _stopButtonSolt(self):
+    @Slot()
+    def _stopButtonSlot(self):
         """
         ## 停止按钮
         """

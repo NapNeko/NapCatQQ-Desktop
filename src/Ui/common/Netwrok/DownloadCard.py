@@ -3,7 +3,7 @@ import platform
 
 from creart import it
 
-from PySide6.QtCore import Qt, QSize, QUrl
+from PySide6.QtCore import Qt, QSize, QUrl, Slot
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import (
@@ -135,7 +135,7 @@ class NapCatDownloadCard(DownloadCardBase):
             "resource usage, like it's asleep, and without the need for a GUI "
             "interface for NTQQ."
         ))
-        self.shareButton.clicked.connect(self._shareButtonSolt)
+        self.shareButton.clicked.connect(self._shareButtonSlot)
         self.openInstallPathButton.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(it(PathFunc).getNapCatPath())))
         )
@@ -168,7 +168,8 @@ class NapCatDownloadCard(DownloadCardBase):
             self.openInstallPathButton.show()
             self.isInstall = True
 
-    def _shareButtonSolt(self):
+    @Slot()
+    def _shareButtonSlot(self):
         """
         ## 分享按钮的槽函数
         """
@@ -207,7 +208,7 @@ class QQDownloadCard(DownloadCardBase):
             "NapCatQQ is a headless bot framework based on the PC NTQQ core, "
             "so you will need to install it."
         ))
-        self.shareButton.clicked.connect(self._shareButtonSolt)
+        self.shareButton.clicked.connect(self._shareButtonSlot)
 
         # 创建控件
         if (version := it(GetNewVersion).getQQVersion()["windows_version"]) is None:
@@ -227,7 +228,8 @@ class QQDownloadCard(DownloadCardBase):
 
         self._setLayout()
 
-    def _shareButtonSolt(self):
+    @Slot()
+    def _shareButtonSlot(self):
         """
         ## 分享按钮的槽函数
         """
