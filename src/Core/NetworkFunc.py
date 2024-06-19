@@ -33,6 +33,7 @@ class Urls(Enum):
 
     # QQ 相关
     QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")
+    QQ_WIN_DOWNLOAD = QUrl("https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/windowsDownloadUrl.js")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
 
 
