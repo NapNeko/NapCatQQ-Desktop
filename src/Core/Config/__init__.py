@@ -81,7 +81,7 @@ class Config(QConfig):
     )
     NapCatPath = ConfigItem(
         group="Path",
-        name="napcat_path",
+        name="napcatPath",
         default="",
         validator=FolderValidator()
     )
