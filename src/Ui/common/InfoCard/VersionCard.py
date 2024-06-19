@@ -19,7 +19,7 @@ class VersionCardBase(QWidget):
     ## 用于显示版本信息和比对最新版本
     """
 
-    def __init__(self, icon: FluentIconBase, name: str, contents: str, parent=None):
+    def __init__(self, icon: FluentIconBase, name: str, contents: str, parent=None) -> None:
         """
         ## 初始化控件
         """
@@ -85,7 +85,7 @@ class NapCatVersionCard(VersionCardBase):
     ## 实现 NapCat 的版本小卡片
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version", parent)
         self.contentsLabel.setText(self.getLocalVersion())
         self.onCheckUpdates()
@@ -143,7 +143,7 @@ class QQVersionCard(VersionCardBase):
     ## 实现显示 QQ版本 小卡片
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.QQ, "QQ Version", "Unknown Version", parent)
         self.contentsLabel.setText(self.getLocalVersion())
 

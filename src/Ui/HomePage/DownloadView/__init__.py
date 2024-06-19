@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 from src.Ui.HomePage.DownloadView.DownloadTopCard import DownloadTopCard
 from src.Ui.StyleSheet import StyleSheet
-
 from src.Ui.common.Netwrok import NapCatDownloadCard, QQDownloadCard
 
 
@@ -29,7 +28,7 @@ class DownloadViewWidget(QWidget):
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对内部进行布局
         """

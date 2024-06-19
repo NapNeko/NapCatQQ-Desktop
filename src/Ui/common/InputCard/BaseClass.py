@@ -2,7 +2,7 @@
 from typing import List
 
 from PySide6.QtCore import QEasingCurve, Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 from qfluentwidgets import (
     BodyLabel,
     ExpandSettingCard,
@@ -29,7 +29,7 @@ class ItemBase(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.hBoxLayout = QHBoxLayout(self)
 
-    def _setLayout(self, widget: LineEdit | SwitchButton):
+    def _setLayout(self, widget: LineEdit | SwitchButton) -> None:
         """
         ## 布局控件
 
@@ -66,7 +66,7 @@ class GroupCardBase(ExpandSettingCard):
         # 调用方法
         self._initWidget()
 
-    def _initWidget(self):
+    def _initWidget(self) -> None:
         """
         设置卡片内部控件
         """
@@ -78,7 +78,7 @@ class GroupCardBase(ExpandSettingCard):
         self.viewLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
 
-    def addItem(self, item: ItemBase):
+    def addItem(self, item: ItemBase) -> None:
         """
         添加 Item
         """

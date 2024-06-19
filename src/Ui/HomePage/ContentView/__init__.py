@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
-from src.Ui.HomePage.ContentView.DashboardWidget import DashboardWidget
 from src.Ui.HomePage.ContentView.ContentTopCard import ContentTopCard
+from src.Ui.HomePage.ContentView.DashboardWidget import DashboardWidget
 from src.Ui.StyleSheet import StyleSheet
 
 
@@ -28,7 +28,7 @@ class ContentViewWidget(QWidget):
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对内部进行布局
         """

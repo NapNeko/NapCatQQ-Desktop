@@ -20,7 +20,7 @@ class DashboardBase(QWidget):
     ## 仪表盘进度条
     """
 
-    def __init__(self, info: str, parent=None):
+    def __init__(self, info: str, parent=None) -> None:
         super().__init__(parent=parent)
 
         # 创建要显示的标签和布局
@@ -42,10 +42,10 @@ class DashboardBase(QWidget):
         # 调用方法
         self._setLayout()
 
-    def setValue(self, value: int | float):
+    def setValue(self, value: int | float) -> None:
         self.progressBar.setValue(value)
 
-    def onMonitor(self):
+    def onMonitor(self) -> None:
         """
         ## 打开监控
         """
@@ -56,7 +56,7 @@ class DashboardBase(QWidget):
         # 设置计时器每隔 1000 毫秒（即 1 秒）超时一次
         self.timer.start(1000)
 
-    def _monitor(self):
+    def _monitor(self) -> None:
         """
         ## 监控实现逻辑, 请继承实现
         """
@@ -74,7 +74,7 @@ class DashboardBase(QWidget):
 
 class SemiCircularProgressBar(QWidget):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._value: int | float = 0
         self._max_value = 100
@@ -96,15 +96,15 @@ class SemiCircularProgressBar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
 
-    def setInfo(self, info: str):
+    def setInfo(self, info: str) -> None:
         self.info_label.setText(info)
 
-    def setValue(self, value: int | float):
+    def setValue(self, value: int | float) -> None:
         self._value = value
         self.value_label.setText(f"{value} %")
         self.update()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event) -> None:
         """
         ## 绘制进度条
         """
@@ -147,14 +147,14 @@ class CPUDashboard(DashboardBase):
     ## 实现 CPU 占用仪表盘
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         """
         ## 初始化
         """
         super().__init__("CPU", parent)
         self.onMonitor()
 
-    def _monitor(self):
+    def _monitor(self) -> None:
         """
         ## 实现监控 CPU 信息
         """
@@ -185,14 +185,14 @@ class MemoryDashboard(DashboardBase):
     ## 实现 Memory 占用仪表盘
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         """
         ## 初始化
         """
         super().__init__("Memory", parent)
         self.onMonitor()
 
-    def _monitor(self):
+    def _monitor(self) -> None:
         """
         ## 实现监控 Memory 信息
         """
@@ -211,7 +211,7 @@ class MemoryDashboard(DashboardBase):
 
         self.setToolTip(toolTipStr)
 
-    def paintEvent(self, event):
+    def paintEvent(self, event) -> None:
         """
         ## 调整 infoLabel 大小
         """
@@ -238,7 +238,7 @@ class SystemInfoCard(HeaderCardWidget):
         - 发行版本, 平台类型, NapCat Desktop版本, 启动时间, 运行时间
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         """
         ## 初始化卡片
         """
@@ -267,7 +267,7 @@ class SystemInfoCard(HeaderCardWidget):
         self.onCalculateRunTime()
         self._setLayout()
 
-    def onCalculateRunTime(self):
+    def onCalculateRunTime(self) -> None:
         """
         ## 启用计算运行时间
         """
@@ -278,14 +278,14 @@ class SystemInfoCard(HeaderCardWidget):
         # 设置计时器每隔 1000 毫秒（即 1 秒）超时一次
         self.timer.start(1000)
 
-    def _calculateRunTime(self):
+    def _calculateRunTime(self) -> None:
         """
         ## 计算运行时间
         """
         run_time_str = time.strftime("%H:%M:%S", time.gmtime(time.time() - cfg.get(cfg.StartTime)))
         self.runningTimeLabel.setText(self.tr(f"{run_time_str}"))
 
-    def updateSystemInfo(self):
+    def updateSystemInfo(self) -> None:
         """
         ## 更新系统信息
         """
@@ -297,7 +297,7 @@ class SystemInfoCard(HeaderCardWidget):
         self.startTimeLabel.setText(self.tr(f"{start_time}"))
         self.runningTimeLabel.setText(self.tr("Calculating"))
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对控件进行布局
         """
@@ -313,13 +313,3 @@ class SystemInfoCard(HeaderCardWidget):
         self.viewLayout.addLayout(self.labelLayout)
         self.viewLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.viewLayout.setContentsMargins(25, 20, 20, 15)
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    progressBar = SemiCircularProgressBar()
-    progressBar.setValue(50)
-    progressBar.resize(175, 175)
-    progressBar.info_label.setText("CPU")
-    progressBar.show()
-    sys.exit(app.exec())

@@ -7,8 +7,7 @@ from PySide6.QtNetwork import QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame
 from creart import it
 from qfluentwidgets import (
-    HeaderCardWidget, FluentIcon, TitleLabel, TransparentToolButton, CardWidget, ImageLabel,
-    TransparentPushButton, SubtitleLabel, BodyLabel, ScrollArea
+    HeaderCardWidget, FluentIcon, TransparentToolButton, ImageLabel, TransparentPushButton, BodyLabel, ScrollArea
 )
 from qfluentwidgets.common.animation import BackgroundAnimationWidget
 
@@ -23,7 +22,7 @@ class BotListCard(HeaderCardWidget):
     ## 用于在首页展示 bot 列表的卡片
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         """
         ## 初始化控件
         """
@@ -47,14 +46,14 @@ class BotListCard(HeaderCardWidget):
 
     @staticmethod
     @Slot()
-    def _toAddBotSlot():
+    def _toAddBotSlot() -> None:
         """
         ## 跳转到 AddPage 页面
         """
         from src.Ui.MainWindow.Window import MainWindow
         it(MainWindow).add_widget_button.click()
 
-    def onMonitorBots(self):
+    def onMonitorBots(self) -> None:
         """
         ## 启动监视器 监控机器人列表(BotListWidget 中的 botCardList)是否为空
         """
@@ -65,7 +64,7 @@ class BotListCard(HeaderCardWidget):
         # 设置计时器每隔 2000 毫秒（即 2 秒）超时一次
         self.timer.start(2000)
 
-    def _monitorBots(self):
+    def _monitorBots(self) -> None:
         """
         ## 监控机器人列表
         """
@@ -81,7 +80,7 @@ class BotListCard(HeaderCardWidget):
             self.toAddBot.hide()
             self.botList.updateList()
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对内部进行布局
         """
@@ -102,7 +101,7 @@ class BotList(ScrollArea):
     自动读取配置文件中已有的的机器人配置
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent) -> None:
         """
         ## 初始化
         """
@@ -116,7 +115,7 @@ class BotList(ScrollArea):
 
         StyleSheet.BOT_LIST_WIDGET.apply(self)
 
-    def _createView(self):
+    def _createView(self) -> None:
         """
         ## 构建并设置 ScrollArea 所需的 widget
         """
@@ -128,7 +127,7 @@ class BotList(ScrollArea):
         self.view.setObjectName("BotListView")
         self.view.setLayout(self.cardLayout)
 
-    def _initWidget(self):
+    def _initWidget(self) -> None:
         """
         ## 设置 ScrollArea
         """
@@ -136,7 +135,7 @@ class BotList(ScrollArea):
         self.setWidgetResizable(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-    def updateList(self):
+    def updateList(self) -> None:
         """
         ## 刷新机器人列表
         """
@@ -179,7 +178,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
     ## BotListCard 中展示的 BotCard
     """
 
-    def __init__(self, config: Config, parent=None):
+    def __init__(self, config: Config, parent=None) -> None:
         """
         ## 初始化机器人
         """
@@ -204,7 +203,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         self._setLayout()
         self.onMonitorBots()
 
-    def onMonitorBots(self):
+    def onMonitorBots(self) -> None:
         """
         ## 启动监视器 监视卡片对应的机器人是否有在运行
         """
@@ -215,7 +214,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         # 设置计时器每隔 2000 毫秒（即 2 秒）超时一次
         self.timer.start(2000)
 
-    def _monitorBots(self):
+    def _monitorBots(self) -> None:
         """
         ## 监控机器人列表
         """
@@ -234,7 +233,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
                     self.stopButton.hide()
 
     @Slot()
-    def _runButtonSlot(self):
+    def _runButtonSlot(self) -> None:
         """
         ## 运行按钮
         """
@@ -250,7 +249,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         self.stopButton.show()
 
     @Slot()
-    def _stopButtonSlot(self):
+    def _stopButtonSlot(self) -> None:
         """
         ## 停止按钮
         """
@@ -261,7 +260,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
             self.runButton.show()
             self.stopButton.hide()
 
-    def _QQAvatar(self):
+    def _QQAvatar(self) -> None:
         """
         ## 创建展示 QQ头像 的 ImageLabel
         """
@@ -280,7 +279,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         replay = it(NetworkFunc).manager.get(request)
         replay.finished.connect(lambda: self._setAvatar(replay))
 
-    def _setAvatar(self, replay: QNetworkReply):
+    def _setAvatar(self, replay: QNetworkReply) -> None:
         """
         ## 设置头像
         """
@@ -298,7 +297,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
                 content=replay.errorString()
             )
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对控件进行布局
         """

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets.common import setFont, FluentIcon
@@ -46,7 +46,7 @@ class DisplayViewWidget(QWidget):
             self.logoImage, alignment=Qt.AlignmentFlag.AlignCenter
         )
         self.vboxLayout.addSpacing(20)
-        self.vboxLayout.setStretch(2, 0.5)
+        self.vboxLayout.setStretch(2, 0)
         self.vboxLayout.addWidget(
             self.logoLabel, alignment=Qt.AlignmentFlag.AlignCenter
         )

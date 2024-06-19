@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Self, Optional
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets import InfoBarPosition
 
 from src.Ui.BotListPage.BotList import BotList
 from src.Ui.BotListPage.BotTopCard import BotTopCard
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
 
 class BotListWidget(QWidget):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.view: Optional[QStackedWidget] = None
         self.topCard: Optional[BotTopCard] = None
@@ -53,7 +52,7 @@ class BotListWidget(QWidget):
 
         return self
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对内部进行布局
         """
@@ -62,7 +61,7 @@ class BotListWidget(QWidget):
         self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
         self.setLayout(self.vBoxLayout)
 
-    def showInfo(self, title: str, content: str):
+    def showInfo(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -73,7 +72,7 @@ class BotListWidget(QWidget):
             showcasePage=self
         )
 
-    def showError(self, title: str, content: str):
+    def showError(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -84,7 +83,7 @@ class BotListWidget(QWidget):
             showcasePage=self
         )
 
-    def showWarning(self, title: str, content: str):
+    def showWarning(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -95,7 +94,7 @@ class BotListWidget(QWidget):
             showcasePage=self
         )
 
-    def showSuccess(self, title: str, content: str):
+    def showSuccess(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """

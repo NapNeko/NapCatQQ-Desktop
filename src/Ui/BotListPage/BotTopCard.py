@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
-from qfluentwidgets import CaptionLabel, InfoBar, InfoBarPosition, ToolTipFilter
+from qfluentwidgets import CaptionLabel, ToolTipFilter
 from qfluentwidgets.common import setFont, FluentIcon
 from qfluentwidgets.components import BreadcrumbBar, TransparentToolButton
 
@@ -20,7 +20,7 @@ class BotTopCard(QWidget):
     用于展示 Breadcrumb navigation 以及一些操作按钮
     """
 
-    def __init__(self, parent: "BotListWidget"):
+    def __init__(self, parent: "BotListWidget") -> None:
         super().__init__(parent=parent)
 
         # 创建所需控件
@@ -42,13 +42,13 @@ class BotTopCard(QWidget):
         self._addTooltips()
         self._setLayout()
 
-    def addItem(self, routeKey: str):
+    def addItem(self, routeKey: str) -> None:
         """
         ## 给 breadcrumbBar 添加 item 项
         """
         self.breadcrumbBar.addItem(routeKey, routeKey)
 
-    def _addTooltips(self):
+    def _addTooltips(self) -> None:
         """
         ## 为按钮添加悬停提示
         """
@@ -57,7 +57,7 @@ class BotTopCard(QWidget):
         self.updateListButton.installEventFilter(ToolTipFilter(self.updateListButton))
 
     @Slot()
-    def _breadcrumbBarSlot(self, index: int):
+    def _breadcrumbBarSlot(self, index: int) -> None:
         """
         ## 判断用户是否点击的是 Bot List
         如果是则返回 Bot List 页面
@@ -69,14 +69,14 @@ class BotTopCard(QWidget):
 
     @staticmethod
     @Slot()
-    def _updateListButtonSlot():
+    def _updateListButtonSlot() -> None:
         """
         ## 更新列表按钮的槽函数
         """
         from src.Ui.BotListPage.BotListWidget import BotListWidget
         it(BotListWidget).botList.updateList()
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对内部进行布局
         """

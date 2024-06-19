@@ -9,7 +9,7 @@ class DownloadTopCard(QWidget):
     ## DownloadViewWidget 顶部展示的 InputCard
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent) -> None:
         super().__init__(parent=parent)
 
         # 创建所需控件
@@ -25,7 +25,7 @@ class DownloadTopCard(QWidget):
         self._addTooltips()
         self._setLayout()
 
-    def _addTooltips(self):
+    def _addTooltips(self) -> None:
         """
         ## 为按钮添加悬停提示
         """
@@ -33,7 +33,7 @@ class DownloadTopCard(QWidget):
         self.returnButton.setToolTip(self.tr("Tap Back to Home"))
         self.returnButton.installEventFilter(ToolTipFilter(self.returnButton))
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对内部进行布局
         """

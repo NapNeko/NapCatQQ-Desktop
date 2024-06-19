@@ -25,15 +25,15 @@ class AppCard(CardWidget):
     ## BotSetupPage  所需使用的卡片
     """
 
-    def __init__(self, icon: FluentIconBase, title: str, content: str, parent=None):
+    def __init__(self, icon: FluentIconBase, title: str, content: str, parent=None) -> None:
         """
         ## 初始化
         """
         super().__init__(parent)
-        self.iconWidget = IconWidget(icon)
+        self.iconWidget = IconWidget(icon, self)
         self.titleLabel = BodyLabel(title, self)
         self.contentLabel = CaptionLabel(content, self)
-        self.openLabel = IconWidget(FluentIcon.CHEVRON_RIGHT_MED)
+        self.openLabel = IconWidget(FluentIcon.CHEVRON_RIGHT_MED, self)
 
         self.hBoxLayout = QHBoxLayout()
         self.vBoxLayout = QVBoxLayout()

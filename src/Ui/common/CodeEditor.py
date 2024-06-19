@@ -110,7 +110,7 @@ class LineNumberArea(QWidget):
 
 
 class LogHighlighter(QSyntaxHighlighter):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(parent)
 
         # 初始化不同日志级别的文本格式
@@ -133,7 +133,7 @@ class LogHighlighter(QSyntaxHighlighter):
         # 正则表达式模式，用于匹配像 [DEBUG]、[INFO] 等日志级别标签
         self.pattern = QRegularExpression(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(DEBUG|INFO|WARN|ERROR)\]')
 
-    def highlightBlock(self, text):
+    def highlightBlock(self, text) -> None:
         # 创建一个格式化对象，用于应用整行的前景色
         test_format = QTextCharFormat()
 

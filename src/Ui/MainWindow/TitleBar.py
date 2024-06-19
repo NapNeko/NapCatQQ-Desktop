@@ -46,12 +46,12 @@ class CustomTitleBar(MSFluentTitleBar):
         }
 
         for btn_name, (btn_class, slot) in button_info.items():
-            self.__replace_utton(btn_class, btn_name)
+            self.__replace_button(btn_class, btn_name)
             getattr(self, btn_name).clicked.connect(slot)
 
         self.buttonLayout.setContentsMargins(0, 8, 10, 0)
 
-    def __replace_utton(self, btn_class, btn_name: str) -> None:
+    def __replace_button(self, btn_class, btn_name: str) -> None:
         """替换指定的按钮"""
         old_btn = getattr(self, btn_name, None)
         if old_btn:
@@ -86,11 +86,11 @@ class MaxBtn(MaximizeButton):
 
         # 绘制背景
         painter.setBrush(bgColor)
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 4, 4)
 
         # 绘制图标
-        painter.setBrush(Qt.NoBrush)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         pen = QPen(color, 1)
         pen.setCosmetic(True)
         painter.setPen(pen)
@@ -122,11 +122,11 @@ class MinBtn(MinimizeButton):
 
         # 绘制背景
         painter.setBrush(bgColor)
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 4, 4)
 
         # 绘制图标
-        painter.setBrush(Qt.NoBrush)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         pen = QPen(color, 1)
         pen.setCosmetic(True)
         painter.setPen(pen)
@@ -140,12 +140,12 @@ class CloseBtn(CloseButton):
 
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
-        painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
+        painter.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
         color, bgColor = self._getColors()
 
         # draw background
         painter.setBrush(bgColor)
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 4, 4)
 
         # draw icon

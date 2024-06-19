@@ -44,7 +44,7 @@ class AdvancedWidget(ScrollArea):
             self.config = config
             self.fillValue()
 
-    def _initWidget(self):
+    def _initWidget(self) -> None:
         """
         ## 初始化 QWidget 所需要的控件并配置
         创建 InputCard
@@ -134,7 +134,7 @@ class AdvancedWidget(ScrollArea):
         self.fileLogLevelCard.fillValue(self.config.fileLogLevel)
         self.consoleLevelCard.fillValue(self.config.consoleLogLevel)
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 将 QWidget 内部的 InputCard 添加到布局中
         """
@@ -169,6 +169,6 @@ class AdvancedWidget(ScrollArea):
         for card in self.cards:
             card.clear()
 
-    def adjustSize(self):
+    def adjustSize(self) -> None:
         h = self.cardLayout.heightForWidth(self.width()) + 46
         return self.resize(self.width(), h)

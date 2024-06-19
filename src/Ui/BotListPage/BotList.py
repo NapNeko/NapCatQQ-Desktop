@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 import json
-from typing import List, Tuple, TYPE_CHECKING
+from typing import List
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QWidget
 from creart import it
-from qfluentwidgets import ScrollArea, InfoBar, InfoBarPosition, FlowLayout, PushButton
+from qfluentwidgets import ScrollArea, FlowLayout
 
 from src.Core.Config.ConfigModel import Config
 from src.Core.PathFunc import PathFunc
 from src.Ui.BotListPage.BotCard import BotCard
-
-if TYPE_CHECKING:
-    from src.Ui.BotListPage import BotListWidget
 
 
 class BotList(ScrollArea):
@@ -22,7 +19,7 @@ class BotList(ScrollArea):
     自动读取配置文件中已有的的机器人配置
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent) -> None:
         """
         ## 初始化
         """
@@ -35,7 +32,7 @@ class BotList(ScrollArea):
         self._createView()
         self._initWidget()
 
-    def _initWidget(self):
+    def _initWidget(self) -> None:
         """
         ## 设置 ScrollArea
         """
@@ -43,7 +40,7 @@ class BotList(ScrollArea):
         self.setWidgetResizable(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-    def _createView(self):
+    def _createView(self) -> None:
         """
         ## 构建并设置 ScrollArea 所需的 widget
         """
@@ -54,7 +51,7 @@ class BotList(ScrollArea):
         self.view.setObjectName("BotListView")
         self.view.setLayout(self.cardLayout)
 
-    def updateList(self):
+    def updateList(self) -> None:
         """
         ## 更新机器人列表
         """
@@ -94,7 +91,7 @@ class BotList(ScrollArea):
         # 刷新一次布局
         self.cardLayout.update()
 
-    def _parseList(self):
+    def _parseList(self) -> None:
         """
         ## 解析机器人配置(如果有)
         """

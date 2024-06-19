@@ -164,7 +164,7 @@ class UrlCard(ExpandSettingCard):
         """
         显示确认对话框
         """
-        from src.Ui.AddPage.Add import AddWidget
+        from src.Ui.AddPage import AddWidget
 
         box = MessageBox(
             title=self.tr("Confirm"),

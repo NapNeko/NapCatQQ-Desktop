@@ -13,7 +13,7 @@ from src.Ui.common.InfoCard import (
 
 class DashboardWidget(QWidget):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(parent=parent)
 
         # 创建布局和控件
@@ -50,7 +50,7 @@ class DashboardWidget(QWidget):
         self._setToolTips()
         self._setLayout()
 
-    def _setToolTips(self):
+    def _setToolTips(self) -> None:
         """
         ## 设置工具提示
         """
@@ -62,7 +62,7 @@ class DashboardWidget(QWidget):
         self.reposButton.setToolTip(self.tr("Click to open the repository page"))
         self.feedbackButton.setToolTip(self.tr("Click Submit feedback"))
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 设置布局
         """
@@ -104,7 +104,7 @@ class SelectReposMsgBox(MessageBoxBase):
     ## 让用户选择打开哪个仓库
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(parent=parent)
         # 创建标签
         self.titleLabel = TitleLabel(self.tr("Please select ..."), self)
@@ -141,7 +141,7 @@ class SelectFeedbackMsgBox(MessageBoxBase):
     ## 让用户选择打开哪个仓库
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(parent=parent)
         # 创建标签
         self.titleLabel = TitleLabel(self.tr("Please select ..."), self)

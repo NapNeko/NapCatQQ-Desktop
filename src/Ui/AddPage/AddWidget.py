@@ -26,7 +26,7 @@ class AddWidget(QWidget):
     ## 窗体中 Add Bot 对应的 Widget
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.view: Optional[QStackedWidget] = None
         self.topCard: Optional[ConfigTopCard] = None
@@ -88,7 +88,7 @@ class AddWidget(QWidget):
         self.view.setCurrentWidget(self.botWidget)
         self.topCard.pivot.setCurrentItem(self.botWidget.objectName())
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 布局内部控件
         """
@@ -107,14 +107,14 @@ class AddWidget(QWidget):
             "advanced": self.advancedWidget.getValue(),
         }
 
-    def onCurrentIndexChanged(self, index):
+    def onCurrentIndexChanged(self, index) -> None:
         """
         ## 切换 Pivot 和 view 的槽函数
         """
         widget = self.view.widget(index)
         self.topCard.pivot.setCurrentItem(widget.objectName())
 
-    def showInfo(self, title: str, content: str):
+    def showInfo(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -125,7 +125,7 @@ class AddWidget(QWidget):
             showcasePage=self
         )
 
-    def showError(self, title: str, content: str):
+    def showError(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -136,7 +136,7 @@ class AddWidget(QWidget):
             showcasePage=self
         )
 
-    def showWarning(self, title: str, content: str):
+    def showWarning(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -147,7 +147,7 @@ class AddWidget(QWidget):
             showcasePage=self
         )
 
-    def showSuccess(self, title: str, content: str):
+    def showSuccess(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """

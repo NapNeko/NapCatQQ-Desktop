@@ -176,7 +176,7 @@ class BotWidget(QWidget):
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
         self.process.readyReadStandardOutput.connect(self._showQRCode)
-        self.process.finished.connect(self._process_finished)
+        self.process.finished.connect(self._processFinishedSlot)
         self.highlighter = LogHighlighter(self.botLogPage.document())
         self.qrcodeMsgBox = QRCodeMessageBox(self.parent().parent())
         self.process.start()
@@ -273,7 +273,8 @@ class BotWidget(QWidget):
                 content=self.tr(f"Account {self.config.bot.QQID} login successful!")
             )
 
-    def _process_finished(self, exit_code, exit_status):
+    @Slot()
+    def _processFinishedSlot(self, exit_code, exit_status):
         cursor = self.botLogPage.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(f"进程结束，退出码为 {exit_code}，状态为 {exit_status}")
@@ -427,7 +428,7 @@ class QRCodeMessageBox(MessageBoxBase):
     ## 用于展示登录用的 QRCode
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(parent=parent)
         self.titleLabel = SubtitleLabel(self.tr('Scan the QR code to log in'), self)
         self.qrcodeLabel = ImageLabel(self)
@@ -448,7 +449,7 @@ class QRCodeMessageBox(MessageBoxBase):
             lambda: self.setQRCode(self.qrcodePath) if self.qrcodePath else None
         )
 
-    def setQRCode(self, qrcodePath: str):
+    def setQRCode(self, qrcodePath: str) -> None:
         QRCode = QPixmap(qrcodePath)
         self.qrcodeLabel.setImage(QRCode)
         self.qrcodePath = qrcodePath
@@ -482,7 +483,7 @@ class DeleteConfigMessageBox(MessageBoxBase):
                 )
             )
             self.yesButton.setText(self.tr("Confirm the deletion"))
-            self.yesButton.clicked.connect(lambda: self._deleteConfig(parent))
+            self.yesButton.clicked.connect(lambda: self._deleteConfigSlot(parent))
 
         # 将组件添加到布局中
         self.viewLayout.addWidget(self.titleLabel)
@@ -492,7 +493,8 @@ class DeleteConfigMessageBox(MessageBoxBase):
         self.widget.setMinimumWidth(350)
 
     @staticmethod
-    def _deleteConfig(parent: BotWidget):
+    @Slot()
+    def _deleteConfigSlot(parent: BotWidget) -> None:
         """
         ## 执行删除配置
             - 返回到列表, 删除配置并保存, 刷新列表

@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
-from pathlib import Path
 
-from PySide6.QtCore import QUrl, QRectF, Qt, Slot, Signal
+from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QPainter, QColor, QBrush
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QProgressBar, QHBoxLayout
+from PySide6.QtWidgets import QHBoxLayout
 
-from qfluentwidgets import PrimaryPushButton, FluentIcon, BodyLabel, ProgressRing, isDarkTheme, \
-    IndeterminateProgressRing
-
-from src.Core.NetworkFunc import Downloader
+from qfluentwidgets import PrimaryPushButton, ProgressRing, IndeterminateProgressRing
 
 
 class ProgressBarButton(PrimaryPushButton):
@@ -16,7 +12,7 @@ class ProgressBarButton(PrimaryPushButton):
     ## 带下载进度条的按钮
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(parent)
         # 创建属性
         self._indeterminate = False
@@ -46,13 +42,13 @@ class ProgressBarButton(PrimaryPushButton):
         # 调用方法
         self.setTestVisible(True)
 
-    def setValue(self, value: int):
+    def setValue(self, value: int) -> None:
         """
         ## 设置 _progressRing 的进度
         """
         self._progressRing.setValue(value)
 
-    def setTestVisible(self, value: bool):
+    def setTestVisible(self, value: bool) -> None:
         """
         ## 设置按钮内容是否可见
         """
@@ -65,7 +61,7 @@ class ProgressBarButton(PrimaryPushButton):
             self.setProgressBarState(self._indeterminate)
             self.setText("")
 
-    def setProgressBarState(self, value: bool):
+    def setProgressBarState(self, value: bool) -> None:
         """
         ## 设置控件显示哪个进度条
         """
@@ -77,7 +73,7 @@ class ProgressBarButton(PrimaryPushButton):
             self._indeterminateProgressRing.hide()
             self._progressRing.show()
 
-    def paintEvent(self, e):
+    def paintEvent(self, e) -> None:
         """
         ## 重写事件绘制图标
         """

@@ -13,7 +13,7 @@ from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
 from qfluentwidgets import isDarkTheme, InfoBar, InfoBarIcon, InfoBarPosition, PushButton
 
-from src.Core.Config import StartOpenHomePageViewEnum as SE
+from src.Core.Config import StartOpenHomePageViewEnum as SEnum
 from src.Core.Config import cfg
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 class HomeWidget(QStackedWidget):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.contentView: Optional[DisplayViewWidget] = None
         self.displayView: Optional[ContentViewWidget] = None
@@ -64,7 +64,7 @@ class HomeWidget(QStackedWidget):
 
         return self
 
-    def _goBtnSlot(self):
+    def _goBtnSlot(self) -> None:
         """
         ## Start Using 的槽函数
         """
@@ -96,9 +96,9 @@ class HomeWidget(QStackedWidget):
         根据配置确定是打开首页视图还是内容视图。
         """
         match cfg.get(cfg.StartOpenHomePageView):
-            case SE.DISPLAY_VIEW:
+            case SEnum.DISPLAY_VIEW:
                 self.setCurrentWidget(self.displayView)
-            case SE.CONTENT_VIEW:
+            case SEnum.CONTENT_VIEW:
                 self.setCurrentWidget(self.contentView)
 
     def updateBgImage(self) -> None:
@@ -118,7 +118,7 @@ class HomeWidget(QStackedWidget):
         )
         self.update()
 
-    def showInfo(self, title: str, content: str):
+    def showInfo(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -129,7 +129,7 @@ class HomeWidget(QStackedWidget):
             showcasePage=self
         )
 
-    def showError(self, title: str, content: str):
+    def showError(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -140,7 +140,7 @@ class HomeWidget(QStackedWidget):
             showcasePage=self
         )
 
-    def showWarning(self, title: str, content: str):
+    def showWarning(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -151,7 +151,7 @@ class HomeWidget(QStackedWidget):
             showcasePage=self
         )
 
-    def showSuccess(self, title: str, content: str):
+    def showSuccess(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """

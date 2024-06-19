@@ -7,7 +7,7 @@
 from abc import ABC
 from typing import Optional
 
-from PySide6.QtCore import QSize, Qt, QObject
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QApplication, QWidget
 from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo

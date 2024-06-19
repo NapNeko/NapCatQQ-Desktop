@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING, Optional
 
-from PySide6.QtCore import QUrl, QUrlQuery, Qt
+from PySide6.QtCore import QUrl, QUrlQuery, Qt, Slot
 from PySide6.QtGui import QPixmap
 from PySide6.QtNetwork import QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import QVBoxLayout
 from creart import it
-from qfluentwidgets import CardWidget, ImageLabel, InfoBar, InfoBarPosition, BodyLabel, setFont, ToolTipFilter
+from qfluentwidgets import CardWidget, ImageLabel, BodyLabel, setFont, ToolTipFilter
 
 from src.Core.Config.ConfigModel import Config
 from src.Core.NetworkFunc import Urls, NetworkFunc
@@ -25,7 +25,7 @@ class BotCard(CardWidget):
         - config 传入的机器人配置
     """
 
-    def __init__(self, config: Config, parent: "BotList" = None):
+    def __init__(self, config: Config, parent: "BotList" = None) -> None:
         super().__init__(parent=parent)
         self.config = config
         self.botWidget: Optional[BotWidget] = None
@@ -34,7 +34,7 @@ class BotCard(CardWidget):
         self._infoLabel()
         self._setLayout()
 
-    def _initWidget(self):
+    def _initWidget(self) -> None:
         """
         ## 初始化卡片并设置自身的一些参数
         """
@@ -43,7 +43,7 @@ class BotCard(CardWidget):
 
         self.clicked.connect(self._clickSlot)
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 布局卡片控件
         """
@@ -59,7 +59,7 @@ class BotCard(CardWidget):
         self.vBoxLayout.setContentsMargins(10, 10, 10, 10)
         self.setLayout(self.vBoxLayout)
 
-    def _infoLabel(self):
+    def _infoLabel(self) -> None:
         """
         ## 卡片展示的一些 Label
         """
@@ -69,7 +69,7 @@ class BotCard(CardWidget):
         self.idLabel.installEventFilter(ToolTipFilter(self.idLabel))
         setFont(self.idLabel, 16)
 
-    def _QQAvatar(self):
+    def _QQAvatar(self) -> None:
         """
         ## 创建展示 QQ头像 的 ImageLabel
         """
@@ -89,7 +89,7 @@ class BotCard(CardWidget):
         replay = it(NetworkFunc).manager.get(request)
         replay.finished.connect(lambda: self._setAvatar(replay))
 
-    def _setAvatar(self, replay: QNetworkReply):
+    def _setAvatar(self, replay: QNetworkReply) -> None:
         """
         ## 设置头像
         """
@@ -107,7 +107,8 @@ class BotCard(CardWidget):
                 content=replay.errorString()
             )
 
-    def _clickSlot(self):
+    @Slot()
+    def _clickSlot(self) -> None:
         """
         当自身被点击时
         """

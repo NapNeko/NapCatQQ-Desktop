@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import CaptionLabel, ToolTipFilter, TitleLabel
+from qfluentwidgets import CaptionLabel, TitleLabel
 
 
 class ContentTopCard(QWidget):
@@ -9,7 +9,7 @@ class ContentTopCard(QWidget):
     ## ContentViewWidget 顶部展示的 InputCard
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent) -> None:
         super().__init__(parent=parent)
 
         # 创建所需控件
@@ -23,7 +23,7 @@ class ContentTopCard(QWidget):
         # 调用方法
         self._setLayout()
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 对内部进行布局
         """

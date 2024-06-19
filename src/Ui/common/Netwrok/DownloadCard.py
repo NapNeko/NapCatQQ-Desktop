@@ -10,9 +10,8 @@ from PySide6.QtCore import Qt, QSize, QUrl, Slot, QThread, Signal
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import (
-    SimpleCardWidget, ImageLabel, TitleLabel, PrimaryPushButton, HyperlinkLabel,
-    FluentIcon, FluentIconBase, CaptionLabel, BodyLabel, setFont, TransparentToolButton,
-    FlyoutView, Flyout, VerticalSeparator, PushButton
+    SimpleCardWidget, ImageLabel, TitleLabel, HyperlinkLabel, FluentIcon, CaptionLabel,
+    BodyLabel, setFont, TransparentToolButton, FlyoutView, Flyout, VerticalSeparator, PushButton
 )
 
 from src.Core.NetworkFunc import Urls, GetNewVersion, Downloader
@@ -29,7 +28,7 @@ class DownloadCardBase(SimpleCardWidget):
         - 此类为基类, 仅仅实现 Ui 具体功能请继承实现
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         """
         ## 初始化控件
         """
@@ -67,7 +66,7 @@ class DownloadCardBase(SimpleCardWidget):
         self.topLayout = QHBoxLayout()  # titleLayout 和 buttonLayout 的布局
         self.infoLayout = QHBoxLayout()  # 信息控件的布局
 
-    def _setLayout(self):
+    def _setLayout(self) -> None:
         """
         ## 设置内部控件的布局
         """
@@ -106,7 +105,7 @@ class InfoWidget(QWidget):
     ## 用于显示 DownloadCardBase 上的信息
     """
 
-    def __init__(self, title: str, value: str, parent=None):
+    def __init__(self, title: str, value: str, parent=None) -> None:
         super().__init__(parent=parent)
         self.titleLabel = CaptionLabel(title, self)
         self.valueLabel = BodyLabel(value, self)
@@ -126,7 +125,7 @@ class NapCatDownloadCard(DownloadCardBase):
     ## 实现 NapCat 的下载卡片
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         """
         ## 初始化控件
         """
@@ -174,7 +173,7 @@ class NapCatDownloadCard(DownloadCardBase):
         self._setLayout()
 
     @staticmethod
-    def _getNCDownloadUrl():
+    def _getNCDownloadUrl() -> QUrl:
         """
         ## 通过系统,平台,匹配下载连接并返回
         """
@@ -188,7 +187,7 @@ class NapCatDownloadCard(DownloadCardBase):
         return download_links.get((cfg.get(cfg.SystemType), cfg.get(cfg.PlatformType)))
 
     @Slot()
-    def _installButtonSlot(self):
+    def _installButtonSlot(self) -> None:
         """
         ## 安装按钮槽函数
         """
@@ -208,7 +207,7 @@ class NapCatDownloadCard(DownloadCardBase):
             self.isRun = True
 
     @Slot(bool)
-    def _install(self, value: bool):
+    def _install(self, value: bool) -> None:
         """
         ## 下载完成后的安装操作
             - value 用于判断是否下载成功
@@ -221,7 +220,7 @@ class NapCatDownloadCard(DownloadCardBase):
             self.installWorker.start()
 
     @Slot(bool)
-    def _installationFinished(self, value: bool):
+    def _installationFinished(self, value: bool) -> None:
         """
         ## 下载完成后的安装操作
             - value 用于判断是否下载成功
@@ -231,7 +230,7 @@ class NapCatDownloadCard(DownloadCardBase):
             self.installButton.hide()
             self.openInstallPathButton.show()
 
-    def _checkInstall(self):
+    def _checkInstall(self) -> None:
         """
         ## 检查是否安装
         """
@@ -241,7 +240,7 @@ class NapCatDownloadCard(DownloadCardBase):
             self.isInstall = True
 
     @Slot()
-    def _shareButtonSlot(self):
+    def _shareButtonSlot(self) -> None:
         """
         ## 分享按钮的槽函数
         """
@@ -267,7 +266,7 @@ class NapCatInstallWorker(QThread):
         self.ncInstallPath = ncInstallPath
         self.zipFilePath = zipFilePath
 
-    def run(self):
+    def run(self) -> None:
         try:
             self._rmOldFile()
             self._unzipFile()
@@ -276,7 +275,7 @@ class NapCatInstallWorker(QThread):
             print(f'Error: {e}')
             self.finished.emit(False)
 
-    def _rmOldFile(self):
+    def _rmOldFile(self) -> None:
         """
         ## 移除老文件(如果有)
         """
@@ -292,7 +291,7 @@ class NapCatInstallWorker(QThread):
             # 如果是文件或其他目录，则删除
             shutil.rmtree(item) if item.is_dir() else item.unlink()
 
-    def _unzipFile(self):
+    def _unzipFile(self) -> None:
         """
         ## 解压到临时目录并移动到安装目录
         """
@@ -332,7 +331,7 @@ class QQDownloadCard(DownloadCardBase):
     ## 实现 QQ 的下载卡片
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         """
         ## 初始化控件
         """
@@ -369,7 +368,7 @@ class QQDownloadCard(DownloadCardBase):
         self._setLayout()
 
     @Slot()
-    def _shareButtonSlot(self):
+    def _shareButtonSlot(self) -> None:
         """
         ## 分享按钮的槽函数
         """
@@ -385,4 +384,3 @@ class QQDownloadCard(DownloadCardBase):
         )
         view = Flyout.make(shareView, self.shareButton, self)
         shareView.closed.connect(view.close)
-
