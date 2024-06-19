@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import time
+import platform
 from enum import Enum
 
 from PySide6.QtCore import QLocale
@@ -57,6 +58,16 @@ class Config(QConfig):
     StartTime = ConfigItem(
         group="Info",
         name="StartTime",
+        default=""
+    )
+    SystemType = ConfigItem(
+        group="Info",
+        name="SystemType",
+        default=""
+    )
+    PlatformType = ConfigItem(
+        group="Info",
+        name="PlatformType",
         default=""
     )
 
@@ -122,3 +133,5 @@ cfg = Config()
 qconfig.load(it(PathFunc).config_path, cfg)
 cfg.set(cfg.StartTime, time.time(), True)
 cfg.set(cfg.NCDVersion, "bate_v0.0.1", True)
+cfg.set(cfg.SystemType, platform.system(), True)
+cfg.set(cfg.PlatformType, platform.machine(), True)
