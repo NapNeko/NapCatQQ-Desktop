@@ -35,8 +35,11 @@ class GetVersion:
         ## 获取 QQ 的版本信息
         """
         try:
+            # 检查 QQPath
+            if (qqPath := it(PathFunc).getQQPath()) is None:
+                return None
             # 获取 package.json 路径并读取
-            package_file_path = it(PathFunc).getQQPath() / "resources/app/package.json"
+            package_file_path = qqPath / "resources/app/package.json"
             with open(str(package_file_path), "r", encoding="utf-8") as f:
                 # 读取参数并返回版本信息
                 package = json.loads(f.read())
