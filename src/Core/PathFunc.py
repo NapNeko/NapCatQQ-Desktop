@@ -85,7 +85,7 @@ class PathFunc:
                 cfg.set(item=cfg.QQPath, value=str(self.qq_path), save=True)
                 return self.qq_path
         except FileNotFoundError:
-            return "No path found"
+            return None
 
     def getNapCatPath(self) -> Path:
         """
