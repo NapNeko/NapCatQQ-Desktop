@@ -155,7 +155,7 @@ class QQVersionCard(VersionCardBase):
 
         if version is None:
             # 如果没有获取到文件就会返回None, 也就代表QQ没有安装
-            self.setToolTip(self.tr("No NapCat path found, please install it"))
+            self.setToolTip(self.tr("No QQ path found, please install it"))
             self.errorBadge.show()
 
         return version if version else "Unknown version"
