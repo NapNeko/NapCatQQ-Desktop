@@ -127,10 +127,10 @@ class GetNewVersion:
 
         # 提取所需的下载链接
         url_dict = {
-            "x86_64": match_x64.captured(1),
-            "AMD64": match_x64.captured(1),
-            "ARM64": match_arm.captured(1),
-            "aarch64": match_arm.captured(1)
+            "x86_64": QUrl(match_x64.captured(1)),
+            "AMD64": QUrl(match_x64.captured(1)),
+            "ARM64": QUrl(match_arm.captured(1)),
+            "aarch64": QUrl(match_arm.captured(1))
         }
 
         # 根据系统架构返回对应的下载链接
