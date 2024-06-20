@@ -68,7 +68,7 @@ class HomeWidget(QStackedWidget):
         """
         ## Start Using 的槽函数
         """
-        self.setCurrentWidget(self.contentView)
+        self.setCurrentWidget(self.downloadView)
 
         if cfg.get(cfg.HideUsGoBtnTips):
             # 是否隐藏提示
