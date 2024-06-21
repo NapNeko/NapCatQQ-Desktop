@@ -58,7 +58,7 @@ class PathFunc:
 
         logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 
-    def getQQPath(self) -> Path | str:
+    def getQQPath(self) -> Path | None:
         """
         获取QQ路径
         """
