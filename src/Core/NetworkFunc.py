@@ -101,6 +101,15 @@ class GetNewVersion:
         # 返回版本信息
         return json.loads(self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)).get("tag_name", None)
 
+    def getNapCatUpdateLog(self):
+        """
+        ## 获取 NapCat 的更新日志
+        """
+        if (response_dict := self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)) is None:
+            return None
+        # 返回版本信息
+        return json.loads(self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)).get("body", None)
+
     def getQQVersion(self):
         """
         ## 获取 QQ 最新版本版本号
