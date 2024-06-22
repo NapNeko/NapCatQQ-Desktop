@@ -12,6 +12,7 @@ from qfluentwidgets import (
     IconInfoBadge, FluentIcon, ToolTipFilter, themeColor, isDarkTheme
 )
 
+from src.Core import timer
 from src.Core.Config import cfg
 
 
@@ -44,23 +45,6 @@ class DashboardBase(QWidget):
 
     def setValue(self, value: int | float) -> None:
         self.progressBar.setValue(value)
-
-    def onMonitor(self) -> None:
-        """
-        ## 打开监控
-        """
-        # 创建 QTimer 对象
-        self.timer = QTimer()
-        # 将计时器超时信号连接到槽函数
-        self.timer.timeout.connect(self._monitor)
-        # 设置计时器每隔 1000 毫秒（即 1 秒）超时一次
-        self.timer.start(1000)
-
-    def _monitor(self) -> None:
-        """
-        ## 监控实现逻辑, 请继承实现
-        """
-        pass
 
     def _setLayout(self) -> None:
         """
@@ -152,9 +136,10 @@ class CPUDashboard(DashboardBase):
         ## 初始化
         """
         super().__init__("CPU", parent)
-        self.onMonitor()
+        self.monitor()
 
-    def _monitor(self) -> None:
+    @timer(1000)
+    def monitor(self) -> None:
         """
         ## 实现监控 CPU 信息
         """
@@ -190,9 +175,10 @@ class MemoryDashboard(DashboardBase):
         ## 初始化
         """
         super().__init__("Memory", parent)
-        self.onMonitor()
+        self.monitor()
 
-    def _monitor(self) -> None:
+    @timer(3000)
+    def monitor(self) -> None:
         """
         ## 实现监控 Memory 信息
         """
@@ -263,22 +249,12 @@ class SystemInfoCard(HeaderCardWidget):
         self.labelLayout = QFormLayout()
 
         # 调用方法
+        self.calculateRunTime()
         self.updateSystemInfo()
-        self.onCalculateRunTime()
         self._setLayout()
 
-    def onCalculateRunTime(self) -> None:
-        """
-        ## 启用计算运行时间
-        """
-        # 创建 QTimer 对象
-        self.timer = QTimer()
-        # 将计时器超时信号连接到槽函数
-        self.timer.timeout.connect(self._calculateRunTime)
-        # 设置计时器每隔 1000 毫秒（即 1 秒）超时一次
-        self.timer.start(1000)
-
-    def _calculateRunTime(self) -> None:
+    @timer(1000)
+    def calculateRunTime(self) -> None:
         """
         ## 计算运行时间
         """

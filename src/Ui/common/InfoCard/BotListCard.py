@@ -11,6 +11,7 @@ from qfluentwidgets import (
 )
 from qfluentwidgets.common.animation import BackgroundAnimationWidget
 
+from src.Core import timer
 from src.Core.Config.ConfigModel import Config
 from src.Core.NetworkFunc import Urls, NetworkFunc
 from src.Ui.BotListPage import BotListWidget
@@ -27,8 +28,6 @@ class BotListCard(HeaderCardWidget):
         ## 初始化控件
         """
         super().__init__(parent=parent)
-        self.timer: Optional[QTimer] = None
-
         # 创建标签和布局
         self.cardLayout = QVBoxLayout()
         self.noBotLabel = BodyLabel(self.tr("No bots were added ＞﹏＜"), self)
@@ -42,7 +41,7 @@ class BotListCard(HeaderCardWidget):
 
         # 调用方法
         self._setLayout()
-        self.onMonitorBots()
+        self.monitorBots()
 
     @staticmethod
     @Slot()
@@ -53,18 +52,8 @@ class BotListCard(HeaderCardWidget):
         from src.Ui.MainWindow.Window import MainWindow
         it(MainWindow).add_widget_button.click()
 
-    def onMonitorBots(self) -> None:
-        """
-        ## 启动监视器 监控机器人列表(BotListWidget 中的 botCardList)是否为空
-        """
-        # 创建 QTimer 对象
-        self.timer = QTimer()
-        # 将计时器超时信号连接到槽函数
-        self.timer.timeout.connect(self._monitorBots)
-        # 设置计时器每隔 2000 毫秒（即 2 秒）超时一次
-        self.timer.start(2000)
-
-    def _monitorBots(self) -> None:
+    @timer(2000)
+    def monitorBots(self) -> None:
         """
         ## 监控机器人列表
         """
@@ -201,20 +190,10 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         # 调用方法
         self._QQAvatar()
         self._setLayout()
-        self.onMonitorBots()
+        self.monitorBots()
 
-    def onMonitorBots(self) -> None:
-        """
-        ## 启动监视器 监视卡片对应的机器人是否有在运行
-        """
-        # 创建 QTimer 对象
-        self.timer = QTimer()
-        # 将计时器超时信号连接到槽函数
-        self.timer.timeout.connect(self._monitorBots)
-        # 设置计时器每隔 2000 毫秒（即 2 秒）超时一次
-        self.timer.start(2000)
-
-    def _monitorBots(self) -> None:
+    @timer(2000)
+    def monitorBots(self) -> None:
         """
         ## 监控机器人列表
         """

@@ -9,6 +9,7 @@ from qfluentwidgets import (
     InfoBadgeManager, ToolTipFilter
 )
 
+from src.Core import timer
 from src.Core.GetVersion import GetVersion
 from src.Core.NetworkFunc import GetNewVersion
 from src.Ui.Icon import NapCatDesktopIcon as NCIcon
@@ -24,7 +25,6 @@ class VersionCardBase(QWidget):
         ## 初始化控件
         """
         super().__init__(parent=parent)
-        self.timer: Optional[QTimer] = None
 
         # 创建要显示的标签和布局
         self.view = SimpleCardWidget(self)
@@ -48,18 +48,6 @@ class VersionCardBase(QWidget):
 
         # 调用方法
         self._setLayout()
-
-    def onCheckUpdates(self) -> None:
-        """
-        ## 启用检查更新, 这部分请继承实现
-        """
-        pass
-
-    def _checkUpdates(self) -> None:
-        """
-        ## 检查更新逻辑函数, 这部分请继承实现
-        """
-        pass
 
     def _setLayout(self) -> None:
         """
@@ -88,22 +76,11 @@ class NapCatVersionCard(VersionCardBase):
     def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version", parent)
         self.contentsLabel.setText(self.getLocalVersion())
-        self.onCheckUpdates()
         # 启动时触发一次检查更新
-        self._checkUpdates()
+        self.checkUpdates()
 
-    def onCheckUpdates(self) -> None:
-        """
-        ## 实现检查更新
-        """
-        # 创建 QTimer 对象
-        self.timer = QTimer()
-        # 将计时器超时信号连接到槽函数
-        self.timer.timeout.connect(self._checkUpdates)
-        # 设置计时器每隔 300000 毫秒（即 5 分钟）超时一次
-        self.timer.start(300000)
-
-    def _checkUpdates(self) -> None:
+    @timer(300000)
+    def checkUpdates(self) -> None:
         """
         ## 检查更新逻辑
         """
