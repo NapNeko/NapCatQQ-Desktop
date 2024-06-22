@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import Optional
 
-from PySide6.QtCore import Qt, QPoint, QTimer
+from PySide6.QtCore import Qt, QPoint, QTimer, Slot
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
 from qfluentwidgets import (
@@ -11,7 +11,6 @@ from qfluentwidgets import (
 
 from src.Core import timer
 from src.Core.GetVersion import GetVersion
-from src.Core.NetworkFunc import GetNewVersion
 from src.Ui.Icon import NapCatDesktopIcon as NCIcon
 
 
@@ -75,44 +74,75 @@ class NapCatVersionCard(VersionCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version", parent)
-        self.contentsLabel.setText(self.getLocalVersion())
+        self.updateSate = False  # 是否有更新标记
+        self.isInstall = False  # 检查是否有安装 NapCat 的标记, False 表示没有安装
         # 启动时触发一次检查更新
+        self.getLocalVersion()
         self.checkUpdates()
 
-    @timer(300000)
+    @timer(3000)
     def checkUpdates(self) -> None:
         """
         ## 检查更新逻辑
         """
         self.warningBadge.hide(), self.errorBadge.hide()
-        if self.contentsLabel.text() == "Unknown Version":
+        if not self.isInstall:
             # 如果本地没有安装 NapCat 则跳过本次检查
+            self.setToolTip(self.tr("You haven't installed NapCat yet, click here to go to the installation page"))
+            self.errorBadge.show()
+            self.updateSate = False
             return
 
-        if (result := it(GetNewVersion).checkUpdate()) is None:
+        if (result := it(GetVersion).checkUpdate()) is None:
             # 如果返回了 None 则代表获取不到远程版本, 添加错误提示
+            print("获取不到远程版本", result)
             self.setToolTip(self.tr("Unable to check for updates, please check your network connection or feedback"))
             self.errorBadge.show()
+            self.updateSate = False
             return
 
         if result["result"]:
             # 如果结果为 True 则代表有更新, 添加更新提示
             self.setToolTip(self.tr(f"Discover new versions({result['remoteVersion']}), please update them in time"))
             self.warningBadge.show()
+            self.updateSate = True
             return
 
-    def getLocalVersion(self) -> str:
+    @timer(3000)
+    def getLocalVersion(self) -> None:
         """
         ## 获取本地版本
         """
-        version = it(GetVersion).getNapCatVersion()
+        if (version := it(GetVersion).napcatLocalVersion) is None:
+            self.isInstall = False
+            self.contentsLabel.setText("Unknown version")
+        else:
+            self.isInstall = True
+            self.contentsLabel.setText(version)
 
-        if version is None:
-            # 如果没有获取到文件就会返回None, 也就代表NapCat没有安装
-            self.setToolTip(self.tr("No NapCat path found, please install it"))
-            self.errorBadge.show()
+    def mousePressEvent(self, event):
+        """
+        ## 重写事件以控制自身点击事件
+        """
+        super().mousePressEvent(event)
+        if self.updateSate:
+            from src.Ui.HomePage.Home import HomeWidget
+            it(HomeWidget).setCurrentWidget(it(HomeWidget).updateView)
 
-        return version if version else "Unknown version"
+        if not self.isInstall:
+            from src.Ui.HomePage.Home import HomeWidget
+            it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
+
+    def enterEvent(self, event):
+        """
+        ## 重写事件以控制鼠标样式
+        """
+        super().enterEvent(event)
+        if self.updateSate or not self.isInstall:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+
 
 
 class QQVersionCard(VersionCardBase):
@@ -124,11 +154,12 @@ class QQVersionCard(VersionCardBase):
         super().__init__(NCIcon.QQ, "QQ Version", "Unknown Version", parent)
         self.contentsLabel.setText(self.getLocalVersion())
 
+    @timer(3000)
     def getLocalVersion(self) -> str:
         """
         ## 获取本地版本
         """
-        version = it(GetVersion).getQQVersion()
+        version = it(GetVersion).QQLocalVersion
 
         if version is None:
             # 如果没有获取到文件就会返回None, 也就代表QQ没有安装

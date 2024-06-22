@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-from loguru import logger
 import shutil
 import zipfile
-from pathlib import Path
 
+from loguru import logger
+from pathlib import Path
 from creart import it
 from typing import Optional
 
@@ -15,7 +15,8 @@ from qfluentwidgets import (
     TransparentToolButton, FlyoutView, Flyout, VerticalSeparator, PushButton, MessageBoxBase, SubtitleLabel
 )
 
-from src.Core.NetworkFunc import Urls, GetNewVersion, Downloader
+from src.Core import timer
+from src.Core.NetworkFunc import Urls, Downloader
 from src.Core.GetVersion import GetVersion
 from src.Core.PathFunc import PathFunc
 from src.Core.Config import cfg
@@ -49,7 +50,7 @@ class DownloadCardBase(SimpleCardWidget):
 
         # 设置控件样式
         self.setFixedHeight(225)
-        self.iconLabel.scaledToWidth(100),
+        self.iconLabel.scaledToWidth(100)
         self.openInstallPathButton.setFixedWidth(140)
         self.descriptionLabel.setWordWrap(True)
         self.shareButton.setFixedSize(32, 32)
@@ -120,6 +121,9 @@ class InfoWidget(QWidget):
         self.setFixedHeight(35)
         self.titleLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
 
+    def setValue(self, text: str):
+        self.valueLabel.setText(text)
+
 
 class NapCatDownloadCard(DownloadCardBase):
     """
@@ -137,9 +141,7 @@ class NapCatDownloadCard(DownloadCardBase):
 
         # 创建控件
         self.downloader = Downloader(self._getNCDownloadUrl(), it(PathFunc).tmp_path)
-        if (version := it(GetNewVersion).getNapCatVersion()) is None:
-            version = self.tr("Unknown")
-        self.versionWidget = InfoWidget(self.tr("Version"), version, self)
+        self.versionWidget = InfoWidget(self.tr("Version"), self.tr("Unknown"), self)
         self.platformWidget = InfoWidget(self.tr("Platform"), cfg.get(cfg.PlatformType), self)
         self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
@@ -170,8 +172,30 @@ class NapCatDownloadCard(DownloadCardBase):
         self.infoLayout.addStretch(1)
         self.versionWidget.vBoxLayout.setContentsMargins(0, 0, 8, 0)
 
-        self._checkInstall()
+        self.checkInstall()
+        self.updateVersion()
         self._setLayout()
+
+    @timer(65000)
+    def updateVersion(self):
+        """
+        ## 更新显示版本和下载器所下载的版本url
+        """
+        self.versionWidget.setValue(it(GetVersion).QQRemoteVersion)
+
+    @timer(3000)
+    def checkInstall(self) -> None:
+        """
+        ## 检查是否安装
+        """
+        if not it(GetVersion).napcatLocalVersion is None:
+            self.installButton.hide()
+            self.openInstallPathButton.show()
+            self.isInstall = True
+        else:
+            self.installButton.show()
+            self.openInstallPathButton.hide()
+            self.isInstall = False
 
     @staticmethod
     def _getNCDownloadUrl() -> QUrl:
@@ -230,15 +254,6 @@ class NapCatDownloadCard(DownloadCardBase):
             self.installButton.setProgressBarState(False)
             self.installButton.hide()
             self.openInstallPathButton.show()
-
-    def _checkInstall(self) -> None:
-        """
-        ## 检查是否安装
-        """
-        if it(GetVersion).getNapCatVersion():
-            self.installButton.hide()
-            self.openInstallPathButton.show()
-            self.isInstall = True
 
     @Slot()
     def _shareButtonSlot(self) -> None:
@@ -342,10 +357,8 @@ class QQDownloadCard(DownloadCardBase):
         self.installMode = False
 
         # 创建控件
-        self.downloader = Downloader(it(GetNewVersion).getQQNewVersionUrl(), it(PathFunc).tmp_path)
-        if (version := it(GetNewVersion).getQQVersion()) is None:
-            version = self.tr("Unknown")
-        self.versionWidget = InfoWidget(self.tr("Version"), version, self)
+        self.downloader = Downloader(path=it(PathFunc).tmp_path)
+        self.versionWidget = InfoWidget(self.tr("Version"), self.tr("Unknown"), self)
         self.platformWidget = InfoWidget(self.tr("Platform"), cfg.get(cfg.PlatformType), self)
         self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
@@ -373,20 +386,39 @@ class QQDownloadCard(DownloadCardBase):
         self.infoLayout.addStretch(1)
         self.versionWidget.vBoxLayout.setContentsMargins(0, 0, 8, 0)
 
-        self._checkInstall()
+        self.checkInstall()
+        self.updateVersion()
         self._setLayout()
 
-    def _checkInstall(self) -> None:
+    @timer(65000)
+    def updateVersion(self):
+        """
+        ## 更新显示版本和下载器所下载的版本url
+        """
+        try:
+            self.versionWidget.setValue(it(GetVersion).QQRemoteVersion)
+            self.downloader.setUrl(it(GetVersion).QQRemoteDownloadUrls[cfg.get(cfg.PlatformType)])
+        except TypeError:
+            it(GetVersion).getQQDownloadUrl()
+            self.updateVersion()
+
+    @timer(3000)
+    def checkInstall(self) -> None:
         """
         ## 检查是否安装
         """
-        if it(GetVersion).getQQVersion():
+        if not it(GetVersion).QQLocalVersion is None:
+            # 如果获取得到版本则表示已安装
             self.openInstallPathButton.clicked.connect(
                 lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(it(PathFunc).getQQPath())))
             )
             self.installButton.hide()
             self.openInstallPathButton.show()
             self.isInstall = True
+        else:
+            self.installButton.show()
+            self.openInstallPathButton.hide()
+            self.isInstall = False
 
     @Slot()
     def _installButtonSlot(self) -> None:
