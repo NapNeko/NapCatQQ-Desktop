@@ -11,9 +11,6 @@ from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression, Signal, Slot, Q
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
 
-from src.Core.GetVersion import GetVersion
-from src.Core.Config import cfg
-
 
 class Urls(Enum):
     """
@@ -119,19 +116,26 @@ class Downloader(QObject):
     finished = Signal(bool)
     errorOccurred = Signal(str, str)
 
-    def __init__(self, url: QUrl, path: Path):
+    def __init__(self, url: QUrl = None, path: Path = None):
         """
         ## 初始化下载器
             - url 下载连接
             - path 下载路径
         """
         super().__init__()
-        self.url: QUrl = url
-        self.path: Path = path
+        self.url: QUrl = url if url else None
+        self.path: Path = path if path else None
 
-        self.request = QNetworkRequest(self.url)
+        self.request = QNetworkRequest(self.url) if self.url else QNetworkRequest()
         self.reply: Optional[QNetworkReply] = None
         self.file: Optional[IO[bytes]] = None
+
+    def setUrl(self, url: QUrl):
+        self.url = url
+        self.request.setUrl(self.url)
+
+    def setPath(self, path: Path):
+        self.path = path
 
     def start(self):
         """
