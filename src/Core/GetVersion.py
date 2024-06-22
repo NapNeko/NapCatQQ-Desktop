@@ -17,7 +17,7 @@ class GetVersion(QObject):
     ## 提供两个方法, 分别获取本地的 NapCat 和 QQ 的版本
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         # 创建属性
         self.napcatLocalVersion: None | str = None
@@ -35,7 +35,7 @@ class GetVersion(QObject):
         self.getLocalNapCatVersion()
         self.getLocalQQVersion()
 
-    def checkUpdate(self):
+    def checkUpdate(self) -> dict | None:
         """
         ## 检查 NapCat 是否有新版本, QQ暂时不支持检测(没有合理的下载指定版本的 api, 直接无脑最新版完事儿了)
         """
@@ -49,12 +49,12 @@ class GetVersion(QObject):
             "remoteVersion": self.napcatRemoteVersion
         }
 
-    @timer(60_000)
+    @timer(15_000)
     @async_request(Urls.NAPCATQQ_REPO_API.value)
-    def getRemoteNapCatUpdate(self, reply):
+    def getRemoteNapCatUpdate(self, reply) -> None:
         """
         ## 获取远程 NapCat 的版本信息和更新日志
-            - 每 1 分钟读取一次并保存到变量中
+            - 每 15 秒读取一次并保存到变量中
         """
         if reply is None:
             # 如果请求失败则放弃覆盖变量
@@ -68,11 +68,12 @@ class GetVersion(QObject):
             logger.error(f"Parsing Json errors, Sending the wrong string:[{reply}]")
             return
 
-    @timer(60_000)
+    @timer(15_000)
     @async_request(Urls.QQ_WIN_DOWNLOAD.value)
-    def getRemoteQQVersion(self, reply):
+    def getRemoteQQVersion(self, reply) -> None:
         """
         ## 获取远程 QQ 版本版本号
+            - 每 15 秒读取一次保存到变量中
         """
         if reply is None:
             # 如果请求失败则放弃覆盖变量
@@ -82,11 +83,12 @@ class GetVersion(QObject):
         version = QRegularExpression(r'"version":\s*"([^"]+)"').match(reply).captured(1)
         self.QQRemoteVersion = version if version else None
 
-    @timer(60_000)
+    @timer(15_000)
     @async_request(Urls.QQ_WIN_DOWNLOAD.value)
-    def getQQDownloadUrl(self, reply):
+    def getQQDownloadUrl(self, reply) -> None:
         """
         ## 获取最新QQ版本下载连接
+            - 每 15 秒读取一次保存到变量中
         """
         if reply is None:
             # 如果请求失败则放弃覆盖变量
@@ -105,10 +107,10 @@ class GetVersion(QObject):
         }
 
     @timer(3000)
-    def getLocalNapCatVersion(self):
+    def getLocalNapCatVersion(self) -> None:
         """
         ## 获取本地 NapCat 的版本信息
-            - 每 1 分钟读取一次并保存到变量中
+            - 每 3 秒读取一次并保存到变量中
         """
         try:
             # 获取 package.json 路径并读取
@@ -122,10 +124,10 @@ class GetVersion(QObject):
             self.napcatLocalVersion = None
 
     @timer(3000)
-    def getLocalQQVersion(self):
+    def getLocalQQVersion(self) -> None:
         """
         ## 获取本地 QQ 的版本信息
-            - 每 1 分钟读取一次并保存到变量中
+            - 每 3 秒读取一次并保存到变量中
         """
         try:
             # 检查 QQPath
