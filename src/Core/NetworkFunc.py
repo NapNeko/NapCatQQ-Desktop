@@ -38,16 +38,26 @@ class Urls(Enum):
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
 
 
-class NetworkFunc:
+class NetworkFunc(QObject):
     """
     ## 软件内部的所有网络请求均通过此类实现
     """
+    response_ready = Signal(QNetworkReply)
 
     def __init__(self):
         """
         ## 创建 QNetworkAccessManager
         """
+        super().__init__()
         self.manager = QNetworkAccessManager()
+
+    def fetchResponse(self, url: QUrl):
+        """
+        ## 发送请求, 请求成功则通过信号返回
+        """
+        request = QNetworkRequest(url)
+        reply = self.manager.get(request)
+        reply.finished.connect(lambda: self.response_ready.emit(reply))
 
 
 class NetworkFuncClassCreator(AbstractCreator, ABC):
