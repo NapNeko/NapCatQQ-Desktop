@@ -2,8 +2,10 @@
 import json
 from abc import ABC
 from enum import Enum
+from functools import wraps
 from pathlib import Path
-from typing import Optional, IO
+from typing import Optional, IO, Callable
+from loguru import logger
 
 from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression, Signal, Slot, QObject
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
@@ -79,117 +81,34 @@ class NetworkFuncClassCreator(AbstractCreator, ABC):
 add_creator(NetworkFuncClassCreator)
 
 
-class GetNewVersion:
+def async_request(url: QUrl) -> Callable[[Callable], Callable]:
     """
-    ## 获取最新版本信息
+    装饰器函数，用于发起异步网络请求并处理响应
+        - url: 请求的URL地址
+        - callable: 装饰后的函数
     """
 
-    @staticmethod
-    def fetchApiResponse(url):
-        """
-        ## 通用的API请求方法
-        """
-        # 创建事件循环和请求, 等待数据返回
-        loop = QEventLoop()
-        reply = it(NetworkFunc).manager.get(QNetworkRequest(url))
-        reply.finished.connect(loop.quit)
-        loop.exec()
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            """ 装饰后函数的包装器，负责发起异步请求并处理响应 """
+            event_loop = QEventLoop()
 
-        # 如果请求失败返回 None
-        if reply.error() != QNetworkReply.NetworkError.NoError:
-            return None
+            def handle_response(reply: QNetworkReply):
+                """ 处理网络请求的响应，根据情况调用被装饰函数或输出错误信息 """
+                if reply.error() == QNetworkReply.NetworkError.NoError:
+                    func(*args, reply=reply.readAll().data().decode(), **kwargs)
+                else:
+                    logger.error(f"Request to {url} failed: {reply.errorString()}")
+                    func(*args, reply=None, **kwargs)
+                event_loop.quit()
 
-        # 返回响应数据
-        return reply.readAll().data().decode().strip()
-
-    def getNapCatVersion(self):
-        """
-        ## 获取 NapCat 的版本信息
-        """
-        if (response_dict := self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)) is None:
-            return None
-        # 返回版本信息
-        return json.loads(self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)).get("tag_name", None)
-
-    def getNapCatUpdateLog(self):
-        """
-        ## 获取 NapCat 的更新日志
-        """
-        if (response_dict := self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)) is None:
-            return None
-        # 返回版本信息
-        return json.loads(self.fetchApiResponse(Urls.NAPCATQQ_REPO_API.value)).get("body", None)
-
-    def getQQVersion(self):
-        """
-        ## 获取 QQ 最新版本版本号
-        """
-        response_data = self.fetchApiResponse(Urls.QQ_WIN_DOWNLOAD.value)
-        if response_data is None:
-            return None
-
-        # 定义正则表达式并匹配
-        version = QRegularExpression(r'"version":\s*"([^"]+)"').match(response_data).captured(1)
-        return version if version else None
-
-    def getQQNewVersionUrl(self):
-        """
-        ## 获取最新QQ版本下载连接
-        """
-        response_data = self.fetchApiResponse(Urls.QQ_WIN_DOWNLOAD.value)
-        if response_data is None:
-            return None
-
-        # 定义正则表达式并匹配
-        match_x64 = QRegularExpression(r'"ntDownloadX64Url":\s*"([^"]+)"').match(response_data)
-        match_arm = QRegularExpression(r'"ntDownloadARMUrl":\s*"([^"]+)"').match(response_data)
-
-        # 提取所需的下载链接
-        url_dict = {
-            "x86_64": QUrl(match_x64.captured(1)),
-            "AMD64": QUrl(match_x64.captured(1)),
-            "ARM64": QUrl(match_arm.captured(1)),
-            "aarch64": QUrl(match_arm.captured(1))
-        }
-
-        # 根据系统架构返回对应的下载链接
-        return url_dict.get(cfg.get(cfg.PlatformType), None)
-
-    def checkUpdate(self):
-        """
-        ## 检查 NapCat 是否有新版本, QQ暂时不支持检测(没有合理的下载指定版本的 api, 直接无脑最新版完事儿了)
-        """
-        remoteVersion = self.getNapCatVersion()
-        localVersion = it(GetVersion).getNapCatVersion()
-
-        if remoteVersion is None:
-            # 如果获取不到远程版本, 则返回 None, Gui那边做ui处理
-            return None
-
-        return {
-            "result": remoteVersion != localVersion,
-            "localVersion": localVersion,
-            "remoteVersion": remoteVersion
-        }
-
-
-class GetNewVersionClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Core.NetworkFunc", "GetNewVersion"),)
-
-    # 静态方法available()，用于检查模块"PathFunc"是否存在，返回值为布尔型。
-    @staticmethod
-    def available() -> bool:
-        return exists_module("src.Core.NetworkFunc")
-
-    # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
-    @staticmethod
-    def create(create_type: [GetNewVersion]) -> GetNewVersion:
-        return GetNewVersion()
-
-
-add_creator(GetNewVersionClassCreator)
+            it(NetworkFunc).response_ready.connect(handle_response)
+            it(NetworkFunc).fetchResponse(url)
+            event_loop.exec()
+            it(NetworkFunc).response_ready.disconnect(handle_response)
+        return wrapper
+    return decorator
 
 
 class Downloader(QObject):
