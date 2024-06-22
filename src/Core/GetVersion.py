@@ -2,14 +2,12 @@
 import json
 from abc import ABC
 from json import JSONDecodeError
-from typing import Optional
+from loguru import logger
 
 from PySide6.QtCore import QObject, QEventLoop, QRegularExpression, QUrl
-from PySide6.QtNetwork import QNetworkRequest, QNetworkReply
 from creart import it, AbstractCreator, CreateTargetInfo, exists_module, add_creator
 
 from src.Core import timer
-from src.Core.Config import cfg
 from src.Core.NetworkFunc import NetworkFunc, Urls, async_request
 from src.Core.PathFunc import PathFunc
 
@@ -61,10 +59,14 @@ class GetVersion(QObject):
         if reply is None:
             # 如果请求失败则放弃覆盖变量
             return
-        # 保存到变量
-        reply_dict = json.loads(reply)
-        self.napcatRemoteVersion = reply_dict.get("tag_name", None)
-        self.napcatUpdateLog = reply_dict.get("body", None)
+        try:
+            # 保存到变量
+            reply_dict = json.loads(reply)
+            self.napcatRemoteVersion = reply_dict.get("tag_name", None)
+            self.napcatUpdateLog = reply_dict.get("body", None)
+        except JSONDecodeError:
+            logger.error(f"Parsing Json errors, Sending the wrong string:[{reply}]")
+            return
 
     @timer(60_000)
     @async_request(Urls.QQ_WIN_DOWNLOAD.value)
