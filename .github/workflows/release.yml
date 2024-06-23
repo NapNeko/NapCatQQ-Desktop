@@ -5,7 +5,8 @@ on:
     tags:
       - "v*"
 permissions:
-  contents: read
+  contents: write
+  discussions: write
 
 jobs:
   build:
@@ -25,10 +26,10 @@ jobs:
     - name: Build Windows Application
       run: |
            pyinstaller main.py -w -F
-    - name: Archive Release
-      uses: thedoctor0/zip-release@0.7.5
+    - name: Release
+      uses: softprops/action-gh-release@v2
       with:
-        type: 'zip'
-        filename: 'release.zip'
-        directory: './dist/main'
-        exclusions: '*.git* /*node_modules/* .editorconfig'
+          draft: true
+          name: NapCat-Desktop
+          files: |
+              dist/*
