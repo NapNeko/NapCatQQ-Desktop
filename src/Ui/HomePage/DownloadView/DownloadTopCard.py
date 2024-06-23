@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from creart import it
 from qfluentwidgets import CaptionLabel, ToolTipFilter, TitleLabel, FluentIcon, TransparentToolButton
 
 
@@ -21,9 +22,20 @@ class DownloadTopCard(QWidget):
         self.labelLayout = QVBoxLayout()
         self.buttonLayout = QHBoxLayout()
 
+        # 连接信号
+        self.returnButton.clicked.connect(self.returnButtonSlot)
+
         # 调用方法
         self._addTooltips()
         self._setLayout()
+
+    @Slot()
+    def returnButtonSlot(self):
+        """
+        ## 返回按钮槽函数
+        """
+        from src.Ui.HomePage.Home import HomeWidget
+        it(HomeWidget).setCurrentWidget(it(HomeWidget).contentView)
 
     def _addTooltips(self) -> None:
         """
