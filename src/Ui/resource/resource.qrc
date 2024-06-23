@@ -46,4 +46,9 @@
         <file>qss/dark/update_log_card.qss</file>
         <file>qss/light/update_log_card.qss</file>
     </qresource>
+
+    <qresource prefix="i18n">
+        <file>i18n/translation.zh_CN.qm</file>
+        <file>i18n/translation.zh_TW.qm</file>
+    </qresource>
 </RCC>
