@@ -39,7 +39,7 @@ class GetVersion(QObject):
         """
         ## 检查 NapCat 是否有新版本, QQ暂时不支持检测(没有合理的下载指定版本的 api, 直接无脑最新版完事儿了)
         """
-        if self.getLocalNapCatVersion is None:
+        if self.napcatRemoteVersion is None:
             # 如果获取不到远程版本, 则返回 None, Gui那边做ui处理
             return None
 
@@ -49,18 +49,17 @@ class GetVersion(QObject):
             "remoteVersion": self.napcatRemoteVersion
         }
 
-    @timer(15_000)
+    @timer(60_000)
     @async_request(Urls.NAPCATQQ_REPO_API.value)
     def getRemoteNapCatUpdate(self, reply) -> None:
         """
         ## 获取远程 NapCat 的版本信息和更新日志
-            - 每 15 秒读取一次并保存到变量中
+            - 每 1 分钟读取一次并保存到变量中
         """
         if reply is None:
             # 如果请求失败则放弃覆盖变量
             return
         try:
-            # 保存到变量
             reply_dict = json.loads(reply)
             self.napcatRemoteVersion = reply_dict.get("tag_name", None)
             self.napcatUpdateLog = reply_dict.get("body", None)
@@ -68,12 +67,12 @@ class GetVersion(QObject):
             logger.error(f"Parsing Json errors, Sending the wrong string:[{reply}]")
             return
 
-    @timer(15_000)
+    @timer(60_000)
     @async_request(Urls.QQ_WIN_DOWNLOAD.value)
     def getRemoteQQVersion(self, reply) -> None:
         """
         ## 获取远程 QQ 版本版本号
-            - 每 15 秒读取一次保存到变量中
+            - 每 1 分钟读取一次并保存到变量中
         """
         if reply is None:
             # 如果请求失败则放弃覆盖变量
@@ -83,12 +82,12 @@ class GetVersion(QObject):
         version = QRegularExpression(r'"version":\s*"([^"]+)"').match(reply).captured(1)
         self.QQRemoteVersion = version if version else None
 
-    @timer(15_000)
+    @timer(60_000)
     @async_request(Urls.QQ_WIN_DOWNLOAD.value)
     def getQQDownloadUrl(self, reply) -> None:
         """
         ## 获取最新QQ版本下载连接
-            - 每 15 秒读取一次保存到变量中
+            - 每 1 分钟读取一次并保存到变量中
         """
         if reply is None:
             # 如果请求失败则放弃覆盖变量
