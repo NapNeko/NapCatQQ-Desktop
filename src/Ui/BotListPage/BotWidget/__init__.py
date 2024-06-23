@@ -52,21 +52,21 @@ class BotWidget(QWidget):
         """
         self.pivot = SegmentedWidget(self)
         self.pivot.addItem(
-            routeKey=self.botInfoPage.objectName(),
-            text=self.tr("Bot info"),
-            onClick=lambda: self.view.setCurrentWidget(self.botInfoPage)
+            routeKey=self.botLogPage.objectName(),
+            text=self.tr("Bot Log"),
+            onClick=lambda: self.view.setCurrentWidget(self.botLogPage)
         )
+        # self.pivot.addItem(
+        #     routeKey=self.botInfoPage.objectName(),
+        #     text=self.tr("Bot info"),
+        #     onClick=lambda: self.view.setCurrentWidget(self.botInfoPage)
+        # )
         self.pivot.addItem(
             routeKey=self.botSetupPage.objectName(),
             text=self.tr("Bot Setup"),
             onClick=lambda: self.view.setCurrentWidget(self.botSetupPage)
         )
-        self.pivot.addItem(
-            routeKey=self.botLogPage.objectName(),
-            text=self.tr("Bot Log"),
-            onClick=lambda: self.view.setCurrentWidget(self.botLogPage)
-        )
-        self.pivot.setCurrentItem(self.botInfoPage.objectName())
+        self.pivot.setCurrentItem(self.botLogPage.objectName())
         self.pivot.setMaximumWidth(300)
 
     def _createView(self) -> None:
@@ -75,8 +75,8 @@ class BotWidget(QWidget):
         """
         # 创建 view 和 页面
         self.view = QStackedWidget()
-        self.botInfoPage = QWidget(self)
-        self.botInfoPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotInfo")
+        # self.botInfoPage = QWidget(self)
+        # self.botInfoPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotInfo")
 
         self.botSetupPage = BotSetupPage(self.config, self)
 
@@ -84,11 +84,11 @@ class BotWidget(QWidget):
         self.botLogPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotLog")
 
         # 将页面添加到 view
-        self.view.addWidget(self.botInfoPage)
+        # self.view.addWidget(self.botInfoPage)
         self.view.addWidget(self.botSetupPage)
         self.view.addWidget(self.botLogPage)
         self.view.setObjectName("BotView")
-        self.view.setCurrentWidget(self.botInfoPage)
+        self.view.setCurrentWidget(self.botLogPage)
         self.view.currentChanged.connect(self._pivotSlot)
 
     def _createButton(self) -> None:
@@ -202,7 +202,7 @@ class BotWidget(QWidget):
 
         self.isRun = False
         self.isLogin = False
-        self.view.setCurrentWidget(self.botInfoPage)
+        self.view.setCurrentWidget(self.botLogPage)
         self.showQRCodeButton.hide()
 
     @Slot()
@@ -355,16 +355,16 @@ class BotWidget(QWidget):
         # 定义页面对应的操作字典
         # 塞一大堆 if-else 是及其不专业的行为(
         page_actions = {
-            self.botInfoPage.objectName(): {
-                'returnListButton': 'show',
-                'updateConfigButton': 'hide',
-                'deleteConfigButton': 'hide',
-                'botSetupSubPageReturnButton': 'hide',
-                'showQRCodeButton': 'hide',
-                'runButton': 'hide' if self.isRun else 'show',
-                'stopButton': 'show' if self.isRun else 'hide',
-                'rebootButton': 'show' if self.isRun else 'hide'
-            },
+            # self.botInfoPage.objectName(): {
+            #     'returnListButton': 'show',
+            #     'updateConfigButton': 'hide',
+            #     'deleteConfigButton': 'hide',
+            #     'botSetupSubPageReturnButton': 'hide',
+            #     'showQRCodeButton': 'hide',
+            #     'runButton': 'hide' if self.isRun else 'show',
+            #     'stopButton': 'show' if self.isRun else 'hide',
+            #     'rebootButton': 'show' if self.isRun else 'hide'
+            # },
             self.botSetupPage.objectName(): {
                 'updateConfigButton': 'show',
                 'deleteConfigButton': 'show',
