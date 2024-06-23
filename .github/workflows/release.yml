@@ -24,7 +24,7 @@ jobs:
         pip install -r requirements.txt
     - name: Build Windows Application
       run: |
-            python -m pyinstaller main.py -w -F
+           pyinstaller main.py -w -F
     - name: Archive Release
       uses: thedoctor0/zip-release@0.7.5
       with:
