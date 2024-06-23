@@ -74,10 +74,21 @@ class NapCatVersionCard(VersionCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version", parent)
+        self._timeout = False  # 计时器启动标记
         self.updateSate = False  # 是否有更新标记
         self.isInstall = False  # 检查是否有安装 NapCat 的标记, False 表示没有安装
         # 启动时触发一次检查更新
         self.getLocalVersion()
+        self._onTimer()
+
+    @timer(10000, True)
+    def _onTimer(self):
+        """
+        ## 延时启动计时器, 等待用于等待网络请求
+        """
+        if not self._timeout:
+            self._timeout = True
+            return
         self.checkUpdates()
 
     @timer(3000)
@@ -95,7 +106,6 @@ class NapCatVersionCard(VersionCardBase):
 
         if (result := it(GetVersion).checkUpdate()) is None:
             # 如果返回了 None 则代表获取不到远程版本, 添加错误提示
-            print("获取不到远程版本", result)
             self.setToolTip(self.tr("Unable to check for updates, please check your network connection or feedback"))
             self.errorBadge.show()
             self.updateSate = False

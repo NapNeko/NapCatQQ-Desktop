@@ -135,6 +135,7 @@ class NapCatDownloadCard(DownloadCardBase):
         ## 初始化控件
         """
         super().__init__(parent=parent)
+        self._timeout = False  # 计时器启动标记
         self.zipFilePath: Optional[Path] = None
         self.isInstall = False
         self.ncInstallPath = it(PathFunc).getNapCatPath()
@@ -173,15 +174,25 @@ class NapCatDownloadCard(DownloadCardBase):
         self.versionWidget.vBoxLayout.setContentsMargins(0, 0, 8, 0)
 
         self.checkInstall()
-        self.updateVersion()
         self._setLayout()
+        self._onTimer()
+
+    @timer(10000, True)
+    def _onTimer(self):
+        """
+        ## 延时启动计时器, 等待用于等待网络请求
+        """
+        if not self._timeout:
+            self._timeout = True
+            return
+        self.updateVersion()
 
     @timer(65000)
     def updateVersion(self):
         """
         ## 更新显示版本和下载器所下载的版本url
         """
-        self.versionWidget.setValue(it(GetVersion).QQRemoteVersion)
+        self.versionWidget.setValue(it(GetVersion).napcatRemoteVersion)
 
     @timer(3000)
     def checkInstall(self) -> None:
@@ -352,6 +363,7 @@ class QQDownloadCard(DownloadCardBase):
         ## 初始化控件
         """
         super().__init__(parent=parent)
+        self._timeout = False  # 计时器启动标记
         self.installExePath: Optional[Path] = None
         self.isInstall = False
         self.installMode = False
@@ -387,8 +399,18 @@ class QQDownloadCard(DownloadCardBase):
         self.versionWidget.vBoxLayout.setContentsMargins(0, 0, 8, 0)
 
         self.checkInstall()
-        self.updateVersion()
         self._setLayout()
+        self._onTimer()
+
+    @timer(10000, True)
+    def _onTimer(self):
+        """
+        ## 延时启动计时器, 等待用于等待网络请求
+        """
+        if not self._timeout:
+            self._timeout = True
+            return
+        self.updateVersion()
 
     @timer(65000)
     def updateVersion(self):
@@ -399,8 +421,8 @@ class QQDownloadCard(DownloadCardBase):
             self.versionWidget.setValue(it(GetVersion).QQRemoteVersion)
             self.downloader.setUrl(it(GetVersion).QQRemoteDownloadUrls[cfg.get(cfg.PlatformType)])
         except TypeError:
-            it(GetVersion).getQQDownloadUrl()
-            self.updateVersion()
+            # 解析失败跳过本次解析
+            return
 
     @timer(3000)
     def checkInstall(self) -> None:
