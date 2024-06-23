@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from PySide6.QtGui import QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import QTextEdit
 from qfluentwidgets import SmoothScrollDelegate, setFont
 from qfluentwidgets.components.widgets.menu import TextEditMenu
@@ -15,6 +16,7 @@ class UpdateLogCard(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.scrollDelegate = SmoothScrollDelegate(self)
+        self.setReadOnly(True)
         StyleSheet.UPDATE_LOG_CARD.apply(self)
         setFont(self)
 
