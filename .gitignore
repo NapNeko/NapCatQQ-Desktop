@@ -12,7 +12,6 @@ test
 /main.spec
 /src/Ui/HomePage/UpdateView/__pycache__
 
-/src/Ui/resource/resource.py
 /src/pysidedeploy.spec
 /src/PatchConfig.json
 
