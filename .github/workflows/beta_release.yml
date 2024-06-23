@@ -1,9 +1,9 @@
-name: Release
+name: Beta_release
 
 on:
   push:
     tags:
-      - "v*"
+      - "beta*"
 permissions:
   contents: write
   discussions: write
@@ -18,18 +18,27 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.11"
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install PyInstaller
         pip install -r requirements.txt
-    - name: Build Windows Application
-      run: |
-           pyinstaller main.py -w -F
+
+    - uses: Nuitka/Nuitka-Action@main
+      name: Build Windows Application
+      with:
+        script-name: main.py
+        onefile: true
+        enable-plugins: pyside6
+        disable-console: true
+        windows-icon-from-ico: src/Ui/resources/image/icon.ico
+
     - name: Release
       uses: softprops/action-gh-release@v2
       with:
           draft: true
-          name: NapCat-Desktop
+          name: "NapCat-Desktop bata*"
           files: |
-              dist/*
+              build/*.exe
+              build/*.bin
+              build/*.app/**/*
