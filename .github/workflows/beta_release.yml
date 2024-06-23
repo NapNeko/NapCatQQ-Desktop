@@ -31,7 +31,7 @@ jobs:
         onefile: true
         enable-plugins: pyside6
         disable-console: true
-        windows-icon-from-ico: ../../src/Ui/resource/image/icon.ico
+        windows-icon-from-ico: src/Ui/resource/image/icon.ico
 
     - name: Release
       uses: softprops/action-gh-release@v2
