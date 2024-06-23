@@ -32,6 +32,7 @@ jobs:
         enable-plugins: pyside6
         disable-console: true
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
+        output-filename: "NapCat-Desktop"
 
     - name: Release
       uses: softprops/action-gh-release@v2
@@ -40,5 +41,3 @@ jobs:
           name: "NapCat-Desktop bata*"
           files: |
               build/*.exe
-              build/*.bin
-              build/*.app/**/*
