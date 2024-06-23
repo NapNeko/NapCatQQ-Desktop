@@ -12,14 +12,15 @@ class ProgressBarButton(PrimaryPushButton):
     ## 带下载进度条的按钮
     """
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, text, parent=None) -> None:
         super().__init__(parent)
         # 创建属性
+        self._text = text
         self._indeterminate = False
         self._testVisible = True
 
         # 创建控件
-        self.setText(self.tr("Install"))
+        self.setText(self._text)
         self._progressRing = ProgressRing(self)
         self._indeterminateProgressRing = IndeterminateProgressRing(self)
         self._viewLayout = QHBoxLayout(self)
@@ -56,7 +57,7 @@ class ProgressBarButton(PrimaryPushButton):
         if self._testVisible:
             self._indeterminateProgressRing.hide()
             self._progressRing.hide()
-            self.setText(self.tr("Install"))
+            self.setText(self._text)
         else:
             self.setProgressBarState(self._indeterminate)
             self.setText("")

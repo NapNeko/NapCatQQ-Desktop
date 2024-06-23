@@ -43,7 +43,7 @@ class DownloadCardBase(SimpleCardWidget):
         self.iconLabel = ImageLabel(":Global/logo.png", self)
         self.nameLabel = TitleLabel(self)
         self.openInstallPathButton = PushButton(self.tr("Open file path"), self)
-        self.installButton = ProgressBarButton(self)
+        self.installButton = ProgressBarButton(self.tr("Install"), self)
         self.companyLabel = HyperlinkLabel(self)
         self.descriptionLabel = BodyLabel(self)
         self.shareButton = TransparentToolButton(FluentIcon.SHARE, self)
