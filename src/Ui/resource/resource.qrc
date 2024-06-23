@@ -6,6 +6,16 @@
         <file>image/Global/image_1.jpg</file>
     </qresource>
 
+    <qresource prefix="1920_540">
+        <file>image/1920_540/image_1.png</file>
+        <file>image/1920_540/image_2.png</file>
+        <file>image/1920_540/image_3.png</file>
+        <file>image/1920_540/image_4.png</file>
+        <file>image/1920_540/image_5.png</file>
+        <file>image/1920_540/image_6.png</file>
+        <file>image/1920_540/image_7.png</file>
+    </qresource>
+
     <qresource prefix="Icon">
         <file>image/Icon/black/Logo.svg</file>
         <file>image/Icon/white/Logo.svg</file>
