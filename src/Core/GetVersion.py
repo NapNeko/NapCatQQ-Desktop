@@ -44,7 +44,7 @@ class GetVersion(QObject):
             return None
 
         return {
-            "result": self.napcatRemoteVersion != self.getLocalNapCatVersion,
+            "result": self.napcatRemoteVersion != self.napcatLocalVersion,
             "localVersion": self.getLocalNapCatVersion,
             "remoteVersion": self.napcatRemoteVersion
         }
