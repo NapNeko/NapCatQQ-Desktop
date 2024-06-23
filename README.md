@@ -1,4 +1,4 @@
-![NapCatQQ-Desktop](https://socialify.git.ci/HeartfeltJoy/NapCatQQ-Desktop/image?font=Raleway&logo=https%3A%2F%2Fraw.githubusercontent.com%2FNapNeko%2FNapCatQQ%2Fmain%2Flogo.png&name=1&pattern=Circuit%20Board&theme=Auto)
+![NapCatQQ-Desktop](https://socialify.git.ci/HeartfeltJoy/NapCatQQ-Desktop/image?font=Raleway&logo=https%3A%2F%2Fraw.githubusercontent.com%2FNapNeko%2FNapCatQQ%2Fmain%2Flogo.png&name=1&pattern=Circuit%20Board&stargazers=1&theme=Auto)
 
 
 ## 关于项目
@@ -8,6 +8,9 @@
 ## 如何使用
 现在核心功能已经开发完毕, 如果想使用请在 Actions 下载测试版, 目前还在测 bug 🥰
 
+## TODO
+ - 实现引导(新手指引, 指引安装 NapCat, QQ 等)
+ - 自动更新
 
 ## 许可证
 
