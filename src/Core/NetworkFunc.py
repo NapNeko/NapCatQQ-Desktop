@@ -4,7 +4,7 @@ from abc import ABC
 from enum import Enum
 from functools import wraps
 from pathlib import Path
-from typing import Optional, IO, Callable
+from typing import Optional, IO, Callable, Any
 from loguru import logger
 
 from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression, Signal, Slot, QObject
@@ -50,14 +50,6 @@ class NetworkFunc(QObject):
         super().__init__()
         self.manager = QNetworkAccessManager()
 
-    def fetchResponse(self, url: QUrl):
-        """
-        ## 发送请求, 请求成功则通过信号返回
-        """
-        request = QNetworkRequest(url)
-        reply = self.manager.get(request)
-        reply.finished.connect(lambda: self.response_ready.emit(reply))
-
 
 class NetworkFuncClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
@@ -78,32 +70,42 @@ class NetworkFuncClassCreator(AbstractCreator, ABC):
 add_creator(NetworkFuncClassCreator)
 
 
-def async_request(url: QUrl) -> Callable[[Callable], Callable]:
+def async_request(url: QUrl) -> Callable[[Callable[..., None]], Callable[..., None]]:
     """
-    装饰器函数，用于发起异步网络请求并处理响应
-        - url: 请求的URL地址
-        - callable: 装饰后的函数
+    装饰器函数，用于装饰其他函数，使其在QUrl请求完成后执行
+        - url (QUrl): 用于进行网络请求的QUrl对象。
     """
-
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            """ 装饰后函数的包装器，负责发起异步请求并处理响应 """
-            event_loop = QEventLoop()
-
-            def handle_response(reply: QNetworkReply):
-                """ 处理网络请求的响应，根据情况调用被装饰函数或输出错误信息 """
-                if reply.error() == QNetworkReply.NetworkError.NoError:
-                    func(*args, reply=reply.readAll().data().decode(), **kwargs)
+    def decorator(func: Callable[..., None]) -> Callable[..., None]:
+        """
+        装饰器内部函数，用于接收被装饰的函数
+            - func (Callable): 被装饰的函数
+        """
+        def wrapper(*args: Any, **kwargs: Any) -> None:
+            """
+            包装函数，用于执行网络请求并在请求完成后调用被装饰的函数。
+                - *args: 传递给被装饰函数的位置参数
+                - **kwargs: 传递给被装饰函数的关键字参数
+            """
+            def on_finished(_reply: QNetworkReply) -> None:
+                """
+                请求完成后的回调函数，读取响应并调用被装饰的函数。
+                    - reply (QNetworkReply): 网络响应对象
+                """
+                if _reply.error() == QNetworkReply.NetworkError.NoError:
+                    # 调用被装饰的函数并传递响应数据
+                    func(*args, reply=_reply.readAll().data().decode().strip(), *kwargs)
                 else:
-                    logger.error(f"Request to {url} failed: {reply.errorString()}")
-                    func(*args, reply=None, **kwargs)
-                event_loop.quit()
+                    func(*args, reply=None, *kwargs)
+                    logger.error(f"Error: {_reply.errorString()}")
+                # 清理回复对象
+                _reply.deleteLater()
 
-            it(NetworkFunc).response_ready.connect(handle_response)
-            it(NetworkFunc).fetchResponse(url)
-            event_loop.exec()
-            it(NetworkFunc).response_ready.disconnect(handle_response)
+            # 创建并发送网络请求
+            request = QNetworkRequest(url)
+            reply = it(NetworkFunc).manager.get(request)
+            # 连接请求完成信号到回调函数
+            reply.finished.connect(lambda: on_finished(reply))
+
         return wrapper
     return decorator
 
