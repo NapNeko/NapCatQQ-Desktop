@@ -61,6 +61,27 @@ class BotListWidget(QWidget):
         self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
         self.setLayout(self.vBoxLayout)
 
+    def stopAllBot(self):
+        """
+        ## 停止所有 bot
+        """
+        for bot in self.botList.botCardList:
+            if not bot.botWidget:
+                continue
+            if bot.botWidget.isRun:
+                bot.botWidget.stopButton.click()
+
+    def getBotIsRun(self):
+        """
+        ## 获取是否有 bot 正在运行
+        """
+        for bot in self.botList.botCardList:
+            if not bot.botWidget:
+                # 如果没有创建则表示没有运行
+                continue
+            if bot.botWidget.isRun:
+                return True
+
     def showInfo(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
