@@ -17,12 +17,12 @@ from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
 from qfluentwidgets.window import MSFluentWindow, SplashScreen
 
-from src.Ui.resource import resource
-from src.Ui.MainWindow.TitleBar import CustomTitleBar
-from src.Ui.SetupPage import SetupWidget
-from src.Ui.HomePage import HomeWidget
+from src.Core.Config import cfg
 from src.Ui.AddPage import AddWidget
 from src.Ui.BotListPage import BotListWidget
+from src.Ui.HomePage import HomeWidget
+from src.Ui.MainWindow.TitleBar import CustomTitleBar
+from src.Ui.SetupPage import SetupWidget
 
 
 class MainWindow(MSFluentWindow):
@@ -56,6 +56,9 @@ class MainWindow(MSFluentWindow):
         # 组件加载完成结束 SplashScreen
         self.splashScreen.finish()
         logger.success("窗体构建完成")
+
+        # 检查 EULA
+        self.showEULA()
 
     def setWindow(self) -> None:
         """
@@ -122,6 +125,26 @@ class MainWindow(MSFluentWindow):
         ## 窗口创建完成进行一些处理
         """
         self.bot_list_widget.botList.updateList()
+
+    def showEULA(self):
+        """
+        ## 检测用户是否同意EULA
+        """
+        if cfg.get(cfg.EULA):
+            return
+        from src.Core.EULA import EULAMessageBox
+        self.home_widget_button.setEnabled(False)
+        self.add_widget_button.setEnabled(False)
+        self.bot_list_widget_button.setEnabled(False)
+        self.setup_widget_button.setEnabled(False)
+        if EULAMessageBox(self.home_widget).exec():
+            self.home_widget_button.setEnabled(True)
+            self.add_widget_button.setEnabled(True)
+            self.bot_list_widget_button.setEnabled(True)
+            self.setup_widget_button.setEnabled(True)
+            cfg.set(cfg.EULA, True, True)
+        else:
+            self.close()
 
     @staticmethod
     def showInfo(title: str, content: str, showcasePage: QWidget) -> None:

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-import time
 import platform
+import time
 from enum import Enum
 
 from PySide6.QtCore import QLocale
@@ -69,6 +69,12 @@ class Config(QConfig):
         group="Info",
         name="PlatformType",
         default=""
+    )
+    EULA = ConfigItem(
+        group="Info",
+        name="EULA",
+        default=False,
+        validator=BoolValidator()
     )
 
     # 路径项
