@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-from typing import Optional
 
-from PySide6.QtCore import Qt, QPoint, QTimer, Slot
+from PySide6.QtCore import Qt, QPoint
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
 from qfluentwidgets import (
@@ -99,8 +98,6 @@ class NapCatVersionCard(VersionCardBase):
         self.warningBadge.hide(), self.errorBadge.hide()
         if not self.isInstall:
             # 如果本地没有安装 NapCat 则跳过本次检查
-            self.setToolTip(self.tr("You haven't installed NapCat yet, click here to go to the installation page"))
-            self.errorBadge.show()
             self.updateSate = False
             return
 
@@ -126,8 +123,11 @@ class NapCatVersionCard(VersionCardBase):
         if (version := it(GetVersion).napcatLocalVersion) is None:
             self.isInstall = False
             self.contentsLabel.setText("Unknown version")
+            self.setToolTip(self.tr("You haven't installed NapCat yet, click here to go to the installation page"))
+            self.errorBadge.show()
         else:
             self.isInstall = True
+            self.setToolTip("")
             self.contentsLabel.setText(version)
 
     def mousePressEvent(self, event):
@@ -152,7 +152,6 @@ class NapCatVersionCard(VersionCardBase):
             self.setCursor(Qt.CursorShape.PointingHandCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
-
 
 
 class QQVersionCard(VersionCardBase):
