@@ -29,8 +29,8 @@ class HomeWidget(QStackedWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.contentView: Optional[DisplayViewWidget] = None
-        self.displayView: Optional[ContentViewWidget] = None
+        self.displayView: Optional[DisplayViewWidget] = None
+        self.contentView: Optional[ContentViewWidget] = None
         self.downloadView: Optional[DownloadViewWidget] = None
         self.updateView: Optional[UpdateViewWidget] = None
 
