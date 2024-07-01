@@ -3,7 +3,6 @@
 """
 构建主窗体
 """
-
 from abc import ABC
 from typing import Optional
 
@@ -47,7 +46,6 @@ class MainWindow(MSFluentWindow):
     def initialize(self) -> None:
         """
         ## 初始化程序, 并显示窗体
-        :return:
         """
         self.setWindow()
         self.setItem()

@@ -162,3 +162,62 @@ class LogHighlighter(QSyntaxHighlighter):
             # 设置对应日志级别的格式
             test_format.setForeground(self.formats[log_level].foreground().color())
             self.setFormat(loglevel_start, loglevel_length, test_format)
+
+
+class NCDLogHighlighter(QSyntaxHighlighter):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+
+        # 初始化不同日志级别的文本格式
+        self.formats = {
+            'SUCCESS': QTextCharFormat(),
+            'DEBUG': QTextCharFormat(),
+            'INFO': QTextCharFormat(),
+            'WARN': QTextCharFormat(),
+            'ERROR': QTextCharFormat(),
+        }
+
+        # 设置每个日志级别的前景色
+        self.formats['SUCCESS'].setForeground(QColor(Qt.GlobalColor.darkGreen))
+        self.formats['DEBUG'].setForeground(QColor(Qt.GlobalColor.darkRed))
+        self.formats['INFO'].setForeground(QColor(Qt.GlobalColor.darkBlue))
+        self.formats['WARN'].setForeground(QColor(Qt.GlobalColor.darkYellow))
+        self.formats['ERROR'].setForeground(QColor(Qt.GlobalColor.red))
+
+        # 定义日志级别的顺序
+        self.log_levels = ['SUCCESS', 'DEBUG', 'INFO', 'WARN', 'ERROR']
+
+        # 正则表达式模式，用于匹配日志的时间和日志级别
+        self.pattern = QRegularExpression(
+            r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \| (SUCCESS|DEBUG|INFO|WARN|ERROR) \|'
+        )
+
+    def highlightBlock(self, text) -> None:
+        # 创建一个格式化对象，用于应用整行的前景色
+        test_format = QTextCharFormat()
+
+        # 检查当前文本块是否匹配日志级别的模式
+        match = self.pattern.match(text)
+
+        # 如果没有匹配到，直接返回
+        if not match or not match.hasMatch():
+            return
+
+        # 获取时间戳的起始位置和长度
+        timestamp_start = match.capturedStart(1)
+        timestamp_length = match.capturedLength(1)
+
+        # 获取日志级别的起始位置和长度
+        loglevel_start = match.capturedStart(2)
+        loglevel_length = match.capturedLength(2)
+
+        # 应用时间戳的格式
+        test_format.setForeground(QColor(Qt.GlobalColor.darkGreen))
+        self.setFormat(timestamp_start, timestamp_length, test_format)
+
+        # 检查捕获的日志级别是否在预定义列表中
+        log_level = match.captured(2)
+        if log_level in self.log_levels:
+            # 设置对应日志级别的格式
+            test_format.setForeground(self.formats[log_level].foreground().color())
+            self.setFormat(loglevel_start, loglevel_length, test_format)

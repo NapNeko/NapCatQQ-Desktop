@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+import sys
 from functools import wraps
+from pathlib import Path
 from typing import Callable, Any
 
-from PySide6.QtCore import QTimer, QObject
+from PySide6.QtCore import QTimer
+from loguru import logger
 
 
 def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -34,3 +37,31 @@ def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., A
         return wrapper
 
     return decorator
+
+
+def stdout():
+    """
+    ## 调整程序输出
+    """
+    # 获取路径
+    logPath = Path.cwd() / "log"
+    allLogPath = logPath / "ALL.log"
+
+    # 检查路径
+    if not logPath.exists():
+        logPath.mkdir(parents=True, exist_ok=True)
+
+    # 打开文件
+    all_file = open(str(allLogPath), "w", encoding="utf-8")
+
+    # 调整 log
+    # 自定义格式化器
+    custom_format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {message}"
+    # 移除默认的 logger
+    logger.remove()
+    # 添加自定义的 logger
+    logger.add(all_file, format=custom_format)
+
+    # 重定向输出
+    sys.stdout = all_file
+    sys.stderr = all_file

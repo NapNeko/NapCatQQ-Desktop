@@ -1,238 +1,128 @@
 # -*- coding: utf-8 -*-
+import re
 from abc import ABC
-from typing import TYPE_CHECKING, Self
+from pathlib import Path
+from typing import TYPE_CHECKING, Self, Optional
 
-from PySide6.QtCore import Qt, QStandardPaths
-from PySide6.QtWidgets import QWidget, QFileDialog
+from PySide6.QtCore import QThread
+from PySide6.QtWidgets import QWidget, QStackedWidget, QVBoxLayout
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets import ScrollArea
-from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor
-from qfluentwidgets.components import (
-    InfoBar,
-    ExpandLayout,
-    SettingCardGroup,
-    OptionsSettingCard,
-    CustomColorSettingCard,
-    ComboBoxSettingCard,
-    PushSettingCard,
-)
 
-from src.Core.Config import cfg
-from src.Core.PathFunc import PathFunc
-from src.Ui.Icon import NapCatDesktopIcon
+from src.Core import timer
+from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
+from src.Ui.SetupPage.SetupTopCard import SetupTopCard
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.common import CodeEditor
+from src.Ui.common.CodeEditor import NCDLogHighlighter
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class SetupWidget(ScrollArea):
+class SetupWidget(QWidget):
+    """
+    ## 设置页面
+    """
 
-    def __init__(self) -> None:
-        """
-        初始化
-        """
+    def __init__(self):
         super().__init__()
-        self.expand_layout = None
-        self.view = None
+        self.view: Optional[QStackedWidget] = None
+        self.topCard: Optional[SetupTopCard] = None
+        self.setupScrollArea: Optional[SetupScrollArea] = None
+        self.vBoxLayout: Optional[QVBoxLayout] = None
+        self.logWidget: Optional[CodeEditor] = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
-        初始化
+        ## 初始化
         """
         # 创建控件
-        self.view = QWidget()
-        self.expand_layout = ExpandLayout(self.view)
+        self.topCard = SetupTopCard(self)
+        self.vBoxLayout = QVBoxLayout()
+        self._createView()
 
-        # 设置 ScrollArea 和控件
+        # 跳转控件
         self.setParent(parent)
         self.setObjectName("SetupPage")
-        self.setWidget(self.view)
-        self.setWidgetResizable(True)
         self.view.setObjectName("SetupView")
 
-        # 调用方法
-        self._createConfigCards()
-        self._connect_signal()
-        self._setLayout()
+        # 设置布局
+        self.vBoxLayout.addWidget(self.topCard)
+        self.vBoxLayout.addWidget(self.view)
+        self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
+        self.setLayout(self.vBoxLayout)
 
         # 应用样式表
         StyleSheet.SETUP_WIDGET.apply(self)
-
         return self
 
-    def _createConfigCards(self) -> None:
+    def _createView(self) -> None:
         """
-        创建配置项卡片
+        ## 创建并配置 QStackedWidget
         """
+        self.view = QStackedWidget(self)
+        self.setupScrollArea = SetupScrollArea(self)
+        self.logWidget = CodeEditor(self)
+        self.logWidget.setObjectName("NCD-LogWidget")
+        self.highlighter = NCDLogHighlighter(self.logWidget.document())
+        self.updateLogWorker = UpdateLogWorker(self)
+        self.updateLogWorker.start()
+        self.view.addWidget(self.setupScrollArea)
+        self.view.addWidget(self.logWidget)
 
-        # 创建组 - 启动项
-        self.startGroup = SettingCardGroup(title=self.tr("Startup Item"), parent=self.view)
-        self.startOpenHomePageViewCard = OptionsSettingCard(
-            configItem=cfg.StartOpenHomePageView,
-            icon=FluentIcon.COPY,
-            title=self.tr("Switch HomePage View"),
-            content=self.tr("Select the page on your homepage when you start"),
-            texts=[self.tr("A useless display page"), self.tr("Function page")],
-            parent=self.startGroup,
+        self.topCard.pivot.addItem(
+            routeKey=self.setupScrollArea.objectName(),
+            text=self.tr("Settings"),
+            onClick=lambda: self.view.setCurrentWidget(self.setupScrollArea),
+        )
+        self.topCard.pivot.addItem(
+            routeKey=self.logWidget.objectName(),
+            text=self.tr("Log"),
+            onClick=lambda: self.view.setCurrentWidget(self.logWidget)
         )
 
-        # 创建组 - 个性化
-        self.personalGroup = SettingCardGroup(title=self.tr("Personalize"), parent=self.view)
-        # 创建项
-        self.themeCard = OptionsSettingCard(
-            configItem=cfg.themeMode,
-            icon=FluentIcon.BRUSH,
-            title=self.tr("Switch themes"),
-            content=self.tr("Switch the theme of the app"),
-            texts=[self.tr("Light"), self.tr("Dark"), self.tr("Auto")],
-            parent=self.personalGroup,
-        )
-        self.themeColorCard = CustomColorSettingCard(
-            configItem=cfg.themeColor,
-            icon=FluentIcon.PALETTE,
-            title=self.tr("Theme Color"),
-            content=self.tr("Choose a theme color"),
-            parent=self.personalGroup,
-        )
-        self.languageCard = ComboBoxSettingCard(
-            configItem=cfg.language,
-            icon=FluentIcon.LANGUAGE,
-            title=self.tr("Language"),
-            content=self.tr("Set your preferred language for UI"),
-            texts=["简体中文", "繁體中文", "English", self.tr("Use system setting")],
-            parent=self.personalGroup,
-        )
+        # 连接信号并初始化当前标签页
+        self.view.currentChanged.connect(self.onCurrentIndexChanged)
+        self.view.setCurrentWidget(self.setupScrollArea)
+        self.topCard.pivot.setCurrentItem(self.setupScrollArea.objectName())
 
-        # 创建组 - 路径
-        self.pathGroup = SettingCardGroup(title=self.tr("Path"), parent=self.view)
-        self.QQPathCard = PushSettingCard(
-            icon=NapCatDesktopIcon.QQ,
-            title=self.tr("QQ installation path"),
-            content=str(it(PathFunc).getQQPath()),
-            text=self.tr("Choose folder"),
-            parent=self.pathGroup,
-        )
-        self.NapCatPathCard = PushSettingCard(
-            icon=FluentIcon.GITHUB,
-            title=self.tr("NapCat path"),
-            content=str(it(PathFunc).getNapCatPath()),
-            text=self.tr("Choose folder"),
-            parent=self.pathGroup,
-        )
-        self.StartScriptPath = PushSettingCard(
-            icon=FluentIcon.COMMAND_PROMPT,
-            title=self.tr("Start script path"),
-            content=str(it(PathFunc).getStartScriptPath()),
-            text=self.tr("Choose folder"),
-            parent=self.pathGroup
-        )
+    def onCurrentIndexChanged(self, index) -> None:
+        """
+        ## 切换 Pivot 和 view 的槽函数
+        """
+        widget = self.view.widget(index)
+        self.topCard.pivot.setCurrentItem(widget.objectName())
 
-    def _setLayout(self) -> None:
-        """
-        控件布局
-        """
-        # 将卡片添加到组
-        self.startGroup.addSettingCard(self.startOpenHomePageViewCard)
 
-        self.personalGroup.addSettingCard(self.themeCard)
-        self.personalGroup.addSettingCard(self.themeColorCard)
-        self.personalGroup.addSettingCard(self.languageCard)
+class UpdateLogWorker(QThread):
 
-        self.pathGroup.addSettingCard(self.QQPathCard)
-        self.pathGroup.addSettingCard(self.NapCatPathCard)
-        self.pathGroup.addSettingCard(self.StartScriptPath)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        # 添加到布局
-        self.expand_layout.addWidget(self.startGroup)
-        self.expand_layout.addWidget(self.personalGroup)
-        self.expand_layout.addWidget(self.pathGroup)
-        self.expand_layout.setContentsMargins(20, 10, 30, 10)
-        self.view.setLayout(self.expand_layout)
+    def run(self):
+        self.updateLogContent()
 
-    def _connect_signal(self) -> None:
-        """
-        信号处理
-        """
-        # 连接重启提示
-        cfg.appRestartSig.connect(self._showRestartTooltip)
+    @timer(5)
+    def updateLogContent(self):
+        log_file_path = Path.cwd() / "log/ALL.log"
 
-        # 连接启动相关
-        self.startOpenHomePageViewCard.optionChanged.connect(
-            lambda value: cfg.set(cfg.StartOpenHomePageView, value.value, True)
-        )
+        if not log_file_path.exists():
+            return
 
-        # 连接个性化相关
-        self.themeCard.optionChanged.connect(self._themeModeChanged)
-        self.themeColorCard.colorChanged.connect(lambda color: setThemeColor(color, save=True, lazy=True))
+        with open(log_file_path, "r", encoding="utf-8") as file:
+            # 匹配并移除 ANSI 转义码
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            content = ansi_escape.sub('', file.read())
+            # 替换特定字符串
+            content = content.replace(
+                "\n📢 Tips: QFluentWidgets Pro is now released. Click "
+                "https://qfluentwidgets.com/pages/pro to learn more about it.\n\n",
+                ""
+            )
+            # 输出内容
+            it(SetupWidget).logWidget.setPlainText(content)
 
-        # 连接路径相关
-        self.QQPathCard.clicked.connect(self._onQQFolderCardClicked)
-        self.NapCatPathCard.clicked.connect(self._onNapCatFolderCardClicked)
-        self.StartScriptPath.clicked.connect(self._onStartScriptFolderCardClicked)
-
-    def _onQQFolderCardClicked(self) -> None:
-        """
-        选择 QQ 路径的设置卡槽函数
-        """
-        folder = self._selectFolder()
-        if folder:
-            cfg.set(cfg.QQPath, folder, save=True)
-            self.QQPathCard.setContent(folder)
-
-    def _onNapCatFolderCardClicked(self) -> None:
-        """
-        选择 NapCat 路径的设置卡槽函数
-        """
-        folder = self._selectFolder()
-        if folder:
-            cfg.set(cfg.NapCatPath, folder, save=True)
-            self.NapCatPathCard.setContent(folder)
-
-    def _onStartScriptFolderCardClicked(self) -> None:
-        """
-        选择启动脚本存放路径的槽函数
-        """
-        folder = self._selectFolder()
-        if folder:
-            cfg.set(cfg.StartScriptPath, folder, save=True)
-            self.StartScriptPath.setContent(folder)
-
-    def _selectFolder(self) -> str:
-        """
-        选择文件夹的槽函数
-        """
-        folder = QFileDialog.getExistingDirectory(
-            parent=self,
-            caption=self.tr("Choose folder"),
-            dir=QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation),
-        )
-        return folder
-
-    @staticmethod
-    def _themeModeChanged(theme) -> None:
-        """
-        主题切换槽函数
-        """
-        # 最好还是重启下吧，不然有些地方不生效，修也不好修，就很烦
-        cfg.appRestartSig.emit()
-        from src.Ui.MainWindow import MainWindow
-
-        setTheme(cfg.get(theme), save=True)
-        it(MainWindow).home_widget.updateBgImage()
-
-    def _showRestartTooltip(self) -> None:
-        """
-        显示重启提示
-        """
-        InfoBar.success(
-            self.tr("Updated successfully"),
-            self.tr("Configuration takes effect after restart"),
-            orient=Qt.Orientation.Vertical,
-            duration=3000,
-            parent=self,
-        )
 
 
 class SetupWidgetClassCreator(AbstractCreator, ABC):

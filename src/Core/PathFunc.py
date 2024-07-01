@@ -34,27 +34,27 @@ class PathFunc:
 
         if not self.config_dir_path.exists():
             self.config_dir_path.mkdir(parents=True, exist_ok=True)
-            logger.success("Config Path 路径不存在, 已创建")
+            logger.info("Config Path 路径不存在, 已创建")
         elif not self.config_dir_path.is_dir():
             self.config_dir_path.mkdir(parents=True, exist_ok=True)
             logger.warning("存在一个名为 config 的文件, 请检查")
-        logger.success("Config Path 验证完成")
+        logger.info("Config Path 验证完成")
 
         if not self.tmp_path.exists():
             self.tmp_path.mkdir(parents=True, exist_ok=True)
-            logger.success("Tmp Path 路径不存在, 已创建")
+            logger.info("Tmp Path 路径不存在, 已创建")
         elif not self.tmp_path.is_dir():
             self.tmp_path.mkdir(parents=True, exist_ok=True)
             logger.warning("存在一个名为 tmp 的文件, 请检查")
-        logger.success("Tmp Path 验证完成")
+        logger.info("Tmp Path 验证完成")
 
         if not self.start_script.exists():
             self.start_script.mkdir(parents=True, exist_ok=True)
-            logger.success("Start Script 路径不存在, 已创建")
+            logger.info("Start Script 路径不存在, 已创建")
         elif not self.start_script.is_dir():
             self.start_script.mkdir(parents=True, exist_ok=True)
             logger.warning("存在一个名为 Start Script 的文件, 请检查")
-        logger.success("Start Script 验证完成")
+        logger.info("Start Script 验证完成")
 
         logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 

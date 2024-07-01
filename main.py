@@ -1,27 +1,28 @@
 # -*- coding: utf-8 -*-
 import sys
 
-from PySide6.QtCore import QTranslator, QLocale
-from creart import it
-from loguru import logger
-from PySide6.QtWidgets import QApplication
-from qfluentwidgets import FluentTranslator
-
-from src.Core.Config import cfg
-from src.Ui.MainWindow import MainWindow
+from src.Core import stdout
 
 NAPCATQQ_DESKTOP_LOGO = r"""
 
-   _  __                _____         __    ____     ____        ___                __     __              
-  / |/ / ___ _  ___    / ___/ ___ _  / /_  / __ \   / __ \      / _ \  ___   ___   / /__  / /_  ___    ___ 
- /    / / _ `/ / _ \  / /__  / _ `/ / __/ / /_/ /  / /_/ /     / // / / -_) (_-<  /  '_/ / __/ / _ \  / _ \
-/_/|_/  \_,_/ / .__/  \___/  \_,_/  \__/  \___\_\  \___\_\    /____/  \__/ /___/ /_/\_\  \__/  \___/ / .__/
-             /_/                                                                                    /_/    
-
+ +-+-+-+-+-+-+ +-+-+-+-+-+-+-+
+ |N|a|p|C|a|t| |D|e|s|k|t|o|p|
+ +-+-+-+-+-+-+ +-+-+-+-+-+-+-+
 """
 
 
 if __name__ == "__main__":
+    # 调整程序 log 输出
+    stdout()
+    # 启动主程序
+    from src.Core.Config import cfg
+    from src.Ui.MainWindow import MainWindow
+    from qfluentwidgets import FluentTranslator
+    from PySide6.QtCore import QTranslator, QLocale
+    from PySide6.QtWidgets import QApplication
+    from creart import it
+    from loguru import logger
+
     logger.opt(colors=True).info(f"<blue>{NAPCATQQ_DESKTOP_LOGO}</>")
     # 创建app实例
     app = QApplication(sys.argv)
@@ -36,5 +37,6 @@ if __name__ == "__main__":
 
     # 显示窗体
     it(MainWindow).initialize()
+
     # 进入循环
-    app.exec()
+    sys.exit(app.exec())
