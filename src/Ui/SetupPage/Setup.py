@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import re
+import time
 from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Self, Optional
@@ -9,7 +10,6 @@ from PySide6.QtWidgets import QWidget, QStackedWidget, QVBoxLayout
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
 
-from src.Core import timer
 from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
 from src.Ui.StyleSheet import StyleSheet
@@ -101,10 +101,13 @@ class UpdateLogWorker(QThread):
         super().__init__(*args, **kwargs)
 
     def run(self):
-        self.updateLogContent()
+        while True:
+            # 暴力循环算了
+            self.updateLogContent()
+            time.sleep(1)
 
-    @timer(5)
-    def updateLogContent(self):
+    @staticmethod
+    def updateLogContent():
         log_file_path = Path.cwd() / "log/ALL.log"
 
         if not log_file_path.exists():
@@ -122,7 +125,6 @@ class UpdateLogWorker(QThread):
             )
             # 输出内容
             it(SetupWidget).logWidget.setPlainText(content)
-
 
 
 class SetupWidgetClassCreator(AbstractCreator, ABC):
