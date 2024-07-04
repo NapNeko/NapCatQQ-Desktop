@@ -138,6 +138,6 @@ class Config(QConfig):
 cfg = Config()
 qconfig.load(it(PathFunc).config_path, cfg)
 cfg.set(cfg.StartTime, time.time(), True)
-cfg.set(cfg.NCDVersion, "bate_v0.0.1", True)
+cfg.set(cfg.NCDVersion, "beta 1.0.3", True)
 cfg.set(cfg.SystemType, platform.system(), True)
 cfg.set(cfg.PlatformType, platform.machine(), True)

@@ -1,27 +1,30 @@
 # -*- coding: utf-8 -*-
 import shutil
+import textwrap
 import zipfile
-
-from loguru import logger
 from pathlib import Path
-from creart import it
+from string import Template
 from typing import Optional
+from urllib import request
 
 from PySide6.QtCore import Qt, QSize, QUrl, Slot, QThread, Signal, QProcess, QCoreApplication
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QApplication
+from creart import it
+from loguru import logger
 from qfluentwidgets import (
     SimpleCardWidget, ImageLabel, TitleLabel, HyperlinkLabel, FluentIcon, CaptionLabel, BodyLabel, setFont,
-    TransparentToolButton, FlyoutView, Flyout, VerticalSeparator, PushButton, MessageBoxBase, SubtitleLabel
+    TransparentToolButton, FlyoutView, Flyout, VerticalSeparator, PushButton, MessageBoxBase, SubtitleLabel,
+    MessageBox
 )
 
 from src.Core import timer
-from src.Core.NetworkFunc import Urls, Downloader
-from src.Core.GetVersion import GetVersion
-from src.Core.PathFunc import PathFunc
 from src.Core.Config import cfg
-from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
+from src.Core.GetVersion import GetVersion
+from src.Core.NetworkFunc import Urls, Downloader
+from src.Core.PathFunc import PathFunc
 from src.Ui.Icon import NapCatDesktopIcon as NCDIcon
+from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
 
 
 class DownloadCardBase(SimpleCardWidget):
@@ -234,13 +237,27 @@ class NapCatDownloadCard(DownloadCardBase):
             self.installButton.setProgressBarState(False)
             self.installButton.setTestVisible(True)
             self.isRun = False
-        else:
+
+        if self._qqIsInstall():
             # 反之则开始下载等操作
             self.downloader.start()
             self.zipFilePath = it(PathFunc).tmp_path / self.downloader.url.fileName()
             self.installButton.setProgressBarState(False)
             self.installButton.setTestVisible(False)
             self.isRun = True
+
+    def _qqIsInstall(self) -> bool:
+        """
+        ## 检查 QQ 是否安装, 没安装则提示先安装QQ
+            - 9.9.12 修改临时方案需要修改 QQ 代码, 故需要检查 QQ 是否安装
+        """
+        if not it(GetVersion).QQLocalVersion is None:
+            return True
+
+        # 获取为 None 则表示没安装
+        msg = MessageBox(self.tr("Installation failed"), self.tr("Please install QQ first"), self.parent().parent())
+        msg.show()
+        return False
 
     @Slot(bool)
     def _install(self, value: bool) -> None:
@@ -294,13 +311,15 @@ class NapCatInstallWorker(QThread):
         self.zipFilePath = zipFilePath
 
     def run(self) -> None:
-        try:
-            self._rmOldFile()
-            self._unzipFile()
-            self.finished.emit(True)
-        except Exception as e:
-            logger.error(e)
-            self.finished.emit(False)
+        # try:
+        self._rmOldFile()
+        self._unzipFile()
+        self._editQQCode()
+        self._fixQQ()
+        self.finished.emit(True)
+        # except Exception as e:
+        #     logger.error(e)
+        #     self.finished.emit(False)
 
     def _rmOldFile(self) -> None:
         """
@@ -351,6 +370,41 @@ class NapCatInstallWorker(QThread):
         # 删除下载文件和解压出来的文件夹
         shutil.rmtree(self.zipFilePath.parent / self.zipFilePath.stem)
         self.zipFilePath.unlink()
+
+    @staticmethod
+    def _editQQCode() -> None:
+        """
+        ## 修改 QQ 代码
+            - 9.9.12 版本需要
+        """
+        js_code_template = (
+            "const hasNapcatParam = process.argv.includes('--enable-logging');\n"
+            "if (hasNapcatParam) {\n"
+            "    (async () => {\n"
+            "        await import('$module_name');\n"
+            "    })();\n"
+            "} else {\n"
+            "    require('./launcher.node').load('external_index', module);\n"
+            "}\n"
+        )
+        template = Template(js_code_template)
+        index_path = it(PathFunc).getQQPath() / r"resources/app/app_launcher/index.js"
+        nc_path = "file://{}".format(str(it(PathFunc).napcat_path / 'napcat.mjs').replace('\\', '//'))
+        with open(str(index_path), "w", encoding="utf-8") as f:
+            f.write(textwrap.dedent(template.substitute(module_name=nc_path).strip()))
+
+    @staticmethod
+    def _fixQQ():
+        """
+        ## 下载修补 QQ 文件
+            - 一样是临时方法啦~
+            - DLLHijackMethod 仓库地址: https://github.com/LiteLoaderQQNT/QQNTFileVerifyPatch/tree/DLLHijackMethod
+        """
+        with request.urlopen(Urls.QQ_FIX_64.value.url()) as response:
+            data = response.read()
+
+        with open(str(it(PathFunc).getQQPath() / "dbghelp.dll"), "wb") as f:
+            f.write(data)
 
 
 class QQDownloadCard(DownloadCardBase):

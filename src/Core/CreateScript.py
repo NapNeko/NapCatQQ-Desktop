@@ -86,10 +86,8 @@ class CreateScript:
         f'$env:FFMPEG_PATH="{self.config.advanced.ffmpegPath}"'
         if self.config.advanced.ffmpegPath else ''
         }
-        $params = "-q {self.config.bot.QQID}"
         $QQpath = "{Path(self.config.advanced.QQPath) / 'QQ.exe'}"
-        $Bootfile = "{it(PathFunc).getNapCatPath() / "napcat.mjs"}"
-        $command = "chcp 65001; &'$QQpath' $Bootfile $params"
+        $command = f"chcp 65001; &'$QQpath' --enable-logging -q {self.config.bot.QQID}"
         $env:ELECTRON_RUN_AS_NODE = 1
         Start-Process powershell -ArgumentList "-noexit", "-noprofile", "-command", $command
         """
@@ -122,10 +120,9 @@ class CreateScript:
         if self.config.advanced.ffmpegPath else ''
         }
         set QQPath="{Path(self.config.advanced.QQPath) / 'QQ.exe'}"
-        set NapCatPath="{it(PathFunc).getNapCatPath() / "napcat.mjs"}"
         set QQID="{self.config.bot.QQID}"
         set ELECTRON_RUN_AS_NODE=1
-        !QQpath! !NapCatPath! -q !QQID!
+        !QQpath! --enable-logging -q !QQID!
         """
 
         # 创建配置文件

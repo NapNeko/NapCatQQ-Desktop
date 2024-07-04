@@ -12,7 +12,6 @@ from qfluentwidgets import (
     SubtitleLabel, ImageLabel, ToolButton, BodyLabel
 )
 
-from src.Core.Config import cfg
 from src.Core.Config.ConfigModel import Config
 from src.Core.PathFunc import PathFunc
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
@@ -172,7 +171,7 @@ class BotWidget(QWidget):
         self.process = QProcess(self)
         self.process.setEnvironment(self.env)
         self.process.setProgram(str(Path(self.config.advanced.QQPath) / "QQ.exe"))
-        self.process.setArguments([str(Path(cfg.NapCatPath.value) / "napcat.mjs"), "-q", self.config.bot.QQID])
+        self.process.setArguments(["--enable-logging", "-q", self.config.bot.QQID])
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
         self.process.readyReadStandardOutput.connect(self._showQRCode)

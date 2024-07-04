@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
-import json
 from abc import ABC
 from enum import Enum
-from functools import wraps
 from pathlib import Path
 from typing import Optional, IO, Callable, Any
-from loguru import logger
 
-from PySide6.QtCore import QUrl, QEventLoop, QRegularExpression, Signal, Slot, QObject
+from PySide6.QtCore import QUrl, Signal, Slot, QObject
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
+from loguru import logger
 
 
 class Urls(Enum):
@@ -35,6 +33,9 @@ class Urls(Enum):
     QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")
     QQ_WIN_DOWNLOAD = QUrl("https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/windowsDownloadUrl.js")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
+
+    # DLLHijackMethod 下载
+    QQ_FIX_64 = QUrl("https://github.com/LiteLoaderQQNT/QQNTFileVerifyPatch/releases/latest/download/dbghelp_x64.dll")
 
 
 class NetworkFunc(QObject):
@@ -70,7 +71,7 @@ class NetworkFuncClassCreator(AbstractCreator, ABC):
 add_creator(NetworkFuncClassCreator)
 
 
-def async_request(url: QUrl) -> Callable[[Callable[..., None]], Callable[..., None]]:
+def async_request(url: QUrl, _bytes: bool = False) -> Callable[[Callable[..., None]], Callable[..., None]]:
     """
     装饰器函数，用于装饰其他函数，使其在QUrl请求完成后执行
         - url (QUrl): 用于进行网络请求的QUrl对象。
@@ -89,11 +90,15 @@ def async_request(url: QUrl) -> Callable[[Callable[..., None]], Callable[..., No
             def on_finished(_reply: QNetworkReply) -> None:
                 """
                 请求完成后的回调函数，读取响应并调用被装饰的函数。
-                    - reply (QNetworkReply): 网络响应对象
+                    - _reply (QNetworkReply): 网络响应对象
+                    - _bytes (bool): 是否直接返回字节
                 """
                 if _reply.error() == QNetworkReply.NetworkError.NoError:
                     # 调用被装饰的函数并传递响应数据
-                    func(*args, reply=_reply.readAll().data().decode().strip(), *kwargs)
+                    if _bytes:
+                        func(*args, reply=_reply.readAll().data(), *kwargs)
+                    else:
+                        func(*args, reply=_reply.readAll().data().decode().strip(), *kwargs)
                 else:
                     func(*args, reply=None, *kwargs)
                     logger.error(f"Error: {_reply.errorString()}")
