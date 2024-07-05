@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 import re
-import time
 from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Self, Optional
 
-from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QWidget, QStackedWidget, QVBoxLayout
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
 
+from src.Core import timer
 from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
 from src.Ui.StyleSheet import StyleSheet
@@ -27,6 +26,7 @@ class SetupWidget(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.log_file_path = Path.cwd() / "log/ALL.log"
         self.view: Optional[QStackedWidget] = None
         self.topCard: Optional[SetupTopCard] = None
         self.setupScrollArea: Optional[SetupScrollArea] = None
@@ -42,10 +42,13 @@ class SetupWidget(QWidget):
         self.vBoxLayout = QVBoxLayout()
         self._createView()
 
-        # 跳转控件
+        # 调整控件
         self.setParent(parent)
         self.setObjectName("SetupPage")
         self.view.setObjectName("SetupView")
+
+        # 调用一次方法以启动计时器
+        self.updateLogContent()
 
         # 设置布局
         self.vBoxLayout.addWidget(self.topCard)
@@ -66,8 +69,6 @@ class SetupWidget(QWidget):
         self.logWidget = CodeEditor(self)
         self.logWidget.setObjectName("NCD-LogWidget")
         self.highlighter = NCDLogHighlighter(self.logWidget.document())
-        self.updateLogWorker = UpdateLogWorker(self)
-        self.updateLogWorker.start()
         self.view.addWidget(self.setupScrollArea)
         self.view.addWidget(self.logWidget)
 
@@ -94,26 +95,12 @@ class SetupWidget(QWidget):
         widget = self.view.widget(index)
         self.topCard.pivot.setCurrentItem(widget.objectName())
 
-
-class UpdateLogWorker(QThread):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def run(self):
-        while True:
-            # 暴力循环算了
-            self.updateLogContent()
-            time.sleep(1)
-
-    @staticmethod
-    def updateLogContent():
-        log_file_path = Path.cwd() / "log/ALL.log"
-
-        if not log_file_path.exists():
+    @timer(1000)
+    def updateLogContent(self):
+        if not self.log_file_path.exists():
             return
 
-        with open(log_file_path, "r", encoding="utf-8") as file:
+        with open(self.log_file_path, "r", encoding="utf-8") as file:
             # 匹配并移除 ANSI 转义码
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
             content = ansi_escape.sub('', file.read())
