@@ -23,9 +23,7 @@ class CustomTitleBar(MSFluentTitleBar):
 
     def __init__(self, parent: "MainWindow") -> None:
         """
-        自定义一个标题栏控件
-
-        :param parent: MSFluentTitleBar需要指定一个父类
+        ## 自定义一个标题栏控件
         """
         super().__init__(parent)
 

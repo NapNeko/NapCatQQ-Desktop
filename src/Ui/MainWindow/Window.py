@@ -7,11 +7,12 @@ from abc import ABC
 from typing import Optional
 
 from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QWidget
 from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
-from qfluentwidgets import InfoBar, InfoBarPosition, NavigationBarPushButton
+from qfluentwidgets import InfoBar, InfoBarPosition, NavigationBarPushButton, Theme
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
 from qfluentwidgets.window import MSFluentWindow, SplashScreen
@@ -20,6 +21,7 @@ from src.Core.Config import cfg
 from src.Ui.AddPage import AddWidget
 from src.Ui.BotListPage import BotListWidget
 from src.Ui.HomePage import HomeWidget
+from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.SetupPage import SetupWidget
 
@@ -64,6 +66,7 @@ class MainWindow(MSFluentWindow):
         """
         # 标题栏部分
         self.setTitleBar(CustomTitleBar(self))
+        self.setWindowIcon(QIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT)))
         # 窗体大小以及设置打开时居中
         self.setMinimumSize(930, 630)
         desktop = QApplication.screens()[0].availableGeometry()
