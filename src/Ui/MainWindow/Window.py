@@ -6,9 +6,9 @@
 from abc import ABC
 from typing import Optional
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, Slot
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QWidget, QSystemTrayIcon
 from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
@@ -22,6 +22,7 @@ from src.Ui.AddPage import AddWidget
 from src.Ui.BotListPage import BotListWidget
 from src.Ui.HomePage import HomeWidget
 from src.Ui.Icon import NapCatDesktopIcon
+from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.SetupPage import SetupWidget
 
@@ -45,6 +46,8 @@ class MainWindow(MSFluentWindow):
         self.bot_list_widget_button: Optional[NavigationBarPushButton] = None
         self.setup_widget_button: Optional[NavigationBarPushButton] = None
 
+        self.trayIcon: Optional[SystemTrayIcon] = None
+
     def initialize(self) -> None:
         """
         ## 初始化程序, 并显示窗体
@@ -52,7 +55,7 @@ class MainWindow(MSFluentWindow):
         self.setWindow()
         self.setItem()
         self.setPage()
-
+        self.setTrayIcon()
         # 组件加载完成结束 SplashScreen
         self.splashScreen.finish()
         logger.success("窗体构建完成")
@@ -127,6 +130,14 @@ class MainWindow(MSFluentWindow):
         """
         self.bot_list_widget.botList.updateList()
 
+    def setTrayIcon(self):
+        """
+        ## 设置托盘图标
+        """
+        self.trayIcon = SystemTrayIcon(self)
+        self.trayIcon.activated.connect(self.trayIconAction)
+        self.trayIcon.show()
+
     def showEULA(self):
         """
         ## 检测用户是否同意EULA
@@ -146,6 +157,19 @@ class MainWindow(MSFluentWindow):
             cfg.set(cfg.EULA, True, True)
         else:
             self.close()
+
+    @Slot(QSystemTrayIcon)
+    def trayIconAction(self, reason: QSystemTrayIcon):
+        """
+        ## 托盘图标被点击事件
+        """
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self.showNormal() if self.isMinimized() else None
+            self.show() if self.isHidden() else None
+
+    def closeEvent(self, event):
+        self.hide()
+        event.ignore()
 
     @staticmethod
     def showInfo(title: str, content: str, showcasePage: QWidget) -> None:
