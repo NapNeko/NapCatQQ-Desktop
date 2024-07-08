@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import shutil
+import subprocess
 import textwrap
 import zipfile
 from pathlib import Path
@@ -7,6 +8,7 @@ from string import Template
 from typing import Optional
 from urllib import request
 
+import psutil
 from PySide6.QtCore import Qt, QSize, QUrl, Slot, QThread, Signal, QProcess, QCoreApplication
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QApplication
@@ -311,20 +313,23 @@ class NapCatInstallWorker(QThread):
         self.zipFilePath = zipFilePath
 
     def run(self) -> None:
-        # try:
-        self._rmOldFile()
-        self._unzipFile()
-        self._editQQCode()
-        self._fixQQ()
-        self.finished.emit(True)
-        # except Exception as e:
-        #     logger.error(e)
-        #     self.finished.emit(False)
+        try:
+            self._rmOldFile()
+            self._unzipFile()
+            self._killQQ()
+            self._change_folder_permissions()
+            self._editQQCode()
+            self._fixQQ()
+            self.finished.emit(True)
+        except Exception as e:
+            logger.error(e)
+            self.finished.emit(False)
 
     def _rmOldFile(self) -> None:
         """
         ## 移除老文件(如果有)
         """
+        logger.info(f"{'-' * 10} 开始移除旧版 NapCat {'-' * 10}")
         if not self.ncInstallPath.exists():
             # 检查路径是否存在, 不存在则创建
             self.ncInstallPath.mkdir(parents=True, exist_ok=True)
@@ -336,14 +341,18 @@ class NapCatInstallWorker(QThread):
                 continue
             # 如果是文件或其他目录，则删除
             shutil.rmtree(item) if item.is_dir() else item.unlink()
+            logger.info(f"移除 {item}")
+        logger.success("成功删除旧版 NapCat")
 
     def _unzipFile(self) -> None:
         """
         ## 解压到临时目录并移动到安装目录
         """
+        logger.info(f"{'-' * 10} 开始解压新版 NapCat {'-' * 10}")
         # 解压缩文件到临时目录
         with zipfile.ZipFile(str(self.zipFilePath), 'r') as zip_ref:
             zip_ref.extractall(str(it(PathFunc).tmp_path))
+        logger.success("解压成功")
 
         # 记录没有被移动的文件和文件夹
         skipped_items = []
@@ -370,6 +379,37 @@ class NapCatInstallWorker(QThread):
         # 删除下载文件和解压出来的文件夹
         shutil.rmtree(self.zipFilePath.parent / self.zipFilePath.stem)
         self.zipFilePath.unlink()
+        logger.success("移动成功")
+
+    @staticmethod
+    def _killQQ() -> None:
+        """
+        ## 干掉 QQ 的进程
+        """
+        try:
+            logger.info(f"{'-' * 10} 开始干掉 QQ {'-' * 10}")
+            for proc in psutil.process_iter():
+                # 遍历进程
+                if proc.name() == "QQ.exe":
+                    proc.kill()
+                    logger.success(f"成功杀死 QQ({proc.pid}) 进程")
+            logger.success("没有报错, 就当修补成功了!")
+        except Exception as e:
+            logger.error(f"做掉 QQ 的过程中发生了错误: {e}")
+
+    @staticmethod
+    def _change_folder_permissions():
+        """
+        # 修改 QQ 目录权限, 确保能修补
+            - 参考(cv)自 LLOneBot install: https://github.com/Mzdyl/LiteLoaderQQNT_Install/blob/52d80530f50fe6dab156dff7b61a85d10d11b759/install_windows.py#L429-L435
+        """
+        try:
+            logger.info(f"{'-' * 10} 开始修改QQ文件夹权限 {'-' * 10}")
+            cmd = ["icacls", str(it(PathFunc).getQQPath()), "/grant", "everyone:(oi)(ci)(F)", "/t"]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
+            logger.success(f"成功修改文件夹 {str(it(PathFunc).getQQPath())} 的权限。")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"修改文件夹权限时出错: {e}")
 
     @staticmethod
     def _editQQCode() -> None:
@@ -390,8 +430,13 @@ class NapCatInstallWorker(QThread):
         template = Template(js_code_template)
         index_path = it(PathFunc).getQQPath() / r"resources/app/app_launcher/index.js"
         nc_path = "file://{}".format(str(it(PathFunc).napcat_path / 'napcat.mjs').replace('\\', '//'))
-        with open(str(index_path), "w", encoding="utf-8") as f:
-            f.write(textwrap.dedent(template.substitute(module_name=nc_path).strip()))
+        logger.info(f"{'-' * 10} 开始修改QQ代码 {'-' * 10}")
+        try:
+            with open(str(index_path), "w", encoding="utf-8") as f:
+                f.write(textwrap.dedent(template.substitute(module_name=nc_path).strip()))
+                logger.success("修改 QQ 代码成功!")
+        except Exception as e:
+            logger.error(f"修改失败: {e}")
 
     @staticmethod
     def _fixQQ():
@@ -400,11 +445,17 @@ class NapCatInstallWorker(QThread):
             - 一样是临时方法啦~
             - DLLHijackMethod 仓库地址: https://github.com/LiteLoaderQQNT/QQNTFileVerifyPatch/tree/DLLHijackMethod
         """
-        with request.urlopen(Urls.QQ_FIX_64.value.url()) as response:
-            data = response.read()
+        try:
+            logger.info(f"{'-' * 10} 开始修补QQ {'-' * 10}")
+            with request.urlopen(Urls.QQ_FIX_64.value.url()) as response:
+                data = response.read()
+                logger.success("成功下载修补文件")
 
-        with open(str(it(PathFunc).getQQPath() / "dbghelp.dll"), "wb") as f:
-            f.write(data)
+            with open(str(it(PathFunc).getQQPath() / "dbghelp.dll"), "wb") as f:
+                f.write(data)
+                logger.success("修补成功!")
+        except Exception as e:
+            logger.error(f"修补失败 {e}")
 
 
 class QQDownloadCard(DownloadCardBase):
