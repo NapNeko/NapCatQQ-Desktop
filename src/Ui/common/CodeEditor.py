@@ -77,6 +77,14 @@ class CodeEditor(PlainTextEdit):
         rect = QRect(cr.left(), cr.top(), width, cr.height())
         self.line_number_area.setGeometry(rect)
 
+    def setPlainText(self, text):
+        # 保存当前的滚动位置
+        scroll_position = self.verticalScrollBar().value()
+        # 调用父类的 setText 方法更新文本
+        super().setPlainText(text)
+        # 恢复滚动位置
+        self.verticalScrollBar().setValue(scroll_position)
+
     @Slot(int)
     def update_line_number_area_width(self, newBlockCount: int) -> None:
         # 更新行号区域的宽度
