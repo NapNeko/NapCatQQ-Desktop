@@ -33,6 +33,10 @@ jobs:
         disable-console: true
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
         output-filename: "NapCat-Desktop"
+        
+    - name: Enable Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1.13.0
+            
     - name: Add Manifest
       run: |
             mt.exe -manifest ./assets/NapCat-Desktop.exe.manifest -outputresource:./build/NapCat-Desktop.exe;1
