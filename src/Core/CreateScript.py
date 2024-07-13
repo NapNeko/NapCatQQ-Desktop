@@ -230,6 +230,10 @@ class CreateScript:
                 "enable": self.config.connect.reverseWs.enable,
                 "urls": [str(url) for url in self.config.connect.reverseWs.urls],
             },
+            "GroupLocalTime": {
+                "Record": self.config.advanced.GroupLocalTime.Record,
+                "RecordList": self.config.advanced.GroupLocalTime.RecordList
+            },
             "debug": self.config.advanced.debug,
             "heartInterval": self.config.bot.heartInterval,
             "messagePostFormat": self.config.bot.messagePostFormat,

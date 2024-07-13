@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QWidget
 from creart import it
 from qfluentwidgets import ScrollArea, FlowLayout
 
-from src.Core.Config.ConfigModel import Config
+from src.Core.Config.ConfigModel import Config, DEFAULT_CONFIG
 from src.Core.PathFunc import PathFunc
 from src.Ui.BotListPage.BotCard import BotCard
 
@@ -99,20 +99,25 @@ class BotList(ScrollArea):
             # 读取配置列表
             with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
                 bot_configs = json.load(f)
-            if bot_configs:
-                # 如果从文件加载的 bot_config 不为空则执行使用Config和列表表达式解析
-                self.botList: List[Config] = [Config(**config) for config in bot_configs]
-                self.parent().parent().showSuccess(
-                    title=self.tr("Load the list of bots"),
-                    content=self.tr("The list of bots was successfully loaded"),
-                )
-            else:
+
+            if not bot_configs:
                 # 创建信息条
                 self.parent().parent().showInfo(
                     title=self.tr("There are no bot configuration items"),
                     content=self.tr("You'll need to add it in the Add bot page"),
                 )
                 self.botList = []
+                return
+
+            # 检查是否有新配置项并配置默认值
+            bot_configs = [self.updateConfig(config, DEFAULT_CONFIG) for config in bot_configs]
+
+            # 如果从文件加载的 bot_config 不为空则执行使用Config和列表表达式解析
+            self.botList: List[Config] = [Config(**config) for config in bot_configs]
+            self.parent().parent().showSuccess(
+                title=self.tr("Load the list of bots"),
+                content=self.tr("The list of bots was successfully loaded"),
+            )
 
         except FileNotFoundError:
             # 如果文件不存在则创建一个
@@ -126,3 +131,16 @@ class BotList(ScrollArea):
             with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
                 json.dump([], f, indent=4)
             self.botList = []
+
+    def updateConfig(self, user_config, default_config):
+        """
+        ## 这是一个检查是否有新版参数并填入默认值的函数
+        """
+        for key, value in default_config.items():
+            if isinstance(value, dict):
+                # 如果值是字典，则递归调用
+                user_config[key] = self.updateConfig(user_config.get(key, {}), value)
+            else:
+                if key not in user_config:
+                    user_config[key] = value
+        return user_config

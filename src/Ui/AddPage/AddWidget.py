@@ -12,9 +12,8 @@ from creart.creator import AbstractCreator, CreateTargetInfo
 
 from src.Ui.AddPage.Advanced import AdvancedWidget
 from src.Ui.AddPage.BotWidget import BotWidget
-from src.Ui.AddPage.Connect import ConnectWidget
-
 from src.Ui.AddPage.ConfigTopCard import ConfigTopCard
+from src.Ui.AddPage.Connect import ConnectWidget
 from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
@@ -60,8 +59,8 @@ class AddWidget(QWidget):
         """
         self.view = QStackedWidget()
         self.botWidget = BotWidget(self)
-        self.connectWidget = ConnectWidget(self)
-        self.advancedWidget = AdvancedWidget(self)
+        self.connectWidget = ConnectWidget("Add", self)
+        self.advancedWidget = AdvancedWidget("Add", self)
 
         self.view.addWidget(self.botWidget)
         self.view.addWidget(self.connectWidget)

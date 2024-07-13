@@ -61,7 +61,7 @@ class HttpConfig(BaseModel):
     secret: str
     enableHeart: bool
     enablePost: bool
-    postUrls: List[HttpUrl]
+    postUrls: List[Optional[HttpUrl]]
 
     @field_validator("port")
     @staticmethod
@@ -83,7 +83,7 @@ class WsConfig(BaseModel):
 
 class ReverseWsConfig(BaseModel):
     enable: bool
-    urls: List[WebsocketUrl]
+    urls: List[Optional[WebsocketUrl]]
 
 
 class ConnectConfig(BaseModel):
@@ -92,10 +92,16 @@ class ConnectConfig(BaseModel):
     reverseWs: ReverseWsConfig
 
 
+class NCGroupLocalTime(BaseModel):
+    Record: bool
+    RecordList: List[Optional[str]]
+
+
 class AdvancedConfig(BaseModel):
     QQPath: str
     startScriptPath: str
     ffmpegPath: str
+    GroupLocalTime: NCGroupLocalTime
     debug: bool
     localFile2url: bool
     fileLog: bool
@@ -108,3 +114,51 @@ class Config(BaseModel):
     bot: BotConfig
     connect: ConnectConfig
     advanced: AdvancedConfig
+
+
+DEFAULT_CONFIG = {
+    "bot": {
+        "name": "",
+        "QQID": "",
+        "messagePostFormat": "array",
+        "reportSelfMsg": False,
+        "musicSignUrl": "",
+        "heartInterval": "30000",
+        "accessToken": "",
+    },
+    "connect": {
+        "http": {
+            "enable": False,
+            "host": "",
+            "port": "",
+            "secret": "",
+            "enableHeart": False,
+            "enablePost": False,
+            "postUrls": [],
+        },
+        "ws": {
+            "enable": False,
+            "host": "",
+            "port": 3001
+        },
+        "reverseWs": {
+            "enable": False,
+            "urls": []
+        },
+    },
+    "advanced": {
+        "QQPath": "",
+        "startScriptPath": "",
+        "ffmpegPath": "",
+        "GroupLocalTime": {
+            "Record": False,
+            "RecordList": []
+        },
+        "debug": False,
+        "localFile2url": False,
+        "fileLog": False,
+        "consoleLog": False,
+        "fileLogLevel": "debug",
+        "consoleLogLevel": "info"
+    }
+}

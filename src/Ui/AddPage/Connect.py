@@ -22,9 +22,10 @@ class ConnectWidget(ScrollArea):
     ## Connect Item 项对应的 QWidget
     """
 
-    def __init__(self, parent=None, config: ConnectConfig = None) -> None:
+    def __init__(self, identifier, parent=None, config: ConnectConfig = None) -> None:
         super().__init__(parent=parent)
         self.setObjectName("ConnectWidget")
+        self.identifier = identifier
         self.view = QWidget()
         self.cardLayout = ExpandLayout(self)
 
@@ -50,6 +51,7 @@ class ConnectWidget(ScrollArea):
         """
         self.httpConfigCard = HttpConfigCard(self.view)
         self.httpPostUrlCard = UrlCard(
+            identifier=self.identifier,
             icon=FluentIcon.SCROLL,
             title=self.tr("Http Report address"),
             content=self.tr("Set the address for reporting HTTP"),
@@ -63,6 +65,7 @@ class ConnectWidget(ScrollArea):
             parent=self.view,
         )
         self.wsReverseUrlCard = UrlCard(
+            identifier=self.identifier,
             icon=FluentIcon.SCROLL,
             title=self.tr("WebSocket Reverse address"),
             content=self.tr("Reverse WebSocket reporting address"),

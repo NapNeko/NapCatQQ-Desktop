@@ -153,6 +153,9 @@ class ConfigTopCard(QWidget):
             with open(str(bot_config_path), "w", encoding="utf-8") as f:
                 json.dump(bot_configs, f, indent=4)
 
+            # 同时创建bat脚本
+            self._createBatScriptSlot()
+
             # 执行刷新
             it(BotListWidget).botList.updateList()
 

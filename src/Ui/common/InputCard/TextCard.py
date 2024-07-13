@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-from typing import List, TypeVar
+from typing import List
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 from creart import it
-from pydantic import HttpUrl, WebsocketUrl
 from qfluentwidgets import (
     BodyLabel,
     ExpandSettingCard,
@@ -20,29 +19,27 @@ from qfluentwidgets import (
     TransparentToolButton,
 )
 
-T = TypeVar("T", HttpUrl, WebsocketUrl)
 
-
-class UrlItem(QWidget):
+class TextItem(QWidget):
     """
     ## Url Item
     """
 
     removed = Signal(QWidget)
 
-    def __init__(self, url: str, parent=None) -> None:
+    def __init__(self, text: str, parent=None) -> None:
         """
         ## 初始化 item
 
         ### 参数
-            - url: 传入的 url 字符串
+            - text: 传入的 text 字符串
             - parent: 父组件
 
         """
         super().__init__(parent=parent)
-        self.url = url
+        self.text = text
         self.hBoxLayout = QHBoxLayout(self)
-        self.urlLabel = BodyLabel(url, self)
+        self.urlLabel = BodyLabel(text, self)
         self.removeButton = TransparentToolButton(FluentIcon.CLOSE, self)
 
         self.setFixedHeight(55)
@@ -57,9 +54,9 @@ class UrlItem(QWidget):
         self.removeButton.clicked.connect(lambda: self.removed.emit(self))
 
 
-class UrlCard(ExpandSettingCard):
+class TextCard(ExpandSettingCard):
     """
-    ## 上报 Url 列表卡片
+    ## 上报 Text 列表卡片
     """
     # 成功添加 url 的信号
     addSignal = Signal()
@@ -81,29 +78,29 @@ class UrlCard(ExpandSettingCard):
         """
         super().__init__(icon, title, content, parent)
         self.identifier = identifier
-        self.urls: List[str] = []
-        self.urlItemList: List[UrlItem] = []
+        self.texts: List[str] = []
+        self.textItemList: List[TextItem] = []
 
         # 创建所需控件
-        self.addUrlButton = TransparentPushButton(FluentIcon.ADD, self.tr("Add URL"))
+        self.addUrlButton = TransparentPushButton(FluentIcon.ADD, self.tr("Add"))
 
         # 调用方法
         self._initWidget()
 
-    def fillValue(self, values: List[T]) -> None:
-        self.urls = values
-        [self._addUrlItem(str(url)) for url in self.urls]
+    def fillValue(self, values: List[str]) -> None:
+        self.texts = values
+        [self._addUrlItem(url) for url in self.texts]
 
     def getValue(self) -> List[str]:
-        return self.urls
+        return self.texts
 
     def clear(self) -> None:
         """
         清空卡片内容
         """
-        for item in self.urlItemList:
+        for item in self.textItemList:
             self._removeUrl(item)
-        self.urls.clear()
+        self.texts.clear()
 
     def _initWidget(self) -> None:
         """
@@ -118,21 +115,20 @@ class UrlCard(ExpandSettingCard):
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
 
         # 连接信号
-        self.addUrlButton.clicked.connect(self._showUrlInputBox)
+        self.addUrlButton.clicked.connect(self._showTextInputBox)
 
-    def _showUrlInputBox(self) -> None:
+    def _showTextInputBox(self) -> None:
         """
-        显示 URL 输入框
+        显示 Text 输入框
         """
         from src.Ui.AddPage import AddWidget
         from src.Ui.BotListPage.BotListWidget import BotListWidget
-
-        box = UrlInputBox(it(AddWidget)) if self.identifier == "Add" else UrlInputBox(it(BotListWidget))
+        box = TextInputBox(it(AddWidget)) if self.identifier == "Add" else TextInputBox(it(BotListWidget))
         if not box.exec() or not box.urlLineEdit.text():
             # 如果用户取消或输入空字符,则退出函数
             return
 
-        if box.urlLineEdit.text() in self.urls:
+        if box.urlLineEdit.text() in self.texts:
             # 如果用户输入的值已经存在则弹出提示并退出函数
             InfoBar.error(
                 title=self.tr("The URL already exists"),
@@ -144,7 +140,7 @@ class UrlCard(ExpandSettingCard):
             )
             return
 
-        self.urls.append(box.urlLineEdit.text())
+        self.texts.append(box.urlLineEdit.text())
         self._addUrlItem(box.urlLineEdit.text())
         self.setExpand(True)
         self.addSignal.emit()
@@ -155,14 +151,14 @@ class UrlCard(ExpandSettingCard):
         """
         if not self.card.expandButton.isEnabled():
             self.card.expandButton.setEnabled(True)
-        item = UrlItem(url, self.view)
+        item = TextItem(url, self.view)
         item.removed.connect(self._showConfirmDialog)
-        self.urlItemList.append(item)
+        self.textItemList.append(item)
         self.viewLayout.addWidget(item)
         item.show()
         self._adjustViewSize()
 
-    def _showConfirmDialog(self, item: UrlItem) -> None:
+    def _showConfirmDialog(self, item: TextItem) -> None:
         """
         显示确认对话框
         """
@@ -171,26 +167,26 @@ class UrlCard(ExpandSettingCard):
         box = MessageBox(
             title=self.tr("Confirm"),
             content=self.tr(
-                f"Are you sure you want to delete the following URLs?\n\n{item.url}"
+                f"Are you sure you want to delete the following URLs?\n\n{item.text}"
             ),
             parent=it(AddWidget),
         )
         box.yesSignal.connect(lambda: self._removeUrl(item))
         box.exec()
 
-    def _removeUrl(self, item: UrlItem):
+    def _removeUrl(self, item: TextItem):
         """
         移除 Url Item
         """
-        if item.url not in self.urls:
+        if item.text not in self.texts:
             return
 
-        self.urls.remove(item.url)
+        self.texts.remove(item.text)
         self.viewLayout.removeWidget(item)
         item.deleteLater()
         self._adjustViewSize()
 
-        if not len(self.urls):
+        if not len(self.texts):
             self.card.expandButton.clicked.emit()
             self.card.expandButton.setEnabled(False)
             self.emptiedSignal.emit()
@@ -201,14 +197,14 @@ class UrlCard(ExpandSettingCard):
             self.parent().wheelEvent(event)
 
 
-class UrlInputBox(MessageBoxBase):
+class TextInputBox(MessageBoxBase):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.titleLabel = TitleLabel(self.tr("Enter the URL"), self)
+        self.titleLabel = TitleLabel(self.tr("Enter"), self)
         self.urlLineEdit = LineEdit()
 
-        self.urlLineEdit.setPlaceholderText(self.tr("Enter the URL..."))
+        self.urlLineEdit.setPlaceholderText(self.tr("Enter..."))
         self.urlLineEdit.setClearButtonEnabled(True)
 
         # 将组件添加到布局中

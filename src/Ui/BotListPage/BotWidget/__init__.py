@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QProcess, Slot
 from PySide6.QtGui import QTextCursor, QPixmap
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
 from creart import it
+from loguru import logger
 from qfluentwidgets import (
     SegmentedWidget, TransparentToolButton, FluentIcon, ToolTipFilter, PrimaryPushButton, PushButton, MessageBoxBase,
     SubtitleLabel, ImageLabel, ToolButton, BodyLabel
@@ -285,34 +286,38 @@ class BotWidget(QWidget):
         ## 更新按钮的槽函数
         """
         from src.Ui.BotListPage import BotListWidget
+        from src.Core.Config.ConfigModel import DEFAULT_CONFIG
         self.newConfig = Config(**self.botSetupPage.getValue())
 
         # 读取配置列表
         with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
-            bot_configs = [Config(**config) for config in json.load(f)]
+            bot_configs = [it(BotListWidget).botList.updateConfig(config, DEFAULT_CONFIG) for config in json.load(f)]
+            bot_configs = [Config(**config) for config in bot_configs]
 
-        if bot_configs:
-            # 如果从文件加载的 bot_config 不为空则进行更新(为空怎么办呢,我能怎么办,崩了呗bushi
-            for index, config in enumerate(bot_configs):
-                # 遍历配置列表,找到一样则替换
-                if config.bot.QQID == self.newConfig.bot.QQID:
-                    bot_configs[index] = self.newConfig
-                    break
-            # 不可以直接使用 dict方法 转为 dict对象, 内部 WebsocketUrl 和 HttpUrl 不会自动转为 str
-            bot_configs = [json.loads(config.json()) for config in bot_configs]
-            with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
-                json.dump(bot_configs, f, indent=4)
-            # 更新成功提示
-            it(BotListWidget).showSuccess(
-                title=self.tr("Update success"),
-                content=self.tr("The updated configuration is successful")
-            )
-        else:
+        if not bot_configs:
             # 为空报错
+            logger.error(f"机器人列表加载失败 数据为空: {bot_configs}")
             it(BotListWidget).showError(
                 title=self.tr("Update error"),
                 content=self.tr("Data loss within the profile")
             )
+            return
+
+        # 如果从文件加载的 bot_config 不为空则进行更新(为空怎么办呢,我能怎么办,崩了呗bushi
+        for index, config in enumerate(bot_configs):
+            # 遍历配置列表,找到一样则替换
+            if config.bot.QQID == self.newConfig.bot.QQID:
+                bot_configs[index] = self.newConfig
+                break
+        # 不可以直接使用 dict方法 转为 dict对象, 内部 WebsocketUrl 和 HttpUrl 不会自动转为 str
+        bot_configs = [json.loads(config.json()) for config in bot_configs]
+        with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
+            json.dump(bot_configs, f, indent=4)
+        # 更新成功提示
+        it(BotListWidget).showSuccess(
+            title=self.tr("Update success"),
+            content=self.tr("The updated configuration is successful")
+        )
 
     @Slot()
     def _deleteButtonSlot(self) -> None:

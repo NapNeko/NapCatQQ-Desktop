@@ -1,21 +1,17 @@
 # -*- coding: utf-8 -*-
-from typing import TYPE_CHECKING
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 from creart import it
 from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
-from src.Core.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import AdvancedConfig
+from src.Core.PathFunc import PathFunc
 from src.Ui.common.InputCard import (
     SwitchConfigCard,
     FolderConfigCard,
     ComboBoxConfigCard,
+    TextCard
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 class AdvancedWidget(ScrollArea):
@@ -23,9 +19,10 @@ class AdvancedWidget(ScrollArea):
     ## Advance Item 项对应的 QWidget
     """
 
-    def __init__(self, parent=None, config: AdvancedConfig = None) -> None:
+    def __init__(self, identifier, parent=None, config: AdvancedConfig = None) -> None:
         super().__init__(parent=parent)
         self.setObjectName("AdvanceWidget")
+        self.identifier = identifier
         self.view = QWidget()
         self.cardLayout = ExpandLayout(self.view)
 
@@ -65,6 +62,19 @@ class AdvancedWidget(ScrollArea):
             icon=FluentIcon.MUSIC_FOLDER,
             title=self.tr("Specifies ffmpeg path"),
             parent=self.view,
+        )
+        self.groupLocalTimeSwitchCard = SwitchConfigCard(
+            icon=FluentIcon.DATE_TIME,
+            title=self.tr("Local group chat time logging"),
+            content=self.tr("Specifies whether to enable local group chat time recording"),
+            parent=self.view
+        )
+        self.groupLocalTimeListCard = TextCard(
+            identifier=self.identifier,
+            icon=FluentIcon.MENU,
+            title=self.tr("Swarms that need to be recorded"),
+            content=self.tr("Hover over for detailed tips"),
+            parent=self.view
         )
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
@@ -108,10 +118,23 @@ class AdvancedWidget(ScrollArea):
             parent=self.view,
         )
 
+        # 当 GroupLocalTimeList 被删除至空时, 设置为 False
+        self.groupLocalTimeListCard.emptiedSignal.connect(
+            lambda: self.groupLocalTimeSwitchCard.switchButton.setChecked(False)
+        )
+
+        # 隐藏卡片，并设置条件显示
+        self.groupLocalTimeListCard.hide()
+        self.groupLocalTimeSwitchCard.switchButton.checkedChanged.connect(
+            lambda checked: self.groupLocalTimeListCard.show() if checked else self.groupLocalTimeListCard.hide()
+        )
+
         self.cards = [
             self.QQPathCard,
             self.startScriptPathCard,
             self.ffmpegPathCard,
+            self.groupLocalTimeSwitchCard,
+            self.groupLocalTimeListCard,
             self.debugModeCard,
             self.localFile2UrlCard,
             self.fileLogCard,
@@ -127,6 +150,8 @@ class AdvancedWidget(ScrollArea):
         self.QQPathCard.fillValue(self.config.QQPath)
         self.startScriptPathCard.fillValue(self.config.startScriptPath)
         self.ffmpegPathCard.fillValue(self.config.ffmpegPath)
+        self.groupLocalTimeSwitchCard.fillValue(self.config.GroupLocalTime.Record)
+        self.groupLocalTimeListCard.fillValue(self.config.GroupLocalTime.RecordList)
         self.debugModeCard.fillValue(self.config.debug)
         self.localFile2UrlCard.fillValue(self.config.localFile2url)
         self.fileLogCard.fillValue(self.config.fileLog)
@@ -154,6 +179,10 @@ class AdvancedWidget(ScrollArea):
             "QQPath": self.QQPathCard.getValue(),
             "startScriptPath": self.startScriptPathCard.getValue(),
             "ffmpegPath": self.ffmpegPathCard.getValue(),
+            "GroupLocalTime": {
+                "Record": self.groupLocalTimeSwitchCard.getValue(),
+                "RecordList": self.groupLocalTimeListCard.getValue()
+            },
             "debug": self.debugModeCard.getValue(),
             "localFile2url": self.localFile2UrlCard.getValue(),
             "fileLog": self.fileLogCard.getValue(),

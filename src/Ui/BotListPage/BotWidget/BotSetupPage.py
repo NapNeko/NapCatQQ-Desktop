@@ -122,8 +122,8 @@ class BotSetupPage(QWidget):
             子页面直接使用 AddWidget 中的页面
         """
         self.botWidget = BotWidget(self, self.config.bot)
-        self.connectWidget = ConnectWidget(self, self.config.connect)
-        self.advancedWidget = AdvancedWidget(self, self.config.advanced)
+        self.connectWidget = ConnectWidget("Setup", self, self.config.connect)
+        self.advancedWidget = AdvancedWidget("Setup", self, self.config.advanced)
 
         self.botWidget.view.setObjectName("BotListBotSetupView")
         self.connectWidget.view.setObjectName("BotListConnectSetupView")

@@ -49,6 +49,7 @@ class ComboBoxConfigCard(SettingCard):
         self.texts = texts or []
         self.comboBox = ComboBox(self)
         self.comboBox.addItems(self.texts)
+        self.comboBox.setFixedWidth(165)
         self.hBoxLayout.addWidget(self.comboBox, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
