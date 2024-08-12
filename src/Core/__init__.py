@@ -16,6 +16,10 @@ def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., A
         - interval （int）: 计时器应触发的间隔（以毫秒为单位）
         - single_shot （bool）: 如果为 True，则计时器只超时一次, 默认值为 False
 
+    ## 以上你看不懂我就说下人话
+        - 传个函数进来套个 QTimer, 超时调用传入的函数
+        - 至于为什么里面那么多 Any, 这个问题也不需要思考太多
+
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -23,7 +27,7 @@ def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., A
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             instance = args[0]
             if not hasattr(instance, '_timers'):
-                instance._timers = []
+                instance.timers = []
 
             timer_instance = QTimer(instance)
             timer_instance.setInterval(interval)
@@ -31,7 +35,7 @@ def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., A
             timer_instance.timeout.connect(lambda: func(*args, **kwargs))
             timer_instance.start()
 
-            instance._timers.append(timer_instance)  # 将计时器保存到实例变量
+            instance.timers.append(timer_instance)  # 将计时器保存到实例变量
             return func(*args, **kwargs)
 
         return wrapper
