@@ -1,24 +1,22 @@
 # -*- coding: utf-8 -*-
 import random
-
 from pathlib import Path
-from creart import it
 from typing import Optional
 
-from PySide6.QtCore import Qt, QSize, QUrl, Slot, QThread, Signal, QProcess, QCoreApplication
-from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QCursor
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QApplication, QTextEdit
+from PySide6.QtCore import Qt, QSize, QUrl, Slot
+from PySide6.QtGui import QFont, QColor
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
+from creart import it
 from qfluentwidgets import (
     SimpleCardWidget, ImageLabel, TitleLabel, HyperlinkLabel, FluentIcon, CaptionLabel, BodyLabel, setFont,
-    TransparentToolButton, FlyoutView, Flyout, VerticalSeparator, PushButton, MessageBoxBase, SubtitleLabel,
-    FlyoutViewBase, PrimaryPushButton, TextWrap, FlyoutAnimationType, MessageBox
+    TransparentToolButton, Flyout, VerticalSeparator, FlyoutViewBase, FlyoutAnimationType, MessageBox
 )
 
 from src.Core import timer
-from src.Core.NetworkFunc import Urls, Downloader
-from src.Core.GetVersion import GetVersion
-from src.Core.PathFunc import PathFunc
 from src.Core.Config import cfg
+from src.Core.GetVersion import GetVersion
+from src.Core.NetworkFunc import Urls, Downloader
+from src.Core.PathFunc import PathFunc
 from src.Ui.common.InfoCard.UpdateLogCard import UpdateLogCard
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
 from src.Ui.common.Netwrok.DownloadCard import NapCatInstallWorker
@@ -134,7 +132,6 @@ class NapCatUpdateCard(UpdateCardBase):
         ## 初始化控件
         """
         super().__init__(parent=parent)
-        self._timeout = False
         self.isInstall = False
         self.isRun = False
 
@@ -244,12 +241,9 @@ class NapCatUpdateCard(UpdateCardBase):
         """
         ## 延时启动计时器, 等待用于等待网络请求
         """
-        if not self._timeout:
-            self._timeout = True
-            return
         self.checkForUpdates()
 
-    @timer(10_000)
+    @timer(86_400_000)
     def checkForUpdates(self):
         """
         ## 检查是否有更新
@@ -328,6 +322,7 @@ class UpdateFlyoutView(FlyoutViewBase):
         self.closeButton.setFixedSize(32, 32)
         self.closeButton.setIconSize(QSize(12, 12))
         self.logCard.setText("unknown")
+        self.logCard.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self.closeButton.clicked.connect(self.hide)
 
