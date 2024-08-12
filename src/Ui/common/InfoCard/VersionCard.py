@@ -73,21 +73,17 @@ class NapCatVersionCard(VersionCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version", parent)
-        self._timeout = False  # 计时器启动标记
         self.updateSate = False  # 是否有更新标记
         self.isInstall = False  # 检查是否有安装 NapCat 的标记, False 表示没有安装
         # 启动时触发一次检查更新
         self.getLocalVersion()
         self._onTimer()
 
-    @timer(10000, True)
+    @timer(10_000, True)
     def _onTimer(self):
         """
         ## 延时启动计时器, 等待用于等待网络请求
         """
-        if not self._timeout:
-            self._timeout = True
-            return
         self.checkUpdates()
 
     @timer(3000)
@@ -95,7 +91,6 @@ class NapCatVersionCard(VersionCardBase):
         """
         ## 检查更新逻辑
         """
-        self.warningBadge.hide(), self.errorBadge.hide()
         if not self.isInstall:
             # 如果本地没有安装 NapCat 则跳过本次检查
             self.updateSate = False
@@ -107,6 +102,8 @@ class NapCatVersionCard(VersionCardBase):
             self.errorBadge.show()
             self.updateSate = False
             return
+        else:
+            self.errorBadge.hide()
 
         if result["result"]:
             # 如果结果为 True 则代表有更新, 添加更新提示
@@ -114,6 +111,8 @@ class NapCatVersionCard(VersionCardBase):
             self.warningBadge.show()
             self.updateSate = True
             return
+        else:
+            self.warningBadge.hide()
 
     @timer(3000)
     def getLocalVersion(self) -> None:
@@ -135,13 +134,14 @@ class NapCatVersionCard(VersionCardBase):
         ## 重写事件以控制自身点击事件
         """
         super().mousePressEvent(event)
-        if self.updateSate:
-            from src.Ui.HomePage.Home import HomeWidget
-            it(HomeWidget).setCurrentWidget(it(HomeWidget).updateView)
 
         if not self.isInstall:
             from src.Ui.HomePage.Home import HomeWidget
             it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
+            return
+
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).update_widget_button.click()
 
     def enterEvent(self, event):
         """
