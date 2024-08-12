@@ -3,6 +3,7 @@
 """
 构建标题栏
 """
+import ctypes
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QRectF, QPointF
@@ -32,7 +33,7 @@ class CustomTitleBar(MSFluentTitleBar):
         logger.success("标题栏构建完成")
 
     def set_title(self) -> None:
-        self.setTitle("NapCatQQ Desktop")
+        self.setTitle("NapCatQQ Desktop [Admin]" if ctypes.windll.shell32.IsUserAnAdmin() else "NapCatQQ Desktop")
         self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
 
     def set_buttons(self) -> None:
