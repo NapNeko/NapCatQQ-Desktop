@@ -18,7 +18,6 @@ from src.Core.Config import cfg
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
 from src.Ui.HomePage.DownloadView import DownloadViewWidget
-from src.Ui.HomePage.UpdateView import UpdateViewWidget
 from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
@@ -32,7 +31,6 @@ class HomeWidget(QStackedWidget):
         self.displayView: Optional[DisplayViewWidget] = None
         self.contentView: Optional[ContentViewWidget] = None
         self.downloadView: Optional[DownloadViewWidget] = None
-        self.updateView: Optional[UpdateViewWidget] = None
 
         # 加载背景图片
         self.bgPixmap = None
@@ -47,7 +45,6 @@ class HomeWidget(QStackedWidget):
         self.displayView = DisplayViewWidget()
         self.contentView = ContentViewWidget()
         self.downloadView = DownloadViewWidget()
-        self.updateView = UpdateViewWidget()
 
         # 设置控件
         self.setParent(parent)
@@ -55,7 +52,6 @@ class HomeWidget(QStackedWidget):
         self.addWidget(self.displayView)
         self.addWidget(self.contentView)
         self.addWidget(self.downloadView)
-        self.addWidget(self.updateView)
         self.setCurrentWidget(self.contentView)
         self.displayView.goBtnSignal.connect(self._goBtnSlot)
 

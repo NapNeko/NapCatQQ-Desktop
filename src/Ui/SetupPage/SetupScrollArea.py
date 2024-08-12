@@ -61,6 +61,14 @@ class SetupScrollArea(ScrollArea):
             texts=[self.tr("A useless display page"), self.tr("Function page")],
             parent=self.startGroup,
         )
+        self.bootWayCard = ComboBoxSettingCard(
+            configItem=cfg.BootWay,
+            icon=FluentIcon.TAG,
+            title=self.tr("NapCat Startup mode"),
+            content=self.tr("What method to start with NapCat"),
+            texts=["BootWay05", "BootWay03"],
+            parent=self.startGroup,
+        )
 
         # 创建组 - 个性化
         self.personalGroup = SettingCardGroup(title=self.tr("Personalize"), parent=self.view)
@@ -119,6 +127,7 @@ class SetupScrollArea(ScrollArea):
         """
         # 将卡片添加到组
         self.startGroup.addSettingCard(self.startOpenHomePageViewCard)
+        self.startGroup.addSettingCard(self.bootWayCard)
 
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.themeColorCard)
@@ -210,10 +219,11 @@ class SetupScrollArea(ScrollArea):
         """
         显示重启提示
         """
+        from src.Ui.SetupPage.Setup import SetupWidget
         InfoBar.success(
             self.tr("Updated successfully"),
             self.tr("Configuration takes effect after restart"),
             orient=Qt.Orientation.Vertical,
             duration=3000,
-            parent=self,
+            parent=it(SetupWidget),
         )

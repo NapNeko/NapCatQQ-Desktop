@@ -25,6 +25,7 @@ from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.SetupPage import SetupWidget
+from src.Ui.UpdatePage import UpdateWidget
 
 
 class MainWindow(MSFluentWindow):
@@ -35,12 +36,14 @@ class MainWindow(MSFluentWindow):
     def __init__(self) -> None:
         super().__init__()
 
+        self.update_widget: Optional[UpdateWidget] = None
         self.splashScreen: Optional[SplashScreen] = None
         self.setup_widget: Optional[SetupWidget] = None
         self.add_widget: Optional[AddWidget] = None
         self.bot_list_widget: Optional[BotListWidget] = None
         self.home_widget: Optional[HomeWidget] = None
 
+        self.update_widget_button: Optional[NavigationBarPushButton] = None
         self.home_widget_button: Optional[NavigationBarPushButton] = None
         self.add_widget_button: Optional[NavigationBarPushButton] = None
         self.bot_list_widget_button: Optional[NavigationBarPushButton] = None
@@ -92,6 +95,7 @@ class MainWindow(MSFluentWindow):
         self.setup_widget = it(SetupWidget).initialize(self)
         self.add_widget = it(AddWidget).initialize(self)
         self.bot_list_widget = it(BotListWidget).initialize(self)
+        self.update_widget = it(UpdateWidget).initialize(self)
         self.home_widget = it(HomeWidget).initialize(self)
 
         # 添加子页面
@@ -114,7 +118,20 @@ class MainWindow(MSFluentWindow):
             text=self.tr("Bot List"),
             position=NavigationItemPosition.TOP
         )
-
+        self.update_widget_button = self.addSubInterface(
+            interface=self.update_widget,
+            icon=FluentIcon.UPDATE,
+            text=self.tr("Update"),
+            position=NavigationItemPosition.TOP
+        )
+        widget1 = QWidget()
+        widget1.setObjectName("fix")
+        self.fix_widget_button = self.addSubInterface(
+            interface=widget1,
+            icon=FluentIcon.DEVELOPER_TOOLS,
+            text=self.tr("Fix"),
+            position=NavigationItemPosition.TOP
+        )
         self.setup_widget_button = self.addSubInterface(
             interface=self.setup_widget,
             icon=FluentIcon.SETTING,

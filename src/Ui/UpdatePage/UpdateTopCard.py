@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
-from qfluentwidgets import CaptionLabel, ToolTipFilter, TitleLabel, FluentIcon, TransparentToolButton
+from qfluentwidgets import CaptionLabel, TitleLabel
 
 
 class UpdateTopCard(QWidget):
@@ -16,17 +16,13 @@ class UpdateTopCard(QWidget):
         # 创建所需控件
         self.titleLabel = TitleLabel(self.tr("Update"), self)
         self.subtitleLabel = CaptionLabel(self.tr("Update the required components"), self)
-        self.returnButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回按钮
 
         self.hBoxLayout = QHBoxLayout()
         self.labelLayout = QVBoxLayout()
         self.buttonLayout = QHBoxLayout()
 
-        # 连接信号
-        self.returnButton.clicked.connect(self.returnButtonSlot)
 
         # 调用方法
-        self._addTooltips()
         self._setLayout()
 
     @Slot()
@@ -36,14 +32,6 @@ class UpdateTopCard(QWidget):
         """
         from src.Ui.HomePage.Home import HomeWidget
         it(HomeWidget).setCurrentWidget(it(HomeWidget).contentView)
-
-    def _addTooltips(self) -> None:
-        """
-        ## 为按钮添加悬停提示
-        """
-        # 添加提示
-        self.returnButton.setToolTip(self.tr("Tap Back to Home"))
-        self.returnButton.installEventFilter(ToolTipFilter(self.returnButton))
 
     def _setLayout(self) -> None:
         """
@@ -55,13 +43,7 @@ class UpdateTopCard(QWidget):
         self.labelLayout.addSpacing(5)
         self.labelLayout.addWidget(self.subtitleLabel)
 
-        self.buttonLayout.setSpacing(0)
-        self.buttonLayout.setContentsMargins(0, 0, 0, 0)
-        self.buttonLayout.addWidget(self.returnButton)
-        self.buttonLayout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
-
         self.hBoxLayout.addLayout(self.labelLayout)
-        self.hBoxLayout.addLayout(self.buttonLayout)
         self.hBoxLayout.setContentsMargins(0, 0, 0, 0)
 
         self.setLayout(self.hBoxLayout)
