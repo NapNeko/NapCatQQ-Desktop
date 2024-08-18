@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
+import ctypes
 import sys
+
+from loguru import logger
 
 from src.Core import stdout
 
@@ -14,6 +17,11 @@ NAPCATQQ_DESKTOP_LOGO = r"""
 if __name__ == "__main__":
     # 调整程序 log 输出
     stdout()
+    # 检查是否以管理员模式启动, 非管理员模式尝试获取管理员权限
+    if not ctypes.windll.shell32.IsUserAnAdmin():
+        logger.warning("非管理员模式启动, 尝试获取管理员权限")
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+
     # 启动主程序
     from src.Core.Config import cfg
     from src.Ui.MainWindow import MainWindow

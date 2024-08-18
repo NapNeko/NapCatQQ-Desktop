@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from creart import it
 from qfluentwidgets import CaptionLabel, TitleLabel
 
 
@@ -19,19 +17,9 @@ class UpdateTopCard(QWidget):
 
         self.hBoxLayout = QHBoxLayout()
         self.labelLayout = QVBoxLayout()
-        self.buttonLayout = QHBoxLayout()
-
 
         # 调用方法
         self._setLayout()
-
-    @Slot()
-    def returnButtonSlot(self):
-        """
-        ## 返回按钮槽函数
-        """
-        from src.Ui.HomePage.Home import HomeWidget
-        it(HomeWidget).setCurrentWidget(it(HomeWidget).contentView)
 
     def _setLayout(self) -> None:
         """

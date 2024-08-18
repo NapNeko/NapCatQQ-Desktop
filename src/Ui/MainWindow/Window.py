@@ -20,6 +20,7 @@ from qfluentwidgets.window import MSFluentWindow, SplashScreen
 from src.Core.Config import cfg
 from src.Ui.AddPage import AddWidget
 from src.Ui.BotListPage import BotListWidget
+from src.Ui.FixPage import FixWidget
 from src.Ui.HomePage import HomeWidget
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
@@ -36,6 +37,7 @@ class MainWindow(MSFluentWindow):
     def __init__(self) -> None:
         super().__init__()
 
+        self.fix_widget: Optional[FixWidget] = None
         self.update_widget: Optional[UpdateWidget] = None
         self.splashScreen: Optional[SplashScreen] = None
         self.setup_widget: Optional[SetupWidget] = None
@@ -43,6 +45,7 @@ class MainWindow(MSFluentWindow):
         self.bot_list_widget: Optional[BotListWidget] = None
         self.home_widget: Optional[HomeWidget] = None
 
+        self.fix_widget_button: Optional[NavigationBarPushButton] = None
         self.update_widget_button: Optional[NavigationBarPushButton] = None
         self.home_widget_button: Optional[NavigationBarPushButton] = None
         self.add_widget_button: Optional[NavigationBarPushButton] = None
@@ -96,6 +99,7 @@ class MainWindow(MSFluentWindow):
         self.add_widget = it(AddWidget).initialize(self)
         self.bot_list_widget = it(BotListWidget).initialize(self)
         self.update_widget = it(UpdateWidget).initialize(self)
+        self.fix_widget = it(FixWidget).initialize(self)
         self.home_widget = it(HomeWidget).initialize(self)
 
         # 添加子页面
@@ -124,10 +128,8 @@ class MainWindow(MSFluentWindow):
             text=self.tr("Update"),
             position=NavigationItemPosition.TOP
         )
-        widget1 = QWidget()
-        widget1.setObjectName("fix")
         self.fix_widget_button = self.addSubInterface(
-            interface=widget1,
+            interface=self.fix_widget,
             icon=FluentIcon.DEVELOPER_TOOLS,
             text=self.tr("Fix"),
             position=NavigationItemPosition.TOP

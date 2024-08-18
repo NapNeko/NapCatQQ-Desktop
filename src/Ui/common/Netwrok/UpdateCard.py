@@ -3,7 +3,7 @@ import random
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QSize, QUrl, Slot
+from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from creart import it
@@ -15,7 +15,7 @@ from qfluentwidgets import (
 from src.Core import timer
 from src.Core.Config import cfg
 from src.Core.GetVersion import GetVersion
-from src.Core.NetworkFunc import Urls, Downloader
+from src.Core.NetworkFunc import Urls, NapCatDownloader
 from src.Core.PathFunc import PathFunc
 from src.Ui.common.InfoCard.UpdateLogCard import UpdateLogCard
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
@@ -140,15 +140,17 @@ class NapCatUpdateCard(UpdateCardBase):
         self.ncInstallPath = it(PathFunc).getNapCatPath()
 
         # 创建控件
-        self.downloader = Downloader(self._getNCDownloadUrl(), it(PathFunc).tmp_path)
+        self.downloader = NapCatDownloader(Urls.NAPCAT_DOWNLOAD.value, it(PathFunc).tmp_path)
         self.versionWidget = InfoWidget(self.tr("Version"), self.tr("Unknown"), self)
         self.platformWidget = InfoWidget(self.tr("Platform"), cfg.get(cfg.PlatformType), self)
         self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
         # 调整控件
         self.updateButton.clicked.connect(self._updateButtonSlot)
+        self.downloader.progressBarToggle.connect(self.switchProgressBar)
         self.downloader.downloadProgress.connect(self.updateButton.setValue)
-        self.downloader.finished.connect(self._install)
+        self.downloader.errorFinsh.connect(self.showErrorTips)
+        self.downloader.downloadFinish.connect(self._install)
         self.nameLabel.setText("NapCatQQ")
         self.companyLabel.setUrl(Urls.NAPCATQQ_REPO.value)
         self.companyLabel.setText(self.tr("Project repositories"))
@@ -192,16 +194,12 @@ class NapCatUpdateCard(UpdateCardBase):
         if self.isRun:
             # 如果正在下载/安装再点击则是取消操作
             self.downloader.stop()  # 先停止下载
-            self.updateButton.setValue(0)
-            self.updateButton.setProgressBarState(False)
-            self.updateButton.setTestVisible(True)
+            self.downloader.wait()  # 等待停止
             self.isRun = False
         else:
             # 反之则开始下载等操作
             self.downloader.start()
             self.zipFilePath = it(PathFunc).tmp_path / self.downloader.url.fileName()
-            self.updateButton.setProgressBarState(False)
-            self.updateButton.setTestVisible(False)
             self.isRun = True
 
     @Slot(bool)
@@ -212,7 +210,7 @@ class NapCatUpdateCard(UpdateCardBase):
         """
         if value:
             self.isRun = False
-            self.updateButton.setProgressBarState(True)
+            self.switchProgressBar(1)
             self.installWorker = NapCatInstallWorker(self.ncInstallPath, self.zipFilePath)
             self.installWorker.finished.connect(self._installationFinished)
             self.installWorker.start()
@@ -224,7 +222,7 @@ class NapCatUpdateCard(UpdateCardBase):
             - value 用于判断是否下载成功
         """
         if value:
-            self.updateButton.setProgressBarState(False)
+            self.switchProgressBar(0)
             self.updateButton.hide()
             self.updateLogButton.hide()
             self.latestVersionLabel.show()
@@ -274,19 +272,32 @@ class NapCatUpdateCard(UpdateCardBase):
             self.updateLogButton.show()
             self.latestVersionLabel.hide()
 
-    @staticmethod
-    def _getNCDownloadUrl() -> QUrl:
+    @Slot(int)
+    def switchProgressBar(self, mode: int):
         """
-        ## 通过系统,平台,匹配下载连接并返回
+        ## 切换进度条样式
+            - 0: 进度模式
+            - 1: 未知进度模式
+            - 2: 文字模式
         """
-        download_links = {
-            ("Linux", "aarch64"): Urls.NAPCAT_ARM64_LINUX.value,
-            ("Linux", "x86_64"): Urls.NAPCAT_64_LINUX.value,
-            ("Linux", "AMD64"): Urls.NAPCAT_64_LINUX.value,
-            ("Windows", "x86_64"): Urls.NAPCAT_WIN.value,
-            ("Windows", "AMD64"): Urls.NAPCAT_WIN.value
-        }
-        return download_links.get((cfg.get(cfg.SystemType), cfg.get(cfg.PlatformType)))
+        match mode:
+            case 0:
+                self.updateButton.setProgressBarState(False)
+            case 1:
+                self.updateButton.setProgressBarState(True)
+            case 2:
+                self.updateButton.setTestVisible(True)
+
+    @Slot()
+    def showErrorTips(self):
+        """
+        ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
+        """
+        from src.Ui.HomePage.Home import HomeWidget
+        it(HomeWidget).showError(
+            self.tr("Download failed"),
+            self.tr("An error occurs when downloading NapCat,\nplease go to Setup > log for details")
+        )
 
 
 class UpdateFlyoutView(FlyoutViewBase):

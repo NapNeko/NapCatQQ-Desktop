@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
 import shutil
-import subprocess
-import textwrap
 import zipfile
 from pathlib import Path
-from string import Template
 from typing import Optional
-from urllib import request
 
-import psutil
 from PySide6.QtCore import Qt, QSize, QUrl, Slot, QThread, Signal, QProcess, QCoreApplication
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QApplication
@@ -22,8 +17,9 @@ from qfluentwidgets import (
 
 from src.Core import timer
 from src.Core.Config import cfg
+# from src.Core.BootWay import FixQQ
 from src.Core.GetVersion import GetVersion
-from src.Core.NetworkFunc import Urls, Downloader
+from src.Core.NetworkFunc import Urls, NapCatDownloader
 from src.Core.PathFunc import PathFunc
 from src.Ui.Icon import NapCatDesktopIcon as NCDIcon
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
@@ -140,21 +136,22 @@ class NapCatDownloadCard(DownloadCardBase):
         ## 初始化控件
         """
         super().__init__(parent=parent)
-        self._timeout = False  # 计时器启动标记
         self.zipFilePath: Optional[Path] = None
         self.isInstall = False
         self.ncInstallPath = it(PathFunc).getNapCatPath()
 
         # 创建控件
-        self.downloader = Downloader(self._getNCDownloadUrl(), it(PathFunc).tmp_path)
+        self.downloader = NapCatDownloader(Urls.NAPCAT_DOWNLOAD.value, it(PathFunc).tmp_path)
         self.versionWidget = InfoWidget(self.tr("Version"), self.tr("Unknown"), self)
         self.platformWidget = InfoWidget(self.tr("Platform"), cfg.get(cfg.PlatformType), self)
         self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
         # 调整控件
         self.installButton.clicked.connect(self._installButtonSlot)
+        self.downloader.progressBarToggle.connect(self.switchProgressBar)
         self.downloader.downloadProgress.connect(self.installButton.setValue)
-        self.downloader.finished.connect(self._install)
+        self.downloader.errorFinsh.connect(self.showErrorTips)
+        self.downloader.downloadFinish.connect(self._downloadFinishSlot)
         self.nameLabel.setText("NapCatQQ")
         self.companyLabel.setUrl(Urls.NAPCATQQ_REPO.value)
         self.companyLabel.setText(self.tr("Project repositories"))
@@ -182,17 +179,14 @@ class NapCatDownloadCard(DownloadCardBase):
         self._setLayout()
         self._onTimer()
 
-    @timer(10000, True)
+    @timer(10_000, True)
     def _onTimer(self):
         """
         ## 延时启动计时器, 等待用于等待网络请求
         """
-        if not self._timeout:
-            self._timeout = True
-            return
         self.updateVersion()
 
-    @timer(65000)
+    @timer(3_600_000)
     def updateVersion(self):
         """
         ## 更新显示版本和下载器所下载的版本url
@@ -213,20 +207,6 @@ class NapCatDownloadCard(DownloadCardBase):
             self.openInstallPathButton.hide()
             self.isInstall = False
 
-    @staticmethod
-    def _getNCDownloadUrl() -> QUrl:
-        """
-        ## 通过系统,平台,匹配下载连接并返回
-        """
-        download_links = {
-            ("Linux", "aarch64"): Urls.NAPCAT_ARM64_LINUX.value,
-            ("Linux", "x86_64"): Urls.NAPCAT_64_LINUX.value,
-            ("Linux", "AMD64"): Urls.NAPCAT_64_LINUX.value,
-            ("Windows", "x86_64"): Urls.NAPCAT_WIN.value,
-            ("Windows", "AMD64"): Urls.NAPCAT_WIN.value
-        }
-        return download_links.get((cfg.get(cfg.SystemType), cfg.get(cfg.PlatformType)))
-
     @Slot()
     def _installButtonSlot(self) -> None:
         """
@@ -235,17 +215,12 @@ class NapCatDownloadCard(DownloadCardBase):
         if self.isRun:
             # 如果正在下载/安装再点击则是取消操作
             self.downloader.stop()  # 先停止下载
-            self.installButton.setValue(0)
-            self.installButton.setProgressBarState(False)
-            self.installButton.setTestVisible(True)
+            self.downloader.wait()  # 等待停止
             self.isRun = False
-
         if self._qqIsInstall():
             # 反之则开始下载等操作
             self.downloader.start()
             self.zipFilePath = it(PathFunc).tmp_path / self.downloader.url.fileName()
-            self.installButton.setProgressBarState(False)
-            self.installButton.setTestVisible(False)
             self.isRun = True
 
     def _qqIsInstall(self) -> bool:
@@ -261,29 +236,74 @@ class NapCatDownloadCard(DownloadCardBase):
         msg.show()
         return False
 
-    @Slot(bool)
-    def _install(self, value: bool) -> None:
+    @Slot()
+    def _downloadFinishSlot(self) -> None:
         """
         ## 下载完成后的安装操作
             - value 用于判断是否下载成功
         """
-        if value:
-            self.isRun = False
-            self.installButton.setProgressBarState(True)
-            self.installWorker = NapCatInstallWorker(self.ncInstallPath, self.zipFilePath)
-            self.installWorker.finished.connect(self._installationFinished)
-            self.installWorker.start()
+        self.isRun = False
+        self.switchProgressBar(1)
+        self.installWorker = NapCatInstallWorker(self.ncInstallPath, self.zipFilePath)
+        self.installWorker.finished.connect(self._installationFinished)
+        self.installWorker.start()
 
     @Slot(bool)
     def _installationFinished(self, value: bool) -> None:
         """
-        ## 下载完成后的安装操作
-            - value 用于判断是否下载成功
+        ## 安装完成后的操作
+            - value 用于判断是否安装成功
         """
+        from src.Ui.HomePage.Home import HomeWidget
+
         if value:
-            self.installButton.setProgressBarState(False)
+            # 如果下载成功,隐藏进度条,显示打开安装路径按钮
+            self.switchProgressBar(0)
             self.installButton.hide()
             self.openInstallPathButton.show()
+
+            # 提示用户应该修补后使用
+            it(HomeWidget).showInfo(
+                self.tr("Installation successful!"),
+                self.tr(
+                    "Congratulations on the successful installation,\n"
+                    "you still need to patch before using it~"
+                )
+            )
+
+        else:
+            # 如果安装失败, 则弹出失败条
+            it(HomeWidget).showError(
+                self.tr("Installation failed"),
+                self.tr("If the NapCat installation fails, check the error log in the log")
+            )
+
+    @Slot(int)
+    def switchProgressBar(self, mode: int):
+        """
+        ## 切换进度条样式
+            - 0: 进度模式
+            - 1: 未知进度模式
+            - 2: 文字模式
+        """
+        match mode:
+            case 0:
+                self.installButton.setProgressBarState(False)
+            case 1:
+                self.installButton.setProgressBarState(True)
+            case 2:
+                self.installButton.setTestVisible(True)
+
+    @Slot()
+    def showErrorTips(self):
+        """
+        ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
+        """
+        from src.Ui.HomePage.Home import HomeWidget
+        it(HomeWidget).showError(
+            self.tr("Download failed"),
+            self.tr("An error occurs when downloading NapCat,\nplease go to Setup > log for details")
+        )
 
     @Slot()
     def _shareButtonSlot(self) -> None:
@@ -316,10 +336,6 @@ class NapCatInstallWorker(QThread):
         try:
             self._rmOldFile()
             self._unzipFile()
-            self._killQQ()
-            self._change_folder_permissions()
-            self._editQQCode()
-            self._fixQQ()
             self.finished.emit(True)
         except Exception as e:
             logger.error(e)
@@ -381,82 +397,6 @@ class NapCatInstallWorker(QThread):
         self.zipFilePath.unlink()
         logger.success("移动成功")
 
-    @staticmethod
-    def _killQQ() -> None:
-        """
-        ## 干掉 QQ 的进程
-        """
-        try:
-            logger.info(f"{'-' * 10} 开始干掉 QQ {'-' * 10}")
-            for proc in psutil.process_iter():
-                # 遍历进程
-                if proc.name() == "QQ.exe":
-                    proc.kill()
-                    logger.success(f"成功杀死 QQ({proc.pid}) 进程")
-            logger.success("没有报错, 就当修补成功了!")
-        except Exception as e:
-            logger.error(f"做掉 QQ 的过程中发生了错误: {e}")
-
-    @staticmethod
-    def _change_folder_permissions():
-        """
-        # 修改 QQ 目录权限, 确保能修补
-            - 参考(cv)自 LLOneBot install: https://github.com/Mzdyl/LiteLoaderQQNT_Install/blob/52d80530f50fe6dab156dff7b61a85d10d11b759/install_windows.py#L429-L435
-        """
-        try:
-            logger.info(f"{'-' * 10} 开始修改QQ文件夹权限 {'-' * 10}")
-            cmd = ["icacls", str(it(PathFunc).getQQPath()), "/grant", "everyone:(oi)(ci)(F)", "/t"]
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
-            logger.success(f"成功修改文件夹 {str(it(PathFunc).getQQPath())} 的权限。")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"修改文件夹权限时出错: {e}")
-
-    @staticmethod
-    def _editQQCode() -> None:
-        """
-        ## 修改 QQ 代码
-            - 9.9.12 版本需要
-        """
-        js_code_template = (
-            "const hasNapcatParam = process.argv.includes('--enable-logging');\n"
-            "if (hasNapcatParam) {\n"
-            "    (async () => {\n"
-            "        await import('$module_name');\n"
-            "    })();\n"
-            "} else {\n"
-            "    require('./launcher.node').load('external_index', module);\n"
-            "}\n"
-        )
-        template = Template(js_code_template)
-        index_path = it(PathFunc).getQQPath() / r"resources/app/app_launcher/index.js"
-        nc_path = "file://{}".format(str(it(PathFunc).napcat_path / 'napcat.mjs').replace('\\', '//'))
-        logger.info(f"{'-' * 10} 开始修改QQ代码 {'-' * 10}")
-        try:
-            with open(str(index_path), "w", encoding="utf-8") as f:
-                f.write(textwrap.dedent(template.substitute(module_name=nc_path).strip()))
-                logger.success("修改 QQ 代码成功!")
-        except Exception as e:
-            logger.error(f"修改失败: {e}")
-
-    @staticmethod
-    def _fixQQ():
-        """
-        ## 下载修补 QQ 文件
-            - 一样是临时方法啦~
-            - DLLHijackMethod 仓库地址: https://github.com/LiteLoaderQQNT/QQNTFileVerifyPatch/tree/DLLHijackMethod
-        """
-        try:
-            logger.info(f"{'-' * 10} 开始修补QQ {'-' * 10}")
-            with request.urlopen(Urls.QQ_FIX_64.value.url()) as response:
-                data = response.read()
-                logger.success("成功下载修补文件")
-
-            with open(str(it(PathFunc).getQQPath() / "dbghelp.dll"), "wb") as f:
-                f.write(data)
-                logger.success("修补成功!")
-        except Exception as e:
-            logger.error(f"修补失败 {e}")
-
 
 class QQDownloadCard(DownloadCardBase):
     """
@@ -468,7 +408,6 @@ class QQDownloadCard(DownloadCardBase):
         ## 初始化控件
         """
         super().__init__(parent=parent)
-        self._timeout = False  # 计时器启动标记
         self.installExePath: Optional[Path] = None
         self.isInstall = False
         self.installMode = False
@@ -507,17 +446,14 @@ class QQDownloadCard(DownloadCardBase):
         self._setLayout()
         self._onTimer()
 
-    @timer(10000, True)
+    @timer(10_000, True)
     def _onTimer(self):
         """
         ## 延时启动计时器, 等待用于等待网络请求
         """
-        if not self._timeout:
-            self._timeout = True
-            return
         self.updateVersion()
 
-    @timer(65000)
+    @timer(86_400_000)
     def updateVersion(self):
         """
         ## 更新显示版本和下载器所下载的版本url

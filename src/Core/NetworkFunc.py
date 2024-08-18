@@ -2,9 +2,10 @@
 from abc import ABC
 from enum import Enum
 from pathlib import Path
-from typing import Optional, IO, Callable, Any
+from typing import Callable, Any
 
-from PySide6.QtCore import QUrl, Signal, Slot, QObject
+import httpx
+from PySide6.QtCore import QUrl, Signal, QObject, QThread
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
 from loguru import logger
@@ -25,16 +26,14 @@ class Urls(Enum):
     NAPCATQQ_DOCUMENT = QUrl("https://napneko.github.io/")
 
     # 直接写入下载地址, 不请求 API 获取, 期望达到节省时间的目的
-    NAPCAT_ARM64_LINUX = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.linux.arm64.zip")
-    NAPCAT_64_LINUX = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.linux.x64.zip")
-    NAPCAT_WIN = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.win32.x64.zip")
+    NAPCAT_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip")
 
     # QQ 相关
     QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")
     QQ_WIN_DOWNLOAD = QUrl("https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/windowsDownloadUrl.js")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
 
-    # DLLHijackMethod 下载
+    # DLLHijackMethod 下载 (BootWay03 使用)
     QQ_FIX_64 = QUrl("https://github.com/LiteLoaderQQNT/QQNTFileVerifyPatch/releases/latest/download/dbghelp_x64.dll")
 
 
@@ -42,7 +41,6 @@ class NetworkFunc(QObject):
     """
     ## 软件内部的所有网络请求均通过此类实现
     """
-    response_ready = Signal(QNetworkReply)
 
     def __init__(self):
         """
@@ -115,92 +113,119 @@ def async_request(url: QUrl, _bytes: bool = False) -> Callable[[Callable[..., No
     return decorator
 
 
-class Downloader(QObject):
+class NapCatDownloader(QThread):
     """
-    ## 执行下载任务
+    ## 执行下载 NapCat 的任务
     """
+    # 进度条模式切换 (进度模式: 0 \ 未知进度模式: 1 \ 文字模式: 2)
+    progressBarToggle = Signal(int)
+    # 下载进度
     downloadProgress = Signal(int)
-    finished = Signal(bool)
-    errorOccurred = Signal(str, str)
+    # 下载完成
+    downloadFinish = Signal()
+    # 引发错误导致结束
+    errorFinsh = Signal()
 
-    def __init__(self, url: QUrl = None, path: Path = None):
+    def __init__(self, url: QUrl, path: Path):
         """
         ## 初始化下载器
             - url 下载连接
             - path 下载路径
         """
         super().__init__()
+        self._is_running = True # 线程是否停止标识符
         self.url: QUrl = url if url else None
         self.path: Path = path if path else None
 
-        self.request = QNetworkRequest(self.url) if self.url else QNetworkRequest()
-        self.reply: Optional[QNetworkReply] = None
-        self.file: Optional[IO[bytes]] = None
+    def run(self) -> None:
+        """
+        ## 运行下载 NapCat 的任务
+            - 自动检查是否需要使用代理
+            - 尽可能下载成功
+        """
+        # 检查网络环境
+        if not self.checkNetwork():
+            # 如果网络环境不好, 则调整下载链接
+            self.url = QUrl(f"https://gh.ddlc.top/{self.url.url()}")
+
+        # 开始下载
+        try:
+            logger.info(f"{'-' * 10} 开始下载 NapCat ~ {'-' * 10}")
+            with httpx.stream('GET', self.url.url(), follow_redirects=True) as response:
+
+                if (total_size := int(response.headers.get('content-length', 0))) == 0:
+                    print(response.headers, total_size)
+                    # 尝试获取文件大小
+                    logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
+                    self.progressBarToggle.emit(2)
+                    self.errorFinsh.emit()
+                    return
+
+                self.progressBarToggle.emit(0)  # 设置进度条为 进度模式
+
+                with open(f'{self.path}/{self.url.fileName()}', 'wb') as file:
+                    for chunk in response.iter_bytes():
+                        file.write(chunk) # 写入字节
+                        self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
+
+                        if not self._is_running:
+                            # 终止运行
+                            return
+
+            # 下载完成
+            logger.info(f"{'-' * 10} 下载 NapCat 结束 ~ {'-' * 10}")
+            self.downloadFinish.emit()  # 发送下载完成信号
+            self.downloadProgress.emit(0)  # 重置进度条进度
+            self.progressBarToggle.emit(2)  # 设置进度条为 文字模式
+
+        except httpx.RequestError as e:
+            logger.error(f"下载 NapCat 时引发 RequestError: {e}")
+            self.errorFinsh.emit()
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"发送下载 NapCat 请求时引发 HTTPStatusError, "
+                f"响应码: {e.response.status_code}, 响应内容: {e.response.content}"
+            )
+            self.errorFinsh.emit()
+        except FileNotFoundError as e:
+            logger.error(f"下载 NapCat 时引发 FileNotFoundError: {e}")
+            self.errorFinsh.emit()
+        except PermissionError as e:
+            logger.error(f"下载 NapCat 时引发 PermissionError: {e}")
+            self.errorFinsh.emit()
+        except Exception as e:
+            logger.error(f"下载 NapCat 时引发未知错误: {e}")
+            self.errorFinsh.emit()
+
+    def checkNetwork(self):
+        """
+        ## 检查网络能否正常访问 Github
+        """
+        try:
+            logger.info(f"{'-' * 10} 检查网络环境 {'-' * 10}")
+            self.progressBarToggle.emit(1)  # 设置进度条为 未知进度模式
+            # 如果 5 秒内能访问到 Github 表示网络环境非常奈斯
+            response = httpx.head(r"https://github.com", timeout=5)
+            logger.info("网络环境非常奈斯")
+            return response.status_code == 200
+        except httpx.RequestError as e:
+            # 引发错误返回 False
+            return False
 
     def setUrl(self, url: QUrl):
         self.url = url
-        self.request.setUrl(self.url)
 
     def setPath(self, path: Path):
         self.path = path
 
-    def start(self):
-        """
-        ## 启动下载
-        """
-        # 打开文件以写入下载数据
-        self.file = open(str(self.path / self.url.fileName()), 'wb')
-        # 执行下载任务并连接信号
-        self.reply = it(NetworkFunc).manager.get(self.request)
-        self.reply.downloadProgress.connect(self._downloadProgressSlot)
-        self.reply.readyRead.connect(self._read2File)
-        self.reply.finished.connect(self._finished)
-        self.reply.errorOccurred.connect(self._error)
-
     def stop(self):
         """
-        ## 停止下载
+        ## 停止下载 NapCat
+            - 如果在下载则终止下载
         """
-        self.reply.abort() if self.reply else None
-
-    @Slot()
-    def _downloadProgressSlot(self, bytes_received: int, bytes_total: int):
-        """
-        ## 下载进度槽函数
-            - bytes_received 接收的字节数
-            - bytes_total 总字节数
-        """
-        if bytes_total > 0:
-            # 防止发生零除以零的情况
-            self.downloadProgress.emit(int((bytes_received / bytes_total) * 100))
-
-    @Slot()
-    def _read2File(self):
-        """
-        ## 读取数据并写入文件
-        """
-        if self.file:
-            self.file.write(self.reply.readAll())
-
-    @Slot()
-    def _finished(self):
-        """
-        ## 下载结束并发送信号
-        """
-        if self.file:
-            # 防止文件中途丢失导致关闭一个没有打开的文件引发报错
-            self.file.close()
-            self.file = None
-        if self.reply.error() != QNetworkReply.NetworkError.NoError:
-            self.finished.emit(False)
-            return
-
-        self.finished.emit(True)
-
-    @Slot()
-    def _error(self, error_code):
-        if self.file:
-            self.file.close()
-            self.file = None
-        self.finished.emit(False)
-        self.errorOccurred.emit(self.reply.errorString(), str(error_code))
+        logger.info(f"{'-' * 10} 手动停止 NapCat 下载 ~ {'-' * 10}")
+        self._is_running = False
+        self.downloadFinish.emit()  # 发送下载完成信号
+        self.downloadProgress.emit(0)  # 重置进度条进度
+        self.progressBarToggle.emit(2)  # 设置进度条为 文字模式
+        logger.info(f"停止下载 NapCat 成功!")

@@ -52,6 +52,8 @@ class ProgressBarButton(PrimaryPushButton):
     def setTestVisible(self, value: bool) -> None:
         """
         ## 设置按钮内容是否可见
+            - True : 显示文字隐藏进度条
+            - False: 隐藏文字显示进度条
         """
         self._testVisible = value
         if self._testVisible:
@@ -65,12 +67,19 @@ class ProgressBarButton(PrimaryPushButton):
     def setProgressBarState(self, value: bool) -> None:
         """
         ## 设置控件显示哪个进度条
+            - True : 未知进度模式
+            - False: 进度模式
+
+        # 无论是哪种模式, 都会关闭文字模式
         """
         self._indeterminate = value
+        self.setText("")
         if self._indeterminate:
+            # 如果为True, 则显示未知进度条
             self._indeterminateProgressRing.show()
             self._progressRing.hide()
         else:
+            # 否则是进度模式
             self._indeterminateProgressRing.hide()
             self._progressRing.show()
 
