@@ -133,7 +133,6 @@ class NapCatUpdateCard(UpdateCardBase):
         """
         super().__init__(parent=parent)
         self.isInstall = False
-        self.isRun = False
 
         self._log = "Unknown"
         self.zipFilePath: Optional[Path] = None
@@ -150,7 +149,7 @@ class NapCatUpdateCard(UpdateCardBase):
         self.downloader.progressBarToggle.connect(self.switchProgressBar)
         self.downloader.downloadProgress.connect(self.updateButton.setValue)
         self.downloader.errorFinsh.connect(self.showErrorTips)
-        self.downloader.downloadFinish.connect(self._install)
+        self.downloader.downloadFinish.connect(self._downloadFinishSlot)
         self.nameLabel.setText("NapCatQQ")
         self.companyLabel.setUrl(Urls.NAPCATQQ_REPO.value)
         self.companyLabel.setText(self.tr("Project repositories"))
@@ -190,42 +189,28 @@ class NapCatUpdateCard(UpdateCardBase):
                 return
             it(BotListWidget).stopAllBot()
 
-        # 检查是否正在下载
-        if self.isRun:
-            # 如果正在下载/安装再点击则是取消操作
-            self.downloader.stop()  # 先停止下载
-            self.downloader.wait()  # 等待停止
-            self.isRun = False
-        else:
-            # 反之则开始下载等操作
-            self.downloader.start()
-            self.zipFilePath = it(PathFunc).tmp_path / self.downloader.url.fileName()
-            self.isRun = True
+        # 开始下载操作
+        self.downloader.start()
 
     @Slot(bool)
-    def _install(self, value):
+    def _downloadFinishSlot(self):
         """
         ## 下载完成后的安装操作
-            - value 用于判断是否下载成功
         """
-        if value:
-            self.isRun = False
-            self.switchProgressBar(1)
-            self.installWorker = NapCatInstallWorker(self.ncInstallPath, self.zipFilePath)
-            self.installWorker.finished.connect(self._installationFinished)
-            self.installWorker.start()
+        self.installWorker = NapCatInstallWorker(it(PathFunc).tmp_path / self.downloader.url.fileName())
+        self.installWorker.installFinished.connect(self._installationFinished)
+        self.installWorker.errorFinished.connect(self.showErrorTips)
+        self.installWorker.progressBarToggle.connect(self.switchProgressBar)
+        self.installWorker.start()
 
     @Slot(bool)
-    def _installationFinished(self, value: bool) -> None:
+    def _installationFinished(self) -> None:
         """
         ## 下载完成后的安装操作
-            - value 用于判断是否下载成功
         """
-        if value:
-            self.switchProgressBar(0)
-            self.updateButton.hide()
-            self.updateLogButton.hide()
-            self.latestVersionLabel.show()
+        self.updateButton.hide()
+        self.updateLogButton.hide()
+        self.latestVersionLabel.show()
 
     @Slot()
     def _updateLogButtonSlot(self):
@@ -279,6 +264,8 @@ class NapCatUpdateCard(UpdateCardBase):
             - 0: 进度模式
             - 1: 未知进度模式
             - 2: 文字模式
+            - 3: 禁用按钮
+            - 4: 解除禁用
         """
         match mode:
             case 0:
@@ -287,6 +274,10 @@ class NapCatUpdateCard(UpdateCardBase):
                 self.updateButton.setProgressBarState(True)
             case 2:
                 self.updateButton.setTestVisible(True)
+            case 3:
+                self.updateButton.setEnabled(False)
+            case 4:
+                self.updateButton.setEnabled(True)
 
     @Slot()
     def showErrorTips(self):

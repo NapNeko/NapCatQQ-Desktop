@@ -11,8 +11,7 @@ from creart import it
 from loguru import logger
 from qfluentwidgets import (
     SimpleCardWidget, ImageLabel, TitleLabel, HyperlinkLabel, FluentIcon, CaptionLabel, BodyLabel, setFont,
-    TransparentToolButton, FlyoutView, Flyout, VerticalSeparator, PushButton, MessageBoxBase, SubtitleLabel,
-    MessageBox
+    TransparentToolButton, FlyoutView, Flyout, VerticalSeparator, PushButton, MessageBoxBase, SubtitleLabel
 )
 
 from src.Core import timer
@@ -138,7 +137,6 @@ class NapCatDownloadCard(DownloadCardBase):
         super().__init__(parent=parent)
         self.zipFilePath: Optional[Path] = None
         self.isInstall = False
-        self.ncInstallPath = it(PathFunc).getNapCatPath()
 
         # 创建控件
         self.downloader = NapCatDownloader(Urls.NAPCAT_DOWNLOAD.value, it(PathFunc).tmp_path)
@@ -147,7 +145,7 @@ class NapCatDownloadCard(DownloadCardBase):
         self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
         # 调整控件
-        self.installButton.clicked.connect(self._installButtonSlot)
+        self.installButton.clicked.connect(self.downloader.start)
         self.downloader.progressBarToggle.connect(self.switchProgressBar)
         self.downloader.downloadProgress.connect(self.installButton.setValue)
         self.downloader.errorFinsh.connect(self.showErrorTips)
@@ -208,75 +206,34 @@ class NapCatDownloadCard(DownloadCardBase):
             self.isInstall = False
 
     @Slot()
-    def _installButtonSlot(self) -> None:
-        """
-        ## 安装按钮槽函数
-        """
-        if self.isRun:
-            # 如果正在下载/安装再点击则是取消操作
-            self.downloader.stop()  # 先停止下载
-            self.downloader.wait()  # 等待停止
-            self.isRun = False
-        if self._qqIsInstall():
-            # 反之则开始下载等操作
-            self.downloader.start()
-            self.zipFilePath = it(PathFunc).tmp_path / self.downloader.url.fileName()
-            self.isRun = True
-
-    def _qqIsInstall(self) -> bool:
-        """
-        ## 检查 QQ 是否安装, 没安装则提示先安装QQ
-            - 9.9.12 修改临时方案需要修改 QQ 代码, 故需要检查 QQ 是否安装
-        """
-        if not it(GetVersion).QQLocalVersion is None:
-            return True
-
-        # 获取为 None 则表示没安装
-        msg = MessageBox(self.tr("Installation failed"), self.tr("Please install QQ first"), self.parent().parent())
-        msg.show()
-        return False
-
-    @Slot()
     def _downloadFinishSlot(self) -> None:
         """
         ## 下载完成后的安装操作
-            - value 用于判断是否下载成功
         """
-        self.isRun = False
-        self.switchProgressBar(1)
-        self.installWorker = NapCatInstallWorker(self.ncInstallPath, self.zipFilePath)
-        self.installWorker.finished.connect(self._installationFinished)
+        self.installWorker = NapCatInstallWorker(it(PathFunc).tmp_path / self.downloader.url.fileName())
+        self.installWorker.installFinished.connect(self._installationFinished)
+        self.installWorker.errorFinished.connect(self.showErrorTips)
+        self.installWorker.progressBarToggle.connect(self.switchProgressBar)
         self.installWorker.start()
 
-    @Slot(bool)
-    def _installationFinished(self, value: bool) -> None:
+    @Slot()
+    def _installationFinished(self) -> None:
         """
         ## 安装完成后的操作
-            - value 用于判断是否安装成功
         """
         from src.Ui.HomePage.Home import HomeWidget
+        # 下载完成后, 显示打开安装路径按钮
+        self.installButton.hide()
+        self.openInstallPathButton.show()
 
-        if value:
-            # 如果下载成功,隐藏进度条,显示打开安装路径按钮
-            self.switchProgressBar(0)
-            self.installButton.hide()
-            self.openInstallPathButton.show()
-
-            # 提示用户应该修补后使用
-            it(HomeWidget).showInfo(
-                self.tr("Installation successful!"),
-                self.tr(
-                    "Congratulations on the successful installation,\n"
-                    "you still need to patch before using it~"
-                )
+        # 提示用户应该修补后使用
+        it(HomeWidget).showInfo(
+            self.tr("Installation successful!"),
+            self.tr(
+                "Congratulations on the successful installation,\n"
+                "you still need to patch before using it~"
             )
-
-        else:
-            # 如果安装失败, 则弹出失败条
-            it(HomeWidget).showError(
-                self.tr("Installation failed"),
-                self.tr("If the NapCat installation fails, check the error log in the log")
-            )
+        )
 
     @Slot(int)
     def switchProgressBar(self, mode: int):
@@ -285,6 +242,8 @@ class NapCatDownloadCard(DownloadCardBase):
             - 0: 进度模式
             - 1: 未知进度模式
             - 2: 文字模式
+            - 3: 禁用按钮
+            - 4: 解除禁用
         """
         match mode:
             case 0:
@@ -293,6 +252,10 @@ class NapCatDownloadCard(DownloadCardBase):
                 self.installButton.setProgressBarState(True)
             case 2:
                 self.installButton.setTestVisible(True)
+            case 3:
+                self.installButton.setEnabled(False)
+            case 4:
+                self.installButton.setEnabled(True)
 
     @Slot()
     def showErrorTips(self):
@@ -301,8 +264,8 @@ class NapCatDownloadCard(DownloadCardBase):
         """
         from src.Ui.HomePage.Home import HomeWidget
         it(HomeWidget).showError(
-            self.tr("Download failed"),
-            self.tr("An error occurs when downloading NapCat,\nplease go to Setup > log for details")
+            self.tr("Failed"),
+            self.tr("Error sent while downloading/installing NapCat,\nplease go to Setup > log for details")
         )
 
     @Slot()
@@ -325,77 +288,70 @@ class NapCatDownloadCard(DownloadCardBase):
 
 
 class NapCatInstallWorker(QThread):
-    finished = Signal(bool)
+    """
+    ## NapCat 安装任务
+    """
+    # 进度条模式切换 (进度模式: 0 \ 未知进度模式: 1 \ 文字模式: 2)
+    progressBarToggle = Signal(int)
+    # 安装结束信号
+    installFinished = Signal()
+    # 发送错误退出信号
+    errorFinished = Signal()
 
-    def __init__(self, ncInstallPath, zipFilePath, parent=None):
+    def __init__(self, zipFilePath, parent=None):
         super().__init__(parent)
-        self.ncInstallPath = ncInstallPath
-        self.zipFilePath = zipFilePath
+        self.ncInstallPath = it(PathFunc).getNapCatPath()
+        self.zipFilePath = zipFilePath  # it(PathFunc).tmp_path / self.downloader.url.fileName()
 
     def run(self) -> None:
         try:
-            self._rmOldFile()
-            self._unzipFile()
-            self.finished.emit(True)
+            logger.info(f"{'-' * 10} 开始移除旧版 NapCat {'-' * 10}")
+            self.progressBarToggle.emit(1)
+            self.progressBarToggle.emit(3)
+            if not self.ncInstallPath.exists():
+                # 检查路径是否存在, 不存在则创建
+                self.ncInstallPath.mkdir(parents=True, exist_ok=True)
+                logger.warning(f"路径 {self.ncInstallPath} 不存在, 已创建")
+
+            # 遍历 NapCat 文件夹中旧版文件并删除
+            for item in self.ncInstallPath.iterdir():
+                # 跳过 config 目录保证配置文件不丢失
+                if item.is_dir() and item.name == 'config':
+                    continue
+
+                # 移除旧版文件
+                shutil.rmtree(item) if item.is_dir() else item.unlink()
+                logger.info(f"删除文件 {item}")
+            logger.info(f"{'-' * 10} 成功移除旧版 NapCat {'-' * 10}")
+            logger.info(f"{'-' * 10} 开始解压新版 NapCat {'-' * 10}")
+
+            # 直接解包到 NapCat 目录
+            with zipfile.ZipFile(str(self.zipFilePath), 'r') as zip_ref:
+                zip_ref.extractall(str(self.ncInstallPath))
+
+            # 删除包释放空间
+            self.zipFilePath.unlink()
+            logger.info(f"{'-' * 10} 成功解压新版 NapCat {'-' * 10}")
+
+        except zipfile.BadZipFile as e:
+            logger.error(f"安装 NapCat 时引发 BadZipFile, 压缩包存在问题: {e}")
+            self.errorFinished.emit()
+        except PermissionError as e:
+            logger.error(f"安装 NapCat 时引发 PermissionError: {e}")
+            self.errorFinished.emit()
+        except FileNotFoundError as e:
+            logger.error(f"安装 NapCat 时引发 FileNotFoundError: {e}")
+            self.errorFinished.emit()
         except Exception as e:
-            logger.error(e)
-            self.finished.emit(False)
-
-    def _rmOldFile(self) -> None:
-        """
-        ## 移除老文件(如果有)
-        """
-        logger.info(f"{'-' * 10} 开始移除旧版 NapCat {'-' * 10}")
-        if not self.ncInstallPath.exists():
-            # 检查路径是否存在, 不存在则创建
-            self.ncInstallPath.mkdir(parents=True, exist_ok=True)
-
-        # 遍历目录中的所有项
-        for item in self.ncInstallPath.iterdir():
-            # 如果是config目录，则跳过
-            if item.is_dir() and item.name == 'config':
-                continue
-            # 如果是文件或其他目录，则删除
-            shutil.rmtree(item) if item.is_dir() else item.unlink()
-            logger.info(f"移除 {item}")
-        logger.success("成功删除旧版 NapCat")
-
-    def _unzipFile(self) -> None:
-        """
-        ## 解压到临时目录并移动到安装目录
-        """
-        logger.info(f"{'-' * 10} 开始解压新版 NapCat {'-' * 10}")
-        # 解压缩文件到临时目录
-        with zipfile.ZipFile(str(self.zipFilePath), 'r') as zip_ref:
-            zip_ref.extractall(str(it(PathFunc).tmp_path))
-        logger.success("解压成功")
-
-        # 记录没有被移动的文件和文件夹
-        skipped_items = []
-
-        # 获取临时目录中所有文件和文件夹
-        for item in (self.zipFilePath.parent / self.zipFilePath.stem).iterdir():
-            target_path = self.ncInstallPath / item.name
-
-            if target_path.exists():
-                # 跳过同名文件或文件夹
-                skipped_items.append(item)
-                continue
-
-            # 移动文件或文件夹
-            shutil.move(str(item), str(self.ncInstallPath))
-
-        # 删除未移动的文件和文件夹
-        for item in skipped_items:
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink()
-
-        # 删除下载文件和解压出来的文件夹
-        shutil.rmtree(self.zipFilePath.parent / self.zipFilePath.stem)
-        self.zipFilePath.unlink()
-        logger.success("移动成功")
+            logger.error(f"安装 NapCat 时引发 未知错误: {e}")
+            self.errorFinished.emit()
+        else:
+            # 没有引发异常
+            self.installFinished.emit()
+        finally:
+            # 无论是否出错,都会重置进度条
+            self.progressBarToggle.emit(2)
+            self.progressBarToggle.emit(4)
 
 
 class QQDownloadCard(DownloadCardBase):

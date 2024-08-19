@@ -133,7 +133,6 @@ class NapCatDownloader(QThread):
             - path 下载路径
         """
         super().__init__()
-        self._is_running = True # 线程是否停止标识符
         self.url: QUrl = url if url else None
         self.path: Path = path if path else None
 
@@ -143,6 +142,9 @@ class NapCatDownloader(QThread):
             - 自动检查是否需要使用代理
             - 尽可能下载成功
         """
+        # 调整按钮样式为禁用
+        self.progressBarToggle.emit(3)
+
         # 检查网络环境
         if not self.checkNetwork():
             # 如果网络环境不好, 则调整下载链接
@@ -165,18 +167,12 @@ class NapCatDownloader(QThread):
 
                 with open(f'{self.path}/{self.url.fileName()}', 'wb') as file:
                     for chunk in response.iter_bytes():
-                        file.write(chunk) # 写入字节
+                        file.write(chunk)  # 写入字节
                         self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
 
-                        if not self._is_running:
-                            # 终止运行
-                            return
-
             # 下载完成
-            logger.info(f"{'-' * 10} 下载 NapCat 结束 ~ {'-' * 10}")
             self.downloadFinish.emit()  # 发送下载完成信号
-            self.downloadProgress.emit(0)  # 重置进度条进度
-            self.progressBarToggle.emit(2)  # 设置进度条为 文字模式
+            logger.info(f"{'-' * 10} 下载 NapCat 结束 ~ {'-' * 10}")
 
         except httpx.RequestError as e:
             logger.error(f"下载 NapCat 时引发 RequestError: {e}")
@@ -196,6 +192,11 @@ class NapCatDownloader(QThread):
         except Exception as e:
             logger.error(f"下载 NapCat 时引发未知错误: {e}")
             self.errorFinsh.emit()
+        finally:
+            # 无论是否出错,都会重置
+            self.downloadProgress.emit(0)  # 重置进度条进度
+            self.progressBarToggle.emit(2)  # 设置进度条为 文字模式
+            self.progressBarToggle.emit(4)  # 解除禁用
 
     def checkNetwork(self):
         """
@@ -217,15 +218,3 @@ class NapCatDownloader(QThread):
 
     def setPath(self, path: Path):
         self.path = path
-
-    def stop(self):
-        """
-        ## 停止下载 NapCat
-            - 如果在下载则终止下载
-        """
-        logger.info(f"{'-' * 10} 手动停止 NapCat 下载 ~ {'-' * 10}")
-        self._is_running = False
-        self.downloadFinish.emit()  # 发送下载完成信号
-        self.downloadProgress.emit(0)  # 重置进度条进度
-        self.progressBarToggle.emit(2)  # 设置进度条为 文字模式
-        logger.info(f"停止下载 NapCat 成功!")
