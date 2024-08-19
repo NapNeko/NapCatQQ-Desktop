@@ -87,6 +87,12 @@ class PathFunc:
         except FileNotFoundError:
             return None
 
+    def getQQIndexPath(self) -> Path:
+        """
+        ## 获取 QQ 的 index.js 文件路径
+        """
+        return self.getQQPath() / r"resources/app/app_launcher/index.js"
+
     def getNapCatPath(self) -> Path:
         """
         ## 获取 NapCat 路径
