@@ -174,24 +174,16 @@ class NapCatDownloader(QThread):
             self.downloadFinish.emit()  # 发送下载完成信号
             logger.info(f"{'-' * 10} 下载 NapCat 结束 ~ {'-' * 10}")
 
-        except httpx.RequestError as e:
-            logger.error(f"下载 NapCat 时引发 RequestError: {e}")
-            self.errorFinsh.emit()
         except httpx.HTTPStatusError as e:
             logger.error(
                 f"发送下载 NapCat 请求时引发 HTTPStatusError, "
                 f"响应码: {e.response.status_code}, 响应内容: {e.response.content}"
             )
             self.errorFinsh.emit()
-        except FileNotFoundError as e:
-            logger.error(f"下载 NapCat 时引发 FileNotFoundError: {e}")
+        except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
+            logger.error(f"下载 NapCat 时引发 {type(e).__name__}: {e}")
             self.errorFinsh.emit()
-        except PermissionError as e:
-            logger.error(f"下载 NapCat 时引发 PermissionError: {e}")
-            self.errorFinsh.emit()
-        except Exception as e:
-            logger.error(f"下载 NapCat 时引发未知错误: {e}")
-            self.errorFinsh.emit()
+
         finally:
             # 无论是否出错,都会重置
             self.downloadProgress.emit(0)  # 重置进度条进度

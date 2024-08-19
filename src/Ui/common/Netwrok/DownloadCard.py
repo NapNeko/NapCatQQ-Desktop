@@ -333,17 +333,8 @@ class NapCatInstallWorker(QThread):
             self.zipFilePath.unlink()
             logger.info(f"{'-' * 10} 成功解压新版 NapCat {'-' * 10}")
 
-        except zipfile.BadZipFile as e:
-            logger.error(f"安装 NapCat 时引发 BadZipFile, 压缩包存在问题: {e}")
-            self.errorFinished.emit()
-        except PermissionError as e:
-            logger.error(f"安装 NapCat 时引发 PermissionError: {e}")
-            self.errorFinished.emit()
-        except FileNotFoundError as e:
-            logger.error(f"安装 NapCat 时引发 FileNotFoundError: {e}")
-            self.errorFinished.emit()
-        except Exception as e:
-            logger.error(f"安装 NapCat 时引发 未知错误: {e}")
+        except (zipfile.BadZipFile, PermissionError, FileNotFoundError, Exception) as e:
+            logger.error(f"安装 NapCat 时引发 {type(e).__name__}: {e}")
             self.errorFinished.emit()
         else:
             # 没有引发异常
