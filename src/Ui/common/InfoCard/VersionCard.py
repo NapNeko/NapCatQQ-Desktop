@@ -161,6 +161,8 @@ class QQVersionCard(VersionCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.QQ, "QQ Version", "Unknown Version", parent)
+        self.updateSate = False  # 是否有更新标记
+        self.isInstall = False  # 检查是否有安装 QQ 的标记, False 表示没有安装
         self.contentsLabel.setText(self.getLocalVersion())
 
     @timer(3000)
@@ -176,6 +178,30 @@ class QQVersionCard(VersionCardBase):
             self.errorBadge.show()
 
         return version if version else "Unknown version"
+
+    def mousePressEvent(self, event):
+        """
+        ## 重写事件以控制自身点击事件
+        """
+        super().mousePressEvent(event)
+
+        if not self.isInstall:
+            from src.Ui.HomePage.Home import HomeWidget
+            it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
+            return
+
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).update_widget_button.click()
+
+    def enterEvent(self, event):
+        """
+        ## 重写事件以控制鼠标样式
+        """
+        super().enterEvent(event)
+        if self.updateSate or not self.isInstall:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
 
 
 @InfoBadgeManager.register('Version')

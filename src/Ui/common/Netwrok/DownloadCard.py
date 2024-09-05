@@ -16,9 +16,8 @@ from qfluentwidgets import (
 
 from src.Core import timer
 from src.Core.Config import cfg
-# from src.Core.BootWay import FixQQ
 from src.Core.GetVersion import GetVersion
-from src.Core.NetworkFunc import Urls, NapCatDownloader
+from src.Core.NetworkFunc import Urls, NapCatDownloader, QQDownloader
 from src.Core.PathFunc import PathFunc
 from src.Ui.Icon import NapCatDesktopIcon as NCDIcon
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
@@ -184,7 +183,7 @@ class NapCatDownloadCard(DownloadCardBase):
         """
         self.updateVersion()
 
-    @timer(3_600_000)
+    @timer(86_400_000)
     def updateVersion(self):
         """
         ## 更新显示版本和下载器所下载的版本url
@@ -329,6 +328,10 @@ class NapCatInstallWorker(QThread):
             with zipfile.ZipFile(str(self.zipFilePath), 'r') as zip_ref:
                 zip_ref.extractall(str(self.ncInstallPath))
 
+            # 修改 NapCat 的 loadNapCat.js 文件
+            with open(str(self.ncInstallPath / 'loadNapCat.js'), 'w', encoding='utf-8') as f:
+                f.write(f'(async () => {{await import("file:///{(self.ncInstallPath / "napcat.mjs").as_posix()}")}})()')
+
             # 删除包释放空间
             self.zipFilePath.unlink()
             logger.info(f"{'-' * 10} 成功解压新版 NapCat {'-' * 10}")
@@ -355,20 +358,21 @@ class QQDownloadCard(DownloadCardBase):
         ## 初始化控件
         """
         super().__init__(parent=parent)
-        self.installExePath: Optional[Path] = None
+        self.installExePath: Path = it(PathFunc).tmp_path / Urls.QQ_WIN_DOWNLOAD.value.fileName()
         self.isInstall = False
-        self.installMode = False
 
         # 创建控件
-        self.downloader = Downloader(path=it(PathFunc).tmp_path)
-        self.versionWidget = InfoWidget(self.tr("Version"), self.tr("Unknown"), self)
+        self.downloader = QQDownloader(Urls.QQ_WIN_DOWNLOAD.value, it(PathFunc).tmp_path)
+        self.versionWidget = InfoWidget(self.tr("Version"), self.tr("9.9.15-27597"), self)
         self.platformWidget = InfoWidget(self.tr("Platform"), cfg.get(cfg.PlatformType), self)
         self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
         # 调整控件
-        self.installButton.clicked.connect(self._installButtonSlot)
+        self.installButton.clicked.connect(self.downloader.start)
+        self.downloader.progressBarToggle.connect(self.switchProgressBar)
         self.downloader.downloadProgress.connect(self.installButton.setValue)
-        self.downloader.finished.connect(self._install)
+        self.downloader.errorFinsh.connect(self.showErrorTips)
+        self.downloader.downloadFinish.connect(self._downloadFinishSlot)
         self.nameLabel.setText("NTQQ")
         self.iconLabel.setImage(QPixmap(NCDIcon.QQ.path()))
         self.iconLabel.scaledToWidth(100)
@@ -391,26 +395,21 @@ class QQDownloadCard(DownloadCardBase):
 
         self.checkInstall()
         self._setLayout()
-        self._onTimer()
+        # self._onTimer()
 
     @timer(10_000, True)
-    def _onTimer(self):
-        """
-        ## 延时启动计时器, 等待用于等待网络请求
-        """
-        self.updateVersion()
-
-    @timer(86_400_000)
-    def updateVersion(self):
-        """
-        ## 更新显示版本和下载器所下载的版本url
-        """
-        try:
-            self.versionWidget.setValue(it(GetVersion).QQRemoteVersion)
-            self.downloader.setUrl(it(GetVersion).QQRemoteDownloadUrls[cfg.get(cfg.PlatformType)])
-        except TypeError:
-            # 解析失败跳过本次解析
-            return
+    # def _onTimer(self):
+    #     """
+    #     ## 延时启动计时器, 等待用于等待网络请求
+    #     """
+    #     self.updateVersion()
+    #
+    # @timer(86_400_000)
+    # def updateVersion(self):
+    #     """
+    #     ## 更新显示版本和下载器所下载的版本url
+    #     """
+    #     self.versionWidget.setValue(it(GetVersion).QQRemoteVersion)
 
     @timer(3000)
     def checkInstall(self) -> None:
@@ -430,53 +429,24 @@ class QQDownloadCard(DownloadCardBase):
             self.openInstallPathButton.hide()
             self.isInstall = False
 
-    @Slot()
-    def _installButtonSlot(self) -> None:
-        """
-        ## 安装按钮槽函数
-        """
-        if self.isRun:
-            # 如果正在下载/安装再点击则是取消操作
-            self.downloader.stop()  # 先停止下载
-            self.installButton.setValue(0)
-            self.installButton.setProgressBarState(False)
-            self.installButton.setTestVisible(True)
-            self.isRun = False
-        else:
-            # 反之则开始下载等操作
-            self.installMode = InstallationMessageBox(self.parent().parent()).exec()
-            self.downloader.start()
-            self.installExePath = it(PathFunc).tmp_path / self.downloader.url.fileName()
-            self.installButton.setProgressBarState(False)
-            self.installButton.setTestVisible(False)
-            self.isRun = True
-
     @Slot(bool)
-    def _install(self, value: bool) -> None:
+    def _downloadFinishSlot(self) -> None:
         """
         ## 下载完成后的安装操作
-            - value 用于判断是否下载成功
         """
-        if not value:
-            # 如果下载失败则重置按钮
-            self.installButton.setProgressBarState(False)
-            self.installButton.setValue(0)
-            self.installButton.setTestVisible(True)
-            return
-
-        self.isRun = False
-        self.installButton.setEnabled(False)
-        self.installButton.setProgressBarState(True)
-
+        # 创建 QProcess 进程
         self.process = QProcess(self)
         self.process.finished.connect(self._installationFinished)
 
-        if self.installMode:
-            # 执行静默安装
+        # 询问用户应该如何安装(手动/静默)
+        from src.Ui.HomePage.Home import HomeWidget
+        if (box := InstallationMessageBox(it(HomeWidget))).exec():
+            # True 为手动安装, 反之为静默安装
             self.process.setProgram(str(self.installExePath))
-            self.process.setArguments(["/s"])
         else:
             self.process.setProgram(str(self.installExePath))
+            self.process.setArguments(["/s"])
+
 
         # QProcess 的启动应该是非阻塞的,我不知道为什么到这里变成了阻塞,只能通过processEvents缓解卡顿
         QApplication.processEvents()
@@ -485,8 +455,7 @@ class QQDownloadCard(DownloadCardBase):
     @Slot(int, QProcess.ExitStatus)
     def _installationFinished(self, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
         """
-        ## 下载完成后的安装操作
-            - value 用于判断是否下载成功
+        ## 安装完成后的安装操作
         """
         self.installButton.setEnabled(True)
         self.installButton.setProgressBarState(False)
@@ -505,6 +474,39 @@ class QQDownloadCard(DownloadCardBase):
 
         # 处理事件循环中的事件
         QCoreApplication.processEvents()
+
+    @Slot(int)
+    def switchProgressBar(self, mode: int):
+        """
+        ## 切换进度条样式
+            - 0: 进度模式
+            - 1: 未知进度模式
+            - 2: 文字模式
+            - 3: 禁用按钮
+            - 4: 解除禁用
+        """
+        match mode:
+            case 0:
+                self.installButton.setProgressBarState(False)
+            case 1:
+                self.installButton.setProgressBarState(True)
+            case 2:
+                self.installButton.setTestVisible(True)
+            case 3:
+                self.installButton.setEnabled(False)
+            case 4:
+                self.installButton.setEnabled(True)
+
+    @Slot()
+    def showErrorTips(self):
+        """
+        ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
+        """
+        from src.Ui.HomePage.Home import HomeWidget
+        it(HomeWidget).showError(
+            self.tr("Failed"),
+            self.tr("Error sent while downloading/installing QQ,\nplease go to Setup > log for details")
+        )
 
     @Slot()
     def _shareButtonSlot(self) -> None:

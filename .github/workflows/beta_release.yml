@@ -40,6 +40,7 @@ jobs:
     - name: Add Manifest
       run: |
             mt.exe -manifest ./assets/NapCat-Desktop.exe.manifest -outputresource:./build/NapCat-Desktop.exe;1
+
     - name: Release
       uses: softprops/action-gh-release@v2
       with:

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import json
 import re
-from pathlib import Path
 
+import psutil
 from PySide6.QtCore import Qt, QProcess, Slot
 from PySide6.QtGui import QTextCursor, QPixmap
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
@@ -167,12 +167,21 @@ class BotWidget(QWidget):
         self.botLogPage.clear()
 
         self.env = QProcess.systemEnvironment()
-        self.env.append("ELECTRON_RUN_AS_NODE=1")
+        self.env.append(f"NAPCAT_PATCH_PATH={it(PathFunc).getNapCatPath() / 'patchNapCat.js'}")
+        self.env.append(f"NAPCAT_LOAD_PATH={it(PathFunc).getNapCatPath() / 'loadNapCat.js'}")
+        self.env.append(f"NAPCAT_INJECT_PATH={it(PathFunc).getNapCatPath() / 'NapCatWinBootHook.dll'}")
+        self.env.append(f"NAPCAT_LAUNCHER_PATH={it(PathFunc).getNapCatPath() / 'NapCatWinBootMain.exe'}")
+        self.env.append(f"NAPCAT_MAIN_PATH={it(PathFunc).getNapCatPath() / 'napcat.mjs'}")
 
         self.process = QProcess(self)
         self.process.setEnvironment(self.env)
-        self.process.setProgram(str(Path(self.config.advanced.QQPath) / "QQ.exe"))
-        self.process.setArguments(["--enable-logging", "-q", self.config.bot.QQID])
+        self.process.setProgram(str(it(PathFunc).getNapCatPath() / 'NapCatWinBootMain.exe'))
+        self.process.setArguments(
+            [
+                str(it(PathFunc).getQQPath() / 'QQ.exe'),
+                str(it(PathFunc).getNapCatPath() / 'NapCatWinBootHook.dll')
+            ]
+        )
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
         self.process.readyReadStandardOutput.connect(self._showQRCode)
@@ -197,8 +206,9 @@ class BotWidget(QWidget):
         """
         ## 停止按钮槽函数
         """
-        self.process.kill()
-        self.process.waitForFinished()
+        parent = psutil.Process(self.process.processId())
+        [child.kill() for child in parent.children(recursive=True)]
+        parent.kill()
 
         self.isRun = False
         self.isLogin = False

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Self
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout
-from creart import AbstractCreator, CreateTargetInfo, exists_module, add_creator
+from creart import AbstractCreator, CreateTargetInfo, exists_module, add_creator, it
 from qfluentwidgets import ScrollArea
 
 from src.Ui.StyleSheet import StyleSheet
@@ -55,6 +55,50 @@ class UpdateWidget(QWidget):
         self.vBoxLayout.addWidget(self.cardView)
         self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
         self.setLayout(self.vBoxLayout)
+
+    def showInfo(self, title: str, content: str) -> None:
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showInfo(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showError(self, title: str, content: str) -> None:
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showError(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showWarning(self, title: str, content: str) -> None:
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showWarning(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
+
+    def showSuccess(self, title: str, content: str) -> None:
+        """
+        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
+        """
+        from src.Ui.MainWindow.Window import MainWindow
+        it(MainWindow).showSuccess(
+            title=title,
+            content=content,
+            showcasePage=self
+        )
 
 
 class CardView(ScrollArea):

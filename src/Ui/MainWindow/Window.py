@@ -17,10 +17,8 @@ from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import NavigationItemPosition
 from qfluentwidgets.window import MSFluentWindow, SplashScreen
 
-from src.Core.Config import cfg
 from src.Ui.AddPage import AddWidget
 from src.Ui.BotListPage import BotListWidget
-from src.Ui.FixPage import FixWidget
 from src.Ui.HomePage import HomeWidget
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
@@ -37,7 +35,6 @@ class MainWindow(MSFluentWindow):
     def __init__(self) -> None:
         super().__init__()
 
-        self.fix_widget: Optional[FixWidget] = None
         self.update_widget: Optional[UpdateWidget] = None
         self.splashScreen: Optional[SplashScreen] = None
         self.setup_widget: Optional[SetupWidget] = None
@@ -65,9 +62,6 @@ class MainWindow(MSFluentWindow):
         # 组件加载完成结束 SplashScreen
         self.splashScreen.finish()
         logger.success("窗体构建完成")
-
-        # 检查 EULA
-        self.showEULA()
 
     def setWindow(self) -> None:
         """
@@ -99,7 +93,6 @@ class MainWindow(MSFluentWindow):
         self.add_widget = it(AddWidget).initialize(self)
         self.bot_list_widget = it(BotListWidget).initialize(self)
         self.update_widget = it(UpdateWidget).initialize(self)
-        self.fix_widget = it(FixWidget).initialize(self)
         self.home_widget = it(HomeWidget).initialize(self)
 
         # 添加子页面
@@ -128,12 +121,6 @@ class MainWindow(MSFluentWindow):
             text=self.tr("Update"),
             position=NavigationItemPosition.TOP
         )
-        self.fix_widget_button = self.addSubInterface(
-            interface=self.fix_widget,
-            icon=FluentIcon.DEVELOPER_TOOLS,
-            text=self.tr("Fix"),
-            position=NavigationItemPosition.TOP
-        )
         self.setup_widget_button = self.addSubInterface(
             interface=self.setup_widget,
             icon=FluentIcon.SETTING,
@@ -156,26 +143,6 @@ class MainWindow(MSFluentWindow):
         self.trayIcon = SystemTrayIcon(self)
         self.trayIcon.activated.connect(self.trayIconAction)
         self.trayIcon.show()
-
-    def showEULA(self):
-        """
-        ## 检测用户是否同意EULA
-        """
-        if cfg.get(cfg.EULA):
-            return
-        from src.Core.EULA import EULAMessageBox
-        self.home_widget_button.setEnabled(False)
-        self.add_widget_button.setEnabled(False)
-        self.bot_list_widget_button.setEnabled(False)
-        self.setup_widget_button.setEnabled(False)
-        if EULAMessageBox(self.home_widget).exec():
-            self.home_widget_button.setEnabled(True)
-            self.add_widget_button.setEnabled(True)
-            self.bot_list_widget_button.setEnabled(True)
-            self.setup_widget_button.setEnabled(True)
-            cfg.set(cfg.EULA, True, True)
-        else:
-            self.close()
 
     @Slot(QSystemTrayIcon)
     def trayIconAction(self, reason: QSystemTrayIcon):

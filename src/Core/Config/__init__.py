@@ -23,16 +23,6 @@ class StartOpenHomePageViewEnum(Enum):
         return [value.value for value in StartOpenHomePageViewEnum]
 
 
-class BootWayEnum(Enum):
-    """修补方法枚举"""
-    BOOT_WAY_05 = "BootWay05"
-    BOOT_WAY_03 = "BootWay03"
-
-    @staticmethod
-    def values(self):
-        return [value.value for value in BootWayEnum]
-
-
 class Language(Enum):
     """语言枚举"""
 
@@ -79,19 +69,6 @@ class Config(QConfig):
         group="Info",
         name="PlatformType",
         default=""
-    )
-    EULA = ConfigItem(
-        group="Info",
-        name="EULA",
-        default=False,
-        validator=BoolValidator()
-    )
-    BootWay = OptionsConfigItem(
-        group="Info",
-        name="BootWay",
-        default=BootWayEnum.BOOT_WAY_05,
-        validator=OptionsValidator(BootWayEnum),
-        serializer=EnumSerializer(BootWayEnum),
     )
 
     # 路径项

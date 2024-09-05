@@ -30,11 +30,8 @@ class Urls(Enum):
 
     # QQ 相关
     QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")
-    QQ_WIN_DOWNLOAD = QUrl("https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/windowsDownloadUrl.js")
+    QQ_WIN_DOWNLOAD = QUrl("https://dldir1.qq.com/qqfile/qq/QQNT/b07cb1a5/QQ9.9.15.27597_x64.exe")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
-
-    # DLLHijackMethod 下载 (BootWay03 使用)
-    QQ_FIX_64 = QUrl("https://github.com/LiteLoaderQQNT/QQNTFileVerifyPatch/releases/latest/download/dbghelp_x64.dll")
 
 
 class NetworkFunc(QObject):
@@ -74,17 +71,20 @@ def async_request(url: QUrl, _bytes: bool = False) -> Callable[[Callable[..., No
     装饰器函数，用于装饰其他函数，使其在QUrl请求完成后执行
         - url (QUrl): 用于进行网络请求的QUrl对象。
     """
+
     def decorator(func: Callable[..., None]) -> Callable[..., None]:
         """
         装饰器内部函数，用于接收被装饰的函数
             - func (Callable): 被装饰的函数
         """
+
         def wrapper(*args: Any, **kwargs: Any) -> None:
             """
             包装函数，用于执行网络请求并在请求完成后调用被装饰的函数。
                 - *args: 传递给被装饰函数的位置参数
                 - **kwargs: 传递给被装饰函数的关键字参数
             """
+
             def on_finished(_reply: QNetworkReply) -> None:
                 """
                 请求完成后的回调函数，读取响应并调用被装饰的函数。
@@ -110,6 +110,7 @@ def async_request(url: QUrl, _bytes: bool = False) -> Callable[[Callable[..., No
             reply.finished.connect(lambda: on_finished(reply))
 
         return wrapper
+
     return decorator
 
 
@@ -126,7 +127,7 @@ class NapCatDownloader(QThread):
     # 引发错误导致结束
     errorFinsh = Signal()
 
-    def __init__(self, url: QUrl, path: Path):
+    def __init__(self, url: QUrl, path: Path) -> None:
         """
         ## 初始化下载器
             - url 下载连接
@@ -149,6 +150,7 @@ class NapCatDownloader(QThread):
         if not self.checkNetwork():
             # 如果网络环境不好, 则调整下载链接
             self.url = QUrl(f"https://gh.ddlc.top/{self.url.url()}")
+            logger.info(f"访问 GITHUB 速度偏慢,切换下载链接为: https://gh.ddlc.top/{self.url.url()}")
 
         # 开始下载
         try:
@@ -156,7 +158,6 @@ class NapCatDownloader(QThread):
             with httpx.stream('GET', self.url.url(), follow_redirects=True) as response:
 
                 if (total_size := int(response.headers.get('content-length', 0))) == 0:
-                    print(response.headers, total_size)
                     # 尝试获取文件大小
                     logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
                     self.progressBarToggle.emit(2)
@@ -165,7 +166,7 @@ class NapCatDownloader(QThread):
 
                 self.progressBarToggle.emit(0)  # 设置进度条为 进度模式
 
-                with open(f'{self.path}/{self.url.fileName()}', 'wb') as file:
+                with open(f'{self.path / self.url.fileName()}', 'wb') as file:
                     for chunk in response.iter_bytes():
                         file.write(chunk)  # 写入字节
                         self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
@@ -190,7 +191,7 @@ class NapCatDownloader(QThread):
             self.progressBarToggle.emit(2)  # 设置进度条为 文字模式
             self.progressBarToggle.emit(4)  # 解除禁用
 
-    def checkNetwork(self):
+    def checkNetwork(self) -> bool:
         """
         ## 检查网络能否正常访问 Github
         """
@@ -205,8 +206,82 @@ class NapCatDownloader(QThread):
             # 引发错误返回 False
             return False
 
-    def setUrl(self, url: QUrl):
+    def setUrl(self, url: QUrl) -> None:
         self.url = url
 
-    def setPath(self, path: Path):
+    def setPath(self, path: Path) -> None:
+        self.path = path
+
+
+class QQDownloader(QThread):
+    """
+    ## 执行下载 QQ 的任务
+    """
+    # 进度条模式切换 (进度模式: 0 \ 未知进度模式: 1 \ 文字模式: 2)
+    progressBarToggle = Signal(int)
+    # 下载进度
+    downloadProgress = Signal(int)
+    # 下载完成
+    downloadFinish = Signal()
+    # 引发错误导致结束
+    errorFinsh = Signal()
+
+    def __init__(self, url: QUrl, path: Path) -> None:
+        """
+        ## 初始化下载器
+        """
+        super().__init__()
+        self.url: QUrl = url if url else None
+        self.path: Path = Path(path) if path else None
+
+    def run(self) -> None:
+        """
+        ## 运行下载 QQ 的任务
+            - 自动下载 QQ
+        """
+        # 调整按钮样式为禁用
+        self.progressBarToggle.emit(3)
+
+        # 开始下载 QQ
+        try:
+            logger.info(f"{'-' * 10} 开始下载 QQ ~ {'-' * 10}")
+            with httpx.stream('GET', self.url.url(), follow_redirects=True) as response:
+
+                if (total_size := int(response.headers.get('content-length', 0))) == 0:
+                    # 尝试获取文件大小
+                    logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
+                    self.progressBarToggle.emit(2)
+                    self.errorFinsh.emit()
+                    return
+
+                self.progressBarToggle.emit(0)  # 设置进度条为 进度模式
+                with open(f'{self.path / self.url.fileName()}', 'wb') as file:
+                    for chunk in response.iter_bytes():
+                        file.write(chunk)  # 写入字节
+                        self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
+
+            # 下载完成
+            self.downloadFinish.emit()  # 发生下载完成信号
+            logger.info(f"{'-' * 10} 下载 QQ 结束 ~ {'-' * 10}")
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"发送下载 QQ 请求时引发 HTTPStatusError, "
+                f"响应码: {e.response.status_code}, 响应内容: {e.response.content}"
+            )
+            self.errorFinsh.emit()
+        except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
+            logger.error(f"下载 QQ 时引发 {type(e).__name__}: {e}")
+            self.errorFinsh.emit()
+
+        finally:
+            # 无论是否出错,都会重置
+            self.downloadProgress.emit(0)  # 重置进度条进度
+            self.progressBarToggle.emit(2)  # 设置进度条为 文字模式
+            self.progressBarToggle.emit(4)  # 解除禁用
+
+    def setUrl(self, url: QUrl) -> None:
+        self.url = url
+
+    def setPath(self, path: Path) -> None:
         self.path = path

@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import re
 from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Self, Optional
@@ -101,17 +100,8 @@ class SetupWidget(QWidget):
             return
 
         with open(self.log_file_path, "r", encoding="utf-8") as file:
-            # 匹配并移除 ANSI 转义码
-            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-            content = ansi_escape.sub('', file.read())
-            # 替换特定字符串
-            content = content.replace(
-                "\n📢 Tips: QFluentWidgets Pro is now released. Click "
-                "https://qfluentwidgets.com/pages/pro to learn more about it.\n\n",
-                ""
-            )
             # 输出内容
-            it(SetupWidget).logWidget.setPlainText(content)
+            it(SetupWidget).logWidget.setPlainText(file.read())
 
 
 class SetupWidgetClassCreator(AbstractCreator, ABC):
