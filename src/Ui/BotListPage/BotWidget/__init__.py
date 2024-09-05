@@ -217,9 +217,9 @@ class BotWidget(QWidget):
         """
         ## 停止按钮槽函数
         """
-        parent = psutil.Process(self.process.processId())
-        [child.kill() for child in parent.children(recursive=True)]
-        parent.kill()
+        if not (parent := psutil.Process(self.process.processId())):
+            [child.kill() for child in parent.children(recursive=True)]
+            parent.kill()
 
         self.isRun = False
         self.isLogin = False
