@@ -2,8 +2,9 @@
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
-from qfluentwidgets import Action, SystemTrayMenu
+from qfluentwidgets import Action
 from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import SystemTrayMenu
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow.Window import MainWindow
@@ -25,4 +26,3 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.setIcon(parent.windowIcon())
         self.setToolTip("NapCat Desktop")
         self.setContextMenu(self.menu)
-

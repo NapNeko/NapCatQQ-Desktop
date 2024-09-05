@@ -1,16 +1,23 @@
 # -*- coding: utf-8 -*-
 
-from PySide6.QtCore import Qt, QPoint
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
+from PySide6.QtCore import Qt, QPoint
 from qfluentwidgets import (
-    SimpleCardWidget, FluentIconBase, IconWidget, StrongBodyLabel, BodyLabel, FluentIcon, IconInfoBadge,
-    InfoBadgeManager, ToolTipFilter
+    BodyLabel,
+    FluentIcon,
+    IconWidget,
+    IconInfoBadge,
+    ToolTipFilter,
+    FluentIconBase,
+    StrongBodyLabel,
+    InfoBadgeManager,
+    SimpleCardWidget,
 )
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 from src.Core import timer
-from src.Core.GetVersion import GetVersion
 from src.Ui.Icon import NapCatDesktopIcon as NCIcon
+from src.Core.GetVersion import GetVersion
 
 
 class VersionCardBase(QWidget):
@@ -137,10 +144,12 @@ class NapCatVersionCard(VersionCardBase):
 
         if not self.isInstall:
             from src.Ui.HomePage.Home import HomeWidget
+
             it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
             return
 
         from src.Ui.MainWindow.Window import MainWindow
+
         it(MainWindow).update_widget_button.click()
 
     def enterEvent(self, event):
@@ -187,10 +196,12 @@ class QQVersionCard(VersionCardBase):
 
         if not self.isInstall:
             from src.Ui.HomePage.Home import HomeWidget
+
             it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
             return
 
         from src.Ui.MainWindow.Window import MainWindow
+
         it(MainWindow).update_widget_button.click()
 
     def enterEvent(self, event):
@@ -204,7 +215,7 @@ class QQVersionCard(VersionCardBase):
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
 
-@InfoBadgeManager.register('Version')
+@InfoBadgeManager.register("Version")
 class NewVersionInfoBadgeManager(InfoBadgeManager):
     """
     ## 更新图标显示位置调整

@@ -2,19 +2,19 @@
 from typing import List
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from creart import it
 from qfluentwidgets import (
-    BodyLabel,
-    ExpandSettingCard,
-    FluentIcon,
-    FluentIconBase,
     InfoBar,
-    InfoBarPosition,
     LineEdit,
+    BodyLabel,
+    FluentIcon,
     MessageBox,
-    MessageBoxBase,
     TitleLabel,
+    FluentIconBase,
+    MessageBoxBase,
+    InfoBarPosition,
+    ExpandSettingCard,
     TransparentPushButton,
     TransparentToolButton,
 )
@@ -58,6 +58,7 @@ class TextCard(ExpandSettingCard):
     """
     ## 上报 Text 列表卡片
     """
+
     # 成功添加 url 的信号
     addSignal = Signal()
     # 当用户删除了所有 url 的信号
@@ -123,6 +124,7 @@ class TextCard(ExpandSettingCard):
         """
         from src.Ui.AddPage import AddWidget
         from src.Ui.BotListPage.BotListWidget import BotListWidget
+
         box = TextInputBox(it(AddWidget)) if self.identifier == "Add" else TextInputBox(it(BotListWidget))
         if not box.exec() or not box.urlLineEdit.text():
             # 如果用户取消或输入空字符,则退出函数
@@ -166,9 +168,7 @@ class TextCard(ExpandSettingCard):
 
         box = MessageBox(
             title=self.tr("Confirm"),
-            content=self.tr(
-                f"Are you sure you want to delete the following URLs?\n\n{item.text}"
-            ),
+            content=self.tr(f"Are you sure you want to delete the following URLs?\n\n{item.text}"),
             parent=it(AddWidget),
         )
         box.yesSignal.connect(lambda: self._removeUrl(item))

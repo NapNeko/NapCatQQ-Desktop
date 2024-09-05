@@ -4,9 +4,9 @@
 添加机器人
 """
 from abc import ABC
-from typing import TYPE_CHECKING, Self, Optional
+from typing import TYPE_CHECKING, Optional, Self
 
-from PySide6.QtWidgets import QStackedWidget, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QStackedWidget, QVBoxLayout, QWidget
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
 
@@ -118,44 +118,32 @@ class AddWidget(QWidget):
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showInfo(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showInfo(title=title, content=content, showcasePage=self)
 
     def showError(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showError(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showError(title=title, content=content, showcasePage=self)
 
     def showWarning(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showWarning(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showWarning(title=title, content=content, showcasePage=self)
 
     def showSuccess(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showSuccess(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showSuccess(title=title, content=content, showcasePage=self)
 
 
 class AddWidgetClassCreator(AbstractCreator, ABC):

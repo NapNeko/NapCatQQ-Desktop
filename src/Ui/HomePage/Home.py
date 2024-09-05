@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Self, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QStackedWidget
-from creart import add_creator, exists_module, it
+from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets import isDarkTheme, InfoBar, InfoBarIcon, InfoBarPosition, PushButton
+from qfluentwidgets import InfoBar, PushButton, InfoBarIcon, InfoBarPosition, isDarkTheme
 
 from src.Core.Config import StartOpenHomePageViewEnum as SEnum
 from src.Core.Config import cfg
@@ -123,44 +123,32 @@ class HomeWidget(QStackedWidget):
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showInfo(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showInfo(title=title, content=content, showcasePage=self)
 
     def showError(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showError(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showError(title=title, content=content, showcasePage=self)
 
     def showWarning(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showWarning(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showWarning(title=title, content=content, showcasePage=self)
 
     def showSuccess(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showSuccess(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showSuccess(title=title, content=content, showcasePage=self)
 
     def paintEvent(self, event) -> None:
         """

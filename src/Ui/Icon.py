@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 from enum import Enum
 
-from qfluentwidgets.common import getIconColor, Theme, FluentIconBase
+from qfluentwidgets.common import FluentIconBase, Theme, getIconColor
 
 
 class NapCatDesktopIcon(FluentIconBase, Enum):
     """主窗体所需要的图标"""
+
     LOGO = "Logo"
     QQ = "QQ"
 

@@ -2,14 +2,14 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
+from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout
-from creart import AbstractCreator, CreateTargetInfo, exists_module, add_creator, it
 from qfluentwidgets import ScrollArea
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 from src.Ui.StyleSheet import StyleSheet
-from src.Ui.UpdatePage.UpdateTopCard import UpdateTopCard
 from src.Ui.common.Netwrok import NapCatUpdateCard
+from src.Ui.UpdatePage.UpdateTopCard import UpdateTopCard
 
 if TYPE_CHECKING:
     from src.Ui import MainWindow
@@ -61,44 +61,32 @@ class UpdateWidget(QWidget):
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showInfo(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showInfo(title=title, content=content, showcasePage=self)
 
     def showError(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showError(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showError(title=title, content=content, showcasePage=self)
 
     def showWarning(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showWarning(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showWarning(title=title, content=content, showcasePage=self)
 
     def showSuccess(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showSuccess(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showSuccess(title=title, content=content, showcasePage=self)
 
 
 class CardView(ScrollArea):

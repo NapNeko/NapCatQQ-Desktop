@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 from abc import ABC
-from pathlib import Path
 from typing import TYPE_CHECKING, Self, Optional
+from pathlib import Path
 
-from PySide6.QtWidgets import QWidget, QStackedWidget, QVBoxLayout
-from creart import add_creator, exists_module, it
+from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
 from src.Core import timer
-from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
-from src.Ui.SetupPage.SetupTopCard import SetupTopCard
-from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common import CodeEditor
+from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.CodeEditor import NCDLogHighlighter
+from src.Ui.SetupPage.SetupTopCard import SetupTopCard
+from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
@@ -79,7 +79,7 @@ class SetupWidget(QWidget):
         self.topCard.pivot.addItem(
             routeKey=self.logWidget.objectName(),
             text=self.tr("Log"),
-            onClick=lambda: self.view.setCurrentWidget(self.logWidget)
+            onClick=lambda: self.view.setCurrentWidget(self.logWidget),
         )
 
         # 连接信号并初始化当前标签页

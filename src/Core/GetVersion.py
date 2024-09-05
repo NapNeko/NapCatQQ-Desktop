@@ -2,13 +2,13 @@
 import json
 from abc import ABC
 from json import JSONDecodeError
+
+from PySide6.QtCore import QUrl, QObject, QRegularExpression
+from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
 from loguru import logger
 
-from PySide6.QtCore import QObject, QEventLoop, QRegularExpression, QUrl
-from creart import it, AbstractCreator, CreateTargetInfo, exists_module, add_creator
-
 from src.Core import timer
-from src.Core.NetworkFunc import NetworkFunc, Urls, async_request
+from src.Core.NetworkFunc import Urls, async_request
 from src.Core.PathFunc import PathFunc
 
 
@@ -46,7 +46,7 @@ class GetVersion(QObject):
         return {
             "result": self.napcatRemoteVersion != self.napcatLocalVersion,
             "localVersion": self.getLocalNapCatVersion,
-            "remoteVersion": self.napcatRemoteVersion
+            "remoteVersion": self.napcatRemoteVersion,
         }
 
     @timer(180_000)
@@ -102,7 +102,7 @@ class GetVersion(QObject):
             "x86_64": QUrl(match_x64),
             "AMD64": QUrl(match_x64),
             "ARM64": QUrl(match_arm),
-            "aarch64": QUrl(match_arm)
+            "aarch64": QUrl(match_arm),
         }
 
     @timer(3000)

@@ -1,13 +1,19 @@
 # -*- coding: utf-8 -*-
-from typing import Optional, List
+from typing import List, Optional
 
-from PySide6.QtCore import Qt, QTimer, QUrl, QUrlQuery, Slot
+from PySide6.QtCore import Qt, QUrl, Slot, QTimer, QUrlQuery
 from PySide6.QtGui import QPixmap
-from PySide6.QtNetwork import QNetworkRequest, QNetworkReply
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame
+from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
+from PySide6.QtWidgets import QFrame, QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
 from qfluentwidgets import (
-    HeaderCardWidget, FluentIcon, TransparentToolButton, ImageLabel, TransparentPushButton, BodyLabel, ScrollArea
+    BodyLabel,
+    FluentIcon,
+    ImageLabel,
+    ScrollArea,
+    HeaderCardWidget,
+    TransparentPushButton,
+    TransparentToolButton,
 )
 from qfluentwidgets.common.animation import BackgroundAnimationWidget
 
@@ -50,6 +56,7 @@ class BotListCard(HeaderCardWidget):
         ## 跳转到 AddPage 页面
         """
         from src.Ui.MainWindow.Window import MainWindow
+
         it(MainWindow).add_widget_button.click()
 
     @timer(2000)
@@ -198,6 +205,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         ## 监控机器人列表
         """
         from src.Ui.BotListPage.BotListWidget import BotListWidget
+
         for card in it(BotListWidget).botList.botCardList:
             if self.config.bot.QQID != card.config.bot.QQID:
                 continue
@@ -218,6 +226,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         """
         from src.Ui.MainWindow import MainWindow
         from src.Ui.BotListPage.BotListWidget import BotListWidget
+
         for card in it(BotListWidget).botList.botCardList:
             if self.config.bot.QQID == card.config.bot.QQID:
                 it(MainWindow).bot_list_widget_button.click()
@@ -233,6 +242,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         ## 停止按钮
         """
         from src.Ui.BotListPage.BotListWidget import BotListWidget
+
         for card in it(BotListWidget).botList.botCardList:
             if self.config.bot.QQID == card.config.bot.QQID:
                 card.botWidget.stopButton.click()
@@ -271,10 +281,8 @@ class BotCard(BackgroundAnimationWidget, QFrame):
             self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
         else:
             from src.Ui.HomePage import HomeWidget
-            it(HomeWidget).showError(
-                title=self.tr("Failed to get the QQ avatar"),
-                content=replay.errorString()
-            )
+
+            it(HomeWidget).showError(title=self.tr("Failed to get the QQ avatar"), content=replay.errorString())
 
     def _setLayout(self) -> None:
         """

@@ -1,15 +1,9 @@
 # -*- coding: utf-8 -*-
 from typing import List
 
-from PySide6.QtCore import QEasingCurve, Qt
-from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
-from qfluentwidgets import (
-    BodyLabel,
-    ExpandSettingCard,
-    FluentIconBase,
-    LineEdit,
-    SwitchButton, FluentIcon,
-)
+from PySide6.QtCore import Qt, QEasingCurve
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
+from qfluentwidgets import LineEdit, BodyLabel, FluentIcon, SwitchButton, FluentIconBase, ExpandSettingCard
 from qfluentwidgets.components.settings.expand_setting_card import GroupSeparator
 
 
@@ -48,9 +42,7 @@ class ItemBase(QWidget):
 
 class GroupCardBase(ExpandSettingCard):
 
-    def __init__(
-        self, icon: FluentIcon | FluentIconBase, title: str, content: str, parent=None
-    ) -> None:
+    def __init__(self, icon: FluentIcon | FluentIconBase, title: str, content: str, parent=None) -> None:
         """
         ## 初始化卡片
 

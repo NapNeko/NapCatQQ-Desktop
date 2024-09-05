@@ -6,25 +6,31 @@
 from abc import ABC
 from typing import Optional
 
-from PySide6.QtCore import QSize, Qt, Slot
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QWidget, QSystemTrayIcon
 from creart import it, add_creator, exists_module
-from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
-from qfluentwidgets import InfoBar, InfoBarPosition, NavigationBarPushButton, Theme
-from qfluentwidgets.common import FluentIcon
-from qfluentwidgets.components import NavigationItemPosition
-from qfluentwidgets.window import MSFluentWindow, SplashScreen
+from PySide6.QtGui import QIcon
+from creart.creator import AbstractCreator, CreateTargetInfo
+from PySide6.QtCore import Qt, Slot, QSize
+from qfluentwidgets import (
+    Theme,
+    InfoBar,
+    FluentIcon,
+    SplashScreen,
+    MSFluentWindow,
+    InfoBarPosition,
+    NavigationItemPosition,
+    NavigationBarPushButton,
+)
+from PySide6.QtWidgets import QWidget, QApplication, QSystemTrayIcon
 
-from src.Ui.AddPage import AddWidget
-from src.Ui.BotListPage import BotListWidget
-from src.Ui.HomePage import HomeWidget
 from src.Ui.Icon import NapCatDesktopIcon
-from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
-from src.Ui.MainWindow.TitleBar import CustomTitleBar
+from src.Ui.AddPage import AddWidget
+from src.Ui.HomePage import HomeWidget
 from src.Ui.SetupPage import SetupWidget
 from src.Ui.UpdatePage import UpdateWidget
+from src.Ui.BotListPage import BotListWidget
+from src.Ui.MainWindow.TitleBar import CustomTitleBar
+from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
 
 
 class MainWindow(MSFluentWindow):
@@ -100,32 +106,32 @@ class MainWindow(MSFluentWindow):
             interface=self.home_widget,
             icon=FluentIcon.HOME,
             text=self.tr("Home"),
-            position=NavigationItemPosition.TOP
+            position=NavigationItemPosition.TOP,
         )
 
         self.add_widget_button = self.addSubInterface(
             interface=self.add_widget,
             icon=FluentIcon.ADD_TO,
             text=self.tr("Add Bot"),
-            position=NavigationItemPosition.TOP
+            position=NavigationItemPosition.TOP,
         )
         self.bot_list_widget_button = self.addSubInterface(
             interface=self.bot_list_widget,
             icon=FluentIcon.MENU,
             text=self.tr("Bot List"),
-            position=NavigationItemPosition.TOP
+            position=NavigationItemPosition.TOP,
         )
         self.update_widget_button = self.addSubInterface(
             interface=self.update_widget,
             icon=FluentIcon.UPDATE,
             text=self.tr("Update"),
-            position=NavigationItemPosition.TOP
+            position=NavigationItemPosition.TOP,
         )
         self.setup_widget_button = self.addSubInterface(
             interface=self.setup_widget,
             icon=FluentIcon.SETTING,
             text=self.tr("Setup"),
-            position=NavigationItemPosition.BOTTOM
+            position=NavigationItemPosition.BOTTOM,
         )
 
         logger.success("侧边栏构建完成")
@@ -168,7 +174,7 @@ class MainWindow(MSFluentWindow):
             orient=Qt.Orientation.Vertical,
             duration=5000,
             position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=showcasePage
+            parent=showcasePage,
         )
 
     @staticmethod
@@ -183,7 +189,7 @@ class MainWindow(MSFluentWindow):
             duration=50000,
             isClosable=True,
             position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=showcasePage
+            parent=showcasePage,
         )
 
     @staticmethod
@@ -197,7 +203,7 @@ class MainWindow(MSFluentWindow):
             orient=Qt.Orientation.Vertical,
             duration=10000,
             position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=showcasePage
+            parent=showcasePage,
         )
 
     @staticmethod
@@ -211,7 +217,7 @@ class MainWindow(MSFluentWindow):
             orient=Qt.Orientation.Vertical,
             duration=5000,
             position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=showcasePage
+            parent=showcasePage,
         )
 
 

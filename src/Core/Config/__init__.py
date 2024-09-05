@@ -6,8 +6,15 @@ from enum import Enum
 from PySide6.QtCore import QLocale
 from creart import it
 from qfluentwidgets.common import (
-    qconfig, QConfig, ConfigItem, BoolValidator, FolderValidator,
-    OptionsConfigItem, OptionsValidator, EnumSerializer, ConfigSerializer
+    QConfig,
+    ConfigItem,
+    BoolValidator,
+    EnumSerializer,
+    FolderValidator,
+    ConfigSerializer,
+    OptionsValidator,
+    OptionsConfigItem,
+    qconfig,
 )
 
 from src.Core.PathFunc import PathFunc
@@ -15,6 +22,7 @@ from src.Core.PathFunc import PathFunc
 
 class StartOpenHomePageViewEnum(Enum):
     """启动页面枚举"""
+
     DISPLAY_VIEW = "DisplayView"
     CONTENT_VIEW = "ContentView"
 
@@ -26,12 +34,8 @@ class StartOpenHomePageViewEnum(Enum):
 class Language(Enum):
     """语言枚举"""
 
-    CHINESE_SIMPLIFIED = QLocale(
-        QLocale.Language.Chinese, QLocale.Script.SimplifiedChineseScript
-    )
-    CHINESE_TRADITIONAL = QLocale(
-        QLocale.Language.Chinese, QLocale.Script.TraditionalChineseScript
-    )
+    CHINESE_SIMPLIFIED = QLocale(QLocale.Language.Chinese, QLocale.Script.SimplifiedChineseScript)
+    CHINESE_TRADITIONAL = QLocale(QLocale.Language.Chinese, QLocale.Script.TraditionalChineseScript)
     ENGLISH = QLocale(QLocale.Language.English)
     AUTO = QLocale()
 
@@ -50,47 +54,16 @@ class Config(QConfig):
     """程序配置"""
 
     # 信息项
-    NCDVersion = ConfigItem(
-        group="Info",
-        name="NCDVersion",
-        default=""
-    )
-    StartTime = ConfigItem(
-        group="Info",
-        name="StartTime",
-        default=""
-    )
-    SystemType = ConfigItem(
-        group="Info",
-        name="SystemType",
-        default=""
-    )
-    PlatformType = ConfigItem(
-        group="Info",
-        name="PlatformType",
-        default=""
-    )
+    NCDVersion = ConfigItem(group="Info", name="NCDVersion", default="")
+    StartTime = ConfigItem(group="Info", name="StartTime", default="")
+    SystemType = ConfigItem(group="Info", name="SystemType", default="")
+    PlatformType = ConfigItem(group="Info", name="PlatformType", default="")
 
     # 路径项
     # 注意: default 为空字符串则默认以程序根目录为路径
-    QQPath = ConfigItem(
-        group="Path",
-        name="QQPath",
-        default="",
-        validator=FolderValidator()
-    )
-    NapCatPath = ConfigItem(
-        group="Path",
-        name="napcatPath",
-        default="",
-        validator=FolderValidator()
-    )
-    StartScriptPath = ConfigItem(
-        group="Path",
-        name="StartScriptPath",
-        default="",
-        validator=FolderValidator()
-    )
+    QQPath = ConfigItem(group="Path", name="QQPath", default="", validator=FolderValidator())
+    NapCatPath = ConfigItem(group="Path", name="napcatPath", default="", validator=FolderValidator())
+    StartScriptPath = ConfigItem(group="Path", name="StartScriptPath", default="", validator=FolderValidator())
 
     # 启动项
     StartOpenHomePageView = OptionsConfigItem(
@@ -99,15 +72,12 @@ class Config(QConfig):
         default=StartOpenHomePageViewEnum.DISPLAY_VIEW,
         validator=OptionsValidator(StartOpenHomePageViewEnum),
         serializer=EnumSerializer(StartOpenHomePageViewEnum),
-        restart=True
+        restart=True,
     )
 
     # 新手引导配置项
     BeginnerGuidance = ConfigItem(
-        group="others",
-        name="BeginnerGuidanceState",
-        default=False,
-        validator=BoolValidator()
+        group="others", name="BeginnerGuidanceState", default=False, validator=BoolValidator()
     )
 
     # 个性化项目
@@ -117,16 +87,11 @@ class Config(QConfig):
         default=Language.AUTO,
         validator=OptionsValidator(Language),
         serializer=LanguageSerializer(),
-        restart=True
+        restart=True,
     )
 
     # 隐藏提示项
-    HideUsGoBtnTips = ConfigItem(
-        group="HideTips",
-        name="HideUsingGoBtnTips",
-        default=False,
-        validator=BoolValidator()
-    )
+    HideUsGoBtnTips = ConfigItem(group="HideTips", name="HideUsingGoBtnTips", default=False, validator=BoolValidator())
 
 
 cfg = Config()

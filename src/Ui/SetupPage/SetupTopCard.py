@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import CaptionLabel, TitleLabel, SegmentedWidget
+from qfluentwidgets import CaptionLabel, SegmentedWidget, TitleLabel
 
 
 class SetupTopCard(QWidget):

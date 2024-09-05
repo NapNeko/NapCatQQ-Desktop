@@ -7,12 +7,12 @@ import ctypes
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QPainter, QPaintEvent, QPen, QPainterPath
+from PySide6.QtGui import QPen, QPainter, QPaintEvent, QPainterPath
 from PySide6.QtSvg import QSvgRenderer
 from loguru import logger
 from qfluentwidgets.common import Theme
 from qfluentwidgets.window import MSFluentTitleBar
-from qframelesswindow.titlebar import MaximizeButton, MinimizeButton, CloseButton
+from qframelesswindow.titlebar import CloseButton, MaximizeButton, MinimizeButton
 
 from src.Ui.Icon import NapCatDesktopIcon
 
@@ -39,9 +39,9 @@ class CustomTitleBar(MSFluentTitleBar):
     def set_buttons(self) -> None:
         """配置窗口控制按钮并初始化槽连接"""
         button_info = {
-            'minBtn': (MinBtn, self.window().showMinimized),
-            'maxBtn': (MaxBtn, self.__toggle_maximization),
-            'closeBtn': (CloseBtn, self.window().close)
+            "minBtn": (MinBtn, self.window().showMinimized),
+            "maxBtn": (MaxBtn, self.__toggle_maximization),
+            "closeBtn": (CloseBtn, self.window().close),
         }
 
         for btn_name, (btn_class, slot) in button_info.items():
@@ -149,10 +149,10 @@ class CloseBtn(CloseButton):
 
         # draw icon
         color = color.name()
-        pathNodes = self._svgDom.elementsByTagName('path')
+        pathNodes = self._svgDom.elementsByTagName("path")
         for i in range(pathNodes.length()):
             element = pathNodes.at(i).toElement()
-            element.setAttribute('stroke', color)
+            element.setAttribute("stroke", color)
 
         renderer = QSvgRenderer(self._svgDom.toByteArray())
         renderer.render(painter, QRectF(self.rect()))

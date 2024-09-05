@@ -1,16 +1,23 @@
 # -*- coding: utf-8 -*-
-import sys
 import time
 from typing import Optional
 
 import psutil
-from PySide6.QtCore import Qt, QRectF, QPoint, QTimer
-from PySide6.QtGui import QPainter, QColor, QPen
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QFormLayout
+from PySide6.QtGui import QPen, QColor, QPainter
+from PySide6.QtCore import Qt, QPoint, QRectF, QTimer
 from qfluentwidgets import (
-    BodyLabel, setFont, SimpleCardWidget, HeaderCardWidget, InfoBadgeManager,
-    IconInfoBadge, FluentIcon, ToolTipFilter, themeColor, isDarkTheme
+    BodyLabel,
+    FluentIcon,
+    IconInfoBadge,
+    ToolTipFilter,
+    HeaderCardWidget,
+    InfoBadgeManager,
+    SimpleCardWidget,
+    setFont,
+    themeColor,
+    isDarkTheme,
 )
+from PySide6.QtWidgets import QWidget, QFormLayout, QVBoxLayout
 
 from src.Core import timer
 from src.Core.Config import cfg
@@ -108,7 +115,9 @@ class SemiCircularProgressBar(QWidget):
         # 设置画笔，颜色为背景色，宽度为_pen_width，实线，圆形线帽实现圆角
         pen = QPen(
             QColor(255, 255, 255, 13) if isDarkTheme() else QColor(208, 210, 212, 170),
-            self._pen_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap
+            self._pen_width,
+            Qt.PenStyle.SolidLine,
+            Qt.PenCapStyle.RoundCap,
         )
         painter.setPen(pen)
         # 在rect区域内，从start_angle开始，绘制跨度为span_angle的弧线
@@ -162,7 +171,7 @@ class CPUDashboard(DashboardBase):
                 else:
                     line.append(f"CPU {core_num:03d} Usage rate:{usage:5.0f}%")
             lines.append(str(" " * 10).join(line))
-        self.setToolTip(self.tr("CPU Occupancy:\n\n{}".format('\n'.join(lines))))
+        self.setToolTip(self.tr("CPU Occupancy:\n\n{}".format("\n".join(lines))))
 
 
 class MemoryDashboard(DashboardBase):
@@ -185,8 +194,8 @@ class MemoryDashboard(DashboardBase):
         self.setValue(psutil.virtual_memory().percent)
         # 获取系统内存信息
         virtual_mem = psutil.virtual_memory()
-        total_mem = virtual_mem.total / (1024 ** 3)
-        used_mem = virtual_mem.used / (1024 ** 3)
+        total_mem = virtual_mem.total / (1024**3)
+        used_mem = virtual_mem.used / (1024**3)
 
         # 构建输出字符串
         toolTipStr = self.tr(
@@ -205,7 +214,7 @@ class MemoryDashboard(DashboardBase):
         setFont(self.progressBar.info_label, 13)
 
 
-@InfoBadgeManager.register('SystemInfo')
+@InfoBadgeManager.register("SystemInfo")
 class DashboardInfoBadgeManager(InfoBadgeManager):
     """
     ## 更新图标显示位置调整

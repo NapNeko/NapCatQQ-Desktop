@@ -3,17 +3,17 @@ import json
 from typing import TYPE_CHECKING, List
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
 from qfluentwidgets.common import Action, FluentIcon
 from qfluentwidgets.components import (
-    CaptionLabel,
-    MessageBox,
-    PrimarySplitPushButton,
-    PushButton,
     RoundMenu,
+    MessageBox,
+    PushButton,
     TitleLabel,
+    CaptionLabel,
     SegmentedWidget,
+    PrimarySplitPushButton,
 )
 
 from src.Core.CreateScript import ScriptType
@@ -126,8 +126,8 @@ class ConfigTopCard(QWidget):
         先保存到配置文件，然后执行 update 进行刷新
         """
         from src.Core.PathFunc import PathFunc
-        from src.Core.Config.ConfigModel import Config
         from src.Ui.AddPage.AddWidget import AddWidget
+        from src.Core.Config.ConfigModel import Config
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
         bot_config_path = it(PathFunc).bot_config_path
@@ -143,7 +143,7 @@ class ConfigTopCard(QWidget):
                 if config.bot.QQID == _.bot.QQID:
                     it(AddWidget).showError(
                         self.tr("Bots can't be added"),
-                        self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly")
+                        self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly"),
                     )
                     return
             # 追加到配置文件, 使用json方法将内部转为json对象, 再用loads方法转为dict对象, 以确保列表内数据一致性
@@ -161,7 +161,7 @@ class ConfigTopCard(QWidget):
 
             it(AddWidget).showSuccess(
                 self.tr("Bot addition success!"),
-                self.tr(f"Bot({config.bot.QQID}) it has been successfully added, you can view it in BotList")
+                self.tr(f"Bot({config.bot.QQID}) it has been successfully added, you can view it in BotList"),
             )
 
         except FileNotFoundError:
@@ -182,8 +182,8 @@ class ConfigTopCard(QWidget):
         ### 参数
             - scriptType 传入需要创建的脚本类型
         """
-        from src.Core.CreateScript import CreateScript
         from src.Ui.AddPage import AddWidget
+        from src.Core.CreateScript import CreateScript
 
         return CreateScript(
             config=it(AddWidget).getConfig(),

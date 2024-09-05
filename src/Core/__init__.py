@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-from functools import wraps
+from typing import Any, Callable
 from pathlib import Path
-from typing import Callable, Any
+from functools import wraps
 
-from PySide6.QtCore import QTimer
 from loguru import logger
+from PySide6.QtCore import QTimer
 
 
 def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -25,7 +25,7 @@ def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., A
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             instance = args[0]
-            if not hasattr(instance, '_timers'):
+            if not hasattr(instance, "_timers"):
                 instance.timers = []
 
             timer_instance = QTimer(instance)

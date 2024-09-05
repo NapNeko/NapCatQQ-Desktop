@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QPainter, QColor, QBrush
+from PySide6.QtCore import Qt, QRectF
+from PySide6.QtGui import QBrush, QColor, QPainter
 from PySide6.QtWidgets import QHBoxLayout
-
-from qfluentwidgets import PrimaryPushButton, ProgressRing, IndeterminateProgressRing
+from qfluentwidgets import ProgressRing, PrimaryPushButton, IndeterminateProgressRing
 
 
 class ProgressBarButton(PrimaryPushButton):
@@ -93,9 +92,7 @@ class ProgressBarButton(PrimaryPushButton):
             return
 
         painter = QPainter(self)
-        painter.setRenderHints(
-            QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
-        )
+        painter.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
         brush = QBrush(QColor(255, 255, 255))
         painter.setBrush(brush)
         painter.setPen(Qt.PenStyle.NoPen)

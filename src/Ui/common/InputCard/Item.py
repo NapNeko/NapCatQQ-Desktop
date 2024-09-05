@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from qfluentwidgets import IndicatorPosition, LineEdit, SwitchButton
+from qfluentwidgets import LineEdit, SwitchButton, IndicatorPosition
 
 from src.Ui.common.InputCard.BaseClass import ItemBase
 

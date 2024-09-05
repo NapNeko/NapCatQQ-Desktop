@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
-from src.Ui.HomePage.DownloadView.DownloadTopCard import DownloadTopCard
 from src.Ui.StyleSheet import StyleSheet
-from src.Ui.common.Netwrok import NapCatDownloadCard, QQDownloadCard
+from src.Ui.common.Netwrok import QQDownloadCard, NapCatDownloadCard
+from src.Ui.HomePage.DownloadView.DownloadTopCard import DownloadTopCard
 
 
 class DownloadViewWidget(QWidget):

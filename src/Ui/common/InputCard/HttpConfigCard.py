@@ -2,10 +2,9 @@
 
 from qfluentwidgets.common import FluentIcon
 
-from src.Ui.common.InputCard.BaseClass import GroupCardBase
-from src.Ui.common.InputCard.Item import LineEditItem, SwitchItem
-
 from src.Core.Config.ConfigModel import HttpConfig
+from src.Ui.common.InputCard.Item import SwitchItem, LineEditItem
+from src.Ui.common.InputCard.BaseClass import GroupCardBase
 
 
 class HttpConfigCard(GroupCardBase):
@@ -22,17 +21,11 @@ class HttpConfigCard(GroupCardBase):
         )
         # HTTP 服务配置项
         self.httpEnableItem = SwitchItem(self.tr("Enable the HTTP service"), self)
-        self.httpHostItem = LineEditItem(
-            self.tr("HTTP Host"), self.tr("Listens for all host for null"), self
-        )
-        self.httpPortItem = LineEditItem(
-            self.tr("HTTP Port"), "8080", self
-        )
+        self.httpHostItem = LineEditItem(self.tr("HTTP Host"), self.tr("Listens for all host for null"), self)
+        self.httpPortItem = LineEditItem(self.tr("HTTP Port"), "8080", self)
 
         # HTTP 上报配置项
-        self.httpSecretItem = LineEditItem(
-            self.tr("HTTP Secret"), self.tr("Can be empty"), self
-        )
+        self.httpSecretItem = LineEditItem(self.tr("HTTP Secret"), self.tr("Can be empty"), self)
         self.httpEnableHeart = SwitchItem(self.tr("Enable HTTP heartbeats"), self)
         self.httpEnablePost = SwitchItem(self.tr("Enable HTTP Post"), self)
 
@@ -58,7 +51,7 @@ class HttpConfigCard(GroupCardBase):
             "port": self.httpPortItem.getValue(),
             "secret": self.httpSecretItem.getValue(),
             "enableHeart": self.httpEnableHeart.getValue(),
-            "enablePost": self.httpEnablePost.getValue()
+            "enablePost": self.httpEnablePost.getValue(),
         }
 
     def clear(self) -> None:

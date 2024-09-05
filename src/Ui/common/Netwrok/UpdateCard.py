@@ -3,13 +3,25 @@ import random
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QSize, Slot
+from PySide6.QtCore import Qt, Slot, QSize
 from PySide6.QtGui import QFont, QColor
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
 from qfluentwidgets import (
-    SimpleCardWidget, ImageLabel, TitleLabel, HyperlinkLabel, FluentIcon, CaptionLabel, BodyLabel, setFont,
-    TransparentToolButton, Flyout, VerticalSeparator, FlyoutViewBase, FlyoutAnimationType, MessageBox
+    Flyout,
+    BodyLabel,
+    FluentIcon,
+    ImageLabel,
+    MessageBox,
+    TitleLabel,
+    CaptionLabel,
+    FlyoutViewBase,
+    HyperlinkLabel,
+    SimpleCardWidget,
+    VerticalSeparator,
+    FlyoutAnimationType,
+    TransparentToolButton,
+    setFont,
 )
 
 from src.Core import timer
@@ -173,8 +185,9 @@ class NapCatUpdateCard(UpdateCardBase):
         """
         ## 更新按钮槽函数
         """
-        from src.Ui.BotListPage.BotListWidget import BotListWidget
         from src.Ui.HomePage.Home import HomeWidget
+        from src.Ui.BotListPage.BotListWidget import BotListWidget
+
         # 检查是否有 bot 正在运行, 如果有则提示
         if it(BotListWidget).getBotIsRun():
             box = MessageBox(
@@ -183,7 +196,7 @@ class NapCatUpdateCard(UpdateCardBase):
                     "A robot sample has been detected to be running, "
                     "and you will need to stop all robots to update NapCat"
                 ),
-                it(HomeWidget)
+                it(HomeWidget),
             )
             if not box.exec():
                 return
@@ -285,9 +298,10 @@ class NapCatUpdateCard(UpdateCardBase):
         ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
         """
         from src.Ui.HomePage.Home import HomeWidget
+
         it(HomeWidget).showError(
             self.tr("Download failed"),
-            self.tr("An error occurs when downloading NapCat,\nplease go to Setup > log for details")
+            self.tr("An error occurs when downloading NapCat,\nplease go to Setup > log for details"),
         )
 
 
@@ -345,9 +359,7 @@ class UpdateFlyoutView(FlyoutViewBase):
         self.viewLayout.addLayout(self.widgetLayout)
 
         # close button
-        self.viewLayout.addWidget(
-            self.closeButton, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop
-        )
+        self.viewLayout.addWidget(self.closeButton, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
 
         # content margins
         self.viewLayout.setContentsMargins(6, 5, 6, 5)

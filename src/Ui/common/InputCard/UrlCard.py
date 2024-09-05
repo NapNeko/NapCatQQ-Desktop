@@ -2,20 +2,20 @@
 from typing import List, TypeVar
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from creart import it
 from pydantic import HttpUrl, WebsocketUrl
 from qfluentwidgets import (
-    BodyLabel,
-    ExpandSettingCard,
-    FluentIcon,
-    FluentIconBase,
     InfoBar,
-    InfoBarPosition,
     LineEdit,
+    BodyLabel,
+    FluentIcon,
     MessageBox,
-    MessageBoxBase,
     TitleLabel,
+    FluentIconBase,
+    MessageBoxBase,
+    InfoBarPosition,
+    ExpandSettingCard,
     TransparentPushButton,
     TransparentToolButton,
 )
@@ -61,6 +61,7 @@ class UrlCard(ExpandSettingCard):
     """
     ## 上报 Url 列表卡片
     """
+
     # 成功添加 url 的信号
     addSignal = Signal()
     # 当用户删除了所有 url 的信号
@@ -170,9 +171,7 @@ class UrlCard(ExpandSettingCard):
 
         box = MessageBox(
             title=self.tr("Confirm"),
-            content=self.tr(
-                f"Are you sure you want to delete the following URLs?\n\n{item.url}"
-            ),
+            content=self.tr(f"Are you sure you want to delete the following URLs?\n\n{item.url}"),
             parent=it(AddWidget),
         )
         box.yesSignal.connect(lambda: self._removeUrl(item))

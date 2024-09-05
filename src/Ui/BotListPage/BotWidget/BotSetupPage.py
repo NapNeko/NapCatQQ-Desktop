@@ -7,9 +7,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from qfluentwidgets import (
-    CardWidget, FluentIcon, FluentIconBase, IconWidget, BodyLabel, CaptionLabel
-)
+from qfluentwidgets import BodyLabel, CardWidget, FluentIcon, IconWidget, CaptionLabel, FluentIconBase
 
 from src.Core.Config.ConfigModel import Config
 from src.Ui.AddPage.Advanced import AdvancedWidget
@@ -94,9 +92,7 @@ class BotSetupPage(QWidget):
         """
         ## 创建页面内的卡片
         """
-        self.botSetupCard = AppCard(
-            FluentIcon.ROBOT, self.tr("Bot settings"), self.tr("Basic settings for the bot")
-        )
+        self.botSetupCard = AppCard(FluentIcon.ROBOT, self.tr("Bot settings"), self.tr("Basic settings for the bot"))
         self.connectSetupCard = AppCard(
             FluentIcon.GLOBE, self.tr("Connection settings"), self.tr("Settings related to bot connections")
         )

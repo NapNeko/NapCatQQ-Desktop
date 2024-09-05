@@ -1,17 +1,12 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget
 from creart import it
-from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
+from PySide6.QtCore import Qt
+from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
+from PySide6.QtWidgets import QWidget
 
-from src.Core.Config.ConfigModel import AdvancedConfig
 from src.Core.PathFunc import PathFunc
-from src.Ui.common.InputCard import (
-    SwitchConfigCard,
-    FolderConfigCard,
-    ComboBoxConfigCard,
-    TextCard
-)
+from src.Ui.common.InputCard import TextCard, FolderConfigCard, SwitchConfigCard, ComboBoxConfigCard
+from src.Core.Config.ConfigModel import AdvancedConfig
 
 
 class AdvancedWidget(ScrollArea):
@@ -67,14 +62,14 @@ class AdvancedWidget(ScrollArea):
             icon=FluentIcon.DATE_TIME,
             title=self.tr("Local group chat time logging"),
             content=self.tr("Specifies whether to enable local group chat time recording"),
-            parent=self.view
+            parent=self.view,
         )
         self.groupLocalTimeListCard = TextCard(
             identifier=self.identifier,
             icon=FluentIcon.MENU,
             title=self.tr("Swarms that need to be recorded"),
             content=self.tr("Hover over for detailed tips"),
-            parent=self.view
+            parent=self.view,
         )
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
@@ -181,7 +176,7 @@ class AdvancedWidget(ScrollArea):
             "ffmpegPath": self.ffmpegPathCard.getValue(),
             "GroupLocalTime": {
                 "Record": self.groupLocalTimeSwitchCard.getValue(),
-                "RecordList": self.groupLocalTimeListCard.getValue()
+                "RecordList": self.groupLocalTimeListCard.getValue(),
             },
             "debug": self.debugModeCard.getValue(),
             "localFile2url": self.localFile2UrlCard.getValue(),

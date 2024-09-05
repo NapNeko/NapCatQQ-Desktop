@@ -4,20 +4,33 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QSize, QUrl, Slot, QThread, Signal, QProcess, QCoreApplication
+from PySide6.QtCore import Qt, QUrl, Slot, QSize, Signal, QThread, QProcess, QCoreApplication
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QApplication
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication
 from creart import it
 from loguru import logger
 from qfluentwidgets import (
-    SimpleCardWidget, ImageLabel, TitleLabel, HyperlinkLabel, FluentIcon, CaptionLabel, BodyLabel, setFont,
-    TransparentToolButton, FlyoutView, Flyout, VerticalSeparator, PushButton, MessageBoxBase, SubtitleLabel
+    Flyout,
+    BodyLabel,
+    FluentIcon,
+    FlyoutView,
+    ImageLabel,
+    PushButton,
+    TitleLabel,
+    CaptionLabel,
+    SubtitleLabel,
+    HyperlinkLabel,
+    MessageBoxBase,
+    SimpleCardWidget,
+    VerticalSeparator,
+    TransparentToolButton,
+    setFont,
 )
 
 from src.Core import timer
 from src.Core.Config import cfg
 from src.Core.GetVersion import GetVersion
-from src.Core.NetworkFunc import Urls, NapCatDownloader, QQDownloader
+from src.Core.NetworkFunc import Urls, QQDownloader, NapCatDownloader
 from src.Core.PathFunc import PathFunc
 from src.Ui.Icon import NapCatDesktopIcon as NCDIcon
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
@@ -152,12 +165,14 @@ class NapCatDownloadCard(DownloadCardBase):
         self.nameLabel.setText("NapCatQQ")
         self.companyLabel.setUrl(Urls.NAPCATQQ_REPO.value)
         self.companyLabel.setText(self.tr("Project repositories"))
-        self.descriptionLabel.setText(self.tr(
-            "NapCatQQ is a headless bot framework based on the PC NTQQ core. "
-            "The name implies 'Sleepy Cat QQ', running in the background with low "
-            "resource usage, like it's asleep, and without the need for a GUI "
-            "interface for NTQQ."
-        ))
+        self.descriptionLabel.setText(
+            self.tr(
+                "NapCatQQ is a headless bot framework based on the PC NTQQ core. "
+                "The name implies 'Sleepy Cat QQ', running in the background with low "
+                "resource usage, like it's asleep, and without the need for a GUI "
+                "interface for NTQQ."
+            )
+        )
         self.shareButton.clicked.connect(self._shareButtonSlot)
         self.openInstallPathButton.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(it(PathFunc).getNapCatPath())))
@@ -210,29 +225,13 @@ class NapCatDownloadCard(DownloadCardBase):
         ## 下载完成后的安装操作
         """
         self.installWorker = NapCatInstallWorker(it(PathFunc).tmp_path / self.downloader.url.fileName())
-        self.installWorker.installFinished.connect(self._installationFinished)
+        self.installWorker.installFinished.connect(
+            # 隐藏安装按钮, 显示打开文件路径按钮
+            lambda: (self.installButton.hide(), self.openInstallPathButton.show())
+        )
         self.installWorker.errorFinished.connect(self.showErrorTips)
         self.installWorker.progressBarToggle.connect(self.switchProgressBar)
         self.installWorker.start()
-
-    @Slot()
-    def _installationFinished(self) -> None:
-        """
-        ## 安装完成后的操作
-        """
-        from src.Ui.HomePage.Home import HomeWidget
-        # 下载完成后, 显示打开安装路径按钮
-        self.installButton.hide()
-        self.openInstallPathButton.show()
-
-        # 提示用户应该修补后使用
-        it(HomeWidget).showInfo(
-            self.tr("Installation successful!"),
-            self.tr(
-                "Congratulations on the successful installation,\n"
-                "you still need to patch before using it~"
-            )
-        )
 
     @Slot(int)
     def switchProgressBar(self, mode: int):
@@ -262,9 +261,10 @@ class NapCatDownloadCard(DownloadCardBase):
         ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
         """
         from src.Ui.HomePage.Home import HomeWidget
+
         it(HomeWidget).showError(
             self.tr("Failed"),
-            self.tr("Error sent while downloading/installing NapCat,\nplease go to Setup > log for details")
+            self.tr("Error sent while downloading/installing NapCat,\nplease go to Setup > log for details"),
         )
 
     @Slot()
@@ -280,7 +280,7 @@ class NapCatDownloadCard(DownloadCardBase):
                 "and should not be used for illegal purposes"
             ),
             isClosable=True,
-            image=":Global/image/Global/image_1.jpg"
+            image=":Global/image/Global/image_1.jpg",
         )
         view = Flyout.make(shareView, self.shareButton, self)
         shareView.closed.connect(view.close)
@@ -290,6 +290,7 @@ class NapCatInstallWorker(QThread):
     """
     ## NapCat 安装任务
     """
+
     # 进度条模式切换 (进度模式: 0 \ 未知进度模式: 1 \ 文字模式: 2)
     progressBarToggle = Signal(int)
     # 安装结束信号
@@ -315,7 +316,7 @@ class NapCatInstallWorker(QThread):
             # 遍历 NapCat 文件夹中旧版文件并删除
             for item in self.ncInstallPath.iterdir():
                 # 跳过 config 目录保证配置文件不丢失
-                if item.is_dir() and item.name == 'config':
+                if item.is_dir() and item.name == "config":
                     continue
 
                 # 移除旧版文件
@@ -325,11 +326,11 @@ class NapCatInstallWorker(QThread):
             logger.info(f"{'-' * 10} 开始解压新版 NapCat {'-' * 10}")
 
             # 直接解包到 NapCat 目录
-            with zipfile.ZipFile(str(self.zipFilePath), 'r') as zip_ref:
+            with zipfile.ZipFile(str(self.zipFilePath), "r") as zip_ref:
                 zip_ref.extractall(str(self.ncInstallPath))
 
             # 修改 NapCat 的 loadNapCat.js 文件
-            with open(str(self.ncInstallPath / 'loadNapCat.js'), 'w', encoding='utf-8') as f:
+            with open(str(self.ncInstallPath / "loadNapCat.js"), "w", encoding="utf-8") as f:
                 f.write(f'(async () => {{await import("file:///{(self.ncInstallPath / "napcat.mjs").as_posix()}")}})()')
 
             # 删除包释放空间
@@ -378,10 +379,11 @@ class QQDownloadCard(DownloadCardBase):
         self.iconLabel.scaledToWidth(100)
         self.companyLabel.setUrl(Urls.QQ_OFFICIAL_WEBSITE.value)
         self.companyLabel.setText(self.tr("QQ official website"))
-        self.descriptionLabel.setText(self.tr(
-            "NapCatQQ is a headless bot framework based on the PC NTQQ core, "
-            "so you will need to install it."
-        ))
+        self.descriptionLabel.setText(
+            self.tr(
+                "NapCatQQ is a headless bot framework based on the PC NTQQ core, " "so you will need to install it."
+            )
+        )
         self.shareButton.clicked.connect(self._shareButtonSlot)
 
         # 设置布局
@@ -397,7 +399,7 @@ class QQDownloadCard(DownloadCardBase):
         self._setLayout()
         # self._onTimer()
 
-    @timer(10_000, True)
+    # @timer(10_000, True)
     # def _onTimer(self):
     #     """
     #     ## 延时启动计时器, 等待用于等待网络请求
@@ -440,13 +442,13 @@ class QQDownloadCard(DownloadCardBase):
 
         # 询问用户应该如何安装(手动/静默)
         from src.Ui.HomePage.Home import HomeWidget
+
         if (box := InstallationMessageBox(it(HomeWidget))).exec():
             # True 为手动安装, 反之为静默安装
             self.process.setProgram(str(self.installExePath))
         else:
             self.process.setProgram(str(self.installExePath))
             self.process.setArguments(["/s"])
-
 
         # QProcess 的启动应该是非阻塞的,我不知道为什么到这里变成了阻塞,只能通过processEvents缓解卡顿
         QApplication.processEvents()
@@ -503,9 +505,10 @@ class QQDownloadCard(DownloadCardBase):
         ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
         """
         from src.Ui.HomePage.Home import HomeWidget
+
         it(HomeWidget).showError(
             self.tr("Failed"),
-            self.tr("Error sent while downloading/installing QQ,\nplease go to Setup > log for details")
+            self.tr("Error sent while downloading/installing QQ,\nplease go to Setup > log for details"),
         )
 
     @Slot()
@@ -521,7 +524,7 @@ class QQDownloadCard(DownloadCardBase):
                 "and should not be used for illegal purposes"
             ),
             isClosable=True,
-            image=":Global/image/Global/image_1.jpg"
+            image=":Global/image/Global/image_1.jpg",
         )
         view = Flyout.make(shareView, self.shareButton, self)
         shareView.closed.connect(view.close)
@@ -534,7 +537,7 @@ class InstallationMessageBox(MessageBoxBase):
 
     def __init__(self, parent):
         super().__init__(parent=parent)
-        self.titleLabel = SubtitleLabel(self.tr('Manual or automatic installation'), self)
+        self.titleLabel = SubtitleLabel(self.tr("Manual or automatic installation"), self)
         self.contentsLabel = BodyLabel(
             self.tr(
                 "Please click the button below to select the installation method\n\n"
@@ -543,7 +546,7 @@ class InstallationMessageBox(MessageBoxBase):
                 "path cannot be specified, and the installation GUI will not be displayed, so please wait "
                 "patiently for the installation to complete)"
             ),
-            self
+            self,
         )
         self.contentsLabel.setWordWrap(True)
 

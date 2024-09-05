@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING, Optional
 
-from PySide6.QtCore import QUrl, QUrlQuery, Qt, Slot
-from PySide6.QtGui import QPixmap
-from PySide6.QtNetwork import QNetworkRequest, QNetworkReply
-from PySide6.QtWidgets import QVBoxLayout
 from creart import it
-from qfluentwidgets import CardWidget, ImageLabel, BodyLabel, setFont, ToolTipFilter
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QUrl, Slot, QUrlQuery
+from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
+from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
+from PySide6.QtWidgets import QVBoxLayout
 
-from src.Core.Config.ConfigModel import Config
 from src.Core.NetworkFunc import Urls, NetworkFunc
+from src.Core.Config.ConfigModel import Config
 
 if TYPE_CHECKING:
     from src.Ui.BotListPage.BotList import BotList
@@ -49,12 +49,11 @@ class BotCard(CardWidget):
         """
         self.vBoxLayout.addSpacing(20)
         self.vBoxLayout.addWidget(
-            self.QQAvatarLabel, alignment=Qt.AlignmentFlag.AlignCenter,
+            self.QQAvatarLabel,
+            alignment=Qt.AlignmentFlag.AlignCenter,
         )
         self.vBoxLayout.addSpacing(25)
-        self.vBoxLayout.addWidget(
-            self.idLabel, alignment=Qt.AlignmentFlag.AlignHCenter
-        )
+        self.vBoxLayout.addWidget(self.idLabel, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.vBoxLayout.addStretch(1)
         self.vBoxLayout.setContentsMargins(10, 10, 10, 10)
         self.setLayout(self.vBoxLayout)
@@ -102,18 +101,17 @@ class BotCard(CardWidget):
             self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
         else:
             from src.Ui.BotListPage import BotListWidget
-            it(BotListWidget).showError(
-                title=self.tr("Failed to get the QQ avatar"),
-                content=replay.errorString()
-            )
+
+            it(BotListWidget).showError(title=self.tr("Failed to get the QQ avatar"), content=replay.errorString())
 
     @Slot()
     def _clickSlot(self) -> None:
         """
         当自身被点击时
         """
-        from src.Ui.BotListPage.BotListWidget import BotListWidget
         from src.Ui.BotListPage.BotWidget import BotWidget
+        from src.Ui.BotListPage.BotListWidget import BotListWidget
+
         it(BotListWidget).topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
         it(BotListWidget).topCard.updateListButton.hide()
 

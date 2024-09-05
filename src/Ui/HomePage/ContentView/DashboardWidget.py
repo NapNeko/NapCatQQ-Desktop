@@ -2,12 +2,16 @@
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from qfluentwidgets import ToolButton, FluentIcon, ToolTipFilter, MessageBoxBase, TitleLabel, BodyLabel, HyperlinkButton
+from qfluentwidgets import BodyLabel, FluentIcon, TitleLabel, ToolButton, ToolTipFilter, MessageBoxBase, HyperlinkButton
 
 from src.Core.NetworkFunc import Urls
 from src.Ui.common.InfoCard import (
-    NapCatVersionCard, QQVersionCard, CPUDashboard, MemoryDashboard, SystemInfoCard,
-    BotListCard
+    BotListCard,
+    CPUDashboard,
+    QQVersionCard,
+    SystemInfoCard,
+    MemoryDashboard,
+    NapCatVersionCard,
 )
 
 
@@ -113,16 +117,10 @@ class SelectReposMsgBox(MessageBoxBase):
         )
 
         self.napcatReposButton = HyperlinkButton(
-            url=Urls.NAPCATQQ_REPO.value.toString(),
-            text=self.tr("NapCatQQ Repo"),
-            icon=FluentIcon.LINK,
-            parent=self
+            url=Urls.NAPCATQQ_REPO.value.toString(), text=self.tr("NapCatQQ Repo"), icon=FluentIcon.LINK, parent=self
         )
         self.NCDReposButton = HyperlinkButton(
-            url=Urls.NCD_REPO.value.toString(),
-            text=self.tr("NapCatQQ Desktop Repo"),
-            icon=FluentIcon.LINK,
-            parent=self
+            url=Urls.NCD_REPO.value.toString(), text=self.tr("NapCatQQ Desktop Repo"), icon=FluentIcon.LINK, parent=self
         )
 
         # 添加到布局
@@ -150,20 +148,20 @@ class SelectFeedbackMsgBox(MessageBoxBase):
                 "Is the problem you having with Desktop or NapCatQQ?\n"
                 "Please go to the corresponding repository to raise issues"
             ),
-            self
+            self,
         )
 
         self.napcatIssuesButton = HyperlinkButton(
             url=Urls.NAPCATQQ_ISSUES.value.toString(),
             text=self.tr("NapCatQQ Issues"),
             icon=FluentIcon.LINK,
-            parent=self
+            parent=self,
         )
         self.NCDIssuesButton = HyperlinkButton(
             url=Urls.NCD_ISSUES.value.toString(),
             text=self.tr("NapCatQQ Desktop Issues"),
             icon=FluentIcon.LINK,
-            parent=self
+            parent=self,
         )
 
         # 添加到布局

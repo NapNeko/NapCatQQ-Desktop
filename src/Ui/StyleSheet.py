@@ -6,6 +6,7 @@ from qfluentwidgets import StyleSheetBase, Theme, qconfig
 
 class StyleSheet(StyleSheetBase, Enum):
     """样式表"""
+
     # widget
     HOME_WIDGET = "home_widget"
     SETUP_WIDGET = "setup_widget"

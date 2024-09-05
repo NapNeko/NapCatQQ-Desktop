@@ -2,12 +2,12 @@
 from abc import ABC
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Any
+from typing import Any, Callable
 
 import httpx
 from PySide6.QtCore import QUrl, Signal, QObject, QThread
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
-from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator, it
+from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
+from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
 from loguru import logger
 
 
@@ -15,6 +15,7 @@ class Urls(Enum):
     """
     ## 软件内部可能用的到的 Url
     """
+
     # NCD相关地址
     NCD_REPO = QUrl("https://github.com/HeartfeltJoy/NapCatQQ-Desktop")
     NCD_ISSUES = QUrl("https://github.com/HeartfeltJoy/NapCatQQ-Desktop/issues")
@@ -118,6 +119,7 @@ class NapCatDownloader(QThread):
     """
     ## 执行下载 NapCat 的任务
     """
+
     # 进度条模式切换 (进度模式: 0 \ 未知进度模式: 1 \ 文字模式: 2)
     progressBarToggle = Signal(int)
     # 下载进度
@@ -155,9 +157,9 @@ class NapCatDownloader(QThread):
         # 开始下载
         try:
             logger.info(f"{'-' * 10} 开始下载 NapCat ~ {'-' * 10}")
-            with httpx.stream('GET', self.url.url(), follow_redirects=True) as response:
+            with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
 
-                if (total_size := int(response.headers.get('content-length', 0))) == 0:
+                if (total_size := int(response.headers.get("content-length", 0))) == 0:
                     # 尝试获取文件大小
                     logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
                     self.progressBarToggle.emit(2)
@@ -166,7 +168,7 @@ class NapCatDownloader(QThread):
 
                 self.progressBarToggle.emit(0)  # 设置进度条为 进度模式
 
-                with open(f'{self.path / self.url.fileName()}', 'wb') as file:
+                with open(f"{self.path / self.url.fileName()}", "wb") as file:
                     for chunk in response.iter_bytes():
                         file.write(chunk)  # 写入字节
                         self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
@@ -217,6 +219,7 @@ class QQDownloader(QThread):
     """
     ## 执行下载 QQ 的任务
     """
+
     # 进度条模式切换 (进度模式: 0 \ 未知进度模式: 1 \ 文字模式: 2)
     progressBarToggle = Signal(int)
     # 下载进度
@@ -245,9 +248,9 @@ class QQDownloader(QThread):
         # 开始下载 QQ
         try:
             logger.info(f"{'-' * 10} 开始下载 QQ ~ {'-' * 10}")
-            with httpx.stream('GET', self.url.url(), follow_redirects=True) as response:
+            with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
 
-                if (total_size := int(response.headers.get('content-length', 0))) == 0:
+                if (total_size := int(response.headers.get("content-length", 0))) == 0:
                     # 尝试获取文件大小
                     logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
                     self.progressBarToggle.emit(2)
@@ -255,7 +258,7 @@ class QQDownloader(QThread):
                     return
 
                 self.progressBarToggle.emit(0)  # 设置进度条为 进度模式
-                with open(f'{self.path / self.url.fileName()}', 'wb') as file:
+                with open(f"{self.path / self.url.fileName()}", "wb") as file:
                     for chunk in response.iter_bytes():
                         file.write(chunk)  # 写入字节
                         self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条

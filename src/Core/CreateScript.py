@@ -4,10 +4,10 @@ import textwrap
 from pathlib import Path
 from typing import Tuple
 
-from PySide6.QtCore import QObject, QOperatingSystemVersion, Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QObject, QOperatingSystemVersion
 from PySide6.QtGui import QDesktopServices
 from creart import it
-from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox, TransparentPushButton, FluentIcon
+from qfluentwidgets import InfoBar, FluentIcon, MessageBox, InfoBarPosition, TransparentPushButton
 
 from src.Core.Config.ConfigModel import Config, ScriptType
 from src.Core.PathFunc import PathFunc
@@ -232,7 +232,7 @@ class CreateScript:
             },
             "GroupLocalTime": {
                 "Record": self.config.advanced.GroupLocalTime.Record,
-                "RecordList": self.config.advanced.GroupLocalTime.RecordList
+                "RecordList": self.config.advanced.GroupLocalTime.RecordList,
             },
             "debug": self.config.advanced.debug,
             "heartInterval": self.config.bot.heartInterval,

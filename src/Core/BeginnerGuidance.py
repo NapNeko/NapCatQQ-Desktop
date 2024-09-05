@@ -24,11 +24,7 @@ class BeginnerGuidance(QObject):
         ## 询问是否要跳过引导
         """
 
-
     def toDownloadPage(self):
         """
         ## 跳转到 Download 页面并指引下载
         """
-
-
-

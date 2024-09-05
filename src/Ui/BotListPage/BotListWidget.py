@@ -6,13 +6,13 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
-from creart import add_creator, exists_module, it
+from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
+from src.Ui.StyleSheet import StyleSheet
 from src.Ui.BotListPage.BotList import BotList
 from src.Ui.BotListPage.BotTopCard import BotTopCard
-from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
@@ -87,44 +87,32 @@ class BotListWidget(QWidget):
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showInfo(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showInfo(title=title, content=content, showcasePage=self)
 
     def showError(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showError(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showError(title=title, content=content, showcasePage=self)
 
     def showWarning(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showWarning(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showWarning(title=title, content=content, showcasePage=self)
 
     def showSuccess(self, title: str, content: str) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
         from src.Ui.MainWindow.Window import MainWindow
-        it(MainWindow).showSuccess(
-            title=title,
-            content=content,
-            showcasePage=self
-        )
+
+        it(MainWindow).showSuccess(title=title, content=content, showcasePage=self)
 
 
 class BotListWidgetClassCreator(AbstractCreator, ABC):

@@ -1,20 +1,12 @@
 # -*- coding: utf-8 -*-
-from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
+from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
 from PySide6.QtWidgets import QWidget
-from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 
-from src.Core.Config.ConfigModel import BotConfig
-from src.Ui.common.InputCard import (
-    ComboBoxConfigCard,
-    LineEditConfigCard,
-    SwitchConfigCard,
-)
 from src.Ui.Icon import NapCatDesktopIcon
-
-if TYPE_CHECKING:
-    pass
+from src.Ui.common.InputCard import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
+from src.Core.Config.ConfigModel import BotConfig
 
 
 class BotWidget(ScrollArea):
@@ -80,7 +72,7 @@ class BotWidget(ScrollArea):
             title=self.tr("Music signature URL"),
             content=self.tr("Used to handle music-related requests"),
             placeholder_text=self.tr("Can be empty"),
-            parent=self.view
+            parent=self.view,
         )
         self.heartIntervalCard = LineEditConfigCard(
             icon=FluentIcon.HEART,

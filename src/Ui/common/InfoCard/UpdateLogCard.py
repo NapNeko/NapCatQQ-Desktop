@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtGui import QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import QTextEdit
 from qfluentwidgets import SmoothScrollDelegate, setFont
 from qfluentwidgets.components.widgets.menu import TextEditMenu
 
 from src.Ui.StyleSheet import StyleSheet
-from src.Ui.resource import resource
 
 
 class UpdateLogCard(QTextEdit):

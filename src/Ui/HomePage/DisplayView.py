@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QDesktopServices
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
-from qfluentwidgets.common import setFont, FluentIcon
-from qfluentwidgets.components import ImageLabel, TitleLabel, PushButton, PrimaryPushButton
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from qfluentwidgets.common import FluentIcon, setFont
+from qfluentwidgets.components import ImageLabel, PushButton, TitleLabel, PrimaryPushButton
 
 from src.Core.NetworkFunc import Urls
 from src.Ui.StyleSheet import StyleSheet
@@ -42,14 +42,10 @@ class DisplayViewWidget(QWidget):
         对 ViewWidget 内控件进行布局
         """
         self.vboxLayout.addStretch(1)
-        self.vboxLayout.addWidget(
-            self.logoImage, alignment=Qt.AlignmentFlag.AlignCenter
-        )
+        self.vboxLayout.addWidget(self.logoImage, alignment=Qt.AlignmentFlag.AlignCenter)
         self.vboxLayout.addSpacing(20)
         self.vboxLayout.setStretch(2, 0)
-        self.vboxLayout.addWidget(
-            self.logoLabel, alignment=Qt.AlignmentFlag.AlignCenter
-        )
+        self.vboxLayout.addWidget(self.logoLabel, alignment=Qt.AlignmentFlag.AlignCenter)
         self.vboxLayout.addSpacing(20)
         self.vboxLayout.addWidget(self.buttonGroup)
         self.vboxLayout.addStretch(1)

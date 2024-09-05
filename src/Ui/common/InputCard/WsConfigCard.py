@@ -2,10 +2,9 @@
 
 from qfluentwidgets.common import FluentIcon
 
+from src.Core.Config.ConfigModel import WsConfig
 from src.Ui.common.InputCard.BaseClass import GroupCardBase
 from src.Ui.common.InputCard.Item import LineEditItem, SwitchItem
-
-from src.Core.Config.ConfigModel import WsConfig
 
 
 class WsConfigCard(GroupCardBase):

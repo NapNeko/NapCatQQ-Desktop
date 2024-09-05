@@ -3,11 +3,9 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
-from qfluentwidgets import CaptionLabel, ToolTipFilter
-from qfluentwidgets.common import setFont, FluentIcon
-from qfluentwidgets.components import BreadcrumbBar, TransparentToolButton
+from qfluentwidgets import FluentIcon, CaptionLabel, BreadcrumbBar, ToolTipFilter, TransparentToolButton, setFont
 
 if TYPE_CHECKING:
     from src.Ui.BotListPage.BotListWidget import BotListWidget
@@ -64,6 +62,7 @@ class BotTopCard(QWidget):
         """
         if index == 0:
             from src.Ui.BotListPage.BotListWidget import BotListWidget
+
             it(BotListWidget).view.setCurrentIndex(index)
             self.updateListButton.show()
 
@@ -74,6 +73,7 @@ class BotTopCard(QWidget):
         ## 更新列表按钮的槽函数
         """
         from src.Ui.BotListPage.BotListWidget import BotListWidget
+
         it(BotListWidget).botList.updateList()
 
     def _setLayout(self) -> None:

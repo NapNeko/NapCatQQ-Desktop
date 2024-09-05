@@ -4,16 +4,18 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt, QStandardPaths
 from PySide6.QtWidgets import QWidget, QFileDialog
 from creart import it
-from qfluentwidgets import ScrollArea
-from qfluentwidgets.common import FluentIcon, setTheme, setThemeColor
-from qfluentwidgets.components import (
+from qfluentwidgets import (
     InfoBar,
+    FluentIcon,
+    ScrollArea,
     ExpandLayout,
+    PushSettingCard,
     SettingCardGroup,
     OptionsSettingCard,
-    CustomColorSettingCard,
     ComboBoxSettingCard,
-    PushSettingCard,
+    CustomColorSettingCard,
+    setTheme,
+    setThemeColor,
 )
 
 from src.Core.Config import cfg
@@ -110,7 +112,7 @@ class SetupScrollArea(ScrollArea):
             title=self.tr("Start script path"),
             content=str(it(PathFunc).getStartScriptPath()),
             text=self.tr("Choose folder"),
-            parent=self.pathGroup
+            parent=self.pathGroup,
         )
 
     def _setLayout(self) -> None:
@@ -211,6 +213,7 @@ class SetupScrollArea(ScrollArea):
         显示重启提示
         """
         from src.Ui.SetupPage.Setup import SetupWidget
+
         InfoBar.success(
             self.tr("Updated successfully"),
             self.tr("Configuration takes effect after restart"),

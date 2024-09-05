@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from src.Ui.HomePage.ContentView.ContentTopCard import ContentTopCard
 from src.Ui.HomePage.ContentView.DashboardWidget import DashboardWidget

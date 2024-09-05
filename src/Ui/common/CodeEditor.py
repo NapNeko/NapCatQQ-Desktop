@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from PySide6.QtCore import QRegularExpression, Slot
-from PySide6.QtCore import Qt, QRect, QRectF, QSize
-from PySide6.QtGui import QFontDatabase, QSyntaxHighlighter, QTextCharFormat, QColor, QPaintEvent
-from PySide6.QtGui import QPainter
+from PySide6.QtCore import Qt, Slot, QRect, QSize, QRectF, QRegularExpression
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QFontDatabase, QTextCharFormat, QSyntaxHighlighter
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import PlainTextEdit
 
@@ -40,7 +38,7 @@ class CodeEditor(PlainTextEdit):
             # 当行数达到五位数时调整显示空间
             max_num *= 0.1
             digits += 1
-        space = 2 + self.fontMetrics().horizontalAdvance('9') * digits
+        space = 2 + self.fontMetrics().horizontalAdvance("9") * digits
         return space
 
     def lineNumberAreaPaintEvent(self, event) -> None:
@@ -61,7 +59,8 @@ class CodeEditor(PlainTextEdit):
                 number = str(block_number + 1)
                 painter.drawText(
                     QRectF(content_left, top, self.line_number_area.width() - 12, self.fontMetrics().height()),
-                    Qt.AlignmentFlag.AlignRight, number
+                    Qt.AlignmentFlag.AlignRight,
+                    number,
                 )
 
             block = block.next()
@@ -123,23 +122,23 @@ class LogHighlighter(QSyntaxHighlighter):
 
         # 初始化不同日志级别的文本格式
         self.formats = {
-            'DEBUG': QTextCharFormat(),
-            'INFO': QTextCharFormat(),
-            'WARN': QTextCharFormat(),
-            'ERROR': QTextCharFormat(),
+            "DEBUG": QTextCharFormat(),
+            "INFO": QTextCharFormat(),
+            "WARN": QTextCharFormat(),
+            "ERROR": QTextCharFormat(),
         }
 
         # 设置每个日志级别的前景色
-        self.formats['DEBUG'].setForeground(QColor(Qt.GlobalColor.darkRed))
-        self.formats['INFO'].setForeground(QColor(Qt.GlobalColor.green))
-        self.formats['WARN'].setForeground(QColor(Qt.GlobalColor.darkYellow))
-        self.formats['ERROR'].setForeground(QColor(Qt.GlobalColor.red))
+        self.formats["DEBUG"].setForeground(QColor(Qt.GlobalColor.darkRed))
+        self.formats["INFO"].setForeground(QColor(Qt.GlobalColor.green))
+        self.formats["WARN"].setForeground(QColor(Qt.GlobalColor.darkYellow))
+        self.formats["ERROR"].setForeground(QColor(Qt.GlobalColor.red))
 
         # 定义日志级别的顺序
-        self.log_levels = ['DEBUG', 'INFO', 'WARN', 'ERROR']
+        self.log_levels = ["DEBUG", "INFO", "WARN", "ERROR"]
 
         # 正则表达式模式，用于匹配像 [DEBUG]、[INFO] 等日志级别标签
-        self.pattern = QRegularExpression(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(DEBUG|INFO|WARN|ERROR)\]')
+        self.pattern = QRegularExpression(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(DEBUG|INFO|WARN|ERROR)\]")
 
     def highlightBlock(self, text) -> None:
         # 创建一个格式化对象，用于应用整行的前景色
@@ -178,26 +177,26 @@ class NCDLogHighlighter(QSyntaxHighlighter):
 
         # 初始化不同日志级别的文本格式
         self.formats = {
-            'SUCCESS': QTextCharFormat(),
-            'DEBUG': QTextCharFormat(),
-            'INFO': QTextCharFormat(),
-            'WARN': QTextCharFormat(),
-            'ERROR': QTextCharFormat(),
+            "SUCCESS": QTextCharFormat(),
+            "DEBUG": QTextCharFormat(),
+            "INFO": QTextCharFormat(),
+            "WARN": QTextCharFormat(),
+            "ERROR": QTextCharFormat(),
         }
 
         # 设置每个日志级别的前景色
-        self.formats['SUCCESS'].setForeground(QColor(Qt.GlobalColor.darkGreen))
-        self.formats['DEBUG'].setForeground(QColor(Qt.GlobalColor.darkRed))
-        self.formats['INFO'].setForeground(QColor(Qt.GlobalColor.darkBlue))
-        self.formats['WARN'].setForeground(QColor(Qt.GlobalColor.darkYellow))
-        self.formats['ERROR'].setForeground(QColor(Qt.GlobalColor.red))
+        self.formats["SUCCESS"].setForeground(QColor(Qt.GlobalColor.darkGreen))
+        self.formats["DEBUG"].setForeground(QColor(Qt.GlobalColor.darkRed))
+        self.formats["INFO"].setForeground(QColor(Qt.GlobalColor.darkBlue))
+        self.formats["WARN"].setForeground(QColor(Qt.GlobalColor.darkYellow))
+        self.formats["ERROR"].setForeground(QColor(Qt.GlobalColor.red))
 
         # 定义日志级别的顺序
-        self.log_levels = ['SUCCESS', 'DEBUG', 'INFO', 'WARN', 'ERROR']
+        self.log_levels = ["SUCCESS", "DEBUG", "INFO", "WARN", "ERROR"]
 
         # 正则表达式模式，用于匹配日志的时间和日志级别
         self.pattern = QRegularExpression(
-            r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \| (SUCCESS|DEBUG|INFO|WARN|ERROR) \|'
+            r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \| (SUCCESS|DEBUG|INFO|WARN|ERROR) \|"
         )
 
     def highlightBlock(self, text) -> None:

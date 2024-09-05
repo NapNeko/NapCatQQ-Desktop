@@ -3,14 +3,23 @@ import json
 import re
 
 import psutil
-from PySide6.QtCore import Qt, QProcess, Slot
-from PySide6.QtGui import QTextCursor, QPixmap
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
+from PySide6.QtCore import Qt, Slot, QProcess
+from PySide6.QtGui import QPixmap, QTextCursor
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 from creart import it
 from loguru import logger
 from qfluentwidgets import (
-    SegmentedWidget, TransparentToolButton, FluentIcon, ToolTipFilter, PrimaryPushButton, PushButton, MessageBoxBase,
-    SubtitleLabel, ImageLabel, ToolButton, BodyLabel
+    BodyLabel,
+    FluentIcon,
+    ImageLabel,
+    PushButton,
+    ToolButton,
+    SubtitleLabel,
+    ToolTipFilter,
+    MessageBoxBase,
+    SegmentedWidget,
+    PrimaryPushButton,
+    TransparentToolButton,
 )
 
 from src.Core.Config.ConfigModel import Config
@@ -54,7 +63,7 @@ class BotWidget(QWidget):
         self.pivot.addItem(
             routeKey=self.botLogPage.objectName(),
             text=self.tr("Bot Log"),
-            onClick=lambda: self.view.setCurrentWidget(self.botLogPage)
+            onClick=lambda: self.view.setCurrentWidget(self.botLogPage),
         )
         # self.pivot.addItem(
         #     routeKey=self.botInfoPage.objectName(),
@@ -64,7 +73,7 @@ class BotWidget(QWidget):
         self.pivot.addItem(
             routeKey=self.botSetupPage.objectName(),
             text=self.tr("Bot Setup"),
-            onClick=lambda: self.view.setCurrentWidget(self.botSetupPage)
+            onClick=lambda: self.view.setCurrentWidget(self.botSetupPage),
         )
         self.pivot.setCurrentItem(self.botLogPage.objectName())
         self.pivot.setMaximumWidth(300)
@@ -164,6 +173,7 @@ class BotWidget(QWidget):
         # 切换按钮显示
         """
         from src.Ui.BotListPage import BotListWidget
+
         self.botLogPage.clear()
 
         self.env = QProcess.systemEnvironment()
@@ -175,12 +185,9 @@ class BotWidget(QWidget):
 
         self.process = QProcess(self)
         self.process.setEnvironment(self.env)
-        self.process.setProgram(str(it(PathFunc).getNapCatPath() / 'NapCatWinBootMain.exe'))
+        self.process.setProgram(str(it(PathFunc).getNapCatPath() / "NapCatWinBootMain.exe"))
         self.process.setArguments(
-            [
-                str(it(PathFunc).getQQPath() / 'QQ.exe'),
-                str(it(PathFunc).getNapCatPath() / 'NapCatWinBootHook.dll')
-            ]
+            [str(it(PathFunc).getQQPath() / "QQ.exe"), str(it(PathFunc).getNapCatPath() / "NapCatWinBootHook.dll")]
         )
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
@@ -193,7 +200,7 @@ class BotWidget(QWidget):
 
         it(BotListWidget).showInfo(
             title=self.tr("The run command has been executed"),
-            content=self.tr("If there is no output for a long time, check the QQ path and NapCat path")
+            content=self.tr("If there is no output for a long time, check the QQ path and NapCat path"),
         )
         self.isRun = True
         self.view.setCurrentWidget(self.botLogPage)
@@ -230,8 +237,8 @@ class BotWidget(QWidget):
         # 获取所有输出
         data = self.process.readAllStandardOutput().data().decode()
         # 匹配并移除 ANSI 转义码
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        data = ansi_escape.sub('', data)
+        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        data = ansi_escape.sub("", data)
         # 获取 CodeEditor 的 cursor 并移动插入输出内容
         cursor = self.botLogPage.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
@@ -250,6 +257,7 @@ class BotWidget(QWidget):
             return
 
         from src.Ui.BotListPage import BotListWidget
+
         if "[ERROR] () | 快速登录错误" in data:
             # 引发此错误时自动重启
             self._rebootButtonSlot()
@@ -259,7 +267,7 @@ class BotWidget(QWidget):
                     "Quick login error, NapCat has been automatically restarted, "
                     "the following is the error message\n"
                     "Quick login error"
-                )
+                ),
             )
             return
 
@@ -279,8 +287,7 @@ class BotWidget(QWidget):
             self.showQRCodeButton.hide()
             self.isLogin = True
             it(BotListWidget).showSuccess(
-                title=self.tr("Login successful!"),
-                content=self.tr(f"Account {self.config.bot.QQID} login successful!")
+                title=self.tr("Login successful!"), content=self.tr(f"Account {self.config.bot.QQID} login successful!")
             )
 
     @Slot()
@@ -297,6 +304,7 @@ class BotWidget(QWidget):
         """
         from src.Ui.BotListPage import BotListWidget
         from src.Core.Config.ConfigModel import DEFAULT_CONFIG
+
         self.newConfig = Config(**self.botSetupPage.getValue())
 
         # 读取配置列表
@@ -307,10 +315,7 @@ class BotWidget(QWidget):
         if not bot_configs:
             # 为空报错
             logger.error(f"机器人列表加载失败 数据为空: {bot_configs}")
-            it(BotListWidget).showError(
-                title=self.tr("Update error"),
-                content=self.tr("Data loss within the profile")
-            )
+            it(BotListWidget).showError(title=self.tr("Update error"), content=self.tr("Data loss within the profile"))
             return
 
         # 如果从文件加载的 bot_config 不为空则进行更新(为空怎么办呢,我能怎么办,崩了呗bushi
@@ -325,8 +330,7 @@ class BotWidget(QWidget):
             json.dump(bot_configs, f, indent=4)
         # 更新成功提示
         it(BotListWidget).showSuccess(
-            title=self.tr("Update success"),
-            content=self.tr("The updated configuration is successful")
+            title=self.tr("Update success"), content=self.tr("The updated configuration is successful")
         )
 
     @Slot()
@@ -335,6 +339,7 @@ class BotWidget(QWidget):
         ## 删除机器人配置按钮
         """
         from src.Ui.BotListPage import BotListWidget
+
         msgBox = DeleteConfigMessageBox(self.isRun, self, it(BotListWidget))
         msgBox.exec()
 
@@ -345,6 +350,7 @@ class BotWidget(QWidget):
         ## 返回列表按钮的槽函数
         """
         from src.Ui.BotListPage.BotListWidget import BotListWidget
+
         it(BotListWidget).view.setCurrentIndex(0)
         it(BotListWidget).topCard.breadcrumbBar.setCurrentIndex(0)
         it(BotListWidget).topCard.updateListButton.show()
@@ -380,32 +386,32 @@ class BotWidget(QWidget):
             #     'rebootButton': 'show' if self.isRun else 'hide'
             # },
             self.botSetupPage.objectName(): {
-                'updateConfigButton': 'show',
-                'deleteConfigButton': 'show',
-                'botSetupSubPageReturnButton': 'hide',
-                'showQRCodeButton': 'hide',
-                'returnListButton': 'show',
-                'runButton': 'hide',
-                'stopButton': 'hide',
-                'rebootButton': 'hide'
+                "updateConfigButton": "show",
+                "deleteConfigButton": "show",
+                "botSetupSubPageReturnButton": "hide",
+                "showQRCodeButton": "hide",
+                "returnListButton": "show",
+                "runButton": "hide",
+                "stopButton": "hide",
+                "rebootButton": "hide",
             },
             self.botLogPage.objectName(): {
-                'returnListButton': 'show',
-                'updateConfigButton': 'hide',
-                'deleteConfigButton': 'hide',
-                'botSetupSubPageReturnButton': 'hide',
-                'runButton': 'hide' if self.isRun else 'show',
-                'stopButton': 'show' if self.isRun else 'hide',
-                'rebootButton': 'show' if self.isRun else 'hide',
-                'showQRCodeButton': 'show' if not self.isLogin and self.isRun else 'hide'
-            }
+                "returnListButton": "show",
+                "updateConfigButton": "hide",
+                "deleteConfigButton": "hide",
+                "botSetupSubPageReturnButton": "hide",
+                "runButton": "hide" if self.isRun else "show",
+                "stopButton": "show" if self.isRun else "hide",
+                "rebootButton": "show" if self.isRun else "hide",
+                "showQRCodeButton": "show" if not self.isLogin and self.isRun else "hide",
+            },
         }
 
         # 根据 widget.objectName() 执行相应操作
         if widget.objectName() in page_actions:
             actions = page_actions[widget.objectName()]
             for button, action in actions.items():
-                getattr(self, button).setVisible(action == 'show')
+                getattr(self, button).setVisible(action == "show")
 
     def _setLayout(self) -> None:
         """
@@ -444,7 +450,7 @@ class QRCodeMessageBox(MessageBoxBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent=parent)
-        self.titleLabel = SubtitleLabel(self.tr('Scan the QR code to log in'), self)
+        self.titleLabel = SubtitleLabel(self.tr("Scan the QR code to log in"), self)
         self.qrcodeLabel = ImageLabel(self)
         self.qrcodePath = None
 
@@ -459,9 +465,7 @@ class QRCodeMessageBox(MessageBoxBase):
         self.widget.setMinimumWidth(350)
         self.yesButton.setText(self.tr("Refresh the QR code"))
         self.yesButton.clicked.disconnect()
-        self.yesButton.clicked.connect(
-            lambda: self.setQRCode(self.qrcodePath) if self.qrcodePath else None
-        )
+        self.yesButton.clicked.connect(lambda: self.setQRCode(self.qrcodePath) if self.qrcodePath else None)
 
     def setQRCode(self, qrcodePath: str) -> None:
         QRCode = QPixmap(qrcodePath)

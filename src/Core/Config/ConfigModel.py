@@ -3,7 +3,7 @@ import string
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, HttpUrl, WebsocketUrl, field_validator
+from pydantic import HttpUrl, BaseModel, WebsocketUrl, field_validator
 
 
 class ScriptType(Enum):
@@ -136,29 +136,19 @@ DEFAULT_CONFIG = {
             "enablePost": False,
             "postUrls": [],
         },
-        "ws": {
-            "enable": False,
-            "host": "",
-            "port": 3001
-        },
-        "reverseWs": {
-            "enable": False,
-            "urls": []
-        },
+        "ws": {"enable": False, "host": "", "port": 3001},
+        "reverseWs": {"enable": False, "urls": []},
     },
     "advanced": {
         "QQPath": "",
         "startScriptPath": "",
         "ffmpegPath": "",
-        "GroupLocalTime": {
-            "Record": False,
-            "RecordList": []
-        },
+        "GroupLocalTime": {"Record": False, "RecordList": []},
         "debug": False,
         "localFile2url": False,
         "fileLog": False,
         "consoleLog": False,
         "fileLogLevel": "debug",
-        "consoleLogLevel": "info"
-    }
+        "consoleLogLevel": "info",
+    },
 }

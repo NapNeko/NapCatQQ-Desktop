@@ -1,20 +1,11 @@
 # -*- coding: utf-8 -*-
-from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
-from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
+from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
 
 from src.Core.Config.ConfigModel import ConnectConfig
-from src.Ui.common.InputCard import (
-    HttpConfigCard,
-    SwitchConfigCard,
-    UrlCard,
-    WsConfigCard,
-)
-
-if TYPE_CHECKING:
-    pass
+from src.Ui.common.InputCard import UrlCard, WsConfigCard, HttpConfigCard, SwitchConfigCard
 
 
 class ConnectWidget(ScrollArea):
@@ -73,9 +64,7 @@ class ConnectWidget(ScrollArea):
         )
 
         # 当 反向WS 地址被删除至空时, 设置为 False
-        self.wsReverseUrlCard.emptiedSignal.connect(
-            lambda: self.wsReverseCard.switchButton.setChecked(False)
-        )
+        self.wsReverseUrlCard.emptiedSignal.connect(lambda: self.wsReverseCard.switchButton.setChecked(False))
 
         # 隐藏卡片，并设置条件显示
         self.httpPostUrlCard.hide()
@@ -126,10 +115,7 @@ class ConnectWidget(ScrollArea):
         http = self.httpConfigCard.getValue()
         http["postUrls"] = self.httpPostUrlCard.getValue()
         ws = self.wsCard.getValue()  # 单纯为了下面字典整齐)
-        reverseWs = {
-            "enable": self.wsReverseCard.getValue(),
-            "urls": self.wsReverseUrlCard.getValue()
-        }
+        reverseWs = {"enable": self.wsReverseCard.getValue(), "urls": self.wsReverseUrlCard.getValue()}
 
         return {
             "http": http,
