@@ -26,6 +26,7 @@ from PySide6.QtWidgets import QWidget, QApplication, QSystemTrayIcon
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.AddPage import AddWidget
 from src.Ui.HomePage import HomeWidget
+from src.Ui.resource import resource
 from src.Ui.SetupPage import SetupWidget
 from src.Ui.UpdatePage import UpdateWidget
 from src.Ui.BotListPage import BotListWidget
@@ -164,7 +165,7 @@ class MainWindow(MSFluentWindow):
         event.ignore()
 
     @staticmethod
-    def showInfo(title: str, content: str, showcasePage: QWidget) -> None:
+    def showInfo(title: str, content: str, page: QWidget) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -174,11 +175,11 @@ class MainWindow(MSFluentWindow):
             orient=Qt.Orientation.Vertical,
             duration=5000,
             position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=showcasePage,
+            parent=page,
         )
 
     @staticmethod
-    def showError(title: str, content: str, showcasePage: QWidget) -> None:
+    def showError(title: str, content: str, page: QWidget) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -189,11 +190,11 @@ class MainWindow(MSFluentWindow):
             duration=50000,
             isClosable=True,
             position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=showcasePage,
+            parent=page,
         )
 
     @staticmethod
-    def showWarning(title: str, content: str, showcasePage: QWidget) -> None:
+    def showWarning(title: str, content: str, page: QWidget) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -203,11 +204,11 @@ class MainWindow(MSFluentWindow):
             orient=Qt.Orientation.Vertical,
             duration=10000,
             position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=showcasePage,
+            parent=page,
         )
 
     @staticmethod
-    def showSuccess(title: str, content: str, showcasePage: QWidget) -> None:
+    def showSuccess(title: str, content: str, page: QWidget) -> None:
         """
         # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
         """
@@ -217,7 +218,7 @@ class MainWindow(MSFluentWindow):
             orient=Qt.Orientation.Vertical,
             duration=5000,
             position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=showcasePage,
+            parent=page,
         )
 
 

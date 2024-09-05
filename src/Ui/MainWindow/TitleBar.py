@@ -81,10 +81,10 @@ class MaxBtn(MaximizeButton):
 
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
-        color, bgColor = self._getColors()
+        color, background_color = self._getColors()
 
         # 绘制背景
-        painter.setBrush(bgColor)
+        painter.setBrush(background_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 4, 4)
 
@@ -117,10 +117,10 @@ class MinBtn(MinimizeButton):
 
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
-        color, bgColor = self._getColors()
+        color, background_color = self._getColors()
 
         # 绘制背景
-        painter.setBrush(bgColor)
+        painter.setBrush(background_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 4, 4)
 
@@ -140,18 +140,18 @@ class CloseBtn(CloseButton):
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
         painter.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
-        color, bgColor = self._getColors()
+        color, background_color = self._getColors()
 
         # draw background
-        painter.setBrush(bgColor)
+        painter.setBrush(background_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 4, 4)
 
         # draw icon
         color = color.name()
-        pathNodes = self._svgDom.elementsByTagName("path")
-        for i in range(pathNodes.length()):
-            element = pathNodes.at(i).toElement()
+        path_nodes = self._svgDom.elementsByTagName("path")
+        for i in range(path_nodes.length()):
+            element = path_nodes.at(i).toElement()
             element.setAttribute("stroke", color)
 
         renderer = QSvgRenderer(self._svgDom.toByteArray())

@@ -275,8 +275,8 @@ class BotWidget(QWidget):
             # 如果已经显示了则关闭
             self.qrcodeMsgBox.cancelButton.click()
             # 提取匹配的路径
-            qrcodePath = match.group(1).strip()
-            self.qrcodeMsgBox.setQRCode(qrcodePath)
+            qrcode_path = match.group(1).strip()
+            self.qrcodeMsgBox.setQRCode(qrcode_path)
             self.showQRCodeButton.show()
             self.showQRCodeButton.click()
             return
@@ -339,9 +339,7 @@ class BotWidget(QWidget):
         ## 删除机器人配置按钮
         """
         from src.Ui.BotListPage import BotListWidget
-
-        msgBox = DeleteConfigMessageBox(self.isRun, self, it(BotListWidget))
-        msgBox.exec()
+        DeleteConfigMessageBox(self.isRun, self, it(BotListWidget)).exec()
 
     @staticmethod
     @Slot()
@@ -467,10 +465,10 @@ class QRCodeMessageBox(MessageBoxBase):
         self.yesButton.clicked.disconnect()
         self.yesButton.clicked.connect(lambda: self.setQRCode(self.qrcodePath) if self.qrcodePath else None)
 
-    def setQRCode(self, qrcodePath: str) -> None:
-        QRCode = QPixmap(qrcodePath)
-        self.qrcodeLabel.setImage(QRCode)
-        self.qrcodePath = qrcodePath
+    def setQRCode(self, qrcode_path: str) -> None:
+        qr_code = QPixmap(qrcode_path)
+        self.qrcodeLabel.setImage(qr_code)
+        self.qrcodePath = qrcode_path
 
 
 class DeleteConfigMessageBox(MessageBoxBase):
@@ -478,12 +476,12 @@ class DeleteConfigMessageBox(MessageBoxBase):
     ## 删除机器人配置对话框
     """
 
-    def __init__(self, isRun: bool, parent: BotWidget, displayLocation) -> None:
-        super().__init__(parent=displayLocation)
+    def __init__(self, is_run: bool, parent: BotWidget, page) -> None:
+        super().__init__(parent=page)
         self.titleLabel = SubtitleLabel()
         self.contentLabel = BodyLabel()
 
-        if isRun:
+        if is_run:
             # 如果正在运行, 则提示停止运行
             self.titleLabel.setText(self.tr("Deletion failed"))
             self.contentLabel.setText(

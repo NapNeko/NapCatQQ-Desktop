@@ -117,7 +117,6 @@ class NapCatVersionCard(VersionCardBase):
             self.setToolTip(self.tr(f"Discover new versions({result['remoteVersion']}), please update them in time"))
             self.warningBadge.show()
             self.updateSate = True
-            return
         else:
             self.warningBadge.hide()
 

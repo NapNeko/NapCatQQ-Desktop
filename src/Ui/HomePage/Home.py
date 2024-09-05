@@ -77,7 +77,7 @@ class HomeWidget(QStackedWidget):
         info = InfoBar(
             icon=InfoBarIcon.INFORMATION,
             title="Tips",
-            content=self.tr("You can choose the page to display at \n" "startup in the settings page"),
+            content=self.tr("You can choose the page to display a\nstartup in the settings page"),
             orient=Qt.Orientation.Vertical,
             isClosable=True,
             position=InfoBarPosition.BOTTOM_RIGHT,
@@ -124,7 +124,7 @@ class HomeWidget(QStackedWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).showInfo(title=title, content=content, showcasePage=self)
+        it(MainWindow).showInfo(title=title, content=content, page=self)
 
     def showError(self, title: str, content: str) -> None:
         """
@@ -132,7 +132,7 @@ class HomeWidget(QStackedWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).showError(title=title, content=content, showcasePage=self)
+        it(MainWindow).showError(title=title, content=content, page=self)
 
     def showWarning(self, title: str, content: str) -> None:
         """
@@ -140,7 +140,7 @@ class HomeWidget(QStackedWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).showWarning(title=title, content=content, showcasePage=self)
+        it(MainWindow).showWarning(title=title, content=content, page=self)
 
     def showSuccess(self, title: str, content: str) -> None:
         """
@@ -148,7 +148,7 @@ class HomeWidget(QStackedWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).showSuccess(title=title, content=content, showcasePage=self)
+        it(MainWindow).showSuccess(title=title, content=content, page=self)
 
     def paintEvent(self, event) -> None:
         """

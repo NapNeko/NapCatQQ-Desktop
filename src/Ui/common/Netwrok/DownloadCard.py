@@ -210,7 +210,7 @@ class NapCatDownloadCard(DownloadCardBase):
         """
         ## 检查是否安装
         """
-        if not it(GetVersion).napcatLocalVersion is None:
+        if it(GetVersion).napcatLocalVersion is not None:
             self.installButton.hide()
             self.openInstallPathButton.show()
             self.isInstall = True
@@ -272,7 +272,7 @@ class NapCatDownloadCard(DownloadCardBase):
         """
         ## 分享按钮的槽函数
         """
-        shareView = FlyoutView(
+        share_view = FlyoutView(
             title=self.tr("What are you doing ?"),
             content=self.tr(
                 "Please do not promote NapCatQQ in irrelevant places,\n"
@@ -282,8 +282,8 @@ class NapCatDownloadCard(DownloadCardBase):
             isClosable=True,
             image=":Global/image/Global/image_1.jpg",
         )
-        view = Flyout.make(shareView, self.shareButton, self)
-        shareView.closed.connect(view.close)
+        view = Flyout.make(share_view, self.shareButton, self)
+        share_view.closed.connect(view.close)
 
 
 class NapCatInstallWorker(QThread):
@@ -298,10 +298,10 @@ class NapCatInstallWorker(QThread):
     # 发送错误退出信号
     errorFinished = Signal()
 
-    def __init__(self, zipFilePath, parent=None):
+    def __init__(self, zip_file_path, parent=None):
         super().__init__(parent)
         self.ncInstallPath = it(PathFunc).getNapCatPath()
-        self.zipFilePath = zipFilePath  # it(PathFunc).tmp_path / self.downloader.url.fileName()
+        self.zipFilePath = zip_file_path  # it(PathFunc).tmp_path / self.downloader.url.fileName()
 
     def run(self) -> None:
         try:
@@ -380,9 +380,7 @@ class QQDownloadCard(DownloadCardBase):
         self.companyLabel.setUrl(Urls.QQ_OFFICIAL_WEBSITE.value)
         self.companyLabel.setText(self.tr("QQ official website"))
         self.descriptionLabel.setText(
-            self.tr(
-                "NapCatQQ is a headless bot framework based on the PC NTQQ core, " "so you will need to install it."
-            )
+            self.tr("NapCatQQ is a headless bot framework based on the PC NTQQ core, so you will need to install it.")
         )
         self.shareButton.clicked.connect(self._shareButtonSlot)
 
@@ -418,7 +416,7 @@ class QQDownloadCard(DownloadCardBase):
         """
         ## 检查是否安装
         """
-        if not it(GetVersion).QQLocalVersion is None:
+        if it(GetVersion).QQLocalVersion is not None:
             # 如果获取得到版本则表示已安装
             self.openInstallPathButton.clicked.connect(
                 lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(it(PathFunc).getQQPath())))
@@ -443,7 +441,7 @@ class QQDownloadCard(DownloadCardBase):
         # 询问用户应该如何安装(手动/静默)
         from src.Ui.HomePage.Home import HomeWidget
 
-        if (box := InstallationMessageBox(it(HomeWidget))).exec():
+        if InstallationMessageBox(it(HomeWidget)).exec():
             # True 为手动安装, 反之为静默安装
             self.process.setProgram(str(self.installExePath))
         else:
@@ -461,12 +459,12 @@ class QQDownloadCard(DownloadCardBase):
         """
         self.installButton.setEnabled(True)
         self.installButton.setProgressBarState(False)
-        if exit_status == QProcess.ExitStatus.NormalExit and not (QQPath := it(PathFunc).getQQPath()) is None:
+        if exit_status == QProcess.ExitStatus.NormalExit and (qq_path := it(PathFunc).getQQPath()) is not None:
             # 如果进程正常退出, 则检查一次路径是否存在QQ, 存在则发送成功, 否则失败
             self.installButton.hide()
             self.openInstallPathButton.show()
             self.openInstallPathButton.clicked.connect(
-                lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(QQPath)))
+                lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(qq_path)))
             )
         else:
             logger.error(f"QQ installation failed, exit code: {exit_code}, exit status: {exit_status}")
@@ -516,7 +514,7 @@ class QQDownloadCard(DownloadCardBase):
         """
         ## 分享按钮的槽函数
         """
-        shareView = FlyoutView(
+        share_view = FlyoutView(
             title=self.tr("What are you doing ?"),
             content=self.tr(
                 "Please do not promote NapCatQQ in irrelevant places,\n"

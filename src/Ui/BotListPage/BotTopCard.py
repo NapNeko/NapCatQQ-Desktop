@@ -40,11 +40,11 @@ class BotTopCard(QWidget):
         self._addTooltips()
         self._setLayout()
 
-    def addItem(self, routeKey: str) -> None:
+    def addItem(self, route_key: str) -> None:
         """
         ## 给 breadcrumbBar 添加 item 项
         """
-        self.breadcrumbBar.addItem(routeKey, routeKey)
+        self.breadcrumbBar.addItem(route_key, route_key)
 
     def _addTooltips(self) -> None:
         """

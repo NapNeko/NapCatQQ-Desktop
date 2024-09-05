@@ -198,13 +198,13 @@ class MemoryDashboard(DashboardBase):
         used_mem = virtual_mem.used / (1024**3)
 
         # 构建输出字符串
-        toolTipStr = self.tr(
+        tool_tip_string = self.tr(
             f"Memory Size: {used_mem:.0f}G/{total_mem:.0f}G\n"
             f"Memory Usage: \n"
             f"{' ' * 8}NapCat Desktop: {psutil.Process().memory_info().rss / (1024 ** 2):.2f} MB"
         )
 
-        self.setToolTip(toolTipStr)
+        self.setToolTip(tool_tip_string)
 
     def paintEvent(self, event) -> None:
         """

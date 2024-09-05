@@ -204,7 +204,7 @@ class NapCatDownloader(QThread):
             response = httpx.head(r"https://github.com", timeout=5)
             logger.info("网络环境非常奈斯")
             return response.status_code == 200
-        except httpx.RequestError as e:
+        except httpx.RequestError:
             # 引发错误返回 False
             return False
 

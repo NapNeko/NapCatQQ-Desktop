@@ -88,7 +88,7 @@ class BotListWidget(QWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).showInfo(title=title, content=content, showcasePage=self)
+        it(MainWindow).showInfo(title=title, content=content, page=self)
 
     def showError(self, title: str, content: str) -> None:
         """
@@ -96,7 +96,7 @@ class BotListWidget(QWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).showError(title=title, content=content, showcasePage=self)
+        it(MainWindow).showError(title=title, content=content, page=self)
 
     def showWarning(self, title: str, content: str) -> None:
         """
@@ -104,7 +104,7 @@ class BotListWidget(QWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).showWarning(title=title, content=content, showcasePage=self)
+        it(MainWindow).showWarning(title=title, content=content, page=self)
 
     def showSuccess(self, title: str, content: str) -> None:
         """
@@ -112,7 +112,7 @@ class BotListWidget(QWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).showSuccess(title=title, content=content, showcasePage=self)
+        it(MainWindow).showSuccess(title=title, content=content, page=self)
 
 
 class BotListWidgetClassCreator(AbstractCreator, ABC):

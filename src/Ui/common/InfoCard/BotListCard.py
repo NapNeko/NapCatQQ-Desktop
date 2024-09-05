@@ -142,10 +142,9 @@ class BotList(ScrollArea):
                 self.cardLayout.addWidget(card, 0, Qt.AlignmentFlag.AlignTop)
                 self.botCardList.append(card)
 
-        QQList = [card.config.bot.QQID for card in self.botCardList]
         for bot_config in it(BotListWidget).botList.botList:
             # 遍历并判断是否有新增的 bot
-            if bot_config.bot.QQID in QQList:
+            if bot_config.bot.QQID in [card.config.bot.QQID for card in self.botCardList]:
                 # 如果属于则直接跳过
                 continue
 

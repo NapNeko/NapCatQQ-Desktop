@@ -85,7 +85,7 @@ class CodeEditor(PlainTextEdit):
         self.verticalScrollBar().setValue(scroll_position)
 
     @Slot(int)
-    def update_line_number_area_width(self, newBlockCount: int) -> None:
+    def update_line_number_area_width(self, new_block_count: int) -> None:
         # 更新行号区域的宽度
         self.setViewportMargins(self.lineNumberAreaWidth() + 10, 0, 0, 0)
 
