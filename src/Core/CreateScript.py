@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 import json
 import textwrap
-from pathlib import Path
 from typing import Tuple
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, QObject, QOperatingSystemVersion
-from PySide6.QtGui import QDesktopServices
 from creart import it
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt, QUrl, QObject, QOperatingSystemVersion
 from qfluentwidgets import InfoBar, FluentIcon, MessageBox, InfoBarPosition, TransparentPushButton
 
-from src.Core.Config.ConfigModel import Config, ScriptType
 from src.Core.PathFunc import PathFunc
+from src.Core.Config.ConfigModel import Config, ScriptType
 
 
 class CreateScript:

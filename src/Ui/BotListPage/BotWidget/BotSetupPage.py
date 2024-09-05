@@ -6,13 +6,13 @@
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from qfluentwidgets import BodyLabel, CardWidget, FluentIcon, IconWidget, CaptionLabel, FluentIconBase
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
-from src.Core.Config.ConfigModel import Config
+from src.Ui.AddPage.Connect import ConnectWidget
 from src.Ui.AddPage.Advanced import AdvancedWidget
 from src.Ui.AddPage.BotWidget import BotWidget
-from src.Ui.AddPage.Connect import ConnectWidget
+from src.Core.Config.ConfigModel import Config
 
 if TYPE_CHECKING:
     from src.Ui.BotListPage.BotWidget import BotWidget

@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 import random
-from pathlib import Path
 from typing import Optional
+from pathlib import Path
 
-from PySide6.QtCore import Qt, Slot, QSize
-from PySide6.QtGui import QFont, QColor
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
+from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, Slot, QSize
 from qfluentwidgets import (
     Flyout,
     BodyLabel,
@@ -23,15 +22,16 @@ from qfluentwidgets import (
     TransparentToolButton,
     setFont,
 )
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 from src.Core import timer
 from src.Core.Config import cfg
+from src.Core.PathFunc import PathFunc
 from src.Core.GetVersion import GetVersion
 from src.Core.NetworkFunc import Urls, NapCatDownloader
-from src.Core.PathFunc import PathFunc
+from src.Ui.common.Netwrok.DownloadCard import NapCatInstallWorker
 from src.Ui.common.InfoCard.UpdateLogCard import UpdateLogCard
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
-from src.Ui.common.Netwrok.DownloadCard import NapCatInstallWorker
 
 
 class UpdateCardBase(SimpleCardWidget):

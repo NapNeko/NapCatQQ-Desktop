@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from PySide6.QtCore import Qt, Slot, QRect, QSize, QRectF, QRegularExpression
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QFontDatabase, QTextCharFormat, QSyntaxHighlighter
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Qt, Slot, QRect, QSize, QRectF, QRegularExpression
 from qfluentwidgets import PlainTextEdit
+from PySide6.QtWidgets import QWidget
 
 
 class CodeEditor(PlainTextEdit):

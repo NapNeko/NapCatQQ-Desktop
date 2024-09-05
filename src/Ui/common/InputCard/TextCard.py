@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 from typing import List
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from creart import it
+from PySide6.QtCore import Qt, Signal
 from qfluentwidgets import (
     InfoBar,
     LineEdit,
@@ -18,6 +17,7 @@ from qfluentwidgets import (
     TransparentPushButton,
     TransparentToolButton,
 )
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 
 
 class TextItem(QWidget):

@@ -2,14 +2,14 @@
 import json
 from typing import List
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget
 from creart import it
+from PySide6.QtCore import Qt
 from qfluentwidgets import FlowLayout, ScrollArea
+from PySide6.QtWidgets import QWidget
 
-from src.Core.Config.ConfigModel import DEFAULT_CONFIG, Config
 from src.Core.PathFunc import PathFunc
 from src.Ui.BotListPage.BotCard import BotCard
+from src.Core.Config.ConfigModel import DEFAULT_CONFIG, Config
 
 
 class BotList(ScrollArea):

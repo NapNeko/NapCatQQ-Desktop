@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
-import json
 import re
+import json
 
 import psutil
-from PySide6.QtCore import Qt, Slot, QProcess
-from PySide6.QtGui import QPixmap, QTextCursor
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 from creart import it
 from loguru import logger
+from PySide6.QtGui import QPixmap, QTextCursor
+from PySide6.QtCore import Qt, Slot, QProcess
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -21,12 +20,13 @@ from qfluentwidgets import (
     PrimaryPushButton,
     TransparentToolButton,
 )
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
-from src.Core.Config.ConfigModel import Config
-from src.Core.PathFunc import PathFunc
-from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
-from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common import CodeEditor, LogHighlighter
+from src.Core.PathFunc import PathFunc
+from src.Ui.StyleSheet import StyleSheet
+from src.Core.Config.ConfigModel import Config
+from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
 
 
 class BotWidget(QWidget):
