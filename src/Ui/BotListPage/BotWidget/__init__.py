@@ -187,7 +187,11 @@ class BotWidget(QWidget):
         self.process.setEnvironment(self.env)
         self.process.setProgram(str(it(PathFunc).getNapCatPath() / "NapCatWinBootMain.exe"))
         self.process.setArguments(
-            [str(it(PathFunc).getQQPath() / "QQ.exe"), str(it(PathFunc).getNapCatPath() / "NapCatWinBootHook.dll")]
+            [
+                str(it(PathFunc).getQQPath() / "QQ.exe"),
+                str(it(PathFunc).getNapCatPath() / "NapCatWinBootHook.dll"),
+                self.config.bot.QQID
+            ]
         )
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
@@ -258,18 +262,18 @@ class BotWidget(QWidget):
 
         from src.Ui.BotListPage import BotListWidget
 
-        if "[ERROR] () | 快速登录错误" in data:
-            # 引发此错误时自动重启
-            self._rebootButtonSlot()
-            it(BotListWidget).showInfo(
-                title=self.tr("Sign-in error"),
-                content=self.tr(
-                    "Quick login error, NapCat has been automatically restarted, "
-                    "the following is the error message\n"
-                    "Quick login error"
-                ),
-            )
-            return
+        # if "[ERROR] () | 快速登录错误" in data:
+        #     # 引发此错误时自动重启
+        #     self._rebootButtonSlot()
+        #     it(BotListWidget).showInfo(
+        #         title=self.tr("Sign-in error"),
+        #         content=self.tr(
+        #             "Quick login error, NapCat has been automatically restarted, "
+        #             "the following is the error message\n"
+        #             "Quick login error"
+        #         ),
+        #     )
+        #     return
 
         if match := re.search(r"二维码已保存到\s(.+)", data):
             # 如果已经显示了则关闭
@@ -281,7 +285,7 @@ class BotWidget(QWidget):
             self.showQRCodeButton.click()
             return
 
-        if f"[INFO] ({self.config.bot.QQID}) | 登录成功! " in data:
+        if "[Notice] [OneBot11]" in data:
             # 如果登录成功
             self.qrcodeMsgBox.cancelButton.click()
             self.showQRCodeButton.hide()
