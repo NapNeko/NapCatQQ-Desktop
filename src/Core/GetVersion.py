@@ -3,13 +3,13 @@ import json
 from abc import ABC
 from json import JSONDecodeError
 
-from PySide6.QtCore import QUrl, QObject, QRegularExpression
 from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
 from loguru import logger
+from PySide6.QtCore import QUrl, QObject, QRegularExpression
 
 from src.Core import timer
-from src.Core.NetworkFunc import Urls, async_request
 from src.Core.PathFunc import PathFunc
+from src.Core.NetworkFunc import Urls, async_request
 
 
 class GetVersion(QObject):

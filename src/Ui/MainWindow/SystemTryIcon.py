@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from qfluentwidgets import Action
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import SystemTrayMenu
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow.Window import MainWindow

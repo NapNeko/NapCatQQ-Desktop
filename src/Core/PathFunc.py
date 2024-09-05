@@ -3,10 +3,10 @@ import winreg
 from abc import ABC
 from pathlib import Path
 
-from PySide6.QtCore import QOperatingSystemVersion
 from creart import add_creator, exists_module
-from creart.creator import AbstractCreator, CreateTargetInfo
 from loguru import logger
+from creart.creator import AbstractCreator, CreateTargetInfo
+from PySide6.QtCore import QOperatingSystemVersion
 
 
 class PathFunc:

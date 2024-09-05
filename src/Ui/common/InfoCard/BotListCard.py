@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QUrl, Slot, QTimer, QUrlQuery
-from PySide6.QtGui import QPixmap
-from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
-from PySide6.QtWidgets import QFrame, QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QUrl, Slot, QTimer, QUrlQuery
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -15,13 +13,15 @@ from qfluentwidgets import (
     TransparentPushButton,
     TransparentToolButton,
 )
+from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
+from PySide6.QtWidgets import QFrame, QWidget, QHBoxLayout, QVBoxLayout
 from qfluentwidgets.common.animation import BackgroundAnimationWidget
 
 from src.Core import timer
-from src.Core.Config.ConfigModel import Config
-from src.Core.NetworkFunc import Urls, NetworkFunc
-from src.Ui.BotListPage import BotListWidget
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.BotListPage import BotListWidget
+from src.Core.NetworkFunc import Urls, NetworkFunc
+from src.Core.Config.ConfigModel import Config
 
 
 class BotListCard(HeaderCardWidget):

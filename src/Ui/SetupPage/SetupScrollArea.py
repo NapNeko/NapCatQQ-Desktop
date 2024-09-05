@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QStandardPaths
-from PySide6.QtWidgets import QWidget, QFileDialog
 from creart import it
+from PySide6.QtCore import Qt, QStandardPaths
 from qfluentwidgets import (
     InfoBar,
     FluentIcon,
@@ -17,10 +16,11 @@ from qfluentwidgets import (
     setTheme,
     setThemeColor,
 )
+from PySide6.QtWidgets import QWidget, QFileDialog
 
+from src.Ui.Icon import NapCatDesktopIcon
 from src.Core.Config import cfg
 from src.Core.PathFunc import PathFunc
-from src.Ui.Icon import NapCatDesktopIcon
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow

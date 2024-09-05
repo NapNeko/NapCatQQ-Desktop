@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from PySide6.QtCore import Qt, QSize
 from qfluentwidgets import BodyLabel, FluentIcon, TitleLabel, ToolButton, ToolTipFilter, MessageBoxBase, HyperlinkButton
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 from src.Core.NetworkFunc import Urls
 from src.Ui.common.InfoCard import (

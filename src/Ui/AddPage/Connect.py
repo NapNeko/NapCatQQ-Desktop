@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget
 from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
+from PySide6.QtWidgets import QWidget
 
-from src.Core.Config.ConfigModel import ConnectConfig
 from src.Ui.common.InputCard import UrlCard, WsConfigCard, HttpConfigCard, SwitchConfigCard
+from src.Core.Config.ConfigModel import ConnectConfig
 
 
 class ConnectWidget(ScrollArea):

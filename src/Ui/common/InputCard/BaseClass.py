@@ -2,8 +2,8 @@
 from typing import List
 
 from PySide6.QtCore import Qt, QEasingCurve
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from qfluentwidgets import LineEdit, BodyLabel, FluentIcon, SwitchButton, FluentIconBase, ExpandSettingCard
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from qfluentwidgets.components.settings.expand_setting_card import GroupSeparator
 
 

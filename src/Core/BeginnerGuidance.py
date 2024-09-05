@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import QObject
 from creart import it
+from PySide6.QtCore import QObject
 
 from src.Ui.MainWindow.Window import MainWindow
 

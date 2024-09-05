@@ -2,9 +2,9 @@
 import json
 from typing import TYPE_CHECKING, List
 
+from creart import it
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from creart import it
 from qfluentwidgets.common import Action, FluentIcon
 from qfluentwidgets.components import (
     RoundMenu,

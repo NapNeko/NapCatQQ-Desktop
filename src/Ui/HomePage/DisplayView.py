@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QDesktopServices
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from qfluentwidgets.common import FluentIcon, setFont
 from qfluentwidgets.components import ImageLabel, PushButton, TitleLabel, PrimaryPushButton
 
-from src.Core.NetworkFunc import Urls
 from src.Ui.StyleSheet import StyleSheet
+from src.Core.NetworkFunc import Urls
 
 
 class DisplayViewWidget(QWidget):

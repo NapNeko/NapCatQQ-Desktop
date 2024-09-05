@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 import shutil
 import zipfile
-from pathlib import Path
 from typing import Optional
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Slot, QSize, Signal, QThread, QProcess, QCoreApplication
-from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication
 from creart import it
 from loguru import logger
+from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
+from PySide6.QtCore import Qt, QUrl, Slot, QSize, Signal, QThread, QProcess, QCoreApplication
 from qfluentwidgets import (
     Flyout,
     BodyLabel,
@@ -26,13 +25,14 @@ from qfluentwidgets import (
     TransparentToolButton,
     setFont,
 )
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication
 
 from src.Core import timer
+from src.Ui.Icon import NapCatDesktopIcon as NCDIcon
 from src.Core.Config import cfg
+from src.Core.PathFunc import PathFunc
 from src.Core.GetVersion import GetVersion
 from src.Core.NetworkFunc import Urls, QQDownloader, NapCatDownloader
-from src.Core.PathFunc import PathFunc
-from src.Ui.Icon import NapCatDesktopIcon as NCDIcon
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
 
 

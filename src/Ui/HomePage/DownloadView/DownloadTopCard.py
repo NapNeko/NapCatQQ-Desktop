@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
+from PySide6.QtCore import Qt, Slot
 from qfluentwidgets import FluentIcon, TitleLabel, CaptionLabel, ToolTipFilter, TransparentToolButton
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 
 class DownloadTopCard(QWidget):

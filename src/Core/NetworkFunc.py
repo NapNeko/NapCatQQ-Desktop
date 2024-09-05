@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 from abc import ABC
 from enum import Enum
-from pathlib import Path
 from typing import Any, Callable
+from pathlib import Path
 
 import httpx
-from PySide6.QtCore import QUrl, Signal, QObject, QThread
-from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
 from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
 from loguru import logger
+from PySide6.QtCore import QUrl, Signal, QObject, QThread
+from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
 
 
 class Urls(Enum):

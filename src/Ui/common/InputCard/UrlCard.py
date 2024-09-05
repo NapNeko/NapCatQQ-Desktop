@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 from typing import List, TypeVar
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from creart import it
 from pydantic import HttpUrl, WebsocketUrl
+from PySide6.QtCore import Qt, Signal
 from qfluentwidgets import (
     InfoBar,
     LineEdit,
@@ -19,6 +18,7 @@ from qfluentwidgets import (
     TransparentPushButton,
     TransparentToolButton,
 )
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 
 T = TypeVar("T", HttpUrl, WebsocketUrl)
 

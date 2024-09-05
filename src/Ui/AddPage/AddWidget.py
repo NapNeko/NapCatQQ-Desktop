@@ -4,17 +4,17 @@
 添加机器人
 """
 from abc import ABC
-from typing import TYPE_CHECKING, Optional, Self
+from typing import TYPE_CHECKING, Self, Optional
 
-from PySide6.QtWidgets import QStackedWidget, QVBoxLayout, QWidget
-from creart import add_creator, exists_module, it
+from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
+from src.Ui.StyleSheet import StyleSheet
+from src.Ui.AddPage.Connect import ConnectWidget
 from src.Ui.AddPage.Advanced import AdvancedWidget
 from src.Ui.AddPage.BotWidget import BotWidget
 from src.Ui.AddPage.ConfigTopCard import ConfigTopCard
-from src.Ui.AddPage.Connect import ConnectWidget
-from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow

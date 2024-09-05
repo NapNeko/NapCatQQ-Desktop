@@ -6,10 +6,10 @@
 import ctypes
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QRectF, QPointF
+from loguru import logger
 from PySide6.QtGui import QPen, QPainter, QPaintEvent, QPainterPath
 from PySide6.QtSvg import QSvgRenderer
-from loguru import logger
+from PySide6.QtCore import Qt, QRectF, QPointF
 from qfluentwidgets.common import Theme
 from qfluentwidgets.window import MSFluentTitleBar
 from qframelesswindow.titlebar import CloseButton, MaximizeButton, MinimizeButton

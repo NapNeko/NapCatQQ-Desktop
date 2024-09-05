@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QBrush, QColor, QPainter
-from PySide6.QtWidgets import QHBoxLayout
+from PySide6.QtCore import Qt, QRectF
 from qfluentwidgets import ProgressRing, PrimaryPushButton, IndeterminateProgressRing
+from PySide6.QtWidgets import QHBoxLayout
 
 
 class ProgressBarButton(PrimaryPushButton):

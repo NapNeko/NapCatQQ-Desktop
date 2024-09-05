@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-import platform
 import time
+import platform
 from enum import Enum
 
-from PySide6.QtCore import QLocale
 from creart import it
+from PySide6.QtCore import QLocale
 from qfluentwidgets.common import (
     QConfig,
     ConfigItem,

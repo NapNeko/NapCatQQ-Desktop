@@ -6,19 +6,19 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QPainter
-from PySide6.QtWidgets import QStackedWidget
 from creart import it, add_creator, exists_module
+from PySide6.QtGui import QPixmap, QPainter
 from creart.creator import AbstractCreator, CreateTargetInfo
+from PySide6.QtCore import Qt
 from qfluentwidgets import InfoBar, PushButton, InfoBarIcon, InfoBarPosition, isDarkTheme
+from PySide6.QtWidgets import QStackedWidget
 
 from src.Core.Config import StartOpenHomePageViewEnum as SEnum
 from src.Core.Config import cfg
+from src.Ui.StyleSheet import StyleSheet
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
 from src.Ui.HomePage.DownloadView import DownloadViewWidget
-from src.Ui.StyleSheet import StyleSheet
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from creart import it
+from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, Slot
 from qfluentwidgets import FluentIcon, CaptionLabel, BreadcrumbBar, ToolTipFilter, TransparentToolButton, setFont
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 if TYPE_CHECKING:
     from src.Ui.BotListPage.BotListWidget import BotListWidget
