@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt
 from qfluentwidgets import FlowLayout, ScrollArea
 from PySide6.QtWidgets import QWidget
 
+from src.Ui.common.info_bar import success_bar
 from src.Core.Utils.PathFunc import PathFunc
 from src.Ui.BotListPage.BotCard import BotCard
 from src.Core.Config.ConfigModel import DEFAULT_CONFIG, Config
@@ -113,9 +114,8 @@ class BotList(ScrollArea):
 
             # 如果从文件加载的 bot_config 不为空则执行使用Config和列表表达式解析
             self.botList: List[Config] = [Config(**config) for config in bot_configs]
-            self.parent().parent().showSuccess(
-                title=self.tr("Load the list of bots"),
-                content=self.tr("The list of bots was successfully loaded"),
+            success_bar(
+                title=self.tr("Load the list of bots"), content=self.tr("The list of bots was successfully loaded")
             )
 
         except FileNotFoundError:
