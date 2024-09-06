@@ -27,6 +27,7 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Core.Utils.AddBot import update_config
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Core.Utils.PathFunc import PathFunc
+from src.Core.Utils.RunNapCat import create_process
 from src.Core.Config.ConfigModel import Config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
 
@@ -154,47 +155,11 @@ class BotWidget(QWidget):
     def _runButtonSlot(self):
         """
         ## 启动按钮槽函数
-
-        # 清除已有(如果有)的log
-        # 配置环境变量
-            - 使用 QProcess.systemEnvironment() 复制一份系统环境变量列表
-            - 使用 append 添加 NapCat 所需的 ELECTRON_RUN_AS_NODE=1
-        # 创建 QProcess
-            - 设置先前配置好的 环境变量
-            - 设置启动的程序(QQ)路径
-            - 将 NapCat 以参数新式启动
-        # 配置 QProcess
-            - 设置输出合并
-            - 连接日志输出管道
-            - 连接结束函数
-            - 设置日志高亮
-            - 创建登录二维码消息盒
-        # 启动 QProcess
-            - 进度条设置完成
-            - 切换到 botLogPage
-        # 切换按钮显示
         """
-        from src.Ui.BotListPage import BotListWidget
-
         self.botLogPage.clear()
 
-        self.env = QProcess.systemEnvironment()
-        self.env.append(f"NAPCAT_PATCH_PATH={it(PathFunc).getNapCatPath() / 'patchNapCat.js'}")
-        self.env.append(f"NAPCAT_LOAD_PATH={it(PathFunc).getNapCatPath() / 'loadNapCat.js'}")
-        self.env.append(f"NAPCAT_INJECT_PATH={it(PathFunc).getNapCatPath() / 'NapCatWinBootHook.dll'}")
-        self.env.append(f"NAPCAT_LAUNCHER_PATH={it(PathFunc).getNapCatPath() / 'NapCatWinBootMain.exe'}")
-        self.env.append(f"NAPCAT_MAIN_PATH={it(PathFunc).getNapCatPath() / 'napcat.mjs'}")
-
-        self.process = QProcess(self)
-        self.process.setEnvironment(self.env)
-        self.process.setProgram(str(it(PathFunc).getNapCatPath() / "NapCatWinBootMain.exe"))
-        self.process.setArguments(
-            [
-                str(it(PathFunc).getQQPath() / "QQ.exe"),
-                str(it(PathFunc).getNapCatPath() / "NapCatWinBootHook.dll"),
-                self.config.bot.QQID,
-            ]
-        )
+        self.process = create_process(self.config)
+        self.process.setParent(self)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         self.process.readyReadStandardOutput.connect(self._handle_stdout)
         self.process.readyReadStandardOutput.connect(self._showQRCode)
