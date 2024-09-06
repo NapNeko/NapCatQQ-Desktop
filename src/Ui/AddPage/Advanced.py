@@ -96,7 +96,7 @@ class AdvancedWidget(ScrollArea):
         ## 如果传入了 config 则对其内部卡片的值进行填充
         """
         self.debugModeCard.fillValue(self.config.debug)
-        self.localFile2UrlCard.fillValue(self.config.localFile2url)
+        self.localFile2UrlCard.fillValue(self.config.enableLocalFile2Url)
         self.fileLogCard.fillValue(self.config.fileLog)
         self.consoleLogCard.fillValue(self.config.consoleLog)
         self.fileLogLevelCard.fillValue(self.config.fileLogLevel)
@@ -120,7 +120,7 @@ class AdvancedWidget(ScrollArea):
         """
         return {
             "debug": self.debugModeCard.getValue(),
-            "localFile2url": self.localFile2UrlCard.getValue(),
+            "enableLocalFile2Url": self.localFile2UrlCard.getValue(),
             "fileLog": self.fileLogCard.getValue(),
             "consoleLog": self.consoleLogCard.getValue(),
             "fileLogLevel": self.fileLogLevelCard.getValue(),

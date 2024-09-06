@@ -105,10 +105,10 @@ class BotWidget(ScrollArea):
         self.botNameCard.fillValue(self.config.name)
         self.botQQIdCard.fillValue(self.config.QQID)
         self.messageFormatCard.fillValue(self.config.messagePostFormat)
-        self.reportSelfMessageCard.fillValue(self.config.reportSelfMsg)
+        self.reportSelfMessageCard.fillValue(self.config.reportSelfMessage)
         self.musicSignUrl.fillValue(self.config.musicSignUrl)
         self.heartIntervalCard.fillValue(self.config.heartInterval)
-        self.accessTokenCard.fillValue(self.config.accessToken)
+        self.accessTokenCard.fillValue(self.config.token)
 
     def _setLayout(self) -> None:
         """
@@ -130,10 +130,10 @@ class BotWidget(ScrollArea):
             "name": self.botNameCard.getValue(),
             "QQID": self.botQQIdCard.getValue(),
             "messagePostFormat": self.messageFormatCard.getValue(),
-            "reportSelfMsg": self.reportSelfMessageCard.getValue(),
+            "reportSelfMessage": self.reportSelfMessageCard.getValue(),
             "musicSignUrl": self.musicSignUrl.getValue(),
             "heartInterval": self.heartIntervalCard.getValue(),
-            "accessToken": self.accessTokenCard.getValue(),
+            "token": self.accessTokenCard.getValue(),
         }
 
     def clearValues(self) -> None:

@@ -21,10 +21,10 @@ class BotConfig(BaseModel):
     name: str
     QQID: str
     messagePostFormat: str
-    reportSelfMsg: bool
+    reportSelfMessage: bool
     musicSignUrl: str
-    heartInterval: str
-    accessToken: Optional[str]
+    heartInterval: int = 30000
+    token: Optional[str]
 
     @field_validator("name")
     @staticmethod
@@ -57,7 +57,7 @@ class BotConfig(BaseModel):
 class HttpConfig(BaseModel):
     enable: bool
     host: str
-    port: str
+    port: int = 3000
     secret: str
     enableHeart: bool
     enablePost: bool
@@ -78,7 +78,7 @@ class HttpConfig(BaseModel):
 class WsConfig(BaseModel):
     enable: bool
     host: str
-    port: str
+    port: int = 3001
 
 
 class ReverseWsConfig(BaseModel):
@@ -94,7 +94,7 @@ class ConnectConfig(BaseModel):
 
 class AdvancedConfig(BaseModel):
     debug: bool
-    localFile2url: bool
+    enableLocalFile2Url: bool
     fileLog: bool
     consoleLog: bool
     fileLogLevel: str
@@ -112,16 +112,16 @@ DEFAULT_CONFIG = {
         "name": "",
         "QQID": "",
         "messagePostFormat": "array",
-        "reportSelfMsg": False,
+        "reportSelfMessage": False,
         "musicSignUrl": "",
-        "heartInterval": "30000",
-        "accessToken": "",
+        "heartInterval": 30000,
+        "token": "",
     },
     "connect": {
         "http": {
             "enable": False,
             "host": "",
-            "port": "",
+            "port": 3000,
             "secret": "",
             "enableHeart": False,
             "enablePost": False,
@@ -135,7 +135,7 @@ DEFAULT_CONFIG = {
         "localFile2url": False,
         "fileLog": False,
         "consoleLog": False,
-        "fileLogLevel": "debug",
+        "enableLocalFile2Url": "debug",
         "consoleLogLevel": "info",
     },
 }
