@@ -142,14 +142,17 @@ class NapCatVersionCard(VersionCardBase):
         super().mousePressEvent(event)
 
         if not self.isInstall:
+            # 如果没有安装则跳转到下载页面
             from src.Ui.HomePage.Home import HomeWidget
 
             it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
             return
 
-        from src.Ui.MainWindow.Window import MainWindow
+        if self.updateSate:
+            # 如果有更新则跳转到更新页面
+            from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).update_widget_button.click()
+            it(MainWindow).update_widget_button.click()
 
     def enterEvent(self, event):
         """
@@ -184,6 +187,9 @@ class QQVersionCard(VersionCardBase):
             # 如果没有获取到文件就会返回None, 也就代表QQ没有安装
             self.setToolTip(self.tr("No QQ path found, please install it"))
             self.errorBadge.show()
+            self.isInstall = False
+
+        self.isInstall = True
 
         return version if version else "Unknown version"
 
@@ -197,11 +203,6 @@ class QQVersionCard(VersionCardBase):
             from src.Ui.HomePage.Home import HomeWidget
 
             it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
-            return
-
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).update_widget_button.click()
 
     def enterEvent(self, event):
         """
