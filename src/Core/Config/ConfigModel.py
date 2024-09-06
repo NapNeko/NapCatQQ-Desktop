@@ -92,16 +92,7 @@ class ConnectConfig(BaseModel):
     reverseWs: ReverseWsConfig
 
 
-class NCGroupLocalTime(BaseModel):
-    Record: bool
-    RecordList: List[Optional[str]]
-
-
 class AdvancedConfig(BaseModel):
-    QQPath: str
-    startScriptPath: str
-    ffmpegPath: str
-    GroupLocalTime: NCGroupLocalTime
     debug: bool
     localFile2url: bool
     fileLog: bool
@@ -140,10 +131,6 @@ DEFAULT_CONFIG = {
         "reverseWs": {"enable": False, "urls": []},
     },
     "advanced": {
-        "QQPath": "",
-        "startScriptPath": "",
-        "ffmpegPath": "",
-        "GroupLocalTime": {"Record": False, "RecordList": []},
         "debug": False,
         "localFile2url": False,
         "fileLog": False,
