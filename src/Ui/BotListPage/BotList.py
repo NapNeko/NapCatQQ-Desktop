@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from qfluentwidgets import FlowLayout, ScrollArea
 from PySide6.QtWidgets import QWidget
 
-from src.Ui.common.info_bar import error_bar, success_bar
+from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Core.Utils.PathFunc import PathFunc
 from src.Ui.BotListPage.BotCard import BotCard
 from src.Core.Config.ConfigModel import DEFAULT_CONFIG, Config
@@ -102,9 +102,9 @@ class BotList(ScrollArea):
 
             if not bot_configs:
                 # 创建信息条
-                self.parent().parent().showInfo(
-                    title=self.tr("There are no bot configuration items"),
-                    content=self.tr("You'll need to add it in the Add bot page"),
+                info_bar(
+                    self.tr("There are no bot configuration items"),
+                    self.tr("You'll need to add it in the Add bot page"),
                 )
                 self.botList = []
                 return
