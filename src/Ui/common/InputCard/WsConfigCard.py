@@ -3,8 +3,8 @@
 from qfluentwidgets.common import FluentIcon
 
 from src.Core.Config.ConfigModel import WsConfig
+from src.Ui.common.InputCard.Item import SwitchItem, LineEditItem
 from src.Ui.common.InputCard.BaseClass import GroupCardBase
-from src.Ui.common.InputCard.Item import LineEditItem, SwitchItem
 
 
 class WsConfigCard(GroupCardBase):
@@ -41,7 +41,7 @@ class WsConfigCard(GroupCardBase):
         return {
             "enable": self.wsEnableItem.getValue(),
             "host": self.wsHostItem.getValue(),
-            "port": self.wsPortItem.getValue(),
+            "port": int(self.wsPortItem.getValue()) if self.wsPortItem.getValue() else 0,
         }
 
     def clear(self) -> None:

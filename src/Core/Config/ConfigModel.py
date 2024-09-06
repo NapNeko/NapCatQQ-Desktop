@@ -24,7 +24,7 @@ class BotConfig(BaseModel):
     reportSelfMessage: bool
     musicSignUrl: str
     heartInterval: int = 30000
-    token: Optional[str]
+    token: str
 
     @field_validator("name")
     @staticmethod
@@ -105,6 +105,26 @@ class Config(BaseModel):
     bot: BotConfig
     connect: ConnectConfig
     advanced: AdvancedConfig
+
+
+class OneBotConfig(BaseModel):
+    http: HttpConfig
+    ws: WsConfig
+    reverseWs: ReverseWsConfig
+    debug: bool
+    heartInterval: int = 30000
+    messagePostFormat: str
+    enableLocalFile2Url: bool
+    musicSignUrl: str
+    reportSelfMessage: bool
+    token: str
+
+
+class NapCatConfig(BaseModel):
+    fileLog: bool
+    consoleLog: bool
+    fileLogLevel: str
+    consoleLogLevel: str
 
 
 DEFAULT_CONFIG = {

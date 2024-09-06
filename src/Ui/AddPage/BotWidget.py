@@ -132,7 +132,7 @@ class BotWidget(ScrollArea):
             "messagePostFormat": self.messageFormatCard.getValue(),
             "reportSelfMessage": self.reportSelfMessageCard.getValue(),
             "musicSignUrl": self.musicSignUrl.getValue(),
-            "heartInterval": self.heartIntervalCard.getValue(),
+            "heartInterval": int(self.heartIntervalCard.getValue()) if self.heartIntervalCard.getValue() else 0,
             "token": self.accessTokenCard.getValue(),
         }
 

@@ -48,7 +48,7 @@ class HttpConfigCard(GroupCardBase):
         return {
             "enable": self.httpEnableItem.getValue(),
             "host": self.httpHostItem.getValue(),
-            "port": self.httpPortItem.getValue(),
+            "port": int(self.httpPortItem.getValue()) if self.httpPortItem.getValue() else 0,
             "secret": self.httpSecretItem.getValue(),
             "enableHeart": self.httpEnableHeart.getValue(),
             "enablePost": self.httpEnablePost.getValue(),
