@@ -63,7 +63,6 @@ class Config(QConfig):
     # 注意: default 为空字符串则默认以程序根目录为路径
     QQPath = ConfigItem(group="Path", name="QQPath", default="", validator=FolderValidator())
     NapCatPath = ConfigItem(group="Path", name="napcatPath", default="", validator=FolderValidator())
-    StartScriptPath = ConfigItem(group="Path", name="StartScriptPath", default="", validator=FolderValidator())
 
     # 启动项
     StartOpenHomePageView = OptionsConfigItem(
@@ -97,6 +96,6 @@ class Config(QConfig):
 cfg = Config()
 qconfig.load(it(PathFunc).config_path, cfg)
 cfg.set(cfg.StartTime, time.time(), True)
-cfg.set(cfg.NCDVersion, "beta 1.0.7", True)
+cfg.set(cfg.NCDVersion, "beta 1.0.9", True)
 cfg.set(cfg.SystemType, platform.system(), True)
 cfg.set(cfg.PlatformType, platform.machine(), True)
