@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-import json
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from creart import it
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from qfluentwidgets.common import Action, FluentIcon
+from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import (
-    RoundMenu,
     MessageBox,
     PushButton,
     TitleLabel,
@@ -16,7 +14,8 @@ from qfluentwidgets.components import (
     PrimaryPushButton,
 )
 
-from src.Ui.common.info_bar import error_bar, success_bar, warning_bar
+from src.Core.Utils.AddBot import update_config, check_duplicate_bot
+from src.Ui.common.info_bar import error_bar, success_bar
 
 if TYPE_CHECKING:
     from src.Ui.AddPage import AddWidget
@@ -97,51 +96,38 @@ class AddTopCard(QWidget):
         ## 添加到机器人列表
         先保存到配置文件，然后执行 update 进行刷新
         """
-        from src.Core.Utils.PathFunc import PathFunc
         from src.Ui.AddPage.AddWidget import AddWidget
         from src.Core.Config.ConfigModel import Config
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-        bot_config_path = it(PathFunc).bot_config_path
-        try:
-            # 读取配置文件并追加, 判断是否存在相同的 QQID
-            config = Config(**it(AddWidget).getConfig())
-            with open(str(bot_config_path), "r", encoding="utf-8") as f:
-                bot_configs: List[dict] = json.load(f)
+        # 读取配置文件并追加, 判断是否存在相同的 QQID
+        config = Config(**it(AddWidget).getConfig())
+        if check_duplicate_bot(config):
+            # 检查是否已存在相同的机器人配置
+            error_bar(
+                self.tr("Bots can't be added"),
+                self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly"),
+            )
+            return
 
-            for bot_config in bot_configs:
-                # 遍历验证是否存在相同的机器人
-                if config.bot.QQID == Config(**bot_config).bot.QQID:
-                    error_bar(
-                        self.tr("Bots can't be added"),
-                        self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly"),
-                    )
-                    return
-            # 追加到配置文件, 使用json方法将内部转为json对象, 再用loads方法转为dict对象, 以确保列表内数据一致性
-            # 不可以直接使用 dict方法 转为 dict对象, 内部 WebsocketUrl 和 HttpUrl 不会自动转为 str
-            bot_configs.append(json.loads(config.json()))
-
-            with open(str(bot_config_path), "w", encoding="utf-8") as f:
-                json.dump(bot_configs, f, indent=4)
-
+        if update_config(config):
+            # 更新配置文件, 如果返回为 True 则代表更新成功
             # 执行刷新
             it(BotListWidget).botList.updateList()
-
             success_bar(
                 self.tr("Bot addition success!"),
                 self.tr(f"Bot({config.bot.QQID}) it has been successfully added, you can view it in BotList"),
             )
-
-        except FileNotFoundError:
-            # 如果 json 文件没有被创建则创建一个并写入
-            config = Config(**it(AddWidget).getConfig())
-            config = [json.loads(config.json())]
-            with open(str(bot_config_path), "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=4)
-
-        except ValueError as e:
-            # 如果用户没有输入必须值，则提示
-            error_bar(self.tr("Bots can't be added"), str(e))
+        else:
+            # 更新失败则提示查看日志
+            error_bar(
+                self.tr("Failed"),
+                self.tr(
+                    "An error is thrown when updating the configuration file, "
+                    "please check the detailed error in the Setup >Log and take "
+                    "a screenshot to someone who has the ability to solve it for help"
+                ),
+            )
 
     @Slot()
     def _clearBtnSlot(self) -> None:
