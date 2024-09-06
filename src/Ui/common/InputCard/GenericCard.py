@@ -18,7 +18,7 @@ class LineEditConfigCard(SettingCard):
         self.hBoxLayout.addSpacing(16)
 
     def fillValue(self, value: str | int) -> None:
-        self.lineEdit.setText(value)
+        self.lineEdit.setText(str(value))
 
     def getValue(self) -> str:
         return self.lineEdit.text()
