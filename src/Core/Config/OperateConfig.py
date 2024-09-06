@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-## 添加 Bot 到配置文件的操作流程
+## 操作 bot 配置文件的操作流程(主要是包含一些工具函数)
 """
 import json
 from json import JSONDecodeError
@@ -13,6 +13,25 @@ from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import Config, NapCatConfig, OneBotConfig
 
 
+def read_config() -> List[Config]:
+    """
+    ## 读取 NCD 保存的机器人配置文件
+
+    ## 返回
+        - List[Config] 一个列表, 成员为 Config
+    """
+    with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as file:
+        return [Config(**config) for config in json.load(file)]
+
+
+def write_config(configs: List[Config]) -> None:
+    """
+    ## 写入 NCD 机器人配置文件
+    """
+    with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as file:
+        json.dump([json.loads(config.json()) for config in configs], file, indent=4, ensure_ascii=False)
+
+
 def check_duplicate_bot(config: Config) -> bool:
     """
     ## 检查是否已存在相同的机器人配置
@@ -23,12 +42,11 @@ def check_duplicate_bot(config: Config) -> bool:
     ## 返回
          - bool 类型
     """
-    with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as file:
-        # 从配置文件读取配置, 解析成 Config
-        bot_configs: List[Config] = [Config(**cfg) for cfg in json.load(file)]
+    # 类型注解
+    configs: List[Config]
 
-    for bot_config in bot_configs:
-        # 遍历配置文件列表进行判断, 如果QQID相同则代表存在相同配置
+    # 遍历配置文件列表进行判断, 如果QQID相同则代表存在相同配置
+    for bot_config in read_config():
         if config.bot.QQID == bot_config.bot.QQID:
             return True
 
@@ -46,21 +64,18 @@ def update_config(config: Config) -> bool:
     """
     try:
         # 更新 NCD 中的配置文件
-        with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as file:
-            # 从配置文件读取配置, 解析成 Config
-            bot_configs: List[Config] = [Config(**cfg) for cfg in json.load(file)]
+        configs: List[Config] = read_config()
 
         # 检查配置是否存在, 如果存在则更新, 不存在则追加到列表中
-        for index, cfg in enumerate(bot_configs):
+        for index, cfg in enumerate(configs):
             if cfg.bot.QQID == config.bot.QQID:
-                bot_configs[index] = config
+                configs[index] = config
                 break
         else:
-            bot_configs.append(config)
+            configs.append(config)
 
-        with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as file:
-            # 写入配置文件
-            json.dump([json.loads(cfg.json()) for cfg in bot_configs], file, indent=4, ensure_ascii=False)
+        # 写入配置文件
+        write_config(configs)
 
         # 定义配置内容
         onebot_config = OneBotConfig(
@@ -97,5 +112,25 @@ def update_config(config: Config) -> bool:
         return True
 
     except (FileNotFoundError, PermissionError, JSONDecodeError, KeyError, TypeError, Exception) as error:
+        logger.error(f"在写入配置文件时引发 {type(error).__name__}: {error}")
+        return False
+
+
+def delete_config(config: Config) -> bool:
+    """
+    ## 删除配置文件
+
+    ## 参数
+         - config 传入的机器人配置
+
+    ## 返回
+         - bool 类型
+    """
+    try:
+        configs: List[Config] = read_config()
+        configs.remove(config)
+        write_config(configs)
+        return True
+    except Exception as error:
         logger.error(f"在写入配置文件时引发 {type(error).__name__}: {error}")
         return False
