@@ -14,8 +14,8 @@ from qfluentwidgets.components import (
     PrimaryPushButton,
 )
 
-from src.Core.Utils.AddBot import update_config, check_duplicate_bot
 from src.Ui.common.info_bar import error_bar, success_bar
+from src.Core.Config.OperateConfig import update_config, check_duplicate_bot
 
 if TYPE_CHECKING:
     from src.Ui.AddPage import AddWidget
