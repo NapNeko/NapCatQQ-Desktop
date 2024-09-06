@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import re
-import json
 
 import psutil
 from creart import it
@@ -23,11 +22,10 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 from src.Ui.common import CodeEditor, LogHighlighter
 from src.Ui.StyleSheet import StyleSheet
-from src.Core.Utils.AddBot import update_config
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
-from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Utils.RunNapCat import create_process
 from src.Core.Config.ConfigModel import Config
+from src.Core.Config.OperateConfig import delete_config, update_config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
 
 
@@ -410,21 +408,24 @@ class DeleteConfigMessageBox(MessageBoxBase):
         # 设置对话框
         self.widget.setMinimumWidth(350)
 
-    @staticmethod
     @Slot()
-    def _deleteConfigSlot(parent: BotWidget) -> None:
+    def _deleteConfigSlot(self, parent: BotWidget) -> None:
         """
         ## 执行删除配置
             - 返回到列表, 删除配置并保存, 刷新列表
         """
         from src.Ui.BotListPage import BotListWidget
 
-        it(BotListWidget).botList.botList.remove(parent.config)
-
-        bot_configs = [json.loads(config.json()) for config in it(BotListWidget).botList.botList]
-
-        with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
-            json.dump(bot_configs, f, indent=4)
-
-        parent.returnButton.click()
-        it(BotListWidget).botList.updateList()
+        if delete_config(parent.config):
+            it(BotListWidget).botList.botList.remove(parent.config)
+            parent.returnButton.click()
+            it(BotListWidget).botList.updateList()
+            success_bar(
+                self.tr("Success"),
+                self.tr(
+                    f"The configuration was successfully deleted "
+                    f"{parent.config.bot.QQID}({parent.config.bot.name})"
+                )
+            )
+        else:
+            error_bar(self.tr("Failed"), self.tr("please go to Setup > log for details"))
