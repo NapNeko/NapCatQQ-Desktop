@@ -52,7 +52,7 @@ class LineEditItem(ItemBase):
         self._setLayout(self.lineEdit)
 
     def fillValue(self, value: str | int) -> None:
-        self.lineEdit.setText(value)
+        self.lineEdit.setText(str(value))
 
     def getValue(self) -> str:
         return self.lineEdit.text()
