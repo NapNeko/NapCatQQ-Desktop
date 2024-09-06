@@ -94,7 +94,6 @@ class AddTopCard(QWidget):
     def _addBotListBtnSlot(self) -> None:
         """
         ## 添加到机器人列表
-        先保存到配置文件，然后执行 update 进行刷新
         """
         from src.Ui.AddPage.AddWidget import AddWidget
         from src.Core.Config.ConfigModel import Config
