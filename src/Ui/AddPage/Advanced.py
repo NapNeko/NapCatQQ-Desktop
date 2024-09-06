@@ -43,7 +43,7 @@ class AdvancedWidget(ScrollArea):
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Debug"),
-            content=self.tr("The message will carry a raw field, " "which is the original message content"),
+            content=self.tr("The message will carry a raw field, which is the original message content"),
             parent=self.view,
         )
         self.localFile2UrlCard = SwitchConfigCard(
