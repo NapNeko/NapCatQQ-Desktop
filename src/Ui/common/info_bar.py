@@ -78,7 +78,7 @@ def warning_bar(title: str, content: str, duration: int = 10_000) -> None:
     )
 
 
-def error_bar(title: str, content: str, duration: int = 0) -> None:
+def error_bar(title: str, content: str, duration: int = -1) -> None:
     """
     ## error 信息消息条, 仅用于展示一些警告提示, 故显示时间稍长
 
