@@ -261,11 +261,9 @@ class NapCatDownloadCard(DownloadCardBase):
         """
         ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
         """
-        from src.Ui.HomePage.Home import HomeWidget
-
         error_bar(
             self.tr("Failed"),
-            self.tr("Error sent while downloading/installing NapCat,\nplease go to Setup > log for details"),
+            self.tr("Error sent while downloading/installing NapCat, please go to Setup > log for details"),
         )
 
     @Slot()
@@ -503,8 +501,6 @@ class QQDownloadCard(DownloadCardBase):
         """
         ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
         """
-        from src.Ui.HomePage.Home import HomeWidget
-
         error_bar(
             self.tr("Failed"),
             self.tr("Error sent while downloading/installing QQ,\nplease go to Setup > log for details"),
@@ -525,8 +521,8 @@ class QQDownloadCard(DownloadCardBase):
             isClosable=True,
             image=":Global/image/Global/image_1.jpg",
         )
-        view = Flyout.make(shareView, self.shareButton, self)
-        shareView.closed.connect(view.close)
+        view = Flyout.make(share_view, self.shareButton, self)
+        share_view.closed.connect(view.close)
 
 
 class InstallationMessageBox(MessageBoxBase):
