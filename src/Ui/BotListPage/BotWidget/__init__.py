@@ -24,6 +24,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 from src.Ui.common import CodeEditor, LogHighlighter
 from src.Ui.StyleSheet import StyleSheet
+from src.Core.Utils.AddBot import update_config
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import Config
@@ -305,34 +306,19 @@ class BotWidget(QWidget):
         """
         ## 更新按钮的槽函数
         """
-        from src.Ui.BotListPage import BotListWidget
-        from src.Core.Config.ConfigModel import DEFAULT_CONFIG
-
         self.newConfig = Config(**self.botSetupPage.getValue())
-
-        # 读取配置列表
-        with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
-            bot_configs = [it(BotListWidget).botList.updateConfig(config, DEFAULT_CONFIG) for config in json.load(f)]
-            bot_configs = [Config(**config) for config in bot_configs]
-
-        if not bot_configs:
-            # 为空报错
-            logger.error(f"机器人列表加载失败 数据为空: {bot_configs}")
-            error_bar(title=self.tr("Update error"), content=self.tr("Data loss within the profile"))
-            return
-
-        # 如果从文件加载的 bot_config 不为空则进行更新(为空怎么办呢,我能怎么办,崩了呗bushi
-        for index, config in enumerate(bot_configs):
-            # 遍历配置列表,找到一样则替换
-            if config.bot.QQID == self.newConfig.bot.QQID:
-                bot_configs[index] = self.newConfig
-                break
-        # 不可以直接使用 dict方法 转为 dict对象, 内部 WebsocketUrl 和 HttpUrl 不会自动转为 str
-        bot_configs = [json.loads(config.json()) for config in bot_configs]
-        with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
-            json.dump(bot_configs, f, indent=4)
-        # 更新成功提示
-        success_bar(self.tr("Update success"), self.tr("The updated configuration is successful"))
+        if update_config(self.newConfig):
+            # 更新成功提示
+            success_bar(self.tr("Update success"), self.tr("The updated configuration is successful"))
+        else:
+            error_bar(
+                self.tr("Failed"),
+                self.tr(
+                    "An error is thrown when updating the configuration file, "
+                    "please check the detailed error in the Setup >Log and take "
+                    "a screenshot to someone who has the ability to solve it for help"
+                ),
+            )
 
     @Slot()
     def _deleteButtonSlot(self) -> None:
