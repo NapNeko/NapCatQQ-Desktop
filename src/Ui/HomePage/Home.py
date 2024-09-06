@@ -10,12 +10,13 @@ from creart import it, add_creator, exists_module
 from PySide6.QtGui import QPixmap, QPainter
 from creart.creator import AbstractCreator, CreateTargetInfo
 from PySide6.QtCore import Qt
-from qfluentwidgets import InfoBar, PushButton, InfoBarIcon, InfoBarPosition, isDarkTheme
+from qfluentwidgets import PushButton, isDarkTheme
 from PySide6.QtWidgets import QStackedWidget
 
 from src.Core.Config import StartOpenHomePageViewEnum as SEnum
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.common.info_bar import info_bar
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
 from src.Ui.HomePage.DownloadView import DownloadViewWidget
@@ -69,26 +70,10 @@ class HomeWidget(QStackedWidget):
         ## Start Using 的槽函数
         """
         self.setCurrentWidget(self.contentView)
-
         if cfg.get(cfg.HideUsGoBtnTips):
             # 是否隐藏提示
             return
-
-        info = InfoBar(
-            icon=InfoBarIcon.INFORMATION,
-            title="Tips",
-            content=self.tr("You can choose the page to display a\nstartup in the settings page"),
-            orient=Qt.Orientation.Vertical,
-            isClosable=True,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            duration=10000,
-            parent=self,
-        )
-        info_button = PushButton(self.tr("Don't show again"), self)
-        info_button.clicked.connect(lambda: cfg.set(cfg.HideUsGoBtnTips, True, True))
-        info_button.clicked.connect(info.close)
-        info.addWidget(info_button)
-        info.show()
+        info_bar("Tips", self.tr("You can choose the page to display a\nstartup in the settings page"))
 
     def chooseView(self) -> None:
         """
@@ -117,38 +102,6 @@ class HomeWidget(QStackedWidget):
             mode=Qt.TransformationMode.SmoothTransformation,  # 平滑效果
         )
         self.update()
-
-    def showInfo(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showInfo(title=title, content=content, page=self)
-
-    def showError(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showError(title=title, content=content, page=self)
-
-    def showWarning(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showWarning(title=title, content=content, page=self)
-
-    def showSuccess(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showSuccess(title=title, content=content, page=self)
 
     def paintEvent(self, event) -> None:
         """

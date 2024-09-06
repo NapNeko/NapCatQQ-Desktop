@@ -4,7 +4,6 @@ from typing import List
 from creart import it
 from PySide6.QtCore import Qt, Signal
 from qfluentwidgets import (
-    InfoBar,
     LineEdit,
     BodyLabel,
     FluentIcon,
@@ -12,12 +11,13 @@ from qfluentwidgets import (
     TitleLabel,
     FluentIconBase,
     MessageBoxBase,
-    InfoBarPosition,
     ExpandSettingCard,
     TransparentPushButton,
     TransparentToolButton,
 )
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
+
+from src.Ui.common.info_bar import error_bar
 
 
 class TextItem(QWidget):
@@ -132,14 +132,7 @@ class TextCard(ExpandSettingCard):
 
         if box.urlLineEdit.text() in self.texts:
             # 如果用户输入的值已经存在则弹出提示并退出函数
-            InfoBar.error(
-                title=self.tr("The URL already exists"),
-                content=self.tr("Please enter a new URL"),
-                orient=Qt.Orientation.Vertical,
-                duration=3000,
-                position=InfoBarPosition.BOTTOM_RIGHT,
-                parent=it(AddWidget),
-            )
+            error_bar(self.tr("The URL already exists"), self.tr("Please enter a new URL"))
             return
 
         self.texts.append(box.urlLineEdit.text())

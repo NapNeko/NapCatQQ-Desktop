@@ -121,38 +121,6 @@ class AddWidget(QWidget):
         widget = self.view.widget(index)
         self.topCard.pivot.setCurrentItem(widget.objectName())
 
-    def showInfo(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showInfo(title=title, content=content, page=self)
-
-    def showError(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showError(title=title, content=content, page=self)
-
-    def showWarning(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showWarning(title=title, content=content, page=self)
-
-    def showSuccess(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showSuccess(title=title, content=content, page=self)
-
 
 class AddWidgetClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，

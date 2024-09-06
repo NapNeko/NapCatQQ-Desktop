@@ -16,12 +16,13 @@ class AdvancedWidget(ScrollArea):
 
     def __init__(self, identifier, parent=None, config: AdvancedConfig = None) -> None:
         super().__init__(parent=parent)
-        self.setObjectName("AdvanceWidget")
+
         self.identifier = identifier
         self.view = QWidget()
         self.cardLayout = ExpandLayout(self.view)
 
         # 设置 ScrollArea
+        self.setObjectName("AdvanceWidget")
         self.setWidget(self.view)
         self.setWidgetResizable(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

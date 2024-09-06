@@ -27,6 +27,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from src.Core import timer
 from src.Core.Config import cfg
 from src.Core.NetworkFunc import Urls, NapCatDownloader
+from src.Ui.common.info_bar import error_bar
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.Netwrok.DownloadCard import NapCatInstallWorker
@@ -299,7 +300,7 @@ class NapCatUpdateCard(UpdateCardBase):
         """
         from src.Ui.HomePage.Home import HomeWidget
 
-        it(HomeWidget).showError(
+        error_bar(
             self.tr("Download failed"),
             self.tr("An error occurs when downloading NapCat,\nplease go to Setup > log for details"),
         )

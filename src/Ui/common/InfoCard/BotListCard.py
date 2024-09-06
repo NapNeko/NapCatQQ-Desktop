@@ -21,6 +21,7 @@ from src.Core import timer
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.BotListPage import BotListWidget
 from src.Core.NetworkFunc import Urls, NetworkFunc
+from src.Ui.common.info_bar import error_bar
 from src.Core.Config.ConfigModel import Config
 
 
@@ -281,7 +282,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         else:
             from src.Ui.HomePage import HomeWidget
 
-            it(HomeWidget).showError(title=self.tr("Failed to get the QQ avatar"), content=replay.errorString())
+            error_bar(self.tr("Failed to get the QQ avatar"), replay.errorString())
 
     def _setLayout(self) -> None:
         """

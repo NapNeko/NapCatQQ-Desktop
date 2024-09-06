@@ -9,6 +9,7 @@ from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QVBoxLayout
 
 from src.Core.NetworkFunc import Urls, NetworkFunc
+from src.Ui.common.info_bar import error_bar
 from src.Core.Config.ConfigModel import Config
 
 if TYPE_CHECKING:
@@ -102,7 +103,7 @@ class BotCard(CardWidget):
         else:
             from src.Ui.BotListPage import BotListWidget
 
-            it(BotListWidget).showError(title=self.tr("Failed to get the QQ avatar"), content=replay.errorString())
+            error_bar(title=self.tr("Failed to get the QQ avatar"), content=replay.errorString())
 
     @Slot()
     def _clickSlot(self) -> None:

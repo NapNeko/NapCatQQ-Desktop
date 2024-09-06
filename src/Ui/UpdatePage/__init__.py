@@ -29,6 +29,7 @@ class UpdateWidget(QWidget):
         初始化
         """
         # 设置控件
+        self.setParent(parent)
         self.setObjectName("update_view")
 
         # 创建布局和控件
@@ -55,38 +56,6 @@ class UpdateWidget(QWidget):
         self.vBoxLayout.addWidget(self.cardView)
         self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
         self.setLayout(self.vBoxLayout)
-
-    def showInfo(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showInfo(title=title, content=content, page=self)
-
-    def showError(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showError(title=title, content=content, page=self)
-
-    def showWarning(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showWarning(title=title, content=content, page=self)
-
-    def showSuccess(self, title: str, content: str) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        from src.Ui.MainWindow.Window import MainWindow
-
-        it(MainWindow).showSuccess(title=title, content=content, page=self)
 
 
 class CardView(ScrollArea):

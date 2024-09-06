@@ -10,23 +10,20 @@ from creart import it, add_creator, exists_module
 from loguru import logger
 from PySide6.QtGui import QIcon
 from creart.creator import AbstractCreator, CreateTargetInfo
-from PySide6.QtCore import Qt, Slot, QSize
+from PySide6.QtCore import Slot, QSize
 from qfluentwidgets import (
     Theme,
-    InfoBar,
     FluentIcon,
     SplashScreen,
     MSFluentWindow,
-    InfoBarPosition,
     NavigationItemPosition,
     NavigationBarPushButton,
 )
-from PySide6.QtWidgets import QWidget, QApplication, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.AddPage import AddWidget
 from src.Ui.HomePage import HomeWidget
-from src.Ui.resource import resource
 from src.Ui.SetupPage import SetupWidget
 from src.Ui.UpdatePage import UpdateWidget
 from src.Ui.BotListPage import BotListWidget
@@ -163,63 +160,6 @@ class MainWindow(MSFluentWindow):
     def closeEvent(self, event):
         self.hide()
         event.ignore()
-
-    @staticmethod
-    def showInfo(title: str, content: str, page: QWidget) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        InfoBar.info(
-            title=title,
-            content=content,
-            orient=Qt.Orientation.Vertical,
-            duration=5000,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=page,
-        )
-
-    @staticmethod
-    def showError(title: str, content: str, page: QWidget) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        InfoBar.error(
-            title=title,
-            content=content,
-            orient=Qt.Orientation.Vertical,
-            duration=50000,
-            isClosable=True,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=page,
-        )
-
-    @staticmethod
-    def showWarning(title: str, content: str, page: QWidget) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        InfoBar.warning(
-            title=title,
-            content=content,
-            orient=Qt.Orientation.Vertical,
-            duration=10000,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=page,
-        )
-
-    @staticmethod
-    def showSuccess(title: str, content: str, page: QWidget) -> None:
-        """
-        # 配置 InfoBar 的一些配置, 简化内部使用 InfoBar 的步骤
-        """
-        InfoBar.success(
-            title=title,
-            content=content,
-            orient=Qt.Orientation.Vertical,
-            duration=5000,
-            position=InfoBarPosition.BOTTOM_RIGHT,
-            parent=page,
-        )
 
 
 class MainWindowClassCreator(AbstractCreator, ABC):

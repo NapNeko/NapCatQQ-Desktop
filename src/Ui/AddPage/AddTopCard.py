@@ -16,6 +16,8 @@ from qfluentwidgets.components import (
     PrimaryPushButton,
 )
 
+from src.Ui.common.info_bar import error_bar, success_bar, warning_bar
+
 if TYPE_CHECKING:
     from src.Ui.AddPage import AddWidget
 
@@ -110,7 +112,7 @@ class AddTopCard(QWidget):
             for bot_config in bot_configs:
                 # 遍历验证是否存在相同的机器人
                 if config.bot.QQID == Config(**bot_config).bot.QQID:
-                    it(AddWidget).showError(
+                    error_bar(
                         self.tr("Bots can't be added"),
                         self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly"),
                     )
@@ -125,7 +127,7 @@ class AddTopCard(QWidget):
             # 执行刷新
             it(BotListWidget).botList.updateList()
 
-            it(AddWidget).showSuccess(
+            success_bar(
                 self.tr("Bot addition success!"),
                 self.tr(f"Bot({config.bot.QQID}) it has been successfully added, you can view it in BotList"),
             )
@@ -139,7 +141,7 @@ class AddTopCard(QWidget):
 
         except ValueError as e:
             # 如果用户没有输入必须值，则提示
-            it(AddWidget).showError(self.tr("Bots can't be added"), str(e))
+            error_bar(self.tr("Bots can't be added"), str(e))
 
     @Slot()
     def _clearBtnSlot(self) -> None:

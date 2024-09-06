@@ -31,6 +31,7 @@ from src.Core import timer
 from src.Ui.Icon import NapCatDesktopIcon as NCDIcon
 from src.Core.Config import cfg
 from src.Core.NetworkFunc import Urls, QQDownloader, NapCatDownloader
+from src.Ui.common.info_bar import error_bar
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
@@ -262,7 +263,7 @@ class NapCatDownloadCard(DownloadCardBase):
         """
         from src.Ui.HomePage.Home import HomeWidget
 
-        it(HomeWidget).showError(
+        error_bar(
             self.tr("Failed"),
             self.tr("Error sent while downloading/installing NapCat,\nplease go to Setup > log for details"),
         )
@@ -504,7 +505,7 @@ class QQDownloadCard(DownloadCardBase):
         """
         from src.Ui.HomePage.Home import HomeWidget
 
-        it(HomeWidget).showError(
+        error_bar(
             self.tr("Failed"),
             self.tr("Error sent while downloading/installing QQ,\nplease go to Setup > log for details"),
         )

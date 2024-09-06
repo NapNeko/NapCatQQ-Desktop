@@ -23,8 +23,9 @@ from qfluentwidgets import (
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 from src.Ui.common import CodeEditor, LogHighlighter
-from src.Core.PathFunc import PathFunc
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.common.info_bar import info_bar, error_bar, success_bar
+from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import Config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
 
@@ -190,7 +191,7 @@ class BotWidget(QWidget):
             [
                 str(it(PathFunc).getQQPath() / "QQ.exe"),
                 str(it(PathFunc).getNapCatPath() / "NapCatWinBootHook.dll"),
-                self.config.bot.QQID
+                self.config.bot.QQID,
             ]
         )
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -202,7 +203,7 @@ class BotWidget(QWidget):
         self.process.start()
         self.process.waitForStarted()
 
-        it(BotListWidget).showInfo(
+        info_bar(
             title=self.tr("The run command has been executed"),
             content=self.tr("If there is no output for a long time, check the QQ path and NapCat path"),
         )
@@ -290,9 +291,7 @@ class BotWidget(QWidget):
             self.qrcodeMsgBox.cancelButton.click()
             self.showQRCodeButton.hide()
             self.isLogin = True
-            it(BotListWidget).showSuccess(
-                title=self.tr("Login successful!"), content=self.tr(f"Account {self.config.bot.QQID} login successful!")
-            )
+            success_bar(self.tr("Login successful!"), self.tr(f"Account {self.config.bot.QQID} login successful!"))
 
     @Slot()
     def _processFinishedSlot(self, exit_code, exit_status):
@@ -319,7 +318,7 @@ class BotWidget(QWidget):
         if not bot_configs:
             # 为空报错
             logger.error(f"机器人列表加载失败 数据为空: {bot_configs}")
-            it(BotListWidget).showError(title=self.tr("Update error"), content=self.tr("Data loss within the profile"))
+            error_bar(title=self.tr("Update error"), content=self.tr("Data loss within the profile"))
             return
 
         # 如果从文件加载的 bot_config 不为空则进行更新(为空怎么办呢,我能怎么办,崩了呗bushi
@@ -333,9 +332,7 @@ class BotWidget(QWidget):
         with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
             json.dump(bot_configs, f, indent=4)
         # 更新成功提示
-        it(BotListWidget).showSuccess(
-            title=self.tr("Update success"), content=self.tr("The updated configuration is successful")
-        )
+        success_bar(self.tr("Update success"), self.tr("The updated configuration is successful"))
 
     @Slot()
     def _deleteButtonSlot(self) -> None:
@@ -343,6 +340,7 @@ class BotWidget(QWidget):
         ## 删除机器人配置按钮
         """
         from src.Ui.BotListPage import BotListWidget
+
         DeleteConfigMessageBox(self.isRun, self, it(BotListWidget)).exec()
 
     @staticmethod
