@@ -50,12 +50,17 @@ def update_config(config: Config) -> bool:
             # 从配置文件读取配置, 解析成 Config
             bot_configs: List[Config] = [Config(**cfg) for cfg in json.load(file)]
 
-        # 追加到列表中
-        bot_configs.append(config)
+        # 检查配置是否存在, 如果存在则更新, 不存在则追加到列表中
+        for index, cfg in enumerate(bot_configs):
+            if cfg.bot.QQID == config.bot.QQID:
+                bot_configs[index] = config
+                break
+        else:
+            bot_configs.append(config)
 
         with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as file:
             # 写入配置文件
-            json.dump([config.dict() for config in bot_configs], file, indent=4, ensure_ascii=False)
+            json.dump([json.loads(cfg.json()) for cfg in bot_configs], file, indent=4, ensure_ascii=False)
 
         # 定义配置内容
         onebot_config = OneBotConfig(
@@ -85,9 +90,9 @@ def update_config(config: Config) -> bool:
         onebot_config_path = it(PathFunc).getNapCatPath() / "config" / f"onebot11_{config.bot.QQID}.json"
         napcat_config_path = it(PathFunc).getNapCatPath() / "config" / f"napcat_{config.bot.QQID}.json"
         with open(str(onebot_config_path), "w", encoding="utf-8") as onebot_file:
-            json.dump(onebot_config.dict(), onebot_file, indent=4, ensure_ascii=False)
+            json.dump(json.loads(onebot_config.json()), onebot_file, indent=4, ensure_ascii=False)
         with open(str(napcat_config_path), "w", encoding="utf-8") as napcat_file:
-            json.dump(napcat_config.dict(), napcat_file, indent=4, ensure_ascii=False)
+            json.dump(json.loads(napcat_config.json()), napcat_file, indent=4, ensure_ascii=False)
 
         return True
 
