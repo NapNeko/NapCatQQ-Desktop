@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from qfluentwidgets import FlowLayout, ScrollArea
 from PySide6.QtWidgets import QWidget
 
-from src.Ui.common.info_bar import success_bar
+from src.Ui.common.info_bar import error_bar, success_bar
 from src.Core.Utils.PathFunc import PathFunc
 from src.Ui.BotListPage.BotCard import BotCard
 from src.Core.Config.ConfigModel import DEFAULT_CONFIG, Config
@@ -126,7 +126,7 @@ class BotList(ScrollArea):
 
         except ValueError as e:
             # 如果配置文件解析失败则提示错误信息并覆盖原有文件
-            self.parent().parent().showError(self.tr("Unable to load bot list"), str(e))
+            error_bar(self.tr("Unable to load bot list"), str(e))
             with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
                 json.dump([], f, indent=4)
             self.botList = []
