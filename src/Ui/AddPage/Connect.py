@@ -115,12 +115,12 @@ class ConnectWidget(ScrollArea):
         http = self.httpConfigCard.getValue()
         http["postUrls"] = self.httpPostUrlCard.getValue()
         ws = self.wsCard.getValue()  # 单纯为了下面字典整齐)
-        reverse_ws = {"enable": self.wsReverseCard.getValue(), "urls": self.wsReverseUrlCard.getValue()}
+        reverseWs = {"enable": self.wsReverseCard.getValue(), "urls": self.wsReverseUrlCard.getValue()}
 
         return {
             "http": http,
             "ws": ws,
-            "reverse_ws": reverse_ws,
+            "reverseWs": reverseWs,
         }
 
     def clearValues(self) -> None:
