@@ -24,6 +24,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.AddPage import AddWidget
 from src.Ui.HomePage import HomeWidget
+from src.Ui.resource import resource
 from src.Ui.SetupPage import SetupWidget
 from src.Ui.UpdatePage import UpdateWidget
 from src.Ui.BotListPage import BotListWidget
