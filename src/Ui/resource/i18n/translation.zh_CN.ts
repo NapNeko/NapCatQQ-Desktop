@@ -423,62 +423,62 @@ Quick login error</source>
 <context>
     <name>ConfigTopCard</name>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="52"/>
+        <location filename="../../AddPage/AddTopCard.py" line="52"/>
         <source>Add bot</source>
         <translation>添加机器人</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="53"/>
+        <location filename="../../AddPage/AddTopCard.py" line="53"/>
         <source>Before adding a robot, you need to do some configuration</source>
         <translation>在添加机器人之前，您需要进行一些配置╰(￣ω￣ｏ)</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="57"/>
+        <location filename="../../AddPage/AddTopCard.py" line="57"/>
         <source>Clear config</source>
         <translation>清空配置</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="58"/>
+        <location filename="../../AddPage/AddTopCard.py" line="58"/>
         <source>Add to bot list</source>
         <translation>添加机器人到列表</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="64"/>
+        <location filename="../../AddPage/AddTopCard.py" line="64"/>
         <source>Create .ps1 script</source>
         <translation>创建 .ps1 启动脚本</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="71"/>
+        <location filename="../../AddPage/AddTopCard.py" line="71"/>
         <source>Create .bat script</source>
         <translation>创建 .bat 启动脚本</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="173"/>
+        <location filename="../../AddPage/AddTopCard.py" line="173"/>
         <source>Bots can&apos;t be added</source>
         <translation>无法添加机器人 (&gt;_&lt;)</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="144"/>
+        <location filename="../../AddPage/AddTopCard.py" line="144"/>
         <source>{config.bot.QQID} it already exists, please do not add it repeatedly</source>
         <translation>{config.bot.QQID} 已经存在，请不要重复添加</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="159"/>
+        <location filename="../../AddPage/AddTopCard.py" line="159"/>
         <source>Bot addition success!</source>
         <translation>机器人添加成功!</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="159"/>
+        <location filename="../../AddPage/AddTopCard.py" line="159"/>
         <source>Bot({config.bot.QQID}) it has been successfully added, you can view it in BotList</source>
         <translation>Bot({config.bot.QQID}) 已成功添加，您可以在BotList中查看</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="214"/>
+        <location filename="../../AddPage/AddTopCard.py" line="214"/>
         <source>Confirm clearing configuration</source>
         <translation>确认清空配置项</translation>
     </message>
     <message>
-        <location filename="../../AddPage/ConfigTopCard.py" line="214"/>
+        <location filename="../../AddPage/AddTopCard.py" line="214"/>
         <source>After clearing, all configuration items on this page will be cleared, and this operation cannot be undone</source>
         <translation>清除后，此页面上的所有配置项都将被清除
 此操作无法撤消o(&gt;&lt;；)oo</translation>

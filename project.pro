@@ -16,7 +16,7 @@ SOURCES += src/Core/BeginnerGuidance.py \
            src/Ui/AddPage/AddWidget.py \
            src/Ui/AddPage/Advanced.py \
            src/Ui/AddPage/BotWidget.py \
-           src/Ui/AddPage/ConfigTopCard.py \
+           src/Ui/AddPage/AddTopCard.py \
            src/Ui/AddPage/Connect.py \
            src/Ui/AddPage/__init__.py \
            src/Ui/BotListPage/BotCard.py \

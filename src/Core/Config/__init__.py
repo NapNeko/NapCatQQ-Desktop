@@ -17,7 +17,7 @@ from qfluentwidgets.common import (
     qconfig,
 )
 
-from src.Core.PathFunc import PathFunc
+from src.Core.Utils.PathFunc import PathFunc
 
 
 class StartOpenHomePageViewEnum(Enum):

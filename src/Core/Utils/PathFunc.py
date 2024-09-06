@@ -22,7 +22,6 @@ class PathFunc:
         self.bot_config_path = self.config_dir_path / "bot.json"
         self.tmp_path = self.base_path / "tmp"
         self.napcat_path = self.base_path / "NapCat"
-        self.start_script = self.base_path / "StartScript"
 
         self.pathValidator()
 
@@ -47,14 +46,6 @@ class PathFunc:
             self.tmp_path.mkdir(parents=True, exist_ok=True)
             logger.warning("存在一个名为 tmp 的文件, 请检查")
         logger.info("Tmp Path 验证完成")
-
-        if not self.start_script.exists():
-            self.start_script.mkdir(parents=True, exist_ok=True)
-            logger.info("Start Script 路径不存在, 已创建")
-        elif not self.start_script.is_dir():
-            self.start_script.mkdir(parents=True, exist_ok=True)
-            logger.warning("存在一个名为 Start Script 的文件, 请检查")
-        logger.info("Start Script 验证完成")
 
         logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 
@@ -101,30 +92,16 @@ class PathFunc:
             self.napcat_path = Path(cfg.get(item=cfg.NapCatPath))
         return self.napcat_path
 
-    def getStartScriptPath(self) -> Path:
-        """
-        ## 获取启动脚本路径
-        会验证路径是否为 default
-        """
-        from src.Core.Config import cfg
-
-        if Path(cfg.get(cfg.StartScriptPath)) == Path.cwd():
-            # 如果为 default 路径则写入类内部定义的路径
-            cfg.set(item=cfg.StartScriptPath, value=str(self.start_script), save=True)
-        else:
-            self.start_script = Path(cfg.get(item=cfg.StartScriptPath))
-        return self.start_script
-
 
 class PathFuncClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
     # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Core.PathFunc", "PathFunc"),)
+    targets = (CreateTargetInfo("src.Core.Utils.PathFunc", "PathFunc"),)
 
     # 静态方法available()，用于检查模块"PathFunc"是否存在，返回值为布尔型。
     @staticmethod
     def available() -> bool:
-        return exists_module("src.Core.PathFunc")
+        return exists_module("src.Core.Utils.PathFunc")
 
     # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
     @staticmethod

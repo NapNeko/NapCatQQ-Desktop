@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt
 from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
 from PySide6.QtWidgets import QWidget
 
-from src.Core.PathFunc import PathFunc
+from src.Core.Utils.PathFunc import PathFunc
 from src.Ui.common.InputCard import TextCard, FolderConfigCard, SwitchConfigCard, ComboBoxConfigCard
 from src.Core.Config.ConfigModel import AdvancedConfig
 
@@ -45,12 +45,6 @@ class AdvancedWidget(ScrollArea):
             icon=FluentIcon.FOLDER,
             title=self.tr("Specify QQ path"),
             content=str(it(PathFunc).getQQPath()),
-            parent=self.view,
-        )
-        self.startScriptPathCard = FolderConfigCard(
-            icon=FluentIcon.FOLDER,
-            title=self.tr("Specifies the path created by the script"),
-            content=str(it(PathFunc).getStartScriptPath()),
             parent=self.view,
         )
         self.ffmpegPathCard = FolderConfigCard(
@@ -126,7 +120,6 @@ class AdvancedWidget(ScrollArea):
 
         self.cards = [
             self.QQPathCard,
-            self.startScriptPathCard,
             self.ffmpegPathCard,
             self.groupLocalTimeSwitchCard,
             self.groupLocalTimeListCard,
@@ -143,7 +136,6 @@ class AdvancedWidget(ScrollArea):
         ## 如果传入了 config 则对其内部卡片的值进行填充
         """
         self.QQPathCard.fillValue(self.config.QQPath)
-        self.startScriptPathCard.fillValue(self.config.startScriptPath)
         self.ffmpegPathCard.fillValue(self.config.ffmpegPath)
         self.groupLocalTimeSwitchCard.fillValue(self.config.GroupLocalTime.Record)
         self.groupLocalTimeListCard.fillValue(self.config.GroupLocalTime.RecordList)
@@ -172,7 +164,6 @@ class AdvancedWidget(ScrollArea):
         """
         return {
             "QQPath": self.QQPathCard.getValue(),
-            "startScriptPath": self.startScriptPathCard.getValue(),
             "ffmpegPath": self.ffmpegPathCard.getValue(),
             "GroupLocalTime": {
                 "Record": self.groupLocalTimeSwitchCard.getValue(),

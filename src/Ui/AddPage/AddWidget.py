@@ -14,7 +14,7 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.AddPage.Connect import ConnectWidget
 from src.Ui.AddPage.Advanced import AdvancedWidget
 from src.Ui.AddPage.BotWidget import BotWidget
-from src.Ui.AddPage.ConfigTopCard import ConfigTopCard
+from src.Ui.AddPage.AddTopCard import AddTopCard
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
@@ -26,21 +26,29 @@ class AddWidget(QWidget):
     """
 
     def __init__(self) -> None:
+        """
+        ## AddWidget 继承自 QWidget 用于显示 侧边栏 AddBot 对应的 Widget
+
+        ## 占位符初始化
+            - view : 窗体内的切换页面控件(QStackedWidget)
+            - topCard : 窗体内顶部操作控件(AddTopCard)
+            - vBoxLayout : 窗体内的总布局
+        """
         super().__init__()
         self.view: Optional[QStackedWidget] = None
-        self.topCard: Optional[ConfigTopCard] = None
+        self.topCard: Optional[AddTopCard] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
-        ## 初始化 Widget 所需要的控件并进行配置
+        ## 初始化 AddWidget 所需要的控件并进行配置
         """
         # 创建控件
         self.vBoxLayout = QVBoxLayout(self)
-        self.topCard = ConfigTopCard(self)
+        self.topCard = AddTopCard(self)
         self._createView()
 
-        # 设置 QWidget
+        # 设置 AddWidget
         self.setParent(parent)
         self.setObjectName("AddPage")
         self.view.setObjectName("AddView")

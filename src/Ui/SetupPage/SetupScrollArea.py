@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QWidget, QFileDialog
 
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Core.Config import cfg
-from src.Core.PathFunc import PathFunc
+from src.Core.Utils.PathFunc import PathFunc
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
@@ -107,13 +107,6 @@ class SetupScrollArea(ScrollArea):
             text=self.tr("Choose folder"),
             parent=self.pathGroup,
         )
-        self.StartScriptPath = PushSettingCard(
-            icon=FluentIcon.COMMAND_PROMPT,
-            title=self.tr("Start script path"),
-            content=str(it(PathFunc).getStartScriptPath()),
-            text=self.tr("Choose folder"),
-            parent=self.pathGroup,
-        )
 
     def _setLayout(self) -> None:
         """
@@ -128,7 +121,6 @@ class SetupScrollArea(ScrollArea):
 
         self.pathGroup.addSettingCard(self.QQPathCard)
         self.pathGroup.addSettingCard(self.NapCatPathCard)
-        self.pathGroup.addSettingCard(self.StartScriptPath)
 
         # 添加到布局
         self.expand_layout.addWidget(self.startGroup)
@@ -156,7 +148,6 @@ class SetupScrollArea(ScrollArea):
         # 连接路径相关
         self.QQPathCard.clicked.connect(self._onQQFolderCardClicked)
         self.NapCatPathCard.clicked.connect(self._onNapCatFolderCardClicked)
-        self.StartScriptPath.clicked.connect(self._onStartScriptFolderCardClicked)
 
     def _onQQFolderCardClicked(self) -> None:
         """
@@ -175,15 +166,6 @@ class SetupScrollArea(ScrollArea):
         if folder:
             cfg.set(cfg.NapCatPath, folder, save=True)
             self.NapCatPathCard.setContent(folder)
-
-    def _onStartScriptFolderCardClicked(self) -> None:
-        """
-        选择启动脚本存放路径的槽函数
-        """
-        folder = self._selectFolder()
-        if folder:
-            cfg.set(cfg.StartScriptPath, folder, save=True)
-            self.StartScriptPath.setContent(folder)
 
     def _selectFolder(self) -> str:
         """

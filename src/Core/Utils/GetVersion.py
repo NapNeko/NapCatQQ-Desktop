@@ -8,8 +8,8 @@ from loguru import logger
 from PySide6.QtCore import QUrl, QObject, QRegularExpression
 
 from src.Core import timer
-from src.Core.PathFunc import PathFunc
 from src.Core.NetworkFunc import Urls, async_request
+from src.Core.Utils.PathFunc import PathFunc
 
 
 class GetVersion(QObject):
@@ -149,12 +149,12 @@ class GetVersion(QObject):
 class GetVersionClassCreator(AbstractCreator, ABC):
     # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
     # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Core.GetVersion", "GetVersion"),)
+    targets = (CreateTargetInfo("src.Core.Utils.GetVersion", "GetVersion"),)
 
     # 静态方法available()，用于检查模块"PathFunc"是否存在，返回值为布尔型。
     @staticmethod
     def available() -> bool:
-        return exists_module("src.Core.GetVersion")
+        return exists_module("src.Core.Utils.GetVersion")
 
     # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
     @staticmethod

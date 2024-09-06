@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 from src.Core import timer
 from src.Ui.Icon import NapCatDesktopIcon as NCIcon
-from src.Core.GetVersion import GetVersion
+from src.Core.Utils.GetVersion import GetVersion
 
 
 class VersionCardBase(QWidget):

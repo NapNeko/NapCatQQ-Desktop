@@ -26,9 +26,9 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 from src.Core import timer
 from src.Core.Config import cfg
-from src.Core.PathFunc import PathFunc
-from src.Core.GetVersion import GetVersion
 from src.Core.NetworkFunc import Urls, NapCatDownloader
+from src.Core.Utils.PathFunc import PathFunc
+from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.Netwrok.DownloadCard import NapCatInstallWorker
 from src.Ui.common.InfoCard.UpdateLogCard import UpdateLogCard
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
