@@ -1,12 +1,10 @@
 ![NapCatQQ-Desktop](https://socialify.git.ci/HeartfeltJoy/NapCatQQ-Desktop/image?font=Raleway&logo=https%3A%2F%2Fraw.githubusercontent.com%2FNapNeko%2FNapCatQQ%2Fmain%2Flogo.png&name=1&pattern=Circuit%20Board&stargazers=1&theme=Auto)
 
+---
 
 ## 关于项目
 
-这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供的图形用户界面（GUI），目的是让用户能够更快速、更直观地创建配置文件和启动脚本
-
-## 如何使用
-现在核心功能已经开发完毕, 如果想使用请在 Actions 下载测试版, 目前还在测 bug 🥰
+这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat
 
 ## TODO
  - 实现引导(新手指引, 指引安装 NapCat, QQ 等)
