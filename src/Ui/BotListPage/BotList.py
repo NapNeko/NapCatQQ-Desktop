@@ -1,23 +1,18 @@
 # -*- coding: utf-8 -*-
-import json
 from typing import List
 
-from creart import it
 from PySide6.QtCore import Qt
 from qfluentwidgets import FlowLayout, ScrollArea
 from PySide6.QtWidgets import QWidget
 
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
-from src.Core.Utils.PathFunc import PathFunc
 from src.Ui.BotListPage.BotCard import BotCard
-from src.Core.Config.ConfigModel import DEFAULT_CONFIG, Config
+from src.Core.Config.OperateConfig import read_config
 
 
 class BotList(ScrollArea):
     """
     ## BotListWidget 内部的机器人列表
-
-    自动读取配置文件中已有的的机器人配置
     """
 
     def __init__(self, parent) -> None:
@@ -26,7 +21,6 @@ class BotList(ScrollArea):
         """
         super().__init__(parent=parent)
         # 创建属性
-        self.botList: List[Config] = []
         self.botCardList: List[BotCard] = []
 
         # 调用方法
@@ -56,90 +50,38 @@ class BotList(ScrollArea):
         """
         ## 更新机器人列表
         """
-        self._parseList()
+
+        if not (bot_configs := read_config()):
+            info_bar(self.tr("您看起来并没有添加机器人 {{{(>_<)}}}"))
+            return
 
         if not self.botCardList:
             # 如果是首次运行, 则直接添加到布局和 botCardList
-            for bot in self.botList:
-                card = BotCard(bot, self)
+            for config in bot_configs:
+                card = BotCard(config, self)
                 self.cardLayout.addWidget(card)
                 self.botCardList.append(card)
+            success_bar(self.tr(f"成功从配置文件加载 {len(bot_configs)} 个配置项"))
             return
 
-        for bot_config in self.botList:
-            # 遍历并判断是否有新增的 bot
-            if bot_config.bot.QQID in [card.config.bot.QQID for card in self.botCardList]:
-                # 如果属于则直接跳过
-                continue
-
-            # 不属于则就属于新增, 创建 card 并 添加到布局
-            card = BotCard(bot_config)
-            self.cardLayout.addWidget(card)
-            self.botCardList.append(card)
+        qq_id_list = [card.config.bot.QQID for card in self.botCardList]  # 取出卡片列表中卡片的 QQID
+        for bot_config in bot_configs:
+            # 遍历并判断是否有新增的 bot 配置
+            if bot_config.bot.QQID not in qq_id_list:
+                # 不属于则就属于新增, 创建 card 并添加到布局
+                new_card = BotCard(bot_config)
+                self.cardLayout.addWidget(new_card)
+                self.botCardList.append(new_card)
 
         for card in self.botCardList:
-            # 遍历并判断是否有减少的 bot
-            if card.config in self.botList:
-                # 属于则就是没有被删除, 跳过
-                continue
+            # 遍历并判断是否有减少的 bot 配置
+            if card.config not in bot_configs:
+                # 不属于则代表已经删除, 移除出布局并删除
+                self.botCardList.remove(card)
+                self.cardLayout.removeWidget(card)
+                card.deleteLater()
 
-            # 移除出布局并删除
-            self.botCardList.remove(card)
-            self.cardLayout.removeWidget(card)
-            card.deleteLater()
+        success_bar(self.tr("更新机器人列表成功!"))
 
         # 刷新一次布局
         self.cardLayout.update()
-
-    def _parseList(self) -> None:
-        """
-        ## 解析机器人配置(如果有)
-        """
-        try:
-            # 读取配置列表
-            with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as f:
-                bot_configs = json.load(f)
-
-            if not bot_configs:
-                # 创建信息条
-                info_bar(
-                    self.tr("There are no bot configuration items"),
-                    self.tr("You'll need to add it in the Add bot page"),
-                )
-                self.botList = []
-                return
-
-            # 检查是否有新配置项并配置默认值
-            bot_configs = [self.updateConfig(config, DEFAULT_CONFIG) for config in bot_configs]
-
-            # 如果从文件加载的 bot_config 不为空则执行使用Config和列表表达式解析
-            self.botList: List[Config] = [Config(**config) for config in bot_configs]
-            success_bar(
-                title=self.tr("Load the list of bots"), content=self.tr("The list of bots was successfully loaded")
-            )
-
-        except FileNotFoundError:
-            # 如果文件不存在则创建一个
-            with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
-                json.dump([], f, indent=4)
-            self.botList = []
-
-        except ValueError as e:
-            # 如果配置文件解析失败则提示错误信息并覆盖原有文件
-            error_bar(self.tr("Unable to load bot list"), str(e))
-            with open(str(it(PathFunc).bot_config_path), "w", encoding="utf-8") as f:
-                json.dump([], f, indent=4)
-            self.botList = []
-
-    def updateConfig(self, user_config, default_config):
-        """
-        ## 这是一个检查是否有新版参数并填入默认值的函数
-        """
-        for key, value in default_config.items():
-            if isinstance(value, dict):
-                # 如果值是字典，则递归调用
-                user_config[key] = self.updateConfig(user_config.get(key, {}), value)
-            else:
-                if key not in user_config:
-                    user_config[key] = value
-        return user_config

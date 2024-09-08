@@ -24,6 +24,7 @@ from src.Ui.BotListPage import BotListWidget
 from src.Core.NetworkFunc import Urls, NetworkFunc
 from src.Ui.common.info_bar import error_bar
 from src.Core.Config.ConfigModel import Config
+from src.Core.Config.OperateConfig import read_config
 
 
 class BotListCard(HeaderCardWidget):
@@ -137,34 +138,34 @@ class BotList(ScrollArea):
         """
         ## 刷新机器人列表
         """
+
+        if not (bot_configs := read_config()):
+            return
+
         if not self.botCardList:
-            # 如果是首次运行,直接添加到 botCardList
-            for bot_config in it(BotListWidget).botList.botList:
-                card = BotCard(bot_config, self)
-                self.cardLayout.addWidget(card, 0, Qt.AlignmentFlag.AlignTop)
+            # 如果是首次运行, 则直接添加到布局和 botCardList
+            for config in bot_configs:
+                card = BotCard(config, self)
+                self.cardLayout.addWidget(card)
                 self.botCardList.append(card)
+            return
 
-        for bot_config in it(BotListWidget).botList.botList:
-            # 遍历并判断是否有新增的 bot
-            if bot_config.bot.QQID in [card.config.bot.QQID for card in self.botCardList]:
-                # 如果属于则直接跳过
-                continue
-
-            # 不属于则就属于新增, 创建 card 并 添加到布局
-            card = BotCard(bot_config)
-            self.cardLayout.addWidget(card, 0, Qt.AlignmentFlag.AlignTop)
-            self.botCardList.append(card)
+        qq_id_list = [card.config.bot.QQID for card in self.botCardList]
+        for bot_config in bot_configs:
+            # 遍历并判断是否有新增的 bot 配置
+            if bot_config.bot.QQID not in qq_id_list:
+                # 不属于则就属于新增, 创建 card 并添加到布局
+                new_card = BotCard(bot_config)
+                self.cardLayout.addWidget(new_card)
+                self.botCardList.append(new_card)
 
         for card in self.botCardList:
-            # 遍历并判断是否有减少的 bot
-            if card.config in it(BotListWidget).botList.botList:
-                # 属于则就是没有被删除, 跳过
-                continue
-
-            # 移除出布局并删除
-            self.botCardList.remove(card)
-            self.cardLayout.removeWidget(card)
-            card.deleteLater()
+            # 遍历并判断是否有减少的 bot 配置
+            if card.config not in bot_configs:
+                # 不属于则代表已经删除, 移除出布局并删除
+                self.botCardList.remove(card)
+                self.cardLayout.removeWidget(card)
+                card.deleteLater()
 
         # 刷新一次布局
         self.cardLayout.update()
