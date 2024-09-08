@@ -67,8 +67,8 @@ class AddWidget(QWidget):
         """
         self.view = QStackedWidget()
         self.botWidget = BotWidget(self)
-        self.connectWidget = ConnectWidget("Add", self)
-        self.advancedWidget = AdvancedWidget("Add", self)
+        self.connectWidget = ConnectWidget(self)
+        self.advancedWidget = AdvancedWidget(self)
 
         self.view.addWidget(self.botWidget)
         self.view.addWidget(self.connectWidget)

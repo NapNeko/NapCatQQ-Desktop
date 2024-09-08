@@ -19,6 +19,7 @@ from qfluentwidgets import (
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 
 from src.Ui.common.info_bar import error_bar
+from src.Ui.common.message_box import TextInputBox, AskBox
 
 T = TypeVar("T", HttpUrl, WebsocketUrl)
 
@@ -67,9 +68,7 @@ class UrlCard(ExpandSettingCard):
     # 当用户删除了所有 url 的信号
     emptiedSignal = Signal()
 
-    def __init__(
-        self, identifier: str, icon: FluentIcon | FluentIconBase, title: str, content: str, parent=None
-    ) -> None:
+    def __init__(self, icon: FluentIcon | FluentIconBase, title: str, content: str, parent=None) -> None:
         """
         ## 初始化卡片
 
@@ -81,7 +80,6 @@ class UrlCard(ExpandSettingCard):
             - parent: 父组件
         """
         super().__init__(icon, title, content, parent)
-        self.identifier = identifier
         self.urls: List[str] = []
         self.urlItemList: List[UrlItem] = []
 
@@ -92,7 +90,7 @@ class UrlCard(ExpandSettingCard):
         self._initWidget()
 
     def fillValue(self, values: List[T]) -> None:
-        self.urls = values
+        self.urls = [str(value) for value in values]
         [self._addUrlItem(str(url)) for url in self.urls]
 
     def getValue(self) -> List[str]:
@@ -125,10 +123,9 @@ class UrlCard(ExpandSettingCard):
         """
         显示 URL 输入框
         """
-        from src.Ui.AddPage import AddWidget
-        from src.Ui.BotListPage.BotListWidget import BotListWidget
+        from src.Ui.MainWindow.Window import MainWindow
 
-        box = UrlInputBox(it(AddWidget)) if self.identifier == "Add" else UrlInputBox(it(BotListWidget))
+        box = TextInputBox(it(MainWindow))
         if not box.exec() or not box.urlLineEdit.text():
             # 如果用户取消或输入空字符,则退出函数
             return
@@ -160,13 +157,9 @@ class UrlCard(ExpandSettingCard):
         """
         显示确认对话框
         """
-        from src.Ui.AddPage import AddWidget
+        from src.Ui.MainWindow.Window import MainWindow
 
-        box = MessageBox(
-            title=self.tr("确认"),
-            content=self.tr(f"是否要删除此 URL？\n\n{item.url}"),
-            parent=it(AddWidget),
-        )
+        box = AskBox(it(MainWindow), self.tr("确认操作"), self.tr(f"是否要删除此 URL？\n\n{item.url}"))
         box.yesSignal.connect(lambda: self._removeUrl(item))
         box.exec()
 
@@ -191,21 +184,3 @@ class UrlCard(ExpandSettingCard):
         if self.isExpand:
             # 如果是展开状态则将滚轮事件向上传递
             self.parent().wheelEvent(event)
-
-
-class UrlInputBox(MessageBoxBase):
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.titleLabel = TitleLabel(self.tr("Enter the URL"), self)
-        self.urlLineEdit = LineEdit()
-
-        self.urlLineEdit.setPlaceholderText(self.tr("Enter the URL..."))
-        self.urlLineEdit.setClearButtonEnabled(True)
-
-        # 将组件添加到布局中
-        self.viewLayout.addWidget(self.titleLabel)
-        self.viewLayout.addWidget(self.urlLineEdit)
-
-        # 设置对话框最小宽度
-        self.widget.setMinimumWidth(350)

@@ -14,10 +14,7 @@ class HttpConfigCard(GroupCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(
-            icon=FluentIcon.SCROLL,
-            title=self.tr("HTTP 配置"),
-            content=self.tr("配置 HTTP 服务和上报"),
-            parent=parent,
+            icon=FluentIcon.SCROLL, title=self.tr("HTTP 配置"), content=self.tr("配置 HTTP 服务和上报"), parent=parent
         )
         # HTTP 服务配置项
         self.httpEnableItem = SwitchItem(self.tr("启用 HTTP 服务"), self)

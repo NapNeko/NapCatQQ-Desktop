@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt
 from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
 from PySide6.QtWidgets import QWidget
 
-from src.Ui.common.InputCard import TextCard, FolderConfigCard, SwitchConfigCard, ComboBoxConfigCard
+from src.Ui.common.InputCard import FolderConfigCard, SwitchConfigCard, ComboBoxConfigCard
 from src.Core.Config.ConfigModel import AdvancedConfig
 
 
@@ -12,10 +12,9 @@ class AdvancedWidget(ScrollArea):
     ## Advance Item 项对应的 QWidget
     """
 
-    def __init__(self, identifier, parent=None, config: AdvancedConfig = None) -> None:
+    def __init__(self, parent=None, config: AdvancedConfig = None) -> None:
         super().__init__(parent=parent)
 
-        self.identifier = identifier
         self.view = QWidget()
         self.cardLayout = ExpandLayout(self.view)
 
