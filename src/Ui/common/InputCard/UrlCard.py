@@ -163,8 +163,8 @@ class UrlCard(ExpandSettingCard):
         from src.Ui.AddPage import AddWidget
 
         box = MessageBox(
-            title=self.tr("Confirm"),
-            content=self.tr(f"Are you sure you want to delete the following URLs?\n\n{item.url}"),
+            title=self.tr("确认"),
+            content=self.tr(f"是否要删除此 URL？\n\n{item.url}"),
             parent=it(AddWidget),
         )
         box.yesSignal.connect(lambda: self._removeUrl(item))

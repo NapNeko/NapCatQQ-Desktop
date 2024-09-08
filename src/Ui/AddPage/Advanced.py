@@ -43,41 +43,40 @@ class AdvancedWidget(ScrollArea):
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Debug"),
-            content=self.tr("The message will carry a raw field, which is the original message content"),
+            content=self.tr("消息会携带一个 raw 字段，即原始消息内容"),
             parent=self.view,
         )
         self.localFile2UrlCard = SwitchConfigCard(
             icon=FluentIcon.SHARE,
             title=self.tr("LocalFile2Url"),
-            content=self.tr(
-                "If the URL cannot be obtained when calling the get file interface, "
-                "use the base 64 field to return the file content"
-            ),
+            content=self.tr("是否将本地文件转换为URL，如果获取不到url则使用base64字段返回文件内容"),
+            value=True,
             parent=self.view,
         )
         self.fileLogCard = SwitchConfigCard(
             icon=FluentIcon.SAVE_AS,
-            title=self.tr("Whether to enable file logging"),
-            content=self.tr("Log to a file(It is off by default)"),
+            title=self.tr("文件日志"),
+            content=self.tr("是否要将日志记录到文件"),
             parent=self.view,
         )
         self.consoleLogCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
-            title=self.tr("Whether to enable console logging"),
-            content=self.tr("Log to a console(It is off by default)"),
+            title=self.tr("控制台日志"),
+            content=self.tr("是否启用控制台日志"),
+            value=True,
             parent=self.view,
         )
         self.fileLogLevelCard = ComboBoxConfigCard(
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
-            title=self.tr("File log level"),
-            content=self.tr("Set the log level when the output file is output (default debug)"),
+            title=self.tr("文件日志等级"),
+            content=self.tr("设置文件日志输出等级"),
             texts=["debug", "info", "error"],
             parent=self.view,
         )
         self.consoleLevelCard = ComboBoxConfigCard(
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
-            title=self.tr("Console log level"),
-            content=self.tr("Setting the Console Output Log Level (Default Info)"),
+            title=self.tr("控制台日志等级"),
+            content=self.tr("设置控制台日志输出等级"),
             texts=["info", "debug", "error"],
             parent=self.view,
         )

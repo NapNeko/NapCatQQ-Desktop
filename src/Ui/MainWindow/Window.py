@@ -104,32 +104,32 @@ class MainWindow(MSFluentWindow):
         self.home_widget_button = self.addSubInterface(
             interface=self.home_widget,
             icon=FluentIcon.HOME,
-            text=self.tr("Home"),
+            text=self.tr("主页"),
             position=NavigationItemPosition.TOP,
         )
 
         self.add_widget_button = self.addSubInterface(
             interface=self.add_widget,
             icon=FluentIcon.ADD_TO,
-            text=self.tr("Add Bot"),
+            text=self.tr("添加机器人"),
             position=NavigationItemPosition.TOP,
         )
         self.bot_list_widget_button = self.addSubInterface(
             interface=self.bot_list_widget,
             icon=FluentIcon.MENU,
-            text=self.tr("Bot List"),
+            text=self.tr("机器人列表"),
             position=NavigationItemPosition.TOP,
         )
         self.update_widget_button = self.addSubInterface(
             interface=self.update_widget,
             icon=FluentIcon.UPDATE,
-            text=self.tr("Update"),
-            position=NavigationItemPosition.TOP,
+            text=self.tr("更新"),
+            position=NavigationItemPosition.BOTTOM,
         )
         self.setup_widget_button = self.addSubInterface(
             interface=self.setup_widget,
             icon=FluentIcon.SETTING,
-            text=self.tr("Setup"),
+            text=self.tr("设置"),
             position=NavigationItemPosition.BOTTOM,
         )
 

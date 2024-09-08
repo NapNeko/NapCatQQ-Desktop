@@ -44,22 +44,22 @@ class ConnectWidget(ScrollArea):
         self.httpPostUrlCard = UrlCard(
             identifier=self.identifier,
             icon=FluentIcon.SCROLL,
-            title=self.tr("Http Report address"),
-            content=self.tr("Set the address for reporting HTTP"),
+            title=self.tr("Http 上报地址"),
+            content=self.tr("例如 http://127.0.0.1:8080/onebot/v11/http"),
             parent=self.view,
         )
         self.wsCard = WsConfigCard(self.view)
         self.wsReverseCard = SwitchConfigCard(
             icon=FluentIcon.SCROLL,
-            title=self.tr("Enable WebSocket Reverse"),
-            content=self.tr("Enable the reverse web socket service"),
+            title=self.tr("启用 反向WebSocket"),
+            content=self.tr("是否启用反向websocket服务"),
             parent=self.view,
         )
         self.wsReverseUrlCard = UrlCard(
             identifier=self.identifier,
             icon=FluentIcon.SCROLL,
-            title=self.tr("WebSocket Reverse address"),
-            content=self.tr("Reverse WebSocket reporting address"),
+            title=self.tr("反向 WebSocket 地址"),
+            content=self.tr("反向 WebSocket 对接的地址"),
             parent=self.view,
         )
 

@@ -105,7 +105,7 @@ class NapCatVersionCard(VersionCardBase):
 
         if (result := it(GetVersion).checkUpdate()) is None:
             # 如果返回了 None 则代表获取不到远程版本, 添加错误提示
-            self.setToolTip(self.tr("Unable to check for updates, please check your network connection or feedback"))
+            self.setToolTip(self.tr("无法检查更新, 请检查您的网络连接"))
             self.errorBadge.show()
             self.updateSate = False
             return
@@ -114,7 +114,7 @@ class NapCatVersionCard(VersionCardBase):
 
         if result["result"]:
             # 如果结果为 True 则代表有更新, 添加更新提示
-            self.setToolTip(self.tr(f"Discover new versions({result['remoteVersion']}), please update them in time"))
+            self.setToolTip(self.tr(f"发现新版本({result['remoteVersion']}), 请及时更新"))
             self.warningBadge.show()
             self.updateSate = True
         else:
@@ -128,7 +128,7 @@ class NapCatVersionCard(VersionCardBase):
         if (version := it(GetVersion).napcatLocalVersion) is None:
             self.isInstall = False
             self.contentsLabel.setText("Unknown version")
-            self.setToolTip(self.tr("You haven't installed NapCat yet, click here to go to the installation page"))
+            self.setToolTip(self.tr("您还没有安装 NapCat，点击这里进入安装页面"))
             self.errorBadge.show()
         else:
             self.isInstall = True
@@ -185,7 +185,7 @@ class QQVersionCard(VersionCardBase):
 
         if version is None:
             # 如果没有获取到文件就会返回None, 也就代表QQ没有安装
-            self.setToolTip(self.tr("No QQ path found, please install it"))
+            self.setToolTip(self.tr("没有找到 QQ 路径，请安装"))
             self.errorBadge.show()
             self.isInstall = False
 

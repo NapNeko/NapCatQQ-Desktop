@@ -165,13 +165,13 @@ class CPUDashboard(DashboardBase):
                 core_num = j + 1
                 usage = cpu_usages[j]
                 if usage < 10:
-                    line.append(f"CPU {core_num:03d} Usage rate:  {usage:5.0f}%")
+                    line.append(f"CPU {core_num:03d} 使用率:  {usage:5.0f}%")
                 elif usage < 100:
-                    line.append(f"CPU {core_num:03d} Usage rate: {usage:5.0f}%")
+                    line.append(f"CPU {core_num:03d} 使用率: {usage:5.0f}%")
                 else:
-                    line.append(f"CPU {core_num:03d} Usage rate:{usage:5.0f}%")
+                    line.append(f"CPU {core_num:03d} 使用率:{usage:5.0f}%")
             lines.append(str(" " * 10).join(line))
-        self.setToolTip(self.tr("CPU Occupancy:\n\n{}".format("\n".join(lines))))
+        self.setToolTip(self.tr("CPU 占用率:\n\n{}".format("\n".join(lines))))
 
 
 class MemoryDashboard(DashboardBase):
@@ -199,8 +199,8 @@ class MemoryDashboard(DashboardBase):
 
         # 构建输出字符串
         tool_tip_string = self.tr(
-            f"Memory Size: {used_mem:.0f}G/{total_mem:.0f}G\n"
-            f"Memory Usage: \n"
+            f"内存大小: {used_mem:.0f}G/{total_mem:.0f}G\n"
+            f"内存使用情况: \n"
             f"{' ' * 8}NapCat Desktop: {psutil.Process().memory_info().rss / (1024 ** 2):.2f} MB"
         )
 
@@ -240,15 +240,14 @@ class SystemInfoCard(HeaderCardWidget):
         super().__init__(parent=parent)
         self.timer: Optional[QTimer] = None
         self.setTitle(self.tr("System info"))
-        # self.setFixedSize(310, 267)
         self.setFixedWidth(310)
 
         # 创建标签和布局
-        self.systemVersionNameLabel = BodyLabel(self.tr("System type"), self)
-        self.platformArchitectureNameLabel = BodyLabel(self.tr("Platform type"), self)
-        self.napcatDesktopVersionNameLabel = BodyLabel(self.tr("NCD Version"), self)
-        self.startTimeNameLabel = BodyLabel(self.tr("Start time"), self)
-        self.runningTimeNameLabel = BodyLabel(self.tr("Running time"), self)
+        self.systemVersionNameLabel = BodyLabel(self.tr("系统类型"), self)
+        self.platformArchitectureNameLabel = BodyLabel(self.tr("平台类型"), self)
+        self.napcatDesktopVersionNameLabel = BodyLabel(self.tr("NCD 版本"), self)
+        self.startTimeNameLabel = BodyLabel(self.tr("启动时间"), self)
+        self.runningTimeNameLabel = BodyLabel(self.tr("运行时间"), self)
 
         self.systemVersionLabel = BodyLabel(self)
         self.platformArchitectureLabel = BodyLabel(self)

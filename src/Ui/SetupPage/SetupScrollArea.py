@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QWidget, QFileDialog
 
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Core.Config import cfg
+from src.Ui.common.info_bar import success_bar
 from src.Core.Utils.PathFunc import PathFunc
 
 if TYPE_CHECKING:
@@ -54,39 +55,39 @@ class SetupScrollArea(ScrollArea):
         """
 
         # 创建组 - 启动项
-        self.startGroup = SettingCardGroup(title=self.tr("Startup Item"), parent=self.view)
+        self.startGroup = SettingCardGroup(title=self.tr("启动项"), parent=self.view)
         self.startOpenHomePageViewCard = OptionsSettingCard(
             configItem=cfg.StartOpenHomePageView,
             icon=FluentIcon.COPY,
-            title=self.tr("Switch HomePage View"),
-            content=self.tr("Select the page on your homepage when you start"),
-            texts=[self.tr("A useless display page"), self.tr("Function page")],
+            title=self.tr("切换主页页面"),
+            content=self.tr("选择启动时主页展示的页面"),
+            texts=[self.tr("展示页面"), self.tr("功能页面")],
             parent=self.startGroup,
         )
 
         # 创建组 - 个性化
-        self.personalGroup = SettingCardGroup(title=self.tr("Personalize"), parent=self.view)
+        self.personalGroup = SettingCardGroup(title=self.tr("个性化"), parent=self.view)
         # 创建项
         self.themeCard = OptionsSettingCard(
             configItem=cfg.themeMode,
             icon=FluentIcon.BRUSH,
-            title=self.tr("Switch themes"),
-            content=self.tr("Switch the theme of the app"),
+            title=self.tr("切换主题"),
+            content=self.tr("切换程序的主题"),
             texts=[self.tr("Light"), self.tr("Dark"), self.tr("Auto")],
             parent=self.personalGroup,
         )
         self.themeColorCard = CustomColorSettingCard(
             configItem=cfg.themeColor,
             icon=FluentIcon.PALETTE,
-            title=self.tr("Theme Color"),
-            content=self.tr("Choose a theme color"),
+            title=self.tr("主题颜色"),
+            content=self.tr("选择主题色"),
             parent=self.personalGroup,
         )
         self.languageCard = ComboBoxSettingCard(
             configItem=cfg.language,
             icon=FluentIcon.LANGUAGE,
-            title=self.tr("Language"),
-            content=self.tr("Set your preferred language for UI"),
+            title=self.tr("语言"),
+            content=self.tr("设置程序的首选语言"),
             texts=["简体中文", "繁體中文", "English", self.tr("Use system setting")],
             parent=self.personalGroup,
         )
@@ -134,7 +135,7 @@ class SetupScrollArea(ScrollArea):
         信号处理
         """
         # 连接重启提示
-        cfg.appRestartSig.connect(self._showRestartTooltip)
+        cfg.appRestartSig.connect(lambda: success_bar(self.tr("配置在重启后生效")))
 
         # 连接启动相关
         self.startOpenHomePageViewCard.optionChanged.connect(
@@ -189,17 +190,3 @@ class SetupScrollArea(ScrollArea):
 
         setTheme(cfg.get(theme), save=True)
         it(MainWindow).home_widget.updateBgImage()
-
-    def _showRestartTooltip(self) -> None:
-        """
-        显示重启提示
-        """
-        from src.Ui.SetupPage.Setup import SetupWidget
-
-        InfoBar.success(
-            self.tr("Updated successfully"),
-            self.tr("Configuration takes effect after restart"),
-            orient=Qt.Orientation.Vertical,
-            duration=3000,
-            parent=it(SetupWidget),
-        )

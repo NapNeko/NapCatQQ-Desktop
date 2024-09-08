@@ -76,17 +76,17 @@ class AddWidget(QWidget):
 
         self.topCard.pivot.addItem(
             routeKey=self.botWidget.objectName(),
-            text=self.tr("Bot"),
+            text=self.tr("基本配置"),
             onClick=lambda: self.view.setCurrentWidget(self.botWidget),
         )
         self.topCard.pivot.addItem(
             routeKey=self.connectWidget.objectName(),
-            text=self.tr("Connect"),
+            text=self.tr("连接配置"),
             onClick=lambda: self.view.setCurrentWidget(self.connectWidget),
         )
         self.topCard.pivot.addItem(
             routeKey=self.advancedWidget.objectName(),
-            text=self.tr("Advanced"),
+            text=self.tr("高级配置"),
             onClick=lambda: self.view.setCurrentWidget(self.advancedWidget),
         )
 

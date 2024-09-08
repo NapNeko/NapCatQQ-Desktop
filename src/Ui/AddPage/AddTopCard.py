@@ -45,8 +45,8 @@ class AddTopCard(QWidget):
 
     def _createLabel(self) -> None:
         """构建 Label 并配置"""
-        self.titleLabel = TitleLabel(self.tr("Add bot"), self)
-        self.subtitleLabel = CaptionLabel(self.tr("Before adding a robot, you need to do some configuration"), self)
+        self.titleLabel = TitleLabel(self.tr("添加机器人"), self)
+        self.subtitleLabel = CaptionLabel(self.tr("在添加机器人之前，您需要做一些配置"), self)
 
     def _createButton(self) -> None:
         """构建 Button 并配置"""
@@ -124,11 +124,8 @@ class AddTopCard(QWidget):
         from src.Ui.AddPage import AddWidget
 
         box = MessageBox(
-            title=self.tr("Confirm clearing configuration"),
-            content=self.tr(
-                "After clearing, all configuration items on this page "
-                "will be cleared, and this operation cannot be undone"
-            ),
+            title=self.tr("确认清除配置"),
+            content=self.tr("清空后，该页面的所有配置项都会被清空，且该操作无法撤销"),
             parent=it(AddWidget),
         )
 

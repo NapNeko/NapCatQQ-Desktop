@@ -15,17 +15,17 @@ class WsConfigCard(GroupCardBase):
     def __init__(self, parent=None) -> None:
         super().__init__(
             icon=FluentIcon.SCROLL,
-            title=self.tr("WebSocket service"),
-            content=self.tr("Configure WebSocket service"),
+            title=self.tr("WebSocket 服务"),
+            content=self.tr("配置 WebSocket 服务"),
             parent=parent,
         )
 
         # 正向 Ws 服务开关
-        self.wsEnableItem = SwitchItem(self.tr("Enable WebSockets"), self)
+        self.wsEnableItem = SwitchItem(self.tr("是否启用正向 WebSocket 服务"), self)
         # 正向 Ws 服务监听 ip/地址
-        self.wsHostItem = LineEditItem(self.tr("WebSockets Host"), "Listens for all host for null", self)
+        self.wsHostItem = LineEditItem(self.tr("WebSockets 主机"), "为空则监听所有地址", self)
         # 正向 Ws 服务端口
-        self.wsPortItem = LineEditItem(self.tr("WebSockets Port"), "3001", self)
+        self.wsPortItem = LineEditItem(self.tr("WebSockets 端口"), "3001", self)
 
         # 添加 item
         self.addItem(self.wsEnableItem)

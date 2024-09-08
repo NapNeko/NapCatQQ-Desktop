@@ -73,12 +73,12 @@ class SetupWidget(QWidget):
 
         self.topCard.pivot.addItem(
             routeKey=self.setupScrollArea.objectName(),
-            text=self.tr("Settings"),
+            text=self.tr("设置"),
             onClick=lambda: self.view.setCurrentWidget(self.setupScrollArea),
         )
         self.topCard.pivot.addItem(
             routeKey=self.logWidget.objectName(),
-            text=self.tr("Log"),
+            text=self.tr("日志"),
             onClick=lambda: self.view.setCurrentWidget(self.logWidget),
         )
 

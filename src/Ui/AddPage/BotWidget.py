@@ -42,49 +42,49 @@ class BotWidget(ScrollArea):
         """
         self.botNameCard = LineEditConfigCard(
             icon=FluentIcon.ROBOT,
-            title=self.tr("Bot name"),
-            content=self.tr("Set your bot name"),
+            title=self.tr("Bot 名称"),
+            content=self.tr("设置机器人的名称,为空自动生成"),
             placeholder_text=self.tr("Bot 1"),
             parent=self.view,
         )
         self.botQQIdCard = LineEditConfigCard(
             icon=NapCatDesktopIcon.QQ,
             title=self.tr("Bot QQ"),
-            content=self.tr("Set your bot QQ"),
-            placeholder_text=self.tr("123456"),
+            content=self.tr("设置机器人 QQ 号"),
+            placeholder_text=self.tr("12345689"),
             parent=self.view,
         )
         self.messageFormatCard = ComboBoxConfigCard(
             icon=FluentIcon.MESSAGE,
-            title=self.tr("Message format"),
-            content=self.tr("Array is the message group, and string is the cq code string"),
+            title=self.tr("消息格式"),
+            content=self.tr("消息上报格式，array为消息组，string为cq码字符串"),
             texts=["array", "string"],
             parent=self.view,
         )
         self.reportSelfMessageCard = SwitchConfigCard(
             icon=FluentIcon.ROBOT,
-            title=self.tr("Report self message"),
-            content=self.tr("Whether to report the bot's own message"),
+            title=self.tr("上报自身消息"),
+            content=self.tr("是否上报自己发送的消息"),
             parent=self.view,
         )
         self.musicSignUrl = LineEditConfigCard(
             icon=FluentIcon.MUSIC,
-            title=self.tr("Music signature URL"),
-            content=self.tr("Used to handle music-related requests"),
+            title=self.tr("音乐签名URL"),
+            content=self.tr("用于处理音乐相关请求"),
             placeholder_text=self.tr("Can be empty"),
             parent=self.view,
         )
         self.heartIntervalCard = LineEditConfigCard(
             icon=FluentIcon.HEART,
-            title=self.tr("Heart interval"),
-            content=self.tr("WebSocket heartbeat interval, in milliseconds"),
+            title=self.tr("心跳间隔"),
+            content=self.tr("WebSocket 心跳间隔, 单位毫秒"),
             placeholder_text="30000",
             parent=self.view,
         )
         self.accessTokenCard = LineEditConfigCard(
             icon=FluentIcon.CERTIFICATE,
             title=self.tr("Access Token"),
-            content=self.tr("Access Token, can be empty"),
+            content=self.tr("Access Token, 可为空"),
             parent=self.view,
         )
 
