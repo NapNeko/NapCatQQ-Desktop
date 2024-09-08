@@ -1,36 +1,23 @@
-bin
-venv
-config
-StartScript
-tmp
-NapCat
-test
-.idea
+# Ignore binary and virtual environment directories
+venv/
 
+# Ignore configuration and temporary files
+config/
+tmp/
+.vscode/
+
+# Ignore specific application directories and files
+NapCat/
 PatchConfig.json
-/build/*
-/dist/*
-/main.spec
-/src/pysidedeploy.spec
 
-src/__pycache__
-src/Core/__pycache__
-src/Core/Config/__pycache__
-src/Ui/__pycache__
-src/Ui/resource/__pycache__
-src/Ui/MainWindow/__pycache__
-src/Ui/AddPage/__pycache__
-src/Ui/AddPage/Add/__pycache__
-src/Ui/BotListPage/__pycache__
-src/Ui/BotListPage/BotWidget/__pycache__
-src/Ui/HomePage/__pycache__
-src/Ui/HomePage/UpdateView/__pycache__
-src/Ui/HomePage/ContentView/__pycache__
-src/Ui/HomePage/DownloadView/__pycache__
-src/Ui/SetupPage/__pycache__
-src/Ui/common/__pycache__
-src/Ui/common/InfoCard/__pycache__
-src/Ui/common/InputCard/__pycache__
-/src/Ui/common/Netwrok/__pycache__
-/log
-/src/Ui/UpdatePage/__pycache__
+# Ignore build artifacts and logs
+/src/pysidedeploy.spec
+/log/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore PDM Python environment file
+.pdm-python
