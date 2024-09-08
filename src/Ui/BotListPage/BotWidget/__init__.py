@@ -373,19 +373,19 @@ class DeleteConfigMessageBox(MessageBoxBase):
 
         if is_run:
             # 如果正在运行, 则提示停止运行
-            self.titleLabel.setText(self.tr("Deletion failed"))
+            self.titleLabel.setText(self.tr("删除失败"))
             self.contentLabel.setText(
-                self.tr("NapCat is currently running, please stop running and delete the configuration")
+                self.tr("NapCat 当前正在运行，请停止运行再删除配置")
             )
-            self.yesButton.setText(self.tr("Stop NapCat operation"))
+            self.yesButton.setText(self.tr("停止 NapCat"))
             self.yesButton.clicked.connect(lambda: parent.stopButton.click())
         else:
             # 不在运行则确认删除
-            self.titleLabel.setText(self.tr("Confirm the deletion"))
+            self.titleLabel.setText(self.tr("确认删除"))
             self.contentLabel.setText(
                 self.tr(
-                    f"Are you sure you want to delete {parent.config.bot.QQID}? \n\n"
-                    f"This operation cannot be undone, please proceed with caution"
+                    f"你确定要删除 {parent.config.bot.QQID} 吗? \n\n"
+                    f"此操作无法撤消, 请谨慎操作"
                 )
             )
             self.yesButton.setText(self.tr("Confirm the deletion"))
