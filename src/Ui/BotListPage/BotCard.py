@@ -2,6 +2,7 @@
 from typing import TYPE_CHECKING, Optional
 
 from creart import it
+from loguru import logger
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QUrl, Slot, QUrlQuery
 from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
@@ -101,9 +102,8 @@ class BotCard(CardWidget):
             self.QQAvatarLabel.scaledToHeight(115)
             self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
         else:
-            from src.Ui.BotListPage import BotListWidget
-
-            error_bar(title=self.tr("Failed to get the QQ avatar"), content=replay.errorString())
+            logger.error(f"获取 QQ 头像时引发错误: {replay.errorString()}")
+            error_bar(self.tr("获取 QQ 头像时引发错误, 请前往 设置 > log 查看错误原因"))
 
     @Slot()
     def _clickSlot(self) -> None:

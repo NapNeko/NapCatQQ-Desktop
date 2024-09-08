@@ -73,7 +73,7 @@ class HomeWidget(QStackedWidget):
         if cfg.get(cfg.HideUsGoBtnTips):
             # 是否隐藏提示
             return
-        info_bar("Tips", self.tr("You can choose the page to display a\nstartup in the settings page"))
+        info_bar(self.tr("您可以选择在设置页面中选择启动时的展示页💕"))
 
     def chooseView(self) -> None:
         """

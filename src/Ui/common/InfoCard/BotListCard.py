@@ -2,6 +2,7 @@
 from typing import List, Optional
 
 from creart import it
+from loguru import logger
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QUrl, Slot, QTimer, QUrlQuery
 from qfluentwidgets import (
@@ -280,9 +281,8 @@ class BotCard(BackgroundAnimationWidget, QFrame):
             self.QQAvatarLabel.scaledToHeight(28)
             self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
         else:
-            from src.Ui.HomePage import HomeWidget
-
-            error_bar(self.tr("Failed to get the QQ avatar"), replay.errorString())
+            logger.error(f"获取 QQ 头像时引发错误: {replay.errorString()}")
+            error_bar(self.tr("获取 QQ 头像时引发错误, 请前往 设置 > log 查看错误原因"))
 
     def _setLayout(self) -> None:
         """

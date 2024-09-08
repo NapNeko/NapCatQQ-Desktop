@@ -103,30 +103,17 @@ class AddTopCard(QWidget):
         config = Config(**it(AddWidget).getConfig())
         if check_duplicate_bot(config):
             # 检查是否已存在相同的机器人配置
-            error_bar(
-                self.tr("Bots can't be added"),
-                self.tr(f"{config.bot.QQID} it already exists, please do not add it repeatedly"),
-            )
+            error_bar(self.tr(f"{config.bot.QQID} 已存在, 请重新输入"),)
             return
 
         if update_config(config):
             # 更新配置文件, 如果返回为 True 则代表更新成功
             # 执行刷新
             it(BotListWidget).botList.updateList()
-            success_bar(
-                self.tr("Bot addition success!"),
-                self.tr(f"Bot({config.bot.QQID}) it has been successfully added, you can view it in BotList"),
-            )
+            success_bar(self.tr(f"Bot({config.bot.QQID}) 已经添加成功，你可以在 机器人列表 中查看😼"))
         else:
             # 更新失败则提示查看日志
-            error_bar(
-                self.tr("Failed"),
-                self.tr(
-                    "An error is thrown when updating the configuration file, "
-                    "please check the detailed error in the Setup >Log and take "
-                    "a screenshot to someone who has the ability to solve it for help"
-                ),
-            )
+            error_bar(self.tr("更新配置文件时引发错误, 请前往 设置 > log 中查看详细错误"))
 
     @Slot()
     def _clearBtnSlot(self) -> None:

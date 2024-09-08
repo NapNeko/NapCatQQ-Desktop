@@ -15,7 +15,7 @@ from qfluentwidgets import InfoBar
 from src.Ui.common.managers import NCDInfoBarPosition
 
 
-def info_bar(title: str, content: str, duration: int = 5_000) -> None:
+def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000) -> None:
     """
     ## info 信息消息条, 仅用于展示一些提示, 故显示时间不会太长
 
@@ -36,7 +36,7 @@ def info_bar(title: str, content: str, duration: int = 5_000) -> None:
     )
 
 
-def success_bar(title: str, content: str, duration: int = 5_000) -> None:
+def success_bar(content: str, title: str = "Success✅", duration: int = 5_000) -> None:
     """
     ## success 信息消息条, 仅用于展示一些成功提示, 故显示时间不会太长
 
@@ -57,7 +57,7 @@ def success_bar(title: str, content: str, duration: int = 5_000) -> None:
     )
 
 
-def warning_bar(title: str, content: str, duration: int = 10_000) -> None:
+def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_000) -> None:
     """
     ## warning 信息消息条, 仅用于展示一些警告提示, 故显示时间稍长
 
@@ -78,7 +78,7 @@ def warning_bar(title: str, content: str, duration: int = 10_000) -> None:
     )
 
 
-def error_bar(title: str, content: str, duration: int = -1) -> None:
+def error_bar(content: str, title: str = "Failed❌", duration: int = -1) -> None:
     """
     ## error 信息消息条, 仅用于展示一些警告提示, 故显示时间稍长
 

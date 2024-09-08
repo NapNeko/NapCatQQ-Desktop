@@ -25,7 +25,7 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Core.Utils.RunNapCat import create_process
 from src.Core.Config.ConfigModel import Config
-from src.Core.Config.OperateConfig import delete_config, update_config
+from src.Core.Config.OperateConfig import read_config, delete_config, update_config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
 
 
@@ -173,10 +173,7 @@ class BotWidget(QWidget):
         self.rebootButton.setVisible(True)
 
         # 显示提示
-        info_bar(
-            title=self.tr("The run command has been executed"),
-            content=self.tr("If there is no output for a long time, check the QQ path and NapCat path"),
-        )
+        info_bar(self.tr("已执行启动命令, 如果长时间没有输, 请前往 设置 > log 查看日志"))
 
     @Slot()
     def _stopButtonSlot(self) -> None:
@@ -233,16 +230,9 @@ class BotWidget(QWidget):
         self.newConfig = Config(**self.botSetupPage.getValue())
         if update_config(self.newConfig):
             # 更新成功提示
-            success_bar(self.tr("Update success"), self.tr("The updated configuration is successful"))
+            success_bar(self.tr("更新配置成功"))
         else:
-            error_bar(
-                self.tr("Failed"),
-                self.tr(
-                    "An error is thrown when updating the configuration file, "
-                    "please check the detailed error in the Setup >Log and take "
-                    "a screenshot to someone who has the ability to solve it for help"
-                ),
-            )
+            error_bar(self.tr("更新配置文件时引发错误, 请前往 设置 > log 中查看详细错误"))
 
     @Slot()
     def _deleteButtonSlot(self) -> None:
@@ -417,15 +407,8 @@ class DeleteConfigMessageBox(MessageBoxBase):
         from src.Ui.BotListPage import BotListWidget
 
         if delete_config(parent.config):
-            it(BotListWidget).botList.botList.remove(parent.config)
             parent.returnButton.click()
             it(BotListWidget).botList.updateList()
-            success_bar(
-                self.tr("Success"),
-                self.tr(
-                    f"The configuration was successfully deleted "
-                    f"{parent.config.bot.QQID}({parent.config.bot.name})"
-                )
-            )
+            success_bar(self.tr(f"成功删除配置 {parent.config.bot.QQID}({parent.config.bot.name})"))
         else:
-            error_bar(self.tr("Failed"), self.tr("please go to Setup > log for details"))
+            error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))

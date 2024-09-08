@@ -259,12 +259,9 @@ class NapCatDownloadCard(DownloadCardBase):
     @Slot()
     def showErrorTips(self):
         """
-        ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
+        ## 下载时发生了错误, 提示用户查看 log
         """
-        error_bar(
-            self.tr("Failed"),
-            self.tr("Error sent while downloading/installing NapCat, please go to Setup > log for details"),
-        )
+        error_bar(self.tr("下载/更新 NapCat 发生了错误, 请前往 设置 > log 查看错误原因"))
 
     @Slot()
     def _shareButtonSlot(self) -> None:
@@ -501,10 +498,7 @@ class QQDownloadCard(DownloadCardBase):
         """
         ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
         """
-        error_bar(
-            self.tr("Failed"),
-            self.tr("Error sent while downloading/installing QQ,\nplease go to Setup > log for details"),
-        )
+        error_bar(self.tr("下载/更新 QQ 发生了错误, 请前往 设置 > log 查看错误原因"))
 
     @Slot()
     def _shareButtonSlot(self) -> None:

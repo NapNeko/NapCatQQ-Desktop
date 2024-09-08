@@ -298,12 +298,7 @@ class NapCatUpdateCard(UpdateCardBase):
         """
         ## 下载时发生了错误, 提示用户查看 log 以寻求帮助或者解决问题
         """
-        from src.Ui.HomePage.Home import HomeWidget
-
-        error_bar(
-            self.tr("Download failed"),
-            self.tr("An error occurs when downloading NapCat,\nplease go to Setup > log for details"),
-        )
+        error_bar(self.tr("下载 NapCat 发生了错误, 请前往 设置 > log 查看错误原因"))
 
 
 class UpdateFlyoutView(FlyoutViewBase):

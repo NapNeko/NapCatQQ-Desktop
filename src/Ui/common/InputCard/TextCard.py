@@ -132,7 +132,7 @@ class TextCard(ExpandSettingCard):
 
         if box.urlLineEdit.text() in self.texts:
             # 如果用户输入的值已经存在则弹出提示并退出函数
-            error_bar(self.tr("The URL already exists"), self.tr("Please enter a new URL"))
+            error_bar(self.tr("此 url 已存在, 请重新输入"))
             return
 
         self.texts.append(box.urlLineEdit.text())
