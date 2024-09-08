@@ -50,10 +50,11 @@ class ComboBoxConfigCard(SettingCard):
 
 class SwitchConfigCard(SettingCard):
 
-    def __init__(self, icon: FluentIconBase, title: str, content=None, parent=None) -> None:
+    def __init__(self, icon: FluentIconBase, title: str, content: str = None, value: bool = False, parent=None) -> None:
         super().__init__(icon, title, content, parent)
         self.switchButton = SwitchButton(self, IndicatorPosition.RIGHT)
 
+        self.fillValue(value)
         self.hBoxLayout.addWidget(self.switchButton, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
