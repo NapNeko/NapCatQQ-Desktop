@@ -23,7 +23,7 @@ class BotTopCard(QWidget):
 
         # 创建所需控件
         self.breadcrumbBar = BreadcrumbBar(self)
-        self.subtitleLabel = CaptionLabel(self.tr("All the bots you've added are here"), self)
+        self.subtitleLabel = CaptionLabel(self.tr("您可以在此对机器人进行配置、启动以及管理"), self)
         self.updateListButton = TransparentToolButton(FluentIcon.SYNC, self)  # 刷新列表按钮
 
         self.hBoxLayout = QHBoxLayout()
@@ -32,7 +32,7 @@ class BotTopCard(QWidget):
 
         # 设置控件
         setFont(self.breadcrumbBar, 28, QFont.Weight.DemiBold)
-        self.breadcrumbBar.addItem(routeKey="BotTopCardTitle", text=self.tr("Bot List"))
+        self.breadcrumbBar.addItem(routeKey="BotTopCardTitle", text=self.tr("机器人列表"))
         self.breadcrumbBar.setSpacing(15)
         self.updateListButton.clicked.connect(self._updateListButtonSlot)
         self.breadcrumbBar.currentIndexChanged.connect(self._breadcrumbBarSlot)
@@ -42,7 +42,7 @@ class BotTopCard(QWidget):
 
     def addItem(self, route_key: str) -> None:
         """
-        ## 给 breadcrumbBar 添加 item 项
+        ## 给 breadcrumbBar 添加 item 项接口
         """
         self.breadcrumbBar.addItem(route_key, route_key)
 
@@ -51,7 +51,7 @@ class BotTopCard(QWidget):
         ## 为按钮添加悬停提示
         """
         # 添加提示
-        self.updateListButton.setToolTip(self.tr("Click to refresh the list"))
+        self.updateListButton.setToolTip(self.tr("点击刷新列表"))
         self.updateListButton.installEventFilter(ToolTipFilter(self.updateListButton))
 
     @Slot()

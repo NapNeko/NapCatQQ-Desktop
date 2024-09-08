@@ -92,13 +92,9 @@ class BotSetupPage(QWidget):
         """
         ## 创建页面内的卡片
         """
-        self.botSetupCard = AppCard(FluentIcon.ROBOT, self.tr("Bot settings"), self.tr("Basic settings for the bot"))
-        self.connectSetupCard = AppCard(
-            FluentIcon.GLOBE, self.tr("Connection settings"), self.tr("Settings related to bot connections")
-        )
-        self.advancedSetupCard = AppCard(
-            FluentIcon.BOOK_SHELF, self.tr("Advanced settings"), self.tr("Advanced bot settings")
-        )
+        self.botSetupCard = AppCard(FluentIcon.ROBOT, self.tr("基本设置"), self.tr("机器人基本配置项"))
+        self.connectSetupCard = AppCard(FluentIcon.GLOBE, self.tr("连接设置"), self.tr("机器人连接配置项"))
+        self.advancedSetupCard = AppCard(FluentIcon.BOOK_SHELF, self.tr("高级设置"), self.tr("机器人高级配置项"))
 
         self.botSetupCard.clicked.connect(lambda: self.view.view.setCurrentWidget(self.botWidget))
         self.connectSetupCard.clicked.connect(lambda: self.view.view.setCurrentWidget(self.connectWidget))

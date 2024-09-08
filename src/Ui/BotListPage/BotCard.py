@@ -50,10 +50,7 @@ class BotCard(CardWidget):
         ## 布局卡片控件
         """
         self.vBoxLayout.addSpacing(20)
-        self.vBoxLayout.addWidget(
-            self.QQAvatarLabel,
-            alignment=Qt.AlignmentFlag.AlignCenter,
-        )
+        self.vBoxLayout.addWidget(self.QQAvatarLabel, alignment=Qt.AlignmentFlag.AlignCenter)
         self.vBoxLayout.addSpacing(25)
         self.vBoxLayout.addWidget(self.idLabel, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.vBoxLayout.addStretch(1)
