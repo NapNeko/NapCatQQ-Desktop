@@ -20,8 +20,13 @@ def read_config() -> List[Config]:
     ## 返回
         - List[Config] 一个列表, 成员为 Config
     """
-    with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as file:
-        return [Config(**config) for config in json.load(file)]
+    try:
+        with open(str(it(PathFunc).bot_config_path), "r", encoding="utf-8") as file:
+            return [Config(**config) for config in json.load(file)]
+    except Exception as error:
+        logger.error(f"读取配置文件时引发错误: {error}")
+        write_config([])  # 覆盖原有配置文件
+        return []
 
 
 def write_config(configs: List[Config]) -> None:
@@ -49,6 +54,7 @@ def check_duplicate_bot(config: Config) -> bool:
     for bot_config in read_config():
         if config.bot.QQID == bot_config.bot.QQID:
             return True
+    return False
 
 
 def update_config(config: Config) -> bool:
