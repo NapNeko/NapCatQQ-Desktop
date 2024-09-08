@@ -11,6 +11,7 @@ dependencies = [
     "pydantic>=2.9.0",
     "PySide6-Fluent-Widgets>=1.6.3",
     "creart>=0.3.0",
+    "psutil>=6.0.0",
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
