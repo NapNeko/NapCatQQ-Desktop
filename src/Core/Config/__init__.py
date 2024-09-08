@@ -61,8 +61,6 @@ class Config(QConfig):
 
     # 路径项
     # 注意: default 为空字符串则默认以程序根目录为路径
-    QQPath = ConfigItem(group="Path", name="QQPath", default="", validator=FolderValidator())
-    NapCatPath = ConfigItem(group="Path", name="napcatPath", default="", validator=FolderValidator())
 
     # 启动项
     StartOpenHomePageView = OptionsConfigItem(

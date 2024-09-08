@@ -49,47 +49,24 @@ class PathFunc:
 
         logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 
-    def getQQPath(self) -> Path | None:
+    @staticmethod
+    def getQQPath() -> Path | None:
         """
         获取QQ路径
         """
-        from src.Core.Config import cfg
-
         try:
-            if QOperatingSystemVersion.currentType() == QOperatingSystemVersion.OSType.Windows:
-                # 当系统为 Windows 时执行以下操作
-                if Path(cfg.get(cfg.QQPath)) == Path.cwd():
-                    key = winreg.OpenKey(
-                        key=winreg.HKEY_LOCAL_MACHINE,
-                        sub_key=r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\QQ",
-                    )
-                    self.qq_path = Path(winreg.QueryValueEx(key, "UninstallString")[0]).parent
-
-                    cfg.set(item=cfg.QQPath, value=str(self.qq_path), save=True)
-                    return self.qq_path
-                else:
-                    self.qq_path = cfg.get(cfg.QQPath)
-                    return Path(self.qq_path)
-            else:
-                # 暂时没有适配 MacOS 的打算，故直接返回 Linux QQ 安装的默认路径
-                self.qq_path = Path("/opt/QQ/qq")
-                cfg.set(item=cfg.QQPath, value=str(self.qq_path), save=True)
-                return self.qq_path
+            key = winreg.OpenKey(
+                key=winreg.HKEY_LOCAL_MACHINE,
+                sub_key=r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\QQ",
+            )
+            return Path(winreg.QueryValueEx(key, "UninstallString")[0]).parent
         except FileNotFoundError:
             return None
 
     def getNapCatPath(self) -> Path:
         """
         ## 获取 NapCat 路径
-        会验证路径是否为 default
         """
-        from src.Core.Config import cfg
-
-        if Path(cfg.get(cfg.NapCatPath)) == Path.cwd():
-            # 如果为 default 路径则写入类内部定义的路径
-            cfg.set(item=cfg.NapCatPath, value=str(self.napcat_path), save=True)
-        else:
-            self.napcat_path = Path(cfg.get(item=cfg.NapCatPath))
         return self.napcat_path
 
 

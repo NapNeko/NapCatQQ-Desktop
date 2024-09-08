@@ -93,21 +93,7 @@ class SetupScrollArea(ScrollArea):
         )
 
         # 创建组 - 路径
-        self.pathGroup = SettingCardGroup(title=self.tr("Path"), parent=self.view)
-        self.QQPathCard = PushSettingCard(
-            icon=NapCatDesktopIcon.QQ,
-            title=self.tr("QQ installation path"),
-            content=str(it(PathFunc).getQQPath()),
-            text=self.tr("Choose folder"),
-            parent=self.pathGroup,
-        )
-        self.NapCatPathCard = PushSettingCard(
-            icon=FluentIcon.GITHUB,
-            title=self.tr("NapCat path"),
-            content=str(it(PathFunc).getNapCatPath()),
-            text=self.tr("Choose folder"),
-            parent=self.pathGroup,
-        )
+        # self.pathGroup = SettingCardGroup(title=self.tr("Path"), parent=self.view)
 
     def _setLayout(self) -> None:
         """
@@ -120,13 +106,9 @@ class SetupScrollArea(ScrollArea):
         self.personalGroup.addSettingCard(self.themeColorCard)
         self.personalGroup.addSettingCard(self.languageCard)
 
-        self.pathGroup.addSettingCard(self.QQPathCard)
-        self.pathGroup.addSettingCard(self.NapCatPathCard)
-
         # 添加到布局
         self.expand_layout.addWidget(self.startGroup)
         self.expand_layout.addWidget(self.personalGroup)
-        self.expand_layout.addWidget(self.pathGroup)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
 
@@ -145,28 +127,6 @@ class SetupScrollArea(ScrollArea):
         # 连接个性化相关
         self.themeCard.optionChanged.connect(self._themeModeChanged)
         self.themeColorCard.colorChanged.connect(lambda color: setThemeColor(color, save=True, lazy=True))
-
-        # 连接路径相关
-        self.QQPathCard.clicked.connect(self._onQQFolderCardClicked)
-        self.NapCatPathCard.clicked.connect(self._onNapCatFolderCardClicked)
-
-    def _onQQFolderCardClicked(self) -> None:
-        """
-        选择 QQ 路径的设置卡槽函数
-        """
-        folder = self._selectFolder()
-        if folder:
-            cfg.set(cfg.QQPath, folder, save=True)
-            self.QQPathCard.setContent(folder)
-
-    def _onNapCatFolderCardClicked(self) -> None:
-        """
-        选择 NapCat 路径的设置卡槽函数
-        """
-        folder = self._selectFolder()
-        if folder:
-            cfg.set(cfg.NapCatPath, folder, save=True)
-            self.NapCatPathCard.setContent(folder)
 
     def _selectFolder(self) -> str:
         """
