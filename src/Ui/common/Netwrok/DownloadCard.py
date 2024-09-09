@@ -17,9 +17,7 @@ from qfluentwidgets import (
     PushButton,
     TitleLabel,
     CaptionLabel,
-    SubtitleLabel,
     HyperlinkLabel,
-    MessageBoxBase,
     SimpleCardWidget,
     VerticalSeparator,
     TransparentToolButton,
@@ -34,6 +32,7 @@ from src.Core.NetworkFunc import Urls, QQDownloader, NapCatDownloader
 from src.Ui.common.info_bar import error_bar
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Utils.GetVersion import GetVersion
+from src.Ui.common.message_box import AskBox
 from src.Ui.common.Netwrok.DownloadButton import ProgressBarButton
 
 
@@ -425,19 +424,31 @@ class QQDownloadCard(DownloadCardBase):
             self.openInstallPathButton.hide()
             self.isInstall = False
 
-    @Slot(bool)
+    @Slot()
     def _downloadFinishSlot(self) -> None:
         """
         ## 下载完成后的安装操作
         """
         # 创建 QProcess 进程
+        from src.Ui.MainWindow.Window import MainWindow
+
         self.process = QProcess(self)
         self.process.finished.connect(self._installationFinished)
 
         # 询问用户应该如何安装(手动/静默)
-        from src.Ui.HomePage.Home import HomeWidget
+        box = AskBox(
+            it(MainWindow),
+            self.tr("选择安装方式"),
+            self.tr(
+                "请点击下面的按钮选择安装方式\n\n"
+                " - 手动安装: 打开 QQ 安装包路径自行操作安装 (推荐手动安装)"
+                " - 静默安装: QQ 安装包自动安装到默认路径, 此过程无GUI显示, 请耐心等待安装完成"
+            ),
+        )
+        box.yesButton.setText(self.tr("手动安装"))
+        box.cancelButton.setText(self.tr("静默安装"))
 
-        if InstallationMessageBox(it(HomeWidget)).exec():
+        if box.exec():
             # True 为手动安装, 反之为静默安装
             self.process.setProgram(str(self.installExePath))
         else:
@@ -517,33 +528,3 @@ class QQDownloadCard(DownloadCardBase):
         )
         view = Flyout.make(share_view, self.shareButton, self)
         share_view.closed.connect(view.close)
-
-
-class InstallationMessageBox(MessageBoxBase):
-    """
-    ## 创建对话框询问用户是手动安装还是静默安装
-    """
-
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.titleLabel = SubtitleLabel(self.tr("Manual or automatic installation"), self)
-        self.contentsLabel = BodyLabel(
-            self.tr(
-                "Please click the button below to select the installation method\n\n"
-                "If it is a manual installation, the program will open the QQ installation package path\n"
-                "If it is an automatic installer, it will perform a silent installation (the installation "
-                "path cannot be specified, and the installation GUI will not be displayed, so please wait "
-                "patiently for the installation to complete)"
-            ),
-            self,
-        )
-        self.contentsLabel.setWordWrap(True)
-
-        # 将组件添加到布局中
-        self.viewLayout.addWidget(self.titleLabel)
-        self.viewLayout.addWidget(self.contentsLabel)
-
-        # 设置对话框
-        self.widget.setMinimumWidth(400)
-        self.yesButton.setText(self.tr("Manual installation"))
-        self.cancelButton.setText(self.tr("Silent installation"))

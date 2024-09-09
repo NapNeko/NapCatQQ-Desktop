@@ -3,17 +3,13 @@ import re
 
 import psutil
 from creart import it
-from PySide6.QtGui import QPixmap, QTextCursor
+from PySide6.QtGui import QTextCursor
 from PySide6.QtCore import Qt, Slot, QProcess
 from qfluentwidgets import (
-    BodyLabel,
     FluentIcon,
-    ImageLabel,
     PushButton,
     ToolButton,
-    SubtitleLabel,
     ToolTipFilter,
-    MessageBoxBase,
     SegmentedWidget,
     PrimaryPushButton,
     TransparentToolButton,
@@ -22,12 +18,12 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 from src.Ui.common import CodeEditor, LogHighlighter
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
 from src.Core.Utils.RunNapCat import create_process
+from src.Ui.common.message_box import AskBox
 from src.Core.Config.ConfigModel import Config
 from src.Core.Config.OperateConfig import delete_config, update_config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
-from src.Ui.common.message_box import AskBox
-from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
 
 
 class BotWidget(QWidget):

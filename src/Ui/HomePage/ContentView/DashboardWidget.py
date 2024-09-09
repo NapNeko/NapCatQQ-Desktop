@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
+from creart import it
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtCore import Qt, QSize
-from qfluentwidgets import BodyLabel, FluentIcon, TitleLabel, ToolButton, ToolTipFilter, MessageBoxBase, HyperlinkButton
+from PySide6.QtCore import Qt, Slot, QSize
+from qfluentwidgets import FluentIcon, ToolButton, ToolTipFilter
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 from src.Core.NetworkFunc import Urls
@@ -13,6 +14,7 @@ from src.Ui.common.InfoCard import (
     MemoryDashboard,
     NapCatVersionCard,
 )
+from src.Ui.common.message_box import HyperlinkBox
 
 
 class DashboardWidget(QWidget):
@@ -47,8 +49,8 @@ class DashboardWidget(QWidget):
 
         # 连接信号
         self.documentButton.clicked.connect(lambda: QDesktopServices.openUrl(Urls.NAPCATQQ_DOCUMENT.value))
-        self.reposButton.clicked.connect(lambda: SelectReposMsgBox(self.parent().parent()).exec())
-        self.feedbackButton.clicked.connect(lambda: SelectFeedbackMsgBox(self.parent().parent()).exec())
+        self.reposButton.clicked.connect(self._showSelectReposMsgBox)
+        self.feedbackButton.clicked.connect(self._showSelectFeedbackMsgBox)
 
         # 调用方法
         self._setToolTips()
@@ -102,74 +104,32 @@ class DashboardWidget(QWidget):
 
         self.setLayout(self.vBoxLayout)
 
+    @Slot()
+    def _showSelectReposMsgBox(self) -> None:
+        """显示选择打开哪个仓库页面"""
+        from src.Ui.MainWindow.Window import MainWindow
 
-class SelectReposMsgBox(MessageBoxBase):
-    """
-    ## 让用户选择打开哪个仓库
-    """
+        HyperlinkBox(
+            self.tr("查看仓库"),
+            self.tr("您可以点击下面的超链接按钮跳转到相应的仓库✨"),
+            [
+                {"name": self.tr("NapCatQQ 仓库"), "url": Urls.NAPCATQQ_REPO.value},
+                {"name": self.tr("NapCatQQ Desktop 仓库"), "url": Urls.NCD_REPO.value}
+            ],
+            it(MainWindow)
+        ).exec()
 
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent=parent)
-        # 创建标签
-        self.titleLabel = TitleLabel(self.tr("Please select ..."), self)
-        self.contentsLabel = BodyLabel(
-            self.tr("You can click the hyperlink button below to jump to the\ncorresponding warehouse"), self
-        )
+    @Slot()
+    def _showSelectFeedbackMsgBox(self) -> None:
+        """显示选择打开哪个仓库的 issue 页面"""
+        from src.Ui.MainWindow.Window import MainWindow
 
-        self.napcatReposButton = HyperlinkButton(
-            url=Urls.NAPCATQQ_REPO.value.toString(), text=self.tr("NapCatQQ Repo"), icon=FluentIcon.LINK, parent=self
-        )
-        self.NCDReposButton = HyperlinkButton(
-            url=Urls.NCD_REPO.value.toString(), text=self.tr("NapCatQQ Desktop Repo"), icon=FluentIcon.LINK, parent=self
-        )
-
-        # 添加到布局
-        self.viewLayout.addWidget(self.titleLabel)
-        self.viewLayout.addWidget(self.contentsLabel)
-        self.viewLayout.addWidget(self.napcatReposButton, 0, Qt.AlignmentFlag.AlignLeft)
-        self.viewLayout.addWidget(self.NCDReposButton, 0, Qt.AlignmentFlag.AlignLeft)
-
-        # 设置对话框
-        self.widget.setMinimumWidth(300)
-        self.cancelButton.hide()
-
-
-class SelectFeedbackMsgBox(MessageBoxBase):
-    """
-    ## 让用户选择打开哪个仓库
-    """
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent=parent)
-        # 创建标签
-        self.titleLabel = TitleLabel(self.tr("Please select ..."), self)
-        self.contentsLabel = BodyLabel(
-            self.tr(
-                "Is the problem you having with Desktop or NapCatQQ?\n"
-                "Please go to the corresponding repository to raise issues"
-            ),
-            self,
-        )
-
-        self.napcatIssuesButton = HyperlinkButton(
-            url=Urls.NAPCATQQ_ISSUES.value.toString(),
-            text=self.tr("NapCatQQ Issues"),
-            icon=FluentIcon.LINK,
-            parent=self,
-        )
-        self.NCDIssuesButton = HyperlinkButton(
-            url=Urls.NCD_ISSUES.value.toString(),
-            text=self.tr("NapCatQQ Desktop Issues"),
-            icon=FluentIcon.LINK,
-            parent=self,
-        )
-
-        # 添加到布局
-        self.viewLayout.addWidget(self.titleLabel)
-        self.viewLayout.addWidget(self.contentsLabel)
-        self.viewLayout.addWidget(self.napcatIssuesButton, 0, Qt.AlignmentFlag.AlignLeft)
-        self.viewLayout.addWidget(self.NCDIssuesButton, 0, Qt.AlignmentFlag.AlignLeft)
-
-        # 设置对话框
-        self.widget.setMinimumWidth(300)
-        self.cancelButton.hide()
+        HyperlinkBox(
+            self.tr("反馈渠道"),
+            self.tr("请确定您要反馈的问题✨"),
+            [
+                {"name": self.tr("NapCatQQ 的问题"), "url": Urls.NAPCATQQ_ISSUES.value},
+                {"name": self.tr("NapCatQQ Desktop 的问题"), "url": Urls.NCD_ISSUES.value}
+            ],
+            it(MainWindow)
+        ).exec()
