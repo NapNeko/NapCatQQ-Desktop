@@ -32,7 +32,6 @@ class TextInputBox(MessageBoxBase):
 
         ## 参数
             - placeholder_text LineEdit的占位符
-
         """
         super().__init__(parent=parent)
         # 创建控件
@@ -50,7 +49,14 @@ class TextInputBox(MessageBoxBase):
 
 
 class AskBox(MessageBoxBase):
-    """询问用户是否确认提示框"""
+    """
+    ##询问用户是否确认提示框
+    
+    ## 参数
+        - title: 消息框标题
+        - content: 消息框内容
+        - parent: 消息框父类
+    """
 
     def __init__(self, title: str, content: str, parent: "MainWindow") -> None:
         """初始化类, 创建必要控件"""
@@ -109,8 +115,9 @@ class HyperlinkBox(MessageBoxBase):
 
         ## 参数
             - title: 消息框标题
+            - content: 消息框内容
+            - hyperlinks: 显示的超链接内容
             - parent: 消息框父类
-            - image: 显示的图片内容
         """
         super().__init__(parent=parent)
 
