@@ -155,9 +155,8 @@ class UrlCard(ExpandSettingCard):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        box = AskBox(it(MainWindow), self.tr("确认操作"), self.tr(f"是否要删除此 URL？\n\n{item.url}"))
-        box.yesSignal.connect(lambda: self._removeUrl(item))
-        box.exec()
+        if AskBox(it(MainWindow), self.tr("确认操作"), self.tr(f"是否要删除此 URL？\n\n{item.url}")).exec():
+            self._removeUrl(item)
 
     def _removeUrl(self, item: UrlItem):
         """

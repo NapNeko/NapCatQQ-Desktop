@@ -52,9 +52,6 @@ class TextInputBox(MessageBoxBase):
 class AskBox(MessageBoxBase):
     """询问用户是否确认提示框"""
 
-    yesSignal = Signal()
-    cancelSignal = Signal()
-
     def __init__(self, parent: "MainWindow", title: str, content: str) -> None:
         """初始化类, 创建必要控件"""
         super().__init__(parent=parent)
@@ -68,10 +65,6 @@ class AskBox(MessageBoxBase):
         # 将组件添加到布局
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addWidget(self.contentLabel)
-
-        # 连接信号
-        self.yesButton.clicked.connect(self.yesSignal.emit)
-        self.cancelButton.clicked.connect(self.cancelSignal.emit)
 
 
 class ImageBox(MessageBoxBase):
