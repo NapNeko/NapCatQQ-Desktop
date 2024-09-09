@@ -7,7 +7,7 @@
 from typing import TYPE_CHECKING, Dict, List
 
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import Qt, QUrl
 from qfluentwidgets import (
     LineEdit,
     FluentIcon,
