@@ -22,11 +22,12 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 from src.Ui.common import CodeEditor, LogHighlighter
 from src.Ui.StyleSheet import StyleSheet
-from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Core.Utils.RunNapCat import create_process
 from src.Core.Config.ConfigModel import Config
-from src.Core.Config.OperateConfig import read_config, delete_config, update_config
+from src.Core.Config.OperateConfig import delete_config, update_config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
+from src.Ui.common.message_box import AskBox
+from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
 
 
 class BotWidget(QWidget):
@@ -241,7 +242,25 @@ class BotWidget(QWidget):
         """
         from src.Ui.MainWindow.Window import MainWindow
 
-        DeleteConfigMessageBox(self.isRun, self, it(MainWindow)).exec()
+        if self.isRun:
+            # 如果 NC 正在运行, 则提示停止运行后删除配置
+            warning_bar(self.tr("NapCat 还在运行, 请停止运行再进行操作"))
+            return
+
+        if AskBox(
+                it(MainWindow),
+                self.tr("确认删除"),
+                self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作")
+        ).exec():
+            # 询问用户是否确认删除, 确认删除执行删除操作
+            from src.Ui.BotListPage.BotListWidget import BotListWidget
+
+            if delete_config(self.config):
+                self.returnButton.clicked.emit()
+                it(BotListWidget).botList.updateList()
+                success_bar(self.tr(f"成功删除配置 {self.config.bot.QQID}({self.config.bot.name})"))
+            else:
+                error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
 
     @Slot()
     def _returnButtonSlot(self) -> None:
@@ -249,6 +268,7 @@ class BotWidget(QWidget):
         ## 返回列表按钮的槽函数
         """
         if self.view.currentWidget() in [self.botInfoPage, self.botSetupPage, self.botLogPage]:
+            # 判断当前处于哪个页面
             from src.Ui.BotListPage.BotListWidget import BotListWidget
 
             it(BotListWidget).view.setCurrentIndex(0)
@@ -329,86 +349,3 @@ class BotWidget(QWidget):
         self.vBoxLayout.addWidget(self.view)
 
         self.setLayout(self.vBoxLayout)
-
-
-class QRCodeMessageBox(MessageBoxBase):
-    """
-    ## 用于展示登录用的 QRCode
-    """
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent=parent)
-        self.titleLabel = SubtitleLabel(self.tr("Scan the QR code to log in"), self)
-        self.qrcodeLabel = ImageLabel(self)
-        self.qrcodePath = None
-
-        # 设置图片宽高
-        self.qrcodeLabel.setFixedSize(100, 100)
-
-        # 将组件添加到布局中
-        self.viewLayout.addWidget(self.titleLabel)
-        self.viewLayout.addWidget(self.qrcodeLabel, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        # 设置对话框
-        self.widget.setMinimumWidth(350)
-        self.yesButton.setText(self.tr("Refresh the QR code"))
-        self.yesButton.clicked.disconnect()
-        self.yesButton.clicked.connect(lambda: self.setQRCode(self.qrcodePath) if self.qrcodePath else None)
-
-    def setQRCode(self, qrcode_path: str) -> None:
-        qr_code = QPixmap(qrcode_path)
-        self.qrcodeLabel.setImage(qr_code)
-        self.qrcodePath = qrcode_path
-
-
-class DeleteConfigMessageBox(MessageBoxBase):
-    """
-    ## 删除机器人配置对话框
-    """
-
-    def __init__(self, is_run: bool, parent: BotWidget, page) -> None:
-        super().__init__(parent=page)
-        self.titleLabel = SubtitleLabel()
-        self.contentLabel = BodyLabel()
-
-        if is_run:
-            # 如果正在运行, 则提示停止运行
-            self.titleLabel.setText(self.tr("删除失败"))
-            self.contentLabel.setText(
-                self.tr("NapCat 当前正在运行，请停止运行再删除配置")
-            )
-            self.yesButton.setText(self.tr("停止 NapCat"))
-            self.yesButton.clicked.connect(lambda: parent.stopButton.click())
-        else:
-            # 不在运行则确认删除
-            self.titleLabel.setText(self.tr("确认删除"))
-            self.contentLabel.setText(
-                self.tr(
-                    f"你确定要删除 {parent.config.bot.QQID} 吗? \n\n"
-                    f"此操作无法撤消, 请谨慎操作"
-                )
-            )
-            self.yesButton.setText(self.tr("Confirm the deletion"))
-            self.yesButton.clicked.connect(lambda: self._deleteConfigSlot(parent))
-
-        # 将组件添加到布局中
-        self.viewLayout.addWidget(self.titleLabel)
-        self.viewLayout.addWidget(self.contentLabel)
-
-        # 设置对话框
-        self.widget.setMinimumWidth(350)
-
-    @Slot()
-    def _deleteConfigSlot(self, parent: BotWidget) -> None:
-        """
-        ## 执行删除配置
-            - 返回到列表, 删除配置并保存, 刷新列表
-        """
-        from src.Ui.BotListPage import BotListWidget
-
-        if delete_config(parent.config):
-            parent.returnButton.click()
-            it(BotListWidget).botList.updateList()
-            success_bar(self.tr(f"成功删除配置 {parent.config.bot.QQID}({parent.config.bot.name})"))
-        else:
-            error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
