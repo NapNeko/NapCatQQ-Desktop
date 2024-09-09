@@ -52,7 +52,7 @@ class TextInputBox(MessageBoxBase):
 class AskBox(MessageBoxBase):
     """询问用户是否确认提示框"""
 
-    def __init__(self, parent: "MainWindow", title: str, content: str) -> None:
+    def __init__(self, title: str, content: str, parent: "MainWindow") -> None:
         """初始化类, 创建必要控件"""
         super().__init__(parent=parent)
         # 创建控件
@@ -137,4 +137,3 @@ class HyperlinkBox(MessageBoxBase):
         for label in self.hyperlinkLabels:
             self.hyperlinkLayout.addWidget(label, 1, Qt.AlignmentFlag.AlignLeft)
         self.viewLayout.addLayout(self.hyperlinkLayout)
-            

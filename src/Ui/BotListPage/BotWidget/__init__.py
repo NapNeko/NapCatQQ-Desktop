@@ -244,9 +244,9 @@ class BotWidget(QWidget):
             return
 
         if AskBox(
-                it(MainWindow),
                 self.tr("确认删除"),
-                self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作")
+                self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
+                it(MainWindow)
         ).exec():
             # 询问用户是否确认删除, 确认删除执行删除操作
             from src.Ui.BotListPage.BotListWidget import BotListWidget
