@@ -121,9 +121,6 @@ class HyperlinkBox(MessageBoxBase):
         """
         super().__init__(parent=parent)
 
-        # 创建属性
-        self.hyperlinkLabels = []
-
         # 创建控件
         self.hyperlinkLayout = QVBoxLayout()
         self.titleLabel = SubtitleLabel(title, self)
@@ -131,8 +128,10 @@ class HyperlinkBox(MessageBoxBase):
 
         for link in hyperlinks:
             # 遍历列表添加到 hyperlinkLabels
-            self.hyperlinkLabels.append(
-                HyperlinkButton(link['url'].toString(), link['name'], self, FluentIcon.LINK)
+            self.hyperlinkLayout.addWidget(
+                HyperlinkButton(link['url'].toString(), link['name'], self, FluentIcon.LINK), 
+                1,
+                Qt.AlignmentFlag.AlignLeft
             )
 
         # 设置属性
@@ -141,6 +140,4 @@ class HyperlinkBox(MessageBoxBase):
         # 添加到布局
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addWidget(self.contentLabel)
-        for label in self.hyperlinkLabels:
-            self.hyperlinkLayout.addWidget(label, 1, Qt.AlignmentFlag.AlignLeft)
         self.viewLayout.addLayout(self.hyperlinkLayout)
