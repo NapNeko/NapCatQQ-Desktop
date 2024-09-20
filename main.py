@@ -21,6 +21,7 @@ if __name__ == "__main__":
     if not ctypes.windll.shell32.IsUserAnAdmin():
         logger.warning("非管理员模式启动, 尝试获取管理员权限")
         ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+        sys.exit()
 
     # 启动主程序
     from src.Core.Config import cfg
