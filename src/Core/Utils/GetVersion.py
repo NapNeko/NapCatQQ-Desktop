@@ -4,8 +4,8 @@ from abc import ABC
 from json import JSONDecodeError
 
 from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
+from PySide6.QtCore import QObject
 from loguru import logger
-from PySide6.QtCore import QUrl, QObject, QRegularExpression
 
 from src.Core import timer
 from src.Core.NetworkFunc import Urls, async_request
@@ -17,27 +17,23 @@ class GetVersion(QObject):
     ## 提供两个方法, 分别获取本地的 NapCat 和 QQ 的版本
     """
 
+
     def __init__(self) -> None:
         super().__init__()
-        # 创建属性
-        self.napcatLocalVersion: None | str = None
-        self.QQLocalVersion: None | str = None
-        self.napcatRemoteVersion: None | str = None
-        self.QQRemoteVersion: None | str = None
-        self.QQRemoteDownloadUrls: None | dict = None
-        self.napcatUpdateLog: None | str = None
+        # 定义属性
+        self.napcatLocalVersion = "Unkonw Version"
+        self.QQLocalVersion = "Unkonw Version"
+        self.napcatRemoteVersion = "Unkonw Version"
+        self.napcatUpdateLog = "Unkonw Log"
 
         # 调用方法
         self.getRemoteNapCatUpdate()
-        self.getQQDownloadUrl()
-        self.getRemoteQQVersion()
-
         self.getLocalNapCatVersion()
         self.getLocalQQVersion()
 
     def checkUpdate(self) -> dict | None:
         """
-        ## 检查 NapCat 是否有新版本, QQ暂时不支持检测(没有合理的下载指定版本的 api, 直接无脑最新版完事儿了)
+        ## 检查 NapCat 是否有新版本
         """
         if self.napcatRemoteVersion is None:
             # 如果获取不到远程版本, 则返回 None, Gui那边做ui处理
@@ -45,16 +41,16 @@ class GetVersion(QObject):
 
         return {
             "result": self.napcatRemoteVersion != self.napcatLocalVersion,
-            "localVersion": self.getLocalNapCatVersion,
+            "localVersion": self.getLocalNapCatVersion(),
             "remoteVersion": self.napcatRemoteVersion,
         }
 
-    @timer(180_000)
+    @timer(86_400_000)
     @async_request(Urls.NAPCATQQ_REPO_API.value)
     def getRemoteNapCatUpdate(self, reply) -> None:
         """
         ## 获取远程 NapCat 的版本信息和更新日志
-            - 每 3 分钟读取一次并保存到变量中
+            - 每天读取一次并保存到变量中
         """
         if reply is None:
             # 如果请求失败则放弃覆盖变量
@@ -66,44 +62,6 @@ class GetVersion(QObject):
         except JSONDecodeError:
             logger.error(f"Parsing Json errors, Sending the wrong string:[{reply}]")
             return
-
-    @timer(180_000)
-    @async_request(Urls.QQ_WIN_DOWNLOAD.value)
-    def getRemoteQQVersion(self, reply) -> None:
-        """
-        ## 获取远程 QQ 版本版本号
-            - 每 3 分钟读取一次并保存到变量中
-        """
-        if reply is None:
-            # 如果请求失败则放弃覆盖变量
-            return
-
-        # 定义正则表达式并匹配
-        version = QRegularExpression(r'"version":\s*"([^"]+)"').match(reply).captured(1)
-        self.QQRemoteVersion = version if version else None
-
-    @timer(180_000)
-    @async_request(Urls.QQ_WIN_DOWNLOAD.value)
-    def getQQDownloadUrl(self, reply) -> None:
-        """
-        ## 获取最新QQ版本下载连接
-            - 每 3 分钟读取一次并保存到变量中
-        """
-        if reply is None:
-            # 如果请求失败则放弃覆盖变量
-            return
-
-        # 定义正则表达式并匹配
-        match_x64 = QRegularExpression(r'"ntDownloadX64Url":\s*"([^"]+)"').match(reply).captured(1)
-        match_arm = QRegularExpression(r'"ntDownloadARMUrl":\s*"([^"]+)"').match(reply).captured(1)
-
-        # 提取所需的下载链接
-        self.QQRemoteDownloadUrls = {
-            "x86_64": QUrl(match_x64),
-            "AMD64": QUrl(match_x64),
-            "ARM64": QUrl(match_arm),
-            "aarch64": QUrl(match_arm),
-        }
 
     @timer(3000)
     def getLocalNapCatVersion(self) -> None:
@@ -158,7 +116,7 @@ class GetVersionClassCreator(AbstractCreator, ABC):
 
     # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
     @staticmethod
-    def create(create_type: [GetVersion]) -> GetVersion:
+    def create(create_type: list[GetVersion]) -> GetVersion:
         return GetVersion()
 
 
