@@ -18,6 +18,7 @@ if __name__ == "__main__":
     # 调整程序 log 输出
     stdout()
     # 检查是否以管理员模式启动, 非管理员模式尝试获取管理员权限
+    # 获取管理员权限成功后退出原有进程
     if not ctypes.windll.shell32.IsUserAnAdmin():
         logger.warning("非管理员模式启动, 尝试获取管理员权限")
         ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
