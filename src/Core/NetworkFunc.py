@@ -31,7 +31,7 @@ class Urls(Enum):
 
     # QQ 相关
     QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")
-    QQ_WIN_DOWNLOAD = QUrl("https://dldir1.qq.com/qqfile/qq/QQNT/b07cb1a5/QQ9.9.15.27597_x64.exe")
+    QQ_WIN_DOWNLOAD = QUrl("https://dldir1.qq.com/qqfile/qq/QQNT/0f14ef6e/QQ9.9.15.28131_x64.exe")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
 
 
@@ -60,7 +60,7 @@ class NetworkFuncClassCreator(AbstractCreator, ABC):
 
     # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
     @staticmethod
-    def create(create_type: [NetworkFunc]) -> NetworkFunc:
+    def create(create_type: list[NetworkFunc]) -> NetworkFunc:
         return NetworkFunc()
 
 

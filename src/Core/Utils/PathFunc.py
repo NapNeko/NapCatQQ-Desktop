@@ -6,7 +6,6 @@ from pathlib import Path
 from creart import add_creator, exists_module
 from loguru import logger
 from creart.creator import AbstractCreator, CreateTargetInfo
-from PySide6.QtCore import QOperatingSystemVersion
 
 
 class PathFunc:
@@ -82,7 +81,7 @@ class PathFuncClassCreator(AbstractCreator, ABC):
 
     # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
     @staticmethod
-    def create(create_type: [PathFunc]) -> PathFunc:
+    def create(create_type: list[PathFunc]) -> PathFunc:
         return PathFunc()
 
 
