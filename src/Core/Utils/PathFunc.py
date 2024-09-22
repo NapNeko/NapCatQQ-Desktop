@@ -56,9 +56,9 @@ class PathFunc:
         try:
             key = winreg.OpenKey(
                 key=winreg.HKEY_LOCAL_MACHINE,
-                sub_key=r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\QQ",
+                sub_key=r"SOFTWARE\WOW6432Node\Tencent\QQNT",
             )
-            return Path(winreg.QueryValueEx(key, "UninstallString")[0]).parent
+            return Path(winreg.QueryValueEx(key, "Install")[0])
         except FileNotFoundError:
             return None
 
