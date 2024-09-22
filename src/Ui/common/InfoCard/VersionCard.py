@@ -181,15 +181,13 @@ class QQVersionCard(VersionCardBase):
         """
         ## 获取本地版本
         """
-        version = it(GetVersion).QQLocalVersion
-
-        if version is None:
+        if (version := it(GetVersion).getLocalQQVersion()) is None:
             # 如果没有获取到文件就会返回None, 也就代表QQ没有安装
             self.setToolTip(self.tr("没有找到 QQ 路径，请安装"))
             self.errorBadge.show()
             self.isInstall = False
-
-        self.isInstall = True
+        else:
+            self.isInstall = True
 
         return version if version else "Unknown version"
 

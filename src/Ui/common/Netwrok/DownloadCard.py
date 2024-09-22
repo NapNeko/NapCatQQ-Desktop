@@ -359,7 +359,7 @@ class QQDownloadCard(DownloadCardBase):
 
         # 创建控件
         self.downloader = QQDownloader(Urls.QQ_WIN_DOWNLOAD.value, it(PathFunc).tmp_path)
-        self.versionWidget = InfoWidget(self.tr("Version"), self.tr("9.9.15-27597"), self)
+        self.versionWidget = InfoWidget(self.tr("Version"), self.tr("9.9.15-28131"), self)
         self.platformWidget = InfoWidget(self.tr("Platform"), cfg.get(cfg.PlatformType), self)
         self.systemWidget = InfoWidget(self.tr("System"), cfg.get(cfg.SystemType), self)
 
@@ -411,7 +411,7 @@ class QQDownloadCard(DownloadCardBase):
         """
         ## 检查是否安装
         """
-        if it(GetVersion).QQLocalVersion is not None:
+        if it(GetVersion).getLocalQQVersion() is not None:
             # 如果获取得到版本则表示已安装
             self.openInstallPathButton.clicked.connect(
                 lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(it(PathFunc).getQQPath())))
