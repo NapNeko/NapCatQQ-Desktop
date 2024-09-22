@@ -21,10 +21,9 @@ class GetVersion(QObject):
     def __init__(self) -> None:
         super().__init__()
         # 定义属性
-        self.napcatLocalVersion = "Unkonw Version"
-        self.QQLocalVersion = "Unkonw Version"
-        self.napcatRemoteVersion = "Unkonw Version"
-        self.napcatUpdateLog = "Unkonw Log"
+        self.napcatLocalVersion = None
+        self.napcatRemoteVersion = None
+        self.napcatUpdateLog = None
 
         # 调用方法
         self.getRemoteNapCatUpdate()
@@ -80,28 +79,21 @@ class GetVersion(QObject):
             # 文件不存在则返回 None
             self.napcatLocalVersion = None
 
-    @timer(3000)
-    def getLocalQQVersion(self) -> None:
+    def getLocalQQVersion(self) -> str | None:
         """
         ## 获取本地 QQ 的版本信息
-            - 每 3 秒读取一次并保存到变量中
         """
         try:
-            # 检查 QQPath
             if (qq_path := it(PathFunc).getQQPath()) is None:
+                # 检查 QQ 目录是否存在
                 return None
-            # 获取 package.json 路径并读取
-            package_file_path = qq_path / "resources/app/package.json"
-            with open(str(package_file_path), "r", encoding="utf-8") as f:
-                # 读取参数并返回版本信息
-                package = json.loads(f.read())
-            # 拼接字符串返回版本信息
-            platform = "Windows" if package["platform"] == "win32" else "Linux"
-            self.QQLocalVersion = f"{platform} {package['version']}"
-
+            
+            with open(str(qq_path / "versions" / "config.json"), "r", encoding='utf-8') as file:
+                # 读取 config.json 文件获取版本信息
+                return json.load(file)["curVersion"]
         except FileNotFoundError:
             # 文件不存在则返回 None
-            self.QQLocalVersion = None
+            return None
 
 
 class GetVersionClassCreator(AbstractCreator, ABC):
