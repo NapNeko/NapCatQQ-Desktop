@@ -58,7 +58,7 @@ def stdout() -> None:
         log_path.mkdir(parents=True, exist_ok=True)
 
     # 自定义格式化器
-    custom_format = "<level>{time:YYYY-MM-DD HH:mm:ss}</level> | <level>{level}</level> | <level>{message}</level>"
+    custom_format = "<level>{time:YYYY-MM-DD HH:mm:ss}</level> | <level>{level: <8}</level> | <level>{message}</level>"
     # 移除原有过滤器
     logger.remove()
     # 添加自定义的 logger
