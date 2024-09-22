@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import sys
+
 from typing import Any, Callable
 from pathlib import Path
 from functools import wraps
@@ -56,8 +58,9 @@ def stdout() -> None:
         log_path.mkdir(parents=True, exist_ok=True)
 
     # 自定义格式化器
-    custom_format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {message}"
-    # 添加自定义的 level
-    logger.level("FIX", no=30, color="<yellow>")
+    custom_format = "<level>{time:YYYY-MM-DD HH:mm:ss}</level> | <level>{level}</level> | <level>{message}</level>"
+    # 移除原有过滤器
+    logger.remove()
     # 添加自定义的 logger
-    logger.add(all_log_path, level="DEBUG", format=custom_format)
+    logger.add(sys.stderr, level="INFO", format=custom_format)
+    logger.add(all_log_path, level="INFO", format=custom_format)
