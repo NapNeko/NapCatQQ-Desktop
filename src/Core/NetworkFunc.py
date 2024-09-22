@@ -23,7 +23,7 @@ class Urls(Enum):
     # NapCat 相关地址
     NAPCATQQ_REPO = QUrl("https://github.com/NapNeko/NapCatQQ")
     NAPCATQQ_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ/issues")
-    NAPCATQQ_REPO_API = QUrl("https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest")
+    NAPCATQQ_REPO_API = QUrl("https://nclatest.znin.net")
     NAPCATQQ_DOCUMENT = QUrl("https://napneko.github.io/")
 
     # 直接写入下载地址, 不请求 API 获取, 期望达到节省时间的目的
