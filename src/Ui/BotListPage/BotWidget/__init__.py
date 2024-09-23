@@ -20,7 +20,7 @@ from src.Ui.common import CodeEditor, LogHighlighter
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
 from src.Core.Utils.RunNapCat import create_process
-from src.Ui.common.message_box import AskBox
+from src.Ui.common.message_box import AskBox, ImageBox
 from src.Core.Config.ConfigModel import Config
 from src.Core.Config.OperateConfig import delete_config, update_config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
@@ -148,10 +148,13 @@ class BotWidget(QWidget):
         """
         ## 启动按钮槽函数
         """
+        # 获取主框架
+        from src.Ui.MainWindow import MainWindow
+
         # 创建组件
         self.process = create_process(self.config)
         self.highlighter = LogHighlighter(self.botLogPage.document())
-        self.qrcodeMsgBox = QRCodeMessageBox(self.parent().parent())
+        self.qrcodeMsgBox = ImageBox(self.tr("QR Code"), "", it(MainWindow))
 
         # 设置组件
         self.botLogPage.clear()

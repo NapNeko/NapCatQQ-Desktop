@@ -22,7 +22,7 @@ def create_process(config: Config) -> QProcess:
 
     # 配置环境变量
     env = QProcess.systemEnvironment()
-    env.append(f"NAPCAT_PATCH_PATH={it(PathFunc).getNapCatPath() / 'patchNapCat.js'}")
+    env.append(f"NAPCAT_PATCH_PACKAGE={it(PathFunc).getNapCatPath() / 'qqnt.json'}")
     env.append(f"NAPCAT_LOAD_PATH={it(PathFunc).getNapCatPath() / 'loadNapCat.js'}")
     env.append(f"NAPCAT_INJECT_PATH={it(PathFunc).getNapCatPath() / 'NapCatWinBootHook.dll'}")
     env.append(f"NAPCAT_LAUNCHER_PATH={it(PathFunc).getNapCatPath() / 'NapCatWinBootMain.exe'}")
