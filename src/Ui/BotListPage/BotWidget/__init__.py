@@ -57,6 +57,12 @@ class BotWidget(QWidget):
             - routeKey 使用 QQ号 作为前缀保证该 pivot 的 objectName 全局唯一
         """
         self.pivot = SegmentedWidget(self)
+
+        self.pivot.addItem(
+            routeKey=self.botSetupPage.objectName(),
+            text=self.tr("Bot Setup"),
+            onClick=lambda: self.view.setCurrentWidget(self.botSetupPage),
+        )
         self.pivot.addItem(
             routeKey=self.botLogPage.objectName(),
             text=self.tr("Bot Log"),
@@ -67,12 +73,8 @@ class BotWidget(QWidget):
         #     text=self.tr("Bot info"),
         #     onClick=lambda: self.view.setCurrentWidget(self.botInfoPage)
         # )
-        self.pivot.addItem(
-            routeKey=self.botSetupPage.objectName(),
-            text=self.tr("Bot Setup"),
-            onClick=lambda: self.view.setCurrentWidget(self.botSetupPage),
-        )
-        self.pivot.setCurrentItem(self.botLogPage.objectName())
+
+        self.pivot.setCurrentItem(self.botSetupPage.objectName())
         self.pivot.setMaximumWidth(300)
 
     def _createView(self) -> None:
@@ -95,7 +97,7 @@ class BotWidget(QWidget):
         self.view.addWidget(self.botSetupPage)
         self.view.addWidget(self.botLogPage)
         self.view.setObjectName("BotView")
-        self.view.setCurrentWidget(self.botLogPage)
+        self.view.setCurrentWidget(self.botSetupPage)
         self.view.currentChanged.connect(self._pivotSlot)
 
     def _createButton(self) -> None:
@@ -186,7 +188,7 @@ class BotWidget(QWidget):
 
         self.isRun = False
         self.isLogin = False
-        self.view.setCurrentWidget(self.botLogPage)
+        self.view.setCurrentWidget(self.botSetupPage)
         self.showQRCodeButton.hide()
 
     @Slot()
