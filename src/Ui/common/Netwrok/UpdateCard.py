@@ -178,7 +178,7 @@ class NapCatUpdateCard(UpdateCardBase):
         self.versionWidget.vBoxLayout.setContentsMargins(0, 0, 8, 0)
 
         # 调用方法
-        self._onTimer()
+        self.checkForUpdates()
         self._setLayout()
 
     @Slot()
@@ -233,20 +233,13 @@ class NapCatUpdateCard(UpdateCardBase):
         """
         Flyout.make(UpdateFlyoutView(self._log), self.updateLogButton, self, aniType=FlyoutAnimationType.DROP_DOWN)
 
-    @timer(10_000, True)
-    def _onTimer(self):
-        """
-        ## 延时启动计时器, 等待用于等待网络请求
-        """
-        self.checkForUpdates()
-
     @timer(86_400_000)
     def checkForUpdates(self):
         """
         ## 检查是否有更新
         """
-        local_version = it(GetVersion).napcatLocalVersion
-        remote_version = it(GetVersion).napcatRemoteVersion
+        local_version = it(GetVersion).getLocalNapCatVersion()
+        remote_version = it(GetVersion).getRemoteNapCatVersion()
 
         if not local_version or not remote_version:
             # 确保两个都获取到的都不是 None
@@ -258,7 +251,7 @@ class NapCatUpdateCard(UpdateCardBase):
             return
 
         self.versionWidget.setText(remote_version)
-        self._log = it(GetVersion).napcatUpdateLog
+        self._log = ""
 
         if local_version == remote_version:
             self.latestVersionLabel.setText(self.tr("It's already the latest version"))

@@ -188,29 +188,22 @@ class NapCatDownloadCard(DownloadCardBase):
         self.versionWidget.vBoxLayout.setContentsMargins(0, 0, 8, 0)
 
         self.checkInstall()
-        self._setLayout()
-        self._onTimer()
-
-    @timer(10_000, True)
-    def _onTimer(self):
-        """
-        ## 延时启动计时器, 等待用于等待网络请求
-        """
         self.updateVersion()
-
+        self._setLayout()
+        
     @timer(86_400_000)
     def updateVersion(self):
         """
         ## 更新显示版本和下载器所下载的版本url
         """
-        self.versionWidget.setValue(it(GetVersion).napcatRemoteVersion)
+        self.versionWidget.setValue(it(GetVersion).getRemoteNapCatVersion())
 
     @timer(3000)
     def checkInstall(self) -> None:
         """
         ## 检查是否安装
         """
-        if it(GetVersion).napcatLocalVersion is not None:
+        if it(GetVersion).getLocalNapCatVersion() is not None:
             self.installButton.hide()
             self.openInstallPathButton.show()
             self.isInstall = True

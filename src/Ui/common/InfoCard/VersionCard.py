@@ -84,16 +84,9 @@ class NapCatVersionCard(VersionCardBase):
         self.isInstall = False  # 检查是否有安装 NapCat 的标记, False 表示没有安装
         # 启动时触发一次检查更新
         self.getLocalVersion()
-        self._onTimer()
-
-    @timer(10_000, True)
-    def _onTimer(self):
-        """
-        ## 延时启动计时器, 等待用于等待网络请求
-        """
         self.checkUpdates()
 
-    @timer(3000)
+    @timer(900_000)
     def checkUpdates(self) -> None:
         """
         ## 检查更新逻辑
@@ -125,7 +118,7 @@ class NapCatVersionCard(VersionCardBase):
         """
         ## 获取本地版本
         """
-        if (version := it(GetVersion).napcatLocalVersion) is None:
+        if (version := it(GetVersion).getLocalNapCatVersion()) is None:
             self.isInstall = False
             self.contentsLabel.setText("Unknown version")
             self.setToolTip(self.tr("您还没有安装 NapCat，点击这里进入安装页面"))
@@ -133,6 +126,7 @@ class NapCatVersionCard(VersionCardBase):
         else:
             self.isInstall = True
             self.setToolTip("")
+            self.errorBadge.hide()
             self.contentsLabel.setText(version)
 
     def mousePressEvent(self, event):
