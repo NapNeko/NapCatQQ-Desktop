@@ -146,7 +146,7 @@ class NapCatVersionCard(VersionCardBase):
             # 如果有更新则跳转到更新页面
             from src.Ui.MainWindow.Window import MainWindow
 
-            it(MainWindow).update_widget_button.click()
+            it(MainWindow).unit_widget_button.click()
 
     def enterEvent(self, event):
         """

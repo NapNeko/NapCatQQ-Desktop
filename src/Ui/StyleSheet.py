@@ -13,7 +13,7 @@ class StyleSheet(StyleSheetBase, Enum):
     ADD_WIDGET = "add_widget"
     BOT_LIST_WIDGET = "bot_list_widget"
     BOT_WIDGET = "bot_widget"
-    UPDATE_WIDGET = "update_widget"
+    UNIT_WIDGET = "unit_widget"
 
     # common
     UPDATE_LOG_CARD = "update_log_card"

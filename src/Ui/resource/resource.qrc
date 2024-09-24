@@ -42,8 +42,8 @@
         <file>qss/light/bot_list_widget.qss</file>
         <file>qss/dark/bot_widget.qss</file>
         <file>qss/light/bot_widget.qss</file>
-        <file>qss/dark/update_widget.qss</file>
-        <file>qss/light/update_widget.qss</file>
+        <file>qss/dark/unit_widget.qss</file>
+        <file>qss/light/unit_widget.qss</file>
 
         <file>qss/dark/update_log_card.qss</file>
         <file>qss/light/update_log_card.qss</file>

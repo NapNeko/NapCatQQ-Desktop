@@ -26,7 +26,7 @@ from src.Ui.AddPage import AddWidget
 from src.Ui.HomePage import HomeWidget
 from src.Ui.resource import resource
 from src.Ui.SetupPage import SetupWidget
-from src.Ui.UpdatePage import UpdateWidget
+from src.Ui.UnitPage import UnitWidget
 from src.Ui.BotListPage import BotListWidget
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
@@ -40,7 +40,7 @@ class MainWindow(MSFluentWindow):
     def __init__(self) -> None:
         super().__init__()
 
-        self.update_widget: Optional[UpdateWidget] = None
+        self.unit_widget: Optional[UnitWidget] = None
         self.splashScreen: Optional[SplashScreen] = None
         self.setup_widget: Optional[SetupWidget] = None
         self.add_widget: Optional[AddWidget] = None
@@ -48,7 +48,7 @@ class MainWindow(MSFluentWindow):
         self.home_widget: Optional[HomeWidget] = None
 
         self.fix_widget_button: Optional[NavigationBarPushButton] = None
-        self.update_widget_button: Optional[NavigationBarPushButton] = None
+        self.unit_widget_button: Optional[NavigationBarPushButton] = None
         self.home_widget_button: Optional[NavigationBarPushButton] = None
         self.add_widget_button: Optional[NavigationBarPushButton] = None
         self.bot_list_widget_button: Optional[NavigationBarPushButton] = None
@@ -97,7 +97,7 @@ class MainWindow(MSFluentWindow):
         self.setup_widget = it(SetupWidget).initialize(self)
         self.add_widget = it(AddWidget).initialize(self)
         self.bot_list_widget = it(BotListWidget).initialize(self)
-        self.update_widget = it(UpdateWidget).initialize(self)
+        self.unit_widget = it(UnitWidget).initialize(self)
         self.home_widget = it(HomeWidget).initialize(self)
 
         # 添加子页面
@@ -111,19 +111,19 @@ class MainWindow(MSFluentWindow):
         self.add_widget_button = self.addSubInterface(
             interface=self.add_widget,
             icon=FluentIcon.ADD_TO,
-            text=self.tr("添加机器人"),
+            text=self.tr("添加"),
             position=NavigationItemPosition.TOP,
         )
         self.bot_list_widget_button = self.addSubInterface(
             interface=self.bot_list_widget,
             icon=FluentIcon.MENU,
-            text=self.tr("机器人列表"),
+            text=self.tr("列表"),
             position=NavigationItemPosition.TOP,
         )
-        self.update_widget_button = self.addSubInterface(
-            interface=self.update_widget,
-            icon=FluentIcon.UPDATE,
-            text=self.tr("更新"),
+        self.unit_widget_button = self.addSubInterface(
+            interface=self.unit_widget,
+            icon=FluentIcon.EMOJI_TAB_SYMBOLS,
+            text=self.tr("组件"),
             position=NavigationItemPosition.BOTTOM,
         )
         self.setup_widget_button = self.addSubInterface(
