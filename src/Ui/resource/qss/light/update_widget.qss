@@ -1,0 +1,23 @@
+UpdateWidget,
+UpdateTopCard,
+ScrollArea,
+#UpdateView {
+    background: transparent;
+    border-color: transparent;
+}
+
+ScrollArea,
+NapCatPage,
+QQPage,
+NCDPage,
+#BotWidgetView,
+#ConnectWidgetView,
+#AdvanceWidgetView {
+    background: transparent;
+    border: none;
+}
+
+UpdateWidget {
+    border-top-left-radius: 16px;
+}
+
