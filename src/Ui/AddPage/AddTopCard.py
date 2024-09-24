@@ -50,8 +50,8 @@ class AddTopCard(QWidget):
 
     def _createButton(self) -> None:
         """构建 Button 并配置"""
-        self.clearConfigButton = PushButton(icon=FluentIcon.DELETE, text=self.tr("Clear config"))
-        self.psPushButton = PrimaryPushButton(icon=FluentIcon.ADD, text=self.tr("Add to bot list"))
+        self.clearConfigButton = PushButton(icon=FluentIcon.DELETE, text=self.tr("清除配置"))
+        self.psPushButton = PrimaryPushButton(icon=FluentIcon.ADD, text=self.tr("添加到机器人列表"))
 
     def _setLayout(self) -> None:
         """
