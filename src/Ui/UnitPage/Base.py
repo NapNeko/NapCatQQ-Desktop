@@ -6,7 +6,7 @@ import re
 from enum import Enum
 from tkinter import Image
 
-from PySide6.QtGui import QFont, QDesktopServices
+from PySide6.QtGui import QFont, QDesktopServices, QPixmap, QImage
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout
 from qfluentwidgets import (
@@ -41,7 +41,6 @@ class Status(Enum):
 
     # 更新状态
     UPDATE = 2
-    NOUPDATE = 3
 
 
 class PageBase(ScrollArea):
@@ -71,13 +70,20 @@ class DisplayCard(SimpleCardWidget):
     ## 用于左侧的介绍卡片
     """
 
+    # 按钮显示标识符
+    button_visibility = {
+        Status.INSTALL: (False, False, True),
+        Status.UNINSTALLED: (True, False, False),
+        Status.UPDATE: (False, True, False)
+    }
+
     def __init__(self, parent) -> None:
         super().__init__(parent)
 
         # 创建控件
         self.iconLabel = ImageLabel(":/Global/logo.png", self)
-        self.nameLabel = TitleLabel("NapCatQQ", self)
-        self.hyperLabel = HyperlinkLabel("仓库地址", self)
+        self.nameLabel = TitleLabel("Unknown", self)
+        self.hyperLabel = HyperlinkLabel("Unknown", self)
 
         self.installButton = PrimaryPushButton(self.tr("安装"), self)
         self.updateButton = PrimaryPushButton(self.tr("更新"), self)
@@ -117,6 +123,26 @@ class DisplayCard(SimpleCardWidget):
         self.vBoxLayout.addStretch(3)
 
         self.setLayout(self.vBoxLayout)
+
+    def setIcon(self, icon: str | QPixmap | QImage) -> None:
+        self.iconLabel.setImage(icon)
+
+    def setName(self, name: str) -> None:
+        self.nameLabel.setText(name)
+
+    def setHyperLabelName(self, name: str) -> None:
+        self.hyperLabel.setText(name)
+
+    def setHyperLabelUrl(self, url: str | QUrl) -> None:
+        self.hyperLabel.setUrl(url)
+
+    def switchButton(self, status: Status) -> None:
+        """
+        ## 切换按钮
+        """
+        self.installButton.setVisible(self.button_visibility[status][0])
+        self.updateButton.setVisible(self.button_visibility[status][1])
+        self.openFolderButton.setVisible(self.button_visibility[status][2])
 
 
 class UpdateLogCard(HeaderCardWidget):
