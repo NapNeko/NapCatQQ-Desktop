@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QFontDatabase, QTextCharFormat, QSyntaxHighlighter
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QFontDatabase, QTextCharFormat, QSyntaxHighlighter, QMouseEvent
 from PySide6.QtCore import Qt, Slot, QRect, QSize, QRectF, QRegularExpression
-from qfluentwidgets import PlainTextEdit
-from PySide6.QtWidgets import QWidget
+from qfluentwidgets import PlainTextEdit, SmoothScrollDelegate, setFont
+from qfluentwidgets.components.widgets.menu import TextEditMenu
+from PySide6.QtWidgets import QWidget, QTextEdit, QTextBrowser
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QUrl
 
 
 class CodeEditor(PlainTextEdit):
@@ -100,6 +103,29 @@ class CodeEditor(PlainTextEdit):
 
         if rect.contains(self.viewport().rect()):
             self.update_line_number_area_width(0)
+
+
+class UpdateLogEdit(QTextBrowser):
+    """
+    ## 更新日志页面使用的透明文本框
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.scrollDelegate = SmoothScrollDelegate(self)
+        self.setReadOnly(True)
+        self.setOpenExternalLinks(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        setFont(self)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.anchorAt(event.pos()):
+            QDesktopServices.openUrl(QUrl(self.anchorAt(event.pos())))
+        else:
+            super().mousePressEvent(event)
+
+    def contextMenuEvent(self, e):
+        menu = TextEditMenu(self)
+        menu.exec(e.globalPos(), ani=True)
 
 
 class LineNumberArea(QWidget):
