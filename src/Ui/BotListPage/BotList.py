@@ -51,8 +51,7 @@ class BotList(ScrollArea):
         ## 更新机器人列表
         """
 
-        if not (bot_configs := read_config()):
-            info_bar(self.tr("您看起来并没有添加机器人 {{{(>_<)}}}"))
+        if not (bot_configs := read_config()) and not self.botCardList:
             return
 
         if not self.botCardList:
