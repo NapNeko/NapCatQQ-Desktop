@@ -11,7 +11,7 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.UnitPage.NCDPage import NCDPage
 from src.Ui.UnitPage.NapCatPage import NapCatPage
 from src.Ui.UnitPage.QQPage import QQPage
-from src.Ui.UnitPage.UpdateTopCard import UpdateTopCard
+from src.Ui.UnitPage.top import TopWidget
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
@@ -22,7 +22,7 @@ class UnitWidget(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.view: Optional[QStackedWidget] = None
-        self.topCard: Optional[UpdateTopCard] = None
+        self.topCard: Optional[TopWidget] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
 
     def initialize(self, parent: "MainWindow") -> Self:
@@ -31,7 +31,7 @@ class UnitWidget(QWidget):
         """
         # 创建布局和控件
         self.vBoxLayout = QVBoxLayout(self)
-        self.topCard = UpdateTopCard(self)
+        self.topCard = TopWidget(self)
         self._createView()
 
         # 调用方法

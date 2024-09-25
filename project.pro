@@ -53,7 +53,7 @@ SOURCES += src/Core/BeginnerGuidance.py \
            src/Ui/HomePage/ContentView/__init__.py \
            src/Ui/HomePage/DownloadView/DownloadTopCard.py \
            src/Ui/HomePage/DownloadView/__init__.py \
-           src/Ui/HomePage/UpdateView/UpdateTopCard.py \
+           src/Ui/HomePage/UpdateView/TopWidget.py \
            src/Ui/HomePage/UpdateView/__init__.py \
            src/Ui/MainWindow/TitleBar.py \
            src/Ui/MainWindow/Window.py \

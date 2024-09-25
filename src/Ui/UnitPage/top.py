@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import CaptionLabel, TitleLabel, SegmentedWidget, PrimaryPushButton, FluentIcon
 
 
-class UpdateTopCard(QWidget):
+class TopWidget(QWidget):
     """
     ## DownloadViewWidget 顶部展示的 InputCard
     """
