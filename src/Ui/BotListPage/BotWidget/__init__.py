@@ -175,7 +175,7 @@ class BotWidget(QWidget):
         self.rebootButton.setVisible(True)
 
         # 显示提示
-        info_bar(self.tr("已执行启动命令, 如果长时间没有输, 请前往 设置 > log 查看日志"))
+        info_bar(self.tr("已执行启动命令, 如果长时间没有输, 请查看日志"))
 
     @Slot()
     def _stopButtonSlot(self) -> None:
@@ -194,7 +194,7 @@ class BotWidget(QWidget):
     @Slot()
     def _rebootButtonSlot(self) -> None:
         """
-        ## 重启机器人, 直接调用函数吧
+        ## 重启机器人, 直接调用函数
         """
         self._stopButtonSlot()
         self._runButtonSlot()
