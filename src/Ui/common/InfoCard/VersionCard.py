@@ -80,8 +80,6 @@ class NapCatVersionCard(VersionCardBase):
 
     def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.LOGO, "NapCat Version", "Unknown Version", parent)
-        self.updateSate = False  # 是否有更新标记
-        self.isInstall = False  # 检查是否有安装 NapCat 的标记, False 表示没有安装
         # 启动时触发一次检查更新
         self.getLocalVersion()
         self.checkUpdates()
@@ -91,40 +89,35 @@ class NapCatVersionCard(VersionCardBase):
         """
         ## 检查更新逻辑
         """
-        if not self.isInstall:
+        if (local_ver := it(GetVersion).getLocalNapCatVersion()) is None:
             # 如果本地没有安装 NapCat 则跳过本次检查
-            self.updateSate = False
             return
 
-        if (result := it(GetVersion).checkUpdate()) is None:
+        if (remote_ver := it(GetVersion).getRemoteNapCatVersion()) is None:
             # 如果返回了 None 则代表获取不到远程版本, 添加错误提示
             self.setToolTip(self.tr("无法检查更新, 请检查您的网络连接"))
             self.errorBadge.show()
-            self.updateSate = False
             return
         else:
             self.errorBadge.hide()
 
-        if result["result"]:
+        if local_ver != remote_ver:
             # 如果结果为 True 则代表有更新, 添加更新提示
-            self.setToolTip(self.tr(f"发现新版本({result['remoteVersion']}), 请及时更新"))
+            self.setToolTip(self.tr(f"发现新版本({remote_ver}), 请及时更新"))
             self.warningBadge.show()
-            self.updateSate = True
         else:
             self.warningBadge.hide()
 
-    @timer(3000)
+    @timer(10_000)
     def getLocalVersion(self) -> None:
         """
         ## 获取本地版本
         """
         if (version := it(GetVersion).getLocalNapCatVersion()) is None:
-            self.isInstall = False
             self.contentsLabel.setText("Unknown version")
             self.setToolTip(self.tr("您还没有安装 NapCat，点击这里进入安装页面"))
             self.errorBadge.show()
         else:
-            self.isInstall = True
             self.setToolTip("")
             self.errorBadge.hide()
             self.contentsLabel.setText(version)
@@ -134,29 +127,18 @@ class NapCatVersionCard(VersionCardBase):
         ## 重写事件以控制自身点击事件
         """
         super().mousePressEvent(event)
-
-        if not self.isInstall:
-            # 如果没有安装则跳转到下载页面
-            from src.Ui.HomePage.Home import HomeWidget
-
-            it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
-            return
-
-        if self.updateSate:
-            # 如果有更新则跳转到更新页面
-            from src.Ui.MainWindow.Window import MainWindow
-
-            it(MainWindow).unit_widget_button.click()
+        # 跳转到组件界面
+        from src.Ui.MainWindow.Window import MainWindow
+        from src.Ui.UnitPage.view import UnitWidget
+        it(MainWindow).unit_widget_button.click()
+        it(UnitWidget).view.setCurrentWidget(it(UnitWidget).napcatPage)
 
     def enterEvent(self, event):
         """
         ## 重写事件以控制鼠标样式
         """
         super().enterEvent(event)
-        if self.updateSate or not self.isInstall:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
-        else:
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
 
 class QQVersionCard(VersionCardBase):
@@ -167,10 +149,9 @@ class QQVersionCard(VersionCardBase):
     def __init__(self, parent=None) -> None:
         super().__init__(NCIcon.QQ, "QQ Version", "Unknown Version", parent)
         self.updateSate = False  # 是否有更新标记
-        self.isInstall = False  # 检查是否有安装 QQ 的标记, False 表示没有安装
         self.contentsLabel.setText(self.getLocalVersion())
 
-    @timer(3000)
+    @timer(10_000)
     def getLocalVersion(self) -> str:
         """
         ## 获取本地版本
@@ -179,9 +160,6 @@ class QQVersionCard(VersionCardBase):
             # 如果没有获取到文件就会返回None, 也就代表QQ没有安装
             self.setToolTip(self.tr("没有找到 QQ 路径，请安装"))
             self.errorBadge.show()
-            self.isInstall = False
-        else:
-            self.isInstall = True
 
         return version if version else "Unknown version"
 
@@ -190,21 +168,18 @@ class QQVersionCard(VersionCardBase):
         ## 重写事件以控制自身点击事件
         """
         super().mousePressEvent(event)
-
-        if not self.isInstall:
-            from src.Ui.HomePage.Home import HomeWidget
-
-            it(HomeWidget).setCurrentWidget(it(HomeWidget).downloadView)
+        # 跳转到组件界面
+        from src.Ui.MainWindow.Window import MainWindow
+        from src.Ui.UnitPage.view import UnitWidget
+        it(MainWindow).unit_widget_button.click()
+        it(UnitWidget).view.setCurrentWidget(it(UnitWidget).qqPage)
 
     def enterEvent(self, event):
         """
         ## 重写事件以控制鼠标样式
         """
         super().enterEvent(event)
-        if self.updateSate or not self.isInstall:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
-        else:
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
 
 @InfoBadgeManager.register("Version")

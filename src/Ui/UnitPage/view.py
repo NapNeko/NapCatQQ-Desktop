@@ -11,7 +11,6 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.UnitPage.NCDPage import NCDPage
 from src.Ui.UnitPage.NapCatPage import NapCatPage
 from src.Ui.UnitPage.QQPage import QQPage
-from src.Ui.common.Netwrok import NapCatUpdateCard
 from src.Ui.UnitPage.UpdateTopCard import UpdateTopCard
 
 if TYPE_CHECKING:

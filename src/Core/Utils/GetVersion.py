@@ -20,23 +20,6 @@ class GetVersion(QObject):
     def __init__(self) -> None:
         super().__init__()
 
-    def checkUpdate(self) -> dict | None:
-        """
-        ## 检查 NapCat 是否有新版本
-        """
-        remote_version = self.getRemoteNapCatVersion()
-        local_version = self.getLocalNapCatVersion()
-
-        if remote_version is None:
-            # 如果获取不到远程版本, 则返回 None, Gui那边做ui处理
-            return None
-
-        return {
-            "result": remote_version != local_version,
-            "localVersion": local_version,
-            "remoteVersion": remote_version,
-        }
-
     def getRemoteNapCatVersion(self) -> str | None:
         """
         ## 获取远程 NapCat 的版本信息

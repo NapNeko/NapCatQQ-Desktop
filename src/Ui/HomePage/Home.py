@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-主页
+## 主页
 """
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
@@ -19,7 +19,6 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.info_bar import info_bar
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
-from src.Ui.HomePage.DownloadView import DownloadViewWidget
 
 if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
@@ -31,7 +30,6 @@ class HomeWidget(QStackedWidget):
         super().__init__()
         self.displayView: Optional[DisplayViewWidget] = None
         self.contentView: Optional[ContentViewWidget] = None
-        self.downloadView: Optional[DownloadViewWidget] = None
 
         # 加载背景图片
         self.bgPixmap = None
@@ -45,14 +43,12 @@ class HomeWidget(QStackedWidget):
         # 创建控件
         self.displayView = DisplayViewWidget()
         self.contentView = ContentViewWidget()
-        self.downloadView = DownloadViewWidget()
 
         # 设置控件
         self.setParent(parent)
         self.setObjectName("HomePage")
         self.addWidget(self.displayView)
         self.addWidget(self.contentView)
-        self.addWidget(self.downloadView)
         self.setCurrentWidget(self.contentView)
         self.displayView.goBtnSignal.connect(self._goBtnSlot)
 
