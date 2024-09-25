@@ -12,6 +12,7 @@ dependencies = [
     "PySide6-Fluent-Widgets>=1.6.3",
     "creart>=0.3.0",
     "psutil>=6.0.0",
+    "markdown>=3.7",
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
