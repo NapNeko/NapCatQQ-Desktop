@@ -105,8 +105,8 @@ class DisplayCard(SimpleCardWidget):
         setFont(self.nameLabel, 22, QFont.Weight.Bold)
 
         # 隐藏控件
+        self.installButton.hide()
         self.updateButton.hide()
-        self.openFolderButton.hide()
 
         # 添加到布局
         self.vBoxLayout.setSpacing(0)
