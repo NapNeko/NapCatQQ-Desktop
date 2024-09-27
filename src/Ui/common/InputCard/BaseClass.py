@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import List
 
-from PySide6.QtCore import Qt, QEasingCurve
+# 第三方库导入
 from qfluentwidgets import LineEdit, BodyLabel, FluentIcon, SwitchButton, FluentIconBase, ExpandSettingCard
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from qfluentwidgets.components.settings.expand_setting_card import GroupSeparator
+from PySide6.QtCore import Qt, QEasingCurve
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 
 
 class ItemBase(QWidget):

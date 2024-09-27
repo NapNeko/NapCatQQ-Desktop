@@ -3,13 +3,16 @@
 """
 添加机器人
 """
+# 标准库导入
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
 
+# 第三方库导入
 from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
+# 项目内模块导入
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.AddPage.Connect import ConnectWidget
 from src.Ui.AddPage.Advanced import AdvancedWidget
@@ -17,6 +20,7 @@ from src.Ui.AddPage.BotWidget import BotWidget
 from src.Ui.AddPage.AddTopCard import AddTopCard
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 

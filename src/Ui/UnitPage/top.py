@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
+# 第三方库导入
+from qfluentwidgets import FluentIcon, TitleLabel, CaptionLabel, SegmentedWidget, PrimaryPushButton
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import CaptionLabel, TitleLabel, SegmentedWidget, PrimaryPushButton, FluentIcon
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 
 class TopWidget(QWidget):

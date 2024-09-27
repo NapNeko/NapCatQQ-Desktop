@@ -3,14 +3,14 @@
 """
 构建主窗体
 """
+# 标准库导入
 from abc import ABC
 from typing import Optional
 
+# 第三方库导入
 from creart import it, add_creator, exists_module
 from loguru import logger
-from PySide6.QtGui import QIcon
 from creart.creator import AbstractCreator, CreateTargetInfo
-from PySide6.QtCore import Slot, QSize
 from qfluentwidgets import (
     Theme,
     FluentIcon,
@@ -19,14 +19,16 @@ from qfluentwidgets import (
     NavigationItemPosition,
     NavigationBarPushButton,
 )
+from PySide6.QtGui import QIcon
+from PySide6.QtCore import Slot, QSize
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+# 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.AddPage import AddWidget
 from src.Ui.HomePage import HomeWidget
-from src.Ui.resource import resource
-from src.Ui.SetupPage import SetupWidget
 from src.Ui.UnitPage import UnitWidget
+from src.Ui.SetupPage import SetupWidget
 from src.Ui.BotListPage import BotListWidget
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon

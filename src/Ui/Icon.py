@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from enum import Enum
 
-from qfluentwidgets.common import FluentIconBase, Theme, getIconColor
+# 第三方库导入
+from qfluentwidgets.common import Theme, FluentIconBase, getIconColor
 
 
 class NapCatDesktopIcon(FluentIconBase, Enum):

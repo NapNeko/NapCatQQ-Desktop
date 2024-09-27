@@ -11,10 +11,12 @@
     - ButtonInfoBarManager 下方位置
     - ButtonRightInfoBarManager 右下方位置
 """
+# 标准库导入
 from enum import Enum
 
-from PySide6.QtCore import QSize, QPoint
+# 第三方库导入
 from qfluentwidgets import InfoBar, InfoBarManager
+from PySide6.QtCore import QSize, QPoint
 
 
 class NCDInfoBarPosition(Enum):

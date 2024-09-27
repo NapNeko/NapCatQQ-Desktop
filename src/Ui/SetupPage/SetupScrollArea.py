@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import TYPE_CHECKING
 
+# 第三方库导入
 from creart import it
-from PySide6.QtCore import Qt, QStandardPaths
 from qfluentwidgets import (
-    InfoBar,
     FluentIcon,
     ScrollArea,
     ExpandLayout,
-    PushSettingCard,
     SettingCardGroup,
     OptionsSettingCard,
     ComboBoxSettingCard,
@@ -16,14 +15,15 @@ from qfluentwidgets import (
     setTheme,
     setThemeColor,
 )
+from PySide6.QtCore import Qt, QStandardPaths
 from PySide6.QtWidgets import QWidget, QFileDialog
 
-from src.Ui.Icon import NapCatDesktopIcon
+# 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
-from src.Core.Utils.PathFunc import PathFunc
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 
@@ -146,6 +146,7 @@ class SetupScrollArea(ScrollArea):
         """
         # 最好还是重启下吧，不然有些地方不生效，修也不好修，就很烦
         cfg.appRestartSig.emit()
+        # 项目内模块导入
         from src.Ui.MainWindow import MainWindow
 
         setTheme(cfg.get(theme), save=True)

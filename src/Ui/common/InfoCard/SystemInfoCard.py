@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 import time
 from typing import Optional
 
+# 第三方库导入
 import psutil
-from PySide6.QtGui import QPen, QColor, QPainter
-from PySide6.QtCore import Qt, QPoint, QRectF, QTimer
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -17,8 +17,11 @@ from qfluentwidgets import (
     themeColor,
     isDarkTheme,
 )
+from PySide6.QtGui import QPen, QColor, QPainter
+from PySide6.QtCore import Qt, QPoint, QRectF, QTimer
 from PySide6.QtWidgets import QWidget, QFormLayout, QVBoxLayout
 
+# 项目内模块导入
 from src.Core import timer
 from src.Core.Config import cfg
 

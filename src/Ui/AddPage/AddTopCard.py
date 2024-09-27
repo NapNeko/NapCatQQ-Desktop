@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import TYPE_CHECKING
 
+# 第三方库导入
 from creart import it
-from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import (
     MessageBox,
@@ -13,11 +13,15 @@ from qfluentwidgets.components import (
     SegmentedWidget,
     PrimaryPushButton,
 )
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
+# 项目内模块导入
 from src.Ui.common.info_bar import error_bar, success_bar
 from src.Core.Config.OperateConfig import update_config, check_duplicate_bot
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.AddPage import AddWidget
 
 
@@ -95,6 +99,7 @@ class AddTopCard(QWidget):
         """
         ## 添加到机器人列表
         """
+        # 项目内模块导入
         from src.Ui.AddPage.AddWidget import AddWidget
         from src.Core.Config.ConfigModel import Config
         from src.Ui.BotListPage.BotListWidget import BotListWidget
@@ -103,7 +108,9 @@ class AddTopCard(QWidget):
         config = Config(**it(AddWidget).getConfig())
         if check_duplicate_bot(config):
             # 检查是否已存在相同的机器人配置
-            error_bar(self.tr(f"{config.bot.QQID} 已存在, 请重新输入"),)
+            error_bar(
+                self.tr(f"{config.bot.QQID} 已存在, 请重新输入"),
+            )
             return
 
         if update_config(config):
@@ -121,6 +128,7 @@ class AddTopCard(QWidget):
         ## 清理按钮的槽函数
             用于提示用户是否确认清空(还原)所有已有配置项
         """
+        # 项目内模块导入
         from src.Ui.AddPage import AddWidget
 
         box = MessageBox(

@@ -2,13 +2,16 @@
 """
 ## 操作 bot 配置文件的操作流程(主要是包含一些工具函数)
 """
+# 标准库导入
 import json
 from json import JSONDecodeError
 from typing import List
 
+# 第三方库导入
 from creart import it
 from loguru import logger
 
+# 项目内模块导入
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import Config, NapCatConfig, OneBotConfig
 

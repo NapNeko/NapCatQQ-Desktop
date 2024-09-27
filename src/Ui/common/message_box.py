@@ -4,10 +4,10 @@
     本模块的目的是为了统一程序内消息框的创建, 从而保持代码的简洁
 
 """
+# 标准库导入
 from typing import TYPE_CHECKING, Dict, List
 
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtCore import Qt, QUrl
+# 第三方库导入
 from qfluentwidgets import (
     LineEdit,
     FluentIcon,
@@ -17,9 +17,12 @@ from qfluentwidgets import (
     MessageBoxBase,
     HyperlinkButton,
 )
+from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import QVBoxLayout
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.MainWindow.Window import MainWindow
 
 
@@ -51,7 +54,7 @@ class TextInputBox(MessageBoxBase):
 class AskBox(MessageBoxBase):
     """
     ##询问用户是否确认提示框
-    
+
     ## 参数
         - title: 消息框标题
         - content: 消息框内容
@@ -129,9 +132,9 @@ class HyperlinkBox(MessageBoxBase):
         for link in hyperlinks:
             # 遍历列表添加到 hyperlinkLabels
             self.hyperlinkLayout.addWidget(
-                HyperlinkButton(link['url'].toString(), link['name'], self, FluentIcon.LINK), 
+                HyperlinkButton(link["url"].toString(), link["name"], self, FluentIcon.LINK),
                 1,
-                Qt.AlignmentFlag.AlignLeft
+                Qt.AlignmentFlag.AlignLeft,
             )
 
         # 设置属性

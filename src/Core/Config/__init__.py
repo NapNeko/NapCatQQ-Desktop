@@ -1,22 +1,24 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 import time
 import platform
 from enum import Enum
 
+# 第三方库导入
 from creart import it
-from PySide6.QtCore import QLocale
 from qfluentwidgets.common import (
     QConfig,
     ConfigItem,
     BoolValidator,
     EnumSerializer,
-    FolderValidator,
     ConfigSerializer,
     OptionsValidator,
     OptionsConfigItem,
     qconfig,
 )
+from PySide6.QtCore import QLocale
 
+# 项目内模块导入
 from src.Core.Utils.PathFunc import PathFunc
 
 

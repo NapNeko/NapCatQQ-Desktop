@@ -1,12 +1,20 @@
 # -*- coding: utf-8 -*-
 
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QFontDatabase, QTextCharFormat, QSyntaxHighlighter, QMouseEvent
-from PySide6.QtCore import Qt, Slot, QRect, QSize, QRectF, QRegularExpression
+# 第三方库导入
 from qfluentwidgets import PlainTextEdit, SmoothScrollDelegate, setFont
 from qfluentwidgets.components.widgets.menu import TextEditMenu
-from PySide6.QtWidgets import QWidget, QTextEdit, QTextBrowser
-from PySide6.QtGui import QDesktopServices
-from PySide6.QtCore import QUrl
+from PySide6.QtGui import (
+    QColor,
+    QPainter,
+    QMouseEvent,
+    QPaintEvent,
+    QFontDatabase,
+    QTextCharFormat,
+    QDesktopServices,
+    QSyntaxHighlighter,
+)
+from PySide6.QtCore import Qt, QUrl, Slot, QRect, QSize, QRectF, QRegularExpression
+from PySide6.QtWidgets import QWidget, QTextBrowser
 
 
 class CodeEditor(PlainTextEdit):
@@ -109,6 +117,7 @@ class UpdateLogEdit(QTextBrowser):
     """
     ## 更新日志页面使用的透明文本框
     """
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scrollDelegate = SmoothScrollDelegate(self)

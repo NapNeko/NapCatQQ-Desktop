@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 import sys
-
 from typing import Any, Callable
 from pathlib import Path
 from functools import wraps
 
+# 第三方库导入
 from loguru import logger
 from PySide6.QtCore import QTimer
 
@@ -22,6 +23,7 @@ def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., A
         - 至于为什么里面那么多 Any, 这个问题也不需要思考太多
 
     """
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -42,7 +44,6 @@ def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., A
         return wrapper
 
     return decorator
-
 
 
 def stdout() -> None:

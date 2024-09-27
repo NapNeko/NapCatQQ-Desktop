@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import List
 
-from PySide6.QtCore import Qt
+# 第三方库导入
 from qfluentwidgets import FlowLayout, ScrollArea
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
-from src.Ui.common.info_bar import info_bar, error_bar, success_bar
+# 项目内模块导入
+from src.Ui.common.info_bar import success_bar
 from src.Ui.BotListPage.BotCard import BotCard
 from src.Core.Config.OperateConfig import read_config
 

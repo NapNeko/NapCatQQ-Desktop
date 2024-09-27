@@ -3,20 +3,24 @@
 """
 构建标题栏
 """
+# 标准库导入
 import ctypes
 from typing import TYPE_CHECKING
 
+# 第三方库导入
 from loguru import logger
-from PySide6.QtGui import QPen, QPainter, QPaintEvent, QPainterPath
-from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtCore import Qt, QRectF, QPointF
 from qfluentwidgets.common import Theme
 from qfluentwidgets.window import MSFluentTitleBar
 from qframelesswindow.titlebar import CloseButton, MaximizeButton, MinimizeButton
+from PySide6.QtGui import QPen, QPainter, QPaintEvent, QPainterPath
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtCore import Qt, QRectF, QPointF
 
+# 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 

@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 import json
-import httpx
 from abc import ABC
-from json import JSONDecodeError
 
+# 第三方库导入
+import httpx
 from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
-from PySide6.QtCore import QObject
 from loguru import logger
+from PySide6.QtCore import QObject
 
-from src.Core.NetworkFunc import Urls, async_request
+# 项目内模块导入
+from src.Core.NetworkFunc import Urls
 from src.Core.Utils.PathFunc import PathFunc
 
 
@@ -33,7 +35,9 @@ class GetVersion(QObject):
             logger.info(f"耗时: {response.elapsed}")
             return response.json()["tag_name"]
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
+            # 项目内模块导入
             from src.Ui.common.info_bar import error_bar
+
             error_bar(self.tr("获取远程 NapCat 信息时引发错误, 请查看日志"))
             logger.error(f"获取 NapCat 版本信息时引发 {type(e).__name__}: {e}")
             return None
@@ -53,7 +57,9 @@ class GetVersion(QObject):
             logger.info(f"耗时: {response.elapsed}")
             return response.json()["body"]
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
+            # 项目内模块导入
             from src.Ui.common.info_bar import error_bar
+
             error_bar(self.tr("获取远程 NapCat 信息时引发错误, 请查看日志"))
             logger.error(f"获取 NapCat 版本信息时引发 {type(e).__name__}: {e}")
             return None
@@ -84,7 +90,7 @@ class GetVersion(QObject):
                 # 检查 QQ 目录是否存在
                 return None
 
-            with open(str(qq_path / "versions" / "config.json"), "r", encoding='utf-8') as file:
+            with open(str(qq_path / "versions" / "config.json"), "r", encoding="utf-8") as file:
                 # 读取 config.json 文件获取版本信息
                 return json.load(file)["curVersion"]
         except FileNotFoundError:

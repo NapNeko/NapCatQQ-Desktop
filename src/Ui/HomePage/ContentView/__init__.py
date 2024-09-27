@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
+# 项目内模块导入
+from src.Ui.StyleSheet import StyleSheet
 from src.Ui.HomePage.ContentView.ContentTopCard import ContentTopCard
 from src.Ui.HomePage.ContentView.DashboardWidget import DashboardWidget
-from src.Ui.StyleSheet import StyleSheet
 
 
 class ContentViewWidget(QWidget):

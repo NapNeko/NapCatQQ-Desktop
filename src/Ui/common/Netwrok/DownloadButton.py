@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
+# 第三方库导入
+from qfluentwidgets import ProgressRing, PrimaryPushButton, IndeterminateProgressRing
 from PySide6.QtGui import QBrush, QColor, QPainter
 from PySide6.QtCore import Qt, QRectF
-from qfluentwidgets import ProgressRing, PrimaryPushButton, IndeterminateProgressRing
 from PySide6.QtWidgets import QHBoxLayout
 
 

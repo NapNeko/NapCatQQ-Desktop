@@ -1,19 +1,11 @@
+# 标准库导入
 import random
 import string
 from enum import Enum
 from typing import List, Optional
 
+# 第三方库导入
 from pydantic import HttpUrl, BaseModel, WebsocketUrl, field_validator
-
-
-class ScriptType(Enum):
-    """
-    ## 脚本类型枚举
-    """
-
-    BAT = "bat"
-    PS1 = "ps1"
-    SH = "sh"
 
 
 class BotConfig(BaseModel):

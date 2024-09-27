@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from abc import ABC
 from enum import Enum
 from typing import Any, Callable
 from pathlib import Path
 
+# 第三方库导入
 import httpx
 from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
 from loguru import logger

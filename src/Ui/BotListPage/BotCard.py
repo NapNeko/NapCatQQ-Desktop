@@ -1,19 +1,23 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import TYPE_CHECKING, Optional
 
+# 第三方库导入
 from creart import it
 from loguru import logger
+from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QUrl, Slot, QUrlQuery
-from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
 from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QVBoxLayout
 
+# 项目内模块导入
 from src.Core.NetworkFunc import Urls, NetworkFunc
 from src.Ui.common.info_bar import error_bar
 from src.Core.Config.ConfigModel import Config
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.BotListPage.BotList import BotList
     from src.Ui.BotListPage.BotWidget import BotWidget
 
@@ -107,6 +111,7 @@ class BotCard(CardWidget):
         """
         当自身被点击时
         """
+        # 项目内模块导入
         from src.Ui.BotListPage.BotWidget import BotWidget
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 

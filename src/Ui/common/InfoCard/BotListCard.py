@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import List, Optional
 
+# 第三方库导入
 from creart import it
 from loguru import logger
-from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt, QUrl, Slot, QTimer, QUrlQuery
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -14,10 +14,13 @@ from qfluentwidgets import (
     TransparentPushButton,
     TransparentToolButton,
 )
+from qfluentwidgets.common.animation import BackgroundAnimationWidget
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QUrl, Slot, QTimer, QUrlQuery
 from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QFrame, QWidget, QHBoxLayout, QVBoxLayout
-from qfluentwidgets.common.animation import BackgroundAnimationWidget
 
+# 项目内模块导入
 from src.Core import timer
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.BotListPage import BotListWidget
@@ -58,6 +61,7 @@ class BotListCard(HeaderCardWidget):
         """
         ## 跳转到 AddPage 页面
         """
+        # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
         it(MainWindow).add_widget_button.click()
@@ -206,6 +210,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         """
         ## 监控机器人列表
         """
+        # 项目内模块导入
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
         for card in it(BotListWidget).botList.botCardList:
@@ -226,6 +231,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         """
         ## 运行按钮
         """
+        # 项目内模块导入
         from src.Ui.MainWindow import MainWindow
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
@@ -243,6 +249,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         """
         ## 停止按钮
         """
+        # 项目内模块导入
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
         for card in it(BotListWidget).botList.botCardList:

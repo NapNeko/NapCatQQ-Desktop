@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt
+# 第三方库导入
 from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
-from src.Ui.common.InputCard import FolderConfigCard, SwitchConfigCard, ComboBoxConfigCard
+# 项目内模块导入
+from src.Ui.common.InputCard import SwitchConfigCard, ComboBoxConfigCard
 from src.Core.Config.ConfigModel import AdvancedConfig
 
 

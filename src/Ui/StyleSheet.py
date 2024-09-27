@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from enum import Enum
 
-from qfluentwidgets import StyleSheetBase, Theme, qconfig
+# 第三方库导入
+from qfluentwidgets import Theme, StyleSheetBase, qconfig
 
 
 class StyleSheet(StyleSheetBase, Enum):

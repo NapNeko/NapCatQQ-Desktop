@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+# 第三方库导入
 from creart import it
+from qfluentwidgets import FluentIcon, ToolButton, ToolTipFilter
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import Qt, Slot, QSize
-from qfluentwidgets import FluentIcon, ToolButton, ToolTipFilter
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
+# 项目内模块导入
 from src.Core.NetworkFunc import Urls
 from src.Ui.common.InfoCard import (
     BotListCard,
@@ -107,6 +109,7 @@ class DashboardWidget(QWidget):
     @Slot()
     def _showSelectReposMsgBox(self) -> None:
         """显示选择打开哪个仓库页面"""
+        # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
         HyperlinkBox(
@@ -122,6 +125,7 @@ class DashboardWidget(QWidget):
     @Slot()
     def _showSelectFeedbackMsgBox(self) -> None:
         """显示选择打开哪个仓库的 issue 页面"""
+        # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
         HyperlinkBox(

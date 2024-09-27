@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+# 第三方库导入
 from qfluentwidgets import SmoothScrollDelegate, setFont
-from PySide6.QtWidgets import QTextEdit
 from qfluentwidgets.components.widgets.menu import TextEditMenu
+from PySide6.QtWidgets import QTextEdit
 
+# 项目内模块导入
 from src.Ui.StyleSheet import StyleSheet
 
 

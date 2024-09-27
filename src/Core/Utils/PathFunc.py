@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 import winreg
 from abc import ABC
 from pathlib import Path
 
+# 第三方库导入
 from creart import add_creator, exists_module
 from loguru import logger
 from creart.creator import AbstractCreator, CreateTargetInfo

@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
 from pathlib import Path
 
+# 第三方库导入
 from creart import it, add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
+# 项目内模块导入
 from src.Core import timer
 from src.Ui.common import CodeEditor
 from src.Ui.StyleSheet import StyleSheet
@@ -15,6 +18,7 @@ from src.Ui.SetupPage.SetupTopCard import SetupTopCard
 from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 

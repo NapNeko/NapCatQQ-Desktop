@@ -8,10 +8,12 @@
     - 右上角: `warning_bar`, `error_bar`
 """
 
+# 第三方库导入
 from creart import it
-from PySide6.QtCore import Qt
 from qfluentwidgets import InfoBar
+from PySide6.QtCore import Qt
 
+# 项目内模块导入
 from src.Ui.common.managers import NCDInfoBarPosition
 
 
@@ -24,6 +26,7 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000) -> Non
         - content: 消息条内容
         - duration: 消息条显示时间, 默认 5 秒
     """
+    # 项目内模块导入
     from src.Ui.MainWindow.Window import MainWindow
 
     InfoBar.info(
@@ -45,6 +48,7 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5_000) 
         - content: 消息条内容
         - duration: 消息条显示时间, 默认 5 秒
     """
+    # 项目内模块导入
     from src.Ui.MainWindow.Window import MainWindow
 
     InfoBar.success(
@@ -66,6 +70,7 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_0
         - content: 消息条内容
         - duration: 消息条显示时间, 默认 10 秒
     """
+    # 项目内模块导入
     from src.Ui.MainWindow.Window import MainWindow
 
     InfoBar.warning(
@@ -87,6 +92,7 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1) -> Non
         - content: 消息条内容
         - duration: 消息条显示时间, 默认 ∞ 秒
     """
+    # 项目内模块导入
     from src.Ui.MainWindow.Window import MainWindow
 
     InfoBar.error(

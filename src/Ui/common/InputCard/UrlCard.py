@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import List, TypeVar
 
+# 第三方库导入
 from creart import it
 from pydantic import HttpUrl, WebsocketUrl
-from PySide6.QtCore import Qt, Signal
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -12,8 +13,10 @@ from qfluentwidgets import (
     TransparentPushButton,
     TransparentToolButton,
 )
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 
+# 项目内模块导入
 from src.Ui.common.info_bar import error_bar
 from src.Ui.common.message_box import AskBox, TextInputBox
 
@@ -119,6 +122,7 @@ class UrlCard(ExpandSettingCard):
         """
         显示 URL 输入框
         """
+        # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
         box = TextInputBox(it(MainWindow))
@@ -153,6 +157,7 @@ class UrlCard(ExpandSettingCard):
         """
         显示确认对话框
         """
+        # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
         if AskBox(self.tr("确认操作"), self.tr(f"是否要删除此 URL？\n\n{item.url}"), it(MainWindow)).exec():

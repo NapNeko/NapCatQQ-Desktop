@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Qt, QStandardPaths
-from PySide6.QtWidgets import QFileDialog
+# 第三方库导入
 from qfluentwidgets.common import FluentIcon, FluentIconBase
 from qfluentwidgets.components import ComboBox, LineEdit, PushButton, SwitchButton, IndicatorPosition
 from qfluentwidgets.components.settings import SettingCard
+from PySide6.QtCore import Qt, QStandardPaths
+from PySide6.QtWidgets import QFileDialog
 
 
 class LineEditConfigCard(SettingCard):

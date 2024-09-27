@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import TYPE_CHECKING
 
+# 第三方库导入
 from qfluentwidgets import Action
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import SystemTrayMenu
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.MainWindow.Window import MainWindow
 
 

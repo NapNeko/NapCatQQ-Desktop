@@ -1,13 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from PySide6.QtCore import Qt, QSize
-from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
-from PySide6.QtWidgets import QWidget
-
-from src.Ui.Icon import NapCatDesktopIcon
-from src.Ui.common.InputCard import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
-from src.Ui.UnitPage.Base import PageBase
+# 项目内模块导入
 from src.Core.NetworkFunc import Urls
+from src.Ui.UnitPage.Base import PageBase
 
 
 class QQPage(PageBase):

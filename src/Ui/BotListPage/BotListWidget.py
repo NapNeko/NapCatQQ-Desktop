@@ -3,18 +3,22 @@
 """
 机器人列表
 """
+# 标准库导入
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
 
-from creart import it, add_creator, exists_module
+# 第三方库导入
+from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
+# 项目内模块导入
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.BotListPage.BotList import BotList
 from src.Ui.BotListPage.BotTopCard import BotTopCard
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 

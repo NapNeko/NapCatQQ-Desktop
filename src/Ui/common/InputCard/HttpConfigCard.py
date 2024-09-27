@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
+# 第三方库导入
 from qfluentwidgets.common import FluentIcon
 
+# 项目内模块导入
 from src.Core.Config.ConfigModel import HttpConfig
 from src.Ui.common.InputCard.Item import SwitchItem, LineEditItem
 from src.Ui.common.InputCard.BaseClass import GroupCardBase

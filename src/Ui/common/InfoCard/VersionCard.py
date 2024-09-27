@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
+# 第三方库导入
 from creart import it
-from PySide6.QtCore import Qt, QPoint
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -13,8 +13,10 @@ from qfluentwidgets import (
     InfoBadgeManager,
     SimpleCardWidget,
 )
+from PySide6.QtCore import Qt, QPoint
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
+# 项目内模块导入
 from src.Core import timer
 from src.Ui.Icon import NapCatDesktopIcon as NCIcon
 from src.Core.Utils.GetVersion import GetVersion
@@ -128,8 +130,10 @@ class NapCatVersionCard(VersionCardBase):
         """
         super().mousePressEvent(event)
         # 跳转到组件界面
-        from src.Ui.MainWindow.Window import MainWindow
+        # 项目内模块导入
         from src.Ui.UnitPage.view import UnitWidget
+        from src.Ui.MainWindow.Window import MainWindow
+
         it(MainWindow).unit_widget_button.click()
         it(UnitWidget).view.setCurrentWidget(it(UnitWidget).napcatPage)
 
@@ -169,8 +173,10 @@ class QQVersionCard(VersionCardBase):
         """
         super().mousePressEvent(event)
         # 跳转到组件界面
-        from src.Ui.MainWindow.Window import MainWindow
+        # 项目内模块导入
         from src.Ui.UnitPage.view import UnitWidget
+        from src.Ui.MainWindow.Window import MainWindow
+
         it(MainWindow).unit_widget_button.click()
         it(UnitWidget).view.setCurrentWidget(it(UnitWidget).qqPage)
 

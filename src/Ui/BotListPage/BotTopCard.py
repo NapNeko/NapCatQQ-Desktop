@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 from typing import TYPE_CHECKING
 
+# 第三方库导入
 from creart import it
+from qfluentwidgets import FluentIcon, CaptionLabel, BreadcrumbBar, ToolTipFilter, TransparentToolButton, setFont
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, Slot
-from qfluentwidgets import FluentIcon, CaptionLabel, BreadcrumbBar, ToolTipFilter, TransparentToolButton, setFont
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.BotListPage.BotListWidget import BotListWidget
 
 
@@ -61,6 +64,7 @@ class BotTopCard(QWidget):
         如果是则返回 Bot List 页面
         """
         if index == 0:
+            # 项目内模块导入
             from src.Ui.BotListPage.BotListWidget import BotListWidget
 
             it(BotListWidget).view.setCurrentIndex(index)
@@ -72,6 +76,7 @@ class BotTopCard(QWidget):
         """
         ## 更新列表按钮的槽函数
         """
+        # 项目内模块导入
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
         it(BotListWidget).botList.updateList()

@@ -3,16 +3,19 @@
 """
 ## 主页
 """
+# 标准库导入
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
 
-from creart import it, add_creator, exists_module
-from PySide6.QtGui import QPixmap, QPainter
+# 第三方库导入
+from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
+from qfluentwidgets import isDarkTheme
+from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtCore import Qt
-from qfluentwidgets import PushButton, isDarkTheme
 from PySide6.QtWidgets import QStackedWidget
 
+# 项目内模块导入
 from src.Core.Config import StartOpenHomePageViewEnum as SEnum
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
@@ -21,6 +24,7 @@ from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 

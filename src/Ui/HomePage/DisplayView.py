@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+# 第三方库导入
+from qfluentwidgets.common import FluentIcon, setFont
+from qfluentwidgets.components import ImageLabel, PushButton, TitleLabel, PrimaryPushButton
 from PySide6.QtGui import QFont, QDesktopServices
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from qfluentwidgets.common import FluentIcon, setFont
-from qfluentwidgets.components import ImageLabel, PushButton, TitleLabel, PrimaryPushButton
 
+# 项目内模块导入
 from src.Ui.StyleSheet import StyleSheet
 from src.Core.NetworkFunc import Urls
 

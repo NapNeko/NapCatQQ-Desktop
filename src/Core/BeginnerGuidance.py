@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+# 第三方库导入
 from creart import it
 from PySide6.QtCore import QObject
 
+# 项目内模块导入
 from src.Ui.MainWindow.Window import MainWindow
 
 

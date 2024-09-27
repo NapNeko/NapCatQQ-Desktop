@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
+# 第三方库导入
+from qfluentwidgets import TitleLabel, CaptionLabel
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import CaptionLabel, TitleLabel
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 
 class ContentTopCard(QWidget):
