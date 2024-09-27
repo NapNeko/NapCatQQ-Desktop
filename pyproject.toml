@@ -21,3 +21,27 @@ license = {text = "GPLv3"}
 
 [tool.pdm]
 distribution = false
+
+
+[tool.black]
+line-length = 120  # 设置代码行的最大长度为 120 字符
+target-version = ['py312']  # 目标 Python 版本为 3.12
+
+
+[tool.isort]
+known_first_party = ["NapCatQQ-Desktop"]
+profile = "black"  # 兼容 black
+line_length = 120  # 将行长度设置为与 black 一致
+length_sort = true  # 按导入语句的长度进行排序
+
+# 导入分类顺序：未来标准库、标准库、第三方库、PySide6 库、项目内库，和本地库
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "PYSIDE6", "FIRSTPARTY", "LOCALFOLDER"]
+known_pyside6 = ["PySide6"]  # 将 PySide6 标记为单独的分组
+no_lines_before = ["PYSIDE6"]  # 确保在 PYSIDE6 之前没有空行
+
+# 导入自动注释
+import_heading_stdlib = "标准库导入"
+import_heading_thirdparty = "第三方库导入"
+import_heading_firstparty = "项目内模块导入"
+
+
