@@ -1,20 +1,14 @@
 # -*- coding: utf-8 -*-
-from tkinter.messagebox import RETRY
 
-from PySide6.QtCore import Qt, Slot
-from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
-from PySide6.QtWidgets import QWidget
-
-from src.Core import timer
-from src.Core.Utils.GetVersion import GetVersion
-from src.Ui.Icon import NapCatDesktopIcon
-from src.Ui.common.InputCard import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
-from src.Ui.UnitPage.Base import PageBase, Status
-from src.Core.NetworkFunc import Urls
-
-from src.Ui.common.info_bar import error_bar
-
+# 第三方库导入
 from creart import it
+
+# 项目内模块导入
+from src.Core import timer
+from src.Core.NetworkFunc import Urls
+from src.Ui.UnitPage.Base import PageBase, ButtonStatus
+from src.Ui.common.info_bar import error_bar
+from src.Core.Utils.GetVersion import GetVersion
 
 
 class NapCatPage(PageBase):
@@ -47,7 +41,7 @@ class NapCatPage(PageBase):
         """
         if (local_ver := it(GetVersion).getLocalNapCatVersion()) is None:
             # 如果没有本地版本则显示安装按钮
-            self.appCard.switchButton(Status.UNINSTALLED)
+            self.appCard.switchButton(ButtonStatus.UNINSTALLED)
             return
 
         if (remote_ver := it(GetVersion).getRemoteNapCatVersion()) is None:
@@ -57,7 +51,7 @@ class NapCatPage(PageBase):
 
         if local_ver != remote_ver:
             # 判断版本是否相等, 否则设置为更新状态
-            self.appCard.switchButton(Status.UPDATE)
+            self.appCard.switchButton(ButtonStatus.UPDATE)
 
     def getNewUpdateLog(self) -> None:
         """
