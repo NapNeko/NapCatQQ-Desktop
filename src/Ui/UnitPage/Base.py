@@ -84,6 +84,7 @@ class DisplayCard(SimpleCardWidget):
         self.iconLabel = ImageLabel(":/Global/logo.png", self)
         self.nameLabel = TitleLabel("Unknown", self)
         self.hyperLabel = HyperlinkLabel("Unknown", self)
+        self.statusLabel = BodyLabel("Unknown", self)
 
         self.installButton = PrimaryPushButton(self.tr("安装"), self)
         self.updateButton = PrimaryPushButton(self.tr("更新"), self)
@@ -107,6 +108,7 @@ class DisplayCard(SimpleCardWidget):
         # 隐藏控件
         self.installButton.hide()
         self.updateButton.hide()
+        self.statusLabel.hide()
 
         # 添加到布局
         self.vBoxLayout.setSpacing(0)
@@ -120,6 +122,8 @@ class DisplayCard(SimpleCardWidget):
         self.vBoxLayout.addWidget(self.installButton, 2, Qt.AlignmentFlag.AlignHCenter)
         self.vBoxLayout.addWidget(self.updateButton, 2, Qt.AlignmentFlag.AlignHCenter)
         self.vBoxLayout.addWidget(self.openFolderButton, 2, Qt.AlignmentFlag.AlignHCenter)
+        self.vBoxLayout.addSpacing(5)
+        self.vBoxLayout.addWidget(self.statusLabel, 0, Qt.AlignmentFlag.AlignHCenter)
         self.vBoxLayout.addStretch(3)
 
         self.setLayout(self.vBoxLayout)
