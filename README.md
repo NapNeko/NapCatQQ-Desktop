@@ -4,9 +4,6 @@
 
 [![License](https://img.shields.io/github/license/NapNeko/NapCatQQ-Desktop)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12.*-green)](https://www.python.org/)
-[![PySide6](https://img.shields.io/pypi/v/PySide6?color=%2390C3D4&label=PySide6)](https://pypi.org/project/PySide6/)
-[![PyQt-Fluent-Widgets](https://img.shields.io/pypi/v/pyqt-fluent-widgets?color=%2334D058&label=PyQt-Fluent-Widgets)](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
-[![Nuitka](https://img.shields.io/pypi/v/Nuitka?color=%23FF0000&label=Nuitka)](https://github.com/Nuitka/Nuitka)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 
