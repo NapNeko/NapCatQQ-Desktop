@@ -73,9 +73,9 @@ class NapCatDownloader(QThread):
                 self.progressRingToggle.emit(ProgressRingStatus.DETERMINATE)
 
                 with open(f"{self.path / self.url.fileName()}", "wb") as file:
+                    self.statusLabel.emit(self.tr("正在下载 NapCat ~ "))
                     for chunk in response.iter_bytes():
                         file.write(chunk)  # 写入字节
-                        self.statusLabel.emit(self.tr("正在下载 NapCat ~ "))
                         self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
 
             # 下载完成
@@ -115,20 +115,17 @@ class NapCatDownloader(QThread):
             # 引发错误返回 False
             return False
 
-    def setUrl(self, url: QUrl) -> None:
-        self.url = url
-
-    def setPath(self, path: Path) -> None:
-        self.path = path
-
 
 class QQDownloader(QThread):
     """
     ## 执行下载 QQ 的任务
     """
-
-    # 进度条模式切换 (进度模式: 0 \ 未知进度模式: 1 \ 文字模式: 2)
-    progressBarToggle = Signal(int)
+    # 按钮模式切换
+    buttonToggle = Signal(ButtonStatus)
+    # 进度条模式切换
+    progressRingToggle = Signal(ProgressRingStatus)
+    # 状态标签
+    statusLabel = Signal(str)
     # 下载进度
     downloadProgress = Signal(int)
     # 下载完成
@@ -136,21 +133,19 @@ class QQDownloader(QThread):
     # 引发错误导致结束
     errorFinsh = Signal()
 
-    def __init__(self, url: QUrl, path: Path) -> None:
+    def __init__(self, url: QUrl) -> None:
         """
         ## 初始化下载器
         """
         super().__init__()
-        self.url: QUrl = url if url else None
-        self.path: Path = Path(path) if path else None
+        self.url: QUrl = url
+        self.path: Path = it(PathFunc).tmp_path
 
     def run(self) -> None:
         """
         ## 运行下载 QQ 的任务
             - 自动下载 QQ
         """
-        # 调整按钮样式为禁用
-        self.progressBarToggle.emit(3)
 
         # 开始下载 QQ
         try:
@@ -160,18 +155,22 @@ class QQDownloader(QThread):
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
                     # 尝试获取文件大小
                     logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
-                    self.progressBarToggle.emit(2)
+                    self.statusLabel.emit(self.tr("无法获取文件大小"))
                     self.errorFinsh.emit()
                     return
 
-                self.progressBarToggle.emit(0)  # 设置进度条为 进度模式
+                # 设置进度条为 进度模式
+                self.progressRingToggle.emit(ProgressRingStatus.DETERMINATE)
+
                 with open(f"{self.path / self.url.fileName()}", "wb") as file:
+                    self.statusLabel.emit(self.tr("正在下载 QQ ~ "))
                     for chunk in response.iter_bytes():
                         file.write(chunk)  # 写入字节
                         self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
 
             # 下载完成
-            self.downloadFinish.emit()  # 发生下载完成信号
+            self.downloadFinish.emit()  # 发送下载完成信号
+            self.statusLabel.emit(self.tr("下载完成"))
             logger.info(f"{'-' * 10} 下载 QQ 结束 ~ {'-' * 10}")
 
         except httpx.HTTPStatusError as e:
@@ -179,19 +178,13 @@ class QQDownloader(QThread):
                 f"发送下载 QQ 请求时引发 HTTPStatusError, "
                 f"响应码: {e.response.status_code}, 响应内容: {e.response.content}"
             )
+            self.statusLabel.emit(self.tr("下载失败"))
             self.errorFinsh.emit()
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
             logger.error(f"下载 QQ 时引发 {type(e).__name__}: {e}")
+            self.statusLabel.emit(self.tr("下载失败"))
             self.errorFinsh.emit()
 
         finally:
             # 无论是否出错,都会重置
-            self.downloadProgress.emit(0)  # 重置进度条进度
-            self.progressBarToggle.emit(2)  # 设置进度条为 文字模式
-            self.progressBarToggle.emit(4)  # 解除禁用
-
-    def setUrl(self, url: QUrl) -> None:
-        self.url = url
-
-    def setPath(self, path: Path) -> None:
-        self.path = path
+            self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)

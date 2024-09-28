@@ -5,6 +5,8 @@
 # 标准库导入
 import shutil
 import zipfile
+import subprocess
+from pathlib import Path
 
 # 第三方库导入
 from creart import it
@@ -90,3 +92,44 @@ class NapCatInstall(QThread):
                 f"'{QUrl.fromLocalFile(str(self.install_path / 'napcat.mjs')).url()}'"
                 ")})()"
             )
+
+
+class QQInstall(QThread):
+    """QQ 安装逻辑"""
+
+    # 安装成功信号
+    installFinish = Signal()
+    # 安装失败信号
+    errorFinsh = Signal()
+    # 按钮模式切换
+    buttonToggle = Signal(ButtonStatus)
+    # 进度条模式切换
+    progressRingToggle = Signal(ProgressRingStatus)
+    # 状态标签
+    statusLabel = Signal(str)
+
+    def __init__(self, exe_path: str | Path) -> None:
+        super().__init__()
+        self.exe_path = exe_path
+
+    def run(self) -> None:
+        """
+        ## 安装逻辑
+        """
+        try:
+            logger.info(f"{'-' * 10} 开始安装 QQ ~ {'-' * 10}")
+            self.statusLabel.emit("正在安装 QQ")
+            self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
+
+            # 启动 QQ 安装程序
+            logger.info(f"启动安装程序: {self.exe_path}")
+            if subprocess.run([str(self.exe_path), "/s"]).returncode == 0:
+                self.installFinish.emit()
+            else:
+                self.errorFinsh.emit()
+            logger.info(f"{'-' * 10} 安装 QQ 完成 ~ {'-' * 10}")
+
+        except Exception as e:
+            logger.error(f"安装 QQ 时引发 {type(e).__name__}: {e}")
+            self.statusLabel.emit(self.tr("安装失败"))
+            self.errorFinsh.emit()
