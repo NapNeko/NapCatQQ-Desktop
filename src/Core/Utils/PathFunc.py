@@ -48,6 +48,14 @@ class PathFunc:
             logger.warning("存在一个名为 tmp 的文件, 请检查")
         logger.info("Tmp Path 验证完成")
 
+        if not self.napcat_path.exists():
+            self.napcat_path.mkdir(parents=True, exist_ok=True)
+            logger.info("NapCat Path 路径不存在, 已创建")
+        elif not self.napcat_path.is_dir():
+            self.napcat_path.mkdir(parents=True, exist_ok=True)
+            logger.warning("存在一个名为 NapCat 的文件, 请检查")
+        logger.info("NapCat Path 验证完成")
+
         logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 
     @staticmethod

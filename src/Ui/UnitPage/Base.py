@@ -29,46 +29,8 @@ from PySide6.QtCore import Qt, QUrl, QSize
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
+from src.Ui.UnitPage.status import StatusLabel, ButtonStatus, ProgressRingStatus
 from src.Ui.common.CodeEditor import UpdateLogEdit
-
-
-class ButtonStatus(Enum):
-    """
-    ## 状态枚举类
-    """
-
-    # 安装状态
-    INSTALL = 0
-    UNINSTALLED = 1
-
-    # 更新状态
-    UPDATE = 2
-
-    # 隐藏所有
-    NONE = 3
-
-
-class ProgressRingStatus(Enum):
-    """
-    ## 进度环状态
-    """
-
-    # 显示确定进度环和不确定进度环
-    INDETERMINATE = 0
-    DETERMINATE = 1
-
-    # 隐藏全部进度环
-    NONE = 2
-
-
-class StatusLabel(Enum):
-    """
-    ## 状态标签
-    """
-
-    # 显示状态标签
-    SHOW = 0
-    HIDE = 1
 
 
 class PageBase(ScrollArea):
@@ -200,6 +162,11 @@ class DisplayCard(SimpleCardWidget):
     def setVisibility(self, visible_buttons: dict, visible_progress_rings: dict, visible_status_label: dict) -> None:
         """
         ## 设置按钮和进度环以及状态标签的可见性
+
+        ## 参数
+            - visible_buttons: dict, 按钮可见性
+            - visible_progress_rings: dict, 进度环可见性
+            - visible_status_label: dict, 状态标签可见性
         """
         self.installButton.setVisible(visible_buttons.get("install", False))
         self.updateButton.setVisible(visible_buttons.get("update", False))
@@ -254,14 +221,14 @@ class UpdateLogCard(HeaderCardWidget):
         self.viewLayout.addWidget(self.logEdit)
         self.viewLayout.setContentsMargins(8, 4, 8, 4)
 
-    def setLog(self, text) -> None:
+    def setLog(self, text: str) -> None:
         """
         ## 设置 Log
         """
         css_style = "<style>pre { white-space: pre-wrap; }</style>"
         self.logEdit.setHtml(css_style + markdown(re.sub(r"\r\n", "\n", text), extensions=["nl2br"]))
 
-    def setUrl(self, url) -> None:
+    def setUrl(self, url: str) -> None:
         """
         ## 设置 Url
         """
