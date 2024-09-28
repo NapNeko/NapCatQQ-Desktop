@@ -12,8 +12,9 @@ from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QVBoxLayout
 
 # 项目内模块导入
-from src.Core.NetworkFunc import Urls, NetworkFunc
+from src.Core.NetworkFunc import NetworkFunc
 from src.Ui.common.info_bar import error_bar
+from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Config.ConfigModel import Config
 
 if TYPE_CHECKING:
