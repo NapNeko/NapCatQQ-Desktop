@@ -61,6 +61,18 @@ class GetVersion(QObject):
         """
         return self.fetchRemoteData(Urls.QQ_Version.value.url(), "version", "QQ 版本信息")
 
+    def getRemoteNCDVersion(self) -> str | None:
+        """
+        ## 获取远程 NCD 的版本信息
+        """
+        return self.fetchRemoteData(Urls.NCD_REPO_API.value.url(), "tag_name", "NCD 版本信息")
+
+    def getRemoteNCDUpdateLog(self) -> str | None:
+        """
+        ## 获取 NCD 的更新日志
+        """
+        return self.fetchRemoteData(Urls.NCD_REPO_API.value.url(), "body", "NCD 更新日志")
+
     def getQQDownloadUrl(self) -> str | None:
         """
         ## 获取 QQ 的下载地址
