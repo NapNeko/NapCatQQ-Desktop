@@ -121,8 +121,8 @@ class GithubDownloader(DownloaderBase):
         try:
             logger.info(f"{'-' * 10} 检查网络环境 {'-' * 10}")
             self.statusLabel.emit(self.tr("检查网络环境"))
-            # 如果 5 秒内能访问到 Github 表示网络环境非常奈斯
-            response = httpx.head(r"https://github.com", timeout=5)
+            # 如果 3 秒内能访问到 Github 表示网络环境非常奈斯
+            response = httpx.head(r"https://objects.githubusercontent.com", timeout=3)
             logger.info("网络环境非常奈斯")
             self.statusLabel.emit(self.tr("网络环境良好"))
             return response.status_code == 200
