@@ -16,10 +16,11 @@ from qfluentwidgets import (
     SubtitleLabel,
     MessageBoxBase,
     HyperlinkButton,
+    TransparentToolButton,
 )
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtWidgets import QVBoxLayout
+from PySide6.QtCore import Qt, QDir, QUrl, Slot
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -144,3 +145,58 @@ class HyperlinkBox(MessageBoxBase):
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addWidget(self.contentLabel)
         self.viewLayout.addLayout(self.hyperlinkLayout)
+
+
+class FolderBox(MessageBoxBase):
+    """文件夹消息框"""
+
+    def __init__(self, title: str, parent: "MainWindow") -> None:
+        """
+        ## 初始化类, 创建必要控件
+
+        ## 参数
+            - title: 消息框标题
+            - content: 消息框内容
+            - folder_path: 文件夹路径
+            - parent: 消息框父类
+        """
+        super().__init__(parent=parent)
+
+        # 创建控件
+        self.titleLabel = SubtitleLabel(title, self)
+        self.folderPathEdit = LineEdit(self)
+        self.selectFolderButton = TransparentToolButton(FluentIcon.FOLDER_ADD, self)
+        self.selectFolderLayout = QHBoxLayout()
+
+        # 设置属性
+        self.widget.setMinimumSize(420, 230)
+        self.selectFolderButton.clicked.connect(self.selectFolderSlot)
+
+        # 添加到布局
+        self.selectFolderLayout.addWidget(self.folderPathEdit)
+        self.selectFolderLayout.addWidget(self.selectFolderButton)
+
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addLayout(self.selectFolderLayout)
+
+    def getValue(self) -> str:
+        """
+        ## 获取文件夹路径
+        """
+        return self.folderPathEdit.text()
+
+    @Slot()
+    def selectFolderSlot(self):
+        """
+        ## 获取文件夹
+        """
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("选择文件夹"),
+            QDir.homePath(),
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        if folder:
+            self.folderPathEdit.setText(folder)
+        else:
+            self.folderPathEdit.clear()
