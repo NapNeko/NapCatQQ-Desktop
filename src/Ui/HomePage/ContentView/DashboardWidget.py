@@ -7,7 +7,6 @@ from PySide6.QtCore import Qt, Slot, QSize
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.Core.NetworkFunc import Urls
 from src.Ui.common.InfoCard import (
     BotListCard,
     CPUDashboard,
@@ -16,6 +15,7 @@ from src.Ui.common.InfoCard import (
     MemoryDashboard,
     NapCatVersionCard,
 )
+from src.Core.NetworkFunc.Urls import Urls
 from src.Ui.common.message_box import HyperlinkBox
 
 
@@ -117,9 +117,9 @@ class DashboardWidget(QWidget):
             self.tr("您可以点击下面的超链接按钮跳转到相应的仓库✨"),
             [
                 {"name": self.tr("NapCatQQ 仓库"), "url": Urls.NAPCATQQ_REPO.value},
-                {"name": self.tr("NapCatQQ Desktop 仓库"), "url": Urls.NCD_REPO.value}
+                {"name": self.tr("NapCatQQ Desktop 仓库"), "url": Urls.NCD_REPO.value},
             ],
-            it(MainWindow)
+            it(MainWindow),
         ).exec()
 
     @Slot()
@@ -133,7 +133,7 @@ class DashboardWidget(QWidget):
             self.tr("请确定您要反馈的问题✨"),
             [
                 {"name": self.tr("NapCatQQ 的问题"), "url": Urls.NAPCATQQ_ISSUES.value},
-                {"name": self.tr("NapCatQQ Desktop 的问题"), "url": Urls.NCD_ISSUES.value}
+                {"name": self.tr("NapCatQQ Desktop 的问题"), "url": Urls.NCD_ISSUES.value},
             ],
-            it(MainWindow)
+            it(MainWindow),
         ).exec()

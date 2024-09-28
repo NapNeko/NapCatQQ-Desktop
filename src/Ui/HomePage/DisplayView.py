@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
 from src.Ui.StyleSheet import StyleSheet
-from src.Core.NetworkFunc import Urls
+from src.Core.NetworkFunc.Urls import Urls
 
 
 class DisplayViewWidget(QWidget):

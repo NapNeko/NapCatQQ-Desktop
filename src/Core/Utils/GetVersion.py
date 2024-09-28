@@ -10,8 +10,8 @@ from loguru import logger
 from PySide6.QtCore import QObject
 
 # 项目内模块导入
-from src.Core.NetworkFunc import Urls
 from src.Core.Utils.PathFunc import PathFunc
+from src.Core.NetworkFunc.Urls import Urls
 
 
 class GetVersion(QObject):

@@ -3,6 +3,7 @@
 # 项目内模块导入
 from src.Core.NetworkFunc import Urls
 from src.Ui.UnitPage.Base import PageBase
+from src.Core.NetworkFunc.Urls import Urls
 
 
 class QQPage(PageBase):

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 # 项目内模块导入
-from src.Core.NetworkFunc import Urls
 from src.Ui.UnitPage.Base import PageBase
+from src.Core.NetworkFunc.Urls import Urls
 
 
 class NCDPage(PageBase):
@@ -12,7 +12,7 @@ class NCDPage(PageBase):
 
     def __init__(self, parent) -> None:
         super().__init__(parent=parent)
-        self.setObjectName("UpDateNCDPage")
+        self.setObjectName("UnitNCDPage")
         self.appCard.setName("NapCat Desktop")
         self.appCard.setHyperLabelName(self.tr("仓库地址"))
         self.appCard.setHyperLabelUrl(Urls.NCD_REPO.value)

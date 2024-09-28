@@ -24,8 +24,9 @@ from PySide6.QtWidgets import QFrame, QWidget, QHBoxLayout, QVBoxLayout
 from src.Core import timer
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.BotListPage import BotListWidget
-from src.Core.NetworkFunc import Urls, NetworkFunc
+from src.Core.NetworkFunc import NetworkFunc
 from src.Ui.common.info_bar import error_bar
+from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Config.ConfigModel import Config
 from src.Core.Config.OperateConfig import read_config
 
