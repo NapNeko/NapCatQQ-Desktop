@@ -1,14 +1,41 @@
 ![NapCatQQ-Desktop](https://socialify.git.ci/NapNeko/NapCatQQ-Desktop/image?font=Raleway&logo=https%3A%2F%2Fraw.githubusercontent.com%2FNapNeko%2FNapCatQQ%2Fmain%2Flogo.png&name=1&pattern=Circuit%20Board&stargazers=1&theme=Auto)
 
+<div align="center">
+
+[![License](https://img.shields.io/github/license/NapNeko/NapCatQQ-Desktop)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12.*-green)](https://www.python.org/)
+[![PySide6](https://img.shields.io/pypi/v/PySide6?color=%2390C3D4&label=PySide6)](https://pypi.org/project/PySide6/)
+[![PyQt-Fluent-Widgets](https://img.shields.io/pypi/v/pyqt-fluent-widgets?color=%2334D058&label=PyQt-Fluent-Widgets)](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
+[![Nuitka](https://img.shields.io/pypi/v/Nuitka?color=%23FF0000&label=Nuitka)](https://github.com/Nuitka/Nuitka)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
+
+![GitHub Repo stars](https://img.shields.io/github/stars/NapNeko/NapCatQQ-Desktop?style=social)
+![GitHub forks](https://img.shields.io/github/forks/NapNeko/NapCatQQ-Desktop?style=social)
+![GitHub watchers](https://img.shields.io/github/watchers/NapNeko/NapCatQQ-Desktop?style=social)
+
+</div>
+
 ---
 
 ## 关于项目
 
 这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat
 
-## TODO
- - 实现引导(新手指引, 指引安装 NapCat, QQ 等)
- - 自动更新
+## 项目特点
+- [x] **安装简单**: 单EXE文件，无需安装任何依赖
+- [x] **界面美观**: 使用 Fluent Design System 设计
+- [x] **功能丰富**: 支持创建配置文件, 管理配置文件, 一键启动/停止/重启
+- [x] **多语言支持**: 支持中文, 繁体中文(还在做)
+- [x] **自动更新**: 支持自动检查 NapCat 更新, 一键更新
+
+## 使用项目
+可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的EXE文件，即可使用
+
+使用本项目默认您同意本项目声明
+
+## 回家归途
+[QQ Group](https://qm.qq.com/q/VfjAq5HIMS)
 
 ## 许可证
 
