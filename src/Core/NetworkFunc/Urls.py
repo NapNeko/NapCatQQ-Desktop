@@ -11,8 +11,10 @@ class Urls(Enum):
     """
 
     # NCD相关地址
-    NCD_REPO = QUrl("https://github.com/HeartfeltJoy/NapCatQQ-Desktop")
-    NCD_ISSUES = QUrl("https://github.com/HeartfeltJoy/NapCatQQ-Desktop/issues")
+    NCD_REPO = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop")
+    NCD_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/issues")
+    NCD_REPO_API = QUrl("https://nclatest.znin.net/get_ncd_ver")
+    NCD_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest/download/NapCat-Desktop.exe")
 
     # NapCat 相关地址
     NAPCATQQ_REPO = QUrl("https://github.com/NapNeko/NapCatQQ")
