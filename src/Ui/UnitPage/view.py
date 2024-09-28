@@ -105,6 +105,8 @@ class UnitWidget(QWidget):
         ## 刷新页面
         """
         self.napcatPage.updatePage()
+        self.qqPage.updatePage()
+        self.ncdPage.updatePage()
 
 
 class UnitWidgetClassCreator(AbstractCreator, ABC):
