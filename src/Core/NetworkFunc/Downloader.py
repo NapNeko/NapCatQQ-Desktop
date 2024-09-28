@@ -13,22 +13,36 @@ from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
 from src.Core.Utils.PathFunc import PathFunc
 
 
-class GithubDownloader(QThread):
+class DownloaderBase(QThread):
     """
-    ## 执行下载 Github文件 的任务
+    ## 下载器基类
     """
-    # 按钮模式切换
-    buttonToggle = Signal(ButtonStatus)
-    # 进度条模式切换
-    progressRingToggle = Signal(ProgressRingStatus)
-    # 状态标签
-    statusLabel = Signal(str)
+
     # 下载进度
     downloadProgress = Signal(int)
     # 下载完成
     downloadFinish = Signal()
     # 引发错误导致结束
     errorFinsh = Signal()
+
+    def __init__(self) -> None:
+        """
+        ## 初始化下载器
+        """
+        super().__init__()
+
+
+class GithubDownloader(QThread):
+    """
+    ## 执行下载 Github文件 的任务
+    """
+
+    # 按钮模式切换
+    buttonToggle = Signal(ButtonStatus)
+    # 进度条模式切换
+    progressRingToggle = Signal(ProgressRingStatus)
+    # 状态标签
+    statusLabel = Signal(str)
 
     def __init__(self, url: QUrl) -> None:
         """
@@ -121,18 +135,13 @@ class QQDownloader(QThread):
     """
     ## 执行下载 QQ 的任务
     """
+
     # 按钮模式切换
     buttonToggle = Signal(ButtonStatus)
     # 进度条模式切换
     progressRingToggle = Signal(ProgressRingStatus)
     # 状态标签
     statusLabel = Signal(str)
-    # 下载进度
-    downloadProgress = Signal(int)
-    # 下载完成
-    downloadFinish = Signal()
-    # 引发错误导致结束
-    errorFinsh = Signal()
 
     def __init__(self, url: QUrl) -> None:
         """
