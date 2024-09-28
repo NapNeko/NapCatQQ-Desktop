@@ -22,49 +22,67 @@ class GetVersion(QObject):
     def __init__(self) -> None:
         super().__init__()
 
-    def getRemoteNapCatVersion(self) -> str | None:
+    def fetchRemoteData(self, url: str, key: str, log_message: str) -> str | None:
         """
-        ## 获取远程 NapCat 的版本信息
+        ## 获取逻辑
         """
         try:
-            logger.info("获取 NapCat 远程版本信息")
-            response = httpx.get(Urls.NAPCATQQ_REPO_API.value.url())
+            logger.info(f"获取 {log_message}")
+            response = httpx.get(url)
             logger.info(f"响应码: {response.status_code}")
             logger.debug(f"响应头: {response.headers}")
             logger.debug(f"数据: {response.json()}")
             logger.info(f"耗时: {response.elapsed}")
-            return response.json()["tag_name"]
+            return response.json().get(key)
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
             # 项目内模块导入
             from src.Ui.common.info_bar import error_bar
-
-            error_bar(self.tr("获取远程 NapCat 信息时引发错误, 请查看日志"))
-            logger.error(f"获取 NapCat 版本信息时引发 {type(e).__name__}: {e}")
+            error_bar(self.tr(f"获取远程 {log_message} 时引发错误, 请查看日志"))
+            logger.error(f"获取 {log_message} 时引发 {type(e).__name__}: {e}")
             return None
         finally:
-            logger.info("获取 NapCat 版本信息结束")
+            logger.info(f"获取 {log_message} 结束")
+
+    def getRemoteNapCatVersion(self) -> str | None:
+        """
+        ## 获取远程 NapCat 的版本信息
+        """
+        return self.fetchRemoteData(Urls.NAPCATQQ_REPO_API.value.url(), "tag_name", "NapCat 版本信息")
 
     def getRemoteNapCatUpdateLog(self) -> str | None:
         """
         ## 获取 NapCat 的更新日志
         """
+        return self.fetchRemoteData(Urls.NAPCATQQ_REPO_API.value.url(), "body", "NapCat 更新日志")
+
+    def getRemoteQQVersion(self) -> str | None:
+        """
+        ## 获取远程 QQ 的版本信息
+        """
+        return self.fetchRemoteData(Urls.QQ_Version.value.url(), "version", "QQ 版本信息")
+
+    def getQQDownloadUrl(self) -> str | None:
+        """
+        ## 获取 QQ 的下载地址
+        """
         try:
-            logger.info("获取 NapCat 远程更新日志")
-            response = httpx.get(Urls.NAPCATQQ_REPO_API.value.url())
+            logger.info(f"获取 QQ 下载地址")
+            response = httpx.get(Urls.QQ_Version.value.url())
             logger.info(f"响应码: {response.status_code}")
             logger.debug(f"响应头: {response.headers}")
             logger.debug(f"数据: {response.json()}")
             logger.info(f"耗时: {response.elapsed}")
-            return response.json()["body"]
+            ver = response.json()["version"].replace("-", ".")
+            ver_hash = response.json()["verHash"]
+            return f"https://dldir1.qq.com/qqfile/qq/QQNT/{ver_hash}/QQ{ver}_x64.exe"
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
             # 项目内模块导入
             from src.Ui.common.info_bar import error_bar
-
-            error_bar(self.tr("获取远程 NapCat 信息时引发错误, 请查看日志"))
-            logger.error(f"获取 NapCat 版本信息时引发 {type(e).__name__}: {e}")
+            error_bar(self.tr(f"获取 QQ 下载地址时引发错误, 请查看日志"))
+            logger.error(f"获取 QQ 下载地址时引发 {type(e).__name__}: {e}")
             return None
         finally:
-            logger.info("获取 NapCat 更新日志结束")
+            logger.info(f"获取 QQ 下载地址结束")
 
     @staticmethod
     def getLocalNapCatVersion() -> str | None:
