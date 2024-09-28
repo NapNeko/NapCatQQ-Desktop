@@ -12,12 +12,6 @@ from creart.creator import AbstractCreator, CreateTargetInfo
 
 class PathFunc:
 
-    paths_to_validate = [
-        (self.config_dir_path, "Config"),
-        (self.tmp_path, "Tmp"),
-        (self.napcat_path, "NapCat")
-    ]
-
     def __init__(self):
         """
         ## 初始化
@@ -38,7 +32,13 @@ class PathFunc:
         """
         logger.info(f"{'-' * 10}开始验证路径{'-' * 10}")
 
-        for path, name in self.paths_to_validate:
+        paths_to_validate = [
+            (self.config_dir_path, "Config"),
+            (self.tmp_path, "Tmp"),
+            (self.napcat_path, "NapCat")
+        ]
+
+        for path, name in paths_to_validate:
             if not path.exists():
                 path.mkdir(parents=True, exist_ok=True)
                 logger.info(f"{name} Path 路径不存在, 已创建")
