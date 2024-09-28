@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
+import sys
+import subprocess
+
 # 第三方库导入
 from creart import it
 from PySide6.QtGui import QDesktopServices
@@ -13,7 +17,6 @@ from src.Ui.UnitPage.status import ButtonStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Utils.GetVersion import GetVersion
-from src.Core.NetworkFunc.Downloader import GithubDownloader
 
 
 class NCDPage(PageBase):
@@ -96,6 +99,51 @@ class NCDPage(PageBase):
         ## 安装逻辑
         """
         success_bar(self.tr("下载成功, 正在安装..."))
+
+        # 写入安装脚本
+        bat_content = "\n".join(
+            [
+                "@echo off",
+                "setlocal",
+                "",
+                "rem 定义应用程序路径",
+                'set "app_name=NapCat-Desktop.exe"',
+                'set "current_app_path=%~dp0%app_name%"',
+                'set "new_app_path=%~dp0tmp\\%app_name%"',
+                "",
+                "rem 等待旧版进程退出，如果其还在运行的话",
+                ":wait_for_exit",
+                'tasklist /FI "IMAGENAME eq %app_name%" 2>NUL | find /I /N "%app_name%">NUL',
+                'if "%ERRORLEVEL%"=="0" (',
+                "    echo Waiting for the application to exit...",
+                "    timeout /T 1 /NOBREAK > NUL",
+                "    goto wait_for_exit",
+                ")",
+                "",
+                "rem 删除旧版本",
+                'if exist "%current_app_path%" (',
+                '    del "%current_app_path%"',
+                ")",
+                "",
+                "rem 移动新版到应用程序目录",
+                'move "%new_app_path%" "%current_app_path%"',
+                "",
+                "rem 启动新版本应用程序",
+                'start "" "%current_app_path%"',
+                "",
+                "rem 删除自身",
+                'del "%~f0"',
+                "endlocal",
+            ]
+        )
+        with open(str(it(PathFunc).base_path / "update.bat"), "w", encoding="utf-8") as file:
+            file.write(bat_content)
+
+        # 创建进程
+        subprocess.Popen([str(it(PathFunc).base_path / "update.bat")], shell=True)
+
+        # 退出程序
+        sys.exit()
 
     @Slot()
     def installFinshSlot(self) -> None:
