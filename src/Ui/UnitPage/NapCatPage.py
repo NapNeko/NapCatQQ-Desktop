@@ -14,7 +14,7 @@ from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Utils.GetVersion import GetVersion
 from src.Core.Utils.InstallFunc import NapCatInstall
-from src.Core.NetworkFunc.Downloader import NapCatDownloader
+from src.Core.NetworkFunc.Downloader import GithubDownloader
 
 
 class NapCatPage(PageBase):
@@ -82,7 +82,7 @@ class NapCatPage(PageBase):
         ## 下载逻辑
         """
         info_bar(self.tr("正在下载 NapCat"))
-        self.downloader = NapCatDownloader(Urls.NAPCAT_DOWNLOAD.value)
+        self.downloader = GithubDownloader(Urls.NAPCAT_DOWNLOAD.value)
         self.downloader.downloadProgress.connect(self.appCard.setProgressRingValue)
         self.downloader.downloadFinish.connect(self.installSlot)
         self.downloader.statusLabel.connect(self.appCard.setStatusText)

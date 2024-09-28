@@ -13,9 +13,9 @@ from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
 from src.Core.Utils.PathFunc import PathFunc
 
 
-class NapCatDownloader(QThread):
+class GithubDownloader(QThread):
     """
-    ## 执行下载 NapCat 的任务
+    ## 执行下载 Github文件 的任务
     """
     # 按钮模式切换
     buttonToggle = Signal(ButtonStatus)
@@ -39,6 +39,7 @@ class NapCatDownloader(QThread):
         super().__init__()
         self.url: QUrl = url
         self.path: Path = it(PathFunc).tmp_path
+        self.filename = self.url.fileName()
 
     def run(self) -> None:
         """
@@ -58,8 +59,8 @@ class NapCatDownloader(QThread):
 
         # 开始下载
         try:
-            logger.info(f"{'-' * 10} 开始下载 NapCat ~ {'-' * 10}")
-            self.statusLabel.emit(self.tr(" 开始下载 NapCat ~ "))
+            logger.info(f"{'-' * 10} 开始下载 {self.filename} ~ {'-' * 10}")
+            self.statusLabel.emit(self.tr(f" 开始下载 {self.filename} ~ "))
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
 
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
@@ -73,7 +74,7 @@ class NapCatDownloader(QThread):
                 self.progressRingToggle.emit(ProgressRingStatus.DETERMINATE)
 
                 with open(f"{self.path / self.url.fileName()}", "wb") as file:
-                    self.statusLabel.emit(self.tr("正在下载 NapCat ~ "))
+                    self.statusLabel.emit(self.tr(f"正在下载 {self.filename} ~ "))
                     for chunk in response.iter_bytes():
                         file.write(chunk)  # 写入字节
                         self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
@@ -81,17 +82,17 @@ class NapCatDownloader(QThread):
             # 下载完成
             self.downloadFinish.emit()  # 发送下载完成信号
             self.statusLabel.emit(self.tr("下载完成"))
-            logger.info(f"{'-' * 10} 下载 NapCat 结束 ~ {'-' * 10}")
+            logger.info(f"{'-' * 10} 下载 {self.filename} 结束 ~ {'-' * 10}")
 
         except httpx.HTTPStatusError as e:
             logger.error(
-                f"发送下载 NapCat 请求时引发 HTTPStatusError, "
+                f"发送下载 {self.filename} 请求时引发 HTTPStatusError, "
                 f"响应码: {e.response.status_code}, 响应内容: {e.response.content}"
             )
             self.statusLabel.emit(self.tr("下载失败"))
             self.errorFinsh.emit()
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            logger.error(f"下载 NapCat 时引发 {type(e).__name__}: {e}")
+            logger.error(f"下载 {self.filename} 时引发 {type(e).__name__}: {e}")
             self.statusLabel.emit(self.tr("下载失败"))
             self.errorFinsh.emit()
 
