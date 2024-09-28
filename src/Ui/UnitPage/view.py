@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Self, Optional
 
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
@@ -41,6 +42,7 @@ class UnitWidget(QWidget):
         self.setObjectName("UpdatePage")
         self.view.setObjectName("UpdateView")
         self._setLayout()
+        self.topCard.updateButton.clicked.connect(self.updateSlot)
 
         # 应用样式表
         StyleSheet.UNIT_WIDGET.apply(self)
@@ -96,6 +98,13 @@ class UnitWidget(QWidget):
         """
         widget = self.view.widget(index)
         self.topCard.pivot.setCurrentItem(widget.objectName())
+
+    @Slot()
+    def updateSlot(self) -> None:
+        """
+        ## 刷新页面
+        """
+        self.napcatPage.updatePage()
 
 
 class UnitWidgetClassCreator(AbstractCreator, ABC):
