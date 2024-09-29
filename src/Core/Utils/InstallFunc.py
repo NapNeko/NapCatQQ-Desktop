@@ -127,6 +127,8 @@ class QQInstall(QThread):
                 self.installFinish.emit()
             else:
                 self.errorFinsh.emit()
+
+            self.exe_path.unlink()  # 移除安装包
             logger.info(f"{'-' * 10} 安装 QQ 完成 ~ {'-' * 10}")
 
         except Exception as e:
