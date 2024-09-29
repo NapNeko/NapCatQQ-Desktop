@@ -96,7 +96,6 @@ class GithubDownloader(DownloaderBase):
             # 下载完成
             self.downloadFinish.emit()  # 发送下载完成信号
             self.statusLabel.emit(self.tr("下载完成"))
-            logger.info(f"{'-' * 10} 下载 {self.filename} 结束 ~ {'-' * 10}")
 
         except httpx.HTTPStatusError as e:
             logger.error(
@@ -113,22 +112,32 @@ class GithubDownloader(DownloaderBase):
         finally:
             # 无论是否出错,都会重置
             self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
+            logger.info(f"{'-' * 10} 下载 {self.filename} 结束 ~ {'-' * 10}")
 
     def checkNetwork(self) -> bool:
         """
         ## 检查网络能否正常访问 Github
         """
         try:
-            logger.info(f"{'-' * 10} 检查网络环境 {'-' * 10}")
+            logger.info(f"{'-' * 10} 开始检查网络环境 {'-' * 10}")
             self.statusLabel.emit(self.tr("检查网络环境"))
             # 如果 3 秒内能访问到 Github 表示网络环境非常奈斯
-            response = httpx.head(r"https://objects.githubusercontent.com", timeout=3)
-            logger.info("网络环境非常奈斯")
-            self.statusLabel.emit(self.tr("网络环境良好"))
-            return response.status_code == 200
-        except httpx.RequestError:
-            # 引发错误返回 False
+            response = httpx.head("https://objects.githubusercontent.com", timeout=3)
+            if response.status_code == 200:
+                logger.info("网络环境非常奈斯")
+                self.statusLabel.emit(self.tr("网络环境良好"))
+                return True
+            else:
+                logger.error(f"无法访问 Github, 状态码: {response.status_code}")
+                self.statusLabel.emit(self.tr("网络环境较差"))
+                return False
+        except httpx.RequestError as e:
+            logger.error(f"网络检查时引发 {type(e).__name__}: {e}")
+            self.statusLabel.emit(self.tr("网络检查失败"))
             return False
+
+        finally:
+            logger.info(f"{'-' * 10} 检查网络环境结束 {'-' * 10}")
 
 
 class QQDownloader(DownloaderBase):
