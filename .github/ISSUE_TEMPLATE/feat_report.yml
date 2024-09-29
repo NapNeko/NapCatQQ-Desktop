@@ -1,0 +1,38 @@
+name: Feat 请求
+description: 希望 NapCat Desktop 新增一些功能
+title: '[Feat] '
+labels: enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        欢迎来到 NapCat Desktop 的 Issue Tracker！请填写以下表格来提交 Feat 请求。
+        在提交新的 Feat 请求前，请确保您：
+        * 不与现有的某一 issue 重复
+  - type: input
+    id: feature-title
+    attributes:
+      label: 功能标题
+      description: 请简要描述您希望新增的功能
+      placeholder: 新增一个夜间模式
+    validations:
+      required: true
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: 功能描述
+      description: 请详细描述您希望新增的功能
+      placeholder: |
+        我希望 NapCat Desktop 能够在夜间自动切换到夜间模式，以减少眼睛疲劳。
+    validations:
+      required: true
+  - type: textarea
+    id: feature-benefits
+    attributes:
+      label: 功能的好处
+      description: 请描述该功能将如何改善您的使用体验
+      placeholder: |
+        1. 减少夜间使用时的眼睛疲劳
+        2. 提高夜间使用的舒适度
+    validations:
+      required: true
