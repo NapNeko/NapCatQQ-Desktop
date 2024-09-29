@@ -33,7 +33,7 @@ if __name__ == "__main__":
     # 检查是否已经有 NCD 在运行了, 如果有则取消运行
     for proc in psutil.process_iter():
         logger.debug(f"检测进程名称: {proc.name()}")
-        if proc.name() == "NapCatQQ-Desktop.exe":
+        if proc.name() == "NapCat-Desktop.exe":
             logger.warning("检测到已有 NapCatQQ-Desktop 进程运行, 请先关闭后再运行")
             sys.exit()
 
