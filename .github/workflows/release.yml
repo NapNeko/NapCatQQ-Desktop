@@ -47,3 +47,31 @@ jobs:
       with:
         name: NapCat-Desktop
         path: ./build/NapCat-Desktop.exe
+
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: "检出代码"
+        uses: actions/checkout@v2
+
+      - name: "下载工件"
+        uses: actions/download-artifact@v3
+        with:
+          name: NapCat-Desktop
+
+      - name: "设置 body 内容"
+        id: get_body
+        run: echo "::set-output name=body::$(cat docs/CHANGELOG.md)"
+
+      - name: "创建发布草案"
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "./NapCat-Desktop.exe"
+          draft: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ github.ref }}
+          name: "NapCat Release ${{ github.ref }}"
+          body: ${{ steps.get_body.outputs.body }}
