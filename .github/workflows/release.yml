@@ -4,7 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'  # 匹配版本标签
-      - 'test*'
+      - 'ci*'
 
 permissions:
   contents: write
@@ -20,15 +20,10 @@ jobs:
     - name: "设置 Python"
       uses: actions/setup-python@v2
       with:
-        python-version: '3.12'
-
-    - name: "安装 PDM"
-      run: |
-        (Invoke-WebRequest -Uri https://pdm-project.org/install-pdm.py -UseBasicParsing).Content | python -
-        $env:Path += ";$env:USERPROFILE\AppData\Roaming\Python\Scripts"
+        python-version: '3.11'
 
     - name: "安装依赖"
-      run: pdm install
+      run: pip install -r requirements.txt
 
     - uses: Nuitka/Nuitka-Action@main
       name: "构建 Windows 版本"
