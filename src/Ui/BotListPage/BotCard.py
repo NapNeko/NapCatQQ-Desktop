@@ -50,6 +50,18 @@ class BotCard(CardWidget):
 
         self.clicked.connect(self._clickSlot)
 
+        if self.config.advanced.autoStart:
+            # 项目内模块导入
+            from src.Ui.BotListPage.BotWidget import BotWidget
+            from src.Ui.BotListPage.BotListWidget import BotListWidget
+
+            # 创建页面
+            self.botWidget = BotWidget(self.config)
+            it(BotListWidget).view.addWidget(self.botWidget)
+
+            # 启动机器人
+            self.botWidget.runButton.clicked.emit()
+
     def _setLayout(self) -> None:
         """
         ## 布局卡片控件

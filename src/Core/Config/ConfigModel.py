@@ -1,7 +1,6 @@
 # 标准库导入
 import random
 import string
-from enum import Enum
 from typing import List, Optional
 
 # 第三方库导入
@@ -85,6 +84,7 @@ class ConnectConfig(BaseModel):
 
 
 class AdvancedConfig(BaseModel):
+    autoStart: bool = False
     debug: bool
     enableLocalFile2Url: bool
     fileLog: bool
@@ -149,5 +149,6 @@ DEFAULT_CONFIG = {
         "consoleLog": False,
         "enableLocalFile2Url": "debug",
         "consoleLogLevel": "info",
+        "autoStart": False,
     },
 }
