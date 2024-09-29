@@ -4,12 +4,10 @@ import sys
 import ctypes
 
 # 第三方库导入
-import win32api
-import winerror
-import win32event
 from loguru import logger
 
 # 项目内模块导入
+from src.Core.Utils.mutex import SingleInstanceApplication
 from src.Core.Utils.logger import Logger
 
 NAPCATQQ_DESKTOP_LOGO = r"""
@@ -32,10 +30,10 @@ if __name__ == "__main__":
         ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
         sys.exit()
 
-    # 创建互斥锁，防止多次启动
-    mutex = win32event.CreateMutex(None, False, "NapCatQQ_Desktop")
-    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
-        logger.error("程序已经在运行中，取消启动")
+    # 实现单实例应用程序检查
+    single_app_checker = SingleInstanceApplication()
+    if single_app_checker.is_running():
+        logger.error("检测到已经有NapCat Desktop正在运行, 取消运行")
         sys.exit()
 
     # 启动主程序
