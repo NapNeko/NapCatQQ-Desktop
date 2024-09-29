@@ -43,7 +43,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # 加载翻译文件
-    locale: QLocale = cfg.get(cfg.language).value
+    locale: QLocale = cfg.get(cfg.Language).value
     NCDTranslator = QTranslator()
     NCDTranslator.load(locale, f":i18n/i18n/translation.{locale.name()}.qm")
     app.installTranslator(FluentTranslator(locale))
