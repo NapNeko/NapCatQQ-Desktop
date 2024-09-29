@@ -25,7 +25,7 @@ jobs:
     - name: "安装 PDM"
       run: |
         (Invoke-WebRequest -Uri https://pdm-project.org/install-pdm.py -UseBasicParsing).Content | python -
-        $env:Path += ";$env:USERPROFILE\.local\bin"
+        $env:Path += ";$env:USERPROFILE\AppData\Roaming\Python\Scripts"
 
     - name: "安装依赖"
       run: pdm install
