@@ -4,7 +4,9 @@ import sys
 import ctypes
 
 # 第三方库导入
-import psutil
+import win32api
+import winerror
+import win32event
 from loguru import logger
 
 # 项目内模块导入
@@ -30,12 +32,11 @@ if __name__ == "__main__":
         ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
         sys.exit()
 
-    # 检查是否已经有 NCD 在运行了, 如果有则取消运行
-    for proc in psutil.process_iter():
-        logger.debug(f"检测进程名称: {proc.name()}")
-        if proc.name() == "NapCat-Desktop.exe":
-            logger.warning("检测到已有 NapCatQQ-Desktop 进程运行, 请先关闭后再运行")
-            sys.exit()
+    # 创建互斥锁，防止多次启动
+    mutex = win32event.CreateMutex(None, False, "NapCatQQ_Desktop")
+    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+        logger.error("程序已经在运行中，取消启动")
+        sys.exit()
 
     # 启动主程序
     # 第三方库导入
