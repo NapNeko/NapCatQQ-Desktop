@@ -27,9 +27,9 @@
 - [x] **自动更新**: 支持自动检查 NapCat 更新, 一键更新
 
 ## 使用项目
-可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的EXE文件，即可使用
+可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的EXE文件
 
-使用本项目默认您同意本项目声明
+如果您的系统是Windows Server 2016(或win10)及以上版本，可以使用本项目
 
 ## 回家归途
 [QQ Group](https://qm.qq.com/q/VfjAq5HIMS)
