@@ -41,6 +41,12 @@ class AdvancedWidget(ScrollArea):
         ## 初始化 QWidget 所需要的控件并配置
         创建 InputCard
         """
+        self.autoStartCard = SwitchConfigCard(
+            icon=FluentIcon.PLAY,
+            title=self.tr("自动启动"),
+            content=self.tr("是否在启动时自动启动 bot"),
+            parent=self.view,
+        )
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Debug"),
@@ -83,6 +89,7 @@ class AdvancedWidget(ScrollArea):
         )
 
         self.cards = [
+            self.autoStartCard,
             self.debugModeCard,
             self.localFile2UrlCard,
             self.fileLogCard,
@@ -95,6 +102,7 @@ class AdvancedWidget(ScrollArea):
         """
         ## 如果传入了 config 则对其内部卡片的值进行填充
         """
+        self.autoStartCard.fillValue(self.config.autoStart)
         self.debugModeCard.fillValue(self.config.debug)
         self.localFile2UrlCard.fillValue(self.config.enableLocalFile2Url)
         self.fileLogCard.fillValue(self.config.fileLog)
@@ -119,6 +127,7 @@ class AdvancedWidget(ScrollArea):
         ## 返回内部卡片的配置结果
         """
         return {
+            "autoStart": self.autoStartCard.getValue(),
             "debug": self.debugModeCard.getValue(),
             "enableLocalFile2Url": self.localFile2UrlCard.getValue(),
             "fileLog": self.fileLogCard.getValue(),
