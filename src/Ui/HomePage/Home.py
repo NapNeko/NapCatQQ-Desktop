@@ -16,8 +16,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QStackedWidget
 
 # 项目内模块导入
-from src.Core.Config import StartOpenHomePageViewEnum as SEnum
-from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
@@ -52,27 +50,20 @@ class HomeWidget(QStackedWidget):
         self.setObjectName("HomePage")
         self.addWidget(self.displayView)
         self.addWidget(self.contentView)
-        self.setCurrentWidget(self.contentView)
+        self.setCurrentWidget(self.displayView)
+
+        # 链接信号
+        self.displayView.buttonGroup.goButton.clicked.connect(
+            lambda: self.setCurrentWidget(self.contentView)
+        )
 
         # 调用方法
-        self.chooseView()
         self.updateBgImage()
 
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
         return self
-
-    def chooseView(self) -> None:
-        """
-        判断并加载相应的 Widget。
-        根据配置确定是打开首页视图还是内容视图。
-        """
-        match cfg.get(cfg.StartOpenHomePageView):
-            case SEnum.DISPLAY_VIEW:
-                self.setCurrentWidget(self.displayView)
-            case SEnum.CONTENT_VIEW:
-                self.setCurrentWidget(self.contentView)
 
     def updateBgImage(self) -> None:
         """

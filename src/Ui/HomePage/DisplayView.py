@@ -3,7 +3,7 @@
 from qfluentwidgets.common import FluentIcon, setFont
 from qfluentwidgets.components import ImageLabel, PushButton, TitleLabel, PrimaryPushButton
 from PySide6.QtGui import QFont, QDesktopServices
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
@@ -13,7 +13,6 @@ from src.Core.NetworkFunc.Urls import Urls
 
 class DisplayViewWidget(QWidget):
     # 开信号接口,将信号向上级传递
-    goBtnSignal = Signal()
 
     def __init__(self) -> None:
         """
@@ -31,7 +30,6 @@ class DisplayViewWidget(QWidget):
         # 设置控件
         self.logoImage.setImage(":Global/logo.png")
         self.logoImage.scaledToWidth(self.width() // 5)
-        self.buttonGroup.goBtnSignal.connect(self.goBtnSignal.emit)
 
         # 进行布局
         self._setLayout()
@@ -70,8 +68,6 @@ class DisplayViewWidget(QWidget):
 
 
 class ButtonGroup(QWidget):
-    # 开信号接口,将信号向上级传递
-    goBtnSignal = Signal()
 
     def __init__(self, parent: DisplayViewWidget) -> None:
         """
@@ -86,11 +82,10 @@ class ButtonGroup(QWidget):
 
         # 设置控件
         self.githubButton.setText(self.tr("GitHub"))
-        self.goButton.setText(self.tr("Start Using"))
+        self.goButton.setText(self.tr("开始使用"))
         self.githubButton.setIcon(FluentIcon.GITHUB)
 
         # 链接按钮信号
-        self.goButton.clicked.connect(self.goBtnSignal.emit)
         self.githubButton.clicked.connect(lambda: QDesktopServices.openUrl(Urls.NAPCATQQ_REPO.value))
 
         # 进行布局
