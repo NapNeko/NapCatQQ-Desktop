@@ -1,20 +1,22 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import winreg
+from pathlib import Path
 
 # 第三方库导入
 from creart import it
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl, Slot
 
 # 项目内模块导入
 from src.Core import timer
 from src.Ui.UnitPage.Base import PageBase
-from src.Ui.common.info_bar import error_bar, success_bar
+from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Utils.GetVersion import GetVersion
-from src.Ui.common.message_box import FolderBox
+from src.Ui.common.message_box import AskBox, FolderBox
 from src.Core.Utils.InstallFunc import QQInstall
 from src.Core.NetworkFunc.Downloader import QQDownloader
 
@@ -113,23 +115,39 @@ class QQPage(PageBase):
         success_bar(self.tr("下载成功, 正在安装..."))
 
         # 创建询问弹出
-        box = FolderBox(self.tr("选择安装路径"), it(MainWindow))
+        folder_box = FolderBox(self.tr("选择安装路径"), it(MainWindow))
 
-        if box.exec():
-            # 如果点击了确定按钮
+        if not folder_box.exec():
+            # 如果没有点击确定按钮
+            self.file_path.unlink()
+            info_bar(self.tr("取消安装"))
+            return
 
-            # 修改注册表, 让安装程序读取注册表按照路径安装
-            key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\WOW6432Node\Tencent\QQNT")
-            winreg.SetValueEx(key, "Install", 0, winreg.REG_SZ, box.getValue())
-            winreg.CloseKey(key)
+        # 修改注册表, 让安装程序读取注册表按照路径安装
+        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Tencent\QQNT")
+        winreg.SetValueEx(key, "Install", 0, winreg.REG_SZ, folder_box.getValue().replace("/", "\\"))
+        winreg.CloseKey(key)
 
-            self.installer = QQInstall(self.file_path)
-            self.installer.statusLabel.connect(self.appCard.setStatusText)
-            self.installer.errorFinsh.connect(self.errorFinshSlot)
-            self.installer.buttonToggle.connect(self.appCard.switchButton)
-            self.installer.progressRingToggle.connect(self.appCard.switchProgressRing)
-            self.installer.installFinish.connect(self.installFinshSlot)
-            self.installer.start()
+        # 检查是否存在 dbghelp.dll 文件, 否则会导致安装失败
+        if Path(Path(folder_box.getValue()) / "dbghelp.dll").exists():
+            rm_dll_box = AskBox(self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), it(MainWindow))
+            rm_dll_box.yesButton.setText(self.tr("删除"))
+            if rm_dll_box.exec():
+                # 用户点击了删除
+                Path(Path(folder_box.getValue()) / "dbghelp.dll").unlink()
+            else:
+                self.file_path.unlink()
+                info_bar(self.tr("取消安装"))
+                return
+
+        # 开始安装
+        self.installer = QQInstall(self.file_path)
+        self.installer.statusLabel.connect(self.appCard.setStatusText)
+        self.installer.errorFinsh.connect(self.errorFinshSlot)
+        self.installer.buttonToggle.connect(self.appCard.switchButton)
+        self.installer.progressRingToggle.connect(self.appCard.switchProgressRing)
+        self.installer.installFinish.connect(self.installFinshSlot)
+        self.installer.start()
 
     @Slot()
     def installFinshSlot(self) -> None:
