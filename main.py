@@ -7,7 +7,7 @@ import ctypes
 from loguru import logger
 
 # 项目内模块导入
-from src.Core import stdout
+from src.Core.Utils.logger import Logger
 
 NAPCATQQ_DESKTOP_LOGO = r"""
 
@@ -19,7 +19,7 @@ NAPCATQQ_DESKTOP_LOGO = r"""
 
 if __name__ == "__main__":
     # 调整程序 log 输出
-    stdout()
+    Logger()
     # 检查是否以管理员模式启动, 非管理员模式尝试获取管理员权限
     # 获取管理员权限成功后退出原有进程
     if not ctypes.windll.shell32.IsUserAnAdmin():
@@ -30,7 +30,6 @@ if __name__ == "__main__":
     # 启动主程序
     # 第三方库导入
     from creart import it
-    from loguru import logger
     from qfluentwidgets import FluentTranslator
     from PySide6.QtCore import QLocale, QTranslator
     from PySide6.QtWidgets import QApplication

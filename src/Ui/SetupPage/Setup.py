@@ -2,7 +2,6 @@
 # 标准库导入
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
-from pathlib import Path
 
 # 第三方库导入
 from creart import it, add_creator, exists_module
@@ -13,6 +12,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 from src.Core import timer
 from src.Ui.common import CodeEditor
 from src.Ui.StyleSheet import StyleSheet
+from src.Core.Utils.logger import INFO_LOG
 from src.Ui.common.CodeEditor import NCDLogHighlighter
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
 from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
@@ -29,7 +29,7 @@ class SetupWidget(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.log_file_path = Path.cwd() / "log/ALL.log"
+        self.log_file_path = INFO_LOG
         self.view: Optional[QStackedWidget] = None
         self.topCard: Optional[SetupTopCard] = None
         self.setupScrollArea: Optional[SetupScrollArea] = None

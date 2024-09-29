@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-import sys
 from typing import Any, Callable
-from pathlib import Path
 from functools import wraps
 
-# 第三方库导入
-from loguru import logger
 from PySide6.QtCore import QTimer
 
 
@@ -44,24 +40,3 @@ def timer(interval: int, single_shot: bool = False) -> Callable[[Callable[..., A
         return wrapper
 
     return decorator
-
-
-def stdout() -> None:
-    """
-    ## 调整程序输出
-    """
-    # 获取路径
-    log_path = Path.cwd() / "log"
-    all_log_path = log_path / "ALL.log"
-
-    # 检查路径, 如果不存在 log 文件夹则创建一个
-    if not log_path.exists():
-        log_path.mkdir(parents=True, exist_ok=True)
-
-    # 自定义格式化器
-    custom_format = "<level>{time:YYYY-MM-DD HH:mm:ss}</level> | <level>{level: <8}</level> | <level>{message}</level>"
-    # 移除原有过滤器
-    logger.remove()
-    # 添加自定义的 logger
-    logger.add(sys.stderr, level="INFO", format=custom_format)
-    logger.add(all_log_path, level="INFO", format=custom_format)

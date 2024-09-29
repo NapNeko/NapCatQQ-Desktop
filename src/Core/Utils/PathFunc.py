@@ -24,6 +24,10 @@ class PathFunc:
         self.tmp_path = self.base_path / "tmp"
         self.napcat_path = self.base_path / "NapCat"
 
+        self.log_path = self.base_path / "log"
+        self.log_info_path = self.log_path / "info"
+        self.log_debug_path = self.log_path / "debug"
+
         self.pathValidator()
 
     def pathValidator(self) -> None:
@@ -35,7 +39,10 @@ class PathFunc:
         paths_to_validate = [
             (self.config_dir_path, "Config"),
             (self.tmp_path, "Tmp"),
-            (self.napcat_path, "NapCat")
+            (self.napcat_path, "NapCat"),
+            (self.log_path, "Log"),
+            (self.log_info_path, "Log Info"),
+            (self.log_debug_path, "Log Debug"),
         ]
 
         for path, name in paths_to_validate:
