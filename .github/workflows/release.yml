@@ -1,4 +1,4 @@
-name: Build Release
+name: 构建发布
 
 on:
   push:
@@ -23,8 +23,8 @@ jobs:
         python-version: '3.12'
 
     - name: "安装 PDM"
-        run: |
-          (Invoke-WebRequest -Uri https://pdm-project.org/install-pdm.py -UseBasicParsing).Content | python -
+      run: |
+        (Invoke-WebRequest -Uri https://pdm-project.org/install-pdm.py -UseBasicParsing).Content | python -
 
     - name: 安装依赖
       run: pdm install
@@ -39,14 +39,14 @@ jobs:
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
         output-filename: "NapCat-Desktop"
 
-    - name: Enable Developer Command Prompt
+    - name: 启用开发者命令提示符
       uses: ilammy/msvc-dev-cmd@v1.13.0
 
-    - name: Add Manifest
+    - name: 添加清单文件
       run: |
         mt.exe -manifest ./assets/NapCat-Desktop.exe.manifest -outputresource:./build/NapCat-Desktop.exe;1
-    
-        - name: Upload artifact
+
+    - name: 上传工件
       uses: actions/upload-artifact@v3
       with:
         name: NapCat-Desktop
