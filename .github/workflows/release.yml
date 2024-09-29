@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'v*.*.*'  # 匹配版本标签
-      - 'ci*'
 
 permissions:
   contents: write
