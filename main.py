@@ -20,19 +20,22 @@ NAPCATQQ_DESKTOP_LOGO = r"""
 
 if __name__ == "__main__":
 
-    # 检查是否已经有 NCD 在运行了, 如果有则取消运行
-    for proc in psutil.process_iter(['name']):
-        if proc.info['name'] == "NapCat-Desktop.exe":
-            sys.exit()
-
     # 调整程序 log 输出
     Logger()
+
     # 检查是否以管理员模式启动, 非管理员模式尝试获取管理员权限
     # 获取管理员权限成功后退出原有进程
     if not ctypes.windll.shell32.IsUserAnAdmin():
         logger.warning("非管理员模式启动, 尝试获取管理员权限")
         ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
         sys.exit()
+
+    # 检查是否已经有 NCD 在运行了, 如果有则取消运行
+    for proc in psutil.process_iter():
+        logger.debug(f"检测进程名称: {proc.name()}")
+        if proc.name() == "NapCatQQ-Desktop.exe":
+            logger.warning("检测到已有 NapCatQQ-Desktop 进程运行, 请先关闭后再运行")
+            sys.exit()
 
     # 启动主程序
     # 第三方库导入
