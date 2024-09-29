@@ -2,7 +2,6 @@
 # 标准库导入
 import time
 import platform
-from enum import Enum
 
 # 第三方库导入
 from creart import it
@@ -19,27 +18,9 @@ from qfluentwidgets.common import (
 from PySide6.QtCore import QLocale
 
 # 项目内模块导入
+from src.Core.Config import Language
+from src.Core.Config.enum import Language, StartOpenHomePageViewEnum
 from src.Core.Utils.PathFunc import PathFunc
-
-
-class StartOpenHomePageViewEnum(Enum):
-    """启动页面枚举"""
-
-    DISPLAY_VIEW = "DisplayView"
-    CONTENT_VIEW = "ContentView"
-
-    @staticmethod
-    def values():
-        return [value.value for value in StartOpenHomePageViewEnum]
-
-
-class Language(Enum):
-    """语言枚举"""
-
-    CHINESE_SIMPLIFIED = QLocale(QLocale.Language.Chinese, QLocale.Script.SimplifiedChineseScript)
-    CHINESE_TRADITIONAL = QLocale(QLocale.Language.Chinese, QLocale.Script.TraditionalChineseScript)
-    ENGLISH = QLocale(QLocale.Language.English)
-    AUTO = QLocale()
 
 
 class LanguageSerializer(ConfigSerializer):

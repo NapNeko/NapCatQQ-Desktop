@@ -19,7 +19,6 @@ from PySide6.QtWidgets import QStackedWidget
 from src.Core.Config import StartOpenHomePageViewEnum as SEnum
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
-from src.Ui.common.info_bar import info_bar
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
 
@@ -54,7 +53,6 @@ class HomeWidget(QStackedWidget):
         self.addWidget(self.displayView)
         self.addWidget(self.contentView)
         self.setCurrentWidget(self.contentView)
-        self.displayView.goBtnSignal.connect(self._goBtnSlot)
 
         # 调用方法
         self.chooseView()
@@ -64,16 +62,6 @@ class HomeWidget(QStackedWidget):
         StyleSheet.HOME_WIDGET.apply(self)
 
         return self
-
-    def _goBtnSlot(self) -> None:
-        """
-        ## Start Using 的槽函数
-        """
-        self.setCurrentWidget(self.contentView)
-        if cfg.get(cfg.HideUsGoBtnTips):
-            # 是否隐藏提示
-            return
-        info_bar(self.tr("您可以选择在设置页面中选择启动时的展示页💕"))
 
     def chooseView(self) -> None:
         """
