@@ -5,6 +5,7 @@ venv/
 config/
 tmp/
 .vscode/
+.idea/
 
 # Ignore specific application directories and files
 NapCat/
