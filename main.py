@@ -4,6 +4,7 @@ import sys
 import ctypes
 
 # 第三方库导入
+import psutil
 from loguru import logger
 
 # 项目内模块导入
@@ -18,6 +19,12 @@ NAPCATQQ_DESKTOP_LOGO = r"""
 
 
 if __name__ == "__main__":
+
+    # 检查是否已经有 NCD 在运行了, 如果有则取消运行
+    for proc in psutil.process_iter():
+        if proc.name() == "NapCat-Desktop.exe":
+            sys.exit()
+    
     # 调整程序 log 输出
     Logger()
     # 检查是否以管理员模式启动, 非管理员模式尝试获取管理员权限
