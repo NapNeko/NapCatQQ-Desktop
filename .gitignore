@@ -20,3 +20,4 @@ __pycache__/
 
 # Ignore PDM Python environment file
 .pdm-python
+pdm.lock
