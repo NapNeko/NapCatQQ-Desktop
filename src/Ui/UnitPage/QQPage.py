@@ -16,6 +16,7 @@ from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.message_box import FolderBox
 from src.Core.Utils.InstallFunc import QQInstall
+from src.Core.NetworkFunc.Downloader import QQDownloader
 
 DESCRIPTION_TEXT = """
 ## 为什么要 QQ?

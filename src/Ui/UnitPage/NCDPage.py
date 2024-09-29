@@ -17,6 +17,7 @@ from src.Ui.UnitPage.status import ButtonStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Utils.GetVersion import GetVersion
+from src.Core.NetworkFunc.Downloader import GithubDownloader
 
 
 class NCDPage(PageBase):
