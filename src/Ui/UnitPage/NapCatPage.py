@@ -13,6 +13,7 @@ from src.Ui.UnitPage.status import ButtonStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Utils.GetVersion import GetVersion
+from src.Ui.common.message_box import AskBox
 from src.Core.Utils.InstallFunc import NapCatInstall
 from src.Core.NetworkFunc.Downloader import GithubDownloader
 
@@ -81,6 +82,16 @@ class NapCatPage(PageBase):
         """
         ## 下载逻辑
         """
+        if self.checkBotIsRun():
+            # 项目内模块导入
+            from src.Ui.MainWindow import MainWindow
+
+            box = AskBox(self.tr("失败"), self.tr("存在Bot运行时,无法执行操作"), it(MainWindow))
+            box.yesButton.clicked.connect(lambda: it(MainWindow).bot_list_widget_button.click())
+            box.yesButton.setText(self.tr("前往关闭"))
+            box.exec()
+            return
+
         info_bar(self.tr("正在下载 NapCat"))
         self.downloader = GithubDownloader(Urls.NAPCAT_DOWNLOAD.value)
         self.downloader.downloadProgress.connect(self.appCard.setProgressRingValue)
@@ -120,3 +131,21 @@ class NapCatPage(PageBase):
         """
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.updatePage()  # 刷新一次页面
+
+    @staticmethod
+    def checkBotIsRun() -> bool:
+        """
+        ## 检查 NapCat 是否有在运行
+        """
+        # 项目内模块导入
+        from src.Ui.BotListPage import BotListWidget
+
+        # 遍历所有卡片
+        for card in it(BotListWidget).botList.botCardList:
+            if card.botWidget is None:
+                continue
+
+            if card.botWidget.isRun:
+                return True
+
+        return False
