@@ -20,8 +20,8 @@ from qfluentwidgets import (
     NavigationBarPushButton,
 )
 from PySide6.QtGui import QIcon
-from PySide6.QtCore import Slot, QSize
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+from PySide6.QtCore import QSize
+from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
@@ -149,17 +149,7 @@ class MainWindow(MSFluentWindow):
         ## 设置托盘图标
         """
         self.trayIcon = SystemTrayIcon(self)
-        self.trayIcon.activated.connect(self.trayIconAction)
         self.trayIcon.show()
-
-    @Slot(QSystemTrayIcon)
-    def trayIconAction(self, reason: QSystemTrayIcon):
-        """
-        ## 托盘图标被点击事件
-        """
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.showNormal() if self.isMinimized() else None
-            self.show() if self.isHidden() else None
 
     def closeEvent(self, event):
         self.hide()

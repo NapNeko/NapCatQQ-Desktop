@@ -47,6 +47,9 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.setToolTip("NapCat Desktop")
         self.setContextMenu(self.menu)
 
+        # 链接信号
+        self.activated.connect(self.clickSlot)
+
     @Slot()
     def addBotSlot(self) -> None:
         self.checkShow()
@@ -76,6 +79,15 @@ class SystemTrayIcon(QSystemTrayIcon):
         # 循环判断是否机器人已经关闭
         it(BotListWidget).stopAllBot()
         sys.exit()
+
+    @Slot(QSystemTrayIcon)
+    def clickSlot(self, reason: QSystemTrayIcon) -> None:
+        """
+        ## 托盘图标被点击事件
+        """
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self.showNormal() if self.isMinimized() else None
+            self.show() if self.isHidden() else None
 
     def checkShow(self) -> None:
         """
