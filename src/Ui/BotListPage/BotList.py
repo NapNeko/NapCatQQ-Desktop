@@ -87,29 +87,3 @@ class BotList(ScrollArea):
 
         # 刷新一次布局
         self.cardLayout.update()
-
-    def getBotIsRun(self) -> bool:
-        """
-        ## 获取是否有机器人在运行
-        """
-        for card in self.botCardList:
-
-            if card.botWidget is None:
-                continue
-
-            if card.botWidget.isRun:
-                return True
-
-        return False
-
-    def closeAllBot(self) -> None:
-        """
-        ## 关闭所有机器人
-        """
-        for card in self.botCardList:
-
-            if card.botWidget is None:
-                continue
-
-            if card.botWidget.isRun:
-                card.botWidget.stopButtonSlot()

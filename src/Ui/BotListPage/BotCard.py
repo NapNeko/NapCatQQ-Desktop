@@ -60,7 +60,7 @@ class BotCard(CardWidget):
             it(BotListWidget).view.addWidget(self.botWidget)
 
             # 启动机器人
-            self.botWidget.runButton.clicked.emit()
+            self.botWidget.runButtonSlot()
 
     def _setLayout(self) -> None:
         """

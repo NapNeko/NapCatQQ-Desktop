@@ -65,25 +65,41 @@ class BotListWidget(QWidget):
         self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
         self.setLayout(self.vBoxLayout)
 
+    def runAllBot(self) -> None:
+        """
+        ## 运行所有机器人
+        """
+        # 项目内模块导入
+        from src.Ui.BotListPage import BotListWidget
+        from src.Ui.BotListPage.BotWidget import BotWidget
+
+        for card in self.botList.botCardList:
+
+            if card.botWidget is None:
+                card.botWidget = BotWidget(card.config)
+                self.view.addWidget(card.botWidget)
+
+            card.botWidget.runButtonSlot()
+
     def stopAllBot(self):
         """
-        ## 停止所有 bot
+        ## 停止所有 card
         """
-        for bot in self.botList.botCardList:
-            if not bot.botWidget:
+        for card in self.botList.botCardList:
+            if not card.botWidget:
                 continue
-            if bot.botWidget.isRun:
-                bot.botWidget.stopButton.click()
+            if card.botWidget.isRun:
+                card.botWidget.stopButton.click()
 
     def getBotIsRun(self):
         """
-        ## 获取是否有 bot 正在运行
+        ## 获取是否有 card 正在运行
         """
-        for bot in self.botList.botCardList:
-            if not bot.botWidget:
+        for card in self.botList.botCardList:
+            if not card.botWidget:
                 # 如果没有创建则表示没有运行
                 continue
-            if bot.botWidget.isRun:
+            if card.botWidget.isRun:
                 return True
 
 
