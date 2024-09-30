@@ -23,17 +23,17 @@ if __name__ == "__main__":
     # 调整程序 log 输出
     Logger()
 
+    # 实现单实例应用程序检查
+    single_app_checker = SingleInstanceApplication()
+    if single_app_checker.is_running():
+        logger.error("检测到已经有 NapCat Desktop 正在运行, 取消运行")
+        sys.exit()
+
     # 检查是否以管理员模式启动, 非管理员模式尝试获取管理员权限
     # 获取管理员权限成功后退出原有进程
     if not ctypes.windll.shell32.IsUserAnAdmin():
         logger.warning("非管理员模式启动, 尝试获取管理员权限")
         ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
-        sys.exit()
-
-    # 实现单实例应用程序检查
-    single_app_checker = SingleInstanceApplication()
-    if single_app_checker.is_running():
-        logger.error("检测到已经有NapCat Desktop正在运行, 取消运行")
         sys.exit()
 
     # 启动主程序
