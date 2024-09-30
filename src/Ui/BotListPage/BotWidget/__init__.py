@@ -179,7 +179,7 @@ class BotWidget(QWidget):
         self.rebootButton.setVisible(True)
 
         # 显示提示
-        info_bar(self.tr("已执行启动命令, 如果长时间没有输, 请查看日志"))
+        info_bar(self.tr("已执行启动命令, 如果长时间没有输出, 请查看日志"))
 
     @Slot()
     def stopButtonSlot(self) -> None:
