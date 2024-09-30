@@ -42,10 +42,5 @@ class SystemTrayIcon(QSystemTrayIcon):
         ## 关闭槽函数
         """
         # 循环判断是否机器人已经关闭
-        for card in it(BotListWidget).botList.botCardList:
-            if card.botWidget is None:
-                continue
-            if card.botWidget.isRun:
-                card.botWidget.stopButtonSlot()
-
+        it(BotListWidget).stopAllBot()
         sys.exit()

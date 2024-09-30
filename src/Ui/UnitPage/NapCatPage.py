@@ -7,6 +7,7 @@ from PySide6.QtCore import QUrl, Slot
 
 # 项目内模块导入
 from src.Core import timer
+from src.Ui.BotListPage import BotListWidget
 from src.Ui.UnitPage.Base import PageBase
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
@@ -82,12 +83,12 @@ class NapCatPage(PageBase):
         """
         ## 下载逻辑
         """
-        if self.checkBotIsRun():
+        if it(BotListWidget).getBotIsRun():
             # 项目内模块导入
             from src.Ui.MainWindow import MainWindow
 
             box = AskBox(self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow))
-            box.yesButton.clicked.connect(self.closeAllBot)
+            box.yesButton.clicked.connect(it(BotListWidget).stopAllBot)
             box.yesButton.setText(self.tr("关闭全部"))
 
             if not box.exec():
@@ -132,37 +133,3 @@ class NapCatPage(PageBase):
         """
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.updatePage()  # 刷新一次页面
-
-    @staticmethod
-    def checkBotIsRun() -> bool:
-        """
-        ## 检查 NapCat 是否有在运行
-        """
-        # 项目内模块导入
-        from src.Ui.BotListPage import BotListWidget
-
-        # 遍历所有卡片
-        for card in it(BotListWidget).botList.botCardList:
-            if card.botWidget is None:
-                continue
-
-            if card.botWidget.isRun:
-                return True
-
-        return False
-
-    @staticmethod
-    def closeAllBot() -> None:
-        """
-        ## 关闭所有bot
-        """
-        # 项目内模块导入
-        from src.Ui.BotListPage import BotListWidget
-
-        # 遍历所有卡片
-        for card in it(BotListWidget).botList.botCardList:
-            if card.botWidget is None:
-                continue
-
-            if card.botWidget.isRun:
-                card.botWidget.stopButtonSlot()
