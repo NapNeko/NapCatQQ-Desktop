@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
 import re
 
+# 第三方库导入
 import psutil
 from creart import it
-from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import Qt, Slot, QProcess
 from qfluentwidgets import (
     FluentIcon,
     PushButton,
@@ -14,8 +14,11 @@ from qfluentwidgets import (
     PrimaryPushButton,
     TransparentToolButton,
 )
+from PySide6.QtGui import QTextCursor
+from PySide6.QtCore import Qt, Slot, QProcess
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
+# 项目内模块导入
 from src.Ui.common import CodeEditor, LogHighlighter
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
@@ -114,9 +117,9 @@ class BotWidget(QWidget):
         self.returnButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回到按钮
 
         # 连接槽函数
-        self.runButton.clicked.connect(self._runButtonSlot)
-        self.stopButton.clicked.connect(self._stopButtonSlot)
-        self.rebootButton.clicked.connect(self._rebootButtonSlot)
+        self.runButton.clicked.connect(self.runButtonSlot)
+        self.stopButton.clicked.connect(self.stopButtonSlot)
+        self.rebootButton.clicked.connect(self.rebootButtonSlot)
         self.showQRCodeButton.clicked.connect(lambda: self.qrcodeMsgBox.show())
         self.updateConfigButton.clicked.connect(self._updateButtonSlot)
         self.deleteConfigButton.clicked.connect(self._deleteButtonSlot)
@@ -146,11 +149,12 @@ class BotWidget(QWidget):
         self.deleteConfigButton.installEventFilter(ToolTipFilter(self.deleteConfigButton))
 
     @Slot()
-    def _runButtonSlot(self) -> None:
+    def runButtonSlot(self) -> None:
         """
         ## 启动按钮槽函数
         """
         # 获取主框架
+        # 项目内模块导入
         from src.Ui.MainWindow import MainWindow
 
         # 创建组件
@@ -178,10 +182,13 @@ class BotWidget(QWidget):
         info_bar(self.tr("已执行启动命令, 如果长时间没有输, 请查看日志"))
 
     @Slot()
-    def _stopButtonSlot(self) -> None:
+    def stopButtonSlot(self) -> None:
         """
         ## 停止按钮槽函数
         """
+        if not self.isRun:
+            return
+
         if parent := psutil.Process(self.process.processId()):
             [child.kill() for child in parent.children(recursive=True)]
             parent.kill()
@@ -192,12 +199,12 @@ class BotWidget(QWidget):
         self.showQRCodeButton.hide()
 
     @Slot()
-    def _rebootButtonSlot(self) -> None:
+    def rebootButtonSlot(self) -> None:
         """
         ## 重启机器人, 直接调用函数
         """
-        self._stopButtonSlot()
-        self._runButtonSlot()
+        self.stopButtonSlot()
+        self.runButtonSlot()
 
     def _handle_stdout(self) -> None:
         """
@@ -241,6 +248,7 @@ class BotWidget(QWidget):
         """
         ## 删除机器人配置按钮
         """
+        # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
         if self.isRun:
@@ -254,6 +262,7 @@ class BotWidget(QWidget):
                 it(MainWindow)
         ).exec():
             # 询问用户是否确认删除, 确认删除执行删除操作
+            # 项目内模块导入
             from src.Ui.BotListPage.BotListWidget import BotListWidget
 
             if delete_config(self.config):
@@ -270,6 +279,7 @@ class BotWidget(QWidget):
         """
         if self.view.currentWidget() in [self.botInfoPage, self.botSetupPage, self.botLogPage]:
             # 判断当前处于哪个页面
+            # 项目内模块导入
             from src.Ui.BotListPage.BotListWidget import BotListWidget
 
             it(BotListWidget).view.setCurrentIndex(0)
