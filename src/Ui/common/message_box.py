@@ -10,8 +10,10 @@ from typing import TYPE_CHECKING, Dict, List
 # 第三方库导入
 from qfluentwidgets import (
     LineEdit,
+    BodyLabel,
     FluentIcon,
     ImageLabel,
+    TitleLabel,
     CaptionLabel,
     SubtitleLabel,
     MessageBoxBase,
@@ -39,7 +41,7 @@ class TextInputBox(MessageBoxBase):
         """
         super().__init__(parent=parent)
         # 创建控件
-        self.titleLabel = SubtitleLabel(self.tr("请输入..."), self)
+        self.titleLabel = TitleLabel(self.tr("请输入..."), self)
         self.urlLineEdit = LineEdit(self)
 
         # 设置属性
@@ -66,8 +68,8 @@ class AskBox(MessageBoxBase):
         """初始化类, 创建必要控件"""
         super().__init__(parent=parent)
         # 创建控件
-        self.titleLabel = SubtitleLabel(title, self)
-        self.contentLabel = CaptionLabel(content, self)
+        self.titleLabel = TitleLabel(title, self)
+        self.contentLabel = BodyLabel(content, self)
 
         # 设置属性
         self.widget.setMinimumSize(420, 230)
@@ -92,7 +94,7 @@ class ImageBox(MessageBoxBase):
         super().__init__(parent=parent)
 
         # 创建控件
-        self.titleLabel = SubtitleLabel(title, self)
+        self.titleLabel = TitleLabel(title, self)
         self.imageLabel = ImageLabel(image, self)
 
         # 设置属性
@@ -163,7 +165,7 @@ class FolderBox(MessageBoxBase):
         super().__init__(parent=parent)
 
         # 创建控件
-        self.titleLabel = SubtitleLabel(title, self)
+        self.titleLabel = TitleLabel(title, self)
         self.folderPathEdit = LineEdit(self)
         self.selectFolderButton = TransparentToolButton(FluentIcon.FOLDER_ADD, self)
         self.selectFolderLayout = QHBoxLayout()
@@ -191,10 +193,7 @@ class FolderBox(MessageBoxBase):
         ## 获取文件夹
         """
         folder = QFileDialog.getExistingDirectory(
-            self,
-            self.tr("选择文件夹"),
-            QDir.homePath(),
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+            self, self.tr("选择文件夹"), QDir.homePath(), QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
         if folder:
             self.folderPathEdit.setText(folder)
