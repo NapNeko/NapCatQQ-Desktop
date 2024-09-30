@@ -86,11 +86,12 @@ class NapCatPage(PageBase):
             # 项目内模块导入
             from src.Ui.MainWindow import MainWindow
 
-            box = AskBox(self.tr("失败"), self.tr("存在Bot运行时,无法执行操作"), it(MainWindow))
-            box.yesButton.clicked.connect(lambda: it(MainWindow).bot_list_widget_button.click())
-            box.yesButton.setText(self.tr("前往关闭"))
-            box.exec()
-            return
+            box = AskBox(self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow))
+            box.yesButton.clicked.connect(self.closeAllBot)
+            box.yesButton.setText(self.tr("关闭全部"))
+
+            if not box.exec():
+                return
 
         info_bar(self.tr("正在下载 NapCat"))
         self.downloader = GithubDownloader(Urls.NAPCAT_DOWNLOAD.value)
@@ -149,3 +150,19 @@ class NapCatPage(PageBase):
                 return True
 
         return False
+
+    @staticmethod
+    def closeAllBot() -> None:
+        """
+        ## 关闭所有bot
+        """
+        # 项目内模块导入
+        from src.Ui.BotListPage import BotListWidget
+
+        # 遍历所有卡片
+        for card in it(BotListWidget).botList.botCardList:
+            if card.botWidget is None:
+                continue
+
+            if card.botWidget.isRun:
+                card.botWidget.stopButtonSlot()
