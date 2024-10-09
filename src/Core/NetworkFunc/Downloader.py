@@ -73,7 +73,7 @@ class GithubDownloader(DownloaderBase):
         logger.info(f"{'-' * 10} 尝试使用镜像站下载 {self.filename} ~ {'-' * 10}")
         for mirror_url in self.mirror_urls:
             self.url = QUrl(mirror_url)
-            logger.info(f"当前下载链接 {self.url}")
+            logger.info(f"当前下载链接 {self.url.url()}")
             if self.download():
                 return
 
