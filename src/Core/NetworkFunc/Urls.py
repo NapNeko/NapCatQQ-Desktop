@@ -30,3 +30,13 @@ class Urls(Enum):
     QQ_WIN_DOWNLOAD = QUrl("https://dldir1.qq.com/qqfile/qq/QQNT/0f14ef6e/QQ9.9.15.28131_x64.exe")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
     QQ_Version = QUrl("https://nclatest.znin.net/get_qq_ver")
+
+    # 镜像站地址
+    MIRROR_SITE = [
+        QUrl("https://gh.ddlc.top"),
+        QUrl("https://slink.ltd"),
+        QUrl("https://cors.isteed.cc"),
+        QUrl("https://hub.gitmirror.com"),
+        QUrl("https://ghproxy.cc"),
+        QUrl("https://github.moeyy.xyz"),
+    ]

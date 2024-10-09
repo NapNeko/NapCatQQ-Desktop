@@ -11,6 +11,7 @@ from PySide6.QtCore import QUrl, Signal, QThread
 # 项目内模块导入
 from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
 from src.Core.Utils.PathFunc import PathFunc
+from src.Core.NetworkFunc.Urls import Urls
 
 
 class DownloaderBase(QThread):
@@ -54,35 +55,44 @@ class GithubDownloader(DownloaderBase):
         self.url: QUrl = url
         self.path: Path = it(PathFunc).tmp_path
         self.filename = self.url.fileName()
+        self.mirror_urls = [QUrl(f"{mirror.toString()}/{self.url.toString()}") for mirror in Urls.MIRROR_SITE.value]
 
     def run(self) -> None:
         """
         ## 运行下载 NapCat 的任务
-            - 自动检查是否需要使用代理
-            - 尽可能下载成功
         """
         # 显示进度环为不确定进度环
         self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
 
         # 检查网络环境
-        if not self.checkNetwork():
-            # 如果网络环境不好, 则调整下载链接
-            self.url = QUrl(f"https://gh.ddlc.top/{self.url.url()}")
-            logger.info(f"访问 GITHUB 速度偏慢,切换下载链接为: https://gh.ddlc.top/{self.url.url()}")
-            self.statusLabel.emit(self.tr("网络环境较差"))
+        if self.checkNetwork():
+            # 如果网络环境好, 则直接下载
+            if self.download():
+                return  # 下载成功, 直接返回
 
-        # 开始下载
+        logger.info(f"{'-' * 10} 尝试使用镜像站下载 {self.filename} ~ {'-' * 10}")
+        for mirror_url in self.mirror_urls:
+            self.url = QUrl(mirror_url)
+            logger.info(f"当前下载链接 {self.url}")
+            if self.download():
+                return
+
+        self.statusLabel.emit(self.tr("下载失败"))
+        self.errorFinsh.emit()
+
+    def download(self) -> bool:
+        """
+        ## 下载文件
+        """
         try:
             logger.info(f"{'-' * 10} 开始下载 {self.filename} ~ {'-' * 10}")
             self.statusLabel.emit(self.tr(f" 开始下载 {self.filename} ~ "))
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
-
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
                     # 尝试获取文件大小
                     logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
                     self.statusLabel.emit(self.tr("无法获取文件大小"))
-                    self.errorFinsh.emit()
-                    return
+                    return False
 
                 # 设置进度条为 进度模式
                 self.progressRingToggle.emit(ProgressRingStatus.DETERMINATE)
@@ -96,23 +106,21 @@ class GithubDownloader(DownloaderBase):
             # 下载完成
             self.downloadFinish.emit()  # 发送下载完成信号
             self.statusLabel.emit(self.tr("下载完成"))
+            return True
 
         except httpx.HTTPStatusError as e:
             logger.error(
                 f"发送下载 {self.filename} 请求时引发 HTTPStatusError, "
                 f"响应码: {e.response.status_code}, 响应内容: {e.response.content}"
             )
-            self.statusLabel.emit(self.tr("下载失败"))
-            self.errorFinsh.emit()
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
             logger.error(f"下载 {self.filename} 时引发 {type(e).__name__}: {e}")
-            self.statusLabel.emit(self.tr("下载失败"))
-            self.errorFinsh.emit()
 
         finally:
-            # 无论是否出错,都会重置
             self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
             logger.info(f"{'-' * 10} 下载 {self.filename} 结束 ~ {'-' * 10}")
+
+        return False
 
     def checkNetwork(self) -> bool:
         """
