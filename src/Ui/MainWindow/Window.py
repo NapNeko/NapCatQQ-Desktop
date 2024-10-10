@@ -79,7 +79,7 @@ class MainWindow(MSFluentWindow):
         self.setTitleBar(CustomTitleBar(self))
         self.setWindowIcon(QIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT)))
         # 窗体大小以及设置打开时居中
-        self.setMinimumSize(930, 630)
+        self.setMinimumSize(1200, 800)
         desktop = QApplication.screens()[0].availableGeometry()
         width, height = desktop.width(), desktop.height()
         self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)

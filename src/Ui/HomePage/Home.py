@@ -54,7 +54,7 @@ class HomeWidget(QStackedWidget):
 
         # 链接信号
         self.displayView.buttonGroup.goButton.clicked.connect(
-            lambda: self.setCurrentWidget(self.contentView)
+            lambda: self.parent().setCurrentIndex(1)
         )
 
         # 调用方法

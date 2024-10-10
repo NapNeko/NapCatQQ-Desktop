@@ -13,6 +13,7 @@ from qfluentwidgets import (
     HeaderCardWidget,
     TransparentPushButton,
     TransparentToolButton,
+    setFont,
 )
 from qfluentwidgets.common.animation import BackgroundAnimationWidget
 from PySide6.QtGui import QPixmap
@@ -43,12 +44,12 @@ class BotListCard(HeaderCardWidget):
         super().__init__(parent=parent)
         # 创建标签和布局
         self.cardLayout = QVBoxLayout()
-        self.noBotLabel = BodyLabel(self.tr("No bots were added ＞﹏＜"), self)
+        self.noBotLabel = BodyLabel(self.tr("没有添加机器人 ＞﹏＜"), self)
         self.toAddBot = TransparentToolButton(FluentIcon.CHEVRON_RIGHT, self)
         self.botList = BotList(self)
 
         # 设置控件
-        self.setTitle(self.tr("Bot List"))
+        self.setTitle(self.tr("机器人列表"))
         self.botList.hide()
         self.toAddBot.clicked.connect(self._toAddBotSlot)
 
@@ -193,13 +194,17 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         self.hBoxLayout = QHBoxLayout()
         self.QQAvatarLabel = ImageLabel(":Global/logo.png", self)
         self.botNameLabel = BodyLabel(f"{self.config.bot.name}({self.config.bot.QQID})", self)
-        self.runButton = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("Start"), self)
-        self.stopButton = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"), self)
+        self.runButton = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
+        self.stopButton = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
 
         # 连接信号以及设置控件
         self.runButton.clicked.connect(self._runButtonSlot)
         self.stopButton.clicked.connect(self._stopButtonSlot)
         self.stopButton.hide()
+
+        # 调整样式
+        self.setMinimumHeight(60)
+        setFont(self.botNameLabel, 16)
 
         # 调用方法
         self._QQAvatar()
@@ -287,7 +292,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
             avatar = QPixmap()
             avatar.loadFromData(replay.readAll())
             self.QQAvatarLabel.setImage(avatar)
-            self.QQAvatarLabel.scaledToHeight(28)
+            self.QQAvatarLabel.scaledToHeight(48)
             self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
         else:
             logger.error(f"获取 QQ 头像时引发错误: {replay.errorString()}")
@@ -299,6 +304,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         """
 
         self.hBoxLayout.addWidget(self.QQAvatarLabel)
+        self.hBoxLayout.addSpacing(10)
         self.hBoxLayout.addWidget(self.botNameLabel)
         self.hBoxLayout.addStretch(1)
         self.hBoxLayout.addWidget(self.runButton)

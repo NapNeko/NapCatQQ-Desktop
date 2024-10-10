@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 # 第三方库导入
 from creart import it
 from qfluentwidgets import (
@@ -12,7 +11,9 @@ from qfluentwidgets import (
     StrongBodyLabel,
     InfoBadgeManager,
     SimpleCardWidget,
+    setFont,
 )
+from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
@@ -45,13 +46,15 @@ class VersionCardBase(QWidget):
         self.vBoxLayout = QVBoxLayout()
 
         # 设置 标签 以及 SimpleCardWidget 的一些属性
-        self.view.setFixedSize(310, 95)
+        self.view.setFixedSize(310, 120)
         self.setFixedSize(self.view.width() + 10, self.view.height() + 10)
         self.view.move(0, self.height() - self.view.height())
-        self.iconLabel.setFixedSize(48, 48)
+        self.iconLabel.setFixedSize(64, 64)
         self.installEventFilter(ToolTipFilter(self))
         self.errorBadge.hide()
         self.warningBadge.hide()
+        setFont(self.nameLabel, 18, QFont.Weight.Bold)
+        setFont(self.contentsLabel, 14, QFont.Weight.Normal)
 
         # 调用方法
         self._setLayout()

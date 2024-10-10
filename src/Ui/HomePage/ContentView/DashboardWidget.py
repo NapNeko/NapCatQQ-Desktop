@@ -38,7 +38,6 @@ class DashboardWidget(QWidget):
         self.documentButton = ToolButton(FluentIcon.DOCUMENT, self)
         self.reposButton = ToolButton(FluentIcon.GITHUB, self)
         self.feedbackButton = ToolButton(FluentIcon.HELP, self)
-        self.systemInfoCard = SystemInfoCard(self)
         self.botList = BotListCard(self)
 
         # 设置控件
@@ -94,8 +93,6 @@ class DashboardWidget(QWidget):
         self.hBoxLayout.addLayout(self.buttonLayout)
         self.hBoxLayout.addStretch(1)
 
-        self.infoLayout.addWidget(self.systemInfoCard)
-        self.infoLayout.addSpacing(4)
         self.infoLayout.addWidget(self.botList)
         self.infoLayout.setContentsMargins(0, 0, 8, 0)
 
