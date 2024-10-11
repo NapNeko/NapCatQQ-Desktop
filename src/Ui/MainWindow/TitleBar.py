@@ -44,6 +44,7 @@ class CustomTitleBar(MSFluentTitleBar):
         self.tabBar = TabBar(self)
         self.tabBar.setMovable(True)
         self.tabBar.setTabMaximumWidth(180)
+        self.tabBar.setTabShadowEnabled(True)
         self.tabBar.setScrollable(True)
         self.tabBar.setCloseButtonDisplayMode(TabCloseButtonDisplayMode.ON_HOVER)
         self.tabBar.setAddButtonVisible(False)
