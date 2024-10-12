@@ -19,6 +19,7 @@ from PySide6.QtCore import Qt, QPoint, QRectF, QPointF
 
 # 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
+from src.Core.Config import cfg
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -42,11 +43,12 @@ class CustomTitleBar(MSFluentTitleBar):
         self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
 
         self.tabBar = TabBar(self)
-        self.tabBar.setMovable(True)
-        self.tabBar.setTabMaximumWidth(180)
-        self.tabBar.setTabShadowEnabled(True)
-        self.tabBar.setScrollable(True)
-        self.tabBar.setCloseButtonDisplayMode(TabCloseButtonDisplayMode.ON_HOVER)
+        self.tabBar.setMovable(cfg.get(cfg.titleTabBarMovable))
+        self.tabBar.setTabMaximumWidth(cfg.get(cfg.titleTabBarMaxWidth))
+        self.tabBar.setTabMinimumWidth(cfg.get(cfg.titleTabBarMinWidth))
+        self.tabBar.setTabShadowEnabled(cfg.get(cfg.titleTabBarShadow))
+        self.tabBar.setScrollable(cfg.get(cfg.titleTabBarScrollable))
+        self.tabBar.setCloseButtonDisplayMode(cfg.get(cfg.titleTabBarCloseMode))
         self.tabBar.setAddButtonVisible(False)
 
         self.tabBar.addTab("Home", "QIAO(572381217)", NapCatDesktopIcon.LOGO)
@@ -89,14 +91,14 @@ class CustomTitleBar(MSFluentTitleBar):
         else:
             self.window().showMaximized()
 
-    def canDrag(self, pos: QPoint):
+    def canDrag(self, pos: QPoint) -> bool:
         if not super().canDrag(pos):
             return False
 
         pos.setX(pos.x() - self.tabBar.x())
         return not self.tabBar.tabRegion().contains(pos)
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self.tabBar.setMinimumWidth(self.width() - 400)
 

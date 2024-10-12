@@ -76,7 +76,8 @@ class MainWindow(MSFluentWindow):
         设置窗体
         """
         # 标题栏部分
-        self.setTitleBar(CustomTitleBar(self))
+        self.title_bar = CustomTitleBar(self)
+        self.setTitleBar(self.title_bar)
         self.setWindowIcon(QIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT)))
         # 窗体大小以及设置打开时居中
         self.setMinimumSize(1200, 800)

@@ -19,12 +19,13 @@ from qfluentwidgets import (
     setTheme,
     setThemeColor,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import QWidget, QHBoxLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
+from src.Ui.SetupPage.ExpandGroupSettingItem import RangeItem, SwitchItem, ComboBoxItem
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -144,72 +145,79 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
             icon=FluentIcon.TAG,
             title=self.tr("标题选项卡配置"),
             content=self.tr("设置标题选项卡的开关和行为"),
-            parent=parent
+            parent=parent,
         )
 
-        # 第一组
-        self.switchLabel = BodyLabel(self.tr("启用标题选项卡"))
-        self.switchButton = SwitchButton()
-        self.switchButton.setFixedWidth(135)
-
-        # 第二组
-        self.setMovableLabel = BodyLabel(self.tr("启用拖动标签页"))
-        self.setMovableButton = SwitchButton()
-        self.setMovableButton.setFixedWidth(135)
-
-        # 第三组
-        self.setScrollableLabel = BodyLabel(self.tr("启用标签页范围可滚动"))
-        self.setScrollableButton = SwitchButton()
-        self.setScrollableButton.setFixedWidth(135)
-
-        # 第四组
-        self.setTabShadowEnabledLabel = BodyLabel(self.tr("启用标签页阴影"))
-        self.setTabShadowEnabledButton = SwitchButton()
-        self.setTabShadowEnabledButton.setFixedWidth(135)
-
-        # 第五组
-        self.setCloseButtonLabel = BodyLabel(self.tr("关闭按钮显示方式"))
-        self.setCloseButtonComboBox = ComboBox()
-        self.setCloseButtonComboBox.addItems([self.tr("始终显示"), self.tr("悬停显示"), self.tr("从不显示")])
-        self.setCloseButtonComboBox.setFixedWidth(135)
-
-        # 第六组
-        self.setTabMaximumWidthLabel = BodyLabel(self.tr("标签最大宽度"))
-        self.setTabMaximumWidthSpinBox = SpinBox()
-        self.setTabMaximumWidthSpinBox.setRange(64, 200)
-        self.setTabMaximumWidthSpinBox.setFixedWidth(135)
-
-        # 第七组
-        self.setTabMinimumWidthLabel = BodyLabel(self.tr("标签最小宽度"))
-        self.setTabMinimumWidthSpinBox = SpinBox()
-        self.setTabMinimumWidthSpinBox.setRange(32, 64)
-        self.setTabMinimumWidthSpinBox.setFixedWidth(135)
+        # 创建项
+        self.enabledTabBarItem = SwitchItem(cfg.titleTabBar, self.tr("启用标题选项卡"), self)
+        self.enabledMovableItem = SwitchItem(cfg.titleTabBarMovable, self.tr("启用拖动标签页"), self)
+        self.enabledScrollableItem = SwitchItem(cfg.titleTabBarScrollable, self.tr("启用标签页范围可滚动"), self)
+        self.enabledTabShadowItem = SwitchItem(cfg.titleTabBarShadow, self.tr("启用标签页阴影"), self)
+        self.setCloseModeItem = ComboBoxItem(
+            cfg.titleTabBarCloseMode,
+            self.tr("关闭按钮显示方式"),
+            [self.tr("始终显示"), self.tr("悬停显示"), self.tr("永不显示")],
+            self,
+        )
+        self.setTabMaximumWidthItem = RangeItem(cfg.titleTabBarMaxWidth, self.tr("标签最大宽度"), self)
+        self.setTabMinimumWidthItem = RangeItem(cfg.titleTabBarMinWidth, self.tr("标签最小宽度"), self)
 
         # 调整内部布局
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
         self.viewLayout.setSpacing(0)
 
-        self.add(self.switchLabel, self.switchButton)
-        self.add(self.setMovableLabel, self.setMovableButton)
-        self.add(self.setScrollableLabel, self.setScrollableButton)
-        self.add(self.setTabShadowEnabledLabel, self.setTabShadowEnabledButton)
-        self.add(self.setCloseButtonLabel, self.setCloseButtonComboBox)
-        self.add(self.setTabMaximumWidthLabel, self.setTabMaximumWidthSpinBox)
-        self.add(self.setTabMinimumWidthLabel, self.setTabMinimumWidthSpinBox)
+        # 启用列表
+        self.itemList = [
+            self.enabledTabBarItem,
+            self.enabledMovableItem,
+            self.enabledScrollableItem,
+            self.enabledTabShadowItem,
+            self.setCloseModeItem,
+            self.setTabMaximumWidthItem,
+            self.setTabMinimumWidthItem,
+        ]
 
-    def add(self, label, widget) -> None:
+        # 添加组件
+        for item in self.itemList:
+            self.addGroupWidget(item)
+
+        self.signalConnect()
+
+    def signalConnect(self) -> None:
         """
-        ## 添加组件到内部
+        ## 信号连接
         """
-        # 创建布局
-        layout = QHBoxLayout(QWidget(self))
-        layout.setContentsMargins(48, 12, 48, 12)
-        layout.parent().setFixedHeight(60)
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
 
-        # 添加到布局中
-        layout.addWidget(label)
-        layout.addStretch(1)
-        layout.addWidget(widget)
+        self.enabledTabBarItem.checkedChanged.connect(self.enabledTabBarItemSlot)
+        self.enabledMovableItem.checkedChanged.connect(lambda state: it(MainWindow).title_bar.tabBar.setMovable(state))
+        self.enabledScrollableItem.checkedChanged.connect(
+            lambda state: it(MainWindow).title_bar.tabBar.setScrollable(state)
+        )
+        self.enabledTabShadowItem.checkedChanged.connect(
+            lambda state: it(MainWindow).title_bar.tabBar.setTabShadowEnabled(state)
+        )
+        self.setTabMaximumWidthItem.valueChanged.connect(
+            lambda value: it(MainWindow).title_bar.tabBar.setTabMaximumWidth(value)
+        )
+        self.setTabMinimumWidthItem.valueChanged.connect(
+            lambda value: it(MainWindow).title_bar.tabBar.setTabMinimumWidth(value)
+        )
 
-        # 添加组件到选项卡
-        self.addGroupWidget(layout.parent())
+    @Slot(bool)
+    def enabledTabBarItemSlot(self, state: bool) -> None:
+        """
+        ## 启用标题选项卡槽函数
+        """
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
+
+        if not state:
+            # 如果状态为 False, 则隐藏标题选项卡, 禁用其他配置项
+            it(MainWindow).title_bar.tabBar.hide()
+            [_.setEnabled(False) for _ in self.itemList if _ != self.enabledTabBarItem]
+        else:
+            # 如果状态为 True, 则显示标题选项卡, 启用其他配置项
+            it(MainWindow).title_bar.tabBar.show()
+            [_.setEnabled(True) for _ in self.itemList if _ != self.enabledTabBarItem]
