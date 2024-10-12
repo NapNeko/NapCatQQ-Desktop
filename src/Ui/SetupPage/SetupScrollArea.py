@@ -182,6 +182,8 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
             self.addGroupWidget(item)
 
         self.signalConnect()
+        self.enabledTabBarItemSlot(cfg.get(cfg.titleTabBar))
+        self.enabledScrollableItemSlot(cfg.get(cfg.titleTabBarScrollable))
 
     def signalConnect(self) -> None:
         """
@@ -192,9 +194,7 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
 
         self.enabledTabBarItem.checkedChanged.connect(self.enabledTabBarItemSlot)
         self.enabledMovableItem.checkedChanged.connect(lambda state: it(MainWindow).title_bar.tabBar.setMovable(state))
-        self.enabledScrollableItem.checkedChanged.connect(
-            lambda state: it(MainWindow).title_bar.tabBar.setScrollable(state)
-        )
+        self.enabledScrollableItem.checkedChanged.connect(self.enabledScrollableItemSlot)
         self.enabledTabShadowItem.checkedChanged.connect(
             lambda state: it(MainWindow).title_bar.tabBar.setTabShadowEnabled(state)
         )
@@ -221,3 +221,29 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
             # 如果状态为 True, 则显示标题选项卡, 启用其他配置项
             it(MainWindow).title_bar.tabBar.show()
             [_.setEnabled(True) for _ in self.itemList if _ != self.enabledTabBarItem]
+
+    @Slot(bool)
+    def enabledScrollableItemSlot(self, state: bool) -> None:
+        """
+        ## 启用标签页范围可滚动槽函数
+        """
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
+
+        if state:
+            # 如果状态为 True, 则设置标签页范围可滚动, 并且禁用调整标签页最大宽度和最小宽度
+            it(MainWindow).title_bar.tabBar.setScrollable(True)
+            self.setTabMaximumWidthItem.setEnabled(False)
+            self.setTabMinimumWidthItem.setEnabled(False)
+        else:
+            # 如果状态为 False, 则设置标签页范围不可滚动, 并且启用调整标签页最大宽度和最小宽度
+            it(MainWindow).title_bar.tabBar.setScrollable(False)
+            self.setTabMaximumWidthItem.setEnabled(True)
+            self.setTabMinimumWidthItem.setEnabled(True)
+
+    def wheelEvent(self, event):
+        """
+        ## 滚动事件上传到父控件
+        """
+        self.parent().wheelEvent(event)
+        super().wheelEvent(event)
