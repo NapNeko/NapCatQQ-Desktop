@@ -141,10 +141,10 @@ class SetupScrollArea(ScrollArea):
         主题切换槽函数
         """
         # 项目内模块导入
-        from src.Ui.MainWindow import MainWindow
+        from src.Ui.HomePage import HomeWidget
 
         setTheme(cfg.get(theme), save=True)
-        it(MainWindow).home_widget.updateBgImage()
+        it(HomeWidget).updateBgImage()
 
 
 class TitleTabBarSettingCard(ExpandGroupSettingCard):

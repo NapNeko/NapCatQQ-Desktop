@@ -16,10 +16,6 @@ class BeginnerGuidance(QObject):
     def __init__(self, parent):
         super().__init__()
         # 禁用所有侧边栏
-        it(MainWindow).home_widget_button.setEnabled(False)
-        it(MainWindow).add_widget_button.setEnabled(False)
-        it(MainWindow).bot_list_widget_button.setEnabled(False)
-        it(MainWindow).setup_widget_button.setEnabled(False)
 
     def skip(self):
         """

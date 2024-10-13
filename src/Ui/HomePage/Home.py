@@ -30,7 +30,7 @@ class HomeWidget(QStackedWidget):
     def __init__(self) -> None:
         super().__init__()
         self.displayView: Optional[DisplayViewWidget] = None
-        self.contentView: Optional[ContentViewWidget] = None
+        # self.contentView: Optional[ContentViewWidget] = None
 
         # 加载背景图片
         self.bgPixmap = None
@@ -43,13 +43,13 @@ class HomeWidget(QStackedWidget):
         """
         # 创建控件
         self.displayView = DisplayViewWidget()
-        self.contentView = ContentViewWidget()
+        # self.contentView = ContentViewWidget()
 
         # 设置控件
         self.setParent(parent)
         self.setObjectName("HomePage")
         self.addWidget(self.displayView)
-        self.addWidget(self.contentView)
+        # self.addWidget(self.contentView)
         self.setCurrentWidget(self.displayView)
 
         # 链接信号
