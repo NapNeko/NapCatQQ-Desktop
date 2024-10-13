@@ -71,6 +71,10 @@ class Config(QConfig):
     )
     themeColor = ColorConfigItem(group="Personalize", name="ThemeColor", default="#009faa")
 
+    windowOpacity = RangeConfigItem(
+        group="Personalize", name="WindowOpacity", default=100, validator=RangeValidator(10, 100)
+    )
+
     titleTabBar = ConfigItem(group="Personalize", name="TitleTabBar", default=False, validator=BoolValidator())
     titleTabBarMovable = ConfigItem(
         group="Personalize", name="TitleTabBarIsMovable", default=False, validator=BoolValidator()

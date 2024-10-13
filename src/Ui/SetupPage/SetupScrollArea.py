@@ -12,6 +12,7 @@ from qfluentwidgets import (
     ScrollArea,
     ExpandLayout,
     SwitchButton,
+    RangeSettingCard,
     SettingCardGroup,
     OptionsSettingCard,
     CustomColorSettingCard,
@@ -88,6 +89,12 @@ class SetupScrollArea(ScrollArea):
         #     texts=["简体中文", "繁體中文", self.tr("Use system setting")],
         #     parent=self.personalGroup,
         # )
+        self.windowOpacityCard = RangeSettingCard(
+            configItem=cfg.windowOpacity,
+            icon=FluentIcon.FIT_PAGE,
+            title=self.tr("窗口透明度"),
+            content=self.tr("设置窗口的透明度"),
+        )
         self.titleTabBarSettingCard = TitleTabBarSettingCard(self)
 
         # 创建组 - 路径
@@ -102,6 +109,7 @@ class SetupScrollArea(ScrollArea):
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.themeColorCard)
         # self.personalGroup.addSettingCard(self.languageCard)
+        self.personalGroup.addSettingCard(self.windowOpacityCard)
         self.personalGroup.addSettingCard(self.titleTabBarSettingCard)
 
         # 添加到布局
@@ -114,6 +122,9 @@ class SetupScrollArea(ScrollArea):
         """
         信号处理
         """
+        # 项目内模块导入
+        from src.Ui.MainWindow.Window import MainWindow
+
         # 连接重启提示
         cfg.appRestartSig.connect(lambda: success_bar(self.tr("配置在重启后生效")))
 
@@ -122,6 +133,7 @@ class SetupScrollArea(ScrollArea):
         # 连接个性化相关
         self.themeCard.optionChanged.connect(self._themeModeChanged)
         self.themeColorCard.colorChanged.connect(lambda color: setThemeColor(color, save=True, lazy=True))
+        self.windowOpacityCard.valueChanged.connect(lambda value: it(MainWindow).setWindowOpacity(value / 100))
 
     @staticmethod
     def _themeModeChanged(theme) -> None:

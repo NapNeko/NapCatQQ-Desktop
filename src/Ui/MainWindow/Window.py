@@ -26,6 +26,7 @@ from PySide6.QtWidgets import QApplication
 # 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.AddPage import AddWidget
+from src.Core.Config import cfg
 from src.Ui.HomePage import HomeWidget
 from src.Ui.resource import resource
 from src.Ui.UnitPage import UnitWidget
@@ -84,6 +85,8 @@ class MainWindow(MSFluentWindow):
         desktop = QApplication.screens()[0].availableGeometry()
         width, height = desktop.width(), desktop.height()
         self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)
+        # 调整窗体透明度
+        self.setWindowOpacity(cfg.get(cfg.windowOpacity) / 100)
         # 创建 Splash Screen
         self.splashScreen = SplashScreen(":Global/logo.png", self, True)
         self.splashScreen.setIconSize(QSize(128, 128))
