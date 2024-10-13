@@ -9,15 +9,17 @@ from typing import TYPE_CHECKING
 
 # 第三方库导入
 from loguru import logger
+from qfluentwidgets import TabBar, TabCloseButtonDisplayMode
 from qfluentwidgets.common import Theme
 from qfluentwidgets.window import MSFluentTitleBar
 from qframelesswindow.titlebar import CloseButton, MaximizeButton, MinimizeButton
 from PySide6.QtGui import QPen, QPainter, QPaintEvent, QPainterPath
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtCore import Qt, QRectF, QPointF
+from PySide6.QtCore import Qt, QPoint, QRectF, QPointF
 
 # 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
+from src.Core.Config import cfg
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -39,6 +41,18 @@ class CustomTitleBar(MSFluentTitleBar):
     def set_title(self) -> None:
         self.setTitle("NapCatQQ Desktop [Admin]" if ctypes.windll.shell32.IsUserAnAdmin() else "NapCatQQ Desktop")
         self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
+
+        self.tabBar = TabBar(self)
+        self.tabBar.setMovable(cfg.get(cfg.titleTabBarMovable))
+        self.tabBar.setTabMaximumWidth(cfg.get(cfg.titleTabBarMaxWidth))
+        self.tabBar.setTabMinimumWidth(cfg.get(cfg.titleTabBarMinWidth))
+        self.tabBar.setTabShadowEnabled(cfg.get(cfg.titleTabBarShadow))
+        self.tabBar.setScrollable(cfg.get(cfg.titleTabBarScrollable))
+        self.tabBar.setCloseButtonDisplayMode(cfg.get(cfg.titleTabBarCloseMode))
+        self.tabBar.setAddButtonVisible(False)
+        self.tabBar.tabCloseRequested.connect(self.tabBar.removeTab)
+
+        self.hBoxLayout.insertWidget(4, self.tabBar, 1)
 
     def set_buttons(self) -> None:
         """配置窗口控制按钮并初始化槽连接"""
@@ -72,6 +86,17 @@ class CustomTitleBar(MSFluentTitleBar):
             self.window().showNormal()
         else:
             self.window().showMaximized()
+
+    def canDrag(self, pos: QPoint) -> bool:
+        if not super().canDrag(pos):
+            return False
+
+        pos.setX(pos.x() - self.tabBar.x())
+        return not self.tabBar.tabRegion().contains(pos)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.tabBar.setMinimumWidth(self.width() - 400)
 
 
 class MaxBtn(MaximizeButton):

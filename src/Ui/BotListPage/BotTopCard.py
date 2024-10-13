@@ -47,6 +47,8 @@ class BotTopCard(QWidget):
         """
         ## 给 breadcrumbBar 添加 item 项接口
         """
+        self.breadcrumbBar.clear()
+        self.breadcrumbBar.addItem(routeKey="BotTopCardTitle", text=self.tr("机器人列表"))
         self.breadcrumbBar.addItem(route_key, route_key)
 
     def _addTooltips(self) -> None:

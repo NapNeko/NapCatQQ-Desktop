@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 from creart import it
 from loguru import logger
 from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QUrl, Slot, QUrlQuery
 from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QVBoxLayout
@@ -125,6 +125,7 @@ class BotCard(CardWidget):
         当自身被点击时
         """
         # 项目内模块导入
+        from src.Ui.MainWindow.Window import MainWindow
         from src.Ui.BotListPage.BotWidget import BotWidget
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
@@ -135,5 +136,14 @@ class BotCard(CardWidget):
             self.botWidget = BotWidget(self.config)
             it(BotListWidget).view.addWidget(self.botWidget)
             it(BotListWidget).view.setCurrentWidget(self.botWidget)
+
+            it(MainWindow).title_bar.tabBar.addTab(
+                f"{self.config.bot.QQID}",
+                f"{self.config.bot.name} ({self.config.bot.QQID})",
+                QIcon(self.QQAvatarLabel.pixmap()),
+                lambda: (it(MainWindow).bot_list_widget_button.click(), self._clickSlot()),
+            )
         else:
             it(BotListWidget).view.setCurrentWidget(self.botWidget)
+
+        it(MainWindow).title_bar.tabBar.setCurrentTab(f"{self.config.bot.QQID}")

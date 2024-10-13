@@ -6,7 +6,7 @@ import platform
 
 # 第三方库导入
 from creart import it
-from qfluentwidgets import qconfig
+from qfluentwidgets import RangeValidator, RangeConfigItem, TabCloseButtonDisplayMode, qconfig
 from qfluentwidgets.common import (
     Theme,
     QConfig,
@@ -22,7 +22,7 @@ from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import Signal, QLocale
 
 # 项目内模块导入
-from src.Core.Config.enum import Language, StartOpenHomePageViewEnum
+from src.Core.Config.enum import Language
 from src.Core.Utils.PathFunc import PathFunc
 
 
@@ -62,11 +62,39 @@ class Config(QConfig):
         serializer=LanguageSerializer(),
         restart=True,
     )
-
     themeMode = OptionsConfigItem(
-        "Personalize", "ThemeMode", Theme.LIGHT, OptionsValidator(Theme), EnumSerializer(Theme)
+        group="Personalize",
+        name="ThemeMode",
+        default=Theme.AUTO,
+        validator=OptionsValidator(Theme),
+        serializer=EnumSerializer(Theme),
     )
-    themeColor = ColorConfigItem("Personalize", "ThemeColor", "#009faa")
+    themeColor = ColorConfigItem(group="Personalize", name="ThemeColor", default="#009faa")
+
+    titleTabBar = ConfigItem(group="Personalize", name="TitleTabBar", default=False, validator=BoolValidator())
+    titleTabBarMovable = ConfigItem(
+        group="Personalize", name="TitleTabBarIsMovable", default=False, validator=BoolValidator()
+    )
+    titleTabBarScrollable = ConfigItem(
+        group="Personalize", name="TitleTabBarIsScrollable", default=False, validator=BoolValidator()
+    )
+    titleTabBarShadow = ConfigItem(
+        group="Personalize", name="TitleTabBarIsShadow", default=False, validator=BoolValidator()
+    )
+    titleTabBarCloseMode = OptionsConfigItem(
+        group="Personalize",
+        name="TitleTabBarCloseButton",
+        default=TabCloseButtonDisplayMode.ON_HOVER,
+        validator=OptionsValidator(TabCloseButtonDisplayMode),
+        serializer=EnumSerializer(TabCloseButtonDisplayMode),
+        restart=True,
+    )
+    titleTabBarMinWidth = RangeConfigItem(
+        group="Personalize", name="TitleTabBarMinWidth", default=64, validator=RangeValidator(32, 64)
+    )
+    titleTabBarMaxWidth = RangeConfigItem(
+        group="Personalize", name="TitleTabBarMaxWidth", default=135, validator=RangeValidator(64, 200)
+    )
 
     # 隐藏提示项
     HideUsGoBtnTips = ConfigItem(group="HideTips", name="HideUsingGoBtnTips", default=False, validator=BoolValidator())

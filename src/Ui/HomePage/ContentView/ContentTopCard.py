@@ -14,8 +14,8 @@ class ContentTopCard(QWidget):
         super().__init__(parent=parent)
 
         # 创建所需控件
-        self.titleLabel = TitleLabel(self.tr("NapCat Dashboard"), self)
-        self.subtitleLabel = CaptionLabel(self.tr("Here you may have the data you're interested in"), self)
+        self.titleLabel = TitleLabel(self.tr("NapCat 仪表板"), self)
+        self.subtitleLabel = CaptionLabel(self.tr("这里可能有您感兴趣的数据"), self)
 
         self.hBoxLayout = QHBoxLayout()
         self.labelLayout = QVBoxLayout()

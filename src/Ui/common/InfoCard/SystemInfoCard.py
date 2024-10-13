@@ -5,6 +5,7 @@ from typing import Optional
 
 # 第三方库导入
 import psutil
+from anyio import value
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -17,7 +18,7 @@ from qfluentwidgets import (
     themeColor,
     isDarkTheme,
 )
-from PySide6.QtGui import QPen, QColor, QPainter
+from PySide6.QtGui import QPen, QFont, QColor, QPainter
 from PySide6.QtCore import Qt, QPoint, QRectF, QTimer
 from PySide6.QtWidgets import QWidget, QFormLayout, QVBoxLayout
 
@@ -42,8 +43,8 @@ class DashboardBase(QWidget):
         self.vBoxLayout = QVBoxLayout()
 
         # 设置 标签 以及 SimpleCardWidget 的一些属性
-        self.view.setFixedSize(200, 200)
-        self.progressBar.setFixedSize(155, 155)
+        self.view.setFixedSize(250, 250)
+        self.progressBar.setFixedSize(205, 205)
         self.progressBar.setInfo(info)
         self.setFixedSize(self.view.width() + 10, self.view.height() + 10)
         self.view.move(0, self.height() - self.view.height())
@@ -209,13 +210,6 @@ class MemoryDashboard(DashboardBase):
 
         self.setToolTip(tool_tip_string)
 
-    def paintEvent(self, event) -> None:
-        """
-        ## 调整 infoLabel 大小
-        """
-        super().paintEvent(event)
-        setFont(self.progressBar.info_label, 13)
-
 
 @InfoBadgeManager.register("SystemInfo")
 class DashboardInfoBadgeManager(InfoBadgeManager):
@@ -228,76 +222,3 @@ class DashboardInfoBadgeManager(InfoBadgeManager):
         x = pos.x() - self.badge.width() // 2 - 5
         y = pos.y() - self.badge.height() // 2 + 5
         return QPoint(x, y)
-
-
-class SystemInfoCard(HeaderCardWidget):
-    """
-    ## 展示一些系统信息
-        - 发行版本, 平台类型, NapCat Desktop版本, 启动时间, 运行时间
-    """
-
-    def __init__(self, parent=None) -> None:
-        """
-        ## 初始化卡片
-        """
-        super().__init__(parent=parent)
-        self.timer: Optional[QTimer] = None
-        self.setTitle(self.tr("System info"))
-        self.setFixedWidth(310)
-
-        # 创建标签和布局
-        self.systemVersionNameLabel = BodyLabel(self.tr("系统类型"), self)
-        self.platformArchitectureNameLabel = BodyLabel(self.tr("平台类型"), self)
-        self.napcatDesktopVersionNameLabel = BodyLabel(self.tr("NCD 版本"), self)
-        self.startTimeNameLabel = BodyLabel(self.tr("启动时间"), self)
-        self.runningTimeNameLabel = BodyLabel(self.tr("运行时间"), self)
-
-        self.systemVersionLabel = BodyLabel(self)
-        self.platformArchitectureLabel = BodyLabel(self)
-        self.napcatDesktopVersionLabel = BodyLabel(self)
-        self.startTimeLabel = BodyLabel(self)
-        self.runningTimeLabel = BodyLabel(self)
-
-        self.labelLayout = QFormLayout()
-
-        # 调用方法
-        self.calculateRunTime()
-        self.updateSystemInfo()
-        self._setLayout()
-
-    @timer(1000)
-    def calculateRunTime(self) -> None:
-        """
-        ## 计算运行时间
-        """
-        run_time_str = time.strftime("%H:%M:%S", time.gmtime(time.time() - cfg.get(cfg.StartTime)))
-        self.runningTimeLabel.setText(self.tr(f"{run_time_str}"))
-
-    def updateSystemInfo(self) -> None:
-        """
-        ## 更新系统信息
-        """
-        self.systemVersionLabel.setText(self.tr(f"{cfg.get(cfg.SystemType)}"))
-        self.platformArchitectureLabel.setText(self.tr(f"{cfg.get(cfg.PlatformType)}"))
-        self.napcatDesktopVersionLabel.setText(self.tr(f"{cfg.get(cfg.NCDVersion)}"))
-
-        start_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cfg.get(cfg.StartTime)))
-        self.startTimeLabel.setText(self.tr(f"{start_time}"))
-        self.runningTimeLabel.setText(self.tr("Calculating"))
-
-    def _setLayout(self) -> None:
-        """
-        ## 对控件进行布局
-        """
-        self.labelLayout.addRow(self.systemVersionNameLabel, self.systemVersionLabel)
-        self.labelLayout.addRow(self.platformArchitectureNameLabel, self.platformArchitectureLabel)
-        self.labelLayout.addRow(self.napcatDesktopVersionNameLabel, self.napcatDesktopVersionLabel)
-        self.labelLayout.addRow(self.startTimeNameLabel, self.startTimeLabel)
-        self.labelLayout.addRow(self.runningTimeNameLabel, self.runningTimeLabel)
-        self.labelLayout.setHorizontalSpacing(30)
-        self.labelLayout.setVerticalSpacing(20)
-        self.labelLayout.setContentsMargins(0, 0, 0, 0)
-
-        self.viewLayout.addLayout(self.labelLayout)
-        self.viewLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.viewLayout.setContentsMargins(25, 20, 20, 15)
