@@ -50,11 +50,7 @@ class CustomTitleBar(MSFluentTitleBar):
         self.tabBar.setScrollable(cfg.get(cfg.titleTabBarScrollable))
         self.tabBar.setCloseButtonDisplayMode(cfg.get(cfg.titleTabBarCloseMode))
         self.tabBar.setAddButtonVisible(False)
-
-        self.tabBar.addTab("Home", "QIAO(572381217)", NapCatDesktopIcon.LOGO)
-        self.tabBar.addTab("Ho1me", "BOT(2550419068)", NapCatDesktopIcon.LOGO)
-        self.tabBar.addTab("Home2", "QIAO(572381217)", NapCatDesktopIcon.LOGO)
-        self.tabBar.addTab("Ho1m3e", "BOT(2550419068)", NapCatDesktopIcon.LOGO)
+        self.tabBar.tabCloseRequested.connect(self.tabBar.removeTab)
 
         self.hBoxLayout.insertWidget(4, self.tabBar, 1)
 
