@@ -1,9 +1,19 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import Slider, ComboBox, BodyLabel, ConfigItem, SwitchButton, FluentIconBase, RangeConfigItem
+from qfluentwidgets import (
+    Slider,
+    ComboBox,
+    BodyLabel,
+    ConfigItem,
+    FluentIcon,
+    PushButton,
+    SwitchButton,
+    FluentIconBase,
+    RangeConfigItem,
+)
 from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt, Slot, Signal
-from PySide6.QtWidgets import QWidget, QHBoxLayout
+from PySide6.QtCore import Qt, QDir, Slot, Signal
+from PySide6.QtWidgets import QWidget, QFileDialog, QHBoxLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
@@ -216,3 +226,42 @@ class RangeItem(ItemBase):
         self.valueLabel.setNum(value)
         self.valueLabel.adjustSize()
         self.slider.setValue(value)
+
+
+class FileItem(ItemBase):
+    """
+    ## 展开设置卡片的子组件
+    """
+    fileChanged = Signal(str)  # file Path
+
+    def __init__(self, configItem: ConfigItem, title: str, parent=None) -> None:
+        """
+        ## 初始化
+        """
+        super().__init__(title, parent=parent)
+        self.configItem = configItem
+        self.title = title
+        self.button = PushButton(self.tr("选择文件"), self, FluentIcon.FOLDER_ADD)
+        self.button.clicked.connect(self._onButtonClicked)
+
+        # 调整控件
+        self.button.setFixedWidth(135)
+
+        # 添加到布局
+        self.hBoxLayout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
+
+    @Slot()
+    def _onButtonClicked(self) -> None:
+        """
+        ## 按钮点击
+        """
+        file, _ = QFileDialog.getOpenFileName(
+            self, self.tr("选择文件"), QDir.homePath(), "Image Files (*.png *.jpg *.jpeg)"
+        )
+
+        if file:
+            cfg.set(self.configItem, file)
+            self.titleLabel.setText(f"{self.title}: {file}")
+
+

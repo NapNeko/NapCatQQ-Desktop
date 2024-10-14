@@ -77,8 +77,8 @@ class HomeWidget(QStackedWidget):
 
         self.bgPixmap = self.bgPixmap.scaled(
             self.size(),
-            aspectMode=Qt.AspectRatioMode.KeepAspectRatioByExpanding,  # 等比缩放
-            mode=Qt.TransformationMode.SmoothTransformation,  # 平滑效果
+            aspectMode=Qt.AspectRatioMode.IgnoreAspectRatio,  # 等比缩放
+            mode=Qt.TransformationMode.FastTransformation,  # 平滑效果
         )
         self.update()
 
