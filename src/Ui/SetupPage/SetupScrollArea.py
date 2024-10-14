@@ -281,27 +281,27 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
         self.enabledHomePageBgItem = SwitchItem(cfg.bgHomePage, self.tr("启用首页页面背景"), self)
         self.selectHomePageLightBgItem = FileItem(cfg.bgHomePageLight, self.tr("明亮模式"), self)
         self.selectHomePageDarkBgItem = FileItem(cfg.bgHomePageDark, self.tr("极夜模式"), self)
-        self.enabledHomePageBgOpacityItem = RangeItem(cfg.bgHomePageOpacity, self.tr("首页背景透明度"), self)
+        self.homePageBgOpacityItem = RangeItem(cfg.bgHomePageOpacity, self.tr("首页背景透明度"), self)
 
         self.enabledAddPageBgItem = SwitchItem(cfg.bgAddPage, self.tr("启用添加页面背景"), self)
         self.selectAddPageLightBgItem = FileItem(cfg.bgAddPageLight, self.tr("明亮模式"), self)
         self.selectAddPageDarkBgItem = FileItem(cfg.bgAddPageDark, self.tr("极夜模式"), self)
-        self.enabledAddPageBgOpacityItem = RangeItem(cfg.bgAddPageOpacity, self.tr("添加页面背景透明度"), self)
+        self.addPageBgOpacityItem = RangeItem(cfg.bgAddPageOpacity, self.tr("添加页面背景透明度"), self)
 
         self.enabledListPageBgItem = SwitchItem(cfg.bgListPage, self.tr("启用列表页面背景"), self)
         self.selectListPageLightBgItem = FileItem(cfg.bgListPageLight, self.tr("明亮模式"), self)
         self.selectListPageDarkBgItem = FileItem(cfg.bgListPageDark, self.tr("极夜模式"), self)
-        self.enabledListPageBgOpacityItem = RangeItem(cfg.bgListPageOpacity, self.tr("列表页面背景透明度"), self)
+        self.listPageBgOpacityItem = RangeItem(cfg.bgListPageOpacity, self.tr("列表页面背景透明度"), self)
 
         self.enabledUnitPageBgItem = SwitchItem(cfg.bgUnitPage, self.tr("启用组件页面背景"), self)
         self.selectUnitPageLightBgItem = FileItem(cfg.bgUnitPageLight, self.tr("明亮模式"), self)
         self.selectUnitPageDarkBgItem = FileItem(cfg.bgUnitPageDark, self.tr("极夜模式"), self)
-        self.enabledUnitPageBgOpacityItem = RangeItem(cfg.bgUnitPageOpacity, self.tr("组件页面背景透明度"), self)
+        self.unitPageBgOpacityItem = RangeItem(cfg.bgUnitPageOpacity, self.tr("组件页面背景透明度"), self)
 
         self.enabledSettingPageBgItem = SwitchItem(cfg.bgSettingPage, self.tr("启用设置页面背景"), self)
         self.selectSettingPageLightBgItem = FileItem(cfg.bgSettingPageLight, self.tr("明亮模式"), self)
         self.selectSettingPageDarkBgItem = FileItem(cfg.bgSettingPageDark, self.tr("极夜模式"), self)
-        self.enabledSettingPageBgOpacityItem = RangeItem(cfg.bgSettingPageOpacity, self.tr("设置页面背景透明度"), self)
+        self.settingPageBgOpacityItem = RangeItem(cfg.bgSettingPageOpacity, self.tr("设置页面背景透明度"), self)
 
         # 调整内部布局
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
@@ -312,23 +312,23 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
             self.enabledHomePageBgItem,
             self.selectHomePageLightBgItem,
             self.selectHomePageDarkBgItem,
-            self.enabledHomePageBgOpacityItem,
+            self.homePageBgOpacityItem,
             self.enabledAddPageBgItem,
             self.selectAddPageLightBgItem,
             self.selectAddPageDarkBgItem,
-            self.enabledAddPageBgOpacityItem,
+            self.addPageBgOpacityItem,
             self.enabledListPageBgItem,
             self.selectListPageLightBgItem,
             self.selectListPageDarkBgItem,
-            self.enabledListPageBgOpacityItem,
+            self.listPageBgOpacityItem,
             self.enabledUnitPageBgItem,
             self.selectUnitPageLightBgItem,
             self.selectUnitPageDarkBgItem,
-            self.enabledUnitPageBgOpacityItem,
+            self.unitPageBgOpacityItem,
             self.enabledSettingPageBgItem,
             self.selectSettingPageLightBgItem,
             self.selectSettingPageDarkBgItem,
-            self.enabledSettingPageBgOpacityItem,
+            self.settingPageBgOpacityItem,
         ]
 
         self.enableItemList = [
@@ -353,6 +353,11 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
         """
         for item in self.enableItemList:
             item.checkedChanged.connect(self.isHide)
+        # 项目内模块导入
+        from src.Ui.HomePage import HomeWidget
+        self.enabledHomePageBgItem.checkedChanged.connect(it(HomeWidget).updateBaseBgImage)
+        self.selectHomePageLightBgItem.fileChanged.connect(it(HomeWidget).updateBaseBgImage)
+        self.selectHomePageDarkBgItem.fileChanged.connect(it(HomeWidget).updateBaseBgImage)
 
     def isHide(self) -> None:
         """
@@ -377,23 +382,23 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
             case cfg.bgHomePage:
                 self.selectHomePageLightBgItem.show()
                 self.selectHomePageDarkBgItem.show()
-                self.enabledHomePageBgOpacityItem.show()
+                self.homePageBgOpacityItem.show()
             case cfg.bgAddPage:
                 self.selectAddPageLightBgItem.show()
                 self.selectAddPageDarkBgItem.show()
-                self.enabledAddPageBgOpacityItem.show()
+                self.addPageBgOpacityItem.show()
             case cfg.bgListPage:
                 self.selectListPageLightBgItem.show()
                 self.selectListPageDarkBgItem.show()
-                self.enabledListPageBgOpacityItem.show()
+                self.listPageBgOpacityItem.show()
             case cfg.bgUnitPage:
                 self.selectUnitPageLightBgItem.show()
                 self.selectUnitPageDarkBgItem.show()
-                self.enabledUnitPageBgOpacityItem.show()
+                self.unitPageBgOpacityItem.show()
             case cfg.bgSettingPage:
                 self.selectSettingPageLightBgItem.show()
                 self.selectSettingPageDarkBgItem.show()
-                self.enabledSettingPageBgOpacityItem.show()
+                self.settingPageBgOpacityItem.show()
 
     def hideItem(self, item: SwitchItem) -> None:
         """
@@ -403,23 +408,23 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
             case cfg.bgHomePage:
                 self.selectHomePageLightBgItem.hide()
                 self.selectHomePageDarkBgItem.hide()
-                self.enabledHomePageBgOpacityItem.hide()
+                self.homePageBgOpacityItem.hide()
             case cfg.bgAddPage:
                 self.selectAddPageLightBgItem.hide()
                 self.selectAddPageDarkBgItem.hide()
-                self.enabledAddPageBgOpacityItem.hide()
+                self.addPageBgOpacityItem.hide()
             case cfg.bgListPage:
                 self.selectListPageLightBgItem.hide()
                 self.selectListPageDarkBgItem.hide()
-                self.enabledListPageBgOpacityItem.hide()
+                self.listPageBgOpacityItem.hide()
             case cfg.bgUnitPage:
                 self.selectUnitPageLightBgItem.hide()
                 self.selectUnitPageDarkBgItem.hide()
-                self.enabledUnitPageBgOpacityItem.hide()
+                self.unitPageBgOpacityItem.hide()
             case cfg.bgSettingPage:
                 self.selectSettingPageLightBgItem.hide()
                 self.selectSettingPageDarkBgItem.hide()
-                self.enabledSettingPageBgOpacityItem.hide()
+                self.settingPageBgOpacityItem.hide()
 
     def wheelEvent(self, event):
         """

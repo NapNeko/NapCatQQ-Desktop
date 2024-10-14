@@ -11,11 +11,12 @@ from typing import TYPE_CHECKING, Self, Optional
 from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from qfluentwidgets import isDarkTheme
-from PySide6.QtGui import QPixmap, QPainter
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QRegion, QPainter, QPainterPath
+from PySide6.QtCore import Qt, QPoint, QRectF
 from PySide6.QtWidgets import QStackedWidget
 
 # 项目内模块导入
+from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
@@ -31,11 +32,6 @@ class HomeWidget(QStackedWidget):
         super().__init__()
         self.displayView: Optional[DisplayViewWidget] = None
         # self.contentView: Optional[ContentViewWidget] = None
-
-        # 加载背景图片
-        self.bgPixmap = None
-        self._bgPixmapLight = QPixmap(":Global/image/Global/page_bg_light.png")
-        self._bgPixmapDark = QPixmap(":Global/image/Global/page_bg_dark.png")
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -53,17 +49,27 @@ class HomeWidget(QStackedWidget):
         self.setCurrentWidget(self.displayView)
 
         # 链接信号
-        self.displayView.buttonGroup.goButton.clicked.connect(
-            lambda: self.parent().setCurrentIndex(1)
-        )
+        self.displayView.buttonGroup.goButton.clicked.connect(lambda: self.parent().setCurrentIndex(1))
 
         # 调用方法
-        self.updateBgImage()
+        self.updateBaseBgImage()
 
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
         return self
+
+    def updateBaseBgImage(self) -> None:
+        """
+        ## 更新背景图片
+        """
+        if cfg.get(cfg.bgHomePage):
+            self._bgPixmapLight = QPixmap(cfg.get(cfg.bgHomePageLight))
+            self._bgPixmapDark = QPixmap(cfg.get(cfg.bgHomePageDark))
+        else:
+            self._bgPixmapLight = QPixmap(":Global/image/Global/page_bg_light.png")
+            self._bgPixmapDark = QPixmap(":Global/image/Global/page_bg_dark.png")
+        self.updateBgImage()
 
     def updateBgImage(self) -> None:
         """
@@ -87,7 +93,34 @@ class HomeWidget(QStackedWidget):
         重写绘制事件绘制背景图片
         """
         painter = QPainter(self)
-        painter.drawPixmap(self.rect(), self.bgPixmap)
+        rect = self.rect()
+        radius = 8  # 圆角半径，可以根据需要调整
+
+        # 创建一个路径，包含全局区域，除了左上角之外
+        path = QPainterPath()
+        path.addRect(rect)
+
+        # 创建左上角的圆角矩形路径
+        corner_rect = QRectF(rect.left(), rect.top(), 2 * radius, 2 * radius)
+        corner_path = QPainterPath()
+        corner_path.moveTo(corner_rect.topLeft())
+        corner_path.arcTo(corner_rect, 90, 90)
+        corner_path.lineTo(rect.topLeft())
+        corner_path.closeSubpath()
+
+        # 从全局路径中减去左上角圆角路径
+        path = path.subtracted(corner_path)
+
+        # 设置剪裁区域为非左上角区域，这样左上角就有了圆角效果
+        region = QRegion(path.toFillPolygon().toPolygon())
+        painter.setClipRegion(region)
+
+        # 设置图片透明度
+        painter.setOpacity(cfg.get(cfg.bgHomePageOpacity) / 100 if cfg.get(cfg.bgHomePage) else 1)
+
+        # 绘制背景图像
+        painter.drawPixmap(rect, self.bgPixmap)
+
         super().paintEvent(event)
 
     def resizeEvent(self, event) -> None:
