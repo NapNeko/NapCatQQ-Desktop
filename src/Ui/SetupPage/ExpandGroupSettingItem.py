@@ -246,6 +246,8 @@ class FileItem(ItemBase):
 
         # 调整控件
         self.button.setFixedWidth(135)
+        if cfg.get(self.configItem):
+            self.titleLabel.setText(f"{self.title}: {cfg.get(self.configItem)}")
 
         # 添加到布局
         self.hBoxLayout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
@@ -263,5 +265,6 @@ class FileItem(ItemBase):
         if file:
             cfg.set(self.configItem, file)
             self.titleLabel.setText(f"{self.title}: {file}")
+            self.fileChanged.emit(file)
 
 
