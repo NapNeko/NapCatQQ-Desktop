@@ -8,23 +8,29 @@ from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
 
 # 第三方库导入
-from creart import it, add_creator, exists_module
+from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
+from qfluentwidgets import isDarkTheme
+from PySide6.QtGui import QPixmap, QRegion, QPainter, QPainterPath
+from PySide6.QtCore import Qt, QRectF
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
+from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.common.widget import BackgroundWidget
 from src.Ui.AddPage.Connect import ConnectWidget
 from src.Ui.AddPage.Advanced import AdvancedWidget
 from src.Ui.AddPage.BotWidget import BotWidget
 from src.Ui.AddPage.AddTopCard import AddTopCard
+from src.Ui.common.stacked_widget import TransparentStackedWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 
-class AddWidget(QWidget):
+class AddWidget(BackgroundWidget):
     """
     ## 窗体中 Add Bot 对应的 Widget
     """
@@ -39,9 +45,16 @@ class AddWidget(QWidget):
             - vBoxLayout : 窗体内的总布局
         """
         super().__init__()
-        self.view: Optional[QStackedWidget] = None
+        self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[AddTopCard] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
+
+        self.bgEnabledConfig = cfg.bgAddPage
+        self.bgPixmapLightConfig = cfg.bgAddPageLight
+        self.bgPixmapDarkConfig = cfg.bgAddPageDark
+        self.bgOpacityConfig = cfg.bgAddPageOpacity
+
+        self.updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -69,7 +82,7 @@ class AddWidget(QWidget):
         """
         ## 创建并配置 QStackedWidget
         """
-        self.view = QStackedWidget()
+        self.view = TransparentStackedWidget()
         self.botWidget = BotWidget(self)
         self.connectWidget = ConnectWidget(self)
         self.advancedWidget = AdvancedWidget(self)

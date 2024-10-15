@@ -71,6 +71,41 @@ class Config(QConfig):
     )
     themeColor = ColorConfigItem(group="Personalize", name="ThemeColor", default="#009faa")
 
+    windowOpacity = RangeConfigItem(
+        group="Personalize", name="WindowOpacity", default=100, validator=RangeValidator(10, 100)
+    )
+
+    bgHomePage = ConfigItem(group="Personalize", name="BgHomePage", default=False, validator=BoolValidator())
+    bgHomePageOpacity = RangeConfigItem(
+        group="Personalize", name="BgHomePageOpacity", default=100, validator=RangeValidator(1, 100)
+    )
+    bgHomePageLight = ConfigItem(group="Personalize", name="BgHomePageLight", default="")
+    bgHomePageDark = ConfigItem(group="Personalize", name="BgHomePageDark", default="")
+    bgAddPage = ConfigItem(group="Personalize", name="BgAddPage", default=False, validator=BoolValidator())
+    bgAddPageOpacity = RangeConfigItem(
+        group="Personalize", name="BgAddPageOpacity", default=100, validator=RangeValidator(1, 100)
+    )
+    bgAddPageLight = ConfigItem(group="Personalize", name="BgAddPageLight", default="")
+    bgAddPageDark = ConfigItem(group="Personalize", name="BgAddPageDark", default="")
+    bgListPage = ConfigItem(group="Personalize", name="BgListPage", default=False, validator=BoolValidator())
+    bgListPageOpacity = RangeConfigItem(
+        group="Personalize", name="BgListPageOpacity", default=100, validator=RangeValidator(1, 100)
+    )
+    bgListPageLight = ConfigItem(group="Personalize", name="BgListPageLight", default="")
+    bgListPageDark = ConfigItem(group="Personalize", name="BgListPageDark", default="")
+    bgUnitPage = ConfigItem(group="Personalize", name="BgUnitPage", default=False, validator=BoolValidator())
+    bgUnitPageOpacity = RangeConfigItem(
+        group="Personalize", name="BgUnitPageOpacity", default=100, validator=RangeValidator(1, 100)
+    )
+    bgUnitPageLight = ConfigItem(group="Personalize", name="BgUnitPageLight", default="")
+    bgUnitPageDark = ConfigItem(group="Personalize", name="BgUnitPageDark", default="")
+    bgSettingPage = ConfigItem(group="Personalize", name="BgSettingPage", default=False, validator=BoolValidator())
+    bgSettingPageOpacity = RangeConfigItem(
+        group="Personalize", name="BgSettingPageOpacity", default=100, validator=RangeValidator(1, 100)
+    )
+    bgSettingPageLight = ConfigItem(group="Personalize", name="BgSettingPageLight", default="")
+    bgSettingPageDark = ConfigItem(group="Personalize", name="BgSettingPageDark", default="")
+
     titleTabBar = ConfigItem(group="Personalize", name="TitleTabBar", default=False, validator=BoolValidator())
     titleTabBarMovable = ConfigItem(
         group="Personalize", name="TitleTabBarIsMovable", default=False, validator=BoolValidator()

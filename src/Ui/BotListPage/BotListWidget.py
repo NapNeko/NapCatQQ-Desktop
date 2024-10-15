@@ -13,8 +13,11 @@ from creart.creator import AbstractCreator, CreateTargetInfo
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
+from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.common.widget import BackgroundWidget
 from src.Ui.BotListPage.BotList import BotList
+from src.Ui.common.stacked_widget import TransparentStackedWidget
 from src.Ui.BotListPage.BotTopCard import BotTopCard
 
 if TYPE_CHECKING:
@@ -22,14 +25,21 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class BotListWidget(QWidget):
+class BotListWidget(BackgroundWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.view: Optional[QStackedWidget] = None
+        self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[BotTopCard] = None
         self.botList: Optional[BotList] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
+
+        self.bgEnabledConfig = cfg.bgListPage
+        self.bgPixmapLightConfig = cfg.bgListPageLight
+        self.bgPixmapDarkConfig = cfg.bgListPageDark
+        self.bgOpacityConfig = cfg.bgListPageOpacity
+
+        self.updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -38,7 +48,7 @@ class BotListWidget(QWidget):
         self.vBoxLayout = QVBoxLayout(self)
 
         self.topCard = BotTopCard(self)
-        self.view = QStackedWidget(self)
+        self.view = TransparentStackedWidget(self)
         self.botList = BotList(self.view)
 
         # 设置 QWidget

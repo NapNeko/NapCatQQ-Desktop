@@ -86,8 +86,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         ## 托盘图标被点击事件
         """
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.showNormal() if self.isMinimized() else None
-            self.show() if self.isHidden() else None
+            self.checkShow()
 
     def checkShow(self) -> None:
         """

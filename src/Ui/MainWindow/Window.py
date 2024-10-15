@@ -26,6 +26,7 @@ from PySide6.QtWidgets import QApplication
 # 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Ui.AddPage import AddWidget
+from src.Core.Config import cfg
 from src.Ui.HomePage import HomeWidget
 from src.Ui.resource import resource
 from src.Ui.UnitPage import UnitWidget
@@ -42,21 +43,6 @@ class MainWindow(MSFluentWindow):
 
     def __init__(self) -> None:
         super().__init__()
-
-        self.unit_widget: Optional[UnitWidget] = None
-        self.splashScreen: Optional[SplashScreen] = None
-        self.setup_widget: Optional[SetupWidget] = None
-        self.add_widget: Optional[AddWidget] = None
-        self.bot_list_widget: Optional[BotListWidget] = None
-        self.home_widget: Optional[HomeWidget] = None
-
-        self.fix_widget_button: Optional[NavigationBarPushButton] = None
-        self.unit_widget_button: Optional[NavigationBarPushButton] = None
-        self.home_widget_button: Optional[NavigationBarPushButton] = None
-        self.add_widget_button: Optional[NavigationBarPushButton] = None
-        self.bot_list_widget_button: Optional[NavigationBarPushButton] = None
-        self.setup_widget_button: Optional[NavigationBarPushButton] = None
-
         self.trayIcon: Optional[SystemTrayIcon] = None
 
     def initialize(self) -> None:
@@ -80,10 +66,12 @@ class MainWindow(MSFluentWindow):
         self.setTitleBar(self.title_bar)
         self.setWindowIcon(QIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT)))
         # 窗体大小以及设置打开时居中
-        self.setMinimumSize(1024, 720)
+        self.setMinimumSize(1148, 720)
         desktop = QApplication.screens()[0].availableGeometry()
         width, height = desktop.width(), desktop.height()
         self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)
+        # 调整窗体透明度
+        self.setWindowOpacity(cfg.get(cfg.windowOpacity) / 100)
         # 创建 Splash Screen
         self.splashScreen = SplashScreen(":Global/logo.png", self, True)
         self.splashScreen.setIconSize(QSize(128, 128))
@@ -98,40 +86,35 @@ class MainWindow(MSFluentWindow):
         """
         设置侧边栏
         """
-        self.setup_widget = it(SetupWidget).initialize(self)
-        self.add_widget = it(AddWidget).initialize(self)
-        self.bot_list_widget = it(BotListWidget).initialize(self)
-        self.unit_widget = it(UnitWidget).initialize(self)
-        self.home_widget = it(HomeWidget).initialize(self)
 
         # 添加子页面
-        self.home_widget_button = self.addSubInterface(
-            interface=self.home_widget,
+        self.addSubInterface(
+            interface=it(HomeWidget).initialize(self),
             icon=FluentIcon.HOME,
             text=self.tr("主页"),
             position=NavigationItemPosition.TOP,
         )
 
-        self.add_widget_button = self.addSubInterface(
-            interface=self.add_widget,
+        self.addSubInterface(
+            interface=it(AddWidget).initialize(self),
             icon=FluentIcon.ADD_TO,
             text=self.tr("添加"),
             position=NavigationItemPosition.TOP,
         )
-        self.bot_list_widget_button = self.addSubInterface(
-            interface=self.bot_list_widget,
+        self.addSubInterface(
+            interface=it(BotListWidget).initialize(self),
             icon=FluentIcon.MENU,
             text=self.tr("列表"),
             position=NavigationItemPosition.TOP,
         )
-        self.unit_widget_button = self.addSubInterface(
-            interface=self.unit_widget,
+        self.addSubInterface(
+            interface=it(UnitWidget).initialize(self),
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             text=self.tr("组件"),
             position=NavigationItemPosition.BOTTOM,
         )
-        self.setup_widget_button = self.addSubInterface(
-            interface=self.setup_widget,
+        self.addSubInterface(
+            interface=it(SetupWidget).initialize(self),
             icon=FluentIcon.SETTING,
             text=self.tr("设置"),
             position=NavigationItemPosition.BOTTOM,
@@ -139,11 +122,14 @@ class MainWindow(MSFluentWindow):
 
         logger.success("侧边栏构建完成")
 
-    def setPage(self) -> None:
+    @staticmethod
+    def setPage() -> None:
         """
         ## 窗口创建完成进行一些处理
         """
-        self.bot_list_widget.botList.updateList()
+        # 项目内模块导入
+        from src.Ui.BotListPage import BotListWidget
+        it(BotListWidget).botList.updateList()
 
     def setTrayIcon(self):
         """

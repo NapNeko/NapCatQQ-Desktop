@@ -141,7 +141,7 @@ class BotCard(CardWidget):
                 f"{self.config.bot.QQID}",
                 f"{self.config.bot.name} ({self.config.bot.QQID})",
                 QIcon(self.QQAvatarLabel.pixmap()),
-                lambda: (it(MainWindow).bot_list_widget_button.click(), self._clickSlot()),
+                lambda: (it(MainWindow).switchTo(it(BotListWidget)), self._clickSlot()),
             )
         else:
             it(BotListWidget).view.setCurrentWidget(self.botWidget)

@@ -9,24 +9,34 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
+from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.UnitPage.top import TopWidget
+from src.Ui.common.widget import BackgroundWidget
 from src.Ui.UnitPage.QQPage import QQPage
 from src.Ui.UnitPage.NCDPage import NCDPage
 from src.Ui.UnitPage.NapCatPage import NapCatPage
+from src.Ui.common.stacked_widget import TransparentStackedWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 
-class UnitWidget(QWidget):
+class UnitWidget(BackgroundWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.view: Optional[QStackedWidget] = None
+        self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[TopWidget] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
+
+        self.bgEnabledConfig = cfg.bgUnitPage
+        self.bgPixmapLightConfig = cfg.bgUnitPageLight
+        self.bgPixmapDarkConfig = cfg.bgUnitPageDark
+        self.bgOpacityConfig = cfg.bgUnitPageOpacity
+
+        self.updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -53,7 +63,7 @@ class UnitWidget(QWidget):
         """
         ## 创建并配置 QStackedWidget
         """
-        self.view = QStackedWidget()
+        self.view = TransparentStackedWidget()
         self.napcatPage = NapCatPage(self)
         self.qqPage = QQPage(self)
         self.ncdPage = NCDPage(self)

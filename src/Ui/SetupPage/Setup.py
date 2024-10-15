@@ -11,9 +11,12 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 # 项目内模块导入
 from src.Core import timer
 from src.Ui.common import CodeEditor
+from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.common.widget import BackgroundWidget
 from src.Core.Utils.logger import INFO_LOG
 from src.Ui.common.CodeEditor import NCDLogHighlighter
+from src.Ui.common.stacked_widget import TransparentStackedWidget
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
 from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
 
@@ -22,7 +25,7 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
-class SetupWidget(QWidget):
+class SetupWidget(BackgroundWidget):
     """
     ## 设置页面
     """
@@ -30,11 +33,18 @@ class SetupWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.log_file_path = INFO_LOG
-        self.view: Optional[QStackedWidget] = None
+        self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[SetupTopCard] = None
         self.setupScrollArea: Optional[SetupScrollArea] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
         self.logWidget: Optional[CodeEditor] = None
+
+        self.bgEnabledConfig = cfg.bgSettingPage
+        self.bgPixmapLightConfig = cfg.bgSettingPageLight
+        self.bgPixmapDarkConfig = cfg.bgSettingPageDark
+        self.bgOpacityConfig = cfg.bgSettingPageOpacity
+
+        self.updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -67,7 +77,7 @@ class SetupWidget(QWidget):
         """
         ## 创建并配置 QStackedWidget
         """
-        self.view = QStackedWidget(self)
+        self.view = TransparentStackedWidget(self)
         self.setupScrollArea = SetupScrollArea(self)
         self.logWidget = CodeEditor(self)
         self.logWidget.setObjectName("NCD-LogWidget")

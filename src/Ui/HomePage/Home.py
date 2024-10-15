@@ -11,31 +11,39 @@ from typing import TYPE_CHECKING, Self, Optional
 from creart import add_creator, exists_module
 from creart.creator import AbstractCreator, CreateTargetInfo
 from qfluentwidgets import isDarkTheme
-from PySide6.QtGui import QPixmap, QPainter
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QRegion, QPainter, QPainterPath
+from PySide6.QtCore import Qt, QPoint, QRectF
 from PySide6.QtWidgets import QStackedWidget
 
 # 项目内模块导入
+from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
+from src.Ui.common.stacked_widget import BackgroundStackedWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 
-class HomeWidget(QStackedWidget):
+class HomeWidget(BackgroundStackedWidget):
 
     def __init__(self) -> None:
         super().__init__()
         self.displayView: Optional[DisplayViewWidget] = None
-        self.contentView: Optional[ContentViewWidget] = None
+        # self.contentView: Optional[ContentViewWidget] = None
 
-        # 加载背景图片
-        self.bgPixmap = None
-        self._bgPixmapLight = QPixmap(":Global/image/Global/page_bg_light.png")
-        self._bgPixmapDark = QPixmap(":Global/image/Global/page_bg_dark.png")
+        self.enabledDefaultBg = True
+        self.bgDefaultLight = ":Global/image/Global/page_bg_light.png"
+        self.bgDefaultDark = ":Global/image/Global/page_bg_dark.png"
+
+        self.bgEnabledConfig = cfg.bgHomePage
+        self.bgPixmapLightConfig = cfg.bgHomePageLight
+        self.bgPixmapDarkConfig = cfg.bgHomePageDark
+        self.bgOpacityConfig = cfg.bgHomePageOpacity
+
+        self.updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -43,19 +51,17 @@ class HomeWidget(QStackedWidget):
         """
         # 创建控件
         self.displayView = DisplayViewWidget()
-        self.contentView = ContentViewWidget()
+        # self.contentView = ContentViewWidget()
 
         # 设置控件
         self.setParent(parent)
         self.setObjectName("HomePage")
         self.addWidget(self.displayView)
-        self.addWidget(self.contentView)
+        # self.addWidget(self.contentView)
         self.setCurrentWidget(self.displayView)
 
         # 链接信号
-        self.displayView.buttonGroup.goButton.clicked.connect(
-            lambda: self.parent().setCurrentIndex(1)
-        )
+        self.displayView.buttonGroup.goButton.clicked.connect(lambda: self.parent().setCurrentIndex(1))
 
         # 调用方法
         self.updateBgImage()
@@ -64,38 +70,6 @@ class HomeWidget(QStackedWidget):
         StyleSheet.HOME_WIDGET.apply(self)
 
         return self
-
-    def updateBgImage(self) -> None:
-        """
-        用于更新图片大小
-        """
-        # 重新加载图片保证缩放后清晰
-        if not isDarkTheme():
-            self.bgPixmap = self._bgPixmapLight
-        else:
-            self.bgPixmap = self._bgPixmapDark
-
-        self.bgPixmap = self.bgPixmap.scaled(
-            self.size(),
-            aspectMode=Qt.AspectRatioMode.KeepAspectRatioByExpanding,  # 等比缩放
-            mode=Qt.TransformationMode.SmoothTransformation,  # 平滑效果
-        )
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        """
-        重写绘制事件绘制背景图片
-        """
-        painter = QPainter(self)
-        painter.drawPixmap(self.rect(), self.bgPixmap)
-        super().paintEvent(event)
-
-    def resizeEvent(self, event) -> None:
-        """
-        重写缩放事件
-        """
-        self.updateBgImage()
-        super().resizeEvent(event)
 
 
 class HomeWidgetClassCreator(AbstractCreator, ABC):

@@ -64,9 +64,10 @@ class BotListCard(HeaderCardWidget):
         ## 跳转到 AddPage 页面
         """
         # 项目内模块导入
+        from src.Ui.AddPage import AddWidget
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).add_widget_button.click()
+        it(MainWindow).switchTo(it(AddWidget))
 
     @timer(2000)
     def monitorBots(self) -> None:
@@ -243,9 +244,9 @@ class BotCard(BackgroundAnimationWidget, QFrame):
 
         for card in it(BotListWidget).botList.botCardList:
             if self.config.bot.QQID == card.config.bot.QQID:
-                it(MainWindow).bot_list_widget_button.click()
+                it(MainWindow).switchTo(it(BotListWidget))
                 card.clicked.emit()
-                card.botWidget.runButton.click()
+                card.botWidget.runButtonSlot()
                 break
         self.runButton.hide()
         self.stopButton.show()
