@@ -24,6 +24,7 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import QWidget, QHBoxLayout
 
 # 项目内模块导入
+from src.Ui.AddPage import AddWidget
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
 from src.Ui.SetupPage.ExpandGroupSettingItem import FileItem, ItemBase, RangeItem, SwitchItem, ComboBoxItem
@@ -146,7 +147,7 @@ class SetupScrollArea(ScrollArea):
         from src.Ui.HomePage import HomeWidget
 
         setTheme(cfg.get(theme), save=True)
-        it(HomeWidget).updateBgImage()
+        it(HomeWidget).updateBgImageSize()
 
 
 class TitleTabBarSettingCard(ExpandGroupSettingCard):
@@ -353,11 +354,34 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
         """
         for item in self.enableItemList:
             item.checkedChanged.connect(self.isHide)
+
         # 项目内模块导入
+        from src.Ui.AddPage import AddWidget
         from src.Ui.HomePage import HomeWidget
-        self.enabledHomePageBgItem.checkedChanged.connect(it(HomeWidget).updateBaseBgImage)
-        self.selectHomePageLightBgItem.fileChanged.connect(it(HomeWidget).updateBaseBgImage)
-        self.selectHomePageDarkBgItem.fileChanged.connect(it(HomeWidget).updateBaseBgImage)
+        from src.Ui.UnitPage import UnitWidget
+        from src.Ui.SetupPage import SetupWidget
+        from src.Ui.BotListPage import BotListWidget
+
+        self.enabledHomePageBgItem.checkedChanged.connect(it(HomeWidget).updateBgImage)
+        self.selectHomePageLightBgItem.fileChanged.connect(it(HomeWidget).updateBgImage)
+        self.selectHomePageDarkBgItem.fileChanged.connect(it(HomeWidget).updateBgImage)
+
+        self.enabledAddPageBgItem.checkedChanged.connect(it(AddWidget).updateBgImage)
+        self.selectAddPageLightBgItem.fileChanged.connect(it(AddWidget).updateBgImage)
+        self.selectAddPageDarkBgItem.fileChanged.connect(it(AddWidget).updateBgImage)
+
+        self.enabledListPageBgItem.checkedChanged.connect(it(BotListWidget).updateBgImage)
+        self.selectListPageLightBgItem.fileChanged.connect(it(BotListWidget).updateBgImage)
+        self.selectListPageDarkBgItem.fileChanged.connect(it(BotListWidget).updateBgImage)
+
+        self.enabledUnitPageBgItem.checkedChanged.connect(it(UnitWidget).updateBgImage)
+        self.selectUnitPageLightBgItem.fileChanged.connect(it(UnitWidget).updateBgImage)
+        self.selectUnitPageDarkBgItem.fileChanged.connect(it(UnitWidget).updateBgImage)
+
+        self.enabledSettingPageBgItem.checkedChanged.connect(it(SetupWidget).updateBgImage)
+        self.selectSettingPageLightBgItem.fileChanged.connect(it(SetupWidget).updateBgImage)
+        self.selectSettingPageDarkBgItem.fileChanged.connect(it(SetupWidget).updateBgImage)
+        self.settingPageBgOpacityItem.valueChanged.connect(it(SetupWidget).updateBgImage)
 
     def isHide(self) -> None:
         """

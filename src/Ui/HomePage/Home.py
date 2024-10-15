@@ -20,18 +20,30 @@ from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.HomePage.ContentView import ContentViewWidget
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
+from src.Ui.common.stacked_widget import BackgroundStackedWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
     from src.Ui.MainWindow import MainWindow
 
 
-class HomeWidget(QStackedWidget):
+class HomeWidget(BackgroundStackedWidget):
 
     def __init__(self) -> None:
         super().__init__()
         self.displayView: Optional[DisplayViewWidget] = None
         # self.contentView: Optional[ContentViewWidget] = None
+
+        self.enabledDefaultBg = True
+        self.bgDefaultLight = ":Global/image/Global/page_bg_light.png"
+        self.bgDefaultDark = ":Global/image/Global/page_bg_dark.png"
+
+        self.bgEnabledConfig = cfg.bgHomePage
+        self.bgPixmapLightConfig = cfg.bgHomePageLight
+        self.bgPixmapDarkConfig = cfg.bgHomePageDark
+        self.bgOpacityConfig = cfg.bgHomePageOpacity
+
+        self.updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -52,83 +64,12 @@ class HomeWidget(QStackedWidget):
         self.displayView.buttonGroup.goButton.clicked.connect(lambda: self.parent().setCurrentIndex(1))
 
         # 调用方法
-        self.updateBaseBgImage()
+        self.updateBgImage()
 
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
         return self
-
-    def updateBaseBgImage(self) -> None:
-        """
-        ## 更新背景图片
-        """
-        if cfg.get(cfg.bgHomePage):
-            self._bgPixmapLight = QPixmap(cfg.get(cfg.bgHomePageLight))
-            self._bgPixmapDark = QPixmap(cfg.get(cfg.bgHomePageDark))
-        else:
-            self._bgPixmapLight = QPixmap(":Global/image/Global/page_bg_light.png")
-            self._bgPixmapDark = QPixmap(":Global/image/Global/page_bg_dark.png")
-        self.updateBgImage()
-
-    def updateBgImage(self) -> None:
-        """
-        用于更新图片大小
-        """
-        # 重新加载图片保证缩放后清晰
-        if not isDarkTheme():
-            self.bgPixmap = self._bgPixmapLight
-        else:
-            self.bgPixmap = self._bgPixmapDark
-
-        self.bgPixmap = self.bgPixmap.scaled(
-            self.size(),
-            aspectMode=Qt.AspectRatioMode.IgnoreAspectRatio,  # 等比缩放
-            mode=Qt.TransformationMode.FastTransformation,  # 平滑效果
-        )
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        """
-        重写绘制事件绘制背景图片
-        """
-        painter = QPainter(self)
-        rect = self.rect()
-        radius = 8  # 圆角半径，可以根据需要调整
-
-        # 创建一个路径，包含全局区域，除了左上角之外
-        path = QPainterPath()
-        path.addRect(rect)
-
-        # 创建左上角的圆角矩形路径
-        corner_rect = QRectF(rect.left(), rect.top(), 2 * radius, 2 * radius)
-        corner_path = QPainterPath()
-        corner_path.moveTo(corner_rect.topLeft())
-        corner_path.arcTo(corner_rect, 90, 90)
-        corner_path.lineTo(rect.topLeft())
-        corner_path.closeSubpath()
-
-        # 从全局路径中减去左上角圆角路径
-        path = path.subtracted(corner_path)
-
-        # 设置剪裁区域为非左上角区域，这样左上角就有了圆角效果
-        region = QRegion(path.toFillPolygon().toPolygon())
-        painter.setClipRegion(region)
-
-        # 设置图片透明度
-        painter.setOpacity(cfg.get(cfg.bgHomePageOpacity) / 100 if cfg.get(cfg.bgHomePage) else 1)
-
-        # 绘制背景图像
-        painter.drawPixmap(rect, self.bgPixmap)
-
-        super().paintEvent(event)
-
-    def resizeEvent(self, event) -> None:
-        """
-        重写缩放事件
-        """
-        self.updateBgImage()
-        super().resizeEvent(event)
 
 
 class HomeWidgetClassCreator(AbstractCreator, ABC):
