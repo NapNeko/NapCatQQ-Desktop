@@ -31,9 +31,11 @@ class HomeWidget(BackgroundStackedWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        # 预定义控件
         self.displayView: Optional[DisplayViewWidget] = None
         # self.contentView: Optional[ContentViewWidget] = None
 
+        # 传入配置
         self.enabledDefaultBg = True
         self.bgDefaultLight = ":Global/image/Global/page_bg_light.png"
         self.bgDefaultDark = ":Global/image/Global/page_bg_dark.png"
@@ -43,7 +45,8 @@ class HomeWidget(BackgroundStackedWidget):
         self.bgPixmapDarkConfig = cfg.bgHomePageDark
         self.bgOpacityConfig = cfg.bgHomePageOpacity
 
-        self.updateBgImage()
+        # 调用方法
+        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
