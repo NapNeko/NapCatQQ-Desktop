@@ -1,6 +1,6 @@
 [project]
 name = "NapCatQQ-Desktop"
-version = "v1.0.5"
+version = "v1.1.0"
 description = "为 NapCat 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat"
 authors = [
     {name = "Qiao", email = "qiaohuayuquan@qq.com"},
