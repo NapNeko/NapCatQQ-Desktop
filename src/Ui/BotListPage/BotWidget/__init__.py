@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-# 标准库导入
-import re
-
 # 第三方库导入
 import psutil
 from creart import it
@@ -15,7 +12,7 @@ from qfluentwidgets import (
     TransparentToolButton,
 )
 from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import Qt, Slot, QProcess
+from PySide6.QtCore import Qt, Slot, QProcess, QRegularExpression
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
@@ -39,6 +36,7 @@ class BotWidget(QWidget):
         self.config = config
         self.isRun = False  # 用于标记机器人是否在运行
         self.isLogin = False  # 用于标记机器人是否登录
+        self.webUiUrl = None  # 用于记录 WebUI 的端口
 
         # 创建所需控件
         self._createView()
@@ -223,6 +221,23 @@ class BotWidget(QWidget):
         cursor.insertText(data)
         self.botLogPage.setTextCursor(cursor)
 
+        # 分发给其他处理函数
+        self._getWebUiUrl(data)
+
+    def _getWebUiUrl(self, data: str):
+        """
+        ## 用于获取 WebUI 运行的 Url
+        """
+        if self.webUiUrl is not None:
+            # 如果已经获取到了, 则直接退出
+            return
+
+        # 创建正则表达式对象
+        if (match := QRegularExpression(r"http://127\.0\.0\.1:\d+/\S+").match(data)).hasMatch():
+            # 如果匹配成功, 则记录并启动 中间件
+            self.webUiUrl = match.captured(0)
+            # TODO 中间件待实现
+
     @Slot()
     def _processFinishedSlot(self, exit_code, exit_status) -> None:
         """
@@ -232,6 +247,9 @@ class BotWidget(QWidget):
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(f"进程结束，退出码为 {exit_code}，状态为 {exit_status}")
         self.botLogPage.setTextCursor(cursor)
+
+        # 重置WebUi链接
+        self.webUiUrl = None
 
     @Slot()
     def _updateButtonSlot(self) -> None:
@@ -259,9 +277,9 @@ class BotWidget(QWidget):
             return
 
         if AskBox(
-                self.tr("确认删除"),
-                self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
-                it(MainWindow)
+            self.tr("确认删除"),
+            self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
+            it(MainWindow),
         ).exec():
             # 询问用户是否确认删除, 确认删除执行删除操作
             # 项目内模块导入
