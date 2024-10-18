@@ -12,7 +12,7 @@ from qfluentwidgets import (
     TransparentToolButton,
 )
 from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import Qt, Slot, QProcess, QRegularExpression
+from PySide6.QtCore import Qt, QUrl, Slot, QProcess, QRegularExpression
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
@@ -232,10 +232,14 @@ class BotWidget(QWidget):
             # 如果已经获取到了, 则直接退出
             return
 
-        # 创建正则表达式对象
-        if (match := QRegularExpression(r"http://127\.0\.0\.1:\d+/\S+").match(data)).hasMatch():
-            # 如果匹配成功, 则记录并启动 中间件
-            self.webUiUrl = match.captured(0)
+        # 正则匹配
+        if not (match := QRegularExpression(r"http://127\.0\.0\.1:\d+/\S+").match(data)).hasMatch():
+            # 如果匹配不成功, 则退出
+            return
+
+        if (url := QUrl(match.captured(0))).isValid():
+            # 验证 url 是否合法
+            self.webUiUrl = url
             # TODO 中间件待实现
 
     @Slot()
