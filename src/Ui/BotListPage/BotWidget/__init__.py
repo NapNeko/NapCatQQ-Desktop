@@ -212,9 +212,11 @@ class BotWidget(QWidget):
         """
         # 获取所有输出
         data = self.process.readAllStandardOutput().data().decode()
-        # 匹配并移除 ANSI 转义码
-        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-        data = ansi_escape.sub("", data)
+
+        # 遍历所有匹配项并移除
+        while (matches := QRegularExpression(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").globalMatch(data)).hasNext():
+            data = data.replace(matches.next().captured(0), "")
+
         # 获取 CodeEditor 的 cursor 并移动插入输出内容
         cursor = self.botLogPage.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
