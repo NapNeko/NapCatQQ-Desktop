@@ -12,8 +12,9 @@ from creart import it
 from loguru import logger
 
 # 项目内模块导入
+from src.Ui.common.info_bar import error_bar
 from src.Core.Utils.PathFunc import PathFunc
-from src.Core.Config.ConfigModel import Config, NapCatConfig, OneBotConfig
+from src.Core.Config.ConfigModel import Config, WebUiConfig, NapCatConfig, OneBotConfig
 
 
 def read_config() -> List[Config]:
@@ -30,6 +31,20 @@ def read_config() -> List[Config]:
         logger.error(f"读取配置文件时引发错误: {error}")
         write_config([])  # 覆盖原有配置文件
         return []
+
+
+def read_webui_config() -> WebUiConfig:
+    """
+    ## 读取 NapCat WebUI 配置文件
+
+    ## 返回
+        - Config
+    """
+    if not it(PathFunc).webui_config_path.exists() and not it(PathFunc).webui_config_path.is_file():
+        error_bar("WebUI 配置文件不存在")
+        return
+    with open(str(it(PathFunc).webui_config_path), "r", encoding="utf-8") as file:
+        return WebUiConfig(**json.load(file))
 
 
 def write_config(configs: List[Config]) -> None:

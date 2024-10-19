@@ -119,6 +119,14 @@ class NapCatConfig(BaseModel):
     consoleLogLevel: str
 
 
+class WebUiConfig(BaseModel):
+    host: str
+    port: int
+    prefix: str
+    token: str
+    loginRate: int
+
+
 DEFAULT_CONFIG = {
     "bot": {
         "name": "",
