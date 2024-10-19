@@ -27,7 +27,14 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout
 from src.Ui.AddPage import AddWidget
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
-from src.Ui.SetupPage.ExpandGroupSettingItem import FileItem, ItemBase, RangeItem, SwitchItem, ComboBoxItem
+from src.Ui.SetupPage.ExpandGroupSettingItem import (
+    FileItem,
+    ItemBase,
+    RangeItem,
+    SwitchItem,
+    ComboBoxItem,
+    LineEditItem,
+)
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -99,6 +106,11 @@ class SetupScrollArea(ScrollArea):
         self.bgSettingCard = BackgroundSettingCard(self)
         self.titleTabBarSettingCard = TitleTabBarSettingCard(self)
 
+        # 创建组 - 事件
+        self.eventGroup = SettingCardGroup(title=self.tr("事件"), parent=self.view)
+        # 创建项
+        self.botOfflineEventCard = BotOfflineEventCard(self)
+
         # 创建组 - 路径
         # self.pathGroup = SettingCardGroup(title=self.tr("Path"), parent=self.view)
 
@@ -115,9 +127,12 @@ class SetupScrollArea(ScrollArea):
         self.personalGroup.addSettingCard(self.windowOpacityCard)
         self.personalGroup.addSettingCard(self.titleTabBarSettingCard)
 
+        self.eventGroup.addSettingCard(self.botOfflineEventCard)
+
         # 添加到布局
         # self.expand_layout.addWidget(self.startGroup)
         self.expand_layout.addWidget(self.personalGroup)
+        self.expand_layout.addWidget(self.eventGroup)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
 
@@ -451,6 +466,90 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
                 self.settingPageBgOpacityItem.hide()
 
     def wheelEvent(self, event):
+        """
+        ## 滚动事件上传到父控件
+        """
+        self.parent().wheelEvent(event)
+        super().wheelEvent(event)
+
+
+class BotOfflineEventCard(ExpandGroupSettingCard):
+    """
+    ## 机器人离线事件
+    """
+
+    def __init__(self, parent) -> None:
+        super().__init__(
+            icon=FluentIcon.RINGER,
+            title=self.tr("机器人离线事件"),
+            content=self.tr("设置机器人离线时的事件"),
+            parent=parent,
+        )
+
+        # 创建项
+        self.enabledEmailNoticeItem = SwitchItem(cfg.botOfflineEmailNotice, self.tr("启用邮件通知"), self)
+        self.emailNoticeReceiversItem = LineEditItem(
+            cfg.botOfflineEmailNoticeReceiver,
+            self.tr("接收人邮箱"),
+            placeholder_text=self.tr("NCD@qq.com"),
+            parent=self,
+        )
+        self.emailNoticeSenderItem = LineEditItem(
+            cfg.botOfflineEmailNoticeSender, self.tr("发送人邮箱"), placeholder_text=self.tr("NC@qq.com"), parent=self
+        )
+        self.emailNoticeToken = LineEditItem(cfg.emailNoticeToken, self.tr("发送人邮箱密钥"), parent=self)
+
+        # 调整内部布局
+        self.viewLayout.setContentsMargins(0, 0, 0, 0)
+        self.viewLayout.setSpacing(0)
+
+        # 添加组件
+        self.addGroupWidget(self.enabledEmailNoticeItem)
+        self.addGroupWidget(self.emailNoticeReceiversItem)
+        self.addGroupWidget(self.emailNoticeSenderItem)
+        self.addGroupWidget(self.emailNoticeToken)
+
+        # 信号连接
+        self.enabledEmailNoticeItem.checkedChanged.connect(self.isHide)
+
+        # 调用方法
+        self.isHide()
+
+    def isHide(self) -> None:
+        """
+        ## 判断是否需要隐藏
+        """
+        for item in [self.enabledEmailNoticeItem]:
+            if cfg.get(item.configItem):
+                self.showItem(item)
+            else:
+                self.hideItem(item)
+
+        [self.viewLayout.itemAt(num).widget().hide() for num in [1, 3, 5]]
+
+        self._adjustViewSize()
+
+    def showItem(self, item: SwitchItem) -> None:
+        """
+        ## 显示项
+        """
+        match item.configItem:
+            case cfg.botOfflineEmailNotice:
+                self.emailNoticeReceiversItem.show()
+                self.emailNoticeSenderItem.show()
+                self.emailNoticeToken.show()
+
+    def hideItem(self, item: SwitchItem) -> None:
+        """
+        ## 隐藏项
+        """
+        match item.configItem:
+            case cfg.botOfflineEmailNotice:
+                self.emailNoticeReceiversItem.hide()
+                self.emailNoticeSenderItem.hide()
+                self.emailNoticeToken.hide()
+
+    def wheelEvent(self, event) -> None:
         """
         ## 滚动事件上传到父控件
         """
