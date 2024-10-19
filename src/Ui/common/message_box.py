@@ -98,9 +98,13 @@ class ImageBox(MessageBoxBase):
         self.imageLabel = ImageLabel(image, self)
 
         # 设置属性
-        self.imageLabel.setMinimumSize(100, 100)
+        self.imageLabel.scaledToWidth(120)
         self.widget.setMinimumSize(420, 230)
         self.yesButton.setText(self.tr("刷新"))
+
+        # 添加到布局
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addWidget(self.imageLabel, 0, Qt.AlignmentFlag.AlignCenter)
 
     def setImage(self, image: str | QImage | QPixmap) -> None:
         """
@@ -110,6 +114,34 @@ class ImageBox(MessageBoxBase):
             - image: 图像
         """
         self.imageLabel.setImage(image)
+        self.setImageScaledToWidth(int(self.width() * 0.3))
+
+    def setImageBorderRadius(self, topLeft: int, topRight: int, bottomLeft: int, bottomRight: int) -> None:
+        """
+        ## 设置图片圆角
+
+        ## 参数
+            - radius: 圆角半径
+        """
+        self.imageLabel.setBorderRadius(topLeft, topRight, bottomLeft, bottomRight)
+
+    def setImageScaledToWidth(self, width: int) -> None:
+        """
+        ## 设置图片宽度
+
+        ## 参数
+            - width: 图片宽度
+        """
+        self.imageLabel.scaledToWidth(width)
+
+    def setImageScaledToHeight(self, height: int) -> None:
+        """
+        ## 设置图片高度
+
+        ## 参数
+            - height: 图片高度
+        """
+        self.imageLabel.scaledToHeight(height)
 
 
 class HyperlinkBox(MessageBoxBase):
