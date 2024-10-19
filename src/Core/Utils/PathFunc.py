@@ -18,11 +18,12 @@ class PathFunc:
         """
         self.qq_path = None
         self.base_path = Path.cwd()
+        self.napcat_path = self.base_path / "NapCat"
         self.config_dir_path = self.base_path / "config"
         self.config_path = self.config_dir_path / "config.json"
+        self.webui_config_path = self.napcat_path / "config" / "webui.json"
         self.bot_config_path = self.config_dir_path / "bot.json"
         self.tmp_path = self.base_path / "tmp"
-        self.napcat_path = self.base_path / "NapCat"
 
         self.log_path = self.base_path / "log"
         self.log_info_path = self.log_path / "info"
