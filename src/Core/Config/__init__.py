@@ -135,15 +135,12 @@ class Config(QConfig):
     botOfflineEmailNotice = ConfigItem(
         group="Event", name="BotOfflineEmailNotice", default=False, validator=BoolValidator()
     )
-    botOfflineEmailNoticeReceiver = ConfigItem(
-        group="Event", name="BotOfflineEmailNoticeReceiver", default=""
-    )
-    botOfflineEmailNoticeSender = ConfigItem(
-        group="Event", name="BotOfflineEmailNoticeSender", default=""
-    )
-    emailNoticeToken = ConfigItem(
-        group="Event", name="EmailNoticeToken", default=""
-    )
+
+    # 邮件项
+    emailReceiver = ConfigItem(group="Email", name="EmailReceiver", default="")
+    emailSender = ConfigItem(group="Email", name="EmailSender", default="")
+    emailToken = ConfigItem(group="Email", name="EmailToken", default="")
+    emailStmpServer = ConfigItem(group="Email", name="EmailStmpServer", default="")
 
     # 隐藏提示项
     HideUsGoBtnTips = ConfigItem(group="HideTips", name="HideUsingGoBtnTips", default=False, validator=BoolValidator())

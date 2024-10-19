@@ -488,16 +488,14 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
 
         # 创建项
         self.enabledEmailNoticeItem = SwitchItem(cfg.botOfflineEmailNotice, self.tr("启用邮件通知"), self)
-        self.emailNoticeReceiversItem = LineEditItem(
-            cfg.botOfflineEmailNoticeReceiver,
-            self.tr("接收人邮箱"),
-            placeholder_text=self.tr("NCD@qq.com"),
-            parent=self,
+        self.emailReceiversItem = LineEditItem(
+            cfg.emailReceiver, self.tr("接收人邮箱"), placeholder_text=self.tr("A@qq.com"), parent=self
         )
-        self.emailNoticeSenderItem = LineEditItem(
-            cfg.botOfflineEmailNoticeSender, self.tr("发送人邮箱"), placeholder_text=self.tr("NC@qq.com"), parent=self
+        self.emailSenderItem = LineEditItem(
+            cfg.emailSender, self.tr("发送人邮箱"), placeholder_text=self.tr("B@qq.com"), parent=self
         )
-        self.emailNoticeToken = LineEditItem(cfg.emailNoticeToken, self.tr("发送人邮箱密钥"), parent=self)
+        self.emailToken = LineEditItem(cfg.emailNoticeToken, self.tr("发送人邮箱密钥"), parent=self)
+        self.emailStmpServer = LineEditItem(cfg.emailStmpServer, self.tr("SMTP服务器"), parent=self)
 
         # 调整内部布局
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
@@ -505,9 +503,10 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
 
         # 添加组件
         self.addGroupWidget(self.enabledEmailNoticeItem)
-        self.addGroupWidget(self.emailNoticeReceiversItem)
-        self.addGroupWidget(self.emailNoticeSenderItem)
-        self.addGroupWidget(self.emailNoticeToken)
+        self.addGroupWidget(self.emailReceiversItem)
+        self.addGroupWidget(self.emailSenderItem)
+        self.addGroupWidget(self.emailToken)
+        self.addGroupWidget(self.emailStmpServer)
 
         # 信号连接
         self.enabledEmailNoticeItem.checkedChanged.connect(self.isHide)
@@ -535,8 +534,8 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
         """
         match item.configItem:
             case cfg.botOfflineEmailNotice:
-                self.emailNoticeReceiversItem.show()
-                self.emailNoticeSenderItem.show()
+                self.emailReceiversItem.show()
+                self.emailSenderItem.show()
                 self.emailNoticeToken.show()
 
     def hideItem(self, item: SwitchItem) -> None:
@@ -545,8 +544,8 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
         """
         match item.configItem:
             case cfg.botOfflineEmailNotice:
-                self.emailNoticeReceiversItem.hide()
-                self.emailNoticeSenderItem.hide()
+                self.emailReceiversItem.hide()
+                self.emailSenderItem.hide()
                 self.emailNoticeToken.hide()
 
     def wheelEvent(self, event) -> None:
