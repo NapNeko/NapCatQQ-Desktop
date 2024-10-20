@@ -91,7 +91,7 @@ class NapCatPage(PageBase):
                 return
 
         info_bar(self.tr("正在下载 NapCat"))
-        self.downloader = GithubDownloader(Urls.NAPCAT_DOWNLOAD.value)
+        self.downloader = GithubDownloader(Urls.NAPCATQQ_DOWNLOAD.value)
         self.downloader.downloadProgress.connect(self.appCard.setProgressRingValue)
         self.downloader.downloadFinish.connect(self.installSlot)
         self.downloader.statusLabel.connect(self.appCard.setStatusText)
