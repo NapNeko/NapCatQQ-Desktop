@@ -45,9 +45,9 @@ class TopWidget(QWidget):
         self.buttonLayout.addWidget(self.updateButton)
         self.buttonLayout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft.AlignLeft)
 
-        self.hBoxLayout.addLayout(self.labelLayout)
-        self.hBoxLayout.addStretch(1)
-        self.hBoxLayout.addLayout(self.buttonLayout)
+        self.hBoxLayout.addLayout(self.labelLayout, 2)
+        self.hBoxLayout.addStretch(2)
+        self.hBoxLayout.addLayout(self.buttonLayout, 0)
         self.hBoxLayout.setContentsMargins(1, 0, 1, 5)
 
         self.setLayout(self.hBoxLayout)
