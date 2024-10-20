@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+import time
 from typing import Optional
 
 # 第三方库导入
@@ -158,6 +159,7 @@ class BotWidget(QWidget):
             self.dlcProcess.setParent(self)
             self.dlcProcess.start()
             self.dlcProcess.waitForStarted()
+            time.sleep(3)  # 无法读取日志, 等待 3 秒, 待发现更好的解决方法
 
         # NapCat 启动
         self.napcatProcess = create_napcat_process(self.config)
