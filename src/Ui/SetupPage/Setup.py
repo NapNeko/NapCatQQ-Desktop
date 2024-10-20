@@ -32,6 +32,7 @@ class SetupWidget(BackgroundWidget):
 
     def __init__(self):
         super().__init__()
+        # 预定义控件及属性
         self.log_file_path = INFO_LOG
         self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[SetupTopCard] = None
@@ -39,12 +40,14 @@ class SetupWidget(BackgroundWidget):
         self.vBoxLayout: Optional[QVBoxLayout] = None
         self.logWidget: Optional[CodeEditor] = None
 
+        # 传入配置
         self.bgEnabledConfig = cfg.bgSettingPage
         self.bgPixmapLightConfig = cfg.bgSettingPageLight
         self.bgPixmapDarkConfig = cfg.bgSettingPageDark
         self.bgOpacityConfig = cfg.bgSettingPageOpacity
 
-        self.updateBgImage()
+        # 调用方法
+        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """

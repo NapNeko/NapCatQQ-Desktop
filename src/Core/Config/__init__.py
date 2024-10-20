@@ -131,6 +131,17 @@ class Config(QConfig):
         group="Personalize", name="TitleTabBarMaxWidth", default=135, validator=RangeValidator(64, 200)
     )
 
+    # 事件项
+    botOfflineEmailNotice = ConfigItem(
+        group="Event", name="BotOfflineEmailNotice", default=False, validator=BoolValidator()
+    )
+
+    # 邮件项
+    emailReceiver = ConfigItem(group="Email", name="EmailReceiver", default="")
+    emailSender = ConfigItem(group="Email", name="EmailSender", default="")
+    emailToken = ConfigItem(group="Email", name="EmailToken", default="")
+    emailStmpServer = ConfigItem(group="Email", name="EmailStmpServer", default="")
+
     # 隐藏提示项
     HideUsGoBtnTips = ConfigItem(group="HideTips", name="HideUsingGoBtnTips", default=False, validator=BoolValidator())
 

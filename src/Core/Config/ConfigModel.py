@@ -85,6 +85,7 @@ class ConnectConfig(BaseModel):
 
 class AdvancedConfig(BaseModel):
     autoStart: bool = False
+    offlineNotice: bool = False
     debug: bool
     enableLocalFile2Url: bool
     fileLog: bool
@@ -119,6 +120,14 @@ class NapCatConfig(BaseModel):
     consoleLogLevel: str
 
 
+class WebUiConfig(BaseModel):
+    host: str
+    port: int
+    prefix: str
+    token: str
+    loginRate: int
+
+
 DEFAULT_CONFIG = {
     "bot": {
         "name": "",
@@ -150,5 +159,6 @@ DEFAULT_CONFIG = {
         "enableLocalFile2Url": "debug",
         "consoleLogLevel": "info",
         "autoStart": False,
+        "offline_notice": False,
     },
 }

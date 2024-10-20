@@ -45,16 +45,19 @@ class AddWidget(BackgroundWidget):
             - vBoxLayout : 窗体内的总布局
         """
         super().__init__()
+        # 预定义控件
         self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[AddTopCard] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
 
+        # 传入配置
         self.bgEnabledConfig = cfg.bgAddPage
         self.bgPixmapLightConfig = cfg.bgAddPageLight
         self.bgPixmapDarkConfig = cfg.bgAddPageDark
         self.bgOpacityConfig = cfg.bgAddPageOpacity
 
-        self.updateBgImage()
+        # 调用方法
+        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """

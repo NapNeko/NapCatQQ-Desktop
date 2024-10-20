@@ -76,8 +76,6 @@ class QQPage(PageBase):
             return
 
         if (remote_ver := it(GetVersion).getRemoteQQVersion()) is None:
-            # 如果拉取不到远程版本
-            error_bar(self.tr("拉取远程版本时发生错误, 详情查看 设置 > Log"))
             return
 
         if locaL_ver != remote_ver:
@@ -92,7 +90,6 @@ class QQPage(PageBase):
         ## 下载按钮槽函数
         """
         if (url := it(GetVersion).getQQDownloadUrl()) is None:
-            error_bar(self.tr("获取下载地址时发生错误, 详情查看 设置 > Log"))
             return
         self.file_path = it(PathFunc).tmp_path / QUrl(url).fileName()
         self.downloader = QQDownloader(QUrl(url))

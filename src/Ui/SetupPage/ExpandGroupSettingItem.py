@@ -3,6 +3,7 @@
 from qfluentwidgets import (
     Slider,
     ComboBox,
+    LineEdit,
     BodyLabel,
     ConfigItem,
     FluentIcon,
@@ -67,6 +68,39 @@ class ItemBase(QWidget):
             - 值
         """
         pass
+
+
+class LineEditItem(ItemBase):
+    """
+    ## 展开设置卡片的子组件
+    """
+
+    def __init__(self, configItem: ConfigItem, title: str, /, placeholder_text: str = "", parent=None):
+        super().__init__(title, parent=parent)
+        self.configItem = configItem
+        self.lineEdit = LineEdit(self)
+        self.lineEdit.setPlaceholderText(placeholder_text)
+
+        if configItem:
+            self.setValue(cfg.get(configItem))
+
+        # 设置控件
+        self.lineEdit.editingFinished.connect(lambda: self.setValue(self.lineEdit.text()))
+        self.lineEdit.setFixedWidth(175)
+
+        # 添加到布局
+        self.hBoxLayout.addWidget(self.lineEdit, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
+
+    @Slot(str)
+    def setValue(self, value: str) -> None:
+        """
+        ## 设置值
+        """
+        if self.configItem:
+            cfg.set(self.configItem, value)
+
+        self.lineEdit.setText(value)
 
 
 class SwitchItem(ItemBase):
@@ -266,5 +300,3 @@ class FileItem(ItemBase):
             cfg.set(self.configItem, file)
             self.titleLabel.setText(f"{self.title}: {file}")
             self.fileChanged.emit(file)
-
-

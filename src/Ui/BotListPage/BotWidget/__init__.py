@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-# 标准库导入
-import re
-
 # 第三方库导入
 import psutil
 from creart import it
+from PIL.ImageQt import QImage, QPixmap
 from qfluentwidgets import (
     FluentIcon,
     PushButton,
@@ -15,12 +13,13 @@ from qfluentwidgets import (
     TransparentToolButton,
 )
 from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import Qt, Slot, QProcess
+from PySide6.QtCore import Qt, QUrl, Slot, QProcess, QByteArray, QRegularExpression
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
 from src.Ui.common import CodeEditor, LogHighlighter
 from src.Ui.StyleSheet import StyleSheet
+from src.Core.Utils.email import Email
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
 from src.Core.Utils.RunNapCat import create_process
 from src.Ui.common.message_box import AskBox, ImageBox
@@ -38,7 +37,7 @@ class BotWidget(QWidget):
         super().__init__()
         self.config = config
         self.isRun = False  # 用于标记机器人是否在运行
-        self.isLogin = False  # 用于标记机器人是否登录
+        self.webUiUrl = None  # 用于记录 WebUI 的端口
 
         # 创建所需控件
         self._createView()
@@ -111,7 +110,6 @@ class BotWidget(QWidget):
         self.runButton = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("Startup"))  # 启动按钮
         self.stopButton = PushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"))  # 停止按钮
         self.rebootButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Reboot"))  # 重启按钮
-        self.showQRCodeButton = TransparentToolButton(FluentIcon.QRCODE, self)  # 显示登录二维码按钮
         self.updateConfigButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Update config"))  # 更新配置按钮
         self.deleteConfigButton = ToolButton(FluentIcon.DELETE, self)  # 删除配置按钮
         self.returnButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回到按钮
@@ -120,7 +118,6 @@ class BotWidget(QWidget):
         self.runButton.clicked.connect(self.runButtonSlot)
         self.stopButton.clicked.connect(self.stopButtonSlot)
         self.rebootButton.clicked.connect(self.rebootButtonSlot)
-        self.showQRCodeButton.clicked.connect(lambda: self.qrcodeMsgBox.show())
         self.updateConfigButton.clicked.connect(self._updateButtonSlot)
         self.deleteConfigButton.clicked.connect(self._deleteButtonSlot)
         self.returnButton.clicked.connect(self._returnButtonSlot)
@@ -130,7 +127,6 @@ class BotWidget(QWidget):
         self.rebootButton.hide()
         self.updateConfigButton.hide()
         self.deleteConfigButton.hide()
-        self.showQRCodeButton.hide()
 
     def _addTooltips(self) -> None:
         """
@@ -139,10 +135,6 @@ class BotWidget(QWidget):
         # 返回按钮提示
         self.returnButton.setToolTip(self.tr("Click Back"))
         self.returnButton.installEventFilter(ToolTipFilter(self.returnButton))
-
-        # 二维码按钮提示
-        self.showQRCodeButton.setToolTip(self.tr("Click to show the login QR code"))
-        self.showQRCodeButton.installEventFilter(ToolTipFilter(self.showQRCodeButton))
 
         # 删除按钮提示
         self.deleteConfigButton.setToolTip(self.tr("Click Delete bot configuration"))
@@ -160,7 +152,6 @@ class BotWidget(QWidget):
         # 创建组件
         self.process = create_process(self.config)
         self.highlighter = LogHighlighter(self.botLogPage.document())
-        self.qrcodeMsgBox = ImageBox(self.tr("QR Code"), "", it(MainWindow))
 
         # 设置组件
         self.botLogPage.clear()
@@ -189,14 +180,12 @@ class BotWidget(QWidget):
         if not self.isRun:
             return
 
-        if parent := psutil.Process(self.process.processId()):
+        if (parent := psutil.Process(self.process.processId())).pid != 0:
             [child.kill() for child in parent.children(recursive=True)]
             parent.kill()
 
         self.isRun = False
-        self.isLogin = False
         self.view.setCurrentWidget(self.botSetupPage)
-        self.showQRCodeButton.hide()
 
     @Slot()
     def rebootButtonSlot(self) -> None:
@@ -212,14 +201,38 @@ class BotWidget(QWidget):
         """
         # 获取所有输出
         data = self.process.readAllStandardOutput().data().decode()
-        # 匹配并移除 ANSI 转义码
-        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-        data = ansi_escape.sub("", data)
+
+        # 遍历所有匹配项并移除
+        while (matches := QRegularExpression(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").globalMatch(data)).hasNext():
+            data = data.replace(matches.next().captured(0), "")
+
         # 获取 CodeEditor 的 cursor 并移动插入输出内容
         cursor = self.botLogPage.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(data)
         self.botLogPage.setTextCursor(cursor)
+
+        # 分发给其他处理函数
+        self._getBofOffline(data)
+
+    def _getBofOffline(self, data: str):
+        """
+        ## 检测用户状态
+        """
+        # 正则匹配
+        pattern = rf"\[INFO\] .+\({self.config.bot.QQID}\) \| 账号状态变更为离线"
+        if not (match := QRegularExpression(pattern).match(data)).hasMatch():
+            # 如果匹配不成功, 则退出
+            return
+
+        if not self.config.advanced.offlineNotice:
+            # 如果未开启通知, 退出
+            return
+
+        # 创建 Email 进行发件
+        self.email = Email(self.config)
+        self.email.error_single.connect(error_bar)
+        self.email.start()
 
     @Slot()
     def _processFinishedSlot(self, exit_code, exit_status) -> None:
@@ -236,8 +249,8 @@ class BotWidget(QWidget):
         """
         ## 更新按钮的槽函数
         """
-        self.newConfig = Config(**self.botSetupPage.getValue())
-        if update_config(self.newConfig):
+        self.config = Config(**self.botSetupPage.getValue())
+        if update_config(self.config):
             # 更新成功提示
             success_bar(self.tr("更新配置成功"))
         else:
@@ -257,9 +270,9 @@ class BotWidget(QWidget):
             return
 
         if AskBox(
-                self.tr("确认删除"),
-                self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
-                it(MainWindow)
+            self.tr("确认删除"),
+            self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
+            it(MainWindow),
         ).exec():
             # 询问用户是否确认删除, 确认删除执行删除操作
             # 项目内模块导入
@@ -303,7 +316,6 @@ class BotWidget(QWidget):
                 "returnButton": "show",
                 "updateConfigButton": "hide",
                 "deleteConfigButton": "hide",
-                "showQRCodeButton": "hide",
                 "runButton": "hide" if self.isRun else "show",
                 "stopButton": "show" if self.isRun else "hide",
                 "rebootButton": "show" if self.isRun else "hide",
@@ -311,7 +323,6 @@ class BotWidget(QWidget):
             self.botSetupPage.objectName(): {
                 "updateConfigButton": "show",
                 "deleteConfigButton": "show",
-                "showQRCodeButton": "hide",
                 "returnButton": "show",
                 "runButton": "hide",
                 "stopButton": "hide",
@@ -324,7 +335,6 @@ class BotWidget(QWidget):
                 "runButton": "hide" if self.isRun else "show",
                 "stopButton": "show" if self.isRun else "hide",
                 "rebootButton": "show" if self.isRun else "hide",
-                "showQRCodeButton": "show" if not self.isLogin and self.isRun else "hide",
             },
         }
 
@@ -342,7 +352,6 @@ class BotWidget(QWidget):
         self.buttonLayout.addWidget(self.runButton)
         self.buttonLayout.addWidget(self.stopButton)
         self.buttonLayout.addWidget(self.rebootButton)
-        self.buttonLayout.addWidget(self.showQRCodeButton)
         self.buttonLayout.addWidget(self.updateConfigButton)
         self.buttonLayout.addWidget(self.deleteConfigButton)
         self.buttonLayout.addWidget(self.returnButton)

@@ -27,16 +27,19 @@ class UnitWidget(BackgroundWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        # 预定义控件
         self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[TopWidget] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
 
+        # 传入配置
         self.bgEnabledConfig = cfg.bgUnitPage
         self.bgPixmapLightConfig = cfg.bgUnitPageLight
         self.bgPixmapDarkConfig = cfg.bgUnitPageDark
         self.bgOpacityConfig = cfg.bgUnitPageOpacity
 
-        self.updateBgImage()
+        # 调用方法
+        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """

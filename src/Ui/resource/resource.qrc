@@ -1,19 +1,9 @@
 <RCC>
     <qresource prefix="Global">
         <file>logo.png</file>
+        <file>image/Global/napcat.png</file>
         <file>image/Global/page_bg_dark.png</file>
         <file>image/Global/page_bg_light.png</file>
-        <file>image/Global/image_1.jpg</file>
-    </qresource>
-
-    <qresource prefix="1920_540">
-        <file>image/1920_540/image_1.png</file>
-        <file>image/1920_540/image_2.png</file>
-        <file>image/1920_540/image_3.png</file>
-        <file>image/1920_540/image_4.png</file>
-        <file>image/1920_540/image_5.png</file>
-        <file>image/1920_540/image_6.png</file>
-        <file>image/1920_540/image_7.png</file>
     </qresource>
 
     <qresource prefix="Icon">
@@ -49,8 +39,8 @@
         <file>qss/light/update_log_card.qss</file>
     </qresource>
 
-    <qresource prefix="i18n">
-        <file>i18n/translation.zh_CN.qm</file>
-        <file>i18n/translation.zh_TW.qm</file>
+    <qresource prefix="template">
+        <file>template/email/bot_offline_notice.html</file>
     </qresource>
+
 </RCC>

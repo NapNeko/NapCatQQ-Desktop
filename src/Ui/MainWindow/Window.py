@@ -73,8 +73,8 @@ class MainWindow(MSFluentWindow):
         # 调整窗体透明度
         self.setWindowOpacity(cfg.get(cfg.windowOpacity) / 100)
         # 创建 Splash Screen
-        self.splashScreen = SplashScreen(":Global/logo.png", self, True)
-        self.splashScreen.setIconSize(QSize(128, 128))
+        self.splashScreen = SplashScreen(":Global/image/Global/napcat.png", self, True)
+        self.splashScreen.setIconSize(QSize(360, 260))
         self.splashScreen.raise_()
         # 显示窗体
         self.show()

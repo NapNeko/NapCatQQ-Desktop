@@ -29,17 +29,20 @@ class BotListWidget(BackgroundWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        # 预定义控件
         self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[BotTopCard] = None
         self.botList: Optional[BotList] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
 
+        # 传入配置
         self.bgEnabledConfig = cfg.bgListPage
         self.bgPixmapLightConfig = cfg.bgListPageLight
         self.bgPixmapDarkConfig = cfg.bgListPageDark
         self.bgOpacityConfig = cfg.bgListPageOpacity
 
-        self.updateBgImage()
+        # 调用方法
+        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
