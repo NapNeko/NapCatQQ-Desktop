@@ -172,7 +172,7 @@ class GetLocalVersionThread(QThread):
                 # 读取到参数返回版本信息
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
-            logger.warning("未找到 NapCat 的 package.json 文件, 可能是未b NapCat")
+            logger.warning("未找到 NapCat 的 package.json 文件, 可能是未安装 NapCat")
             return None
 
     @staticmethod
