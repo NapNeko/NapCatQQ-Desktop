@@ -54,6 +54,8 @@ class PageBase(ScrollArea):
 
         self.setLayout(self.hBoxLayout)
 
+        self.getVersion = parent.getVersion
+
 
 class DisplayCard(SimpleCardWidget):
     """

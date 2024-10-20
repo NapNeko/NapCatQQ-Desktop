@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Self, Optional
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
+from PySide6.QtWidgets import QVBoxLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
@@ -15,6 +15,7 @@ from src.Ui.UnitPage.top import TopWidget
 from src.Ui.common.widget import BackgroundWidget
 from src.Ui.UnitPage.QQPage import QQPage
 from src.Ui.UnitPage.NCDPage import NCDPage
+from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.UnitPage.NapCatPage import NapCatPage
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 
@@ -48,6 +49,7 @@ class UnitWidget(BackgroundWidget):
         # 创建布局和控件
         self.vBoxLayout = QVBoxLayout(self)
         self.topCard = TopWidget(self)
+        self.getVersion = GetVersion(self)
         self._createView()
 
         # 调用方法
@@ -56,6 +58,18 @@ class UnitWidget(BackgroundWidget):
         self.view.setObjectName("UpdateView")
         self._setLayout()
         self.topCard.updateButton.clicked.connect(self.updateSlot)
+
+        # 创建获取版本功能
+        self.getVersion.remoteUpdateFinish.connect(self.napcatPage.updateRemoteVersion)
+        self.getVersion.remoteUpdateFinish.connect(self.qqPage.updateRemoteVersion)
+        self.getVersion.remoteUpdateFinish.connect(self.ncdPage.updateRemoteVersion)
+
+        self.getVersion.localUpdateFinish.connect(self.napcatPage.updateLocalVersion)
+        self.getVersion.localUpdateFinish.connect(self.qqPage.updateLocalVersion)
+        self.getVersion.localUpdateFinish.connect(self.ncdPage.updateLocalVersion)
+
+        # 启用一次更新
+        self.getVersion.update()
 
         # 应用样式表
         StyleSheet.UNIT_WIDGET.apply(self)
@@ -117,9 +131,7 @@ class UnitWidget(BackgroundWidget):
         """
         ## 刷新页面
         """
-        self.napcatPage.updatePage()
-        self.qqPage.updatePage()
-        self.ncdPage.updatePage()
+        self.getVersion.update()
 
 
 class UnitWidgetClassCreator(AbstractCreator, ABC):
