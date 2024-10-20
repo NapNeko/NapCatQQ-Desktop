@@ -170,7 +170,7 @@ class DLCInstall(QThread):
                 error_bar(self.tr("DLC丢失, 取消安装"))
                 return
 
-            if path.exists():
+            if Path(it(PathFunc).dlc_path / path.name).exists():
                 Path(it(PathFunc).dlc_path / path.name).unlink()
 
             shutil.move(path, it(PathFunc).dlc_path / path.name)
