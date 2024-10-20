@@ -63,13 +63,14 @@ class UnitWidget(BackgroundWidget):
         self.getVersion.remoteUpdateFinish.connect(self.napcatPage.updateRemoteVersion)
         self.getVersion.remoteUpdateFinish.connect(self.qqPage.updateRemoteVersion)
         self.getVersion.remoteUpdateFinish.connect(self.ncdPage.updateRemoteVersion)
+        self.getVersion.remoteUpdateFinish.connect(lambda: self.topCard.updateButton.setEnabled(True))
 
         self.getVersion.localUpdateFinish.connect(self.napcatPage.updateLocalVersion)
         self.getVersion.localUpdateFinish.connect(self.qqPage.updateLocalVersion)
         self.getVersion.localUpdateFinish.connect(self.ncdPage.updateLocalVersion)
 
         # 启用一次更新
-        self.getVersion.update()
+        self.updateSlot()
 
         # 应用样式表
         StyleSheet.UNIT_WIDGET.apply(self)
@@ -132,6 +133,7 @@ class UnitWidget(BackgroundWidget):
         ## 刷新页面
         """
         self.getVersion.update()
+        self.topCard.updateButton.setEnabled(False)
 
 
 class UnitWidgetClassCreator(AbstractCreator, ABC):
