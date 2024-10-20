@@ -53,10 +53,7 @@ if __name__ == "__main__":
 
     # 加载翻译文件
     locale: QLocale = cfg.get(cfg.Language).value
-    NCDTranslator = QTranslator()
-    NCDTranslator.load(locale, f":i18n/i18n/translation.{locale.name()}.qm")
     app.installTranslator(FluentTranslator(locale))
-    app.installTranslator(NCDTranslator)
 
     # 显示窗体
     it(MainWindow).initialize()

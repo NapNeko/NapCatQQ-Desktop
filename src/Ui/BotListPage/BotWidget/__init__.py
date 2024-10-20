@@ -2,7 +2,6 @@
 # 第三方库导入
 import psutil
 from creart import it
-from PIL.ImageQt import QImage, QPixmap
 from qfluentwidgets import (
     FluentIcon,
     PushButton,
@@ -13,16 +12,17 @@ from qfluentwidgets import (
     TransparentToolButton,
 )
 from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import Qt, QUrl, Slot, QProcess, QByteArray, QRegularExpression
+from PySide6.QtCore import Qt, Slot, QProcess, QRegularExpression
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
 from src.Ui.common import CodeEditor, LogHighlighter
+from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Core.Utils.email import Email
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
 from src.Core.Utils.RunNapCat import create_process
-from src.Ui.common.message_box import AskBox, ImageBox
+from src.Ui.common.message_box import AskBox
 from src.Core.Config.ConfigModel import Config
 from src.Core.Config.OperateConfig import delete_config, update_config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
@@ -107,10 +107,10 @@ class BotWidget(QWidget):
         ## 创建按钮并设置
         """
         # 创建按钮
-        self.runButton = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("Startup"))  # 启动按钮
-        self.stopButton = PushButton(FluentIcon.POWER_BUTTON, self.tr("Stop"))  # 停止按钮
-        self.rebootButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Reboot"))  # 重启按钮
-        self.updateConfigButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("Update config"))  # 更新配置按钮
+        self.runButton = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"))  # 启动按钮
+        self.stopButton = PushButton(FluentIcon.POWER_BUTTON, self.tr("停止"))  # 停止按钮
+        self.rebootButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("重启"))  # 重启按钮
+        self.updateConfigButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("更新配置"))  # 更新配置按钮
         self.deleteConfigButton = ToolButton(FluentIcon.DELETE, self)  # 删除配置按钮
         self.returnButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回到按钮
 
@@ -133,11 +133,11 @@ class BotWidget(QWidget):
         ## 为按钮添加悬停提示
         """
         # 返回按钮提示
-        self.returnButton.setToolTip(self.tr("Click Back"))
+        self.returnButton.setToolTip(self.tr("返回"))
         self.returnButton.installEventFilter(ToolTipFilter(self.returnButton))
 
         # 删除按钮提示
-        self.deleteConfigButton.setToolTip(self.tr("Click Delete bot configuration"))
+        self.deleteConfigButton.setToolTip(self.tr("点击删除配置"))
         self.deleteConfigButton.installEventFilter(ToolTipFilter(self.deleteConfigButton))
 
     @Slot()
@@ -147,7 +147,6 @@ class BotWidget(QWidget):
         """
         # 获取主框架
         # 项目内模块导入
-        from src.Ui.MainWindow import MainWindow
 
         # 创建组件
         self.process = create_process(self.config)
@@ -225,7 +224,7 @@ class BotWidget(QWidget):
             # 如果匹配不成功, 则退出
             return
 
-        if not self.config.advanced.offlineNotice:
+        if not self.config.advanced.offlineNotice and cfg.get(cfg.botOfflineEmailNotice):
             # 如果未开启通知, 退出
             return
 
