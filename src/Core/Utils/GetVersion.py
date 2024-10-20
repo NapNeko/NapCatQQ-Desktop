@@ -113,7 +113,7 @@ class GetRemoteVersionThread(QThread):
         """
         if (response := self.request(Urls.QQ_Version.value, "QQ")) is not None:
             download_url = f"https://dldir1.qq.com/qqfile/qq/QQNT/{response['verHash']}/QQ{response['version']}_x64.exe"
-            return {"version": response["version"], "download_url": download_url}
+            return {"version": response["version"], "download_url": download_url.replace("-", ".")}
 
     def getNapCatDesktop(self) -> dict:
         """
