@@ -122,6 +122,7 @@ def update_config(config: Config) -> bool:
                 "consoleLog": config.advanced.consoleLog,
                 "fileLogLevel": config.advanced.fileLogLevel,
                 "consoleLogLevel": config.advanced.consoleLogLevel,
+                "packetServer": config.advanced.packetServer
             }
         )
 

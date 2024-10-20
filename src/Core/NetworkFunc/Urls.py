@@ -21,10 +21,11 @@ class Urls(Enum):
     NAPCATQQ_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ/issues")
     NAPCATQQ_REPO_API = QUrl("https://nclatest.znin.net")
     NAPCATQQ_DOCUMENT = QUrl("https://napneko.github.io/")
+    NAPCATQQ_DLC_DOCUMENT = QUrl("https://napcat.napneko.icu/config/advanced#%E9%85%8D%E7%BD%AE-pakcetserver")
 
     # 直接写入下载地址, 不请求 API 获取, 期望达到节省时间的目的
-    NAPCAT_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip")
-    NAPCAT_DLC_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/napcat.packet.exe")
+    NAPCATQQ_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip")
+    NAPCATQQ_DLC_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/napcat.packet.exe")
 
     # QQ 相关
     QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")

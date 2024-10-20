@@ -14,6 +14,7 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.UnitPage.top import TopWidget
 from src.Ui.common.widget import BackgroundWidget
 from src.Ui.UnitPage.QQPage import QQPage
+from src.Ui.UnitPage.DLCPage import DLCPage
 from src.Ui.UnitPage.NCDPage import NCDPage
 from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.UnitPage.NapCatPage import NapCatPage
@@ -63,13 +64,14 @@ class UnitWidget(BackgroundWidget):
         self.getVersion.remoteUpdateFinish.connect(self.napcatPage.updateRemoteVersion)
         self.getVersion.remoteUpdateFinish.connect(self.qqPage.updateRemoteVersion)
         self.getVersion.remoteUpdateFinish.connect(self.ncdPage.updateRemoteVersion)
+        self.getVersion.remoteUpdateFinish.connect(lambda: self.topCard.updateButton.setEnabled(True))
 
         self.getVersion.localUpdateFinish.connect(self.napcatPage.updateLocalVersion)
         self.getVersion.localUpdateFinish.connect(self.qqPage.updateLocalVersion)
         self.getVersion.localUpdateFinish.connect(self.ncdPage.updateLocalVersion)
 
         # 启用一次更新
-        self.getVersion.update()
+        self.updateSlot()
 
         # 应用样式表
         StyleSheet.UNIT_WIDGET.apply(self)
@@ -82,10 +84,12 @@ class UnitWidget(BackgroundWidget):
         """
         self.view = TransparentStackedWidget()
         self.napcatPage = NapCatPage(self)
+        self.napcatDLCPage = DLCPage(self)
         self.qqPage = QQPage(self)
         self.ncdPage = NCDPage(self)
 
         self.view.addWidget(self.napcatPage)
+        self.view.addWidget(self.napcatDLCPage)
         self.view.addWidget(self.qqPage)
         self.view.addWidget(self.ncdPage)
 
@@ -93,6 +97,11 @@ class UnitWidget(BackgroundWidget):
             routeKey=self.napcatPage.objectName(),
             text=self.tr("NapCat"),
             onClick=lambda: self.view.setCurrentWidget(self.napcatPage),
+        )
+        self.topCard.pivot.addItem(
+            routeKey=self.napcatDLCPage.objectName(),
+            text=self.tr("NapCat DLC"),
+            onClick=lambda: self.view.setCurrentWidget(self.napcatDLCPage),
         )
         self.topCard.pivot.addItem(
             routeKey=self.qqPage.objectName(),
@@ -132,6 +141,7 @@ class UnitWidget(BackgroundWidget):
         ## 刷新页面
         """
         self.getVersion.update()
+        self.topCard.updateButton.setEnabled(False)
 
 
 class UnitWidgetClassCreator(AbstractCreator, ABC):

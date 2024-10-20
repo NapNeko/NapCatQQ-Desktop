@@ -75,6 +75,7 @@ class GithubDownloader(DownloaderBase):
             self.url = QUrl(mirror_url)
             logger.debug(f"当前下载链接 {self.url.url()}")
             if self.download():
+                self.downloadFinish.emit()  # 发送下载完成信号
                 return
 
         self.statusLabel.emit(self.tr("下载失败"))
@@ -104,7 +105,6 @@ class GithubDownloader(DownloaderBase):
                         self.downloadProgress.emit(int((file.tell() / total_size) * 100))  # 设置进度条
 
             # 下载完成
-            self.downloadFinish.emit()  # 发送下载完成信号
             self.statusLabel.emit(self.tr("下载完成"))
             return True
 
