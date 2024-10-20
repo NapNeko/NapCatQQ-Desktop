@@ -39,45 +39,42 @@ class NCDPage(PageBase):
         self.appCard.openFolderButton.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).getNapCatPath()))
         )
-        # 启动计时器
-        self.updatePage()
 
-    @timer(900_000)
     def updatePage(self) -> None:
         """
-        ## 调用方法更新页面内容
-            - 自动更新频率: 15分钟更新一次
+        ## 更新页面
         """
-        self.checkStatus()
-        self.getNewUpdateLog()
-
-    def checkStatus(self) -> None:
-        """
-        ## 检查是否有更新, 发现更新改变按钮状态
-        """
-        if (local_ver := cfg.get(cfg.NCDVersion)) is None:
+        if self.localVersion is None:
             # 如果没有本地版本则显示安装按钮
             self.appCard.switchButton(ButtonStatus.UNINSTALLED)
             return
 
-        if (remote_ver := it(GetVersion).getRemoteNCDVersion()) is None:
-            # 如果拉取不到远程版本
+        if self.remoteVersion is None:
+            # 如果没有远程版本则不操作
             return
 
-        if local_ver != remote_ver:
-            # 判断版本是否相等, 否则设置为更新状态
+        if self.remoteVersion != self.localVersion:
             self.appCard.switchButton(ButtonStatus.UPDATE)
         else:
             self.appCard.switchButton(ButtonStatus.INSTALL)
 
-    def getNewUpdateLog(self) -> None:
-        """
-        ## 拉取最新更新日志到卡片
-        """
-        if (log := it(GetVersion).getRemoteNCDUpdateLog()) is None:
-            return
+        self.logCard.setLog(self.remoteLog)
 
-        self.logCard.setLog(log)
+    @Slot()
+    def updateRemoteVersion(self) -> None:
+        """
+        ## 更新远程版本
+        """
+        self.remoteVersion = self.getVersion.remote_NCD
+        self.remoteLog = self.getVersion.updateLog_NCD
+        self.updatePage()
+
+    @Slot()
+    def updateLocalVersion(self) -> None:
+        """
+        ## 更新本地版本
+        """
+        self.localVersion = self.getVersion.local_NCD
 
     @Slot()
     def downloadSlot(self) -> None:

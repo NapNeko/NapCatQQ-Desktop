@@ -70,10 +70,10 @@ class GithubDownloader(DownloaderBase):
             if self.download():
                 return  # 下载成功, 直接返回
 
-        logger.info(f"{'-' * 10} 尝试使用镜像站下载 {self.filename} ~ {'-' * 10}")
+        logger.debug(f"{'-' * 10} 尝试使用镜像站下载 {self.filename} ~ {'-' * 10}")
         for mirror_url in self.mirror_urls:
             self.url = QUrl(mirror_url)
-            logger.info(f"当前下载链接 {self.url.url()}")
+            logger.debug(f"当前下载链接 {self.url.url()}")
             if self.download():
                 return
 
@@ -85,7 +85,7 @@ class GithubDownloader(DownloaderBase):
         ## 下载文件
         """
         try:
-            logger.info(f"{'-' * 10} 开始下载 {self.filename} ~ {'-' * 10}")
+            logger.debug(f"{'-' * 10} 开始下载 {self.filename} ~ {'-' * 10}")
             self.statusLabel.emit(self.tr(f" 开始下载 {self.filename} ~ "))
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
@@ -118,7 +118,7 @@ class GithubDownloader(DownloaderBase):
 
         finally:
             self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
-            logger.info(f"{'-' * 10} 下载 {self.filename} 结束 ~ {'-' * 10}")
+            logger.debug(f"{'-' * 10} 下载 {self.filename} 结束 ~ {'-' * 10}")
 
         return False
 
@@ -127,12 +127,12 @@ class GithubDownloader(DownloaderBase):
         ## 检查网络能否正常访问 Github
         """
         try:
-            logger.info(f"{'-' * 10} 开始检查网络环境 {'-' * 10}")
+            logger.debug(f"{'-' * 10} 开始检查网络环境 {'-' * 10}")
             self.statusLabel.emit(self.tr("检查网络环境"))
             # 如果 3 秒内能访问到 Github 表示网络环境非常奈斯
             response = httpx.head("https://objects.githubusercontent.com", timeout=3)
             if response.status_code == 200:
-                logger.info("网络环境非常奈斯")
+                logger.debug("网络环境非常奈斯")
                 self.statusLabel.emit(self.tr("网络环境良好"))
                 return True
             else:
@@ -145,7 +145,7 @@ class GithubDownloader(DownloaderBase):
             return False
 
         finally:
-            logger.info(f"{'-' * 10} 检查网络环境结束 {'-' * 10}")
+            logger.debug(f"{'-' * 10} 检查网络环境结束 {'-' * 10}")
 
 
 class QQDownloader(DownloaderBase):
@@ -176,7 +176,7 @@ class QQDownloader(DownloaderBase):
 
         # 开始下载 QQ
         try:
-            logger.info(f"{'-' * 10} 开始下载 QQ ~ {'-' * 10}")
+            logger.debug(f"{'-' * 10} 开始下载 QQ ~ {'-' * 10}")
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
 
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
@@ -185,6 +185,8 @@ class QQDownloader(DownloaderBase):
                     self.statusLabel.emit(self.tr("无法获取文件大小"))
                     self.errorFinsh.emit()
                     return
+
+                logger.debug(f"下载链接: {self.url.url()}")
 
                 # 设置进度条为 进度模式
                 self.progressRingToggle.emit(ProgressRingStatus.DETERMINATE)
@@ -198,7 +200,6 @@ class QQDownloader(DownloaderBase):
             # 下载完成
             self.downloadFinish.emit()  # 发送下载完成信号
             self.statusLabel.emit(self.tr("下载完成"))
-            logger.info(f"{'-' * 10} 下载 QQ 结束 ~ {'-' * 10}")
 
         except httpx.HTTPStatusError as e:
             logger.error(
@@ -215,3 +216,4 @@ class QQDownloader(DownloaderBase):
         finally:
             # 无论是否出错,都会重置
             self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
+            logger.debug(f"{'-' * 10} 下载 QQ 结束 ~ {'-' * 10}")

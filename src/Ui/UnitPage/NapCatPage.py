@@ -13,7 +13,6 @@ from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
-from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.message_box import AskBox
 from src.Core.Utils.InstallFunc import NapCatInstall
 from src.Core.NetworkFunc.Downloader import GithubDownloader
@@ -36,45 +35,42 @@ class NapCatPage(PageBase):
         self.appCard.openFolderButton.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).getNapCatPath()))
         )
-        # 启动计时器
-        self.updatePage()
 
-    @timer(900_000)
     def updatePage(self) -> None:
         """
-        ## 调用方法更新页面内容
-            - 自动更新频率: 15分钟更新一次
+        ## 更新页面
         """
-        self.checkStatus()
-        self.getNewUpdateLog()
-
-    def checkStatus(self) -> None:
-        """
-        ## 检查是否有更新, 发现更新改变按钮状态
-        """
-        if (local_ver := it(GetVersion).getLocalNapCatVersion()) is None:
+        if self.localVersion is None:
             # 如果没有本地版本则显示安装按钮
             self.appCard.switchButton(ButtonStatus.UNINSTALLED)
             return
 
-        if (remote_ver := it(GetVersion).getRemoteNapCatVersion()) is None:
-            # 如果拉取不到远程版本
+        if self.remoteVersion is None:
+            # 如果没有远程版本则不操作
             return
 
-        if local_ver != remote_ver:
-            # 判断版本是否相等, 否则设置为更新状态
+        if self.remoteVersion != self.localVersion:
             self.appCard.switchButton(ButtonStatus.UPDATE)
         else:
             self.appCard.switchButton(ButtonStatus.INSTALL)
 
-    def getNewUpdateLog(self) -> None:
-        """
-        ## 拉取最新更新日志到卡片
-        """
-        if (log := it(GetVersion).getRemoteNapCatUpdateLog()) is None:
-            return
+        self.logCard.setLog(self.remoteLog)
 
-        self.logCard.setLog(log)
+    @Slot()
+    def updateRemoteVersion(self) -> None:
+        """
+        ## 更新远程版本
+        """
+        self.remoteVersion = self.getVersion.remote_NapCat
+        self.remoteLog = self.getVersion.updateLog_NapCat
+        self.updatePage()
+
+    @Slot()
+    def updateLocalVersion(self) -> None:
+        """
+        ## 更新本地版本
+        """
+        self.localVersion = self.getVersion.local_NapCat
 
     @Slot()
     def downloadSlot(self) -> None:
@@ -85,7 +81,9 @@ class NapCatPage(PageBase):
             # 项目内模块导入
             from src.Ui.MainWindow import MainWindow
 
-            box = AskBox(self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow))
+            box = AskBox(
+                self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow)
+            )
             box.yesButton.clicked.connect(it(BotListWidget).stopAllBot)
             box.yesButton.setText(self.tr("关闭全部"))
 
@@ -122,7 +120,7 @@ class NapCatPage(PageBase):
         ## 安装结束逻辑
         """
         success_bar(self.tr("安装成功 !"))
-        self.updatePage()  # 刷新一次页面
+        self.appCard.switchButton(ButtonStatus.INSTALL)
 
     @Slot()
     def errorFinshSlot(self) -> None:

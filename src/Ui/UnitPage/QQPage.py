@@ -37,6 +37,7 @@ class QQPage(PageBase):
     def __init__(self, parent) -> None:
         super().__init__(parent=parent)
         self.setObjectName("UnitQQPage")
+        self.url = None
 
         # 设置 appCard
         self.appCard.setIcon(":/Icon/image/Icon/black/QQ.svg")
@@ -56,43 +57,50 @@ class QQPage(PageBase):
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).getQQPath()))
         )
 
-        # 启动计时器
-        self.updatePage()
-
-    @timer(900_000)
     def updatePage(self) -> None:
         """
-        ## 调用方法更新页面内容
+        ## 更新页面
         """
-        self.checkStatus()
-
-    def checkStatus(self) -> None:
-        """
-        ## 检查是否有更新, 发现更新改变按钮状态
-        """
-        if (locaL_ver := it(GetVersion).getLocalQQVersion()) is None:
+        if self.localVersion is None:
             # 如果没有本地版本则显示安装按钮
             self.appCard.switchButton(ButtonStatus.UNINSTALLED)
             return
 
-        if (remote_ver := it(GetVersion).getRemoteQQVersion()) is None:
+        if self.remoteVersion is None:
+            # 如果没有远程版本则不操作
             return
 
-        if locaL_ver != remote_ver:
-            # 判断版本是否相等, 否则设置为更新状态
+        if self.remoteVersion != self.localVersion:
             self.appCard.switchButton(ButtonStatus.UPDATE)
         else:
             self.appCard.switchButton(ButtonStatus.INSTALL)
+
+    @Slot()
+    def updateRemoteVersion(self) -> None:
+        """
+        ## 更新远程版本
+        """
+        self.remoteVersion = self.getVersion.remote_QQ
+        self.url = QUrl(self.getVersion.download_qq_url)
+        self.updatePage()
+
+    @Slot()
+    def updateLocalVersion(self) -> None:
+        """
+        ## 更新本地版本
+        """
+        self.localVersion = self.getVersion.local_QQ
 
     @Slot()
     def downloadSlot(self) -> None:
         """
         ## 下载按钮槽函数
         """
-        if (url := it(GetVersion).getQQDownloadUrl()) is None:
+        if self.url is None:
+            error_bar(self.tr("QQ下载链接为空"))
             return
-        self.file_path = it(PathFunc).tmp_path / QUrl(url).fileName()
-        self.downloader = QQDownloader(QUrl(url))
+        self.file_path = it(PathFunc).tmp_path / self.url.fileName()
+        self.downloader = QQDownloader(self.url)
         self.downloader.downloadProgress.connect(self.appCard.setProgressRingValue)
         self.downloader.downloadFinish.connect(self.installSlot)
         self.downloader.statusLabel.connect(self.appCard.setStatusText)
@@ -127,7 +135,9 @@ class QQPage(PageBase):
 
         # 检查是否存在 dbghelp.dll 文件, 否则会导致安装失败
         if Path(Path(folder_box.getValue()) / "dbghelp.dll").exists():
-            rm_dll_box = AskBox(self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), it(MainWindow))
+            rm_dll_box = AskBox(
+                self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), it(MainWindow)
+            )
             rm_dll_box.yesButton.setText(self.tr("删除"))
             if rm_dll_box.exec():
                 # 用户点击了删除
@@ -152,7 +162,7 @@ class QQPage(PageBase):
         ## 安装结束逻辑
         """
         success_bar(self.tr("安装成功 !"))
-        self.updatePage()  # 刷新一次页面
+        self.appCard.switchButton(ButtonStatus.INSTALL)
 
     @Slot()
     def errorFinshSlot(self) -> None:
