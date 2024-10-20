@@ -59,7 +59,6 @@ class NapCatPage(PageBase):
 
         if (remote_ver := it(GetVersion).getRemoteNapCatVersion()) is None:
             # 如果拉取不到远程版本
-            error_bar(self.tr("拉取远程版本时发生错误, 详情查看 设置 > Log"))
             return
 
         if local_ver != remote_ver:
@@ -73,7 +72,6 @@ class NapCatPage(PageBase):
         ## 拉取最新更新日志到卡片
         """
         if (log := it(GetVersion).getRemoteNapCatUpdateLog()) is None:
-            error_bar(self.tr("拉取更新日志时发生错误, 详情查看 设置 > Log"))
             return
 
         self.logCard.setLog(log)
