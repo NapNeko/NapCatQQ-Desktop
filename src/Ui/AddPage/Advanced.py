@@ -47,6 +47,12 @@ class AdvancedWidget(ScrollArea):
             content=self.tr("是否在启动时自动启动 bot"),
             parent=self.view,
         )
+        self.offlineNotice = SwitchConfigCard(
+            icon=FluentIcon.MEGAPHONE,
+            title=self.tr("掉线通知"),
+            content=self.tr("当Bot状态为 离线 时, 发送通知"),
+            parent=self.view,
+        )
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Debug"),
@@ -90,6 +96,7 @@ class AdvancedWidget(ScrollArea):
 
         self.cards = [
             self.autoStartCard,
+            self.offlineNotice,
             self.debugModeCard,
             self.localFile2UrlCard,
             self.fileLogCard,
@@ -103,6 +110,7 @@ class AdvancedWidget(ScrollArea):
         ## 如果传入了 config 则对其内部卡片的值进行填充
         """
         self.autoStartCard.fillValue(self.config.autoStart)
+        self.offlineNotice.fillValue(self.config.offlineNotice)
         self.debugModeCard.fillValue(self.config.debug)
         self.localFile2UrlCard.fillValue(self.config.enableLocalFile2Url)
         self.fileLogCard.fillValue(self.config.fileLog)
@@ -128,6 +136,7 @@ class AdvancedWidget(ScrollArea):
         """
         return {
             "autoStart": self.autoStartCard.getValue(),
+            "offlineNotice": self.offlineNotice.getValue(),
             "debug": self.debugModeCard.getValue(),
             "enableLocalFile2Url": self.localFile2UrlCard.getValue(),
             "fileLog": self.fileLogCard.getValue(),

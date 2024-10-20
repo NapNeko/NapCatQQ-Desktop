@@ -14,7 +14,6 @@ dependencies = [
     "psutil>=6.0.0",
     "markdown>=3.7",
     "nuitka>=2.4.8",
-    "qrcode[pil]>=8.0",
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
