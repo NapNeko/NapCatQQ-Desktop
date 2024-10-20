@@ -86,6 +86,7 @@ class ConnectConfig(BaseModel):
 class AdvancedConfig(BaseModel):
     autoStart: bool = False
     offlineNotice: bool = False
+    packetServer: str = ""
     debug: bool
     enableLocalFile2Url: bool
     fileLog: bool
@@ -118,6 +119,7 @@ class NapCatConfig(BaseModel):
     consoleLog: bool
     fileLogLevel: str
     consoleLogLevel: str
+    packetServer: str = None
 
 
 class WebUiConfig(BaseModel):
@@ -160,5 +162,6 @@ DEFAULT_CONFIG = {
         "consoleLogLevel": "info",
         "autoStart": False,
         "offline_notice": False,
+        "packetServer": ""
     },
 }

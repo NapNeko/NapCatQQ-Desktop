@@ -4,14 +4,15 @@
 """
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QProcess
+from PySide6.QtCore import QUrl, QProcess
 
 # 项目内模块导入
 from src.Core.Utils.PathFunc import PathFunc
+from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Config.ConfigModel import Config
 
 
-def create_process(config: Config) -> QProcess:
+def create_napcat_process(config: Config) -> QProcess:
     """
     ## 创建并配置 QProcess
 
@@ -41,5 +42,26 @@ def create_process(config: Config) -> QProcess:
             config.bot.QQID,
         ]
     )
+
+    return process
+
+
+def create_dlc_process(config: Config) -> QProcess:
+    """
+    ## 创建并配置 QProcess
+
+    ## 参数
+        - config 机器人配置
+
+    ## 返回
+        - QProcess 程序实例
+    """
+    # 获取参数
+    host, port = config.advanced.packetServer.split(":")
+
+    # 创建 QProcess 并配置
+    process = QProcess()
+    process.setProgram(str(it(PathFunc).dlc_path / Urls.NAPCATQQ_DLC_DOWNLOAD.value.fileName()))
+    process.setArguments(["-ip", host, "-port", str(port)])
 
     return process

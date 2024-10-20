@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
+from typing import Optional
+
 # 第三方库导入
 import psutil
 from creart import it
 from qfluentwidgets import (
+    ComboBox,
     FluentIcon,
     PushButton,
     ToolButton,
@@ -21,7 +25,7 @@ from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Core.Utils.email import Email
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
-from src.Core.Utils.RunNapCat import create_process
+from src.Core.Utils.RunNapCat import create_dlc_process, create_napcat_process
 from src.Ui.common.message_box import AskBox
 from src.Core.Config.ConfigModel import Config
 from src.Core.Config.OperateConfig import delete_config, update_config
@@ -37,7 +41,9 @@ class BotWidget(QWidget):
         super().__init__()
         self.config = config
         self.isRun = False  # 用于标记机器人是否在运行
-        self.webUiUrl = None  # 用于记录 WebUI 的端口
+
+        self.napcatProcess: Optional[QProcess] = None
+        self.dlcProcess: Optional[QProcess] = None
 
         # 创建所需控件
         self._createView()
@@ -62,12 +68,12 @@ class BotWidget(QWidget):
 
         self.pivot.addItem(
             routeKey=self.botSetupPage.objectName(),
-            text=self.tr("Bot Setup"),
+            text=self.tr("设置"),
             onClick=lambda: self.view.setCurrentWidget(self.botSetupPage),
         )
         self.pivot.addItem(
             routeKey=self.botLogPage.objectName(),
-            text=self.tr("Bot Log"),
+            text=self.tr("日志"),
             onClick=lambda: self.view.setCurrentWidget(self.botLogPage),
         )
         # self.pivot.addItem(
@@ -145,23 +151,26 @@ class BotWidget(QWidget):
         """
         ## 启动按钮槽函数
         """
-        # 获取主框架
-        # 项目内模块导入
 
-        # 创建组件
-        self.process = create_process(self.config)
+        # DLC启动
+        if self.config.advanced.packetServer:
+            self.dlcProcess = create_dlc_process(self.config)
+            self.dlcProcess.setParent(self)
+            self.dlcProcess.start()
+            self.dlcProcess.waitForStarted()
+
+        # NapCat 启动
+        self.napcatProcess = create_napcat_process(self.config)
         self.highlighter = LogHighlighter(self.botLogPage.document())
-
-        # 设置组件
         self.botLogPage.clear()
-        self.process.setParent(self)
-        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self.process.readyReadStandardOutput.connect(self._handle_stdout)
-        self.process.finished.connect(self._processFinishedSlot)
+        self.napcatProcess.setParent(self)
+        self.napcatProcess.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.napcatProcess.readyReadStandardOutput.connect(self._napcatHandleStdout)
+        self.napcatProcess.finished.connect(self._napcatProcessFinishedSlot)
+        self.napcatProcess.start()
+        self.napcatProcess.waitForStarted()
 
-        # 启动进程
-        self.process.start()
-        self.process.waitForStarted()
+        # 参数调整
         self.isRun = True
         self.view.setCurrentWidget(self.botLogPage)
         self.runButton.setVisible(False)
@@ -179,9 +188,16 @@ class BotWidget(QWidget):
         if not self.isRun:
             return
 
-        if (parent := psutil.Process(self.process.processId())).pid != 0:
+        if self.dlcProcess is not None:
+            if (parent := psutil.Process(self.dlcProcess.processId())).pid != 0:
+                [child.kill() for child in parent.children(recursive=True)]
+                parent.kill()
+            self.dlcProcess = None
+
+        if (parent := psutil.Process(self.napcatProcess.processId())).pid != 0:
             [child.kill() for child in parent.children(recursive=True)]
             parent.kill()
+            self.napcatProcess = None
 
         self.isRun = False
         self.view.setCurrentWidget(self.botSetupPage)
@@ -194,12 +210,12 @@ class BotWidget(QWidget):
         self.stopButtonSlot()
         self.runButtonSlot()
 
-    def _handle_stdout(self) -> None:
+    def _napcatHandleStdout(self) -> None:
         """
         ## 日志管道并检测内部信息执行操作
         """
         # 获取所有输出
-        data = self.process.readAllStandardOutput().data().decode()
+        data = self.napcatProcess.readAllStandardOutput().data().decode()
 
         # 遍历所有匹配项并移除
         while (matches := QRegularExpression(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").globalMatch(data)).hasNext():
@@ -213,6 +229,16 @@ class BotWidget(QWidget):
 
         # 分发给其他处理函数
         self._getBofOffline(data)
+
+    @Slot()
+    def _napcatProcessFinishedSlot(self, exit_code, exit_status) -> None:
+        """
+        ## 进程结束槽函数
+        """
+        cursor = self.botLogPage.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(f"进程结束，退出码为 {exit_code}，状态为 {exit_status}")
+        self.botLogPage.setTextCursor(cursor)
 
     def _getBofOffline(self, data: str):
         """
@@ -232,16 +258,6 @@ class BotWidget(QWidget):
         self.email = Email(self.config)
         self.email.error_single.connect(error_bar)
         self.email.start()
-
-    @Slot()
-    def _processFinishedSlot(self, exit_code, exit_status) -> None:
-        """
-        ## 进程结束槽函数
-        """
-        cursor = self.botLogPage.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(f"进程结束，退出码为 {exit_code}，状态为 {exit_status}")
-        self.botLogPage.setTextCursor(cursor)
 
     @Slot()
     def _updateButtonSlot(self) -> None:
