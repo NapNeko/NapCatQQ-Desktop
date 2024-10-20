@@ -495,7 +495,7 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
             cfg.emailSender, self.tr("发送人邮箱"), placeholder_text=self.tr("B@qq.com"), parent=self
         )
         self.emailToken = LineEditItem(cfg.emailToken, self.tr("发送人邮箱密钥"), parent=self)
-        self.emailStmpServer = LineEditItem(cfg.emailToken, self.tr("SMTP服务器"), parent=self)
+        self.emailStmpServer = LineEditItem(cfg.emailStmpServer, self.tr("SMTP服务器"), parent=self)
 
         # 调整内部布局
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
