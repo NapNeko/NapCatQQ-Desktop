@@ -40,7 +40,7 @@
     </qresource>
 
     <qresource prefix="template">
-        <file alise="bot_offline_notice.html">template/email/bot_offline_notice.html</file>
+        <file>template/email/bot_offline_notice.html</file>
     </qresource>
 
 </RCC>
