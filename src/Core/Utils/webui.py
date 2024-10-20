@@ -45,38 +45,44 @@ class WebUi(QThread):
         """
         ## 运行
         """
+        time.sleep(3)
         self.getAuth()
         self.getQRCode()
 
         while not self.loginState:
-            time.sleep(1)
             self.getLoginStatus()
 
     def getAuth(self) -> str:
         """
         ## 获取授权
         """
-        if (response := self.client.post("/api/auth/login", json={"token": self.token})).status_code != 200:
-            return
-        self.auth = f"Bearer {response.json()['data']['Credential']}"  # 返回 Bearer Token
+        try:
+            if (response := self.client.post("/api/auth/login", json={"token": self.token})).status_code != 200:
+                return
+            self.auth = f"Bearer {response.json()['data']['Credential']}"  # 返回 Bearer Token
+        except Exception:
+            time.sleep(1)
 
     def getLoginStatus(self) -> None:
         """
         ## 获取登录状态
         """
-        # 设置 headers，包括 Authorization
-        headers = {
-            "Authorization": self.auth,  # 返回的 Bearer Token 放在 headers 中
-            "Accept": "*/*",
-            "Content-Type": "application/json",
-        }
-        # 获取登录状态信息
-        if (response := self.client.post("/api/QQLogin/CheckLoginStatus", headers=headers)).status_code != 200:
-            return
+        try:
+            # 设置 headers，包括 Authorization
+            headers = {
+                "Authorization": self.auth,  # 返回的 Bearer Token 放在 headers 中
+                "Accept": "*/*",
+                "Content-Type": "application/json",
+            }
+            # 获取登录状态信息
+            if (response := self.client.post("/api/QQLogin/CheckLoginStatus", headers=headers)).status_code != 200:
+                return
 
-        if response.json()["data"]["isLogin"]:
-            self.loginState = True
-            self.login_state_single.emit(True)
+            if response.json()["data"]["isLogin"]:
+                self.loginState = True
+                self.login_state_single.emit(True)
+        except Exception:
+            time.sleep(1)
 
     def getQRCode(self) -> None:
         """
