@@ -1,147 +1,202 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import json
-from abc import ABC
 
 # 第三方库导入
 import httpx
-from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
+from creart import it
 from loguru import logger
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QUrl, Slot, Signal, QObject, QThread
 
 # 项目内模块导入
+from src.Core.Config import cfg
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 
 
 class GetVersion(QObject):
+
+    remoteUpdateFinish = Signal()
+    localUpdateFinish = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent=parent)
+
+        # 本地
+        self.local_NapCat = None
+        self.local_QQ = None
+        self.local_NCD = None
+
+        # 远程
+        self.remote_NapCat = None
+        self.remote_QQ = None
+        self.remote_NCD = None
+        self.updateLog_NapCat = None
+        self.updateLog_NCD = None
+        self.download_qq_url = None
+
+        # 初始化线程
+        self.remoteUpdateThread = None
+        self.localUpdateThread = None
+
+    def update(self) -> None:
+        """
+        ## 更新内容
+        """
+        # 更新远程
+        self.remoteUpdateThread = GetRemoteVersionThread()
+        self.remoteUpdateThread.remoteSingle.connect(self.updateRemote)
+        self.remoteUpdateThread.updateFinish.connect(self.remoteUpdateFinish.emit)
+        self.remoteUpdateThread.start()
+
+        # 更新本地
+        self.localUpdateThread = GetLocalVersionThread()
+        self.localUpdateThread.localSingle.connect(self.updateLocal)
+        self.localUpdateThread.updateFinish.connect(self.localUpdateFinish.emit)
+        self.localUpdateThread.start()
+
+    @Slot(dict)
+    def updateRemote(self, data: dict) -> None:
+        """
+        ## 更新远程
+        """
+        self.remote_NapCat = data["NapCat"]["version"]
+        self.remote_QQ = data["QQ"]["version"]
+        self.remote_NCD = data["NCD"]["version"]
+
+        self.updateLog_NapCat = data["NapCat"]["update_log"]
+        self.updateLog_NCD = data["NCD"]["update_log"]
+
+        self.download_qq_url = QUrl(data["QQ"]["download_url"])
+
+    @Slot(dict)
+    def updateLocal(self, data: dict) -> None:
+        """
+        ## 更新本地
+        """
+        self.local_NapCat = data["NapCat"]
+        self.local_QQ = data["QQ"]
+        self.local_NCD = data["NCD"]
+
+
+class GetRemoteVersionThread(QThread):
     """
-    ## 提供两个方法, 分别获取本地的 NapCat 和 QQ 的版本
+    ## 更新远程版本
     """
+
+    remoteSingle = Signal(dict)
+    updateFinish = Signal()
 
     def __init__(self) -> None:
         super().__init__()
 
-    def fetchRemoteData(self, url: str, key: str, log_message: str) -> str | None:
+    def run(self) -> None:
         """
-        ## 获取逻辑
+        ## 获取远程内容
         """
-        try:
-            logger.info(f"获取 {log_message}")
-            response = httpx.get(url)
-            logger.info(f"响应码: {response.status_code}")
-            logger.debug(f"响应头: {response.headers}")
-            logger.debug(f"数据: {response.json()}")
-            logger.info(f"耗时: {response.elapsed}")
-            return response.json().get(key)
-        except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            # 项目内模块导入
-            from src.Ui.common.info_bar import error_bar
-            error_bar(self.tr(f"获取远程 {log_message} 时引发错误, 请查看日志"))
-            logger.error(f"获取 {log_message} 时引发 {type(e).__name__}: {e}")
-            return None
-        finally:
-            logger.info(f"获取 {log_message} 结束")
+        remote_dict = {"NapCat": self.getNapCat(), "QQ": self.getQQ(), "NCD": self.getNapCatDesktop()}
 
-    def getRemoteNapCatVersion(self) -> str | None:
-        """
-        ## 获取远程 NapCat 的版本信息
-        """
-        return self.fetchRemoteData(Urls.NAPCATQQ_REPO_API.value.url(), "tag_name", "NapCat 版本信息")
+        # 发送信号
+        self.remoteSingle.emit(remote_dict)
+        self.updateFinish.emit()
 
-    def getRemoteNapCatUpdateLog(self) -> str | None:
+    def getNapCat(self) -> dict:
         """
-        ## 获取 NapCat 的更新日志
+        ## 获取 NapCat 相关内容
         """
-        return self.fetchRemoteData(Urls.NAPCATQQ_REPO_API.value.url(), "body", "NapCat 更新日志")
+        if (response := self.request(Urls.NAPCATQQ_REPO_API.value, "NapCat")) is not None:
+            return {"version": response["tag_name"], "update_log": response["body"]}
 
-    def getRemoteQQVersion(self) -> str | None:
+    def getQQ(self) -> None:
         """
-        ## 获取远程 QQ 的版本信息
+        ## 获取 QQ 相关内容
         """
-        return self.fetchRemoteData(Urls.QQ_Version.value.url(), "version", "QQ 版本信息")
+        if (response := self.request(Urls.QQ_Version.value, "QQ")) is not None:
+            download_url = f"https://dldir1.qq.com/qqfile/qq/QQNT/{response['verHash']}/QQ{response['version']}_x64.exe"
+            return {"version": response["version"], "download_url": download_url}
 
-    def getRemoteNCDVersion(self) -> str | None:
+    def getNapCatDesktop(self) -> dict:
         """
-        ## 获取远程 NCD 的版本信息
+        ## 获取 NCD 相关内容
         """
-        return self.fetchRemoteData(Urls.NCD_REPO_API.value.url(), "tag_name", "NCD 版本信息")
-
-    def getRemoteNCDUpdateLog(self) -> str | None:
-        """
-        ## 获取 NCD 的更新日志
-        """
-        return self.fetchRemoteData(Urls.NCD_REPO_API.value.url(), "body", "NCD 更新日志")
-
-    def getQQDownloadUrl(self) -> str | None:
-        """
-        ## 获取 QQ 的下载地址
-        """
-        try:
-            logger.info(f"获取 QQ 下载地址")
-            response = httpx.get(Urls.QQ_Version.value.url())
-            logger.info(f"响应码: {response.status_code}")
-            logger.debug(f"响应头: {response.headers}")
-            logger.debug(f"数据: {response.json()}")
-            logger.info(f"耗时: {response.elapsed}")
-            ver = response.json()["version"].replace("-", ".")
-            ver_hash = response.json()["verHash"]
-            return f"https://dldir1.qq.com/qqfile/qq/QQNT/{ver_hash}/QQ{ver}_x64.exe"
-        except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            # 项目内模块导入
-            from src.Ui.common.info_bar import error_bar
-            error_bar(self.tr(f"获取 QQ 下载地址时引发错误, 请查看日志"))
-            logger.error(f"获取 QQ 下载地址时引发 {type(e).__name__}: {e}")
-            return None
-        finally:
-            logger.info(f"获取 QQ 下载地址结束")
+        if (response := self.request(Urls.NCD_REPO_API.value, "NapCat Desktop")) is not None:
+            return {"version": response["tag_name"], "update_log": response["body"]}
 
     @staticmethod
-    def getLocalNapCatVersion() -> str | None:
+    def request(url: QUrl, name: str) -> dict:
         """
-        ## 获取本地 NapCat 的版本信息
+        ## 网络请求
         """
         try:
-            # 获取 package.json 路径并读取
+            logger.debug(f"{10 * '-'} 开始获取 <-> {name[:16]:^16} {10 * '-'}")
+            response = httpx.get(url.url())
+            logger.debug(f"响应码: {response.status_code}")
+            logger.debug(f"响应头: {response.headers}")
+            logger.debug(f"数据: {response.json()}")
+            logger.debug(f"耗时: {response.elapsed}")
+            return response.json()
+        except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
+            logger.error(f"获取 {name} 时引发 {type(e).__name__}: {e}")
+        finally:
+            logger.debug(f"{10 * '-'} 结束获取 <-> {name[:16]:^16} {10 * '-'}")
+
+
+class GetLocalVersionThread(QThread):
+    """
+    ## 更新本地版本
+    """
+
+    localSingle = Signal(dict)
+    updateFinish = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def run(self) -> None:
+        """
+        ## 获取远程内容
+        """
+        local_dict = {"NapCat": self.getNapCat(), "QQ": self.getQQ(), "NCD": self.getNapCatDesktop()}
+
+        # 发送信号
+        self.localSingle.emit(local_dict)
+        self.updateFinish.emit()
+
+    @staticmethod
+    def getNapCat() -> dict:
+        """
+        ## 获取 NapCat 相关内容
+        """
+        try:
             with open(str(it(PathFunc).getNapCatPath() / "package.json"), "r", encoding="utf-8") as f:
                 # 读取到参数返回版本信息
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
-            # 文件不存在则返回 None
+            logger.warning("未找到 NapCat 的 package.json 文件, 可能是未b NapCat")
             return None
 
     @staticmethod
-    def getLocalQQVersion() -> str | None:
+    def getQQ() -> None:
         """
-        ## 获取本地 QQ 的版本信息
+        ## 获取 QQ 相关内容
         """
         try:
             if (qq_path := it(PathFunc).getQQPath()) is None:
                 # 检查 QQ 目录是否存在
-                return None
+                logger.warning("未找到 QQ 的安装目录, 可能是未安装 QQ")
+                return
 
             with open(str(qq_path / "versions" / "config.json"), "r", encoding="utf-8") as file:
                 # 读取 config.json 文件获取版本信息
                 return json.load(file)["curVersion"]
         except FileNotFoundError:
             # 文件不存在则返回 None
-            return None
+            logger.warning("未找到 QQ 的 config.json 文件, 可能是未安装 QQ")
+            return
 
-
-class GetVersionClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Core.Utils.GetVersion", "GetVersion"),)
-
-    # 静态方法available()，用于检查模块"PathFunc"是否存在，返回值为布尔型。
     @staticmethod
-    def available() -> bool:
-        return exists_module("src.Core.Utils.GetVersion")
-
-    # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
-    @staticmethod
-    def create(create_type: list[GetVersion]) -> GetVersion:
-        return GetVersion()
-
-
-add_creator(GetVersionClassCreator)
+    def getNapCatDesktop() -> dict:
+        """
+        ## 获取 NCD 相关内容
+        """
+        return cfg.get(cfg.NCDVersion)
