@@ -4,6 +4,7 @@ venv/
 # Ignore configuration and temporary files
 config/
 tmp/
+dlc/
 .vscode/
 .idea/
 
