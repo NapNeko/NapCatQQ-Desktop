@@ -1,24 +1,20 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-import shutil
 from pathlib import Path
 
 # 第三方库导入
 from creart import it
-from PySide6.QtGui import QDesktopServices
-from PySide6.QtCore import QUrl, Slot
+from PySide6.QtCore import Slot
 
 # 项目内模块导入
-from src.Core import timer
 from src.Ui.BotListPage import BotListWidget
 from src.Ui.UnitPage.Base import PageBase
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
-from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.message_box import AskBox
-from src.Core.Utils.InstallFunc import NapCatInstall
+from src.Core.Utils.InstallFunc import DLCInstall
 from src.Core.NetworkFunc.Downloader import GithubDownloader
 
 DESCRIPTION_TEXT = """
@@ -92,13 +88,26 @@ class DLCPage(PageBase):
         """
         ## 下载逻辑
         """
+        if it(BotListWidget).getBotIsRun():
+            # 项目内模块导入
+            from src.Ui.MainWindow import MainWindow
+
+            box = AskBox(
+                self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow)
+            )
+            box.yesButton.clicked.connect(it(BotListWidget).stopAllBot)
+            box.yesButton.setText(self.tr("关闭全部"))
+
+            if not box.exec():
+                return
+
         info_bar("开始下载 DLC")
         self.downloader = GithubDownloader(Urls.NAPCATQQ_DLC_DOWNLOAD.value)
         self.downloader.downloadProgress.connect(self.appCard.setProgressRingValue)
-        self.downloader.downloadFinish.connect(self.installSlot)
         self.downloader.statusLabel.connect(self.appCard.setStatusText)
         self.downloader.errorFinsh.connect(self.errorFinshSlot)
         self.downloader.progressRingToggle.connect(self.appCard.switchProgressRing)
+        self.downloader.downloadFinish.connect(self.installSlot)
         self.downloader.start()
 
     def installSlot(self) -> None:
@@ -106,17 +115,21 @@ class DLCPage(PageBase):
         ## 安装逻辑
         """
         success_bar(self.tr("下载成功, 正在安装..."))
-        if not (path := it(PathFunc).tmp_path / Urls.NAPCATQQ_DLC_DOWNLOAD.value.fileName()).exists():
-            error_bar(self.tr("DLC丢失, 取消安装"))
-            return
+        self.installer = DLCInstall()
+        self.installer.statusLabel.connect(self.appCard.setStatusText)
+        self.installer.errorFinsh.connect(self.errorFinshSlot)
+        self.installer.buttonToggle.connect(self.appCard.switchButton)
+        self.installer.progressRingToggle.connect(self.appCard.switchProgressRing)
+        self.installer.installFinish.connect(self.installFinshSlot)
+        self.installer.start()
 
-        if self.isInstall():
-            Path(it(PathFunc).dlc_path / path.name).unlink()
-
-        shutil.move(path, it(PathFunc).dlc_path / path.name)
+    @Slot()
+    def installFinshSlot(self) -> None:
+        """
+        ## 安装结束逻辑
+        """
         success_bar(self.tr("安装成功 !"))
-
-        self.setButton()
+        self.appCard.switchButton(ButtonStatus.UPDATE)
 
     @Slot()
     def errorFinshSlot(self) -> None:

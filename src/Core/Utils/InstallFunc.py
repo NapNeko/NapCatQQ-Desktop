@@ -16,6 +16,7 @@ from PySide6.QtCore import QUrl, Signal, QThread
 # 项目内模块导入
 from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
 from src.Core.Utils.PathFunc import PathFunc
+from src.Core.NetworkFunc.Urls import Urls
 
 
 class NapCatInstall(QThread):
@@ -133,5 +134,51 @@ class QQInstall(QThread):
 
         except Exception as e:
             logger.error(f"安装 QQ 时引发 {type(e).__name__}: {e}")
+            self.statusLabel.emit(self.tr("安装失败"))
+            self.errorFinsh.emit()
+
+
+class DLCInstall(QThread):
+    """QQ 安装逻辑"""
+
+    # 安装成功信号
+    installFinish = Signal()
+    # 安装失败信号
+    errorFinsh = Signal()
+    # 按钮模式切换
+    buttonToggle = Signal(ButtonStatus)
+    # 进度条模式切换
+    progressRingToggle = Signal(ProgressRingStatus)
+    # 状态标签
+    statusLabel = Signal(str)
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def run(self) -> None:
+        """
+        ## 安装逻辑
+        """
+        try:
+            logger.debug(f"{'-' * 10} 开始安装 DLC ~ {'-' * 10}")
+            self.statusLabel.emit("正在安装 DLC")
+            self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
+
+            # 移动到 DLC 文件夹
+
+            if not (path := it(PathFunc).tmp_path / Urls.NAPCATQQ_DLC_DOWNLOAD.value.fileName()).exists():
+                error_bar(self.tr("DLC丢失, 取消安装"))
+                return
+
+            if path.exists():
+                Path(it(PathFunc).dlc_path / path.name).unlink()
+
+            shutil.move(path, it(PathFunc).dlc_path / path.name)
+
+            self.installFinish.emit()
+            logger.debug(f"{'-' * 10} 安装 DLC 完成 ~ {'-' * 10}")
+
+        except Exception as e:
+            logger.error(f"安装 DLC 时引发 {type(e).__name__}: {e}")
             self.statusLabel.emit(self.tr("安装失败"))
             self.errorFinsh.emit()
