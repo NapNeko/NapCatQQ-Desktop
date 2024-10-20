@@ -24,10 +24,10 @@ class Urls(Enum):
 
     # 直接写入下载地址, 不请求 API 获取, 期望达到节省时间的目的
     NAPCAT_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip")
+    NAPCAT_DLC_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ/releases/latest/download/napcat.packet.exe")
 
     # QQ 相关
     QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")
-    QQ_WIN_DOWNLOAD = QUrl("https://dldir1.qq.com/qqfile/qq/QQNT/0f14ef6e/QQ9.9.15.28131_x64.exe")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
     QQ_Version = QUrl("https://nclatest.znin.net/get_qq_ver")
 
