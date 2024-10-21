@@ -1,0 +1,3 @@
+[submodule "src/napcat.packet"]
+    path = src/napcat.packet
+    url = https://github.com/NapNeko/napcat.packet.git
