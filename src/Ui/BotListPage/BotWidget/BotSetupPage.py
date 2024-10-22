@@ -3,18 +3,22 @@
 """
 ## Bot 设置界面, 设置选项卡直接调用 AddBot 中的选项卡
 """
+# 标准库导入
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+# 第三方库导入
 from qfluentwidgets import BodyLabel, CardWidget, FluentIcon, IconWidget, CaptionLabel, FluentIconBase
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
+# 项目内模块导入
 from src.Ui.AddPage.Connect import ConnectWidget
 from src.Ui.AddPage.Advanced import AdvancedWidget
 from src.Ui.AddPage.BotWidget import BotWidget
 from src.Core.Config.ConfigModel import Config
 
 if TYPE_CHECKING:
+    # 项目内模块导入
     from src.Ui.BotListPage.BotWidget import BotWidget
 
 
