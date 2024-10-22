@@ -1,49 +1,45 @@
-name: test_build
+name: 构建发布
 
 on:
-  push:
-    tags:
-      - "test*"
+    workflow_dispatch:
+
 permissions:
   contents: write
-  discussions: write
 
 jobs:
   build:
-    runs-on: windows-latest # For Linux, use ubuntu-latest
+    runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.11"
+    - name: "检出代码"
+      uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+    - name: "设置 Python"
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.11'
+
+    - name: "安装依赖"
+      run: pip install -r requirements.txt
 
     - uses: Nuitka/Nuitka-Action@main
-      name: Build Windows Application
+      name: "构建 Windows 版本"
       with:
         script-name: main.py
         onefile: true
         enable-plugins: pyside6
-        disable-console: false
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
         output-filename: "NapCat-Desktop"
 
-    - name: Enable Developer Command Prompt
+    - name: "启用开发者命令提示符"
       uses: ilammy/msvc-dev-cmd@v1.13.0
 
-    - name: Add Manifest
+    - name: "添加清单文件"
       run: |
-            mt.exe -manifest ./assets/NapCat-Desktop.exe.manifest -outputresource:./build/NapCat-Desktop.exe;1
+        mt.exe -manifest ./assets/NapCat-Desktop.exe.manifest -outputresource:./build/NapCat-Desktop.exe;1
 
-    - name: Upload artifact
+    - name: "上传工件"
       uses: actions/upload-artifact@v3
       with:
         name: NapCat-Desktop
         path: ./build/NapCat-Desktop.exe
-
