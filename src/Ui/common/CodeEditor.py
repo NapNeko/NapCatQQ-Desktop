@@ -13,7 +13,7 @@ from PySide6.QtGui import (
     QDesktopServices,
     QSyntaxHighlighter,
 )
-from PySide6.QtCore import Qt, QUrl, Slot, QRect, QSize, QRectF, QRegularExpression
+from PySide6.QtCore import Qt, QUrl, Slot, QRect, QSize, QRectF, QTimer, QRegularExpression
 from PySide6.QtWidgets import QWidget, QTextBrowser
 
 
@@ -92,8 +92,9 @@ class CodeEditor(PlainTextEdit):
         scroll_position = self.verticalScrollBar().value()
         # 调用父类的 setText 方法更新文本
         super().setPlainText(text)
-        # 恢复滚动位置
-        self.verticalScrollBar().setValue(scroll_position)
+
+        # 使用 QTimer 延迟恢复滚动条位置
+        QTimer.singleShot(0, lambda: self.verticalScrollBar().setValue(scroll_position))
 
     @Slot(int)
     def update_line_number_area_width(self, new_block_count: int) -> None:

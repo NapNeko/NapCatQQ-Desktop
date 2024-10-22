@@ -14,7 +14,7 @@ from src.Ui.common import CodeEditor
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.widget import BackgroundWidget
-from src.Core.Utils.logger import INFO_LOG
+from src.Core.Utils.logger import INFO_LOG, DEBUG_LOG
 from src.Ui.common.CodeEditor import NCDLogHighlighter
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
@@ -33,12 +33,13 @@ class SetupWidget(BackgroundWidget):
     def __init__(self):
         super().__init__()
         # 预定义控件及属性
-        self.log_file_path = INFO_LOG
+        self.info_log_file_path = INFO_LOG
+        self.debug_log_file_path = DEBUG_LOG
         self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[SetupTopCard] = None
         self.setupScrollArea: Optional[SetupScrollArea] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
-        self.logWidget: Optional[CodeEditor] = None
+        self.infoWidget: Optional[CodeEditor] = None
 
         # 传入配置
         self.bgEnabledConfig = cfg.bgSettingPage
@@ -64,7 +65,8 @@ class SetupWidget(BackgroundWidget):
         self.view.setObjectName("SetupView")
 
         # 调用一次方法以启动计时器
-        self.updateLogContent()
+        self.updateInfoLogContent()
+        self.updateDebugLogContent()
 
         # 设置布局
         self.vBoxLayout.addWidget(self.topCard)
@@ -82,11 +84,15 @@ class SetupWidget(BackgroundWidget):
         """
         self.view = TransparentStackedWidget(self)
         self.setupScrollArea = SetupScrollArea(self)
-        self.logWidget = CodeEditor(self)
-        self.logWidget.setObjectName("NCD-LogWidget")
-        self.highlighter = NCDLogHighlighter(self.logWidget.document())
+        self.infoWidget = CodeEditor(self)
+        self.infoWidget.setObjectName("NCD-InfoLogWidget")
+        self.debugWidget = CodeEditor(self)
+        self.debugWidget.setObjectName("NCD-DebugLogWidget")
+        self.infoHighlighter = NCDLogHighlighter(self.infoWidget.document())
+        self.debugHighlighter = NCDLogHighlighter(self.debugWidget.document())
         self.view.addWidget(self.setupScrollArea)
-        self.view.addWidget(self.logWidget)
+        self.view.addWidget(self.infoWidget)
+        self.view.addWidget(self.debugWidget)
 
         self.topCard.pivot.addItem(
             routeKey=self.setupScrollArea.objectName(),
@@ -94,9 +100,14 @@ class SetupWidget(BackgroundWidget):
             onClick=lambda: self.view.setCurrentWidget(self.setupScrollArea),
         )
         self.topCard.pivot.addItem(
-            routeKey=self.logWidget.objectName(),
-            text=self.tr("日志"),
-            onClick=lambda: self.view.setCurrentWidget(self.logWidget),
+            routeKey=self.infoWidget.objectName(),
+            text=self.tr("INFO 日志"),
+            onClick=lambda: self.view.setCurrentWidget(self.infoWidget),
+        )
+        self.topCard.pivot.addItem(
+            routeKey=self.debugWidget.objectName(),
+            text=self.tr("DEBUG 日志"),
+            onClick=lambda: self.view.setCurrentWidget(self.debugWidget),
         )
 
         # 连接信号并初始化当前标签页
@@ -112,13 +123,22 @@ class SetupWidget(BackgroundWidget):
         self.topCard.pivot.setCurrentItem(widget.objectName())
 
     @timer(1000)
-    def updateLogContent(self):
-        if not self.log_file_path.exists():
+    def updateInfoLogContent(self):
+        if not self.info_log_file_path.exists():
             return
 
-        with open(self.log_file_path, "r", encoding="utf-8") as file:
+        with open(self.info_log_file_path, "r", encoding="utf-8") as file:
             # 输出内容
-            it(SetupWidget).logWidget.setPlainText(file.read())
+            it(SetupWidget).infoWidget.setPlainText(file.read())
+
+    @timer(1000)
+    def updateDebugLogContent(self):
+        if not self.debug_log_file_path.exists():
+            return
+
+        with open(self.debug_log_file_path, "r", encoding="utf-8") as file:
+            # 输出内容
+            it(SetupWidget).debugWidget.setPlainText(file.read())
 
 
 class SetupWidgetClassCreator(AbstractCreator, ABC):
