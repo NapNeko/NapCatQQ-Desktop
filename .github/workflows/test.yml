@@ -1,4 +1,4 @@
-name: 调试编译
+name: Text Build
 
 on:
     workflow_dispatch:
@@ -11,34 +11,40 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: "检出代码"
-      uses: actions/checkout@v2
-
-    - name: "设置 Python"
-      uses: actions/setup-python@v2
+    - name: Checkout Code
+      uses: actions/checkout@v4
       with:
-        python-version: '3.11'
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
+        fetch-depth: 0
+        persist-credentials: false
 
-    - name: "安装依赖"
+    - name: Set Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
       run: pip install -r requirements.txt
 
     - uses: Nuitka/Nuitka-Action@main
-      name: "构建 Windows 版本"
+      name: Build Windows version
       with:
         script-name: main.py
         onefile: true
         enable-plugins: pyside6
+        disable-console: true
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
         output-filename: "NapCat-Desktop"
 
-    - name: "启用开发者命令提示符"
+    - name: Enable Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1.13.0
 
-    - name: "添加清单文件"
+    - name: Add manifest file
       run: |
         mt.exe -manifest ./assets/NapCat-Desktop.exe.manifest -outputresource:./build/NapCat-Desktop.exe;1
 
-    - name: "上传工件"
+    - name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
         name: NapCat-Desktop

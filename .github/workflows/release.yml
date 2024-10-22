@@ -1,9 +1,9 @@
-name: 构建发布
+name: Build Release
 
 on:
   push:
     tags:
-      - 'v*.*.*'  # 匹配版本标签
+      - 'v*.*.*'  # Match version tags
 
 permissions:
   contents: write
@@ -13,19 +13,24 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: "检出代码"
-      uses: actions/checkout@v2
-
-    - name: "设置 Python"
-      uses: actions/setup-python@v2
+    - name: Checkout Code
+      uses: actions/checkout@v4
       with:
-        python-version: '3.11'
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
+        fetch-depth: 0
+        persist-credentials: false
 
-    - name: "安装依赖"
+    - name: Set Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
       run: pip install -r requirements.txt
 
     - uses: Nuitka/Nuitka-Action@main
-      name: "构建 Windows 版本"
+      name: Build Windows version
       with:
         script-name: main.py
         onefile: true
@@ -34,33 +39,29 @@ jobs:
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
         output-filename: "NapCat-Desktop"
 
-    - name: "启用开发者命令提示符"
+    - name: Enable Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1.13.0
 
-    - name: "添加清单文件"
+    - name: Add manifest file
       run: |
         mt.exe -manifest ./assets/NapCat-Desktop.exe.manifest -outputresource:./build/NapCat-Desktop.exe;1
 
-    - name: "上传工件"
+    - name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
         name: NapCat-Desktop
         path: ./build/NapCat-Desktop.exe
 
-
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: "检出代码"
-        uses: actions/checkout@v2
-
-      - name: "下载工件"
+      - name: Download artifact
         uses: actions/download-artifact@v3
         with:
           name: NapCat-Desktop
 
-      - name: "设置标签和 body 内容"
+      - name: Set tag and body content
         id: get_info
         run: |
           TAG_NAME=$(echo "${GITHUB_REF#refs/tags/}")
@@ -70,7 +71,7 @@ jobs:
           echo "$BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: "创建发布草案"
+      - name: Create release draft
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
@@ -78,5 +79,5 @@ jobs:
           draft: true
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.TAG_NAME }}
-          name: "NapCat Desktop Release ${{ env.TAG_NAME }}"
+          name: NapCat Desktop Release ${{ env.TAG_NAME }}
           body: ${{ env.BODY }}
