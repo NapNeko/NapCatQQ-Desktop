@@ -21,7 +21,6 @@ class PathFunc:
         self.napcat_path = self.base_path / "NapCat"
         self.config_dir_path = self.base_path / "config"
         self.config_path = self.config_dir_path / "config.json"
-        self.webui_config_path = self.napcat_path / "config" / "webui.json"
         self.bot_config_path = self.config_dir_path / "bot.json"
         self.tmp_path = self.base_path / "tmp"
 
