@@ -35,7 +35,6 @@ jobs:
         script-name: main.py
         onefile: true
         enable-plugins: pyside6
-        disable-console: true
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
         output-filename: "NapCat-Desktop"
 
