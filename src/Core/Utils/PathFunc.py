@@ -25,8 +25,6 @@ class PathFunc:
         self.bot_config_path = self.config_dir_path / "bot.json"
         self.tmp_path = self.base_path / "tmp"
 
-        self.dlc_path = self.base_path / "dlc"
-
         self.log_path = self.base_path / "log"
         self.log_info_path = self.log_path / "info"
         self.log_debug_path = self.log_path / "debug"
@@ -43,7 +41,6 @@ class PathFunc:
             (self.config_dir_path, "Config"),
             (self.tmp_path, "Tmp"),
             (self.napcat_path, "NapCat"),
-            (self.dlc_path, "NapCat DLC"),
             (self.log_path, "Log"),
             (self.log_info_path, "Log Info"),
             (self.log_debug_path, "Log Debug"),
