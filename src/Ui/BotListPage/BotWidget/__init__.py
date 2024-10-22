@@ -43,9 +43,6 @@ class BotWidget(QWidget):
         self.config = config
         self.isRun = False  # 用于标记机器人是否在运行
 
-        self.napcatProcess: Optional[QProcess] = None
-        self.dlcProcess: Optional[QProcess] = None
-
         # 创建所需控件
         self._createView()
         self._createPivot()
@@ -74,7 +71,7 @@ class BotWidget(QWidget):
         )
         self.pivot.addItem(
             routeKey=self.botLogPage.objectName(),
-            text=self.tr("日志"),
+            text=self.tr("NapCat 日志"),
             onClick=lambda: self.view.setCurrentWidget(self.botLogPage),
         )
         # self.pivot.addItem(
@@ -82,6 +79,11 @@ class BotWidget(QWidget):
         #     text=self.tr("Bot info"),
         #     onClick=lambda: self.view.setCurrentWidget(self.botInfoPage)
         # )
+        self.pivot.addItem(
+            routeKey=self.botInfoPage.objectName(),
+            text=self.tr("Packet 日志"),
+            onClick=lambda: self.view.setCurrentWidget(self.packetLogPage)
+        )
 
         self.pivot.setCurrentItem(self.botSetupPage.objectName())
         self.pivot.setMaximumWidth(300)
@@ -101,10 +103,14 @@ class BotWidget(QWidget):
         self.botLogPage = CodeEditor(self)
         self.botLogPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotLog")
 
+        self.packetLogPage = CodeEditor(self)
+        self.packetLogPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_PacketLog")
+
         # 将页面添加到 view
         self.view.addWidget(self.botInfoPage)
         self.view.addWidget(self.botSetupPage)
         self.view.addWidget(self.botLogPage)
+        self.view.addWidget(self.packetLogPage)
         self.view.setObjectName("BotView")
         self.view.setCurrentWidget(self.botSetupPage)
         self.view.currentChanged.connect(self._pivotSlot)
@@ -132,8 +138,6 @@ class BotWidget(QWidget):
         # 隐藏按钮
         self.stopButton.hide()
         self.rebootButton.hide()
-        self.updateConfigButton.hide()
-        self.deleteConfigButton.hide()
 
     def _addTooltips(self) -> None:
         """
@@ -155,11 +159,15 @@ class BotWidget(QWidget):
 
         # DLC启动
         if self.config.advanced.packetServer:
-            self.dlcProcess = create_dlc_process(self.config)
-            self.dlcProcess.setParent(self)
-            self.dlcProcess.start()
-            self.dlcProcess.waitForStarted()
-            time.sleep(3)  # 无法读取日志, 等待 3 秒, 待发现更好的解决方法
+            # 项目内模块导入
+            from src.packet import PacketWebSocketWorker
+
+            ip, host = self.config.advanced.packetServer.split(":")
+            self.packetLogPage.clear()
+
+            self.packet = PacketWebSocketWorker(ip, host, self)
+            self.packet.log_signal.connect(self.packetLogPage.appendPlainText)
+            self.packet.start()
 
         # NapCat 启动
         self.napcatProcess = create_napcat_process(self.config)
@@ -190,11 +198,8 @@ class BotWidget(QWidget):
         if not self.isRun:
             return
 
-        if self.dlcProcess is not None:
-            if (parent := psutil.Process(self.dlcProcess.processId())).pid != 0:
-                [child.kill() for child in parent.children(recursive=True)]
-                parent.kill()
-            self.dlcProcess = None
+        if self.config.advanced.packetServer:
+            self.packet.stop()
 
         if (parent := psutil.Process(self.napcatProcess.processId())).pid != 0:
             [child.kill() for child in parent.children(recursive=True)]
@@ -307,7 +312,7 @@ class BotWidget(QWidget):
         """
         ## 返回列表按钮的槽函数
         """
-        if self.view.currentWidget() in [self.botInfoPage, self.botSetupPage, self.botLogPage]:
+        if self.view.currentWidget() in [self.botInfoPage, self.botSetupPage, self.botLogPage, self.packetLogPage]:
             # 判断当前处于哪个页面
             # 项目内模块导入
             from src.Ui.BotListPage.BotListWidget import BotListWidget
@@ -341,11 +346,19 @@ class BotWidget(QWidget):
                 "updateConfigButton": "show",
                 "deleteConfigButton": "show",
                 "returnButton": "show",
-                "runButton": "hide",
-                "stopButton": "hide",
-                "rebootButton": "hide",
+                "runButton": "hide" if self.isRun else "show",
+                "stopButton": "show" if self.isRun else "hide",
+                "rebootButton": "show" if self.isRun else "hide",
             },
             self.botLogPage.objectName(): {
+                "returnButton": "show",
+                "updateConfigButton": "hide",
+                "deleteConfigButton": "hide",
+                "runButton": "hide" if self.isRun else "show",
+                "stopButton": "show" if self.isRun else "hide",
+                "rebootButton": "show" if self.isRun else "hide",
+            },
+            self.packetLogPage.objectName(): {
                 "returnButton": "show",
                 "updateConfigButton": "hide",
                 "deleteConfigButton": "hide",
