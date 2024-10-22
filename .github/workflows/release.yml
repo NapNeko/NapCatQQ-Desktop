@@ -58,6 +58,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          submodules: true
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Download artifact
         uses: actions/download-artifact@v3
         with:
