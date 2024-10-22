@@ -14,7 +14,6 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.UnitPage.top import TopWidget
 from src.Ui.common.widget import BackgroundWidget
 from src.Ui.UnitPage.QQPage import QQPage
-from src.Ui.UnitPage.DLCPage import DLCPage
 from src.Ui.UnitPage.NCDPage import NCDPage
 from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.UnitPage.NapCatPage import NapCatPage
@@ -84,12 +83,10 @@ class UnitWidget(BackgroundWidget):
         """
         self.view = TransparentStackedWidget()
         self.napcatPage = NapCatPage(self)
-        self.napcatDLCPage = DLCPage(self)
         self.qqPage = QQPage(self)
         self.ncdPage = NCDPage(self)
 
         self.view.addWidget(self.napcatPage)
-        self.view.addWidget(self.napcatDLCPage)
         self.view.addWidget(self.qqPage)
         self.view.addWidget(self.ncdPage)
 
@@ -97,11 +94,6 @@ class UnitWidget(BackgroundWidget):
             routeKey=self.napcatPage.objectName(),
             text=self.tr("NapCat"),
             onClick=lambda: self.view.setCurrentWidget(self.napcatPage),
-        )
-        self.topCard.pivot.addItem(
-            routeKey=self.napcatDLCPage.objectName(),
-            text=self.tr("NapCat DLC"),
-            onClick=lambda: self.view.setCurrentWidget(self.napcatDLCPage),
         )
         self.topCard.pivot.addItem(
             routeKey=self.qqPage.objectName(),
