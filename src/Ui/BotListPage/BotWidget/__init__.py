@@ -301,9 +301,15 @@ class BotWidget(QWidget):
             from src.Ui.BotListPage.BotListWidget import BotListWidget
 
             if delete_config(self.config):
+                # 删除成功后的操作
                 self.returnButton.clicked.emit()
                 it(BotListWidget).botList.updateList()
                 success_bar(self.tr(f"成功删除配置 {self.config.bot.QQID}({self.config.bot.name})"))
+
+                # 处理 TabBar
+                # 项目内模块导入
+                from src.Ui.MainWindow.Window import MainWindow
+                it(MainWindow).title_bar.tabBar.removeTabByKey(f"{self.config.bot.QQID}")
             else:
                 error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
 

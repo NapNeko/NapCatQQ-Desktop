@@ -152,9 +152,17 @@ def delete_config(config: Config) -> bool:
          - bool 类型
     """
     try:
+        # 删除 NCD 中的配置文件
         configs: List[Config] = read_config()
         configs.remove(config)
         write_config(configs)
+
+        # 删除 NC 中配置文件
+        onebot_config_path = it(PathFunc).getNapCatPath() / "config" / f"onebot11_{config.bot.QQID}.json"
+        napcat_config_path = it(PathFunc).getNapCatPath() / "config" / f"napcat_{config.bot.QQID}.json"
+        onebot_config_path.unlink()
+        napcat_config_path.unlink()
+
         return True
     except Exception as error:
         logger.error(f"在写入配置文件时引发 {type(error).__name__}: {error}")
