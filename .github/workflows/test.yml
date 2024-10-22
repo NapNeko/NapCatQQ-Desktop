@@ -1,4 +1,4 @@
-name: 构建发布
+name: 调试编译
 
 on:
     workflow_dispatch:
