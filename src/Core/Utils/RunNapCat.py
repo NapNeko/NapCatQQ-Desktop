@@ -44,24 +44,3 @@ def create_napcat_process(config: Config) -> QProcess:
     )
 
     return process
-
-
-def create_dlc_process(config: Config) -> QProcess:
-    """
-    ## 创建并配置 QProcess
-
-    ## 参数
-        - config 机器人配置
-
-    ## 返回
-        - QProcess 程序实例
-    """
-    # 获取参数
-    host, port = config.advanced.packetServer.split(":")
-
-    # 创建 QProcess 并配置
-    process = QProcess()
-    process.setProgram(str(it(PathFunc).dlc_path / Urls.NAPCATQQ_DLC_DOWNLOAD.value.fileName()))
-    process.setArguments(["-ip", host, "-port", str(port)])
-
-    return process

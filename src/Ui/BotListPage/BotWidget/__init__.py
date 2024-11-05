@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-import time
-from typing import Optional
 
 # 第三方库导入
 import psutil
 from creart import it
 from qfluentwidgets import (
-    ComboBox,
     FluentIcon,
     PushButton,
     ToolButton,
@@ -26,7 +23,7 @@ from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Core.Utils.email import Email
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
-from src.Core.Utils.RunNapCat import create_dlc_process, create_napcat_process
+from src.Core.Utils.RunNapCat import create_napcat_process
 from src.Ui.common.message_box import AskBox
 from src.Core.Config.ConfigModel import Config
 from src.Core.Config.OperateConfig import delete_config, update_config
@@ -79,11 +76,6 @@ class BotWidget(QWidget):
         #     text=self.tr("Bot info"),
         #     onClick=lambda: self.view.setCurrentWidget(self.botInfoPage)
         # )
-        self.pivot.addItem(
-            routeKey=self.botInfoPage.objectName(),
-            text=self.tr("Packet 日志"),
-            onClick=lambda: self.view.setCurrentWidget(self.packetLogPage)
-        )
 
         self.pivot.setCurrentItem(self.botSetupPage.objectName())
         self.pivot.setMaximumWidth(300)
@@ -103,14 +95,10 @@ class BotWidget(QWidget):
         self.botLogPage = CodeEditor(self)
         self.botLogPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotLog")
 
-        self.packetLogPage = CodeEditor(self)
-        self.packetLogPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_PacketLog")
-
         # 将页面添加到 view
         self.view.addWidget(self.botInfoPage)
         self.view.addWidget(self.botSetupPage)
         self.view.addWidget(self.botLogPage)
-        self.view.addWidget(self.packetLogPage)
         self.view.setObjectName("BotView")
         self.view.setCurrentWidget(self.botSetupPage)
         self.view.currentChanged.connect(self._pivotSlot)
@@ -156,19 +144,6 @@ class BotWidget(QWidget):
         """
         ## 启动按钮槽函数
         """
-
-        # DLC启动
-        if self.config.advanced.packetServer:
-            # 项目内模块导入
-            from src.packet import PacketWebSocketWorker
-
-            ip, host = self.config.advanced.packetServer.split(":")
-            self.packetLogPage.clear()
-
-            self.packet = PacketWebSocketWorker(ip, host, self)
-            self.packet.log_signal.connect(self.packetLogPage.appendPlainText)
-            self.packet.start()
-
         # NapCat 启动
         self.napcatProcess = create_napcat_process(self.config)
         self.highlighter = LogHighlighter(self.botLogPage.document())
@@ -197,9 +172,6 @@ class BotWidget(QWidget):
         """
         if not self.isRun:
             return
-
-        if self.config.advanced.packetServer:
-            self.packet.stop()
 
         if (parent := psutil.Process(self.napcatProcess.processId())).pid != 0:
             [child.kill() for child in parent.children(recursive=True)]
@@ -318,7 +290,7 @@ class BotWidget(QWidget):
         """
         ## 返回列表按钮的槽函数
         """
-        if self.view.currentWidget() in [self.botInfoPage, self.botSetupPage, self.botLogPage, self.packetLogPage]:
+        if self.view.currentWidget() in [self.botInfoPage, self.botSetupPage, self.botLogPage]:
             # 判断当前处于哪个页面
             # 项目内模块导入
             from src.Ui.BotListPage.BotListWidget import BotListWidget
@@ -363,15 +335,7 @@ class BotWidget(QWidget):
                 "runButton": "hide" if self.isRun else "show",
                 "stopButton": "show" if self.isRun else "hide",
                 "rebootButton": "show" if self.isRun else "hide",
-            },
-            self.packetLogPage.objectName(): {
-                "returnButton": "show",
-                "updateConfigButton": "hide",
-                "deleteConfigButton": "hide",
-                "runButton": "hide" if self.isRun else "show",
-                "stopButton": "show" if self.isRun else "hide",
-                "rebootButton": "show" if self.isRun else "hide",
-            },
+            }
         }
 
         # 根据 widget.objectName() 执行相应操作

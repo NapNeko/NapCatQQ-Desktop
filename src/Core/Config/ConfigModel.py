@@ -86,42 +86,13 @@ class ConnectConfig(BaseModel):
 class AdvancedConfig(BaseModel):
     autoStart: bool = False
     offlineNotice: bool = False
-    packetServer: str
+    packetServer: str = ""
     debug: bool
     enableLocalFile2Url: bool
     fileLog: bool
     consoleLog: bool
     fileLogLevel: str
     consoleLogLevel: str
-
-    @field_validator("packetServer")
-    def set_default_packet_server(cls, value):
-        """
-        ## 设置默认值
-        """
-        # 项目内模块导入
-        from src.Core.Config.OperateConfig import read_config
-
-        if not value:
-            # 从项目配置读取现有端口号
-            ports = [
-                int(config.advanced.packetServer.split(":")[1])
-                for config in read_config()
-                if config.advanced.packetServer
-            ]
-
-            # 如果有端口，排序并取最大端口号
-            if ports:
-                max_port = max(ports)
-                new_port = max_port + 1
-            else:
-                # 如果没有任何已占用端口，设置初始端口为8000
-                new_port = 8000
-
-            # 设置默认值为 127.0.0.1:最大端口号+1
-            return f"127.0.0.1:{new_port}"
-
-        return value
 
 
 class Config(BaseModel):

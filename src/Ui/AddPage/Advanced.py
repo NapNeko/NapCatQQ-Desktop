@@ -53,12 +53,6 @@ class AdvancedWidget(ScrollArea):
             content=self.tr("当Bot状态为 离线 时, 发送通知"),
             parent=self.view,
         )
-        self.packetServer = LineEditConfigCard(
-            icon=FluentIcon.CALORIES,
-            title=self.tr("Packet Server"),
-            content=self.tr("设置 Packet Server 的地址"),
-            parent=self.view,
-        )
         self.debugModeCard = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("Debug"),
@@ -103,7 +97,6 @@ class AdvancedWidget(ScrollArea):
         self.cards = [
             self.autoStartCard,
             self.offlineNotice,
-            self.packetServer,
             self.debugModeCard,
             self.localFile2UrlCard,
             self.fileLogCard,
@@ -118,7 +111,6 @@ class AdvancedWidget(ScrollArea):
         """
         self.autoStartCard.fillValue(self.config.autoStart)
         self.offlineNotice.fillValue(self.config.offlineNotice)
-        self.packetServer.fillValue(self.config.packetServer)
         self.debugModeCard.fillValue(self.config.debug)
         self.localFile2UrlCard.fillValue(self.config.enableLocalFile2Url)
         self.fileLogCard.fillValue(self.config.fileLog)
@@ -145,7 +137,6 @@ class AdvancedWidget(ScrollArea):
         return {
             "autoStart": self.autoStartCard.getValue(),
             "offlineNotice": self.offlineNotice.getValue(),
-            "packetServer": self.packetServer.getValue(),
             "debug": self.debugModeCard.getValue(),
             "enableLocalFile2Url": self.localFile2UrlCard.getValue(),
             "fileLog": self.fileLogCard.getValue(),
