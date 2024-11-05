@@ -1,3 +1,0 @@
-[submodule "src/packet"]
-    path = src/packet
-	url = https://github.com/HeartfeltJoy/napcat.packet.git
