@@ -74,7 +74,7 @@ class BotListCard(HeaderCardWidget):
         """
         ## 监控机器人列表
         """
-        if not it(BotListWidget).botList.botCardList:
+        if not BotListWidget().botList.botCardList:
             # 如果为空则代表没有机器人, 显示提示
             self.botList.hide()
             self.noBotLabel.show()
@@ -220,7 +220,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         # 项目内模块导入
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-        for card in it(BotListWidget).botList.botCardList:
+        for card in BotListWidget().botList.botCardList:
             if self.config.bot.QQID != card.config.bot.QQID:
                 continue
             else:
@@ -242,9 +242,9 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         from src.Ui.MainWindow import MainWindow
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-        for card in it(BotListWidget).botList.botCardList:
+        for card in BotListWidget().botList.botCardList:
             if self.config.bot.QQID == card.config.bot.QQID:
-                MainWindow().switchTo(it(BotListWidget))
+                MainWindow().switchTo(BotListWidget())
                 card.clicked.emit()
                 card.botWidget.runButtonSlot()
                 break
@@ -259,7 +259,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
         # 项目内模块导入
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-        for card in it(BotListWidget).botList.botCardList:
+        for card in BotListWidget().botList.botCardList:
             if self.config.bot.QQID == card.config.bot.QQID:
                 card.botWidget.stopButton.click()
             self.runButton.show()

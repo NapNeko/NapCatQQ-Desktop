@@ -63,13 +63,13 @@ class SystemTrayIcon(QSystemTrayIcon):
     @Slot()
     def runAllBotSlot(self) -> None:
         self.checkShow()
-        it(BotListWidget).runAllBot()
+        BotListWidget().runAllBot()
 
     @Slot()
     def stopAllBotBotSlot(self) -> None:
         self.checkShow()
         success_bar(self.tr("成功停止所有机器人运行"))
-        it(BotListWidget).stopAllBot()
+        BotListWidget().stopAllBot()
 
     @Slot()
     def closeSlot(self) -> None:
@@ -77,7 +77,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         ## 关闭槽函数
         """
         # 循环判断是否机器人已经关闭
-        it(BotListWidget).stopAllBot()
+        BotListWidget().stopAllBot()
         sys.exit()
 
     @Slot(QSystemTrayIcon)

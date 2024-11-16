@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-
-"""
-机器人列表
-"""
 # 标准库导入
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
@@ -16,6 +12,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.widget import BackgroundWidget
+from src.Core.Utils.singleton import singleton
 from src.Ui.BotListPage.BotList import BotList
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 from src.Ui.BotListPage.BotTopCard import BotTopCard
@@ -25,15 +22,15 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
+@singleton
 class BotListWidget(BackgroundWidget):
+    view: Optional[TransparentStackedWidget]
+    topCard: Optional[BotTopCard]
+    botList: Optional[BotList]
+    vBoxLayout: Optional[QVBoxLayout]
 
     def __init__(self) -> None:
         super().__init__()
-        # 预定义控件
-        self.view: Optional[TransparentStackedWidget] = None
-        self.topCard: Optional[BotTopCard] = None
-        self.botList: Optional[BotList] = None
-        self.vBoxLayout: Optional[QVBoxLayout] = None
 
         # 传入配置
         self.bgEnabledConfig = cfg.bgListPage
@@ -114,22 +111,3 @@ class BotListWidget(BackgroundWidget):
                 continue
             if card.botWidget.isRun:
                 return True
-
-
-class BotListWidgetClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Ui.BotListPage.BotListWidget", "BotListWidget"),)
-
-    # 静态方法available()，用于检查模块"BotListWidget"是否存在，返回值为布尔型。
-    @staticmethod
-    def available() -> bool:
-        return exists_module("src.Ui.BotListPage.BotListWidget")
-
-    # 静态方法create()，用于创建BotListWidget类的实例，返回值为BotListWidget对象。
-    @staticmethod
-    def create(create_type: [BotListWidget]) -> BotListWidget:
-        return BotListWidget()
-
-
-add_creator(BotListWidgetClassCreator)

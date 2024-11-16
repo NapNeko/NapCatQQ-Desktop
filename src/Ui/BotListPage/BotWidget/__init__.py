@@ -286,7 +286,7 @@ class BotWidget(QWidget):
             if delete_config(self.config):
                 # 删除成功后的操作
                 self.returnButton.clicked.emit()
-                it(BotListWidget).botList.updateList()
+                BotListWidget().botList.updateList()
                 success_bar(self.tr(f"成功删除配置 {self.config.bot.QQID}({self.config.bot.name})"))
 
                 # 处理 TabBar
@@ -306,9 +306,9 @@ class BotWidget(QWidget):
             # 项目内模块导入
             from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-            it(BotListWidget).view.setCurrentIndex(0)
-            it(BotListWidget).topCard.breadcrumbBar.setCurrentIndex(0)
-            it(BotListWidget).topCard.updateListButton.show()
+            BotListWidget().view.setCurrentIndex(0)
+            BotListWidget().topCard.breadcrumbBar.setCurrentIndex(0)
+            BotListWidget().topCard.updateListButton.show()
         else:
             self.view.setCurrentWidget(self.botSetupPage)
 

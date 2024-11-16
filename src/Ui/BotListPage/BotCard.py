@@ -129,21 +129,21 @@ class BotCard(CardWidget):
         from src.Ui.BotListPage.BotWidget import BotWidget
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-        MainWindow().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
-        MainWindow().topCard.updateListButton.hide()
+        BotListWidget().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
+        BotListWidget().topCard.updateListButton.hide()
 
         if self.botWidget is None:
             self.botWidget = BotWidget(self.config)
-            MainWindow().view.addWidget(self.botWidget)
-            MainWindow().view.setCurrentWidget(self.botWidget)
+            BotListWidget().view.addWidget(self.botWidget)
+            BotListWidget().view.setCurrentWidget(self.botWidget)
 
             MainWindow().title_bar.tabBar.addTab(
                 f"{self.config.bot.QQID}",
                 f"{self.config.bot.name} ({self.config.bot.QQID})",
                 QIcon(self.QQAvatarLabel.pixmap()),
-                lambda: (MainWindow().switchTo(MainWindow()), self._clickSlot()),
+                lambda: (MainWindow().switchTo(BotListWidget()), self._clickSlot()),
             )
         else:
-            MainWindow().view.setCurrentWidget(self.botWidget)
+            BotListWidget().view.setCurrentWidget(self.botWidget)
 
         MainWindow().title_bar.tabBar.setCurrentTab(f"{self.config.bot.QQID}")

@@ -385,9 +385,9 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
         self.selectAddPageLightBgItem.fileChanged.connect(AddWidget().updateBgImage)
         self.selectAddPageDarkBgItem.fileChanged.connect(AddWidget().updateBgImage)
 
-        self.enabledListPageBgItem.checkedChanged.connect(it(BotListWidget).updateBgImage)
-        self.selectListPageLightBgItem.fileChanged.connect(it(BotListWidget).updateBgImage)
-        self.selectListPageDarkBgItem.fileChanged.connect(it(BotListWidget).updateBgImage)
+        self.enabledListPageBgItem.checkedChanged.connect(BotListWidget().updateBgImage)
+        self.selectListPageLightBgItem.fileChanged.connect(BotListWidget().updateBgImage)
+        self.selectListPageDarkBgItem.fileChanged.connect(BotListWidget().updateBgImage)
 
         self.enabledUnitPageBgItem.checkedChanged.connect(it(UnitWidget).updateBgImage)
         self.selectUnitPageLightBgItem.fileChanged.connect(it(UnitWidget).updateBgImage)

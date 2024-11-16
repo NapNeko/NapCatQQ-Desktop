@@ -100,7 +100,7 @@ class MainWindow(MSFluentWindow):
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
-            interface=it(BotListWidget).initialize(self),
+            interface=BotListWidget().initialize(self),
             icon=FluentIcon.MENU,
             text=self.tr("列表"),
             position=NavigationItemPosition.TOP,

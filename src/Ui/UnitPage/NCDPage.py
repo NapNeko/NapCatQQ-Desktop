@@ -81,14 +81,14 @@ class NCDPage(PageBase):
         """
         ## 下载逻辑
         """
-        if it(BotListWidget).getBotIsRun():
+        if BotListWidget().getBotIsRun():
             # 项目内模块导入
             from src.Ui.MainWindow import MainWindow
 
             box = AskBox(
                 self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), MainWindow()
             )
-            box.yesButton.clicked.connect(it(BotListWidget).stopAllBot)
+            box.yesButton.clicked.connect(BotListWidget().stopAllBot)
             box.yesButton.setText(self.tr("关闭全部"))
 
             if not box.exec():
