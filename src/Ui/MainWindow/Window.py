@@ -106,7 +106,7 @@ class MainWindow(MSFluentWindow):
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
-            interface=it(UnitWidget).initialize(self),
+            interface=UnitWidget().initialize(self),
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             text=self.tr("组件"),
             position=NavigationItemPosition.BOTTOM,

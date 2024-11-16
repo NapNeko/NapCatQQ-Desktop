@@ -137,8 +137,8 @@ class NapCatVersionCard(VersionCardBase):
         from src.Ui.UnitPage.view import UnitWidget
         from src.Ui.MainWindow.Window import MainWindow
 
-        MainWindow().switchTo(it(UnitWidget))
-        it(UnitWidget).view.setCurrentWidget(it(UnitWidget).napcatPage)
+        MainWindow().switchTo(UnitWidget())
+        UnitWidget().view.setCurrentWidget(UnitWidget().napcatPage)
 
     def enterEvent(self, event):
         """
@@ -180,8 +180,8 @@ class QQVersionCard(VersionCardBase):
         from src.Ui.UnitPage.view import UnitWidget
         from src.Ui.MainWindow.Window import MainWindow
 
-        MainWindow().switchTo(it(UnitWidget))
-        it(UnitWidget).view.setCurrentWidget(it(UnitWidget).qqPage)
+        MainWindow().switchTo(UnitWidget())
+        UnitWidget().view.setCurrentWidget(UnitWidget().qqPage)
 
     def enterEvent(self, event):
         """

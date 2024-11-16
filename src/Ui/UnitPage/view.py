@@ -15,6 +15,7 @@ from src.Ui.UnitPage.top import TopWidget
 from src.Ui.common.widget import BackgroundWidget
 from src.Ui.UnitPage.QQPage import QQPage
 from src.Ui.UnitPage.NCDPage import NCDPage
+from src.Core.Utils.singleton import singleton
 from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.UnitPage.NapCatPage import NapCatPage
 from src.Ui.common.stacked_widget import TransparentStackedWidget
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
+@singleton
 class UnitWidget(BackgroundWidget):
 
     def __init__(self) -> None:
@@ -134,22 +136,3 @@ class UnitWidget(BackgroundWidget):
         """
         self.getVersion.update()
         self.topCard.updateButton.setEnabled(False)
-
-
-class UnitWidgetClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Ui.UnitPage.view", "UnitWidget"),)
-
-    # 静态方法available()，用于检查模块"BotListWidget"是否存在，返回值为布尔型。
-    @staticmethod
-    def available() -> bool:
-        return exists_module("src.Ui.UnitWidget.view")
-
-    # 静态方法create()，用于创建BotListWidget类的实例，返回值为BotListWidget对象。
-    @staticmethod
-    def create(create_type: list[UnitWidget]) -> UnitWidget:
-        return UnitWidget()
-
-
-add_creator(UnitWidgetClassCreator)
