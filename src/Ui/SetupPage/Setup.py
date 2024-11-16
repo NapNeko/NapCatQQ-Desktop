@@ -15,6 +15,7 @@ from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.widget import BackgroundWidget
 from src.Core.Utils.logger import INFO_LOG, DEBUG_LOG
+from src.Core.Utils.singleton import singleton
 from src.Ui.common.CodeEditor import NCDLogHighlighter
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
@@ -25,21 +26,22 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
+@singleton
 class SetupWidget(BackgroundWidget):
     """
     ## 设置页面
     """
+    view: Optional[TransparentStackedWidget]
+    topCard: Optional[SetupTopCard]
+    setupScrollArea: Optional[SetupScrollArea]
+    vBoxLayout: Optional[QVBoxLayout]
+    infoWidget: Optional[CodeEditor]
 
     def __init__(self):
         super().__init__()
         # 预定义控件及属性
         self.info_log_file_path = INFO_LOG
         self.debug_log_file_path = DEBUG_LOG
-        self.view: Optional[TransparentStackedWidget] = None
-        self.topCard: Optional[SetupTopCard] = None
-        self.setupScrollArea: Optional[SetupScrollArea] = None
-        self.vBoxLayout: Optional[QVBoxLayout] = None
-        self.infoWidget: Optional[CodeEditor] = None
 
         # 传入配置
         self.bgEnabledConfig = cfg.bgSettingPage
@@ -129,7 +131,7 @@ class SetupWidget(BackgroundWidget):
 
         with open(self.info_log_file_path, "r", encoding="utf-8") as file:
             # 输出内容
-            it(SetupWidget).infoWidget.setPlainText(file.read())
+            self.infoWidget.setPlainText(file.read())
 
     @timer(1000)
     def updateDebugLogContent(self):
@@ -138,23 +140,4 @@ class SetupWidget(BackgroundWidget):
 
         with open(self.debug_log_file_path, "r", encoding="utf-8") as file:
             # 输出内容
-            it(SetupWidget).debugWidget.setPlainText(file.read())
-
-
-class SetupWidgetClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Ui.SetupPage.Setup", "SetupWidget"),)
-
-    # 静态方法available()，用于检查模块"Setup"是否存在，返回值为布尔型。
-    @staticmethod
-    def available() -> bool:
-        return exists_module("src.Ui.SetupPage.Setup")
-
-    # 静态方法create()，用于创建SetupWidget类的实例，返回值为SetupWidget对象。
-    @staticmethod
-    def create(create_type: [SetupWidget]) -> SetupWidget:
-        return SetupWidget()
-
-
-add_creator(SetupWidgetClassCreator)
+            self.debugWidget.setPlainText(file.read())

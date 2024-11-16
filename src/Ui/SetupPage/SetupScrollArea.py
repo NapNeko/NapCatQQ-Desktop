@@ -393,10 +393,10 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
         self.selectUnitPageLightBgItem.fileChanged.connect(UnitWidget().updateBgImage)
         self.selectUnitPageDarkBgItem.fileChanged.connect(UnitWidget().updateBgImage)
 
-        self.enabledSettingPageBgItem.checkedChanged.connect(it(SetupWidget).updateBgImage)
-        self.selectSettingPageLightBgItem.fileChanged.connect(it(SetupWidget).updateBgImage)
-        self.selectSettingPageDarkBgItem.fileChanged.connect(it(SetupWidget).updateBgImage)
-        self.settingPageBgOpacityItem.valueChanged.connect(it(SetupWidget).updateBgImage)
+        self.enabledSettingPageBgItem.checkedChanged.connect(SetupWidget().updateBgImage)
+        self.selectSettingPageLightBgItem.fileChanged.connect(SetupWidget().updateBgImage)
+        self.selectSettingPageDarkBgItem.fileChanged.connect(SetupWidget().updateBgImage)
+        self.settingPageBgOpacityItem.valueChanged.connect(SetupWidget().updateBgImage)
 
     def isHide(self) -> None:
         """
