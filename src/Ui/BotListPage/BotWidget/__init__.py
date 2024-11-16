@@ -277,7 +277,7 @@ class BotWidget(QWidget):
         if AskBox(
             self.tr("确认删除"),
             self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
-            it(MainWindow),
+            MainWindow(),
         ).exec():
             # 询问用户是否确认删除, 确认删除执行删除操作
             # 项目内模块导入
@@ -292,7 +292,7 @@ class BotWidget(QWidget):
                 # 处理 TabBar
                 # 项目内模块导入
                 from src.Ui.MainWindow.Window import MainWindow
-                it(MainWindow).title_bar.tabBar.removeTabByKey(f"{self.config.bot.QQID}")
+                MainWindow().title_bar.tabBar.removeTabByKey(f"{self.config.bot.QQID}")
             else:
                 error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
 

@@ -67,7 +67,7 @@ class BotListCard(HeaderCardWidget):
         from src.Ui.AddPage import AddWidget
         from src.Ui.MainWindow.Window import MainWindow
 
-        it(MainWindow).switchTo(it(AddWidget))
+        MainWindow().switchTo(it(AddWidget))
 
     @timer(2000)
     def monitorBots(self) -> None:
@@ -244,7 +244,7 @@ class BotCard(BackgroundAnimationWidget, QFrame):
 
         for card in it(BotListWidget).botList.botCardList:
             if self.config.bot.QQID == card.config.bot.QQID:
-                it(MainWindow).switchTo(it(BotListWidget))
+                MainWindow().switchTo(it(BotListWidget))
                 card.clicked.emit()
                 card.botWidget.runButtonSlot()
                 break

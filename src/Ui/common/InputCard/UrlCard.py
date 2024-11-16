@@ -125,7 +125,7 @@ class UrlCard(ExpandSettingCard):
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        box = TextInputBox(it(MainWindow))
+        box = TextInputBox(MainWindow())
         if not box.exec() or not box.urlLineEdit.text():
             # 如果用户取消或输入空字符,则退出函数
             return
@@ -160,7 +160,7 @@ class UrlCard(ExpandSettingCard):
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        if AskBox(self.tr("确认操作"), self.tr(f"是否要删除此 URL？\n\n{item.url}"), it(MainWindow)).exec():
+        if AskBox(self.tr("确认操作"), self.tr(f"是否要删除此 URL？\n\n{item.url}"), MainWindow()).exec():
             self._removeUrl(item)
 
     def _removeUrl(self, item: UrlItem):

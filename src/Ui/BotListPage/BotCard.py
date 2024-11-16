@@ -57,7 +57,7 @@ class BotCard(CardWidget):
 
             # 创建页面
             self.botWidget = BotWidget(self.config)
-            it(BotListWidget).view.addWidget(self.botWidget)
+            MainWindow().view.addWidget(self.botWidget)
 
             # 启动机器人
             self.botWidget.runButtonSlot()
@@ -129,21 +129,21 @@ class BotCard(CardWidget):
         from src.Ui.BotListPage.BotWidget import BotWidget
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-        it(BotListWidget).topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
-        it(BotListWidget).topCard.updateListButton.hide()
+        MainWindow().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
+        MainWindow().topCard.updateListButton.hide()
 
         if self.botWidget is None:
             self.botWidget = BotWidget(self.config)
-            it(BotListWidget).view.addWidget(self.botWidget)
-            it(BotListWidget).view.setCurrentWidget(self.botWidget)
+            MainWindow().view.addWidget(self.botWidget)
+            MainWindow().view.setCurrentWidget(self.botWidget)
 
-            it(MainWindow).title_bar.tabBar.addTab(
+            MainWindow().title_bar.tabBar.addTab(
                 f"{self.config.bot.QQID}",
                 f"{self.config.bot.name} ({self.config.bot.QQID})",
                 QIcon(self.QQAvatarLabel.pixmap()),
-                lambda: (it(MainWindow).switchTo(it(BotListWidget)), self._clickSlot()),
+                lambda: (MainWindow().switchTo(MainWindow()), self._clickSlot()),
             )
         else:
-            it(BotListWidget).view.setCurrentWidget(self.botWidget)
+            MainWindow().view.setCurrentWidget(self.botWidget)
 
-        it(MainWindow).title_bar.tabBar.setCurrentTab(f"{self.config.bot.QQID}")
+        MainWindow().title_bar.tabBar.setCurrentTab(f"{self.config.bot.QQID}")

@@ -116,7 +116,7 @@ class DashboardWidget(QWidget):
                 {"name": self.tr("NapCatQQ 仓库"), "url": Urls.NAPCATQQ_REPO.value},
                 {"name": self.tr("NapCatQQ Desktop 仓库"), "url": Urls.NCD_REPO.value},
             ],
-            it(MainWindow),
+            MainWindow(),
         ).exec()
 
     @Slot()
@@ -132,5 +132,5 @@ class DashboardWidget(QWidget):
                 {"name": self.tr("NapCatQQ 的问题"), "url": Urls.NAPCATQQ_ISSUES.value},
                 {"name": self.tr("NapCatQQ Desktop 的问题"), "url": Urls.NCD_ISSUES.value},
             ],
-            it(MainWindow),
+            MainWindow(),
         ).exec()

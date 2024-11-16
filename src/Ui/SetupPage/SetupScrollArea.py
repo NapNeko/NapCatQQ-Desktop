@@ -151,7 +151,7 @@ class SetupScrollArea(ScrollArea):
         # 连接个性化相关
         self.themeCard.optionChanged.connect(self._themeModeChanged)
         self.themeColorCard.colorChanged.connect(lambda color: setThemeColor(color, save=True, lazy=True))
-        self.windowOpacityCard.valueChanged.connect(lambda value: it(MainWindow).setWindowOpacity(value / 100))
+        self.windowOpacityCard.valueChanged.connect(lambda value: MainWindow().setWindowOpacity(value / 100))
 
     @staticmethod
     def _themeModeChanged(theme) -> None:
@@ -224,16 +224,16 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
         from src.Ui.MainWindow import MainWindow
 
         self.enabledTabBarItem.checkedChanged.connect(self.enabledTabBarItemSlot)
-        self.enabledMovableItem.checkedChanged.connect(lambda state: it(MainWindow).title_bar.tabBar.setMovable(state))
+        self.enabledMovableItem.checkedChanged.connect(lambda state: MainWindow().title_bar.tabBar.setMovable(state))
         self.enabledScrollableItem.checkedChanged.connect(self.enabledScrollableItemSlot)
         self.enabledTabShadowItem.checkedChanged.connect(
-            lambda state: it(MainWindow).title_bar.tabBar.setTabShadowEnabled(state)
+            lambda state: MainWindow().title_bar.tabBar.setTabShadowEnabled(state)
         )
         self.setTabMaximumWidthItem.valueChanged.connect(
-            lambda value: it(MainWindow).title_bar.tabBar.setTabMaximumWidth(value)
+            lambda value: MainWindow().title_bar.tabBar.setTabMaximumWidth(value)
         )
         self.setTabMinimumWidthItem.valueChanged.connect(
-            lambda value: it(MainWindow).title_bar.tabBar.setTabMinimumWidth(value)
+            lambda value: MainWindow().title_bar.tabBar.setTabMinimumWidth(value)
         )
 
     @Slot(bool)
@@ -246,11 +246,11 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
 
         if not state:
             # 如果状态为 False, 则隐藏标题选项卡, 禁用其他配置项
-            it(MainWindow).title_bar.tabBar.hide()
+            MainWindow().title_bar.tabBar.hide()
             [_.setEnabled(False) for _ in self.itemList if _ != self.enabledTabBarItem]
         else:
             # 如果状态为 True, 则显示标题选项卡, 启用其他配置项
-            it(MainWindow).title_bar.tabBar.show()
+            MainWindow().title_bar.tabBar.show()
             [_.setEnabled(True) for _ in self.itemList if _ != self.enabledTabBarItem]
 
     @Slot(bool)
@@ -263,12 +263,12 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
 
         if state:
             # 如果状态为 True, 则设置标签页范围可滚动, 并且禁用调整标签页最大宽度和最小宽度
-            it(MainWindow).title_bar.tabBar.setScrollable(True)
+            MainWindow().title_bar.tabBar.setScrollable(True)
             self.setTabMaximumWidthItem.setEnabled(False)
             self.setTabMinimumWidthItem.setEnabled(False)
         else:
             # 如果状态为 False, 则设置标签页范围不可滚动, 并且启用调整标签页最大宽度和最小宽度
-            it(MainWindow).title_bar.tabBar.setScrollable(False)
+            MainWindow().title_bar.tabBar.setScrollable(False)
             self.setTabMaximumWidthItem.setEnabled(True)
             self.setTabMinimumWidthItem.setEnabled(True)
 

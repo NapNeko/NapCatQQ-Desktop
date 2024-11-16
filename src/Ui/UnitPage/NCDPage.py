@@ -86,7 +86,7 @@ class NCDPage(PageBase):
             from src.Ui.MainWindow import MainWindow
 
             box = AskBox(
-                self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow)
+                self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), MainWindow()
             )
             box.yesButton.clicked.connect(it(BotListWidget).stopAllBot)
             box.yesButton.setText(self.tr("关闭全部"))

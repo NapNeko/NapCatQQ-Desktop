@@ -35,7 +35,7 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000) -> Non
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.BOTTOM_RIGHT,
-        parent=it(MainWindow),
+        parent=MainWindow(),
     )
 
 
@@ -57,7 +57,7 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5_000) 
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.BOTTOM_RIGHT,
-        parent=it(MainWindow),
+        parent=MainWindow(),
     )
 
 
@@ -79,7 +79,7 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_0
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.TOP_RIGHT,
-        parent=it(MainWindow),
+        parent=MainWindow(),
     )
 
 
@@ -101,5 +101,5 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1) -> Non
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.TOP_RIGHT,
-        parent=it(MainWindow),
+        parent=MainWindow(),
     )

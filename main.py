@@ -56,7 +56,7 @@ if __name__ == "__main__":
     app.installTranslator(FluentTranslator(locale))
 
     # 显示窗体
-    it(MainWindow).initialize()
+    MainWindow().initialize()
 
     # 进入循环
     sys.exit(app.exec())
