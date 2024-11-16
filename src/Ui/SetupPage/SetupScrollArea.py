@@ -3,15 +3,10 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets import (
-    SpinBox,
-    ComboBox,
-    BodyLabel,
     FluentIcon,
     ScrollArea,
     ExpandLayout,
-    SwitchButton,
     RangeSettingCard,
     SettingCardGroup,
     OptionsSettingCard,
@@ -21,20 +16,12 @@ from qfluentwidgets import (
     setThemeColor,
 )
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QWidget, QHBoxLayout
+from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.Ui.AddPage import AddWidget
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
-from src.Ui.SetupPage.ExpandGroupSettingItem import (
-    FileItem,
-    ItemBase,
-    RangeItem,
-    SwitchItem,
-    ComboBoxItem,
-    LineEditItem,
-)
+from src.Ui.SetupPage.ExpandGroupSettingItem import FileItem, RangeItem, SwitchItem, ComboBoxItem, LineEditItem
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -151,7 +138,7 @@ class SetupScrollArea(ScrollArea):
         # 连接个性化相关
         self.themeCard.optionChanged.connect(self._themeModeChanged)
         self.themeColorCard.colorChanged.connect(lambda color: setThemeColor(color, save=True, lazy=True))
-        self.windowOpacityCard.valueChanged.connect(lambda value: it(MainWindow).setWindowOpacity(value / 100))
+        self.windowOpacityCard.valueChanged.connect(lambda value: MainWindow().setWindowOpacity(value / 100))
 
     @staticmethod
     def _themeModeChanged(theme) -> None:
@@ -162,7 +149,7 @@ class SetupScrollArea(ScrollArea):
         from src.Ui.HomePage import HomeWidget
 
         setTheme(cfg.get(theme), save=True)
-        it(HomeWidget).updateBgImageSize()
+        HomeWidget().updateBgImageSize()
 
 
 class TitleTabBarSettingCard(ExpandGroupSettingCard):
@@ -224,16 +211,16 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
         from src.Ui.MainWindow import MainWindow
 
         self.enabledTabBarItem.checkedChanged.connect(self.enabledTabBarItemSlot)
-        self.enabledMovableItem.checkedChanged.connect(lambda state: it(MainWindow).title_bar.tabBar.setMovable(state))
+        self.enabledMovableItem.checkedChanged.connect(lambda state: MainWindow().title_bar.tabBar.setMovable(state))
         self.enabledScrollableItem.checkedChanged.connect(self.enabledScrollableItemSlot)
         self.enabledTabShadowItem.checkedChanged.connect(
-            lambda state: it(MainWindow).title_bar.tabBar.setTabShadowEnabled(state)
+            lambda state: MainWindow().title_bar.tabBar.setTabShadowEnabled(state)
         )
         self.setTabMaximumWidthItem.valueChanged.connect(
-            lambda value: it(MainWindow).title_bar.tabBar.setTabMaximumWidth(value)
+            lambda value: MainWindow().title_bar.tabBar.setTabMaximumWidth(value)
         )
         self.setTabMinimumWidthItem.valueChanged.connect(
-            lambda value: it(MainWindow).title_bar.tabBar.setTabMinimumWidth(value)
+            lambda value: MainWindow().title_bar.tabBar.setTabMinimumWidth(value)
         )
 
     @Slot(bool)
@@ -246,11 +233,11 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
 
         if not state:
             # 如果状态为 False, 则隐藏标题选项卡, 禁用其他配置项
-            it(MainWindow).title_bar.tabBar.hide()
+            MainWindow().title_bar.tabBar.hide()
             [_.setEnabled(False) for _ in self.itemList if _ != self.enabledTabBarItem]
         else:
             # 如果状态为 True, 则显示标题选项卡, 启用其他配置项
-            it(MainWindow).title_bar.tabBar.show()
+            MainWindow().title_bar.tabBar.show()
             [_.setEnabled(True) for _ in self.itemList if _ != self.enabledTabBarItem]
 
     @Slot(bool)
@@ -263,12 +250,12 @@ class TitleTabBarSettingCard(ExpandGroupSettingCard):
 
         if state:
             # 如果状态为 True, 则设置标签页范围可滚动, 并且禁用调整标签页最大宽度和最小宽度
-            it(MainWindow).title_bar.tabBar.setScrollable(True)
+            MainWindow().title_bar.tabBar.setScrollable(True)
             self.setTabMaximumWidthItem.setEnabled(False)
             self.setTabMinimumWidthItem.setEnabled(False)
         else:
             # 如果状态为 False, 则设置标签页范围不可滚动, 并且启用调整标签页最大宽度和最小宽度
-            it(MainWindow).title_bar.tabBar.setScrollable(False)
+            MainWindow().title_bar.tabBar.setScrollable(False)
             self.setTabMaximumWidthItem.setEnabled(True)
             self.setTabMinimumWidthItem.setEnabled(True)
 
@@ -377,26 +364,26 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
         from src.Ui.SetupPage import SetupWidget
         from src.Ui.BotListPage import BotListWidget
 
-        self.enabledHomePageBgItem.checkedChanged.connect(it(HomeWidget).updateBgImage)
-        self.selectHomePageLightBgItem.fileChanged.connect(it(HomeWidget).updateBgImage)
-        self.selectHomePageDarkBgItem.fileChanged.connect(it(HomeWidget).updateBgImage)
+        self.enabledHomePageBgItem.checkedChanged.connect(HomeWidget().updateBgImage)
+        self.selectHomePageLightBgItem.fileChanged.connect(HomeWidget().updateBgImage)
+        self.selectHomePageDarkBgItem.fileChanged.connect(HomeWidget().updateBgImage)
 
-        self.enabledAddPageBgItem.checkedChanged.connect(it(AddWidget).updateBgImage)
-        self.selectAddPageLightBgItem.fileChanged.connect(it(AddWidget).updateBgImage)
-        self.selectAddPageDarkBgItem.fileChanged.connect(it(AddWidget).updateBgImage)
+        self.enabledAddPageBgItem.checkedChanged.connect(AddWidget().updateBgImage)
+        self.selectAddPageLightBgItem.fileChanged.connect(AddWidget().updateBgImage)
+        self.selectAddPageDarkBgItem.fileChanged.connect(AddWidget().updateBgImage)
 
-        self.enabledListPageBgItem.checkedChanged.connect(it(BotListWidget).updateBgImage)
-        self.selectListPageLightBgItem.fileChanged.connect(it(BotListWidget).updateBgImage)
-        self.selectListPageDarkBgItem.fileChanged.connect(it(BotListWidget).updateBgImage)
+        self.enabledListPageBgItem.checkedChanged.connect(BotListWidget().updateBgImage)
+        self.selectListPageLightBgItem.fileChanged.connect(BotListWidget().updateBgImage)
+        self.selectListPageDarkBgItem.fileChanged.connect(BotListWidget().updateBgImage)
 
-        self.enabledUnitPageBgItem.checkedChanged.connect(it(UnitWidget).updateBgImage)
-        self.selectUnitPageLightBgItem.fileChanged.connect(it(UnitWidget).updateBgImage)
-        self.selectUnitPageDarkBgItem.fileChanged.connect(it(UnitWidget).updateBgImage)
+        self.enabledUnitPageBgItem.checkedChanged.connect(UnitWidget().updateBgImage)
+        self.selectUnitPageLightBgItem.fileChanged.connect(UnitWidget().updateBgImage)
+        self.selectUnitPageDarkBgItem.fileChanged.connect(UnitWidget().updateBgImage)
 
-        self.enabledSettingPageBgItem.checkedChanged.connect(it(SetupWidget).updateBgImage)
-        self.selectSettingPageLightBgItem.fileChanged.connect(it(SetupWidget).updateBgImage)
-        self.selectSettingPageDarkBgItem.fileChanged.connect(it(SetupWidget).updateBgImage)
-        self.settingPageBgOpacityItem.valueChanged.connect(it(SetupWidget).updateBgImage)
+        self.enabledSettingPageBgItem.checkedChanged.connect(SetupWidget().updateBgImage)
+        self.selectSettingPageLightBgItem.fileChanged.connect(SetupWidget().updateBgImage)
+        self.selectSettingPageDarkBgItem.fileChanged.connect(SetupWidget().updateBgImage)
+        self.settingPageBgOpacityItem.valueChanged.connect(SetupWidget().updateBgImage)
 
     def isHide(self) -> None:
         """

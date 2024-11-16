@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets import FluentIcon, CaptionLabel, BreadcrumbBar, ToolTipFilter, TransparentToolButton, setFont
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, Slot
@@ -69,7 +68,7 @@ class BotTopCard(QWidget):
             # 项目内模块导入
             from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-            it(BotListWidget).view.setCurrentIndex(index)
+            BotListWidget().view.setCurrentIndex(index)
             self.updateListButton.show()
 
     @staticmethod
@@ -81,7 +80,7 @@ class BotTopCard(QWidget):
         # 项目内模块导入
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-        it(BotListWidget).botList.updateList()
+        BotListWidget().botList.updateList()
 
     def _setLayout(self) -> None:
         """

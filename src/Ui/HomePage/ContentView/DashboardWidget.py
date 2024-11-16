@@ -1,20 +1,12 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from creart import it
 from qfluentwidgets import FluentIcon, ToolButton, ToolTipFilter
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import Qt, Slot, QSize
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.Ui.common.InfoCard import (
-    BotListCard,
-    CPUDashboard,
-    QQVersionCard,
-    SystemInfoCard,
-    MemoryDashboard,
-    NapCatVersionCard,
-)
+from src.Ui.common.InfoCard import BotListCard, CPUDashboard, QQVersionCard, MemoryDashboard, NapCatVersionCard
 from src.Core.NetworkFunc.Urls import Urls
 from src.Ui.common.message_box import HyperlinkBox
 
@@ -116,7 +108,7 @@ class DashboardWidget(QWidget):
                 {"name": self.tr("NapCatQQ 仓库"), "url": Urls.NAPCATQQ_REPO.value},
                 {"name": self.tr("NapCatQQ Desktop 仓库"), "url": Urls.NCD_REPO.value},
             ],
-            it(MainWindow),
+            MainWindow(),
         ).exec()
 
     @Slot()
@@ -132,5 +124,5 @@ class DashboardWidget(QWidget):
                 {"name": self.tr("NapCatQQ 的问题"), "url": Urls.NAPCATQQ_ISSUES.value},
                 {"name": self.tr("NapCatQQ Desktop 的问题"), "url": Urls.NCD_ISSUES.value},
             ],
-            it(MainWindow),
+            MainWindow(),
         ).exec()

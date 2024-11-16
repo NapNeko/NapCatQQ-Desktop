@@ -2,13 +2,10 @@
 """
 ## 运行 NapCat 流程
 """
-# 第三方库导入
-from creart import it
-from PySide6.QtCore import QUrl, QProcess
+from PySide6.QtCore import QProcess
 
 # 项目内模块导入
 from src.Core.Utils.PathFunc import PathFunc
-from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Config.ConfigModel import Config
 
 

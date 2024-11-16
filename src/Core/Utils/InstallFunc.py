@@ -9,7 +9,6 @@ import subprocess
 from pathlib import Path
 
 # 第三方库导入
-from creart import it
 from loguru import logger
 from PySide6.QtCore import QUrl, Signal, QThread
 

@@ -38,9 +38,8 @@ if __name__ == "__main__":
 
     # 启动主程序
     # 第三方库导入
-    from creart import it
     from qfluentwidgets import FluentTranslator
-    from PySide6.QtCore import QLocale, QTranslator
+    from PySide6.QtCore import QLocale
     from PySide6.QtWidgets import QApplication
 
     # 项目内模块导入
@@ -56,7 +55,7 @@ if __name__ == "__main__":
     app.installTranslator(FluentTranslator(locale))
 
     # 显示窗体
-    it(MainWindow).initialize()
+    MainWindow().initialize()
 
     # 进入循环
     sys.exit(app.exec())

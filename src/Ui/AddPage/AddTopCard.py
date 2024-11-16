@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import (
     MessageBox,
@@ -105,7 +104,7 @@ class AddTopCard(QWidget):
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
         # 读取配置文件并追加, 判断是否存在相同的 QQID
-        config = Config(**it(AddWidget).getConfig())
+        config = Config(**AddWidget().getConfig())
         if check_duplicate_bot(config):
             # 检查是否已存在相同的机器人配置
             error_bar(
@@ -116,7 +115,7 @@ class AddTopCard(QWidget):
         if update_config(config):
             # 更新配置文件, 如果返回为 True 则代表更新成功
             # 执行刷新
-            it(BotListWidget).botList.updateList()
+            BotListWidget().botList.updateList()
             success_bar(self.tr(f"Bot({config.bot.QQID}) 已经添加成功，你可以在 机器人列表 中查看😼"))
         else:
             # 更新失败则提示查看日志
@@ -134,10 +133,10 @@ class AddTopCard(QWidget):
         box = MessageBox(
             title=self.tr("确认清除配置"),
             content=self.tr("清空后，该页面的所有配置项都会被清空，且该操作无法撤销"),
-            parent=it(AddWidget),
+            parent=AddWidget(),
         )
 
         if box.exec():
-            it(AddWidget).botWidget.clearValues()
-            it(AddWidget).connectWidget.clearValues()
-            it(AddWidget).advancedWidget.clearValues()
+            AddWidget().botWidget.clearValues()
+            AddWidget().connectWidget.clearValues()
+            AddWidget().advancedWidget.clearValues()

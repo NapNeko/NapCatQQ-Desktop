@@ -3,16 +3,14 @@
 from typing import TYPE_CHECKING, Optional
 
 # 第三方库导入
-from creart import it
 from loguru import logger
 from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QUrl, Slot, QUrlQuery
-from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
+from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
 from PySide6.QtWidgets import QVBoxLayout
 
 # 项目内模块导入
-from src.Core.NetworkFunc import NetworkFunc
 from src.Ui.common.info_bar import error_bar
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Config.ConfigModel import Config
@@ -57,7 +55,7 @@ class BotCard(CardWidget):
 
             # 创建页面
             self.botWidget = BotWidget(self.config)
-            it(BotListWidget).view.addWidget(self.botWidget)
+            MainWindow().view.addWidget(self.botWidget)
 
             # 启动机器人
             self.botWidget.runButtonSlot()
@@ -101,7 +99,7 @@ class BotCard(CardWidget):
 
         # 创建请求并链接槽函数
         request = QNetworkRequest(avatar_url)
-        replay = it(NetworkFunc).manager.get(request)
+        replay = QNetworkAccessManager().get(request)
         replay.finished.connect(lambda: self._setAvatar(replay))
 
     def _setAvatar(self, replay: QNetworkReply) -> None:
@@ -129,21 +127,21 @@ class BotCard(CardWidget):
         from src.Ui.BotListPage.BotWidget import BotWidget
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
-        it(BotListWidget).topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
-        it(BotListWidget).topCard.updateListButton.hide()
+        BotListWidget().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
+        BotListWidget().topCard.updateListButton.hide()
 
         if self.botWidget is None:
             self.botWidget = BotWidget(self.config)
-            it(BotListWidget).view.addWidget(self.botWidget)
-            it(BotListWidget).view.setCurrentWidget(self.botWidget)
+            BotListWidget().view.addWidget(self.botWidget)
+            BotListWidget().view.setCurrentWidget(self.botWidget)
 
-            it(MainWindow).title_bar.tabBar.addTab(
+            MainWindow().title_bar.tabBar.addTab(
                 f"{self.config.bot.QQID}",
                 f"{self.config.bot.name} ({self.config.bot.QQID})",
                 QIcon(self.QQAvatarLabel.pixmap()),
-                lambda: (it(MainWindow).switchTo(it(BotListWidget)), self._clickSlot()),
+                lambda: (MainWindow().switchTo(BotListWidget()), self._clickSlot()),
             )
         else:
-            it(BotListWidget).view.setCurrentWidget(self.botWidget)
+            BotListWidget().view.setCurrentWidget(self.botWidget)
 
-        it(MainWindow).title_bar.tabBar.setCurrentTab(f"{self.config.bot.QQID}")
+        MainWindow().title_bar.tabBar.setCurrentTab(f"{self.config.bot.QQID}")

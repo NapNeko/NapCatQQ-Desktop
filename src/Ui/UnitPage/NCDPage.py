@@ -3,21 +3,16 @@
 import sys
 import subprocess
 
-# 第三方库导入
-from creart import it
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl, Slot
 
 # 项目内模块导入
-from src.Core import timer
-from src.Core.Config import cfg
 from src.Ui.BotListPage import BotListWidget
 from src.Ui.UnitPage.Base import PageBase
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
-from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.message_box import AskBox
 from src.Core.NetworkFunc.Downloader import GithubDownloader
 
@@ -81,14 +76,14 @@ class NCDPage(PageBase):
         """
         ## 下载逻辑
         """
-        if it(BotListWidget).getBotIsRun():
+        if BotListWidget().getBotIsRun():
             # 项目内模块导入
             from src.Ui.MainWindow import MainWindow
 
             box = AskBox(
-                self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow)
+                self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), MainWindow()
             )
-            box.yesButton.clicked.connect(it(BotListWidget).stopAllBot)
+            box.yesButton.clicked.connect(BotListWidget().stopAllBot)
             box.yesButton.setText(self.tr("关闭全部"))
 
             if not box.exec():

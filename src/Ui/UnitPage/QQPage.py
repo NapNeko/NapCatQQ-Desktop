@@ -3,19 +3,15 @@
 import winreg
 from pathlib import Path
 
-# 第三方库导入
-from creart import it
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl, Slot
 
 # 项目内模块导入
-from src.Core import timer
 from src.Ui.UnitPage.Base import PageBase
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
-from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.message_box import AskBox, FolderBox
 from src.Core.Utils.InstallFunc import QQInstall
 from src.Core.NetworkFunc.Downloader import QQDownloader
@@ -120,7 +116,7 @@ class QQPage(PageBase):
         success_bar(self.tr("下载成功, 正在安装..."))
 
         # 创建询问弹出
-        folder_box = FolderBox(self.tr("选择安装路径"), it(MainWindow))
+        folder_box = FolderBox(self.tr("选择安装路径"), MainWindow())
 
         if not folder_box.exec():
             # 如果没有点击确定按钮
@@ -136,7 +132,7 @@ class QQPage(PageBase):
         # 检查是否存在 dbghelp.dll 文件, 否则会导致安装失败
         if Path(Path(folder_box.getValue()) / "dbghelp.dll").exists():
             rm_dll_box = AskBox(
-                self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), it(MainWindow)
+                self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), MainWindow()
             )
             rm_dll_box.yesButton.setText(self.tr("删除"))
             if rm_dll_box.exec():
