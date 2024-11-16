@@ -10,7 +10,7 @@ from PySide6.QtCore import QUrl, Slot, Signal, QObject, QThread
 
 # 项目内模块导入
 from src.Core.Config import cfg
-from src.Core.Utils.PathFunc import PathFunc
+from src.Core.Utils.PathFunc import PathFunction
 from src.Core.NetworkFunc.Urls import Urls
 
 
@@ -168,7 +168,7 @@ class GetLocalVersionThread(QThread):
         ## 获取 NapCat 相关内容
         """
         try:
-            with open(str(it(PathFunc).getNapCatPath() / "package.json"), "r", encoding="utf-8") as f:
+            with open(str(PathFunction.getNapCatPath() / "package.json"), "r", encoding="utf-8") as f:
                 # 读取到参数返回版本信息
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
@@ -181,7 +181,7 @@ class GetLocalVersionThread(QThread):
         ## 获取 QQ 相关内容
         """
         try:
-            if (qq_path := it(PathFunc).getQQPath()) is None:
+            if (qq_path := PathFunction.getQQPath()) is None:
                 # 检查 QQ 目录是否存在
                 logger.warning("未找到 QQ 的安装目录, 可能是未安装 QQ")
                 return

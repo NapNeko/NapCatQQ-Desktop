@@ -23,7 +23,7 @@ from PySide6.QtCore import Signal, QLocale
 
 # 项目内模块导入
 from src.Core.Config.enum import Language
-from src.Core.Utils.PathFunc import PathFunc
+from src.Core.Utils.PathFunc import PathFunction
 
 
 class LanguageSerializer(ConfigSerializer):
@@ -196,7 +196,7 @@ class Config(QConfig):
 
 
 cfg = Config()
-qconfig.load(it(PathFunc).config_path, cfg)
+qconfig.load(PathFunction.config_path, cfg)
 cfg.set(cfg.StartTime, time.time(), True)
 cfg.set(cfg.NCDVersion, "v1.4.0", True)
 cfg.set(cfg.SystemType, platform.system(), True)

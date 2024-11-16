@@ -15,7 +15,7 @@ from src.Ui.BotListPage import BotListWidget
 from src.Ui.UnitPage.Base import PageBase
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
-from src.Core.Utils.PathFunc import PathFunc
+from src.Core.Utils.PathFunc import PathFunction
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.message_box import AskBox
@@ -37,7 +37,7 @@ class NCDPage(PageBase):
         self.appCard.installButton.clicked.connect(self.downloadSlot)
         self.appCard.updateButton.clicked.connect(self.downloadSlot)
         self.appCard.openFolderButton.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).getNapCatPath()))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunction.getNapCatPath()))
         )
 
     def updatePage(self) -> None:
@@ -147,11 +147,11 @@ class NCDPage(PageBase):
                 "endlocal",
             ]
         )
-        with open(str(it(PathFunc).base_path / "update.bat"), "w", encoding="utf-8") as file:
+        with open(str(PathFunction.base_path / "update.bat"), "w", encoding="utf-8") as file:
             file.write(bat_content)
 
         # 创建进程
-        subprocess.Popen([str(it(PathFunc).base_path / "update.bat")], shell=True)
+        subprocess.Popen([str(PathFunction.base_path / "update.bat")], shell=True)
 
         # 退出程序
         sys.exit()

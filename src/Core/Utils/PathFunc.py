@@ -5,12 +5,15 @@ from abc import ABC
 from pathlib import Path
 
 # 第三方库导入
-from creart import add_creator, exists_module
 from loguru import logger
-from creart.creator import AbstractCreator, CreateTargetInfo
 
 
 class PathFunc:
+
+    def __new__(cls, *args, **kwargs) -> "PathFunc":
+        if not hasattr(cls, "_instance"):
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     def __init__(self):
         """
@@ -77,20 +80,4 @@ class PathFunc:
         return self.napcat_path
 
 
-class PathFuncClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Core.Utils.PathFunc", "PathFunc"),)
-
-    # 静态方法available()，用于检查模块"PathFunc"是否存在，返回值为布尔型。
-    @staticmethod
-    def available() -> bool:
-        return exists_module("src.Core.Utils.PathFunc")
-
-    # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
-    @staticmethod
-    def create(create_type: list[PathFunc]) -> PathFunc:
-        return PathFunc()
-
-
-add_creator(PathFuncClassCreator)
+PathFunction = PathFunc()

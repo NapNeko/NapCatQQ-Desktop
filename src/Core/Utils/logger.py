@@ -8,12 +8,12 @@ from creart import it
 from loguru import logger
 
 # 项目内模块导入
-from src.Core.Utils.PathFunc import PathFunc
+from src.Core.Utils.PathFunc import PathFunction
 
 # 获取路径
 TIME = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-INFO_LOG = it(PathFunc).log_info_path / f"INFO.{TIME}.log"
-DEBUG_LOG = it(PathFunc).log_debug_path / f"DEBUG.{TIME}.log"
+INFO_LOG = PathFunction.log_info_path / f"INFO.{TIME}.log"
+DEBUG_LOG = PathFunction.log_debug_path / f"DEBUG.{TIME}.log"
 
 CUSTOM_FORMAT = "<level>{time:YYYY-MM-DD HH:mm:ss}</level> | <level>{level: <8}</level> | <level>{message}</level>"
 
@@ -30,8 +30,8 @@ class Logger:
         logger.add(DEBUG_LOG, level="DEBUG", format=CUSTOM_FORMAT, enqueue=True)
 
         # 清理旧日志
-        self.cleanup_logs(it(PathFunc).log_info_path, "INFO.")
-        self.cleanup_logs(it(PathFunc).log_debug_path, "DEBUG.")
+        self.cleanup_logs(PathFunction.log_info_path, "INFO.")
+        self.cleanup_logs(PathFunction.log_debug_path, "DEBUG.")
 
     @staticmethod
     def cleanup_logs(log_path, log_prefix) -> None:

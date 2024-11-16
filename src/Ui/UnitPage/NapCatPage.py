@@ -11,7 +11,7 @@ from src.Ui.BotListPage import BotListWidget
 from src.Ui.UnitPage.Base import PageBase
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
-from src.Core.Utils.PathFunc import PathFunc
+from src.Core.Utils.PathFunc import PathFunction
 from src.Core.NetworkFunc.Urls import Urls
 from src.Ui.common.message_box import AskBox
 from src.Core.Utils.InstallFunc import NapCatInstall
@@ -33,7 +33,7 @@ class NapCatPage(PageBase):
         self.appCard.installButton.clicked.connect(self.downloadSlot)
         self.appCard.updateButton.clicked.connect(self.downloadSlot)
         self.appCard.openFolderButton.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).getNapCatPath()))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunction.getNapCatPath()))
         )
 
     def updatePage(self) -> None:

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+from typing import Optional
 
 # 第三方库导入
 import psutil
@@ -39,6 +40,7 @@ class BotWidget(QWidget):
         super().__init__()
         self.config = config
         self.isRun = False  # 用于标记机器人是否在运行
+        self.napcatProcess: Optional[QProcess] = None  # 用于存储 QProcess 实例
 
         # 创建所需控件
         self._createView()
@@ -144,8 +146,14 @@ class BotWidget(QWidget):
         """
         ## 启动按钮槽函数
         """
+        # 判断是否存在旧实例, 如果不存在则创建新实例, 存在则销毁后创建新实例
+        if self.napcatProcess is None:
+            self.napcatProcess = create_napcat_process(self.config)
+        elif isinstance(self.napcatProcess, QProcess):
+            self.napcatProcess.deleteLater()
+            self.napcatProcess = create_napcat_process(self.config)
+
         # NapCat 启动
-        self.napcatProcess = create_napcat_process(self.config)
         self.highlighter = LogHighlighter(self.botLogPage.document())
         self.botLogPage.clear()
         self.napcatProcess.setParent(self)
@@ -176,6 +184,9 @@ class BotWidget(QWidget):
         if (parent := psutil.Process(self.napcatProcess.processId())).pid != 0:
             [child.kill() for child in parent.children(recursive=True)]
             parent.kill()
+            self.napcatProcess.kill()
+            self.napcatProcess.waitForFinished()
+            self.napcatProcess.deleteLater()
             self.napcatProcess = None
 
         self.isRun = False
