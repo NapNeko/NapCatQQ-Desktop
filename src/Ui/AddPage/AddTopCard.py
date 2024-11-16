@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import (
     MessageBox,

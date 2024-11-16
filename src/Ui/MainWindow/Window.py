@@ -1,20 +1,10 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from abc import ABC
 from typing import Optional
 
 # 第三方库导入
-from creart import it, add_creator, exists_module
 from loguru import logger
-from creart.creator import AbstractCreator, CreateTargetInfo
-from qfluentwidgets import (
-    Theme,
-    FluentIcon,
-    SplashScreen,
-    MSFluentWindow,
-    NavigationItemPosition,
-    NavigationBarPushButton,
-)
+from qfluentwidgets import Theme, FluentIcon, SplashScreen, MSFluentWindow, NavigationItemPosition
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QSize
 from PySide6.QtWidgets import QApplication
@@ -38,6 +28,7 @@ class MainWindow(MSFluentWindow):
     """
     ## 程序的主窗体
     """
+
     trayIcon: Optional[SystemTrayIcon]
     title_bar: Optional[CustomTitleBar]
     splashScreen: Optional[SplashScreen]

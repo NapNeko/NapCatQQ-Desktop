@@ -4,7 +4,6 @@ from typing import Optional
 
 # 第三方库导入
 import psutil
-from creart import it
 from qfluentwidgets import (
     FluentIcon,
     PushButton,

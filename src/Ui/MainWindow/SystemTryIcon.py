@@ -4,7 +4,6 @@ import sys
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets import Action, BodyLabel
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import AvatarWidget, CaptionLabel, SystemTrayMenu

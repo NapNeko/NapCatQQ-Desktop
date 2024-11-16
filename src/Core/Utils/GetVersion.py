@@ -4,13 +4,13 @@ import json
 
 # 第三方库导入
 import httpx
-from creart import it
 from loguru import logger
 from PySide6.QtCore import QUrl, Slot, Signal, QObject, QThread
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Core.Utils.PathFunc import PathFunc
+from src.Core.Utils.singleton import singleton
 from src.Core.NetworkFunc.Urls import Urls
 
 

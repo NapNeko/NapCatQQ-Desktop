@@ -9,7 +9,6 @@
 """
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets import InfoBar
 from PySide6.QtCore import Qt
 

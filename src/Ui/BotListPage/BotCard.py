@@ -3,16 +3,14 @@
 from typing import TYPE_CHECKING, Optional
 
 # 第三方库导入
-from creart import it
 from loguru import logger
 from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QUrl, Slot, QUrlQuery
-from PySide6.QtNetwork import QNetworkReply, QNetworkRequest
+from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
 from PySide6.QtWidgets import QVBoxLayout
 
 # 项目内模块导入
-from src.Core.NetworkFunc import NetworkFunc
 from src.Ui.common.info_bar import error_bar
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Config.ConfigModel import Config
@@ -101,7 +99,7 @@ class BotCard(CardWidget):
 
         # 创建请求并链接槽函数
         request = QNetworkRequest(avatar_url)
-        replay = it(NetworkFunc).manager.get(request)
+        replay = QNetworkAccessManager().get(request)
         replay.finished.connect(lambda: self._setAvatar(replay))
 
     def _setAvatar(self, replay: QNetworkReply) -> None:

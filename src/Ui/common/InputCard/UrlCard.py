@@ -3,7 +3,6 @@
 from typing import List, TypeVar
 
 # 第三方库导入
-from creart import it
 from pydantic import HttpUrl, WebsocketUrl
 from qfluentwidgets import (
     BodyLabel,

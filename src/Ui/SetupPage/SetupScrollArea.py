@@ -3,15 +3,10 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets import (
-    SpinBox,
-    ComboBox,
-    BodyLabel,
     FluentIcon,
     ScrollArea,
     ExpandLayout,
-    SwitchButton,
     RangeSettingCard,
     SettingCardGroup,
     OptionsSettingCard,
@@ -21,20 +16,12 @@ from qfluentwidgets import (
     setThemeColor,
 )
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QWidget, QHBoxLayout
+from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.Ui.AddPage import AddWidget
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
-from src.Ui.SetupPage.ExpandGroupSettingItem import (
-    FileItem,
-    ItemBase,
-    RangeItem,
-    SwitchItem,
-    ComboBoxItem,
-    LineEditItem,
-)
+from src.Ui.SetupPage.ExpandGroupSettingItem import FileItem, RangeItem, SwitchItem, ComboBoxItem, LineEditItem
 
 if TYPE_CHECKING:
     # 项目内模块导入

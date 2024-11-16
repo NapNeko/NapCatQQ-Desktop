@@ -5,7 +5,6 @@ import time
 import platform
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets import RangeValidator, RangeConfigItem, TabCloseButtonDisplayMode, qconfig
 from qfluentwidgets.common import (
     Theme,

@@ -1,20 +1,12 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from creart import it
 from qfluentwidgets import FluentIcon, ToolButton, ToolTipFilter
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import Qt, Slot, QSize
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.Ui.common.InfoCard import (
-    BotListCard,
-    CPUDashboard,
-    QQVersionCard,
-    SystemInfoCard,
-    MemoryDashboard,
-    NapCatVersionCard,
-)
+from src.Ui.common.InfoCard import BotListCard, CPUDashboard, QQVersionCard, MemoryDashboard, NapCatVersionCard
 from src.Core.NetworkFunc.Urls import Urls
 from src.Ui.common.message_box import HyperlinkBox
 

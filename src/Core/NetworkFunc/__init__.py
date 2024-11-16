@@ -1,45 +1,11 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from abc import ABC
 from typing import Any, Callable
 
 # 第三方库导入
-from creart import AbstractCreator, CreateTargetInfo, it, add_creator, exists_module
 from loguru import logger
-from PySide6.QtCore import QUrl, QObject
+from PySide6.QtCore import QUrl
 from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
-
-
-class NetworkFunc(QObject):
-    """
-    ## 软件内部的所有网络请求均通过此类实现
-    """
-
-    def __init__(self):
-        """
-        ## 创建 QNetworkAccessManager
-        """
-        super().__init__()
-        self.manager = QNetworkAccessManager()
-
-
-class NetworkFuncClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Core.NetworkFunc", "NetworkFunc"),)
-
-    # 静态方法available()，用于检查模块"PathFunc"是否存在，返回值为布尔型。
-    @staticmethod
-    def available() -> bool:
-        return exists_module("src.Core.NetworkFunc")
-
-    # 静态方法create()，用于创建PathFunc类的实例，返回值为PathFunc对象。
-    @staticmethod
-    def create(create_type: list[NetworkFunc]) -> NetworkFunc:
-        return NetworkFunc()
-
-
-add_creator(NetworkFuncClassCreator)
 
 
 def async_request(url: QUrl, _bytes: bool = False) -> Callable[[Callable[..., None]], Callable[..., None]]:
@@ -81,7 +47,7 @@ def async_request(url: QUrl, _bytes: bool = False) -> Callable[[Callable[..., No
 
             # 创建并发送网络请求
             request = QNetworkRequest(url)
-            reply = it(NetworkFunc).manager.get(request)
+            reply = QNetworkAccessManager().get(request)
             # 连接请求完成信号到回调函数
             reply.finished.connect(lambda: on_finished(reply))
 

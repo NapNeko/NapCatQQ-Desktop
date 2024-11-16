@@ -3,19 +3,15 @@
 import winreg
 from pathlib import Path
 
-# 第三方库导入
-from creart import it
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl, Slot
 
 # 项目内模块导入
-from src.Core import timer
 from src.Ui.UnitPage.Base import PageBase
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
-from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.message_box import AskBox, FolderBox
 from src.Core.Utils.InstallFunc import QQInstall
 from src.Core.NetworkFunc.Downloader import QQDownloader

@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from creart import it
 from qfluentwidgets import FluentIcon, CaptionLabel, BreadcrumbBar, ToolTipFilter, TransparentToolButton, setFont
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, Slot
