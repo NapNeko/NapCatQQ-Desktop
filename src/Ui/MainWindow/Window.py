@@ -94,7 +94,7 @@ class MainWindow(MSFluentWindow):
         )
 
         self.addSubInterface(
-            interface=it(AddWidget).initialize(self),
+            interface=AddWidget().initialize(self),
             icon=FluentIcon.ADD_TO,
             text=self.tr("添加"),
             position=NavigationItemPosition.TOP,

@@ -105,7 +105,7 @@ class AddTopCard(QWidget):
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
         # 读取配置文件并追加, 判断是否存在相同的 QQID
-        config = Config(**it(AddWidget).getConfig())
+        config = Config(**AddWidget().getConfig())
         if check_duplicate_bot(config):
             # 检查是否已存在相同的机器人配置
             error_bar(
@@ -134,10 +134,10 @@ class AddTopCard(QWidget):
         box = MessageBox(
             title=self.tr("确认清除配置"),
             content=self.tr("清空后，该页面的所有配置项都会被清空，且该操作无法撤销"),
-            parent=it(AddWidget),
+            parent=AddWidget(),
         )
 
         if box.exec():
-            it(AddWidget).botWidget.clearValues()
-            it(AddWidget).connectWidget.clearValues()
-            it(AddWidget).advancedWidget.clearValues()
+            AddWidget().botWidget.clearValues()
+            AddWidget().connectWidget.clearValues()
+            AddWidget().advancedWidget.clearValues()

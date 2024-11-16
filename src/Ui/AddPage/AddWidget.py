@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-
-"""
-添加机器人
-"""
 # 标准库导入
 from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
@@ -21,6 +17,7 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.widget import BackgroundWidget
 from src.Ui.AddPage.Connect import ConnectWidget
 from src.Ui.AddPage.Advanced import AdvancedWidget
+from src.Core.Utils.singleton import singleton
 from src.Ui.AddPage.BotWidget import BotWidget
 from src.Ui.AddPage.AddTopCard import AddTopCard
 from src.Ui.common.stacked_widget import TransparentStackedWidget
@@ -30,10 +27,14 @@ if TYPE_CHECKING:
     from src.Ui.MainWindow import MainWindow
 
 
+@singleton
 class AddWidget(BackgroundWidget):
     """
     ## 窗体中 Add Bot 对应的 Widget
     """
+    view: Optional[TransparentStackedWidget]
+    topCard: Optional[AddTopCard]
+    vBoxLayout: Optional[QVBoxLayout]
 
     def __init__(self) -> None:
         """
@@ -45,11 +46,6 @@ class AddWidget(BackgroundWidget):
             - vBoxLayout : 窗体内的总布局
         """
         super().__init__()
-        # 预定义控件
-        self.view: Optional[TransparentStackedWidget] = None
-        self.topCard: Optional[AddTopCard] = None
-        self.vBoxLayout: Optional[QVBoxLayout] = None
-
         # 传入配置
         self.bgEnabledConfig = cfg.bgAddPage
         self.bgPixmapLightConfig = cfg.bgAddPageLight
@@ -140,22 +136,3 @@ class AddWidget(BackgroundWidget):
         """
         widget = self.view.widget(index)
         self.topCard.pivot.setCurrentItem(widget.objectName())
-
-
-class AddWidgetClassCreator(AbstractCreator, ABC):
-    # 定义类方法targets，该方法返回一个元组，元组中包含了一个CreateTargetInfo对象，
-    # 该对象描述了创建目标的相关信息，包括应用程序名称和类名。
-    targets = (CreateTargetInfo("src.Ui.AddPage.AddWidget", "AddWidget"),)
-
-    # 静态方法available()，用于检查模块"Add"是否存在，返回值为布尔型。
-    @staticmethod
-    def available() -> bool:
-        return exists_module("src.Ui.AddPage.AddWidget")
-
-    # 静态方法create()，用于创建AddWidget类的实例，返回值为AddWidget对象。
-    @staticmethod
-    def create(create_type: [AddWidget]) -> AddWidget:
-        return AddWidget()
-
-
-add_creator(AddWidgetClassCreator)

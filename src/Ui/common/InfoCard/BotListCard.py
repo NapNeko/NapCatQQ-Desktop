@@ -67,7 +67,7 @@ class BotListCard(HeaderCardWidget):
         from src.Ui.AddPage import AddWidget
         from src.Ui.MainWindow.Window import MainWindow
 
-        MainWindow().switchTo(it(AddWidget))
+        MainWindow().switchTo(AddWidget())
 
     @timer(2000)
     def monitorBots(self) -> None:
