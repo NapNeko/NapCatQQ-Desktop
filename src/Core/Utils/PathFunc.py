@@ -7,13 +7,11 @@ from pathlib import Path
 # 第三方库导入
 from loguru import logger
 
+# 项目内模块导入
+from src.Core.Utils.singleton import Singleton
 
-class PathFunc:
 
-    def __new__(cls, *args, **kwargs) -> "PathFunc":
-        if not hasattr(cls, "_instance"):
-            cls._instance = super().__new__(cls)
-        return cls._instance
+class PathFunc(metaclass=Singleton):
 
     def __init__(self):
         """
@@ -78,6 +76,3 @@ class PathFunc:
         ## 获取 NapCat 路径
         """
         return self.napcat_path
-
-
-PathFunction = PathFunc()

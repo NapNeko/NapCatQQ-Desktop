@@ -10,7 +10,7 @@ from PySide6.QtCore import QUrl, Signal, QThread
 
 # 项目内模块导入
 from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
-from src.Core.Utils.PathFunc import PathFunction
+from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 
 
@@ -53,7 +53,7 @@ class GithubDownloader(DownloaderBase):
         """
         super().__init__()
         self.url: QUrl = url
-        self.path: Path = PathFunction.tmp_path
+        self.path: Path = PathFunc().tmp_path
         self.filename = self.url.fileName()
         self.mirror_urls = [QUrl(f"{mirror.toString()}/{self.url.toString()}") for mirror in Urls.MIRROR_SITE.value]
 
@@ -166,7 +166,7 @@ class QQDownloader(DownloaderBase):
         """
         super().__init__()
         self.url: QUrl = url
-        self.path: Path = PathFunction.tmp_path
+        self.path: Path = PathFunc().tmp_path
 
     def run(self) -> None:
         """

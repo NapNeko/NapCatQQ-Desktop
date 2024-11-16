@@ -15,7 +15,7 @@ from PySide6.QtCore import QUrl, Signal, QThread
 
 # 项目内模块导入
 from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
-from src.Core.Utils.PathFunc import PathFunction
+from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 
 
@@ -35,8 +35,8 @@ class NapCatInstall(QThread):
 
     def __init__(self) -> None:
         super().__init__()
-        self.zip_file_path = PathFunction.tmp_path / "NapCat.Shell.zip"
-        self.install_path = PathFunction.getNapCatPath()
+        self.zip_file_path = PathFunc().tmp_path / "NapCat.Shell.zip"
+        self.install_path = PathFunc().getNapCatPath()
 
     def run(self) -> None:
         """
@@ -166,14 +166,14 @@ class DLCInstall(QThread):
 
             # 移动到 DLC 文件夹
 
-            if not (path := PathFunction.tmp_path / Urls.NAPCATQQ_DLC_DOWNLOAD.value.fileName()).exists():
+            if not (path := PathFunc().tmp_path / Urls.NAPCATQQ_DLC_DOWNLOAD.value.fileName()).exists():
                 error_bar(self.tr("DLC丢失, 取消安装"))
                 return
 
-            if Path(PathFunction.dlc_path / path.name).exists():
-                Path(PathFunction.dlc_path / path.name).unlink()
+            if Path(PathFunc().dlc_path / path.name).exists():
+                Path(PathFunc().dlc_path / path.name).unlink()
 
-            shutil.move(path, PathFunction.dlc_path / path.name)
+            shutil.move(path, PathFunc().dlc_path / path.name)
 
             self.installFinish.emit()
             logger.debug(f"{'-' * 10} 安装 DLC 完成 ~ {'-' * 10}")

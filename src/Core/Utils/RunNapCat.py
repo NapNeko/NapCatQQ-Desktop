@@ -7,7 +7,7 @@ from creart import it
 from PySide6.QtCore import QUrl, QProcess
 
 # 项目内模块导入
-from src.Core.Utils.PathFunc import PathFunction
+from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Config.ConfigModel import Config
 
@@ -25,20 +25,20 @@ def create_napcat_process(config: Config) -> QProcess:
 
     # 配置环境变量
     env = QProcess.systemEnvironment()
-    env.append(f"NAPCAT_PATCH_PACKAGE={PathFunction.getNapCatPath() / 'qqnt.json'}")
-    env.append(f"NAPCAT_LOAD_PATH={PathFunction.getNapCatPath() / 'loadNapCat.js'}")
-    env.append(f"NAPCAT_INJECT_PATH={PathFunction.getNapCatPath() / 'NapCatWinBootHook.dll'}")
-    env.append(f"NAPCAT_LAUNCHER_PATH={PathFunction.getNapCatPath() / 'NapCatWinBootMain.exe'}")
-    env.append(f"NAPCAT_MAIN_PATH={PathFunction.getNapCatPath() / 'napcat.mjs'}")
+    env.append(f"NAPCAT_PATCH_PACKAGE={PathFunc().getNapCatPath() / 'qqnt.json'}")
+    env.append(f"NAPCAT_LOAD_PATH={PathFunc().getNapCatPath() / 'loadNapCat.js'}")
+    env.append(f"NAPCAT_INJECT_PATH={PathFunc().getNapCatPath() / 'NapCatWinBootHook.dll'}")
+    env.append(f"NAPCAT_LAUNCHER_PATH={PathFunc().getNapCatPath() / 'NapCatWinBootMain.exe'}")
+    env.append(f"NAPCAT_MAIN_PATH={PathFunc().getNapCatPath() / 'napcat.mjs'}")
 
     # 创建 QProcess 并配置
     process = QProcess()
     process.setEnvironment(env)
-    process.setProgram(str(PathFunction.getNapCatPath() / "NapCatWinBootMain.exe"))
+    process.setProgram(str(PathFunc().getNapCatPath() / "NapCatWinBootMain.exe"))
     process.setArguments(
         [
-            str(PathFunction.getQQPath() / "QQ.exe"),
-            str(PathFunction.getNapCatPath() / "NapCatWinBootHook.dll"),
+            str(PathFunc().getQQPath() / "QQ.exe"),
+            str(PathFunc().getNapCatPath() / "NapCatWinBootHook.dll"),
             config.bot.QQID,
         ]
     )

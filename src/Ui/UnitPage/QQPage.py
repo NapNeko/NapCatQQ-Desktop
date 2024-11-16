@@ -13,7 +13,7 @@ from src.Core import timer
 from src.Ui.UnitPage.Base import PageBase
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar
 from src.Ui.UnitPage.status import ButtonStatus
-from src.Core.Utils.PathFunc import PathFunction
+from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 from src.Core.Utils.GetVersion import GetVersion
 from src.Ui.common.message_box import AskBox, FolderBox
@@ -54,7 +54,7 @@ class QQPage(PageBase):
         self.appCard.installButton.clicked.connect(self.downloadSlot)
         self.appCard.updateButton.clicked.connect(self.downloadSlot)
         self.appCard.openFolderButton.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunction.getQQPath()))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().getQQPath()))
         )
 
     def updatePage(self) -> None:
@@ -99,7 +99,7 @@ class QQPage(PageBase):
         if self.url is None:
             error_bar(self.tr("QQ下载链接为空"))
             return
-        self.file_path = PathFunction.tmp_path / self.url.fileName()
+        self.file_path = PathFunc().tmp_path / self.url.fileName()
         self.downloader = QQDownloader(self.url)
         self.downloader.downloadProgress.connect(self.appCard.setProgressRingValue)
         self.downloader.downloadFinish.connect(self.installSlot)

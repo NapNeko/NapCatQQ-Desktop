@@ -13,7 +13,7 @@ from loguru import logger
 
 # 项目内模块导入
 from src.Ui.common.info_bar import error_bar
-from src.Core.Utils.PathFunc import PathFunction
+from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import Config, WebUiConfig, NapCatConfig, OneBotConfig
 
 
@@ -25,7 +25,7 @@ def read_config() -> List[Config]:
         - List[Config] 一个列表, 成员为 Config
     """
     try:
-        with open(str(PathFunction.bot_config_path), "r", encoding="utf-8") as file:
+        with open(str(PathFunc().bot_config_path), "r", encoding="utf-8") as file:
             return [Config(**config) for config in json.load(file)]
     except Exception as error:
         logger.error(f"读取配置文件时引发错误: {error}")
@@ -40,10 +40,10 @@ def read_webui_config() -> WebUiConfig:
     ## 返回
         - Config
     """
-    if not PathFunction.webui_config_path.exists() and not PathFunction.webui_config_path.is_file():
+    if not PathFunc().webui_config_path.exists() and not PathFunc().webui_config_path.is_file():
         error_bar("WebUI 配置文件不存在")
         return
-    with open(str(PathFunction.webui_config_path), "r", encoding="utf-8") as file:
+    with open(str(PathFunc().webui_config_path), "r", encoding="utf-8") as file:
         return WebUiConfig(**json.load(file))
 
 
@@ -51,7 +51,7 @@ def write_config(configs: List[Config]) -> None:
     """
     ## 写入 NCD 机器人配置文件
     """
-    with open(str(PathFunction.bot_config_path), "w", encoding="utf-8") as file:
+    with open(str(PathFunc().bot_config_path), "w", encoding="utf-8") as file:
         json.dump([json.loads(config.json()) for config in configs], file, indent=4, ensure_ascii=False)
 
 
@@ -127,8 +127,8 @@ def update_config(config: Config) -> bool:
         )
 
         # 更新 NC 中配置文件
-        onebot_config_path = PathFunction.getNapCatPath() / "config" / f"onebot11_{config.bot.QQID}.json"
-        napcat_config_path = PathFunction.getNapCatPath() / "config" / f"napcat_{config.bot.QQID}.json"
+        onebot_config_path = PathFunc().getNapCatPath() / "config" / f"onebot11_{config.bot.QQID}.json"
+        napcat_config_path = PathFunc().getNapCatPath() / "config" / f"napcat_{config.bot.QQID}.json"
         with open(str(onebot_config_path), "w", encoding="utf-8") as onebot_file:
             json.dump(json.loads(onebot_config.json()), onebot_file, indent=4, ensure_ascii=False)
         with open(str(napcat_config_path), "w", encoding="utf-8") as napcat_file:
@@ -158,8 +158,8 @@ def delete_config(config: Config) -> bool:
         write_config(configs)
 
         # 删除 NC 中配置文件
-        onebot_config_path = PathFunction.getNapCatPath() / "config" / f"onebot11_{config.bot.QQID}.json"
-        napcat_config_path = PathFunction.getNapCatPath() / "config" / f"napcat_{config.bot.QQID}.json"
+        onebot_config_path = PathFunc().getNapCatPath() / "config" / f"onebot11_{config.bot.QQID}.json"
+        napcat_config_path = PathFunc().getNapCatPath() / "config" / f"napcat_{config.bot.QQID}.json"
         onebot_config_path.unlink()
         napcat_config_path.unlink()
 
