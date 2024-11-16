@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-
-"""
-构建主窗体
-"""
 # 标准库导入
 from abc import ABC
 from typing import Optional
@@ -91,7 +87,7 @@ class MainWindow(MSFluentWindow):
 
         # 添加子页面
         self.addSubInterface(
-            interface=it(HomeWidget).initialize(self),
+            interface=HomeWidget().initialize(self),
             icon=FluentIcon.HOME,
             text=self.tr("主页"),
             position=NavigationItemPosition.TOP,

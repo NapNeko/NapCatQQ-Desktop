@@ -162,7 +162,7 @@ class SetupScrollArea(ScrollArea):
         from src.Ui.HomePage import HomeWidget
 
         setTheme(cfg.get(theme), save=True)
-        it(HomeWidget).updateBgImageSize()
+        HomeWidget().updateBgImageSize()
 
 
 class TitleTabBarSettingCard(ExpandGroupSettingCard):
@@ -377,9 +377,9 @@ class BackgroundSettingCard(ExpandGroupSettingCard):
         from src.Ui.SetupPage import SetupWidget
         from src.Ui.BotListPage import BotListWidget
 
-        self.enabledHomePageBgItem.checkedChanged.connect(it(HomeWidget).updateBgImage)
-        self.selectHomePageLightBgItem.fileChanged.connect(it(HomeWidget).updateBgImage)
-        self.selectHomePageDarkBgItem.fileChanged.connect(it(HomeWidget).updateBgImage)
+        self.enabledHomePageBgItem.checkedChanged.connect(HomeWidget().updateBgImage)
+        self.selectHomePageLightBgItem.fileChanged.connect(HomeWidget().updateBgImage)
+        self.selectHomePageDarkBgItem.fileChanged.connect(HomeWidget().updateBgImage)
 
         self.enabledAddPageBgItem.checkedChanged.connect(it(AddWidget).updateBgImage)
         self.selectAddPageLightBgItem.fileChanged.connect(it(AddWidget).updateBgImage)
