@@ -54,18 +54,15 @@ class Logger:
         self.info_path.touch(mode=0o777, exist_ok=True)
         self.debug_path.touch(mode=0o777, exist_ok=True)
 
-    def toStringLog(self, log_list: list[Log], file_path: Path | str):
+    @staticmethod
+    def toStringLog(log_list: list[Log], file_path: Path | str):
         """
         ## 持久化日志
             - 将日志转为字符串保存到文件中
         """
         # 遍历日志列表, 追加到日志文件中
         with open(file_path, "a", encoding="utf-8") as f:
-            for log in log_list:
-                f.write(log.toString() + "\n")
-
-        # 清空日志列表
-        self.log_list = []
+            [f.write(log.toString() + "\n") for log in log_list]
 
     @capture_call_location
     def debug(
