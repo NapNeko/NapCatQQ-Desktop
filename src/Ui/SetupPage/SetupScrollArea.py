@@ -31,9 +31,6 @@ if TYPE_CHECKING:
 class SetupScrollArea(ScrollArea):
 
     def __init__(self, parent) -> None:
-        """
-        初始化
-        """
         super().__init__(parent=parent)
         # 创建控件
         self.view = QWidget()
@@ -54,10 +51,6 @@ class SetupScrollArea(ScrollArea):
         """
         创建配置项卡片
         """
-
-        # 创建组 - 启动项
-        # self.startGroup = SettingCardGroup(title=self.tr("启动项"), parent=self.view)
-
         # 创建组 - 个性化
         self.personalGroup = SettingCardGroup(title=self.tr("个性化"), parent=self.view)
         # 创建项
@@ -76,14 +69,6 @@ class SetupScrollArea(ScrollArea):
             content=self.tr("选择主题色"),
             parent=self.personalGroup,
         )
-        # self.languageCard = ComboBoxSettingCard(
-        #     configItem=cfg.Language,
-        #     icon=FluentIcon.LANGUAGE,
-        #     title=self.tr("语言"),
-        #     content=self.tr("设置程序的首选语言"),
-        #     texts=["简体中文", "繁體中文", self.tr("Use system setting")],
-        #     parent=self.personalGroup,
-        # )
         self.windowOpacityCard = RangeSettingCard(
             configItem=cfg.windowOpacity,
             icon=FluentIcon.FIT_PAGE,
@@ -97,9 +82,6 @@ class SetupScrollArea(ScrollArea):
         self.eventGroup = SettingCardGroup(title=self.tr("事件"), parent=self.view)
         # 创建项
         self.botOfflineEventCard = BotOfflineEventCard(self)
-
-        # 创建组 - 路径
-        # self.pathGroup = SettingCardGroup(title=self.tr("Path"), parent=self.view)
 
     def _setLayout(self) -> None:
         """

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-import ctypes
 from typing import TYPE_CHECKING
 
 # 第三方库导入
@@ -33,7 +32,7 @@ class CustomTitleBar(MSFluentTitleBar):
         self.set_buttons()
 
     def set_title(self) -> None:
-        self.setTitle("NapCatQQ Desktop [Admin]" if ctypes.windll.shell32.IsUserAnAdmin() else "NapCatQQ Desktop")
+        self.setTitle("NapCatQQ Desktop")
         self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
 
         self.tabBar = TabBar(self)

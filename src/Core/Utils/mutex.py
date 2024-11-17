@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-# 标准库导入
-
 from PySide6.QtCore import QSharedMemory, QSystemSemaphore
 
 
 class SingleInstanceApplication:
-    """ 单实例应用程序检查 """
+    """单实例应用程序检查"""
 
     def __init__(self):
         # 为共享内存和信号量创建唯一的键
@@ -14,7 +12,7 @@ class SingleInstanceApplication:
         self.semaphore = QSystemSemaphore(self.key + "_sem", 1)
 
     def is_running(self):
-        """ 检查是否已经有实例正在运行 """
+        """检查是否已经有实例正在运行"""
 
         # 锁定信号量以访问共享内存
         self.semaphore.acquire()
