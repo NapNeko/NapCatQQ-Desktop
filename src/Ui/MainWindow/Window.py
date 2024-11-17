@@ -3,7 +3,6 @@
 from typing import Optional
 
 # 第三方库导入
-from loguru import logger
 from qfluentwidgets import Theme, FluentIcon, SplashScreen, MSFluentWindow, NavigationItemPosition
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QSize
@@ -69,7 +68,6 @@ class MainWindow(MSFluentWindow):
         self.show()
         # 挂起
         QApplication.processEvents()
-        logger.success("窗体设置完成")
 
     def setItem(self) -> None:
         """
@@ -108,8 +106,6 @@ class MainWindow(MSFluentWindow):
             text=self.tr("设置"),
             position=NavigationItemPosition.BOTTOM,
         )
-
-        logger.success("侧边栏构建完成")
 
     def setTrayIcon(self):
         """

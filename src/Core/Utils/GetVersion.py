@@ -4,13 +4,11 @@ import json
 
 # 第三方库导入
 import httpx
-from loguru import logger
 from PySide6.QtCore import QUrl, Slot, Signal, QObject, QThread
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Core.Utils.PathFunc import PathFunc
-from src.Core.Utils.singleton import singleton
 from src.Core.NetworkFunc.Urls import Urls
 
 
@@ -128,17 +126,11 @@ class GetRemoteVersionThread(QThread):
         ## 网络请求
         """
         try:
-            logger.debug(f"{10 * '-'} 开始获取 <-> {name[:16]:^16} {10 * '-'}")
-            response = httpx.get(url.url())
-            logger.debug(f"响应码: {response.status_code}")
-            logger.debug(f"响应头: {response.headers}")
-            logger.debug(f"数据: {response.json()}")
-            logger.debug(f"耗时: {response.elapsed}")
-            return response.json()
+            return httpx.get(url.url()).json()
+
+        # TODO: 重新实现错误处理
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            logger.error(f"获取 {name} 时引发 {type(e).__name__}: {e}")
-        finally:
-            logger.debug(f"{10 * '-'} 结束获取 <-> {name[:16]:^16} {10 * '-'}")
+            ...
 
 
 class GetLocalVersionThread(QThread):
@@ -172,7 +164,7 @@ class GetLocalVersionThread(QThread):
                 # 读取到参数返回版本信息
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
-            logger.warning("未找到 NapCat 的 package.json 文件, 可能是未安装 NapCat")
+            # TODO: 重新实现错误处理
             return None
 
     @staticmethod
@@ -183,7 +175,7 @@ class GetLocalVersionThread(QThread):
         try:
             if (qq_path := PathFunc().getQQPath()) is None:
                 # 检查 QQ 目录是否存在
-                logger.warning("未找到 QQ 的安装目录, 可能是未安装 QQ")
+                # TODO: 重新实现错误处理
                 return
 
             with open(str(qq_path / "versions" / "config.json"), "r", encoding="utf-8") as file:
@@ -191,7 +183,7 @@ class GetLocalVersionThread(QThread):
                 return json.load(file)["curVersion"]
         except FileNotFoundError:
             # 文件不存在则返回 None
-            logger.warning("未找到 QQ 的 config.json 文件, 可能是未安装 QQ")
+            # TODO: 重新实现错误处理
             return
 
     @staticmethod

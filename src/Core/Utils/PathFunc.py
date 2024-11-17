@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import winreg
-from abc import ABC
 from pathlib import Path
-
-# 第三方库导入
-from loguru import logger
 
 # 项目内模块导入
 from src.Core.Utils.singleton import Singleton
@@ -35,7 +31,6 @@ class PathFunc(metaclass=Singleton):
         """
         ## 验证一系列路径
         """
-        logger.info(f"{'-' * 10}开始验证路径{'-' * 10}")
 
         paths_to_validate = [
             (self.config_dir_path, "Config"),
@@ -49,13 +44,8 @@ class PathFunc(metaclass=Singleton):
         for path, name in paths_to_validate:
             if not path.exists():
                 path.mkdir(parents=True, exist_ok=True)
-                logger.info(f"{name} Path 路径不存在, 已创建")
             elif not path.is_dir():
                 path.mkdir(parents=True, exist_ok=True)
-                logger.warning(f"存在一个名为 {name.lower()} 的文件, 请检查")
-            logger.info(f"{name} Path 验证完成")
-
-        logger.info(f"{'-' * 10}路径验证完成{'-' * 10}")
 
     @staticmethod
     def getQQPath() -> Path | None:

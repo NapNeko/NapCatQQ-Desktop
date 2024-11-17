@@ -4,7 +4,6 @@ from pathlib import Path
 
 # 第三方库导入
 import httpx
-from loguru import logger
 from PySide6.QtCore import QUrl, Signal, QThread
 
 # 项目内模块导入
@@ -69,10 +68,8 @@ class GithubDownloader(DownloaderBase):
             if self.download():
                 return  # 下载成功, 直接返回
 
-        logger.debug(f"{'-' * 10} 尝试使用镜像站下载 {self.filename} ~ {'-' * 10}")
         for mirror_url in self.mirror_urls:
             self.url = QUrl(mirror_url)
-            logger.debug(f"当前下载链接 {self.url.url()}")
             if self.download():
                 self.downloadFinish.emit()  # 发送下载完成信号
                 return
@@ -85,12 +82,10 @@ class GithubDownloader(DownloaderBase):
         ## 下载文件
         """
         try:
-            logger.debug(f"{'-' * 10} 开始下载 {self.filename} ~ {'-' * 10}")
             self.statusLabel.emit(self.tr(f" 开始下载 {self.filename} ~ "))
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
                     # 尝试获取文件大小
-                    logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
                     self.statusLabel.emit(self.tr("无法获取文件大小"))
                     return False
 
@@ -108,17 +103,13 @@ class GithubDownloader(DownloaderBase):
             return True
 
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"发送下载 {self.filename} 请求时引发 HTTPStatusError, "
-                f"响应码: {e.response.status_code}, 响应内容: {e.response.content}"
-            )
+            # TODO: 重新实现错误处理
+            ...
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            logger.error(f"下载 {self.filename} 时引发 {type(e).__name__}: {e}")
-
+            # TODO: 重新实现错误处理
+            ...
         finally:
             self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
-            logger.debug(f"{'-' * 10} 下载 {self.filename} 结束 ~ {'-' * 10}")
-
         return False
 
     def checkNetwork(self) -> bool:
@@ -126,25 +117,18 @@ class GithubDownloader(DownloaderBase):
         ## 检查网络能否正常访问 Github
         """
         try:
-            logger.debug(f"{'-' * 10} 开始检查网络环境 {'-' * 10}")
             self.statusLabel.emit(self.tr("检查网络环境"))
             # 如果 3 秒内能访问到 Github 表示网络环境非常奈斯
             response = httpx.head("https://objects.githubusercontent.com", timeout=3)
             if response.status_code == 200:
-                logger.debug("网络环境非常奈斯")
                 self.statusLabel.emit(self.tr("网络环境良好"))
                 return True
             else:
-                logger.error(f"无法访问 Github, 状态码: {response.status_code}")
                 self.statusLabel.emit(self.tr("网络环境较差"))
                 return False
         except httpx.RequestError as e:
-            logger.error(f"网络检查时引发 {type(e).__name__}: {e}")
             self.statusLabel.emit(self.tr("网络检查失败"))
             return False
-
-        finally:
-            logger.debug(f"{'-' * 10} 检查网络环境结束 {'-' * 10}")
 
 
 class QQDownloader(DownloaderBase):
@@ -175,17 +159,13 @@ class QQDownloader(DownloaderBase):
 
         # 开始下载 QQ
         try:
-            logger.debug(f"{'-' * 10} 开始下载 QQ ~ {'-' * 10}")
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
 
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
                     # 尝试获取文件大小
-                    logger.error("无法获取文件大小, Content-Length为空或无法连接到下载链接")
                     self.statusLabel.emit(self.tr("无法获取文件大小"))
                     self.errorFinsh.emit()
                     return
-
-                logger.debug(f"下载链接: {self.url.url()}")
 
                 # 设置进度条为 进度模式
                 self.progressRingToggle.emit(ProgressRingStatus.DETERMINATE)
@@ -201,18 +181,12 @@ class QQDownloader(DownloaderBase):
             self.statusLabel.emit(self.tr("下载完成"))
 
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"发送下载 QQ 请求时引发 HTTPStatusError, "
-                f"响应码: {e.response.status_code}, 响应内容: {e.response.content}"
-            )
             self.statusLabel.emit(self.tr("下载失败"))
             self.errorFinsh.emit()
         except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            logger.error(f"下载 QQ 时引发 {type(e).__name__}: {e}")
             self.statusLabel.emit(self.tr("下载失败"))
             self.errorFinsh.emit()
 
         finally:
             # 无论是否出错,都会重置
             self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
-            logger.debug(f"{'-' * 10} 下载 QQ 结束 ~ {'-' * 10}")

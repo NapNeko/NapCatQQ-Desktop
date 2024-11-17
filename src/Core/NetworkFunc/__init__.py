@@ -2,8 +2,6 @@
 # 标准库导入
 from typing import Any, Callable
 
-# 第三方库导入
-from loguru import logger
 from PySide6.QtCore import QUrl
 from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
 
@@ -41,13 +39,13 @@ def async_request(url: QUrl, _bytes: bool = False) -> Callable[[Callable[..., No
                         func(*args, reply=_reply.readAll().data().decode().strip(), *kwargs)
                 else:
                     func(*args, reply=None, *kwargs)
-                    logger.error(f"Error: {_reply.errorString()}")
                 # 清理回复对象
                 _reply.deleteLater()
 
             # 创建并发送网络请求
             request = QNetworkRequest(url)
-            reply = QNetworkAccessManager().get(request)
+            manager = QNetworkAccessManager()
+            reply = manager.get(request)
             # 连接请求完成信号到回调函数
             reply.finished.connect(lambda: on_finished(reply))
 

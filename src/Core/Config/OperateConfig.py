@@ -7,9 +7,6 @@ import json
 from json import JSONDecodeError
 from typing import List
 
-# 第三方库导入
-from loguru import logger
-
 # 项目内模块导入
 from src.Ui.common.info_bar import error_bar
 from src.Core.Utils.PathFunc import PathFunc
@@ -27,7 +24,6 @@ def read_config() -> List[Config]:
         with open(str(PathFunc().bot_config_path), "r", encoding="utf-8") as file:
             return [Config(**config) for config in json.load(file)]
     except Exception as error:
-        logger.error(f"读取配置文件时引发错误: {error}")
         write_config([])  # 覆盖原有配置文件
         return []
 

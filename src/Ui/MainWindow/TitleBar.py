@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
-
-"""
-构建标题栏
-"""
 # 标准库导入
 import ctypes
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from loguru import logger
 from qfluentwidgets import TabBar, TabCloseButtonDisplayMode
 from qfluentwidgets.common import Theme
 from qfluentwidgets.window import MSFluentTitleBar
@@ -36,7 +31,6 @@ class CustomTitleBar(MSFluentTitleBar):
 
         self.set_title()
         self.set_buttons()
-        logger.success("标题栏构建完成")
 
     def set_title(self) -> None:
         self.setTitle("NapCatQQ Desktop [Admin]" if ctypes.windll.shell32.IsUserAnAdmin() else "NapCatQQ Desktop")
