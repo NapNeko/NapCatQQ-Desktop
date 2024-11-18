@@ -33,7 +33,7 @@ class NapCatInstall(QThread):
     def __init__(self) -> None:
         super().__init__()
         self.zip_file_path = PathFunc().tmp_path / "NapCat.Shell.zip"
-        self.install_path = PathFunc().getNapCatPath()
+        self.install_path = PathFunc().napcat_path
 
     def run(self) -> None:
         """

@@ -24,6 +24,8 @@ class PathFunc(metaclass=Singleton):
         self.log_path = self.base_path / "log"
         self.log_info_path = self.log_path / "info"
         self.log_debug_path = self.log_path / "debug"
+        self.log_warn_path = self.log_path / "warn"
+        self.log_error_path = self.log_path / "error"
 
         self.pathValidator()
 
@@ -39,12 +41,12 @@ class PathFunc(metaclass=Singleton):
             (self.log_path, "Log"),
             (self.log_info_path, "Log Info"),
             (self.log_debug_path, "Log Debug"),
+            (self.log_warn_path, "Log Warn"),
+            (self.log_error_path, "Log Error"),
         ]
 
         for path, name in paths_to_validate:
             if not path.exists():
-                path.mkdir(parents=True, exist_ok=True)
-            elif not path.is_dir():
                 path.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
@@ -60,9 +62,3 @@ class PathFunc(metaclass=Singleton):
             return Path(winreg.QueryValueEx(key, "Install")[0])
         except FileNotFoundError:
             return None
-
-    def getNapCatPath(self) -> Path:
-        """
-        ## 获取 NapCat 路径
-        """
-        return self.napcat_path

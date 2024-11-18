@@ -30,7 +30,7 @@ class NapCatPage(PageBase):
         self.appCard.installButton.clicked.connect(self.downloadSlot)
         self.appCard.updateButton.clicked.connect(self.downloadSlot)
         self.appCard.openFolderButton.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().getNapCatPath()))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().napcat_path))
         )
 
     def updatePage(self) -> None:

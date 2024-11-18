@@ -160,7 +160,7 @@ class GetLocalVersionThread(QThread):
         ## 获取 NapCat 相关内容
         """
         try:
-            with open(str(PathFunc().getNapCatPath() / "package.json"), "r", encoding="utf-8") as f:
+            with open(str(PathFunc().napcat_path / "package.json"), "r", encoding="utf-8") as f:
                 # 读取到参数返回版本信息
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
