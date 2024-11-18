@@ -1,6 +1,7 @@
 # 标准库导入
 import inspect
 from typing import Any, Callable
+from pathlib import Path
 from functools import wraps
 
 # 项目内模块导入
@@ -28,7 +29,7 @@ def capture_call_location(func: Callable[..., Any]) -> Callable[..., Any]:
         pos = inspect.stack()[1]
         position = LogPosition(
             module=pos.frame.f_globals.get('__name__'),
-            file=pos.filename,
+            file=Path(pos.filename).name,
             line=pos.lineno,
         )
         # 检查被装饰函数是否存在 log_position 形参

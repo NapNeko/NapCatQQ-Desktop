@@ -20,12 +20,7 @@ class PathFunc(metaclass=Singleton):
         self.config_path = self.config_dir_path / "config.json"
         self.bot_config_path = self.config_dir_path / "bot.json"
         self.tmp_path = self.base_path / "tmp"
-
         self.log_path = self.base_path / "log"
-        self.log_info_path = self.log_path / "info"
-        self.log_debug_path = self.log_path / "debug"
-        self.log_warn_path = self.log_path / "warn"
-        self.log_error_path = self.log_path / "error"
 
         self.pathValidator()
 
@@ -38,11 +33,7 @@ class PathFunc(metaclass=Singleton):
             (self.config_dir_path, "Config"),
             (self.tmp_path, "Tmp"),
             (self.napcat_path, "NapCat"),
-            (self.log_path, "Log"),
-            (self.log_info_path, "Log Info"),
-            (self.log_debug_path, "Log Debug"),
-            (self.log_warn_path, "Log Warn"),
-            (self.log_error_path, "Log Error"),
+            (self.log_path, "Log")
         ]
 
         for path, name in paths_to_validate:
