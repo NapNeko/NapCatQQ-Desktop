@@ -97,6 +97,9 @@ class Logger:
         if len(self.log_list) >= 2000:
             self.log_list = self.log_list[1000:]
 
+        # 打印 log
+        print(log)
+
     @capture_call_location
     def info(
         self,
@@ -130,6 +133,9 @@ class Logger:
         if len(self.log_list) >= 2000:
             self.log_list = self.log_list[1000:]
 
+        # 打印 log
+        print(log)
+
     def warning(
         self,
         message: str,
@@ -158,6 +164,9 @@ class Logger:
             self.log_list = self.log_list[1000:]
         if len(self.warning_list) >= 2000:
             self.warning_list = self.warning_list[1000:]
+
+        # 打印 log
+        print(log)
 
     def error(
         self,
@@ -188,6 +197,9 @@ class Logger:
         if len(self.error_list) >= 2000:
             self.error_list = self.error_list[1000:]
 
+        # 打印 log
+        print(log)
+
     def critical(
         self,
         message: str,
@@ -216,3 +228,11 @@ class Logger:
             self.log_list = self.log_list[1000:]
         if len(self.critical_list) >= 2000:
             self.critical_list = self.critical_list[1000:]
+
+        # 打印 log
+        print(log)
+
+
+# 实例化日志记录器
+logger = Logger()
+logger.createLogFile()
