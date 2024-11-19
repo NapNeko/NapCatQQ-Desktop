@@ -17,6 +17,7 @@ from src.Ui.resource import resource
 from src.Ui.UnitPage import UnitWidget
 from src.Ui.SetupPage import SetupWidget
 from src.Ui.BotListPage import BotListWidget
+from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Utils.singleton import singleton
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
@@ -38,6 +39,8 @@ class MainWindow(MSFluentWindow):
 
     def initialize(self) -> None:
         """初始化"""
+        # 执行路径验证
+        PathFunc().path_validator()
         # 调用方法
         self.setWindow()
         self.setItem()

@@ -50,7 +50,7 @@ class QQPage(PageBase):
         self.appCard.installButton.clicked.connect(self.downloadSlot)
         self.appCard.updateButton.clicked.connect(self.downloadSlot)
         self.appCard.openFolderButton.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().getQQPath()))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().get_qq_path()))
         )
 
     def updatePage(self) -> None:
