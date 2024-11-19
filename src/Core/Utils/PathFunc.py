@@ -31,18 +31,14 @@ class PathFunc(metaclass=Singleton):
         ## 验证一系列路径
         """
 
-        paths_to_validate = [
-            (self.config_dir_path, "Config"),
-            (self.tmp_path, "Tmp"),
-            (self.napcat_path, "NapCat")
-        ]
+        paths_to_validate = [(self.tmp_path, "Tmp"), (self.config_dir_path, "Config"), (self.napcat_path, "NapCat")]
 
         for path, name in paths_to_validate:
             if not path.exists():
                 path.mkdir(parents=True, exist_ok=True)
-                logger.info(f"创建路径 {name} 成功", LogType.FILE_FUNC, LogSource.CORE)
+                logger.info(f"创建路径 {name.center(8)} 成功", LogType.FILE_FUNC, LogSource.CORE)
             else:
-                logger.info(f"路径 {name} 已存在", LogType.FILE_FUNC, LogSource.CORE)
+                logger.info(f"路径 {name.center(8)} 已存在", LogType.FILE_FUNC, LogSource.CORE)
 
     @staticmethod
     def get_qq_path() -> Path | None:
