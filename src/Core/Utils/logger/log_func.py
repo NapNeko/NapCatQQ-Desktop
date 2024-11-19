@@ -44,15 +44,14 @@ class Logger:
             if (datetime.now() - datetime.fromtimestamp(log_file.stat().st_mtime)).days > self.log_save_day:
                 log_file.unlink()
 
-    @staticmethod
-    def toStringLog(log_buffer: list[Log], file_path: Path | str):
+    def toStringLog(self):
         """
         ## 持久化日志
             - 将日志转为字符串保存到文件中
         """
         # 遍历日志列表, 追加到日志文件中
-        with open(file_path, "a", encoding="utf-8") as f:
-            [f.write(log.toString() + "\n") for log in log_buffer]
+        with open(self.log_path, "a", encoding="utf-8") as f:
+            [f.write(log.toString() + "\n") for log in self.log_buffer]
 
     # 清理缓冲区
     def clearBuffer(self):
@@ -61,7 +60,7 @@ class Logger:
             - 当日志列表长度超过 日志缓冲区大小 时, 进行持久化, 并根据 删除缓冲区日志数量 清理缓冲区
         """
         if len(self.log_buffer) >= self.log_buffer_size:
-            self.toStringLog(self.log_buffer, self.log_path)
+            self.toStringLog()
             self.log_buffer = self.log_buffer[self.log_buffer_delete_size :]
 
     def _log(
