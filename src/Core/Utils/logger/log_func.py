@@ -4,10 +4,9 @@ from pathlib import Path
 from datetime import datetime
 
 # 项目内模块导入
-from src.Core.Utils.logger import LogLevel
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Utils.logger.log_data import Log, LogPosition
-from src.Core.Utils.logger.log_enum import LogType, LogSource
+from src.Core.Utils.logger.log_enum import LogType, LogLevel, LogSource
 from src.Core.Utils.logger.log_utils import capture_call_location
 
 
@@ -167,16 +166,154 @@ class Logger:
         self._log(LogLevel.EROR, message, datetime.now().timestamp(), log_type, log_source, log_position)
 
 
+class LoggerChunk:
+    """日志块功能实现"""
+
+    def __init__(self):
+        """初始化日志块"""
+
+        # 日志记录器
+        self.logger = logger
+
+        # 日志块
+        self.log_chunk = []
+
+    def _log(
+        self,
+        level: LogLevel,
+        message: str,
+        time: int | float,
+        log_type: LogType,
+        log_source: LogSource,
+        log_position: LogPosition,
+    ):
+        """
+        ## 构造 Log 对象
+
+        ## 参数
+            - level: LogLevel - 日志等级
+            - message: str - 信息内容
+            - time: int | float - 时间戳
+            - log_type: LogType - 日志类型
+            - log_source: LogSource - 日志来源
+            - log_position: LogPosition - 日志位置
+        """
+        # 构造 Log 并添加到列表
+        self.log_chunk.append(Log(level, message, time, log_type, log_source, log_position))
+        # 打印日志
+        print(self.log_chunk[-1])
+
+    @capture_call_location
+    def start(self, text: str, log_type: LogType, log_source: LogSource, log_position: LogPosition = None):
+        """
+        ## 日志块标头
+
+        ## 参数
+            - text: str - 日志块名称
+            - log_type: LogType - 日志类型
+            - log_source: LogSource - 日志来源
+            - log_position: LogPosition - 日志位置
+        """
+        text = f"{'-'*20} > {text} < {'-'*20}"
+        self._log(LogLevel.INFO, text, datetime.now().timestamp(), log_type, log_source, log_position)
+
+    @capture_call_location
+    def end(self, text: str, log_type: LogType, log_source: LogSource, log_position: LogPosition = None):
+        """
+        ## 日志块结尾
+
+        ## 参数
+            - text: str - 日志块名称
+            - log_type: LogType - 日志类型
+            - log_source: LogSource - 日志来源
+            - log_position: LogPosition - 日志位置
+        """
+        text = f"{'-'*20} > {text} < {'-'*20}"
+        self._log(LogLevel.INFO, text, datetime.now().timestamp(), log_type, log_source, log_position)
+        self.logger.log_buffer.append(self)
+
+    @capture_call_location
+    def debug(
+        self,
+        message: str,
+        log_type: LogType = LogType.NONE_TYPE,
+        log_source: LogSource = LogSource.NONE,
+        log_position: LogPosition = None,
+    ):
+        """
+        ## debug 消息记录
+
+        ## 参数
+            - message: str - 信息内容
+            - log_type: LogType - 日志类型
+            - log_source: LogSource - 日志来源
+            - log_position: LogPosition - 日志位置
+        """
+        self._log(LogLevel.DBUG, message, datetime.now().timestamp(), log_type, log_source, log_position)
+
+    @capture_call_location
+    def info(
+        self,
+        message: str,
+        log_type: LogType = LogType.NONE_TYPE,
+        log_source: LogSource = LogSource.NONE,
+        log_position: LogPosition = None,
+    ):
+        """
+        ## info 消息记录
+
+        ## 参数
+            - message: str - 信息内容
+            - log_type: LogType - 日志类型
+            - log_source: LogSource - 日志来源
+            - log_position: LogPosition - 日志位置
+        """
+        self._log(LogLevel.INFO, message, datetime.now().timestamp(), log_type, log_source, log_position)
+
+    @capture_call_location
+    def warning(
+        self,
+        message: str,
+        log_type: LogType = LogType.NONE_TYPE,
+        log_source: LogSource = LogSource.NONE,
+        log_position: LogPosition = None,
+    ):
+        """
+        ## warning 消息记录
+
+        ## 参数
+            - message: str - 信息内容
+            - log_type: LogType - 日志类型
+            - log_source: LogSource - 日志来源
+            - log_position: LogPosition - 日志位置
+        """
+        self._log(LogLevel.WARN, message, datetime.now().timestamp(), log_type, log_source, log_position)
+
+    @capture_call_location
+    def error(
+        self,
+        message: str,
+        log_type: LogType = LogType.NONE_TYPE,
+        log_source: LogSource = LogSource.NONE,
+        log_position: LogPosition = None,
+    ):
+        """
+        ## error 消息记录
+
+        ## 参数
+            - message: str - 信息内容
+            - log_type: LogType - 日志类型
+            - log_source: LogSource - 日志来源
+            - log_position: LogPosition - 日志位置
+        """
+        self._log(LogLevel.EROR, message, datetime.now().timestamp(), log_type, log_source, log_position)
+
+    def __str__(self):
+        """ 输出日志块开头,内容结尾 """
+        return "\n".join([log.toString() for log in self.log_chunk])
+
+
 # 实例化日志记录器
 logger = Logger()
 logger.createLogFile()
 
-
-if __name__ == "__main__":
-    for i in range(2000):
-        logger.info("info")
-        logger.error("error")
-        logger.warning("warning")
-
-    print(logger.log_buffer)
-    print(len(logger.log_buffer))

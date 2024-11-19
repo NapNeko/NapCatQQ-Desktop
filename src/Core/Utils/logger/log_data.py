@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 
 # 项目内模块导入
 from src.Core.Utils.logger.log_enum import LogType, LogLevel, LogSource
@@ -21,7 +21,7 @@ class LogPosition:
 
 @dataclass(frozen=True)
 class Log:
-    """基本日志内容"""
+    """ 基本日志内容 """
 
     # 基本信息
     level: LogLevel  # 日志等级
@@ -43,3 +43,11 @@ class Log:
         """
         time = datetime.fromtimestamp(self.time).strftime("%y-%m-%d %H:%M:%S")
         return f"{time} | {self.level} | {self.log_type} | {self.source} | {self.position} | {self.message}"
+
+
+@dataclass()
+class LogChunk:
+    """ 日志块 """
+    log_title: Log
+    log_end: Log
+    logs: list[Log] = field(default_factory=list)
