@@ -4,7 +4,6 @@ from pathlib import Path
 from datetime import datetime
 
 # 项目内模块导入
-from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Utils.logger.log_data import Log, LogPosition
 from src.Core.Utils.logger.log_enum import LogType, LogLevel, LogSource
 from src.Core.Utils.logger.log_utils import capture_call_location
@@ -34,11 +33,14 @@ class Logger:
         ## 用于创建日志文件
             - 日志文件名格式为: {DATETIME}.log
         """
+
         # 定义日志文件路径
-        self.log_path = PathFunc().log_path / f"{datetime.now().strftime('%Y-%m-%d %H-%M-%S')}.log"
+        if not (log_dir := Path.cwd() / "log").exists():
+            log_dir.mkdir(parents=True, exist_ok=True)
+        self.log_path = log_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
 
         # 遍历日志文件夹, 删除过期日志文件(超过 7 天)
-        for log_file in PathFunc().log_path.iterdir():
+        for log_file in log_dir.iterdir():
             if (datetime.now() - datetime.fromtimestamp(log_file.stat().st_mtime)).days > self.log_save_day:
                 log_file.unlink()
 
@@ -309,11 +311,10 @@ class LoggerChunk:
         self._log(LogLevel.EROR, message, datetime.now().timestamp(), log_type, log_source, log_position)
 
     def __str__(self):
-        """ 输出日志块开头,内容结尾 """
+        """输出日志块开头,内容结尾"""
         return "\n".join([log.toString() for log in self.log_chunk])
 
 
 # 实例化日志记录器
 logger = Logger()
 logger.createLogFile()
-
