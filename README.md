@@ -52,3 +52,12 @@
 - [PySide6](https://wiki.qt.io/Qt_for_Python)
 - [PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
 - [GraiaProject - creart](https://github.com/GraiaProject/creart)
+
+## 贡献者 
+> 🌟 星光闪烁，你们的智慧如同璀璨的夜空。感谢所有为 **NapCat Desktop** 做出贡献的人！
+
+<a href="https://github.com/NapNeko/NapCatQQ-Desktop/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=NapNeko/NapCatQQ-Desktop" alt=""/>
+</a>
+
+![Alt](https://repobeats.axiom.co/api/embed/4078024c5df90cf42305ec425e68cfae76a1306d.svg "Repobeats analytics image")
