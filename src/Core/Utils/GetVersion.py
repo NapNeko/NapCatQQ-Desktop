@@ -173,7 +173,7 @@ class GetLocalVersionThread(QThread):
         ## 获取 QQ 相关内容
         """
         try:
-            if (qq_path := PathFunc().getQQPath()) is None:
+            if (qq_path := PathFunc().get_qq_path()) is None:
                 # 检查 QQ 目录是否存在
                 # TODO: 重新实现错误处理
                 return
