@@ -23,7 +23,6 @@
 - [x] **安装简单**: 单EXE文件，无需安装任何依赖
 - [x] **界面美观**: 使用 Fluent Design System 设计
 - [x] **功能丰富**: 支持创建配置文件, 管理配置文件, 一键启动/停止/重启
-- [x] **多语言支持**: 支持中文, 繁体中文(还在做)
 - [x] **自动更新**: 支持自动检查 NapCat 更新, 一键更新
 
 ## 使用项目
@@ -36,7 +35,7 @@
 
 ## 许可证
 
-这个项目遵循 GPLv3 许可证，详情见[LICENSE](LICENSE)文件
+项目遵循 GPLv3 许可证，详情见[LICENSE](LICENSE)文件
 
 ## 声明
 
@@ -51,7 +50,6 @@
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
 - [PySide6](https://wiki.qt.io/Qt_for_Python)
 - [PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
-- [GraiaProject - creart](https://github.com/GraiaProject/creart)
 
 ## 贡献者 
 > 🌟 星光闪烁，你们的智慧如同璀璨的夜空。感谢所有为 **NapCat Desktop** 做出贡献的人！
