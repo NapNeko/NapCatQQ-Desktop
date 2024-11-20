@@ -46,8 +46,21 @@ class Log:
 
 
 @dataclass()
-class LogChunk:
-    """ 日志块 """
-    log_title: Log
-    log_end: Log
-    logs: list[Log] = field(default_factory=list)
+class LogGroup:
+    def __init__(self, name: str, log_type: LogType, log_source: LogSource):
+        self.name = name
+        self.log_type = log_type
+        self.log_source = log_source
+        self.logs = []
+
+    def add(self, log: Log):
+        self.logs.append(log)
+
+    def __str__(self):
+        return "\n".join([str(log) for log in self.logs])
+
+    def __repr__(self):
+        return self.__str__()
+
+    def toString(self):
+        return "\n".join([log.toString() for log in self.logs])

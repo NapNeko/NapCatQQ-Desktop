@@ -2,9 +2,10 @@
 # 标准库导入
 from pathlib import Path
 from datetime import datetime
+from contextlib import contextmanager
 
 # 项目内模块导入
-from src.Core.Utils.logger.log_data import Log, LogPosition
+from src.Core.Utils.logger.log_data import Log, LogGroup, LogPosition
 from src.Core.Utils.logger.log_enum import LogType, LogLevel, LogSource
 from src.Core.Utils.logger.log_utils import capture_call_location
 
@@ -62,6 +63,7 @@ class Logger:
         log_type: LogType,
         log_source: LogSource,
         log_position: LogPosition,
+        log_group: LogGroup = None,
     ):
         """
         ## 构造 Log 对象
@@ -73,17 +75,25 @@ class Logger:
             - log_type: LogType - 日志类型
             - log_source: LogSource - 日志来源
             - log_position: LogPosition - 日志位置
+            - log_group: LogGroup - 可选，若指定则将日志添加到日志组
         """
-        # 构造 Log 并添加到列表
+        # 构造 Log
         log = Log(level, message, time, log_type, log_source, log_position)
-        self.log_buffer.append(log)
+
+        if log_group:
+            # 如果提供了 log_group，将日志添加到它的内部
+            log_group.add(log)
+        else:
+            # 否则直接添加到 log_buffer
+            self.log_buffer.append(log)
+
         # 遍历日志列表, 追加到日志文件中
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(log.toString() + "\n")
         # 判断是否需要清理缓冲区
         self.clearBuffer()
         # 打印 log
-        print(self.log_buffer[-1])
+        print(log)
 
     @capture_call_location
     def debug(
@@ -92,17 +102,9 @@ class Logger:
         log_type: LogType = LogType.NONE_TYPE,
         log_source: LogSource = LogSource.NONE,
         log_position: LogPosition = None,
+        log_group: LogGroup = None,
     ):
-        """
-        ## debug 消息记录
-
-        ## 参数
-            - message: str - 信息内容
-            - log_type: LogType - 日志类型
-            - log_source: LogSource - 日志来源
-            - log_position: LogPosition - 日志位置
-        """
-        self._log(LogLevel.DBUG, message, datetime.now().timestamp(), log_type, log_source, log_position)
+        self._log(LogLevel.DBUG, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
     @capture_call_location
     def info(
@@ -111,17 +113,9 @@ class Logger:
         log_type: LogType = LogType.NONE_TYPE,
         log_source: LogSource = LogSource.NONE,
         log_position: LogPosition = None,
+        log_group: LogGroup = None,
     ):
-        """
-        ## info 消息记录
-
-        ## 参数
-            - message: str - 信息内容
-            - log_type: LogType - 日志类型
-            - log_source: LogSource - 日志来源
-            - log_position: LogPosition - 日志位置
-        """
-        self._log(LogLevel.INFO, message, datetime.now().timestamp(), log_type, log_source, log_position)
+        self._log(LogLevel.INFO, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
     @capture_call_location
     def warning(
@@ -130,17 +124,9 @@ class Logger:
         log_type: LogType = LogType.NONE_TYPE,
         log_source: LogSource = LogSource.NONE,
         log_position: LogPosition = None,
+        log_group: LogGroup = None,
     ):
-        """
-        ## warning 消息记录
-
-        ## 参数
-            - message: str - 信息内容
-            - log_type: LogType - 日志类型
-            - log_source: LogSource - 日志来源
-            - log_position: LogPosition - 日志位置
-        """
-        self._log(LogLevel.WARN, message, datetime.now().timestamp(), log_type, log_source, log_position)
+        self._log(LogLevel.WARN, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
     @capture_call_location
     def error(
@@ -149,102 +135,26 @@ class Logger:
         log_type: LogType = LogType.NONE_TYPE,
         log_source: LogSource = LogSource.NONE,
         log_position: LogPosition = None,
+        log_group: LogGroup = None,
     ):
-        """
-        ## error 消息记录
+        self._log(LogLevel.EROR, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
-        ## 参数
-            - message: str - 信息内容
-            - log_type: LogType - 日志类型
-            - log_source: LogSource - 日志来源
-            - log_position: LogPosition - 日志位置
-        """
-        self._log(LogLevel.EROR, message, datetime.now().timestamp(), log_type, log_source, log_position)
-
-
-class LoggerChunk(Logger):
-    """日志块功能实现"""
-
-    logger: Logger
-
-    def __init__(self):
-        """初始化日志块"""
-        super().__init__()
-
-        # 日志记录器
-        self.logger = logger
-
-    def _log(
-        self,
-        level: LogLevel,
-        message: str,
-        time: int | float,
-        log_type: LogType,
-        log_source: LogSource,
-        log_position: LogPosition,
-    ):
-        """
-        ## 构造 Log 对象
-
-        ## 参数
-            - level: LogLevel - 日志等级
-            - message: str - 信息内容
-            - time: int | float - 时间戳
-            - log_type: LogType - 日志类型
-            - log_source: LogSource - 日志来源
-            - log_position: LogPosition - 日志位置
-        """
-        # 构造 Log 并添加到列表
-        log = Log(level, message, time, log_type, log_source, log_position)
-        self.log_buffer.append(log)
-        # 遍历日志列表, 追加到日志文件中
-        with open(logger.log_path, "a", encoding="utf-8") as f:
-            f.write(log.toString() + "\n")
-        # 打印日志
-        print(self.log_buffer[-1])
-
-    @capture_call_location
-    def start(self, text: str, log_type: LogType, log_source: LogSource, log_position: LogPosition = None):
-        """
-        ## 日志块标头
-
-        ## 参数
-            - text: str - 日志块名称
-            - log_type: LogType - 日志类型
-            - log_source: LogSource - 日志来源
-            - log_position: LogPosition - 日志位置
-        """
-        text = f"{'-'*20} > {text} < {'-'*20}"
-        self._log(LogLevel.INFO, text, datetime.now().timestamp(), log_type, log_source, log_position)
-
-    @capture_call_location
-    def end(self, text: str, log_type: LogType, log_source: LogSource, log_position: LogPosition = None):
-        """
-        ## 日志块结尾
-
-        ## 参数
-            - text: str - 日志块名称
-            - log_type: LogType - 日志类型
-            - log_source: LogSource - 日志来源
-            - log_position: LogPosition - 日志位置
-        """
-        text = f"{'-'*20} > {text} < {'-'*20}"
-        self._log(LogLevel.INFO, text, datetime.now().timestamp(), log_type, log_source, log_position)
-        self.logger.log_buffer.append(self)
-
-    def __str__(self):
-        """输出日志块开头,内容结尾"""
-        return "\n".join([log.toString() for log in self.log_chunk])
-
-    def toString(self):
-        """
-        ## 转为字符串
-        """
-        return "\n".join(
-            f"{datetime.fromtimestamp(log.time).strftime('%y-%m-%d %H:%M:%S')} | "
-            f"{log.level} | {log.log_type} | {log.source} | {log.position} | {log.message}"
-            for log in self.log_buffer
-        )
+    @contextmanager
+    def group(self, name: str, log_type: LogType, log_source: LogSource):
+        """创建一个带有开始/结束标记的逻辑日志组"""
+        log_group = LogGroup(name, log_type, log_source)
+        try:
+            self.info(
+                f"{'-' * 20} > {name} 开始 < {'-' * 20}",
+                log_type=log_type, log_source=log_source, log_group=log_group
+            )
+            yield log_group
+        finally:
+            self.info(
+                f"{'-' * 20} > {name} 结束 < {'-' * 20}",
+                log_type=log_type, log_source=log_source, log_group=log_group
+            )
+            self.log_buffer.append(log_group)
 
 
 # 实例化日志记录器
