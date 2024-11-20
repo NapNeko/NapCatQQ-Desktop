@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QWidget, QSystemTrayIcon
 
 # 项目内模块导入
 from src.Ui.BotListPage import BotListWidget
+from src.Core.Utils.logger import logger
 from src.Ui.common.info_bar import success_bar
 
 if TYPE_CHECKING:

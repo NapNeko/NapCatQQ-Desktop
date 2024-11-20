@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING, Optional
 
 # 第三方库导入
-from loguru import logger
 from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QUrl, Slot, QUrlQuery
@@ -99,8 +98,9 @@ class BotCard(CardWidget):
 
         # 创建请求并链接槽函数
         request = QNetworkRequest(avatar_url)
-        replay = QNetworkAccessManager().get(request)
-        replay.finished.connect(lambda: self._setAvatar(replay))
+        manager = QNetworkAccessManager()
+        reply = manager.get(request)
+        reply.finished.connect(lambda: self._setAvatar(reply))
 
     def _setAvatar(self, replay: QNetworkReply) -> None:
         """
@@ -114,7 +114,6 @@ class BotCard(CardWidget):
             self.QQAvatarLabel.scaledToHeight(115)
             self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
         else:
-            logger.error(f"获取 QQ 头像时引发错误: {replay.errorString()}")
             error_bar(self.tr("获取 QQ 头像时引发错误, 请前往 设置 > log 查看错误原因"))
 
     @Slot()

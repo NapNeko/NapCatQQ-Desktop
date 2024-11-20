@@ -7,8 +7,6 @@ from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# 第三方库导入
-from loguru import logger
 from PySide6.QtCore import QFile, Signal, QThread
 
 # 项目内模块导入
@@ -75,4 +73,4 @@ class Email(QThread):
                 server.login(self.senderEmail, self.token)  # 登录SMTP服务器
                 server.sendmail(self.senderEmail, self.receiversEmail, msg.as_string())  # 发送邮件
         except smtplib.SMTPResponseException as e:
-            logger.error(f"发送邮件时引发{type(e)}:{e}")
+            self.error_single.emit(self.tr(f"创建邮件时引发错误: {e.smtp_code} {e.smtp_error}"))

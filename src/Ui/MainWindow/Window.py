@@ -3,7 +3,6 @@
 from typing import Optional
 
 # 第三方库导入
-from loguru import logger
 from qfluentwidgets import Theme, FluentIcon, SplashScreen, MSFluentWindow, NavigationItemPosition
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QSize
@@ -18,6 +17,7 @@ from src.Ui.resource import resource
 from src.Ui.UnitPage import UnitWidget
 from src.Ui.SetupPage import SetupWidget
 from src.Ui.BotListPage import BotListWidget
+from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Utils.singleton import singleton
 from src.Ui.MainWindow.TitleBar import CustomTitleBar
 from src.Ui.MainWindow.SystemTryIcon import SystemTrayIcon
@@ -39,6 +39,8 @@ class MainWindow(MSFluentWindow):
 
     def initialize(self) -> None:
         """初始化"""
+        # 执行路径验证
+        PathFunc().path_validator()
         # 调用方法
         self.setWindow()
         self.setItem()
@@ -69,7 +71,6 @@ class MainWindow(MSFluentWindow):
         self.show()
         # 挂起
         QApplication.processEvents()
-        logger.success("窗体设置完成")
 
     def setItem(self) -> None:
         """
@@ -108,8 +109,6 @@ class MainWindow(MSFluentWindow):
             text=self.tr("设置"),
             position=NavigationItemPosition.BOTTOM,
         )
-
-        logger.success("侧边栏构建完成")
 
     def setTrayIcon(self):
         """

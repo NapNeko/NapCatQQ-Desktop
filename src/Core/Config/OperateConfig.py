@@ -7,9 +7,6 @@ import json
 from json import JSONDecodeError
 from typing import List
 
-# 第三方库导入
-from loguru import logger
-
 # 项目内模块导入
 from src.Ui.common.info_bar import error_bar
 from src.Core.Utils.PathFunc import PathFunc
@@ -27,7 +24,6 @@ def read_config() -> List[Config]:
         with open(str(PathFunc().bot_config_path), "r", encoding="utf-8") as file:
             return [Config(**config) for config in json.load(file)]
     except Exception as error:
-        logger.error(f"读取配置文件时引发错误: {error}")
         write_config([])  # 覆盖原有配置文件
         return []
 
@@ -126,8 +122,8 @@ def update_config(config: Config) -> bool:
         )
 
         # 更新 NC 中配置文件
-        onebot_config_path = PathFunc().getNapCatPath() / "config" / f"onebot11_{config.bot.QQID}.json"
-        napcat_config_path = PathFunc().getNapCatPath() / "config" / f"napcat_{config.bot.QQID}.json"
+        onebot_config_path = PathFunc().napcat_path / "config" / f"onebot11_{config.bot.QQID}.json"
+        napcat_config_path = PathFunc().napcat_path / "config" / f"napcat_{config.bot.QQID}.json"
         with open(str(onebot_config_path), "w", encoding="utf-8") as onebot_file:
             json.dump(json.loads(onebot_config.json()), onebot_file, indent=4, ensure_ascii=False)
         with open(str(napcat_config_path), "w", encoding="utf-8") as napcat_file:
@@ -157,8 +153,8 @@ def delete_config(config: Config) -> bool:
         write_config(configs)
 
         # 删除 NC 中配置文件
-        onebot_config_path = PathFunc().getNapCatPath() / "config" / f"onebot11_{config.bot.QQID}.json"
-        napcat_config_path = PathFunc().getNapCatPath() / "config" / f"napcat_{config.bot.QQID}.json"
+        onebot_config_path = PathFunc().napcat_path / "config" / f"onebot11_{config.bot.QQID}.json"
+        napcat_config_path = PathFunc().napcat_path / "config" / f"napcat_{config.bot.QQID}.json"
         onebot_config_path.unlink()
         napcat_config_path.unlink()
 

@@ -4,12 +4,8 @@ from abc import ABC
 from typing import TYPE_CHECKING, Self, Optional
 
 # 第三方库导入
-from creart import add_creator, exists_module
-from creart.creator import AbstractCreator, CreateTargetInfo
 from qfluentwidgets import isDarkTheme
-from PySide6.QtGui import QPixmap, QRegion, QPainter, QPainterPath
-from PySide6.QtCore import Qt, QRectF
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
@@ -32,6 +28,7 @@ class AddWidget(BackgroundWidget):
     """
     ## 窗体中 Add Bot 对应的 Widget
     """
+
     view: Optional[TransparentStackedWidget]
     topCard: Optional[AddTopCard]
     vBoxLayout: Optional[QVBoxLayout]
