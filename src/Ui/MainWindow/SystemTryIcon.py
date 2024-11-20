@@ -78,7 +78,6 @@ class SystemTrayIcon(QSystemTrayIcon):
         """
         # 循环判断是否机器人已经关闭
         BotListWidget().stopAllBot()
-        logger.toStringLog()
         sys.exit()
 
     @Slot(QSystemTrayIcon)
