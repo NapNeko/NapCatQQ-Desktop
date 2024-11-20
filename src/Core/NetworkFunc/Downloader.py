@@ -7,6 +7,7 @@ import httpx
 from PySide6.QtCore import QUrl, Signal, QThread
 
 # 项目内模块导入
+from src.Core.Utils.logger import logger
 from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
@@ -102,12 +103,8 @@ class GithubDownloader(DownloaderBase):
             self.statusLabel.emit(self.tr("下载完成"))
             return True
 
-        except httpx.HTTPStatusError as e:
-            # TODO: 重新实现错误处理
-            ...
-        except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            # TODO: 重新实现错误处理
-            ...
+        except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, Exception) as e:
+            logger.error(f"下载失败: {e}")
         finally:
             self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
         return False
@@ -127,7 +124,7 @@ class GithubDownloader(DownloaderBase):
                 self.statusLabel.emit(self.tr("网络环境较差"))
                 return False
         except httpx.RequestError as e:
-            self.statusLabel.emit(self.tr("网络检查失败"))
+            self.statusLabel.emit(self.tr(f"网络检查失败: {e}"))
             return False
 
 
@@ -180,11 +177,8 @@ class QQDownloader(DownloaderBase):
             self.downloadFinish.emit()  # 发送下载完成信号
             self.statusLabel.emit(self.tr("下载完成"))
 
-        except httpx.HTTPStatusError as e:
-            self.statusLabel.emit(self.tr("下载失败"))
-            self.errorFinsh.emit()
-        except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            self.statusLabel.emit(self.tr("下载失败"))
+        except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, Exception) as e:
+            self.statusLabel.emit(self.tr(f"下载失败: {e}"))
             self.errorFinsh.emit()
 
         finally:

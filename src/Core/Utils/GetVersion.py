@@ -8,6 +8,7 @@ from PySide6.QtCore import QUrl, Slot, Signal, QObject, QThread
 
 # 项目内模块导入
 from src.Core.Config import cfg
+from src.Core.Utils.logger import logger
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.NetworkFunc.Urls import Urls
 
@@ -128,9 +129,9 @@ class GetRemoteVersionThread(QThread):
         try:
             return httpx.get(url.url()).json()
 
-        # TODO: 重新实现错误处理
-        except (httpx.RequestError, FileNotFoundError, PermissionError, Exception) as e:
-            ...
+        except (httpx.RequestError, PermissionError, Exception) as e:
+            logger.error(f"获取{name}版本信息失败: {e}")
+            return None
 
 
 class GetLocalVersionThread(QThread):
@@ -164,7 +165,7 @@ class GetLocalVersionThread(QThread):
                 # 读取到参数返回版本信息
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
-            # TODO: 重新实现错误处理
+            logger.error("获取 NapCat 版本信息失败: 文件不存在")
             return None
 
     @staticmethod
@@ -175,7 +176,7 @@ class GetLocalVersionThread(QThread):
         try:
             if (qq_path := PathFunc().get_qq_path()) is None:
                 # 检查 QQ 目录是否存在
-                # TODO: 重新实现错误处理
+                logger.error("获取 QQ 版本信息失败: 文件不存在")
                 return
 
             with open(str(qq_path / "versions" / "config.json"), "r", encoding="utf-8") as file:
@@ -183,7 +184,7 @@ class GetLocalVersionThread(QThread):
                 return json.load(file)["curVersion"]
         except FileNotFoundError:
             # 文件不存在则返回 None
-            # TODO: 重新实现错误处理
+            logger.error("获取 QQ 版本信息失败: 文件不存在")
             return
 
     @staticmethod
