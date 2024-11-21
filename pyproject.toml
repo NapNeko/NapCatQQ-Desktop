@@ -7,7 +7,6 @@ authors = [
 ]
 dependencies = [
     "httpx>=0.27.2",
-    "pydantic>=2.9.0",
     "PySide6-Fluent-Widgets>=1.6.3",
     "psutil>=6.0.0",
     "markdown>=3.7",
