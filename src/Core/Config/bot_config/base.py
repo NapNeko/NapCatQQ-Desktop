@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-# 项目内模块导入
-from src.Core.Utils.logger import LogType, LogSource, logger
-
-
 class BaseModel:
 
     def __init__(self, **kwargs):
@@ -28,8 +24,21 @@ class BaseModel:
 
         # 忽略未定义的多余字段
         if kwargs:
+            # 项目内模块导入
+            from src.Core.Utils.logger import LogType, LogSource, logger
+
             logger.warning(f"配置项传入额外属性: {', '.join(kwargs.keys())}", LogType.NONE_TYPE, LogSource.CORE)
 
     def __repr__(self):
         attrs = ", ".join(f"{key}={value!r}" for key, value in self.__dict__.items())
         return f"{self.__class__.__name__}({attrs})"
+
+
+class BaseConnection(BaseModel):
+    """通用连接配置"""
+
+    name: str = ""
+    enable: bool = False
+    token: str = ""
+    messagePostFormat: str = "array"
+    debug: bool = False
