@@ -21,7 +21,6 @@ from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import Signal, QLocale
 
 # 项目内模块导入
-from src.Core.Config.enum import Language
 from src.Core.Utils.PathFunc import PathFunc
 
 
@@ -43,14 +42,6 @@ class Config(QConfig):
     # 启动项
 
     # 个性化项目
-    Language = OptionsConfigItem(
-        group="Personalize",
-        name="Language",
-        default=Language.AUTO,
-        validator=OptionsValidator(Language),
-        serializer=LanguageSerializer(),
-        restart=True,
-    )
     themeMode = OptionsConfigItem(
         group="Personalize",
         name="ThemeMode",
