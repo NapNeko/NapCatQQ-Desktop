@@ -3,7 +3,7 @@
 from typing import Dict, List, Optional
 
 # 项目内模块导入
-from src.Core.Config.bot_config.base import BaseModel, BaseConnection
+from src.Core.Config.bot_config.base import BaseModel
 
 
 class BotConfig(BaseModel):
@@ -21,6 +21,16 @@ class Network(BaseModel):
     httpClients: List[Optional[HttpClients]]
     websocketServers: List[Optional[WebsocketServers]]
     websocketClients: List[Optional[WebsocketClients]]
+
+
+class BaseConnection(BaseModel):
+    """通用连接配置"""
+
+    name: str = ""
+    enable: bool = False
+    token: str = ""
+    messagePostFormat: str = "array"
+    debug: bool = False
 
 
 class HttpServers(BaseNetworkConfig):

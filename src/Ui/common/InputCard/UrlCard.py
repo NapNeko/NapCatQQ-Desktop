@@ -3,7 +3,6 @@
 from typing import List, TypeVar
 
 # 第三方库导入
-from pydantic import HttpUrl, WebsocketUrl
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -18,8 +17,6 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 # 项目内模块导入
 from src.Ui.common.info_bar import error_bar
 from src.Ui.common.message_box import AskBox, TextInputBox
-
-T = TypeVar("T", HttpUrl, WebsocketUrl)
 
 
 class UrlItem(QWidget):
@@ -87,7 +84,7 @@ class UrlCard(ExpandSettingCard):
         # 调用方法
         self._initWidget()
 
-    def fillValue(self, values: List[T]) -> None:
+    def fillValue(self, values: List[str]) -> None:
         self.urls = [str(value) for value in values]
         [self._addUrlItem(str(url)) for url in self.urls]
 
