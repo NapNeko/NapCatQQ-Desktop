@@ -29,8 +29,8 @@ class SetupWidget(BackgroundWidget):
     vBoxLayout: Optional[QVBoxLayout]
     infoWidget: Optional[CodeEditor]
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent: "MainWindow"):
+        super().__init__(parent=parent)
         # 传入配置
         self.bgEnabledConfig = cfg.bgSettingPage
         self.bgPixmapLightConfig = cfg.bgSettingPageLight
@@ -40,7 +40,7 @@ class SetupWidget(BackgroundWidget):
         # 调用方法
         super().updateBgImage()
 
-    def initialize(self, parent: "MainWindow") -> Self:
+    def initialize(self) -> Self:
         """
         ## 初始化
         """
@@ -50,7 +50,6 @@ class SetupWidget(BackgroundWidget):
         self._createView()
 
         # 调整控件
-        self.setParent(parent)
         self.setObjectName("SetupPage")
         self.view.setObjectName("SetupView")
 

@@ -14,11 +14,11 @@ from src.Core.Config import cfg
 
 class BackgroundWidget(QWidget):
 
-    def __init__(self) -> None:
+    def __init__(self, parent=None) -> None:
         """
         ## 初始化
         """
-        super().__init__()
+        super().__init__(parent)
         self.bgPixmap: Optional[QPixmap] = None
 
         self.enabledDefaultBg = False

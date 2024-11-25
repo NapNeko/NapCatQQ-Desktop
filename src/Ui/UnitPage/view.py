@@ -25,8 +25,8 @@ if TYPE_CHECKING:
 @singleton
 class UnitWidget(BackgroundWidget):
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, parent: "MainWindow") -> None:
+        super().__init__(parent=parent)
         # 预定义控件
         self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[TopWidget] = None
@@ -41,7 +41,7 @@ class UnitWidget(BackgroundWidget):
         # 调用方法
         super().updateBgImage()
 
-    def initialize(self, parent: "MainWindow") -> Self:
+    def initialize(self) -> Self:
         """
         初始化
         """
@@ -52,7 +52,6 @@ class UnitWidget(BackgroundWidget):
         self._createView()
 
         # 调用方法
-        self.setParent(parent)
         self.setObjectName("UpdatePage")
         self.view.setObjectName("UpdateView")
         self._setLayout()

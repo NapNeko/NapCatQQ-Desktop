@@ -28,7 +28,7 @@ class AddWidget(BackgroundWidget):
     view: Optional[TransparentStackedWidget]
     vBoxLayout: Optional[QVBoxLayout]
 
-    def __init__(self) -> None:
+    def __init__(self, parent: "MainWindow") -> None:
         """
         ## AddWidget 继承自 QWidget 用于显示 侧边栏 AddBot 对应的 Widget
 
@@ -36,7 +36,7 @@ class AddWidget(BackgroundWidget):
             - view : 窗体内的切换页面控件(QStackedWidget)
             - vBoxLayout : 窗体内的总布局
         """
-        super().__init__()
+        super().__init__(parent=parent)
         # 传入配置
         self.bgEnabledConfig = cfg.bgAddPage
         self.bgPixmapLightConfig = cfg.bgAddPageLight
@@ -46,16 +46,15 @@ class AddWidget(BackgroundWidget):
         # 调用方法
         super().updateBgImage()
 
-    def initialize(self, parent: "MainWindow") -> Self:
+    def initialize(self) -> Self:
         """
         ## 初始化 AddWidget 所需要的控件并进行配置
         """
         # 创建控件
         self.vBoxLayout = QVBoxLayout(self)
-        self._createView()
+        self.view = TransparentStackedWidget()
 
         # 设置 AddWidget
-        self.setParent(parent)
         self.setObjectName("AddPage")
         self.view.setObjectName("AddView")
 
@@ -66,12 +65,6 @@ class AddWidget(BackgroundWidget):
         StyleSheet.ADD_WIDGET.apply(self)
 
         return self
-
-    def _createView(self) -> None:
-        """
-        ## 创建并配置 QStackedWidget
-        """
-        self.view = TransparentStackedWidget()
 
     def _setLayout(self) -> None:
         """

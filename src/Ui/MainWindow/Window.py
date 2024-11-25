@@ -86,7 +86,7 @@ class MainWindow(MSFluentWindow):
         )
 
         self.addSubInterface(
-            interface=AddWidget().initialize(self),
+            interface=AddWidget(self).initialize(),
             icon=FluentIcon.ADD_TO,
             text=self.tr("添加"),
             position=NavigationItemPosition.TOP,
@@ -106,13 +106,13 @@ class MainWindow(MSFluentWindow):
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
-            interface=UnitWidget().initialize(self),
+            interface=UnitWidget(self).initialize(),
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             text=self.tr("组件"),
             position=NavigationItemPosition.BOTTOM,
         )
         self.addSubInterface(
-            interface=SetupWidget().initialize(self),
+            interface=SetupWidget(self).initialize(),
             icon=FluentIcon.SETTING,
             text=self.tr("设置"),
             position=NavigationItemPosition.BOTTOM,
