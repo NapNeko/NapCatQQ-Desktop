@@ -6,7 +6,7 @@ from typing import Optional
 from qfluentwidgets import Theme, FluentIcon, SplashScreen, MSFluentWindow, NavigationItemPosition
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QSize
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QWidget, QApplication
 
 # 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
@@ -91,8 +91,16 @@ class MainWindow(MSFluentWindow):
             text=self.tr("添加"),
             position=NavigationItemPosition.TOP,
         )
+        # self.addSubInterface(
+        #     interface=BotListWidget().initialize(self),
+        #     icon=FluentIcon.MENU,
+        #     text=self.tr("列表"),
+        #     position=NavigationItemPosition.TOP,
+        # )
+        list_widget = QWidget(self)
+        list_widget.setObjectName("BotListPage")
         self.addSubInterface(
-            interface=BotListWidget().initialize(self),
+            interface=list_widget,
             icon=FluentIcon.MENU,
             text=self.tr("列表"),
             position=NavigationItemPosition.TOP,

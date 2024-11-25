@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QWidget
 # 项目内模块导入
 from src.Ui.common.info_bar import success_bar
 from src.Ui.BotListPage.BotCard import BotCard
-from src.Core.Config.OperateConfig import read_config
 
 
 class BotList(ScrollArea):
