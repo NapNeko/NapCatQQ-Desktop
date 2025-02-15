@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.AddPage.Pages import Builder
 from src.Ui.common.widget import BackgroundWidget
 from src.Core.Utils.singleton import singleton
 from src.Ui.common.stacked_widget import TransparentStackedWidget
@@ -29,13 +30,6 @@ class AddWidget(BackgroundWidget):
     vBoxLayout: Optional[QVBoxLayout]
 
     def __init__(self, parent: "MainWindow") -> None:
-        """
-        ## AddWidget 继承自 QWidget 用于显示 侧边栏 AddBot 对应的 Widget
-
-        ## 占位符初始化
-            - view : 窗体内的切换页面控件(QStackedWidget)
-            - vBoxLayout : 窗体内的总布局
-        """
         super().__init__(parent=parent)
         # 传入配置
         self.bgEnabledConfig = cfg.bgAddPage
@@ -53,10 +47,15 @@ class AddWidget(BackgroundWidget):
         # 创建控件
         self.vBoxLayout = QVBoxLayout(self)
         self.view = TransparentStackedWidget()
+        self.builder = Builder(self)
+
+        # 添加到页面
+        self.view.addWidget(self.builder)
 
         # 设置 AddWidget
         self.setObjectName("AddPage")
         self.view.setObjectName("AddView")
+        self.view.setCurrentWidget(self.builder)
 
         # 调用方法
         self._setLayout()
