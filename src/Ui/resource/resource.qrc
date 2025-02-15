@@ -10,10 +10,6 @@
 
     </qresource>
 
-    <qresource prefix="HomePage">
-
-    </qresource>
-
     <qresource prefix="QSS">
 
     </qresource>
