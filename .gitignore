@@ -1,19 +1,14 @@
 # Ignore binary and virtual environment directories
-venv/
+.venv/
 
 # Ignore configuration and temporary files
-config/
-tmp/
-dlc/
 .vscode/
 .idea/
 
 # Ignore specific application directories and files
-NapCat/
-PatchConfig.json
+src/ui/resource/resource.py
 
 # Ignore build artifacts and logs
-/src/pysidedeploy.spec
 /log/
 
 # Ignore Python cache files
