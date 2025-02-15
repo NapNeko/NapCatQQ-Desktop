@@ -7,9 +7,9 @@ authors = [
 ]
 dependencies = [
     "httpx>=0.27.2",
-    "PySide6-Fluent-Widgets>=1.6.3",
     "psutil>=6.0.0",
     "markdown>=3.7",
+    "Fluent-Widgets-QIAO>=0.1.0",
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
@@ -28,7 +28,7 @@ target-version = ['py312']  # 目标 Python 版本为 3.12
 [tool.isort]
 known_first_party = ["NapCatQQ-Desktop"]
 profile = "black"  # 兼容 black
-line_length = 120  # 将行长度设置为与 black 一致
+line_length = 140  # 将行长度设置为与 black 一致
 length_sort = true  # 按导入语句的长度进行排序
 
 # 导入分类顺序：未来标准库、标准库、第三方库、PySide6 库、项目内库，和本地库
