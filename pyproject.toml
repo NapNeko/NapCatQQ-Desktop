@@ -10,6 +10,8 @@ dependencies = [
     "psutil>=6.0.0",
     "markdown>=3.7",
     "Fluent-Widgets-QIAO>=0.1.0",
+    "PySide6>=6.4.2,<=6.7.2",
+    "nuitka>=2.6.6",
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
