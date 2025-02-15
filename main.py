@@ -5,8 +5,8 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.Ui.MainWindow import MainWindow
-from src.Core.Utils.mutex import SingleInstanceApplication
+from src.ui.MainWindow import MainWindow
+from src.core.utils.mutex import SingleInstanceApplication
 
 if __name__ == "__main__":
     # 实现单实例应用程序检查

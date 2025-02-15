@@ -1,16 +1,9 @@
 <RCC>
     <qresource prefix="Global">
         <file>logo.png</file>
-        <file>image/Global/napcat.png</file>
-        <file>image/Global/page_bg_dark.png</file>
-        <file>image/Global/page_bg_light.png</file>
     </qresource>
 
     <qresource prefix="Icon">
-        <file>image/Icon/black/Logo.svg</file>
-        <file>image/Icon/white/Logo.svg</file>
-        <file>image/Icon/black/QQ.svg</file>
-        <file>image/Icon/white/QQ.svg</file>
     </qresource>
 
     <qresource  prefix="MainWindow">
@@ -22,25 +15,11 @@
     </qresource>
 
     <qresource prefix="QSS">
-        <file>qss/dark/home_widget.qss</file>
-        <file>qss/light/home_widget.qss</file>
-        <file>qss/dark/setup_widget.qss</file>
-        <file>qss/light/setup_widget.qss</file>
-        <file>qss/dark/add_widget.qss</file>
-        <file>qss/light/add_widget.qss</file>
-        <file>qss/dark/bot_list_widget.qss</file>
-        <file>qss/light/bot_list_widget.qss</file>
-        <file>qss/dark/bot_widget.qss</file>
-        <file>qss/light/bot_widget.qss</file>
-        <file>qss/dark/unit_widget.qss</file>
-        <file>qss/light/unit_widget.qss</file>
 
-        <file>qss/dark/update_log_card.qss</file>
-        <file>qss/light/update_log_card.qss</file>
     </qresource>
 
     <qresource prefix="template">
-        <file>template/email/bot_offline_notice.html</file>
+    
     </qresource>
 
 </RCC>

@@ -5,9 +5,9 @@ from datetime import datetime
 from contextlib import contextmanager
 
 # 项目内模块导入
-from src.Core.Utils.logger.log_data import Log, LogGroup, LogPosition
-from src.Core.Utils.logger.log_enum import LogType, LogLevel, LogSource
-from src.Core.Utils.logger.log_utils import capture_call_location
+from src.core.utils.logger.log_data import Log, LogGroup, LogPosition
+from src.core.utils.logger.log_enum import LogType, LogLevel, LogSource
+from src.core.utils.logger.log_utils import capture_call_location
 
 
 class Logger:
@@ -145,14 +145,12 @@ class Logger:
         log_group = LogGroup(name, log_type, log_source)
         try:
             self.info(
-                f"{'-' * 20} > {name} 开始 < {'-' * 20}",
-                log_type=log_type, log_source=log_source, log_group=log_group
+                f"{'-' * 20} > {name} 开始 < {'-' * 20}", log_type=log_type, log_source=log_source, log_group=log_group
             )
             yield log_group
         finally:
             self.info(
-                f"{'-' * 20} > {name} 结束 < {'-' * 20}",
-                log_type=log_type, log_source=log_source, log_group=log_group
+                f"{'-' * 20} > {name} 结束 < {'-' * 20}", log_type=log_type, log_source=log_source, log_group=log_group
             )
             self.log_buffer.append(log_group)
 

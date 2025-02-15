@@ -3,6 +3,7 @@
 import json
 import time
 import platform
+from pathlib import Path
 
 # 第三方库导入
 from qfluentwidgets import RangeValidator, RangeConfigItem, TabCloseButtonDisplayMode, qconfig

@@ -1,2 +1,3 @@
 # -*- coding: utf-8 -*-
-from src.Ui.MainWindow.Window import MainWindow
+# 项目内模块导入
+from src.ui.MainWindow.Window import MainWindow

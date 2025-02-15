@@ -5,7 +5,7 @@ from pathlib import Path
 from functools import wraps
 
 # 项目内模块导入
-from src.Core.Utils.logger.log_data import LogPosition
+from src.core.utils.logger.log_data import LogPosition
 
 
 def capture_call_location(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -28,14 +28,14 @@ def capture_call_location(func: Callable[..., Any]) -> Callable[..., Any]:
         # 获取调用者的位置信息
         pos = inspect.stack()[1]
         position = LogPosition(
-            module=pos.frame.f_globals.get('__name__'),
+            module=pos.frame.f_globals.get("__name__"),
             file=Path(pos.filename).name,
             line=pos.lineno,
         )
         # 检查被装饰函数是否存在 log_position 形参
-        if 'log_position' in inspect.signature(func).parameters:
+        if "log_position" in inspect.signature(func).parameters:
             # 如果存在则将 position 添加到关键字参数中
-            kwargs['log_position'] = position
+            kwargs["log_position"] = position
             return func(*args, **kwargs)
         else:
             # 否则直接调用函数

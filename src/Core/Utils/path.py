@@ -4,8 +4,8 @@ import winreg
 from pathlib import Path
 
 # 项目内模块导入
-from src.Core.Utils.logger import LogType, LogSource, logger
-from src.Core.Utils.singleton import Singleton
+from src.core.utils.logger import LogType, LogSource, logger
+from src.core.utils.singleton import Singleton
 
 
 class PathFunc(metaclass=Singleton):
