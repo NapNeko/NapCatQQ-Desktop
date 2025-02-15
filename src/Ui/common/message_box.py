@@ -26,7 +26,7 @@ from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.Ui.MainWindow.Window import MainWindow
+    from src.ui.main_window.window import MainWindow
 
 
 class TextInputBox(MessageBoxBase):

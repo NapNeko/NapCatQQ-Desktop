@@ -5,7 +5,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.ui.MainWindow import MainWindow
+from src.ui.main_window import MainWindow
 from src.core.utils.mutex import SingleInstanceApplication
 
 if __name__ == "__main__":
@@ -17,7 +17,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # 初始化主窗口
-    MainWindow().initialize()
+    MainWindow()
 
     # 进入循环
     sys.exit(app.exec())

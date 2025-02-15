@@ -13,7 +13,7 @@ from qfluentwidgets import InfoBar
 from PySide6.QtCore import Qt
 
 # 项目内模块导入
-from src.Ui.common.managers import NCDInfoBarPosition
+from src.ui.common.managers import NCDInfoBarPosition
 
 
 def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000) -> None:
@@ -26,7 +26,7 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000) -> Non
         - duration: 消息条显示时间, 默认 5 秒
     """
     # 项目内模块导入
-    from src.Ui.MainWindow.Window import MainWindow
+    from src.ui.main_window.window import MainWindow
 
     InfoBar.info(
         title=title,
@@ -48,7 +48,7 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5_000) 
         - duration: 消息条显示时间, 默认 5 秒
     """
     # 项目内模块导入
-    from src.Ui.MainWindow.Window import MainWindow
+    from src.ui.main_window.window import MainWindow
 
     InfoBar.success(
         title=title,
@@ -70,7 +70,7 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_0
         - duration: 消息条显示时间, 默认 10 秒
     """
     # 项目内模块导入
-    from src.Ui.MainWindow.Window import MainWindow
+    from src.ui.main_window.window import MainWindow
 
     InfoBar.warning(
         title=title,
@@ -92,7 +92,7 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1) -> Non
         - duration: 消息条显示时间, 默认 ∞ 秒
     """
     # 项目内模块导入
-    from src.Ui.MainWindow.Window import MainWindow
+    from src.ui.main_window.window import MainWindow
 
     InfoBar.error(
         title=title,
