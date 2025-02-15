@@ -22,7 +22,7 @@ from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import Signal, QLocale
 
 # 项目内模块导入
-from src.Core.Utils.PathFunc import PathFunc
+from src.core.utils.path import PathFunc
 
 
 class Config(QConfig):
