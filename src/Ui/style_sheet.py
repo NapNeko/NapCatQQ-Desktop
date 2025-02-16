@@ -3,23 +3,18 @@
 from enum import Enum
 
 # 第三方库导入
-from qfluentwidgets import Theme, StyleSheetBase, qconfig
+from qfluentwidgets import Theme, StyleSheetBase
+
+# 项目内模块导入
+from src.core.config import cfg
 
 
 class StyleSheet(StyleSheetBase, Enum):
     """样式表"""
 
-    # widget
-    HOME_WIDGET = "home_widget"
-    SETUP_WIDGET = "setup_widget"
-    ADD_WIDGET = "add_widget"
-    BOT_LIST_WIDGET = "bot_list_widget"
-    BOT_WIDGET = "bot_widget"
-    UNIT_WIDGET = "unit_widget"
-
     # common
-    UPDATE_LOG_CARD = "update_log_card"
+    TRANSPARENT_SCROLL_AREA = "transparent_scroll_area"
 
     def path(self, theme=Theme.AUTO):
-        theme = qconfig.theme if theme == Theme.AUTO else theme
-        return f":QSS/qss/{theme.value.lower()}/{self.value}.qss"
+        theme = cfg.theme if theme == Theme.AUTO else theme
+        return f":QSS/style/{theme.value.lower()}/{self.value}.qss"
