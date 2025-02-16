@@ -42,7 +42,7 @@ class SettingsPage(QWidget):
     def setComponent(self) -> None:
         """设置组件"""
         self.setObjectName("SettingsPage")
-        setFont(self.titleLabel, 36, QFont.Weight.DemiBold)
+        setFont(self.titleLabel, 32, QFont.Weight.DemiBold)
 
         # 设置提示
         self.clearConfigButton.setToolTip(self.tr("清除所有配置(不可逆喔😣)"))
