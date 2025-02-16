@@ -7,6 +7,7 @@
 
 # Ignore specific application directories and files
 src/ui/resource/resource.py
+.NapCat Desktop/
 
 # Ignore build artifacts and logs
 log/
