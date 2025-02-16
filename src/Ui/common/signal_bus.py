@@ -11,8 +11,5 @@ class SignalBus(QObject):
 
     # 不知道后续要不要做扩展
 
-    # 云母切换信号
-    micaEnableChanged = Signal(bool)
-
 
 signalBus = SignalBus()

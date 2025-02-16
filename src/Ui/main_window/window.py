@@ -3,8 +3,7 @@
 from qfluentwidgets import FluentIcon as FIcon
 from qfluentwidgets import SplashScreen, MSFluentWindow
 from qfluentwidgets.window.fluent_window import NavigationItemPosition
-from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
@@ -29,6 +28,7 @@ class MainWindow(MSFluentWindow):
         # 调用方法
         self.setWindow()
         self.setItem()
+        self._connectSignalToSlot()
         # 组件加载完成结束 SplashScreen
         self.splashScreen.finish()
 
@@ -41,6 +41,7 @@ class MainWindow(MSFluentWindow):
 
         # 窗体大小
         self.setMinimumSize(1280, 720)
+
         # 设置窗体居中
         desktop = QApplication.screens()[0].availableGeometry()
         width, height = desktop.width(), desktop.height()
@@ -73,3 +74,5 @@ class MainWindow(MSFluentWindow):
             text=self.tr("设置"),
             position=NavigationItemPosition.BOTTOM,
         )
+
+    def _connectSignalToSlot(self): ...

@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 
+"""
+NCD 设置页面
+"""
+
 # 第三方库导入
 from qfluentwidgets import BodyLabel
 from qfluentwidgets import FluentIcon as FIcon
@@ -12,6 +16,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
 from src.ui.settings_page.separator import Separator
+from src.ui.settings_page.personalized import Personalized
 
 
 class SettingsPage(QWidget):
@@ -43,6 +48,9 @@ class SettingsPage(QWidget):
         """设置组件"""
         self.setObjectName("SettingsPage")
         setFont(self.titleLabel, 32, QFont.Weight.DemiBold)
+
+        self.view.addWidget(Personalized(self.view))
+        self.view.setCurrentIndex(0)
 
         # 设置提示
         self.clearConfigButton.setToolTip(self.tr("清除所有配置(不可逆喔😣)"))
@@ -94,5 +102,5 @@ class SettingsPage(QWidget):
         self.vBoxLayout.addSpacing(16)
         self.vBoxLayout.addLayout(self.pivotBoxLayout, 0)
         self.vBoxLayout.addSpacing(12)
-        self.vBoxLayout.addWidget(self.view, 1, Qt.AlignmentFlag.AlignHCenter)
+        self.vBoxLayout.addWidget(self.view, 1)
         self.setLayout(self.vBoxLayout)
