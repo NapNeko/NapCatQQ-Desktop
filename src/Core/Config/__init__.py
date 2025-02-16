@@ -19,7 +19,7 @@ from qfluentwidgets.common import (
     OptionsConfigItem,
 )
 from qfluentwidgets.common.exception_handler import exceptionHandler
-from PySide6.QtCore import Signal, QLocale
+from PySide6.QtCore import Signal
 
 # 项目内模块导入
 from src.core.utils.path import PathFunc
@@ -33,98 +33,28 @@ class Config(QConfig):
 
     # 信息项
     NCDVersion = ConfigItem(group="Info", name="NCDVersion", default="")
-    StartTime = ConfigItem(group="Info", name="StartTime", default="")
-    SystemType = ConfigItem(group="Info", name="SystemType", default="")
-    PlatformType = ConfigItem(group="Info", name="PlatformType", default="")
-
-    # 路径项
-    # 注意: default 为空字符串则默认以程序根目录为路径
-
-    # 启动项
 
     # 个性化项目
+
     themeMode = OptionsConfigItem(
-        group="Personalize",
+        group="Personalized",
         name="ThemeMode",
         default=Theme.AUTO,
         validator=OptionsValidator(Theme),
         serializer=EnumSerializer(Theme),
     )
-    themeColor = ColorConfigItem(group="Personalize", name="ThemeColor", default="#009faa")
-
-    windowOpacity = RangeConfigItem(
-        group="Personalize", name="WindowOpacity", default=100, validator=RangeValidator(10, 100)
+    themeColor = ColorConfigItem(
+        group="Personalized",
+        name="ThemeColor",
+        default="#009faa",
     )
-
-    bgHomePage = ConfigItem(group="Personalize", name="BgHomePage", default=False, validator=BoolValidator())
-    bgHomePageOpacity = RangeConfigItem(
-        group="Personalize", name="BgHomePageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgHomePageLight = ConfigItem(group="Personalize", name="BgHomePageLight", default="")
-    bgHomePageDark = ConfigItem(group="Personalize", name="BgHomePageDark", default="")
-    bgAddPage = ConfigItem(group="Personalize", name="BgAddPage", default=False, validator=BoolValidator())
-    bgAddPageOpacity = RangeConfigItem(
-        group="Personalize", name="BgAddPageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgAddPageLight = ConfigItem(group="Personalize", name="BgAddPageLight", default="")
-    bgAddPageDark = ConfigItem(group="Personalize", name="BgAddPageDark", default="")
-    bgListPage = ConfigItem(group="Personalize", name="BgListPage", default=False, validator=BoolValidator())
-    bgListPageOpacity = RangeConfigItem(
-        group="Personalize", name="BgListPageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgListPageLight = ConfigItem(group="Personalize", name="BgListPageLight", default="")
-    bgListPageDark = ConfigItem(group="Personalize", name="BgListPageDark", default="")
-    bgUnitPage = ConfigItem(group="Personalize", name="BgUnitPage", default=False, validator=BoolValidator())
-    bgUnitPageOpacity = RangeConfigItem(
-        group="Personalize", name="BgUnitPageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgUnitPageLight = ConfigItem(group="Personalize", name="BgUnitPageLight", default="")
-    bgUnitPageDark = ConfigItem(group="Personalize", name="BgUnitPageDark", default="")
-    bgSettingPage = ConfigItem(group="Personalize", name="BgSettingPage", default=False, validator=BoolValidator())
-    bgSettingPageOpacity = RangeConfigItem(
-        group="Personalize", name="BgSettingPageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgSettingPageLight = ConfigItem(group="Personalize", name="BgSettingPageLight", default="")
-    bgSettingPageDark = ConfigItem(group="Personalize", name="BgSettingPageDark", default="")
-
-    titleTabBar = ConfigItem(group="Personalize", name="TitleTabBar", default=False, validator=BoolValidator())
-    titleTabBarMovable = ConfigItem(
-        group="Personalize", name="TitleTabBarIsMovable", default=False, validator=BoolValidator()
-    )
-    titleTabBarScrollable = ConfigItem(
-        group="Personalize", name="TitleTabBarIsScrollable", default=False, validator=BoolValidator()
-    )
-    titleTabBarShadow = ConfigItem(
-        group="Personalize", name="TitleTabBarIsShadow", default=False, validator=BoolValidator()
-    )
-    titleTabBarCloseMode = OptionsConfigItem(
-        group="Personalize",
-        name="TitleTabBarCloseButton",
-        default=TabCloseButtonDisplayMode.ON_HOVER,
-        validator=OptionsValidator(TabCloseButtonDisplayMode),
-        serializer=EnumSerializer(TabCloseButtonDisplayMode),
+    dpiScale = OptionsConfigItem(
+        group="Personalized",
+        name="DpiScale",
+        default="Auto",
+        validator=OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]),
         restart=True,
     )
-    titleTabBarMinWidth = RangeConfigItem(
-        group="Personalize", name="TitleTabBarMinWidth", default=64, validator=RangeValidator(32, 64)
-    )
-    titleTabBarMaxWidth = RangeConfigItem(
-        group="Personalize", name="TitleTabBarMaxWidth", default=135, validator=RangeValidator(64, 200)
-    )
-
-    # 事件项
-    botOfflineEmailNotice = ConfigItem(
-        group="Event", name="BotOfflineEmailNotice", default=False, validator=BoolValidator()
-    )
-
-    # 邮件项
-    emailReceiver = ConfigItem(group="Email", name="EmailReceiver", default="")
-    emailSender = ConfigItem(group="Email", name="EmailSender", default="")
-    emailToken = ConfigItem(group="Email", name="EmailToken", default="")
-    emailStmpServer = ConfigItem(group="Email", name="EmailStmpServer", default="")
-
-    # 隐藏提示项
-    HideUsGoBtnTips = ConfigItem(group="HideTips", name="HideUsingGoBtnTips", default=False, validator=BoolValidator())
 
     def __init__(self):
         super().__init__()
@@ -178,7 +108,4 @@ class Config(QConfig):
 
 cfg = Config()
 qconfig.load(PathFunc().config_path, cfg)
-cfg.set(cfg.StartTime, time.time(), True)
-cfg.set(cfg.NCDVersion, "v1.4.0", True)
-cfg.set(cfg.SystemType, platform.system(), True)
-cfg.set(cfg.PlatformType, platform.machine(), True)
+cfg.set(cfg.NCDVersion, "v2.0.0", True)
