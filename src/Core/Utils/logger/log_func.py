@@ -38,7 +38,7 @@ class Logger:
         """
 
         # 定义日志文件路径
-        if not (log_dir := Path.cwd() / "log").exists():
+        if not (log_dir := Path.cwd() / ".NapCat Desktop" / "log").exists():
             log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = log_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
 
