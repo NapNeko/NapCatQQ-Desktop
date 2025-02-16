@@ -4,18 +4,13 @@
     </qresource>
 
     <qresource prefix="Icon">
-    </qresource>
-
-    <qresource  prefix="MainWindow">
 
     </qresource>
 
     <qresource prefix="QSS">
+        <file>style/dark/transparent_scroll_area.qss</file>
 
-    </qresource>
-
-    <qresource prefix="template">
-    
+        <file>style/light/transparent_scroll_area.qss</file>
     </qresource>
 
 </RCC>
