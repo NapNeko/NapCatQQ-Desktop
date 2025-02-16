@@ -9,7 +9,8 @@
 src/ui/resource/resource.py
 
 # Ignore build artifacts and logs
-/log/
+log/
+dist/
 
 # Ignore Python cache files
 __pycache__/
