@@ -1,15 +1,15 @@
 <RCC>
-    <qresource prefix="Global">
-        <file>logo.png</file>
+    <qresource prefix="Icon">
+        <file>icons/logo.png</file>
     </qresource>
 
-    <qresource prefix="Icon">
-
+    <qresource prefix="Fluent-Icon">
+        <file>icons/dark/AppTitle.svg</file>
+        <file>icons/light/AppTitle.svg</file>
     </qresource>
 
     <qresource prefix="QSS">
         <file>style/dark/transparent_scroll_area.qss</file>
-
         <file>style/light/transparent_scroll_area.qss</file>
     </qresource>
 
