@@ -13,7 +13,7 @@ from src.ui.home_page import HomePage
 from src.core.utils.path import PathFunc
 from src.ui.settings_page import SettingsPage
 from src.core.utils.singleton import singleton
-from src.ui.main_window.title_bar import TitleBar
+from src.ui.main_window.title_bar import NCDTitleBar
 
 
 @singleton
@@ -36,7 +36,7 @@ class MainWindow(MSFluentWindow):
         """设置窗体"""
         # 标题栏部分
         self.titleBar.deleteLater()
-        self.tille_bar = TitleBar(self)
+        self.tille_bar = NCDTitleBar(self)
         self.setTitleBar(self.tille_bar)
 
         # 窗体大小

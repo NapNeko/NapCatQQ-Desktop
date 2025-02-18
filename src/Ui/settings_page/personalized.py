@@ -8,13 +8,37 @@ NCD 设置页面 - 个性化
 from qfluentwidgets import FluentIcon as FIcon
 from qfluentwidgets import ScrollArea, ExpandLayout
 from qfluentwidgets.common import setTheme, setThemeColor
-from qfluentwidgets.components.settings import SettingCardGroup, OptionsSettingCard, CustomColorSettingCard
+from qfluentwidgets.components.settings import (
+    SettingCardGroup,
+    SwitchSettingCard,
+    OptionsSettingCard,
+    CustomColorSettingCard,
+    ExpandGroupSettingCard,
+)
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
+from src.ui.icon import NCDFluentIcon as NCDIcon
 from src.core.config import cfg
 from src.ui.style_sheet import StyleSheet
 from src.ui.common.info_bar import success_bar
+from src.ui.common.signal_bus import settingsSignalBus
+
+
+class LineEidtExpandGroupSettingCard(ExpandGroupSettingCard):
+    """带有输入框的可展开设置卡片"""
+
+    def __init__(self, icon, title, content=None, parent=None):
+        super().__init__(icon, title, content, parent)
+
+    def _adjustViewSize(self):
+        """adjust view size"""
+        h = sum(w.sizeHint().height() + 3 for w in self.widgets)
+        self.spaceWidget.setFixedHeight(h)
+
+        if self.isExpand:
+            self.setFixedHeight(self.card.height() + h)
 
 
 class Personalized(ScrollArea):
@@ -64,10 +88,21 @@ class Personalized(ScrollArea):
             parent=self.styleGroup,
         )
 
+        # 标题栏配置项
+        self.titleBarGroup = SettingCardGroup(self.tr("标题栏"), self.viewWidget)
+        self.commandCenterCard = SwitchSettingCard(
+            configItem=cfg.commandCenter,
+            icon=FIcon.COMMAND_PROMPT,
+            title=self.tr("命令中心"),
+            content=self.tr("启用或禁用命令中心"),
+            parent=self.titleBarGroup,
+        )
+
     def setComponent(self) -> None:
         """设置组件"""
         self.setWidget(self.viewWidget)
         self.setWidgetResizable(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
     def setupLayout(self) -> None:
         """设置布局"""
@@ -75,14 +110,20 @@ class Personalized(ScrollArea):
         self.styleGroup.addSettingCard(self.themeColorCard)
         self.styleGroup.addSettingCard(self.zoomCard)
 
+        self.titleBarGroup.addSettingCard(self.commandCenterCard)
+
         self.expandLayout.setSpacing(24)
         self.expandLayout.setContentsMargins(0, 0, 0, 0)
         self.expandLayout.addWidget(self.styleGroup)
+        self.expandLayout.addWidget(self.titleBarGroup)
 
     def _connectSignalToSlot(self):
         """连接信号与槽"""
         cfg.appRestartSig.connect(lambda: success_bar(self.tr("设置成功!"), self.tr("设置已生效, 请重启程序")))
 
-        # personalization
+        # 个性化
         self.themeCard.optionChanged.connect(setTheme)
         self.themeColorCard.colorChanged.connect(lambda color: setThemeColor(color))
+
+        # 标题栏
+        self.commandCenterCard.checkedChanged.connect(settingsSignalBus.commandCenterSingal)

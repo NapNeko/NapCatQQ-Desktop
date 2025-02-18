@@ -11,6 +11,7 @@ from qfluentwidgets.common import (
     Theme,
     QConfig,
     ConfigItem,
+    BoolValidator,
     EnumSerializer,
     ColorConfigItem,
     OptionsValidator,
@@ -33,7 +34,6 @@ class Config(QConfig):
     NCDVersion = ConfigItem(group="Info", name="NCDVersion", default="")
 
     # 个性化项目
-
     themeMode = OptionsConfigItem(
         group="Personalized",
         name="ThemeMode",
@@ -52,6 +52,18 @@ class Config(QConfig):
         default="Auto",
         validator=OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]),
         restart=True,
+    )
+    windowTitle = ConfigItem(
+        group="Personalized",
+        name="WindowTitle",
+        default=True,
+        validator=BoolValidator(),
+    )
+    commandCenter = ConfigItem(
+        group="Personalized",
+        name="CommandCenter",
+        default=True,
+        validator=BoolValidator(),
     )
 
     def __init__(self):
