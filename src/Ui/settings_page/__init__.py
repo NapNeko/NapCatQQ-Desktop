@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QWidget, QFileDialog, QHBoxLayout, QVBoxLayout, QS
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.utils.file import JsonFunc
-from src.ui.common.info_bar import success_bar
+from src.ui.common.info_bar import info_bar, error_bar, success_bar
 from src.ui.common.file_dialog import getFilePath, saveFilePath
 from src.ui.settings_page.separator import Separator
 from src.ui.settings_page.personalized import Personalized
@@ -123,25 +123,31 @@ class SettingsPage(QWidget):
 
     def _connectSignalToSlot(self):
         """连接信号与槽"""
-        self.saveConfigButton.clicked.connect(
-            lambda: (success_bar(self.tr("设置已生效, 部分配置可能需要重启程序生效")), cfg.save())
-        )
-        self.exportConfigButton.clicked.connect(
-            lambda: JsonFunc().dict2json(
-                cfg.toDict(), saveFilePath(self.tr("导出配置"), "NCD Config.json", "JSON (*.json)")
-            )
-        )
-        self.importConfigButton.clicked.connect(
-            lambda: (
-                JsonFunc().dict2json(
-                    JsonFunc().json2dict(getFilePath(self.tr("导入配置"), "NCD Config.json", "JSON (*.json)")), cfg.file
-                ),
-                cfg.appRestartSig.emit(),
-            )
-        )
-        self.clearConfigButton.clicked.connect(
-            lambda: (
-                cfg.file.unlink(),
-                success_bar(self.tr("清除成功! 重启程序生效")),
-            )
-        )
+        self.saveConfigButton.clicked.connect(self._on_save_config)
+        self.exportConfigButton.clicked.connect(self._on_export_config)
+        self.importConfigButton.clicked.connect(self._on_import_config)
+        self.clearConfigButton.clicked.connect(self._on_clear_config)
+
+    def _on_save_config(self):
+        cfg.save()
+        success_bar(self.tr("设置已生效, 部分配置可能需要重启程序生效"))
+
+    def _on_export_config(self):
+        if JsonFunc().dict2json(cfg.toDict(), saveFilePath(self.tr("导出配置"), "NCD Config.json", "JSON (*.json)")):
+            success_bar(self.tr("导出成功!"))
+        else:
+            info_bar(self.tr("未选择路径, 操作取消!"))
+
+    def _on_import_config(self):
+        if not (file_path := getFilePath(self.tr("导入配置"), "NCD Config.json", "JSON (*.json)")):
+            info_bar(self.tr("未选择路径, 操作取消!"))
+            return
+
+        if JsonFunc().dict2json(JsonFunc().json2dict(file_path), cfg.file):
+            success_bar(self.tr("导入成功! 重启程序生效"))
+        else:
+            error_bar(self.tr("导入失败!"))
+
+    def _on_clear_config(self):
+        cfg.file.unlink()
+        success_bar(self.tr("清除成功! 重启程序生效"))

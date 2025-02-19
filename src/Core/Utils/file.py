@@ -18,11 +18,11 @@ from src.core.utils.singleton import singleton
 @singleton
 class JsonFunc(QObject):
 
-    def dict2json(self, data: dict, path: Path | str) -> None:
+    def dict2json(self, data: dict, path: Path | str) -> bool | None:
         """字典转 json 文件"""
         try:
             if not data or not path:
-                return
+                return False
 
             if isinstance(path, str):
                 path = Path(path)
@@ -30,26 +30,26 @@ class JsonFunc(QObject):
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(str(path), "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
-            success_bar(self.tr("成功!"))
+
+            return True
 
         except PermissionError:
             error_bar(self.tr("没有权限写入文件"))
 
-    def json2dict(self, path: Path | str) -> dict:
+    def json2dict(self, path: Path | str) -> dict | bool:
         """json 文件转字典"""
         try:
             if not path:
-                return
+                raise FileNotFoundError  # 用于触发 except
 
             if isinstance(path, str):
                 path = Path(path)
 
-            if not path.exists():
-                return
-
             with open(str(path), "r", encoding="utf-8") as f:
                 return json.load(f)
 
+        except FileNotFoundError:
+            error_bar(self.tr("文件不存在"))
+
         except PermissionError:
             error_bar(self.tr("没有权限读取文件"))
-            return {}
