@@ -26,3 +26,6 @@ class NCDIcon(FluentIconBase, Enum):
 
     def path(self, theme=Theme.AUTO) -> str:
         return self.value
+
+
+__all__ = ["NCDFluentIcon", "NCDIcon"]

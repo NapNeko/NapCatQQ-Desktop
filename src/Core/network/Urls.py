@@ -39,3 +39,6 @@ class Urls(Enum):
         QUrl("https://ghproxy.cc"),
         QUrl("https://github.moeyy.xyz"),
     ]
+
+
+__all__ = ["Urls"]

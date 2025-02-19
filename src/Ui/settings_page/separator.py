@@ -37,3 +37,6 @@ class Separator(QWidget):
 
         # 释放画家
         painter.end()
+
+
+__all__ = ["Separator"]

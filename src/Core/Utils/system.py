@@ -8,3 +8,6 @@ import sys
 import platform
 
 isWin11 = platform.system() == "Windows" and sys.getwindowsversion().build >= 22000
+
+
+__all__ = ["isWin11"]

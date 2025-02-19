@@ -12,3 +12,6 @@ class HomePage(QWidget):
 
         # 设置属性
         self.setObjectName("HomePage")
+
+
+__all__ = ["HomePage"]

@@ -18,3 +18,6 @@ class StyleSheet(StyleSheetBase, Enum):
     def path(self, theme=Theme.AUTO):
         theme = cfg.theme if theme == Theme.AUTO else theme
         return f":QSS/style/{theme.value.lower()}/{self.value}.qss"
+
+
+__all__ = ["StyleSheet"]

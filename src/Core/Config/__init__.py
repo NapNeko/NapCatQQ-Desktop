@@ -118,3 +118,5 @@ class Config(QConfig):
 cfg = Config()
 qconfig.load(PathFunc().config_path, cfg)
 cfg.set(cfg.NCDVersion, "v2.0.0", True)
+
+__all__ = ["cfg"]

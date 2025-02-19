@@ -42,3 +42,6 @@ def capture_call_location(func: Callable[..., Any]) -> Callable[..., Any]:
             return func(*args, **kwargs)
 
     return wrapper
+
+
+__all__ = ["capture_call_location"]

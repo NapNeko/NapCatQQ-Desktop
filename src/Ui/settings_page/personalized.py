@@ -111,3 +111,6 @@ class Personalized(ScrollArea):
 
         # 标题栏
         self.commandCenterCard.checkedChanged.connect(settingsSignalBus.commandCenterSingal)
+
+
+__all__ = ["Personalized"]

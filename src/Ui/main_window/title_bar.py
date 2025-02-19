@@ -3,7 +3,7 @@
 
 # 第三方库导入
 from qfluentwidgets import FluentIcon as FIcon
-from qfluentwidgets import SearchLineEdit, FluentStyleSheet, MSFluentTitleBar, TransparentToolButton
+from qfluentwidgets import SearchLineEdit, FluentStyleSheet, TransparentToolButton
 from qframelesswindow.titlebar import TitleBarBase
 from qfluentwidgets.common.icon import toQIcon
 from qfluentwidgets.window.fluent_title_bar import MaxBtn, MinBtn, CloseBtn
@@ -128,3 +128,6 @@ class NCDTitleBar(TitleBarBase):
             lambda: self.window().showNormal() if self.window().isMaximized() else self.window().showMaximized()
         )
         self.closeBtn.clicked.connect(self.window().close)
+
+
+__all__ = ["NCDTitleBar"]

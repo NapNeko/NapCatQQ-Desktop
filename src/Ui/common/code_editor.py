@@ -264,3 +264,6 @@ class NCDLogHighlighter(QSyntaxHighlighter):
             # 设置对应日志级别的格式
             test_format.setForeground(self.formats[log_level].foreground().color())
             self.setFormat(loglevel_start, loglevel_length, test_format)
+
+
+__all__ = ["CodeEditor", "UpdateLogEdit", "LogHighlighter", "NCDLogHighlighter"]

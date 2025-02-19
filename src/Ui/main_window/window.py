@@ -15,6 +15,11 @@ from src.ui.settings_page import SettingsPage
 from src.core.utils.singleton import singleton
 from src.ui.main_window.title_bar import NCDTitleBar
 
+if False:
+    # 使用无法到达的if, 引用 resource 模块保证不会被 autoflake 删除
+    # 同时也不会因为引用了 resource 模块发送奇怪的问题
+    rec = resource
+
 
 @singleton
 class MainWindow(MSFluentWindow):
@@ -76,3 +81,6 @@ class MainWindow(MSFluentWindow):
         )
 
     def _connectSignalToSlot(self): ...
+
+
+__all__ = ["MainWindow"]

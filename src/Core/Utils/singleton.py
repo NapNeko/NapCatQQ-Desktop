@@ -36,3 +36,6 @@ def singleton(cls: T) -> Callable[..., T]:
             setattr(wrapper, attr, getattr(cls, attr))
 
     return wrapper
+
+
+__all__ = ["Singleton", "singleton"]

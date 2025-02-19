@@ -159,3 +159,5 @@ class Logger:
 logger = Logger()
 logger.load_config()
 logger.createLogFile()
+
+__all__ = ["logger"]

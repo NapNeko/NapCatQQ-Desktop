@@ -38,3 +38,6 @@ def saveFilePath(title: str, file_name: str | None, filter: str) -> Path:
     # 获取路径
     if path := QFileDialog.getSaveFileName(MainWindow(), title, default_path, filter)[0]:
         return Path(path)
+
+
+__all__ = ["getFilePath", "saveFilePath"]

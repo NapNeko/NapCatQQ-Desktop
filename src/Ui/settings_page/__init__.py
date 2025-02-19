@@ -157,3 +157,6 @@ class SettingsPage(QWidget):
     def _onClearConfig(self):
         cfg.file.unlink()
         success_bar(self.tr("清除成功! 重启程序生效"))
+
+
+__all__ = ["SettingsPage"]

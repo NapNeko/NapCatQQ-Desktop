@@ -16,3 +16,6 @@ class SettingsSignalBus(QObject):
 
 
 settingsSignalBus = SettingsSignalBus()
+
+
+__all__ = ["settingsSignalBus"]

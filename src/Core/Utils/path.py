@@ -45,3 +45,6 @@ class PathFunc(metaclass=Singleton):
             return self.qq_path
         except FileNotFoundError:
             return None
+
+
+__all__ = ["PathFunc"]
