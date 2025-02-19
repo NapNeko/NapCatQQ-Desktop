@@ -36,8 +36,8 @@ class MainWindow(MSFluentWindow):
         """设置窗体"""
         # 标题栏部分
         self.titleBar.deleteLater()
-        self.tille_bar = NCDTitleBar(self)
-        self.setTitleBar(self.tille_bar)
+        self.title_bar = NCDTitleBar(self)
+        self.setTitleBar(self.title_bar)
 
         # 窗体大小
         self.setMinimumSize(1280, 720)

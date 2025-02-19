@@ -18,10 +18,10 @@ def getFilePath(title: str, file_name: str | None, filter: str) -> Path:
 
     # 参数处理
     file_name = file_name or ""
-    dufalt_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.HomeLocation)) / file_name)
+    default_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.HomeLocation)) / file_name)
 
     # 获取路径
-    if path := QFileDialog.getOpenFileName(MainWindow(), title, dufalt_path, filter)[0]:
+    if path := QFileDialog.getOpenFileName(MainWindow(), title, default_path, filter)[0]:
         return Path(path)
 
 
@@ -33,8 +33,8 @@ def saveFilePath(title: str, file_name: str | None, filter: str) -> Path:
 
     # 参数处理
     file_name = file_name or ""
-    dufalt_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.HomeLocation)) / file_name)
+    default_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.HomeLocation)) / file_name)
 
     # 获取路径
-    if path := QFileDialog.getSaveFileName(MainWindow(), title, dufalt_path, filter)[0]:
+    if path := QFileDialog.getSaveFileName(MainWindow(), title, default_path, filter)[0]:
         return Path(path)
