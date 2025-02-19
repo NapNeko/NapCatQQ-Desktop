@@ -34,3 +34,6 @@ class Separator(QWidget):
         # 绘制分隔线
         x = self.width() // 2
         painter.drawLine(x, 0, x, self.height())
+
+        # 释放画家
+        painter.end()
