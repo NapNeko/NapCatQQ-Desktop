@@ -12,7 +12,7 @@ class SettingsSignalBus(QObject):
     # 设置页面相关信号
 
     # 个性化设置相关信号
-    commandCenterSingal = Signal(bool)  # 是否隐藏命令中心
+    commandCenterSignal = Signal(bool)  # 是否隐藏命令中心
 
 
 settingsSignalBus = SettingsSignalBus()

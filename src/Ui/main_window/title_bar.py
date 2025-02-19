@@ -121,7 +121,7 @@ class NCDTitleBar(TitleBarBase):
 
     def _connectSignalToSlot(self):
         """连接信号与槽"""
-        settingsSignalBus.commandCenterSingal.connect(self._updateCommandCenterVisibility)
+        settingsSignalBus.commandCenterSignal.connect(self._updateCommandCenterVisibility)
         self.minBtn.clicked.connect(self.window().showMinimized)
         self.maxBtn.clicked.connect(
             lambda: self.window().showNormal() if self.window().isMaximized() else self.window().showMaximized()

@@ -110,7 +110,7 @@ class Personalized(ScrollArea):
         self.themeColorCard.colorChanged.connect(setThemeColor)
 
         # 标题栏
-        self.commandCenterCard.checkedChanged.connect(settingsSignalBus.commandCenterSingal)
+        self.commandCenterCard.checkedChanged.connect(settingsSignalBus.commandCenterSignal)
 
 
 __all__ = ["Personalized"]
