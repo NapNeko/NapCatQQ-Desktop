@@ -125,6 +125,6 @@ class NCDTitleBar(TitleBarBase):
         )
         self.minBtn.clicked.connect(self.window().showMinimized)
         self.maxBtn.clicked.connect(
-            lambda: self.window().showMaximized() if not self.window().isMaximized() else self.window().showNormal()
+            lambda: self.window().showNormal() if self.window().isMaximized() else self.window().showMaximized()
         )
         self.closeBtn.clicked.connect(self.window().close)
