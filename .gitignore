@@ -11,6 +11,7 @@ src/ui/resource/resource.py
 
 # Ignore build artifacts and logs
 log/
+build/
 dist/
 
 # Ignore Python cache files

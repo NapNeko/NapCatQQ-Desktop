@@ -16,28 +16,34 @@ license = { text = "GPLv3" }
 
 
 [dependency-groups]
-dev = ["isort>=6.0.0", "black>=25.1.0", "nuitka>=2.6.6"]
+dev = [
+    "isort>=6.0.0",
+    "black>=25.1.0",
+    "nuitka>=2.6.6",
+    "pyinstaller>=6.12.0",
+]
 
 [tool.pdm.scripts]
-format = "python scripts/format_code.py"
+format = "python scripts/format_code.py"                                 # 格式化代码
+quick_build = "pyinstaller --clean scripts/quick_build.spec"             # 快速构建可执行文件
 
 
 [tool.pdm]
-distribution = false                     # 不生成 wheel 包
+distribution = false                                                     # 不生成 wheel 包
 
 
 [tool.black]
-line-length = 120                        # 设置代码行的最大长度为 120 字符
-target-version = ['py312']               # 目标 Python 版本为 3.12
-exclude = "src/ui/resource/resource.py"  # 不要格式化资源文件夹
+line-length = 120                                                        # 设置代码行的最大长度为 120 字符
+target-version = ['py312']                                               # 目标 Python 版本为 3.12
+exclude = "src/ui/resource/resource.py"                                  # 不要格式化资源文件夹
 
 
 [tool.isort]
 known_first_party = ["NapCatQQ-Desktop"]
-profile = "black"                        # 兼容 black
-line_length = 140                        # 将行长度设置为与 black 一致
-length_sort = true                       # 按导入语句的长度进行排序
-skip = ["src/ui/resource/resource.py"]  # 不要格式化资源文件夹
+profile = "black"                                                        # 兼容 black
+line_length = 140                                                        # 将行长度设置为与 black 一致
+length_sort = true                                                       # 按导入语句的长度进行排序
+skip = ["src/ui/resource/resource.py"]                                   # 不要格式化资源文件夹
 # 导入分类顺序：未来标准库、标准库、第三方库、PySide6 库、项目内库，和本地库
 sections = [
     "FUTURE",
@@ -47,8 +53,8 @@ sections = [
     "FIRSTPARTY",
     "LOCALFOLDER",
 ]
-known_pyside6 = ["PySide6"]              # 将 PySide6 标记为单独的分组
-no_lines_before = ["PYSIDE6"]            # 确保在 PYSIDE6 之前没有空行
+known_pyside6 = ["PySide6"]                                              # 将 PySide6 标记为单独的分组
+no_lines_before = ["PYSIDE6"]                                            # 确保在 PYSIDE6 之前没有空行
 # 导入自动注释
 import_heading_stdlib = "标准库导入"
 import_heading_thirdparty = "第三方库导入"
@@ -57,6 +63,6 @@ import_heading_firstparty = "项目内模块导入"
 
 [tool.autoflake]
 in-place = true
-remove_all_unused_imports = true         # 删除所有未使用的导入
-exclude = "src/ui/resource/resource.py"  # 不要格式化资源文件夹
-recursive = true                         # 递归处理所有文件
+remove_all_unused_imports = true                                         # 删除所有未使用的导入
+exclude = "src/ui/resource/resource.py"                                  # 不要格式化资源文件夹
+recursive = true                                                         # 递归处理所有文件
