@@ -38,14 +38,14 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000) -> Non
     )
 
 
-def success_bar(content: str, title: str = "Success✅", duration: int = 5_000) -> None:
+def success_bar(content: str, title: str = "Success✅", duration: int = 3_000) -> None:
     """
     ## success 信息消息条, 仅用于展示一些成功提示, 故显示时间不会太长
 
     ## 参数
         - title: 消息条的标题, 不建议太长
         - content: 消息条内容
-        - duration: 消息条显示时间, 默认 5 秒
+        - duration: 消息条显示时间, 默认 3 秒
     """
     # 项目内模块导入
     from src.ui.main_window.window import MainWindow
@@ -60,14 +60,14 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5_000) 
     )
 
 
-def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_000) -> None:
+def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 5_000) -> None:
     """
     ## warning 信息消息条, 仅用于展示一些警告提示, 故显示时间稍长
 
     ## 参数
         - title: 消息条的标题, 不建议太长
         - content: 消息条内容
-        - duration: 消息条显示时间, 默认 10 秒
+        - duration: 消息条显示时间, 默认 5 秒
     """
     # 项目内模块导入
     from src.ui.main_window.window import MainWindow
@@ -77,14 +77,14 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_0
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
-        position=NCDInfoBarPosition.TOP_RIGHT,
+        position=NCDInfoBarPosition.BOTTOM_RIGHT,
         parent=MainWindow(),
     )
 
 
 def error_bar(content: str, title: str = "Failed❌", duration: int = -1) -> None:
     """
-    ## error 信息消息条, 仅用于展示一些警告提示, 故显示时间稍长
+    ## error 信息消息条, 仅用于展示一些错误提示, 故不会关闭
 
     ## 参数
         - title: 消息条的标题, 不建议太长
@@ -99,6 +99,6 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1) -> Non
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
-        position=NCDInfoBarPosition.TOP_RIGHT,
+        position=NCDInfoBarPosition.BOTTOM_RIGHT,
         parent=MainWindow(),
     )

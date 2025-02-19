@@ -3,6 +3,8 @@
 """
 NCD 设置页面
 """
+# 标准库导入
+from pathlib import Path
 
 # 第三方库导入
 from qfluentwidgets import BodyLabel
@@ -13,9 +15,14 @@ from qfluentwidgets import PrimaryPushButton
 from qfluentwidgets.common import setFont
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
+from PySide6.QtCore import QStandardPaths as QSPath
+from PySide6.QtWidgets import QWidget, QFileDialog, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
+from src.core.config import cfg
+from src.core.utils.file import JsonFunc
+from src.ui.common.info_bar import success_bar
+from src.ui.common.file_dialog import getFilePath, saveFilePath
 from src.ui.settings_page.separator import Separator
 from src.ui.settings_page.personalized import Personalized
 
@@ -32,6 +39,9 @@ class SettingsPage(QWidget):
         self.setComponent()
         self.setPiovt()
         self.setupLayout()
+
+        # 连接信号与槽
+        self._connectSignalToSlot()
 
     def createComponent(self) -> None:
         """创建组件"""
@@ -110,3 +120,28 @@ class SettingsPage(QWidget):
         self.vBoxLayout.addSpacing(12)
         self.vBoxLayout.addWidget(self.view, 1)
         self.setLayout(self.vBoxLayout)
+
+    def _connectSignalToSlot(self):
+        """连接信号与槽"""
+        self.saveConfigButton.clicked.connect(
+            lambda: (success_bar(self.tr("设置已生效, 部分配置可能需要重启程序生效")), cfg.save())
+        )
+        self.exportConfigButton.clicked.connect(
+            lambda: JsonFunc().dict2json(
+                cfg.toDict(), saveFilePath(self.tr("导出配置"), "NCD Config.json", "JSON (*.json)")
+            )
+        )
+        self.importConfigButton.clicked.connect(
+            lambda: (
+                JsonFunc().dict2json(
+                    JsonFunc().json2dict(getFilePath(self.tr("导入配置"), "NCD Config.json", "JSON (*.json)")), cfg.file
+                ),
+                cfg.appRestartSig.emit(),
+            )
+        )
+        self.clearConfigButton.clicked.connect(
+            lambda: (
+                cfg.file.unlink(),
+                success_bar(self.tr("清除成功! 重启程序生效")),
+            )
+        )

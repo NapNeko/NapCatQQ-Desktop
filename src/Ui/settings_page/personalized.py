@@ -19,7 +19,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.ui.icon import NCDFluentIcon as NCDIcon
 from src.core.config import cfg
 from src.ui.style_sheet import StyleSheet
 from src.ui.common.info_bar import success_bar
@@ -123,7 +122,7 @@ class Personalized(ScrollArea):
 
         # 个性化
         self.themeCard.optionChanged.connect(setTheme)
-        self.themeColorCard.colorChanged.connect(lambda color: setThemeColor(color))
+        self.themeColorCard.colorChanged.connect(setThemeColor)
 
         # 标题栏
         self.commandCenterCard.checkedChanged.connect(settingsSignalBus.commandCenterSingal)

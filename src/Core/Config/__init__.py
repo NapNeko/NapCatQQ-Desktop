@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import json
-import time
-import platform
 from pathlib import Path
 
 # 第三方库导入
-from qfluentwidgets import RangeValidator, RangeConfigItem, TabCloseButtonDisplayMode, qconfig
+from qfluentwidgets import qconfig
 from qfluentwidgets.common import (
     Theme,
     QConfig,
@@ -68,9 +66,10 @@ class Config(QConfig):
 
     def __init__(self):
         super().__init__()
+        self.file = PathFunc().config_path
 
     @exceptionHandler()
-    def load(self, file=None, config=None) -> None:
+    def load(self, file: str | Path | None = None, config: QConfig = None) -> None:
         """
         ## 加载配置
 
