@@ -13,7 +13,6 @@ from qfluentwidgets.components.settings import (
     SwitchSettingCard,
     OptionsSettingCard,
     CustomColorSettingCard,
-    ExpandGroupSettingCard,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
@@ -23,21 +22,6 @@ from src.core.config import cfg
 from src.ui.style_sheet import StyleSheet
 from src.ui.common.info_bar import success_bar
 from src.ui.common.signal_bus import settingsSignalBus
-
-
-class LineEidtExpandGroupSettingCard(ExpandGroupSettingCard):
-    """带有输入框的可展开设置卡片"""
-
-    def __init__(self, icon, title, content=None, parent=None):
-        super().__init__(icon, title, content, parent)
-
-    def _adjustViewSize(self):
-        """adjust view size"""
-        h = sum(w.sizeHint().height() + 3 for w in self.widgets)
-        self.spaceWidget.setFixedHeight(h)
-
-        if self.isExpand:
-            self.setFixedHeight(self.card.height() + h)
 
 
 class Personalized(ScrollArea):
@@ -99,6 +83,7 @@ class Personalized(ScrollArea):
 
     def setComponent(self) -> None:
         """设置组件"""
+        self.setObjectName("settings_pivot_personalized")
         self.setWidget(self.viewWidget)
         self.setWidgetResizable(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

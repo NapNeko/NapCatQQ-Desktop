@@ -3,8 +3,6 @@
 """
 NCD 设置页面
 """
-# 标准库导入
-from pathlib import Path
 
 # 第三方库导入
 from qfluentwidgets import BodyLabel
@@ -15,14 +13,14 @@ from qfluentwidgets import PrimaryPushButton
 from qfluentwidgets.common import setFont
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
-from PySide6.QtCore import QStandardPaths as QSPath
-from PySide6.QtWidgets import QWidget, QFileDialog, QHBoxLayout, QVBoxLayout, QStackedWidget
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.utils.file import JsonFunc
 from src.ui.common.info_bar import info_bar, error_bar, success_bar
 from src.ui.common.file_dialog import getFilePath, saveFilePath
+from src.ui.settings_page.general import General
 from src.ui.settings_page.separator import Separator
 from src.ui.settings_page.personalized import Personalized
 
@@ -54,7 +52,7 @@ class SettingsPage(QWidget):
         self.exportConfigButton = ToolButton(FIcon.UP)
         self.importConfigButton = ToolButton(FIcon.DOWN)
         self.saveConfigButton = PrimaryPushButton(FIcon.UPDATE, self.tr("保存配置"))
-        self.view = QStackedWidget()
+        self.view = QStackedWidget(self)
 
     def setComponent(self) -> None:
         """设置组件"""
@@ -62,6 +60,7 @@ class SettingsPage(QWidget):
         setFont(self.titleLabel, 32, QFont.Weight.DemiBold)
 
         self.view.addWidget(Personalized(self.view))
+        self.view.addWidget(General(self.view))
         self.view.setCurrentIndex(0)
 
         # 设置提示
@@ -78,21 +77,23 @@ class SettingsPage(QWidget):
         """设置分段控件"""
 
         self.pivot.addItem(
-            routeKey="settings_pivot_personalized",
+            routeKey=self.view.widget(0).objectName(),
             text=self.tr("个性化"),
             icon=FIcon.EMOJI_TAB_SYMBOLS,
+            onClick=lambda: self.view.setCurrentWidget(self.view.widget(0)),
         )
         self.pivot.addItem(
-            routeKey="settings_pivot_other",
-            text=self.tr("其他"),
+            routeKey=self.view.widget(1).objectName(),
+            text=self.tr("通用"),
             icon=FIcon.EXPRESSIVE_INPUT_ENTRY,
+            onClick=lambda: self.view.setCurrentWidget(self.view.widget(1)),
         )
         # self.pivot.addItem(
         #     routeKey="settings_pivot_log",
         #     text=self.tr("日志"),
         #     icon=FIcon.CODE,
         # )
-        self.pivot.setCurrentItem("settings_pivot_personalized")
+        self.pivot.setCurrentItem(self.view.widget(0).objectName())
 
     def setupLayout(self) -> None:
         """设置布局"""
@@ -123,22 +124,27 @@ class SettingsPage(QWidget):
 
     def _connectSignalToSlot(self):
         """连接信号与槽"""
-        self.saveConfigButton.clicked.connect(self._on_save_config)
-        self.exportConfigButton.clicked.connect(self._on_export_config)
-        self.importConfigButton.clicked.connect(self._on_import_config)
-        self.clearConfigButton.clicked.connect(self._on_clear_config)
+        self.view.currentChanged.connect(self._onCurrentIndexChanged)
+        self.saveConfigButton.clicked.connect(self._onSaveConfig)
+        self.exportConfigButton.clicked.connect(self._onExportConfig)
+        self.importConfigButton.clicked.connect(self._onImportConfig)
+        self.clearConfigButton.clicked.connect(self._onClearConfig)
 
-    def _on_save_config(self):
+    def _onCurrentIndexChanged(self, index: int) -> None:
+        """分段控件当前索引改变时的槽函数"""
+        self.pivot.setCurrentItem(self.view.widget(index).objectName())
+
+    def _onSaveConfig(self):
         cfg.save()
-        success_bar(self.tr("设置已生效, 部分配置可能需要重启程序生效"))
+        success_bar(self.tr("设置已生效, 部分配置需要重启程序生效"))
 
-    def _on_export_config(self):
+    def _onExportConfig(self):
         if JsonFunc().dict2json(cfg.toDict(), saveFilePath(self.tr("导出配置"), "NCD Config.json", "JSON (*.json)")):
             success_bar(self.tr("导出成功!"))
         else:
             info_bar(self.tr("未选择路径, 操作取消!"))
 
-    def _on_import_config(self):
+    def _onImportConfig(self):
         if not (file_path := getFilePath(self.tr("导入配置"), "NCD Config.json", "JSON (*.json)")):
             info_bar(self.tr("未选择路径, 操作取消!"))
             return
@@ -148,6 +154,6 @@ class SettingsPage(QWidget):
         else:
             error_bar(self.tr("导入失败!"))
 
-    def _on_clear_config(self):
+    def _onClearConfig(self):
         cfg.file.unlink()
         success_bar(self.tr("清除成功! 重启程序生效"))
