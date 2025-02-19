@@ -114,15 +114,14 @@ class NCDTitleBar(TitleBarBase):
         self.maxBtn.close()
         self.closeBtn.close()
 
+    def _updateCommandCenterVisibility(self, visible: bool) -> None:
+        self.backButton.setVisible(visible)
+        self.forwardButton.setVisible(visible)
+        self.searchLineEdit.setVisible(visible)
+
     def _connectSignalToSlot(self):
         """连接信号与槽"""
-        settingsSignalBus.commandCenterSingal.connect(
-            lambda value: (
-                self.backButton.setVisible(value),
-                self.forwardButton.setVisible(value),
-                self.searchLineEdit.setVisible(value),
-            )
-        )
+        settingsSignalBus.commandCenterSingal.connect(self._updateCommandCenterVisibility)
         self.minBtn.clicked.connect(self.window().showMinimized)
         self.maxBtn.clicked.connect(
             lambda: self.window().showNormal() if self.window().isMaximized() else self.window().showMaximized()
