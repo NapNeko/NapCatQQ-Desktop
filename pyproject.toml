@@ -26,6 +26,8 @@ dev = [
 [tool.pdm.scripts]
 format = "python scripts/format_code.py"                                 # 格式化代码
 quick_build = "pyinstaller --clean scripts/quick_build.spec"             # 快速构建可执行文件
+                                                                         # 完整构建可执行文件
+build = "nuitka --standalone --no-pyi-file --output-dir=dist --output-filename='NapCatQQ Desktop' --windows-icon-from-ico=src/ui/resource/icons/logo.ico --enable-plugin=pyside6 --jobs=12 ./main.py"
 
 
 [tool.pdm]
