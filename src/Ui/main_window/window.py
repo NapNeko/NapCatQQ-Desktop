@@ -14,6 +14,7 @@ from src.core.utils.path import PathFunc
 from src.ui.settings_page import SettingsPage
 from src.core.utils.singleton import singleton
 from src.ui.main_window.title_bar import NCDTitleBar
+from src.ui.main_window.system_tray_menu import SystemTray
 
 if False:
     # 使用无法到达的if, 引用 resource 模块保证不会被 autoflake 删除
@@ -39,6 +40,7 @@ class MainWindow(MSFluentWindow):
 
     def setWindow(self) -> None:
         """设置窗体"""
+
         # 标题栏部分
         self.titleBar.deleteLater()
         self.title_bar = NCDTitleBar(self)
@@ -51,6 +53,10 @@ class MainWindow(MSFluentWindow):
         desktop = QApplication.screens()[0].availableGeometry()
         width, height = desktop.width(), desktop.height()
         self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)
+
+        # 创建系统托盘图标
+        self.systemTrayIcon = SystemTray(self)
+        self.systemTrayIcon.show()
 
         # 创建 Splash Screen
         self.splashScreen = SplashScreen(NCDIcon.LOGO.value, self, True)
