@@ -20,6 +20,7 @@ from PySide6.QtCore import Signal
 
 # 项目内模块导入
 from src.core.utils.path import PathFunc
+from src.core.config.config_enum import CloseActionEnum
 
 
 class Config(QConfig):
@@ -62,6 +63,13 @@ class Config(QConfig):
         name="CommandCenter",
         default=True,
         validator=BoolValidator(),
+    )
+    closeBtnAction = OptionsConfigItem(
+        group="General",
+        name="CloseBtnAction",
+        default=CloseActionEnum.CLOSE,
+        validator=OptionsValidator(CloseActionEnum),
+        serializer=EnumSerializer(CloseActionEnum),
     )
 
     def __init__(self):

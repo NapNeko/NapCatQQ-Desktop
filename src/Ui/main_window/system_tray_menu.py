@@ -36,6 +36,7 @@ class SystemTray(QSystemTrayIcon):
             ]
         )
         self.setContextMenu(self.menu)
+        self.activated.connect(parent.show)
 
 
 class SystemTrayIconInfoWidget(QWidget):

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QLabel, QHBoxLayout
 from src.ui.icon import NCDIcon
 from src.core.config import cfg
 from src.ui.common.signal_bus import settingsSignalBus
+from src.core.config.config_enum import CloseActionEnum
 
 
 class NCDTitleBar(TitleBarBase):
@@ -126,7 +127,11 @@ class NCDTitleBar(TitleBarBase):
         self.maxBtn.clicked.connect(
             lambda: self.window().showNormal() if self.window().isMaximized() else self.window().showMaximized()
         )
-        self.closeBtn.clicked.connect(self.window().close)
+        self.closeBtn.clicked.connect(
+            lambda: (
+                self.window().close() if cfg.get(cfg.closeBtnAction) == CloseActionEnum.CLOSE else self.window().hide()
+            )
+        )
 
 
 __all__ = ["NCDTitleBar"]
