@@ -103,7 +103,6 @@ class Personalized(ScrollArea):
 
     def _connectSignalToSlot(self):
         """连接信号与槽"""
-        cfg.appRestartSig.connect(lambda: success_bar(self.tr("设置成功!"), self.tr("设置已生效, 请重启程序")))
 
         # 个性化
         self.themeCard.optionChanged.connect(setTheme)

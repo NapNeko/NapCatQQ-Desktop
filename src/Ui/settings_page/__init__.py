@@ -129,6 +129,7 @@ class SettingsPage(QWidget):
         self.exportConfigButton.clicked.connect(self._onExportConfig)
         self.importConfigButton.clicked.connect(self._onImportConfig)
         self.clearConfigButton.clicked.connect(self._onClearConfig)
+        cfg.appRestartSig.connect(lambda: success_bar(self.tr("设置成功!"), self.tr("设置已生效, 请重启程序")))
 
     def _onCurrentIndexChanged(self, index: int) -> None:
         """分段控件当前索引改变时的槽函数"""
