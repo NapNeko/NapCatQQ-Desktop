@@ -20,7 +20,6 @@ from PySide6.QtWidgets import QWidget
 # 项目内模块导入
 from src.core.config import cfg
 from src.ui.style_sheet import StyleSheet
-from src.ui.common.info_bar import success_bar
 from src.ui.common.signal_bus import settingsSignalBus
 
 

@@ -6,12 +6,9 @@ NCD 设置页面 - 个性化
 # 第三方库导入
 from qfluentwidgets import FluentIcon as FIcon
 from qfluentwidgets import ScrollArea, ExpandLayout
-from qfluentwidgets.common import setTheme, setThemeColor
 from qfluentwidgets.components.settings import (
     SettingCardGroup,
-    SwitchSettingCard,
     OptionsSettingCard,
-    CustomColorSettingCard,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
@@ -19,7 +16,6 @@ from PySide6.QtWidgets import QWidget
 # 项目内模块导入
 from src.core.config import cfg
 from src.ui.style_sheet import StyleSheet
-from src.ui.common.info_bar import success_bar
 
 
 class General(ScrollArea):
