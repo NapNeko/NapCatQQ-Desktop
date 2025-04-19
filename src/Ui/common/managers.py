@@ -284,3 +284,14 @@ class ButtonRightInfoBarManager(InfoBarManager):
             - QPoint: 信息栏的起始位置，在父组件右侧之外
         """
         return QPoint(info_bar.parent().width(), self._pos(info_bar).y())
+
+
+__all__ = [
+    "NCDInfoBarPosition",
+    "TopLeftInfoBarManager",
+    "TopInfoBarManager",
+    "TopRightInfoBarManager",
+    "ButtonLeftInfoBarManager",
+    "ButtonInfoBarManager",
+    "ButtonRightInfoBarManager",
+]

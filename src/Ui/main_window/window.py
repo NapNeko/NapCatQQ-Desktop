@@ -1,0 +1,100 @@
+# -*- coding: utf-8 -*-
+# 第三方库导入
+from qfluentwidgets import FluentIcon as FIcon
+from qfluentwidgets import SplashScreen, MSFluentWindow
+from qfluentwidgets.window.fluent_window import NavigationItemPosition
+from PySide6.QtCore import QSize
+from PySide6.QtWidgets import QApplication
+
+# 项目内模块导入
+from src.ui.icon import NCDIcon
+from src.ui.resource import resource
+from src.ui.home_page import HomePage
+from src.ui.unit_page import UnitPage
+from src.core.utils.path import PathFunc
+from src.ui.settings_page import SettingsPage
+from src.core.utils.singleton import singleton
+from src.ui.main_window.title_bar import NCDTitleBar
+from src.ui.main_window.system_tray_menu import SystemTray
+
+if False:
+    # 使用无法到达的if, 引用 resource 模块保证不会被 autoflake 删除
+    # 同时也不会因为引用了 resource 模块发送奇怪的问题
+    rec = resource
+
+
+@singleton
+class MainWindow(MSFluentWindow):
+    """NapCat Desktop 的主窗体"""
+
+    def __init__(self) -> None:
+        """构造函数"""
+        super().__init__()
+        # 执行路径验证
+        PathFunc().path_validator()
+        # 调用方法
+        self.setWindow()
+        self.setItem()
+        self._connectSignalToSlot()
+        # 组件加载完成结束 SplashScreen
+        self.splashScreen.finish()
+
+    def setWindow(self) -> None:
+        """设置窗体"""
+
+        # 标题栏部分
+        self.titleBar.deleteLater()
+        self.title_bar = NCDTitleBar(self)
+        self.setTitleBar(self.title_bar)
+
+        # 窗体大小
+        self.setMinimumSize(1280, 720)
+
+        # 设置窗体居中
+        desktop = QApplication.screens()[0].availableGeometry()
+        width, height = desktop.width(), desktop.height()
+        self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)
+
+        # 创建系统托盘图标
+        self.systemTrayIcon = SystemTray(self)
+        self.systemTrayIcon.show()
+
+        # 创建 Splash Screen
+        self.splashScreen = SplashScreen(NCDIcon.LOGO.value, self, True)
+        self.splashScreen.setIconSize(QSize(360, 260))
+        self.splashScreen.raise_()
+
+        # 显示窗体
+        self.show()
+
+        # 挂起
+        QApplication.processEvents()
+
+    def setItem(self) -> None:
+        """设置侧边栏"""
+
+        self.addSubInterface(
+            interface=HomePage(),
+            icon=FIcon.HOME,
+            text=self.tr("主页"),
+            position=NavigationItemPosition.TOP,
+        )
+
+        self.addSubInterface(
+            interface=UnitPage(),
+            icon=FIcon.TILES,
+            text=self.tr("组件"),
+            position=NavigationItemPosition.BOTTOM,
+        )
+
+        self.addSubInterface(
+            interface=SettingsPage(),
+            icon=FIcon.SETTING,
+            text=self.tr("设置"),
+            position=NavigationItemPosition.BOTTOM,
+        )
+
+    def _connectSignalToSlot(self): ...
+
+
+__all__ = ["MainWindow"]

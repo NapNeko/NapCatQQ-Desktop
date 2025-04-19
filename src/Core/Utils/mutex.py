@@ -30,3 +30,6 @@ class SingleInstanceApplication:
         self.semaphore.release()
 
         return running
+
+
+__all__ = ["SingleInstanceApplication"]
