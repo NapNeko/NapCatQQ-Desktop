@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 from src.ui.icon import NCDIcon
 from src.ui.resource import resource
 from src.ui.home_page import HomePage
+from src.ui.unit_page import UnitPage
 from src.core.utils.path import PathFunc
 from src.ui.settings_page import SettingsPage
 from src.core.utils.singleton import singleton
@@ -77,6 +78,13 @@ class MainWindow(MSFluentWindow):
             icon=FIcon.HOME,
             text=self.tr("主页"),
             position=NavigationItemPosition.TOP,
+        )
+
+        self.addSubInterface(
+            interface=UnitPage(),
+            icon=FIcon.TILES,
+            text=self.tr("组件"),
+            position=NavigationItemPosition.BOTTOM,
         )
 
         self.addSubInterface(
