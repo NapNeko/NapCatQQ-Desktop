@@ -8,7 +8,6 @@ from json import JSONDecodeError
 from typing import List
 
 # 项目内模块导入
-from src.Ui.common.info_bar import error_bar
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import Config, NapCatConfig, OneBotConfig
 
@@ -85,16 +84,10 @@ def update_config(config: Config) -> bool:
         # 定义配置内容
         onebot_config = OneBotConfig(
             **{
-                "http": config.connect.http,
-                "ws": config.connect.ws,
-                "reverseWs": config.connect.reverseWs,
-                "debug": config.advanced.debug,
-                "heartInterval": config.bot.heartInterval,
-                "messagePostFormat": config.bot.messagePostFormat,
-                "enableLocalFile2Url": config.advanced.enableLocalFile2Url,
+                "network": config.connect,
                 "musicSignUrl": config.bot.musicSignUrl,
-                "reportSelfMessage": config.bot.reportSelfMessage,
-                "token": config.bot.token,
+                "enableLocalFile2Url": config.advanced.enableLocalFile2Url,
+                "parseMultMsg": config.advanced.parseMultMsg,
             }
         )
         napcat_config = NapCatConfig(
@@ -103,7 +96,9 @@ def update_config(config: Config) -> bool:
                 "consoleLog": config.advanced.consoleLog,
                 "fileLogLevel": config.advanced.fileLogLevel,
                 "consoleLogLevel": config.advanced.consoleLogLevel,
+                "packetBackend": config.advanced.packetBackend,
                 "packetServer": config.advanced.packetServer,
+                "o3HookMode": config.advanced.o3HookMode,
             }
         )
 
