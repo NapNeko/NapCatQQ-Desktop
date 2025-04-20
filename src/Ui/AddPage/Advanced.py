@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.Ui.common.InputCard import LineEditItem, SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
+from src.Ui.common.InputCard import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
 from src.Core.Config.ConfigModel import AdvancedConfig
 
 
@@ -39,7 +39,6 @@ class AdvancedWidget(ScrollArea):
     def _initWidget(self) -> None:
         """
         ## 初始化 QWidget 所需要的控件并配置
-        创建 InputCard
         """
         self.autoStartCard = SwitchConfigCard(
             icon=FluentIcon.PLAY,
@@ -53,16 +52,28 @@ class AdvancedWidget(ScrollArea):
             content=self.tr("当Bot状态为 离线 时, 发送通知"),
             parent=self.view,
         )
-        self.debugModeCard = SwitchConfigCard(
+        self.parseMultMsg = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
-            title=self.tr("Debug"),
-            content=self.tr("消息会携带一个 raw 字段，即原始消息内容"),
+            title=self.tr("解析合并转发消息"),
+            content=self.tr("是否解析合并转发消息"),
+            parent=self.view,
+        )
+        self.packetServerCard = LineEditConfigCard(
+            icon=FluentIcon.COMMAND_PROMPT,
+            title=self.tr("Packet Server"),
+            content=self.tr("设置 Packet Server 地址, 为空则使用默认值"),
+            parent=self.view,
+        )
+        self.packetBackendCard = LineEditConfigCard(
+            icon=FluentIcon.COMMAND_PROMPT,
+            title=self.tr("Packet Backend"),
+            content=self.tr("设置 Packet Backend, 为空则使用默认值"),
             parent=self.view,
         )
         self.localFile2UrlCard = SwitchConfigCard(
             icon=FluentIcon.SHARE,
             title=self.tr("LocalFile2Url"),
-            content=self.tr("是否将本地文件转换为URL，如果获取不到url则使用base64字段返回文件内容"),
+            content=self.tr("是否将本地文件转换为URL, 如果获取不到url则使用base64字段返回文件内容"),
             value=True,
             parent=self.view,
         )
@@ -93,16 +104,26 @@ class AdvancedWidget(ScrollArea):
             texts=["info", "debug", "error"],
             parent=self.view,
         )
+        self.o3HookModeCard = ComboBoxConfigCard(
+            icon=FluentIcon.EMOJI_TAB_SYMBOLS,
+            title=self.tr("O3 Hook 模式"),
+            content=self.tr("设置 O3 Hook 模式"),
+            texts=["0", "1"],
+            parent=self.view,
+        )
 
         self.cards = [
             self.autoStartCard,
             self.offlineNotice,
-            self.debugModeCard,
+            self.parseMultMsg,
+            self.packetServerCard,
+            self.packetBackendCard,
             self.localFile2UrlCard,
             self.fileLogCard,
             self.consoleLogCard,
             self.fileLogLevelCard,
             self.consoleLevelCard,
+            self.o3HookModeCard,
         ]
 
     def fillValue(self) -> None:
@@ -111,12 +132,15 @@ class AdvancedWidget(ScrollArea):
         """
         self.autoStartCard.fillValue(self.config.autoStart)
         self.offlineNotice.fillValue(self.config.offlineNotice)
-        self.debugModeCard.fillValue(self.config.debug)
+        self.parseMultMsg.fillValue(self.config.parseMultMsg)
+        self.packetServerCard.fillValue(self.config.packetServer)
+        self.packetBackendCard.fillValue(self.config.packetBackend)
         self.localFile2UrlCard.fillValue(self.config.enableLocalFile2Url)
         self.fileLogCard.fillValue(self.config.fileLog)
         self.consoleLogCard.fillValue(self.config.consoleLog)
         self.fileLogLevelCard.fillValue(self.config.fileLogLevel)
         self.consoleLevelCard.fillValue(self.config.consoleLogLevel)
+        self.o3HookModeCard.fillValue(self.config.o3HookMode)
 
     def _setLayout(self) -> None:
         """
@@ -137,12 +161,15 @@ class AdvancedWidget(ScrollArea):
         return {
             "autoStart": self.autoStartCard.getValue(),
             "offlineNotice": self.offlineNotice.getValue(),
-            "debug": self.debugModeCard.getValue(),
+            "parseMultMsg": self.parseMultMsg.getValue(),
+            "packetServer": self.packetServerCard.getValue(),
+            "packetBackend": self.packetBackendCard.getValue(),
             "enableLocalFile2Url": self.localFile2UrlCard.getValue(),
             "fileLog": self.fileLogCard.getValue(),
             "consoleLog": self.consoleLogCard.getValue(),
             "fileLogLevel": self.fileLogLevelCard.getValue(),
             "consoleLogLevel": self.consoleLevelCard.getValue(),
+            "o3HookMode": self.o3HookModeCard.getValue(),
         }
 
     def clearValues(self) -> None:
