@@ -10,7 +10,7 @@ from typing import List
 # 项目内模块导入
 from src.Ui.common.info_bar import error_bar
 from src.Core.Utils.PathFunc import PathFunc
-from src.Core.Config.ConfigModel import Config, WebUiConfig, NapCatConfig, OneBotConfig
+from src.Core.Config.ConfigModel import Config, NapCatConfig, OneBotConfig
 
 
 def read_config() -> List[Config]:
@@ -26,20 +26,6 @@ def read_config() -> List[Config]:
     except Exception as error:
         write_config([])  # 覆盖原有配置文件
         return []
-
-
-def read_webui_config() -> WebUiConfig:
-    """
-    ## 读取 NapCat WebUI 配置文件
-
-    ## 返回
-        - Config
-    """
-    if not PathFunc().webui_config_path.exists() and not PathFunc().webui_config_path.is_file():
-        error_bar("WebUI 配置文件不存在")
-        return
-    with open(str(PathFunc().webui_config_path), "r", encoding="utf-8") as file:
-        return WebUiConfig(**json.load(file))
 
 
 def write_config(configs: List[Config]) -> None:
@@ -117,7 +103,7 @@ def update_config(config: Config) -> bool:
                 "consoleLog": config.advanced.consoleLog,
                 "fileLogLevel": config.advanced.fileLogLevel,
                 "consoleLogLevel": config.advanced.consoleLogLevel,
-                "packetServer": config.advanced.packetServer
+                "packetServer": config.advanced.packetServer,
             }
         )
 

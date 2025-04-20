@@ -120,14 +120,6 @@ class NapCatConfig(BaseModel):
     packetServer: str
 
 
-class WebUiConfig(BaseModel):
-    host: str
-    port: int
-    prefix: str
-    token: str
-    loginRate: int
-
-
 DEFAULT_CONFIG = {
     "bot": {
         "name": "",
