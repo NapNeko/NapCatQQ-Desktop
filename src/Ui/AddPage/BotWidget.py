@@ -60,7 +60,7 @@ class BotWidget(ScrollArea):
             icon=FluentIcon.MUSIC,
             title=self.tr("音乐签名URL"),
             content=self.tr("用于处理音乐相关请求, 为空则使用默认签名服务器"),
-            placeholder_text=self.tr("http://example.com/music"),
+            placeholder_text=self.tr("https://example.com/music"),
             parent=self.view,
         )
 

@@ -114,7 +114,7 @@ class GetRemoteVersionThread(QThread):
             ver_hash = response["verHash"]
             version = response["version"].replace("-", ".")
             download_url = f"https://dldir1.qq.com/qqfile/qq/QQNT/{ver_hash}/QQ{version}_x64.exe"
-            return {"version": response["version"], "download_url": download_url}
+            return {"version": version, "download_url": download_url}
 
     def getNapCatDesktop(self) -> dict:
         """
