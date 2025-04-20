@@ -11,7 +11,6 @@ class BotConfig(BaseModel):
     name: str
     QQID: str
     musicSignUrl: str
-    parseMultMsg: bool = False
 
     @field_validator("name")
     @staticmethod
@@ -83,6 +82,7 @@ class ConnectConfig(BaseModel):
 class AdvancedConfig(BaseModel):
     autoStart: bool = False
     offlineNotice: bool = False
+    parseMultMsg: bool = False
     packetServer: str = ""
     packetBackend: str = "auto"
     enableLocalFile2Url: bool
