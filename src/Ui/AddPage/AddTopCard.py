@@ -129,11 +129,12 @@ class AddTopCard(QWidget):
         """
         # 项目内模块导入
         from src.Ui.AddPage import AddWidget
+        from src.Ui.MainWindow import MainWindow
 
         box = MessageBox(
             title=self.tr("确认清除配置"),
             content=self.tr("清空后，该页面的所有配置项都会被清空，且该操作无法撤销"),
-            parent=AddWidget(),
+            parent=MainWindow(),
         )
 
         if box.exec():
