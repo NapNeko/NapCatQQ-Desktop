@@ -88,9 +88,9 @@ class AdvancedConfig(BaseModel):
     enableLocalFile2Url: bool
     fileLog: bool
     consoleLog: bool
-    fileLogLevel: str
-    consoleLogLevel: str
-    o3HookMode: int
+    fileLogLevel: Literal["debug", "info", "error"] = "debug"
+    consoleLogLevel: Literal["debug", "info", "error"] = "info"
+    o3HookMode: Literal[0, 1] = 1
 
 
 class Config(BaseModel):
@@ -100,16 +100,10 @@ class Config(BaseModel):
 
 
 class OneBotConfig(BaseModel):
-    http: HttpConfig
-    ws: WsConfig
-    reverseWs: ReverseWsConfig
-    debug: bool
-    heartInterval: int = 30000
-    messagePostFormat: str
-    enableLocalFile2Url: bool
-    musicSignUrl: str
-    reportSelfMessage: bool
-    token: str
+    network: ConnectConfig
+    musicSignUrl: str = ""
+    enableLocalFile2Url: bool = False
+    parseMultMsg: bool = False
 
 
 class NapCatConfig(BaseModel):
@@ -117,41 +111,36 @@ class NapCatConfig(BaseModel):
     consoleLog: bool
     fileLogLevel: str
     consoleLogLevel: str
+    packetBackend: str
     packetServer: str
+    o3HookMode: Literal[0, 1] = 1
 
 
 DEFAULT_CONFIG = {
     "bot": {
         "name": "",
         "QQID": "",
-        "messagePostFormat": "array",
-        "reportSelfMessage": False,
         "musicSignUrl": "",
-        "heartInterval": 30000,
-        "token": "",
+        "parseMultMsg": False,
     },
     "connect": {
-        "http": {
-            "enable": False,
-            "host": "",
-            "port": 3000,
-            "secret": "",
-            "enableHeart": False,
-            "enablePost": False,
-            "postUrls": [],
-        },
-        "ws": {"enable": False, "host": "", "port": 3001},
-        "reverseWs": {"enable": False, "urls": []},
+        "httpServers": [],
+        "httpSseServers": [],
+        "httpClients": [],
+        "websocketServers": [],
+        "websocketClients": [],
+        "plugins": [],
     },
     "advanced": {
-        "debug": False,
-        "localFile2url": False,
-        "fileLog": False,
-        "consoleLog": False,
-        "enableLocalFile2Url": "debug",
-        "consoleLogLevel": "info",
         "autoStart": False,
-        "offline_notice": False,
+        "offlineNotice": False,
         "packetServer": "",
+        "packetBackend": "auto",
+        "enableLocalFile2Url": False,
+        "fileLog": False,
+        "consoleLog": True,
+        "fileLogLevel": "debug",
+        "consoleLogLevel": "info",
+        "o3HookMode": 1,
     },
 }
