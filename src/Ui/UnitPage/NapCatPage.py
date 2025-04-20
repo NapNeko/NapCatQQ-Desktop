@@ -40,7 +40,6 @@ class NapCatPage(PageBase):
         if self.localVersion is None:
             # 如果没有本地版本则显示安装按钮
             self.appCard.switchButton(ButtonStatus.UNINSTALLED)
-            return
 
         if self.remoteVersion is None:
             # 如果没有远程版本则不操作
