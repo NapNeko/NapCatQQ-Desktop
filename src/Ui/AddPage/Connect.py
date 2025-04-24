@@ -70,7 +70,7 @@ class DefaultPage(QWidget):
 
         self.imageLabel = ImageLabel(self)
         self.movie = QMovie(random.choice(self.images))
-        self.label = BodyLabel(self.tr("还没有添加配置项喔"), self)
+        self.label = BodyLabel(self.tr("还没有添加配置项喔, 快点击左上角按钮添加一个吧"), self)
         self.hBoxLayout = QVBoxLayout(self)
 
         self.imageLabel.setMovie(self.movie)

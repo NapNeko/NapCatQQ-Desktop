@@ -8,6 +8,7 @@ from qfluentwidgets.components import (
     MessageBox,
     PushButton,
     TitleLabel,
+    ToolButton,
     CaptionLabel,
     SegmentedWidget,
     PrimaryPushButton,
@@ -17,6 +18,8 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
 from src.Ui.common.info_bar import error_bar, success_bar
+from src.Ui.common.separator import Separator
+from src.Ui.AddPage.signal_bus import addPageSingalBus
 from src.Core.Config.OperateConfig import update_config, check_duplicate_bot
 
 if TYPE_CHECKING:
@@ -52,9 +55,15 @@ class AddTopCard(QWidget):
         self.subtitleLabel = CaptionLabel(self.tr("在添加机器人之前，您需要做一些配置"), self)
 
     def _createButton(self) -> None:
-        """构建 Button 并配置"""
-        self.clearConfigButton = PushButton(icon=FluentIcon.DELETE, text=self.tr("清除配置"))
-        self.psPushButton = PrimaryPushButton(icon=FluentIcon.ADD, text=self.tr("添加到机器人列表"))
+        """构建 Button相关 并配置"""
+        self.clearConfigButton = ToolButton(FluentIcon.DELETE)
+        self.psPushButton = PrimaryPushButton(FluentIcon.ADD, self.tr("添加"))
+        self.separator = Separator(self)
+        self.addConnectConfigButton = PrimaryPushButton(FluentIcon.ADD, self.tr("添加连接配置"), self)
+
+        # 设置一下默认隐藏
+        self.separator.setVisible(False)
+        self.addConnectConfigButton.setVisible(False)
 
     def _setLayout(self) -> None:
         """
@@ -75,6 +84,10 @@ class AddTopCard(QWidget):
         self.buttonLayout.addWidget(self.clearConfigButton),
         self.buttonLayout.addSpacing(2)
         self.buttonLayout.addWidget(self.psPushButton)
+        self.buttonLayout.addSpacing(2)
+        self.buttonLayout.addWidget(self.separator)
+        self.buttonLayout.addSpacing(2)
+        self.buttonLayout.addWidget(self.addConnectConfigButton)
         self.buttonLayout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
 
         # 添加到总布局
@@ -92,6 +105,8 @@ class AddTopCard(QWidget):
         """
         self.clearConfigButton.clicked.connect(self._clearBtnSlot)
         self.psPushButton.clicked.connect(self._addBotListBtnSlot)
+        addPageSingalBus.addWidgetViewChange.connect(self._buttonVisiable)
+        self.addConnectConfigButton.clicked.connect(addPageSingalBus.addConnectConfigButtonClicked.emit)
 
     @Slot()
     def _addBotListBtnSlot(self) -> None:
@@ -141,3 +156,24 @@ class AddTopCard(QWidget):
             AddWidget().botWidget.clearValues()
             AddWidget().connectWidget.clearValues()
             AddWidget().advancedWidget.clearValues()
+
+    @Slot(int)
+    def _buttonVisiable(self, index) -> None:
+        """
+        ## 设置按钮的激活状态
+        """
+
+        # 判断当前再哪一页,然后决定按钮是否显示
+        match index:
+            case 0 | 2:
+                self.psPushButton.setVisible(True)
+                self.clearConfigButton.setVisible(True)
+                self.separator.setVisible(False)
+                self.addConnectConfigButton.setVisible(False)
+            case 1:
+                self.psPushButton.setVisible(True)
+                self.clearConfigButton.setVisible(True)
+                self.separator.setVisible(True)
+                self.addConnectConfigButton.setVisible(True)
+            case _:
+                pass
