@@ -103,7 +103,7 @@ class QQInstall(QThread):
 
     def __init__(self, exe_path: str | Path) -> None:
         super().__init__()
-        self.exe_path = exe_path
+        self.exe_path: Path = exe_path if isinstance(exe_path, Path) else Path(exe_path)
 
     def run(self) -> None:
         """

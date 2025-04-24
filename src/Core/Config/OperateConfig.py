@@ -8,6 +8,7 @@ from json import JSONDecodeError
 from typing import List
 
 # 项目内模块导入
+from src.Core.Utils.logger import logger
 from src.Core.Utils.PathFunc import PathFunc
 from src.Core.Config.ConfigModel import Config, NapCatConfig, OneBotConfig
 
