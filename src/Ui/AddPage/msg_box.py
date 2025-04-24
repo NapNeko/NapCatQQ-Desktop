@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 
 # 第三方库导入
-from qfluentwidgets import BodyLabel, TitleLabel, RadioButton, MessageBoxBase, SimpleCardWidget
+from qfluentwidgets import BodyLabel
+from qfluentwidgets import FluentIcon as FI
+from qfluentwidgets import TitleLabel, RadioButton, MessageBoxBase, SimpleCardWidget
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import QGridLayout, QVBoxLayout, QButtonGroup
 
 # 项目内模块导入
 from src.Ui.AddPage.enum import ConnectType
 from src.Ui.AddPage.signal_bus import addPageSingalBus
+from src.Ui.common.InputCard.GenericCard import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
 
 
 class ChooseConfigCard(SimpleCardWidget):
@@ -91,16 +94,217 @@ class ChooseConfigTypeDialog(MessageBoxBase):
         self.yesButton.clicked.connect(self._onYesButtonClicked)
 
     @Slot()
-    def _onYesButtonClicked(self):
+    def _onYesButtonClicked(self) -> None:
         """Yes 按钮槽函数"""
 
-        if id := self.buttonGroup.checkedId() == -1:
+        if (id := self.buttonGroup.checkedId()) == -1:
             return
         else:
-            addPageSingalBus.ChooseConnectType.emit(list(ConnectType)[id])
+            addPageSingalBus.chooseConnectType.emit(list(ConnectType)[id])
 
 
 class HttpServerConfigDialog(MessageBoxBase):
 
+    def __init__(self, parent) -> None:
+        super().__init__(parent)
+
+        # 创建控件
+        self.titleLabel = TitleLabel(self.tr("HTTP Server"), self)
+        self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用"))
+        self.debugCard = SwitchConfigCard(FI.DEVELOPER_TOOLS, self.tr("调试"))
+        self.nameCard = LineEditConfigCard(FI.TAG, self.tr("名称*"), "HTTP Server", self.tr("设置配置名称"))
+        self.hostCard = LineEditConfigCard(FI.HOME, self.tr("Host*"), "0.0.0.0", self.tr("设置主机地址"))
+        self.portCard = LineEditConfigCard(FI.LINK, self.tr("Port*"), "3000", self.tr("设置端口号"))
+        self.CORSCard = SwitchConfigCard(FI.GLOBE, self.tr("CORS"))
+        self.websocketCard = SwitchConfigCard(FI.SCROLL, self.tr("WebSocket"))
+        self.msgFormatCard = ComboBoxConfigCard(
+            FI.MESSAGE, self.tr("消息格式"), ["Array", "String"], self.tr("设置消息格式")
+        )
+        self.tokenCard = LineEditConfigCard(FI.VPN, self.tr("Token"), content=self.tr("设置连接Token"))
+
+        # 设置属性
+        self.widget.setMinimumWidth(600)
+
+        # 创建布局
+        self.gridLayout = QGridLayout()
+        self.gridLayout.setSpacing(8)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.debugCard, 0, 1, 1, 1)
+        self.gridLayout.addWidget(self.nameCard, 2, 0, 1, 2)
+        self.gridLayout.addWidget(self.hostCard, 3, 0, 1, 2)
+        self.gridLayout.addWidget(self.portCard, 4, 0, 1, 2)
+        self.gridLayout.addWidget(self.CORSCard, 5, 0, 1, 1)
+        self.gridLayout.addWidget(self.websocketCard, 5, 1, 1, 1)
+        self.gridLayout.addWidget(self.msgFormatCard, 6, 0, 1, 2)
+        self.gridLayout.addWidget(self.tokenCard, 7, 0, 1, 2)
+
+        # 设置布局
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addLayout(self.gridLayout)
+
+
+class HttpSSEServerConfigDialog(MessageBoxBase):
+
     def __init__(self, parent):
         super().__init__(parent)
+
+        # 创建控件
+        self.titleLabel = TitleLabel(self.tr("HTTP SSE Server"), self)
+        self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用"))
+        self.debugCard = SwitchConfigCard(FI.DEVELOPER_TOOLS, self.tr("调试"))
+        self.nameCard = LineEditConfigCard(FI.TAG, self.tr("名称*"), "HTTP SSE Server", self.tr("设置配置名称"))
+        self.hostCard = LineEditConfigCard(FI.HOME, self.tr("Host*"), "0.0.0.0", self.tr("设置主机地址"))
+        self.portCard = LineEditConfigCard(FI.LINK, self.tr("Port*"), "3000", self.tr("设置端口号"))
+        self.CORSCard = SwitchConfigCard(FI.GLOBE, self.tr("CORS"))
+        self.websocketCard = SwitchConfigCard(FI.SCROLL, self.tr("WebSocket"))
+        self.reportSelfMsgCard = SwitchConfigCard(FI.MESSAGE, self.tr("上报自身消息"))
+        self.msgFormatCard = ComboBoxConfigCard(
+            FI.MESSAGE, self.tr("消息格式"), ["Array", "String"], self.tr("设置消息格式")
+        )
+        self.tokenCard = LineEditConfigCard(FI.VPN, self.tr("Token"), content=self.tr("设置连接Token"))
+
+        # 设置属性
+        self.widget.setMinimumWidth(600)
+
+        # 创建布局
+        self.gridLayout = QGridLayout()
+        self.gridLayout.setSpacing(8)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 3)
+        self.gridLayout.addWidget(self.debugCard, 0, 3, 1, 3)
+        self.gridLayout.addWidget(self.nameCard, 2, 0, 1, 6)
+        self.gridLayout.addWidget(self.hostCard, 3, 0, 1, 6)
+        self.gridLayout.addWidget(self.portCard, 4, 0, 1, 6)
+        self.gridLayout.addWidget(self.CORSCard, 5, 0, 1, 2)
+        self.gridLayout.addWidget(self.websocketCard, 5, 2, 1, 2)
+        self.gridLayout.addWidget(self.reportSelfMsgCard, 5, 4, 1, 2)
+        self.gridLayout.addWidget(self.msgFormatCard, 6, 0, 1, 6)
+        self.gridLayout.addWidget(self.tokenCard, 7, 0, 1, 6)
+
+        # 设置布局
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addLayout(self.gridLayout)
+
+
+class HttpClientConfigDialog(MessageBoxBase):
+
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        # 创建控件
+        self.titleLabel = TitleLabel(self.tr("HTTP Client"), self)
+        self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用"))
+        self.debugCard = SwitchConfigCard(FI.DEVELOPER_TOOLS, self.tr("调试"))
+        self.reportSelfMsgCard = SwitchConfigCard(FI.MESSAGE, self.tr("上报自身消息"))
+        self.nameCard = LineEditConfigCard(FI.TAG, self.tr("名称*"), "HTTP Client", self.tr("设置配置名称"))
+        self.urlCard = LineEditConfigCard(FI.LINK, "URL*", "http://localhost:8080", self.tr("设置请求地址"))
+        self.msgFormatCard = ComboBoxConfigCard(
+            FI.MESSAGE, self.tr("消息格式"), ["Array", "String"], self.tr("设置消息格式")
+        )
+        self.tokenCard = LineEditConfigCard(FI.VPN, self.tr("Token"), content=self.tr("设置连接Token"))
+
+        # 设置属性
+        self.widget.setMinimumWidth(600)
+
+        # 创建布局
+        self.gridLayout = QGridLayout()
+        self.gridLayout.setSpacing(8)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 2)
+        self.gridLayout.addWidget(self.debugCard, 0, 2, 1, 2)
+        self.gridLayout.addWidget(self.reportSelfMsgCard, 0, 4, 1, 2)
+        self.gridLayout.addWidget(self.nameCard, 1, 0, 1, 6)
+        self.gridLayout.addWidget(self.urlCard, 2, 0, 1, 6)
+        self.gridLayout.addWidget(self.msgFormatCard, 3, 0, 1, 6)
+        self.gridLayout.addWidget(self.tokenCard, 4, 0, 1, 6)
+
+        # 设置布局
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addLayout(self.gridLayout)
+
+
+class WebsocketServerConfigDialog(MessageBoxBase):
+
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        # 创建控件
+        self.titleLabel = TitleLabel(self.tr("Websocket Server"), self)
+        self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用"))
+        self.debugCard = SwitchConfigCard(FI.DEVELOPER_TOOLS, self.tr("调试"))
+        self.forcePushEventCard = SwitchConfigCard(FI.MESSAGE, self.tr("强制推送事件"), value=True)
+        self.reportSelfMsgCard = SwitchConfigCard(FI.MESSAGE, self.tr("上报自身消息"))
+        self.nameCard = LineEditConfigCard(FI.TAG, self.tr("名称*"), "Websocket Server", self.tr("设置配置名称"))
+        self.hostCard = LineEditConfigCard(FI.HOME, self.tr("Host*"), "0.0.0.0", self.tr("设置主机地址"))
+        self.portCard = LineEditConfigCard(FI.LINK, self.tr("Port*"), "3000", self.tr("设置端口号"))
+        self.msgFormatCard = ComboBoxConfigCard(
+            FI.MESSAGE, self.tr("消息格式"), ["Array", "String"], self.tr("设置消息格式")
+        )
+        self.tokenCard = LineEditConfigCard(FI.VPN, self.tr("Token"), content=self.tr("设置连接Token"))
+        self.heartIntervalCard = LineEditConfigCard(FI.HEART, self.tr("心跳间隔"), "30000", self.tr("设置心跳间隔"))
+
+        # 设置属性
+        self.widget.setMinimumWidth(600)
+
+        # 创建布局
+        self.gridLayout = QGridLayout()
+        self.gridLayout.setSpacing(8)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.debugCard, 0, 1, 1, 1)
+        self.gridLayout.addWidget(self.forcePushEventCard, 0, 2, 1, 1)
+        self.gridLayout.addWidget(self.reportSelfMsgCard, 0, 3, 1, 1)
+        self.gridLayout.addWidget(self.nameCard, 2, 0, 1, 4)
+        self.gridLayout.addWidget(self.hostCard, 3, 0, 1, 2)
+        self.gridLayout.addWidget(self.portCard, 3, 2, 1, 2)
+        self.gridLayout.addWidget(self.msgFormatCard, 4, 0, 1, 4)
+        self.gridLayout.addWidget(self.tokenCard, 5, 0, 1, 2)
+        self.gridLayout.addWidget(self.heartIntervalCard, 5, 2, 1, 2)
+
+        # 设置布局
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addLayout(self.gridLayout)
+
+
+class WebsocketClientConfigDialog(MessageBoxBase):
+
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        # 创建控件
+        self.titleLabel = TitleLabel(self.tr("Websocket Client"), self)
+        self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用"))
+        self.debugCard = SwitchConfigCard(FI.DEVELOPER_TOOLS, self.tr("调试"))
+        self.reportSelfMsgCard = SwitchConfigCard(FI.MESSAGE, self.tr("上报自身消息"))
+        self.nameCard = LineEditConfigCard(FI.TAG, self.tr("名称*"), "Websocket Client", self.tr("设置配置名称"))
+        self.urlCard = LineEditConfigCard(FI.LINK, "URL*", "ws://localhost:8080", self.tr("设置请求地址"))
+        self.msgFormatCard = ComboBoxConfigCard(
+            FI.MESSAGE, self.tr("消息格式"), ["Array", "String"], self.tr("设置消息格式")
+        )
+        self.tokenCard = LineEditConfigCard(FI.VPN, self.tr("Token"), content=self.tr("设置连接Token"))
+        self.heartIntervalCard = LineEditConfigCard(FI.HEART, self.tr("心跳间隔"), "30000", self.tr("设置心跳间隔"))
+        self.reconnectIntervalCard = LineEditConfigCard(
+            FI.UPDATE, self.tr("重连间隔"), "30000", self.tr("设置重连间隔")
+        )
+
+        # 设置属性
+        self.widget.setMinimumWidth(600)
+
+        # 创建布局
+        self.gridLayout = QGridLayout()
+        self.gridLayout.setSpacing(8)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 2)
+        self.gridLayout.addWidget(self.debugCard, 0, 2, 1, 2)
+        self.gridLayout.addWidget(self.reportSelfMsgCard, 0, 4, 1, 2)
+        self.gridLayout.addWidget(self.nameCard, 1, 0, 1, 6)
+        self.gridLayout.addWidget(self.urlCard, 2, 0, 1, 6)
+        self.gridLayout.addWidget(self.msgFormatCard, 3, 0, 1, 3)
+        self.gridLayout.addWidget(self.tokenCard, 3, 3, 1, 3)
+        self.gridLayout.addWidget(self.heartIntervalCard, 4, 0, 1, 3)
+        self.gridLayout.addWidget(self.reconnectIntervalCard, 4, 3, 1, 3)
+
+        # 设置布局
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addLayout(self.gridLayout)

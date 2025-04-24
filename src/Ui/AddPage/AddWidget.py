@@ -11,9 +11,17 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.AddPage.enum import ConnectType
 from src.Ui.common.widget import BackgroundWidget
 from src.Ui.AddPage.Connect import ConnectWidget
-from src.Ui.AddPage.msg_box import ChooseConfigTypeDialog
+from src.Ui.AddPage.msg_box import (
+    ChooseConfigTypeDialog,
+    HttpClientConfigDialog,
+    HttpServerConfigDialog,
+    HttpSSEServerConfigDialog,
+    WebsocketClientConfigDialog,
+    WebsocketServerConfigDialog,
+)
 from src.Ui.AddPage.Advanced import AdvancedWidget
 from src.Core.Utils.singleton import singleton
 from src.Ui.AddPage.BotWidget import BotWidget
@@ -128,6 +136,7 @@ class AddWidget(BackgroundWidget):
         """
         # 连接信号
         addPageSingalBus.addConnectConfigButtonClicked.connect(self._onAddConnectConfigButtonClicked)
+        addPageSingalBus.chooseConnectType.connect(self._onShowTypeDialog)
 
     @Slot()
     def _onAddConnectConfigButtonClicked(self) -> None:
@@ -136,6 +145,29 @@ class AddWidget(BackgroundWidget):
         from src.Ui.MainWindow import MainWindow
 
         ChooseConfigTypeDialog(MainWindow()).exec()
+
+    @Slot()
+    def _onShowTypeDialog(self, connectType: ConnectType) -> None:
+        """添加连接配置按钮的槽函数"""
+        print(connectType)
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
+
+        match connectType:
+            case ConnectType.HTTP_SERVER:
+                # HTTP 服务器
+                HttpServerConfigDialog(MainWindow()).exec()
+            case ConnectType.HTTP_SSE_SERVER:
+                # HTTP SSE 服务器
+                HttpSSEServerConfigDialog(MainWindow()).exec()
+            case ConnectType.HTTP_CLIENT:
+                HttpClientConfigDialog(MainWindow()).exec()
+            case ConnectType.WEBSOCKET_SERVER:
+                WebsocketServerConfigDialog(MainWindow()).exec()
+            case ConnectType.WEBSOCKET_CLIENT:
+                WebsocketClientConfigDialog(MainWindow()).exec()
+            case _:
+                pass
 
     def getConfig(self) -> dict:
         """
