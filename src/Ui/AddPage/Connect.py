@@ -3,7 +3,7 @@
 import random
 
 # 第三方库导入
-from qfluentwidgets import BodyLabel, ImageLabel
+from qfluentwidgets import BodyLabel, FlowLayout, ImageLabel, ScrollArea
 from PySide6.QtGui import QMovie
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
@@ -13,9 +13,7 @@ from src.Core.Config.ConfigModel import ConnectConfig
 
 
 class ConnectWidget(QStackedWidget):
-    """
-    ## 连接配置项对应的 QStackedWidget
-    """
+    """连接配置项对应的 QStackedWidget"""
 
     def __init__(self, parent=None, config: ConnectConfig | None = None) -> None:
         super().__init__(parent=parent)
@@ -31,27 +29,23 @@ class ConnectWidget(QStackedWidget):
     def _postInit(self) -> None:
         """初始化"""
         self.defultPage = DefaultPage(self)
+        self.cardListPage = CardListPage(self)
 
         self.addWidget(self.defultPage)
+        self.addWidget(self.cardListPage)
 
         self.setCurrentWidget(self.defultPage)
 
     def fillValue(self) -> None:
-        """
-        ## 如果传入了 config 则对其内部卡片的值进行填充
-        """
+        """如果传入了 config 则对其内部卡片的值进行填充"""
         ...
 
     def getValue(self) -> dict:
-        """
-        ## 返回内部卡片的配置结果
-        """
+        """返回内部卡片的配置结果"""
         return {}
 
     def clearValues(self) -> None:
-        """
-        ## 清空(还原)内部卡片的配置
-        """
+        """清空(还原)内部卡片的配置"""
         ...
 
 
@@ -80,10 +74,26 @@ class DefaultPage(QWidget):
         self.hBoxLayout = QVBoxLayout(self)
 
         self.imageLabel.setMovie(self.movie)
-        self.imageLabel.scaledToWidth(self.width())
 
-        self.hBoxLayout.addStretch(1)
+        self.hBoxLayout.addStretch(3)
         self.hBoxLayout.addWidget(self.imageLabel, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.hBoxLayout.addSpacing(12)
-        self.hBoxLayout.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.hBoxLayout.addStretch(1)
+        self.hBoxLayout.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.hBoxLayout.addStretch(3)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.imageLabel.scaledToWidth(self.width() // 6)
+
+
+class CardListPage(ScrollArea):
+
+    def __init__(self, parent: ConnectWidget):
+        super().__init__(parent)
+
+        self.view = QWidget(self)
+        self.viewLayout = FlowLayout(self.view, needAni=True)
+
+        self.setWidget(self.view)
+        self.setWidgetResizable(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
