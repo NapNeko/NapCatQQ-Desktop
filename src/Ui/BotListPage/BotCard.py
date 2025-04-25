@@ -54,7 +54,7 @@ class BotCard(CardWidget):
 
             # 创建页面
             self.botWidget = BotWidget(self.config)
-            MainWindow().view.addWidget(self.botWidget)
+            BotListWidget().view.addWidget(self.botWidget)
 
             # 启动机器人
             self.botWidget.runButtonSlot()
