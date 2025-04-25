@@ -13,7 +13,7 @@ from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.AddPage.enum import ConnectType
 from src.Ui.common.widget import BackgroundWidget
-from src.Ui.AddPage.Connect import ConnectWidget
+from src.Ui.AddPage.connect import ConnectWidget
 from src.Ui.AddPage.msg_box import (
     ChooseConfigTypeDialog,
     HttpClientConfigDialog,
