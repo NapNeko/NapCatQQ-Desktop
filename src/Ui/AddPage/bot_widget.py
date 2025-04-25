@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
-from src.Ui.common.InputCard import LineEditConfigCard
+from src.Ui.common.input_card import LineEditConfigCard
 from src.Core.Config.ConfigModel import BotConfig
 
 

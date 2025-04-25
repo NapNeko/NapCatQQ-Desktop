@@ -12,8 +12,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.Ui.AddPage.Connect import ConnectWidget
-from src.Ui.AddPage.Advanced import AdvancedWidget
+from src.Ui.AddPage.connect import ConnectWidget
+from src.Ui.AddPage.advanced import AdvancedWidget
 from src.Ui.AddPage.bot_widget import BotWidget
 from src.Core.Config.ConfigModel import Config
 

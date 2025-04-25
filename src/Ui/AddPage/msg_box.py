@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QGridLayout, QVBoxLayout, QButtonGroup
 # 项目内模块导入
 from src.Ui.AddPage.enum import ConnectType
 from src.Ui.AddPage.signal_bus import addPageSingalBus
-from src.Ui.common.InputCard.GenericCard import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
+from src.Ui.common.input_card.generic_card import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
 
 
 class ChooseConfigCard(SimpleCardWidget):
