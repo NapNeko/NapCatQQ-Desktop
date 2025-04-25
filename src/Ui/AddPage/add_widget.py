@@ -22,11 +22,11 @@ from src.Ui.AddPage.msg_box import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
-from src.Ui.AddPage.Advanced import AdvancedWidget
+from src.Ui.AddPage.advanced import AdvancedWidget
 from src.Core.Utils.singleton import singleton
-from src.Ui.AddPage.BotWidget import BotWidget
-from src.Ui.AddPage.AddTopCard import AddTopCard
+from src.Ui.AddPage.bot_widget import BotWidget
 from src.Ui.AddPage.signal_bus import addPageSingalBus
+from src.Ui.AddPage.add_top_card import AddTopCard
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 
 if TYPE_CHECKING:

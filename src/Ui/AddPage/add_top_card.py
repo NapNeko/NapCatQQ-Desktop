@@ -114,7 +114,7 @@ class AddTopCard(QWidget):
         ## 添加到机器人列表
         """
         # 项目内模块导入
-        from src.Ui.AddPage.AddWidget import AddWidget
+        from src.Ui.AddPage.add_widget import AddWidget
         from src.Core.Config.ConfigModel import Config
         from src.Ui.BotListPage.BotListWidget import BotListWidget
 
