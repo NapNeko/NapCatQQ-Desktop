@@ -165,12 +165,18 @@ class HttpServerConfigCard(ConfigCardBase):
         self.configViewLayout.addWidget(self.msgPostFormatLabel, 2, 0, 1, 1)
         self.configViewLayout.addWidget(self.msgPostFormatConfigLabel, 2, 1, 1, 5)
 
+    def fillValue(self):
+        """填充需要展示的配置"""
+        self.hostConfigLabel.setText(self.config.host)
+        self.portConfigLabel.setText(str(self.config.port))
+
     def _onEditButtonClicked(self):
 
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        HttpServerConfigDialog(MainWindow(), self.config).exec()
+        if (dialog := HttpServerConfigDialog(MainWindow(), self.config)).exec():
+            self.config = dialog.config
 
 
 class HttpSSEConfigCard(ConfigCardBase):
