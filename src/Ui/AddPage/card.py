@@ -170,7 +170,7 @@ class HttpServerConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        HttpServerConfigDialog(MainWindow()).exec()
+        HttpServerConfigDialog(MainWindow(), self.config).exec()
 
 
 class HttpSSEConfigCard(ConfigCardBase):
@@ -222,7 +222,7 @@ class HttpSSEConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        HttpSSEServerConfigDialog(MainWindow()).exec()
+        HttpSSEServerConfigDialog(MainWindow(), self.config).exec()
 
 
 class HttpClientConfigCard(ConfigCardBase):
@@ -256,7 +256,7 @@ class HttpClientConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        HttpClientConfigDialog(MainWindow()).exec()
+        HttpClientConfigDialog(MainWindow(), self.config).exec()
 
 
 class WebsocketServersConfigCard(ConfigCardBase):
@@ -308,7 +308,7 @@ class WebsocketServersConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        WebsocketServerConfigDialog(MainWindow()).exec()
+        WebsocketServerConfigDialog(MainWindow(), self.config).exec()
 
 
 class WebsocketClientConfigCard(ConfigCardBase):
@@ -354,4 +354,4 @@ class WebsocketClientConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        WebsocketClientConfigDialog(MainWindow()).exec()
+        WebsocketClientConfigDialog(MainWindow(), self.config).exec()

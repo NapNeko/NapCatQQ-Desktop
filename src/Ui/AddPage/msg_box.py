@@ -10,6 +10,14 @@ from PySide6.QtWidgets import QGridLayout, QVBoxLayout, QButtonGroup
 # 项目内模块导入
 from src.Ui.AddPage.enum import ConnectType
 from src.Ui.AddPage.signal_bus import addPageSingalBus
+from src.Core.Config.ConfigModel import (
+    BaseModel,
+    HttpClientsConfig,
+    HttpServersConfig,
+    HttpSseServersConfig,
+    WebsocketClientsConfig,
+    WebsocketServersConfig,
+)
 from src.Ui.common.input_card.generic_card import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
 
 
@@ -97,16 +105,16 @@ class ChooseConfigTypeDialog(MessageBoxBase):
     def _onYesButtonClicked(self) -> None:
         """Yes 按钮槽函数"""
 
-        if (id := self.buttonGroup.checkedId()) == -1:
-            return
-        else:
+        if (id := self.buttonGroup.checkedId()) != -1:
             addPageSingalBus.chooseConnectType.emit(list(ConnectType)[id])
 
 
 class HttpServerConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent: QObject) -> None:
+    def __init__(self, parent: QObject, config: HttpServersConfig | None = None) -> None:
         super().__init__(parent)
+        # 属性
+        self.config = config
 
         # 创建控件
         self.titleLabel = TitleLabel(self.tr("HTTP Server"), self)
@@ -143,11 +151,34 @@ class HttpServerConfigDialog(MessageBoxBase):
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
 
+        # 调用方法
+        self.fillConfig()
+
+    def fillConfig(self) -> None:
+        """如果传入了配置,则该对话框作为编辑对话框"""
+        if self.config is None:
+            return
+
+        self.enableCard.fillValue(self.config.enable)
+        self.debugCard.fillValue(self.config.debug)
+        self.nameCard.fillValue(self.config.name)
+        self.hostCard.fillValue(self.config.host)
+        self.portCard.fillValue(self.config.port)
+        self.CORSCard.fillValue(self.config.enableCors)
+        self.websocketCard.fillValue(self.config.enableWebsocket)
+        self.msgFormatCard.fillValue(self.config.messagePostFormat)
+        self.tokenCard.fillValue(self.config.token)
+
+        # 禁用名字卡片
+        self.nameCard.setEnabled(False)
+
 
 class HttpSSEServerConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent: QObject) -> None:
+    def __init__(self, parent: QObject, config: HttpSseServersConfig | None = None) -> None:
         super().__init__(parent)
+        # 属性
+        self.config = config
 
         # 创建控件
         self.titleLabel = TitleLabel(self.tr("HTTP SSE Server"), self)
@@ -186,11 +217,35 @@ class HttpSSEServerConfigDialog(MessageBoxBase):
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
 
+        # 调用方法
+        self.fillConfig()
+
+    def fillConfig(self) -> None:
+        """如果传入了配置,则该对话框作为编辑对话框"""
+        if self.config is None:
+            return
+
+        self.enableCard.fillValue(self.config.enable)
+        self.debugCard.fillValue(self.config.debug)
+        self.nameCard.fillValue(self.config.name)
+        self.hostCard.fillValue(self.config.host)
+        self.portCard.fillValue(self.config.port)
+        self.CORSCard.fillValue(self.config.enableCors)
+        self.websocketCard.fillValue(self.config.enableWebsocket)
+        self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
+        self.msgFormatCard.fillValue(self.config.messagePostFormat)
+        self.tokenCard.fillValue(self.config.token)
+
+        # 禁用名字卡片
+        self.nameCard.setEnabled(False)
+
 
 class HttpClientConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent: QObject) -> None:
+    def __init__(self, parent: QObject, config: HttpClientsConfig | None = None) -> None:
         super().__init__(parent)
+        # 属性
+        self.config = config
 
         # 创建控件
         self.titleLabel = TitleLabel(self.tr("HTTP Client"), self)
@@ -223,11 +278,32 @@ class HttpClientConfigDialog(MessageBoxBase):
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
 
+        # 调用方法
+        self.fillConfig()
+
+    def fillConfig(self) -> None:
+        """如果传入了配置,则该对话框作为编辑对话框"""
+        if self.config is None:
+            return
+
+        self.enableCard.fillValue(self.config.enable)
+        self.debugCard.fillValue(self.config.debug)
+        self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
+        self.nameCard.fillValue(self.config.name)
+        self.urlCard.fillValue(str(self.config.url))
+        self.msgFormatCard.fillValue(self.config.messagePostFormat)
+        self.tokenCard.fillValue(self.config.token)
+
+        # 禁用名字卡片
+        self.nameCard.setEnabled(False)
+
 
 class WebsocketServerConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent: QObject) -> None:
+    def __init__(self, parent: QObject, config: WebsocketServersConfig | None = None) -> None:
         super().__init__(parent)
+        # 属性
+        self.config = config
 
         # 创建控件
         self.titleLabel = TitleLabel(self.tr("Websocket Server"), self)
@@ -266,11 +342,35 @@ class WebsocketServerConfigDialog(MessageBoxBase):
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
 
+        # 调用方法
+        self.fillConfig()
+
+    def fillConfig(self) -> None:
+        """如果传入了配置,则该对话框作为编辑对话框"""
+        if self.config is None:
+            return
+
+        self.enableCard.fillValue(self.config.enable)
+        self.debugCard.fillValue(self.config.debug)
+        self.forcePushEventCard.fillValue(self.config.enableForcePushEvent)
+        self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
+        self.nameCard.fillValue(self.config.name)
+        self.hostCard.fillValue(self.config.host)
+        self.portCard.fillValue(self.config.port)
+        self.msgFormatCard.fillValue(self.config.messagePostFormat)
+        self.tokenCard.fillValue(self.config.token)
+        self.heartIntervalCard.fillValue(self.config.heartInterval)
+
+        # 禁用名字卡片
+        self.nameCard.setEnabled(False)
+
 
 class WebsocketClientConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent: QObject) -> None:
+    def __init__(self, parent: QObject, config: WebsocketClientsConfig | None = None) -> None:
         super().__init__(parent)
+        # 属性
+        self.config = config
 
         # 创建控件
         self.titleLabel = TitleLabel(self.tr("Websocket Client"), self)
@@ -308,3 +408,24 @@ class WebsocketClientConfigDialog(MessageBoxBase):
         # 设置布局
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
+
+        # 调用方法
+        self.fillConfig()
+
+    def fillConfig(self) -> None:
+        """如果传入了配置,则该对话框作为编辑对话框"""
+        if self.config is None:
+            return
+
+        self.enableCard.fillValue(self.config.enable)
+        self.debugCard.fillValue(self.config.debug)
+        self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
+        self.nameCard.fillValue(self.config.name)
+        self.urlCard.fillValue(str(self.config.url))
+        self.msgFormatCard.fillValue(self.config.messagePostFormat)
+        self.tokenCard.fillValue(self.config.token)
+        self.heartIntervalCard.fillValue(self.config.heartInterval)
+        self.reconnectIntervalCard.fillValue(self.config.reconnectInterval)
+
+        # 禁用名字卡片
+        self.nameCard.setEnabled(False)

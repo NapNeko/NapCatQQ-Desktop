@@ -40,7 +40,7 @@ class ComboBoxConfigCard(SettingCard):
         self.hBoxLayout.addSpacing(16)
 
     def fillValue(self, value: str) -> None:
-        self.comboBox.setCurrentIndex(self.texts.index(value))
+        self.comboBox.setCurrentIndex(self.texts.index(value.title()))
 
     def getValue(self) -> str:
         return self.comboBox.currentText()
