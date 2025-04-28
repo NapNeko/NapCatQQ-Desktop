@@ -156,7 +156,7 @@ class ConfigDialogBase(MessageBoxBase):
             **{
                 "enable": self.enableCard.getValue(),
                 "name": self.nameCard.getValue(),
-                "messagePostFormat": self.msgFormatCard.getValue(),
+                "messagePostFormat": self.msgFormatCard.getValue().lower(),
                 "token": self.tokenCard.getValue(),
                 "debug": self.debugCard.getValue(),
             }

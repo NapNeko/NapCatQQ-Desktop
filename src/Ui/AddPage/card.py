@@ -165,18 +165,22 @@ class HttpServerConfigCard(ConfigCardBase):
         self.configViewLayout.addWidget(self.msgPostFormatLabel, 2, 0, 1, 1)
         self.configViewLayout.addWidget(self.msgPostFormatConfigLabel, 2, 1, 1, 5)
 
-    def fillValue(self):
+    def fillValue(self) -> None:
         """填充需要展示的配置"""
         self.hostConfigLabel.setText(self.config.host)
         self.portConfigLabel.setText(str(self.config.port))
+        self.corsConfigLabel.update_status(self.config.enableCors)
+        self.websocketConfigLabel.update_status(self.config.enableWebsocket)
+        self.msgPostFormatConfigLabel.update_format(self.config.messagePostFormat)
 
-    def _onEditButtonClicked(self):
+    def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
         if (dialog := HttpServerConfigDialog(MainWindow(), self.config)).exec():
-            self.config = dialog.config
+            self.config = dialog.getConfig()
+            self.fillValue()
 
 
 class HttpSSEConfigCard(ConfigCardBase):
@@ -223,12 +227,23 @@ class HttpSSEConfigCard(ConfigCardBase):
         self.configViewLayout.addWidget(self.reportSelfMessageLabel, 2, 3, 1, 1)
         self.configViewLayout.addWidget(self.reportSelfMessageConfigLabel, 2, 4, 1, 2)
 
-    def _onEditButtonClicked(self):
+    def fillValue(self) -> None:
+        """填充需要展示的配置"""
+        self.hostConfigLabel.setText(self.config.host)
+        self.portConfigLabel.setText(str(self.config.port))
+        self.corsConfigLabel.update_status(self.config.enableCors)
+        self.websocketConfigLabel.update_status(self.config.enableWebsocket)
+        self.msgPostFormatConfigLabel.update_format(self.config.messagePostFormat)
+        self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+
+    def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        HttpSSEServerConfigDialog(MainWindow(), self.config).exec()
+        if (dialog := HttpSSEServerConfigDialog(MainWindow(), self.config)).exec():
+            self.config = dialog.getConfig()
+            self.fillValue()
 
 
 class HttpClientConfigCard(ConfigCardBase):
@@ -257,12 +272,20 @@ class HttpClientConfigCard(ConfigCardBase):
         self.configViewLayout.addWidget(reportSelfMessageLabel, 1, 4, 1, 1)
         self.configViewLayout.addWidget(reportSelfMessageConfigLabel, 1, 5, 1, 1)
 
-    def _onEditButtonClicked(self):
+    def fillValue(self) -> None:
+        """填充需要展示的配置"""
+        self.urlConfigLabel.setText(str(self.config.url))
+        self.formatConfigLabel.update_format(self.config.messagePostFormat)
+        self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+
+    def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        HttpClientConfigDialog(MainWindow(), self.config).exec()
+        if (dialog := HttpClientConfigDialog(MainWindow(), self.config)).exec():
+            self.config = dialog.getConfig()
+            self.fillValue()
 
 
 class WebsocketServersConfigCard(ConfigCardBase):
@@ -309,12 +332,23 @@ class WebsocketServersConfigCard(ConfigCardBase):
         self.configViewLayout.addWidget(self.enableForcePushEventLabel, 2, 3, 1, 1)
         self.configViewLayout.addWidget(self.enableForcePushEventConfigLabel, 2, 4, 1, 2)
 
-    def _onEditButtonClicked(self):
+    def fillValue(self) -> None:
+        """填充需要展示的配置"""
+        self.hostConfigLabel.setText(self.config.host)
+        self.portConfigLabel.setText(str(self.config.port))
+        self.heartIntervalConfigLabel.setText(str(self.config.heartInterval) + "ms")
+        self.msgPostFormatConfigLabel.update_format(self.config.messagePostFormat)
+        self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+        self.enableForcePushEventConfigLabel.update_status(self.config.enableForcePushEvent)
+
+    def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        WebsocketServerConfigDialog(MainWindow(), self.config).exec()
+        if (dialog := WebsocketServerConfigDialog(MainWindow(), self.config)).exec():
+            self.config = dialog.getConfig()
+            self.fillValue()
 
 
 class WebsocketClientConfigCard(ConfigCardBase):
@@ -355,9 +389,19 @@ class WebsocketClientConfigCard(ConfigCardBase):
         self.configViewLayout.addWidget(self.reportSelfMessageLabel, 2, 3, 1, 1)
         self.configViewLayout.addWidget(self.reportSelfMessageConfigLabel, 2, 4, 1, 2)
 
-    def _onEditButtonClicked(self):
+    def fillValue(self) -> None:
+        """填充需要展示的配置"""
+        self.urlConfigLabel.setText(str(self.config.url))
+        self.reconnectIntervalConfigLabel.setText(str(self.config.reconnectInterval) + "ms")
+        self.heartIntervalConfigLabel.setText(str(self.config.heartInterval) + "ms")
+        self.formatConfigLabel.update_format(self.config.messagePostFormat)
+        self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+
+    def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
         from src.Ui.MainWindow.Window import MainWindow
 
-        WebsocketClientConfigDialog(MainWindow(), self.config).exec()
+        if (dialog := WebsocketClientConfigDialog(MainWindow(), self.config)).exec():
+            self.config = dialog.getConfig()
+            self.fillValue()
