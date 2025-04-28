@@ -4,7 +4,7 @@
 from qfluentwidgets import BodyLabel
 from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import TitleLabel, RadioButton, MessageBoxBase, SimpleCardWidget
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QObject
 from PySide6.QtWidgets import QGridLayout, QVBoxLayout, QButtonGroup
 
 # 项目内模块导入
@@ -41,7 +41,7 @@ class ChooseConfigCard(SimpleCardWidget):
 class ChooseConfigTypeDialog(MessageBoxBase):
     """选择配置类型的对话框"""
 
-    def __init__(self, parent) -> None:
+    def __init__(self, parent: QObject) -> None:
         super().__init__(parent=parent)
 
         # 介绍
@@ -105,7 +105,7 @@ class ChooseConfigTypeDialog(MessageBoxBase):
 
 class HttpServerConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent) -> None:
+    def __init__(self, parent: QObject) -> None:
         super().__init__(parent)
 
         # 创建控件
@@ -146,7 +146,7 @@ class HttpServerConfigDialog(MessageBoxBase):
 
 class HttpSSEServerConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent):
+    def __init__(self, parent: QObject) -> None:
         super().__init__(parent)
 
         # 创建控件
@@ -189,7 +189,7 @@ class HttpSSEServerConfigDialog(MessageBoxBase):
 
 class HttpClientConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent):
+    def __init__(self, parent: QObject) -> None:
         super().__init__(parent)
 
         # 创建控件
@@ -226,7 +226,7 @@ class HttpClientConfigDialog(MessageBoxBase):
 
 class WebsocketServerConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent):
+    def __init__(self, parent: QObject) -> None:
         super().__init__(parent)
 
         # 创建控件
@@ -269,7 +269,7 @@ class WebsocketServerConfigDialog(MessageBoxBase):
 
 class WebsocketClientConfigDialog(MessageBoxBase):
 
-    def __init__(self, parent):
+    def __init__(self, parent: QObject) -> None:
         super().__init__(parent)
 
         # 创建控件
