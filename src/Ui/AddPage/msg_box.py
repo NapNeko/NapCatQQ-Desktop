@@ -150,6 +150,18 @@ class ConfigDialogBase(MessageBoxBase):
         # 禁用名字卡片
         self.nameCard.setEnabled(False)
 
+    def getConfig(self) -> NetworkBaseConfig:
+        """获取配置"""
+        return NetworkBaseConfig(
+            **{
+                "enable": self.enableCard.getValue(),
+                "name": self.nameCard.getValue(),
+                "messagePostFormat": self.msgFormatCard.getValue(),
+                "token": self.tokenCard.getValue(),
+                "debug": self.debugCard.getValue(),
+            }
+        )
+
 
 class HttpServerConfigDialog(ConfigDialogBase):
     config: HttpServersConfig | None
@@ -190,6 +202,17 @@ class HttpServerConfigDialog(ConfigDialogBase):
         self.portCard.fillValue(self.config.port)
         self.CORSCard.fillValue(self.config.enableCors)
         self.websocketCard.fillValue(self.config.enableWebsocket)
+
+    def getConfig(self) -> HttpServersConfig:
+        return HttpServersConfig(
+            **{
+                "host": self.hostCard.getValue(),
+                "port": self.portCard.getValue(),
+                "enableCors": self.CORSCard.getValue(),
+                "enableWebsocket": self.websocketCard.getValue(),
+                **super().getConfig().model_dump(),
+            }
+        )
 
 
 class HttpSSEServerConfigDialog(ConfigDialogBase):
@@ -235,6 +258,18 @@ class HttpSSEServerConfigDialog(ConfigDialogBase):
         self.websocketCard.fillValue(self.config.enableWebsocket)
         self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
 
+    def getConfig(self) -> HttpSseServersConfig:
+        return HttpSseServersConfig(
+            **{
+                "host": self.hostCard.getValue(),
+                "port": self.portCard.getValue(),
+                "enableCors": self.CORSCard.getValue(),
+                "enableWebsocket": self.websocketCard.getValue(),
+                "reportSelfMessage": self.reportSelfMsgCard.getValue(),
+                **super().getConfig().model_dump(),
+            }
+        )
+
 
 class HttpClientConfigDialog(ConfigDialogBase):
     config: HttpClientsConfig | None
@@ -270,6 +305,15 @@ class HttpClientConfigDialog(ConfigDialogBase):
         super().fillConfig()
         self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
         self.urlCard.fillValue(str(self.config.url))
+
+    def getConfig(self) -> HttpClientsConfig:
+        return HttpClientsConfig(
+            **{
+                "url": self.urlCard.getValue(),
+                "reportSelfMessage": self.reportSelfMsgCard.getValue(),
+                **super().getConfig().model_dump(),
+            }
+        )
 
 
 class WebsocketServerConfigDialog(ConfigDialogBase):
@@ -316,6 +360,18 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
         self.portCard.fillValue(self.config.port)
         self.heartIntervalCard.fillValue(self.config.heartInterval)
 
+    def getConfig(self) -> WebsocketServersConfig:
+        return WebsocketServersConfig(
+            **{
+                "host": self.hostCard.getValue(),
+                "port": self.portCard.getValue(),
+                "reportSelfMessage": self.reportSelfMsgCard.getValue(),
+                "enableForcePushEvent": self.enableForcePushEvent.getValue(),
+                "heartInterval": self.heartInterval.getValue(),
+                **super().getConfig().model_dump(),
+            }
+        )
+
 
 class WebsocketClientConfigDialog(ConfigDialogBase):
     config: WebsocketClientsConfig | None
@@ -359,3 +415,14 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
         self.urlCard.fillValue(str(self.config.url))
         self.heartIntervalCard.fillValue(self.config.heartInterval)
         self.reconnectIntervalCard.fillValue(self.config.reconnectInterval)
+
+    def getConfig(self) -> WebsocketClientsConfig:
+        return WebsocketClientsConfig(
+            **{
+                "url": self.urlCard.getValue(),
+                "reportSelfMessage": self.reportSelfMsgCard.getValue(),
+                "heartInterval": self.heartIntervalCard.getValue(),
+                "reconnectInterval": self.reconnectIntervalCard.getValue(),
+                **super().getConfig().model_dump(),
+            }
+        )
