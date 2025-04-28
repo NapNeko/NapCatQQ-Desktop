@@ -17,6 +17,13 @@ from PySide6.QtCore import Qt, QObject
 from PySide6.QtWidgets import QWidget, QGridLayout
 
 # 项目内模块导入
+from src.Ui.AddPage.msg_box import (
+    HttpClientConfigDialog,
+    HttpServerConfigDialog,
+    HttpSSEServerConfigDialog,
+    WebsocketClientConfigDialog,
+    WebsocketServerConfigDialog,
+)
 from src.Core.Config.ConfigModel import (
     BaseModel,
     HttpClientsConfig,
@@ -93,6 +100,7 @@ class ConfigCardBase(HeaderCardWidget):
 
         # 信号连接
         self.removeButton.clicked.connect(self._onRemoveButtonClicked)
+        self.editButton.clicked.connect(self._onEditButtonClicked)
 
     def _onRemoveButtonClicked(self) -> None:
         """删除按钮被点击"""
@@ -113,6 +121,10 @@ class ConfigCardBase(HeaderCardWidget):
             parent=self,
         )
         view.closed.connect(widget.close)
+
+    def _onEditButtonClicked(self) -> None:
+        """编辑按钮点击事件"""
+        ...
 
 
 class HttpServerConfigCard(ConfigCardBase):
@@ -152,6 +164,13 @@ class HttpServerConfigCard(ConfigCardBase):
 
         self.configViewLayout.addWidget(self.msgPostFormatLabel, 2, 0, 1, 1)
         self.configViewLayout.addWidget(self.msgPostFormatConfigLabel, 2, 1, 1, 5)
+
+    def _onEditButtonClicked(self):
+
+        # 项目内模块导入
+        from src.Ui.MainWindow.Window import MainWindow
+
+        HttpServerConfigDialog(MainWindow()).exec()
 
 
 class HttpSSEConfigCard(ConfigCardBase):
@@ -198,6 +217,13 @@ class HttpSSEConfigCard(ConfigCardBase):
         self.configViewLayout.addWidget(self.reportSelfMessageLabel, 2, 3, 1, 1)
         self.configViewLayout.addWidget(self.reportSelfMessageConfigLabel, 2, 4, 1, 2)
 
+    def _onEditButtonClicked(self):
+
+        # 项目内模块导入
+        from src.Ui.MainWindow.Window import MainWindow
+
+        HttpSSEServerConfigDialog(MainWindow()).exec()
+
 
 class HttpClientConfigCard(ConfigCardBase):
     config: HttpClientsConfig
@@ -224,6 +250,13 @@ class HttpClientConfigCard(ConfigCardBase):
 
         self.configViewLayout.addWidget(reportSelfMessageLabel, 1, 4, 1, 1)
         self.configViewLayout.addWidget(reportSelfMessageConfigLabel, 1, 5, 1, 1)
+
+    def _onEditButtonClicked(self):
+
+        # 项目内模块导入
+        from src.Ui.MainWindow.Window import MainWindow
+
+        HttpClientConfigDialog(MainWindow()).exec()
 
 
 class WebsocketServersConfigCard(ConfigCardBase):
@@ -270,6 +303,13 @@ class WebsocketServersConfigCard(ConfigCardBase):
         self.configViewLayout.addWidget(self.enableForcePushEventLabel, 2, 3, 1, 1)
         self.configViewLayout.addWidget(self.enableForcePushEventConfigLabel, 2, 4, 1, 2)
 
+    def _onEditButtonClicked(self):
+
+        # 项目内模块导入
+        from src.Ui.MainWindow.Window import MainWindow
+
+        WebsocketServerConfigDialog(MainWindow()).exec()
+
 
 class WebsocketClientConfigCard(ConfigCardBase):
     config: WebsocketClientsConfig
@@ -308,3 +348,10 @@ class WebsocketClientConfigCard(ConfigCardBase):
 
         self.configViewLayout.addWidget(self.reportSelfMessageLabel, 2, 3, 1, 1)
         self.configViewLayout.addWidget(self.reportSelfMessageConfigLabel, 2, 4, 1, 2)
+
+    def _onEditButtonClicked(self):
+
+        # 项目内模块导入
+        from src.Ui.MainWindow.Window import MainWindow
+
+        WebsocketClientConfigDialog(MainWindow()).exec()
