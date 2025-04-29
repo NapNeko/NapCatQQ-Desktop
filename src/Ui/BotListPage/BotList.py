@@ -29,6 +29,7 @@ class BotList(ScrollArea):
         # 调用方法
         self._createView()
         self._initWidget()
+        self.updateList()
 
     def _initWidget(self) -> None:
         """

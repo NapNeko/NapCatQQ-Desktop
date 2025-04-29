@@ -36,12 +36,15 @@ class ConnectWidget(QStackedWidget):
         super().__init__(parent=parent)
         self.setObjectName("ConnectWidget")
 
-        if config is not None:
+        self._postInit()
+
+        if not config is None:
             # 如果传入了 config 则进行解析并填充内部卡片
             self.config = config
             self.fillValue()
-
-        self._postInit()
+            self.setCurrentWidget(self.cardListPage)
+        else:
+            self.setCurrentWidget(self.defultPage)
 
     def _postInit(self) -> None:
         """初始化"""
@@ -50,8 +53,6 @@ class ConnectWidget(QStackedWidget):
 
         self.addWidget(self.defultPage)
         self.addWidget(self.cardListPage)
-
-        self.setCurrentWidget(self.cardListPage)
 
     def addCard(self, config: NetworkBaseConfig) -> None:
         """添加到卡片"""
@@ -67,7 +68,11 @@ class ConnectWidget(QStackedWidget):
 
     def fillValue(self) -> None:
         """如果传入了 config 则对其内部卡片的值进行填充"""
-        ...
+        [self.addCard(_) for _ in self.config.httpServers]
+        [self.addCard(_) for _ in self.config.httpSseServers]
+        [self.addCard(_) for _ in self.config.httpClients]
+        [self.addCard(_) for _ in self.config.websocketServers]
+        [self.addCard(_) for _ in self.config.websocketClients]
 
     def getValue(self) -> ConnectConfig:
         """返回内部卡片的配置结果"""

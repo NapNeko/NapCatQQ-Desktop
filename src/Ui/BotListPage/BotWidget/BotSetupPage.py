@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 # 项目内模块导入
 from src.Ui.AddPage.connect import ConnectWidget
 from src.Ui.AddPage.advanced import AdvancedWidget
-from src.Ui.AddPage.bot_widget import BotWidget
+from src.Ui.AddPage.bot_widget import BotWidget as BotConfigWidget
 from src.Core.Config.ConfigModel import Config
 
 if TYPE_CHECKING:
@@ -109,12 +109,12 @@ class BotSetupPage(QWidget):
         ## 创建子页面, 并添加到 view 中
             子页面直接使用 AddWidget 中的页面
         """
-        self.botWidget = BotWidget(self, self.config.bot)
+        self.botWidget = BotConfigWidget(self, self.config.bot)
         self.connectWidget = ConnectWidget(self, self.config.connect)
         self.advancedWidget = AdvancedWidget(self, self.config.advanced)
 
         self.botWidget.view.setObjectName("BotListBotSetupView")
-        self.connectWidget.view.setObjectName("BotListConnectSetupView")
+        self.connectWidget.cardListPage.setObjectName("BotListConnectSetupView")
         self.advancedWidget.view.setObjectName("BotListAdvancedSetupView")
 
         self.botWidget.botQQIdCard.lineEdit.setEnabled(False)
