@@ -111,6 +111,7 @@ class ConfigCardBase(HeaderCardWidget):
             tailPosition=TeachingTipTailPosition.TOP,
         )
         button = PushButton(self.tr("删除"), self)
+
         view.addWidget(button, align=Qt.AlignmentFlag.AlignRight)
 
         widget = TeachingTip.make(
@@ -121,6 +122,8 @@ class ConfigCardBase(HeaderCardWidget):
             parent=self,
         )
         view.closed.connect(widget.close)
+        button.clicked.connect(self.close)
+        button.clicked.connect(widget.close)
 
     def _onEditButtonClicked(self) -> None:
         """编辑按钮点击事件"""
