@@ -10,13 +10,22 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
 from src.Ui.AddPage.card import (
+    ConfigCardBase,
     HttpSSEConfigCard,
     HttpClientConfigCard,
     HttpServerConfigCard,
     WebsocketClientConfigCard,
     WebsocketServersConfigCard,
 )
-from src.Core.Config.ConfigModel import ConnectConfig
+from src.Core.Config.ConfigModel import (
+    ConnectConfig,
+    HttpClientsConfig,
+    HttpServersConfig,
+    NetworkBaseConfig,
+    HttpSseServersConfig,
+    WebsocketClientsConfig,
+    WebsocketServersConfig,
+)
 
 
 class ConnectWidget(QStackedWidget):
@@ -42,6 +51,18 @@ class ConnectWidget(QStackedWidget):
         self.addWidget(self.cardListPage)
 
         self.setCurrentWidget(self.cardListPage)
+
+    def addCard(self, config: NetworkBaseConfig) -> None:
+        """添加到卡片"""
+        self.cardListPage.addCard(
+            {
+                HttpServersConfig: HttpServerConfigCard,
+                HttpSseServersConfig: HttpSSEConfigCard,
+                HttpClientsConfig: HttpClientConfigCard,
+                WebsocketServersConfig: WebsocketServersConfigCard,
+                WebsocketClientsConfig: WebsocketClientConfigCard,
+            }.get(type(config))(config, self.cardListPage)
+        )
 
     def fillValue(self) -> None:
         """如果传入了 config 则对其内部卡片的值进行填充"""
@@ -106,82 +127,10 @@ class CardListPage(ScrollArea):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view.setObjectName("ConnectListView")
 
-        # 项目内模块导入
-        from src.Core.Config.ConfigModel import (
-            HttpClientsConfig,
-            HttpServersConfig,
-            HttpSseServersConfig,
-            WebsocketClientsConfig,
-            WebsocketServersConfig,
-        )
-
-        test_http_config = HttpServersConfig(
-            enable=True,
-            name="Http Server",
-            messagePostFormat="array",
-            token="",
-            debug=False,
-            host="127.0.0.1",
-            port="8080",
-            enableCors=True,
-            enableWebsocket=False,
-        )
-        test_http_sse_config = HttpSseServersConfig(
-            enable=True,
-            name="Http SSE Server",
-            messagePostFormat="array",
-            token="",
-            debug=False,
-            host="127.0.0.1",
-            port="8080",
-            enableCors=True,
-            enableWebsocket=False,
-            reportSelfMessage=True,
-        )
-        test_http_client_config = HttpClientsConfig(
-            enable=True,
-            name="Http Client",
-            messagePostFormat="array",
-            url="http://localhost:8080",
-            token="",
-            debug=False,
-            reportSelfMessage=True,
-        )
-        test_wss_config = WebsocketServersConfig(
-            enable=True,
-            name="Websocket Server",
-            messagePostFormat="array",
-            token="",
-            debug=False,
-            host="127.0.0.1",
-            port="8080",
-            reportSelfMessage=True,
-            enableForcePushEvent=True,
-            heartInterval=30000,
-        )
-        test_wsc_config = WebsocketClientsConfig(
-            enable=True,
-            name="Websocket Client",
-            messagePostFormat="array",
-            token="",
-            debug=False,
-            url="ws://localhost:8080",
-            reportSelfMessage=True,
-            reconnectInterval=30000,
-            heartInterval=30000,
-        )
-
-        self.card1 = HttpServerConfigCard(test_http_config, self.view)
-        self.card2 = HttpSSEConfigCard(test_http_sse_config, self.view)
-        self.card3 = HttpClientConfigCard(test_http_client_config, self.view)
-        self.card4 = WebsocketServersConfigCard(test_wss_config, self.view)
-        self.card5 = WebsocketClientConfigCard(test_wsc_config, self.view)
-
-        self.viewLayout.addWidget(self.card1)
-        self.viewLayout.addWidget(self.card2)
-        self.viewLayout.addWidget(self.card3)
-        self.viewLayout.addWidget(self.card4)
-        self.viewLayout.addWidget(self.card5)
-
         self.viewLayout.setSpacing(8)
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
+
+    def addCard(self, card: ConfigCardBase) -> None:
+        self.viewLayout.addWidget(card)
+        self.viewLayout.update()
+        self.updateGeometry()

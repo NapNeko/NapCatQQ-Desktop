@@ -149,25 +149,19 @@ class AddWidget(BackgroundWidget):
     @Slot()
     def _onShowTypeDialog(self, connectType: ConnectType) -> None:
         """添加连接配置按钮的槽函数"""
-        print(connectType)
         # 项目内模块导入
         from src.Ui.MainWindow import MainWindow
 
-        match connectType:
-            case ConnectType.HTTP_SERVER:
-                # HTTP 服务器
-                HttpServerConfigDialog(MainWindow()).exec()
-            case ConnectType.HTTP_SSE_SERVER:
-                # HTTP SSE 服务器
-                HttpSSEServerConfigDialog(MainWindow()).exec()
-            case ConnectType.HTTP_CLIENT:
-                HttpClientConfigDialog(MainWindow()).exec()
-            case ConnectType.WEBSOCKET_SERVER:
-                WebsocketServerConfigDialog(MainWindow()).exec()
-            case ConnectType.WEBSOCKET_CLIENT:
-                WebsocketClientConfigDialog(MainWindow()).exec()
-            case _:
-                pass
+        if (
+            dialog := {
+                ConnectType.HTTP_SERVER: HttpServerConfigDialog,
+                ConnectType.HTTP_SSE_SERVER: HttpSSEServerConfigDialog,
+                ConnectType.HTTP_CLIENT: HttpClientConfigDialog,
+                ConnectType.WEBSOCKET_SERVER: WebsocketServerConfigDialog,
+                ConnectType.WEBSOCKET_CLIENT: WebsocketClientConfigDialog,
+            }.get(connectType)(MainWindow())
+        ).exec():
+            self.connectWidget.addCard(dialog.getConfig())
 
     def getConfig(self) -> dict:
         """
