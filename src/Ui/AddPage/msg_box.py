@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, Slot, QObject
 from PySide6.QtWidgets import QGridLayout, QVBoxLayout, QButtonGroup
 
 # 项目内模块导入
+from src.Core.Utils import my_int
 from src.Ui.AddPage.enum import ConnectType
 from src.Ui.AddPage.signal_bus import addPageSingalBus
 from src.Core.Config.ConfigModel import (
@@ -120,7 +121,7 @@ class ConfigDialogBase(MessageBoxBase):
         # 创建控件
         self.titleLabel = TitleLabel(self)
         self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用"))
-        self.nameCard = LineEditConfigCard(FI.TAG, self.tr("名称*"), "HTTP Server", self.tr("设置配置名称"))
+        self.nameCard = LineEditConfigCard(FI.TAG, self.tr("名称*"), "输入配置名称", self.tr("设置配置名称"))
         self.msgFormatCard = ComboBoxConfigCard(
             FI.MESSAGE, self.tr("消息格式"), ["Array", "String"], self.tr("设置消息格式")
         )
@@ -366,8 +367,8 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
                 "host": self.hostCard.getValue(),
                 "port": self.portCard.getValue(),
                 "reportSelfMessage": self.reportSelfMsgCard.getValue(),
-                "enableForcePushEvent": self.enableForcePushEvent.getValue(),
-                "heartInterval": self.heartInterval.getValue(),
+                "enableForcePushEvent": self.forcePushEventCard.getValue(),
+                "heartInterval": my_int(self.heartIntervalCard.getValue(), 300000),
                 **super().getConfig().model_dump(),
             }
         )
@@ -421,8 +422,8 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
             **{
                 "url": self.urlCard.getValue(),
                 "reportSelfMessage": self.reportSelfMsgCard.getValue(),
-                "heartInterval": self.heartIntervalCard.getValue(),
-                "reconnectInterval": self.reconnectIntervalCard.getValue(),
+                "heartInterval": my_int(self.heartIntervalCard.getValue(), 300000),
+                "reconnectInterval": my_int(self.reconnectIntervalCard.getValue(), 300000),
                 **super().getConfig().model_dump(),
             }
         )

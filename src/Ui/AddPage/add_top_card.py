@@ -120,6 +120,7 @@ class AddTopCard(QWidget):
 
         # 读取配置文件并追加, 判断是否存在相同的 QQID
         config = Config(**AddWidget().getConfig())
+
         if check_duplicate_bot(config):
             # 检查是否已存在相同的机器人配置
             error_bar(
@@ -130,7 +131,7 @@ class AddTopCard(QWidget):
         if update_config(config):
             # 更新配置文件, 如果返回为 True 则代表更新成功
             # 执行刷新
-            BotListWidget().botList.updateList()
+            # BotListWidget().botList.updateList()
             success_bar(self.tr(f"Bot({config.bot.QQID}) 已经添加成功，你可以在 机器人列表 中查看😼"))
         else:
             # 更新失败则提示查看日志

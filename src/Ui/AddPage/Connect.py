@@ -17,6 +17,7 @@ from src.Ui.AddPage.card import (
     WebsocketClientConfigCard,
     WebsocketServersConfigCard,
 )
+from src.Ui.AddPage.signal_bus import addPageSingalBus
 from src.Core.Config.ConfigModel import (
     ConnectConfig,
     HttpClientsConfig,
@@ -68,13 +69,20 @@ class ConnectWidget(QStackedWidget):
         """如果传入了 config 则对其内部卡片的值进行填充"""
         ...
 
-    def getValue(self) -> dict:
+    def getValue(self) -> ConnectConfig:
         """返回内部卡片的配置结果"""
-        return {}
+        return ConnectConfig(
+            **{
+                "plugins": [],
+                **self.cardListPage.getValue(),
+            }
+        )
 
     def clearValues(self) -> None:
         """清空(还原)内部卡片的配置"""
-        ...
+        for item in self.cardListPage.viewLayout._items:
+            item.close()
+        self.cardListPage.viewLayout.removeAllWidgets()
 
 
 class DefaultPage(QWidget):
@@ -118,6 +126,8 @@ class CardListPage(ScrollArea):
 
     def __init__(self, parent: ConnectWidget):
         super().__init__(parent)
+        # 属性
+        self.cards = []
 
         self.view = QWidget(self)
         self.viewLayout = FlowLayout(self.view, needAni=True)
@@ -130,7 +140,26 @@ class CardListPage(ScrollArea):
         self.viewLayout.setSpacing(8)
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
 
+        addPageSingalBus.removeCard.connect(self.removeCard)
+
     def addCard(self, card: ConfigCardBase) -> None:
+        self.cards.append(card)
         self.viewLayout.addWidget(card)
         self.viewLayout.update()
         self.updateGeometry()
+
+    def removeCard(self, card: ConfigCardBase) -> None:
+        """删除卡片"""
+        self.cards.remove(card)
+        self.viewLayout.removeWidget(card)
+        card.close()
+
+    def getValue(self) -> dict:
+        print([_.getValue() for _ in self.cards if isinstance(_, HttpServerConfigCard)])
+        return {
+            "httpServers": [_.getValue() for _ in self.cards if isinstance(_, HttpServerConfigCard)],
+            "httpSseServers": [_.getValue() for _ in self.cards if isinstance(_, HttpSSEConfigCard)],
+            "httpClients": [_.getValue() for _ in self.cards if isinstance(_, HttpClientConfigCard)],
+            "websocketServers": [_.getValue() for _ in self.cards if isinstance(_, WebsocketServersConfigCard)],
+            "websocketClients": [_.getValue() for _ in self.cards if isinstance(_, WebsocketClientConfigCard)],
+        }

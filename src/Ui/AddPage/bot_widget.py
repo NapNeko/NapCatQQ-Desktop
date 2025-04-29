@@ -93,7 +93,6 @@ class BotWidget(ScrollArea):
         return {
             "name": self.botNameCard.getValue(),
             "QQID": self.botQQIdCard.getValue(),
-            "messagePostFormat": self.messageFormatCard.getValue(),
             "musicSignUrl": self.musicSignUrl.getValue(),
         }
 

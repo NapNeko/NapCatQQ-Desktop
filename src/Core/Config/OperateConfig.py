@@ -107,9 +107,9 @@ def update_config(config: Config) -> bool:
         onebot_config_path = PathFunc().napcat_path / "config" / f"onebot11_{config.bot.QQID}.json"
         napcat_config_path = PathFunc().napcat_path / "config" / f"napcat_{config.bot.QQID}.json"
         with open(str(onebot_config_path), "w", encoding="utf-8") as onebot_file:
-            json.dump(json.loads(onebot_config.json()), onebot_file, indent=4, ensure_ascii=False)
+            json.dump(json.loads(onebot_config.model_dump_json()), onebot_file, indent=4, ensure_ascii=False)
         with open(str(napcat_config_path), "w", encoding="utf-8") as napcat_file:
-            json.dump(json.loads(napcat_config.json()), napcat_file, indent=4, ensure_ascii=False)
+            json.dump(json.loads(napcat_config.model_dump_json()), napcat_file, indent=4, ensure_ascii=False)
 
         return True
 

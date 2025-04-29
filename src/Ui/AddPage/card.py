@@ -104,6 +104,9 @@ class ConfigCardBase(HeaderCardWidget):
 
     def _onRemoveButtonClicked(self) -> None:
         """删除按钮被点击"""
+        # 项目内模块导入
+        from src.Ui.AddPage.signal_bus import addPageSingalBus
+
         view = TeachingTipView(
             title=self.tr("删除配置"),
             content=self.tr("确定要删除该配置吗?这个操作不可逆!"),
@@ -117,12 +120,12 @@ class ConfigCardBase(HeaderCardWidget):
         widget = TeachingTip.make(
             target=self.removeButton,
             view=view,
-            duration=3000,
-            tailPosition=TeachingTipTailPosition.TOP,
+            duration=2000,
+            tailPosition=TeachingTipTailPosition.BOTTOM,
             parent=self,
         )
         view.closed.connect(widget.close)
-        button.clicked.connect(self.close)
+        button.clicked.connect(lambda: addPageSingalBus.removeCard.emit(self))
         button.clicked.connect(widget.close)
 
     def _onEditButtonClicked(self) -> None:
@@ -175,6 +178,9 @@ class HttpServerConfigCard(ConfigCardBase):
         self.corsConfigLabel.update_status(self.config.enableCors)
         self.websocketConfigLabel.update_status(self.config.enableWebsocket)
         self.msgPostFormatConfigLabel.update_format(self.config.messagePostFormat)
+
+    def getValue(self) -> HttpServersConfig:
+        return self.config
 
     def _onEditButtonClicked(self) -> None:
 
@@ -239,6 +245,9 @@ class HttpSSEConfigCard(ConfigCardBase):
         self.msgPostFormatConfigLabel.update_format(self.config.messagePostFormat)
         self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
 
+    def getValue(self) -> HttpSseServersConfig:
+        return self.config
+
     def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
@@ -280,6 +289,9 @@ class HttpClientConfigCard(ConfigCardBase):
         self.urlConfigLabel.setText(str(self.config.url))
         self.formatConfigLabel.update_format(self.config.messagePostFormat)
         self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+
+    def getValue(self) -> HttpClientsConfig:
+        return self.config
 
     def _onEditButtonClicked(self) -> None:
 
@@ -344,6 +356,9 @@ class WebsocketServersConfigCard(ConfigCardBase):
         self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
         self.enableForcePushEventConfigLabel.update_status(self.config.enableForcePushEvent)
 
+    def getValue(self) -> WebsocketServersConfig:
+        return self.config
+
     def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
@@ -399,6 +414,9 @@ class WebsocketClientConfigCard(ConfigCardBase):
         self.heartIntervalConfigLabel.setText(str(self.config.heartInterval) + "ms")
         self.formatConfigLabel.update_format(self.config.messagePostFormat)
         self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+
+    def getValue(self) -> WebsocketClientsConfig:
+        return self.config
 
     def _onEditButtonClicked(self) -> None:
 

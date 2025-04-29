@@ -140,7 +140,7 @@ class AdvancedWidget(ScrollArea):
         self.consoleLogCard.fillValue(self.config.consoleLog)
         self.fileLogLevelCard.fillValue(self.config.fileLogLevel)
         self.consoleLevelCard.fillValue(self.config.consoleLogLevel)
-        self.o3HookModeCard.fillValue(self.config.o3HookMode)
+        self.o3HookModeCard.fillValue(str(self.config.o3HookMode))
 
     def _setLayout(self) -> None:
         """
@@ -169,7 +169,7 @@ class AdvancedWidget(ScrollArea):
             "consoleLog": self.consoleLogCard.getValue(),
             "fileLogLevel": self.fileLogLevelCard.getValue(),
             "consoleLogLevel": self.consoleLevelCard.getValue(),
-            "o3HookMode": self.o3HookModeCard.getValue(),
+            "o3HookMode": int(self.o3HookModeCard.getValue()),
         }
 
     def clearValues(self) -> None:

@@ -12,6 +12,7 @@ class AddPageSignalBus(QObject):
     addWidgetViewChange = Signal(int)  # 添加页面视图切换信号, 带切换的索引
     addConnectConfigButtonClicked = Signal()  # 添加网络配置按钮点击信号
     chooseConnectType = Signal(Enum)  # 选择连接类型信号, 带连接类型的字符串
+    removeCard = Signal(QObject)  # 删除卡片信号, 带卡片
 
 
 addPageSingalBus = AddPageSignalBus()
