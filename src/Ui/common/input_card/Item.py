@@ -3,7 +3,7 @@
 from qfluentwidgets import LineEdit, SwitchButton, IndicatorPosition
 
 # 项目内模块导入
-from src.Ui.common.InputCard.BaseClass import ItemBase
+from src.Ui.common.input_card.base import ItemBase
 
 
 class SwitchItem(ItemBase):

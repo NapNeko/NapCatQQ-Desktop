@@ -5,17 +5,28 @@ from typing import TYPE_CHECKING, Self, Optional
 
 # 第三方库导入
 from qfluentwidgets import isDarkTheme
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.AddPage.enum import ConnectType
 from src.Ui.common.widget import BackgroundWidget
-from src.Ui.AddPage.Connect import ConnectWidget
-from src.Ui.AddPage.Advanced import AdvancedWidget
+from src.Ui.AddPage.connect import ConnectWidget
+from src.Ui.AddPage.msg_box import (
+    ChooseConfigTypeDialog,
+    HttpClientConfigDialog,
+    HttpServerConfigDialog,
+    HttpSSEServerConfigDialog,
+    WebsocketClientConfigDialog,
+    WebsocketServerConfigDialog,
+)
+from src.Ui.AddPage.advanced import AdvancedWidget
 from src.Core.Utils.singleton import singleton
-from src.Ui.AddPage.BotWidget import BotWidget
-from src.Ui.AddPage.AddTopCard import AddTopCard
+from src.Ui.AddPage.bot_widget import BotWidget
+from src.Ui.AddPage.signal_bus import addPageSingalBus
+from src.Ui.AddPage.add_top_card import AddTopCard
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 
 if TYPE_CHECKING:
@@ -68,6 +79,7 @@ class AddWidget(BackgroundWidget):
 
         # 调用方法
         self._setLayout()
+        self._connectSignal()
 
         # 应用样式表
         StyleSheet.ADD_WIDGET.apply(self)
@@ -105,6 +117,7 @@ class AddWidget(BackgroundWidget):
 
         # 连接信号并初始化当前标签页
         self.view.currentChanged.connect(self.onCurrentIndexChanged)
+        self.view.currentChanged.connect(addPageSingalBus.addWidgetViewChange.emit)
         self.view.setCurrentWidget(self.botWidget)
         self.topCard.pivot.setCurrentItem(self.botWidget.objectName())
 
@@ -116,6 +129,39 @@ class AddWidget(BackgroundWidget):
         self.vBoxLayout.addWidget(self.view)
         self.vBoxLayout.setContentsMargins(24, 20, 24, 10)
         self.setLayout(self.vBoxLayout)
+
+    def _connectSignal(self) -> None:
+        """
+        ## 连接信号
+        """
+        # 连接信号
+        addPageSingalBus.addConnectConfigButtonClicked.connect(self._onAddConnectConfigButtonClicked)
+        addPageSingalBus.chooseConnectType.connect(self._onShowTypeDialog)
+
+    @Slot()
+    def _onAddConnectConfigButtonClicked(self) -> None:
+        """添加连接配置按钮的槽函数"""
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
+
+        ChooseConfigTypeDialog(MainWindow()).exec()
+
+    @Slot()
+    def _onShowTypeDialog(self, connectType: ConnectType) -> None:
+        """添加连接配置按钮的槽函数"""
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
+
+        if (
+            dialog := {
+                ConnectType.HTTP_SERVER: HttpServerConfigDialog,
+                ConnectType.HTTP_SSE_SERVER: HttpSSEServerConfigDialog,
+                ConnectType.HTTP_CLIENT: HttpClientConfigDialog,
+                ConnectType.WEBSOCKET_SERVER: WebsocketServerConfigDialog,
+                ConnectType.WEBSOCKET_CLIENT: WebsocketClientConfigDialog,
+            }.get(connectType)(MainWindow())
+        ).exec():
+            self.connectWidget.addCard(dialog.getConfig())
 
     def getConfig(self) -> dict:
         """

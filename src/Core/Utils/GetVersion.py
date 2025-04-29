@@ -99,22 +99,24 @@ class GetRemoteVersionThread(QThread):
         self.remoteSingle.emit(remote_dict)
         self.updateFinish.emit()
 
-    def getNapCat(self) -> dict:
+    def getNapCat(self) -> dict | None:
         """
         ## 获取 NapCat 相关内容
         """
         if (response := self.request(Urls.NAPCATQQ_REPO_API.value, "NapCat")) is not None:
             return {"version": response["tag_name"], "update_log": response["body"]}
 
-    def getQQ(self) -> None:
+    def getQQ(self) -> dict | None:
         """
         ## 获取 QQ 相关内容
         """
         if (response := self.request(Urls.QQ_Version.value, "QQ")) is not None:
-            download_url = f"https://dldir1.qq.com/qqfile/qq/QQNT/{response['verHash']}/QQ{response['version']}_x64.exe"
-            return {"version": response["version"], "download_url": download_url.replace("-", ".")}
+            ver_hash = response["verHash"]
+            version = response["version"].replace("-", ".")
+            download_url = f"https://dldir1.qq.com/qqfile/qq/QQNT/{ver_hash}/QQ{version}_x64.exe"
+            return {"version": version, "download_url": download_url}
 
-    def getNapCatDesktop(self) -> dict:
+    def getNapCatDesktop(self) -> dict | None:
         """
         ## 获取 NCD 相关内容
         """
@@ -122,7 +124,7 @@ class GetRemoteVersionThread(QThread):
             return {"version": response["tag_name"], "update_log": response["body"]}
 
     @staticmethod
-    def request(url: QUrl, name: str) -> dict:
+    def request(url: QUrl, name: str) -> dict | None:
         """
         ## 网络请求
         """
@@ -156,7 +158,7 @@ class GetLocalVersionThread(QThread):
         self.updateFinish.emit()
 
     @staticmethod
-    def getNapCat() -> dict:
+    def getNapCat() -> str | None:
         """
         ## 获取 NapCat 相关内容
         """

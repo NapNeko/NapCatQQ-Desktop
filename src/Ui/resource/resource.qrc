@@ -6,6 +6,19 @@
         <file>image/Global/page_bg_light.png</file>
     </qresource>
 
+    <qresource prefix="FuFuFace">
+        <file>image/FuFuFace/g_fufu_01.gif</file>
+        <file>image/FuFuFace/g_fufu_02.gif</file>
+        <file>image/FuFuFace/g_fufu_03.gif</file>
+        <file>image/FuFuFace/g_fufu_04.gif</file>
+        <file>image/FuFuFace/g_fufu_05.gif</file>
+        <file>image/FuFuFace/g_fufu_06.gif</file>
+        <file>image/FuFuFace/g_fufu_07.gif</file>
+        <file>image/FuFuFace/g_fufu_08.gif</file>
+        <file>image/FuFuFace/g_fufu_09.gif</file>
+        <file>image/FuFuFace/g_fufu_10.gif</file>
+    </qresource>
+
     <qresource prefix="Icon">
         <file>image/Icon/black/Logo.svg</file>
         <file>image/Icon/white/Logo.svg</file>

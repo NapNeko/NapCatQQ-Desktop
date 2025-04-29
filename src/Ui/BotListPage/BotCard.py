@@ -54,7 +54,7 @@ class BotCard(CardWidget):
 
             # 创建页面
             self.botWidget = BotWidget(self.config)
-            MainWindow().view.addWidget(self.botWidget)
+            BotListWidget().view.addWidget(self.botWidget)
 
             # 启动机器人
             self.botWidget.runButtonSlot()
@@ -93,12 +93,12 @@ class BotCard(CardWidget):
         avatar_url: QUrl = Urls.QQ_AVATAR.value
         query = QUrlQuery()
         query.addQueryItem("spec", "640")
-        query.addQueryItem("dst_uin", self.config.bot.QQID)
+        query.addQueryItem("dst_uin", str(self.config.bot.QQID))
         avatar_url.setQuery(query)
 
         # 创建请求并链接槽函数
         request = QNetworkRequest(avatar_url)
-        manager = QNetworkAccessManager()
+        manager = QNetworkAccessManager(self)
         reply = manager.get(request)
         reply.finished.connect(lambda: self._setAvatar(reply))
 
@@ -112,7 +112,7 @@ class BotCard(CardWidget):
             avatar.loadFromData(replay.readAll())
             self.QQAvatarLabel.setImage(avatar)
             self.QQAvatarLabel.scaledToHeight(115)
-            self.QQAvatarLabel.setBorderRadius(5, 5, 5, 5)
+            self.QQAvatarLabel.setBorderRadius(6, 6, 6, 6)
         else:
             error_bar(self.tr("获取 QQ 头像时引发错误, 请前往 设置 > log 查看错误原因"))
 

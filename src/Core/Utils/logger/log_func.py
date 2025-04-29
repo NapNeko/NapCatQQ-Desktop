@@ -62,8 +62,8 @@ class Logger:
         time: int | float,
         log_type: LogType,
         log_source: LogSource,
-        log_position: LogPosition,
-        log_group: LogGroup = None,
+        log_position: LogPosition | None,
+        log_group: LogGroup | None = None,
     ):
         """
         ## 构造 Log 对象
@@ -101,8 +101,8 @@ class Logger:
         message: str,
         log_type: LogType = LogType.NONE_TYPE,
         log_source: LogSource = LogSource.NONE,
-        log_position: LogPosition = None,
-        log_group: LogGroup = None,
+        log_position: LogPosition | None = None,
+        log_group: LogGroup | None = None,
     ):
         self._log(LogLevel.DBUG, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
@@ -112,8 +112,8 @@ class Logger:
         message: str,
         log_type: LogType = LogType.NONE_TYPE,
         log_source: LogSource = LogSource.NONE,
-        log_position: LogPosition = None,
-        log_group: LogGroup = None,
+        log_position: LogPosition | None = None,
+        log_group: LogGroup | None = None,
     ):
         self._log(LogLevel.INFO, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
@@ -145,14 +145,12 @@ class Logger:
         log_group = LogGroup(name, log_type, log_source)
         try:
             self.info(
-                f"{'-' * 20} > {name} 开始 < {'-' * 20}",
-                log_type=log_type, log_source=log_source, log_group=log_group
+                f"{'-' * 20} > {name} 开始 < {'-' * 20}", log_type=log_type, log_source=log_source, log_group=log_group
             )
             yield log_group
         finally:
             self.info(
-                f"{'-' * 20} > {name} 结束 < {'-' * 20}",
-                log_type=log_type, log_source=log_source, log_group=log_group
+                f"{'-' * 20} > {name} 结束 < {'-' * 20}", log_type=log_type, log_source=log_source, log_group=log_group
             )
             self.log_buffer.append(log_group)
 

@@ -1,2 +1,3 @@
 # -*- coding: utf-8 -*-
-from src.Ui.AddPage.AddWidget import AddWidget
+# 项目内模块导入
+from src.Ui.AddPage.add_widget import AddWidget

@@ -21,7 +21,7 @@ class LogPosition:
 
 @dataclass(frozen=True)
 class Log:
-    """ 基本日志内容 """
+    """基本日志内容"""
 
     # 基本信息
     level: LogLevel  # 日志等级
@@ -29,9 +29,9 @@ class Log:
     time: int | float  # 日志时间
 
     # 详细信息
-    log_type: LogType  # 日志类型
-    source: LogSource  # 日志来源
-    position: LogPosition  # 日志位置
+    log_type: LogType | None  # 日志类型
+    source: LogSource | None  # 日志来源
+    position: LogPosition | None  # 日志位置
 
     def __str__(self):
         time = datetime.fromtimestamp(self.time).strftime("%y-%m-%d %H:%M:%S")

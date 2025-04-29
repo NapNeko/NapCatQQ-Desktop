@@ -9,6 +9,12 @@ from src.Core.Utils.singleton import Singleton
 
 
 class PathFunc(metaclass=Singleton):
+    qq_path: Path | None
+    napcat_path: Path
+    config_dir_path: Path
+    tmp_path: Path
+    config_path: Path
+    bot_config_path: Path
 
     def __init__(self):
         """

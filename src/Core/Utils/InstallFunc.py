@@ -103,7 +103,7 @@ class QQInstall(QThread):
 
     def __init__(self, exe_path: str | Path) -> None:
         super().__init__()
-        self.exe_path = exe_path
+        self.exe_path: Path = exe_path if isinstance(exe_path, Path) else Path(exe_path)
 
     def run(self) -> None:
         """
@@ -120,49 +120,6 @@ class QQInstall(QThread):
                 self.errorFinsh.emit()
 
             self.exe_path.unlink()  # 移除安装包
-
-        except Exception as e:
-            self.statusLabel.emit(self.tr(f"安装失败: {e}"))
-            self.errorFinsh.emit()
-
-
-class DLCInstall(QThread):
-    """QQ 安装逻辑"""
-
-    # 安装成功信号
-    installFinish = Signal()
-    # 安装失败信号
-    errorFinsh = Signal()
-    # 按钮模式切换
-    buttonToggle = Signal(ButtonStatus)
-    # 进度条模式切换
-    progressRingToggle = Signal(ProgressRingStatus)
-    # 状态标签
-    statusLabel = Signal(str)
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    def run(self) -> None:
-        """
-        ## 安装逻辑
-        """
-        try:
-            self.statusLabel.emit("正在安装 DLC")
-            self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
-
-            # 移动到 DLC 文件夹
-
-            if not (path := PathFunc().tmp_path / Urls.NAPCATQQ_DLC_DOWNLOAD.value.fileName()).exists():
-                error_bar(self.tr("DLC丢失, 取消安装"))
-                return
-
-            if Path(PathFunc().dlc_path / path.name).exists():
-                Path(PathFunc().dlc_path / path.name).unlink()
-
-            shutil.move(path, PathFunc().dlc_path / path.name)
-
-            self.installFinish.emit()
 
         except Exception as e:
             self.statusLabel.emit(self.tr(f"安装失败: {e}"))

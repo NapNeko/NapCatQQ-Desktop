@@ -1,134 +1,170 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
+import random
 
 # 第三方库导入
-from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
+from qfluentwidgets import BodyLabel, FlowLayout, ImageLabel, ScrollArea
+from PySide6.QtGui import QMovie
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
-from src.Ui.common.InputCard import UrlCard, WsConfigCard, HttpConfigCard, SwitchConfigCard
-from src.Core.Config.ConfigModel import ConnectConfig
+from src.Ui.AddPage.card import (
+    ConfigCardBase,
+    HttpSSEConfigCard,
+    HttpClientConfigCard,
+    HttpServerConfigCard,
+    WebsocketClientConfigCard,
+    WebsocketServersConfigCard,
+)
+from src.Ui.AddPage.signal_bus import addPageSingalBus
+from src.Core.Config.ConfigModel import (
+    ConnectConfig,
+    HttpClientsConfig,
+    HttpServersConfig,
+    NetworkBaseConfig,
+    HttpSseServersConfig,
+    WebsocketClientsConfig,
+    WebsocketServersConfig,
+)
 
 
-class ConnectWidget(ScrollArea):
-    """
-    ## Connect Item 项对应的 QWidget
-    """
+class ConnectWidget(QStackedWidget):
+    """连接配置项对应的 QStackedWidget"""
 
-    def __init__(self, parent=None, config: ConnectConfig = None) -> None:
+    def __init__(self, parent=None, config: ConnectConfig | None = None) -> None:
         super().__init__(parent=parent)
         self.setObjectName("ConnectWidget")
-        self.view = QWidget()
-        self.cardLayout = ExpandLayout(self)
 
-        # 设置 ScrollArea
-        self.setWidget(self.view)
-        self.setWidgetResizable(True)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.view.setObjectName("ConnectWidgetView")
+        self._postInit()
 
-        # 调用方法
-        self._initWidget()
-        self._setLayout()
-
-        if config is not None:
+        if not config is None:
             # 如果传入了 config 则进行解析并填充内部卡片
             self.config = config
             self.fillValue()
+            self.setCurrentWidget(self.cardListPage)
+        else:
+            self.setCurrentWidget(self.defultPage)
 
-    def _initWidget(self) -> None:
-        """
-        ## 初始化 QWidget 所需要的控件并配置
-        创建 InputCard
-        """
-        self.httpConfigCard = HttpConfigCard(self.view)
-        self.httpPostUrlCard = UrlCard(
-            icon=FluentIcon.SCROLL,
-            title=self.tr("Http 上报地址"),
-            content=self.tr("例如 http://127.0.0.1:8080/onebot/v11/http"),
-            parent=self.view,
-        )
-        self.wsCard = WsConfigCard(self.view)
-        self.wsReverseCard = SwitchConfigCard(
-            icon=FluentIcon.SCROLL,
-            title=self.tr("启用 反向WebSocket"),
-            content=self.tr("是否启用反向websocket服务"),
-            parent=self.view,
-        )
-        self.wsReverseUrlCard = UrlCard(
-            icon=FluentIcon.SCROLL,
-            title=self.tr("反向 WebSocket 地址"),
-            content=self.tr("反向 WebSocket 对接的地址"),
-            parent=self.view,
-        )
+    def _postInit(self) -> None:
+        """初始化"""
+        self.defultPage = DefaultPage(self)
+        self.cardListPage = CardListPage(self)
 
-        # 当 反向WS 地址被删除至空时, 设置为 False
-        self.wsReverseUrlCard.emptiedSignal.connect(lambda: self.wsReverseCard.switchButton.setChecked(False))
+        self.addWidget(self.defultPage)
+        self.addWidget(self.cardListPage)
 
-        # 隐藏卡片，并设置条件显示
-        self.httpPostUrlCard.hide()
-        self.wsReverseUrlCard.hide()
-        self.wsReverseUrlCard.hide()
-
-        self.httpConfigCard.httpEnablePost.button.checkedChanged.connect(
-            lambda checked: self.httpPostUrlCard.show() if checked else self.httpPostUrlCard.hide()
+    def addCard(self, config: NetworkBaseConfig) -> None:
+        """添加到卡片"""
+        self.cardListPage.addCard(
+            {
+                HttpServersConfig: HttpServerConfigCard,
+                HttpSseServersConfig: HttpSSEConfigCard,
+                HttpClientsConfig: HttpClientConfigCard,
+                WebsocketServersConfig: WebsocketServersConfigCard,
+                WebsocketClientsConfig: WebsocketClientConfigCard,
+            }.get(type(config))(config, self.cardListPage)
         )
-        self.wsReverseCard.switchButton.checkedChanged.connect(
-            lambda checked: self.wsReverseUrlCard.show() if checked else self.wsReverseUrlCard.hide()
-        )
-
-        self.cards = [
-            self.httpConfigCard,
-            self.httpPostUrlCard,
-            self.wsCard,
-            self.wsReverseCard,
-            self.wsReverseUrlCard,
-        ]
 
     def fillValue(self) -> None:
-        """
-        ## 如果传入了 config 则对其内部卡片的值进行填充
-        """
-        self.httpConfigCard.fillValue(self.config.http)
-        self.httpPostUrlCard.fillValue(self.config.http.postUrls)
-        self.wsCard.fillValue(self.config.ws)
-        self.wsReverseCard.fillValue(self.config.reverseWs.enable)
-        self.wsReverseUrlCard.fillValue(self.config.reverseWs.urls)
+        """如果传入了 config 则对其内部卡片的值进行填充"""
+        [self.addCard(_) for _ in self.config.httpServers]
+        [self.addCard(_) for _ in self.config.httpSseServers]
+        [self.addCard(_) for _ in self.config.httpClients]
+        [self.addCard(_) for _ in self.config.websocketServers]
+        [self.addCard(_) for _ in self.config.websocketClients]
 
-    def _setLayout(self) -> None:
-        """
-        ## 将 QWidget 内部的 InputCard 添加到布局中
-        """
-        self.cardLayout.setContentsMargins(0, 0, 0, 0)
-        self.cardLayout.setSpacing(2)
-        for card in self.cards:
-            self.cardLayout.addWidget(card)
-            self.adjustSize()
-
-        self.view.setLayout(self.cardLayout)
-
-    def getValue(self) -> dict:
-        """
-        ## 返回内部卡片的配置结果
-        """
-        http = self.httpConfigCard.getValue()
-        http["postUrls"] = self.httpPostUrlCard.getValue()
-        ws = self.wsCard.getValue()  # 单纯为了下面字典整齐)
-        reverseWs = {"enable": self.wsReverseCard.getValue(), "urls": self.wsReverseUrlCard.getValue()}
-
-        return {
-            "http": http,
-            "ws": ws,
-            "reverseWs": reverseWs,
-        }
+    def getValue(self) -> ConnectConfig:
+        """返回内部卡片的配置结果"""
+        return ConnectConfig(
+            **{
+                "plugins": [],
+                **self.cardListPage.getValue(),
+            }
+        )
 
     def clearValues(self) -> None:
-        """
-        ## 清空(还原)内部卡片的配置
-        """
-        for card in self.cards:
-            card.clear()
+        """清空(还原)内部卡片的配置"""
+        for item in self.cardListPage.viewLayout._items:
+            item.close()
+        self.cardListPage.viewLayout.removeAllWidgets()
 
-    def adjustSize(self) -> None:
-        h = self.cardLayout.heightForWidth(self.width()) + 46
-        return self.resize(self.width(), h)
+
+class DefaultPage(QWidget):
+    """无配置时的默认页面"""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+
+        self.images = [
+            ":/FuFuFace/image/FuFuFace/g_fufu_01.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_02.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_03.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_04.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_05.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_06.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_07.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_08.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_09.gif",
+            ":/FuFuFace/image/FuFuFace/g_fufu_10.gif",
+        ]
+
+        self.imageLabel = ImageLabel(self)
+        self.movie = QMovie(random.choice(self.images))
+        self.label = BodyLabel(self.tr("还没有添加配置项喔, 快点击左上角按钮添加一个吧"), self)
+        self.hBoxLayout = QVBoxLayout(self)
+
+        self.imageLabel.setMovie(self.movie)
+
+        self.hBoxLayout.addStretch(3)
+        self.hBoxLayout.addWidget(self.imageLabel, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.hBoxLayout.addStretch(1)
+        self.hBoxLayout.addWidget(self.label, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.hBoxLayout.addStretch(3)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.imageLabel.scaledToWidth(self.width() // 6)
+
+
+class CardListPage(ScrollArea):
+
+    def __init__(self, parent: ConnectWidget):
+        super().__init__(parent)
+        # 属性
+        self.cards = []
+
+        self.view = QWidget(self)
+        self.viewLayout = FlowLayout(self.view, needAni=True)
+
+        self.setWidget(self.view)
+        self.setWidgetResizable(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setObjectName("ConnectListView")
+
+        self.viewLayout.setSpacing(8)
+        self.viewLayout.setContentsMargins(0, 0, 0, 0)
+
+        addPageSingalBus.removeCard.connect(self.removeCard)
+
+    def addCard(self, card: ConfigCardBase) -> None:
+        self.cards.append(card)
+        self.viewLayout.addWidget(card)
+        self.viewLayout.update()
+        self.updateGeometry()
+
+    def removeCard(self, card: ConfigCardBase) -> None:
+        """删除卡片"""
+        self.cards.remove(card)
+        self.viewLayout.removeWidget(card)
+        card.close()
+
+    def getValue(self) -> dict:
+        print([_.getValue() for _ in self.cards if isinstance(_, HttpServerConfigCard)])
+        return {
+            "httpServers": [_.getValue() for _ in self.cards if isinstance(_, HttpServerConfigCard)],
+            "httpSseServers": [_.getValue() for _ in self.cards if isinstance(_, HttpSSEConfigCard)],
+            "httpClients": [_.getValue() for _ in self.cards if isinstance(_, HttpClientConfigCard)],
+            "websocketServers": [_.getValue() for _ in self.cards if isinstance(_, WebsocketServersConfigCard)],
+            "websocketClients": [_.getValue() for _ in self.cards if isinstance(_, WebsocketClientConfigCard)],
+        }

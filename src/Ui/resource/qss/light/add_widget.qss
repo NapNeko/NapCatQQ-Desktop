@@ -8,8 +8,9 @@ ConfigTopCard,
 BotWidget,
 AdvancedWidget,
 ConnectWidget,
+CardListPage,
 #BotWidgetView,
-#ConnectWidgetView,
+#ConnectListView,
 #AdvanceWidgetView {
     background: transparent;
     border: none;

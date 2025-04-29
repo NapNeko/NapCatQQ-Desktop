@@ -8,9 +8,9 @@ from json import JSONDecodeError
 from typing import List
 
 # 项目内模块导入
-from src.Ui.common.info_bar import error_bar
+from src.Core.Utils.logger import logger
 from src.Core.Utils.PathFunc import PathFunc
-from src.Core.Config.ConfigModel import Config, WebUiConfig, NapCatConfig, OneBotConfig
+from src.Core.Config.ConfigModel import Config, NapCatConfig, OneBotConfig
 
 
 def read_config() -> List[Config]:
@@ -26,20 +26,6 @@ def read_config() -> List[Config]:
     except Exception as error:
         write_config([])  # 覆盖原有配置文件
         return []
-
-
-def read_webui_config() -> WebUiConfig:
-    """
-    ## 读取 NapCat WebUI 配置文件
-
-    ## 返回
-        - Config
-    """
-    if not PathFunc().webui_config_path.exists() and not PathFunc().webui_config_path.is_file():
-        error_bar("WebUI 配置文件不存在")
-        return
-    with open(str(PathFunc().webui_config_path), "r", encoding="utf-8") as file:
-        return WebUiConfig(**json.load(file))
 
 
 def write_config(configs: List[Config]) -> None:
@@ -99,16 +85,10 @@ def update_config(config: Config) -> bool:
         # 定义配置内容
         onebot_config = OneBotConfig(
             **{
-                "http": config.connect.http,
-                "ws": config.connect.ws,
-                "reverseWs": config.connect.reverseWs,
-                "debug": config.advanced.debug,
-                "heartInterval": config.bot.heartInterval,
-                "messagePostFormat": config.bot.messagePostFormat,
-                "enableLocalFile2Url": config.advanced.enableLocalFile2Url,
+                "network": config.connect,
                 "musicSignUrl": config.bot.musicSignUrl,
-                "reportSelfMessage": config.bot.reportSelfMessage,
-                "token": config.bot.token,
+                "enableLocalFile2Url": config.advanced.enableLocalFile2Url,
+                "parseMultMsg": config.advanced.parseMultMsg,
             }
         )
         napcat_config = NapCatConfig(
@@ -117,7 +97,9 @@ def update_config(config: Config) -> bool:
                 "consoleLog": config.advanced.consoleLog,
                 "fileLogLevel": config.advanced.fileLogLevel,
                 "consoleLogLevel": config.advanced.consoleLogLevel,
-                "packetServer": config.advanced.packetServer
+                "packetBackend": config.advanced.packetBackend,
+                "packetServer": config.advanced.packetServer,
+                "o3HookMode": config.advanced.o3HookMode,
             }
         )
 
@@ -125,9 +107,9 @@ def update_config(config: Config) -> bool:
         onebot_config_path = PathFunc().napcat_path / "config" / f"onebot11_{config.bot.QQID}.json"
         napcat_config_path = PathFunc().napcat_path / "config" / f"napcat_{config.bot.QQID}.json"
         with open(str(onebot_config_path), "w", encoding="utf-8") as onebot_file:
-            json.dump(json.loads(onebot_config.json()), onebot_file, indent=4, ensure_ascii=False)
+            json.dump(json.loads(onebot_config.model_dump_json()), onebot_file, indent=4, ensure_ascii=False)
         with open(str(napcat_config_path), "w", encoding="utf-8") as napcat_file:
-            json.dump(json.loads(napcat_config.json()), napcat_file, indent=4, ensure_ascii=False)
+            json.dump(json.loads(napcat_config.model_dump_json()), napcat_file, indent=4, ensure_ascii=False)
 
         return True
 
