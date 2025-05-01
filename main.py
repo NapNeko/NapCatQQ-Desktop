@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import sys
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.Ui.MainWindow import MainWindow
 from src.Core.Utils.mutex import SingleInstanceApplication
 
 if __name__ == "__main__":
@@ -13,11 +13,17 @@ if __name__ == "__main__":
     if SingleInstanceApplication().is_running():
         sys.exit()
 
-    # 创建应用程序
     app = QApplication(sys.argv)
 
-    # 初始化主窗口
-    MainWindow().initialize()
+    # if (Path.cwd() / "config" / "config.json").exists():
+    #     # 项目内模块导入
+    #     from src.Ui.MainWindow import MainWindow
 
-    # 进入循环
+    #     MainWindow().initialize()
+    # else:
+    # 项目内模块导入
+    from src.Ui.GuideWindow.guide_window import GuideWindow
+
+    GuideWindow().initialize()
+
     sys.exit(app.exec())

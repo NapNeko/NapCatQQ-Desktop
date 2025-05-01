@@ -25,6 +25,16 @@ from src.Core.Config.enum import Language
 from src.Core.Utils.PathFunc import PathFunc
 
 
+class LanguageSerializer(ConfigSerializer):
+    """语言序列化"""
+
+    def serialize(self, language):
+        return language.value.name() if language != Language.AUTO else "Auto"
+
+    def deserialize(self, value: str):
+        return Language(QLocale(value)) if value != "Auto" else Language.AUTO
+
+
 class Config(QConfig):
     """程序配置"""
 
