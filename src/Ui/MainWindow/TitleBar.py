@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from qfluentwidgets import TabBar, TabCloseButtonDisplayMode
+from qfluentwidgets import TabBar
 from qfluentwidgets.common import Theme
 from qfluentwidgets.window import MSFluentTitleBar
 from qframelesswindow.titlebar import CloseButton, MaximizeButton, MinimizeButton
@@ -14,6 +14,7 @@ from PySide6.QtCore import Qt, QPoint, QRectF, QPointF
 # 项目内模块导入
 from src.Ui.Icon import NapCatDesktopIcon
 from src.Core.Config import cfg
+from src.Core.Config.enum import CloseActionEnum
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -52,7 +53,7 @@ class CustomTitleBar(MSFluentTitleBar):
         button_info = {
             "minBtn": (MinBtn, self.window().showMinimized),
             "maxBtn": (MaxBtn, self.__toggle_maximization),
-            "closeBtn": (CloseBtn, self.window().close),
+            "closeBtn": (CloseBtn, self.__close),
         }
 
         for btn_name, (btn_class, slot) in button_info.items():
@@ -79,6 +80,13 @@ class CustomTitleBar(MSFluentTitleBar):
             self.window().showNormal()
         else:
             self.window().showMaximized()
+
+    def __close(self) -> None:
+        """关闭窗口"""
+        if cfg.get(cfg.closeBtnAction) == CloseActionEnum.CLOSE:
+            self.window().close()
+        else:
+            self.window().hide()
 
     def canDrag(self, pos: QPoint) -> bool:
         if not super().canDrag(pos):

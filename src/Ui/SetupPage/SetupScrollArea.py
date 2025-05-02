@@ -74,9 +74,26 @@ class SetupScrollArea(ScrollArea):
             icon=FluentIcon.FIT_PAGE,
             title=self.tr("窗口透明度"),
             content=self.tr("设置窗口的透明度"),
+            parent=self.personalGroup,
+        )
+        self.zoomCard = OptionsSettingCard(
+            configItem=cfg.dpiScale,
+            icon=FluentIcon.ZOOM,
+            title=self.tr("界面缩放"),
+            content=self.tr("更改 Widget 和字体的大小"),
+            texts=["100%", "125%", "150%", "175%", "200%", self.tr("跟随系统")],
+            parent=self.personalGroup,
         )
         self.bgSettingCard = BackgroundSettingCard(self)
         self.titleTabBarSettingCard = TitleTabBarSettingCard(self)
+        self.closeBtnCard = OptionsSettingCard(
+            configItem=cfg.closeBtnAction,
+            icon=FluentIcon.CLOSE,
+            title=self.tr("关闭按钮"),
+            content=self.tr("选择点击关闭按钮时的行为"),
+            texts=[self.tr("关闭程序"), self.tr("最小化隐藏到托盘")],
+            parent=self.personalGroup,
+        )
 
         # 创建组 - 事件
         self.eventGroup = SettingCardGroup(title=self.tr("事件"), parent=self.view)
@@ -92,9 +109,11 @@ class SetupScrollArea(ScrollArea):
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.themeColorCard)
         # self.personalGroup.addSettingCard(self.languageCard)
+        self.personalGroup.addSettingCard(self.zoomCard)
         self.personalGroup.addSettingCard(self.bgSettingCard)
         self.personalGroup.addSettingCard(self.windowOpacityCard)
         self.personalGroup.addSettingCard(self.titleTabBarSettingCard)
+        self.personalGroup.addSettingCard(self.closeBtnCard)
 
         self.eventGroup.addSettingCard(self.botOfflineEventCard)
 

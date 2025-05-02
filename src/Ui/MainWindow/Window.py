@@ -114,7 +114,3 @@ class MainWindow(MSFluentWindow):
         """
         self.trayIcon = SystemTrayIcon(self)
         self.trayIcon.show()
-
-    def closeEvent(self, event):
-        self.hide()
-        event.ignore()

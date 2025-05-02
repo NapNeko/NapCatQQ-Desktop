@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+import os
 import sys
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
@@ -17,6 +19,12 @@ if __name__ == "__main__":
     # 执行路径验证
     PathFunc().path_validator()
 
+    # 设置DPI缩放
+    if cfg.get(cfg.dpiScale) == "Auto":
+        QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    else:
+        os.environ["QT_SCALE_FACTOR"] = str(cfg.get(cfg.dpiScale))
+
     app = QApplication(sys.argv)
 
     if cfg.get(cfg.MainWindow):
@@ -29,6 +37,6 @@ if __name__ == "__main__":
         from src.Ui.GuideWindow.guide_window import GuideWindow
 
         GuideWindow().initialize()
-        cfg.set(cfg.MainWindow, False)
+        cfg.set(cfg.MainWindow, True)
 
     sys.exit(app.exec())
