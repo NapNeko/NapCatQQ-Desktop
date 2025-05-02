@@ -49,7 +49,7 @@ jobs:
         mt.exe -manifest ./assets/NapCat-Desktop.exe.manifest -outputresource:./build/NapCat-Desktop.exe;1
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: NapCat-Desktop
         path: ./build/NapCat-Desktop.exe
