@@ -96,7 +96,7 @@ class NCDCard(QWidget):
         self.licenseLabel = CaptionLabel("License: GPL-v3", self)
         self.licenseLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
 
-        self.setFixedSize(200, 60)
+        self.setFixedSize(218, 60)
         self.avatar.setRadius(24)
         self.avatar.move(2, 6)
         self.nameLabel.move(64, 13)
