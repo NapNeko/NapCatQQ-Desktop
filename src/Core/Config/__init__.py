@@ -213,6 +213,6 @@ class Config(QConfig):
 cfg = Config()
 qconfig.load(PathFunc().config_path, cfg)
 cfg.set(cfg.StartTime, time.time(), True)
-cfg.set(cfg.NCDVersion, "v1.4.0", True)
+cfg.set(cfg.NCDVersion, "v1.5.0", True)
 cfg.set(cfg.SystemType, platform.system(), True)
 cfg.set(cfg.PlatformType, platform.machine(), True)
