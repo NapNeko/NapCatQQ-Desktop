@@ -46,6 +46,7 @@ class Config(QConfig):
     StartTime = ConfigItem(group="Info", name="StartTime", default="")
     SystemType = ConfigItem(group="Info", name="SystemType", default="")
     PlatformType = ConfigItem(group="Info", name="PlatformType", default="")
+    MainWindow = ConfigItem(group="Info", name="MainWindow", default=False, validator=BoolValidator())
 
     # 路径项
     # 注意: default 为空字符串则默认以程序根目录为路径
