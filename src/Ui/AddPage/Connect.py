@@ -160,7 +160,6 @@ class CardListPage(ScrollArea):
         card.close()
 
     def getValue(self) -> dict:
-        print([_.getValue() for _ in self.cards if isinstance(_, HttpServerConfigCard)])
         return {
             "httpServers": [_.getValue() for _ in self.cards if isinstance(_, HttpServerConfigCard)],
             "httpSseServers": [_.getValue() for _ in self.cards if isinstance(_, HttpSSEConfigCard)],
