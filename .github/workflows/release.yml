@@ -39,7 +39,7 @@ jobs:
         enable-plugins: pyside6
         disable-console: true
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
-        output-filename: "NapCat-Desktop"
+        output-filename: "NapCatQQ-Desktop"
 
     - name: Enable Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1.13.0

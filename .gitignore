@@ -8,6 +8,7 @@ dlc/
 .vscode/
 .idea/
 test/
+build/
 
 # Ignore specific application directories and files
 NapCat/
