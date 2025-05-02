@@ -17,6 +17,9 @@
         <file>image/FuFuFace/g_fufu_08.gif</file>
         <file>image/FuFuFace/g_fufu_09.gif</file>
         <file>image/FuFuFace/g_fufu_10.gif</file>
+        <file>image/FuFuFace/g_fufu_11.gif</file>
+        <file>image/FuFuFace/g_fufu_12.gif</file>
+        <file>image/FuFuFace/g_fufu_13.gif</file>
     </qresource>
 
     <qresource prefix="Icon">
@@ -24,6 +27,7 @@
         <file>image/Icon/white/Logo.svg</file>
         <file>image/Icon/black/QQ.svg</file>
         <file>image/Icon/white/QQ.svg</file>
+        <file>image/Icon/static/logo.png</file>
     </qresource>
 
     <qresource  prefix="MainWindow">
