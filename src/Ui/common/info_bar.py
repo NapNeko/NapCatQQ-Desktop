@@ -10,13 +10,13 @@
 
 # 第三方库导入
 from qfluentwidgets import InfoBar
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject
 
 # 项目内模块导入
 from src.Ui.common.managers import NCDInfoBarPosition
 
 
-def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000) -> None:
+def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000, parent: QObject | None = None) -> None:
     """
     ## info 信息消息条, 仅用于展示一些提示, 故显示时间不会太长
 
@@ -34,11 +34,11 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5_000) -> Non
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.BOTTOM_RIGHT,
-        parent=MainWindow(),
+        parent=MainWindow() if parent is None else parent,
     )
 
 
-def success_bar(content: str, title: str = "Success✅", duration: int = 5_000) -> None:
+def success_bar(content: str, title: str = "Success✅", duration: int = 5_000, parent: QObject | None = None) -> None:
     """
     ## success 信息消息条, 仅用于展示一些成功提示, 故显示时间不会太长
 
@@ -56,11 +56,11 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5_000) 
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.BOTTOM_RIGHT,
-        parent=MainWindow(),
+        parent=MainWindow() if parent is None else parent,
     )
 
 
-def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_000) -> None:
+def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_000, parent: QObject | None = None) -> None:
     """
     ## warning 信息消息条, 仅用于展示一些警告提示, 故显示时间稍长
 
@@ -78,11 +78,11 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10_0
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.TOP_RIGHT,
-        parent=MainWindow(),
+        parent=MainWindow() if parent is None else parent,
     )
 
 
-def error_bar(content: str, title: str = "Failed❌", duration: int = -1) -> None:
+def error_bar(content: str, title: str = "Failed❌", duration: int = -1, parent: QObject | None = None) -> None:
     """
     ## error 信息消息条, 仅用于展示一些警告提示, 故显示时间稍长
 
@@ -100,5 +100,5 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1) -> Non
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.TOP_RIGHT,
-        parent=MainWindow(),
+        parent=MainWindow() if parent is None else parent,
     )
