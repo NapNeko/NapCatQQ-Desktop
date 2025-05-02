@@ -100,7 +100,6 @@ class ImageBox(MessageBoxBase):
         # 设置属性
         self.imageLabel.scaledToWidth(120)
         self.widget.setMinimumSize(420, 230)
-        self.yesButton.setText(self.tr("刷新"))
 
         # 添加到布局
         self.viewLayout.addWidget(self.titleLabel)
