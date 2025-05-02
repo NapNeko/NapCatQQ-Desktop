@@ -14,3 +14,12 @@ class NapCatDesktopIcon(FluentIconBase, Enum):
 
     def path(self, theme=Theme.AUTO) -> str:
         return f":Icon/image/Icon/{getIconColor(theme)}/{self.value}.svg"
+
+
+class StaticIcon(FluentIconBase, Enum):
+    """静态图标"""
+
+    LOGO = "logo"
+
+    def path(self, theme=Theme.AUTO) -> str:
+        return f":Icon/image/Icon/static/{self.value}.png"
