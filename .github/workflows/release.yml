@@ -36,6 +36,7 @@ jobs:
       with:
         script-name: main.py
         onefile: true
+        mode: standalone
         enable-plugins: pyside6
         disable-console: true
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
