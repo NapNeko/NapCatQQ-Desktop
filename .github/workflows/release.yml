@@ -35,8 +35,7 @@ jobs:
       name: Build Windows version
       with:
         script-name: main.py
-        onefile: true
-        mode: standalone
+        mode: onefile
         enable-plugins: pyside6
         disable-console: true
         windows-icon-from-ico: src/Ui/resource/image/icon.ico
