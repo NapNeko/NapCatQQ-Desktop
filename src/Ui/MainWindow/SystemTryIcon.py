@@ -34,7 +34,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.menu.addWidget(NCDCard(), selectable=False)
         self.menu.addSeparator()
-        self.menu.addAction(Action(FIF.PLAY, self.tr(“运行所有机器人”), triggered=self.runAllBotSlot))
+        self.menu.addAction(Action(FIF.PLAY, self.tr("运行所有机器人"), triggered=self.runAllBotSlot))
         self.menu.addAction(Action(FIF.PAUSE, self.tr("停止所有机器人"), triggered=self.stopAllBotBotSlot))
         self.menu.addSeparator()
         self.menu.addAction(Action(FIF.CLOSE, self.tr("关闭程序"), triggered=self.closeSlot))
