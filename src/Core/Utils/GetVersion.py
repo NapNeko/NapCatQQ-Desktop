@@ -120,8 +120,12 @@ class GetRemoteVersionThread(QThread):
         """
         ## 获取 NCD 相关内容
         """
-        if (response := self.request(Urls.NCD_REPO_API.value, "NapCat Desktop")) is not None:
-            return {"version": response["tag_name"], "update_log": response["body"]}
+        try:
+            if (response := self.request(Urls.NCD_REPO_API.value, "NapCat Desktop")) is not None:
+                return {"version": response["tag_name"], "update_log": response["body"]}
+        except (httpx.RequestError, PermissionError, Exception) as e:
+            logger.error(f"获取 NCD 版本信息失败: {e}")
+            return None
 
     @staticmethod
     def request(url: QUrl, name: str) -> dict | None:
@@ -183,7 +187,7 @@ class GetLocalVersionThread(QThread):
 
             with open(str(qq_path / "versions" / "config.json"), "r", encoding="utf-8") as file:
                 # 读取 config.json 文件获取版本信息
-                return json.load(file)["curVersion"]
+                return json.load(file)["curVersion"].replace("-", ".")
         except FileNotFoundError:
             # 文件不存在则返回 None
             logger.error("获取 QQ 版本信息失败: 文件不存在")

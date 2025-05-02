@@ -103,7 +103,7 @@ class DisplayCard(SimpleCardWidget):
         self.setMinimumWidth(230)
 
         self.iconLabel.setBorderRadius(8, 8, 8, 8)
-        self.iconLabel.scaledToWidth(100)
+        self.iconLabel.scaledToHeight(128)
 
         self.installButton.setMinimumWidth(140)
         self.updateButton.setMinimumWidth(140)

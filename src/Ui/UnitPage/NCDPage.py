@@ -19,13 +19,13 @@ from src.Core.NetworkFunc.Downloader import GithubDownloader
 
 class NCDPage(PageBase):
     """
-    ## NapCat Desktop 更新页面
+    ## NapCatQQ Desktop 更新页面
     """
 
     def __init__(self, parent) -> None:
         super().__init__(parent=parent)
         self.setObjectName("UnitNCDPage")
-        self.appCard.setName("NapCat Desktop")
+        self.appCard.setName("NapCatQQ Desktop")
         self.appCard.setHyperLabelName(self.tr("仓库地址"))
         self.appCard.setHyperLabelUrl(Urls.NCD_REPO.value)
 

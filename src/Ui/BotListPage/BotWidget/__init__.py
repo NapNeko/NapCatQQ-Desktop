@@ -24,7 +24,7 @@ from src.Ui.StyleSheet import StyleSheet
 from src.Core.Utils.email import Email
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
 from src.Core.Utils.RunNapCat import create_napcat_process
-from src.Ui.common.message_box import AskBox
+from src.Ui.common.message_box import AskBox, ImageBox
 from src.Core.Config.ConfigModel import Config
 from src.Core.Config.OperateConfig import delete_config, update_config
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
@@ -209,6 +209,7 @@ class BotWidget(QWidget):
         # 遍历所有匹配项并移除
         while (matches := QRegularExpression(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").globalMatch(data)).hasNext():
             data = data.replace(matches.next().captured(0), "")
+            data = data.replace("\n\n", "\n")
 
         # 获取 CodeEditor 的 cursor 并移动插入输出内容
         cursor = self.botLogPage.textCursor()
@@ -217,6 +218,7 @@ class BotWidget(QWidget):
         self.botLogPage.setTextCursor(cursor)
 
         # 分发给其他处理函数
+        self._getQRCode(data)
         self._getBofOffline(data)
 
     @Slot()
@@ -228,6 +230,24 @@ class BotWidget(QWidget):
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(f"进程结束，退出码为 {exit_code}，状态为 {exit_status}")
         self.botLogPage.setTextCursor(cursor)
+
+    def _getQRCode(self, data: str) -> None:
+        """
+        ## 判断是否需要显示二维码
+        """
+        if "二维码已保存到" in data:
+            # 项目内模块导入
+            from src.Ui.MainWindow import MainWindow
+
+            pattern = rf"[a-zA-Z]:\\(?:[^\\\s]+\\)*[^\\\s]+"
+            if not (match := QRegularExpression(pattern).match(data)).hasMatch():
+                # 如果匹配不成功, 则退出
+                return
+
+            box = ImageBox(self.tr("请扫码登陆"), match.captured(0), MainWindow())
+            box.cancelButton.hide()
+            box.imageLabel.scaledToHeight(256)
+            box.exec()
 
     def _getBofOffline(self, data: str):
         """
@@ -291,6 +311,7 @@ class BotWidget(QWidget):
                 # 处理 TabBar
                 # 项目内模块导入
                 from src.Ui.MainWindow.Window import MainWindow
+
                 MainWindow().title_bar.tabBar.removeTabByKey(f"{self.config.bot.QQID}")
             else:
                 error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
@@ -345,7 +366,7 @@ class BotWidget(QWidget):
                 "runButton": "hide" if self.isRun else "show",
                 "stopButton": "show" if self.isRun else "hide",
                 "rebootButton": "show" if self.isRun else "hide",
-            }
+            },
         }
 
         # 根据 widget.objectName() 执行相应操作

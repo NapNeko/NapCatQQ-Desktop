@@ -3,6 +3,7 @@
 import json
 import time
 import platform
+from pathlib import Path
 
 # 第三方库导入
 from qfluentwidgets import RangeValidator, RangeConfigItem, TabCloseButtonDisplayMode, qconfig
@@ -21,7 +22,7 @@ from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import Signal, QLocale
 
 # 项目内模块导入
-from src.Core.Config.enum import Language
+from src.Core.Config.enum import Language, CloseActionEnum
 from src.Core.Utils.PathFunc import PathFunc
 
 
@@ -46,6 +47,7 @@ class Config(QConfig):
     StartTime = ConfigItem(group="Info", name="StartTime", default="")
     SystemType = ConfigItem(group="Info", name="SystemType", default="")
     PlatformType = ConfigItem(group="Info", name="PlatformType", default="")
+    MainWindow = ConfigItem(group="Info", name="MainWindow", default=False, validator=BoolValidator())
 
     # 路径项
     # 注意: default 为空字符串则默认以程序根目录为路径
@@ -69,6 +71,20 @@ class Config(QConfig):
         serializer=EnumSerializer(Theme),
     )
     themeColor = ColorConfigItem(group="Personalize", name="ThemeColor", default="#009faa")
+    dpiScale = OptionsConfigItem(
+        group="Personalized",
+        name="DpiScale",
+        default="Auto",
+        validator=OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]),
+        restart=True,
+    )
+    closeBtnAction = OptionsConfigItem(
+        group="Personalized",
+        name="CloseBtnAction",
+        default=CloseActionEnum.CLOSE,
+        validator=OptionsValidator(list(CloseActionEnum)),
+        serializer=EnumSerializer(CloseActionEnum),
+    )
 
     windowOpacity = RangeConfigItem(
         group="Personalize", name="WindowOpacity", default=100, validator=RangeValidator(10, 100)

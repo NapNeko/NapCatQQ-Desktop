@@ -39,8 +39,6 @@ class MainWindow(MSFluentWindow):
 
     def initialize(self) -> None:
         """初始化"""
-        # 执行路径验证
-        PathFunc().path_validator()
         # 调用方法
         self.setWindow()
         self.setItem()
@@ -116,7 +114,3 @@ class MainWindow(MSFluentWindow):
         """
         self.trayIcon = SystemTrayIcon(self)
         self.trayIcon.show()
-
-    def closeEvent(self, event):
-        self.hide()
-        event.ignore()

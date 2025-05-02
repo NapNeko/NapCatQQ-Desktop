@@ -34,31 +34,18 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.menu.addWidget(NCDCard(), selectable=False)
         self.menu.addSeparator()
-        self.menu.addAction(Action(FIF.ADD, self.tr("Add Bot"), triggered=self.addBotSlot))
-        self.menu.addAction(Action(FIF.MENU, self.tr("Bot List"), triggered=self.botListSlot))
+        self.menu.addAction(Action(FIF.PLAY, self.tr("运行所有机器人"), triggered=self.runAllBotSlot))
+        self.menu.addAction(Action(FIF.PAUSE, self.tr("停止所有机器人"), triggered=self.stopAllBotBotSlot))
         self.menu.addSeparator()
-        self.menu.addAction(Action(FIF.PLAY, self.tr("Run All Bots"), triggered=self.runAllBotSlot))
-        self.menu.addAction(Action(FIF.PAUSE, self.tr("Stop All Bots"), triggered=self.stopAllBotBotSlot))
-        self.menu.addSeparator()
-        self.menu.addAction(Action(FIF.CLOSE, self.tr("Close"), triggered=self.closeSlot))
+        self.menu.addAction(Action(FIF.CLOSE, self.tr("关闭程序"), triggered=self.closeSlot))
 
         # 设置控件
         self.setIcon(parent.windowIcon())
-        self.setToolTip("NapCat Desktop")
+        self.setToolTip("NapCatQQ Desktop")
         self.setContextMenu(self.menu)
 
         # 链接信号
         self.activated.connect(self.clickSlot)
-
-    @Slot()
-    def addBotSlot(self) -> None:
-        self.checkShow()
-        self.parent().add_widget_button.click()
-
-    @Slot()
-    def botListSlot(self) -> None:
-        self.checkShow()
-        self.parent().bot_list_widget_button.click()
 
     @Slot()
     def runAllBotSlot(self) -> None:
@@ -105,11 +92,11 @@ class NCDCard(QWidget):
     def __init__(self):
         super().__init__()
         self.avatar = AvatarWidget(":Global/logo.png", self)
-        self.nameLabel = BodyLabel("NapCat Desktop", self)
+        self.nameLabel = BodyLabel("NapCatQQ Desktop", self)
         self.licenseLabel = CaptionLabel("License: GPL-v3", self)
         self.licenseLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))
 
-        self.setFixedSize(200, 60)
+        self.setFixedSize(218, 60)
         self.avatar.setRadius(24)
         self.avatar.move(2, 6)
         self.nameLabel.move(64, 13)
