@@ -15,15 +15,15 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    # if (Path.cwd() / "config" / "config.json").exists():
-    #     # 项目内模块导入
-    #     from src.Ui.MainWindow import MainWindow
+    if (Path.cwd() / "config" / "config.json").exists():
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
 
-    #     MainWindow().initialize()
-    # else:
-    # 项目内模块导入
-    from src.Ui.GuideWindow.guide_window import GuideWindow
+        MainWindow().initialize()
+    else:
+        # 项目内模块导入
+        from src.Ui.GuideWindow.guide_window import GuideWindow
 
-    GuideWindow().initialize()
+        GuideWindow().initialize()
 
     sys.exit(app.exec())
