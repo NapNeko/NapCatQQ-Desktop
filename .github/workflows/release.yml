@@ -31,7 +31,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt --verbose
 
-    - uses: Nuitka/Nuitka-Action@main
+    - uses: Nuitka/Nuitka-Action@v1.1
       name: Build Windows version
       with:
         script-name: main.py
