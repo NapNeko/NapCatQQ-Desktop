@@ -97,9 +97,6 @@ class VeteranCard(CardWidget):
     def on_click(self) -> None:
         """点击事件"""
         # 项目内模块导入
-        from src.Ui.MainWindow import MainWindow
+        from src.Ui.GuideWindow.guide_window import GuideWindow
 
-        MainWindow().initialize()
-
-        # 关闭当前窗口
-        self.parent().parent().parent().close()
+        GuideWindow().close()
