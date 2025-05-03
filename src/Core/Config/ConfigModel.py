@@ -4,7 +4,7 @@ import string
 from typing import Literal
 
 # 第三方库导入
-from pydantic import HttpUrl, BaseModel, WebsocketUrl, field_validator
+from pydantic import Field, HttpUrl, BaseModel, WebsocketUrl, field_validator
 
 
 class BotConfig(BaseModel):
@@ -84,7 +84,7 @@ class AdvancedConfig(BaseModel):
     offlineNotice: bool = False
     parseMultMsg: bool = False
     packetServer: str = ""
-    packetBackend: str = "auto"
+    packetBackend: str = Field(default="auto", exclude=True)
     enableLocalFile2Url: bool
     fileLog: bool
     consoleLog: bool
@@ -111,7 +111,7 @@ class NapCatConfig(BaseModel):
     consoleLog: bool
     fileLogLevel: str
     consoleLogLevel: str
-    packetBackend: str
+    packetBackend: str = Field(default="auto", exclude=True)
     packetServer: str
     o3HookMode: Literal[0, 1] = 1
 
