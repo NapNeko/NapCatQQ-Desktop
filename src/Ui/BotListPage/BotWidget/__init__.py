@@ -345,6 +345,9 @@ class BotWidget(QWidget):
                 BotListWidget().botList.updateList()
                 success_bar(self.tr(f"成功删除配置 {self.config.bot.QQID}({self.config.bot.name})"))
 
+                self.returnButton.click()
+                self.close()
+
                 # 处理 TabBar
                 # 项目内模块导入
                 from src.Ui.MainWindow.Window import MainWindow
