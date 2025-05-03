@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import (
     MessageBox,
-    PushButton,
     TitleLabel,
     ToolButton,
     CaptionLabel,
@@ -62,8 +61,8 @@ class AddTopCard(QWidget):
         self.addConnectConfigButton = PrimaryPushButton(FluentIcon.ADD, self.tr("添加连接配置"), self)
 
         # 设置一下默认隐藏
-        self.separator.setVisible(False)
-        self.addConnectConfigButton.setVisible(False)
+        self.separator.hide()
+        self.addConnectConfigButton.hide()
 
     def _setLayout(self) -> None:
         """

@@ -3,7 +3,15 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from qfluentwidgets import FluentIcon, CaptionLabel, BreadcrumbBar, ToolTipFilter, TransparentToolButton, setFont
+from qfluentwidgets import (
+    FluentIcon,
+    CaptionLabel,
+    BreadcrumbBar,
+    ToolTipFilter,
+    PrimaryPushButton,
+    TransparentToolButton,
+    setFont,
+)
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout

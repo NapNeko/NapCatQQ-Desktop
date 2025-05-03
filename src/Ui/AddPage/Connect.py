@@ -38,8 +38,17 @@ class ConnectWidget(QStackedWidget):
 
         self._postInit()
 
-        if not config is None:
-            # 如果传入了 config 则进行解析并填充内部卡片
+        if config is None:
+            self.setCurrentWidget(self.defultPage)
+            return
+
+        if (
+            config.httpServers
+            and config.httpSseServers
+            and config.httpClients
+            and config.websocketServers
+            and config.websocketClients
+        ):
             self.config = config
             self.fillValue()
             self.setCurrentWidget(self.cardListPage)
@@ -65,6 +74,7 @@ class ConnectWidget(QStackedWidget):
                 WebsocketClientsConfig: WebsocketClientConfigCard,
             }.get(type(config))(config, self.cardListPage)
         )
+        self.setCurrentWidget(self.cardListPage)
 
     def fillValue(self) -> None:
         """如果传入了 config 则对其内部卡片的值进行填充"""

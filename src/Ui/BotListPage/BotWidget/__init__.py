@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 # 第三方库导入
 import psutil
@@ -13,6 +13,8 @@ from qfluentwidgets import (
     PrimaryPushButton,
     TransparentToolButton,
 )
+from qfluentwidgets.common import FluentIcon
+from qfluentwidgets.components import ToolButton, SegmentedWidget, PrimaryPushButton
 from PySide6.QtGui import QTextCursor
 from PySide6.QtCore import Qt, Slot, QProcess, QRegularExpression
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
@@ -21,12 +23,24 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 from src.Ui.common import CodeEditor, LogHighlighter
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
+from src.Ui.AddPage.enum import ConnectType
 from src.Core.Utils.email import Email
+from src.Ui.AddPage.msg_box import (
+    HttpClientConfigDialog,
+    HttpServerConfigDialog,
+    HttpSSEServerConfigDialog,
+    WebsocketClientConfigDialog,
+    WebsocketServerConfigDialog,
+)
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
+from src.Ui.common.separator import Separator
 from src.Core.Utils.RunNapCat import create_napcat_process
+from src.Ui.AddPage.signal_bus import addPageSingalBus
 from src.Ui.common.message_box import AskBox, ImageBox
 from src.Core.Config.ConfigModel import Config
-from src.Core.Config.OperateConfig import delete_config, update_config
+from src.Core.Config.OperateConfig import delete_config, update_config, check_duplicate_bot
+from src.Ui.BotListPage.signal_bus import botListPageSignalBus
+from src.Ui.BotListPage.BotWidget.meg_box import ChooseConfigTypeDialog
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
 
 
@@ -115,6 +129,7 @@ class BotWidget(QWidget):
         self.updateConfigButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("更新配置"))  # 更新配置按钮
         self.deleteConfigButton = ToolButton(FluentIcon.DELETE, self)  # 删除配置按钮
         self.returnButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回到按钮
+        self.addConnectConfigButton = PrimaryPushButton(FluentIcon.ADD, self.tr("添加连接配置"), self)
 
         # 连接槽函数
         self.runButton.clicked.connect(self.runButtonSlot)
@@ -123,6 +138,8 @@ class BotWidget(QWidget):
         self.updateConfigButton.clicked.connect(self._updateButtonSlot)
         self.deleteConfigButton.clicked.connect(self._deleteButtonSlot)
         self.returnButton.clicked.connect(self._returnButtonSlot)
+        self.addConnectConfigButton.clicked.connect(self._onAddConnectConfigButtonClicked)
+        botListPageSignalBus.chooseConnectType.connect(self._onShowTypeDialog)
 
         # 隐藏按钮
         self.stopButton.hide()
@@ -139,6 +156,26 @@ class BotWidget(QWidget):
         # 删除按钮提示
         self.deleteConfigButton.setToolTip(self.tr("点击删除配置"))
         self.deleteConfigButton.installEventFilter(ToolTipFilter(self.deleteConfigButton))
+
+        # 更新按钮提示
+        self.updateConfigButton.setToolTip(self.tr("点击更新配置"))
+        self.updateConfigButton.installEventFilter(ToolTipFilter(self.updateConfigButton))
+
+        # 启动按钮提示
+        self.runButton.setToolTip(self.tr("点击启动机器人"))
+        self.runButton.installEventFilter(ToolTipFilter(self.runButton))
+
+        # 停止按钮提示
+        self.stopButton.setToolTip(self.tr("点击停止机器人"))
+        self.stopButton.installEventFilter(ToolTipFilter(self.stopButton))
+
+        # 重启按钮提示
+        self.rebootButton.setToolTip(self.tr("点击重启机器人"))
+        self.rebootButton.installEventFilter(ToolTipFilter(self.rebootButton))
+
+        # 添加连接配置按钮提示
+        self.addConnectConfigButton.setToolTip(self.tr("添加连接配置"))
+        self.addConnectConfigButton.installEventFilter(ToolTipFilter(self.addConnectConfigButton))
 
     @Slot()
     def runButtonSlot(self) -> None:
@@ -333,6 +370,31 @@ class BotWidget(QWidget):
             self.view.setCurrentWidget(self.botSetupPage)
 
     @Slot()
+    def _onAddConnectConfigButtonClicked(self) -> None:
+        """添加连接配置按钮的槽函数"""
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
+
+        ChooseConfigTypeDialog(MainWindow()).exec()
+
+    @Slot()
+    def _onShowTypeDialog(self, connectType: ConnectType) -> None:
+        """添加连接配置按钮的槽函数"""
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
+
+        if (
+            dialog := {
+                ConnectType.HTTP_SERVER: HttpServerConfigDialog,
+                ConnectType.HTTP_SSE_SERVER: HttpSSEServerConfigDialog,
+                ConnectType.HTTP_CLIENT: HttpClientConfigDialog,
+                ConnectType.WEBSOCKET_SERVER: WebsocketServerConfigDialog,
+                ConnectType.WEBSOCKET_CLIENT: WebsocketClientConfigDialog,
+            }.get(connectType)(MainWindow())
+        ).exec():
+            self.botSetupPage.connectWidget.addCard(dialog.getConfig())
+
+    @Slot()
     def _pivotSlot(self, index: int) -> None:
         """
         ## pivot 切换槽函数
@@ -350,6 +412,7 @@ class BotWidget(QWidget):
                 "runButton": "hide" if self.isRun else "show",
                 "stopButton": "show" if self.isRun else "hide",
                 "rebootButton": "show" if self.isRun else "hide",
+                "addConnectConfigButton": "hide" if self.isRun else "hide",
             },
             self.botSetupPage.objectName(): {
                 "updateConfigButton": "show",
@@ -358,6 +421,7 @@ class BotWidget(QWidget):
                 "runButton": "hide" if self.isRun else "show",
                 "stopButton": "show" if self.isRun else "hide",
                 "rebootButton": "show" if self.isRun else "hide",
+                "addConnectConfigButton": "show" if self.isRun else "show",
             },
             self.botLogPage.objectName(): {
                 "returnButton": "show",
@@ -366,6 +430,7 @@ class BotWidget(QWidget):
                 "runButton": "hide" if self.isRun else "show",
                 "stopButton": "show" if self.isRun else "hide",
                 "rebootButton": "show" if self.isRun else "hide",
+                "addConnectConfigButton": "hide" if self.isRun else "hide",
             },
         }
 
@@ -384,6 +449,7 @@ class BotWidget(QWidget):
         self.buttonLayout.addWidget(self.stopButton)
         self.buttonLayout.addWidget(self.rebootButton)
         self.buttonLayout.addWidget(self.updateConfigButton)
+        self.buttonLayout.addWidget(self.addConnectConfigButton)
         self.buttonLayout.addWidget(self.deleteConfigButton)
         self.buttonLayout.addWidget(self.returnButton)
         self.buttonLayout.setAlignment(Qt.AlignmentFlag.AlignRight)
