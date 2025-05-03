@@ -15,7 +15,7 @@ class SetupTopCard(QWidget):
         # 创建所需控件
         self.pivot = SegmentedWidget()
         self.titleLabel = TitleLabel(self.tr("设置"), self)
-        self.subtitleLabel = CaptionLabel(self.tr("NapCat Desktop 设置"), self)
+        self.subtitleLabel = CaptionLabel(self.tr("NapCatQQ Desktop 设置"), self)
         self.hBoxLayout = QHBoxLayout()
         self.vBoxLayout = QVBoxLayout()
         self.labelLayout = QVBoxLayout()

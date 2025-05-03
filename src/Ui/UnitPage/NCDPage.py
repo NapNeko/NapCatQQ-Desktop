@@ -113,7 +113,7 @@ class NCDPage(PageBase):
                 "setlocal",
                 "",
                 "rem 定义应用程序路径",
-                'set "app_name=NapCat-Desktop.exe"',
+                'set "app_name=NapCatQQ-Desktop.exe"',
                 'set "current_app_path=%~dp0%app_name%"',
                 'set "new_app_path=%~dp0tmp\\%app_name%"',
                 "",
