@@ -10,8 +10,8 @@ dependencies = [
     "pydantic>=2.9.0",
     "psutil>=6.0.0",
     "markdown>=3.7",
-    "nuitka>=2.4.8",
     "Fluent-Widgets-QIAO>=0.4.0",
+    "pyinstaller>=6.13.0",
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
