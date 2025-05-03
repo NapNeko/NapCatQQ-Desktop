@@ -23,7 +23,7 @@
 - [x] **安装简单**: 单EXE文件，无需安装任何依赖
 - [x] **界面美观**: 使用 Fluent Design System 设计
 - [x] **功能丰富**: 支持创建配置文件, 管理配置文件, 一键启动/停止/重启
-- [x] **自动更新**: 支持自动检查 NapCat 更新, 一键更新
+- [x] **自动更新**: 支持自动检查 NapCatQQ 更新, 一键更新
 
 ## 使用项目
 可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的EXE文件
@@ -31,7 +31,7 @@
 如果您的系统是Windows Server 2016(或win10)及以上版本，可以使用本项目
 
 ## 回家归途
-[QQ Group](https://qm.qq.com/q/VfjAq5HIMS)
+[QQ Group](https://qm.qq.com/q/X4CA6RnoIw)
 
 ## 许可证
 
