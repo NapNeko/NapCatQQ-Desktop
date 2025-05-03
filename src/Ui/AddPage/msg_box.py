@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # 第三方库导入
+from pydantic import ValidationError
 from qfluentwidgets import BodyLabel
 from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import TitleLabel, RadioButton, MessageBoxBase, SimpleCardWidget
@@ -150,6 +151,19 @@ class ConfigDialogBase(MessageBoxBase):
 
         # 禁用名字卡片
         self.nameCard.setEnabled(False)
+
+    def accept(self):
+        """重写accept方法, 以便在点击确定按钮时验证配置"""
+        try:
+            # 验证配置
+            self.getConfig()
+            # 关闭对话框
+            super().accept()
+        except ValidationError as e:
+            # 显示错误信息
+            if "配置错误请重试" in self.titleLabel.text():
+                return
+            self.titleLabel.setText(self.titleLabel.text() + f" - 配置错误请重试")
 
     def getConfig(self) -> NetworkBaseConfig:
         """获取配置"""
