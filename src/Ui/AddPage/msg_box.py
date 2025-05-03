@@ -124,7 +124,7 @@ class ConfigDialogBase(MessageBoxBase):
         self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用"))
         self.nameCard = LineEditConfigCard(FI.TAG, self.tr("名称*"), "输入配置名称", self.tr("设置配置名称"))
         self.msgFormatCard = ComboBoxConfigCard(
-            FI.MESSAGE, self.tr("消息格式"), ["Array", "String"], self.tr("设置消息格式")
+            FI.MESSAGE, self.tr("消息格式"), ["array", "string"], self.tr("设置消息格式")
         )
         self.tokenCard = LineEditConfigCard(FI.VPN, self.tr("Token"), content=self.tr("设置连接Token"))
         self.debugCard = SwitchConfigCard(FI.DEVELOPER_TOOLS, self.tr("调试"))
