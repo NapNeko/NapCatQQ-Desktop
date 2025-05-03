@@ -486,8 +486,8 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
         self.emailStmpServer = LineEditItem(cfg.emailStmpServer, self.tr("SMTP服务器"), parent=self)
 
         # 调整内部布局
-        self.viewLayout.setContentsMargins(0, 0, 0, 0)
-        self.viewLayout.setSpacing(0)
+        self.viewLayout.setContentsMargins(0, 0, 1, 0)
+        self.viewLayout.setSpacing(2)
 
         # 添加组件
         self.addGroupWidget(self.enabledEmailNoticeItem)
@@ -512,8 +512,6 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
             else:
                 self.hideItem(item)
 
-        [self.viewLayout.itemAt(num).widget().hide() for num in [1, 3, 5, 7]]
-
         self._adjustViewSize()
 
     def showItem(self, item: SwitchItem) -> None:
@@ -522,10 +520,10 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
         """
         match item.configItem:
             case cfg.botOfflineEmailNotice:
-                self.emailReceiversItem.show()
-                self.emailSenderItem.show()
-                self.emailToken.show()
-                self.emailStmpServer.show()
+                self.emailReceiversItem.setEnabled(True)
+                self.emailSenderItem.setEnabled(True)
+                self.emailToken.setEnabled(True)
+                self.emailStmpServer.setEnabled(True)
 
     def hideItem(self, item: SwitchItem) -> None:
         """
@@ -533,10 +531,10 @@ class BotOfflineEventCard(ExpandGroupSettingCard):
         """
         match item.configItem:
             case cfg.botOfflineEmailNotice:
-                self.emailReceiversItem.hide()
-                self.emailSenderItem.hide()
-                self.emailToken.hide()
-                self.emailStmpServer.hide()
+                self.emailReceiversItem.setEnabled(False)
+                self.emailSenderItem.setEnabled(False)
+                self.emailToken.setEnabled(False)
+                self.emailStmpServer.setEnabled(False)
 
     def wheelEvent(self, event) -> None:
         """
