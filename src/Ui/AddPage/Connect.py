@@ -44,10 +44,10 @@ class ConnectWidget(QStackedWidget):
 
         if (
             config.httpServers
-            and config.httpSseServers
-            and config.httpClients
-            and config.websocketServers
-            and config.websocketClients
+            or config.httpSseServers
+            or config.httpClients
+            or config.websocketServers
+            or config.websocketClients
         ):
             self.config = config
             self.fillValue()
