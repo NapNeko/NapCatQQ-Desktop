@@ -2,13 +2,12 @@
 # 标准库导入
 from typing import TYPE_CHECKING, Self, Optional
 
-from PySide6.QtWidgets import QVBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
 from src.Ui.common import CodeEditor
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
-from src.Ui.common.widget import BackgroundWidget
 from src.Core.Utils.singleton import singleton
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 
 
 @singleton
-class SetupWidget(BackgroundWidget):
+class SetupWidget(QWidget):
     """设置页面"""
 
     view: Optional[TransparentStackedWidget]
@@ -31,14 +30,6 @@ class SetupWidget(BackgroundWidget):
 
     def __init__(self):
         super().__init__()
-        # 传入配置
-        self.bgEnabledConfig = cfg.bgSettingPage
-        self.bgPixmapLightConfig = cfg.bgSettingPageLight
-        self.bgPixmapDarkConfig = cfg.bgSettingPageDark
-        self.bgOpacityConfig = cfg.bgSettingPageOpacity
-
-        # 调用方法
-        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """

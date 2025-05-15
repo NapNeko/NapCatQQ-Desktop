@@ -7,7 +7,7 @@ from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Core.Utils.singleton import singleton
 from src.Ui.HomePage.DisplayView import DisplayViewWidget
-from src.Ui.common.stacked_widget import BackgroundStackedWidget
+from src.Ui.common.stacked_widget import TransparentStackedWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -15,24 +15,11 @@ if TYPE_CHECKING:
 
 
 @singleton
-class HomeWidget(BackgroundStackedWidget):
+class HomeWidget(TransparentStackedWidget):
     displayView: Optional[DisplayViewWidget]
 
     def __init__(self) -> None:
         super().__init__()
-
-        # 传入配置
-        self.enabledDefaultBg = True
-        self.bgDefaultLight = ":Global/image/Global/page_bg_light.png"
-        self.bgDefaultDark = ":Global/image/Global/page_bg_dark.png"
-
-        self.bgEnabledConfig = cfg.bgHomePage
-        self.bgPixmapLightConfig = cfg.bgHomePageLight
-        self.bgPixmapDarkConfig = cfg.bgHomePageDark
-        self.bgOpacityConfig = cfg.bgHomePageOpacity
-
-        # 调用方法
-        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """
@@ -49,9 +36,6 @@ class HomeWidget(BackgroundStackedWidget):
 
         # 链接信号
         self.displayView.buttonGroup.goButton.clicked.connect(lambda: self.parent().setCurrentIndex(1))
-
-        # 调用方法
-        self.updateBgImage()
 
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
