@@ -1,7 +1,19 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
+from pyclbr import Class
+from tkinter import N
+
 # 第三方库导入
 from qfluentwidgets.common import FluentIcon, FluentIconBase
-from qfluentwidgets.components import ComboBox, LineEdit, PushButton, SwitchButton, IndicatorPosition
+from qfluentwidgets.components import (
+    ComboBox,
+    LineEdit,
+    PushButton,
+    SwitchButton,
+    MessageBoxBase,
+    IndicatorPosition,
+    TransparentPushButton,
+)
 from qfluentwidgets.components.settings import SettingCard
 from PySide6.QtCore import Qt, QStandardPaths
 from PySide6.QtWidgets import QFileDialog
@@ -98,3 +110,22 @@ class FolderConfigCard(SettingCard):
 
     def clear(self) -> None:
         self.contentLabel.setText(self.default)
+
+
+class ShowDialogCard(SettingCard):
+
+    def __init__(self, dialog: MessageBoxBase, icon: FluentIconBase, title: str, content=None, parent=None) -> None:
+        super().__init__(icon, title, content, parent)
+        self._dialog = dialog
+        self.button = TransparentPushButton(FluentIcon.SETTING, self.tr("点我配置"))
+
+        self.button.clicked.connect(self.showDialog)
+
+        self.hBoxLayout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
+
+    def showDialog(self) -> None:
+        # 项目内模块导入
+        from src.Ui.MainWindow import MainWindow
+
+        self._dialog(MainWindow()).exec()

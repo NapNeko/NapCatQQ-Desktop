@@ -3,10 +3,13 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
+from qfluentwidgets import FluentIcon
+from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import (
-    FluentIcon,
     ScrollArea,
+    TitleLabel,
     ExpandLayout,
+    MessageBoxBase,
     RangeSettingCard,
     SettingCardGroup,
     OptionsSettingCard,
@@ -15,12 +18,18 @@ from qfluentwidgets import (
     setTheme,
     setThemeColor,
 )
-from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Qt, Slot, QObject
+from PySide6.QtWidgets import QWidget, QGridLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
+from src.Ui.common.input_card.generic_card import (
+    ShowDialogCard,
+    SwitchConfigCard,
+    ComboBoxConfigCard,
+    LineEditConfigCard,
+)
 from src.Ui.SetupPage.ExpandGroupSettingItem import RangeItem, SwitchItem, ComboBoxItem
 
 if TYPE_CHECKING:
@@ -88,7 +97,13 @@ class Personalization(ScrollArea):
             texts=["100%", "125%", "150%", "175%", "200%", self.tr("跟随系统")],
             parent=self.windowGroup,
         )
-        self.titleTabBarSettingCard = TitleTabBarSettingCard(self)
+        self.titleTabBarSettingCard = ShowDialogCard(
+            dialog=TitleTabBarSettingDialog,
+            icon=FluentIcon.TILES,
+            title=self.tr("标题选项卡"),
+            content=self.tr("标题选项卡相关设置"),
+            parent=self.windowGroup,
+        )
 
     def _setLayout(self) -> None:
         """
@@ -138,116 +153,54 @@ class Personalization(ScrollArea):
         HomeWidget().updateBgImageSize()
 
 
-class TitleTabBarSettingCard(ExpandGroupSettingCard):
-    """
-    ## 标题选项卡配置项
-    """
+class TitleTabBarSettingDialog(MessageBoxBase):
 
-    def __init__(self, parent) -> None:
-        super().__init__(
-            icon=FluentIcon.TAG,
-            title=self.tr("标题选项卡配置"),
-            content=self.tr("设置标题选项卡的开关和行为"),
-            parent=parent,
-        )
+    def __init__(self, parent: QObject) -> None:
+        super().__init__(parent=parent)
 
-        # 创建项
-        self.enabledTabBarItem = SwitchItem(cfg.titleTabBar, self.tr("启用标题选项卡"), self)
-        self.enabledMovableItem = SwitchItem(cfg.titleTabBarMovable, self.tr("启用拖动标签页"), self)
-        self.enabledScrollableItem = SwitchItem(cfg.titleTabBarScrollable, self.tr("启用标签页范围可滚动"), self)
-        self.enabledTabShadowItem = SwitchItem(cfg.titleTabBarShadow, self.tr("启用标签页阴影"), self)
-        self.setCloseModeItem = ComboBoxItem(
-            cfg.titleTabBarCloseMode,
+        # 创建控件
+        self.titleLabel = TitleLabel(self.tr("标题选项卡配置"))
+        self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用标题选项卡"))
+        self.enableMovableCard = SwitchConfigCard(FI.MOVE, self.tr("启用拖动标签页"))
+        self.enableScrollableCard = SwitchConfigCard(FI.SCROLL, self.tr("启用标签页范围可滚动"))
+        self.enableTabShadowCard = SwitchConfigCard(FI.FIT_PAGE, self.tr("启用标签页阴影"))
+        self.setCloseModeCard = ComboBoxConfigCard(
+            FI.CLOSE,
             self.tr("关闭按钮显示方式"),
             [self.tr("始终显示"), self.tr("悬停显示"), self.tr("永不显示")],
-            self,
         )
-        self.setTabMaximumWidthItem = RangeItem(cfg.titleTabBarMaxWidth, self.tr("标签最大宽度"), self)
-        self.setTabMinimumWidthItem = RangeItem(cfg.titleTabBarMinWidth, self.tr("标签最小宽度"), self)
+        self.setTabMaximumWidthCard = RangeSettingCard(cfg.titleTabBarMaxWidth, FI.TRANSPARENT, self.tr("标签最大宽度"))
+        self.setTabMinimumWidthCard = RangeSettingCard(cfg.titleTabBarMinWidth, FI.TRANSPARENT, self.tr("标签最小宽度"))
 
-        # 调整内部布局
-        self.viewLayout.setContentsMargins(0, 0, 0, 0)
-        self.viewLayout.setSpacing(0)
+        # 布局
+        self.gridLayout = QGridLayout()
+        self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 2)
+        self.gridLayout.addWidget(self.enableMovableCard, 0, 2, 1, 2)
+        self.gridLayout.addWidget(self.enableScrollableCard, 1, 0, 1, 2)
+        self.gridLayout.addWidget(self.enableTabShadowCard, 1, 2, 1, 2)
+        self.gridLayout.addWidget(self.setCloseModeCard, 2, 0, 1, 4)
+        self.gridLayout.addWidget(self.setTabMaximumWidthCard, 3, 0, 1, 4)
+        self.gridLayout.addWidget(self.setTabMinimumWidthCard, 4, 0, 1, 4)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.setSpacing(8)
 
-        # 启用列表
-        self.itemList = [
-            self.enabledTabBarItem,
-            self.enabledMovableItem,
-            self.enabledScrollableItem,
-            self.enabledTabShadowItem,
-            self.setCloseModeItem,
-            self.setTabMaximumWidthItem,
-            self.setTabMinimumWidthItem,
-        ]
+        # 设置布局
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addLayout(self.gridLayout)
+        self.widget.setMinimumSize(500, 400)
 
-        # 添加组件
-        for item in self.itemList:
-            self.addGroupWidget(item)
+        # 填充配置
+        self.enableCard.fillValue(cfg.get(cfg.titleTabBar))
+        self.enableMovableCard.fillValue(cfg.get(cfg.titleTabBarMovable))
+        self.enableScrollableCard.fillValue(cfg.get(cfg.titleTabBarScrollable))
+        self.enableTabShadowCard.fillValue(cfg.get(cfg.titleTabBarShadow))
+        self.setCloseModeCard.fillValue(cfg.get(cfg.titleTabBarCloseMode).value)
 
-        # 调用方法
-        self.signalConnect()
-        self.enabledTabBarItemSlot(cfg.get(cfg.titleTabBar))
-        self.enabledScrollableItemSlot(cfg.get(cfg.titleTabBarScrollable))
-
-    def signalConnect(self) -> None:
-        """
-        ## 信号连接
-        """
-        # 项目内模块导入
-        from src.Ui.MainWindow import MainWindow
-
-        self.enabledTabBarItem.checkedChanged.connect(self.enabledTabBarItemSlot)
-        self.enabledMovableItem.checkedChanged.connect(lambda state: MainWindow().title_bar.tabBar.setMovable(state))
-        self.enabledScrollableItem.checkedChanged.connect(self.enabledScrollableItemSlot)
-        self.enabledTabShadowItem.checkedChanged.connect(
-            lambda state: MainWindow().title_bar.tabBar.setTabShadowEnabled(state)
-        )
-        self.setTabMaximumWidthItem.valueChanged.connect(
-            lambda value: MainWindow().title_bar.tabBar.setTabMaximumWidth(value)
-        )
-        self.setTabMinimumWidthItem.valueChanged.connect(
-            lambda value: MainWindow().title_bar.tabBar.setTabMinimumWidth(value)
-        )
-
-    @Slot(bool)
-    def enabledTabBarItemSlot(self, state: bool) -> None:
-        """
-        ## 启用标题选项卡槽函数
-        """
-        # 项目内模块导入
-        from src.Ui.MainWindow import MainWindow
-
-        if not state:
-            # 如果状态为 False, 则隐藏标题选项卡, 禁用其他配置项
-            MainWindow().title_bar.tabBar.hide()
-            [_.setEnabled(False) for _ in self.itemList if _ != self.enabledTabBarItem]
-        else:
-            # 如果状态为 True, 则显示标题选项卡, 启用其他配置项
-            MainWindow().title_bar.tabBar.show()
-            [_.setEnabled(True) for _ in self.itemList if _ != self.enabledTabBarItem]
-
-    @Slot(bool)
-    def enabledScrollableItemSlot(self, state: bool) -> None:
-        """
-        ## 启用标签页范围可滚动槽函数
-        """
-        # 项目内模块导入
-        from src.Ui.MainWindow import MainWindow
-
-        if state:
-            # 如果状态为 True, 则设置标签页范围可滚动, 并且禁用调整标签页最大宽度和最小宽度
-            MainWindow().title_bar.tabBar.setScrollable(True)
-            self.setTabMaximumWidthItem.setEnabled(False)
-            self.setTabMinimumWidthItem.setEnabled(False)
-        else:
-            # 如果状态为 False, 则设置标签页范围不可滚动, 并且启用调整标签页最大宽度和最小宽度
-            MainWindow().title_bar.tabBar.setScrollable(False)
-            self.setTabMaximumWidthItem.setEnabled(True)
-            self.setTabMinimumWidthItem.setEnabled(True)
-
-    def wheelEvent(self, event):
-        """
-        ## 滚动事件上传到父控件
-        """
-        self.parent().wheelEvent(event)
-        super().wheelEvent(event)
+    def accept(self) -> None:
+        """接受按钮"""
+        cfg.set(cfg.titleTabBar, self.enableCard.getValue())
+        cfg.set(cfg.titleTabBarMovable, self.enableMovableCard.getValue())
+        cfg.set(cfg.titleTabBarScrollable, self.enableScrollableCard.getValue())
+        cfg.set(cfg.titleTabBarShadow, self.enableTabShadowCard.getValue())
+        cfg.set(cfg.titleTabBarCloseMode, self.setCloseModeCard.getValue())
+        super().accept()
