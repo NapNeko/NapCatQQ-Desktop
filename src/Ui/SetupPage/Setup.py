@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import TYPE_CHECKING, Self, Optional
+from typing import TYPE_CHECKING, Self
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
@@ -9,9 +9,10 @@ from src.Ui.common import CodeEditor
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Core.Utils.singleton import singleton
+from src.Ui.SetupPage.General import General
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
-from src.Ui.SetupPage.SetupScrollArea import SetupScrollArea
+from src.Ui.SetupPage.Personalization import Personalization
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -22,11 +23,12 @@ if TYPE_CHECKING:
 class SetupWidget(QWidget):
     """设置页面"""
 
-    view: Optional[TransparentStackedWidget]
-    topCard: Optional[SetupTopCard]
-    setupScrollArea: Optional[SetupScrollArea]
-    vBoxLayout: Optional[QVBoxLayout]
-    infoWidget: Optional[CodeEditor]
+    topCard: SetupTopCard
+    vBoxLayout: QVBoxLayout
+    infoWidget: CodeEditor
+
+    view: TransparentStackedWidget
+    personalization: Personalization
 
     def __init__(self):
         super().__init__()
@@ -59,9 +61,26 @@ class SetupWidget(QWidget):
         """
         ## 创建并配置 QStackedWidget
         """
+        # 创建控件
         self.view = TransparentStackedWidget(self)
-        self.setupScrollArea = SetupScrollArea(self)
-        self.view.addWidget(self.setupScrollArea)
+        self.general = General(self)
+        self.personalization = Personalization(self)
+
+        # 设置控件
+        self.view.addWidget(self.personalization)
+        self.view.addWidget(self.general)
+
+        self.topCard.pivot.addItem(
+            routeKey=self.personalization.objectName(),
+            text=self.tr("个性化"),
+            onClick=lambda: self.view.setCurrentWidget(self.personalization),
+        )
+        self.topCard.pivot.addItem(
+            routeKey=self.general.objectName(),
+            text=self.tr("常规"),
+            onClick=lambda: self.view.setCurrentWidget(self.general),
+        )
 
         # 连接信号并初始化当前标签页
-        self.view.setCurrentWidget(self.setupScrollArea)
+        self.view.setCurrentWidget(self.personalization)
+        self.topCard.pivot.setCurrentItem(self.personalization.objectName())

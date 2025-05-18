@@ -79,7 +79,7 @@ class Config(QConfig):
         restart=True,
     )
     closeBtnAction = OptionsConfigItem(
-        group="Personalized",
+        group="General",
         name="CloseBtnAction",
         default=CloseActionEnum.CLOSE,
         validator=OptionsValidator(list(CloseActionEnum)),
@@ -125,9 +125,6 @@ class Config(QConfig):
     emailSender = ConfigItem(group="Email", name="EmailSender", default="")
     emailToken = ConfigItem(group="Email", name="EmailToken", default="")
     emailStmpServer = ConfigItem(group="Email", name="EmailStmpServer", default="")
-
-    # 隐藏提示项
-    HideUsGoBtnTips = ConfigItem(group="HideTips", name="HideUsingGoBtnTips", default=False, validator=BoolValidator())
 
     def __init__(self):
         super().__init__()
