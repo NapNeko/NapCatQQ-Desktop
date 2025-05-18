@@ -187,7 +187,7 @@ class TitleTabBarSettingDialog(MessageBoxBase):
         # 设置布局
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
-        self.widget.setMinimumSize(500, 400)
+        self.widget.setMinimumSize(500, 450)
 
         # 填充配置
         self.enableCard.fillValue(cfg.get(cfg.titleTabBar))

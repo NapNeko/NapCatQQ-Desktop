@@ -3,25 +3,29 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
+from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import (
-    FluentIcon,
     ScrollArea,
+    TitleLabel,
     ExpandLayout,
-    RangeSettingCard,
+    MessageBoxBase,
     SettingCardGroup,
     OptionsSettingCard,
-    CustomColorSettingCard,
     ExpandGroupSettingCard,
-    setTheme,
-    setThemeColor,
 )
-from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Qt, Slot, QObject
+from PySide6.QtWidgets import QWidget, QGridLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
-from src.Ui.SetupPage.ExpandGroupSettingItem import FileItem, RangeItem, SwitchItem, ComboBoxItem, LineEditItem
+from src.Ui.common.input_card.generic_card import (
+    ShowDialogCard,
+    SwitchConfigCard,
+    ComboBoxConfigCard,
+    LineEditConfigCard,
+)
+from src.Ui.SetupPage.ExpandGroupSettingItem import RangeItem, SwitchItem, ComboBoxItem, LineEditItem
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -45,7 +49,6 @@ class General(ScrollArea):
 
         # 调用方法
         self._createConfigCards()
-        self._connect_signal()
         self._setLayout()
 
     def _createConfigCards(self) -> None:
@@ -57,7 +60,7 @@ class General(ScrollArea):
         # 创建项
         self.closeBtnCard = OptionsSettingCard(
             configItem=cfg.closeBtnAction,
-            icon=FluentIcon.CLOSE,
+            icon=FI.CLOSE,
             title=self.tr("关闭按钮"),
             content=self.tr("选择点击关闭按钮时的行为"),
             texts=[self.tr("关闭程序"), self.tr("最小化隐藏到托盘")],
@@ -67,7 +70,13 @@ class General(ScrollArea):
         # 创建组 - 事件
         self.eventGroup = SettingCardGroup(title=self.tr("事件"), parent=self.view)
         # 创建项
-        self.botOfflineEventCard = BotOfflineEventCard(self.eventGroup)
+        self.botOfflineEmailCard = ShowDialogCard(
+            dialog=BotOfflineEmailDialog,
+            icon=FI.CHAT,
+            title=self.tr("机器人离线通知[邮件]"),
+            content=self.tr("设置机器人离线邮件通知, 目前仅测试过QQ邮箱"),
+            parent=self.eventGroup,
+        )
 
     def _setLayout(self) -> None:
         """
@@ -75,7 +84,7 @@ class General(ScrollArea):
         """
         # 将卡片添加到组
         self.actionGroup.addSettingCard(self.closeBtnCard)
-        self.eventGroup.addSettingCard(self.botOfflineEventCard)
+        self.eventGroup.addSettingCard(self.botOfflineEmailCard)
 
         # 添加到布局
         self.expand_layout.addWidget(self.actionGroup)
@@ -83,93 +92,47 @@ class General(ScrollArea):
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
 
-    def _connect_signal(self) -> None:
-        """
-        信号处理
-        """
-        # 连接重启提示
-        # cfg.appRestartSig.connect(lambda: success_bar(self.tr("配置在重启后生效")))
-        # 连接启动相关
 
+class BotOfflineEmailDialog(MessageBoxBase):
 
-class BotOfflineEventCard(ExpandGroupSettingCard):
-    """
-    ## 机器人离线事件
-    """
+    def __init__(self, parent: QObject) -> None:
+        super().__init__(parent=parent)
 
-    def __init__(self, parent) -> None:
-        super().__init__(
-            icon=FluentIcon.RINGER,
-            title=self.tr("机器人离线事件"),
-            content=self.tr("设置机器人离线时的事件"),
-            parent=parent,
-        )
+        # 创建控件
+        self.titleLabel = TitleLabel(self.tr("机器人离线通知[邮件]"), self)
+        self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用邮箱通知"))
+        self.receiversCard = LineEditConfigCard(FI.ROBOT, self.tr("收件人邮箱"), "Receivers@qq.com")
+        self.senderCard = LineEditConfigCard(FI.ROBOT, self.tr("发件人邮箱"), "Sender@qq.com")
+        self.tokenCard = LineEditConfigCard(FI.VPN, self.tr("发件人邮箱密钥"), "Token")
+        self.stmpServerCard = LineEditConfigCard(FI.ALBUM, self.tr("SMTP服务器"), "smtp.qq.com")
 
-        # 创建项
-        self.enabledEmailNoticeItem = SwitchItem(cfg.botOfflineEmailNotice, self.tr("启用邮件通知"), self)
-        self.emailReceiversItem = LineEditItem(
-            cfg.emailReceiver, self.tr("接收人邮箱"), placeholder_text=self.tr("A@qq.com"), parent=self
-        )
-        self.emailSenderItem = LineEditItem(
-            cfg.emailSender, self.tr("发送人邮箱"), placeholder_text=self.tr("B@qq.com"), parent=self
-        )
-        self.emailToken = LineEditItem(cfg.emailToken, self.tr("发送人邮箱密钥"), parent=self)
-        self.emailStmpServer = LineEditItem(cfg.emailStmpServer, self.tr("SMTP服务器"), parent=self)
+        # 布局
+        self.gridLayout = QGridLayout()
+        self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 4)
+        self.gridLayout.addWidget(self.receiversCard, 1, 0, 1, 2)
+        self.gridLayout.addWidget(self.senderCard, 1, 2, 1, 2)
+        self.gridLayout.addWidget(self.tokenCard, 2, 0, 1, 4)
+        self.gridLayout.addWidget(self.stmpServerCard, 3, 0, 1, 4)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.setSpacing(8)
 
-        # 调整内部布局
-        self.viewLayout.setContentsMargins(0, 0, 1, 0)
-        self.viewLayout.setSpacing(2)
+        # 设置布局
+        self.viewLayout.addWidget(self.titleLabel)
+        self.viewLayout.addLayout(self.gridLayout)
+        self.widget.setMinimumSize(500, 400)
 
-        # 添加组件
-        self.addGroupWidget(self.enabledEmailNoticeItem)
-        self.addGroupWidget(self.emailReceiversItem)
-        self.addGroupWidget(self.emailSenderItem)
-        self.addGroupWidget(self.emailToken)
-        self.addGroupWidget(self.emailStmpServer)
+        # 填充配置
+        self.enableCard.fillValue(cfg.get(cfg.titleTabBar))
+        self.receiversCard.fillValue(cfg.get(cfg.emailReceiver))
+        self.senderCard.fillValue(cfg.get(cfg.emailSender))
+        self.tokenCard.fillValue(cfg.get(cfg.emailToken))
+        self.stmpServerCard.fillValue(cfg.get(cfg.emailStmpServer))
 
-        # 信号连接
-        self.enabledEmailNoticeItem.checkedChanged.connect(self.isHide)
-
-        # 调用方法
-        self.isHide()
-
-    def isHide(self) -> None:
-        """
-        ## 判断是否需要隐藏
-        """
-        for item in [self.enabledEmailNoticeItem]:
-            if cfg.get(item.configItem):
-                self.showItem(item)
-            else:
-                self.hideItem(item)
-
-        self._adjustViewSize()
-
-    def showItem(self, item: SwitchItem) -> None:
-        """
-        ## 显示项
-        """
-        match item.configItem:
-            case cfg.botOfflineEmailNotice:
-                self.emailReceiversItem.setEnabled(True)
-                self.emailSenderItem.setEnabled(True)
-                self.emailToken.setEnabled(True)
-                self.emailStmpServer.setEnabled(True)
-
-    def hideItem(self, item: SwitchItem) -> None:
-        """
-        ## 隐藏项
-        """
-        match item.configItem:
-            case cfg.botOfflineEmailNotice:
-                self.emailReceiversItem.setEnabled(False)
-                self.emailSenderItem.setEnabled(False)
-                self.emailToken.setEnabled(False)
-                self.emailStmpServer.setEnabled(False)
-
-    def wheelEvent(self, event) -> None:
-        """
-        ## 滚动事件上传到父控件
-        """
-        self.parent().wheelEvent(event)
-        super().wheelEvent(event)
+    def accept(self) -> None:
+        """接受按钮"""
+        cfg.set(cfg.titleTabBar, self.enableCard.getValue())
+        cfg.set(cfg.emailReceiver, self.receiversCard.getValue())
+        cfg.set(cfg.emailSender, self.senderCard.getValue())
+        cfg.set(cfg.emailToken, self.tokenCard.getValue())
+        cfg.set(cfg.emailStmpServer, self.stmpServerCard.getValue())
+        super().accept()
