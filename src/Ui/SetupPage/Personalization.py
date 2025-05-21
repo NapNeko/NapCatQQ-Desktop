@@ -14,23 +14,16 @@ from qfluentwidgets import (
     SettingCardGroup,
     OptionsSettingCard,
     CustomColorSettingCard,
-    ExpandGroupSettingCard,
     setTheme,
     setThemeColor,
 )
-from PySide6.QtCore import Qt, Slot, QObject
+from PySide6.QtCore import Qt, QObject
 from PySide6.QtWidgets import QWidget, QGridLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.common.info_bar import success_bar
-from src.Ui.common.input_card.generic_card import (
-    ShowDialogCard,
-    SwitchConfigCard,
-    ComboBoxConfigCard,
-    LineEditConfigCard,
-)
-from src.Ui.SetupPage.ExpandGroupSettingItem import RangeItem, SwitchItem, ComboBoxItem
+from src.Ui.common.input_card.generic_card import ShowDialogCard, SwitchConfigCard, ComboBoxConfigCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
