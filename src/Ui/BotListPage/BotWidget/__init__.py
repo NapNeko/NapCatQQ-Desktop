@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 # 第三方库导入
 import psutil
@@ -24,7 +24,7 @@ from src.Ui.common import CodeEditor, LogHighlighter
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.AddPage.enum import ConnectType
-from src.Core.Utils.email import Email
+from src.Core.Utils.email import offline_email
 from src.Ui.AddPage.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
@@ -33,12 +33,10 @@ from src.Ui.AddPage.msg_box import (
     WebsocketServerConfigDialog,
 )
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
-from src.Ui.common.separator import Separator
 from src.Core.Utils.RunNapCat import create_napcat_process
-from src.Ui.AddPage.signal_bus import addPageSingalBus
 from src.Ui.common.message_box import AskBox, ImageBox
 from src.Core.Config.ConfigModel import Config
-from src.Core.Config.OperateConfig import delete_config, update_config, check_duplicate_bot
+from src.Core.Config.OperateConfig import delete_config, update_config
 from src.Ui.BotListPage.signal_bus import botListPageSignalBus
 from src.Ui.BotListPage.BotWidget.meg_box import ChooseConfigTypeDialog
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
@@ -300,10 +298,8 @@ class BotWidget(QWidget):
             # 如果未开启通知, 退出
             return
 
-        # 创建 Email 进行发件
-        self.email = Email(self.config)
-        self.email.error_single.connect(error_bar)
-        self.email.start()
+        # 发件通知
+        offline_email(self.config)
 
     @Slot()
     def _updateButtonSlot(self) -> None:

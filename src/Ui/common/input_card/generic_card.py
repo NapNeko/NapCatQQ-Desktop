@@ -10,6 +10,7 @@ from qfluentwidgets.components import (
     LineEdit,
     PushButton,
     SwitchButton,
+    PlainTextEdit,
     MessageBoxBase,
     IndicatorPosition,
     TransparentPushButton,
@@ -17,6 +18,12 @@ from qfluentwidgets.components import (
 from qfluentwidgets.components.settings import SettingCard
 from PySide6.QtCore import Qt, QStandardPaths
 from PySide6.QtWidgets import QFileDialog
+
+
+class TestEditConfigCard(SettingCard):
+
+    def __init__(self, icon, title, content=None, parent=None):
+        super().__init__(icon, title, content, parent)
 
 
 class LineEditConfigCard(SettingCard):

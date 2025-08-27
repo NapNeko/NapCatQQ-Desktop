@@ -125,6 +125,15 @@ class Config(QConfig):
     emailSender = ConfigItem(group="Email", name="EmailSender", default="")
     emailToken = ConfigItem(group="Email", name="EmailToken", default="")
     emailStmpServer = ConfigItem(group="Email", name="EmailStmpServer", default="")
+    emailStmpPort = RangeConfigItem(
+        group="Email", name="EmailStmpPort", default=465, validator=RangeValidator(1, 65535)
+    )
+    emailEncryption = OptionsConfigItem(
+        group="Email",
+        name="EmailEncryption",
+        default="SSL",
+        validator=OptionsValidator(["SSL", "TLS", "无加密"]),
+    )
 
     def __init__(self):
         super().__init__()
