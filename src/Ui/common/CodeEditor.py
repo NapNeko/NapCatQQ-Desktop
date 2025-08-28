@@ -23,15 +23,15 @@ class CodeEditor(PlainTextEdit):
         self.line_number_area = LineNumberArea(self)
 
         # 连接信号和槽函数
-        self.blockCountChanged.connect(self.update_line_number_area_width)
-        self.updateRequest.connect(self.update_line_number_area)
+        self.blockCountChanged.connect(self.updateLineNumberAreaWidth)
+        self.updateRequest.connect(self.updateLineNumberArea)
 
         # 初始设置
         self.setReadOnly(True)
-        self.update_line_number_area_width(0)
-        self.set_monospace_font()
+        self.updateLineNumberAreaWidth(0)
+        self.setMonospaceFont()
 
-    def set_monospace_font(self) -> None:
+    def setMonospaceFont(self) -> None:
         """
         设置字体为等宽字体
         """
@@ -67,11 +67,11 @@ class CodeEditor(PlainTextEdit):
 
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
-                number = str(block_number + 1)
+                line_number = str(block_number + 1)
                 painter.drawText(
                     QRectF(content_left, top, self.line_number_area.width() - 12, self.fontMetrics().height()),
                     Qt.AlignmentFlag.AlignRight,
-                    number,
+                    line_number,
                 )
 
             block = block.next()
@@ -82,9 +82,9 @@ class CodeEditor(PlainTextEdit):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         # 调整行号区域的位置和大小
-        cr = self.contentsRect()
-        width = self.lineNumberAreaWidth()
-        rect = QRect(cr.left(), cr.top(), width, cr.height())
+        content_rect = self.contentsRect()
+        area_width = self.lineNumberAreaWidth()
+        rect = QRect(content_rect.left(), content_rect.top(), area_width, content_rect.height())
         self.line_number_area.setGeometry(rect)
 
     def setPlainText(self, text):
@@ -97,12 +97,12 @@ class CodeEditor(PlainTextEdit):
         QTimer.singleShot(0, lambda: self.verticalScrollBar().setValue(scroll_position))
 
     @Slot(int)
-    def update_line_number_area_width(self, new_block_count: int) -> None:
+    def updateLineNumberAreaWidth(self, new_block_count: int) -> None:
         # 更新行号区域的宽度
         self.setViewportMargins(self.lineNumberAreaWidth() + 10, 0, 0, 0)
 
     @Slot(QRect, int)
-    def update_line_number_area(self, rect: QRect, dy: int) -> None:
+    def updateLineNumberArea(self, rect: QRect, dy: int) -> None:
         # 更新行号区域的显示内容
         if dy:
             self.line_number_area.scroll(0, dy)
@@ -111,7 +111,7 @@ class CodeEditor(PlainTextEdit):
             self.line_number_area.update(0, rect.y(), width, rect.height())
 
         if rect.contains(self.viewport().rect()):
-            self.update_line_number_area_width(0)
+            self.updateLineNumberAreaWidth(0)
 
 
 class UpdateLogEdit(QTextBrowser):
@@ -121,7 +121,7 @@ class UpdateLogEdit(QTextBrowser):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.scrollDelegate = SmoothScrollDelegate(self)
+        self.scroll_delegate = SmoothScrollDelegate(self)
         self.setReadOnly(True)
         self.setOpenExternalLinks(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -133,9 +133,9 @@ class UpdateLogEdit(QTextBrowser):
         else:
             super().mousePressEvent(event)
 
-    def contextMenuEvent(self, e):
+    def contextMenuEvent(self, event):
         menu = TextEditMenu(self)
-        menu.exec(e.globalPos(), ani=True)
+        menu.exec(event.globalPos(), ani=True)
 
 
 class LineNumberArea(QWidget):
@@ -148,7 +148,7 @@ class LineNumberArea(QWidget):
         return QSize(self.code_editor.lineNumberAreaWidth(), 0)
 
     def paintEvent(self, event: QPaintEvent) -> None:
-        # 绘制事件处理，委托给CodeEditor中的lineNumberAreaPaintEvent方法
+        # 绘制事件处理，委托给 CodeEditor 中的 lineNumberAreaPaintEvent 方法
         self.code_editor.lineNumberAreaPaintEvent(event)
 
 
@@ -178,12 +178,10 @@ class LogHighlighter(QSyntaxHighlighter):
 
     def highlightBlock(self, text) -> None:
         # 创建一个格式化对象，用于应用整行的前景色
-        test_format = QTextCharFormat()
+        text_format = QTextCharFormat()
 
         # 检查当前文本块是否匹配日志级别的模式
         match = self.pattern.match(text)
-
-        # 如果没有匹配到，直接返回
         if not match or not match.hasMatch():
             return
 
@@ -192,19 +190,18 @@ class LogHighlighter(QSyntaxHighlighter):
         timestamp_length = match.capturedLength(1)
 
         # 获取日志级别的起始位置和长度
-        loglevel_start = match.capturedStart(2)
-        loglevel_length = match.capturedLength(2)
+        log_level_start = match.capturedStart(2)
+        log_level_length = match.capturedLength(2)
 
         # 应用时间戳的格式
-        test_format.setForeground(QColor(Qt.GlobalColor.lightGray))
-        self.setFormat(timestamp_start, timestamp_length, test_format)
+        text_format.setForeground(QColor(Qt.GlobalColor.lightGray))
+        self.setFormat(timestamp_start, timestamp_length, text_format)
 
         # 检查捕获的日志级别是否在预定义列表中
         log_level = match.captured(2)
         if log_level in self.log_levels:
-            # 设置对应日志级别的格式
-            test_format.setForeground(self.formats[log_level].foreground().color())
-            self.setFormat(loglevel_start, loglevel_length, test_format)
+            text_format.setForeground(self.formats[log_level].foreground().color())
+            self.setFormat(log_level_start, log_level_length, text_format)
 
 
 class NCDLogHighlighter(QSyntaxHighlighter):
@@ -237,12 +234,10 @@ class NCDLogHighlighter(QSyntaxHighlighter):
 
     def highlightBlock(self, text) -> None:
         # 创建一个格式化对象，用于应用整行的前景色
-        test_format = QTextCharFormat()
+        text_format = QTextCharFormat()
 
         # 检查当前文本块是否匹配日志级别的模式
         match = self.pattern.match(text)
-
-        # 如果没有匹配到，直接返回
         if not match or not match.hasMatch():
             return
 
@@ -251,16 +246,15 @@ class NCDLogHighlighter(QSyntaxHighlighter):
         timestamp_length = match.capturedLength(1)
 
         # 获取日志级别的起始位置和长度
-        loglevel_start = match.capturedStart(2)
-        loglevel_length = match.capturedLength(2)
+        log_level_start = match.capturedStart(2)
+        log_level_length = match.capturedLength(2)
 
         # 应用时间戳的格式
-        test_format.setForeground(QColor(Qt.GlobalColor.darkGreen))
-        self.setFormat(timestamp_start, timestamp_length, test_format)
+        text_format.setForeground(QColor(Qt.GlobalColor.darkGreen))
+        self.setFormat(timestamp_start, timestamp_length, text_format)
 
         # 检查捕获的日志级别是否在预定义列表中
         log_level = match.captured(2)
         if log_level in self.log_levels:
-            # 设置对应日志级别的格式
-            test_format.setForeground(self.formats[log_level].foreground().color())
-            self.setFormat(loglevel_start, loglevel_length, test_format)
+            text_format.setForeground(self.formats[log_level].foreground().color())
+            self.setFormat(log_level_start, log_level_length, text_format)
