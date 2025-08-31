@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QTextBrowser
 from src.Ui.common.code_editor.editor import CodeEditor
 
 
-class CodeExibit(QTextBrowser):
+class CodeExibit(CodeEditor):
 
     def __init__(self, parent=...):
         super().__init__(parent)
