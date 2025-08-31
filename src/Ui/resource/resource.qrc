@@ -61,4 +61,8 @@
         <file>template/email/test_email.html</file>
     </qresource>
 
+    <qresource prefix="font">
+        <file>font/JB-MONO.ttf</file>
+    </qresource>
+
 </RCC>

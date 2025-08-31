@@ -7,7 +7,6 @@ from qfluentwidgets.components import (
     LineEdit,
     PushButton,
     SwitchButton,
-    PlainTextEdit,
     MessageBoxBase,
     IndicatorPosition,
     TransparentPushButton,
@@ -19,7 +18,7 @@ from PySide6.QtCore import Qt, QObject, QStandardPaths
 from PySide6.QtWidgets import QFrame, QLabel, QFileDialog, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.Ui.common.code_editor import CodeEditor
+from src.Ui.common.code_editor import JsonEditor
 
 
 class TemplateEditConfigCard(QFrame):
@@ -30,7 +29,7 @@ class TemplateEditConfigCard(QFrame):
         # 创建控件
         self.iconLabel = SettingIconWidget(icon, self)
         self.titleLabel = QLabel(title, self)
-        self.plainTextEdit = CodeEditor(self)
+        self.plainTextEdit = JsonEditor(self)
         self.vBoxLayout = QVBoxLayout(self)
         self.hBoxLayout = QHBoxLayout()
 
