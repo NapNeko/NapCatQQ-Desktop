@@ -41,6 +41,10 @@ class CodeEditorBase(QPlainTextEdit):
 
     def __init__(self, parent: Optional[QPlainTextEdit] = None) -> None:
         super().__init__(parent)
+        # 变量
+        self.font_size: int = 12
+
+        # 行号区域
         self.line_number_area = LineNumberArea(self)
 
         # 绑定信号
@@ -66,10 +70,11 @@ class CodeEditorBase(QPlainTextEdit):
 
     def setFontSize(self, size: int) -> None:
         """设置编辑器字体大小"""
+        self.font_size = size
         font_id = QFontDatabase.addApplicationFont(":/font/font/JB-MONO.ttf")
         if font_id != -1:
             font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
-            self.setFont(QFont(font_family, size))
+            self.setFont(QFont(font_family, self.font_size))
 
     def lineNumberAreaWidth(self) -> int:
         """计算行号区域宽度"""

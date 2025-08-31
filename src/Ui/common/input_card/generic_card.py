@@ -10,6 +10,7 @@ from qfluentwidgets.components import (
     MessageBoxBase,
     IndicatorPosition,
     TransparentPushButton,
+    TransparentToolButton,
 )
 from qfluentwidgets.components.settings import SettingCard
 from qfluentwidgets.components.settings.setting_card import SettingIconWidget
@@ -29,14 +30,24 @@ class TemplateEditConfigCard(QFrame):
         # 创建控件
         self.iconLabel = SettingIconWidget(icon, self)
         self.titleLabel = QLabel(title, self)
-        self.plainTextEdit = JsonEditor(self)
+        self.jsonTextEdit = JsonEditor(self)
+        self.EditorFontSizeAddButton = TransparentToolButton(FluentIcon.ADD, self)
+        self.EditorFontSizeSubButton = TransparentToolButton(FluentIcon.REMOVE, self)
         self.vBoxLayout = QVBoxLayout(self)
         self.hBoxLayout = QHBoxLayout()
 
         # 设置属性
         self.setFixedHeight(260)
         self.iconLabel.setFixedSize(16, 16)
-        self.plainTextEdit.setReadOnly(False)
+        self.jsonTextEdit.setReadOnly(False)
+
+        # 信号与槽
+        self.EditorFontSizeAddButton.clicked.connect(
+            lambda: self.jsonTextEdit.setFontSize(self.jsonTextEdit.font_size + 1)
+        )
+        self.EditorFontSizeSubButton.clicked.connect(
+            lambda: self.jsonTextEdit.setFontSize(self.jsonTextEdit.font_size - 1)
+        )
 
         # 布局
         self.hBoxLayout.setSpacing(0)
@@ -49,14 +60,16 @@ class TemplateEditConfigCard(QFrame):
 
         self.hBoxLayout.addWidget(self.iconLabel, 0, Qt.AlignmentFlag.AlignLeft)
         self.hBoxLayout.addSpacing(16)
-
         self.hBoxLayout.addWidget(self.titleLabel, 0, Qt.AlignmentFlag.AlignLeft)
         self.hBoxLayout.addSpacing(16)
         self.hBoxLayout.addStretch(1)
+        self.hBoxLayout.addWidget(self.EditorFontSizeSubButton, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addWidget(self.EditorFontSizeAddButton, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(8)
 
         self.vBoxLayout.addLayout(self.hBoxLayout)
         self.vBoxLayout.addSpacing(8)
-        self.vBoxLayout.addWidget(self.plainTextEdit)
+        self.vBoxLayout.addWidget(self.jsonTextEdit)
 
         FluentStyleSheet.SETTING_CARD.apply(self)
 
