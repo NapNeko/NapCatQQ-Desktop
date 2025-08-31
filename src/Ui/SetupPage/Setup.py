@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Self
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
-from src.Ui.common import CodeEditor
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Core.Utils.singleton import singleton
 from src.Ui.SetupPage.General import General
+from src.Ui.common.code_editor import CodeExibit
 from src.Ui.common.stacked_widget import TransparentStackedWidget
 from src.Ui.SetupPage.SetupTopCard import SetupTopCard
 from src.Ui.SetupPage.Personalization import Personalization
@@ -25,7 +25,7 @@ class SetupWidget(QWidget):
 
     topCard: SetupTopCard
     vBoxLayout: QVBoxLayout
-    infoWidget: CodeEditor
+    infoWidget: CodeExibit
 
     view: TransparentStackedWidget
     personalization: Personalization

@@ -30,7 +30,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
 from src.Ui.UnitPage.status import StatusLabel, ButtonStatus, ProgressRingStatus
-from src.Ui.common.CodeEditor import UpdateLogEdit
+from src.Ui.common.code_editor import UpdateLogExhibit
 
 
 class PageBase(ScrollArea):
@@ -211,7 +211,7 @@ class UpdateLogCard(HeaderCardWidget):
         self.url = QUrl()
 
         # 创建控件
-        self.logEdit = UpdateLogEdit()
+        self.logEdit = UpdateLogExhibit()
         self.urlButton = TransparentToolButton(FluentIcon.GLOBE)
 
         # 设置属性

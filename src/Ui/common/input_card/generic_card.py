@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
-# 标准库导入
-from pyclbr import Class
-from tkinter import N
 
 # 第三方库导入
-from qfluentwidgets.common import FluentIcon, FluentIconBase
+from qfluentwidgets.common import FluentIcon, FluentIconBase, FluentStyleSheet, isDarkTheme
 from qfluentwidgets.components import (
     ComboBox,
     LineEdit,
@@ -16,14 +13,66 @@ from qfluentwidgets.components import (
     TransparentPushButton,
 )
 from qfluentwidgets.components.settings import SettingCard
-from PySide6.QtCore import Qt, QStandardPaths
-from PySide6.QtWidgets import QFileDialog
+from qfluentwidgets.components.settings.setting_card import SettingIconWidget
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import Qt, QObject, QStandardPaths
+from PySide6.QtWidgets import QFrame, QLabel, QFileDialog, QHBoxLayout, QVBoxLayout
+
+# 项目内模块导入
+from src.Ui.common.code_editor import CodeEditor
 
 
-class TestEditConfigCard(SettingCard):
+class TemplateEditConfigCard(QFrame):
 
-    def __init__(self, icon, title, content=None, parent=None):
-        super().__init__(icon, title, content, parent)
+    def __init__(self, icon: FluentIconBase, title: str, parent: QObject | None = None):
+        super().__init__(parent)
+
+        # 创建控件
+        self.iconLabel = SettingIconWidget(icon, self)
+        self.titleLabel = QLabel(title, self)
+        self.plainTextEdit = CodeEditor(self)
+        self.vBoxLayout = QVBoxLayout(self)
+        self.hBoxLayout = QHBoxLayout()
+
+        # 设置属性
+        self.setFixedHeight(260)
+        self.iconLabel.setFixedSize(16, 16)
+        self.plainTextEdit.setReadOnly(False)
+
+        # 布局
+        self.hBoxLayout.setSpacing(0)
+        self.hBoxLayout.setContentsMargins(0, 0, 0, 0)
+        self.hBoxLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        self.vBoxLayout.setSpacing(0)
+        self.vBoxLayout.setContentsMargins(16, 16, 16, 16)
+        self.vBoxLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self.hBoxLayout.addWidget(self.iconLabel, 0, Qt.AlignmentFlag.AlignLeft)
+        self.hBoxLayout.addSpacing(16)
+
+        self.hBoxLayout.addWidget(self.titleLabel, 0, Qt.AlignmentFlag.AlignLeft)
+        self.hBoxLayout.addSpacing(16)
+        self.hBoxLayout.addStretch(1)
+
+        self.vBoxLayout.addLayout(self.hBoxLayout)
+        self.vBoxLayout.addSpacing(8)
+        self.vBoxLayout.addWidget(self.plainTextEdit)
+
+        FluentStyleSheet.SETTING_CARD.apply(self)
+
+    def paintEvent(self, e):
+        painter = QPainter(self)
+        painter.setRenderHints(QPainter.Antialiasing)
+
+        if isDarkTheme():
+            painter.setBrush(QColor(255, 255, 255, 13))
+            painter.setPen(QColor(0, 0, 0, 50))
+        else:
+            painter.setBrush(QColor(255, 255, 255, 170))
+            painter.setPen(QColor(0, 0, 0, 19))
+
+        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
 
 
 class LineEditConfigCard(SettingCard):

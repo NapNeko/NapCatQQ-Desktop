@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 from typing import TYPE_CHECKING
-from tkinter import W
 
 # 第三方库导入
 from qfluentwidgets import FluentIcon as FI
@@ -26,6 +25,7 @@ from src.Ui.common.input_card.generic_card import (
     SwitchConfigCard,
     ComboBoxConfigCard,
     LineEditConfigCard,
+    TemplateEditConfigCard,
 )
 
 if TYPE_CHECKING:
@@ -78,6 +78,13 @@ class General(ScrollArea):
             content=self.tr("设置机器人离线邮件通知"),
             parent=self.eventGroup,
         )
+        self.botOfflineWebHookCard = ShowDialogCard(
+            dialog=BotOfflineWebHookDialog,
+            icon=FI.CHAT,
+            title=self.tr("机器人离线通知[Webhook]"),
+            content=self.tr("设置机器人离线Webhook通知"),
+            parent=self.eventGroup,
+        )
 
     def _setLayout(self) -> None:
         """
@@ -86,6 +93,7 @@ class General(ScrollArea):
         # 将卡片添加到组
         self.actionGroup.addSettingCard(self.closeBtnCard)
         self.eventGroup.addSettingCard(self.botOfflineEmailCard)
+        self.eventGroup.addSettingCard(self.botOfflineWebHookCard)
 
         # 添加到布局
         self.expand_layout.addWidget(self.actionGroup)
@@ -173,11 +181,14 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         # 创建控件
         self.titleLabel = TitleLabel(self.tr("机器人离线通知[Webhook]"), self)
         self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用Webhook通知"))
-        self.webhookCard = LineEditConfigCard(FI.ROBOT, self.tr("Webhook地址"), "https://example.com")
-        self.jsonCard = LineEditConfigCard(FI.ROBOT, self.tr("Webhook JSON"), '{"key": "value"}')
+        self.webhookCard = LineEditConfigCard(FI.ROBOT, self.tr("Webhook地址"), "https://example.com/webhook")
+        self.jsonCard = TemplateEditConfigCard(FI.CODE, self.tr("Webhook JSON"))
 
         # 布局
         self.gridLayout = QGridLayout()
+        self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 4)
+        self.gridLayout.addWidget(self.webhookCard, 1, 0, 1, 4)
+        self.gridLayout.addWidget(self.jsonCard, 2, 0, 1, 4)
 
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
         self.gridLayout.setSpacing(8)
@@ -185,7 +196,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         # 设置布局
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
-        self.widget.setMinimumSize(500, 400)
+        self.widget.setMinimumSize(600, 400)
 
         # 填充配置
 
