@@ -42,27 +42,42 @@ class CodeEditor(PlainTextEdit):
         return space
 
     def lineNumberAreaPaintEvent(self, event) -> None:
-        # 绘制行号区域的内容
+        """绘制行号区域的内容"""
         painter = QPainter(self.line_number_area)
-        painter.setPen(Qt.GlobalColor.gray)  # 设置画笔颜色为灰色
-        painter.fillRect(event.rect(), Qt.GlobalColor.transparent)  # 使用透明背景
+        painter.setPen(Qt.GlobalColor.gray)
 
+        # 使用透明背景填充整个区域
+        painter.fillRect(event.rect(), Qt.GlobalColor.transparent)
+
+        # 获取第一个可见文本块及其相关信息
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
-        offset = self.contentOffset()
-        top = self.blockBoundingGeometry(block).translated(offset).top()
-        bottom = top + self.blockBoundingRect(block).height()
-        content_left = self.contentsRect().left()  # 内容区域的左边界
+        content_offset = self.contentOffset()
 
+        # 计算第一个文本块的顶部和底部位置
+        block_geometry = self.blockBoundingGeometry(block).translated(content_offset)
+        top = block_geometry.top()
+        bottom = top + self.blockBoundingRect(block).height()
+
+        # 准备绘制参数
+        area_width = self.line_number_area.width()
+        text_margin = 2  # 右边距
+        text_rect_width = area_width - text_margin
+        text_height = self.fontMetrics().height()
+
+        # 遍历所有可见文本块并绘制行号
         while block.isValid() and top <= event.rect().bottom():
+            # 只绘制在当前视图区域内可见的文本块
             if block.isVisible() and bottom >= event.rect().top():
                 line_number = str(block_number + 1)
-                painter.drawText(
-                    QRectF(0, top, self.line_number_area.width() - 2, self.fontMetrics().height()),
-                    Qt.AlignmentFlag.AlignRight,
-                    line_number,
-                )
 
+                # 创建文本绘制区域
+                text_rect = QRectF(0, top, text_rect_width, text_height)
+
+                # 绘制行号（右对齐）
+                painter.drawText(text_rect, Qt.AlignmentFlag.AlignRight, line_number)
+
+            # 移动到下一个文本块
             block = block.next()
             top = bottom
             bottom = top + self.blockBoundingRect(block).height()
