@@ -119,6 +119,9 @@ class Config(QConfig):
     botOfflineEmailNotice = ConfigItem(
         group="Event", name="BotOfflineEmailNotice", default=False, validator=BoolValidator()
     )
+    botOfflineWebHookNotice = ConfigItem(
+        group="Event", name="BotOfflineWebHookNotice", default=False, validator=BoolValidator()
+    )
 
     # 邮件项
     emailReceiver = ConfigItem(group="Email", name="EmailReceiver", default="")
@@ -134,6 +137,11 @@ class Config(QConfig):
         default="SSL",
         validator=OptionsValidator(["SSL", "TLS", "无加密"]),
     )
+
+    # WebHook 项
+    webHookUrl = ConfigItem(group="WebHook", name="WebHookUrl", default="")
+    webHookSecret = ConfigItem(group="WebHook", name="WebHookSecret", default="")
+    webHookJson = ConfigItem(group="WebHook", name="WebHookJson", default="")
 
     def __init__(self):
         super().__init__()

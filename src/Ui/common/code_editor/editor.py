@@ -331,37 +331,62 @@ class JsonEditor(CodeEditor):
         self.cursorPositionChanged.connect(lambda: self.viewport().update())
         self.updateRequest.connect(lambda rect, dy: self.viewport().update())
 
-    def checkJson(self) -> bool:
+    def setJson(self, json_data: str) -> None:
+        """设置 JSON 数据"""
+        try:
+            parsed = json.loads(json_data)
+            pretty_json = json.dumps(parsed, indent=4, ensure_ascii=False)
+            self.setPlainText(pretty_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"无效的 JSON 数据: {e}")
+            self.setPlainText(json_data)
+
+    def getJson(self) -> str:
+        """获取当前 JSON 数据, 压缩转为一行字符串"""
+        try:
+            parsed = json.loads(self.toPlainText())
+            return json.dumps(parsed, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            logger.error(f"无效的 JSON 数据: {e}")
+            return self.toPlainText()
+
+    def checkJson(self, tips: bool = True) -> bool:
         """检查当前文本是否为有效 JSON, 并标记错误行"""
         self.error_line = -1  # 清除旧错误
         try:
             json.loads(self.toPlainText())
             self.setExtraSelections([])
 
-            TeachingTip.create(
-                target=self.parent(),
-                title="JSON 语法正确!",
-                content="校验完成, JSON 语法正确！",
-                icon=FluentIcon.ACCEPT,
-                duration=2000,
-                parent=self,
-            )
+            if tips:
+                TeachingTip.create(
+                    target=self.parent(),
+                    title="JSON 语法正确!",
+                    content="校验完成, JSON 语法正确！",
+                    icon=FluentIcon.ACCEPT,
+                    duration=2000,
+                    parent=self,
+                )
 
             self.setPlainText(json.dumps(json.loads(self.toPlainText()), indent=4, ensure_ascii=False))
+
+            return True
 
         except json.JSONDecodeError as e:
             self.error_line = e.lineno - 1
             self.highlightErrorLine(self.error_line)
             logger.error(f"JSON 语法错误: {e}")
 
-            TeachingTip.create(
-                target=self.parent(),
-                title="JSON 语法错误!",
-                content=f"校验完成, JSON 语法错误! 请检查高亮行上下几行\n {e}",
-                icon=FluentIcon.CLOSE,
-                duration=-1,
-                parent=self,
-            )
+            if tips:
+                TeachingTip.create(
+                    target=self.parent(),
+                    title="JSON 语法错误!",
+                    content=f"校验完成, JSON 语法错误! 请检查高亮行上下几行\n {e}",
+                    icon=FluentIcon.CLOSE,
+                    duration=-1,
+                    parent=self,
+                )
+
+            return False
 
     def highlightErrorLine(self, line_number: int) -> None:
         """高亮并跳转到指定错误行"""

@@ -13,8 +13,8 @@ from qfluentwidgets import (
     SettingCardGroup,
     OptionsSettingCard,
 )
-from PySide6.QtCore import Qt, QObject
-from PySide6.QtWidgets import QWidget, QGridLayout
+from PySide6.QtCore import Qt, QSize, QObject
+from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
@@ -181,25 +181,53 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         # 创建控件
         self.titleLabel = TitleLabel(self.tr("机器人离线通知[Webhook]"), self)
         self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用Webhook通知"))
-        self.webhookCard = LineEditConfigCard(FI.ROBOT, self.tr("Webhook地址"), "https://example.com/webhook")
+        self.webhookUrlCard = LineEditConfigCard(FI.ROBOT, self.tr("Webhook地址"), "https://example.com/webhook")
+        self.webhookSecretCard = LineEditConfigCard(FI.VPN, self.tr("Webhook 密钥"), "Secret")
         self.jsonCard = TemplateEditConfigCard(FI.CODE, self.tr("Webhook JSON"))
+        self.testButtonn = PushButton(self.tr("发送测试请求"), self)
 
         # 布局
         self.gridLayout = QGridLayout()
         self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 4)
-        self.gridLayout.addWidget(self.webhookCard, 1, 0, 1, 4)
+        self.gridLayout.addWidget(self.webhookUrlCard, 1, 0, 1, 4)
         self.gridLayout.addWidget(self.jsonCard, 2, 0, 1, 4)
-
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
         self.gridLayout.setSpacing(8)
 
-        # 设置布局
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
+
+        self.buttonLayout.addWidget(self.testButtonn, 1)
+
+        # 设置
         self.widget.setMinimumSize(650, 400)
 
         # 填充配置
+        self.fill_config()
+
+    def fill_config(self) -> None:
+        # 填充配置
+        self.enableCard.fillValue(cfg.get(cfg.botOfflineWebHookNotice))
+        self.webhookUrlCard.fillValue(cfg.get(cfg.webHookUrl))
+        self.webhookSecretCard.fillValue(cfg.get(cfg.webHookSecret))
+        self.jsonCard.fillValue(cfg.get(cfg.webHookJson))
+
+    def save_config(self) -> None:
+        """保存配置"""
+        try:
+            cfg.set(cfg.botOfflineWebHookNotice, self.enableCard.getValue())
+            cfg.set(cfg.webHookUrl, self.webhookUrlCard.getValue())
+            cfg.set(cfg.webHookSecret, self.webhookSecretCard.getValue())
+            cfg.set(cfg.webHookJson, self.jsonCard.getValue())
+            self.fill_config()
+        except ValueError:
+            warning_bar(self.tr("配置保存失败，请检查输入是否正确"))
 
     def accept(self) -> None:
         """接受按钮"""
+
+        if self.jsonCard.jsonTextEdit.checkJson(False) is False:
+            return
+
+        self.save_config()
         super().accept()

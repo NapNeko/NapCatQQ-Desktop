@@ -90,6 +90,15 @@ class TemplateEditConfigCard(QFrame):
 
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
 
+    def fillValue(self, value: str) -> None:
+        self.jsonTextEdit.setJson(str(value))
+
+    def getValue(self) -> str:
+        return self.jsonTextEdit.getJson()
+
+    def clear(self) -> None:
+        self.jsonTextEdit.clear()
+
 
 class LineEditConfigCard(SettingCard):
 
