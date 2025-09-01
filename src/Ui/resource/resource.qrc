@@ -54,6 +54,8 @@
 
         <file>qss/dark/update_log_card.qss</file>
         <file>qss/light/update_log_card.qss</file>
+        <file>qss/dark/code_editor.qss</file>
+        <file>qss/light/code_editor.qss</file>
     </qresource>
 
     <qresource prefix="template">
@@ -63,6 +65,7 @@
 
     <qresource prefix="font">
         <file>font/JB-MONO.ttf</file>
+        <file>font/ALMM.ttf</file>
     </qresource>
 
 </RCC>

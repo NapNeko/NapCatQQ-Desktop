@@ -19,6 +19,7 @@ class StyleSheet(StyleSheetBase, Enum):
 
     # common
     UPDATE_LOG_CARD = "update_log_card"
+    CODE_EDITOR = "code_editor"
 
     def path(self, theme=Theme.AUTO):
         theme = qconfig.theme if theme == Theme.AUTO else theme

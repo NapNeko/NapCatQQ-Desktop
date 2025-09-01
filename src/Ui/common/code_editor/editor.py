@@ -18,14 +18,15 @@ from PySide6.QtGui import (
     QFontDatabase,
 )
 from PySide6.QtCore import Qt, Slot, QRect, QRectF
-from PySide6.QtWidgets import QTextEdit, QApplication, QPlainTextEdit
+from PySide6.QtWidgets import QTextEdit, QApplication
 
 # 项目内模块导入
+from src.Ui.StyleSheet import StyleSheet
 from src.Ui.common.code_editor.controls import LineNumberArea
 from src.Ui.common.code_editor.highlight import JsonHighlighter
 
 
-class CodeEditorBase(QPlainTextEdit):
+class CodeEditorBase(PlainTextEdit):
     """
     基础代码编辑器
 
@@ -38,7 +39,7 @@ class CodeEditorBase(QPlainTextEdit):
 
     INDENT: int = 4  # 缩进宽度
 
-    def __init__(self, parent: Optional[QPlainTextEdit] = None) -> None:
+    def __init__(self, parent: Optional[PlainTextEdit] = None) -> None:
         super().__init__(parent)
         # 变量
         self.font_size: int = 12
@@ -61,19 +62,13 @@ class CodeEditorBase(QPlainTextEdit):
         self.selection_start_line: int = -1
         self.selected_lines: set[int] = set()
 
-        # 设置选中行高亮颜色（白色 30% 透明）
-        palette = self.palette()
-        palette.setColor(QPalette.ColorRole.Highlight, QColor(255, 255, 255, 76))
-        palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
-        self.setPalette(palette)
+        # 样式
+        StyleSheet.CODE_EDITOR.apply(self)
 
     def setFontSize(self, size: int) -> None:
         """设置编辑器字体大小"""
         self.font_size = size
-        font_id = QFontDatabase.addApplicationFont(":/font/font/JB-MONO.ttf")
-        if font_id != -1:
-            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
-            self.setFont(QFont(font_family, self.font_size))
+        self.setFont(QFont(self.font().families(), self.font_size))
 
     def lineNumberAreaWidth(self) -> int:
         """计算行号区域宽度"""
@@ -211,7 +206,7 @@ class CodeEditor(CodeEditorBase):
     AUTO_COMPLETE_CHARS: dict[str, str] = {"{": "}", "[": "]", "(": ")", '"': '"', "'": "'"}
     INDENT: int = 4
 
-    def __init__(self, parent: Optional[QPlainTextEdit] = None) -> None:
+    def __init__(self, parent: Optional[PlainTextEdit] = None) -> None:
         super().__init__(parent)
         self.setLineWrapMode(PlainTextEdit.LineWrapMode.NoWrap)
         self.setTabChangesFocus(False)
@@ -337,7 +332,7 @@ class CodeEditor(CodeEditorBase):
 class JsonEditor(CodeEditor):
     """JSON 专用编辑器，带语法高亮, 层级辅助线"""
 
-    def __init__(self, parent: Optional[QPlainTextEdit] = None) -> None:
+    def __init__(self, parent: Optional[PlainTextEdit] = None) -> None:
         super().__init__(parent)
         self.highlighter = JsonHighlighter(self.document())
 
