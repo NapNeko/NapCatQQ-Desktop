@@ -1,27 +1,18 @@
 # -*- coding: utf-8 -*-
 
 # 标准库导入
+import json
 from typing import Optional
 
 # 第三方库导入
-from qfluentwidgets import PlainTextEdit
-from PySide6.QtGui import (
-    QPen,
-    QFont,
-    QColor,
-    QPainter,
-    QPalette,
-    QKeyEvent,
-    QPaintEvent,
-    QTextCursor,
-    QTextFormat,
-    QFontDatabase,
-)
+from qfluentwidgets import FluentIcon, TeachingTip, PlainTextEdit
+from PySide6.QtGui import QPen, QFont, QColor, QPainter, QKeyEvent, QPaintEvent, QTextCursor, QTextFormat
 from PySide6.QtCore import Qt, Slot, QRect, QRectF
 from PySide6.QtWidgets import QTextEdit, QApplication
 
 # 项目内模块导入
 from src.Ui.StyleSheet import StyleSheet
+from src.Core.Utils.logger import logger
 from src.Ui.common.code_editor.controls import LineNumberArea
 from src.Ui.common.code_editor.highlight import JsonHighlighter
 
@@ -339,6 +330,57 @@ class JsonEditor(CodeEditor):
         # 链接信号
         self.cursorPositionChanged.connect(lambda: self.viewport().update())
         self.updateRequest.connect(lambda rect, dy: self.viewport().update())
+
+    def checkJson(self) -> bool:
+        """检查当前文本是否为有效 JSON, 并标记错误行"""
+        self.error_line = -1  # 清除旧错误
+        try:
+            json.loads(self.toPlainText())
+            self.setExtraSelections([])
+
+            TeachingTip.create(
+                target=self.parent(),
+                title="JSON 语法正确!",
+                content="校验完成, JSON 语法正确！",
+                icon=FluentIcon.ACCEPT,
+                duration=2000,
+                parent=self,
+            )
+
+            self.setPlainText(json.dumps(json.loads(self.toPlainText()), indent=4, ensure_ascii=False))
+
+        except json.JSONDecodeError as e:
+            self.error_line = e.lineno - 1
+            self.highlightErrorLine(self.error_line)
+            logger.error(f"JSON 语法错误: {e}")
+
+            TeachingTip.create(
+                target=self.parent(),
+                title="JSON 语法错误!",
+                content=f"校验完成, JSON 语法错误! 请检查高亮行上下几行\n {e}",
+                icon=FluentIcon.CLOSE,
+                duration=-1,
+                parent=self,
+            )
+
+    def highlightErrorLine(self, line_number: int) -> None:
+        """高亮并跳转到指定错误行"""
+        block = self.document().findBlockByNumber(line_number)
+        if not block.isValid():
+            return
+
+        cursor = self.textCursor()
+        cursor.setPosition(block.position())
+        self.setTextCursor(cursor)
+        self.centerCursor()
+
+        extra = QTextEdit.ExtraSelection()
+        fmt = extra.format
+        fmt.setBackground(QColor(255, 0, 0, 50))
+        fmt.setProperty(QTextFormat.FullWidthSelection, True)
+        extra.cursor = cursor
+
+        self.setExtraSelections([extra])
 
     def paintEvent(self, event: QPaintEvent) -> None:
         """绘制文本及多层级缩进辅助线"""

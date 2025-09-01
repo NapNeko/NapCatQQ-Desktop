@@ -13,7 +13,7 @@ from qfluentwidgets import (
     SettingCardGroup,
     OptionsSettingCard,
 )
-from PySide6.QtCore import Qt, Slot, QObject
+from PySide6.QtCore import Qt, QObject
 from PySide6.QtWidgets import QWidget, QGridLayout
 
 # 项目内模块导入
@@ -196,7 +196,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         # 设置布局
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
-        self.widget.setMinimumSize(600, 400)
+        self.widget.setMinimumSize(650, 400)
 
         # 填充配置
 
