@@ -34,7 +34,6 @@ class CodeEditorBase(QPlainTextEdit):
         - 光标所在行高亮
         - Shift 多行选择并高亮
         - 行号高亮同步
-        - 多层级缩进辅助线
     """
 
     INDENT: int = 4  # 缩进宽度
@@ -336,7 +335,7 @@ class CodeEditor(CodeEditorBase):
 
 
 class JsonEditor(CodeEditor):
-    """JSON 专用编辑器，带语法高亮"""
+    """JSON 专用编辑器，带语法高亮, 层级辅助线"""
 
     def __init__(self, parent: Optional[QPlainTextEdit] = None) -> None:
         super().__init__(parent)
