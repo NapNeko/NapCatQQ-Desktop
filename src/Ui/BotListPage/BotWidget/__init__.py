@@ -25,6 +25,7 @@ from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.AddPage.enum import ConnectType
 from src.Core.Utils.email import offline_email
+from src.Core.Utils.webhook import offline_webhook
 from src.Ui.AddPage.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
@@ -294,12 +295,19 @@ class BotWidget(QWidget):
             # 如果匹配不成功, 则退出
             return
 
-        if not self.config.advanced.offlineNotice and cfg.get(cfg.botOfflineEmailNotice):
+        if not self.config.advanced.offlineNotice:
             # 如果未开启通知, 退出
             return
 
-        # 发件通知
-        offline_email(self.config)
+        if cfg.get(cfg.botOfflineEmailNotice):
+            # 如果开启了邮件通知, 则发送邮件
+            offline_email(self.config)
+        elif cfg.get(cfg.botOfflineWebHookNotice):
+            # 如果开启了 WebHook 通知, 则发送 WebHook
+            offline_webhook(self.config)
+        else:
+            # 否则显示提示
+            warning_bar(self.tr(f"账号 {self.config.bot.QQID} 已离线, 请前往 NapCat 日志 查看详情"))
 
     @Slot()
     def _updateButtonSlot(self) -> None:

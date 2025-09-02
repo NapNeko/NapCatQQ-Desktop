@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Core.Utils.email import EncryptionType, test_email
+from src.Core.Utils.webhook import test_webhook
 from src.Ui.common.info_bar import success_bar, warning_bar
 from src.Ui.common.input_card.generic_card import (
     ShowDialogCard,
@@ -184,26 +185,30 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         self.webhookUrlCard = LineEditConfigCard(FI.ROBOT, self.tr("Webhook地址"), "https://example.com/webhook")
         self.webhookSecretCard = LineEditConfigCard(FI.VPN, self.tr("Webhook 密钥"), "Secret")
         self.jsonCard = JsonTemplateEditConfigCard(FI.CODE, self.tr("Webhook JSON"))
-        self.testButtonn = PushButton(self.tr("发送测试请求"), self)
+        self.testWebhookButtonn = PushButton(self.tr("发送测试请求"), self)
 
         # 布局
         self.gridLayout = QGridLayout()
         self.gridLayout.addWidget(self.enableCard, 0, 0, 1, 4)
         self.gridLayout.addWidget(self.webhookUrlCard, 1, 0, 1, 4)
-        self.gridLayout.addWidget(self.jsonCard, 2, 0, 1, 4)
+        self.gridLayout.addWidget(self.webhookSecretCard, 2, 0, 1, 4)
+        self.gridLayout.addWidget(self.jsonCard, 3, 0, 1, 4)
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
         self.gridLayout.setSpacing(8)
 
         self.viewLayout.addWidget(self.titleLabel)
         self.viewLayout.addLayout(self.gridLayout)
 
-        self.buttonLayout.addWidget(self.testButtonn, 1)
+        self.buttonLayout.addWidget(self.testWebhookButtonn, 1)
 
         # 设置
         self.widget.setMinimumSize(650, 400)
 
         # 填充配置
         self.fill_config()
+
+        # 链接信号
+        self.testWebhookButtonn.clicked.connect(lambda: (self.save_config(), test_webhook()))
 
     def fill_config(self) -> None:
         # 填充配置

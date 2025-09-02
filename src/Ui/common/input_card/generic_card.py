@@ -41,9 +41,9 @@ from src.Ui.common.code_editor import JsonEditor
 class JsonTemplateEditConfigCard(QFrame):
 
     TEMPLATE_STRING = [
-        {"name": "机器人名称", "string": "${bot-name}", "doc": "显示您在 NCD 中配置的机器人名称"},
-        {"name": "机器人QQ号", "string": "${bot-qq-id}", "doc": "显示机器人的 QQ 号"},
-        {"name": "当前时间", "string": "${now-time}", "doc": "显示为当前的时间(发件时间)"},
+        {"name": "机器人名称", "string": "${bot_name}", "doc": "显示您在 NCD 中配置的机器人名称"},
+        {"name": "机器人QQ号", "string": "${bot_qq_id}", "doc": "显示机器人的 QQ 号"},
+        {"name": "当前时间", "string": "${disconnect_time}", "doc": "显示为当前的时间(发件时间)"},
     ]
 
     def __init__(self, icon: FluentIconBase, title: str, parent: QObject | None = None):
