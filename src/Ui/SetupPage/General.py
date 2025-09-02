@@ -25,7 +25,7 @@ from src.Ui.common.input_card.generic_card import (
     SwitchConfigCard,
     ComboBoxConfigCard,
     LineEditConfigCard,
-    TemplateEditConfigCard,
+    JsonTemplateEditConfigCard,
 )
 
 if TYPE_CHECKING:
@@ -183,7 +183,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         self.enableCard = SwitchConfigCard(FI.IOT, self.tr("启用Webhook通知"))
         self.webhookUrlCard = LineEditConfigCard(FI.ROBOT, self.tr("Webhook地址"), "https://example.com/webhook")
         self.webhookSecretCard = LineEditConfigCard(FI.VPN, self.tr("Webhook 密钥"), "Secret")
-        self.jsonCard = TemplateEditConfigCard(FI.CODE, self.tr("Webhook JSON"))
+        self.jsonCard = JsonTemplateEditConfigCard(FI.CODE, self.tr("Webhook JSON"))
         self.testButtonn = PushButton(self.tr("发送测试请求"), self)
 
         # 布局

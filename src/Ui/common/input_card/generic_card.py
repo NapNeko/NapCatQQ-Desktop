@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 
+# 标准库导入
+from types import CodeType
+
 # 第三方库导入
+from annotated_types import T
 from qfluentwidgets.common import FluentIcon, FluentIconBase, FluentStyleSheet, isDarkTheme
 from qfluentwidgets.components import (
+    Flyout,
     ComboBox,
     LineEdit,
     PushButton,
+    TableWidget,
     SwitchButton,
     MessageBoxBase,
     IndicatorPosition,
@@ -13,16 +19,32 @@ from qfluentwidgets.components import (
     TransparentToolButton,
 )
 from qfluentwidgets.components.settings import SettingCard
+from qfluentwidgets.components.widgets.flyout import FlyoutView
 from qfluentwidgets.components.settings.setting_card import SettingIconWidget
 from PySide6.QtGui import QColor, QPainter
-from PySide6.QtCore import Qt, QObject, QStandardPaths
-from PySide6.QtWidgets import QFrame, QLabel, QFileDialog, QHBoxLayout, QVBoxLayout
+from PySide6.QtCore import Qt, QSize, QObject, QStandardPaths
+from PySide6.QtWidgets import (
+    QFrame,
+    QLabel,
+    QFileDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QSizePolicy,
+    QVBoxLayout,
+    QTableWidgetItem,
+)
 
 # 项目内模块导入
 from src.Ui.common.code_editor import JsonEditor
 
 
-class TemplateEditConfigCard(QFrame):
+class JsonTemplateEditConfigCard(QFrame):
+
+    TEMPLATE_STRING = [
+        {"name": "机器人名称", "string": "${bot-name}", "doc": "显示您在 NCD 中配置的机器人名称"},
+        {"name": "机器人QQ号", "string": "${bot-qq-id}", "doc": "显示机器人的 QQ 号"},
+        {"name": "当前时间", "string": "${now-time}", "doc": "显示为当前的时间(发件时间)"},
+    ]
 
     def __init__(self, icon: FluentIconBase, title: str, parent: QObject | None = None):
         super().__init__(parent)
@@ -34,6 +56,7 @@ class TemplateEditConfigCard(QFrame):
         self.editorFontSizeAddButton = TransparentToolButton(FluentIcon.ADD, self)
         self.editorFontSizeSubButton = TransparentToolButton(FluentIcon.REMOVE, self)
         self.checkButton = TransparentPushButton(FluentIcon.CODE, self.tr("校验 JSON"), self)
+        self.insertTemplateButton = TransparentPushButton(FluentIcon.DICTIONARY_ADD, self.tr("插入模板"), self)
         self.vBoxLayout = QVBoxLayout(self)
         self.hBoxLayout = QHBoxLayout()
 
@@ -51,6 +74,7 @@ class TemplateEditConfigCard(QFrame):
             lambda: self.jsonTextEdit.setFontSize(self.jsonTextEdit.font_size - 1)
         )
         self.checkButton.clicked.connect(self.jsonTextEdit.checkJson)
+        self.insertTemplateButton.clicked.connect(self.showTemplateFlyout)
 
         # 布局
         self.hBoxLayout.setSpacing(0)
@@ -69,6 +93,7 @@ class TemplateEditConfigCard(QFrame):
         self.hBoxLayout.addWidget(self.editorFontSizeSubButton, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addWidget(self.editorFontSizeAddButton, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addWidget(self.checkButton, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addWidget(self.insertTemplateButton, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(8)
 
         self.vBoxLayout.addLayout(self.hBoxLayout)
@@ -98,6 +123,67 @@ class TemplateEditConfigCard(QFrame):
 
     def clear(self) -> None:
         self.jsonTextEdit.clear()
+
+    def showTemplateFlyout(self) -> None:
+        """展示模板弹出组件"""
+        # 创建视图
+        view = FlyoutView(
+            title=self.tr("Json 模板"),
+            content=self.tr(
+                "这是自带的模板字符串以及模板,模板字符串将会被 NCD 自动解析成相应内容插入\n点击表格中的内容即视为执行插入"
+            ),
+            isClosable=True,
+        )
+
+        # 创建相关组件
+        table = TableWidget()
+        table.setBorderVisible(True)
+        table.setBorderRadius(8)
+        table.setWordWrap(False)
+        table.setRowCount(len(self.TEMPLATE_STRING))
+        table.setColumnCount(3)
+        table.setHorizontalHeaderLabels(["模板名称", "模板字符串", "介绍"])
+        table.verticalHeader().hide()
+
+        # 修改列宽设置 - 前两列根据内容调整，第三列拉伸填充
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+
+        table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        table.setMinimumWidth(530)
+
+        # 链接信号
+        table.cellClicked.connect(self._on_table_cell_clicked)
+
+        # 填充数据
+        for row, item in enumerate(self.TEMPLATE_STRING):
+            # 模板名称列
+            name_item = QTableWidgetItem(item["name"])
+            name_item.setTextAlignment(Qt.AlignCenter)
+            table.setItem(row, 0, name_item)
+
+            # 模板字符串列
+            string_item = QTableWidgetItem(item["string"])
+            string_item.setTextAlignment(Qt.AlignCenter)
+            table.setItem(row, 1, string_item)
+
+            # 介绍列
+            doc_item = QTableWidgetItem(item["doc"])
+            table.setItem(row, 2, doc_item)
+
+        view.addWidget(table)
+        view.setMinimumSize(QSize(600, 290))
+
+        # 展示窗口
+        widget = Flyout.make(view, self.insertTemplateButton, self)
+        view.closed.connect(widget.close)
+
+    def _on_table_cell_clicked(self, row: int, _: int) -> None:
+        """列表点击事件处理"""
+        cursor = self.jsonTextEdit.textCursor()
+        cursor.insertText(self.TEMPLATE_STRING[row]["string"])
+        self.jsonTextEdit.setTextCursor(cursor)
 
 
 class LineEditConfigCard(SettingCard):
