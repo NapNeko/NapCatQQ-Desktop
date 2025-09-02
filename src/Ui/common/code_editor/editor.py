@@ -231,8 +231,6 @@ class CodeEditor(CodeEditorBase):
 
         super().keyPressEvent(event)
 
-    # [以下函数保持原功能，只加类型注解和注释]
-
     def handle_backspace(self, cursor: QTextCursor, text: str) -> bool:
         """退格处理自动删除配对字符"""
         pos = cursor.position()
