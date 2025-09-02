@@ -7,7 +7,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
+from src.Ui.Font import FontManager
 from src.Core.Config import cfg
+from src.Ui.resource import resource
 from src.Core.Utils.mutex import SingleInstanceApplication
 from src.Core.Utils.PathFunc import PathFunc
 
@@ -26,6 +28,9 @@ if __name__ == "__main__":
         os.environ["QT_SCALE_FACTOR"] = str(cfg.get(cfg.dpiScale))
 
     app = QApplication(sys.argv)
+
+    # 初始化字体
+    FontManager.initialize_fonts()
 
     if cfg.get(cfg.MainWindow):
         # 项目内模块导入

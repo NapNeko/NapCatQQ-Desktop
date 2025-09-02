@@ -3,13 +3,12 @@
 from typing import TYPE_CHECKING, Self, Optional
 
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QVBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.UnitPage.top import TopWidget
-from src.Ui.common.widget import BackgroundWidget
 from src.Ui.UnitPage.QQPage import QQPage
 from src.Ui.UnitPage.NCDPage import NCDPage
 from src.Core.Utils.singleton import singleton
@@ -23,7 +22,7 @@ if TYPE_CHECKING:
 
 
 @singleton
-class UnitWidget(BackgroundWidget):
+class UnitWidget(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
@@ -31,15 +30,6 @@ class UnitWidget(BackgroundWidget):
         self.view: Optional[TransparentStackedWidget] = None
         self.topCard: Optional[TopWidget] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
-
-        # 传入配置
-        self.bgEnabledConfig = cfg.bgUnitPage
-        self.bgPixmapLightConfig = cfg.bgUnitPageLight
-        self.bgPixmapDarkConfig = cfg.bgUnitPageDark
-        self.bgOpacityConfig = cfg.bgUnitPageOpacity
-
-        # 调用方法
-        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """

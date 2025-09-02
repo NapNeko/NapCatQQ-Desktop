@@ -79,7 +79,7 @@ class Config(QConfig):
         restart=True,
     )
     closeBtnAction = OptionsConfigItem(
-        group="Personalized",
+        group="General",
         name="CloseBtnAction",
         default=CloseActionEnum.CLOSE,
         validator=OptionsValidator(list(CloseActionEnum)),
@@ -89,37 +89,6 @@ class Config(QConfig):
     windowOpacity = RangeConfigItem(
         group="Personalize", name="WindowOpacity", default=100, validator=RangeValidator(10, 100)
     )
-
-    bgHomePage = ConfigItem(group="Personalize", name="BgHomePage", default=False, validator=BoolValidator())
-    bgHomePageOpacity = RangeConfigItem(
-        group="Personalize", name="BgHomePageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgHomePageLight = ConfigItem(group="Personalize", name="BgHomePageLight", default="")
-    bgHomePageDark = ConfigItem(group="Personalize", name="BgHomePageDark", default="")
-    bgAddPage = ConfigItem(group="Personalize", name="BgAddPage", default=False, validator=BoolValidator())
-    bgAddPageOpacity = RangeConfigItem(
-        group="Personalize", name="BgAddPageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgAddPageLight = ConfigItem(group="Personalize", name="BgAddPageLight", default="")
-    bgAddPageDark = ConfigItem(group="Personalize", name="BgAddPageDark", default="")
-    bgListPage = ConfigItem(group="Personalize", name="BgListPage", default=False, validator=BoolValidator())
-    bgListPageOpacity = RangeConfigItem(
-        group="Personalize", name="BgListPageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgListPageLight = ConfigItem(group="Personalize", name="BgListPageLight", default="")
-    bgListPageDark = ConfigItem(group="Personalize", name="BgListPageDark", default="")
-    bgUnitPage = ConfigItem(group="Personalize", name="BgUnitPage", default=False, validator=BoolValidator())
-    bgUnitPageOpacity = RangeConfigItem(
-        group="Personalize", name="BgUnitPageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgUnitPageLight = ConfigItem(group="Personalize", name="BgUnitPageLight", default="")
-    bgUnitPageDark = ConfigItem(group="Personalize", name="BgUnitPageDark", default="")
-    bgSettingPage = ConfigItem(group="Personalize", name="BgSettingPage", default=False, validator=BoolValidator())
-    bgSettingPageOpacity = RangeConfigItem(
-        group="Personalize", name="BgSettingPageOpacity", default=100, validator=RangeValidator(1, 100)
-    )
-    bgSettingPageLight = ConfigItem(group="Personalize", name="BgSettingPageLight", default="")
-    bgSettingPageDark = ConfigItem(group="Personalize", name="BgSettingPageDark", default="")
 
     titleTabBar = ConfigItem(group="Personalize", name="TitleTabBar", default=False, validator=BoolValidator())
     titleTabBarMovable = ConfigItem(
@@ -150,15 +119,29 @@ class Config(QConfig):
     botOfflineEmailNotice = ConfigItem(
         group="Event", name="BotOfflineEmailNotice", default=False, validator=BoolValidator()
     )
+    botOfflineWebHookNotice = ConfigItem(
+        group="Event", name="BotOfflineWebHookNotice", default=False, validator=BoolValidator()
+    )
 
     # 邮件项
     emailReceiver = ConfigItem(group="Email", name="EmailReceiver", default="")
     emailSender = ConfigItem(group="Email", name="EmailSender", default="")
     emailToken = ConfigItem(group="Email", name="EmailToken", default="")
     emailStmpServer = ConfigItem(group="Email", name="EmailStmpServer", default="")
+    emailStmpPort = RangeConfigItem(
+        group="Email", name="EmailStmpPort", default=465, validator=RangeValidator(1, 65535)
+    )
+    emailEncryption = OptionsConfigItem(
+        group="Email",
+        name="EmailEncryption",
+        default="SSL",
+        validator=OptionsValidator(["SSL", "TLS", "无加密"]),
+    )
 
-    # 隐藏提示项
-    HideUsGoBtnTips = ConfigItem(group="HideTips", name="HideUsingGoBtnTips", default=False, validator=BoolValidator())
+    # WebHook 项
+    webHookUrl = ConfigItem(group="WebHook", name="WebHookUrl", default="")
+    webHookSecret = ConfigItem(group="WebHook", name="WebHookSecret", default="")
+    webHookJson = ConfigItem(group="WebHook", name="WebHookJson", default="")
 
     def __init__(self):
         super().__init__()

@@ -1,0 +1,8 @@
+PlainTextEdit {
+    font-family: JetBrains Mono, Alimama FangYuanTi VF;
+}
+
+PlainTextEdit::selection {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}

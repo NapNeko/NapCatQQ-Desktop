@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 # 第三方库导入
 import psutil
@@ -24,7 +24,8 @@ from src.Ui.common import CodeEditor, LogHighlighter
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.AddPage.enum import ConnectType
-from src.Core.Utils.email import Email
+from src.Core.Utils.email import offline_email
+from src.Core.Utils.webhook import offline_webhook
 from src.Ui.AddPage.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
@@ -33,12 +34,10 @@ from src.Ui.AddPage.msg_box import (
     WebsocketServerConfigDialog,
 )
 from src.Ui.common.info_bar import info_bar, error_bar, success_bar, warning_bar
-from src.Ui.common.separator import Separator
 from src.Core.Utils.RunNapCat import create_napcat_process
-from src.Ui.AddPage.signal_bus import addPageSingalBus
 from src.Ui.common.message_box import AskBox, ImageBox
 from src.Core.Config.ConfigModel import Config
-from src.Core.Config.OperateConfig import delete_config, update_config, check_duplicate_bot
+from src.Core.Config.OperateConfig import delete_config, update_config
 from src.Ui.BotListPage.signal_bus import botListPageSignalBus
 from src.Ui.BotListPage.BotWidget.meg_box import ChooseConfigTypeDialog
 from src.Ui.BotListPage.BotWidget.BotSetupPage import BotSetupPage
@@ -296,14 +295,19 @@ class BotWidget(QWidget):
             # 如果匹配不成功, 则退出
             return
 
-        if not self.config.advanced.offlineNotice and cfg.get(cfg.botOfflineEmailNotice):
+        if not self.config.advanced.offlineNotice:
             # 如果未开启通知, 退出
             return
 
-        # 创建 Email 进行发件
-        self.email = Email(self.config)
-        self.email.error_single.connect(error_bar)
-        self.email.start()
+        if cfg.get(cfg.botOfflineEmailNotice):
+            # 如果开启了邮件通知, 则发送邮件
+            offline_email(self.config)
+        elif cfg.get(cfg.botOfflineWebHookNotice):
+            # 如果开启了 WebHook 通知, 则发送 WebHook
+            offline_webhook(self.config)
+        else:
+            # 否则显示提示
+            warning_bar(self.tr(f"账号 {self.config.bot.QQID} 已离线, 请前往 NapCat 日志 查看详情"))
 
     @Slot()
     def _updateButtonSlot(self) -> None:

@@ -12,7 +12,6 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
 from src.Ui.AddPage.enum import ConnectType
-from src.Ui.common.widget import BackgroundWidget
 from src.Ui.AddPage.connect import ConnectWidget
 from src.Ui.AddPage.msg_box import (
     ChooseConfigTypeDialog,
@@ -35,7 +34,7 @@ if TYPE_CHECKING:
 
 
 @singleton
-class AddWidget(BackgroundWidget):
+class AddWidget(QWidget):
     """
     ## 窗体中 Add Bot 对应的 Widget
     """
@@ -54,14 +53,6 @@ class AddWidget(BackgroundWidget):
             - vBoxLayout : 窗体内的总布局
         """
         super().__init__()
-        # 传入配置
-        self.bgEnabledConfig = cfg.bgAddPage
-        self.bgPixmapLightConfig = cfg.bgAddPageLight
-        self.bgPixmapDarkConfig = cfg.bgAddPageDark
-        self.bgOpacityConfig = cfg.bgAddPageOpacity
-
-        # 调用方法
-        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """

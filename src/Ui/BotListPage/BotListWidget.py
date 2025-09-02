@@ -2,12 +2,11 @@
 # 标准库导入
 from typing import TYPE_CHECKING, Self, Optional
 
-from PySide6.QtWidgets import QVBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
 from src.Core.Config import cfg
 from src.Ui.StyleSheet import StyleSheet
-from src.Ui.common.widget import BackgroundWidget
 from src.Core.Utils.singleton import singleton
 from src.Ui.BotListPage.BotList import BotList
 from src.Ui.common.stacked_widget import TransparentStackedWidget
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
 
 
 @singleton
-class BotListWidget(BackgroundWidget):
+class BotListWidget(QWidget):
     view: Optional[TransparentStackedWidget]
     topCard: Optional[BotTopCard]
     botList: Optional[BotList]
@@ -27,15 +26,6 @@ class BotListWidget(BackgroundWidget):
 
     def __init__(self) -> None:
         super().__init__()
-
-        # 传入配置
-        self.bgEnabledConfig = cfg.bgListPage
-        self.bgPixmapLightConfig = cfg.bgListPageLight
-        self.bgPixmapDarkConfig = cfg.bgListPageDark
-        self.bgOpacityConfig = cfg.bgListPageOpacity
-
-        # 调用方法
-        super().updateBgImage()
 
     def initialize(self, parent: "MainWindow") -> Self:
         """

@@ -1,11 +1,14 @@
 SetupWidget,
 SetupTopCard,
-SetupScrollArea,
+General,
+Personalization,
 #SetupView {
     background: transparent;
     border-color: transparent;
 }
 
+General,
+Personalization,
 SetupScrollArea,
 #SetupView {
     background: transparent;

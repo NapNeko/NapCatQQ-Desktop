@@ -1,27 +1,66 @@
-# Ignore binary and virtual environment directories
+### 开发环境 ###
+# 虚拟环境和开发工具配置
 venv/
-
-# Ignore configuration and temporary files
-config/
-tmp/
-dlc/
-.vscode/
+.venv/
+.pdm-python/
+.python-version
 .idea/
-test/
+.vscode/
+
+### 依赖管理 ###
+# Python 依赖和锁定文件
+pdm.lock
+.pdm-python
+Pipfile.lock
+poetry.lock
+requirements.txt
+
+### 构建产物 ###
+# 构建和发布生成的文件
 build/
-
-# Ignore specific application directories and files
-NapCat/
-PatchConfig.json
-
-# Ignore build artifacts and logs
-/src/pysidedeploy.spec
-/log/
-
-# Ignore Python cache files
+dist/
+*.egg-info/
+*.egg
 __pycache__/
 *$py.class
 
-# Ignore PDM Python environment file
-.pdm-python
-pdm.lock
+### 日志和临时文件 ###
+log/
+logs/
+*.log
+tmp/
+*.tmp
+*.temp
+
+### 配置文件 ###
+# 本地配置和敏感文件
+config/
+*.local
+*.env
+.env
+.env.local
+PatchConfig.json
+
+### 特定项目忽略 ###
+# 项目特定目录和文件
+NapCat/
+/src/pysidedeploy.spec
+
+### 测试相关 ###
+test/
+tests/
+*.test
+*.test.py
+
+### 操作系统生成文件 ###
+# macOS
+.DS_Store
+._*
+
+# Windows
+Thumbs.db
+ehthumbs*.db
+[Dd]esktop.ini
+
+# Linux
+*~
