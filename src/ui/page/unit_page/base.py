@@ -28,6 +28,7 @@ from PySide6.QtCore import Qt, QUrl, QSize
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
+from src.ui.common.icon import StaticIcon
 from src.ui.page.unit_page.status import StatusLabel, ButtonStatus, ProgressRingStatus
 from src.ui.components.code_editor import UpdateLogExhibit
 
@@ -83,7 +84,7 @@ class DisplayCard(SimpleCardWidget):
         super().__init__(parent)
 
         # 创建控件
-        self.iconLabel = ImageLabel(":/Global/logo.png", self)
+        self.iconLabel = ImageLabel(StaticIcon.LOGO.path(), self)
         self.nameLabel = TitleLabel("Unknown", self)
         self.hyperLabel = HyperlinkLabel("Unknown", self)
         self.statusLabel = BodyLabel("Unknown", self)

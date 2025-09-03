@@ -3,14 +3,14 @@
 from typing import TYPE_CHECKING, Self, Optional
 
 # 项目内模块导入
-from src.ui.common.style_sheet import StyleSheet
 from src.core.utils.singleton import singleton
-from src.ui.page.home_page.display_view import DisplayViewWidget
+from src.ui.common.style_sheet import StyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.ui.page.home_page.display_view import DisplayViewWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.ui.window.main_window import main_window
 
 
 @singleton

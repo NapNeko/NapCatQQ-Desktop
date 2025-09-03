@@ -5,17 +5,17 @@ from typing import TYPE_CHECKING, Self
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
-from src.ui.common.style_sheet import StyleSheet
 from src.core.utils.singleton import singleton
-from src.ui.page.setup_page.general import General
+from src.ui.common.style_sheet import StyleSheet
 from src.ui.components.code_editor import CodeExibit
+from src.ui.page.setup_page.general import General
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.setup_page.setup_top_card import SetupTopCard
 from src.ui.page.setup_page.personalization import Personalization
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.ui.window.main_window import main_window
 
 
 @singleton

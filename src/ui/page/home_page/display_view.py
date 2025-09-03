@@ -7,8 +7,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.ui.common.style_sheet import StyleSheet
+from src.ui.common.icon import StaticIcon
 from src.core.network.urls import Urls
+from src.ui.common.style_sheet import StyleSheet
 
 
 class DisplayViewWidget(QWidget):
@@ -28,8 +29,8 @@ class DisplayViewWidget(QWidget):
         self.buttonGroup = ButtonGroup(self)
 
         # 设置控件
-        self.logoImage.setImage(":Global/logo.png")
-        self.logoImage.scaledToWidth(self.width() // 5)
+        self.logoImage.setImage(StaticIcon.NAPCAT.path())
+        self.logoImage.scaledToHeight(self.width() // 4)
 
         # 进行布局
         self._setLayout()
@@ -59,7 +60,7 @@ class DisplayViewWidget(QWidget):
         """
         super().resizeEvent(event)
         # 缩放 Logo
-        self.logoImage.scaledToWidth(self.width() // 5)
+        self.logoImage.scaledToHeight(self.width() // 4)
         # 缩放字体
         new_font_size = max(28, self.width() // 30)
         setFont(self.logoLabel, new_font_size, QFont.Weight.DemiBold)

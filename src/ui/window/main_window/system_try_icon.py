@@ -17,7 +17,7 @@ from src.ui.components.info_bar import success_bar
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window.window import MainWindow
+    from src.ui.window.main_window.window import main_window
 
 
 class SystemTrayIcon(QSystemTrayIcon):

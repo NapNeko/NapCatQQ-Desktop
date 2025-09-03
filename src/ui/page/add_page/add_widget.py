@@ -2,11 +2,11 @@
 # 标准库导入
 from typing import TYPE_CHECKING, Self, Optional
 
-# 第三方库导入
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
+from src.core.utils.singleton import singleton
 from src.ui.common.style_sheet import StyleSheet
 from src.ui.page.add_page.enum import ConnectType
 from src.ui.page.add_page.connect import ConnectWidget
@@ -19,15 +19,14 @@ from src.ui.page.add_page.msg_box import (
     WebsocketServerConfigDialog,
 )
 from src.ui.page.add_page.advanced import AdvancedWidget
-from src.core.utils.singleton import singleton
 from src.ui.page.add_page.bot_widget import BotWidget
 from src.ui.page.add_page.signal_bus import addPageSingalBus
-from src.ui.page.add_page.add_top_card import AddTopCard
 from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.ui.page.add_page.add_top_card import AddTopCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.ui.window.main_window import main_window
 
 
 @singleton

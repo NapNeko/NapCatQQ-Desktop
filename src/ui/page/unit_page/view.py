@@ -6,18 +6,18 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
+from src.core.utils.singleton import singleton
 from src.ui.common.style_sheet import StyleSheet
 from src.ui.page.unit_page.top import TopWidget
-from src.ui.page.unit_page.qq_page import QQPage
-from src.ui.page.unit_page.napcat_desktop_page import NCDPage
-from src.core.utils.singleton import singleton
 from src.core.utils.get_version import GetVersion
-from src.ui.page.unit_page.napcat_page import NapCatPage
+from src.ui.page.unit_page.qq_page import QQPage
 from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.ui.page.unit_page.napcat_page import NapCatPage
+from src.ui.page.unit_page.napcat_desktop_page import NCDPage
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.ui.window.main_window import main_window
 
 
 @singleton

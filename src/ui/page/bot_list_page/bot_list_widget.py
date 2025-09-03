@@ -5,15 +5,15 @@ from typing import TYPE_CHECKING, Self, Optional
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
-from src.ui.common.style_sheet import StyleSheet
 from src.core.utils.singleton import singleton
-from src.ui.page.bot_list_page.bot_list import BotList
+from src.ui.common.style_sheet import StyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.ui.page.bot_list_page.bot_list import BotList
 from src.ui.page.bot_list_page.bot_top_card import BotTopCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.ui.window.main_window import main_window
 
 
 @singleton

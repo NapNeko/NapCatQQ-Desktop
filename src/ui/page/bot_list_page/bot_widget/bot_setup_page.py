@@ -12,14 +12,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
+from src.core.config.config_model import Config
 from src.ui.page.add_page.connect import ConnectWidget
 from src.ui.page.add_page.advanced import AdvancedWidget
 from src.ui.page.add_page.bot_widget import BotWidget as BotConfigWidget
-from src.core.config.config_model import Config
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.page.bot_list_page.bot_widget import BotWidget
+    from src.ui.page.bot_list_page.bot_widget import bot_widget
 
 
 class AppCard(CardWidget):

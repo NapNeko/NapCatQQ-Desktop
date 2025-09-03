@@ -12,13 +12,13 @@ from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtCore import Qt, QPoint, QRectF, QPointF
 
 # 项目内模块导入
-from src.ui.common.icon import NapCatDesktopIcon
 from src.core.config import cfg
+from src.ui.common.icon import NapCatDesktopIcon
 from src.core.config.enum import CloseActionEnum
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.ui.window.main_window import main_window
 
 
 class CustomTitleBar(MSFluentTitleBar):

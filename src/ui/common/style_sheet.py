@@ -23,11 +23,4 @@ class StyleSheet(StyleSheetBase, Enum):
 
     def path(self, theme=Theme.AUTO):
         theme = qconfig.theme if theme == Theme.AUTO else theme
-        return f":QSS/qss/{theme.value.lower()}/{self.value}.qss"
-
-
-class StaticStyleSheet(StyleSheetBase, Enum):
-    """静态样式表"""
-
-    def path(self, theme=Theme.AUTO):
-        return f":QSS/qss/static/{self.value}.qss"
+        return f":style/style/{theme.value.lower()}/{self.value}.qss"

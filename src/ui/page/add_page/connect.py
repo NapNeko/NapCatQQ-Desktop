@@ -17,7 +17,6 @@ from src.ui.page.add_page.card import (
     WebsocketClientConfigCard,
     WebsocketServersConfigCard,
 )
-from src.ui.page.add_page.signal_bus import addPageSingalBus
 from src.core.config.config_model import (
     ConnectConfig,
     HttpClientsConfig,
@@ -27,6 +26,7 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
+from src.ui.page.add_page.signal_bus import addPageSingalBus
 
 
 class ConnectWidget(QStackedWidget):
@@ -107,16 +107,16 @@ class DefaultPage(QWidget):
         super().__init__(parent)
 
         self.images = [
-            ":/FuFuFace/image/FuFuFace/g_fufu_01.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_02.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_03.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_04.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_05.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_06.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_07.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_08.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_09.gif",
-            ":/FuFuFace/image/FuFuFace/g_fufu_10.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_01.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_02.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_03.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_04.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_05.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_06.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_07.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_08.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_09.gif",
+            ":/emoticons/image/emoticons/fu_fu/g_fufu_10.gif",
         ]
 
         self.imageLabel = ImageLabel(self)
