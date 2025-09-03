@@ -18,13 +18,13 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
-from src.ui.Icon import StaticIcon as SI
-from src.ui.Icon import NapCatDesktopIcon as DI
-from src.ui.common.info_bar import success_bar
-from src.ui.UnitPage.status import StatusLabel, ButtonStatus, ProgressRingStatus
+from src.ui.common.icon import StaticIcon as SI
+from src.ui.common.icon import NapCatDesktopIcon as DI
+from src.ui.components.info_bar import success_bar
+from src.ui.page.unit_page.status import StatusLabel, ButtonStatus, ProgressRingStatus
 from src.core.utils.path_func import PathFunc
 from src.core.network.urls import Urls
-from src.ui.common.message_box import FolderBox
+from src.ui.components.message_box import FolderBox
 from src.core.utils.install_func import QQInstall, NapCatInstall
 from src.core.network.downloader import QQDownloader, GithubDownloader
 
@@ -185,7 +185,7 @@ class InstallQQPage(InstallPageBase):
         ## 安装槽函数
         """
         # 项目内模块导入
-        from src.ui.page.guide_window.guide_window import GuideWindow
+        from src.ui.window.guide_window.guide_window import GuideWindow
 
         folder_box = FolderBox(self.tr("选择安装路径"), GuideWindow())
         folder_box.cancelButton.hide()
@@ -210,7 +210,7 @@ class InstallQQPage(InstallPageBase):
         ## 安装完成槽函数
         """
         # 项目内模块导入
-        from src.ui.page.guide_window.guide_window import GuideWindow
+        from src.ui.window.guide_window.guide_window import GuideWindow
 
         success_bar(self.tr("安装完成"), parent=GuideWindow())
         GuideWindow().on_next_page()
@@ -259,7 +259,7 @@ class InstallNapCatQQPage(InstallPageBase):
         ## 安装完成槽函数
         """
         # 项目内模块导入
-        from src.ui.page.guide_window.guide_window import GuideWindow
+        from src.ui.window.guide_window.guide_window import GuideWindow
 
         success_bar(self.tr("安装完成"), parent=GuideWindow())
         GuideWindow().on_next_page()

@@ -6,8 +6,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.ui.Icon import NapCatDesktopIcon
-from src.ui.common.input_card import LineEditConfigCard
+from src.ui.common.icon import NapCatDesktopIcon
+from src.ui.components.input_card import LineEditConfigCard
 from src.core.config.config_model import BotConfig
 
 
@@ -18,7 +18,7 @@ class BotWidget(ScrollArea):
 
     def __init__(self, parent=None, config: BotConfig = None) -> None:
         super().__init__(parent=parent)
-        self.setObjectName("BotWidget")
+        self.setObjectName("bot_widget")
         self.view = QWidget()
         self.cardLayout = ExpandLayout(self)
 

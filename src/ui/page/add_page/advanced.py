@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.ui.common.input_card import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
+from src.ui.components.input_card import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
 from src.core.config.config_model import AdvancedConfig
 
 

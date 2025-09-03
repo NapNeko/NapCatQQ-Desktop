@@ -7,7 +7,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
-from src.ui.StyleSheet import StyleSheet
+from src.ui.common.style_sheet import StyleSheet
 from src.ui.page.add_page.enum import ConnectType
 from src.ui.page.add_page.connect import ConnectWidget
 from src.ui.page.add_page.msg_box import (
@@ -23,11 +23,11 @@ from src.core.utils.singleton import singleton
 from src.ui.page.add_page.bot_widget import BotWidget
 from src.ui.page.add_page.signal_bus import addPageSingalBus
 from src.ui.page.add_page.add_top_card import AddTopCard
-from src.ui.common.stacked_widget import TransparentStackedWidget
+from src.ui.components.stacked_widget import TransparentStackedWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.MainWindow import MainWindow
+    from src.ui.window.main_window import MainWindow
 
 
 @singleton
@@ -51,7 +51,7 @@ class AddWidget(QWidget):
         """
         super().__init__()
 
-    def initialize(self, parent: "MainWindow") -> Self:
+    def initialize(self, parent: "main_window") -> Self:
         """
         ## 初始化 AddWidget 所需要的控件并进行配置
         """
@@ -130,7 +130,7 @@ class AddWidget(QWidget):
     def _onAddConnectConfigButtonClicked(self) -> None:
         """添加连接配置按钮的槽函数"""
         # 项目内模块导入
-        from src.ui.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         ChooseConfigTypeDialog(MainWindow()).exec()
 
@@ -138,7 +138,7 @@ class AddWidget(QWidget):
     def _onShowTypeDialog(self, connectType: ConnectType) -> None:
         """添加连接配置按钮的槽函数"""
         # 项目内模块导入
-        from src.ui.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         if (
             dialog := {

@@ -14,9 +14,9 @@ from qfluentwidgets.common.file import QFluentFile
 from PySide6.QtCore import QFile, Signal, QObject, QRunnable, QThreadPool
 
 # 项目内模块导入
-from src.Core.Config import cfg
-from src.Ui.common.info_bar import error_bar, success_bar
-from src.Core.Config.ConfigModel import Config
+from src.core.config import cfg
+from src.ui.components.info_bar import error_bar, success_bar
+from src.core.config.config_model import Config
 
 
 class EncryptionType(Enum):

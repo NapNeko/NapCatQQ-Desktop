@@ -20,8 +20,8 @@ from PySide6.QtWidgets import QWidget, QGridLayout
 from src.core.config import cfg
 from src.core.network.email import EncryptionType, test_email
 from src.core.network.webhook import test_webhook
-from src.ui.common.info_bar import success_bar, warning_bar
-from src.ui.common.input_card.generic_card import (
+from src.ui.components.info_bar import success_bar, warning_bar
+from src.ui.components.input_card.generic_card import (
     ShowDialogCard,
     SwitchConfigCard,
     ComboBoxConfigCard,

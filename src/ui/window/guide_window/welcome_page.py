@@ -6,7 +6,7 @@ from qframelesswindow import FramelessWindow
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.ui.Icon import StaticIcon
+from src.ui.common.icon import StaticIcon
 from src.core.network.urls import Urls
 
 

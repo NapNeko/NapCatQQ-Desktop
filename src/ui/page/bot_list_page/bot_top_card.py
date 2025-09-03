@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.page.bot_list_page.BotListWidget import BotListWidget
+    from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
 
 class BotTopCard(QWidget):
@@ -73,7 +73,7 @@ class BotTopCard(QWidget):
         """
         if index == 0:
             # 项目内模块导入
-            from src.ui.page.bot_list_page.BotListWidget import BotListWidget
+            from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
             BotListWidget().view.setCurrentIndex(index)
             self.updateListButton.show()
@@ -85,7 +85,7 @@ class BotTopCard(QWidget):
         ## 更新列表按钮的槽函数
         """
         # 项目内模块导入
-        from src.ui.page.bot_list_page.BotListWidget import BotListWidget
+        from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
         BotListWidget().botList.updateList()
 

@@ -5,7 +5,7 @@ from PySide6.QtCore import QUrl, Slot
 
 # 项目内模块导入
 from src.ui.page.bot_list_page import BotListWidget
-from src.ui.page.unit_page.Base import PageBase
+from src.ui.page.unit_page.base import PageBase
 from src.ui.components.info_bar import info_bar, error_bar, success_bar
 from src.ui.page.unit_page.status import ButtonStatus
 from src.core.utils.path_func import PathFunc
@@ -75,7 +75,7 @@ class NapCatPage(PageBase):
         """
         if BotListWidget().getBotIsRun():
             # 项目内模块导入
-            from src.ui.window.MainWindow import MainWindow
+            from src.ui.window.main_window import MainWindow
 
             box = AskBox(
                 self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), MainWindow()

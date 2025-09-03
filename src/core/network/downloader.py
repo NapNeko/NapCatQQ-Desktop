@@ -7,10 +7,10 @@ import httpx
 from PySide6.QtCore import QUrl, Signal, QThread
 
 # 项目内模块导入
-from src.Core.Utils.logger import logger
-from src.Ui.UnitPage.status import ButtonStatus, ProgressRingStatus
-from src.Core.Utils.PathFunc import PathFunc
-from src.Core.NetworkFunc.Urls import Urls
+from src.core.utils.logger import logger
+from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus
+from src.core.utils.path_func import PathFunc
+from src.core.network.urls import Urls
 
 
 class DownloaderBase(QThread):

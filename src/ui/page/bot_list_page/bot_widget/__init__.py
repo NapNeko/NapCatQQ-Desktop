@@ -16,7 +16,8 @@ from PySide6.QtCore import Qt, Slot, QProcess, QRegularExpression
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
-from src.ui.components import CodeEditor, LogHighlighter
+from src.ui.components.code_editor.editor import CodeEditor
+from src.ui.components.code_editor.highlight import LogHighlighter
 from src.core.config import cfg
 from src.ui.common.style_sheet import StyleSheet
 from src.ui.page.add_page.enum import ConnectType
@@ -35,8 +36,8 @@ from src.ui.components.message_box import AskBox, ImageBox
 from src.core.config.config_model import Config
 from src.core.config.operate_config import delete_config, update_config
 from src.ui.page.bot_list_page.signal_bus import botListPageSignalBus
-from src.ui.page.bot_list_page.BotWidget.meg_box import ChooseConfigTypeDialog
-from src.ui.page.bot_list_page.BotWidget.BotSetupPage import BotSetupPage
+from src.ui.page.bot_list_page.bot_widget.meg_box import ChooseConfigTypeDialog
+from src.ui.page.bot_list_page.bot_widget.bot_setup_page import BotSetupPage
 
 
 class BotWidget(QWidget):
@@ -269,7 +270,7 @@ class BotWidget(QWidget):
         """
         if "二维码已保存到" in data:
             # 项目内模块导入
-            from src.ui.window.MainWindow import MainWindow
+            from src.ui.window.main_window import MainWindow
 
             pattern = rf"[a-zA-Z]:\\(?:[^\\\s]+\\)*[^\\\s]+"
             if not (match := QRegularExpression(pattern).match(data)).hasMatch():
@@ -323,7 +324,7 @@ class BotWidget(QWidget):
         ## 删除机器人配置按钮
         """
         # 项目内模块导入
-        from src.ui.window.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         if self.isRun:
             # 如果 NC 正在运行, 则提示停止运行后删除配置
@@ -337,7 +338,7 @@ class BotWidget(QWidget):
         ).exec():
             # 询问用户是否确认删除, 确认删除执行删除操作
             # 项目内模块导入
-            from src.ui.page.bot_list_page.BotListWidget import BotListWidget
+            from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
             if delete_config(self.config):
                 # 删除成功后的操作
@@ -350,7 +351,7 @@ class BotWidget(QWidget):
 
                 # 处理 TabBar
                 # 项目内模块导入
-                from src.ui.window.MainWindow.Window import MainWindow
+                from src.ui.window.main_window.window import MainWindow
 
                 MainWindow().title_bar.tabBar.removeTabByKey(f"{self.config.bot.QQID}")
             else:
@@ -364,7 +365,7 @@ class BotWidget(QWidget):
         if self.view.currentWidget() in [self.botInfoPage, self.botSetupPage, self.botLogPage]:
             # 判断当前处于哪个页面
             # 项目内模块导入
-            from src.ui.page.bot_list_page.BotListWidget import BotListWidget
+            from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
             BotListWidget().view.setCurrentIndex(0)
             BotListWidget().topCard.breadcrumbBar.setCurrentIndex(0)
@@ -376,7 +377,7 @@ class BotWidget(QWidget):
     def _onAddConnectConfigButtonClicked(self) -> None:
         """添加连接配置按钮的槽函数"""
         # 项目内模块导入
-        from src.ui.window.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         ChooseConfigTypeDialog(MainWindow()).exec()
 
@@ -384,7 +385,7 @@ class BotWidget(QWidget):
     def _onShowTypeDialog(self, connectType: ConnectType) -> None:
         """添加连接配置按钮的槽函数"""
         # 项目内模块导入
-        from src.ui.window.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         if (
             dialog := {

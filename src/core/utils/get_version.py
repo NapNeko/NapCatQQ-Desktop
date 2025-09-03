@@ -9,8 +9,8 @@ from PySide6.QtCore import QUrl, Slot, Signal, QObject, QThread
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.utils.logger import logger
-from src.core.utils.PathFunc import PathFunc
-from src.core.network.Urls import Urls
+from src.core.utils.path_func import PathFunc
+from src.core.network.urls import Urls
 
 
 class GetVersion(QObject):

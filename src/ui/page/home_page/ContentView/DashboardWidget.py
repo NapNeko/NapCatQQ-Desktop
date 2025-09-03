@@ -99,7 +99,7 @@ class DashboardWidget(QWidget):
     def _showSelectReposMsgBox(self) -> None:
         """显示选择打开哪个仓库页面"""
         # 项目内模块导入
-        from src.ui.window.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         HyperlinkBox(
             self.tr("查看仓库"),
@@ -115,7 +115,7 @@ class DashboardWidget(QWidget):
     def _showSelectFeedbackMsgBox(self) -> None:
         """显示选择打开哪个仓库的 issue 页面"""
         # 项目内模块导入
-        from src.ui.window.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         HyperlinkBox(
             self.tr("反馈渠道"),

@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 # 项目内模块导入
-from src.ui.common.code_editor import JsonEditor
+from src.ui.components.code_editor import JsonEditor
 
 
 class JsonTemplateEditConfigCard(QFrame):
@@ -291,6 +291,6 @@ class ShowDialogCard(SettingCard):
 
     def showDialog(self) -> None:
         # 项目内模块导入
-        from src.ui.window.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         self._dialog(MainWindow()).exec()

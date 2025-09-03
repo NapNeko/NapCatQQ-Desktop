@@ -26,13 +26,13 @@ from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.MainWindow.Window import MainWindow
+    from src.ui.window.main_window.window import MainWindow
 
 
 class TextInputBox(MessageBoxBase):
     """文本输入框"""
 
-    def __init__(self, parent: "MainWindow", placeholder_text: str = "Enter...") -> None:
+    def __init__(self, parent: "main_window", placeholder_text: str = "Enter...") -> None:
         """
         ## 初始化类, 创建必要控件
 
@@ -64,7 +64,7 @@ class AskBox(MessageBoxBase):
         - parent: 消息框父类
     """
 
-    def __init__(self, title: str, content: str, parent: "MainWindow") -> None:
+    def __init__(self, title: str, content: str, parent: "main_window") -> None:
         """初始化类, 创建必要控件"""
         super().__init__(parent=parent)
         # 创建控件
@@ -82,7 +82,7 @@ class AskBox(MessageBoxBase):
 class ImageBox(MessageBoxBase):
     """图片展示框"""
 
-    def __init__(self, title: str, image: str | QImage | QPixmap, parent: "MainWindow") -> None:
+    def __init__(self, title: str, image: str | QImage | QPixmap, parent: "main_window") -> None:
         """
         ## 初始化类, 创建必要控件
 
@@ -146,7 +146,7 @@ class ImageBox(MessageBoxBase):
 class HyperlinkBox(MessageBoxBase):
     """超链接消息框"""
 
-    def __init__(self, title: str, content: str, hyperlinks: List[Dict[str, QUrl]], parent: "MainWindow") -> None:
+    def __init__(self, title: str, content: str, hyperlinks: List[Dict[str, QUrl]], parent: "main_window") -> None:
         """
         ## 初始化类, 创建必要控件
 
@@ -183,7 +183,7 @@ class HyperlinkBox(MessageBoxBase):
 class FolderBox(MessageBoxBase):
     """文件夹消息框"""
 
-    def __init__(self, title: str, parent: "MainWindow") -> None:
+    def __init__(self, title: str, parent: "main_window") -> None:
         """
         ## 初始化类, 创建必要控件
 

@@ -19,7 +19,7 @@ from src.core.config.config_model import Config
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.page.bot_list_page.BotWidget import BotWidget
+    from src.ui.page.bot_list_page.bot_widget import BotWidget
 
 
 class AppCard(CardWidget):
@@ -66,7 +66,7 @@ class BotSetupPage(QWidget):
     ## 窗体 Bot List 中, 对应 QQ 的 BotSetupPage
     """
 
-    def __init__(self, config: Config, view: "BotWidget") -> None:
+    def __init__(self, config: Config, view: "bot_widget") -> None:
         """
         ## 初始化 BotSetupPage
         """

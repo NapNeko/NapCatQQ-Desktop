@@ -18,12 +18,12 @@ from src.core.config.enum import CloseActionEnum
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.MainWindow import MainWindow
+    from src.ui.window.main_window import MainWindow
 
 
 class CustomTitleBar(MSFluentTitleBar):
 
-    def __init__(self, parent: "MainWindow") -> None:
+    def __init__(self, parent: "main_window") -> None:
         """
         ## 自定义一个标题栏控件
         """

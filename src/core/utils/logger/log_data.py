@@ -4,7 +4,7 @@ from datetime import datetime
 from dataclasses import field, dataclass
 
 # 项目内模块导入
-from src.Core.Utils.logger.log_enum import LogType, LogLevel, LogSource
+from src.core.utils.logger.log_enum import LogType, LogLevel, LogSource
 
 
 @dataclass(frozen=True)

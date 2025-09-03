@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, Property, QEasingCurve, QPropertyAnimation
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.ui.common.separator import Separator
+from src.ui.components.separator import Separator
 from src.core.network.urls import Urls
 
 
@@ -216,7 +216,7 @@ class NextCard(Card):
         """鼠标点击事件"""
         if event.button() == Qt.MouseButton.LeftButton:
             # 项目内模块导入
-            from src.ui.page.guide_window.guide_window import GuideWindow
+            from src.ui.window.guide_window.guide_window import GuideWindow
 
             GuideWindow().close()
         super().mousePressEvent(event)

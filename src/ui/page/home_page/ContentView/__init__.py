@@ -3,8 +3,8 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
 from src.ui.common.style_sheet import StyleSheet
-from src.ui.page.HomePage.ContentView.ContentTopCard import ContentTopCard
-from src.ui.page.HomePage.ContentView.DashboardWidget import DashboardWidget
+from src.ui.page.home_page.ContentView.ContentTopCard import ContentTopCard
+from src.ui.page.home_page.ContentView.DashboardWidget import DashboardWidget
 
 
 class ContentViewWidget(QWidget):

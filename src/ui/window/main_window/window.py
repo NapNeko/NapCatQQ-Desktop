@@ -12,13 +12,13 @@ from PySide6.QtWidgets import QApplication
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.page.add_page import AddWidget
 from src.core.config import cfg
-from src.ui.page.HomePage import HomeWidget
+from src.ui.page.home_page import HomeWidget
 from src.ui.page.unit_page import UnitWidget
 from src.ui.page.setup_page import SetupWidget
 from src.ui.page.bot_list_page import BotListWidget
 from src.core.utils.singleton import singleton
-from src.ui.window.MainWindow.TitleBar import CustomTitleBar
-from src.ui.window.MainWindow.SystemTryIcon import SystemTrayIcon
+from src.ui.window.main_window.title_bar import CustomTitleBar
+from src.ui.window.main_window.system_try_icon import SystemTrayIcon
 
 
 @singleton

@@ -1,2 +1,2 @@
 # -*- coding: utf-8 -*-
-from src.ui.SetupPage.Setup import SetupWidget
+from .setup import SetupWidget

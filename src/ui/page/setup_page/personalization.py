@@ -22,12 +22,12 @@ from PySide6.QtWidgets import QWidget, QGridLayout
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.ui.common.info_bar import success_bar
-from src.ui.common.input_card.generic_card import ShowDialogCard, SwitchConfigCard, ComboBoxConfigCard
+from src.ui.components.info_bar import success_bar
+from src.ui.components.input_card.generic_card import ShowDialogCard, SwitchConfigCard, ComboBoxConfigCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.MainWindow import MainWindow
+    from src.ui.window.main_window import MainWindow
 
 
 class Personalization(ScrollArea):
@@ -122,7 +122,7 @@ class Personalization(ScrollArea):
         信号处理
         """
         # 项目内模块导入
-        from src.ui.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         # 连接重启提示
         cfg.appRestartSig.connect(lambda: success_bar(self.tr("配置在重启后生效")))
@@ -140,7 +140,7 @@ class Personalization(ScrollArea):
         主题切换槽函数
         """
         # 项目内模块导入
-        from src.ui.page.HomePage import HomeWidget
+        from src.ui.page.home_page import HomeWidget
 
         setTheme(cfg.get(theme), save=True)
         HomeWidget().updateBgImageSize()

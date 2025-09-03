@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.ui.components.info_bar import success_bar
-from src.ui.page.bot_list_page.BotCard import BotCard
+from src.ui.page.bot_list_page.bot_card import BotCard
 from src.core.config.operate_config import read_config
 
 

@@ -8,10 +8,10 @@ from PySide6.QtWidgets import QVBoxLayout, QApplication
 
 # 项目内模块导入
 from src.core.utils.singleton import singleton
-from src.ui.page.guide_window.ask_page import AskPage
-from src.ui.page.guide_window.finsh_page import FinshPage
-from src.ui.page.guide_window.install_page import InstallQQPage, InstallNapCatQQPage
-from src.ui.page.guide_window.welcome_page import WelcomePage
+from src.ui.window.guide_window.ask_page import AskPage
+from src.ui.window.guide_window.finsh_page import FinshPage
+from src.ui.window.guide_window.install_page import InstallQQPage, InstallNapCatQQPage
+from src.ui.window.guide_window.welcome_page import WelcomePage
 
 
 @singleton
@@ -92,7 +92,7 @@ class GuideWindow(FramelessWindow):
         self.hide()
 
         # 项目内模块导入
-        from src.ui.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         MainWindow().initialize()
 

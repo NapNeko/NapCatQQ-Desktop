@@ -5,8 +5,8 @@
 from PySide6.QtCore import QProcess
 
 # 项目内模块导入
-from src.core.utils.PathFunc import PathFunc
-from src.core.config.ConfigModel import Config
+from src.core.utils.path_func import PathFunc
+from src.core.config.config_model import Config
 
 
 def create_napcat_process(config: Config) -> QProcess:

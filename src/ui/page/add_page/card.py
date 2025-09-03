@@ -185,7 +185,7 @@ class HttpServerConfigCard(ConfigCardBase):
     def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
-        from src.ui.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         if (dialog := HttpServerConfigDialog(MainWindow(), self.config)).exec():
             self.config = dialog.getConfig()
@@ -251,7 +251,7 @@ class HttpSSEConfigCard(ConfigCardBase):
     def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
-        from src.ui.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         if (dialog := HttpSSEServerConfigDialog(MainWindow(), self.config)).exec():
             self.config = dialog.getConfig()
@@ -296,7 +296,7 @@ class HttpClientConfigCard(ConfigCardBase):
     def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
-        from src.ui.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         if (dialog := HttpClientConfigDialog(MainWindow(), self.config)).exec():
             self.config = dialog.getConfig()
@@ -362,7 +362,7 @@ class WebsocketServersConfigCard(ConfigCardBase):
     def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
-        from src.ui.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         if (dialog := WebsocketServerConfigDialog(MainWindow(), self.config)).exec():
             self.config = dialog.getConfig()
@@ -421,7 +421,7 @@ class WebsocketClientConfigCard(ConfigCardBase):
     def _onEditButtonClicked(self) -> None:
 
         # 项目内模块导入
-        from src.ui.MainWindow.Window import MainWindow
+        from src.ui.window.main_window.window import MainWindow
 
         if (dialog := WebsocketClientConfigDialog(MainWindow(), self.config)).exec():
             self.config = dialog.getConfig()

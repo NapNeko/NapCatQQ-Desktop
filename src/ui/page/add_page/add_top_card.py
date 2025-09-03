@@ -16,8 +16,8 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.ui.common.info_bar import error_bar, success_bar
-from src.ui.common.separator import Separator
+from src.ui.components.info_bar import error_bar, success_bar
+from src.ui.components.separator import Separator
 from src.ui.page.add_page.signal_bus import addPageSingalBus
 from src.core.config.operate_config import update_config, check_duplicate_bot
 
@@ -115,7 +115,7 @@ class AddTopCard(QWidget):
         # 项目内模块导入
         from src.ui.page.add_page.add_widget import AddWidget
         from src.core.config.config_model import Config
-        from src.ui.page.bot_list_page.BotListWidget import BotListWidget
+        from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
         # 读取配置文件并追加, 判断是否存在相同的 QQID
         config = Config(**AddWidget().getConfig())
@@ -144,7 +144,7 @@ class AddTopCard(QWidget):
         """
         # 项目内模块导入
         from src.ui.page.add_page import AddWidget
-        from src.ui.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         box = MessageBox(
             title=self.tr("确认清除配置"),

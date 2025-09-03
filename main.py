@@ -7,11 +7,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.Ui.Font import FontManager
-from src.Core.Config import cfg
-from src.Ui.resource import resource
-from src.Core.Utils.mutex import SingleInstanceApplication
-from src.Core.Utils.PathFunc import PathFunc
+from src.ui.common.font import FontManager
+from src.core.config import cfg
+from src.core.utils.mutex import SingleInstanceApplication
+from src.core.utils.path_func import PathFunc
+from src.resource import resource
 
 if __name__ == "__main__":
     # 实现单实例应用程序检查
@@ -34,12 +34,12 @@ if __name__ == "__main__":
 
     if cfg.get(cfg.MainWindow):
         # 项目内模块导入
-        from src.Ui.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         MainWindow().initialize()
     else:
         # 项目内模块导入
-        from src.Ui.GuideWindow.guide_window import GuideWindow
+        from src.ui.window.guide_window import GuideWindow
 
         GuideWindow().initialize()
         cfg.set(cfg.MainWindow, True)

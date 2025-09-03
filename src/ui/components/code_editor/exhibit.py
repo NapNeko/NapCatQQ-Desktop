@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import QTextBrowser
 
 # 项目内模块导入
-from src.ui.common.code_editor.editor import CodeEditor
+from src.ui.components.code_editor.editor import CodeEditor
 
 
 class CodeExibit(CodeEditor):

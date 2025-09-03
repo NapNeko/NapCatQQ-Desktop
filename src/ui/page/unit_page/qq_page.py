@@ -7,7 +7,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl, Slot
 
 # 项目内模块导入
-from src.ui.page.unit_page.Base import PageBase
+from src.ui.page.unit_page.base import PageBase
 from src.ui.components.info_bar import info_bar, error_bar, success_bar
 from src.ui.page.unit_page.status import ButtonStatus
 from src.core.utils.path_func import PathFunc
@@ -132,7 +132,7 @@ class QQPage(PageBase):
         ## 安装逻辑
         """
         # 项目内模块导入
-        from src.ui.window.MainWindow import MainWindow
+        from src.ui.window.main_window import MainWindow
 
         success_bar(self.tr("下载成功, 正在安装..."))
 

@@ -5,7 +5,7 @@ from pathlib import Path
 from functools import wraps
 
 # 项目内模块导入
-from src.Core.Utils.logger.log_data import LogPosition
+from src.core.utils.logger.log_data import LogPosition
 
 
 def capture_call_location(func: Callable[..., Any]) -> Callable[..., Any]:

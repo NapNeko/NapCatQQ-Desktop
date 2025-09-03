@@ -6,19 +6,18 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.ui.StyleSheet import StyleSheet
-from src.ui.UnitPage.top import TopWidget
-from src.ui.UnitPage.QQPage import QQPage
-from src.ui.UnitPage.NCDPage import NCDPage
+from src.ui.common.style_sheet import StyleSheet
+from src.ui.page.unit_page.top import TopWidget
+from src.ui.page.unit_page.qq_page import QQPage
+from src.ui.page.unit_page.napcat_desktop_page import NCDPage
 from src.core.utils.singleton import singleton
 from src.core.utils.get_version import GetVersion
-from src.ui.UnitPage.NapCatPage import NapCatPage
-from src.ui.common.stacked_widget import TransparentStackedWidget
+from src.ui.page.unit_page.napcat_page import NapCatPage
+from src.ui.components.stacked_widget import TransparentStackedWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.MainWindow import MainWindow
+    from src.ui.window.main_window import MainWindow
 
 
 @singleton
@@ -31,7 +30,7 @@ class UnitWidget(QWidget):
         self.topCard: Optional[TopWidget] = None
         self.vBoxLayout: Optional[QVBoxLayout] = None
 
-    def initialize(self, parent: "MainWindow") -> Self:
+    def initialize(self, parent: "main_window") -> Self:
         """
         初始化
         """

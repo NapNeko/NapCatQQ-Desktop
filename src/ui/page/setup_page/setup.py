@@ -5,18 +5,17 @@ from typing import TYPE_CHECKING, Self
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.ui.StyleSheet import StyleSheet
+from src.ui.common.style_sheet import StyleSheet
 from src.core.utils.singleton import singleton
-from src.ui.SetupPage.General import General
-from src.ui.common.code_editor import CodeExibit
-from src.ui.common.stacked_widget import TransparentStackedWidget
-from src.ui.SetupPage.SetupTopCard import SetupTopCard
-from src.ui.SetupPage.Personalization import Personalization
+from src.ui.page.setup_page.general import General
+from src.ui.components.code_editor import CodeExibit
+from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.ui.page.setup_page.setup_top_card import SetupTopCard
+from src.ui.page.setup_page.personalization import Personalization
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.MainWindow import MainWindow
+    from src.ui.window.main_window import MainWindow
 
 
 @singleton
@@ -33,7 +32,7 @@ class SetupWidget(QWidget):
     def __init__(self):
         super().__init__()
 
-    def initialize(self, parent: "MainWindow") -> Self:
+    def initialize(self, parent: "main_window") -> Self:
         """
         ## 初始化
         """
@@ -44,7 +43,7 @@ class SetupWidget(QWidget):
 
         # 调整控件
         self.setParent(parent)
-        self.setObjectName("SetupPage")
+        self.setObjectName("setup_page")
         self.view.setObjectName("SetupView")
 
         # 设置布局

@@ -118,27 +118,27 @@
 <context>
     <name>BotList</name>
     <message>
-        <location filename="../../bot_list_page/BotList.py" line="105"/>
+        <location filename="../../bot_list_page/bot_list.py" line="105"/>
         <source>Load the list of bots</source>
         <translation>加載本地機器人列表</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotList.py" line="105"/>
+        <location filename="../../bot_list_page/bot_list.py" line="105"/>
         <source>The list of bots was successfully loaded</source>
         <translation>成功加載本地機器人列表</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotList.py" line="111"/>
+        <location filename="../../bot_list_page/bot_list.py" line="111"/>
         <source>There are no bot configuration items</source>
         <translation>唔~找不到配置</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotList.py" line="111"/>
+        <location filename="../../bot_list_page/bot_list.py" line="111"/>
         <source>You&apos;ll need to add it in the Add bot page</source>
         <translation>你可以點擊側邊欄 添加 按鈕進行添加機器人</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotList.py" line="125"/>
+        <location filename="../../bot_list_page/bot_list.py" line="125"/>
         <source>Unable to load bot list</source>
         <translation>無法加載機器人列表</translation>
     </message>
@@ -159,32 +159,32 @@
 <context>
     <name>BotSetupPage</name>
     <message>
-        <location filename="../../bot_list_page/BotWidget/BotSetupPage.py" line="97"/>
+        <location filename="../../bot_list_page/bot_widget/bot_setup_page.py" line="97"/>
         <source>Bot settings</source>
         <translation>機器人設置</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/BotSetupPage.py" line="97"/>
+        <location filename="../../bot_list_page/bot_widget/bot_setup_page.py" line="97"/>
         <source>Basic settings for the bot</source>
         <translation>機器人基本配置項</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/BotSetupPage.py" line="100"/>
+        <location filename="../../bot_list_page/bot_widget/bot_setup_page.py" line="100"/>
         <source>Connection settings</source>
         <translation>連接設置</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/BotSetupPage.py" line="100"/>
+        <location filename="../../bot_list_page/bot_widget/bot_setup_page.py" line="100"/>
         <source>Settings related to bot connections</source>
         <translation>機器人鏈接配置項</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/BotSetupPage.py" line="103"/>
+        <location filename="../../bot_list_page/bot_widget/bot_setup_page.py" line="103"/>
         <source>Advanced settings</source>
         <translation>高級配置</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/BotSetupPage.py" line="103"/>
+        <location filename="../../bot_list_page/bot_widget/bot_setup_page.py" line="103"/>
         <source>Advanced bot settings</source>
         <translation>機器人高級配置</translation>
     </message>
@@ -192,17 +192,17 @@
 <context>
     <name>BotTopCard</name>
     <message>
-        <location filename="../../bot_list_page/BotTopCard.py" line="28"/>
+        <location filename="../../bot_list_page/bot_top_card.py" line="28"/>
         <source>All the bots you&apos;ve added are here</source>
         <translation>你添加的機器人都在這兒 ╰(￣ω￣ｏ)</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotTopCard.py" line="37"/>
+        <location filename="../../bot_list_page/bot_top_card.py" line="37"/>
         <source>Bot List</source>
         <translation>機器人列表</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotTopCard.py" line="56"/>
+        <location filename="../../bot_list_page/bot_top_card.py" line="56"/>
         <source>Click to refresh the list</source>
         <translation>點擊刷新列表</translation>
     </message>
@@ -210,189 +210,189 @@
 <context>
     <name>BotWidget</name>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="51"/>
+        <location filename="../../add_page/bot_widget.py" line="51"/>
         <source>Bot name</source>
         <translation>機器人名稱</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="51"/>
+        <location filename="../../add_page/bot_widget.py" line="51"/>
         <source>Set your bot name</source>
         <translation>設置你的機器人名稱</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="51"/>
+        <location filename="../../add_page/bot_widget.py" line="51"/>
         <source>Bot 1</source>
         <translation>機器人1號</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="58"/>
+        <location filename="../../add_page/bot_widget.py" line="58"/>
         <source>Bot QQ</source>
         <translation>機器人QQ號</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="58"/>
+        <location filename="../../add_page/bot_widget.py" line="58"/>
         <source>Set your bot QQ</source>
         <translation>設置你的機器人QQ號</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="58"/>
+        <location filename="../../add_page/bot_widget.py" line="58"/>
         <source>123456</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="65"/>
+        <location filename="../../add_page/bot_widget.py" line="65"/>
         <source>Message format</source>
         <translation>消息上報格式</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="65"/>
+        <location filename="../../add_page/bot_widget.py" line="65"/>
         <source>Array is the message group, and string is the cq code string</source>
         <translation>消息上報格式，array為消息組，string為cq碼字符串</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="72"/>
+        <location filename="../../add_page/bot_widget.py" line="72"/>
         <source>Report self message</source>
         <translation>上報自己發送的消息</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="72"/>
+        <location filename="../../add_page/bot_widget.py" line="72"/>
         <source>Whether to report the bot&apos;s own message</source>
         <translation>是否上報自己(機器人)發送的消息</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="78"/>
+        <location filename="../../add_page/bot_widget.py" line="78"/>
         <source>Music signature URL</source>
         <translation>音樂簽名URL</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="78"/>
+        <location filename="../../add_page/bot_widget.py" line="78"/>
         <source>Used to handle music-related requests</source>
         <translation>用於處理音樂相關請求</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="78"/>
+        <location filename="../../add_page/bot_widget.py" line="78"/>
         <source>Can be empty</source>
         <translation>可爲空</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="85"/>
+        <location filename="../../add_page/bot_widget.py" line="85"/>
         <source>Heart interval</source>
         <translation>WS心跳</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="85"/>
+        <location filename="../../add_page/bot_widget.py" line="85"/>
         <source>WebSocket heartbeat interval, in milliseconds</source>
         <translation>WebSocket心跳間隔，單位毫秒</translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="92"/>
+        <location filename="../../add_page/bot_widget.py" line="92"/>
         <source>Access Token</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../add_page/BotWidget.py" line="92"/>
+        <location filename="../../add_page/bot_widget.py" line="92"/>
         <source>Access Token, can be empty</source>
         <translation>鏈接臨牌，持有臨牌才能與機器人通信(可爲空)</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="54"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="54"/>
         <source>Bot Log</source>
         <translation>日志</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="64"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="64"/>
         <source>Bot Setup</source>
         <translation>設置</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="99"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="99"/>
         <source>Startup</source>
         <translation>啓動</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="100"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="100"/>
         <source>Stop</source>
         <translation>停止</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="101"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="101"/>
         <source>Reboot</source>
         <translation>重啓</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="103"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="103"/>
         <source>Update config</source>
         <translation>更新配置</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="130"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="130"/>
         <source>Click Back to list</source>
         <translation>點擊返回機器人列表</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="133"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="133"/>
         <source>Click Back to BotSetup</source>
         <translation>點擊返回機器人設置</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="136"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="136"/>
         <source>Click to show the login QR code</source>
         <translation>點擊顯示登錄二維碼</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="139"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="139"/>
         <source>Click Delete bot configuration</source>
         <translation>點擊刪除機器人</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="185"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="185"/>
         <source>The run command has been executed</source>
         <translation>已啓動</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="185"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="185"/>
         <source>If there is no output for a long time, check the QQ path and NapCat path</source>
         <translation>如果長時間沒有輸出
 請檢查QQ路徑和NapCat路徑o(￣┰￣*)ゞ</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="246"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="246"/>
         <source>Sign-in error</source>
         <translation>登錄錯誤</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="246"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="246"/>
         <source>Quick login error, NapCat has been automatically restarted, the following is the error message
 Quick login error</source>
         <translation>已經爲您重啓NapCat []~(￣▽￣)~*</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="271"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="271"/>
         <source>Login successful!</source>
         <translation>登錄成功</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="271"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="271"/>
         <source>Account {self.config.bot.QQID} login successful!</source>
         <translation>賬戶 {self.config.bot.QQID} 登錄成功!</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="307"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="307"/>
         <source>Update success</source>
         <translation>更新成功!</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="307"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="307"/>
         <source>The updated configuration is successful</source>
         <translation>更新配置成功</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="313"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="313"/>
         <source>Update error</source>
         <translation>更新錯誤</translation>
     </message>
     <message>
-        <location filename="../../bot_list_page/BotWidget/__init__.py" line="313"/>
+        <location filename="../../bot_list_page/bot_widget/__init__.py" line="313"/>
         <source>Data loss within the profile</source>
         <translation>配置文件丟了Σ(っ °Д °;)っ</translation>
     </message>
@@ -400,12 +400,12 @@ Quick login error</source>
 <context>
     <name>ButtonGroup</name>
     <message>
-        <location filename="../../HomePage/DisplayView.py" line="90"/>
+        <location filename="../../home_page/display_view.py" line="90"/>
         <source>GitHub</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../HomePage/DisplayView.py" line="91"/>
+        <location filename="../../home_page/display_view.py" line="91"/>
         <source>Start Using</source>
         <translation></translation>
     </message>
@@ -520,12 +520,12 @@ Quick login error</source>
 <context>
     <name>ContentTopCard</name>
     <message>
-        <location filename="../../HomePage/ContentView/ContentTopCard.py" line="16"/>
+        <location filename="../../home_page/ContentView/ContentTopCard.py" line="16"/>
         <source>NapCat Dashboard</source>
         <translation>NapCat 儀表盤</translation>
     </message>
     <message>
-        <location filename="../../HomePage/ContentView/ContentTopCard.py" line="17"/>
+        <location filename="../../home_page/ContentView/ContentTopCard.py" line="17"/>
         <source>Here you may have the data you&apos;re interested in</source>
         <translation>這裏可能有您感興趣的數據 (❁´◡`❁)</translation>
     </message>

@@ -20,7 +20,7 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.ui.common.input_card.generic_card import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
+from src.ui.components.input_card.generic_card import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
 
 
 class ChooseConfigCard(SimpleCardWidget):

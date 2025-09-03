@@ -17,7 +17,7 @@ from src.ui.components.info_bar import success_bar
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.MainWindow.Window import MainWindow
+    from src.ui.window.main_window.window import MainWindow
 
 
 class SystemTrayIcon(QSystemTrayIcon):
@@ -25,7 +25,7 @@ class SystemTrayIcon(QSystemTrayIcon):
     ## 系统托盘功能
     """
 
-    def __init__(self, parent: "MainWindow" = None):
+    def __init__(self, parent: "main_window" = None):
         super().__init__(parent=parent)
 
         # 创建控件

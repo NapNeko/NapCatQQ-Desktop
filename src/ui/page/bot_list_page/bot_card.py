@@ -16,8 +16,8 @@ from src.core.config.config_model import Config
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.page.bot_list_page.BotList import BotList
-    from src.ui.page.bot_list_page.BotWidget import BotWidget
+    from src.ui.page.bot_list_page.bot_list import BotList
+    from src.ui.page.bot_list_page.bot_widget import BotWidget
 
 
 class BotCard(CardWidget):
@@ -49,8 +49,8 @@ class BotCard(CardWidget):
 
         if self.config.advanced.autoStart:
             # 项目内模块导入
-            from src.ui.page.bot_list_page.BotWidget import BotWidget
-            from src.ui.page.bot_list_page.BotListWidget import BotListWidget
+            from src.ui.page.bot_list_page.bot_widget import BotWidget
+            from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
             # 创建页面
             self.botWidget = BotWidget(self.config)
@@ -122,9 +122,9 @@ class BotCard(CardWidget):
         当自身被点击时
         """
         # 项目内模块导入
-        from src.ui.window.MainWindow.Window import MainWindow
-        from src.ui.page.bot_list_page.BotWidget import BotWidget
-        from src.ui.page.bot_list_page.BotListWidget import BotListWidget
+        from src.ui.window.main_window.window import MainWindow
+        from src.ui.page.bot_list_page.bot_widget import BotWidget
+        from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
         BotListWidget().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
         BotListWidget().topCard.updateListButton.hide()

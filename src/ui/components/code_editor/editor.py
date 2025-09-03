@@ -11,10 +11,10 @@ from PySide6.QtCore import Qt, Slot, QRect, QRectF
 from PySide6.QtWidgets import QTextEdit, QApplication
 
 # 项目内模块导入
-from src.ui.style_sheet import StyleSheet
+from src.ui.common.style_sheet import StyleSheet
 from src.core.utils.logger import logger
-from src.ui.common.code_editor.controls import LineNumberArea
-from src.ui.common.code_editor.highlight import JsonHighlighter
+from src.ui.components.code_editor.controls import LineNumberArea
+from src.ui.components.code_editor.highlight import JsonHighlighter
 
 
 class CodeEditorBase(PlainTextEdit):

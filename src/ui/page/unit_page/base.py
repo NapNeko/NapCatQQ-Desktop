@@ -4,7 +4,6 @@
 """
 # 标准库导入
 import re
-from enum import Enum
 
 # 第三方库导入
 from markdown import markdown
@@ -29,8 +28,8 @@ from PySide6.QtCore import Qt, QUrl, QSize
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.ui.UnitPage.status import StatusLabel, ButtonStatus, ProgressRingStatus
-from src.ui.common.code_editor import UpdateLogExhibit
+from src.ui.page.unit_page.status import StatusLabel, ButtonStatus, ProgressRingStatus
+from src.ui.components.code_editor import UpdateLogExhibit
 
 
 class PageBase(ScrollArea):

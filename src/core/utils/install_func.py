@@ -11,9 +11,8 @@ from pathlib import Path
 from PySide6.QtCore import QUrl, Signal, QThread
 
 # 项目内模块导入
-from src.ui.UnitPage.status import ButtonStatus, ProgressRingStatus
-from src.core.utils.PathFunc import PathFunc
-from src.core.network.Urls import Urls
+from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus
+from src.core.utils.path_func import PathFunc
 
 
 class NapCatInstall(QThread):

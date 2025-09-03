@@ -22,8 +22,8 @@ from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import Signal, QLocale
 
 # 项目内模块导入
-from src.Core.Config.enum import Language, CloseActionEnum
-from src.Core.Utils.PathFunc import PathFunc
+from src.core.config.enum import Language, CloseActionEnum
+from src.core.utils.path_func import PathFunc
 
 
 class LanguageSerializer(ConfigSerializer):
@@ -47,7 +47,7 @@ class Config(QConfig):
     StartTime = ConfigItem(group="Info", name="StartTime", default="")
     SystemType = ConfigItem(group="Info", name="SystemType", default="")
     PlatformType = ConfigItem(group="Info", name="PlatformType", default="")
-    MainWindow = ConfigItem(group="Info", name="MainWindow", default=False, validator=BoolValidator())
+    MainWindow = ConfigItem(group="Info", name="main_window", default=False, validator=BoolValidator())
 
     # 路径项
     # 注意: default 为空字符串则默认以程序根目录为路径
@@ -155,7 +155,7 @@ class Config(QConfig):
             file: str 或者 Path
                 json 配置文件的路径
 
-            config: Config
+            config: config
                 被初始化的配置对象
         """
         if isinstance(config, QConfig):

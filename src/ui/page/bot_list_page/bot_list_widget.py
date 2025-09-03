@@ -7,13 +7,13 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 # 项目内模块导入
 from src.ui.common.style_sheet import StyleSheet
 from src.core.utils.singleton import singleton
-from src.ui.page.bot_list_page.BotList import BotList
+from src.ui.page.bot_list_page.bot_list import BotList
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from src.ui.page.bot_list_page.BotTopCard import BotTopCard
+from src.ui.page.bot_list_page.bot_top_card import BotTopCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.MainWindow import MainWindow
+    from src.ui.window.main_window import MainWindow
 
 
 @singleton
@@ -26,7 +26,7 @@ class BotListWidget(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-    def initialize(self, parent: "MainWindow") -> Self:
+    def initialize(self, parent: "main_window") -> Self:
         """
         初始化
         """
@@ -65,7 +65,7 @@ class BotListWidget(QWidget):
         ## 运行所有机器人
         """
         # 项目内模块导入
-        from src.ui.page.bot_list_page.BotWidget import BotWidget
+        from src.ui.page.bot_list_page.bot_widget import BotWidget
 
         for card in self.botList.botCardList:
 
