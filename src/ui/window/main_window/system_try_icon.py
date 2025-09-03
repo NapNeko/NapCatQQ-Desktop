@@ -12,12 +12,13 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QWidget, QSystemTrayIcon
 
 # 项目内模块导入
+from src.ui.common.icon import StaticIcon
 from src.ui.page.bot_list_page import BotListWidget
 from src.ui.components.info_bar import success_bar
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window.window import main_window
+    from src.ui.window.main_window.window import MainWindow
 
 
 class SystemTrayIcon(QSystemTrayIcon):
@@ -25,7 +26,7 @@ class SystemTrayIcon(QSystemTrayIcon):
     ## 系统托盘功能
     """
 
-    def __init__(self, parent: "main_window" = None):
+    def __init__(self, parent: "MainWindow" = None):
         super().__init__(parent=parent)
 
         # 创建控件
@@ -90,7 +91,7 @@ class NCDCard(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.avatar = AvatarWidget(":Global/logo.png", self)
+        self.avatar = AvatarWidget(StaticIcon.LOGO.path(), self)
         self.nameLabel = BodyLabel("NapCatQQ Desktop", self)
         self.licenseLabel = CaptionLabel("License: GPL-v3", self)
         self.licenseLabel.setTextColor(QColor(96, 96, 96), QColor(206, 206, 206))

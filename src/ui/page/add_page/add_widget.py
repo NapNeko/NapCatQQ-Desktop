@@ -26,7 +26,7 @@ from src.ui.page.add_page.add_top_card import AddTopCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import main_window
+    from src.ui.window.main_window import MainWindow
 
 
 @singleton
@@ -50,7 +50,7 @@ class AddWidget(QWidget):
         """
         super().__init__()
 
-    def initialize(self, parent: "main_window") -> Self:
+    def initialize(self, parent: "MainWindow") -> Self:
         """
         ## 初始化 AddWidget 所需要的控件并进行配置
         """

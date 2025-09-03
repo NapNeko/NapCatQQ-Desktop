@@ -13,7 +13,7 @@ from src.ui.page.bot_list_page.bot_top_card import BotTopCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import main_window
+    from src.ui.window.main_window import MainWindow
 
 
 @singleton
@@ -26,7 +26,7 @@ class BotListWidget(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-    def initialize(self, parent: "main_window") -> Self:
+    def initialize(self, parent: "MainWindow") -> Self:
         """
         初始化
         """

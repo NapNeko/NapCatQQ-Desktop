@@ -10,7 +10,7 @@ from src.ui.page.home_page.display_view import DisplayViewWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import main_window
+    from src.ui.window.main_window import MainWindow
 
 
 @singleton
@@ -20,7 +20,7 @@ class HomeWidget(TransparentStackedWidget):
     def __init__(self) -> None:
         super().__init__()
 
-    def initialize(self, parent: "main_window") -> Self:
+    def initialize(self, parent: "MainWindow") -> Self:
         """
         初始化
         """
