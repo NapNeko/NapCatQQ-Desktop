@@ -136,7 +136,90 @@
       pass
   ```
 
-## 八、资源文件命名规范
+## 八、类内方法顺序规范
+
+为了提高代码可读性和一致性，建议类中方法按以下顺序组织：
+
+1. **构造与析构方法**
+
+   * `__init__`
+   * `__del__`（若需要）
+
+2. **Qt 特殊方法 / 生命周期相关**
+
+   * `setupUi` 或 `setup_xxx` 初始化界面方法
+   * `showEvent`, `closeEvent`, `resizeEvent` 等重写的 Qt 事件处理方法
+
+3. **公共方法（对外 API）**
+
+   * 提供给其他模块调用的核心业务逻辑方法
+   * 应尽量保持语义清晰
+
+4. **槽函数（Slot）**
+
+   * 按功能分组，建议在方法名前加 `on_` 前缀
+   * 可以在类内集中放置，方便查找和维护
+
+5. **辅助方法（Helper）**
+
+   * 用于类内部逻辑的工具性方法
+   * 命名上应能体现用途
+   * 如仅限类内使用，加 `_` 前缀
+
+6. **私有方法**
+
+   * 命名以 `_` 开头
+   * 辅助公共方法或内部逻辑
+
+7. **静态方法 / 类方法**
+
+   * `@staticmethod` 和 `@classmethod` 方法统一放在末尾
+
+8. **属性（Property）定义**
+
+   * 使用 `@property` 和对应的 setter
+   * 建议放在类最后，便于直观阅读
+
+### 示例
+
+```python
+class UserProfileDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.user_id = None
+        self.setup_ui()
+
+    def setup_ui(self):
+        # 初始化 UI
+        pass
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.load_user_data()
+
+    def load_user_data(self):
+        # 公共方法，对外暴露
+        pass
+
+    def on_submit_button_clicked(self):
+        # 槽函数
+        self._validate_input()
+
+    def _validate_input(self):
+        # 内部辅助方法
+        pass
+
+    @staticmethod
+    def format_username(username: str) -> str:
+        return username.strip().title()
+
+    @property
+    def is_valid(self):
+        return self.user_id is not None
+```
+
+
+## 九、资源文件命名规范
 
 * 所有资源文件放在统一的 `resources/` 或 `assets/` 目录
 
@@ -182,12 +265,12 @@
 
 * 代码中引用资源时，使用统一的路径变量或资源管理类，避免硬编码
 
-## 九、文档与示例
+## 十、文档与示例
 
 * 建立 `docs/naming_convention.md` 文档
 * 在 README 中注明开发规范要求
 
-## 十、迁移计划
+## 十一、迁移计划
 
 1. 逐步重构现有代码和资源文件，避免大规模破坏性修改
 2. 新代码与新资源必须符合规范，代码审查时重点检查命名一致性
