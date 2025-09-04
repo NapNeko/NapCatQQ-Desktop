@@ -147,7 +147,7 @@
 
 2. **Qt 特殊方法 / 生命周期相关**
 
-   * `setupUi` 或 `setup_xxx` 初始化界面方法
+   * `setup_xxx` 初始化界面或组件方法
    * `showEvent`, `closeEvent`, `resizeEvent` 等重写的 Qt 事件处理方法
 
 3. **公共方法（对外 API）**
