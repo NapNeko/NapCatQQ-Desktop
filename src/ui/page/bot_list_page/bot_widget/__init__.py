@@ -4,11 +4,7 @@ from typing import Optional
 
 # 第三方库导入
 import psutil
-from qfluentwidgets import (
-    PushButton,
-    ToolTipFilter,
-    TransparentToolButton,
-)
+from qfluentwidgets import PushButton, ToolTipFilter, TransparentToolButton
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import ToolButton, SegmentedWidget, PrimaryPushButton
 from PySide6.QtGui import QTextCursor
@@ -16,13 +12,14 @@ from PySide6.QtCore import Qt, Slot, QProcess, QRegularExpression
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
 
 # 项目内模块导入
-from src.ui.components.code_editor.editor import CodeEditor
-from src.ui.components.code_editor.highlight import LogHighlighter
 from src.core.config import cfg
-from src.ui.common.style_sheet import StyleSheet
-from src.ui.page.add_page.enum import ConnectType
 from src.core.network.email import offline_email
 from src.core.network.webhook import offline_webhook
+from src.core.utils.run_napCat import create_napcat_process
+from src.ui.common.style_sheet import StyleSheet
+from src.ui.page.add_page.enum import ConnectType
+from src.ui.components.info_bar import info_bar, error_bar, success_bar, warning_bar
+from src.core.config.config_model import Config
 from src.ui.page.add_page.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
@@ -30,12 +27,11 @@ from src.ui.page.add_page.msg_box import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
-from src.ui.components.info_bar import info_bar, error_bar, success_bar, warning_bar
-from src.core.utils.run_napCat import create_napcat_process
 from src.ui.components.message_box import AskBox, ImageBox
-from src.core.config.config_model import Config
 from src.core.config.operate_config import delete_config, update_config
+from src.ui.components.code_editor.editor import CodeEditor
 from src.ui.page.bot_list_page.signal_bus import botListPageSignalBus
+from src.ui.components.code_editor.highlight import LogHighlighter
 from src.ui.page.bot_list_page.bot_widget.meg_box import ChooseConfigTypeDialog
 from src.ui.page.bot_list_page.bot_widget.bot_setup_page import BotSetupPage
 
@@ -353,7 +349,7 @@ class BotWidget(QWidget):
                 # 项目内模块导入
                 from src.ui.window.main_window.window import MainWindow
 
-                MainWindow().title_bar.tabBar.removeTabByKey(f"{self.config.bot.QQID}")
+                MainWindow().title_bar.tab_bar.removeTabByKey(f"{self.config.bot.QQID}")
             else:
                 error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
 

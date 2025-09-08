@@ -1,40 +1,53 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import FluentIcon as FI
-from qfluentwidgets import ImageLabel, TitleLabel, SubtitleLabel, HyperlinkButton, PrimaryPushButton
+from qfluentwidgets import FluentIcon, HyperlinkButton, ImageLabel, PrimaryPushButton, SubtitleLabel, TitleLabel
 from qframelesswindow import FramelessWindow
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.ui.common.icon import StaticIcon
 from src.core.network.urls import Urls
+from src.ui.common.icon import StaticIcon
 
 
 class WelcomePage(QWidget):
     """欢迎页面"""
 
     def __init__(self, parent: FramelessWindow) -> None:
+        """初始化
+
+        创建控件, 设置属性, 布局, 信号连接
+
+        Args:
+            parent (FramelessWindow): 父窗体
+        """
         super().__init__(parent)
 
         # 创建控件
-        self.logoLabel = ImageLabel(StaticIcon.LOGO.path(), self)
-        self.titleLabel = TitleLabel("NapCatQQ", self)
-        self.subTitleLabel = SubtitleLabel(self.tr("现代化的基于 NTQQ\n的 Bot 协议端实现"), self)
-        self.installButton = PrimaryPushButton(self.tr("开始安装"), self)
-        self.githubLinkButton = HyperlinkButton(self)
+        self.logo_label = ImageLabel(StaticIcon.LOGO.path(), self)
+        self.title_label = TitleLabel("NapCatQQ", self)
+        self.subtitle_label = SubtitleLabel(self.tr("现代化的基于 NTQQ\n的 Bot 协议端实现"), self)
+        self.install_button = PrimaryPushButton(self.tr("开始安装"), self)
+        self.github_link_button = HyperlinkButton(self)
 
         # 设置属性
-        self.logoLabel.scaledToHeight(256)
-        self.githubLinkButton.setText("GitHub")
-        self.githubLinkButton.setIcon(FI.GITHUB)
-        self.githubLinkButton.setUrl(Urls.NAPCATQQ_REPO.value)
+        self.logo_label.scaledToHeight(256)
+        self.github_link_button.setText("GitHub")
+        self.github_link_button.setIcon(FluentIcon.GITHUB)
+        self.github_link_button.setUrl(Urls.NAPCATQQ_REPO.value)
 
         # 布局
-        self.logoLabel.move(310, 100)
-        self.titleLabel.move(80, 160)
-        self.subTitleLabel.move(80, 210)
-        self.installButton.move(80, 290)
-        self.githubLinkButton.move(180, 290)
+        self.logo_label.move(310, 100)
+        self.title_label.move(80, 160)
+        self.subtitle_label.move(80, 210)
+        self.install_button.move(80, 290)
+        self.github_link_button.move(180, 290)
 
         # 信号连接
-        self.installButton.clicked.connect(self.parent().on_next_page)
+        self.install_button.clicked.connect(self.on_click)
+
+    def on_click(self) -> None:
+        """点击事件"""
+        # 项目内模块导入
+        from src.ui.window.guide_window.guide_window import GuideWindow
+
+        GuideWindow().on_next_page()

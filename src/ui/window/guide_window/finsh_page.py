@@ -1,58 +1,66 @@
 # -*- coding: utf-8 -*-
 
+# 标准库导入
+from typing import TYPE_CHECKING
+
 # 第三方库导入
-from qfluentwidgets import BodyLabel
+from qfluentwidgets import BodyLabel, CaptionLabel
 from qfluentwidgets import FluentIcon as FI
-from qfluentwidgets import IconWidget, ImageLabel, CaptionLabel, SubtitleLabel
-from qframelesswindow import FramelessWindow
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QDesktopServices
-from PySide6.QtCore import Qt, Property, QEasingCurve, QPropertyAnimation
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from qfluentwidgets import IconWidget, ImageLabel, SubtitleLabel
+from PySide6.QtCore import Property, QEasingCurve, QEvent, QPropertyAnimation, Qt
+from PySide6.QtGui import QColor, QDesktopServices, QEnterEvent, QPainter, QPainterPath, QPaintEvent
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.ui.components.separator import Separator
 from src.core.network.urls import Urls
+from src.ui.common.emoticons import FuFuEmoticons
+from src.ui.components.separator import Separator
+
+if TYPE_CHECKING:
+    # 项目内模块导入
+    from src.ui.window.guide_window.guide_window import GuideWindow
 
 
 class FinshPage(QWidget):
+    """安装完成页面"""
 
-    def __init__(self, parent: FramelessWindow):
+    def __init__(self, parent: GuideWindow) -> None:
         super().__init__(parent)
 
         # 创建控件
-        self.titleLabel = SubtitleLabel(self.tr("安装完成, 下一步?"), self)
-        self.fufuLabel = ImageLabel(":/FuFuFace/image/FuFuFace/g_fufu_13.gif", self)
+        self.title_label = SubtitleLabel(self.tr("安装完成, 下一步?"), self)
+        self.fufu_emoticons_Label = ImageLabel(FuFuEmoticons.FU_13.path(), self)
         self.separator = Separator(self)
-        self.documentCard = DocumentCard(self)
-        self.nextCard = NextCard(self)
+        self.document_card = DocumentCard(self)
+        self.next_card = NextCard(self)
 
         # 设置控件属性
-        self.fufuLabel.scaledToHeight(128)
+        self.fufu_emoticons_Label.scaledToHeight(128)
 
         # 设置布局
-        self.cardLayout = QVBoxLayout()
-        self.cardLayout.setContentsMargins(0, 0, 0, 0)
-        self.cardLayout.setSpacing(16)
-        self.cardLayout.addWidget(self.documentCard)
-        self.cardLayout.addWidget(self.nextCard)
+        self.card_layout = QVBoxLayout()
+        self.card_layout.setContentsMargins(0, 0, 0, 0)
+        self.card_layout.setSpacing(16)
+        self.card_layout.addWidget(self.document_card)
+        self.card_layout.addWidget(self.next_card)
 
-        self.hBoxLayout = QHBoxLayout()
-        self.hBoxLayout.setContentsMargins(0, 0, 0, 0)
-        self.hBoxLayout.setSpacing(16)
-        self.hBoxLayout.addStretch(1)
-        self.hBoxLayout.addWidget(self.fufuLabel)
-        self.hBoxLayout.addWidget(self.separator)
-        self.hBoxLayout.addLayout(self.cardLayout)
-        self.hBoxLayout.addStretch(1)
+        self.h_box_layout = QHBoxLayout()
+        self.h_box_layout.setContentsMargins(0, 0, 0, 0)
+        self.h_box_layout.setSpacing(16)
+        self.h_box_layout.addStretch(1)
+        self.h_box_layout.addWidget(self.fufu_emoticons_Label)
+        self.h_box_layout.addWidget(self.separator)
+        self.h_box_layout.addLayout(self.card_layout)
+        self.h_box_layout.addStretch(1)
 
-        self.vBoxLayout = QVBoxLayout(self)
-        self.vBoxLayout.setContentsMargins(16, 16, 16, 16)
-        self.vBoxLayout.setSpacing(16)
-        self.vBoxLayout.addStretch(1)
-        self.vBoxLayout.addWidget(self.titleLabel, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.vBoxLayout.addSpacing(32)
-        self.vBoxLayout.addLayout(self.hBoxLayout)
-        self.vBoxLayout.addStretch(1)
+        self.v_box_layout = QVBoxLayout(self)
+        self.v_box_layout.setContentsMargins(16, 16, 16, 16)
+        self.v_box_layout.setSpacing(16)
+        self.v_box_layout.addStretch(1)
+        self.v_box_layout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.v_box_layout.addSpacing(32)
+        self.v_box_layout.addLayout(self.h_box_layout)
+        self.v_box_layout.addStretch(1)
 
         # 设置属性
         self.separator.setFixedHeight(128)
@@ -61,59 +69,53 @@ class FinshPage(QWidget):
 class Card(QWidget):
     """卡片基类，带有悬停动画效果"""
 
-    def __init__(self, title: str, subTitle: str, parent=None) -> None:
+    def __init__(self, title: str, subtitle: str, parent=None) -> None:
         super().__init__(parent)
 
         # 动画属性
         self._radius = 5
         self._scale = 1.0
-        self._bg_color = QColor(240, 240, 240)
+        self._background_color = QColor(240, 240, 240)
 
         # 创建控件
-        self.titleLabel = BodyLabel(title, self)
-        self.subTitleLabel = CaptionLabel(subTitle, self)
-        self.iconLabel = IconWidget(FI.RIGHT_ARROW, self)
+        self.title_label = BodyLabel(title, self)
+        self.subtitle_label = CaptionLabel(subtitle, self)
+        self.icon_label = IconWidget(FI.RIGHT_ARROW, self)
 
         # 设置属性
         self.setFixedSize(260, 60)
-        self.iconLabel.setFixedSize(12, 12)
+        self.icon_label.setFixedSize(12, 12)
 
         # 设置鼠标跟踪
         self.setMouseTracking(True)
 
         # 布局
-        self.labelLayout = QVBoxLayout()
-        self.labelLayout.setContentsMargins(0, 0, 0, 0)
-        self.labelLayout.setSpacing(8)
-        self.labelLayout.addWidget(self.titleLabel)
-        self.labelLayout.addWidget(self.subTitleLabel)
+        self.label_layout = QVBoxLayout()
+        self.label_layout.setContentsMargins(0, 0, 0, 0)
+        self.label_layout.setSpacing(8)
+        self.label_layout.addWidget(self.title_label)
+        self.label_layout.addWidget(self.subtitle_label)
 
-        self.hBoxLayout = QHBoxLayout(self)
-        self.hBoxLayout.setContentsMargins(12, 12, 12, 12)
-        self.hBoxLayout.setSpacing(0)
-        self.hBoxLayout.addLayout(self.labelLayout)
-        self.hBoxLayout.addWidget(self.iconLabel, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.h_box_layout = QHBoxLayout(self)
+        self.h_box_layout.setContentsMargins(12, 12, 12, 12)
+        self.h_box_layout.setSpacing(0)
+        self.h_box_layout.addLayout(self.label_layout)
+        self.h_box_layout.addWidget(
+            self.icon_label,
+            alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+        )
 
         # 初始化动画
-        self.initAnimations()
+        self.init_animations()
 
-    def initAnimations(self):
-        # 圆角动画
-        self.radius_anim = QPropertyAnimation(self, b"radius")
-        self.radius_anim.setDuration(300)
-        self.radius_anim.setEasingCurve(QEasingCurve.OutQuad)
+    def enterEvent(self, event: QEnterEvent):
+        """重写鼠标进入事件
 
-        # 缩放动画
-        self.scale_anim = QPropertyAnimation(self, b"scale")
-        self.scale_anim.setDuration(300)
-        self.scale_anim.setEasingCurve(QEasingCurve.OutQuad)
+        当鼠标进入卡片时，启动悬停动画
 
-        # 颜色动画
-        self.color_anim = QPropertyAnimation(self, b"bg_color")
-        self.color_anim.setDuration(300)
-        self.color_anim.setEasingCurve(QEasingCurve.OutQuad)
-
-    def enterEvent(self, event):
+        Args:
+            event (QEnterEvent): _QEnterEvent_
+        """
         # 鼠标进入时启动动画
         self.radius_anim.setStartValue(self._radius)
         self.radius_anim.setEndValue(10)
@@ -121,7 +123,7 @@ class Card(QWidget):
         self.scale_anim.setStartValue(self._scale)
         self.scale_anim.setEndValue(1.02)
 
-        self.color_anim.setStartValue(self._bg_color)
+        self.color_anim.setStartValue(self._background_color)
         self.color_anim.setEndValue(QColor(220, 220, 220))
 
         self.radius_anim.start()
@@ -130,7 +132,14 @@ class Card(QWidget):
 
         super().enterEvent(event)
 
-    def leaveEvent(self, event):
+    def leaveEvent(self, event: QEvent):
+        """重写鼠标离开事件
+
+        当鼠标离开卡片时，恢复初始状态
+
+        Args:
+            event (QEvent): _QEvent_
+        """
         # 鼠标离开时恢复动画
         self.radius_anim.setStartValue(self._radius)
         self.radius_anim.setEndValue(5)
@@ -138,7 +147,7 @@ class Card(QWidget):
         self.scale_anim.setStartValue(self._scale)
         self.scale_anim.setEndValue(1.0)
 
-        self.color_anim.setStartValue(self._bg_color)
+        self.color_anim.setStartValue(self._background_color)
         self.color_anim.setEndValue(QColor(240, 240, 240))
 
         self.radius_anim.start()
@@ -147,7 +156,14 @@ class Card(QWidget):
 
         super().leaveEvent(event)
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent):
+        """重写绘制事件
+
+        通过 QPainter 绘制圆角矩形背景，并应用当前的动画属性
+
+        Args:
+            event (QPaintEvent): _QPaintEvent_
+        """
         # 绘制圆角矩形背景
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -163,34 +179,54 @@ class Card(QWidget):
 
         path.addRoundedRect(rect, self._radius, self._radius)
 
-        painter.fillPath(path, self._bg_color)
+        painter.fillPath(path, self._background_color)
+
+    def init_animations(self):
+        """初始化动画
+
+        初始化用于圆角、缩放和颜色变化的动画
+        """
+        # 圆角动画
+        self.radius_anim = QPropertyAnimation(self, b"radius")
+        self.radius_anim.setDuration(300)
+        self.radius_anim.setEasingCurve(QEasingCurve.OutQuad)
+
+        # 缩放动画
+        self.scale_anim = QPropertyAnimation(self, b"scale")
+        self.scale_anim.setDuration(300)
+        self.scale_anim.setEasingCurve(QEasingCurve.OutQuad)
+
+        # 颜色动画
+        self.color_anim = QPropertyAnimation(self, b"background_color")
+        self.color_anim.setDuration(300)
+        self.color_anim.setEasingCurve(QEasingCurve.OutQuad)
 
     # 自定义属性，用于动画
-    def getRadius(self):
+    def get_radius(self) -> int:
         return self._radius
 
-    def setRadius(self, radius):
+    def set_radius(self, radius: int) -> None:
         self._radius = radius
         self.update()
 
-    def getScale(self):
+    def get_scale(self) -> float:
         return self._scale
 
-    def setScale(self, scale):
+    def set_scale(self, scale: float) -> None:
         self._scale = scale
         self.update()
 
-    def getBgColor(self):
-        return self._bg_color
+    def get_background_color(self) -> QColor:
+        return self._background_color
 
-    def setBgColor(self, color):
-        self._bg_color = color
+    def set_background_color(self, color: QColor) -> None:
+        self._background_color = color
         self.update()
 
     # 定义属性
-    radius = Property(int, getRadius, setRadius)
-    scale = Property(float, getScale, setScale)
-    bg_color = Property(QColor, getBgColor, setBgColor)
+    radius = Property(int, get_radius, set_radius)
+    scale = Property(float, get_scale, set_scale)
+    background_color = Property(QColor, get_background_color, set_background_color)
 
 
 class DocumentCard(Card):

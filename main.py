@@ -7,11 +7,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.ui.common.font import FontManager
 from src.core.config import cfg
 from src.core.utils.mutex import SingleInstanceApplication
 from src.core.utils.path_func import PathFunc
 from src.resource import resource
+from src.ui.common.font import FontManager
 
 if __name__ == "__main__":
     # 实现单实例应用程序检查

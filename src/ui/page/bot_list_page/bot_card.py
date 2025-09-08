@@ -10,8 +10,8 @@ from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessMana
 from PySide6.QtWidgets import QVBoxLayout
 
 # 项目内模块导入
-from src.ui.components.info_bar import error_bar
 from src.core.network.urls import Urls
+from src.ui.components.info_bar import error_bar
 from src.core.config.config_model import Config
 
 if TYPE_CHECKING:
@@ -134,7 +134,7 @@ class BotCard(CardWidget):
             BotListWidget().view.addWidget(self.botWidget)
             BotListWidget().view.setCurrentWidget(self.botWidget)
 
-            MainWindow().title_bar.tabBar.addTab(
+            MainWindow().title_bar.tab_bar.addTab(
                 f"{self.config.bot.QQID}",
                 f"{self.config.bot.name} ({self.config.bot.QQID})",
                 QIcon(self.QQAvatarLabel.pixmap()),
@@ -143,4 +143,4 @@ class BotCard(CardWidget):
         else:
             BotListWidget().view.setCurrentWidget(self.botWidget)
 
-        MainWindow().title_bar.tabBar.setCurrentTab(f"{self.config.bot.QQID}")
+        MainWindow().title_bar.tab_bar.setCurrentTab(f"{self.config.bot.QQID}")
