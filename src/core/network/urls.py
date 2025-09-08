@@ -6,9 +6,7 @@ from PySide6.QtCore import QUrl
 
 
 class Urls(Enum):
-    """
-    ## 软件内部可能用的到的 Url
-    """
+    """存放所有需要用到的 URL 地址"""
 
     # NCD相关地址
     NCD_REPO = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop")

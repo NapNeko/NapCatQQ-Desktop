@@ -3,18 +3,11 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
+from qfluentwidgets import ExpandLayout
 from qfluentwidgets import FluentIcon as FI
-from qfluentwidgets import (
-    PushButton,
-    ScrollArea,
-    TitleLabel,
-    ExpandLayout,
-    MessageBoxBase,
-    SettingCardGroup,
-    OptionsSettingCard,
-)
-from PySide6.QtCore import Qt, QObject
-from PySide6.QtWidgets import QWidget, QGridLayout
+from qfluentwidgets import MessageBoxBase, OptionsSettingCard, PushButton, ScrollArea, SettingCardGroup, TitleLabel
+from PySide6.QtCore import QObject, Qt
+from PySide6.QtWidgets import QGridLayout, QWidget
 
 # 项目内模块导入
 from src.core.config import cfg
@@ -22,11 +15,11 @@ from src.core.network.email import EncryptionType, test_email
 from src.core.network.webhook import test_webhook
 from src.ui.components.info_bar import success_bar, warning_bar
 from src.ui.components.input_card.generic_card import (
+    ComboBoxConfigCard,
+    JsonTemplateEditConfigCard,
+    LineEditConfigCard,
     ShowDialogCard,
     SwitchConfigCard,
-    ComboBoxConfigCard,
-    LineEditConfigCard,
-    JsonTemplateEditConfigCard,
 )
 
 if TYPE_CHECKING:
@@ -61,7 +54,7 @@ class General(ScrollArea):
         self.actionGroup = SettingCardGroup(title=self.tr("行为"), parent=self.view)
         # 创建项
         self.closeBtnCard = OptionsSettingCard(
-            configItem=cfg.closeBtnAction,
+            configItem=cfg.close_button_action,
             icon=FI.CLOSE,
             title=self.tr("关闭按钮"),
             content=self.tr("选择点击关闭按钮时的行为"),
@@ -145,24 +138,24 @@ class BotOfflineEmailDialog(MessageBoxBase):
 
     def fill_config(self) -> None:
         # 填充配置
-        self.enableCard.fillValue(cfg.get(cfg.titleTabBar))
-        self.receiversCard.fillValue(cfg.get(cfg.emailReceiver))
-        self.senderCard.fillValue(cfg.get(cfg.emailSender))
+        self.enableCard.fillValue(cfg.get(cfg.title_tab_bar))
+        self.receiversCard.fillValue(cfg.get(cfg.email_receiver))
+        self.senderCard.fillValue(cfg.get(cfg.email_sender))
         self.tokenCard.fillValue(cfg.get(cfg.emailToken))
-        self.stmpServerCard.fillValue(cfg.get(cfg.emailStmpServer))
-        self.stmpServerPortCard.fillValue(str(cfg.get(cfg.emailStmpPort)))
-        self.encryptionCard.fillValue(cfg.get(cfg.emailEncryption))
+        self.stmpServerCard.fillValue(cfg.get(cfg.email_stmp_server))
+        self.stmpServerPortCard.fillValue(str(cfg.get(cfg.email_stmp_port)))
+        self.encryptionCard.fillValue(cfg.get(cfg.email_encryption))
 
     def save_config(self) -> None:
         """保存配置"""
         try:
-            cfg.set(cfg.titleTabBar, self.enableCard.getValue())
-            cfg.set(cfg.emailReceiver, self.receiversCard.getValue())
-            cfg.set(cfg.emailSender, self.senderCard.getValue())
+            cfg.set(cfg.title_tab_bar, self.enableCard.getValue())
+            cfg.set(cfg.email_receiver, self.receiversCard.getValue())
+            cfg.set(cfg.email_sender, self.senderCard.getValue())
             cfg.set(cfg.emailToken, self.tokenCard.getValue())
-            cfg.set(cfg.emailStmpServer, self.stmpServerCard.getValue())
-            cfg.set(cfg.emailStmpPort, int(self.stmpServerPortCard.getValue()))
-            cfg.set(cfg.emailEncryption, self.encryptionCard.getValue())
+            cfg.set(cfg.email_stmp_server, self.stmpServerCard.getValue())
+            cfg.set(cfg.email_stmp_port, int(self.stmpServerPortCard.getValue()))
+            cfg.set(cfg.email_encryption, self.encryptionCard.getValue())
             success_bar(self.tr("配置已保存"))
             self.fill_config()
         except ValueError:
@@ -212,18 +205,18 @@ class BotOfflineWebHookDialog(MessageBoxBase):
 
     def fill_config(self) -> None:
         # 填充配置
-        self.enableCard.fillValue(cfg.get(cfg.botOfflineWebHookNotice))
-        self.webhookUrlCard.fillValue(cfg.get(cfg.webHookUrl))
-        self.webhookSecretCard.fillValue(cfg.get(cfg.webHookSecret))
-        self.jsonCard.fillValue(cfg.get(cfg.webHookJson))
+        self.enableCard.fillValue(cfg.get(cfg.bot_offline_web_hook_notice))
+        self.webhookUrlCard.fillValue(cfg.get(cfg.web_hook_url))
+        self.webhookSecretCard.fillValue(cfg.get(cfg.web_hook_secret))
+        self.jsonCard.fillValue(cfg.get(cfg.web_hook_json))
 
     def save_config(self) -> None:
         """保存配置"""
         try:
-            cfg.set(cfg.botOfflineWebHookNotice, self.enableCard.getValue())
-            cfg.set(cfg.webHookUrl, self.webhookUrlCard.getValue())
-            cfg.set(cfg.webHookSecret, self.webhookSecretCard.getValue())
-            cfg.set(cfg.webHookJson, self.jsonCard.getValue())
+            cfg.set(cfg.bot_offline_web_hook_notice, self.enableCard.getValue())
+            cfg.set(cfg.web_hook_url, self.webhookUrlCard.getValue())
+            cfg.set(cfg.web_hook_secret, self.webhookSecretCard.getValue())
+            cfg.set(cfg.web_hook_json, self.jsonCard.getValue())
             self.fill_config()
         except ValueError:
             warning_bar(self.tr("配置保存失败，请检查输入是否正确"))

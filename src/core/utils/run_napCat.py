@@ -5,19 +5,18 @@
 from PySide6.QtCore import QProcess
 
 # 项目内模块导入
-from src.core.utils.path_func import PathFunc
 from src.core.config.config_model import Config
+from src.core.utils.path_func import PathFunc
 
 
 def create_napcat_process(config: Config) -> QProcess:
-    """
-    ## 创建并配置 QProcess
+    """创建并配置 QProcess
 
-    ## 参数
-        - config 机器人配置
+    Args:
+        config (Config): 配置对象
 
-    ## 返回
-        - QProcess 程序实例
+    Returns:
+        QProcess: 配置好的 QProcess 对象
     """
 
     # 配置环境变量
@@ -36,7 +35,7 @@ def create_napcat_process(config: Config) -> QProcess:
         [
             str(PathFunc().get_qq_path() / "QQ.exe"),
             str(PathFunc().napcat_path / "NapCatWinBootHook.dll"),
-            config.bot.QQID,
+            config.bot.qq_id,
         ]
     )
 

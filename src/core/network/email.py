@@ -2,21 +2,21 @@
 
 # 标准库导入
 import smtplib
+from dataclasses import dataclass
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from enum import Enum
 from string import Template
-from datetime import datetime
-from dataclasses import dataclass
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 # 第三方库导入
 from qfluentwidgets.common.file import QFluentFile
-from PySide6.QtCore import QFile, Signal, QObject, QRunnable, QThreadPool
+from PySide6.QtCore import QFile, QObject, QRunnable, QThreadPool, Signal
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.ui.components.info_bar import error_bar, success_bar
 from src.core.config.config_model import Config
+from src.ui.components.info_bar import error_bar, success_bar
 
 
 class EncryptionType(Enum):
@@ -47,6 +47,21 @@ class EncryptionType(Enum):
 
 @dataclass
 class EmailData:
+    """存储发送邮件所需的数据
+
+    Attributes
+        email_content - 邮件内容
+        msg_subject - 邮件主题
+        msg_from - 发件人
+        msg_to - 收件人
+        sender_email - 发件邮箱
+        reciver_email - 收件邮箱
+        token - 发件邮箱授权码
+        smtp_server - SMTP服务器地址
+        smtp_port - SMTP服务器端口
+        encryption - 加密类型
+    """
+
     email_content: str
     msg_subject: str
     msg_from: str
@@ -58,38 +73,43 @@ class EmailData:
     smtp_port: int
     encryption: EncryptionType
 
-    def __init__(self, email_content: str, msg_subject: str):
-        """
-        初始化 EmailData, 动态从配置中获取值
+    def __init__(self, email_content: str, msg_subject: str) -> None:
+        """初始化 EmailData, 动态从配置中获取值
 
-        ## 参数
-            email_content - 邮件内容
-            msg_subject - 邮件主题
+        Args:
+            email_content (str): 邮件内容
+            msg_subject (str): 邮件主题
         """
         self.email_content = email_content
         self.msg_subject = msg_subject
 
         # 动态从配置中获取值
-        self.sender_email = cfg.get(cfg.emailSender)
-        self.reciver_email = cfg.get(cfg.emailReceiver)
+        self.sender_email = cfg.get(cfg.email_sender)
+        self.reciver_email = cfg.get(cfg.email_receiver)
         self.token = cfg.get(cfg.emailToken)
-        self.smtp_server = cfg.get(cfg.emailStmpServer)
-        self.smtp_port = cfg.get(cfg.emailStmpPort)
-        self.encryption = EncryptionType.get_enum_by_value(cfg.get(cfg.emailEncryption))
+        self.smtp_server = cfg.get(cfg.email_stmp_server)
+        self.smtp_port = cfg.get(cfg.email_stmp_port)
+        self.encryption = EncryptionType.get_enum_by_value(cfg.get(cfg.email_encryption))
 
         self.msg_from = f"NapCatQQ-Desktop Bot {self.sender_email}"
         self.msg_to = self.reciver_email
 
 
 class Email(QObject, QRunnable):
+    """发送邮件类
+
+    继承 QObject 和 QRunnable 用于多线程发送邮件
+    相对于 QThread 更加轻量级, 适合短时间任务
+    """
 
     error_signal = Signal(str)
     success_signal = Signal(str)
 
     def __init__(self, data: EmailData) -> None:
-        """
-        # 参数
-            data - EmailData 实例 各类所需要的数据
+        """初始化 Email 任务
+
+        Args:
+            data (EmailData): 发送邮件所需的数据
         """
         QObject.__init__(self)
         QRunnable.__init__(self)
@@ -99,8 +119,11 @@ class Email(QObject, QRunnable):
         self.setAutoDelete(True)
 
     def run(self) -> None:
-        """
-        ## 发送邮件
+        """发送邮件
+
+        构建邮件内容并发送, 支持 SSL/TLS/无加密 三种方式
+        发送成功后发出 success_signal 信号, 发送失败发出 error_signal 信号
+        该方法将在独立线程中运行, 不会阻塞主线程
         """
         msg = MIMEMultipart("related")
         msg["From"] = self.data.msg_from
@@ -136,7 +159,7 @@ class Email(QObject, QRunnable):
             self.error_signal.emit(f"发送邮件时发生错误: {str(e)}")
 
 
-def test_email():
+def test_email() -> None:
     """测试邮件功能是否正常"""
 
     with QFluentFile(":template/template/email/test_email.html", QFile.OpenModeFlag.ReadOnly) as file:
@@ -158,14 +181,14 @@ def test_email():
     QThreadPool.globalInstance().start(email)
 
 
-def offline_email(config: Config):
+def offline_email(config: Config) -> None:
     """离线通知"""
 
     with QFluentFile(":template/template/email/bot_offline_notice.html", QFile.OpenModeFlag.ReadOnly) as file:
 
         email_content = Template(file.readAll().data().decode("utf-8")).safe_substitute(
             {
-                "bot_name": f"{config.bot.name} ({config.bot.QQID})",
+                "bot_name": f"{config.bot.name} ({config.bot.qq_id})",
                 "disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
             }
         )

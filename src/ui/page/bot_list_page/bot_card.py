@@ -4,15 +4,15 @@ from typing import TYPE_CHECKING, Optional
 
 # 第三方库导入
 from qfluentwidgets import BodyLabel, CardWidget, ImageLabel, ToolTipFilter, setFont
+from PySide6.QtCore import Qt, QUrl, QUrlQuery, Slot
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtCore import Qt, QUrl, Slot, QUrlQuery
-from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QVBoxLayout
 
 # 项目内模块导入
+from src.core.config.config_model import Config
 from src.core.network.urls import Urls
 from src.ui.components.info_bar import error_bar
-from src.core.config.config_model import Config
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -49,8 +49,8 @@ class BotCard(CardWidget):
 
         if self.config.advanced.autoStart:
             # 项目内模块导入
-            from src.ui.page.bot_list_page.bot_widget import BotWidget
             from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
+            from src.ui.page.bot_list_page.bot_widget import BotWidget
 
             # 创建页面
             self.botWidget = BotWidget(self.config)
@@ -93,7 +93,7 @@ class BotCard(CardWidget):
         avatar_url: QUrl = Urls.QQ_AVATAR.value
         query = QUrlQuery()
         query.addQueryItem("spec", "640")
-        query.addQueryItem("dst_uin", str(self.config.bot.QQID))
+        query.addQueryItem("dst_uin", str(self.config.bot.qq_id))
         avatar_url.setQuery(query)
 
         # 创建请求并链接槽函数
@@ -122,11 +122,11 @@ class BotCard(CardWidget):
         当自身被点击时
         """
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
-        from src.ui.page.bot_list_page.bot_widget import BotWidget
         from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
+        from src.ui.page.bot_list_page.bot_widget import BotWidget
+        from src.ui.window.main_window.window import MainWindow
 
-        BotListWidget().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
+        BotListWidget().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.qq_id})")
         BotListWidget().topCard.updateListButton.hide()
 
         if self.botWidget is None:
@@ -135,12 +135,12 @@ class BotCard(CardWidget):
             BotListWidget().view.setCurrentWidget(self.botWidget)
 
             MainWindow().title_bar.tab_bar.addTab(
-                f"{self.config.bot.QQID}",
-                f"{self.config.bot.name} ({self.config.bot.QQID})",
+                f"{self.config.bot.qq_id}",
+                f"{self.config.bot.name} ({self.config.bot.qq_id})",
                 QIcon(self.QQAvatarLabel.pixmap()),
                 lambda: (MainWindow().switchTo(BotListWidget()), self._clickSlot()),
             )
         else:
             BotListWidget().view.setCurrentWidget(self.botWidget)
 
-        MainWindow().title_bar.tab_bar.setCurrentTab(f"{self.config.bot.QQID}")
+        MainWindow().title_bar.tab_bar.setCurrentTab(f"{self.config.bot.qq_id}")

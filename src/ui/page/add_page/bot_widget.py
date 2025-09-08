@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 
 # 第三方库导入
-from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
+from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
+from src.core.config.config_model import BotConfig
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.components.input_card import LineEditConfigCard
-from src.core.config.config_model import BotConfig
 
 
 class BotWidget(ScrollArea):
@@ -71,7 +71,7 @@ class BotWidget(ScrollArea):
         ## 如果传入了 config 则对其内部卡片的值进行填充
         """
         self.botNameCard.fillValue(self.config.name)
-        self.botQQIdCard.fillValue(self.config.QQID)
+        self.botQQIdCard.fillValue(self.config.qq_id)
         self.musicSignUrl.fillValue(self.config.musicSignUrl)
 
     def _setLayout(self) -> None:

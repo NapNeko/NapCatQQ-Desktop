@@ -62,12 +62,12 @@ class CustomTitleBar(MSFluentTitleBar):
         self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
 
         self.tab_bar = TabBar(self)
-        self.tab_bar.setMovable(cfg.get(cfg.titleTabBarMovable))
-        self.tab_bar.setTabMaximumWidth(cfg.get(cfg.titleTabBarMaxWidth))
-        self.tab_bar.setTabMinimumWidth(cfg.get(cfg.titleTabBarMinWidth))
-        self.tab_bar.setTabShadowEnabled(cfg.get(cfg.titleTabBarShadow))
-        self.tab_bar.setScrollable(cfg.get(cfg.titleTabBarScrollable))
-        self.tab_bar.setCloseButtonDisplayMode(cfg.get(cfg.titleTabBarCloseMode))
+        self.tab_bar.setMovable(cfg.get(cfg.title_tab_bar_movable))
+        self.tab_bar.setTabMaximumWidth(cfg.get(cfg.title_tab_bar_max_width))
+        self.tab_bar.setTabMinimumWidth(cfg.get(cfg.title_tab_bar_min_width))
+        self.tab_bar.setTabShadowEnabled(cfg.get(cfg.title_tab_bar_shadow))
+        self.tab_bar.setScrollable(cfg.get(cfg.title_tab_bar_scrollable))
+        self.tab_bar.setCloseButtonDisplayMode(cfg.get(cfg.title_tab_bar_close_mode))
         self.tab_bar.setAddButtonVisible(False)
         self.tab_bar.tabCloseRequested.connect(self.tab_bar.removeTab)
 
@@ -93,7 +93,7 @@ class CustomTitleBar(MSFluentTitleBar):
                 CloseBtn,
                 lambda: (
                     self.window().close()
-                    if cfg.get(cfg.closeBtnAction) == CloseActionEnum.CLOSE
+                    if cfg.get(cfg.close_button_action) == CloseActionEnum.CLOSE
                     else self.window().hide()
                 ),
             ),

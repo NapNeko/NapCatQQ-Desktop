@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from pathlib import Path
-from datetime import datetime
 from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
 
 # 项目内模块导入
 from src.core.utils.logger.log_data import Log, LogGroup, LogPosition
-from src.core.utils.logger.log_enum import LogType, LogLevel, LogSource
+from src.core.utils.logger.log_enum import LogLevel, LogSource, LogType
 from src.core.utils.logger.log_utils import capture_call_location
 
 
@@ -18,20 +18,18 @@ class Logger:
     log_buffer_size: int
     log_buffer_delete_size: int
 
-    def __init__(self):
+    def __init__(self) -> None:
         """初始化日志记录器"""
         # Log 缓冲区
         self.log_buffer = []
 
-    def load_config(self):
-        """
-        ## 加载配置项
-        """
+    def load_config(self) -> None:
+        """加载配置项"""
         self.log_buffer_size = 5000  # 日志缓冲区大小
         self.log_buffer_delete_size = 1000  # 删除缓冲区日志数量
         self.log_save_day = 7  # 日志保存天数
 
-    def createLogFile(self):
+    def create_log_file(self) -> None:
         """
         ## 用于创建日志文件
             - 日志文件名格式为: {DATETIME}.log
@@ -47,10 +45,10 @@ class Logger:
             if (datetime.now() - datetime.fromtimestamp(log_file.stat().st_mtime)).days > self.log_save_day:
                 log_file.unlink()
 
-    def clearBuffer(self):
-        """
-        ## 清理日志缓冲区
-            - 当日志列表长度超过 日志缓冲区大小 时, 并根据 删除缓冲区日志数量 清理缓冲区
+    def clear_buffer(self) -> None:
+        """清理日志缓冲区
+
+        当日志列表长度超过 日志缓冲区大小 时, 并根据 删除缓冲区日志数量 清理缓冲区
         """
         if len(self.log_buffer) >= self.log_buffer_size:
             self.log_buffer = self.log_buffer[self.log_buffer_delete_size :]
@@ -65,17 +63,16 @@ class Logger:
         log_position: LogPosition | None,
         log_group: LogGroup | None = None,
     ):
-        """
-        ## 构造 Log 对象
+        """构造 Log 对象并添加到日志缓冲区
 
-        ## 参数
-            - level: LogLevel - 日志等级
-            - message: str - 信息内容
-            - time: int | float - 时间戳
-            - log_type: LogType - 日志类型
-            - log_source: LogSource - 日志来源
-            - log_position: LogPosition - 日志位置
-            - log_group: LogGroup - 可选，若指定则将日志添加到日志组
+        Args:
+            level (LogLevel): 日志等级
+            message (str): 日志消息
+            time (int | float): 日志时间戳
+            log_type (LogType): 日志类型
+            log_source (LogSource): 日志来源
+            log_position (LogPosition | None): 日志位置
+            log_group (LogGroup | None, optional): 日志组. Defaults to None.
         """
         # 构造 Log
         log = Log(level, message, time, log_type, log_source, log_position)
@@ -89,9 +86,9 @@ class Logger:
 
         # 遍历日志列表, 追加到日志文件中
         with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(log.toString() + "\n")
+            f.write(log.to_string() + "\n")
         # 判断是否需要清理缓冲区
-        self.clearBuffer()
+        self.clear_buffer()
         # 打印 log
         print(log)
 
@@ -158,4 +155,4 @@ class Logger:
 # 实例化日志记录器
 logger = Logger()
 logger.load_config()
-logger.createLogFile()
+logger.create_log_file()

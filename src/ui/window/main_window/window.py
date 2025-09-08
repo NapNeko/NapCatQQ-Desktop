@@ -62,7 +62,7 @@ class MainWindow(MSFluentWindow):
         width, height = desktop.width(), desktop.height()
         self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)
         # 调整窗体透明度
-        self.setWindowOpacity(cfg.get(cfg.windowOpacity) / 100)
+        self.setWindowOpacity(cfg.get(cfg.window_opacity) / 100)
         # 创建 Splash Screen
         self.splash_screen = SplashScreen(":Global/image/Global/napcat.png", self, True)
         self.splash_screen.setIconSize(QSize(360, 260))

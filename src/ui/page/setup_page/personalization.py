@@ -3,27 +3,26 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
+from qfluentwidgets import CustomColorSettingCard, ExpandLayout
 from qfluentwidgets import FluentIcon
 from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import (
-    ScrollArea,
-    TitleLabel,
-    ExpandLayout,
     MessageBoxBase,
-    RangeSettingCard,
-    SettingCardGroup,
     OptionsSettingCard,
-    CustomColorSettingCard,
+    RangeSettingCard,
+    ScrollArea,
+    SettingCardGroup,
+    TitleLabel,
     setTheme,
     setThemeColor,
 )
-from PySide6.QtCore import Qt, QObject
-from PySide6.QtWidgets import QWidget, QGridLayout
+from PySide6.QtCore import QObject, Qt
+from PySide6.QtWidgets import QGridLayout, QWidget
 
 # 项目内模块导入
 from src.core.config import cfg
 from src.ui.components.info_bar import success_bar
-from src.ui.components.input_card.generic_card import ShowDialogCard, SwitchConfigCard, ComboBoxConfigCard
+from src.ui.components.input_card.generic_card import ComboBoxConfigCard, ShowDialogCard, SwitchConfigCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -58,7 +57,7 @@ class Personalization(ScrollArea):
         self.themeGroup = SettingCardGroup(title=self.tr("主题"), parent=self.view)
         # 创建项
         self.themeCard = OptionsSettingCard(
-            configItem=cfg.themeMode,
+            configItem=cfg.theme_mode,
             icon=FluentIcon.BRUSH,
             title=self.tr("切换主题"),
             content=self.tr("切换程序的主题"),
@@ -66,7 +65,7 @@ class Personalization(ScrollArea):
             parent=self.themeGroup,
         )
         self.themeColorCard = CustomColorSettingCard(
-            configItem=cfg.themeColor,
+            configItem=cfg.theme_color,
             icon=FluentIcon.PALETTE,
             title=self.tr("主题颜色"),
             content=self.tr("选择主题色"),
@@ -76,14 +75,14 @@ class Personalization(ScrollArea):
         self.windowGroup = SettingCardGroup(title=self.tr("窗体"), parent=self.view)
         # 创建项
         self.windowOpacityCard = RangeSettingCard(
-            configItem=cfg.windowOpacity,
+            configItem=cfg.window_opacity,
             icon=FluentIcon.FIT_PAGE,
             title=self.tr("窗口透明度"),
             content=self.tr("设置窗口的透明度"),
             parent=self.windowGroup,
         )
         self.zoomCard = OptionsSettingCard(
-            configItem=cfg.dpiScale,
+            configItem=cfg.dpi_scale,
             icon=FluentIcon.ZOOM,
             title=self.tr("界面缩放"),
             content=self.tr("更改 Widget 和字体的大小"),
@@ -125,7 +124,7 @@ class Personalization(ScrollArea):
         from src.ui.window.main_window.window import MainWindow
 
         # 连接重启提示
-        cfg.appRestartSig.connect(lambda: success_bar(self.tr("配置在重启后生效")))
+        cfg.app_restart_signal.connect(lambda: success_bar(self.tr("配置在重启后生效")))
 
         # 连接启动相关
 
@@ -143,7 +142,6 @@ class Personalization(ScrollArea):
         from src.ui.page.home_page import HomeWidget
 
         setTheme(cfg.get(theme), save=True)
-        HomeWidget().updateBgImageSize()
 
 
 class TitleTabBarSettingDialog(MessageBoxBase):
@@ -162,8 +160,12 @@ class TitleTabBarSettingDialog(MessageBoxBase):
             self.tr("关闭按钮显示方式"),
             [self.tr("始终显示"), self.tr("悬停显示"), self.tr("永不显示")],
         )
-        self.setTabMaximumWidthCard = RangeSettingCard(cfg.titleTabBarMaxWidth, FI.TRANSPARENT, self.tr("标签最大宽度"))
-        self.setTabMinimumWidthCard = RangeSettingCard(cfg.titleTabBarMinWidth, FI.TRANSPARENT, self.tr("标签最小宽度"))
+        self.setTabMaximumWidthCard = RangeSettingCard(
+            cfg.title_tab_bar_max_width, FI.TRANSPARENT, self.tr("标签最大宽度")
+        )
+        self.setTabMinimumWidthCard = RangeSettingCard(
+            cfg.title_tab_bar_min_width, FI.TRANSPARENT, self.tr("标签最小宽度")
+        )
 
         # 布局
         self.gridLayout = QGridLayout()
@@ -183,17 +185,17 @@ class TitleTabBarSettingDialog(MessageBoxBase):
         self.widget.setMinimumSize(500, 450)
 
         # 填充配置
-        self.enableCard.fillValue(cfg.get(cfg.titleTabBar))
-        self.enableMovableCard.fillValue(cfg.get(cfg.titleTabBarMovable))
-        self.enableScrollableCard.fillValue(cfg.get(cfg.titleTabBarScrollable))
-        self.enableTabShadowCard.fillValue(cfg.get(cfg.titleTabBarShadow))
-        self.setCloseModeCard.fillValue(cfg.get(cfg.titleTabBarCloseMode).value)
+        self.enableCard.fillValue(cfg.get(cfg.title_tab_bar))
+        self.enableMovableCard.fillValue(cfg.get(cfg.title_tab_bar_movable))
+        self.enableScrollableCard.fillValue(cfg.get(cfg.title_tab_bar_scrollable))
+        self.enableTabShadowCard.fillValue(cfg.get(cfg.title_tab_bar_shadow))
+        self.setCloseModeCard.fillValue(cfg.get(cfg.title_tab_bar_close_mode).value)
 
     def accept(self) -> None:
         """接受按钮"""
-        cfg.set(cfg.titleTabBar, self.enableCard.getValue())
-        cfg.set(cfg.titleTabBarMovable, self.enableMovableCard.getValue())
-        cfg.set(cfg.titleTabBarScrollable, self.enableScrollableCard.getValue())
-        cfg.set(cfg.titleTabBarShadow, self.enableTabShadowCard.getValue())
-        cfg.set(cfg.titleTabBarCloseMode, self.setCloseModeCard.getValue())
+        cfg.set(cfg.title_tab_bar, self.enableCard.getValue())
+        cfg.set(cfg.title_tab_bar_movable, self.enableMovableCard.getValue())
+        cfg.set(cfg.title_tab_bar_scrollable, self.enableScrollableCard.getValue())
+        cfg.set(cfg.title_tab_bar_shadow, self.enableTabShadowCard.getValue())
+        cfg.set(cfg.title_tab_bar_close_mode, self.setCloseModeCard.getValue())
         super().accept()

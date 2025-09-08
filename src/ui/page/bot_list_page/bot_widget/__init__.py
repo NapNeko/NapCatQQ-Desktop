@@ -6,20 +6,24 @@ from typing import Optional
 import psutil
 from qfluentwidgets import PushButton, ToolTipFilter, TransparentToolButton
 from qfluentwidgets.common import FluentIcon
-from qfluentwidgets.components import ToolButton, SegmentedWidget, PrimaryPushButton
+from qfluentwidgets.components import PrimaryPushButton, SegmentedWidget, ToolButton
+from PySide6.QtCore import QProcess, QRegularExpression, Qt, Slot
 from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import Qt, Slot, QProcess, QRegularExpression
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget
+from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config import cfg
+from src.core.config.config_model import Config
+from src.core.config.operate_config import delete_config, update_config
 from src.core.network.email import offline_email
 from src.core.network.webhook import offline_webhook
 from src.core.utils.run_napCat import create_napcat_process
 from src.ui.common.style_sheet import StyleSheet
+from src.ui.components.code_editor.editor import CodeEditor
+from src.ui.components.code_editor.highlight import LogHighlighter
+from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
+from src.ui.components.message_box import AskBox, ImageBox
 from src.ui.page.add_page.enum import ConnectType
-from src.ui.components.info_bar import info_bar, error_bar, success_bar, warning_bar
-from src.core.config.config_model import Config
 from src.ui.page.add_page.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
@@ -27,13 +31,9 @@ from src.ui.page.add_page.msg_box import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
-from src.ui.components.message_box import AskBox, ImageBox
-from src.core.config.operate_config import delete_config, update_config
-from src.ui.components.code_editor.editor import CodeEditor
-from src.ui.page.bot_list_page.signal_bus import botListPageSignalBus
-from src.ui.components.code_editor.highlight import LogHighlighter
-from src.ui.page.bot_list_page.bot_widget.meg_box import ChooseConfigTypeDialog
 from src.ui.page.bot_list_page.bot_widget.bot_setup_page import BotSetupPage
+from src.ui.page.bot_list_page.bot_widget.meg_box import ChooseConfigTypeDialog
+from src.ui.page.bot_list_page.signal_bus import botListPageSignalBus
 
 
 class BotWidget(QWidget):
@@ -94,13 +94,13 @@ class BotWidget(QWidget):
         # 创建 view 和 页面
         self.view = QStackedWidget()
         self.botInfoPage = QWidget(self)
-        self.botInfoPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotInfo")
+        self.botInfoPage.setObjectName(f"{self.config.bot.qq_id}_BotWidgetPivot_BotInfo")
 
         self.botSetupPage = BotSetupPage(self.config, self)
-        self.botSetupPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotSetup")
+        self.botSetupPage.setObjectName(f"{self.config.bot.qq_id}_BotWidgetPivot_BotSetup")
 
         self.botLogPage = CodeEditor(self)
-        self.botLogPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotLog")
+        self.botLogPage.setObjectName(f"{self.config.bot.qq_id}_BotWidgetPivot_BotLog")
 
         # 将页面添加到 view
         self.view.addWidget(self.botInfoPage)
@@ -283,7 +283,7 @@ class BotWidget(QWidget):
         ## 检测用户状态
         """
         # 正则匹配
-        pattern = rf"\[INFO\] .+\({self.config.bot.QQID}\) \| 账号状态变更为离线"
+        pattern = rf"\[INFO\] .+\({self.config.bot.qq_id}\) \| 账号状态变更为离线"
         if not (match := QRegularExpression(pattern).match(data)).hasMatch():
             # 如果匹配不成功, 则退出
             return
@@ -292,15 +292,15 @@ class BotWidget(QWidget):
             # 如果未开启通知, 退出
             return
 
-        if cfg.get(cfg.botOfflineEmailNotice):
+        if cfg.get(cfg.bot_offline_email_notice):
             # 如果开启了邮件通知, 则发送邮件
             offline_email(self.config)
-        elif cfg.get(cfg.botOfflineWebHookNotice):
+        elif cfg.get(cfg.bot_offline_web_hook_notice):
             # 如果开启了 WebHook 通知, 则发送 WebHook
             offline_webhook(self.config)
         else:
             # 否则显示提示
-            warning_bar(self.tr(f"账号 {self.config.bot.QQID} 已离线, 请前往 NapCat 日志 查看详情"))
+            warning_bar(self.tr(f"账号 {self.config.bot.qq_id} 已离线, 请前往 NapCat 日志 查看详情"))
 
     @Slot()
     def _updateButtonSlot(self) -> None:
@@ -329,7 +329,7 @@ class BotWidget(QWidget):
 
         if AskBox(
             self.tr("确认删除"),
-            self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
+            self.tr(f"你确定要删除 {self.config.bot.qq_id} 吗? \n\n此操作无法撤消, 请谨慎操作"),
             MainWindow(),
         ).exec():
             # 询问用户是否确认删除, 确认删除执行删除操作
@@ -340,7 +340,7 @@ class BotWidget(QWidget):
                 # 删除成功后的操作
                 self.returnButton.clicked.emit()
                 BotListWidget().botList.updateList()
-                success_bar(self.tr(f"成功删除配置 {self.config.bot.QQID}({self.config.bot.name})"))
+                success_bar(self.tr(f"成功删除配置 {self.config.bot.qq_id}({self.config.bot.name})"))
 
                 self.returnButton.click()
                 self.close()
@@ -349,7 +349,7 @@ class BotWidget(QWidget):
                 # 项目内模块导入
                 from src.ui.window.main_window.window import MainWindow
 
-                MainWindow().title_bar.tab_bar.removeTabByKey(f"{self.config.bot.QQID}")
+                MainWindow().title_bar.tab_bar.removeTabByKey(f"{self.config.bot.qq_id}")
             else:
                 error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
 

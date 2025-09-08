@@ -213,11 +213,11 @@ class InstallQQPage(InstallPageBase):
 
     def on_download(self) -> None:
         """下载"""
-        self.downloader.downloadProgress.connect(self.set_progress_ring_value)
-        self.downloader.downloadFinish.connect(self.on_install)
-        self.downloader.statusLabel.connect(self.set_status_text)
-        self.downloader.buttonToggle.connect(self.on_switch_button)
-        self.downloader.progressRingToggle.connect(self.on_switch_progress_ring)
+        self.downloader.download_progress_signal.connect(self.set_progress_ring_value)
+        self.downloader.download_finish_signal.connect(self.on_install)
+        self.downloader.status_label_signal.connect(self.set_status_text)
+        self.downloader.button_toggle_signal.connect(self.on_switch_button)
+        self.downloader.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
         self.downloader.start()
 
     def on_install(self) -> None:
@@ -236,10 +236,10 @@ class InstallQQPage(InstallPageBase):
 
         # 开始安装
         self.installer = QQInstall(self.file_path)
-        self.installer.statusLabel.connect(self.set_status_text)
-        self.installer.buttonToggle.connect(self.on_switch_button)
-        self.installer.progressRingToggle.connect(self.on_switch_progress_ring)
-        self.installer.installFinish.connect(self.on_install_finsh)
+        self.installer.status_label_signal.connect(self.set_status_text)
+        self.installer.button_toggle_signal.connect(self.on_switch_button)
+        self.installer.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
+        self.installer.install_finish_signal.connect(self.on_install_finsh)
 
         self.installer.start()
 
@@ -270,20 +270,20 @@ class InstallNapCatQQPage(InstallPageBase):
 
     def on_download(self) -> None:
         """下载"""
-        self.downloader.downloadProgress.connect(self.set_progress_ring_value)
-        self.downloader.downloadFinish.connect(self.on_install)
-        self.downloader.statusLabel.connect(self.set_status_text)
-        self.downloader.buttonToggle.connect(self.on_switch_button)
-        self.downloader.progressRingToggle.connect(self.on_switch_progress_ring)
+        self.downloader.download_progress_signal.connect(self.set_progress_ring_value)
+        self.downloader.download_finish_signal.connect(self.on_install)
+        self.downloader.status_label_signal.connect(self.set_status_text)
+        self.downloader.button_toggle_signal.connect(self.on_switch_button)
+        self.downloader.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
         self.downloader.start()
 
     def on_install(self) -> None:
         """安装"""
         self.installer = NapCatInstall()
-        self.installer.statusLabel.connect(self.set_status_text)
-        self.installer.buttonToggle.connect(self.on_switch_button)
-        self.installer.progressRingToggle.connect(self.on_switch_progress_ring)
-        self.installer.installFinish.connect(self.install_finsh)
+        self.installer.status_label_signal.connect(self.set_status_text)
+        self.installer.button_toggle_signal.connect(self.on_switch_button)
+        self.installer.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
+        self.installer.install_finish_signal.connect(self.install_finsh)
         self.installer.start()
 
     def install_finsh(self) -> None:

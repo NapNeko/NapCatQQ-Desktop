@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import TYPE_CHECKING, Self, Optional
+from typing import TYPE_CHECKING, Optional, Self
 
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
+from src.core.utils.get_version import GetVersion
 from src.core.utils.singleton import singleton
 from src.ui.common.style_sheet import StyleSheet
-from src.ui.page.unit_page.top import TopWidget
-from src.core.utils.get_version import GetVersion
-from src.ui.page.unit_page.qq_page import QQPage
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from src.ui.page.unit_page.napcat_page import NapCatPage
 from src.ui.page.unit_page.napcat_desktop_page import NCDPage
+from src.ui.page.unit_page.napcat_page import NapCatPage
+from src.ui.page.unit_page.qq_page import QQPage
+from src.ui.page.unit_page.top import TopWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -48,14 +48,14 @@ class UnitWidget(QWidget):
         self.topCard.updateButton.clicked.connect(self.updateSlot)
 
         # 创建获取版本功能
-        self.getVersion.remoteUpdateFinish.connect(self.napcatPage.updateRemoteVersion)
-        self.getVersion.remoteUpdateFinish.connect(self.qqPage.updateRemoteVersion)
-        self.getVersion.remoteUpdateFinish.connect(self.ncdPage.updateRemoteVersion)
-        self.getVersion.remoteUpdateFinish.connect(lambda: self.topCard.updateButton.setEnabled(True))
+        self.getVersion.remote_update_finish_signal.connect(self.napcatPage.updateRemoteVersion)
+        self.getVersion.remote_update_finish_signal.connect(self.qqPage.updateRemoteVersion)
+        self.getVersion.remote_update_finish_signal.connect(self.ncdPage.updateRemoteVersion)
+        self.getVersion.remote_update_finish_signal.connect(lambda: self.topCard.updateButton.setEnabled(True))
 
-        self.getVersion.localUpdateFinish.connect(self.napcatPage.updateLocalVersion)
-        self.getVersion.localUpdateFinish.connect(self.qqPage.updateLocalVersion)
-        self.getVersion.localUpdateFinish.connect(self.ncdPage.updateLocalVersion)
+        self.getVersion.local_update_finish_signal.connect(self.napcatPage.updateLocalVersion)
+        self.getVersion.local_update_finish_signal.connect(self.qqPage.updateLocalVersion)
+        self.getVersion.local_update_finish_signal.connect(self.ncdPage.updateLocalVersion)
 
         # 启用一次更新
         self.updateSlot()

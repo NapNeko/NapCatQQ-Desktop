@@ -1,10 +1,27 @@
+# -*- coding: utf-8 -*-
 # 标准库导入
 import random
 import string
 from typing import Literal
 
 # 第三方库导入
-from pydantic import Field, HttpUrl, BaseModel, WebsocketUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, WebsocketUrl, field_validator
+
+"""
+这个模块包含的是机器人配置模型
+
+每个配置模型都继承自 pydantic 的 BaseModel, 用于数据验证和序列化
+每个配置模型都可以包含多个字段, 每个字段都对应一个配置项
+每个字段都可以指定类型, 默认值, 验证器等
+
+注意:
+- 配置模型主要用于定义与机器人相关的配置项, 如机器人名称, QQ号, 连接方式等
+- 配置模型可以嵌套, 如 ConnectConfig 包含多个网络连接配置模型
+- 配置模型可以与 JSON 等格式互相转换, 方便存储和读取配置文件
+- 具体使用方法可以参考 pydantic 的文档
+- 此文件可以不遵守 naming_convention 中的命名规范, 因为 NapCatQQ 配置项采用驼峰体命名, 以保持与 OneBot 标准的一致
+- 如果使用 snake_case 命名, 则需要在读取配置文件时进行转换, 增加不必要的复杂度
+"""
 
 
 class BotConfig(BaseModel):
@@ -14,16 +31,35 @@ class BotConfig(BaseModel):
 
     @field_validator("name")
     @staticmethod
-    def validate_name(value):
+    def validate_name(value: str) -> str:
+        """验证机器人名称
+
+        如果名称为空, 则生成一个随机的8位字母字符串作为名称
+
+        Args:
+            value (str): 机器人名称
+
+        Returns:
+            str: 验证后的机器人名称
+        """
         if not value:
             return "".join(random.choices(string.ascii_letters, k=8))
         return value
 
     @field_validator("QQID")
     @staticmethod
-    def validate_qqid(value):
+    def validate_qqid(value: str) -> str:
+        """验证QQID
+
+        如果QQID为空, 则抛出异常
+
+        Args:
+            value (str): QQID
+        Returns:
+            str: 验证后的QQID
+        """
         if not value:
-            raise ValueError("QQID cannot be empty")
+            raise ValueError("QQ号不能为空, 请重新输入")
         return value
 
 

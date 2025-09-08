@@ -22,17 +22,17 @@ if __name__ == "__main__":
     PathFunc().path_validator()
 
     # 设置DPI缩放
-    if cfg.get(cfg.dpiScale) == "Auto":
+    if cfg.get(cfg.dpi_scale) == "Auto":
         QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     else:
-        os.environ["QT_SCALE_FACTOR"] = str(cfg.get(cfg.dpiScale))
+        os.environ["QT_SCALE_FACTOR"] = str(cfg.get(cfg.dpi_scale))
 
     app = QApplication(sys.argv)
 
     # 初始化字体
     FontManager.initialize_fonts()
 
-    if cfg.get(cfg.MainWindow):
+    if cfg.get(cfg.main_window):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
@@ -42,6 +42,6 @@ if __name__ == "__main__":
         from src.ui.window.guide_window import GuideWindow
 
         GuideWindow().initialize()
-        cfg.set(cfg.MainWindow, True)
+        cfg.set(cfg.main_window, True)
 
     sys.exit(app.exec())

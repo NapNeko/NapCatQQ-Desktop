@@ -3,19 +3,19 @@
 import winreg
 from pathlib import Path
 
-from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl, Slot
+from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
-from src.ui.common.icon import NapCatDesktopIcon
-from src.core.network.urls import Urls
-from src.core.utils.path_func import PathFunc
-from src.ui.components.info_bar import info_bar, error_bar, success_bar
-from src.ui.page.unit_page.base import PageBase
 from src.core.network.downloader import QQDownloader
+from src.core.network.urls import Urls
 from src.core.utils.install_func import QQInstall
-from src.ui.page.unit_page.status import ButtonStatus
+from src.core.utils.path_func import PathFunc
+from src.ui.common.icon import NapCatDesktopIcon
+from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox, FolderBox
+from src.ui.page.unit_page.base import PageBase
+from src.ui.page.unit_page.status import ButtonStatus
 
 DESCRIPTION_TEXT = """
 ## **NapCatQQ与NTQQ的奇幻物语**  
@@ -119,12 +119,12 @@ class QQPage(PageBase):
             return
         self.file_path = PathFunc().tmp_path / self.url.fileName()
         self.downloader = QQDownloader(self.url)
-        self.downloader.downloadProgress.connect(self.appCard.setProgressRingValue)
-        self.downloader.downloadFinish.connect(self.installSlot)
-        self.downloader.statusLabel.connect(self.appCard.setStatusText)
-        self.downloader.errorFinsh.connect(self.errorFinshSlot)
-        self.downloader.buttonToggle.connect(self.appCard.switchButton)
-        self.downloader.progressRingToggle.connect(self.appCard.switchProgressRing)
+        self.downloader.download_progress_signal.connect(self.appCard.setProgressRingValue)
+        self.downloader.download_finish_signal.connect(self.installSlot)
+        self.downloader.status_label_signal.connect(self.appCard.setStatusText)
+        self.downloader.error_finsh_signal.connect(self.errorFinshSlot)
+        self.downloader.button_toggle_signal.connect(self.appCard.switchButton)
+        self.downloader.progress_ring_toggle_signal.connect(self.appCard.switchProgressRing)
         self.downloader.start()
 
     @Slot()
@@ -167,11 +167,11 @@ class QQPage(PageBase):
 
         # 开始安装
         self.installer = QQInstall(self.file_path)
-        self.installer.statusLabel.connect(self.appCard.setStatusText)
-        self.installer.errorFinsh.connect(self.errorFinshSlot)
-        self.installer.buttonToggle.connect(self.appCard.switchButton)
-        self.installer.progressRingToggle.connect(self.appCard.switchProgressRing)
-        self.installer.installFinish.connect(self.installFinshSlot)
+        self.installer.status_label_signal.connect(self.appCard.setStatusText)
+        self.installer.error_finish_signal.connect(self.errorFinshSlot)
+        self.installer.button_toggle_signal.connect(self.appCard.switchButton)
+        self.installer.progress_ring_toggle_signal.connect(self.appCard.switchProgressRing)
+        self.installer.install_finish_signal.connect(self.installFinshSlot)
         self.installer.start()
 
     @Slot()

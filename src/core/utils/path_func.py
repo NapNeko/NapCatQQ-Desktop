@@ -4,11 +4,24 @@ import winreg
 from pathlib import Path
 
 # 项目内模块导入
-from src.core.utils.logger import LogType, LogSource, logger
+from src.core.utils.logger import LogSource, LogType, logger
 from src.core.utils.singleton import Singleton
 
 
 class PathFunc(metaclass=Singleton):
+    """路径处理类
+
+    NapCatQQ Desktop 的路径处理类, 负责管理和验证应用程序所需的各种路径
+
+    Attributes:
+        qq_path (Path | None): QQ安装路径, 如果未找到则为None
+        napcat_path (Path): NapCat目录路径
+        config_dir_path (Path): 配置文件目录路径
+        tmp_path (Path): 临时文件目录路径
+        config_path (Path): 主配置文件路径
+        bot_config_path (Path): 机器人配置文件路径
+    """
+
     qq_path: Path | None
     napcat_path: Path
     config_dir_path: Path
@@ -16,10 +29,8 @@ class PathFunc(metaclass=Singleton):
     config_path: Path
     bot_config_path: Path
 
-    def __init__(self):
-        """
-        ## 初始化
-        """
+    def __init__(self) -> None:
+        """初始化"""
 
         # 路径字段
         self.qq_path = None
@@ -33,9 +44,7 @@ class PathFunc(metaclass=Singleton):
         self.bot_config_path = self.config_dir_path / "bot.json"
 
     def path_validator(self) -> None:
-        """
-        ## 验证一系列路径
-        """
+        """验证一系列路径"""
 
         paths_to_validate = [(self.tmp_path, "Tmp"), (self.config_dir_path, "config"), (self.napcat_path, "NapCat")]
 
@@ -48,9 +57,7 @@ class PathFunc(metaclass=Singleton):
 
     @staticmethod
     def get_qq_path() -> Path | None:
-        """
-        获取QQ路径
-        """
+        """获取QQ路径"""
         try:
             key = winreg.OpenKey(
                 key=winreg.HKEY_LOCAL_MACHINE,

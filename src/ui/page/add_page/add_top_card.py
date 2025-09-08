@@ -5,21 +5,21 @@ from typing import TYPE_CHECKING
 # 第三方库导入
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import (
+    CaptionLabel,
     MessageBox,
+    PrimaryPushButton,
+    SegmentedWidget,
     TitleLabel,
     ToolButton,
-    CaptionLabel,
-    SegmentedWidget,
-    PrimaryPushButton,
 )
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
+from src.core.config.operate_config import check_duplicate_bot, update_config
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.separator import Separator
 from src.ui.page.add_page.signal_bus import addPageSingalBus
-from src.core.config.operate_config import update_config, check_duplicate_bot
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -113,8 +113,8 @@ class AddTopCard(QWidget):
         ## 添加到机器人列表
         """
         # 项目内模块导入
-        from src.ui.page.add_page.add_widget import AddWidget
         from src.core.config.config_model import Config
+        from src.ui.page.add_page.add_widget import AddWidget
         from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
         # 读取配置文件并追加, 判断是否存在相同的 QQID
@@ -123,7 +123,7 @@ class AddTopCard(QWidget):
         if check_duplicate_bot(config):
             # 检查是否已存在相同的机器人配置
             error_bar(
-                self.tr(f"{config.bot.QQID} 已存在, 请重新输入"),
+                self.tr(f"{config.bot.qq_id} 已存在, 请重新输入"),
             )
             return
 
@@ -131,7 +131,7 @@ class AddTopCard(QWidget):
             # 更新配置文件, 如果返回为 True 则代表更新成功
             # 执行刷新
             BotListWidget().botList.updateList()
-            success_bar(self.tr(f"Bot({config.bot.QQID}) 已经添加成功，你可以在 机器人列表 中查看😼"))
+            success_bar(self.tr(f"Bot({config.bot.qq_id}) 已经添加成功，你可以在 机器人列表 中查看😼"))
         else:
             # 更新失败则提示查看日志
             error_bar(self.tr("更新配置文件时引发错误, 请前往 设置 > log 中查看详细错误"))

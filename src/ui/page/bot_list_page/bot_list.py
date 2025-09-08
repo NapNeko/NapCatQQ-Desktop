@@ -8,9 +8,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
+from src.core.config.operate_config import read_config
 from src.ui.components.info_bar import success_bar
 from src.ui.page.bot_list_page.bot_card import BotCard
-from src.core.config.operate_config import read_config
 
 
 class BotList(ScrollArea):
@@ -67,10 +67,10 @@ class BotList(ScrollArea):
             success_bar(self.tr(f"成功从配置文件加载 {len(bot_configs)} 个配置项"))
             return
 
-        qq_id_list = [card.config.bot.QQID for card in self.botCardList]  # 取出卡片列表中卡片的 QQID
+        qq_id_list = [card.config.bot.qq_id for card in self.botCardList]  # 取出卡片列表中卡片的 QQID
         for bot_config in bot_configs:
             # 遍历并判断是否有新增的 bot 配置
-            if bot_config.bot.QQID not in qq_id_list:
+            if bot_config.bot.qq_id not in qq_id_list:
                 # 不属于则就属于新增, 创建 card 并添加到布局
                 new_card = BotCard(bot_config)
                 self.cardLayout.addWidget(new_card)

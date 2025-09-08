@@ -4,30 +4,30 @@
 """
 # 标准库导入
 import shutil
-import zipfile
 import subprocess
+import zipfile
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Signal, QThread
+from PySide6.QtCore import QThread, QUrl, Signal
 
 # 项目内模块导入
-from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus
 from src.core.utils.path_func import PathFunc
+from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus
 
 
 class NapCatInstall(QThread):
     """NapCat 安装逻辑"""
 
     # 安装成功信号
-    installFinish = Signal()
+    install_finish_signal = Signal()
     # 安装失败信号
-    errorFinsh = Signal()
+    error_finish_signal = Signal()
     # 按钮模式切换
-    buttonToggle = Signal(ButtonStatus)
+    button_toggle_signal = Signal(ButtonStatus)
     # 进度条模式切换
-    progressRingToggle = Signal(ProgressRingStatus)
+    progress_ring_toggle_signal = Signal(ProgressRingStatus)
     # 状态标签
-    statusLabel = Signal(str)
+    status_label_signal = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -35,49 +35,41 @@ class NapCatInstall(QThread):
         self.install_path = PathFunc().napcat_path
 
     def run(self) -> None:
-        """
-        ## 安装逻辑
-        """
+        """安装逻辑"""
         try:
-            self.statusLabel.emit("正在安装 NapCat")
-            self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
+            self.status_label_signal.emit("正在安装 NapCat")
+            self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
             # 移除 NapCat 文件夹下除了 config 和 log 文件夹外的所有文件
-            self.rmOldFile()
+            self.remove_old_file()
             # 解压文件
-            self.unzipFile()
+            self.unzip_file()
             # 写入JS
-            self.writeJsFile()
+            self.write_js_file()
 
         except Exception as e:
-            self.statusLabel.emit(self.tr("安装失败"))
-            self.errorFinsh.emit()
+            self.status_label_signal.emit(self.tr("安装失败"))
+            self.error_finish_signal.emit()
 
-    def rmOldFile(self) -> None:
-        """
-        ## 删除旧文件
-        """
-        self.statusLabel.emit("正在删除旧文件")
+    def remove_old_file(self) -> None:
+        """删除旧文件"""
+        self.status_label_signal.emit("正在删除旧文件")
         for item in self.install_path.iterdir():
             if item.is_dir() and item.name not in ["config", "log"]:
                 shutil.rmtree(item)
             elif item.is_file():
                 item.unlink()
-        self.statusLabel.emit("旧文件删除成功")
+        self.status_label_signal.emit("旧文件删除成功")
 
-    def unzipFile(self) -> None:
-        """
-        ## 解压文件
-        """
-        self.statusLabel.emit("正在解压文件")
+    def unzip_file(self) -> None:
+        """解压文件"""
+        self.status_label_signal.emit("正在解压文件")
         with zipfile.ZipFile(self.zip_file_path, "r") as zip_ref:
             zip_ref.extractall(self.install_path)
         self.zip_file_path.unlink()  # 移除安装包
-        self.installFinish.emit()
+        self.install_finish_signal.emit()
 
-    def writeJsFile(self) -> None:
-        """
-        ## 写入 JS 文件
-        """
+    def write_js_file(self) -> None:
+        """写入 JS 文件"""
         with open(str(self.install_path / "loadNapCat.js"), "w") as file:
             file.write(
                 "(async () => {await import("
@@ -90,36 +82,34 @@ class QQInstall(QThread):
     """QQ 安装逻辑"""
 
     # 安装成功信号
-    installFinish = Signal()
+    install_finish_signal = Signal()
     # 安装失败信号
-    errorFinsh = Signal()
+    error_finish_signal = Signal()
     # 按钮模式切换
-    buttonToggle = Signal(ButtonStatus)
+    button_toggle_signal = Signal(ButtonStatus)
     # 进度条模式切换
-    progressRingToggle = Signal(ProgressRingStatus)
+    progress_ring_toggle_signal = Signal(ProgressRingStatus)
     # 状态标签
-    statusLabel = Signal(str)
+    status_label_signal = Signal(str)
 
     def __init__(self, exe_path: str | Path) -> None:
         super().__init__()
         self.exe_path: Path = exe_path if isinstance(exe_path, Path) else Path(exe_path)
 
     def run(self) -> None:
-        """
-        ## 安装逻辑
-        """
+        """安装逻辑"""
         try:
-            self.statusLabel.emit("正在安装 QQ")
-            self.progressRingToggle.emit(ProgressRingStatus.INDETERMINATE)
+            self.status_label_signal.emit("正在安装 QQ")
+            self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
 
             # 启动 QQ 安装程序
             if subprocess.run([str(self.exe_path), "/s"]).returncode == 0:
-                self.installFinish.emit()
+                self.install_finish_signal.emit()
             else:
-                self.errorFinsh.emit()
+                self.error_finish_signal.emit()
 
             self.exe_path.unlink()  # 移除安装包
 
         except Exception as e:
-            self.statusLabel.emit(self.tr(f"安装失败: {e}"))
-            self.errorFinsh.emit()
+            self.status_label_signal.emit(self.tr(f"安装失败: {e}"))
+            self.error_finish_signal.emit()
