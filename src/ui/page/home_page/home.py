@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import TYPE_CHECKING, Self, Optional
+from typing import TYPE_CHECKING, Self
 
 # 项目内模块导入
 from src.core.utils.singleton import singleton
@@ -15,26 +15,25 @@ if TYPE_CHECKING:
 
 @singleton
 class HomeWidget(TransparentStackedWidget):
-    displayView: Optional[DisplayViewWidget]
+
+    display_view: DisplayViewWidget
 
     def __init__(self) -> None:
         super().__init__()
 
     def initialize(self, parent: "MainWindow") -> Self:
-        """
-        初始化
-        """
+        """初始化"""
         # 创建控件
-        self.displayView = DisplayViewWidget()
+        self.display_view = DisplayViewWidget()
 
         # 设置控件
         self.setParent(parent)
         self.setObjectName("home_page")
-        self.addWidget(self.displayView)
-        self.setCurrentWidget(self.displayView)
+        self.addWidget(self.display_view)
+        self.setCurrentWidget(self.display_view)
 
         # 链接信号
-        self.displayView.buttonGroup.goButton.clicked.connect(lambda: self.parent().setCurrentIndex(1))
+        self.display_view.button_group.go_button.clicked.connect(lambda: self.parent().setCurrentIndex(1))
 
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)

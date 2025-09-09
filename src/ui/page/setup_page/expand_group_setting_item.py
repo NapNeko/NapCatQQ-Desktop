@@ -1,302 +1,354 @@
 # -*- coding: utf-8 -*-
+"""
+设置项组件模块
+
+提供各种类型的设置项组件，用于配置界面。
+包括文本框、开关、下拉框、范围滑块和文件选择器等。
+"""
+
 # 第三方库导入
 from qfluentwidgets import (
-    Slider,
-    ComboBox,
-    LineEdit,
     BodyLabel,
+    ComboBox,
     ConfigItem,
     FluentIcon,
+    LineEdit,
     PushButton,
-    SwitchButton,
-    FluentIconBase,
     RangeConfigItem,
+    Slider,
+    SwitchButton,
 )
-from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt, QDir, Slot, Signal
-from PySide6.QtWidgets import QWidget, QFileDialog, QHBoxLayout
+from PySide6.QtCore import QDir, Qt, Signal, Slot
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config import cfg
 
 
 class ItemBase(QWidget):
-    """
-    ## 设置卡片的基类
-    """
+    """设置项组件的基类"""
 
-    def __init__(self, title: str, parent=None) -> None:
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
         """
-        ## 初始化
+        初始化设置项基类
 
-        ## 参数
-        ----------
-        - title: str
-            - 标题
-
-        - parent: QWidget
-            - 父窗口
+        Args:
+            title: 设置项标题文本
+            parent: 父组件
         """
         super().__init__(parent=parent)
 
-        # 创建控件
-        self.titleLabel = BodyLabel(title, self)
-        self.hBoxLayout = QHBoxLayout(self)
+        self.title_label = BodyLabel(title, self)
+        self.h_box_layout = QHBoxLayout(self)
 
-        # 布局调整
+        # 布局配置
         self.setFixedHeight(64)
-        self.hBoxLayout.addWidget(self.titleLabel, 0, Qt.AlignmentFlag.AlignLeft)
-        self.hBoxLayout.addStretch(1)
-        self.hBoxLayout.setContentsMargins(32, 12, 32, 12)
+        self.h_box_layout.addWidget(self.title_label, 0, Qt.AlignmentFlag.AlignLeft)
+        self.h_box_layout.addStretch(1)
+        self.h_box_layout.setContentsMargins(32, 12, 32, 12)
 
-    def setTitle(self, title: str) -> None:
+    def set_title(self, title: str) -> None:
         """
-        ## 设置标题
+        设置标题文本
 
-        ## 参数
-        - title: str
-            - 标题
+        Args:
+            title: 新的标题文本
         """
-        self.titleLabel.setText(title)
+        self.title_label.setText(title)
 
-    def setValue(self, value) -> None:
+    def set_value(self, value) -> None:
         """
-        ## 设置值(继承实现)
+        设置组件值（需要在子类中实现）
 
-        ## 参数
-        - value
-            - 值
+        Args:
+            value: 要设置的值
         """
         pass
 
 
 class LineEditItem(ItemBase):
-    """
-    ## 展开设置卡片的子组件
-    """
+    """文本输入框设置项"""
 
-    def __init__(self, configItem: ConfigItem, title: str, /, placeholder_text: str = "", parent=None):
+    def __init__(
+        self, config_item: ConfigItem, title: str, placeholder_text: str = "", parent: QWidget | None = None
+    ) -> None:
+        """
+        初始化文本输入框设置项
+
+        Args:
+            config_item: 配置项对象
+            title: 设置项标题
+            placeholder_text: 输入框占位文本
+            parent: 父组件
+        """
         super().__init__(title, parent=parent)
-        self.configItem = configItem
-        self.lineEdit = LineEdit(self)
-        self.lineEdit.setPlaceholderText(placeholder_text)
 
-        if configItem:
-            self.setValue(cfg.get(configItem))
+        self.config_item = config_item
+        self.line_edit = LineEdit(self)
+        self.line_edit.setPlaceholderText(placeholder_text)
 
-        # 设置控件
-        self.lineEdit.editingFinished.connect(lambda: self.setValue(self.lineEdit.text()))
-        self.lineEdit.setFixedWidth(175)
+        # 初始化值
+        if config_item:
+            self.set_value(cfg.get(config_item))
 
-        # 添加到布局
-        self.hBoxLayout.addWidget(self.lineEdit, 0, Qt.AlignmentFlag.AlignRight)
-        self.hBoxLayout.addSpacing(16)
+        # 控件配置
+        self.line_edit.editingFinished.connect(self._on_editing_finished)
+        self.line_edit.setFixedWidth(175)
+
+        # 布局添加
+        self.h_box_layout.addWidget(self.line_edit, 0, Qt.AlignmentFlag.AlignRight)
+        self.h_box_layout.addSpacing(16)
+
+    def _on_editing_finished(self) -> None:
+        """编辑完成时的槽函数"""
+        self.set_value(self.line_edit.text())
 
     @Slot(str)
-    def setValue(self, value: str) -> None:
+    def set_value(self, value: str) -> None:
         """
-        ## 设置值
-        """
-        if self.configItem:
-            cfg.set(self.configItem, value)
+        设置输入框的值并更新配置
 
-        self.lineEdit.setText(value)
+        Args:
+            value: 要设置的文本值
+        """
+        if self.config_item:
+            cfg.set(self.config_item, value)
+
+        self.line_edit.setText(value)
 
 
 class SwitchItem(ItemBase):
-    """
-    ## 展开设置卡片的子组件
-    """
+    """开关按钮设置项"""
 
-    checkedChanged = Signal(bool)
+    checked_changed_signal = Signal(bool)
 
-    def __init__(self, configItem: ConfigItem, title: str, parent=None) -> None:
+    def __init__(self, config_item: ConfigItem, title: str, parent: QWidget | None = None) -> None:
         """
-        ## 初始化
+        初始化开关按钮设置项
 
-        ## 参数
-        - title: str
-            - 标题
-        - configItem: ConfigItem
-            - 配置项
-        - parent: QWidget
-            - 父窗口
+        Args:
+            config_item: 配置项对象
+            title: 设置项标题
+            parent: 父组件
         """
         super().__init__(title, parent=parent)
-        self.configItem = configItem
-        self.switchButton = SwitchButton(self)
 
-        if configItem:
-            self.setValue(cfg.get(configItem))
-            configItem.valueChanged.connect(self.setValue)
+        self.config_item = config_item
+        self.switch_button = SwitchButton(self)
 
-        # 添加到布局
-        self.hBoxLayout.addWidget(self.switchButton, 0, Qt.AlignmentFlag.AlignRight)
-        self.hBoxLayout.addSpacing(2)
+        # 初始化状态
+        if config_item:
+            self.set_value(cfg.get(config_item))
+            config_item.valueChanged.connect(self.set_value)
 
-        self.switchButton.checkedChanged.connect(self._onCheckedChanged)
+        # 布局添加
+        self.h_box_layout.addWidget(self.switch_button, 0, Qt.AlignmentFlag.AlignRight)
+        self.h_box_layout.addSpacing(2)
 
-    def _onCheckedChanged(self, value: bool) -> None:
+        # 信号连接
+        self.switch_button.checkedChanged.connect(self._on_checked_changed)
+
+    def _on_checked_changed(self, value: bool) -> None:
         """
-        ## 选中状态变更
+        开关状态变化处理
+
+        Args:
+            value: 新的开关状态
         """
-        self.setValue(value)
-        self.checkedChanged.emit(value)
+        self.set_value(value)
+        self.checked_changed_signal.emit(value)
 
     @Slot(bool)
-    def setValue(self, value: bool) -> None:
+    def set_value(self, value: bool) -> None:
         """
-        ## 设置值
-        """
-        if self.configItem:
-            cfg.set(self.configItem, value)
+        设置开关状态并更新配置
 
-        self.switchButton.setChecked(value)
+        Args:
+            value: 要设置的开关状态
+        """
+        if self.config_item:
+            cfg.set(self.config_item, value)
 
-    def setChecked(self, value: bool) -> None:
-        """
-        ## 设置选中状态
-        """
-        self.setValue(value)
+        self.switch_button.setChecked(value)
 
-    def isChecked(self) -> bool:
+    def set_checked(self, value: bool) -> None:
         """
-        ## 获取选中状态
+        设置选中状态
+
+        Args:
+            value: 要设置的选中状态
         """
-        return self.switchButton.isChecked()
+        self.set_value(value)
+
+    def is_checked(self) -> bool:
+        """
+        获取当前选中状态
+
+        Returns:
+            当前的开关状态
+        """
+        return self.switch_button.isChecked()
 
 
 class ComboBoxItem(ItemBase):
-    """
-    ## 展开设置卡片的子组件
-    """
+    """下拉选择框设置项"""
 
-    def __init__(self, configItem: ConfigItem, title: str, texts=None, parent=None) -> None:
+    def __init__(
+        self, config_item: ConfigItem, title: str, texts: list[str] | None = None, parent: QWidget | None = None
+    ) -> None:
         """
-        ## 初始化
+        初始化下拉选择框设置项
+
+        Args:
+            config_item: 配置项对象
+            title: 设置项标题
+            texts: 选项显示文本列表
+            parent: 父组件
         """
         super().__init__(title, parent=parent)
-        self.configItem = configItem
-        self.comboBox = ComboBox(self)
-        self.hBoxLayout.addWidget(self.comboBox, 0, Qt.AlignmentFlag.AlignRight)
-        self.hBoxLayout.addSpacing(16)
 
-        # 添加选项
-        self.optionToText = {option: text for option, text in zip(configItem.options, texts)}
-        for text, option in zip(texts, configItem.options):
-            self.comboBox.addItem(text, userData=option)
+        self.config_item = config_item
+        self.combo_box = ComboBox(self)
 
-        # 设置控件
-        self.comboBox.setCurrentText(self.optionToText[cfg.get(configItem)])
-        self.comboBox.currentIndexChanged.connect(self._currentIndexChanged)
-        self.comboBox.setFixedWidth(135)
+        # 布局添加
+        self.h_box_layout.addWidget(self.combo_box, 0, Qt.AlignmentFlag.AlignRight)
+        self.h_box_layout.addSpacing(16)
+
+        # 选项映射
+        self.option_to_text = {option: text for option, text in zip(config_item.options, texts)}
+        for text, option in zip(texts, config_item.options):
+            self.combo_box.addItem(text, userData=option)
+
+        # 控件配置
+        self.combo_box.setCurrentText(self.option_to_text[cfg.get(config_item)])
+        self.combo_box.currentIndexChanged.connect(self._on_current_index_changed)
+        self.combo_box.setFixedWidth(135)
 
     @Slot(int)
-    def _currentIndexChanged(self, index: int) -> None:
+    def _on_current_index_changed(self, index: int) -> None:
         """
-        ## 选项变更
-        """
-        cfg.set(self.configItem, self.comboBox.itemData(index))
+        当前选项变化处理
 
-    def setValue(self, value) -> None:
+        Args:
+            index: 新的选项索引
         """
-        ## 设置值
+        cfg.set(self.config_item, self.combo_box.itemData(index))
+
+    def set_value(self, value) -> None:
         """
-        if value not in self.optionToText:
+        设置选中值并更新配置
+
+        Args:
+            value: 要设置的选项值
+        """
+        if value not in self.option_to_text:
             return
 
-        self.comboBox.setCurrentText(self.optionToText[value])
-        cfg.set(self.configItem, value)
+        self.combo_box.setCurrentText(self.option_to_text[value])
+        cfg.set(self.config_item, value)
 
 
 class RangeItem(ItemBase):
-    """
-    ## 展开设置卡片的子组件
-    """
+    """范围滑块设置项"""
 
-    valueChanged = Signal(int)
+    value_changed_signal = Signal(int)
 
-    def __init__(self, configItem: RangeConfigItem, title: str, parent=None) -> None:
+    def __init__(self, config_item: RangeConfigItem, title: str, parent: QWidget | None = None) -> None:
         """
-        ## 初始化
+        初始化范围滑块设置项
+
+        Args:
+            config_item: 范围配置项对象
+            title: 设置项标题
+            parent: 父组件
         """
         super().__init__(title, parent=parent)
-        self.configItem = configItem
+
+        self.config_item = config_item
         self.slider = Slider(Qt.Orientation.Horizontal, self)
-        self.valueLabel = BodyLabel(self)
+        self.value_label = BodyLabel(self)
 
-        # 调整控件
-        self.valueLabel.setObjectName("valueLabel")
+        # 控件配置
+        self.value_label.setObjectName("valueLabel")
         self.slider.setMinimumWidth(260)
-        self.slider.setRange(*configItem.range)
-        self.slider.setValue(configItem.value)
+        self.slider.setRange(*config_item.range)
+        self.slider.setValue(config_item.value)
         self.slider.setFixedWidth(200)
-        self.valueLabel.setNum(configItem.value)
+        self.value_label.setNum(config_item.value)
 
-        # 调整布局
-        self.hBoxLayout.addStretch(1)
-        self.hBoxLayout.addWidget(self.valueLabel, 0, Qt.AlignmentFlag.AlignRight)
-        self.hBoxLayout.addSpacing(6)
-        self.hBoxLayout.addWidget(self.slider, 0, Qt.AlignmentFlag.AlignRight)
-        self.hBoxLayout.addSpacing(16)
+        # 布局配置
+        self.h_box_layout.addStretch(1)
+        self.h_box_layout.addWidget(self.value_label, 0, Qt.AlignmentFlag.AlignRight)
+        self.h_box_layout.addSpacing(6)
+        self.h_box_layout.addWidget(self.slider, 0, Qt.AlignmentFlag.AlignRight)
+        self.h_box_layout.addSpacing(16)
 
         # 信号连接
-        configItem.valueChanged.connect(self.setValue)
-        self.slider.valueChanged.connect(self._onValueChanged)
+        config_item.valueChanged.connect(self.set_value)
+        self.slider.valueChanged.connect(self._on_value_changed)
 
     @Slot(int)
-    def _onValueChanged(self, value: int) -> None:
+    def _on_value_changed(self, value: int) -> None:
         """
-        ## 值变更
-        """
-        self.setValue(value)
-        self.valueChanged.emit(value)
+        滑块值变化处理
 
-    def setValue(self, value: int) -> None:
+        Args:
+            value: 新的滑块值
         """
-        ## 设置值
+        self.set_value(value)
+        self.value_changed_signal.emit(value)
+
+    def set_value(self, value: int) -> None:
         """
-        cfg.set(self.configItem, value)
-        self.valueLabel.setNum(value)
-        self.valueLabel.adjustSize()
+        设置滑块值并更新配置
+
+        Args:
+            value: 要设置的数值
+        """
+        cfg.set(self.config_item, value)
+        self.value_label.setNum(value)
+        self.value_label.adjustSize()
         self.slider.setValue(value)
 
 
 class FileItem(ItemBase):
-    """
-    ## 展开设置卡片的子组件
-    """
-    fileChanged = Signal(str)  # file Path
+    """文件选择器设置项"""
 
-    def __init__(self, configItem: ConfigItem, title: str, parent=None) -> None:
+    file_changed_signal = Signal(str)  # 文件路径信号
+
+    def __init__(self, config_item: ConfigItem, title: str, parent: QWidget | None = None) -> None:
         """
-        ## 初始化
+        初始化文件选择器设置项
+
+        Args:
+            config_item: 配置项对象
+            title: 设置项标题
+            parent: 父组件
         """
         super().__init__(title, parent=parent)
-        self.configItem = configItem
-        self.title = title
+
+        self.config_item = config_item
+        self.title_text = title
         self.button = PushButton(self.tr("选择文件"), self, FluentIcon.FOLDER_ADD)
-        self.button.clicked.connect(self._onButtonClicked)
+        self.button.clicked.connect(self._on_button_clicked)
 
-        # 调整控件
+        # 控件配置
         self.button.setFixedWidth(135)
-        if cfg.get(self.configItem):
-            self.titleLabel.setText(f"{self.title}: {cfg.get(self.configItem)}")
+        if cfg.get(self.config_item):
+            self.title_label.setText(f"{self.title_text}: {cfg.get(self.config_item)}")
 
-        # 添加到布局
-        self.hBoxLayout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
-        self.hBoxLayout.addSpacing(16)
+        # 布局添加
+        self.h_box_layout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
+        self.h_box_layout.addSpacing(16)
 
     @Slot()
-    def _onButtonClicked(self) -> None:
-        """
-        ## 按钮点击
-        """
-        file, _ = QFileDialog.getOpenFileName(
+    def _on_button_clicked(self) -> None:
+        """按钮点击打开文件对话框"""
+        file_path, _ = QFileDialog.getOpenFileName(
             self, self.tr("选择文件"), QDir.homePath(), "Image Files (*.png *.jpg *.jpeg)"
         )
 
-        if file:
-            cfg.set(self.configItem, file)
-            self.titleLabel.setText(f"{self.title}: {file}")
-            self.fileChanged.emit(file)
+        if file_path:
+            cfg.set(self.config_item, file_path)
+            self.title_label.setText(f"{self.title_text}: {file_path}")
+            self.file_changed_signal.emit(file_path)

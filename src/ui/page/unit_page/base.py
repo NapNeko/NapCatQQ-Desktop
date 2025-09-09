@@ -10,27 +10,27 @@ from markdown import markdown
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
+    HeaderCardWidget,
+    HyperlinkLabel,
     ImageLabel,
+    IndeterminateProgressRing,
+    PrimaryPushButton,
+    ProgressRing,
     PushButton,
     ScrollArea,
-    TitleLabel,
-    ProgressRing,
-    HyperlinkLabel,
-    HeaderCardWidget,
     SimpleCardWidget,
-    PrimaryPushButton,
+    TitleLabel,
     TransparentToolButton,
-    IndeterminateProgressRing,
     setFont,
 )
-from PySide6.QtGui import QFont, QImage, QPixmap, QDesktopServices
-from PySide6.QtCore import Qt, QUrl, QSize
+from PySide6.QtCore import QSize, Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QFont, QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 
 # 项目内模块导入
 from src.ui.common.icon import StaticIcon
-from src.ui.page.unit_page.status import StatusLabel, ButtonStatus, ProgressRingStatus
 from src.ui.components.code_editor import UpdateLogExhibit
+from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus, StatusLabel
 
 
 class PageBase(ScrollArea):
@@ -211,7 +211,7 @@ class UpdateLogCard(HeaderCardWidget):
         self.url = QUrl()
 
         # 创建控件
-        self.logEdit = UpdateLogExhibit()
+        self.logEdit = UpdateLogExhibit(self)
         self.urlButton = TransparentToolButton(FluentIcon.GLOBE)
 
         # 设置属性

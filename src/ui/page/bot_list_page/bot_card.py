@@ -93,7 +93,7 @@ class BotCard(CardWidget):
         avatar_url: QUrl = Urls.QQ_AVATAR.value
         query = QUrlQuery()
         query.addQueryItem("spec", "640")
-        query.addQueryItem("dst_uin", str(self.config.bot.qq_id))
+        query.addQueryItem("dst_uin", str(self.config.bot.QQID))
         avatar_url.setQuery(query)
 
         # 创建请求并链接槽函数
@@ -126,7 +126,7 @@ class BotCard(CardWidget):
         from src.ui.page.bot_list_page.bot_widget import BotWidget
         from src.ui.window.main_window.window import MainWindow
 
-        BotListWidget().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.qq_id})")
+        BotListWidget().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
         BotListWidget().topCard.updateListButton.hide()
 
         if self.botWidget is None:
@@ -135,12 +135,12 @@ class BotCard(CardWidget):
             BotListWidget().view.setCurrentWidget(self.botWidget)
 
             MainWindow().title_bar.tab_bar.addTab(
-                f"{self.config.bot.qq_id}",
-                f"{self.config.bot.name} ({self.config.bot.qq_id})",
+                f"{self.config.bot.QQID}",
+                f"{self.config.bot.name} ({self.config.bot.QQID})",
                 QIcon(self.QQAvatarLabel.pixmap()),
                 lambda: (MainWindow().switchTo(BotListWidget()), self._clickSlot()),
             )
         else:
             BotListWidget().view.setCurrentWidget(self.botWidget)
 
-        MainWindow().title_bar.tab_bar.setCurrentTab(f"{self.config.bot.qq_id}")
+        MainWindow().title_bar.tab_bar.setCurrentTab(f"{self.config.bot.QQID}")

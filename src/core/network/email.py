@@ -86,7 +86,7 @@ class EmailData:
         # 动态从配置中获取值
         self.sender_email = cfg.get(cfg.email_sender)
         self.reciver_email = cfg.get(cfg.email_receiver)
-        self.token = cfg.get(cfg.emailToken)
+        self.token = cfg.get(cfg.email_token)
         self.smtp_server = cfg.get(cfg.email_stmp_server)
         self.smtp_port = cfg.get(cfg.email_stmp_port)
         self.encryption = EncryptionType.get_enum_by_value(cfg.get(cfg.email_encryption))

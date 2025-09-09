@@ -94,13 +94,13 @@ class BotWidget(QWidget):
         # 创建 view 和 页面
         self.view = QStackedWidget()
         self.botInfoPage = QWidget(self)
-        self.botInfoPage.setObjectName(f"{self.config.bot.qq_id}_BotWidgetPivot_BotInfo")
+        self.botInfoPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotInfo")
 
         self.botSetupPage = BotSetupPage(self.config, self)
-        self.botSetupPage.setObjectName(f"{self.config.bot.qq_id}_BotWidgetPivot_BotSetup")
+        self.botSetupPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotSetup")
 
         self.botLogPage = CodeEditor(self)
-        self.botLogPage.setObjectName(f"{self.config.bot.qq_id}_BotWidgetPivot_BotLog")
+        self.botLogPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotLog")
 
         # 将页面添加到 view
         self.view.addWidget(self.botInfoPage)
@@ -283,7 +283,7 @@ class BotWidget(QWidget):
         ## 检测用户状态
         """
         # 正则匹配
-        pattern = rf"\[INFO\] .+\({self.config.bot.qq_id}\) \| 账号状态变更为离线"
+        pattern = rf"\[INFO\] .+\({self.config.bot.QQID}\) \| 账号状态变更为离线"
         if not (match := QRegularExpression(pattern).match(data)).hasMatch():
             # 如果匹配不成功, 则退出
             return
@@ -300,7 +300,7 @@ class BotWidget(QWidget):
             offline_webhook(self.config)
         else:
             # 否则显示提示
-            warning_bar(self.tr(f"账号 {self.config.bot.qq_id} 已离线, 请前往 NapCat 日志 查看详情"))
+            warning_bar(self.tr(f"账号 {self.config.bot.QQID} 已离线, 请前往 NapCat 日志 查看详情"))
 
     @Slot()
     def _updateButtonSlot(self) -> None:
@@ -329,7 +329,7 @@ class BotWidget(QWidget):
 
         if AskBox(
             self.tr("确认删除"),
-            self.tr(f"你确定要删除 {self.config.bot.qq_id} 吗? \n\n此操作无法撤消, 请谨慎操作"),
+            self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
             MainWindow(),
         ).exec():
             # 询问用户是否确认删除, 确认删除执行删除操作
@@ -340,7 +340,7 @@ class BotWidget(QWidget):
                 # 删除成功后的操作
                 self.returnButton.clicked.emit()
                 BotListWidget().botList.updateList()
-                success_bar(self.tr(f"成功删除配置 {self.config.bot.qq_id}({self.config.bot.name})"))
+                success_bar(self.tr(f"成功删除配置 {self.config.bot.QQID}({self.config.bot.name})"))
 
                 self.returnButton.click()
                 self.close()
@@ -349,7 +349,7 @@ class BotWidget(QWidget):
                 # 项目内模块导入
                 from src.ui.window.main_window.window import MainWindow
 
-                MainWindow().title_bar.tab_bar.removeTabByKey(f"{self.config.bot.qq_id}")
+                MainWindow().title_bar.tab_bar.removeTabByKey(f"{self.config.bot.QQID}")
             else:
                 error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
 

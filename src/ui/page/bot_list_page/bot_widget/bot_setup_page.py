@@ -80,7 +80,7 @@ class BotSetupPage(QWidget):
         self._setLayout()
 
         # 设置全局唯一名称
-        self.setObjectName(f"{self.config.bot.qq_id}_BotWidgetPivot_BotSetup")
+        self.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotSetup")
 
     def getValue(self) -> dict:
         """

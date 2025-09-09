@@ -7,6 +7,7 @@ UI 组件位置调整模块
 
 ## 注意
 - 方法 `_slideStartPos` 保持驼峰命名，因为它是重写父类的方法，需要保持方法签名一致。
+- 属性 `infoBars` 保持驼峰命名，因为它是继承自父类的属性，需要保持一致。
 - 其他命名遵循项目的 snake_case 规范。
 """
 
@@ -52,7 +53,7 @@ class TopLeftInfoBarManager(InfoBarManager):
         y = self.margin + 42
 
         # 累加之前所有信息栏的高度和间距
-        for bar in self.info_bars[parent][: self.info_bars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
             y += bar.height() + self.spacing
 
         return QPoint(x, y)
@@ -92,7 +93,7 @@ class TopInfoBarManager(InfoBarManager):
         y = self.margin + 42
 
         # 累加之前所有信息栏的高度和间距
-        for bar in self.info_bars[parent][: self.info_bars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
             y += bar.height() + self.spacing
 
         return QPoint(x, y)
@@ -133,7 +134,7 @@ class TopRightInfoBarManager(InfoBarManager):
         y = self.margin + 42
 
         # 累加之前所有信息栏的高度和间距
-        for bar in self.info_bars[parent][: self.info_bars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
             y += bar.height() + self.spacing
 
         return QPoint(x, y)
@@ -173,7 +174,7 @@ class BottomLeftInfoBarManager(InfoBarManager):
         y = parent_size.height() - info_bar.height() - self.margin
 
         # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
-        for bar in self.info_bars[parent][: self.info_bars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
             y -= bar.height() + self.spacing
 
         return QPoint(x, y)
@@ -213,7 +214,7 @@ class BottomInfoBarManager(InfoBarManager):
         y = parent_size.height() - info_bar.height() - self.margin
 
         # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
-        for bar in self.info_bars[parent][: self.info_bars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
             y -= bar.height() + self.spacing
 
         return QPoint(x, y)
@@ -254,7 +255,7 @@ class BottomRightInfoBarManager(InfoBarManager):
         y = parent_size.height() - info_bar.height() - self.margin
 
         # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
-        for bar in self.info_bars[parent][: self.info_bars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
             y -= bar.height() + self.spacing
 
         return QPoint(x, y)

@@ -27,91 +27,96 @@ if TYPE_CHECKING:
 
 
 class AddTopCard(QWidget):
-    """
-    ## AddWidget 顶部展示的信息, 操作面板
-        用于展示切换 view 的 SegmentedWidget
-        包括清空配置项的按钮, 添加到列表的按钮, 创建脚本的按钮
+    """AddWidget 顶部展示的信息, 操作面板
 
+        用于展示切换 view 的 SegmentedWidget
+        包括清空配置项的按钮, 添加到列表的按钮
+
+    Attributes:
+        pivot (SegmentedWidget): 用于切换 view 的 SegmentedWidget
+        h_box_layout (QHBoxLayout): 总布局
+        label_layout (QVBoxLayout): Label 区域布局
+        button_layout (QHBoxLayout): Button 区域布局
+        title_label (TitleLabel): 主标题
+        subtitle_label (CaptionLabel): 副标题
+        clear_config_button (ToolButton): 清空配置按钮
+        add_push_button (PrimaryPushButton): 添加到列表按钮
+        separator (Separator): 分割线
+        add_connect_config_button (PrimaryPushButton): 添加连接配置按钮
     """
 
     def __init__(self, parent: "AddWidget") -> None:
         super().__init__(parent=parent)
         # 创建所需控件
         self.pivot = SegmentedWidget()
-        self.hBoxLayout = QHBoxLayout()
-        self.labelLayout = QVBoxLayout()
-        self.buttonLayout = QHBoxLayout()
+        self.h_box_layout = QHBoxLayout()
+        self.label_layout = QVBoxLayout()
+        self.button_layout = QHBoxLayout()
 
         # 调用方法
-        self._createLabel()
-        self._createButton()
-        self._setLayout()
-        self._connectSignal()
+        self._create_label()
+        self._create_button()
+        self._set_layout()
+        self._connect_signal()
 
-    def _createLabel(self) -> None:
+    def _create_label(self) -> None:
         """构建 Label 并配置"""
-        self.titleLabel = TitleLabel(self.tr("添加机器人"), self)
-        self.subtitleLabel = CaptionLabel(self.tr("在添加机器人之前，您需要做一些配置"), self)
+        self.title_label = TitleLabel(self.tr("添加机器人"), self)
+        self.subtitle_label = CaptionLabel(self.tr("在添加机器人之前，您需要做一些配置"), self)
 
-    def _createButton(self) -> None:
+    def _create_button(self) -> None:
         """构建 Button相关 并配置"""
-        self.clearConfigButton = ToolButton(FluentIcon.DELETE)
-        self.psPushButton = PrimaryPushButton(FluentIcon.ADD, self.tr("添加"))
+        self.clear_config_button = ToolButton(FluentIcon.DELETE)
+        self.add_push_button = PrimaryPushButton(FluentIcon.ADD, self.tr("添加"))
         self.separator = Separator(self)
-        self.addConnectConfigButton = PrimaryPushButton(FluentIcon.ADD, self.tr("添加连接配置"), self)
+        self.add_connect_config_button = PrimaryPushButton(FluentIcon.ADD, self.tr("添加连接配置"), self)
 
         # 设置一下默认隐藏
         self.separator.hide()
-        self.addConnectConfigButton.hide()
+        self.add_connect_config_button.hide()
 
-    def _setLayout(self) -> None:
-        """
-        ## 对内部进行布局
-        """
+    def _set_layout(self) -> None:
+        """对内部进行布局"""
         # 对 Label 区域进行布局
-        self.labelLayout.setSpacing(0)
-        self.labelLayout.setContentsMargins(0, 0, 0, 0)
-        self.labelLayout.addWidget(self.titleLabel)
-        self.labelLayout.addSpacing(5)
-        self.labelLayout.addWidget(self.subtitleLabel)
-        self.labelLayout.addSpacing(4)
-        self.labelLayout.addWidget(self.pivot)
+        self.label_layout.setSpacing(0)
+        self.label_layout.setContentsMargins(0, 0, 0, 0)
+        self.label_layout.addWidget(self.title_label)
+        self.label_layout.addSpacing(5)
+        self.label_layout.addWidget(self.subtitle_label)
+        self.label_layout.addSpacing(4)
+        self.label_layout.addWidget(self.pivot)
 
         # 对 Button 区域进行布局
-        self.buttonLayout.setSpacing(4)
-        self.buttonLayout.setContentsMargins(0, 0, 0, 0)
-        self.buttonLayout.addWidget(self.clearConfigButton),
-        self.buttonLayout.addSpacing(2)
-        self.buttonLayout.addWidget(self.psPushButton)
-        self.buttonLayout.addSpacing(2)
-        self.buttonLayout.addWidget(self.separator)
-        self.buttonLayout.addSpacing(2)
-        self.buttonLayout.addWidget(self.addConnectConfigButton)
-        self.buttonLayout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+        self.button_layout.setSpacing(4)
+        self.button_layout.setContentsMargins(0, 0, 0, 0)
+        self.button_layout.addWidget(self.clear_config_button),
+        self.button_layout.addSpacing(2)
+        self.button_layout.addWidget(self.add_push_button)
+        self.button_layout.addSpacing(2)
+        self.button_layout.addWidget(self.separator)
+        self.button_layout.addSpacing(2)
+        self.button_layout.addWidget(self.add_connect_config_button)
+        self.button_layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
 
         # 添加到总布局
-        self.hBoxLayout.addLayout(self.labelLayout)
-        self.hBoxLayout.addStretch(1)
-        self.hBoxLayout.addLayout(self.buttonLayout)
-        self.hBoxLayout.setContentsMargins(1, 0, 1, 5)
+        self.h_box_layout.addLayout(self.label_layout)
+        self.h_box_layout.addStretch(1)
+        self.h_box_layout.addLayout(self.button_layout)
+        self.h_box_layout.setContentsMargins(1, 0, 1, 5)
 
         # 设置页面布局
-        self.setLayout(self.hBoxLayout)
+        self.setLayout(self.h_box_layout)
 
-    def _connectSignal(self) -> None:
-        """
-        ## 链接所需信号
-        """
-        self.clearConfigButton.clicked.connect(self._clearBtnSlot)
-        self.psPushButton.clicked.connect(self._addBotListBtnSlot)
-        addPageSingalBus.addWidgetViewChange.connect(self._buttonVisiable)
-        self.addConnectConfigButton.clicked.connect(addPageSingalBus.addConnectConfigButtonClicked.emit)
+    def _connect_signal(self) -> None:
+        """链接所需信号"""
+        self.clear_config_button.clicked.connect(self._on_clear_button)
+        self.add_push_button.clicked.connect(self._on_add_bot_list_button)
+        addPageSingalBus.addWidgetViewChange.connect(self._on_button_visiable)
+        self.add_connect_config_button.clicked.connect(addPageSingalBus.addConnectConfigButtonClicked.emit)
 
     @Slot()
-    def _addBotListBtnSlot(self) -> None:
-        """
-        ## 添加到机器人列表
-        """
+    def _on_add_bot_list_button(self) -> None:
+        """添加到机器人列表"""
         # 项目内模块导入
         from src.core.config.config_model import Config
         from src.ui.page.add_page.add_widget import AddWidget
@@ -137,11 +142,8 @@ class AddTopCard(QWidget):
             error_bar(self.tr("更新配置文件时引发错误, 请前往 设置 > log 中查看详细错误"))
 
     @Slot()
-    def _clearBtnSlot(self) -> None:
-        """
-        ## 清理按钮的槽函数
-            用于提示用户是否确认清空(还原)所有已有配置项
-        """
+    def _on_clear_button(self) -> None:
+        """清理按钮的槽函数, 用于提示用户是否确认清空(还原)所有已有配置项"""
         # 项目内模块导入
         from src.ui.page.add_page import AddWidget
         from src.ui.window.main_window import MainWindow
@@ -158,22 +160,20 @@ class AddTopCard(QWidget):
             AddWidget().advancedWidget.clearValues()
 
     @Slot(int)
-    def _buttonVisiable(self, index) -> None:
-        """
-        ## 设置按钮的激活状态
-        """
+    def _on_button_visiable(self, index) -> None:
+        """设置按钮的激活状态"""
 
         # 判断当前再哪一页,然后决定按钮是否显示
         match index:
             case 0 | 2:
-                self.psPushButton.setVisible(True)
-                self.clearConfigButton.setVisible(True)
+                self.add_push_button.setVisible(True)
+                self.clear_config_button.setVisible(True)
                 self.separator.setVisible(False)
-                self.addConnectConfigButton.setVisible(False)
+                self.add_connect_config_button.setVisible(False)
             case 1:
-                self.psPushButton.setVisible(True)
-                self.clearConfigButton.setVisible(True)
+                self.add_push_button.setVisible(True)
+                self.clear_config_button.setVisible(True)
                 self.separator.setVisible(True)
-                self.addConnectConfigButton.setVisible(True)
+                self.add_connect_config_button.setVisible(True)
             case _:
                 pass

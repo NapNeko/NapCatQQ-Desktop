@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 class TextInputBox(MessageBoxBase):
     """文本输入框弹窗，用于获取用户输入的文本信息."""
 
-    def __init__(self, parent: MainWindow, placeholder_text: str = "Enter...") -> None:
+    def __init__(self, parent: "MainWindow", placeholder_text: str = "Enter...") -> None:
         """
         初始化文本输入框弹窗.
 
@@ -58,7 +58,7 @@ class TextInputBox(MessageBoxBase):
 class AskBox(MessageBoxBase):
     """询问用户是否确认的提示框，通常用于危险操作前的二次确认."""
 
-    def __init__(self, title: str, content: str, parent: MainWindow) -> None:
+    def __init__(self, title: str, content: str, parent: "MainWindow") -> None:
         """
         初始化确认提示框.
 
@@ -83,7 +83,7 @@ class AskBox(MessageBoxBase):
 class ImageBox(MessageBoxBase):
     """图片展示弹窗，用于在弹窗中展示一张图片."""
 
-    def __init__(self, title: str, image: str | QImage | QPixmap, parent: MainWindow) -> None:
+    def __init__(self, title: str, image: str | QImage | QPixmap, parent: "MainWindow") -> None:
         """
         初始化图片展示弹窗。
 
@@ -146,7 +146,7 @@ class ImageBox(MessageBoxBase):
 class HyperlinkBox(MessageBoxBase):
     """超链接消息框"""
 
-    def __init__(self, title: str, content: str, hyperlinks: List[Dict[str, QUrl]], parent: MainWindow) -> None:
+    def __init__(self, title: str, content: str, hyperlinks: List[Dict[str, QUrl]], parent: "MainWindow") -> None:
         """初始化
 
         Args:
@@ -183,7 +183,7 @@ class HyperlinkBox(MessageBoxBase):
 class FolderBox(MessageBoxBase):
     """文件夹消息框"""
 
-    def __init__(self, title: str, parent: MainWindow) -> None:
+    def __init__(self, title: str, parent: "MainWindow") -> None:
         """初始化
 
         Args:

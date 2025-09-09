@@ -1,38 +1,36 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import TitleLabel, CaptionLabel, SegmentedWidget
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from qfluentwidgets import CaptionLabel, SegmentedWidget, TitleLabel
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 
 class SetupTopCard(QWidget):
-    """
-    ## SetupTopCard 顶部展示的 InputCard
-    """
+    """SetupTopCard 顶部展示的 InputCard"""
 
     def __init__(self, parent) -> None:
         super().__init__(parent=parent)
 
         # 创建所需控件
         self.pivot = SegmentedWidget()
-        self.titleLabel = TitleLabel(self.tr("设置"), self)
-        self.subtitleLabel = CaptionLabel(self.tr("NapCatQQ Desktop 设置"), self)
-        self.hBoxLayout = QHBoxLayout()
-        self.vBoxLayout = QVBoxLayout()
-        self.labelLayout = QVBoxLayout()
+        self.title_label = TitleLabel(self.tr("设置"), self)
+        self.subtitle_label = CaptionLabel(self.tr("NapCatQQ Desktop 设置"), self)
+        self.h_box_layout = QHBoxLayout()
+        self.v_box_layout = QVBoxLayout()
+        self.label_layout = QVBoxLayout()
 
         # 设置布局
-        self.labelLayout.setSpacing(0)
-        self.labelLayout.setContentsMargins(0, 0, 0, 0)
-        self.labelLayout.addWidget(self.titleLabel)
-        self.labelLayout.addSpacing(5)
-        self.labelLayout.addWidget(self.subtitleLabel)
+        self.label_layout.setSpacing(0)
+        self.label_layout.setContentsMargins(0, 0, 0, 0)
+        self.label_layout.addWidget(self.title_label)
+        self.label_layout.addSpacing(5)
+        self.label_layout.addWidget(self.subtitle_label)
 
-        self.hBoxLayout.addWidget(self.pivot, 1)
-        self.hBoxLayout.addStretch(3)
-        self.hBoxLayout.setContentsMargins(0, 0, 0, 0)
+        self.h_box_layout.addWidget(self.pivot, 1)
+        self.h_box_layout.addStretch(3)
+        self.h_box_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.vBoxLayout.addLayout(self.labelLayout)
-        self.vBoxLayout.addLayout(self.hBoxLayout)
-        self.vBoxLayout.setContentsMargins(0, 0, 0, 0)
+        self.v_box_layout.addLayout(self.label_layout)
+        self.v_box_layout.addLayout(self.h_box_layout)
+        self.v_box_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.setLayout(self.vBoxLayout)
+        self.setLayout(self.v_box_layout)

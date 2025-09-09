@@ -1,69 +1,67 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
 from qfluentwidgets.common import FluentIcon, setFont
-from qfluentwidgets.components import ImageLabel, PushButton, TitleLabel, PrimaryPushButton
-from PySide6.QtGui import QFont, QDesktopServices
+from qfluentwidgets.components import ImageLabel, PrimaryPushButton, PushButton, TitleLabel
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from PySide6.QtGui import QDesktopServices, QFont
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.ui.common.icon import StaticIcon
 from src.core.network.urls import Urls
+from src.ui.common.icon import StaticIcon
 from src.ui.common.style_sheet import StyleSheet
+
+"""
+这里我是真没招了,这里是这个项目最早的代码了,当时也没什么经验
+所以代码风格和现在不太一样,而且也没什么注释,后续有时间再来重构吧
+目前只重构了代码风格,加上了一些注释(bushi),后续再说吧
+"""
 
 
 class DisplayViewWidget(QWidget):
-    # 开信号接口,将信号向上级传递
 
     def __init__(self) -> None:
-        """
-        初始化
-        """
+        """初始化"""
         super().__init__()
         self.setObjectName("display_view")
 
         # 创建控件
-        self.vboxLayout = QVBoxLayout(self)
-        self.logoImage = ImageLabel(self)
-        self.logoLabel = TitleLabel("NapCatQQ-Desktop", self)
-        self.buttonGroup = ButtonGroup(self)
+        self.v_box_layout = QVBoxLayout(self)
+        self.logo_image = ImageLabel(self)
+        self.logo_label = TitleLabel("NapCatQQ-Desktop", self)
+        self.button_group = ButtonGroup(self)
 
         # 设置控件
-        self.logoImage.setImage(StaticIcon.NAPCAT.path())
-        self.logoImage.scaledToHeight(self.width() // 4)
+        self.logo_image.setImage(StaticIcon.NAPCAT.path())
+        self.logo_image.scaledToHeight(self.width() // 4)
 
         # 进行布局
-        self._setLayout()
+        self._set_layout()
 
         # 应用样式表
         StyleSheet.HOME_WIDGET.apply(self)
 
-    def _setLayout(self) -> None:
-        """
-        对 ViewWidget 内控件进行布局
-        """
-        self.vboxLayout.addStretch(1)
-        self.vboxLayout.addWidget(self.logoImage, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.vboxLayout.addSpacing(20)
-        self.vboxLayout.setStretch(2, 0)
-        self.vboxLayout.addWidget(self.logoLabel, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.vboxLayout.addSpacing(20)
-        self.vboxLayout.addWidget(self.buttonGroup)
-        self.vboxLayout.addStretch(1)
+    def _set_layout(self) -> None:
+        """对 ViewWidget 内控件进行布局"""
+        self.v_box_layout.addStretch(1)
+        self.v_box_layout.addWidget(self.logo_image, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.v_box_layout.addSpacing(20)
+        self.v_box_layout.setStretch(2, 0)
+        self.v_box_layout.addWidget(self.logo_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.v_box_layout.addSpacing(20)
+        self.v_box_layout.addWidget(self.button_group)
+        self.v_box_layout.addStretch(1)
 
-        self.vboxLayout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setLayout(self.vboxLayout)
+        self.v_box_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setLayout(self.v_box_layout)
 
     def resizeEvent(self, event):
-        """
-        重写实现自动缩放
-        """
+        """重写实现自动缩放"""
         super().resizeEvent(event)
         # 缩放 Logo
-        self.logoImage.scaledToHeight(self.width() // 4)
+        self.logo_image.scaledToHeight(self.width() // 4)
         # 缩放字体
-        new_font_size = max(28, self.width() // 30)
-        setFont(self.logoLabel, new_font_size, QFont.Weight.DemiBold)
+        setFont(self.logo_label, max(28, self.width() // 30), QFont.Weight.DemiBold)
         # 重绘页面
         self.update()
 
@@ -71,45 +69,39 @@ class DisplayViewWidget(QWidget):
 class ButtonGroup(QWidget):
 
     def __init__(self, parent: DisplayViewWidget) -> None:
-        """
-        初始化
-        """
+        """初始化"""
         super().__init__(parent=parent)
 
         # 创建控件
-        self.hBoxLayout = QHBoxLayout(self)
-        self.githubButton = PushButton(self)
-        self.goButton = PrimaryPushButton(self)
+        self.h_box_layout = QHBoxLayout(self)
+        self.github_button = PushButton(self)
+        self.go_button = PrimaryPushButton(self)
 
         # 设置控件
-        self.githubButton.setText(self.tr("GitHub"))
-        self.goButton.setText(self.tr("开始使用"))
-        self.githubButton.setIcon(FluentIcon.GITHUB)
+        self.github_button.setText(self.tr("GitHub"))
+        self.go_button.setText(self.tr("开始使用"))
+        self.github_button.setIcon(FluentIcon.GITHUB)
 
         # 链接按钮信号
-        self.githubButton.clicked.connect(lambda: QDesktopServices.openUrl(Urls.NAPCATQQ_REPO.value))
+        self.github_button.clicked.connect(lambda: QDesktopServices.openUrl(Urls.NAPCATQQ_REPO.value))
 
         # 进行布局
-        self._setLayout()
+        self._set_layout()
 
-    def _setLayout(self) -> None:
-        """
-        对 ButtonGroup 进行布局
-        """
-        self.hBoxLayout.addWidget(self.githubButton, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.hBoxLayout.addWidget(self.goButton, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.hBoxLayout.setSpacing(25)
-        self.setLayout(self.hBoxLayout)
+    def _set_layout(self) -> None:
+        """对 ButtonGroup 进行布局"""
+        self.h_box_layout.addWidget(self.github_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.h_box_layout.addWidget(self.go_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.h_box_layout.setSpacing(25)
+        self.setLayout(self.h_box_layout)
 
     def resizeEvent(self, event) -> None:
-        """
-        重写实现自动调整按钮大小
-        """
+        """重写实现自动调整按钮大小"""
         super().resizeEvent(event)
         # 重新计算大小
         new_button_width = max(100, self.parent().width() // 10)
         new_button_height = max(30, self.parent().height() // 20)
-        self.githubButton.setFixedSize(new_button_width, new_button_height)
-        self.goButton.setFixedSize(new_button_width, new_button_height)
+        self.github_button.setFixedSize(new_button_width, new_button_height)
+        self.go_button.setFixedSize(new_button_width, new_button_height)
         # 重绘画面
         self.update()

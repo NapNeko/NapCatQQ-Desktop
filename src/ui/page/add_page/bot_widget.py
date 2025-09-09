@@ -71,7 +71,7 @@ class BotWidget(ScrollArea):
         ## 如果传入了 config 则对其内部卡片的值进行填充
         """
         self.botNameCard.fill_value(self.config.name)
-        self.botQQIdCard.fill_value(self.config.qq_id)
+        self.botQQIdCard.fill_value(self.config.QQID)
         self.musicSignUrl.fill_value(self.config.musicSignUrl)
 
     def _setLayout(self) -> None:

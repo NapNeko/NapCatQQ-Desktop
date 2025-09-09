@@ -35,7 +35,7 @@ def create_napcat_process(config: Config) -> QProcess:
         [
             str(PathFunc().get_qq_path() / "QQ.exe"),
             str(PathFunc().napcat_path / "NapCatWinBootHook.dll"),
-            config.bot.qq_id,
+            config.bot.QQID,
         ]
     )
 

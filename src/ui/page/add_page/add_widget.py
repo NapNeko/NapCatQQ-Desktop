@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import TYPE_CHECKING, Self, Optional
+from typing import TYPE_CHECKING, Optional, Self
 
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.utils.singleton import singleton
 from src.ui.common.style_sheet import StyleSheet
-from src.ui.page.add_page.enum import ConnectType
+from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.ui.page.add_page.add_top_card import AddTopCard
+from src.ui.page.add_page.advanced import AdvancedWidget
+from src.ui.page.add_page.bot_widget import BotWidget
 from src.ui.page.add_page.connect import ConnectWidget
+from src.ui.page.add_page.enum import ConnectType
 from src.ui.page.add_page.msg_box import (
     ChooseConfigTypeDialog,
     HttpClientConfigDialog,
@@ -18,11 +22,7 @@ from src.ui.page.add_page.msg_box import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
-from src.ui.page.add_page.advanced import AdvancedWidget
-from src.ui.page.add_page.bot_widget import BotWidget
 from src.ui.page.add_page.signal_bus import addPageSingalBus
-from src.ui.components.stacked_widget import TransparentStackedWidget
-from src.ui.page.add_page.add_top_card import AddTopCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -31,9 +31,7 @@ if TYPE_CHECKING:
 
 @singleton
 class AddWidget(QWidget):
-    """
-    ## 窗体中 Add Bot 对应的 Widget
-    """
+    """窗体中 Add Bot 对应的 Widget"""
 
     view: Optional[TransparentStackedWidget]
     topCard: Optional[AddTopCard]
