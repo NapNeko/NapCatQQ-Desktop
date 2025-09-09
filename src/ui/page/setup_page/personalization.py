@@ -185,17 +185,17 @@ class TitleTabBarSettingDialog(MessageBoxBase):
         self.widget.setMinimumSize(500, 450)
 
         # 填充配置
-        self.enableCard.fillValue(cfg.get(cfg.title_tab_bar))
-        self.enableMovableCard.fillValue(cfg.get(cfg.title_tab_bar_movable))
-        self.enableScrollableCard.fillValue(cfg.get(cfg.title_tab_bar_scrollable))
-        self.enableTabShadowCard.fillValue(cfg.get(cfg.title_tab_bar_shadow))
-        self.setCloseModeCard.fillValue(cfg.get(cfg.title_tab_bar_close_mode).value)
+        self.enableCard.fill_value(cfg.get(cfg.title_tab_bar))
+        self.enableMovableCard.fill_value(cfg.get(cfg.title_tab_bar_movable))
+        self.enableScrollableCard.fill_value(cfg.get(cfg.title_tab_bar_scrollable))
+        self.enableTabShadowCard.fill_value(cfg.get(cfg.title_tab_bar_shadow))
+        self.setCloseModeCard.fill_value(cfg.get(cfg.title_tab_bar_close_mode).value)
 
     def accept(self) -> None:
         """接受按钮"""
-        cfg.set(cfg.title_tab_bar, self.enableCard.getValue())
-        cfg.set(cfg.title_tab_bar_movable, self.enableMovableCard.getValue())
-        cfg.set(cfg.title_tab_bar_scrollable, self.enableScrollableCard.getValue())
-        cfg.set(cfg.title_tab_bar_shadow, self.enableTabShadowCard.getValue())
-        cfg.set(cfg.title_tab_bar_close_mode, self.setCloseModeCard.getValue())
+        cfg.set(cfg.title_tab_bar, self.enableCard.get_value())
+        cfg.set(cfg.title_tab_bar_movable, self.enableMovableCard.get_value())
+        cfg.set(cfg.title_tab_bar_scrollable, self.enableScrollableCard.get_value())
+        cfg.set(cfg.title_tab_bar_shadow, self.enableTabShadowCard.get_value())
+        cfg.set(cfg.title_tab_bar_close_mode, self.setCloseModeCard.get_value())
         super().accept()

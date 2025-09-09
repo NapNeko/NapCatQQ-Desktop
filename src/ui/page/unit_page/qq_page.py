@@ -148,18 +148,18 @@ class QQPage(PageBase):
 
         # 修改注册表, 让安装程序读取注册表按照路径安装
         key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Tencent\QQNT")
-        winreg.SetValueEx(key, "Install", 0, winreg.REG_SZ, folder_box.getValue().replace("/", "\\"))
+        winreg.SetValueEx(key, "Install", 0, winreg.REG_SZ, folder_box.get_value().replace("/", "\\"))
         winreg.CloseKey(key)
 
         # 检查是否存在 dbghelp.dll 文件, 否则会导致安装失败
-        if Path(Path(folder_box.getValue()) / "dbghelp.dll").exists():
+        if Path(Path(folder_box.get_value()) / "dbghelp.dll").exists():
             rm_dll_box = AskBox(
                 self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), MainWindow()
             )
             rm_dll_box.yesButton.setText(self.tr("删除"))
             if rm_dll_box.exec():
                 # 用户点击了删除
-                Path(Path(folder_box.getValue()) / "dbghelp.dll").unlink()
+                Path(Path(folder_box.get_value()) / "dbghelp.dll").unlink()
             else:
                 self.file_path.unlink()
                 info_bar(self.tr("取消安装"))

@@ -231,7 +231,7 @@ class InstallQQPage(InstallPageBase):
 
         # 修改注册表, 让安装程序读取注册表按照路径安装
         key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Tencent\QQNT")
-        winreg.SetValueEx(key, "Install", 0, winreg.REG_SZ, folder_box.getValue().replace("/", "\\"))
+        winreg.SetValueEx(key, "Install", 0, winreg.REG_SZ, folder_box.get_value().replace("/", "\\"))
         winreg.CloseKey(key)
 
         # 开始安装

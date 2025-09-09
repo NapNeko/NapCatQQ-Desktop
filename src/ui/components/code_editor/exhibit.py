@@ -2,9 +2,9 @@
 # 第三方库导入
 from qfluentwidgets import SmoothScrollDelegate, setFont
 from qfluentwidgets.components.widgets.menu import TextEditMenu
-from PySide6.QtGui import QMouseEvent, QDesktopServices
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtWidgets import QTextBrowser
+from PySide6.QtGui import QDesktopServices, QMouseEvent
+from PySide6.QtWidgets import QTextBrowser, QWidget
 
 # 项目内模块导入
 from src.ui.components.code_editor.editor import CodeEditor
@@ -12,17 +12,15 @@ from src.ui.components.code_editor.editor import CodeEditor
 
 class CodeExibit(CodeEditor):
 
-    def __init__(self, parent=...):
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self.setReadOnly(True)
 
 
 class UpdateLogExhibit(QTextBrowser):
-    """
-    ## 更新日志页面使用的透明文本框
-    """
+    """更新日志页面使用的透明文本框"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self.scroll_delegate = SmoothScrollDelegate(self)
         self.setReadOnly(True)
@@ -36,6 +34,6 @@ class UpdateLogExhibit(QTextBrowser):
         else:
             super().mousePressEvent(event)
 
-    def contextMenuEvent(self, event):
+    def contextMenuEvent(self, event) -> None:
         menu = TextEditMenu(self)
         menu.exec(event.globalPos(), ani=True)

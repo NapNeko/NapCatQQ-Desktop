@@ -70,9 +70,9 @@ class BotWidget(ScrollArea):
         """
         ## 如果传入了 config 则对其内部卡片的值进行填充
         """
-        self.botNameCard.fillValue(self.config.name)
-        self.botQQIdCard.fillValue(self.config.qq_id)
-        self.musicSignUrl.fillValue(self.config.musicSignUrl)
+        self.botNameCard.fill_value(self.config.name)
+        self.botQQIdCard.fill_value(self.config.qq_id)
+        self.musicSignUrl.fill_value(self.config.musicSignUrl)
 
     def _setLayout(self) -> None:
         """
@@ -91,9 +91,9 @@ class BotWidget(ScrollArea):
         ## 返回内部卡片的配置结果
         """
         return {
-            "name": self.botNameCard.getValue(),
-            "QQID": self.botQQIdCard.getValue(),
-            "musicSignUrl": self.musicSignUrl.getValue(),
+            "name": self.botNameCard.get_value(),
+            "QQID": self.botQQIdCard.get_value(),
+            "musicSignUrl": self.musicSignUrl.get_value(),
         }
 
     def clearValues(self) -> None:

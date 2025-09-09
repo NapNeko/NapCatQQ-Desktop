@@ -275,7 +275,7 @@ class BotWidget(QWidget):
 
             box = ImageBox(self.tr("请扫码登陆"), match.captured(0), MainWindow())
             box.cancelButton.hide()
-            box.imageLabel.scaledToHeight(256)
+            box.image_label.scaledToHeight(256)
             box.exec()
 
     def _getBofOffline(self, data: str):

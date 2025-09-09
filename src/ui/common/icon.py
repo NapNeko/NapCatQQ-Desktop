@@ -3,7 +3,7 @@
 from enum import Enum
 
 # 第三方库导入
-from qfluentwidgets.common import Theme, FluentIconBase, getIconColor
+from qfluentwidgets.common import FluentIconBase, Theme, getIconColor
 
 
 class NapCatDesktopIcon(FluentIconBase, Enum):

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import FluentIcon, ScrollArea, ExpandLayout
+from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.ui.components.input_card import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
 from src.core.config.config_model import AdvancedConfig
+from src.ui.components.input_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 
 
 class AdvancedWidget(ScrollArea):
@@ -130,17 +130,17 @@ class AdvancedWidget(ScrollArea):
         """
         ## 如果传入了 config 则对其内部卡片的值进行填充
         """
-        self.autoStartCard.fillValue(self.config.autoStart)
-        self.offlineNotice.fillValue(self.config.offlineNotice)
-        self.parseMultMsg.fillValue(self.config.parseMultMsg)
-        self.packetServerCard.fillValue(self.config.packetServer)
-        self.packetBackendCard.fillValue(self.config.packetBackend)
-        self.localFile2UrlCard.fillValue(self.config.enableLocalFile2Url)
-        self.fileLogCard.fillValue(self.config.fileLog)
-        self.consoleLogCard.fillValue(self.config.consoleLog)
-        self.fileLogLevelCard.fillValue(self.config.fileLogLevel)
-        self.consoleLevelCard.fillValue(self.config.consoleLogLevel)
-        self.o3HookModeCard.fillValue(str(self.config.o3HookMode))
+        self.autoStartCard.fill_value(self.config.autoStart)
+        self.offlineNotice.fill_value(self.config.offlineNotice)
+        self.parseMultMsg.fill_value(self.config.parseMultMsg)
+        self.packetServerCard.fill_value(self.config.packetServer)
+        self.packetBackendCard.fill_value(self.config.packetBackend)
+        self.localFile2UrlCard.fill_value(self.config.enableLocalFile2Url)
+        self.fileLogCard.fill_value(self.config.fileLog)
+        self.consoleLogCard.fill_value(self.config.consoleLog)
+        self.fileLogLevelCard.fill_value(self.config.fileLogLevel)
+        self.consoleLevelCard.fill_value(self.config.consoleLogLevel)
+        self.o3HookModeCard.fill_value(str(self.config.o3HookMode))
 
     def _setLayout(self) -> None:
         """
@@ -159,17 +159,17 @@ class AdvancedWidget(ScrollArea):
         ## 返回内部卡片的配置结果
         """
         return {
-            "autoStart": self.autoStartCard.getValue(),
-            "offlineNotice": self.offlineNotice.getValue(),
-            "parseMultMsg": self.parseMultMsg.getValue(),
-            "packetServer": self.packetServerCard.getValue(),
-            "packetBackend": self.packetBackendCard.getValue(),
-            "enableLocalFile2Url": self.localFile2UrlCard.getValue(),
-            "fileLog": self.fileLogCard.getValue(),
-            "consoleLog": self.consoleLogCard.getValue(),
-            "fileLogLevel": self.fileLogLevelCard.getValue(),
-            "consoleLogLevel": self.consoleLevelCard.getValue(),
-            "o3HookMode": int(self.o3HookModeCard.getValue()),
+            "autoStart": self.autoStartCard.get_value(),
+            "offlineNotice": self.offlineNotice.get_value(),
+            "parseMultMsg": self.parseMultMsg.get_value(),
+            "packetServer": self.packetServerCard.get_value(),
+            "packetBackend": self.packetBackendCard.get_value(),
+            "enableLocalFile2Url": self.localFile2UrlCard.get_value(),
+            "fileLog": self.fileLogCard.get_value(),
+            "consoleLog": self.consoleLogCard.get_value(),
+            "fileLogLevel": self.fileLogLevelCard.get_value(),
+            "consoleLogLevel": self.consoleLevelCard.get_value(),
+            "o3HookMode": int(self.o3HookModeCard.get_value()),
         }
 
     def clearValues(self) -> None:

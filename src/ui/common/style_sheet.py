@@ -3,7 +3,7 @@
 from enum import Enum
 
 # 第三方库导入
-from qfluentwidgets import Theme, StyleSheetBase, qconfig
+from qfluentwidgets import StyleSheetBase, Theme, qconfig
 
 
 class StyleSheet(StyleSheetBase, Enum):

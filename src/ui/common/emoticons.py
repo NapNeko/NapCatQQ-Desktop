@@ -30,5 +30,4 @@ class FuFuEmoticons(FluentIconBase, Enum):
     FU_13 = "g_fufu_13"
 
     def path(self) -> str:
-        print(f":emoticons/image/emoticons/fu_fu/{self.value}.gif")
         return f":emoticons/image/emoticons/fu_fu/{self.value}.gif"

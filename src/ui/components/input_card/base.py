@@ -1,23 +1,19 @@
 # -*- coding: utf-8 -*-
-# 标准库导入
-from typing import List
-
 # 第三方库导入
-from qfluentwidgets import LineEdit, BodyLabel, FluentIcon, SwitchButton, FluentIconBase, ExpandSettingCard
+from qfluentwidgets import BodyLabel, ExpandSettingCard, FluentIcon, FluentIconBase, LineEdit, SwitchButton
 from qfluentwidgets.components.settings.expand_setting_card import GroupSeparator
-from PySide6.QtCore import Qt, QEasingCurve
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
+from PySide6.QtCore import QEasingCurve, Qt
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 
 
 class ItemBase(QWidget):
 
-    def __init__(self, title: str, parent=None) -> None:
-        """
-        ## 初始化 item
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        """初始化
 
-        ### 参数
-            - parent: 父组件
-
+        Args:
+            title (str): item的标题
+            parent (QWidget, optional): 父控件. Defaults to None.
         """
         super().__init__(parent=parent)
         self.label = BodyLabel(title, self)
@@ -25,13 +21,11 @@ class ItemBase(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.hBoxLayout = QHBoxLayout(self)
 
-    def _setLayout(self, widget: LineEdit | SwitchButton) -> None:
-        """
-        ## 布局控件
+    def _set_layout(self, widget: LineEdit | SwitchButton) -> None:
+        """设置布局
 
-        ### 参数
-            - label item的内容
-            - widget item的可操作控件,如输入框,开关等
+        Args:
+            widget (LineEdit | SwitchButton): item右侧的控件
         """
 
         self.hBoxLayout.setContentsMargins(48, 0, 60, 0)
@@ -44,23 +38,24 @@ class ItemBase(QWidget):
 
 class GroupCardBase(ExpandSettingCard):
 
-    def __init__(self, icon: FluentIcon | FluentIconBase, title: str, content: str, parent=None) -> None:
-        """
-        ## 初始化卡片
+    def __init__(
+        self, icon: FluentIcon | FluentIconBase, title: str, content: str, parent: QWidget | None = None
+    ) -> None:
+        """初始化
 
-        ### 参数
-            - icon: 卡片图标
-            - title: 卡片标题
-            - content: 卡片内容
-            - parent: 父组件
+        Args:
+            icon (FluentIcon | FluentIconBase): 图标
+            title (str): 标题
+            content (str): 内容
+            parent (QWidget, optional): 父控件. Defaults to None.
         """
         super().__init__(icon, title, content, parent)
-        self.itemList: List[ItemBase] = []
+        self.itemList: list[ItemBase] = []
 
         # 调用方法
-        self._initWidget()
+        self._setup_ui()
 
-    def _initWidget(self) -> None:
+    def _setup_ui(self) -> None:
         """
         设置卡片内部控件
         """
@@ -72,10 +67,8 @@ class GroupCardBase(ExpandSettingCard):
         self.viewLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
 
-    def addItem(self, item: ItemBase) -> None:
-        """
-        添加 Item
-        """
+    def add_item(self, item: ItemBase) -> None:
+        """添加 Item"""
         self.itemList.append(item)
         self.viewLayout.addWidget(item)
 
@@ -86,6 +79,7 @@ class GroupCardBase(ExpandSettingCard):
         self._adjustViewSize()
 
     def wheelEvent(self, event) -> None:
+        """重写滚轮事件"""
         # 不知道为什么ExpandGroupSettingCard把wheelEvent屏蔽了
         # 检查是否在展开状态下，如果是，则传递滚轮事件给父级窗体
         if self.isExpand:

@@ -4,23 +4,23 @@
 from pydantic import ValidationError
 from qfluentwidgets import BodyLabel
 from qfluentwidgets import FluentIcon as FI
-from qfluentwidgets import TitleLabel, RadioButton, MessageBoxBase, SimpleCardWidget
-from PySide6.QtCore import Qt, Slot, QObject
-from PySide6.QtWidgets import QGridLayout, QVBoxLayout, QButtonGroup
+from qfluentwidgets import MessageBoxBase, RadioButton, SimpleCardWidget, TitleLabel
+from PySide6.QtCore import QObject, Qt, Slot
+from PySide6.QtWidgets import QButtonGroup, QGridLayout, QVBoxLayout
 
 # 项目内模块导入
-from src.core.utils import my_int
-from src.ui.page.add_page.enum import ConnectType
-from src.ui.page.add_page.signal_bus import addPageSingalBus
 from src.core.config.config_model import (
     HttpClientsConfig,
     HttpServersConfig,
-    NetworkBaseConfig,
     HttpSseServersConfig,
+    NetworkBaseConfig,
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.ui.components.input_card.generic_card import SwitchConfigCard, ComboBoxConfigCard, LineEditConfigCard
+from src.core.utils import my_int
+from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
+from src.ui.page.add_page.enum import ConnectType
+from src.ui.page.add_page.signal_bus import addPageSingalBus
 
 
 class ChooseConfigCard(SimpleCardWidget):
@@ -143,11 +143,11 @@ class ConfigDialogBase(MessageBoxBase):
         if self.config is None:
             return
 
-        self.enableCard.fillValue(self.config.enable)
-        self.debugCard.fillValue(self.config.debug)
-        self.nameCard.fillValue(self.config.name)
-        self.msgFormatCard.fillValue(self.config.messagePostFormat)
-        self.tokenCard.fillValue(self.config.token)
+        self.enableCard.fill_value(self.config.enable)
+        self.debugCard.fill_value(self.config.debug)
+        self.nameCard.fill_value(self.config.name)
+        self.msgFormatCard.fill_value(self.config.messagePostFormat)
+        self.tokenCard.fill_value(self.config.token)
 
         # 禁用名字卡片
         self.nameCard.setEnabled(False)
@@ -169,11 +169,11 @@ class ConfigDialogBase(MessageBoxBase):
         """获取配置"""
         return NetworkBaseConfig(
             **{
-                "enable": self.enableCard.getValue(),
-                "name": self.nameCard.getValue(),
-                "messagePostFormat": self.msgFormatCard.getValue().lower(),
-                "token": self.tokenCard.getValue(),
-                "debug": self.debugCard.getValue(),
+                "enable": self.enableCard.get_value(),
+                "name": self.nameCard.get_value(),
+                "messagePostFormat": self.msgFormatCard.get_value().lower(),
+                "token": self.tokenCard.get_value(),
+                "debug": self.debugCard.get_value(),
             }
         )
 
@@ -213,18 +213,18 @@ class HttpServerConfigDialog(ConfigDialogBase):
             return
 
         super().fillConfig()
-        self.hostCard.fillValue(self.config.host)
-        self.portCard.fillValue(self.config.port)
-        self.CORSCard.fillValue(self.config.enableCors)
-        self.websocketCard.fillValue(self.config.enableWebsocket)
+        self.hostCard.fill_value(self.config.host)
+        self.portCard.fill_value(self.config.port)
+        self.CORSCard.fill_value(self.config.enableCors)
+        self.websocketCard.fill_value(self.config.enableWebsocket)
 
     def getConfig(self) -> HttpServersConfig:
         return HttpServersConfig(
             **{
-                "host": self.hostCard.getValue(),
-                "port": self.portCard.getValue(),
-                "enableCors": self.CORSCard.getValue(),
-                "enableWebsocket": self.websocketCard.getValue(),
+                "host": self.hostCard.get_value(),
+                "port": self.portCard.get_value(),
+                "enableCors": self.CORSCard.get_value(),
+                "enableWebsocket": self.websocketCard.get_value(),
                 **super().getConfig().model_dump(),
             }
         )
@@ -267,20 +267,20 @@ class HttpSSEServerConfigDialog(ConfigDialogBase):
             return
 
         super().fillConfig()
-        self.hostCard.fillValue(self.config.host)
-        self.portCard.fillValue(self.config.port)
-        self.CORSCard.fillValue(self.config.enableCors)
-        self.websocketCard.fillValue(self.config.enableWebsocket)
-        self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
+        self.hostCard.fill_value(self.config.host)
+        self.portCard.fill_value(self.config.port)
+        self.CORSCard.fill_value(self.config.enableCors)
+        self.websocketCard.fill_value(self.config.enableWebsocket)
+        self.reportSelfMsgCard.fill_value(self.config.reportSelfMessage)
 
     def getConfig(self) -> HttpSseServersConfig:
         return HttpSseServersConfig(
             **{
-                "host": self.hostCard.getValue(),
-                "port": self.portCard.getValue(),
-                "enableCors": self.CORSCard.getValue(),
-                "enableWebsocket": self.websocketCard.getValue(),
-                "reportSelfMessage": self.reportSelfMsgCard.getValue(),
+                "host": self.hostCard.get_value(),
+                "port": self.portCard.get_value(),
+                "enableCors": self.CORSCard.get_value(),
+                "enableWebsocket": self.websocketCard.get_value(),
+                "reportSelfMessage": self.reportSelfMsgCard.get_value(),
                 **super().getConfig().model_dump(),
             }
         )
@@ -318,14 +318,14 @@ class HttpClientConfigDialog(ConfigDialogBase):
             return
 
         super().fillConfig()
-        self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
-        self.urlCard.fillValue(str(self.config.url))
+        self.reportSelfMsgCard.fill_value(self.config.reportSelfMessage)
+        self.urlCard.fill_value(str(self.config.url))
 
     def getConfig(self) -> HttpClientsConfig:
         return HttpClientsConfig(
             **{
-                "url": self.urlCard.getValue(),
-                "reportSelfMessage": self.reportSelfMsgCard.getValue(),
+                "url": self.urlCard.get_value(),
+                "reportSelfMessage": self.reportSelfMsgCard.get_value(),
                 **super().getConfig().model_dump(),
             }
         )
@@ -369,20 +369,20 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
             return
 
         super().fillConfig()
-        self.forcePushEventCard.fillValue(self.config.enableForcePushEvent)
-        self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
-        self.hostCard.fillValue(self.config.host)
-        self.portCard.fillValue(self.config.port)
-        self.heartIntervalCard.fillValue(self.config.heartInterval)
+        self.forcePushEventCard.fill_value(self.config.enableForcePushEvent)
+        self.reportSelfMsgCard.fill_value(self.config.reportSelfMessage)
+        self.hostCard.fill_value(self.config.host)
+        self.portCard.fill_value(self.config.port)
+        self.heartIntervalCard.fill_value(self.config.heartInterval)
 
     def getConfig(self) -> WebsocketServersConfig:
         return WebsocketServersConfig(
             **{
-                "host": self.hostCard.getValue(),
-                "port": self.portCard.getValue(),
-                "reportSelfMessage": self.reportSelfMsgCard.getValue(),
-                "enableForcePushEvent": self.forcePushEventCard.getValue(),
-                "heartInterval": my_int(self.heartIntervalCard.getValue(), 300000),
+                "host": self.hostCard.get_value(),
+                "port": self.portCard.get_value(),
+                "reportSelfMessage": self.reportSelfMsgCard.get_value(),
+                "enableForcePushEvent": self.forcePushEventCard.get_value(),
+                "heartInterval": my_int(self.heartIntervalCard.get_value(), 300000),
                 **super().getConfig().model_dump(),
             }
         )
@@ -426,18 +426,18 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
             return
 
         super().fillConfig()
-        self.reportSelfMsgCard.fillValue(self.config.reportSelfMessage)
-        self.urlCard.fillValue(str(self.config.url))
-        self.heartIntervalCard.fillValue(self.config.heartInterval)
-        self.reconnectIntervalCard.fillValue(self.config.reconnectInterval)
+        self.reportSelfMsgCard.fill_value(self.config.reportSelfMessage)
+        self.urlCard.fill_value(str(self.config.url))
+        self.heartIntervalCard.fill_value(self.config.heartInterval)
+        self.reconnectIntervalCard.fill_value(self.config.reconnectInterval)
 
     def getConfig(self) -> WebsocketClientsConfig:
         return WebsocketClientsConfig(
             **{
-                "url": self.urlCard.getValue(),
-                "reportSelfMessage": self.reportSelfMsgCard.getValue(),
-                "heartInterval": my_int(self.heartIntervalCard.getValue(), 300000),
-                "reconnectInterval": my_int(self.reconnectIntervalCard.getValue(), 300000),
+                "url": self.urlCard.get_value(),
+                "reportSelfMessage": self.reportSelfMsgCard.get_value(),
+                "heartInterval": my_int(self.heartIntervalCard.get_value(), 300000),
+                "reconnectInterval": my_int(self.reconnectIntervalCard.get_value(), 300000),
                 **super().getConfig().model_dump(),
             }
         )

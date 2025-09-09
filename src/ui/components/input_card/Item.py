@@ -1,32 +1,31 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import LineEdit, SwitchButton, IndicatorPosition
+from qfluentwidgets import IndicatorPosition, LineEdit, SwitchButton
+from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.ui.components.input_card.base import ItemBase
 
 
 class SwitchItem(ItemBase):
-    """
-    实现 开关Item
-    """
+    """开关Item"""
 
-    def __init__(self, title: str, parent=None) -> None:
-        """
-        ## 初始化 Item
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        """初始化 Item
 
-        ### 参数
-            - title: Item 内容
+        Args:
+            title (str): Item 内容
+            parent (QWidget, optional): 父控件. Defaults to None.
         """
         super().__init__(title, parent=parent)
         self.button = SwitchButton(self, IndicatorPosition.RIGHT)
 
-        self._setLayout(self.button)
+        self._set_layout(self.button)
 
-    def fillValue(self, value: bool) -> None:
+    def fill_value(self, value: bool) -> None:
         self.button.setChecked(value)
 
-    def getValue(self) -> bool:
+    def get_value(self) -> bool:
         return self.button.isChecked()
 
     def clear(self) -> None:
@@ -34,16 +33,15 @@ class SwitchItem(ItemBase):
 
 
 class LineEditItem(ItemBase):
-    """
-    实现 单行输入框Item
-    """
+    """单行输入框Item"""
 
-    def __init__(self, title: str, placeholders: str, parent=None) -> None:
-        """
-        ## 初始化 Item
+    def __init__(self, title: str, placeholders: str, parent: QWidget | None = None) -> None:
+        """初始化 Item
 
-        ### 参数
-            - title: Item 内容
+        Args:
+            title (str): Item 内容
+            placeholders (str): 输入框占位符
+            parent (QWidget, optional): 父控件. Defaults to None.
         """
         super().__init__(title, parent=parent)
         self.lineEdit = LineEdit(self)
@@ -51,12 +49,12 @@ class LineEditItem(ItemBase):
         self.lineEdit.setPlaceholderText(placeholders)
         self.lineEdit.setClearButtonEnabled(True)
 
-        self._setLayout(self.lineEdit)
+        self._set_layout(self.lineEdit)
 
-    def fillValue(self, value: str | int) -> None:
+    def fill_value(self, value: str | int) -> None:
         self.lineEdit.setText(str(value))
 
-    def getValue(self) -> str:
+    def get_value(self) -> str:
         return self.lineEdit.text()
 
     def clear(self) -> None:

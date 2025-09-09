@@ -2,8 +2,8 @@
 # 标准库导入
 from typing import Optional
 
-from PySide6.QtGui import QColor, QTextCharFormat, QSyntaxHighlighter
-from PySide6.QtCore import Qt, QRegularExpression
+from PySide6.QtCore import QRegularExpression, Qt
+from PySide6.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat
 
 
 class LogHighlighter(QSyntaxHighlighter):
