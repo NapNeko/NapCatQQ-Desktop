@@ -63,11 +63,11 @@ class BotList(ScrollArea):
             return
 
         # 非首次运行：检查新增和删除的配置
-        qq_id_list = [card.config.bot.qq_id for card in self.bot_card_list]
+        qq_id_list = [card.config.bot.QQID for card in self.bot_card_list]
 
         # 检查新增的机器人配置
         for bot_config in bot_configs:
-            if bot_config.bot.qq_id not in qq_id_list:
+            if bot_config.bot.QQID not in qq_id_list:
                 new_card = BotCard(bot_config)
                 self.cardLayout.addWidget(new_card)
                 self.bot_card_list.append(new_card)

@@ -127,8 +127,8 @@ class BotCard(CardWidget):
         from src.ui.window.main_window.window import MainWindow
 
         # 添加标签页项
-        BotListWidget().topCard.addItem(f"{self.config.bot.name} ({self.config.bot.QQID})")
-        BotListWidget().topCard.updateListButton.hide()
+        BotListWidget().top_card.add_item(f"{self.config.bot.name} ({self.config.bot.QQID})")
+        BotListWidget().top_card.update_list_button.hide()
 
         # 如果机器人控件不存在则创建
         if self.bot_widget is None:

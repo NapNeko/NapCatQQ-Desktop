@@ -54,7 +54,7 @@ class PageBase(ScrollArea):
         self.h_box_layout.setContentsMargins(0, 0, 0, 0)
 
         self.setLayout(self.h_box_layout)
-        self.get_version = parent.getVersion
+        self.get_version = parent.get_version
 
 
 class DisplayCard(SimpleCardWidget):
