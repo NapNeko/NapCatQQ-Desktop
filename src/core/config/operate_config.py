@@ -51,7 +51,7 @@ def check_duplicate_bot(config: Config) -> bool:
 
     # 遍历配置文件列表进行判断, 如果QQID相同则代表存在相同配置
     for bot_config in read_config():
-        if config.bot.qq_id == bot_config.bot.qq_id:
+        if config.bot.QQID == bot_config.bot.QQID:
             return True
     return False
 
@@ -73,7 +73,7 @@ def update_config(config: Config) -> bool:
 
         # 检查配置是否存在, 如果存在则更新, 不存在则追加到列表中
         for index, cfg in enumerate(configs):
-            if cfg.bot.qq_id == config.bot.qq_id:
+            if cfg.bot.QQID == config.bot.QQID:
                 configs[index] = config
                 break
         else:
@@ -104,8 +104,8 @@ def update_config(config: Config) -> bool:
         )
 
         # 更新 NC 中配置文件
-        onebot_config_path = PathFunc().napcat_path / "config" / f"onebot11_{config.bot.qq_id}.json"
-        napcat_config_path = PathFunc().napcat_path / "config" / f"napcat_{config.bot.qq_id}.json"
+        onebot_config_path = PathFunc().napcat_path / "config" / f"onebot11_{config.bot.QQID}.json"
+        napcat_config_path = PathFunc().napcat_path / "config" / f"napcat_{config.bot.QQID}.json"
         with open(str(onebot_config_path), "w", encoding="utf-8") as onebot_file:
             json.dump(json.loads(onebot_config.model_dump_json()), onebot_file, indent=4, ensure_ascii=False)
         with open(str(napcat_config_path), "w", encoding="utf-8") as napcat_file:
@@ -135,8 +135,8 @@ def delete_config(config: Config) -> bool:
         write_config(configs)
 
         # 删除 NC 中配置文件
-        onebot_config_path = PathFunc().napcat_path / "config" / f"onebot11_{config.bot.qq_id}.json"
-        napcat_config_path = PathFunc().napcat_path / "config" / f"napcat_{config.bot.qq_id}.json"
+        onebot_config_path = PathFunc().napcat_path / "config" / f"onebot11_{config.bot.QQID}.json"
+        napcat_config_path = PathFunc().napcat_path / "config" / f"napcat_{config.bot.QQID}.json"
         onebot_config_path.unlink()
         napcat_config_path.unlink()
 

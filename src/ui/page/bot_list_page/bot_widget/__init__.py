@@ -392,7 +392,7 @@ class BotWidget(QWidget):
                 ConnectType.WEBSOCKET_CLIENT: WebsocketClientConfigDialog,
             }.get(connectType)(MainWindow())
         ).exec():
-            self.botSetupPage.connectWidget.addCard(dialog.getConfig())
+            self.botSetupPage.connectWidget.add_card(dialog.get_config())
 
     @Slot()
     def _pivotSlot(self, index: int) -> None:

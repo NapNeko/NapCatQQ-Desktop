@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import Slot, QObject
+from PySide6.QtCore import QObject, Slot
 
 # 项目内模块导入
 from src.ui.page.add_page.enum import ConnectType
@@ -13,14 +13,14 @@ class ChooseConfigTypeDialog(OldChooseConfigTypeDialog):
         super().__init__(parent=parent)
 
         self.yesButton.clicked.disconnect()
-        self.yesButton.clicked.connect(self._onYesButtonClicked)
+        self.yesButton.clicked.connect(self._on_yes_button_clicked)
 
     @Slot()
-    def _onYesButtonClicked(self) -> None:
+    def _on_yes_button_clicked(self) -> None:
         """Yes 按钮槽函数"""
 
         if self.validate():
             self.accept()
 
-        if (id := self.buttonGroup.checkedId()) != -1:
+        if (id := self.button_group.checkedId()) != -1:
             botListPageSignalBus.chooseConnectType.emit(list(ConnectType)[id])

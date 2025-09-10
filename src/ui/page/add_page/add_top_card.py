@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from src.core.config.operate_config import check_duplicate_bot, update_config
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.separator import Separator
-from src.ui.page.add_page.signal_bus import addPageSingalBus
+from src.ui.page.add_page.signal_bus import add_page_singal_bus
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -111,8 +111,10 @@ class AddTopCard(QWidget):
         """链接所需信号"""
         self.clear_config_button.clicked.connect(self._on_clear_button)
         self.add_push_button.clicked.connect(self._on_add_bot_list_button)
-        addPageSingalBus.addWidgetViewChange.connect(self._on_button_visiable)
-        self.add_connect_config_button.clicked.connect(addPageSingalBus.addConnectConfigButtonClicked.emit)
+        add_page_singal_bus.add_widget_view_change_signal.connect(self._on_button_visiable)
+        self.add_connect_config_button.clicked.connect(
+            add_page_singal_bus.add_connect_config_button_clicked_signal.emit
+        )
 
     @Slot()
     def _on_add_bot_list_button(self) -> None:
@@ -123,7 +125,7 @@ class AddTopCard(QWidget):
         from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
         # 读取配置文件并追加, 判断是否存在相同的 QQID
-        config = Config(**AddWidget().getConfig())
+        config = Config(**AddWidget().get_config())
 
         if check_duplicate_bot(config):
             # 检查是否已存在相同的机器人配置
@@ -155,9 +157,9 @@ class AddTopCard(QWidget):
         )
 
         if box.exec():
-            AddWidget().botWidget.clearValues()
-            AddWidget().connectWidget.clearValues()
-            AddWidget().advancedWidget.clearValues()
+            AddWidget().bot_widget.clear_values()
+            AddWidget().connect_widget.clear_values()
+            AddWidget().advanced_widget.clearValues()
 
     @Slot(int)
     def _on_button_visiable(self, index) -> None:

@@ -87,9 +87,9 @@ class BotSetupPage(QWidget):
         ## 返回配置结果
         """
         return {
-            "bot": self.botWidget.getValue(),
-            "connect": self.connectWidget.getValue(),
-            "advanced": self.advancedWidget.getValue(),
+            "bot": self.botWidget.get_value(),
+            "connect": self.connectWidget.get_value(),
+            "advanced": self.advancedWidget.get_value(),
         }
 
     def _createCard(self) -> None:
@@ -114,10 +114,10 @@ class BotSetupPage(QWidget):
         self.advancedWidget = AdvancedWidget(self, self.config.advanced)
 
         self.botWidget.view.setObjectName("BotListBotSetupView")
-        self.connectWidget.cardListPage.setObjectName("BotListConnectSetupView")
+        self.connectWidget.card_list_page.setObjectName("BotListConnectSetupView")
         self.advancedWidget.view.setObjectName("BotListAdvancedSetupView")
 
-        self.botWidget.botQQIdCard.lineEdit.setEnabled(False)
+        self.botWidget.bot_qq_id_card.lineEdit.setEnabled(False)
 
         self.view.view.addWidget(self.botWidget)
         self.view.view.addWidget(self.connectWidget)

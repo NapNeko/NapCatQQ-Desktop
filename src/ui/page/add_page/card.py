@@ -1,29 +1,25 @@
 # -*- coding: utf-8 -*-
 
+# 标准库导入
+from typing import Optional, cast
+
 # 第三方库导入
 from qfluentwidgets import BodyLabel
 from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import (
+    HeaderCardWidget,
+    PillPushButton,
     PushButton,
     TeachingTip,
-    PillPushButton,
-    TeachingTipView,
-    HeaderCardWidget,
-    TransparentToolButton,
     TeachingTipTailPosition,
+    TeachingTipView,
+    TransparentToolButton,
 )
+from PySide6.QtCore import QObject, Qt
 from PySide6.QtGui import QFont
-from PySide6.QtCore import Qt, QObject
-from PySide6.QtWidgets import QWidget, QGridLayout
+from PySide6.QtWidgets import QGridLayout, QWidget
 
 # 项目内模块导入
-from src.ui.page.add_page.msg_box import (
-    HttpClientConfigDialog,
-    HttpServerConfigDialog,
-    HttpSSEServerConfigDialog,
-    WebsocketClientConfigDialog,
-    WebsocketServerConfigDialog,
-)
 from src.core.config.config_model import (
     BaseModel,
     HttpClientsConfig,
@@ -32,12 +28,25 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
+from src.ui.page.add_page.msg_box import (
+    HttpClientConfigDialog,
+    HttpServerConfigDialog,
+    HttpSSEServerConfigDialog,
+    WebsocketClientConfigDialog,
+    WebsocketServerConfigDialog,
+)
 
 
 class EnableTag(PillPushButton):
-    """显示是否启用的标签"""
+    """显示启用/禁用状态的标签控件"""
 
-    def __init__(self, status: bool, parent: QObject) -> None:
+    def __init__(self, status: bool, parent: Optional[QObject] = None) -> None:
+        """初始化启用标签
+
+        Args:
+            status: 初始状态，True 为启用，False 为禁用
+            parent: 父控件
+        """
         super().__init__(parent)
 
         # 设置属性
@@ -47,7 +56,11 @@ class EnableTag(PillPushButton):
         self.update_status(status)
 
     def update_status(self, status: bool) -> None:
-        """更新状态"""
+        """更新标签显示状态
+
+        Args:
+            status: 新的状态值，True 为启用，False 为禁用
+        """
         if status:
             self.setText(self.tr("启用"))
         else:
@@ -55,57 +68,100 @@ class EnableTag(PillPushButton):
 
 
 class FormateTag(PillPushButton):
-    """消息格式标签"""
+    """消息格式显示标签控件"""
 
-    def __init__(self, format: str, parent: QObject) -> None:
+    def __init__(self, format_str: str, parent: Optional[QObject] = None) -> None:
+        """初始化格式标签
+
+        Args:
+            format_str: 消息格式字符串
+            parent: 父控件
+        """
         super().__init__(parent)
 
         # 设置属性
         self.setFixedSize(48, 24)
         self.setCheckable(False)
         self.setFont(QFont(self.font().family(), 8))
-        self.update_format(format)
+        self.update_format(format_str)
 
-    def update_format(self, format: str) -> None:
-        """更新格式"""
-        self.setText(format)
+    def update_format(self, format_str: str) -> None:
+        """更新格式显示
+
+        Args:
+            format_str: 新的格式字符串
+        """
+        self.setText(format_str)
 
 
 class ConfigCardBase(HeaderCardWidget):
+    """配置卡片基类，提供通用的配置显示和操作功能"""
 
-    def __init__(self, config: BaseModel, parent: QObject) -> None:
+    def __init__(self, config: BaseModel, parent: Optional[QObject] = None) -> None:
+        """初始化配置卡片基类
+
+        Args:
+            config: 配置数据模型
+            parent: 父控件
+        """
         super().__init__(parent)
+
         # 属性
         self.config = config
+        self.config_view: Optional[QWidget] = None
+        self.config_view_layout: Optional[QGridLayout] = None
+        self.remove_button: Optional[TransparentToolButton] = None
+        self.edit_button: Optional[TransparentToolButton] = None
 
-        # 创建控件
-        self.removeButton = TransparentToolButton(FI.DELETE, self)
-        self.editButton = TransparentToolButton(FI.EDIT, self)
-        self.configView = QWidget(self)
+        self._create_widgets()
+        self._setup_layout()
+        self._connect_signals()
 
-        # 设置属性
+    def _create_widgets(self) -> None:
+        """创建子控件"""
+        self.remove_button = TransparentToolButton(FI.DELETE, self)
+        self.edit_button = TransparentToolButton(FI.EDIT, self)
+        self.config_view = QWidget(self)
+
+    def _setup_layout(self) -> None:
+        """设置控件布局"""
         self.setTitle(self.config.name)
         self.setFixedSize(335, 170)
 
         # 设置布局
         self.headerLayout.addStretch(1)
-        self.headerLayout.addWidget(self.removeButton)
-        self.headerLayout.addWidget(self.editButton)
-        self.viewLayout.addWidget(self.configView)
+        self.headerLayout.addWidget(self.remove_button)
+        self.headerLayout.addWidget(self.edit_button)
+        self.viewLayout.addWidget(self.config_view)
         self.viewLayout.setContentsMargins(16, 16, 16, 16)
 
-        self.configViewLayout = QGridLayout(self.configView)
-        self.configViewLayout.setContentsMargins(0, 0, 0, 0)
-        self.configViewLayout.setVerticalSpacing(10)
+        self.config_view_layout = QGridLayout(self.config_view)
+        self.config_view_layout.setContentsMargins(0, 0, 0, 0)
+        self.config_view_layout.setVerticalSpacing(10)
 
-        # 信号连接
-        self.removeButton.clicked.connect(self._onRemoveButtonClicked)
-        self.editButton.clicked.connect(self._onEditButtonClicked)
+    def _connect_signals(self) -> None:
+        """连接信号与槽"""
+        self.remove_button.clicked.connect(self._on_remove_button_clicked)
+        self.edit_button.clicked.connect(self._on_edit_button_clicked)
 
-    def _onRemoveButtonClicked(self) -> None:
-        """删除按钮被点击"""
+    # ==================== 公共方法 ====================
+    def fill_value(self) -> None:
+        """填充配置数据显示 - 由子类实现"""
+        raise NotImplementedError("子类必须实现 fill_value 方法")
+
+    def get_value(self) -> BaseModel:
+        """获取配置数据
+
+        Returns:
+            BaseModel: 配置数据模型
+        """
+        return self.config
+
+    # ==================== 槽函数 ====================
+    def _on_remove_button_clicked(self) -> None:
+        """处理删除按钮点击事件"""
         # 项目内模块导入
-        from src.ui.page.add_page.signal_bus import addPageSingalBus
+        from src.ui.page.add_page.signal_bus import add_page_singal_bus
 
         view = TeachingTipView(
             title=self.tr("删除配置"),
@@ -118,311 +174,371 @@ class ConfigCardBase(HeaderCardWidget):
         view.addWidget(button, align=Qt.AlignmentFlag.AlignRight)
 
         widget = TeachingTip.make(
-            target=self.removeButton,
+            target=self.remove_button,
             view=view,
             duration=2000,
             tailPosition=TeachingTipTailPosition.BOTTOM,
             parent=self,
         )
         view.closed.connect(widget.close)
-        button.clicked.connect(lambda: addPageSingalBus.removeCard.emit(self))
+        button.clicked.connect(lambda: add_page_singal_bus.remove_card_signal.emit(self))
         button.clicked.connect(widget.close)
 
-    def _onEditButtonClicked(self) -> None:
-        """编辑按钮点击事件"""
-        ...
+    def _on_edit_button_clicked(self) -> None:
+        """处理编辑按钮点击事件 - 由子类实现"""
+        raise NotImplementedError("子类必须实现 _on_edit_button_clicked 方法")
 
 
 class HttpServerConfigCard(ConfigCardBase):
-    config: HttpServersConfig
+    """HTTP 服务器配置卡片"""
 
-    def __init__(self, config: HttpServersConfig, parent: QObject):
+    def __init__(self, config: HttpServersConfig, parent: Optional[QObject] = None) -> None:
+        """初始化 HTTP 服务器配置卡片
+
+        Args:
+            config: HTTP 服务器配置数据
+            parent: 父控件
+        """
         super().__init__(config, parent)
 
         # 创建控件
-        self.hostLabel = BodyLabel(self.tr("主机"), self)
-        self.hostConfigLabel = BodyLabel(self.config.host, self)
+        self.host_label = BodyLabel(self.tr("主机"), self)
+        self.host_config_label = BodyLabel(self.config.host, self)
 
-        self.portLabel = BodyLabel(self.tr("端口"), self)
-        self.portConfigLabel = BodyLabel(str(self.config.port), self)
+        self.port_label = BodyLabel(self.tr("端口"), self)
+        self.port_config_label = BodyLabel(str(self.config.port), self)
 
-        self.corsLabel = BodyLabel(self.tr("CORS"), self)
-        self.corsConfigLabel = EnableTag(self.config.enableCors, self)
+        self.cors_label = BodyLabel(self.tr("CORS"), self)
+        self.cors_config_label = EnableTag(self.config.enableCors, self)
 
-        self.websocketLabel = BodyLabel(self.tr("WS"), self)
-        self.websocketConfigLabel = EnableTag(self.config.enableWebsocket, self)
+        self.websocket_label = BodyLabel(self.tr("WS"), self)
+        self.websocket_config_label = EnableTag(self.config.enableWebsocket, self)
 
-        self.msgPostFormatLabel = BodyLabel(self.tr("格式"), self)
-        self.msgPostFormatConfigLabel = FormateTag(self.config.messagePostFormat, self)
+        self.msg_post_format_label = BodyLabel(self.tr("格式"), self)
+        self.msg_post_format_config_label = FormateTag(self.config.messagePostFormat, self)
 
         # 布局
-        self.configViewLayout.addWidget(self.hostLabel, 0, 0, 1, 1)
-        self.configViewLayout.addWidget(self.hostConfigLabel, 0, 1, 1, 2)
+        self.config_view_layout.addWidget(self.host_label, 0, 0, 1, 1)
+        self.config_view_layout.addWidget(self.host_config_label, 0, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.portLabel, 0, 3, 1, 1)
-        self.configViewLayout.addWidget(self.portConfigLabel, 0, 4, 1, 2)
+        self.config_view_layout.addWidget(self.port_label, 0, 3, 1, 1)
+        self.config_view_layout.addWidget(self.port_config_label, 0, 4, 1, 2)
 
-        self.configViewLayout.addWidget(self.corsLabel, 1, 0, 1, 1)
-        self.configViewLayout.addWidget(self.corsConfigLabel, 1, 1, 1, 2)
+        self.config_view_layout.addWidget(self.cors_label, 1, 0, 1, 1)
+        self.config_view_layout.addWidget(self.cors_config_label, 1, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.websocketLabel, 1, 3, 1, 1)
-        self.configViewLayout.addWidget(self.websocketConfigLabel, 1, 4, 1, 2)
+        self.config_view_layout.addWidget(self.websocket_label, 1, 3, 1, 1)
+        self.config_view_layout.addWidget(self.websocket_config_label, 1, 4, 1, 2)
 
-        self.configViewLayout.addWidget(self.msgPostFormatLabel, 2, 0, 1, 1)
-        self.configViewLayout.addWidget(self.msgPostFormatConfigLabel, 2, 1, 1, 5)
+        self.config_view_layout.addWidget(self.msg_post_format_label, 2, 0, 1, 1)
+        self.config_view_layout.addWidget(self.msg_post_format_config_label, 2, 1, 1, 5)
 
-    def fillValue(self) -> None:
-        """填充需要展示的配置"""
-        self.hostConfigLabel.setText(self.config.host)
-        self.portConfigLabel.setText(str(self.config.port))
-        self.corsConfigLabel.update_status(self.config.enableCors)
-        self.websocketConfigLabel.update_status(self.config.enableWebsocket)
-        self.msgPostFormatConfigLabel.update_format(self.config.messagePostFormat)
+    def fill_value(self) -> None:
+        """填充 HTTP 服务器配置数据"""
+        self.host_config_label.setText(self.config.host)
+        self.port_config_label.setText(str(self.config.port))
+        self.cors_config_label.update_status(self.config.enableCors)
+        self.websocket_config_label.update_status(self.config.enableWebsocket)
+        self.msg_post_format_config_label.update_format(self.config.messagePostFormat)
 
-    def getValue(self) -> HttpServersConfig:
-        return self.config
+    def get_value(self) -> HttpServersConfig:
+        """获取 HTTP 服务器配置数据
 
-    def _onEditButtonClicked(self) -> None:
+        Returns:
+            HttpServersConfig: HTTP 服务器配置
+        """
+        return cast(HttpServersConfig, self.config)
 
+    def _on_edit_button_clicked(self) -> None:
+        """处理编辑按钮点击事件"""
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if (dialog := HttpServerConfigDialog(MainWindow(), self.config)).exec():
-            self.config = dialog.getConfig()
-            self.fillValue()
+        dialog = HttpServerConfigDialog(MainWindow(), cast(HttpServersConfig, self.config))
+        if dialog.exec():
+            self.config = dialog.get_config()
+            self.fill_value()
 
 
 class HttpSSEConfigCard(ConfigCardBase):
-    config: HttpSseServersConfig
+    """HTTP SSE 服务器配置卡片"""
 
-    def __init__(self, config: HttpSseServersConfig, parent: QObject):
+    def __init__(self, config: HttpSseServersConfig, parent: Optional[QObject] = None) -> None:
+        """初始化 HTTP SSE 服务器配置卡片
+
+        Args:
+            config: HTTP SSE 服务器配置数据
+            parent: 父控件
+        """
         super().__init__(config, parent)
 
         # 创建控件
-        self.hostLabel = BodyLabel(self.tr("主机"), self)
-        self.hostConfigLabel = BodyLabel(self.config.host, self)
+        self.host_label = BodyLabel(self.tr("主机"), self)
+        self.host_config_label = BodyLabel(self.config.host, self)
 
-        self.portLabel = BodyLabel(self.tr("端口"), self)
-        self.portConfigLabel = BodyLabel(str(self.config.port), self)
+        self.port_label = BodyLabel(self.tr("端口"), self)
+        self.port_config_label = BodyLabel(str(self.config.port), self)
 
-        self.corsLabel = BodyLabel(self.tr("CORS"), self)
-        self.corsConfigLabel = EnableTag(self.config.enableCors, self)
+        self.cors_label = BodyLabel(self.tr("CORS"), self)
+        self.cors_config_label = EnableTag(self.config.enableCors, self)
 
-        self.websocketLabel = BodyLabel(self.tr("WS"), self)
-        self.websocketConfigLabel = EnableTag(self.config.enableWebsocket, self)
+        self.websocket_label = BodyLabel(self.tr("WS"), self)
+        self.websocket_config_label = EnableTag(self.config.enableWebsocket, self)
 
-        self.msgPostFormatLabel = BodyLabel(self.tr("格式"), self)
-        self.msgPostFormatConfigLabel = FormateTag(self.config.messagePostFormat, self)
+        self.msg_post_format_label = BodyLabel(self.tr("格式"), self)
+        self.msg_post_format_config_label = FormateTag(self.config.messagePostFormat, self)
 
-        self.reportSelfMessageLabel = BodyLabel(self.tr("上报自身消息"), self)
-        self.reportSelfMessageConfigLabel = EnableTag(self.config.reportSelfMessage, self)
+        self.report_self_message_label = BodyLabel(self.tr("上报自身消息"), self)
+        self.report_self_message_config_label = EnableTag(self.config.reportSelfMessage, self)
 
         # 布局
-        self.configViewLayout.addWidget(self.hostLabel, 0, 0, 1, 1)
-        self.configViewLayout.addWidget(self.hostConfigLabel, 0, 1, 1, 2)
+        self.config_view_layout.addWidget(self.host_label, 0, 0, 1, 1)
+        self.config_view_layout.addWidget(self.host_config_label, 0, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.portLabel, 0, 3, 1, 1)
-        self.configViewLayout.addWidget(self.portConfigLabel, 0, 4, 1, 2)
+        self.config_view_layout.addWidget(self.port_label, 0, 3, 1, 1)
+        self.config_view_layout.addWidget(self.port_config_label, 0, 4, 1, 2)
 
-        self.configViewLayout.addWidget(self.corsLabel, 1, 0, 1, 1)
-        self.configViewLayout.addWidget(self.corsConfigLabel, 1, 1, 1, 2)
+        self.config_view_layout.addWidget(self.cors_label, 1, 0, 1, 1)
+        self.config_view_layout.addWidget(self.cors_config_label, 1, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.websocketLabel, 1, 3, 1, 1)
-        self.configViewLayout.addWidget(self.websocketConfigLabel, 1, 4, 1, 2)
+        self.config_view_layout.addWidget(self.websocket_label, 1, 3, 1, 1)
+        self.config_view_layout.addWidget(self.websocket_config_label, 1, 4, 1, 2)
 
-        self.configViewLayout.addWidget(self.msgPostFormatLabel, 2, 0, 1, 1)
-        self.configViewLayout.addWidget(self.msgPostFormatConfigLabel, 2, 1, 1, 2)
+        self.config_view_layout.addWidget(self.msg_post_format_label, 2, 0, 1, 1)
+        self.config_view_layout.addWidget(self.msg_post_format_config_label, 2, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.reportSelfMessageLabel, 2, 3, 1, 1)
-        self.configViewLayout.addWidget(self.reportSelfMessageConfigLabel, 2, 4, 1, 2)
+        self.config_view_layout.addWidget(self.report_self_message_label, 2, 3, 1, 1)
+        self.config_view_layout.addWidget(self.report_self_message_config_label, 2, 4, 1, 2)
 
-    def fillValue(self) -> None:
-        """填充需要展示的配置"""
-        self.hostConfigLabel.setText(self.config.host)
-        self.portConfigLabel.setText(str(self.config.port))
-        self.corsConfigLabel.update_status(self.config.enableCors)
-        self.websocketConfigLabel.update_status(self.config.enableWebsocket)
-        self.msgPostFormatConfigLabel.update_format(self.config.messagePostFormat)
-        self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+    def fill_value(self) -> None:
+        """填充 HTTP SSE 服务器配置数据"""
+        self.host_config_label.setText(self.config.host)
+        self.port_config_label.setText(str(self.config.port))
+        self.cors_config_label.update_status(self.config.enableCors)
+        self.websocket_config_label.update_status(self.config.enableWebsocket)
+        self.msg_post_format_config_label.update_format(self.config.messagePostFormat)
+        self.report_self_message_config_label.update_status(self.config.reportSelfMessage)
 
-    def getValue(self) -> HttpSseServersConfig:
-        return self.config
+    def get_value(self) -> HttpSseServersConfig:
+        """获取 HTTP SSE 服务器配置数据
 
-    def _onEditButtonClicked(self) -> None:
+        Returns:
+            HttpSseServersConfig: HTTP SSE 服务器配置
+        """
+        return cast(HttpSseServersConfig, self.config)
 
+    def _on_edit_button_clicked(self) -> None:
+        """处理编辑按钮点击事件"""
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if (dialog := HttpSSEServerConfigDialog(MainWindow(), self.config)).exec():
-            self.config = dialog.getConfig()
-            self.fillValue()
+        dialog = HttpSSEServerConfigDialog(MainWindow(), cast(HttpSseServersConfig, self.config))
+        if dialog.exec():
+            self.config = dialog.get_config()
+            self.fill_value()
 
 
 class HttpClientConfigCard(ConfigCardBase):
-    config: HttpClientsConfig
+    """HTTP 客户端配置卡片"""
 
-    def __init__(self, config: HttpClientsConfig, parent: QObject):
+    def __init__(self, config: HttpClientsConfig, parent: Optional[QObject] = None) -> None:
+        """初始化 HTTP 客户端配置卡片
+
+        Args:
+            config: HTTP 客户端配置数据
+            parent: 父控件
+        """
         super().__init__(config, parent)
 
         # 创建控件
-        urlLabel = BodyLabel(self.tr("URL"), self)
-        urlConfigLabel = BodyLabel(str(self.config.url), self)
+        self.url_label = BodyLabel(self.tr("URL"), self)
+        self.url_config_label = BodyLabel(str(self.config.url), self)
 
-        formatLabel = BodyLabel(self.tr("格式"), self)
-        formatConfigLabel = FormateTag(self.config.messagePostFormat, self)
+        self.format_label = BodyLabel(self.tr("格式"), self)
+        self.format_config_label = FormateTag(self.config.messagePostFormat, self)
 
-        reportSelfMessageLabel = BodyLabel(self.tr("上报自身消息"), self)
-        reportSelfMessageConfigLabel = EnableTag(self.config.reportSelfMessage, self)
+        self.report_self_message_label = BodyLabel(self.tr("上报自身消息"), self)
+        self.report_self_message_config_label = EnableTag(self.config.reportSelfMessage, self)
 
         # 布局
-        self.configViewLayout.addWidget(urlLabel, 0, 0, 1, 1)
-        self.configViewLayout.addWidget(urlConfigLabel, 0, 1, 1, 6)
+        self.config_view_layout.addWidget(self.url_label, 0, 0, 1, 1)
+        self.config_view_layout.addWidget(self.url_config_label, 0, 1, 1, 6)
 
-        self.configViewLayout.addWidget(formatLabel, 1, 0, 1, 1)
-        self.configViewLayout.addWidget(formatConfigLabel, 1, 1, 1, 1)
+        self.config_view_layout.addWidget(self.format_label, 1, 0, 1, 1)
+        self.config_view_layout.addWidget(self.format_config_label, 1, 1, 1, 1)
 
-        self.configViewLayout.addWidget(reportSelfMessageLabel, 1, 4, 1, 1)
-        self.configViewLayout.addWidget(reportSelfMessageConfigLabel, 1, 5, 1, 1)
+        self.config_view_layout.addWidget(self.report_self_message_label, 1, 4, 1, 1)
+        self.config_view_layout.addWidget(self.report_self_message_config_label, 1, 5, 1, 1)
 
-    def fillValue(self) -> None:
-        """填充需要展示的配置"""
-        self.urlConfigLabel.setText(str(self.config.url))
-        self.formatConfigLabel.update_format(self.config.messagePostFormat)
-        self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+    def fill_value(self) -> None:
+        """填充 HTTP 客户端配置数据"""
+        self.url_config_label.setText(str(self.config.url))
+        self.format_config_label.update_format(self.config.messagePostFormat)
+        self.report_self_message_config_label.update_status(self.config.reportSelfMessage)
 
-    def getValue(self) -> HttpClientsConfig:
-        return self.config
+    def get_value(self) -> HttpClientsConfig:
+        """获取 HTTP 客户端配置数据
 
-    def _onEditButtonClicked(self) -> None:
+        Returns:
+            HttpClientsConfig: HTTP 客户端配置
+        """
+        return cast(HttpClientsConfig, self.config)
 
+    def _on_edit_button_clicked(self) -> None:
+        """处理编辑按钮点击事件"""
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if (dialog := HttpClientConfigDialog(MainWindow(), self.config)).exec():
-            self.config = dialog.getConfig()
-            self.fillValue()
+        dialog = HttpClientConfigDialog(MainWindow(), cast(HttpClientsConfig, self.config))
+        if dialog.exec():
+            self.config = dialog.get_config()
+            self.fill_value()
 
 
 class WebsocketServersConfigCard(ConfigCardBase):
-    config: WebsocketServersConfig
+    """WebSocket 服务器配置卡片"""
 
-    def __init__(self, config: WebsocketServersConfig, parent: QObject):
+    def __init__(self, config: WebsocketServersConfig, parent: Optional[QObject] = None) -> None:
+        """初始化 WebSocket 服务器配置卡片
+
+        Args:
+            config: WebSocket 服务器配置数据
+            parent: 父控件
+        """
         super().__init__(config, parent)
 
         # 创建控件
-        self.hostLabel = BodyLabel(self.tr("主机"), self)
-        self.hostConfigLabel = BodyLabel(self.config.host, self)
+        self.host_label = BodyLabel(self.tr("主机"), self)
+        self.host_config_label = BodyLabel(self.config.host, self)
 
-        self.portLabel = BodyLabel(self.tr("端口"), self)
-        self.portConfigLabel = BodyLabel(str(self.config.port), self)
+        self.port_label = BodyLabel(self.tr("端口"), self)
+        self.port_config_label = BodyLabel(str(self.config.port), self)
 
-        self.heartIntervalLabel = BodyLabel(self.tr("心跳间隔"), self)
-        self.heartIntervalConfigLabel = BodyLabel(str(self.config.heartInterval) + "ms", self)
+        self.heart_interval_label = BodyLabel(self.tr("心跳间隔"), self)
+        self.heart_interval_config_label = BodyLabel(str(self.config.heartInterval) + "ms", self)
 
-        self.msgPostFormatLabel = BodyLabel(self.tr("格式"), self)
-        self.msgPostFormatConfigLabel = FormateTag(self.config.messagePostFormat, self)
+        self.msg_post_format_label = BodyLabel(self.tr("格式"), self)
+        self.msg_post_format_config_label = FormateTag(self.config.messagePostFormat, self)
 
-        self.reportSelfMessageLabel = BodyLabel(self.tr("上报自身消息"), self)
-        self.reportSelfMessageConfigLabel = EnableTag(self.config.reportSelfMessage, self)
+        self.report_self_message_label = BodyLabel(self.tr("上报自身消息"), self)
+        self.report_self_message_config_label = EnableTag(self.config.reportSelfMessage, self)
 
-        self.enableForcePushEventLabel = BodyLabel(self.tr("强制推送事件"), self)
-        self.enableForcePushEventConfigLabel = EnableTag(self.config.enableForcePushEvent, self)
+        self.enable_force_push_event_label = BodyLabel(self.tr("强制推送事件"), self)
+        self.enable_force_push_event_config_label = EnableTag(self.config.enableForcePushEvent, self)
 
         # 布局
-        self.configViewLayout.addWidget(self.hostLabel, 0, 0, 1, 1)
-        self.configViewLayout.addWidget(self.hostConfigLabel, 0, 1, 1, 2)
+        self.config_view_layout.addWidget(self.host_label, 0, 0, 1, 1)
+        self.config_view_layout.addWidget(self.host_config_label, 0, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.portLabel, 0, 3, 1, 1)
-        self.configViewLayout.addWidget(self.portConfigLabel, 0, 4, 1, 2)
+        self.config_view_layout.addWidget(self.port_label, 0, 3, 1, 1)
+        self.config_view_layout.addWidget(self.port_config_label, 0, 4, 1, 2)
 
-        self.configViewLayout.addWidget(self.heartIntervalLabel, 1, 0, 1, 1)
-        self.configViewLayout.addWidget(self.heartIntervalConfigLabel, 1, 1, 1, 2)
+        self.config_view_layout.addWidget(self.heart_interval_label, 1, 0, 1, 1)
+        self.config_view_layout.addWidget(self.heart_interval_config_label, 1, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.msgPostFormatLabel, 1, 3, 1, 1)
-        self.configViewLayout.addWidget(self.msgPostFormatConfigLabel, 1, 4, 1, 2)
+        self.config_view_layout.addWidget(self.msg_post_format_label, 1, 3, 1, 1)
+        self.config_view_layout.addWidget(self.msg_post_format_config_label, 1, 4, 1, 2)
 
-        self.configViewLayout.addWidget(self.reportSelfMessageLabel, 2, 0, 1, 1)
-        self.configViewLayout.addWidget(self.reportSelfMessageConfigLabel, 2, 1, 1, 2)
+        self.config_view_layout.addWidget(self.report_self_message_label, 2, 0, 1, 1)
+        self.config_view_layout.addWidget(self.report_self_message_config_label, 2, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.enableForcePushEventLabel, 2, 3, 1, 1)
-        self.configViewLayout.addWidget(self.enableForcePushEventConfigLabel, 2, 4, 1, 2)
+        self.config_view_layout.addWidget(self.enable_force_push_event_label, 2, 3, 1, 1)
+        self.config_view_layout.addWidget(self.enable_force_push_event_config_label, 2, 4, 1, 2)
 
-    def fillValue(self) -> None:
-        """填充需要展示的配置"""
-        self.hostConfigLabel.setText(self.config.host)
-        self.portConfigLabel.setText(str(self.config.port))
-        self.heartIntervalConfigLabel.setText(str(self.config.heartInterval) + "ms")
-        self.msgPostFormatConfigLabel.update_format(self.config.messagePostFormat)
-        self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
-        self.enableForcePushEventConfigLabel.update_status(self.config.enableForcePushEvent)
+    def fill_value(self) -> None:
+        """填充 WebSocket 服务器配置数据"""
+        self.host_config_label.setText(self.config.host)
+        self.port_config_label.setText(str(self.config.port))
+        self.heart_interval_config_label.setText(str(self.config.heartInterval) + "ms")
+        self.msg_post_format_config_label.update_format(self.config.messagePostFormat)
+        self.report_self_message_config_label.update_status(self.config.reportSelfMessage)
+        self.enable_force_push_event_config_label.update_status(self.config.enableForcePushEvent)
 
-    def getValue(self) -> WebsocketServersConfig:
-        return self.config
+    def get_value(self) -> WebsocketServersConfig:
+        """获取 WebSocket 服务器配置数据
 
-    def _onEditButtonClicked(self) -> None:
+        Returns:
+            WebsocketServersConfig: WebSocket 服务器配置
+        """
+        return cast(WebsocketServersConfig, self.config)
 
+    def _on_edit_button_clicked(self) -> None:
+        """处理编辑按钮点击事件"""
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if (dialog := WebsocketServerConfigDialog(MainWindow(), self.config)).exec():
-            self.config = dialog.getConfig()
-            self.fillValue()
+        dialog = WebsocketServerConfigDialog(MainWindow(), cast(WebsocketServersConfig, self.config))
+        if dialog.exec():
+            self.config = dialog.get_config()
+            self.fill_value()
 
 
 class WebsocketClientConfigCard(ConfigCardBase):
-    config: WebsocketClientsConfig
+    """WebSocket 客户端配置卡片"""
 
-    def __init__(self, config: WebsocketClientsConfig, parent: QObject):
+    def __init__(self, config: WebsocketClientsConfig, parent: Optional[QObject] = None) -> None:
+        """初始化 WebSocket 客户端配置卡片
+
+        Args:
+            config: WebSocket 客户端配置数据
+            parent: 父控件
+        """
         super().__init__(config, parent)
 
         # 创建控件
-        self.urlLabel = BodyLabel(self.tr("URL"), self)
-        self.urlConfigLabel = BodyLabel(str(self.config.url), self)
+        self.url_label = BodyLabel(self.tr("URL"), self)
+        self.url_config_label = BodyLabel(str(self.config.url), self)
 
-        self.reconnectIntervalLabel = BodyLabel(self.tr("重连间隔"), self)
-        self.reconnectIntervalConfigLabel = BodyLabel(str(self.config.reconnectInterval) + "ms", self)
+        self.reconnect_interval_label = BodyLabel(self.tr("重连间隔"), self)
+        self.reconnect_interval_config_label = BodyLabel(str(self.config.reconnectInterval) + "ms", self)
 
-        self.heartIntervalLabel = BodyLabel(self.tr("心跳间隔"), self)
-        self.heartIntervalConfigLabel = BodyLabel(str(self.config.heartInterval) + "ms", self)
+        self.heart_interval_label = BodyLabel(self.tr("心跳间隔"), self)
+        self.heart_interval_config_label = BodyLabel(str(self.config.heartInterval) + "ms", self)
 
-        self.formatLabel = BodyLabel(self.tr("格式"), self)
-        self.formatConfigLabel = FormateTag(self.config.messagePostFormat, self)
+        self.format_label = BodyLabel(self.tr("格式"), self)
+        self.format_config_label = FormateTag(self.config.messagePostFormat, self)
 
-        self.reportSelfMessageLabel = BodyLabel(self.tr("上报自身消息"), self)
-        self.reportSelfMessageConfigLabel = EnableTag(self.config.reportSelfMessage, self)
+        self.report_self_message_label = BodyLabel(self.tr("上报自身消息"), self)
+        self.report_self_message_config_label = EnableTag(self.config.reportSelfMessage, self)
 
         # 布局
-        self.configViewLayout.addWidget(self.urlLabel, 0, 0, 1, 1)
-        self.configViewLayout.addWidget(self.urlConfigLabel, 0, 1, 1, 6)
+        self.config_view_layout.addWidget(self.url_label, 0, 0, 1, 1)
+        self.config_view_layout.addWidget(self.url_config_label, 0, 1, 1, 6)
 
-        self.configViewLayout.addWidget(self.reconnectIntervalLabel, 1, 0, 1, 1)
-        self.configViewLayout.addWidget(self.reconnectIntervalConfigLabel, 1, 1, 1, 2)
+        self.config_view_layout.addWidget(self.reconnect_interval_label, 1, 0, 1, 1)
+        self.config_view_layout.addWidget(self.reconnect_interval_config_label, 1, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.heartIntervalLabel, 1, 3, 1, 1)
-        self.configViewLayout.addWidget(self.heartIntervalConfigLabel, 1, 4, 1, 2)
+        self.config_view_layout.addWidget(self.heart_interval_label, 1, 3, 1, 1)
+        self.config_view_layout.addWidget(self.heart_interval_config_label, 1, 4, 1, 2)
 
-        self.configViewLayout.addWidget(self.formatLabel, 2, 0, 1, 1)
-        self.configViewLayout.addWidget(self.formatConfigLabel, 2, 1, 1, 2)
+        self.config_view_layout.addWidget(self.format_label, 2, 0, 1, 1)
+        self.config_view_layout.addWidget(self.format_config_label, 2, 1, 1, 2)
 
-        self.configViewLayout.addWidget(self.reportSelfMessageLabel, 2, 3, 1, 1)
-        self.configViewLayout.addWidget(self.reportSelfMessageConfigLabel, 2, 4, 1, 2)
+        self.config_view_layout.addWidget(self.report_self_message_label, 2, 3, 1, 1)
+        self.config_view_layout.addWidget(self.report_self_message_config_label, 2, 4, 1, 2)
 
-    def fillValue(self) -> None:
-        """填充需要展示的配置"""
-        self.urlConfigLabel.setText(str(self.config.url))
-        self.reconnectIntervalConfigLabel.setText(str(self.config.reconnectInterval) + "ms")
-        self.heartIntervalConfigLabel.setText(str(self.config.heartInterval) + "ms")
-        self.formatConfigLabel.update_format(self.config.messagePostFormat)
-        self.reportSelfMessageConfigLabel.update_status(self.config.reportSelfMessage)
+    def fill_value(self) -> None:
+        """填充 WebSocket 客户端配置数据"""
+        self.url_config_label.setText(str(self.config.url))
+        self.reconnect_interval_config_label.setText(str(self.config.reconnectInterval) + "ms")
+        self.heart_interval_config_label.setText(str(self.config.heartInterval) + "ms")
+        self.format_config_label.update_format(self.config.messagePostFormat)
+        self.report_self_message_config_label.update_status(self.config.reportSelfMessage)
 
-    def getValue(self) -> WebsocketClientsConfig:
-        return self.config
+    def get_value(self) -> WebsocketClientsConfig:
+        """获取 WebSocket 客户端配置数据
 
-    def _onEditButtonClicked(self) -> None:
+        Returns:
+            WebsocketClientsConfig: WebSocket 客户端配置
+        """
+        return cast(WebsocketClientsConfig, self.config)
 
+    def _on_edit_button_clicked(self) -> None:
+        """处理编辑按钮点击事件"""
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if (dialog := WebsocketClientConfigDialog(MainWindow(), self.config)).exec():
-            self.config = dialog.getConfig()
-            self.fillValue()
+        dialog = WebsocketClientConfigDialog(MainWindow(), cast(WebsocketClientsConfig, self.config))
+        if dialog.exec():
+            self.config = dialog.get_config()
+            self.fill_value()
