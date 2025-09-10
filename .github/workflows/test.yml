@@ -35,7 +35,7 @@ jobs:
         script-name: main.py
         onefile: true
         enable-plugins: pyside6
-        windows-icon-from-ico: src/Ui/resource/image/icon.ico
+        windows-icon-from-ico: src/ui/resource/image/icon.ico
         output-filename: "NapCat-Desktop"
 
     - name: Enable Developer Command Prompt

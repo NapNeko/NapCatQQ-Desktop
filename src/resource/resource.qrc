@@ -1,0 +1,60 @@
+<RCC>
+    <qresource prefix="emoticons">
+        <file>image/emoticons/fu_fu/g_fufu_01.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_02.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_03.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_04.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_05.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_06.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_07.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_08.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_09.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_10.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_11.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_12.gif</file>
+        <file>image/emoticons/fu_fu/g_fufu_13.gif</file>
+    </qresource>
+
+    <qresource prefix="mono_icon">
+        <file>icon/mono_icon/black/logo.svg</file>
+        <file>icon/mono_icon/white/logo.svg</file>
+        <file>icon/mono_icon/black/qq.svg</file>
+        <file>icon/mono_icon/white/qq.svg</file>
+    </qresource>
+
+    <qresource prefix="color_icon">
+        <file>icon/color_icon/logo.png</file>
+        <file>icon/color_icon/napcat.png</file>
+    </qresource>
+
+    <qresource prefix="style">
+        <file>style/dark/home_widget.qss</file>
+        <file>style/dark/setup_widget.qss</file>
+        <file>style/dark/add_widget.qss</file>
+        <file>style/dark/bot_list_widget.qss</file>
+        <file>style/dark/bot_widget.qss</file>
+        <file>style/dark/unit_widget.qss</file>
+        <file>style/dark/update_log_card.qss</file>
+        <file>style/dark/code_editor.qss</file>
+
+        <file>style/light/home_widget.qss</file>
+        <file>style/light/setup_widget.qss</file>
+        <file>style/light/add_widget.qss</file>
+        <file>style/light/bot_list_widget.qss</file>
+        <file>style/light/bot_widget.qss</file>
+        <file>style/light/unit_widget.qss</file>
+        <file>style/light/update_log_card.qss</file>
+        <file>style/light/code_editor.qss</file>
+    </qresource>
+
+    <qresource prefix="template">
+        <file>template/email/bot_offline_notice.html</file>
+        <file>template/email/test_email.html</file>
+    </qresource>
+
+    <qresource prefix="font">
+        <file>font/JB-MONO.ttf</file>
+        <file>font/ALMM.ttf</file>
+    </qresource>
+
+</RCC>

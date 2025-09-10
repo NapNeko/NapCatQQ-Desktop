@@ -1,0 +1,23 @@
+AddWidget,
+ConfigTopCard,
+ScrollArea,
+#AddView {
+    background: transparent;
+    border-color: transparent;
+}
+
+BotWidget,
+AdvancedWidget,
+ConnectWidget,
+CardListPage,
+#BotWidgetView,
+#ConnectListView,
+#AdvanceWidgetView {
+    background: transparent;
+    border: none;
+}
+
+AddWidget {
+    border-top-left-radius: 16px;
+}
+
