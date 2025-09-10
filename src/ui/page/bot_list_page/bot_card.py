@@ -62,7 +62,7 @@ class BotCard(CardWidget):
             BotListWidget().view.addWidget(self.bot_widget)
 
             # 启动机器人
-            self.bot_widget.runButtonSlot()
+            self.bot_widget.on_run_button()
 
     def _qq_avatar(self) -> None:
         """创建并加载QQ头像的ImageLabel"""

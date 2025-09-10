@@ -12,12 +12,7 @@ class ChooseConfigTypeDialog(OldChooseConfigTypeDialog):
     def __init__(self, parent: QObject) -> None:
         super().__init__(parent=parent)
 
-        self.yesButton.clicked.disconnect()
-        self.yesButton.clicked.connect(self._on_yes_button_clicked)
-
-    @Slot()
-    def _on_yes_button_clicked(self) -> None:
-        """Yes 按钮槽函数"""
+    def accept(self) -> None:
 
         if self.validate():
             self.accept()

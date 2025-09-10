@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import Optional
+from typing import Any, Dict, Optional
 
 # 第三方库导入
 import psutil
@@ -37,312 +37,244 @@ from src.ui.page.bot_list_page.signal_bus import bot_list_page_signal_bus
 
 
 class BotWidget(QWidget):
-    """
-    ## 机器人卡片对应的 Widget
-    """
+    """机器人配置卡片控件，包含设置、日志等标签页"""
 
     def __init__(self, config: Config) -> None:
+        """初始化机器人控件
+
+        Args:
+            config: 机器人配置对象
+        """
         super().__init__()
         self.config = config
-        self.isRun = False  # 用于标记机器人是否在运行
-        self.napcatProcess: Optional[QProcess] = None  # 用于存储 QProcess 实例
+        self.is_run = False  # 标记机器人是否在运行
+        self.napcat_process: Optional[QProcess] = None  # 存储 QProcess 实例
 
-        # 创建所需控件
-        self._createView()
-        self._createPivot()
-        self._createButton()
-        self.vBoxLayout = QVBoxLayout()
-        self.hBoxLayout = QHBoxLayout()
-        self.buttonLayout = QHBoxLayout()
+        # 创建控件
+        self._create_view()
+        self._create_pivot()
+        self._create_button()
+        self.v_box_layout = QVBoxLayout()
+        self.h_box_layout = QHBoxLayout()
+        self.button_layout = QHBoxLayout()
 
         # 调用方法
-        self._setLayout()
-        self._addTooltips()
+        self._set_layout()
+        self._add_tool_tips()
 
         StyleSheet.BOT_WIDGET.apply(self)
 
-    def _createPivot(self) -> None:
-        """
-        ## 创建机器人 Widget 顶部导航栏
-            - routeKey 使用 QQ号 作为前缀保证该 pivot 的 objectName 全局唯一
-        """
+    def _create_view(self) -> None:
+        """创建并配置堆叠视图页面"""
+        # 创建 view 和页面
+        self.view = QStackedWidget()
+        self.bot_info_page = QWidget(self)
+        self.bot_info_page.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotInfo")
+
+        self.bot_setup_page = BotSetupPage(self.config, self)
+        self.bot_setup_page.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotSetup")
+
+        self.bot_log_page = CodeEditor(self)
+        self.bot_log_page.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotLog")
+
+        # 将页面添加到 view
+        self.view.addWidget(self.bot_info_page)
+        self.view.addWidget(self.bot_setup_page)
+        self.view.addWidget(self.bot_log_page)
+        self.view.setObjectName("BotView")
+        self.view.setCurrentWidget(self.bot_setup_page)
+        self.view.currentChanged.connect(self._on_pivot)
+
+    def _create_pivot(self) -> None:
+        """创建顶部导航栏"""
         self.pivot = SegmentedWidget(self)
 
         self.pivot.addItem(
-            routeKey=self.botSetupPage.objectName(),
+            routeKey=self.bot_setup_page.objectName(),
             text=self.tr("设置"),
-            onClick=lambda: self.view.setCurrentWidget(self.botSetupPage),
+            onClick=lambda: self.view.setCurrentWidget(self.bot_setup_page),
         )
         self.pivot.addItem(
-            routeKey=self.botLogPage.objectName(),
+            routeKey=self.bot_log_page.objectName(),
             text=self.tr("NapCat 日志"),
-            onClick=lambda: self.view.setCurrentWidget(self.botLogPage),
+            onClick=lambda: self.view.setCurrentWidget(self.bot_log_page),
         )
-        # self.pivot.addItem(
-        #     routeKey=self.botInfoPage.objectName(),
-        #     text=self.tr("Bot info"),
-        #     onClick=lambda: self.view.setCurrentWidget(self.botInfoPage)
-        # )
 
-        self.pivot.setCurrentItem(self.botSetupPage.objectName())
+        self.pivot.setCurrentItem(self.bot_setup_page.objectName())
         self.pivot.setMaximumWidth(300)
 
-    def _createView(self) -> None:
-        """
-        ## 创建用于切换页面的 view
-        """
-        # 创建 view 和 页面
-        self.view = QStackedWidget()
-        self.botInfoPage = QWidget(self)
-        self.botInfoPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotInfo")
-
-        self.botSetupPage = BotSetupPage(self.config, self)
-        self.botSetupPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotSetup")
-
-        self.botLogPage = CodeEditor(self)
-        self.botLogPage.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotLog")
-
-        # 将页面添加到 view
-        self.view.addWidget(self.botInfoPage)
-        self.view.addWidget(self.botSetupPage)
-        self.view.addWidget(self.botLogPage)
-        self.view.setObjectName("BotView")
-        self.view.setCurrentWidget(self.botSetupPage)
-        self.view.currentChanged.connect(self._pivotSlot)
-
-    def _createButton(self) -> None:
-        """
-        ## 创建按钮并设置
-        """
+    def _create_button(self) -> None:
+        """创建并配置所有功能按钮"""
         # 创建按钮
-        self.runButton = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"))  # 启动按钮
-        self.stopButton = PushButton(FluentIcon.POWER_BUTTON, self.tr("停止"))  # 停止按钮
-        self.rebootButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("重启"))  # 重启按钮
-        self.updateConfigButton = PrimaryPushButton(FluentIcon.UPDATE, self.tr("更新配置"))  # 更新配置按钮
-        self.deleteConfigButton = ToolButton(FluentIcon.DELETE, self)  # 删除配置按钮
-        self.returnButton = TransparentToolButton(FluentIcon.RETURN, self)  # 返回到按钮
-        self.addConnectConfigButton = PrimaryPushButton(FluentIcon.ADD, self.tr("添加连接配置"), self)
+        self.run_button = PrimaryPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"))
+        self.stop_button = PushButton(FluentIcon.POWER_BUTTON, self.tr("停止"))
+        self.reboot_button = PrimaryPushButton(FluentIcon.UPDATE, self.tr("重启"))
+        self.update_config_button = PrimaryPushButton(FluentIcon.UPDATE, self.tr("更新配置"))
+        self.delete_config_button = ToolButton(FluentIcon.DELETE, self)
+        self.return_button = TransparentToolButton(FluentIcon.RETURN, self)
+        self.add_connect_config_button = PrimaryPushButton(FluentIcon.ADD, self.tr("添加连接配置"), self)
 
         # 连接槽函数
-        self.runButton.clicked.connect(self.runButtonSlot)
-        self.stopButton.clicked.connect(self.stopButtonSlot)
-        self.rebootButton.clicked.connect(self.rebootButtonSlot)
-        self.updateConfigButton.clicked.connect(self._updateButtonSlot)
-        self.deleteConfigButton.clicked.connect(self._deleteButtonSlot)
-        self.returnButton.clicked.connect(self._returnButtonSlot)
-        self.addConnectConfigButton.clicked.connect(self._onAddConnectConfigButtonClicked)
-        bot_list_page_signal_bus.choose_connect_type_signal.connect(self._onShowTypeDialog)
+        self.run_button.clicked.connect(self.on_run_button)
+        self.stop_button.clicked.connect(self.on_stop_button)
+        self.reboot_button.clicked.connect(self.on_reboot_button)
+        self.update_config_button.clicked.connect(self._on_update_button)
+        self.delete_config_button.clicked.connect(self._on_delete_button)
+        self.return_button.clicked.connect(self._on_return_button)
+        self.add_connect_config_button.clicked.connect(self._on_add_connect_config_button_clicked)
+        bot_list_page_signal_bus.choose_connect_type_signal.connect(self._on_show_type_dialog)
 
         # 隐藏按钮
-        self.stopButton.hide()
-        self.rebootButton.hide()
+        self.stop_button.hide()
+        self.reboot_button.hide()
 
-    def _addTooltips(self) -> None:
-        """
-        ## 为按钮添加悬停提示
-        """
+    def _set_layout(self) -> None:
+        """设置控件布局"""
+        self.button_layout.setSpacing(8)
+        self.button_layout.setContentsMargins(0, 0, 0, 0)
+        self.button_layout.addWidget(self.run_button)
+        self.button_layout.addWidget(self.stop_button)
+        self.button_layout.addWidget(self.reboot_button)
+        self.button_layout.addWidget(self.update_config_button)
+        self.button_layout.addWidget(self.add_connect_config_button)
+        self.button_layout.addWidget(self.delete_config_button)
+        self.button_layout.addWidget(self.return_button)
+        self.button_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.h_box_layout.setSpacing(0)
+        self.h_box_layout.setContentsMargins(0, 0, 0, 0)
+        self.h_box_layout.addWidget(self.pivot)
+        self.h_box_layout.addLayout(self.button_layout)
+
+        self.v_box_layout.setSpacing(0)
+        self.v_box_layout.setContentsMargins(0, 0, 0, 0)
+        self.v_box_layout.addLayout(self.h_box_layout)
+        self.v_box_layout.addSpacing(10)
+        self.v_box_layout.addWidget(self.view)
+
+        self.setLayout(self.v_box_layout)
+
+    def _add_tool_tips(self) -> None:
+        """为按钮添加悬停提示"""
         # 返回按钮提示
-        self.returnButton.setToolTip(self.tr("返回"))
-        self.returnButton.installEventFilter(ToolTipFilter(self.returnButton))
+        self.return_button.setToolTip(self.tr("返回"))
+        self.return_button.installEventFilter(ToolTipFilter(self.return_button))
 
         # 删除按钮提示
-        self.deleteConfigButton.setToolTip(self.tr("点击删除配置"))
-        self.deleteConfigButton.installEventFilter(ToolTipFilter(self.deleteConfigButton))
+        self.delete_config_button.setToolTip(self.tr("点击删除配置"))
+        self.delete_config_button.installEventFilter(ToolTipFilter(self.delete_config_button))
 
         # 更新按钮提示
-        self.updateConfigButton.setToolTip(self.tr("点击更新配置"))
-        self.updateConfigButton.installEventFilter(ToolTipFilter(self.updateConfigButton))
+        self.update_config_button.setToolTip(self.tr("点击更新配置"))
+        self.update_config_button.installEventFilter(ToolTipFilter(self.update_config_button))
 
         # 启动按钮提示
-        self.runButton.setToolTip(self.tr("点击启动机器人"))
-        self.runButton.installEventFilter(ToolTipFilter(self.runButton))
+        self.run_button.setToolTip(self.tr("点击启动机器人"))
+        self.run_button.installEventFilter(ToolTipFilter(self.run_button))
 
         # 停止按钮提示
-        self.stopButton.setToolTip(self.tr("点击停止机器人"))
-        self.stopButton.installEventFilter(ToolTipFilter(self.stopButton))
+        self.stop_button.setToolTip(self.tr("点击停止机器人"))
+        self.stop_button.installEventFilter(ToolTipFilter(self.stop_button))
 
         # 重启按钮提示
-        self.rebootButton.setToolTip(self.tr("点击重启机器人"))
-        self.rebootButton.installEventFilter(ToolTipFilter(self.rebootButton))
+        self.reboot_button.setToolTip(self.tr("点击重启机器人"))
+        self.reboot_button.installEventFilter(ToolTipFilter(self.reboot_button))
 
         # 添加连接配置按钮提示
-        self.addConnectConfigButton.setToolTip(self.tr("添加连接配置"))
-        self.addConnectConfigButton.installEventFilter(ToolTipFilter(self.addConnectConfigButton))
+        self.add_connect_config_button.setToolTip(self.tr("添加连接配置"))
+        self.add_connect_config_button.installEventFilter(ToolTipFilter(self.add_connect_config_button))
 
+    # ==================== 公共方法 ====================
+    # 注：此类暂无对外公开方法
+
+    # ==================== 槽函数 ====================
     @Slot()
-    def runButtonSlot(self) -> None:
-        """
-        ## 启动按钮槽函数
-        """
-        # 判断是否存在旧实例, 如果不存在则创建新实例, 存在则销毁后创建新实例
-        if self.napcatProcess is None:
-            self.napcatProcess = create_napcat_process(self.config)
-        elif isinstance(self.napcatProcess, QProcess):
-            self.napcatProcess.deleteLater()
-            self.napcatProcess = create_napcat_process(self.config)
+    def on_run_button(self) -> None:
+        """启动机器人按钮点击槽函数"""
+        # 判断是否存在旧实例，如果不存在则创建新实例，存在则销毁后创建新实例
+        if self.napcat_process is None:
+            self.napcat_process = create_napcat_process(self.config)
+        elif isinstance(self.napcat_process, QProcess):
+            self.napcat_process.deleteLater()
+            self.napcat_process = create_napcat_process(self.config)
 
         # NapCat 启动
-        self.highlighter = LogHighlighter(self.botLogPage.document())
-        self.botLogPage.clear()
-        self.napcatProcess.setParent(self)
-        self.napcatProcess.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self.napcatProcess.readyReadStandardOutput.connect(self._napcatHandleStdout)
-        self.napcatProcess.finished.connect(self._napcatProcessFinishedSlot)
-        self.napcatProcess.start()
-        self.napcatProcess.waitForStarted()
+        self.highlighter = LogHighlighter(self.bot_log_page.document())
+        self.bot_log_page.clear()
+        self.napcat_process.setParent(self)
+        self.napcat_process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.napcat_process.readyReadStandardOutput.connect(self._napcat_handle_stdout)
+        self.napcat_process.finished.connect(self._on_napcat_process_finished)
+        self.napcat_process.start()
+        self.napcat_process.waitForStarted()
 
         # 参数调整
-        self.isRun = True
-        self.view.setCurrentWidget(self.botLogPage)
-        self.runButton.setVisible(False)
-        self.stopButton.setVisible(True)
-        self.rebootButton.setVisible(True)
+        self.is_run = True
+        self.view.setCurrentWidget(self.bot_log_page)
+        self.run_button.setVisible(False)
+        self.stop_button.setVisible(True)
+        self.reboot_button.setVisible(True)
 
         # 显示提示
-        info_bar(self.tr("已执行启动命令, 如果长时间没有输出, 请查看日志"))
+        info_bar(self.tr("已执行启动命令，如果长时间没有输出，请查看日志"))
 
     @Slot()
-    def stopButtonSlot(self) -> None:
-        """
-        ## 停止按钮槽函数
-        """
-        if not self.isRun:
+    def on_stop_button(self) -> None:
+        """停止机器人按钮点击槽函数"""
+        if not self.is_run:
             return
 
-        if (parent := psutil.Process(self.napcatProcess.processId())).pid != 0:
+        if (parent := psutil.Process(self.napcat_process.processId())).pid != 0:
             [child.kill() for child in parent.children(recursive=True)]
             parent.kill()
-            self.napcatProcess.kill()
-            self.napcatProcess.waitForFinished()
-            self.napcatProcess.deleteLater()
-            self.napcatProcess = None
+            self.napcat_process.kill()
+            self.napcat_process.waitForFinished()
+            self.napcat_process.deleteLater()
+            self.napcat_process = None
 
-        self.isRun = False
-        self.view.setCurrentWidget(self.botSetupPage)
-
-    @Slot()
-    def rebootButtonSlot(self) -> None:
-        """
-        ## 重启机器人, 直接调用函数
-        """
-        self.stopButtonSlot()
-        self.runButtonSlot()
-
-    def _napcatHandleStdout(self) -> None:
-        """
-        ## 日志管道并检测内部信息执行操作
-        """
-        # 获取所有输出
-        data = self.napcatProcess.readAllStandardOutput().data().decode()
-
-        # 遍历所有匹配项并移除
-        while (matches := QRegularExpression(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").globalMatch(data)).hasNext():
-            data = data.replace(matches.next().captured(0), "")
-            data = data.replace("\n\n", "\n")
-
-        # 获取 CodeEditor 的 cursor 并移动插入输出内容
-        cursor = self.botLogPage.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(data)
-        self.botLogPage.setTextCursor(cursor)
-
-        # 分发给其他处理函数
-        self._getQRCode(data)
-        self._getBofOffline(data)
+        self.is_run = False
+        self.view.setCurrentWidget(self.bot_setup_page)
 
     @Slot()
-    def _napcatProcessFinishedSlot(self, exit_code, exit_status) -> None:
-        """
-        ## 进程结束槽函数
-        """
-        cursor = self.botLogPage.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(f"进程结束，退出码为 {exit_code}，状态为 {exit_status}")
-        self.botLogPage.setTextCursor(cursor)
-
-    def _getQRCode(self, data: str) -> None:
-        """
-        ## 判断是否需要显示二维码
-        """
-        if "二维码已保存到" in data:
-            # 项目内模块导入
-            from src.ui.window.main_window import MainWindow
-
-            pattern = rf"[a-zA-Z]:\\(?:[^\\\s]+\\)*[^\\\s]+"
-            if not (match := QRegularExpression(pattern).match(data)).hasMatch():
-                # 如果匹配不成功, 则退出
-                return
-
-            box = ImageBox(self.tr("请扫码登陆"), match.captured(0), MainWindow())
-            box.cancelButton.hide()
-            box.image_label.scaledToHeight(256)
-            box.exec()
-
-    def _getBofOffline(self, data: str):
-        """
-        ## 检测用户状态
-        """
-        # 正则匹配
-        pattern = rf"\[INFO\] .+\({self.config.bot.QQID}\) \| 账号状态变更为离线"
-        if not (match := QRegularExpression(pattern).match(data)).hasMatch():
-            # 如果匹配不成功, 则退出
-            return
-
-        if not self.config.advanced.offlineNotice:
-            # 如果未开启通知, 退出
-            return
-
-        if cfg.get(cfg.bot_offline_email_notice):
-            # 如果开启了邮件通知, 则发送邮件
-            offline_email(self.config)
-        elif cfg.get(cfg.bot_offline_web_hook_notice):
-            # 如果开启了 WebHook 通知, 则发送 WebHook
-            offline_webhook(self.config)
-        else:
-            # 否则显示提示
-            warning_bar(self.tr(f"账号 {self.config.bot.QQID} 已离线, 请前往 NapCat 日志 查看详情"))
+    def on_reboot_button(self) -> None:
+        """重启机器人按钮点击槽函数"""
+        self.on_stop_button()
+        self.on_run_button()
 
     @Slot()
-    def _updateButtonSlot(self) -> None:
-        """
-        ## 更新按钮的槽函数
-        """
-        self.config = Config(**self.botSetupPage.getValue())
+    def _on_update_button(self) -> None:
+        """更新配置按钮点击槽函数"""
+        self.config = Config(**self.bot_setup_page.get_value())
         if update_config(self.config):
-            # 更新成功提示
             success_bar(self.tr("更新配置成功"))
         else:
-            error_bar(self.tr("更新配置文件时引发错误, 请前往 设置 > log 中查看详细错误"))
+            error_bar(self.tr("更新配置文件时引发错误，请前往 设置 > log 中查看详细错误"))
 
     @Slot()
-    def _deleteButtonSlot(self) -> None:
-        """
-        ## 删除机器人配置按钮
-        """
+    def _on_delete_button(self) -> None:
+        """删除配置按钮点击槽函数"""
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if self.isRun:
-            # 如果 NC 正在运行, 则提示停止运行后删除配置
-            warning_bar(self.tr("NapCat 还在运行, 请停止运行再进行操作"))
+        if self.is_run:
+            warning_bar(self.tr("NapCat 还在运行，请停止运行再进行操作"))
             return
 
         if AskBox(
             self.tr("确认删除"),
-            self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消, 请谨慎操作"),
+            self.tr(f"你确定要删除 {self.config.bot.QQID} 吗? \n\n此操作无法撤消，请谨慎操作"),
             MainWindow(),
         ).exec():
-            # 询问用户是否确认删除, 确认删除执行删除操作
             # 项目内模块导入
             from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
             if delete_config(self.config):
                 # 删除成功后的操作
-                self.returnButton.clicked.emit()
+                self.return_button.clicked.emit()
                 BotListWidget().bot_list.update_list()
                 success_bar(self.tr(f"成功删除配置 {self.config.bot.QQID}({self.config.bot.name})"))
 
-                self.returnButton.click()
+                self.return_button.click()
                 self.close()
 
                 # 处理 TabBar
@@ -351,15 +283,12 @@ class BotWidget(QWidget):
 
                 MainWindow().title_bar.tab_bar.removeTabByKey(f"{self.config.bot.QQID}")
             else:
-                error_bar(self.tr("删除配置文件时引发错误, 请前往 设置 > log 查看错误原因"))
+                error_bar(self.tr("删除配置文件时引发错误，请前往 设置 > log 查看错误原因"))
 
     @Slot()
-    def _returnButtonSlot(self) -> None:
-        """
-        ## 返回列表按钮的槽函数
-        """
-        if self.view.currentWidget() in [self.botInfoPage, self.botSetupPage, self.botLogPage]:
-            # 判断当前处于哪个页面
+    def _on_return_button(self) -> None:
+        """返回按钮点击槽函数"""
+        if self.view.currentWidget() in [self.bot_info_page, self.bot_setup_page, self.bot_log_page]:
             # 项目内模块导入
             from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
@@ -367,70 +296,78 @@ class BotWidget(QWidget):
             BotListWidget().top_card.breadcrumb_bar.setCurrentIndex(0)
             BotListWidget().top_card.update_list_button.show()
         else:
-            self.view.setCurrentWidget(self.botSetupPage)
+            self.view.setCurrentWidget(self.bot_setup_page)
 
     @Slot()
-    def _onAddConnectConfigButtonClicked(self) -> None:
-        """添加连接配置按钮的槽函数"""
+    def _on_add_connect_config_button_clicked(self) -> None:
+        """添加连接配置按钮点击槽函数"""
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
         ChooseConfigTypeDialog(MainWindow()).exec()
 
-    @Slot()
-    def _onShowTypeDialog(self, connectType: ConnectType) -> None:
-        """添加连接配置按钮的槽函数"""
+    @Slot(ConnectType)
+    def _on_show_type_dialog(self, connect_type: ConnectType) -> None:
+        """显示连接类型选择对话框槽函数
+
+        Args:
+            connect_type: 连接类型枚举值
+        """
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        if (
-            dialog := {
-                ConnectType.HTTP_SERVER: HttpServerConfigDialog,
-                ConnectType.HTTP_SSE_SERVER: HttpSSEServerConfigDialog,
-                ConnectType.HTTP_CLIENT: HttpClientConfigDialog,
-                ConnectType.WEBSOCKET_SERVER: WebsocketServerConfigDialog,
-                ConnectType.WEBSOCKET_CLIENT: WebsocketClientConfigDialog,
-            }.get(connectType)(MainWindow())
-        ).exec():
-            self.botSetupPage.connectWidget.add_card(dialog.get_config())
+        dialog_map = {
+            ConnectType.HTTP_SERVER: HttpServerConfigDialog,
+            ConnectType.HTTP_SSE_SERVER: HttpSSEServerConfigDialog,
+            ConnectType.HTTP_CLIENT: HttpClientConfigDialog,
+            ConnectType.WEBSOCKET_SERVER: WebsocketServerConfigDialog,
+            ConnectType.WEBSOCKET_CLIENT: WebsocketClientConfigDialog,
+        }
 
-    @Slot()
-    def _pivotSlot(self, index: int) -> None:
-        """
-        ## pivot 切换槽函数
+        dialog_class = dialog_map.get(connect_type)
+        if dialog_class:
+            dialog = dialog_class(MainWindow())
+            if dialog.exec():
+                self.bot_setup_page.connect_widget.add_card(dialog.get_config())
+
+    @Slot(int)
+    def _on_pivot(self, index: int) -> None:
+        """导航栏切换槽函数
+
+        Args:
+            index: 当前页面索引
         """
         widget = self.view.widget(index)
         self.pivot.setCurrentItem(widget.objectName())
 
         # 定义页面对应的操作字典
-        # 塞一大堆 if-else 是及其不专业的行为(
         page_actions = {
-            self.botInfoPage.objectName(): {
-                "returnButton": "show",
-                "updateConfigButton": "hide",
-                "deleteConfigButton": "hide",
-                "runButton": "hide" if self.isRun else "show",
-                "stopButton": "show" if self.isRun else "hide",
-                "rebootButton": "show" if self.isRun else "hide",
-                "addConnectConfigButton": "hide" if self.isRun else "hide",
+            self.bot_info_page.objectName(): {
+                "return_button": "show",
+                "update_config_button": "hide",
+                "delete_config_button": "hide",
+                "run_button": "hide" if self.is_run else "show",
+                "stop_button": "show" if self.is_run else "hide",
+                "reboot_button": "show" if self.is_run else "hide",
+                "add_connect_config_button": "hide" if self.is_run else "hide",
             },
-            self.botSetupPage.objectName(): {
-                "updateConfigButton": "show",
-                "deleteConfigButton": "show",
-                "returnButton": "show",
-                "runButton": "hide" if self.isRun else "show",
-                "stopButton": "show" if self.isRun else "hide",
-                "rebootButton": "show" if self.isRun else "hide",
-                "addConnectConfigButton": "show" if self.isRun else "show",
+            self.bot_setup_page.objectName(): {
+                "return_button": "show",
+                "update_config_button": "show",
+                "delete_config_button": "show",
+                "run_button": "hide" if self.is_run else "show",
+                "stop_button": "show" if self.is_run else "hide",
+                "reboot_button": "show" if self.is_run else "hide",
+                "add_connect_config_button": "show" if self.is_run else "show",
             },
-            self.botLogPage.objectName(): {
-                "returnButton": "show",
-                "updateConfigButton": "hide",
-                "deleteConfigButton": "hide",
-                "runButton": "hide" if self.isRun else "show",
-                "stopButton": "show" if self.isRun else "hide",
-                "rebootButton": "show" if self.isRun else "hide",
-                "addConnectConfigButton": "hide" if self.isRun else "hide",
+            self.bot_log_page.objectName(): {
+                "return_button": "show",
+                "update_config_button": "hide",
+                "delete_config_button": "hide",
+                "run_button": "hide" if self.is_run else "show",
+                "stop_button": "show" if self.is_run else "hide",
+                "reboot_button": "show" if self.is_run else "hide",
+                "add_connect_config_button": "hide" if self.is_run else "hide",
             },
         }
 
@@ -439,30 +376,76 @@ class BotWidget(QWidget):
             for button, action in page_actions[widget.objectName()].items():
                 getattr(self, button).setVisible(action == "show")
 
-    def _setLayout(self) -> None:
+    # ==================== 辅助方法 ====================
+    def _napcat_handle_stdout(self) -> None:
+        """处理 NapCat 标准输出，解析日志并执行相应操作"""
+        # 获取所有输出
+        data = self.napcat_process.readAllStandardOutput().data().decode()
+
+        # 遍历所有匹配项并移除 ANSI 转义码
+        while (matches := QRegularExpression(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").globalMatch(data)).hasNext():
+            data = data.replace(matches.next().captured(0), "")
+            data = data.replace("\n\n", "\n")
+
+        # 获取 CodeEditor 的 cursor 并移动插入输出内容
+        cursor = self.bot_log_page.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(data)
+        self.bot_log_page.setTextCursor(cursor)
+
+        # 分发给其他处理函数
+        self._get_qr_code(data)
+        self._get_bof_offline(data)
+
+    @Slot(int, int)
+    def _on_napcat_process_finished(self, exit_code: int, exit_status: int) -> None:
+        """NapCat 进程结束槽函数
+
+        Args:
+            exit_code: 退出码
+            exit_status: 退出状态
         """
-        ## 对内部进行布局
+        cursor = self.bot_log_page.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(f"进程结束，退出码为 {exit_code}，状态为 {exit_status}")
+        self.bot_log_page.setTextCursor(cursor)
+
+    def _get_qr_code(self, data: str) -> None:
+        """从输出中解析二维码信息并显示
+
+        Args:
+            data: 日志输出数据
         """
-        self.buttonLayout.setSpacing(8)
-        self.buttonLayout.setContentsMargins(0, 0, 0, 0)
-        self.buttonLayout.addWidget(self.runButton)
-        self.buttonLayout.addWidget(self.stopButton)
-        self.buttonLayout.addWidget(self.rebootButton)
-        self.buttonLayout.addWidget(self.updateConfigButton)
-        self.buttonLayout.addWidget(self.addConnectConfigButton)
-        self.buttonLayout.addWidget(self.deleteConfigButton)
-        self.buttonLayout.addWidget(self.returnButton)
-        self.buttonLayout.setAlignment(Qt.AlignmentFlag.AlignRight)
+        if "二维码已保存到" in data:
+            # 项目内模块导入
+            from src.ui.window.main_window import MainWindow
 
-        self.hBoxLayout.setSpacing(0)
-        self.hBoxLayout.setContentsMargins(0, 0, 0, 0)
-        self.hBoxLayout.addWidget(self.pivot)
-        self.hBoxLayout.addLayout(self.buttonLayout)
+            pattern = rf"[a-zA-Z]:\\(?:[^\\\s]+\\)*[^\\\s]+"
+            if not (match := QRegularExpression(pattern).match(data)).hasMatch():
+                return
 
-        self.vBoxLayout.setSpacing(0)
-        self.vBoxLayout.setContentsMargins(0, 0, 0, 0)
-        self.vBoxLayout.addLayout(self.hBoxLayout)
-        self.vBoxLayout.addSpacing(10)
-        self.vBoxLayout.addWidget(self.view)
+            box = ImageBox(self.tr("请扫码登陆"), match.captured(0), MainWindow())
+            box.cancelButton.hide()
+            box.image_label.scaledToHeight(256)
+            box.exec()
 
-        self.setLayout(self.vBoxLayout)
+    def _get_bof_offline(self, data: str) -> None:
+        """检测用户离线状态并发送通知
+
+        Args:
+            data: 日志输出数据
+        """
+        # 正则匹配
+        pattern = rf"\[INFO\] .+\({self.config.bot.QQID}\) \| 账号状态变更为离线"
+        if not (match := QRegularExpression(pattern).match(data)).hasMatch():
+            return
+
+        if not self.config.advanced.offlineNotice:
+            return
+
+        if cfg.get(cfg.bot_offline_email_notice):
+            offline_email(self.config)
+        elif cfg.get(cfg.bot_offline_web_hook_notice):
+            offline_webhook(self.config)
+        else:
+            warning_bar(self.tr(f"账号 {self.config.bot.QQID} 已离线，请前往 NapCat 日志 查看详情"))

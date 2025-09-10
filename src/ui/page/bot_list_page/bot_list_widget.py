@@ -86,15 +86,15 @@ class BotListWidget(QWidget):
                 card.bot_widget = BotWidget(card.config)
                 self.view.addWidget(card.bot_widget)
 
-            card.bot_widget.runButtonSlot()
+            card.bot_widget.on_run_button()
 
     def stop_all_bot(self) -> None:
         """停止所有正在运行的机器人"""
         for card in self.bot_list.bot_card_list:
             if not card.bot_widget:
                 continue
-            if card.bot_widget.isRun:
-                card.bot_widget.stopButton.click()
+            if card.bot_widget.is_run:
+                card.bot_widget.stop_button.click()
 
     def get_bot_is_run(self) -> bool:
         """检查是否有机器人正在运行
@@ -106,6 +106,6 @@ class BotListWidget(QWidget):
             if not card.bot_widget:
                 # 如果没有创建则表示没有运行
                 continue
-            if card.bot_widget.isRun:
+            if card.bot_widget.is_run:
                 return True
         return False

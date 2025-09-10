@@ -32,33 +32,33 @@ class AppCard(CardWidget):
         ## 初始化
         """
         super().__init__(parent)
-        self.iconWidget = IconWidget(icon, self)
-        self.titleLabel = BodyLabel(title, self)
-        self.contentLabel = CaptionLabel(content, self)
-        self.openLabel = IconWidget(FluentIcon.CHEVRON_RIGHT_MED, self)
+        self.icon_widget = IconWidget(icon, self)
+        self.title_label = BodyLabel(title, self)
+        self.content_label = CaptionLabel(content, self)
+        self.open_label = IconWidget(FluentIcon.CHEVRON_RIGHT_MED, self)
 
-        self.hBoxLayout = QHBoxLayout()
-        self.vBoxLayout = QVBoxLayout()
+        self.h_box_layout = QHBoxLayout()
+        self.v_box_layout = QVBoxLayout()
 
         self.setFixedHeight(70)
-        self.iconWidget.setFixedSize(24, 24)
-        self.openLabel.setFixedSize(12, 12)
-        self.contentLabel.setTextColor("#606060", "#d2d2d2")
+        self.icon_widget.setFixedSize(24, 24)
+        self.open_label.setFixedSize(12, 12)
+        self.content_label.setTextColor("#606060", "#d2d2d2")
 
-        self.vBoxLayout.setContentsMargins(0, 0, 0, 0)
-        self.vBoxLayout.setSpacing(0)
-        self.vBoxLayout.addWidget(self.titleLabel, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.vBoxLayout.addWidget(self.contentLabel, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.vBoxLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self.v_box_layout.setContentsMargins(0, 0, 0, 0)
+        self.v_box_layout.setSpacing(0)
+        self.v_box_layout.addWidget(self.title_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.v_box_layout.addWidget(self.content_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.v_box_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        self.hBoxLayout.setContentsMargins(20, 10, 30, 10)
-        self.hBoxLayout.setSpacing(15)
-        self.hBoxLayout.addWidget(self.iconWidget, 0, Qt.AlignmentFlag.AlignRight)
-        self.hBoxLayout.addLayout(self.vBoxLayout)
-        self.hBoxLayout.addStretch(1)
-        self.hBoxLayout.addWidget(self.openLabel, 0, Qt.AlignmentFlag.AlignRight)
+        self.h_box_layout.setContentsMargins(20, 10, 30, 10)
+        self.h_box_layout.setSpacing(15)
+        self.h_box_layout.addWidget(self.icon_widget, 0, Qt.AlignmentFlag.AlignRight)
+        self.h_box_layout.addLayout(self.v_box_layout)
+        self.h_box_layout.addStretch(1)
+        self.h_box_layout.addWidget(self.open_label, 0, Qt.AlignmentFlag.AlignRight)
 
-        self.setLayout(self.hBoxLayout)
+        self.setLayout(self.h_box_layout)
 
 
 class BotSetupPage(QWidget):
@@ -75,64 +75,64 @@ class BotSetupPage(QWidget):
         self.view = view
 
         # 调用方法
-        self._createSubPages()
-        self._createCard()
-        self._setLayout()
+        self._create_sub_pages()
+        self._create_card()
+        self._set_layout()
 
         # 设置全局唯一名称
         self.setObjectName(f"{self.config.bot.QQID}_BotWidgetPivot_BotSetup")
 
-    def getValue(self) -> dict:
+    def get_value(self) -> dict:
         """
         ## 返回配置结果
         """
         return {
-            "bot": self.botWidget.get_value(),
-            "connect": self.connectWidget.get_value(),
-            "advanced": self.advancedWidget.get_value(),
+            "bot": self.bot_widget.get_value(),
+            "connect": self.connect_widget.get_value(),
+            "advanced": self.advanced_widget.get_value(),
         }
 
-    def _createCard(self) -> None:
+    def _create_card(self) -> None:
         """
         ## 创建页面内的卡片
         """
-        self.botSetupCard = AppCard(FluentIcon.ROBOT, self.tr("基本设置"), self.tr("机器人基本配置项"))
-        self.connectSetupCard = AppCard(FluentIcon.GLOBE, self.tr("连接设置"), self.tr("机器人连接配置项"))
-        self.advancedSetupCard = AppCard(FluentIcon.BOOK_SHELF, self.tr("高级设置"), self.tr("机器人高级配置项"))
+        self.bot_setup_card = AppCard(FluentIcon.ROBOT, self.tr("基本设置"), self.tr("机器人基本配置项"))
+        self.connect_setup_card = AppCard(FluentIcon.GLOBE, self.tr("连接设置"), self.tr("机器人连接配置项"))
+        self.advanced_setup_card = AppCard(FluentIcon.BOOK_SHELF, self.tr("高级设置"), self.tr("机器人高级配置项"))
 
-        self.botSetupCard.clicked.connect(lambda: self.view.view.setCurrentWidget(self.botWidget))
-        self.connectSetupCard.clicked.connect(lambda: self.view.view.setCurrentWidget(self.connectWidget))
-        self.advancedSetupCard.clicked.connect(lambda: self.view.view.setCurrentWidget(self.advancedWidget))
+        self.bot_setup_card.clicked.connect(lambda: self.view.view.setCurrentWidget(self.bot_widget))
+        self.connect_setup_card.clicked.connect(lambda: self.view.view.setCurrentWidget(self.connect_widget))
+        self.advanced_setup_card.clicked.connect(lambda: self.view.view.setCurrentWidget(self.advanced_widget))
 
-    def _createSubPages(self) -> None:
+    def _create_sub_pages(self) -> None:
         """
         ## 创建子页面, 并添加到 view 中
             子页面直接使用 AddWidget 中的页面
         """
-        self.botWidget = BotConfigWidget(self, self.config.bot)
-        self.connectWidget = ConnectWidget(self, self.config.connect)
-        self.advancedWidget = AdvancedWidget(self, self.config.advanced)
+        self.bot_widget = BotConfigWidget(self, self.config.bot)
+        self.connect_widget = ConnectWidget(self, self.config.connect)
+        self.advanced_widget = AdvancedWidget(self, self.config.advanced)
 
-        self.botWidget.view.setObjectName("BotListBotSetupView")
-        self.connectWidget.card_list_page.setObjectName("BotListConnectSetupView")
-        self.advancedWidget.view.setObjectName("BotListAdvancedSetupView")
+        self.bot_widget.view.setObjectName("BotListBotSetupView")
+        self.connect_widget.card_list_page.setObjectName("BotListConnectSetupView")
+        self.advanced_widget.view.setObjectName("BotListAdvancedSetupView")
 
-        self.botWidget.bot_qq_id_card.lineEdit.setEnabled(False)
+        self.bot_widget.bot_qq_id_card.lineEdit.setEnabled(False)
 
-        self.view.view.addWidget(self.botWidget)
-        self.view.view.addWidget(self.connectWidget)
-        self.view.view.addWidget(self.advancedWidget)
+        self.view.view.addWidget(self.bot_widget)
+        self.view.view.addWidget(self.connect_widget)
+        self.view.view.addWidget(self.advanced_widget)
 
-    def _setLayout(self) -> None:
+    def _set_layout(self) -> None:
         """
         ## 对内部进行布局
         """
-        self.vBoxLayout = QVBoxLayout()
+        self.v_box_layout = QVBoxLayout()
 
-        self.vBoxLayout.setContentsMargins(0, 5, 0, 5)
-        self.vBoxLayout.addWidget(self.botSetupCard)
-        self.vBoxLayout.addWidget(self.connectSetupCard)
-        self.vBoxLayout.addWidget(self.advancedSetupCard)
-        self.vBoxLayout.addStretch(1)
+        self.v_box_layout.setContentsMargins(0, 5, 0, 5)
+        self.v_box_layout.addWidget(self.bot_setup_card)
+        self.v_box_layout.addWidget(self.connect_setup_card)
+        self.v_box_layout.addWidget(self.advanced_setup_card)
+        self.v_box_layout.addStretch(1)
 
-        self.setLayout(self.vBoxLayout)
+        self.setLayout(self.v_box_layout)
