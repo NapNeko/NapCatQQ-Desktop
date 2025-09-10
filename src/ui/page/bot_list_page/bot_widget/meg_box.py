@@ -13,9 +13,9 @@ class ChooseConfigTypeDialog(OldChooseConfigTypeDialog):
         super().__init__(parent=parent)
 
     def accept(self) -> None:
-
-        if self.validate():
-            self.accept()
+        """重写 accept 方法, 选择配置类型后发送信号"""
 
         if (id := self.button_group.checkedId()) != -1:
             bot_list_page_signal_bus.choose_connect_type_signal.emit(list(ConnectType)[id])
+
+        self.close()

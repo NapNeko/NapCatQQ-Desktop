@@ -188,7 +188,6 @@ class BotWidget(QWidget):
     # 注：此类暂无对外公开方法
 
     # ==================== 槽函数 ====================
-    @Slot()
     def on_run_button(self) -> None:
         """启动机器人按钮点击槽函数"""
         # 判断是否存在旧实例，如果不存在则创建新实例，存在则销毁后创建新实例
@@ -218,7 +217,6 @@ class BotWidget(QWidget):
         # 显示提示
         info_bar(self.tr("已执行启动命令，如果长时间没有输出，请查看日志"))
 
-    @Slot()
     def on_stop_button(self) -> None:
         """停止机器人按钮点击槽函数"""
         if not self.is_run:
@@ -235,13 +233,11 @@ class BotWidget(QWidget):
         self.is_run = False
         self.view.setCurrentWidget(self.bot_setup_page)
 
-    @Slot()
     def on_reboot_button(self) -> None:
         """重启机器人按钮点击槽函数"""
         self.on_stop_button()
         self.on_run_button()
 
-    @Slot()
     def _on_update_button(self) -> None:
         """更新配置按钮点击槽函数"""
         self.config = Config(**self.bot_setup_page.get_value())
@@ -250,7 +246,6 @@ class BotWidget(QWidget):
         else:
             error_bar(self.tr("更新配置文件时引发错误，请前往 设置 > log 中查看详细错误"))
 
-    @Slot()
     def _on_delete_button(self) -> None:
         """删除配置按钮点击槽函数"""
         # 项目内模块导入
@@ -285,7 +280,6 @@ class BotWidget(QWidget):
             else:
                 error_bar(self.tr("删除配置文件时引发错误，请前往 设置 > log 查看错误原因"))
 
-    @Slot()
     def _on_return_button(self) -> None:
         """返回按钮点击槽函数"""
         if self.view.currentWidget() in [self.bot_info_page, self.bot_setup_page, self.bot_log_page]:
@@ -298,7 +292,6 @@ class BotWidget(QWidget):
         else:
             self.view.setCurrentWidget(self.bot_setup_page)
 
-    @Slot()
     def _on_add_connect_config_button_clicked(self) -> None:
         """添加连接配置按钮点击槽函数"""
         # 项目内模块导入
@@ -306,7 +299,6 @@ class BotWidget(QWidget):
 
         ChooseConfigTypeDialog(MainWindow()).exec()
 
-    @Slot(ConnectType)
     def _on_show_type_dialog(self, connect_type: ConnectType) -> None:
         """显示连接类型选择对话框槽函数
 
@@ -330,7 +322,6 @@ class BotWidget(QWidget):
             if dialog.exec():
                 self.bot_setup_page.connect_widget.add_card(dialog.get_config())
 
-    @Slot(int)
     def _on_pivot(self, index: int) -> None:
         """导航栏切换槽函数
 

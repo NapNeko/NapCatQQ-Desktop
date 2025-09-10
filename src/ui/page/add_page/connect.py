@@ -31,14 +31,14 @@ from src.ui.page.add_page.signal_bus import add_page_singal_bus
 
 
 class ConnectWidget(QStackedWidget):
-    """连接配置页面，包含默认空状态和配置卡片列表两种视图"""
+    """连接配置页面, 包含默认空状态和配置卡片列表两种视图"""
 
     def __init__(self, parent: QWidget | None = None, config: ConnectConfig | None = None) -> None:
         """初始化连接配置控件
 
         Args:
             parent: 父控件
-            config: 初始连接配置，如果为None则显示默认空页面
+            config: 初始连接配置, 如果为None则显示默认空页面
         """
         super().__init__(parent=parent)
         self.setObjectName("ConnectWidget")
@@ -61,7 +61,7 @@ class ConnectWidget(QStackedWidget):
             self.setCurrentWidget(self.defult_page)
             return
 
-        # 检查是否有配置数据，有则显示卡片列表页面
+        # 检查是否有配置数据, 有则显示卡片列表页面
         if (
             self.config.httpServers
             or self.config.httpSseServers
@@ -127,7 +127,7 @@ class ConnectWidget(QStackedWidget):
 
 
 class DefaultPage(QWidget):
-    """默认空状态页面，显示提示信息和动画"""
+    """默认空状态页面, 显示提示信息和动画"""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """初始化默认页面
