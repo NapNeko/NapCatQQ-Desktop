@@ -1,2 +1,2 @@
 # -*- coding: utf-8 -*-
-from .view import UnitWidget
+from .unit_widget import UnitWidget

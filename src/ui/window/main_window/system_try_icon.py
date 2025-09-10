@@ -57,7 +57,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             Action(
                 icon=FIF.PLAY,
                 text=self.tr("运行所有机器人"),
-                triggered=lambda: (self.check_show_state(), BotListWidget().runAllBot()),
+                triggered=lambda: (self.check_show_state(), BotListWidget().run_all_bot()),
             )
         )
         self.menu.addAction(
@@ -76,7 +76,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             Action(
                 icon=FIF.CLOSE,
                 text=self.tr("关闭程序"),
-                triggered=lambda: (BotListWidget().stopAllBot(), sys.exit()),
+                triggered=lambda: (BotListWidget().stop_all_bot(), sys.exit()),
             )
         )
 

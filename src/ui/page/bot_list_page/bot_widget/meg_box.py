@@ -4,7 +4,7 @@ from PySide6.QtCore import QObject, Slot
 # 项目内模块导入
 from src.ui.page.add_page.enum import ConnectType
 from src.ui.page.add_page.msg_box import ChooseConfigTypeDialog as OldChooseConfigTypeDialog
-from src.ui.page.bot_list_page.signal_bus import botListPageSignalBus
+from src.ui.page.bot_list_page.signal_bus import bot_list_page_signal_bus
 
 
 class ChooseConfigTypeDialog(OldChooseConfigTypeDialog):
@@ -23,4 +23,4 @@ class ChooseConfigTypeDialog(OldChooseConfigTypeDialog):
             self.accept()
 
         if (id := self.button_group.checkedId()) != -1:
-            botListPageSignalBus.chooseConnectType.emit(list(ConnectType)[id])
+            bot_list_page_signal_bus.choose_connect_type_signal.emit(list(ConnectType)[id])

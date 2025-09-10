@@ -33,7 +33,7 @@ from src.ui.page.add_page.msg_box import (
 )
 from src.ui.page.bot_list_page.bot_widget.bot_setup_page import BotSetupPage
 from src.ui.page.bot_list_page.bot_widget.meg_box import ChooseConfigTypeDialog
-from src.ui.page.bot_list_page.signal_bus import botListPageSignalBus
+from src.ui.page.bot_list_page.signal_bus import bot_list_page_signal_bus
 
 
 class BotWidget(QWidget):
@@ -131,7 +131,7 @@ class BotWidget(QWidget):
         self.deleteConfigButton.clicked.connect(self._deleteButtonSlot)
         self.returnButton.clicked.connect(self._returnButtonSlot)
         self.addConnectConfigButton.clicked.connect(self._onAddConnectConfigButtonClicked)
-        botListPageSignalBus.chooseConnectType.connect(self._onShowTypeDialog)
+        bot_list_page_signal_bus.choose_connect_type_signal.connect(self._onShowTypeDialog)
 
         # 隐藏按钮
         self.stopButton.hide()
@@ -339,7 +339,7 @@ class BotWidget(QWidget):
             if delete_config(self.config):
                 # 删除成功后的操作
                 self.returnButton.clicked.emit()
-                BotListWidget().botList.updateList()
+                BotListWidget().bot_list.update_list()
                 success_bar(self.tr(f"成功删除配置 {self.config.bot.QQID}({self.config.bot.name})"))
 
                 self.returnButton.click()
@@ -364,8 +364,8 @@ class BotWidget(QWidget):
             from src.ui.page.bot_list_page.bot_list_widget import BotListWidget
 
             BotListWidget().view.setCurrentIndex(0)
-            BotListWidget().topCard.breadcrumbBar.setCurrentIndex(0)
-            BotListWidget().topCard.updateListButton.show()
+            BotListWidget().top_card.breadcrumb_bar.setCurrentIndex(0)
+            BotListWidget().top_card.update_list_button.show()
         else:
             self.view.setCurrentWidget(self.botSetupPage)
 

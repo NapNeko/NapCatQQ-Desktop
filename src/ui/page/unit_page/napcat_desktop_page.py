@@ -2,6 +2,7 @@
 # 标准库导入
 import subprocess
 import sys
+from typing import Optional
 
 from PySide6.QtCore import QUrl, Slot
 from PySide6.QtGui import QDesktopServices
@@ -18,72 +19,68 @@ from src.ui.page.unit_page.status import ButtonStatus
 
 
 class NCDPage(PageBase):
-    """
-    ## NapCatQQ Desktop 更新页面
-    """
+    """NapCatQQ Desktop 应用程序更新页面"""
 
     def __init__(self, parent) -> None:
+        """初始化更新页面
+
+        Args:
+            parent: 父控件
+        """
         super().__init__(parent=parent)
         self.setObjectName("UnitNCDPage")
-        self.appCard.setName("NapCatQQ Desktop")
-        self.appCard.setHyperLabelName(self.tr("仓库地址"))
-        self.appCard.setHyperLabelUrl(Urls.NCD_REPO.value)
+        self.app_card.set_name("NapCatQQ Desktop")
+        self.app_card.set_hyper_label_name(self.tr("仓库地址"))
+        self.app_card.set_hyper_label_url(Urls.NCD_REPO.value)
 
-        self.appCard.installButton.clicked.connect(self.downloadSlot)
-        self.appCard.updateButton.clicked.connect(self.downloadSlot)
-        self.appCard.openFolderButton.clicked.connect(
+        # 连接信号槽
+        self.app_card.install_button.clicked.connect(self.on_download)
+        self.app_card.update_button.clicked.connect(self.on_download)
+        self.app_card.open_folder_button.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().napcat_path))
         )
 
-    def updatePage(self) -> None:
-        """
-        ## 更新页面
-        """
-        if self.localVersion is None:
+    # ==================== 公共方法 ====================
+    def update_page(self) -> None:
+        """根据本地和远程版本信息更新页面状态"""
+        if self.local_version is None:
             # 如果没有本地版本则显示安装按钮
-            self.appCard.switchButton(ButtonStatus.UNINSTALLED)
+            self.app_card.switch_button(ButtonStatus.UNINSTALLED)
             return
 
         if self.remoteVersion is None:
             # 如果没有远程版本则不操作
             return
 
-        if self.remoteVersion != self.localVersion:
-            self.appCard.switchButton(ButtonStatus.UPDATE)
+        if self.remoteVersion != self.local_version:
+            self.app_card.switch_button(ButtonStatus.UPDATE)
         else:
-            self.appCard.switchButton(ButtonStatus.INSTALL)
+            self.app_card.switch_button(ButtonStatus.INSTALL)
 
-        self.logCard.setLog(self.remoteLog)
+        self.log_card.setLog(self.remoteLog)
 
+    def on_update_remote_version(self) -> None:
+        """更新远程版本信息和更新日志"""
+        self.remoteVersion = self.get_version.remote_NCD
+        self.remoteLog = self.get_version.updateLog_NCD
+        self.update_page()
+
+    def on_update_local_version(self) -> None:
+        """更新本地版本信息"""
+        self.local_version = self.get_version.local_NCD
+
+    # ==================== 槽函数 ====================
     @Slot()
-    def updateRemoteVersion(self) -> None:
-        """
-        ## 更新远程版本
-        """
-        self.remoteVersion = self.getVersion.remote_NCD
-        self.remoteLog = self.getVersion.updateLog_NCD
-        self.updatePage()
-
-    @Slot()
-    def updateLocalVersion(self) -> None:
-        """
-        ## 更新本地版本
-        """
-        self.localVersion = self.getVersion.local_NCD
-
-    @Slot()
-    def downloadSlot(self) -> None:
-        """
-        ## 下载逻辑
-        """
-        if BotListWidget().getBotIsRun():
+    def on_download(self) -> None:
+        """处理下载按钮点击事件，开始下载应用程序"""
+        if BotListWidget().get_bot_is_run():
             # 项目内模块导入
             from src.ui.window.main_window import MainWindow
 
             box = AskBox(
                 self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), MainWindow()
             )
-            box.yesButton.clicked.connect(BotListWidget().stopAllBot)
+            box.yesButton.clicked.connect(BotListWidget().stop_all_bot)
             box.yesButton.setText(self.tr("关闭全部"))
 
             if not box.exec():
@@ -91,19 +88,17 @@ class NCDPage(PageBase):
 
         info_bar(self.tr("正在下载 NapCat Desktop"))
         self.downloader = GithubDownloader(Urls.NCD_DOWNLOAD.value)
-        self.downloader.download_progress_signal.connect(self.appCard.setProgressRingValue)
-        self.downloader.download_finish_signal.connect(self.installSlot)
-        self.downloader.status_label_signal.connect(self.appCard.setStatusText)
-        self.downloader.error_finsh_signal.connect(self.errorFinshSlot)
-        self.downloader.button_toggle_signal.connect(self.appCard.switchButton)
-        self.downloader.progress_ring_toggle_signal.connect(self.appCard.switchProgressRing)
+        self.downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
+        self.downloader.download_finish_signal.connect(self.on_install)
+        self.downloader.status_label_signal.connect(self.app_card.set_status_text)
+        self.downloader.error_finsh_signal.connect(self.on_error_finsh)
+        self.downloader.button_toggle_signal.connect(self.app_card.switch_button)
+        self.downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
         self.downloader.start()
 
     @Slot()
-    def installSlot(self) -> None:
-        """
-        ## 安装逻辑
-        """
+    def on_install(self) -> None:
+        """下载完成后执行安装逻辑"""
         success_bar(self.tr("下载成功, 正在安装..."))
 
         # 写入安装脚本
@@ -155,9 +150,7 @@ class NCDPage(PageBase):
         sys.exit()
 
     @Slot()
-    def errorFinshSlot(self) -> None:
-        """
-        ## 错误结束逻辑
-        """
+    def on_error_finsh(self) -> None:
+        """下载错误处理逻辑"""
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
-        self.updatePage()  # 刷新一次页面
+        self.update_page()  # 刷新一次页面
