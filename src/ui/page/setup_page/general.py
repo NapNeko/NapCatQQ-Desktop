@@ -145,7 +145,7 @@ class BotOfflineEmailDialog(MessageBoxBase):
     def save_config(self) -> None:
         """保存配置"""
         try:
-            cfg.set(cfg.title_tab_bar, self.enable_card.get_value())
+            cfg.set(cfg.bot_offline_email_notice, self.enable_card.get_value())
             cfg.set(cfg.email_receiver, self.receivers_card.get_value())
             cfg.set(cfg.email_sender, self.sender_card.get_value())
             cfg.set(cfg.email_token, self.token_card.get_value())

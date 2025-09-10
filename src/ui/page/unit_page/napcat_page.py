@@ -6,7 +6,6 @@ from PySide6.QtCore import QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
-from src.core.network.downloader import GithubDownloader
 from src.core.network.urls import Urls
 from src.core.utils.install_func import NapCatInstall
 from src.core.utils.path_func import PathFunc
@@ -75,6 +74,8 @@ class NapCatPage(PageBase):
         """处理下载按钮点击事件，开始下载 NapCat"""
         if BotListWidget().get_bot_is_run():
             # 项目内模块导入
+
+            # 项目内模块导入
             from src.ui.window.main_window import MainWindow
 
             box = AskBox(
@@ -87,6 +88,10 @@ class NapCatPage(PageBase):
                 return
 
         info_bar(self.tr("正在下载 NapCat"))
+
+        # 项目内模块导入
+        from src.core.network.downloader import GithubDownloader
+
         self.downloader = GithubDownloader(Urls.NAPCATQQ_DOWNLOAD.value)
         self.downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
         self.downloader.download_finish_signal.connect(self.on_install)

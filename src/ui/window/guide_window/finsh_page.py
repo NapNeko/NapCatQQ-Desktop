@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 # 第三方库导入
 from qfluentwidgets import BodyLabel, CaptionLabel
 from qfluentwidgets import FluentIcon as FI
-from qfluentwidgets import IconWidget, ImageLabel, SubtitleLabel
+from qfluentwidgets import IconWidget, ImageLabel, SubtitleLabel, isDarkTheme
 from PySide6.QtCore import Property, QEasingCurve, QEvent, QPropertyAnimation, Qt
 from PySide6.QtGui import QColor, QDesktopServices, QEnterEvent, QPainter, QPainterPath, QPaintEvent
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class FinshPage(QWidget):
     """安装完成页面"""
 
-    def __init__(self, parent: GuideWindow) -> None:
+    def __init__(self, parent: "GuideWindow") -> None:
         super().__init__(parent)
 
         # 创建控件
@@ -75,7 +75,10 @@ class Card(QWidget):
         # 动画属性
         self._radius = 5
         self._scale = 1.0
-        self._background_color = QColor(240, 240, 240)
+        if isDarkTheme():
+            self._background_color = QColor(48, 48, 48)
+        else:
+            self._background_color = QColor(240, 240, 240)
 
         # 创建控件
         self.title_label = BodyLabel(title, self)
@@ -124,7 +127,7 @@ class Card(QWidget):
         self.scale_anim.setEndValue(1.02)
 
         self.color_anim.setStartValue(self._background_color)
-        self.color_anim.setEndValue(QColor(220, 220, 220))
+        self.color_anim.setEndValue(QColor(220, 220, 220) if not isDarkTheme() else QColor(70, 70, 70))
 
         self.radius_anim.start()
         self.scale_anim.start()
@@ -148,7 +151,7 @@ class Card(QWidget):
         self.scale_anim.setEndValue(1.0)
 
         self.color_anim.setStartValue(self._background_color)
-        self.color_anim.setEndValue(QColor(240, 240, 240))
+        self.color_anim.setEndValue(QColor(240, 240, 240) if not isDarkTheme() else QColor(48, 48, 48))
 
         self.radius_anim.start()
         self.scale_anim.start()

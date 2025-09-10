@@ -1,18 +1,24 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
+from typing import TYPE_CHECKING
+
 # 第三方库导入
 from qfluentwidgets import FluentIcon, HyperlinkButton, ImageLabel, PrimaryPushButton, SubtitleLabel, TitleLabel
-from qframelesswindow import FramelessWindow
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.core.network.urls import Urls
 from src.ui.common.icon import StaticIcon
 
+if TYPE_CHECKING:
+    # 项目内模块导入
+    from src.ui.window.guide_window.guide_window import GuideWindow
+
 
 class WelcomePage(QWidget):
     """欢迎页面"""
 
-    def __init__(self, parent: FramelessWindow) -> None:
+    def __init__(self, parent: "GuideWindow") -> None:
         """初始化
 
         创建控件, 设置属性, 布局, 信号连接

@@ -2,13 +2,11 @@
 # 标准库导入
 import subprocess
 import sys
-from typing import Optional
 
 from PySide6.QtCore import QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
-from src.core.network.downloader import GithubDownloader
 from src.core.network.urls import Urls
 from src.core.utils.path_func import PathFunc
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
@@ -87,6 +85,10 @@ class NCDPage(PageBase):
                 return
 
         info_bar(self.tr("正在下载 NapCat Desktop"))
+
+        # 项目内模块导入
+        from src.core.network.downloader import GithubDownloader
+
         self.downloader = GithubDownloader(Urls.NCD_DOWNLOAD.value)
         self.downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
         self.downloader.download_finish_signal.connect(self.on_install)

@@ -188,7 +188,7 @@ def offline_email(config: Config) -> None:
 
         email_content = Template(file.readAll().data().decode("utf-8")).safe_substitute(
             {
-                "bot_name": f"{config.bot.name} ({config.bot.qq_id})",
+                "bot_name": f"{config.bot.name} ({config.bot.QQID})",
                 "disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
             }
         )

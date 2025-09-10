@@ -59,7 +59,7 @@ class InstallPageBase(QWidget):
     # 状态标签显示标识符
     STATUS_LABEL_VISIBILITY: dict = {StatusLabel.SHOW: True, StatusLabel.HIDE: False}
 
-    def __init__(self, parent: GuideWindow) -> None:
+    def __init__(self, parent: "GuideWindow") -> None:
         """初始化页面
 
         Args:
@@ -162,8 +162,8 @@ class InstallPageBase(QWidget):
         """
         self.set_visibility(
             self.BUTTON_VISIBILITY[status],
-            self.progress_ring_visibility[ProgressRingStatus.NONE],
-            self.status_label_visibility[StatusLabel.HIDE],
+            self.PROGRESS_RING_VISIBILITY[ProgressRingStatus.NONE],
+            self.STATUS_LABEL_VISIBILITY[StatusLabel.HIDE],
         )
 
     def on_switch_progress_ring(self, status: ProgressRingStatus) -> None:
@@ -176,15 +176,15 @@ class InstallPageBase(QWidget):
         """
         self.set_visibility(
             self.BUTTON_VISIBILITY[ButtonStatus.NONE],
-            self.progress_ring_visibility[status],
-            self.status_label_visibility[StatusLabel.SHOW],
+            self.PROGRESS_RING_VISIBILITY[status],
+            self.STATUS_LABEL_VISIBILITY[StatusLabel.SHOW],
         )
 
 
 class InstallQQPage(InstallPageBase):
     """安装 QQ 页面"""
 
-    def __init__(self, parent: GuideWindow) -> None:
+    def __init__(self, parent: "GuideWindow") -> None:
         """初始化页面
 
         Args:
@@ -254,7 +254,7 @@ class InstallQQPage(InstallPageBase):
 
 class InstallNapCatQQPage(InstallPageBase):
 
-    def __init__(self, parent: GuideWindow) -> None:
+    def __init__(self, parent: "GuideWindow") -> None:
         super().__init__(parent)
         # 创建杂七杂八的控件
         self.url = Urls.NAPCATQQ_DOWNLOAD.value

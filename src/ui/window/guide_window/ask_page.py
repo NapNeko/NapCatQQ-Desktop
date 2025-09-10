@@ -29,7 +29,7 @@ class AskPage(QWidget):
         v_box_layout (QVBoxLayout): 垂直布局
     """
 
-    def __init__(self, parent: GuideWindow) -> None:
+    def __init__(self, parent: "GuideWindow") -> None:
         """初始化
 
         创建控件, 布局, 信号连接等

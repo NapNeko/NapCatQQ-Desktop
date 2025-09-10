@@ -2,13 +2,12 @@
 # 标准库导入
 import winreg
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from PySide6.QtCore import QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
-from src.core.network.downloader import QQDownloader
 from src.core.network.urls import Urls
 from src.core.utils.install_func import QQInstall
 from src.core.utils.path_func import PathFunc
@@ -17,6 +16,10 @@ from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox, FolderBox
 from src.ui.page.unit_page.base import PageBase
 from src.ui.page.unit_page.status import ButtonStatus
+
+if TYPE_CHECKING:
+    # 项目内模块导入
+    from src.core.network.downloader import QQDownloader
 
 DESCRIPTION_TEXT = """
 ## **NapCatQQ与NTQQ的奇幻物语**  
@@ -49,7 +52,7 @@ NapCatQQ并非QQ本身, 而是通过魔法将QQ的接口**"驯化"**成更柔软
 
 
 class QQPage(PageBase):
-    """QQ 安装与更新页面，负责QQ的下载、安装和版本管理"""
+    """QQ 安装与更新页面, 负责QQ的下载、安装和版本管理"""
 
     def __init__(self, parent) -> None:
         """初始化QQ页面
@@ -59,10 +62,10 @@ class QQPage(PageBase):
         """
         super().__init__(parent=parent)
         self.setObjectName("UnitQQPage")
-        self.url: Optional[QUrl] = None
-        self.file_path: Optional[Path] = None
-        self.downloader: Optional[QQDownloader] = None
-        self.installer: Optional[QQInstall] = None
+        self.url: QUrl | None = None
+        self.file_path: Path | None = None
+        self.downloader: "QQDownloader" | None = None
+        self.installer: QQInstall | None = None
 
         self._setup_ui()
         self._connect_signals()
@@ -119,10 +122,13 @@ class QQPage(PageBase):
 
     @Slot()
     def on_download(self) -> None:
-        """处理下载按钮点击事件，开始下载QQ安装包"""
+        """处理下载按钮点击事件, 开始下载QQ安装包"""
         if self.url is None:
             error_bar(self.tr("QQ下载链接为空"))
             return
+
+        # 项目内模块导入
+        from src.core.network.downloader import QQDownloader
 
         self.file_path = PathFunc().tmp_path / self.url.fileName()
         self.downloader = QQDownloader(self.url)
@@ -151,12 +157,12 @@ class QQPage(PageBase):
             info_bar(self.tr("取消安装"))
             return
 
-        # 修改注册表，设置安装路径
+        # 修改注册表, 设置安装路径
         key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Tencent\QQNT")
         winreg.SetValueEx(key, "Install", 0, winreg.REG_SZ, folder_box.get_value().replace("/", "\\"))
         winreg.CloseKey(key)
 
-        # 检查是否存在 dbghelp.dll 文件，否则会导致安装失败
+        # 检查是否存在 dbghelp.dll 文件, 否则会导致安装失败
         if Path(Path(folder_box.get_value()) / "dbghelp.dll").exists():
             rm_dll_box = AskBox(
                 self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), MainWindow()

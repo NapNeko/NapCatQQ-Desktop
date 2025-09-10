@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import SplashScreen
+from qfluentwidgets import SplashScreen, Theme, setTheme
 from qfluentwidgets.components.widgets.stacked_widget import FadeEffectAniStackedWidget
 from qframelesswindow import FramelessWindow
 from PySide6.QtCore import QSize, Qt
@@ -45,6 +45,8 @@ class GuideWindow(FramelessWindow):
 
         调整窗体大小、位置、布局等
         """
+        # 设置主题
+        setTheme(Theme.AUTO)
 
         # 创建 Splash Screen
         self.splashScreen = SplashScreen(StaticIcon.NAPCAT.path(), self, True)

@@ -120,7 +120,7 @@ def offline_webhook(config: Config):
             json=Template(cfg.get(cfg.web_hook_json)).safe_substitute(
                 {
                     "bot_name": config.bot.name,
-                    "bot_qq_id": config.bot.qq_id,
+                    "bot_qq_id": config.bot.QQID,
                     "disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
                 }
             ),

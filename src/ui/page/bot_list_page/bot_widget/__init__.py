@@ -426,9 +426,7 @@ class BotWidget(QWidget):
         Args:
             data: 日志输出数据
         """
-        # 正则匹配
-        pattern = rf"\[INFO\] .+\({self.config.bot.QQID}\) \| 账号状态变更为离线"
-        if not (match := QRegularExpression(pattern).match(data)).hasMatch():
+        if not "账号状态变更为离线" in data:
             return
 
         if not self.config.advanced.offlineNotice:
@@ -436,7 +434,7 @@ class BotWidget(QWidget):
 
         if cfg.get(cfg.bot_offline_email_notice):
             offline_email(self.config)
-        elif cfg.get(cfg.bot_offline_web_hook_notice):
+        if cfg.get(cfg.bot_offline_web_hook_notice):
             offline_webhook(self.config)
-        else:
-            warning_bar(self.tr(f"账号 {self.config.bot.QQID} 已离线，请前往 NapCat 日志 查看详情"))
+
+        warning_bar(self.tr(f"账号 {self.config.bot.QQID} 已离线，请前往 NapCat 日志 查看详情"))
