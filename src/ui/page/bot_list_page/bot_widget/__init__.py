@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+from enum import Enum
 from typing import Any, Dict, Optional
 
 # 第三方库导入
@@ -7,7 +8,7 @@ import psutil
 from qfluentwidgets import PushButton, ToolTipFilter, TransparentToolButton
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import PrimaryPushButton, SegmentedWidget, ToolButton
-from PySide6.QtCore import QProcess, QRegularExpression, Qt, Slot
+from PySide6.QtCore import QProcess, QRegularExpression, Qt, Signal, Slot
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
@@ -38,6 +39,8 @@ from src.ui.page.bot_list_page.signal_bus import bot_list_page_signal_bus
 
 class BotWidget(QWidget):
     """机器人配置卡片控件，包含设置、日志等标签页"""
+
+    choose_connect_type_signal = Signal(Enum)
 
     def __init__(self, config: Config) -> None:
         """初始化机器人控件
@@ -122,7 +125,7 @@ class BotWidget(QWidget):
         self.delete_config_button.clicked.connect(self._on_delete_button)
         self.return_button.clicked.connect(self._on_return_button)
         self.add_connect_config_button.clicked.connect(self._on_add_connect_config_button_clicked)
-        bot_list_page_signal_bus.choose_connect_type_signal.connect(self._on_show_type_dialog)
+        self.choose_connect_type_signal.connect(self._on_show_type_dialog)
 
         # 隐藏按钮
         self.stop_button.hide()
@@ -297,7 +300,7 @@ class BotWidget(QWidget):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        ChooseConfigTypeDialog(MainWindow()).exec()
+        ChooseConfigTypeDialog(MainWindow(), self.choose_connect_type_signal).exec()
 
     def _on_show_type_dialog(self, connect_type: ConnectType) -> None:
         """显示连接类型选择对话框槽函数
