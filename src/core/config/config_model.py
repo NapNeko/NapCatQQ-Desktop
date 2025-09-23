@@ -2,11 +2,13 @@
 # 标准库导入
 import random
 import string
-from gc import enable
 from typing import Literal, Optional
 
 # 第三方库导入
 from pydantic import BaseModel, Field, HttpUrl, WebsocketUrl, field_validator
+from PySide6.QtCore import QTime
+
+from .data_class import TimeInterval
 
 """
 这个模块包含的是机器人配置模型
@@ -32,15 +34,9 @@ class AutoRestartSchedule(BaseModel):
         default=False,
         description="是否启用自动重启计划任务",
     )
-    interval: Optional[str] = Field(
-        default="6h",
-        description="间隔任务的时间间隔, 例如: 6h(6小时), 30m(30分钟), 1d(1天)",
-    )
-    jitter: Optional[int] = Field(
-        default=0,
-        description="随机抖动时间, 单位为秒, 用于避免多个机器人同时重启, 例如: 300 (0-300秒内随机)",
-        ge=0,
-        le=3600,
+    interval: TimeInterval = Field(
+        default=TimeInterval(hours=6),  # 默认每6小时重启一次
+        description="间隔任务的时间间隔, 例如: 6h, 30m, 45s",
     )
 
 
