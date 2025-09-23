@@ -1,6 +1,6 @@
 [project]
 name = "NapCatQQ-Desktop"
-version = "v1.5.4"
+version = "v1.6.0"
 description = "为 NapCat 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat"
 authors = [
     {name = "Qiao", email = "qiaohuayuquan@qq.com"},
@@ -43,3 +43,8 @@ import_heading_thirdparty = "第三方库导入"
 import_heading_firstparty = "项目内模块导入"
 
 
+
+[dependency-groups]
+dev = [
+    "nuitka>=2.7.16",
+]
