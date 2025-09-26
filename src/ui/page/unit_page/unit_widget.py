@@ -115,14 +115,14 @@ class UnitWidget(QWidget):
         self.top_card.update_button.clicked.connect(self.on_update)
 
         # 版本更新信号
-        self.get_version.remote_update_finish_signal.connect(self.napcat_page.on_update_remote_version)
-        self.get_version.remote_update_finish_signal.connect(self.qq_page.on_update_remote_version)
-        self.get_version.remote_update_finish_signal.connect(self.ncd_page.on_update_remote_version)
-        self.get_version.remote_update_finish_signal.connect(lambda: self.top_card.update_button.setEnabled(True))
+        self.get_version.remote_finish_signal.connect(self.napcat_page.on_update_remote_version)
+        self.get_version.remote_finish_signal.connect(self.qq_page.on_update_remote_version)
+        self.get_version.remote_finish_signal.connect(self.ncd_page.on_update_remote_version)
+        self.get_version.remote_finish_signal.connect(lambda: self.top_card.update_button.setEnabled(True))
 
-        self.get_version.local_update_finish_signal.connect(self.napcat_page.on_update_local_version)
-        self.get_version.local_update_finish_signal.connect(self.qq_page.on_update_local_version)
-        self.get_version.local_update_finish_signal.connect(self.ncd_page.on_update_local_version)
+        self.get_version.local_finish_signal.connect(self.napcat_page.on_update_local_version)
+        self.get_version.local_finish_signal.connect(self.qq_page.on_update_local_version)
+        self.get_version.local_finish_signal.connect(self.ncd_page.on_update_local_version)
 
     def _apply_styles(self) -> None:
         """应用样式表"""

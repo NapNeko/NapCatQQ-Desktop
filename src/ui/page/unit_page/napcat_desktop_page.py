@@ -8,6 +8,7 @@ from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
+from src.core.utils.get_version import VersionData
 from src.core.utils.path_func import PathFunc
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox
@@ -46,26 +47,35 @@ class NCDPage(PageBase):
             self.app_card.switch_button(ButtonStatus.UNINSTALLED)
             return
 
-        if self.remoteVersion is None:
-            # 如果没有远程版本则不操作
+        if self.remote_version is None:
+            # 如果没有远程版本则提示错误
+            error_bar(self.tr("无法获取 NapCatQQ Desktop 版本信息, 请检查网络连接"))
             return
 
-        if self.remoteVersion != self.local_version:
+        if self.remote_version != self.local_version:
             self.app_card.switch_button(ButtonStatus.UPDATE)
         else:
             self.app_card.switch_button(ButtonStatus.INSTALL)
 
-        self.log_card.setLog(self.remoteLog)
+        self.log_card.setLog(self.remote_log)
 
-    def on_update_remote_version(self) -> None:
+    def on_update_remote_version(self, version_data: VersionData) -> None:
         """更新远程版本信息和更新日志"""
-        self.remoteVersion = self.get_version.remote_NCD
-        self.remoteLog = self.get_version.updateLog_NCD
+        if version_data.ncd_version is None or version_data.ncd_update_log is None:
+            self.remote_version = None
+            self.remote_log = self.tr("无法获取 NapCat Desktop 版本信息, 请检查网络连接")
+        else:
+            self.remote_version = version_data.ncd_version
+            self.remote_log = version_data.ncd_update_log
+
         self.update_page()
 
-    def on_update_local_version(self) -> None:
+    def on_update_local_version(self, version_data: VersionData) -> None:
         """更新本地版本信息"""
-        self.local_version = self.get_version.local_NCD
+        if version_data.ncd_version is None:
+            self.local_version = None
+        else:
+            self.local_version = version_data.ncd_version
 
     # ==================== 槽函数 ====================
     @Slot()

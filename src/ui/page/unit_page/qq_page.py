@@ -9,6 +9,7 @@ from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
+from src.core.utils.get_version import VersionData
 from src.core.utils.install_func import QQInstall
 from src.core.utils.path_func import PathFunc
 from src.ui.common.icon import NapCatDesktopIcon
@@ -93,32 +94,41 @@ class QQPage(PageBase):
 
     def update_page(self) -> None:
         """根据本地和远程版本信息更新页面状态"""
-        if self.localVersion is None:
+        if self.local_version is None:
             # 如果没有本地版本则显示安装按钮
             self.app_card.switch_button(ButtonStatus.UNINSTALLED)
             return
 
-        if self.remoteVersion is None:
-            # 如果没有远程版本则不操作
+        if self.remote_version is None:
+            # 如果没有远程版本则提示错误
+            error_bar(self.tr("无法获取QQ版本信息, 请检查网络连接"))
             return
 
-        if self.remoteVersion != self.localVersion:
+        if self.remote_version != self.local_version:
             self.app_card.switch_button(ButtonStatus.UPDATE)
         else:
             self.app_card.switch_button(ButtonStatus.INSTALL)
 
     # ==================== 槽函数 ====================
     @Slot()
-    def on_update_remote_version(self) -> None:
+    def on_update_remote_version(self, version_data: VersionData) -> None:
         """更新远程版本信息"""
-        self.remoteVersion = self.get_version.remote_QQ
-        self.url = QUrl(self.get_version.download_qq_url)
+        if version_data.qq_version is None or version_data.qq_download_url is None:
+            self.remote_version = None
+            self.url = None
+        else:
+            self.remote_version = version_data.qq_version
+            self.url = QUrl(version_data.qq_download_url)
+
         self.update_page()
 
     @Slot()
-    def on_update_local_version(self) -> None:
+    def on_update_local_version(self, version_data: VersionData) -> None:
         """更新本地版本信息"""
-        self.localVersion = self.get_version.local_QQ
+        if version_data.qq_version is None:
+            self.local_version = None
+        else:
+            self.local_version = version_data.qq_version
 
     @Slot()
     def on_download(self) -> None:
