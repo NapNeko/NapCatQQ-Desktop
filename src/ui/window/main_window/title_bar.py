@@ -12,7 +12,7 @@ from PySide6.QtSvg import QSvgRenderer
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
-from src.ui.common.icon import NapCatDesktopIcon
+from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -60,6 +60,7 @@ class CustomTitleBar(MSFluentTitleBar):
         """
         self.setTitle("NapCatQQ Desktop")
         self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
+        self.setWindowIcon(StaticIcon.LOGO.qicon())
 
         self.tab_bar = TabBar(self)
         self.tab_bar.setMovable(cfg.get(cfg.title_tab_bar_movable))

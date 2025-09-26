@@ -54,6 +54,9 @@ class GuideWindow(FramelessWindow):
         self.splashScreen.raise_()
         self.show()
 
+        # 设置窗体图标
+        self.setWindowIcon(StaticIcon.NAPCAT.qicon())
+
         # 设置窗体大小以及设置打开时居中
         self.setFixedSize(600, 450)
         desktop = QApplication.screens()[0].availableGeometry()
