@@ -212,12 +212,12 @@ class GetVersion(QObject):
 
     def update(self) -> None:
         """开始更新版本信息"""
-        # 远程版本检查
-        remote_runnable = GetRemoteVersionRunnable()
-        remote_runnable.version_signal.connect(self.remote_finish_signal.emit)
-        QThreadPool.globalInstance().start(remote_runnable)
-
         # 本地版本检查
         local_runnable = GetLocalVersionRunnable()
         local_runnable.version_signal.connect(self.local_finish_signal.emit)
         QThreadPool.globalInstance().start(local_runnable)
+
+        # 远程版本检查
+        remote_runnable = GetRemoteVersionRunnable()
+        remote_runnable.version_signal.connect(self.remote_finish_signal.emit)
+        QThreadPool.globalInstance().start(remote_runnable)
