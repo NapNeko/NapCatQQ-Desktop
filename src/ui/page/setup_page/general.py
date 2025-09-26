@@ -18,7 +18,7 @@ from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
     JsonTemplateEditConfigCard,
     LineEditConfigCard,
-    ShowDialogCard,
+    ShowDialogCardBase,
     SwitchConfigCard,
 )
 
@@ -63,14 +63,14 @@ class General(ScrollArea):
         # 创建组 - 事件
         self.event_group = SettingCardGroup(title=self.tr("事件"), parent=self.view)
         # 创建项
-        self.bot_offline_email_card = ShowDialogCard(
+        self.bot_offline_email_card = ShowDialogCardBase(
             dialog=BotOfflineEmailDialog,
             icon=FI.CHAT,
             title=self.tr("机器人离线通知[邮件]"),
             content=self.tr("设置机器人离线邮件通知"),
             parent=self.event_group,
         )
-        self.bot_offline_webhook_card = ShowDialogCard(
+        self.bot_offline_webhook_card = ShowDialogCardBase(
             dialog=BotOfflineWebHookDialog,
             icon=FI.CHAT,
             title=self.tr("机器人离线通知[Webhook]"),

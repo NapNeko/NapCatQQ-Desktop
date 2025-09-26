@@ -36,7 +36,7 @@ class AutoRestartSchedule(BaseModel):
     )
     # 时间单位
     time_unit: TimeUnitEnum = Field(
-        default=TimeUnitEnum.HOUR.value,
+        default=TimeUnitEnum.HOUR,
         description="时间单位, m: 分钟, h: 小时, d: 天, mon: 月, year: 年",
     )
     # 时间长度, 不包含单位

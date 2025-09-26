@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QGridLayout, QWidget
 # 项目内模块导入
 from src.core.config import cfg
 from src.ui.components.info_bar import success_bar
-from src.ui.components.input_card.generic_card import ComboBoxConfigCard, ShowDialogCard, SwitchConfigCard
+from src.ui.components.input_card.generic_card import ComboBoxConfigCard, ShowDialogCardBase, SwitchConfigCard
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -87,7 +87,7 @@ class Personalization(ScrollArea):
             texts=["100%", "125%", "150%", "175%", "200%", self.tr("跟随系统")],
             parent=self.window_group,
         )
-        self.title_tab_bar_setting_card = ShowDialogCard(
+        self.title_tab_bar_setting_card = ShowDialogCardBase(
             dialog=TitleTabBarSettingDialog,
             icon=FluentIcon.TILES,
             title=self.tr("标题选项卡"),

@@ -116,7 +116,7 @@ class BotWidget(ScrollArea):
             "name": self.bot_name_card.get_value(),
             "QQID": self.bot_qq_id_card.get_value(),
             "musicSignUrl": self.music_sign_url.get_value(),
-            "autoRestartSchedule": self.auto_restart_dialog.get_config(),
+            "autoRestartSchedule": self.auto_restart_dialog.get_value(),
         }
 
     def fill_value(self) -> None:
@@ -184,6 +184,14 @@ class AutoRestartDialog(MessageBoxBase):
         """
         self.enable_card.fill_value(config.enable)
         self.interval_card.fill_value(config.time_unit, config.duration)
+
+    def get_value(self) -> dict:
+        """获取当前配置项的值
+
+        Returns:
+            dict: 包含启用状态和重启间隔的配置字典
+        """
+        return self.get_config().model_dump()
 
     def get_config(self) -> AutoRestartSchedule:
         """获取当前配置项的值

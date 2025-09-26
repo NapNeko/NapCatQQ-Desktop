@@ -19,7 +19,7 @@ from src.core.config.config_model import (
 )
 from src.core.utils import my_int
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
-from src.ui.page.add_page.enum import ConnectType
+from src.ui.page.add_page.add_page_enum import ConnectType
 from src.ui.page.add_page.signal_bus import add_page_singal_bus
 
 

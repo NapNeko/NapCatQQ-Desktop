@@ -37,11 +37,11 @@ class IntervalTimeConfigCard(SettingCard):
         self.duration_spin_box = CompactSpinBox(self)
 
         # 设置组件
-        self.time_unit_combo_box.addItem(self.tr("分钟"), userData=TimeUnitEnum.MINUTE.value)
-        self.time_unit_combo_box.addItem(self.tr("小时"), userData=TimeUnitEnum.HOUR.value)
-        self.time_unit_combo_box.addItem(self.tr("天"), userData=TimeUnitEnum.DAY.value)
-        self.time_unit_combo_box.addItem(self.tr("月"), userData=TimeUnitEnum.MONTH.value)
-        self.time_unit_combo_box.addItem(self.tr("年"), userData=TimeUnitEnum.YEAR.value)
+        self.time_unit_combo_box.addItem(self.tr("分钟"), userData=TimeUnitEnum.MINUTE)
+        self.time_unit_combo_box.addItem(self.tr("小时"), userData=TimeUnitEnum.HOUR)
+        self.time_unit_combo_box.addItem(self.tr("天"), userData=TimeUnitEnum.DAY)
+        self.time_unit_combo_box.addItem(self.tr("月"), userData=TimeUnitEnum.MONTH)
+        self.time_unit_combo_box.addItem(self.tr("年"), userData=TimeUnitEnum.YEAR)
         self.time_unit_combo_box.setCurrentIndex(1)
 
         self.duration_spin_box.setRange(1, 999)
@@ -60,7 +60,7 @@ class IntervalTimeConfigCard(SettingCard):
             time_unit (TimeUnitEnum): 时间单位
             duration (int): 时间长度
         """
-        self.time_unit_combo_box.setCurrentIndex(self.time_unit_combo_box.findData(time_unit.value))
+        self.time_unit_combo_box.setCurrentIndex(self.time_unit_combo_box.findData(time_unit))
         self.duration_spin_box.setValue(duration)
 
     def get_value(self) -> tuple[TimeUnitEnum, int]:
@@ -71,7 +71,7 @@ class IntervalTimeConfigCard(SettingCard):
         Returns:
             tuple: (TimeUnitEnum, int)
         """
-        return (TimeUnitEnum(self.time_unit_combo_box.currentData()), self.duration_spin_box.value())
+        return (self.time_unit_combo_box.currentData(), self.duration_spin_box.value())
 
     def clear(self) -> None:
         """清空时间值"""
