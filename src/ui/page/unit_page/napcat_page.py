@@ -7,6 +7,7 @@ from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
+from src.core.utils.get_version import VersionData
 from src.core.utils.install_func import NapCatInstall
 from src.core.utils.path_func import PathFunc
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
@@ -46,7 +47,8 @@ class NapCatPage(PageBase):
             self.app_card.switch_button(ButtonStatus.UNINSTALLED)
 
         if self.remote_version is None:
-            # 如果没有远程版本则不操作
+            # 如果没有远程版本则提示错误
+            error_bar(self.tr("无法获取 NapCatQQ 版本信息, 请检查网络连接"))
             return
 
         if self.remote_version != self.local_version:
@@ -58,16 +60,24 @@ class NapCatPage(PageBase):
 
     # ==================== 槽函数 ====================
     @Slot()
-    def on_update_remote_version(self) -> None:
+    def on_update_remote_version(self, version_data: VersionData) -> None:
         """更新远程版本信息和更新日志"""
-        self.remote_version = self.get_version.remote_NapCat
-        self.remote_log = self.get_version.updateLog_NapCat
+        if version_data.napcat_version is None or version_data.napcat_update_log is None:
+            self.remote_version = None
+            self.remote_log = self.tr("获取 NapCatQQ 更新日志失败")
+        else:
+            self.remote_version = version_data.napcat_version
+            self.remote_log = version_data.napcat_update_log
+
         self.update_page()
 
     @Slot()
-    def on_update_local_version(self) -> None:
+    def on_update_local_version(self, version_data: VersionData) -> None:
         """更新本地版本信息"""
-        self.local_version = self.get_version.local_NapCat
+        if version_data.napcat_version is None:
+            self.local_version = None
+        else:
+            self.local_version = version_data.napcat_version
 
     @Slot()
     def on_download(self) -> None:
