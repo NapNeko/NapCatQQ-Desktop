@@ -11,7 +11,7 @@ from PySide6.QtSvg import QSvgRenderer
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.core.config.enum import CloseActionEnum
+from src.core.config.config_enum import CloseActionEnum
 from src.ui.common.icon import NapCatDesktopIcon
 
 if TYPE_CHECKING:

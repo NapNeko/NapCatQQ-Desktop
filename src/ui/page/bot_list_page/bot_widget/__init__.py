@@ -8,7 +8,7 @@ import psutil
 from qfluentwidgets import PushButton, ToolTipFilter, TransparentToolButton
 from qfluentwidgets.common import FluentIcon
 from qfluentwidgets.components import PrimaryPushButton, SegmentedWidget, ToolButton
-from PySide6.QtCore import QProcess, QRegularExpression, Qt, Signal, Slot
+from PySide6.QtCore import QProcess, QRegularExpression, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
@@ -24,7 +24,7 @@ from src.ui.components.code_editor.editor import CodeEditor
 from src.ui.components.code_editor.highlight import LogHighlighter
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.message_box import AskBox, ImageBox
-from src.ui.page.add_page.enum import ConnectType
+from src.ui.page.add_page.add_page_enum import ConnectType
 from src.ui.page.add_page.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
@@ -33,7 +33,7 @@ from src.ui.page.add_page.msg_box import (
     WebsocketServerConfigDialog,
 )
 from src.ui.page.bot_list_page.bot_widget.bot_setup_page import BotSetupPage
-from src.ui.page.bot_list_page.bot_widget.meg_box import ChooseConfigTypeDialog
+from src.ui.page.bot_list_page.bot_widget.msg_box import ChooseConfigTypeDialog
 from src.ui.page.bot_list_page.signal_bus import bot_list_page_signal_bus
 
 
@@ -52,6 +52,7 @@ class BotWidget(QWidget):
         self.config = config
         self.is_run = False  # 标记机器人是否在运行
         self.napcat_process: Optional[QProcess] = None  # 存储 QProcess 实例
+        self.restart_timer = QTimer(self)
 
         # 创建控件
         self._create_view()
@@ -217,6 +218,9 @@ class BotWidget(QWidget):
         self.stop_button.setVisible(True)
         self.reboot_button.setVisible(True)
 
+        # 配置自动重启
+        self._auto_restart()
+
         # 显示提示
         info_bar(self.tr("已执行启动命令，如果长时间没有输出，请查看日志"))
 
@@ -236,9 +240,12 @@ class BotWidget(QWidget):
         self.is_run = False
         self.view.setCurrentWidget(self.bot_setup_page)
 
+        # 停止自动重启
+        self._stop_auto_restart()
+
     def on_reboot_button(self) -> None:
         """重启机器人按钮点击槽函数"""
-        self.on_stop_button()
+        self._on_stop()
         self.on_run_button()
 
     def _on_update_button(self) -> None:
@@ -390,6 +397,60 @@ class BotWidget(QWidget):
         # 分发给其他处理函数
         self._get_qr_code(data)
         self._get_bof_offline(data)
+
+    def _on_stop(self) -> None:
+        """停止机器人槽函数"""
+        if not self.is_run:
+            return
+
+        if (parent := psutil.Process(self.napcat_process.processId())).pid != 0:
+            [child.kill() for child in parent.children(recursive=True)]
+            parent.kill()
+            self.napcat_process.kill()
+            self.napcat_process.waitForFinished()
+            self.napcat_process.deleteLater()
+            self.napcat_process = None
+
+        self.is_run = False
+
+    def _auto_restart(self) -> None:
+        """设置自动重启"""
+
+        if not self.config.bot.autoRestartSchedule.enable:
+            return
+
+        if self.restart_timer.isActive():
+            # 如果定时器已存在, 则跳过
+            return
+
+        # 项目内模块导入
+        from src.core.config.config_enum import TimeUnitEnum
+
+        # 获取时间单位和持续时间
+        time_unit: TimeUnitEnum = self.config.bot.autoRestartSchedule.time_unit
+        duration: int = self.config.bot.autoRestartSchedule.duration
+
+        # 转换为秒
+        unit_to_seconds = {
+            TimeUnitEnum.MINUTE: 60,
+            TimeUnitEnum.HOUR: 3600,
+            TimeUnitEnum.DAY: 86400,
+            TimeUnitEnum.MONTH: 2592000,
+            TimeUnitEnum.YEAR: 31536000,
+        }
+        total_seconds = duration * unit_to_seconds.get(time_unit, 0)
+
+        self.restart_timer.timeout.connect(self.on_reboot_button)
+        self.restart_timer.start(total_seconds * 1000)
+
+        # 显示提示
+        info_bar(self.tr(f"已设置自动重启，间隔为 {duration} {time_unit.value}"))
+
+    def _stop_auto_restart(self) -> None:
+        """停止自动重启"""
+        if hasattr(self, "restart_timer") and self.restart_timer.isActive():
+            self.restart_timer.stop()
+            info_bar(self.tr("已停止自动重启"))
 
     @Slot(int, int)
     def _on_napcat_process_finished(self, exit_code: int, exit_status: int) -> None:

@@ -34,7 +34,7 @@ tmp/
 
 ### 配置文件 ###
 # 本地配置和敏感文件
-config/
+/config/
 *.local
 *.env
 .env
@@ -43,7 +43,7 @@ PatchConfig.json
 
 ### 特定项目忽略 ###
 # 项目特定目录和文件
-NapCat/
+NapCat/*
 /src/pysidedeploy.spec
 
 ### 测试相关 ###

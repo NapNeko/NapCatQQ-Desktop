@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
+from typing import Any
+
 # 第三方库导入
 from qfluentwidgets.common import FluentIcon, FluentIconBase, FluentStyleSheet, isDarkTheme
 from qfluentwidgets.components import (
@@ -370,8 +373,8 @@ class FolderConfigCard(SettingCard):
         self.contentLabel.setText(self.default)
 
 
-class ShowDialogCard(SettingCard):
-    """显示对话框卡片"""
+class ShowDialogCardBase(SettingCard):
+    """显示对话框卡片, 只有一个按钮, 点击后显示对话框"""
 
     def __init__(
         self,
@@ -391,8 +394,9 @@ class ShowDialogCard(SettingCard):
             parent (QWidget | None, optional): 父控件. Defaults to None.
         """
         super().__init__(icon, title, content, parent)
-        self._dialog = dialog
+        self.dialog = dialog
         self.button = TransparentPushButton(FluentIcon.SETTING, self.tr("点我配置"))
+        self._value = None
 
         self.button.clicked.connect(self.on_show_dialog)
 
@@ -403,4 +407,48 @@ class ShowDialogCard(SettingCard):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        self._dialog(MainWindow()).exec()
+        self.dialog(MainWindow()).exec()
+
+
+class ShowDialogCard(ShowDialogCardBase):
+    """显示对话框卡片, 可以对对话进行参数传入"""
+
+    def __init__(self, dialog, icon, title, fill_config=None, content=None, parent=None):
+        super().__init__(dialog, icon, title, content, parent)
+        self.config = fill_config
+
+        if self.config:
+            self.dialog.fill_config(self.config)
+
+    def on_show_dialog(self):
+        """重写方法"""
+        if self.config:
+            self.dialog.fill_config(self.config)
+        else:
+            # 项目内模块导入
+            from src.ui.window.main_window import MainWindow
+
+            self.dialog = self.dialog(MainWindow())
+
+        if self.dialog.exec():
+            self._value = self.dialog.get_value()
+
+    def get_value(self):
+        """需要判断 dialog 是否有过初始化, 如果没有则初始化一次, 然后拿到默认值"""
+        if self._value is None:
+            # 项目内模块导入
+            from src.ui.window.main_window import MainWindow
+
+            self.dialog = self.dialog(MainWindow())
+            self._value = self.dialog.get_value()
+        return self._value
+
+    def fill_config(self, config: Any) -> None:
+        """填充配置"""
+
+        # 项目内模块导入
+        from src.ui.window.main_window import MainWindow
+
+        self.config = config
+        self.dialog = self.dialog(MainWindow())
+        self.dialog.fill_config(config)

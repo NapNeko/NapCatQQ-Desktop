@@ -4,14 +4,21 @@
 from typing import Any, Dict, List, Optional
 
 # 第三方库导入
-from qfluentwidgets import ExpandLayout, FluentIcon, ScrollArea
+from qfluentwidgets import ExpandLayout, FluentIcon, MessageBoxBase, ScrollArea, TitleLabel
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QGridLayout, QWidget
 
 # 项目内模块导入
-from src.core.config.config_model import BotConfig
+from src.core.config.config_model import AutoRestartSchedule, BotConfig
 from src.ui.common.icon import NapCatDesktopIcon
-from src.ui.components.input_card import LineEditConfigCard
+from src.ui.components.input_card.generic_card import (
+    ComboBoxConfigCard,
+    JsonTemplateEditConfigCard,
+    LineEditConfigCard,
+    ShowDialogCard,
+    SwitchConfigCard,
+)
+from src.ui.components.input_card.time_card import IntervalTimeConfigCard
 
 
 class BotWidget(ScrollArea):
@@ -77,8 +84,15 @@ class BotWidget(ScrollArea):
             placeholder_text=self.tr("https://example.com/music"),
             parent=self.view,
         )
+        self.auto_restart_dialog = ShowDialogCard(
+            dialog=AutoRestartDialog,
+            icon=FluentIcon.IOT,
+            title=self.tr("自动重启"),
+            content=self.tr("设置自动重启 Bot 的相关选项"),
+            parent=self.view,
+        )
 
-        self.cards = [self.bot_name_card, self.bot_qq_id_card, self.music_sign_url]
+        self.cards = [self.bot_name_card, self.bot_qq_id_card, self.music_sign_url, self.auto_restart_dialog]
 
     def _set_layout(self) -> None:
         """设置控件布局"""
@@ -102,6 +116,7 @@ class BotWidget(ScrollArea):
             "name": self.bot_name_card.get_value(),
             "QQID": self.bot_qq_id_card.get_value(),
             "musicSignUrl": self.music_sign_url.get_value(),
+            "autoRestartSchedule": self.auto_restart_dialog.get_value(),
         }
 
     def fill_value(self) -> None:
@@ -116,6 +131,7 @@ class BotWidget(ScrollArea):
         self.bot_name_card.fill_value(self.config.name)
         self.bot_qq_id_card.fill_value(self.config.QQID)
         self.music_sign_url.fill_value(self.config.musicSignUrl)
+        self.auto_restart_dialog.fill_config(self.config.autoRestartSchedule)
 
     def clear_values(self) -> None:
         """清空所有配置项的值"""
@@ -130,3 +146,68 @@ class BotWidget(ScrollArea):
         """
         h = self.card_layout.heightForWidth(self.width()) + 46
         return self.resize(self.width(), h)
+
+
+class AutoRestartDialog(MessageBoxBase):
+    """自动重启提示对话框"""
+
+    def __init__(self, parent: QWidget) -> None:
+        """初始化自动重启提示对话框
+
+        Args:
+            parent: 父控件
+        """
+        super().__init__(parent=parent)
+
+        # 创建控件
+        self.title_label = TitleLabel(self.tr("自动重启 Bot"), self)
+        self.enable_card = SwitchConfigCard(FluentIcon.IOT, self.tr("启用自动重启"), parent=self)
+        self.interval_card = IntervalTimeConfigCard(FluentIcon.DATE_TIME, self.tr("重启间隔"), parent=self)
+
+        # 布局
+        self.grid_layout = QGridLayout()
+        self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 4)
+        self.grid_layout.addWidget(self.interval_card, 1, 0, 1, 4)
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_layout.setSpacing(8)
+
+        # 设置布局
+        self.viewLayout.addWidget(self.title_label)
+        self.viewLayout.addLayout(self.grid_layout)
+        self.widget.setMinimumWidth(600)
+
+    def fill_config(self, config: AutoRestartSchedule) -> None:
+        """使用配置数据填充表单
+
+        Args:
+            config (AutoRestartSchedule): 自动重启配置数据
+        """
+        self.enable_card.fill_value(config.enable)
+        self.interval_card.fill_value(config.time_unit, config.duration)
+
+    def get_value(self) -> dict:
+        """获取当前配置项的值
+
+        Returns:
+            dict: 包含启用状态和重启间隔的配置字典
+        """
+        return self.get_config().model_dump()
+
+    def get_config(self) -> AutoRestartSchedule:
+        """获取当前配置项的值
+
+        Returns:
+            AutoRestartSchedule: 包含启用状态和重启间隔的配置数据
+        """
+        interval_card_value = self.interval_card.get_value()
+
+        return AutoRestartSchedule(
+            enable=self.enable_card.get_value(),
+            time_unit=interval_card_value[0],
+            duration=interval_card_value[1],
+        )
+
+    def clear(self) -> None:
+        """清空所有配置项的值"""
+        self.enable_card.clear()
+        self.interval_card.clear()

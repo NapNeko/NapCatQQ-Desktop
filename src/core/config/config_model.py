@@ -7,6 +7,8 @@ from typing import Literal
 # 第三方库导入
 from pydantic import BaseModel, Field, HttpUrl, WebsocketUrl, field_validator
 
+from .config_enum import TimeUnitEnum
+
 """
 这个模块包含的是机器人配置模型
 
@@ -24,10 +26,31 @@ from pydantic import BaseModel, Field, HttpUrl, WebsocketUrl, field_validator
 """
 
 
+class AutoRestartSchedule(BaseModel):
+    """自动重启计划配置"""
+
+    # 是否启用自动重启计划任务
+    enable: bool = Field(
+        default=False,
+        description="是否启用自动重启计划任务",
+    )
+    # 时间单位
+    time_unit: TimeUnitEnum = Field(
+        default=TimeUnitEnum.HOUR,
+        description="时间单位, m: 分钟, h: 小时, d: 天, mon: 月, year: 年",
+    )
+    # 时间长度, 不包含单位
+    duration: int = Field(
+        default=6,
+        description="时间长度, 仅包含数字, 不包含单位",
+    )
+
+
 class BotConfig(BaseModel):
     name: str
     QQID: str
     musicSignUrl: str
+    autoRestartSchedule: AutoRestartSchedule
 
     @field_validator("name")
     @staticmethod
@@ -157,7 +180,12 @@ DEFAULT_CONFIG = {
         "name": "",
         "QQID": "",
         "musicSignUrl": "",
-        "parseMultMsg": False,
+        "autoRestartSchedule": {
+            "taskType": "none",
+            "interval": "6h",
+            "crontab": "0 4 * * *",
+            "jitter": 0,
+        },
     },
     "connect": {
         "httpServers": [],
