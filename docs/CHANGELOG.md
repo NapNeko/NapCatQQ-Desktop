@@ -3,10 +3,11 @@
 ## 🛠 修复与优化
 - 🐛 修复离线通知[邮箱]无效的问题
 - 🐛 修复文件名命名错误的问题
-- 🐛 修复点击添加离线配置时,对话框异常的问题 #44
+- 🐛 修复点击添加离线配置时,对话框异常的问题 [#44](https://github.com/NapNeko/NapCatQQ-Desktop/issues/44)
+- 🐛 修复图标缺失的问题
 - 🌟 优化离线通知操作逻辑
 - 🌟 优化大量操作逻辑
-- 💡 使用 QRunnable 重构版本检查逻辑
+- 💡 使用 QRunnable 重构版本检查逻辑 [#50](https://github.com/NapNeko/NapCatQQ-Desktop/issues/50)
 
 ## ✨ 新增与调整
 - ✨ 新增离线通知[邮箱]操作界面
