@@ -174,6 +174,7 @@ class AutoRestartDialog(MessageBoxBase):
         # 设置布局
         self.viewLayout.addWidget(self.title_label)
         self.viewLayout.addLayout(self.grid_layout)
+        self.widget.setMinimumWidth(600)
 
     def fill_config(self, config: AutoRestartSchedule) -> None:
         """使用配置数据填充表单
@@ -182,7 +183,7 @@ class AutoRestartDialog(MessageBoxBase):
             config (AutoRestartSchedule): 自动重启配置数据
         """
         self.enable_card.fill_value(config.enable)
-        self.interval_card.fill_value(config.interval)
+        self.interval_card.fill_value(config.time_unit, config.duration)
 
     def get_config(self) -> AutoRestartSchedule:
         """获取当前配置项的值
@@ -190,11 +191,15 @@ class AutoRestartDialog(MessageBoxBase):
         Returns:
             AutoRestartSchedule: 包含启用状态和重启间隔的配置数据
         """
+        interval_card_value = self.interval_card.get_value()
+
         return AutoRestartSchedule(
             enable=self.enable_card.get_value(),
-            interval=self.interval_card.get_value(),
+            time_unit=interval_card_value[0],
+            duration=interval_card_value[1],
         )
 
     def clear(self) -> None:
         """清空所有配置项的值"""
         self.enable_card.clear()
+        self.interval_card.clear()

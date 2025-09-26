@@ -24,7 +24,7 @@ from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import QLocale, Signal
 
 # 项目内模块导入
-from src.core.config.enum import CloseActionEnum, Language
+from src.core.config.config_enum import CloseActionEnum, Language
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
 

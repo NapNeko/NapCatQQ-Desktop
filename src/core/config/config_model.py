@@ -2,13 +2,12 @@
 # 标准库导入
 import random
 import string
-from typing import Literal, Optional
+from typing import Literal
 
 # 第三方库导入
 from pydantic import BaseModel, Field, HttpUrl, WebsocketUrl, field_validator
-from PySide6.QtCore import QTime
 
-from .data_class import TimeInterval
+from .config_enum import TimeUnitEnum
 
 """
 这个模块包含的是机器人配置模型
@@ -30,13 +29,20 @@ from .data_class import TimeInterval
 class AutoRestartSchedule(BaseModel):
     """自动重启计划配置"""
 
+    # 是否启用自动重启计划任务
     enable: bool = Field(
         default=False,
         description="是否启用自动重启计划任务",
     )
-    interval: TimeInterval = Field(
-        default=TimeInterval(hours=6),  # 默认每6小时重启一次
-        description="间隔任务的时间间隔, 例如: 6h, 30m, 45s",
+    # 时间单位
+    time_unit: TimeUnitEnum = Field(
+        default=TimeUnitEnum.HOUR.value,
+        description="时间单位, m: 分钟, h: 小时, d: 天, mon: 月, year: 年",
+    )
+    # 时间长度, 不包含单位
+    duration: int = Field(
+        default=6,
+        description="时间长度, 仅包含数字, 不包含单位",
     )
 
 

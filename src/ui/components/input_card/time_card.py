@@ -5,13 +5,16 @@ UI 组件：时间选择卡片
 """
 
 
+# 标准库导入
+from ast import Dict
+
 # 第三方库导入
-from qfluentwidgets import FluentIconBase, SettingCard
-from PySide6.QtCore import Qt, QTime
+from qfluentwidgets import ComboBox, CompactSpinBox, FluentIconBase, LineEdit, SettingCard
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.ui.components.time_picker import IntervalTimePicker
+from src.core.config.config_enum import TimeUnitEnum
 
 
 class IntervalTimeConfigCard(SettingCard):
@@ -29,28 +32,48 @@ class IntervalTimeConfigCard(SettingCard):
             parent (QWidget | None, optional): 父控件. Defaults to None.
         """
         super().__init__(icon, title, content, parent)
-        self.interval_time_picker = IntervalTimePicker(self)
+        # 创建组件
+        self.time_unit_combo_box = ComboBox(self)
+        self.duration_spin_box = CompactSpinBox(self)
 
-        self.hBoxLayout.addWidget(self.interval_time_picker, 0, Qt.AlignmentFlag.AlignRight)
+        # 设置组件
+        self.time_unit_combo_box.addItem(self.tr("分钟"), userData=TimeUnitEnum.MINUTE.value)
+        self.time_unit_combo_box.addItem(self.tr("小时"), userData=TimeUnitEnum.HOUR.value)
+        self.time_unit_combo_box.addItem(self.tr("天"), userData=TimeUnitEnum.DAY.value)
+        self.time_unit_combo_box.addItem(self.tr("月"), userData=TimeUnitEnum.MONTH.value)
+        self.time_unit_combo_box.addItem(self.tr("年"), userData=TimeUnitEnum.YEAR.value)
+        self.time_unit_combo_box.setCurrentIndex(1)
+
+        self.duration_spin_box.setRange(1, 999)
+        self.duration_spin_box.setValue(6)
+
+        # 添加组件到布局
+        self.hBoxLayout.addWidget(self.duration_spin_box, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.hBoxLayout.addSpacing(8)
+        self.hBoxLayout.addWidget(self.time_unit_combo_box, alignment=Qt.AlignmentFlag.AlignLeft)
         self.hBoxLayout.addSpacing(16)
 
-    def fill_value(self, value: str) -> None:
+    def fill_value(self, time_unit: TimeUnitEnum, duration: int) -> None:
         """填充时间值
 
         Args:
-            value (QTime): 时间值
+            time_unit (TimeUnitEnum): 时间单位
+            duration (int): 时间长度
         """
-        self.interval_time_picker.setTime(value)
+        self.time_unit_combo_box.setCurrentIndex(self.time_unit_combo_box.findData(time_unit.value))
+        self.duration_spin_box.setValue(duration)
 
-    def get_value(self) -> QTime:
+    def get_value(self) -> tuple[TimeUnitEnum, int]:
         """获取时间值
 
-        这里返回的是 QTime 对象, 但实际上表示的是一个时间间隔
+        这里返回的是元组, 第一个元素是时间单位, 第二个元素是时间长度
 
         Returns:
-            QTime: 时间值
+            tuple: (TimeUnitEnum, int)
         """
-        return self.interval_time_picker.getTime().toPython
+        return (TimeUnitEnum(self.time_unit_combo_box.currentData()), self.duration_spin_box.value())
 
     def clear(self) -> None:
-        pass
+        """清空时间值"""
+        self.time_unit_combo_box.setCurrentIndex(-1)
+        self.duration_spin_box.setValue(0)
