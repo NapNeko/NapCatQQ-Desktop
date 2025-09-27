@@ -47,7 +47,3 @@ import_heading_firstparty = "项目内模块导入"
 
 
 
-[dependency-groups]
-dev = [
-    "nuitka>=2.7.16",
-]
