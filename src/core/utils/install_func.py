@@ -8,15 +8,15 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-from PySide6.QtCore import QThread, QUrl, Signal
+from PySide6.QtCore import QObject, QRunnable, QThread, QUrl, Signal
 
 # 项目内模块导入
 from src.core.utils.path_func import PathFunc
 from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus
 
 
-class NapCatInstall(QThread):
-    """NapCat 安装逻辑"""
+class InstallBase(QObject, QRunnable):
+    """安装工具基类, 包含通用信号"""
 
     # 安装成功信号
     install_finish_signal = Signal()
@@ -30,11 +30,27 @@ class NapCatInstall(QThread):
     status_label_signal = Signal(str)
 
     def __init__(self) -> None:
+        QObject.__init__(self)
+        QRunnable.__init__(self)
+
+    def run(self) -> None:
+        """运行安装逻辑"""
+        self.execute()
+
+    def execute(self) -> None:
+        """执行安装逻辑 (子类必须实现)"""
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class NapCatInstall(InstallBase):
+    """NapCat 安装逻辑"""
+
+    def __init__(self) -> None:
         super().__init__()
         self.zip_file_path = PathFunc().tmp_path / "NapCat.Shell.zip"
         self.install_path = PathFunc().napcat_path
 
-    def run(self) -> None:
+    def execute(self) -> None:
         """安装逻辑"""
         try:
             self.status_label_signal.emit("正在安装 NapCat")
@@ -78,25 +94,14 @@ class NapCatInstall(QThread):
             )
 
 
-class QQInstall(QThread):
+class QQInstall(InstallBase):
     """QQ 安装逻辑"""
-
-    # 安装成功信号
-    install_finish_signal = Signal()
-    # 安装失败信号
-    error_finish_signal = Signal()
-    # 按钮模式切换
-    button_toggle_signal = Signal(ButtonStatus)
-    # 进度条模式切换
-    progress_ring_toggle_signal = Signal(ProgressRingStatus)
-    # 状态标签
-    status_label_signal = Signal(str)
 
     def __init__(self, exe_path: str | Path) -> None:
         super().__init__()
         self.exe_path: Path = exe_path if isinstance(exe_path, Path) else Path(exe_path)
 
-    def run(self) -> None:
+    def execute(self) -> None:
         """安装逻辑"""
         try:
             self.status_label_signal.emit("正在安装 QQ")

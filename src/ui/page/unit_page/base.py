@@ -56,6 +56,9 @@ class PageBase(ScrollArea):
         self.setLayout(self.h_box_layout)
         self.get_version = parent.get_version
 
+        self.local_version = None
+        self.remote_version = None
+
 
 class DisplayCard(SimpleCardWidget):
     """左侧的应用展示卡片, 包含图标、名称、状态和操作按钮"""

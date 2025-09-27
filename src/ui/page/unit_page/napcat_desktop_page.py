@@ -3,7 +3,7 @@
 import subprocess
 import sys
 
-from PySide6.QtCore import QUrl, Slot
+from PySide6.QtCore import QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
@@ -99,14 +99,15 @@ class NCDPage(PageBase):
         # 项目内模块导入
         from src.core.network.downloader import GithubDownloader
 
-        self.downloader = GithubDownloader(Urls.NCD_DOWNLOAD.value)
-        self.downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
-        self.downloader.download_finish_signal.connect(self.on_install)
-        self.downloader.status_label_signal.connect(self.app_card.set_status_text)
-        self.downloader.error_finsh_signal.connect(self.on_error_finsh)
-        self.downloader.button_toggle_signal.connect(self.app_card.switch_button)
-        self.downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
-        self.downloader.start()
+        downloader = GithubDownloader(Urls.NCD_DOWNLOAD.value)
+        downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
+        downloader.download_finish_signal.connect(self.on_install)
+        downloader.status_label_signal.connect(self.app_card.set_status_text)
+        downloader.error_finsh_signal.connect(self.on_error_finsh)
+        downloader.button_toggle_signal.connect(self.app_card.switch_button)
+        downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+
+        QThreadPool.globalInstance().start(downloader)
 
     @Slot()
     def on_install(self) -> None:
