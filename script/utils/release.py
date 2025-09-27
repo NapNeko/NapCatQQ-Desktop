@@ -7,7 +7,8 @@
 2. 输入要发布的版本号 (格式: x.y.z, 例如: 1.0.0)
 3. 脚本将执行 pdm bump to x.y.z  命令来更新版本号(pyproject.toml)
 4. 修改 src\core\config\__init__.py 中的 __version__ 变量
-5. 提交更改并推送到远程仓库
+5. 修改 docs\CHANGELOG.md 中的版本号
+6. 提交更改并推送到远程仓库
     - 主题为 "🌟 releases: 发布 vx.y.z 版本"
 """
 
@@ -49,6 +50,25 @@ def update_version_in_file(file_path: Path, new_version: str) -> None:
     print(f"已更新文件中的版本号: {file_path}")
 
 
+def update_changelog_version(file_path: Path, new_version: str) -> None:
+    """更新CHANGELOG.md文件中的版本号
+
+    更新格式如: # 🚀 v1.6.6 - 累积更新！ 改为新的版本号
+    """
+    version_pattern = re.compile(r"(# 🚀 v)\d+\.\d+\.\d+(- 累积更新！)")
+    with file_path.open("r", encoding="utf-8") as file:
+        content = file.read()
+
+    new_content, count = version_pattern.subn(rf"\g<1>{new_version}\g<2>", content)
+    if count == 0:
+        print(f"⚠️  CHANGELOG.md中未找到版本号标题，文件未修改: {file_path}")
+        return
+
+    with file_path.open("w", encoding="utf-8") as file:
+        file.write(new_content)
+    print(f"已更新CHANGELOG.md中的版本号: {file_path}")
+
+
 def main() -> None:
     """主函数"""
     print("🚀 开始发布流程...")
@@ -83,13 +103,21 @@ def main() -> None:
         else:
             print(f"⚠️  版本文件不存在: {version_file}，跳过")
 
-        # 3. 提交更改
-        print(f"\n3. 提交版本更改...")
+        # 3. 更新docs/CHANGELOG.md中的版本号
+        print(f"\n3. 更新CHANGELOG.md中的版本号...")
+        changelog_file = Path("docs/CHANGELOG.md")
+        if changelog_file.exists():
+            update_changelog_version(changelog_file, version)
+        else:
+            print(f"⚠️  CHANGELOG.md文件不存在: {changelog_file}，跳过")
+
+        # 4. 提交更改
+        print(f"\n4. 提交版本更改...")
         run_command("git add .")
         run_command(f'git commit -m "🌟 releases: 发布 {version_with_v} 版本"')
 
-        # 4. 创建标签
-        print(f"\n4. 创建版本标签 {version_with_v}...")
+        # 5. 创建标签
+        print(f"\n5. 创建版本标签 {version_with_v}...")
         run_command(f'git tag -a {version_with_v} -m "发布 {version_with_v} 版本"')
 
         print(f"\n🎉 版本 {version_with_v} 发布完成!")
