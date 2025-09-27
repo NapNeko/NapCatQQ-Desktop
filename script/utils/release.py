@@ -53,9 +53,9 @@ def update_version_in_file(file_path: Path, new_version: str) -> None:
 def update_changelog_version(file_path: Path, new_version: str) -> None:
     """更新CHANGELOG.md文件中的版本号
 
-    更新格式如: # 🚀 v1.6.6 - 累积更新！ 改为新的版本号
+    更新格式如:  vx.y.z 改为新的版本号
     """
-    version_pattern = re.compile(r"(# 🚀 v)\d+\.\d+\.\d+(- 累积更新！)")
+    version_pattern = re.compile(r"(##\s*\[)(v?\d+\.\d+\.\d+)(\])")
     with file_path.open("r", encoding="utf-8") as file:
         content = file.read()
 
