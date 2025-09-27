@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -34,18 +33,19 @@ jobs:
 
       - name: "打包应用"
         run: |
-          pyinstaller ./script/build_scripts/main_debug.spec
-          pyinstaller ./script/build_scripts/main.spec
+          pyinstaller .\script\build_scripts\main_debug.spec
+          pyinstaller .\script\build_scripts\main.spec
 
       - name: "设置标签和更新内容"
         id: get_info
         run: |
-          TAG_NAME=$(echo "${GITHUB_REF#refs/tags/}")
-          BODY=$(cat docs/CHANGELOG.md)
-          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-          echo "BODY<<EOF" >> $GITHUB_ENV
-          echo "$BODY" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          $TAG_NAME = $env:GITHUB_REF -replace "refs/tags/", ""
+          $BODY = Get-Content -Path "docs/CHANGELOG.md" -Raw
+          
+          echo "TAG_NAME=$TAG_NAME" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "BODY<<EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "$BODY" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: "创建发布草稿"
         id: create_release
@@ -57,5 +57,5 @@ jobs:
           name: NapCatQQ Desktop Release ${{ env.TAG_NAME }}
           body: ${{ env.BODY }}
           files: |
-            dist/NapCatQQ-Desktop-debug.exe
-            dist/NapCatQQ-Desktop.exe
+            dist\NapCatQQ-Desktop-debug.exe
+            dist\NapCatQQ-Desktop.exe
