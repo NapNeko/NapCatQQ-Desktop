@@ -55,18 +55,18 @@ def update_changelog_version(file_path: Path, new_version: str) -> None:
 
     更新格式如:  vx.y.z 改为新的版本号
     """
-    version_pattern = re.compile(r"(##\s*\[)(v?\d+\.\d+\.\d+)(\])")
+    version_pattern = re.compile(r"^(##\s+)\d+\.\d+\.\d+", re.MULTILINE)
     with file_path.open("r", encoding="utf-8") as file:
         content = file.read()
 
-    new_content, count = version_pattern.subn(rf"\g<1>{new_version}\g<2>", content)
+    new_content, count = version_pattern.subn(rf"\1{new_version}", content)
     if count == 0:
-        print(f"⚠️  CHANGELOG.md中未找到版本号标题，文件未修改: {file_path}")
-        return
+        print(f"未找到CHANGELOG中的版本号模式，文件未修改: {file_path}")
+        sys.exit(1)
 
     with file_path.open("w", encoding="utf-8") as file:
         file.write(new_content)
-    print(f"已更新CHANGELOG.md中的版本号: {file_path}")
+    print(f"已更新CHANGELOG中的版本号: {file_path}")
 
 
 def main() -> None:
