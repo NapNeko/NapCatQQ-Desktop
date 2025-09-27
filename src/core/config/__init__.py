@@ -266,6 +266,6 @@ class Config(QConfig):
 cfg = Config()
 qconfig.load(PathFunc().config_path, cfg)
 cfg.set(cfg.start_time, time.time(), True)
-cfg.set(cfg.napcat_desktop_version, "v1.6.3", True)
+cfg.set(cfg.napcat_desktop_version, "v1.6.4", True)
 cfg.set(cfg.system_type, platform.system(), True)
 cfg.set(cfg.platform_type, platform.machine(), True)
