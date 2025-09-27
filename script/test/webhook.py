@@ -1,6 +1,21 @@
+# -*- coding: utf-8 -*-
+"""
+此测试脚本会启动一个简单的 HTTP 服务器来接收 WebHook 请求。
+
+使用方法:
+1. 运行脚本：`python webhook.py`
+2. 服务器将在端口 8000 上监听 WebHook 请求。
+3. 发送 POST 请求到 `http://localhost:8000/`，请求体应为 JSON 格式。
+4. 服务器将打印接收到的请求数据并返回一个简单的 JSON 响应。
+
+注意事项:
+- 确保端口 8000 未被其他服务占用。
+- 该脚本仅用于测试目的，不适合生产环境。
+"""
+
 # 标准库导入
 import json
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
 

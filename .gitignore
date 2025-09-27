@@ -47,8 +47,8 @@ NapCat/*
 /src/pysidedeploy.spec
 
 ### 测试相关 ###
-test/
-tests/
+/test/
+/tests/
 *.test
 *.test.py
 

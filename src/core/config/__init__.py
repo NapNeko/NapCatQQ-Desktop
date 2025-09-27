@@ -1,32 +1,4 @@
 # -*- coding: utf-8 -*-
-# 标准库导入
-import inspect
-import json
-import platform
-import time
-from pathlib import Path
-from typing import Self
-
-# 第三方库导入
-from qfluentwidgets import RangeConfigItem, RangeValidator, TabCloseButtonDisplayMode, qconfig
-from qfluentwidgets.common import (
-    BoolValidator,
-    ColorConfigItem,
-    ConfigItem,
-    ConfigSerializer,
-    EnumSerializer,
-    OptionsConfigItem,
-    OptionsValidator,
-    QConfig,
-    Theme,
-)
-from qfluentwidgets.common.exception_handler import exceptionHandler
-from PySide6.QtCore import QLocale, Signal
-
-# 项目内模块导入
-from src.core.config.config_enum import CloseActionEnum, Language
-from src.core.utils.logger import logger
-from src.core.utils.path_func import PathFunc
 
 """
 这个模块包含的是 NapCatQQ Desktop 的配置项
@@ -57,6 +29,37 @@ from src.core.utils.path_func import PathFunc
 - 具体使用方法可以参考 qfluentwidgets.common.QConfig 类的文档
 - 与 config_model.py 区别在于, config_model.py 主要用于定义与机器人相关的配置模型, 而此模块主要用于定义应用程序的整体配置项
 """
+
+# 标准库导入
+import inspect
+import json
+import platform
+import time
+from pathlib import Path
+from typing import Self
+
+# 第三方库导入
+from qfluentwidgets import RangeConfigItem, RangeValidator, TabCloseButtonDisplayMode, qconfig
+from qfluentwidgets.common import (
+    BoolValidator,
+    ColorConfigItem,
+    ConfigItem,
+    ConfigSerializer,
+    EnumSerializer,
+    OptionsConfigItem,
+    OptionsValidator,
+    QConfig,
+    Theme,
+)
+from qfluentwidgets.common.exception_handler import exceptionHandler
+from PySide6.QtCore import QLocale, Signal
+
+# 项目内模块导入
+from src.core.config.config_enum import CloseActionEnum, Language
+from src.core.utils.logger import logger
+from src.core.utils.path_func import PathFunc
+
+__version__ = "1.6.5"
 
 
 class LanguageSerializer(ConfigSerializer):
@@ -266,6 +269,6 @@ class Config(QConfig):
 cfg = Config()
 qconfig.load(PathFunc().config_path, cfg)
 cfg.set(cfg.start_time, time.time(), True)
-cfg.set(cfg.napcat_desktop_version, "v1.6.4", True)
+cfg.set(cfg.napcat_desktop_version, __version__, True)
 cfg.set(cfg.system_type, platform.system(), True)
 cfg.set(cfg.platform_type, platform.machine(), True)
