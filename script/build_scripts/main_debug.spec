@@ -2,27 +2,9 @@
 
 block_cipher = None
 
-from PyInstaller.utils.hooks import collect_submodules, collect_dynamic_libs
-import PySide6
-import os
-
-# 强制收集 PySide6.QtSvg 模块和依赖
-hiddenimports = collect_submodules("PySide6.QtSvg")
-binaries = collect_dynamic_libs("PySide6.QtSvg")
-
-# 收集 Qt 插件目录
-pyside6_path = os.path.dirname(PySide6.__file__)
-datas = [
-    (os.path.join(pyside6_path, "plugins", "iconengines"), "PySide6/plugins/iconengines"),
-    (os.path.join(pyside6_path, "plugins", "imageformats"), "PySide6/plugins/imageformats"),
-]
-
 a = Analysis(
     ['../../main.py'],  # 主入口文件
     pathex=[],    # 可添加额外搜索路径
-    binaries=binaries,
-    datas=datas,      # 加入 Qt 插件目录
-    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

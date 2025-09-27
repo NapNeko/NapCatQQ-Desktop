@@ -3,7 +3,7 @@ name: Build Release
 on:
   push:
     tags:
-      - 'v*.*.*'  # Match version tags
+      - 'v*.*.*'
 
 permissions:
   contents: write
@@ -13,7 +13,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: "检出代码"
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
@@ -21,7 +21,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set tag and body content
+      - name: "设置Python 3.12.6"
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12.6'
+
+      - name: "安装依赖"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: "打包应用"
+        run: |
+          pyinstaller ./script/build_scripts/main_debug.spec
+          pyinstaller ./script/build_scripts/main.spec
+
+      - name: "设置标签和更新内容"
         id: get_info
         run: |
           TAG_NAME=$(echo "${GITHUB_REF#refs/tags/}")
@@ -31,7 +46,7 @@ jobs:
           echo "$BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: Create release draft
+      - name: "创建发布草稿"
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
@@ -40,3 +55,6 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           name: NapCatQQ Desktop Release ${{ env.TAG_NAME }}
           body: ${{ env.BODY }}
+          files: |
+            dist/NapCatQQ-Desktop-debug.exe
+            dist/NapCatQQ-Desktop.exe
