@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.operate_config import check_duplicate_bot, update_config
+from src.core.utils.path_func import PathFunc
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.separator import Separator
 from src.ui.page.add_page.signal_bus import add_page_singal_bus
@@ -119,6 +120,11 @@ class AddTopCard(QWidget):
     @Slot()
     def _on_add_bot_list_button(self) -> None:
         """添加到机器人列表"""
+        # 检查是否存在配置文件夹
+        if not PathFunc().napcat_config_path.exists():
+            error_bar(self.tr("配置文件夹不存在, 请检查是否安装 NapCatQQ"))
+            return
+
         # 项目内模块导入
         from src.core.config.config_model import Config
         from src.ui.page.add_page.add_widget import AddWidget
