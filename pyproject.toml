@@ -21,6 +21,9 @@ license = {text = "GPLv3"}
 [tool.pdm]
 distribution = false
 
+[tool.pdm.scripts]
+release = "python script/utils/release.py"
+
 
 [tool.black]
 line-length = 120  # 设置代码行的最大长度为 120 字符
