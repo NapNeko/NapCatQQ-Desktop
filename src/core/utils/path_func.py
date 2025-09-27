@@ -42,7 +42,7 @@ class PathFunc(metaclass=Singleton):
         # 文件字段
         self.config_path = self.config_dir_path / "config.json"
         self.bot_config_path = self.config_dir_path / "bot.json"
-        self.napcat_config_path = self.napcat_path / "config.json"
+        self.napcat_config_path = self.napcat_path / "config"
 
     def path_validator(self) -> None:
         """验证一系列路径"""
