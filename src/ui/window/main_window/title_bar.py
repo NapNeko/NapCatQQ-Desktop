@@ -11,7 +11,6 @@ from PySide6.QtSvg import QSvgRenderer
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.core.config.config_enum import CloseActionEnum
 from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
 
 if TYPE_CHECKING:
@@ -90,14 +89,7 @@ class CustomTitleBar(MSFluentTitleBar):
                     else self.window().showMaximized()
                 ),
             ),
-            "closeBtn": (
-                CloseBtn,
-                lambda: (
-                    self.window().close()
-                    if cfg.get(cfg.close_button_action) == CloseActionEnum.CLOSE
-                    else self.window().hide()
-                ),
-            ),
+            "closeBtn": (CloseBtn, self.window().close),
         }
 
         for btn_name, (btn_class, slot) in button_info.items():

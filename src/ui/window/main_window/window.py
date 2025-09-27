@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
 from src.core.config import cfg
+from src.core.config.config_enum import CloseActionEnum
 from src.core.utils.singleton import singleton
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.page.add_page import AddWidget
@@ -116,3 +117,19 @@ class MainWindow(MSFluentWindow):
         """
         self.trayIcon = SystemTrayIcon(self)
         self.trayIcon.show()
+
+    def close(self) -> None:
+        """重写关闭事件"""
+        if cfg.get(cfg.close_button_action) == CloseActionEnum.CLOSE:
+            # 如果有机器人在线, 则提示用户关闭实例
+            if BotListWidget().get_bot_is_run():
+                # 项目内模块导入
+                from src.ui.components.message_box import AskBox
+
+                msg_box = AskBox(self.tr("无法退出"), self.tr("有机器人正在运行, 请关闭它们后再退出程序"), self)
+                msg_box.cancelButton.hide()
+                msg_box.exec()
+            else:
+                super().close()
+        else:
+            self.hide()
