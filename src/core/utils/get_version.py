@@ -176,7 +176,7 @@ class GetLocalVersionRunnable(VersionRunnableBase):
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
             logger.error("获取 NapCat 版本信息失败: 文件不存在")
-            self.error_signal("获取 NapCat 版本信息失败: 文件不存在")
+            self.error_signal.emit("获取 NapCat 版本信息失败: 文件不存在")
             return None
 
     def get_qq_version(self) -> str | None:
@@ -193,7 +193,7 @@ class GetLocalVersionRunnable(VersionRunnableBase):
         except FileNotFoundError:
             # 文件不存在则返回 None
             logger.error("获取 QQ 版本信息失败: 文件不存在")
-            self.error_signal("获取 QQ 版本信息失败: 文件不存在")
+            self.error_signal.emit("获取 QQ 版本信息失败: 文件不存在")
             return None
 
     def get_ncd_version(self) -> str | None:

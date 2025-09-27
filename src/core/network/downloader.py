@@ -4,7 +4,7 @@ from pathlib import Path
 
 # 第三方库导入
 import httpx
-from PySide6.QtCore import QThread, QUrl, Signal
+from PySide6.QtCore import QObject, QRunnable, QUrl, Signal
 
 # 项目内模块导入
 from src.core.network.urls import Urls
@@ -13,7 +13,7 @@ from src.core.utils.path_func import PathFunc
 from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus
 
 
-class DownloaderBase(QThread):
+class DownloaderBase(QObject, QRunnable):
     """下载器基类
 
     定义了3个信号:
@@ -37,7 +37,8 @@ class DownloaderBase(QThread):
     status_label_signal = Signal(str)
 
     def __init__(self) -> None:
-        super().__init__()
+        QObject.__init__(self)
+        QRunnable.__init__(self)
 
 
 class GithubDownloader(DownloaderBase):

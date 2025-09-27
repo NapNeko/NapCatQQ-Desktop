@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-# 标准库导入
-from typing import Optional
-
-from PySide6.QtCore import QUrl, Slot
+from PySide6.QtCore import QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
@@ -45,6 +42,8 @@ class NapCatPage(PageBase):
         if self.local_version is None:
             # 如果没有本地版本则显示安装按钮
             self.app_card.switch_button(ButtonStatus.UNINSTALLED)
+            self.log_card.setLog(self.remote_log)
+            return
 
         if self.remote_version is None:
             # 如果没有远程版本则提示错误
@@ -102,26 +101,28 @@ class NapCatPage(PageBase):
         # 项目内模块导入
         from src.core.network.downloader import GithubDownloader
 
-        self.downloader = GithubDownloader(Urls.NAPCATQQ_DOWNLOAD.value)
-        self.downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
-        self.downloader.download_finish_signal.connect(self.on_install)
-        self.downloader.status_label_signal.connect(self.app_card.set_status_text)
-        self.downloader.error_finsh_signal.connect(self.on_error_finsh)
-        self.downloader.button_toggle_signal.connect(self.app_card.switch_button)
-        self.downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
-        self.downloader.start()
+        downloader = GithubDownloader(Urls.NAPCATQQ_DOWNLOAD.value)
+        downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
+        downloader.download_finish_signal.connect(self.on_install)
+        downloader.status_label_signal.connect(self.app_card.set_status_text)
+        downloader.error_finsh_signal.connect(self.on_error_finsh)
+        downloader.button_toggle_signal.connect(self.app_card.switch_button)
+        downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+
+        QThreadPool.globalInstance().start(downloader)
 
     @Slot()
     def on_install(self) -> None:
         """下载完成后开始安装 NapCat"""
         success_bar(self.tr("下载成功, 正在安装..."))
-        self.installer = NapCatInstall()
-        self.installer.status_label_signal.connect(self.app_card.set_status_text)
-        self.installer.error_finish_signal.connect(self.on_error_finsh)
-        self.installer.button_toggle_signal.connect(self.app_card.switch_button)
-        self.installer.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
-        self.installer.install_finish_signal.connect(self.on_install_finsh)
-        self.installer.start()
+        installer = NapCatInstall()
+        installer.status_label_signal.connect(self.app_card.set_status_text)
+        installer.error_finish_signal.connect(self.on_error_finsh)
+        installer.button_toggle_signal.connect(self.app_card.switch_button)
+        installer.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+        installer.install_finish_signal.connect(self.on_install_finsh)
+
+        QThreadPool.globalInstance().start(installer)
 
     @Slot()
     def on_install_finsh(self) -> None:

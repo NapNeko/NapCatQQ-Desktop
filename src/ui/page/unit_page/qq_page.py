@@ -2,9 +2,9 @@
 # 标准库导入
 import winreg
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QUrl, Slot
+from PySide6.QtCore import QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
@@ -141,14 +141,15 @@ class QQPage(PageBase):
         from src.core.network.downloader import QQDownloader
 
         self.file_path = PathFunc().tmp_path / self.url.fileName()
-        self.downloader = QQDownloader(self.url)
-        self.downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
-        self.downloader.download_finish_signal.connect(self.on_install)
-        self.downloader.status_label_signal.connect(self.app_card.set_status_text)
-        self.downloader.error_finsh_signal.connect(self.on_error_finsh)
-        self.downloader.button_toggle_signal.connect(self.app_card.switch_button)
-        self.downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
-        self.downloader.start()
+        downloader = QQDownloader(self.url)
+        downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
+        downloader.download_finish_signal.connect(self.on_install)
+        downloader.status_label_signal.connect(self.app_card.set_status_text)
+        downloader.error_finsh_signal.connect(self.on_error_finsh)
+        downloader.button_toggle_signal.connect(self.app_card.switch_button)
+        downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+
+        QThreadPool.globalInstance().start(downloader)
 
     @Slot()
     def on_install(self) -> None:
@@ -187,13 +188,14 @@ class QQPage(PageBase):
                 return
 
         # 开始安装
-        self.installer = QQInstall(self.file_path)
-        self.installer.status_label_signal.connect(self.app_card.set_status_text)
-        self.installer.error_finish_signal.connect(self.on_error_finsh)
-        self.installer.button_toggle_signal.connect(self.app_card.switch_button)
-        self.installer.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
-        self.installer.install_finish_signal.connect(self.on_install_finsh)
-        self.installer.start()
+        installer = QQInstall(self.file_path)
+        installer.status_label_signal.connect(self.app_card.set_status_text)
+        installer.error_finish_signal.connect(self.on_error_finsh)
+        installer.button_toggle_signal.connect(self.app_card.switch_button)
+        installer.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+        installer.install_finish_signal.connect(self.on_install_finsh)
+
+        QThreadPool.globalInstance().start(installer)
 
     @Slot()
     def on_install_finsh(self) -> None:
