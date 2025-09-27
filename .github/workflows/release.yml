@@ -39,12 +39,6 @@ jobs:
         run: |
           pyinstaller .\script\build_scripts\main.spec
 
-      - name: "查看打包产物"
-        run: |
-          dir dist\
-          echo "当前工作目录: $(Get-Location)"
-          echo "dist目录完整路径: $(Resolve-Path dist)"
-
       - name: "设置标签和更新内容"
         id: get_info
         run: |
@@ -56,15 +50,15 @@ jobs:
           echo "$BODY" | Out-File -FilePath $env:GITHUB_ENV -Append
           echo "EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: "创建发布并上传文件"
+      - name: "创建发布草稿并上传文件"
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          draft: false
+          draft: true
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.TAG_NAME }}
           name: NapCatQQ Desktop Release ${{ env.TAG_NAME }}
           body: ${{ env.BODY }}
           files: |
-            ${{ github.workspace }}\dist\NapCatQQ-Desktop-debug.exe
-            ${{ github.workspace }}\dist\NapCatQQ-Desktop.exe
+            dist\NapCatQQ-Desktop-debug.exe
+            dist\NapCatQQ-Desktop.exe
