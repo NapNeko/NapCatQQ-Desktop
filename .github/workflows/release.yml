@@ -72,7 +72,7 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          draft: true
+          draft: false
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.TAG_NAME }}
           name: NapCatQQ Desktop Release ${{ env.TAG_NAME }}
