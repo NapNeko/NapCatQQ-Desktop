@@ -33,11 +33,29 @@ jobs:
 
       - name: "打包Debug版本"
         run: |
-          pyinstaller .\script\build_scripts\main_debug.spec
+          pyinstaller ./script/build_scripts/main_debug.spec
 
       - name: "打包Release版本"
         run: |
-          pyinstaller .\script\build_scripts\main.spec
+          pyinstaller ./script/build_scripts/main.spec
+
+      - name: "验证文件存在"
+        run: |
+          Write-Host "检查文件是否存在:"
+          if (Test-Path "dist/NapCatQQ-Desktop-debug.exe") {
+              Write-Host "✓ NapCatQQ-Desktop-debug.exe 存在"
+              Write-Host "文件大小:" (Get-Item "dist/NapCatQQ-Desktop-debug.exe").Length "bytes"
+          } else {
+              Write-Host "✗ NapCatQQ-Desktop-debug.exe 不存在"
+          }
+          if (Test-Path "dist/NapCatQQ-Desktop.exe") {
+              Write-Host "✓ NapCatQQ-Desktop.exe 存在"
+              Write-Host "文件大小:" (Get-Item "dist/NapCatQQ-Desktop.exe").Length "bytes"
+          } else {
+              Write-Host "✗ NapCatQQ-Desktop.exe 不存在"
+          }
+          Write-Host "dist目录内容:"
+          Get-ChildItem -Path "dist" -Recurse | ForEach-Object { Write-Host "  $($_.FullName)" }
 
       - name: "设置标签和更新内容"
         id: get_info
@@ -60,5 +78,4 @@ jobs:
           name: NapCatQQ Desktop Release ${{ env.TAG_NAME }}
           body: ${{ env.BODY }}
           files: |
-            dist\NapCatQQ-Desktop-debug.exe
-            dist\NapCatQQ-Desktop.exe
+            dist/*.exe
