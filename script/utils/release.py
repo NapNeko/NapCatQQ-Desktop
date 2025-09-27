@@ -6,8 +6,7 @@
 1. 运行脚本：`python release.py`
 2. 输入要发布的版本号 (格式: x.y.z, 例如: 1.0.0)
 3. 脚本将执行 pdm bump to x.y.z  命令来更新版本号(pyproject.toml)
-4. 修改 src\core\config\__init__.py 中的 __version__ 变量
-5. 修改 docs\CHANGELOG.md 中的版本号
+4. 修改 src/core/config/__init__.py 中的 __version__ 变量
 6. 提交更改并推送到远程仓库
     - 主题为 "🌟 releases: 发布 vx.y.z 版本"
 """
@@ -17,7 +16,6 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def run_command(command: str) -> None:
@@ -53,15 +51,15 @@ def update_version_in_file(file_path: Path, new_version: str) -> None:
 def update_changelog_version(file_path: Path, new_version: str) -> None:
     """更新CHANGELOG.md文件中的版本号
 
-    更新格式如:  vx.y.z 改为新的版本号
+    更新格式如: # 🚀 v1.6.6 - 累积更新！ 改为新的版本号
     """
-    version_pattern = re.compile(r"^(##\s+)\d+\.\d+\.\d+", re.MULTILINE)
+    version_pattern = re.compile(r"(# 🚀 v)(\d+\.\d+\.\d+)( - 累积更新！)")
     with file_path.open("r", encoding="utf-8") as file:
         content = file.read()
 
-    new_content, count = version_pattern.subn(rf"\1{new_version}", content)
+    new_content, count = version_pattern.subn(rf"\1{new_version}\3", content)
     if count == 0:
-        print(f"未找到CHANGELOG中的版本号模式，文件未修改: {file_path}")
+        print(f"未找到CHANGELOG中的版本号模式, 文件未修改: {file_path}")
         sys.exit(1)
 
     with file_path.open("w", encoding="utf-8") as file:
@@ -102,14 +100,6 @@ def main() -> None:
             update_version_in_file(version_file, version_with_v)
         else:
             print(f"⚠️  版本文件不存在: {version_file}，跳过")
-
-        # 3. 更新docs/CHANGELOG.md中的版本号
-        print(f"\n3. 更新CHANGELOG.md中的版本号...")
-        changelog_file = Path("docs/CHANGELOG.md")
-        if changelog_file.exists():
-            update_changelog_version(changelog_file, version)
-        else:
-            print(f"⚠️  CHANGELOG.md文件不存在: {changelog_file}，跳过")
 
         # 4. 提交更改
         print(f"\n4. 提交版本更改...")
