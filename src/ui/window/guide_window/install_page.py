@@ -13,7 +13,7 @@ from qfluentwidgets import (
     ProgressBar,
     SubtitleLabel,
 )
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QThreadPool, QUrl
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
@@ -218,7 +218,8 @@ class InstallQQPage(InstallPageBase):
         self.downloader.status_label_signal.connect(self.set_status_text)
         self.downloader.button_toggle_signal.connect(self.on_switch_button)
         self.downloader.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
-        self.downloader.start()
+
+        QThreadPool.globalInstance().start(self.downloader)
 
     def on_install(self) -> None:
         """安装"""
@@ -275,7 +276,8 @@ class InstallNapCatQQPage(InstallPageBase):
         self.downloader.status_label_signal.connect(self.set_status_text)
         self.downloader.button_toggle_signal.connect(self.on_switch_button)
         self.downloader.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
-        self.downloader.start()
+
+        QThreadPool.globalInstance().start(self.downloader)
 
     def on_install(self) -> None:
         """安装"""
