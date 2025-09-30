@@ -110,10 +110,12 @@ def main() -> None:
         print(f"\n5. 创建版本标签 {version_with_v}...")
         run_command(f'git tag -a {version_with_v} -m "发布 {version_with_v} 版本"')
 
+        # 推送更改和标签
+        print(f"\n6. 推送更改和标签到远程仓库...")
+        run_command("git push origin main")
+        run_command(f"git push origin {version_with_v}")
+
         print(f"\n🎉 版本 {version_with_v} 发布完成!")
-        print("\n请手动执行以下命令推送更改:")
-        print(f"git push origin main")
-        print(f"git push origin {version_with_v}")
 
     except Exception as e:
         print(f"❌ 发布过程中出现错误: {e}")
