@@ -59,8 +59,6 @@ class NapCatInstall(InstallBase):
             self.remove_old_file()
             # 解压文件
             self.unzip_file()
-            # 写入JS
-            self.write_js_file()
 
         except Exception as e:
             self.status_label_signal.emit(self.tr("安装失败"))
@@ -83,15 +81,6 @@ class NapCatInstall(InstallBase):
             zip_ref.extractall(self.install_path)
         self.zip_file_path.unlink()  # 移除安装包
         self.install_finish_signal.emit()
-
-    def write_js_file(self) -> None:
-        """写入 JS 文件"""
-        with open(str(self.install_path / "loadNapCat.js"), "w") as file:
-            file.write(
-                "(async () => {await import("
-                f"'{QUrl.fromLocalFile(str(self.install_path / 'napcat.mjs')).url()}'"
-                ")})()"
-            )
 
 
 class QQInstall(InstallBase):

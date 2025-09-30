@@ -18,7 +18,7 @@ from src.core.config.config_model import Config
 from src.core.config.operate_config import delete_config, update_config
 from src.core.network.email import offline_email
 from src.core.network.webhook import offline_webhook
-from src.core.utils.run_napCat import create_napcat_process
+from src.core.utils.run_napcat import create_napcat_process
 from src.ui.common.style_sheet import StyleSheet
 from src.ui.components.code_editor.editor import CodeEditor
 from src.ui.components.code_editor.highlight import LogHighlighter

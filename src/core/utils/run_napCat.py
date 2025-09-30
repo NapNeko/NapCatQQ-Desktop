@@ -27,6 +27,10 @@ def create_napcat_process(config: Config) -> QProcess:
     env.append(f"NAPCAT_LAUNCHER_PATH={PathFunc().napcat_path / 'NapCatWinBootMain.exe'}")
     env.append(f"NAPCAT_MAIN_PATH={PathFunc().napcat_path / 'napcat.mjs'}")
 
+    # 写入 loadNapCat.js 文件
+    with open(str(PathFunc().napcat_path / "loadNapCat.js"), "w") as file:
+        file.write("(async () => {await import(" f"'{ (PathFunc().napcat_path / 'napcat.mjs').as_uri() }'" ")})()")
+
     # 创建 QProcess 并配置
     process = QProcess()
     process.setEnvironment(env)
