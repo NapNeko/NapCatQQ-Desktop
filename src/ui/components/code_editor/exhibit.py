@@ -7,6 +7,7 @@ from PySide6.QtGui import QDesktopServices, QMouseEvent
 from PySide6.QtWidgets import QTextBrowser, QWidget
 
 # 项目内模块导入
+from src.ui.common.style_sheet import StyleSheet
 from src.ui.components.code_editor.editor import CodeEditor
 
 
@@ -27,6 +28,8 @@ class UpdateLogExhibit(QTextBrowser):
         self.setOpenExternalLinks(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         setFont(self)
+
+        StyleSheet.CODE_EDITOR.apply(self)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton and self.anchorAt(event.pos()):
