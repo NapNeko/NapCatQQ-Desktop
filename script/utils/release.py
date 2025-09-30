@@ -112,7 +112,6 @@ def main() -> None:
 
         # 推送更改和标签
         print(f"\n6. 推送更改和标签到远程仓库...")
-        run_command("git push origin main")
         run_command(f"git push origin {version_with_v}")
 
         print(f"\n🎉 版本 {version_with_v} 发布完成!")
