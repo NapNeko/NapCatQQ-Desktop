@@ -452,3 +452,6 @@ class ShowDialogCard(ShowDialogCardBase):
         self.config = config
         self.dialog = self.dialog(MainWindow())
         self.dialog.fill_config(config)
+
+    def clear(self) -> None:
+        pass
