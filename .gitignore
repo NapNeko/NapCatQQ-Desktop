@@ -45,6 +45,7 @@ PatchConfig.json
 # 项目特定目录和文件
 NapCat/*
 /src/pysidedeploy.spec
+/runtime/*
 
 ### 测试相关 ###
 /test/
