@@ -1,23 +1,24 @@
-# 🚀 v1.6.13 - 累积更新！
+# 🚀 v1.6.14 - 累积更新！
 
 ## 🛠 修复与优化
 - 🐛 修复离线通知[邮箱]无效的问题
 - 🐛 修复文件名命名错误的问题
-- 🐛 修复点击添加离线配置时,对话框异常的问题 [#44](https://github.com/NapNeko/NapCatQQ-Desktop/issues/44)
+- 🐛 修复点击添加离线配置时,对话框异常的问题 [#44]
 - 🐛 修复图标缺失的问题
 - 🐛 修复未安装 NapCatQQ 时, 页面仍然显示更新按钮的问题
 - 🌟 优化离线通知操作逻辑
 - 🌟 优化大量操作逻辑
-- 💡 使用 QRunnable 重构版本检查逻辑 [#49](https://github.com/NapNeko/NapCatQQ-Desktop/issues/49)
-- 💡 使用 QRunnable 重构安装模块和下载的线程逻辑 [[#50](https://github.com/NapNeko/NapCatQQ-Desktop/issues/50)]
+- 💡 使用 QRunnable 重构版本检查逻辑 [#49]
+- 💡 使用 QRunnable 重构安装模块和下载的线程逻辑 [#50]
 
 ## ✨ 新增与调整
 - ✨ 新增离线通知[邮箱]操作界面
 - ✨ 新增离线通知[Webhook]功能
 - ✨ 添加配置解析时验证配置是否合法
 - ✨ 添加自动重启 Bot 功能
-- ✨ 添加退出提示(当机器人仍在运行时，在关闭应用程序时警告用户) [[#58](https://github.com/NapNeko/NapCatQQ-Desktop/issues/58)]
-- ✨ 添加未安装NapCatQQ时 添加机器人添加限制(防呆) [[#58](https://github.com/NapNeko/NapCatQQ-Desktop/issues/58)]
+- ✨ 添加退出提示(当机器人仍在运行时，在关闭应用程序时警告用户) [#58]
+- ✨ 添加未安装NapCatQQ时 添加机器人添加限制(防呆) [#58]
+- ✨ 添加运行时文件路径并实现自动迁移功能(v1.6.14起文件结构发生变化) [#61]
 
 ## 📝 使用须知
 
