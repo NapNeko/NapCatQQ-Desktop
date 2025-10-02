@@ -242,7 +242,7 @@ class InstallQQPage(InstallPageBase):
         self.installer.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
         self.installer.install_finish_signal.connect(self.on_install_finsh)
 
-        self.installer.start()
+        QThreadPool.globalInstance().start(self.installer)
 
     def on_install_finsh(self) -> None:
         """安装完成"""
@@ -286,7 +286,8 @@ class InstallNapCatQQPage(InstallPageBase):
         self.installer.button_toggle_signal.connect(self.on_switch_button)
         self.installer.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
         self.installer.install_finish_signal.connect(self.install_finsh)
-        self.installer.start()
+
+        QThreadPool.globalInstance().start(self.installer)
 
     def install_finsh(self) -> None:
         """安装完成"""
