@@ -123,7 +123,7 @@ class NCDPage(PageBase):
                 "rem 定义应用程序路径",
                 'set "app_name=NapCatQQ-Desktop.exe"',
                 'set "current_app_path=%~dp0%app_name%"',
-                'set "new_app_path=%~dp0tmp\\%app_name%"',
+                'set "new_app_path=%~dp0runtime\\tmp\\%app_name%"',
                 "",
                 "rem 等待旧版进程退出，如果其还在运行的话",
                 ":wait_for_exit",
