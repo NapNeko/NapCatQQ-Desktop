@@ -416,31 +416,32 @@ class ShowDialogCard(ShowDialogCardBase):
     def __init__(self, dialog, icon, title, fill_config=None, content=None, parent=None):
         super().__init__(dialog, icon, title, content, parent)
         self.config = fill_config
+        self._dialog = dialog
 
         if self.config:
-            self.dialog.fill_config(self.config)
+            self._dialog.fill_config(self.config)
 
     def on_show_dialog(self):
         """重写方法"""
         if self.config:
-            self.dialog.fill_config(self.config)
+            self._dialog.fill_config(self.config)
         else:
             # 项目内模块导入
             from src.ui.window.main_window import MainWindow
 
-            self.dialog = self.dialog(MainWindow())
+            self._dialog = self._dialog(MainWindow())
 
-        if self.dialog.exec():
-            self._value = self.dialog.get_value()
+        if self._dialog.exec():
+            self._value = self._dialog.get_value()
 
     def get_value(self):
         """需要判断 dialog 是否有过初始化, 如果没有则初始化一次, 然后拿到默认值"""
-        if self._value is None:
+        if self._value is None and self._dialog is None:
             # 项目内模块导入
             from src.ui.window.main_window import MainWindow
 
-            self.dialog = self.dialog(MainWindow())
-            self._value = self.dialog.get_value()
+            self._dialog = self._dialog(MainWindow())
+            self._value = self._dialog.get_value()
         return self._value
 
     def fill_config(self, config: Any) -> None:
@@ -450,8 +451,8 @@ class ShowDialogCard(ShowDialogCardBase):
         from src.ui.window.main_window import MainWindow
 
         self.config = config
-        self.dialog = self.dialog(MainWindow())
-        self.dialog.fill_config(config)
+        self._dialog = self._dialog(MainWindow())
+        self._dialog.fill_config(config)
 
     def clear(self) -> None:
         pass
