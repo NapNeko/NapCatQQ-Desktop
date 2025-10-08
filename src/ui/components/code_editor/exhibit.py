@@ -29,7 +29,7 @@ class UpdateLogExhibit(QTextBrowser):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         setFont(self)
 
-        StyleSheet.CODE_EDITOR.apply(self)
+        StyleSheet.UPDATE_LOG_CARD.apply(self)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton and self.anchorAt(event.pos()):

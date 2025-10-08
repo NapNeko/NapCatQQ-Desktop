@@ -1,23 +1,24 @@
-UpdateLogCard {
+QTextBrowser {
     color: white;
     background-color: transparent;
     border: none;
     border-radius: 5px;
+    font-family: JetBrains Mono, Alimama FangYuanTi VF;
     padding: 2px 3px 2px 8px;
 }
 
 
-UpdateLogCard:hover {
+QTextBrowser:hover {
     background-color: transparent;
     border: none;
 }
 
-UpdateLogCard:focus {
+QTextBrowser:focus {
     background-color: transparent;
     border: none;
 }
 
-UpdateLogCard:disabled {
+QTextBrowser:disabled {
     background-color: transparent;
     border: none;
     color: rgba(255, 255, 255, 92);
