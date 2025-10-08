@@ -436,11 +436,14 @@ class ShowDialogCard(ShowDialogCardBase):
 
     def get_value(self):
         """需要判断 dialog 是否有过初始化, 如果没有则初始化一次, 然后拿到默认值"""
-        if self._value is None and self._dialog is None:
-            # 项目内模块导入
-            from src.ui.window.main_window import MainWindow
+        if self._value is None:
 
-            self._dialog = self._dialog(MainWindow())
+            if self._dialog is None:
+                # 项目内模块导入
+                from src.ui.window.main_window import MainWindow
+
+                self._dialog = self._dialog(MainWindow())
+
             self._value = self._dialog.get_value()
         return self._value
 
