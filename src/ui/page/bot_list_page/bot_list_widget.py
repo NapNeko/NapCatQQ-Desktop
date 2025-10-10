@@ -102,10 +102,13 @@ class BotListWidget(QWidget):
         Returns:
             bool: 如果有机器人正在运行返回 True, 否则返回 False
         """
-        for card in self.bot_list.bot_card_list:
-            if not card.bot_widget:
-                # 如果没有创建则表示没有运行
-                continue
-            if card.bot_widget.is_run:
-                return True
+        # TODO 此处需要调整为检查 bot_widget 的 is_run 状态
+        # for card in self.bot_list.bot_card_list:
+        #     if not card.bot_widget:
+        #         # 如果没有创建则表示没有运行
+        #         continue
+        #     if card.bot_widget.is_run:
+        #         return True
+        # return False
+
         return False

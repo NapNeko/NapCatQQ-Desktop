@@ -10,11 +10,7 @@ from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
 from src.core.utils.singleton import singleton
 from src.ui.common.icon import NapCatDesktopIcon
-from src.ui.page.add_page import AddWidget
-from src.ui.page.bot_list_page import BotListWidget
-from src.ui.page.home_page import HomeWidget
-from src.ui.page.setup_page import SetupWidget
-from src.ui.page.unit_page import UnitWidget
+from src.ui.page import BotListWidget, BotPage, HomeWidget, SetupWidget, UnitWidget
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
 from src.ui.window.main_window.title_bar import CustomTitleBar
 
@@ -85,17 +81,10 @@ class MainWindow(MSFluentWindow):
             text=self.tr("主页"),
             position=NavigationItemPosition.TOP,
         )
-
         self.addSubInterface(
-            interface=AddWidget().initialize(self),
-            icon=FluentIcon.ADD_TO,
-            text=self.tr("添加"),
-            position=NavigationItemPosition.TOP,
-        )
-        self.addSubInterface(
-            interface=BotListWidget().initialize(self),
-            icon=FluentIcon.MENU,
-            text=self.tr("列表"),
+            interface=BotPage(self),
+            icon=FluentIcon.ROBOT,
+            text=self.tr("BOT"),
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
@@ -112,9 +101,7 @@ class MainWindow(MSFluentWindow):
         )
 
     def _set_tray_icon(self):
-        """
-        ## 设置托盘图标
-        """
+        """设置托盘图标"""
         self.trayIcon = SystemTrayIcon(self)
         self.trayIcon.show()
 
