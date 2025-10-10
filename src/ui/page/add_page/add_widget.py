@@ -7,7 +7,6 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.utils.singleton import singleton
-from src.ui.common.style_sheet import StyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.add_page.add_page_enum import ConnectType
 from src.ui.page.add_page.add_top_card import AddTopCard
@@ -130,7 +129,7 @@ class AddWidget(QWidget):
 
     def _apply_styles(self) -> None:
         """应用样式表"""
-        StyleSheet.ADD_WIDGET.apply(self)
+        ...
 
     def get_config(self) -> Dict[str, Any]:
         """返回配置结果

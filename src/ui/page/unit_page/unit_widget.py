@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 # 项目内模块导入
 from src.core.utils.get_version import GetVersion
 from src.core.utils.singleton import singleton
-from src.ui.common.style_sheet import StyleSheet
+from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.unit_page.napcat_desktop_page import NCDPage
 from src.ui.page.unit_page.napcat_page import NapCatPage
@@ -126,7 +126,7 @@ class UnitWidget(QWidget):
 
     def _apply_styles(self) -> None:
         """应用样式表"""
-        StyleSheet.UNIT_WIDGET.apply(self)
+        PageStyleSheet.UNIT.apply(self)
 
     # ==================== 槽函数 ====================
     @Slot()

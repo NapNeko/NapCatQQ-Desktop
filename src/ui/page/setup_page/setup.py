@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.utils.singleton import singleton
-from src.ui.common.style_sheet import StyleSheet
+from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.code_editor import CodeExibit
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.setup_page.general import General
@@ -51,7 +51,7 @@ class SetupWidget(QWidget):
         self.setLayout(self.v_box_layout)
 
         # 应用样式表
-        StyleSheet.SETUP_WIDGET.apply(self)
+        PageStyleSheet.SETUP.apply(self)
         return self
 
     def _create_view(self) -> None:

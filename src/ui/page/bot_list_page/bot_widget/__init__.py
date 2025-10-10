@@ -19,7 +19,6 @@ from src.core.config.operate_config import delete_config, update_config
 from src.core.network.email import offline_email
 from src.core.network.webhook import offline_webhook
 from src.core.utils.run_napcat import create_napcat_process
-from src.ui.common.style_sheet import StyleSheet
 from src.ui.components.code_editor.editor import CodeEditor
 from src.ui.components.code_editor.highlight import LogHighlighter
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
@@ -65,8 +64,6 @@ class BotWidget(QWidget):
         # 调用方法
         self._set_layout()
         self._add_tool_tips()
-
-        StyleSheet.BOT_WIDGET.apply(self)
 
     def _create_view(self) -> None:
         """创建并配置堆叠视图页面"""

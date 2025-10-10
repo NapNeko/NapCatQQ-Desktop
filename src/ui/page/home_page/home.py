@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Self
 
 # 项目内模块导入
 from src.core.utils.singleton import singleton
-from src.ui.common.style_sheet import StyleSheet
+from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.home_page.display_view import DisplayViewWidget
 
@@ -36,6 +36,6 @@ class HomeWidget(TransparentStackedWidget):
         self.display_view.button_group.go_button.clicked.connect(lambda: self.parent().setCurrentIndex(1))
 
         # 应用样式表
-        StyleSheet.HOME_WIDGET.apply(self)
+        PageStyleSheet.HOME.apply(self)
 
         return self

@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTextEdit, QWidget
 
 # 项目内模块导入
 from src.core.utils.logger import logger
-from src.ui.common.style_sheet import StyleSheet
+from src.ui.common.style_sheet import WidgetStyleSheet
 from src.ui.components.code_editor.controls import LineNumberArea
 from src.ui.components.code_editor.highlight import JsonHighlighter
 
@@ -61,7 +61,7 @@ class CodeEditorBase(PlainTextEdit):
         self._update_line_number_area_width()
 
         # 应用样式
-        StyleSheet.CODE_EDITOR.apply(self)
+        WidgetStyleSheet.CODE_EDITOR.apply(self)
 
         # 连接信号
         self._connect_signals()

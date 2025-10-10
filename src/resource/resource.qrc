@@ -28,23 +28,17 @@
     </qresource>
 
     <qresource prefix="style">
-        <file>style/dark/home_widget.qss</file>
-        <file>style/dark/setup_widget.qss</file>
-        <file>style/dark/add_widget.qss</file>
-        <file>style/dark/bot_list_widget.qss</file>
-        <file>style/dark/bot_widget.qss</file>
-        <file>style/dark/unit_widget.qss</file>
-        <file>style/dark/update_log_card.qss</file>
-        <file>style/dark/code_editor.qss</file>
+        <file>style/dark/page/home.qss</file>
+        <file>style/dark/page/setup.qss</file>
+        <file>style/dark/page/unit.qss</file>
+        <file>style/dark/widget/update_log_card.qss</file>
+        <file>style/dark/widget/code_editor.qss</file>
 
-        <file>style/light/home_widget.qss</file>
-        <file>style/light/setup_widget.qss</file>
-        <file>style/light/add_widget.qss</file>
-        <file>style/light/bot_list_widget.qss</file>
-        <file>style/light/bot_widget.qss</file>
-        <file>style/light/unit_widget.qss</file>
-        <file>style/light/update_log_card.qss</file>
-        <file>style/light/code_editor.qss</file>
+        <file>style/light/page/home.qss</file>
+        <file>style/light/page/setup.qss</file>
+        <file>style/light/page/unit.qss</file>
+        <file>style/light/widget/update_log_card.qss</file>
+        <file>style/light/widget/code_editor.qss</file>
     </qresource>
 
     <qresource prefix="template">

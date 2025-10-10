@@ -6,7 +6,6 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.utils.singleton import singleton
-from src.ui.common.style_sheet import StyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.bot_list_page.bot_list import BotList
 from src.ui.page.bot_list_page.bot_top_card import BotTopCard
@@ -73,7 +72,7 @@ class BotListWidget(QWidget):
 
     def _apply_styles(self) -> None:
         """应用样式表"""
-        StyleSheet.BOT_LIST_WIDGET.apply(self)
+        ...
 
     # ==================== 公共方法 ====================
     def run_all_bot(self) -> None:
