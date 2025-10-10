@@ -48,7 +48,7 @@ class AutoRestartSchedule(BaseModel):
 
 class BotConfig(BaseModel):
     name: str
-    QQID: str
+    QQID: str | int
     musicSignUrl: str
     autoRestartSchedule: AutoRestartSchedule
 
@@ -71,19 +71,28 @@ class BotConfig(BaseModel):
 
     @field_validator("QQID")
     @staticmethod
-    def validate_qqid(value: str) -> str:
+    def validate_qqid(value: str | int) -> int:
         """验证QQID
 
-        如果QQID为空, 则抛出异常
+        v1.6.x版本及以前使用的是 str 类型, 现在要处理成 int 类型储存
 
         Args:
-            value (str): QQID
+            value (str | int): QQID, QQ号
         Returns:
-            str: 验证后的QQID
+            int: 验证后的QQID
         """
-        if not value:
-            raise ValueError("QQ号不能为空, 请重新输入")
-        return value
+        # 如果已经是整数，直接通过
+        if isinstance(value, int):
+            return value
+
+        # 如果是字符串，尝试转换为整数
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                raise ValueError(f"QQ号 '{value}' 无法转换为整数")
+
+        raise TypeError("QQ号必须是字符串或整数")
 
 
 class NetworkBaseConfig(BaseModel):
