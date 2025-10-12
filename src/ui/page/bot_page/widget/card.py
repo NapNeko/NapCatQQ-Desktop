@@ -3,10 +3,24 @@
 """
 Bot 卡片
 """
+from __future__ import annotations
 
 # 第三方库导入
 import httpx
-from qfluentwidgets import HeaderCardWidget, ImageLabel
+from qfluentwidgets import (
+    CaptionLabel,
+    FlowLayout,
+    FluentIcon,
+    FluentIconBase,
+    HeaderCardWidget,
+    IconWidget,
+    ImageLabel,
+    PillPushButton,
+    ToolTipFilter,
+    TransparentDropDownToolButton,
+    TransparentPushButton,
+    setFont,
+)
 from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
@@ -19,11 +33,11 @@ from PySide6.QtCore import (
     QUrlQuery,
     Signal,
 )
-from PySide6.QtGui import QEnterEvent, QPixmap
-from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import QColor, QEnterEvent, QPixmap
+from PySide6.QtWidgets import QAbstractButton, QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.config.config_model import Config
+from src.core.config.config_model import Config, ConnectConfig
 from src.core.network.urls import Urls
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar
@@ -33,6 +47,30 @@ class BotCard(HeaderCardWidget):
     """Bot 卡片 Widget"""
 
     config: Config
+
+    class ButtonGroup(QWidget):
+        """按钮组, 当一个按钮点击后, 另一个按钮隐藏"""
+
+        def __init__(self, btn_1: QAbstractButton, btn_2: QAbstractButton, parent: BotCard) -> None:
+            super().__init__(parent)
+
+            # 创建控件
+            self._btn_1 = btn_1
+            self._btn_2 = btn_2
+
+            # 设置控件
+            self._btn_2.hide()
+
+            # 链接信号
+            self._btn_1.clicked.connect(lambda: (self._btn_1.hide(), self._btn_2.show()))
+            self._btn_2.clicked.connect(lambda: (self._btn_2.hide(), self._btn_1.show()))
+
+            # 设置布局
+            self.h_box_layout = QHBoxLayout(self)
+            self.h_box_layout.setContentsMargins(0, 0, 0, 0)
+            self.h_box_layout.setSpacing(8)
+            self.h_box_layout.addWidget(self._btn_1)
+            self.h_box_layout.addWidget(self._btn_2)
 
     def __init__(self, bot_config: Config, parent: QWidget | None = None) -> None:
         """构造函数
@@ -47,14 +85,24 @@ class BotCard(HeaderCardWidget):
 
         # 创建控件
         self.avatar_widget = BotAvatarWidget(int(self.config.bot.QQID), self)
+        self.info_widget = BotInfoWidget(self.config, self)
+
+        self.menu_button = TransparentDropDownToolButton(FluentIcon.MENU, self)
+        self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
+        self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
+        self.run_button_group = self.ButtonGroup(self.run_button, self.stop_button, self)
 
         # 设置控件
-        self.setTitle(self.config.bot.name)
+        self.setTitle(f"{self.config.bot.name} ({self.config.bot.QQID})")
         self.setFixedSize(500, 240)
 
         # 设置布局
         self.viewLayout.addWidget(self.avatar_widget, 1)
-        self.viewLayout.addWidget(QWidget(), 2)
+        self.viewLayout.addWidget(self.info_widget, 2)
+
+        self.headerLayout.addStretch(1)
+        self.headerLayout.addWidget(self.run_button_group)
+        self.headerLayout.addWidget(self.menu_button)
 
 
 class BotAvatarWidget(QWidget):
@@ -100,13 +148,12 @@ class BotAvatarWidget(QWidget):
     def __init__(self, qq_id: int, parent: BotCard) -> None:
         super().__init__(parent)
         # 创建控件
-        self.imageLabel = ImageLabel(self)
+        self.image_label = ImageLabel(self)
 
         # 设置控件
-        self.imageLabel.setImage(StaticIcon.LOGO.path())
-        self.imageLabel.scaledToWidth(128)
-        self.imageLabel.setBorderRadius(8, 8, 8, 8)
-        self.raise_()
+        self.image_label.setImage(StaticIcon.LOGO.path())
+        self.image_label.scaledToWidth(128)
+        self.image_label.setBorderRadius(8, 8, 8, 8)
 
         # 设置属性
         self.qq_id = qq_id
@@ -162,9 +209,9 @@ class BotAvatarWidget(QWidget):
         worker = self.GetAvatarWoker(value)
         worker.avatar_pixmap_signal.connect(
             lambda pixmap: (
-                self.imageLabel.setImage(pixmap),
-                self.imageLabel.scaledToWidth(128),
-                self.imageLabel.setBorderRadius(8, 8, 8, 8),
+                self.image_label.setImage(pixmap),
+                self.image_label.scaledToWidth(128),
+                self.image_label.setBorderRadius(8, 8, 8, 8),
             )
         )
 
@@ -174,5 +221,95 @@ class BotAvatarWidget(QWidget):
 class BotInfoWidget(QWidget):
     """Bot 信息展示控件"""
 
-    def __init__(self, parent: BotCard) -> None:
+    class InfoWidget(QWidget):
+
+        def __init__(self, icon: FluentIconBase, text: str, parent: BotInfoWidget) -> None:
+            super().__init__(parent)
+            # 设置属性
+            self._icon = icon.colored(QColor("#454655"), QColor("#fff3fa"))
+
+            # 创建控件
+            self.icon_widget = IconWidget(self._icon, self)
+            self.text_label = CaptionLabel(text, self)
+
+            # 设置控件
+            self.icon_widget.setFixedSize(16, 16)
+            setFont(self.text_label, 16)
+
+            # 设置布局
+            self.h_box_layout = QHBoxLayout(self)
+            self.h_box_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+            self.h_box_layout.setContentsMargins(0, 0, 0, 0)
+            self.h_box_layout.setSpacing(8)
+            self.h_box_layout.addWidget(self.icon_widget)
+            self.h_box_layout.addWidget(self.text_label)
+
+    class TagWidget(QWidget):
+
+        def __init__(self, connect_config: ConnectConfig, parent: BotInfoWidget) -> None:
+            super().__init__(parent)
+            # 创建控件
+            self.icon_widget = IconWidget(FluentIcon.TAG, self)
+            self.h_box_layout = QHBoxLayout(self)
+            self.flow_layout = FlowLayout()
+
+            mapping = [
+                ("HTTPC", connect_config.httpClients),
+                ("HTTPS", connect_config.httpServers),
+                ("SSE", connect_config.httpSseServers),
+                ("WSC", connect_config.websocketClients),
+                ("WSS", connect_config.websocketServers),
+            ]
+
+            for label, items in mapping:
+                if items:
+                    tag = PillPushButton(label, self)
+                    tag.setFixedHeight(22)
+                    tag.setCheckable(False)
+                    self.flow_layout.addWidget(tag)
+
+            # 设置控件
+            self.icon_widget.setFixedSize(16, 16)
+
+            # 设置布局
+            self.flow_layout.setContentsMargins(0, 0, 0, 0)
+            self.flow_layout.setSpacing(2)
+            self.h_box_layout.setContentsMargins(0, 0, 0, 0)
+            self.h_box_layout.setSpacing(8)
+            self.h_box_layout.addWidget(self.icon_widget)
+            self.h_box_layout.addLayout(self.flow_layout)
+
+    def __init__(self, config: Config, parent: BotCard) -> None:
         super().__init__(parent)
+        # 设置属性
+        self._config = config
+
+        # 创建控件
+        self._run_time_info = self.InfoWidget(FluentIcon.DATE_TIME, f"未运行", self)
+        self._memory_info = self.InfoWidget(FluentIcon.CALENDAR, f"-M / -M", self)
+        self._tag_info = self.TagWidget(self._config.connect, self)
+
+        # 设置布局
+        self.v_box_layout = QVBoxLayout(self)
+        self.v_box_layout.setContentsMargins(0, 0, 0, 0)
+        self.v_box_layout.setSpacing(8)
+        self.v_box_layout.addWidget(self._run_time_info)
+        self.v_box_layout.addWidget(self._memory_info)
+        self.v_box_layout.addWidget(self._tag_info)
+        self.v_box_layout.addStretch(1)
+
+        # 调用方法
+        self.setup_tooltip()
+
+    def setup_tooltip(self) -> None:
+        """设置工具提示"""
+        self._run_time_info.setToolTip(self.tr("运行时长"))
+        self._memory_info.setToolTip(self.tr("内存占用"))
+        self._tag_info.setToolTip(self.tr("网络类型"))
+
+        for i in range(self.v_box_layout.count()):
+            item = self.v_box_layout.itemAt(i)
+
+            if widget := item.widget():
+                widget.setToolTipDuration(1000)
+                widget.installEventFilter(ToolTipFilter(widget, showDelay=300))
