@@ -44,6 +44,7 @@ class BotPage(QWidget):
         self.vBoxLayout.addWidget(self.view, 9)
 
         # 调用方法
+        self.conncet_signal()
         self.setup_view()
 
     def setup_view(self) -> None:
@@ -56,3 +57,7 @@ class BotPage(QWidget):
 
         # 设置初始页面
         self.view.setCurrentWidget(self.bot_list_page)
+
+    def conncet_signal(self) -> None:
+        """链接信号"""
+        self.view.currentChanged.connect(self.header.setup_breadcrumb_bar)
