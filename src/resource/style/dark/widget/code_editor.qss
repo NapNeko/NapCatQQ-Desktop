@@ -1,5 +1,4 @@
 PlainTextEdit {
-    font-family: JetBrains Mono, Alimama FangYuanTi VF;
     color: #ffffff;
 }
 
@@ -9,6 +8,5 @@ PlainTextEdit::selection {
 }
 
 QTextBrowser {
-    font-family: JetBrains Mono, Alimama FangYuanTi VF;
     color: #ffffff;
 }

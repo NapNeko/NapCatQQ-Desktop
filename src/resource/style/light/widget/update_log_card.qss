@@ -3,7 +3,6 @@ QTextBrowser {
     background-color: transparent;
     border: none;
     border-radius: 5px;
-    font-family: JetBrains Mono, Alimama FangYuanTi VF;
     padding: 2px 3px 2px 8px;
 }
 

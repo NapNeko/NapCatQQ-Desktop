@@ -5,7 +5,7 @@ import json
 from typing import Optional
 
 # 第三方库导入
-from qfluentwidgets import FluentIcon, PlainTextEdit, TeachingTip
+from qfluentwidgets import FluentIcon, PlainTextEdit, TeachingTip, isDarkTheme
 from PySide6.QtCore import QRect, QRectF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
@@ -121,13 +121,7 @@ class CodeEditorBase(PlainTextEdit):
             if block.isVisible() and bottom >= event.rect().top():
                 line_number = str(block_number + 1)
                 rect = QRectF(0, top, area_width - text_margin, text_height)
-
-                # 设置行号颜色
-                if block_number == self.current_line or block_number in self.selected_lines:
-                    painter.setPen(QColor(255, 255, 255))
-                else:
-                    painter.setPen(Qt.GlobalColor.gray)
-
+                painter.setPen(Qt.GlobalColor.gray)
                 painter.drawText(rect, Qt.AlignmentFlag.AlignRight, line_number)
 
             block = block.next()
@@ -427,6 +421,7 @@ class JsonEditor(CodeEditor):
 
     def _connect_signals(self) -> None:
         """连接信号与槽"""
+        super()._connect_signals()
         self.cursorPositionChanged.connect(self._on_cursor_position_changed)
         self.updateRequest.connect(self._on_update_request)
 
