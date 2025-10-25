@@ -58,8 +58,22 @@ class BotListPage(ScrollArea):
         # 创建 Bot Card 并添加到布局
         for config in self._bot_config_list:
             card = BotCard(config)
+            card.remove_signal.connect(self.remove_bot_by_qqid)
             self._bot_card_list.append(card)
             self.view_layout.addWidget(card)
+            
+    def remove_bot_by_qqid(self, qqid: str) -> None:
+        """通过 QQID 移除 Bot Card
+
+        用于移除 view 中指定 QQID 的 Bot Card
+        """
+        for card in self._bot_card_list:
+            if str(card.config.bot.QQID) == qqid:
+                self._bot_card_list.remove(card)
+                self.view_layout.removeWidget(card)
+                card.setParent(None)
+                card.deleteLater()
+                break
 
     def remove_all_bot(self) -> None:
         """移除所有 Bot Card

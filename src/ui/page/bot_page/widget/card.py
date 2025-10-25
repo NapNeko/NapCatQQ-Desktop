@@ -4,11 +4,15 @@
 Bot 卡片
 """
 from __future__ import annotations
-import psutil
+
+# 标准库导入
+from time import monotonic
 
 # 第三方库导入
 import httpx
+import psutil
 from qfluentwidgets import (
+    Action,
     CaptionLabel,
     FlowLayout,
     FluentIcon,
@@ -21,20 +25,21 @@ from qfluentwidgets import (
     TransparentDropDownToolButton,
     TransparentPushButton,
     setFont,
+    TransparentToolButton
 )
 from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
     QObject,
     QPoint,
+    QProcess,
     QPropertyAnimation,
     QRunnable,
     Qt,
     QThreadPool,
+    QTimer,
     QUrlQuery,
     Signal,
-    QProcess,
-    QTimer
 )
 from PySide6.QtGui import QColor, QEnterEvent, QPixmap
 from PySide6.QtWidgets import QAbstractButton, QHBoxLayout, QVBoxLayout, QWidget
@@ -42,70 +47,16 @@ from PySide6.QtWidgets import QAbstractButton, QHBoxLayout, QVBoxLayout, QWidget
 # 项目内模块导入
 from src.core.config.config_model import Config, ConnectConfig
 from src.core.network.urls import Urls
+from src.core.utils.run_napcat import manager_process
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar
-from src.core.utils.run_napcat import manager_process
-from time import monotonic
+from src.ui.components.message_box import AskBox
 
 
 class BotCard(HeaderCardWidget):
     """Bot 卡片 Widget"""
-
-    config: Config
-
-    class ButtonGroup(QWidget):
-        """按钮组, 当一个按钮点击后, 另一个按钮隐藏"""
-
-        def __init__(self, btn_1: QAbstractButton, btn_2: QAbstractButton, parent: BotCard) -> None:
-            super().__init__(parent)
-            # 属性
-            self.parent_bot_card = parent
-
-            # 创建控件
-            self._btn_1 = btn_1
-            self._btn_2 = btn_2
-
-            # 设置控件
-            self._btn_2.hide()
-
-            # 设置布局
-            self.h_box_layout = QHBoxLayout(self)
-            self.h_box_layout.setContentsMargins(0, 0, 0, 0)
-            self.h_box_layout.setSpacing(8)
-            self.h_box_layout.addWidget(self._btn_1)
-            self.h_box_layout.addWidget(self._btn_2)
-
-            # 链接信号
-            self._btn_1.clicked.connect(self.slot_run_button)
-            self._btn_2.clicked.connect(self.slot_stop_button)
-            manager_process.process_changed_signal.connect(self.slot_process_changed_button)
-
-        # =================== 槽函数 ====================
-        def slot_run_button(self) -> None:
-            """处理运行按钮点击"""
-            manager_process.create_napcat_process(self.parent_bot_card.config)
-        
-        def slot_stop_button(self) -> None:
-            """处理停止按钮点击"""
-            manager_process.stop_process(str(self.parent_bot_card.config.bot.QQID))
-        
-        def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
-            """处理 NapCatQQ 进程变化时, 切换按钮显示
-
-            Args:
-                qq_id (str): QQ 号
-                state (QProcess.ProcessState): 进程状态
-            """
-            if qq_id != str(self.parent_bot_card.config.bot.QQID):
-                return
-            
-            if state == QProcess.ProcessState.Running:
-                self._btn_1.hide()
-                self._btn_2.show()
-            else:
-                self._btn_2.hide()
-                self._btn_1.show()
-            
+    # 当自身被移除时发出信号 值为QQID
+    remove_signal = Signal(str)
 
     def __init__(self, bot_config: Config, parent: QWidget | None = None) -> None:
         """构造函数
@@ -121,23 +72,68 @@ class BotCard(HeaderCardWidget):
         # 创建控件
         self.avatar_widget = BotAvatarWidget(int(self.config.bot.QQID), self)
         self.info_widget = BotInfoWidget(self.config, self)
-
-        self.menu_button = TransparentDropDownToolButton(FluentIcon.MENU, self)
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
         self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
-        self.run_button_group = self.ButtonGroup(self.run_button, self.stop_button, self)
+        self.remove_batton = TransparentToolButton(FluentIcon.DELETE, self)
 
         # 设置控件
         self.setTitle(f"{self.config.bot.name} ({self.config.bot.QQID})")
         self.setFixedSize(500, 240)
+        self.stop_button.hide()
 
         # 设置布局
         self.viewLayout.addWidget(self.avatar_widget, 1)
         self.viewLayout.addWidget(self.info_widget, 2)
 
         self.headerLayout.addStretch(1)
-        self.headerLayout.addWidget(self.run_button_group)
-        self.headerLayout.addWidget(self.menu_button)
+        self.headerLayout.addWidget(self.run_button)
+        self.headerLayout.addWidget(self.stop_button)
+        self.headerLayout.addWidget(self.remove_batton)
+
+        # 链接信号
+        manager_process.process_changed_signal.connect(self.slot_process_changed_button)
+        self.run_button.clicked.connect(self.slot_run_button)
+        self.stop_button.clicked.connect(self.slot_stop_button)
+        self.remove_batton.clicked.connect(self.slot_remove_button)
+
+    # ==================== 槽函数 ====================
+    def slot_run_button(self) -> None:
+        """处理运行按钮点击"""
+        manager_process.create_napcat_process(self.config)
+
+    def slot_stop_button(self) -> None:
+        """处理停止按钮点击"""
+        manager_process.stop_process(str(self.config.bot.QQID))
+
+    def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
+        """处理 NapCatQQ 进程变化时, 切换按钮显示
+
+        Args:
+            qq_id (str): QQ 号
+            state (QProcess.ProcessState): 进程状态
+        """
+        if qq_id != str(self.config.bot.QQID):
+            return
+
+        if state == QProcess.ProcessState.Running:
+            self._btn_1.hide()
+            self._btn_2.show()
+        else:
+            self._btn_2.hide()
+            self._btn_1.show()
+
+    def slot_remove_button(self) -> None:
+        """处理移除自身槽函数"""
+        # 项目内模块导入
+        from src.ui.window.main_window.window import MainWindow
+
+        if AskBox(
+            self.tr("确认移除 Bot"),
+            self.tr("确定要移除此 Bot 吗？\n此操作无法恢复!"),
+            MainWindow()
+        ).exec():
+            manager_process.stop_process(str(self.config.bot.QQID))
+            self.remove_signal.emit(str(self.config.bot.QQID))
 
 
 class BotAvatarWidget(QWidget):

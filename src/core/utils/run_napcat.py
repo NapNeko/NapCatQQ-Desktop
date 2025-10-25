@@ -2,16 +2,19 @@
 """
 ## 运行 NapCat 流程
 """
+# 标准库导入
+from collections import deque
+
+# 第三方库导入
 import psutil
-from PySide6.QtCore import QProcess, QObject, Signal
+from PySide6.QtCore import QObject, QProcess, Signal
 
 # 项目内模块导入
 from src.core.config.config_model import Config
+from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
 from src.ui.components.info_bar import error_bar
 
-from src.core.utils.logger import logger
-from collections import deque
 
 class ManagerNapCatQQProcess(QObject):
     """NapCatQQ 进程管理类
@@ -106,7 +109,7 @@ class ManagerNapCatQQProcess(QObject):
             process.deleteLater()
 
         logger.info(f"NapCatQQ 进程已停止(QQID: {qq_id})")
-        self.process_changed_signal.emit(qq_id, process.state())
+        self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
 
     def get_memory_usage(self, qq_id: str) -> int:
         """获取指定 QQ 号的 NapCatQQ 进程树内存使用情况"""
