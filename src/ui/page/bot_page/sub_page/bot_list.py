@@ -68,3 +68,4 @@ class BotListPage(ScrollArea):
         """
         self._bot_config_list.clear()
         self.view_layout.takeAllWidgets()
+        

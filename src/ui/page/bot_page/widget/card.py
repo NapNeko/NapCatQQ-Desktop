@@ -4,6 +4,7 @@
 Bot 卡片
 """
 from __future__ import annotations
+import psutil
 
 # 第三方库导入
 import httpx
@@ -32,6 +33,8 @@ from PySide6.QtCore import (
     QThreadPool,
     QUrlQuery,
     Signal,
+    QProcess,
+    QTimer
 )
 from PySide6.QtGui import QColor, QEnterEvent, QPixmap
 from PySide6.QtWidgets import QAbstractButton, QHBoxLayout, QVBoxLayout, QWidget
@@ -41,6 +44,8 @@ from src.core.config.config_model import Config, ConnectConfig
 from src.core.network.urls import Urls
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar
+from src.core.utils.run_napcat import manager_process
+from time import monotonic
 
 
 class BotCard(HeaderCardWidget):
@@ -53,6 +58,8 @@ class BotCard(HeaderCardWidget):
 
         def __init__(self, btn_1: QAbstractButton, btn_2: QAbstractButton, parent: BotCard) -> None:
             super().__init__(parent)
+            # 属性
+            self.parent_bot_card = parent
 
             # 创建控件
             self._btn_1 = btn_1
@@ -61,16 +68,44 @@ class BotCard(HeaderCardWidget):
             # 设置控件
             self._btn_2.hide()
 
-            # 链接信号
-            self._btn_1.clicked.connect(lambda: (self._btn_1.hide(), self._btn_2.show()))
-            self._btn_2.clicked.connect(lambda: (self._btn_2.hide(), self._btn_1.show()))
-
             # 设置布局
             self.h_box_layout = QHBoxLayout(self)
             self.h_box_layout.setContentsMargins(0, 0, 0, 0)
             self.h_box_layout.setSpacing(8)
             self.h_box_layout.addWidget(self._btn_1)
             self.h_box_layout.addWidget(self._btn_2)
+
+            # 链接信号
+            self._btn_1.clicked.connect(self.slot_run_button)
+            self._btn_2.clicked.connect(self.slot_stop_button)
+            manager_process.process_changed_signal.connect(self.slot_process_changed_button)
+
+        # =================== 槽函数 ====================
+        def slot_run_button(self) -> None:
+            """处理运行按钮点击"""
+            manager_process.create_napcat_process(self.parent_bot_card.config)
+        
+        def slot_stop_button(self) -> None:
+            """处理停止按钮点击"""
+            manager_process.stop_process(str(self.parent_bot_card.config.bot.QQID))
+        
+        def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
+            """处理 NapCatQQ 进程变化时, 切换按钮显示
+
+            Args:
+                qq_id (str): QQ 号
+                state (QProcess.ProcessState): 进程状态
+            """
+            if qq_id != str(self.parent_bot_card.config.bot.QQID):
+                return
+            
+            if state == QProcess.ProcessState.Running:
+                self._btn_1.hide()
+                self._btn_2.show()
+            else:
+                self._btn_2.hide()
+                self._btn_1.show()
+            
 
     def __init__(self, bot_config: Config, parent: QWidget | None = None) -> None:
         """构造函数
@@ -301,6 +336,10 @@ class BotInfoWidget(QWidget):
         # 调用方法
         self.setup_tooltip()
 
+        # 链接信号
+        manager_process.process_changed_signal.connect(self.slot_run_time_start)
+        manager_process.process_changed_signal.connect(self.slot_memory_usage_start)
+
     def setup_tooltip(self) -> None:
         """设置工具提示"""
         self._run_time_info.setToolTip(self.tr("运行时长"))
@@ -313,3 +352,63 @@ class BotInfoWidget(QWidget):
             if widget := item.widget():
                 widget.setToolTipDuration(1000)
                 widget.installEventFilter(ToolTipFilter(widget, showDelay=300))
+
+    # =================== 槽函数 ====================
+    def slot_run_time_start(self, qq_id: str, state: QProcess.ProcessState) -> None:
+        """处理运行时长开始更新槽函数"""
+        if qq_id != str(self._config.bot.QQID):
+            return
+
+        if state == QProcess.ProcessState.Running:
+            # 获取当前时间作为起始时间
+            self.start_time = monotonic()
+
+            # 检查是否已有计时器在运行
+            if hasattr(self, "_timer"):
+                self._run_time_timer.stop()
+                self._run_time_timer.deleteLater()
+
+            # 创建新的计时器
+            timer = QTimer(self)
+            # 每秒更新一次运行时长显示
+            timer.timeout.connect(lambda: self._run_time_info.text_label.setText(
+                f"{int(monotonic() - self.start_time)//3600:02}:{(int(monotonic() - self.start_time)%3600)//60:02}:{int(monotonic() - self.start_time)%60:02}"
+            ))
+            timer.start(1000)
+            # 保存计时器引用
+            self._run_time_timer = timer
+        else:
+            if hasattr(self, "_run_time_timer"):
+                self._run_time_timer.stop()
+                self._run_time_timer.deleteLater()
+                del self._run_time_timer
+
+            self._run_time_info.text_label.setText("未运行")
+
+    def slot_memory_usage_start(self, qq_id: str, state: QProcess.ProcessState) -> None:
+        """处理内存占用开始更新槽函数"""
+        if qq_id != str(self._config.bot.QQID):
+            return
+
+        if state == QProcess.ProcessState.Running:
+            # 检查是否已有计时器在运行
+            if hasattr(self, "_memory_timer"):
+                self._memory_timer.stop()
+                self._memory_timer.deleteLater()
+
+            # 创建新的计时器
+            timer = QTimer(self)
+            # 每秒更新一次内存占用显示
+            timer.timeout.connect(lambda: self._memory_info.text_label.setText(
+                f"{manager_process.get_memory_usage(qq_id)} MB / {int(psutil.virtual_memory().total / (1024 * 1024))} MB"
+            ))
+            timer.start(1000)
+            # 保存计时器引用
+            self._memory_timer = timer
+        else:
+            if hasattr(self, "_memory_timer"):
+                self._memory_timer.stop()
+                self._memory_timer.deleteLater()
+                del self._memory_timer
+
+            self._memory_info.text_label.setText("-M / -M")
