@@ -116,11 +116,11 @@ class BotCard(HeaderCardWidget):
             return
 
         if state == QProcess.ProcessState.Running:
-            self._btn_1.hide()
-            self._btn_2.show()
+            self.run_button.hide()
+            self.stop_button.show()
         else:
-            self._btn_2.hide()
-            self._btn_1.show()
+            self.run_button.hide()
+            self.stop_button.show()
 
     def slot_remove_button(self) -> None:
         """处理移除自身槽函数"""
