@@ -10,7 +10,7 @@ dependencies = [
     "pydantic>=2.9.0",
     "psutil>=6.0.0",
     "markdown>=3.7",
-    "pyinstaller>=6.13.0",
+    "pyinstaller>=6.16.0",
     "PySide6-Fluent-Widgets[full]>=1.9.1",
 ]
 requires-python = "==3.12.*"

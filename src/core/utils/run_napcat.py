@@ -107,6 +107,7 @@ class ManagerNapCatQQProcess(QObject):
             process.kill()
             process.waitForFinished()
             process.deleteLater()
+            self.napcat_process_dict.pop(qq_id)
 
         logger.info(f"NapCatQQ 进程已停止(QQID: {qq_id})")
         self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
