@@ -47,8 +47,7 @@
     </qresource>
 
     <qresource prefix="font">
-        <file>font/JB-MONO.ttf</file>
-        <file>font/ALMM.ttf</file>
+        <file>font/JB-MAPLE.ttf</file>
     </qresource>
 
 </RCC>
