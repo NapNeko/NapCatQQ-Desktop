@@ -10,7 +10,6 @@ from enum import Enum
 from string import Template
 
 # 第三方库导入
-from qfluentwidgets.common.file import QFluentFile
 from PySide6.QtCore import QFile, QObject, QRunnable, QThreadPool, Signal
 
 # 项目内模块导入
@@ -162,11 +161,14 @@ class Email(QObject, QRunnable):
 def test_email() -> None:
     """测试邮件功能是否正常"""
 
-    with QFluentFile(":template/template/email/test_email.html", QFile.OpenModeFlag.ReadOnly) as file:
-
-        email_content = Template(file.readAll().data().decode("utf-8")).safe_substitute(
-            {"disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S")}
-        )
+    file = QFile(":template/template/email/test_email.html")
+    file.setOpenMode(QFile.OpenModeFlag.ReadOnly)
+    
+    email_content = Template(file.readAll().data().decode("utf-8")).safe_substitute(
+        {"disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S")}
+    )
+    
+    file.close()
 
     email = Email(
         EmailData(

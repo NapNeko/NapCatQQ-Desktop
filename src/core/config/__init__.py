@@ -153,9 +153,8 @@ class Config(QConfig):
     title_tab_bar_close_mode = OptionsConfigItem(
         group="Personalize",
         name="TitleTabBarCloseButton",
-        default=TabCloseButtonDisplayMode.ON_HOVER,
-        validator=OptionsValidator(TabCloseButtonDisplayMode),
-        serializer=EnumSerializer(TabCloseButtonDisplayMode),
+        default="悬停显示",
+        validator=OptionsValidator(["始终显示", "悬停显示", "永不显示"]),
         restart=True,
     )
     title_tab_bar_min_width = RangeConfigItem(

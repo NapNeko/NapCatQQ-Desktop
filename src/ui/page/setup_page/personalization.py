@@ -181,7 +181,7 @@ class TitleTabBarSettingDialog(MessageBoxBase):
         self.enable_movable_card.fill_value(cfg.get(cfg.title_tab_bar_movable))
         self.enable_scrollable_card.fill_value(cfg.get(cfg.title_tab_bar_scrollable))
         self.enable_tab_shadow_card.fill_value(cfg.get(cfg.title_tab_bar_shadow))
-        self.set_close_mode_card.fill_value(cfg.get(cfg.title_tab_bar_close_mode).value)
+        self.set_close_mode_card.fill_value(cfg.get(cfg.title_tab_bar_close_mode))
 
     def accept(self) -> None:
         """接受按钮"""

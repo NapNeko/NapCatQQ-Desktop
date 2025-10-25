@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
 from qfluentwidgets import SplashScreen, Theme, setTheme
-from qfluentwidgets.components.widgets.stacked_widget import FadeEffectAniStackedWidget
+from qfluentwidgets.components.widgets.stacked_widget import PopUpAniStackedWidget
 from qframelesswindow import FramelessWindow
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QApplication, QVBoxLayout
@@ -83,7 +83,7 @@ class GuideWindow(FramelessWindow):
         通过 FadeEffectAniStackedWidget 实现页面切换时的淡入淡出效果
         通过 on_next_page 方法实现页面的切换
         """
-        self.view = FadeEffectAniStackedWidget(self)
+        self.view = PopUpAniStackedWidget(self)
         self.welcome_page = WelcomePage(self)
         self.ask_page = AskPage(self)
         self.install_qq_page = InstallQQPage(self)
