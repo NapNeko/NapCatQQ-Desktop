@@ -2,22 +2,16 @@
 """
 Bot 配置页面
 """
-# 标准库导入
-from ast import Lambda
-from enum import Enum
-from turtle import TPen
-
 # 第三方库导入
-from qfluentwidgets import ExpandLayout, FlowLayout, FluentIcon, ScrollArea, SegmentedWidget, TransparentPushButton
+from qfluentwidgets import ExpandLayout, FlowLayout, FluentIcon, ScrollArea
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import (
     AdvancedConfig,
+    AutoRestartScheduleConfig,
     BotConfig,
-    Config,
-    AutoRestartSchedule,
     ConnectConfig,
     HttpClientsConfig,
     HttpServersConfig,
@@ -27,25 +21,15 @@ from src.core.config.config_model import (
     WebsocketServersConfig,
 )
 from src.ui.common.icon import NapCatDesktopIcon
-from src.ui.components.input_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
-from src.ui.components.stacked_widget import TransparentStackedWidget
-from src.ui.page.add_page import card
+from src.ui.components.input_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard, ShowDialogCard
 from src.ui.page.bot_page.widget import (
-    ConfigCardBase,
     HttpClientConfigCard,
     HttpServerConfigCard,
     HttpSSEConfigCard,
     WebsocketClientConfigCard,
     WebsocketServersConfigCard,
-    ChooseConfigTypeDialog,
-    HttpClientConfigDialog,
-    HttpServerConfigDialog,
-    HttpSSEServerConfigDialog,
-    WebsocketClientConfigDialog,
-    WebsocketServerConfigDialog,
+    AutoRestartDialog,
 )
-
-from src.ui.page.bot_page.bot_page_enum import ConnectType
 
 
 class BotConfigWidget(ScrollArea):
@@ -77,17 +61,17 @@ class BotConfigWidget(ScrollArea):
             placeholder_text=self.tr("https://example.com/music"),
             parent=self.view,
         )
-        # self.auto_restart_dialog = ShowDialogCard(
-        #     dialog=AutoRestartDialog,
-        #     icon=FluentIcon.IOT,
-        #     title=self.tr("自动重启"),
-        #     content=self.tr("设置自动重启 Bot 的相关选项"),
-        #     parent=self.view,
-        # )
+        self.auto_restart_dialog_card = ShowDialogCard(
+            dialog=AutoRestartDialog,
+            icon=FluentIcon.IOT,
+            title=self.tr("自动重启"),
+            content=self.tr("设置自动重启 Bot 的相关选项"),
+            parent=self.view,
+        )
 
         # 设置属性
         self._config = None
-        self.cards = [getattr(self, attr) for attr in dir(self) if attr.endswith("_card")]
+        self.cards = [self.bot_name_card, self.bot_qq_id_card, self.music_sign_url_card, self.auto_restart_dialog_card]
 
         # 设置控件
         self.setWidget(self.view)
@@ -110,7 +94,7 @@ class BotConfigWidget(ScrollArea):
                 "name": self.bot_name_card.get_value(),
                 "QQID": self.bot_qq_id_card.get_value(),
                 "musicSignUrl": self.music_sign_url_card.get_value(),
-                "autoRestartSchedule": AutoRestartSchedule(**{"enable": False, "time_unit": "h", "duration": 6}),
+                "autoRestartSchedule": self.auto_restart_dialog_card.get_value(),
             }
         )
 
@@ -123,6 +107,7 @@ class BotConfigWidget(ScrollArea):
         self.bot_name_card.fill_value(self._config.name)
         self.bot_qq_id_card.fill_value(self._config.QQID)
         self.music_sign_url_card.fill_value(self._config.musicSignUrl)
+        self.auto_restart_dialog_card.fill_value(self._config.autoRestartSchedule)
 
     def clear_config(self) -> None:
         """清空配置"""
@@ -227,9 +212,6 @@ class ConnectConfigWidget(ScrollArea):
 
     def clear_config(self) -> None:
         """清空配置"""
-        for card in self.cards:
-            card.setParent(None)
-            card.deleteLater()
         self.cards.clear()
         self.card_layout.takeAllWidgets()
 
@@ -316,7 +298,19 @@ class AdvancedConfigWidget(ScrollArea):
 
         # 设置属性
         self._config = None
-        self.cards = [getattr(self, attr) for attr in dir(self) if attr.endswith("_card")]
+        self.cards = [
+            self.auto_start_card,
+            self.offline_notice_card,
+            self.parse_mult_message_card,
+            self.packet_server_card,
+            self.packet_backend_card,
+            self.local_file_to_url_card,
+            self.file_log_card,
+            self.console_log_card,
+            self.file_log_level_card,
+            self.console_level_card,
+            self.o3_hook_mode_card,
+        ]
 
         # 设置控件
         self.setWidget(self.view)

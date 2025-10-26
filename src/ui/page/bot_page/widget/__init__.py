@@ -16,4 +16,5 @@ from .msg_box import (
     HttpSSEServerConfigDialog,
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
+    AutoRestartDialog,
 )

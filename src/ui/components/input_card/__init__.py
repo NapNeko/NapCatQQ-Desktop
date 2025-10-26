@@ -5,5 +5,6 @@ from src.ui.components.input_card.generic_card import (
     FolderConfigCard,
     LineEditConfigCard,
     SwitchConfigCard,
+    ShowDialogCard,
 )
 from src.ui.components.input_card.Item import LineEditItem, SwitchItem

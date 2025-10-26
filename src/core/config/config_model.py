@@ -26,7 +26,7 @@ from .config_enum import TimeUnitEnum
 """
 
 
-class AutoRestartSchedule(BaseModel):
+class AutoRestartScheduleConfig(BaseModel):
     """自动重启计划配置"""
 
     # 是否启用自动重启计划任务
@@ -50,7 +50,7 @@ class BotConfig(BaseModel):
     name: str
     QQID: str | int
     musicSignUrl: str = ""
-    autoRestartSchedule: AutoRestartSchedule
+    autoRestartSchedule: AutoRestartScheduleConfig
 
     @field_validator("name")
     @staticmethod

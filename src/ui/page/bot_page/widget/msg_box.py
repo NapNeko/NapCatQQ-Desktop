@@ -6,10 +6,11 @@ from qfluentwidgets import BodyLabel
 from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import MessageBoxBase, RadioButton, SimpleCardWidget, TitleLabel
 from PySide6.QtCore import QObject, Qt, Slot
-from PySide6.QtWidgets import QButtonGroup, QGridLayout, QVBoxLayout
+from PySide6.QtWidgets import QButtonGroup, QGridLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import (
+    AutoRestartScheduleConfig,
     HttpClientsConfig,
     HttpServersConfig,
     HttpSseServersConfig,
@@ -19,6 +20,7 @@ from src.core.config.config_model import (
 )
 from src.core.utils import my_int
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
+from src.ui.components.input_card.time_card import IntervalTimeConfigCard
 from src.ui.page.bot_page.bot_page_enum import ConnectType
 
 
@@ -537,3 +539,58 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
                 **super().get_config().model_dump(),
             }
         )
+
+
+class AutoRestartDialog(MessageBoxBase):
+    """自动重启提示对话框"""
+
+    def __init__(self, parent: QWidget) -> None:
+        """初始化自动重启提示对话框
+
+        Args:
+            parent: 父控件
+        """
+        super().__init__(parent=parent)
+
+        # 创建控件
+        self.title_label = TitleLabel(self.tr("自动重启 Bot"), self)
+        self.enable_card = SwitchConfigCard(FI.IOT, self.tr("启用自动重启"), parent=self)
+        self.interval_card = IntervalTimeConfigCard(FI.DATE_TIME, self.tr("重启间隔"), parent=self)
+
+        # 布局
+        self.grid_layout = QGridLayout()
+        self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 4)
+        self.grid_layout.addWidget(self.interval_card, 1, 0, 1, 4)
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_layout.setSpacing(8)
+
+        # 设置布局
+        self.viewLayout.addWidget(self.title_label)
+        self.viewLayout.addLayout(self.grid_layout)
+        self.widget.setMinimumWidth(600)
+
+    # ==================== 公共方法 ====================
+    def get_config(self) -> AutoRestartScheduleConfig:
+        """获取配置"""
+        interval_value = self.interval_card.get_value()
+        return AutoRestartScheduleConfig(
+            **{
+                "enable": self.enable_card.get_value(),
+                "time_unit": interval_value[0],
+                "duration": interval_value[1],
+            }
+        )
+
+    def fill_config(self, config: AutoRestartScheduleConfig | None = None) -> None:
+        """填充配置"""
+        if config is None:
+            return
+
+        self._config = config
+        self.enable_card.fill_value(config.enable)
+        self.interval_card.fill_value(config.time_unit, config.duration)
+
+    def clear_config(self) -> None:
+        """清空配置"""
+        self.enable_card.clear()
+        self.interval_card.clear()

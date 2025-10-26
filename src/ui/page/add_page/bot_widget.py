@@ -9,11 +9,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGridLayout, QWidget
 
 # 项目内模块导入
-from src.core.config.config_model import AutoRestartSchedule, BotConfig
+from src.core.config.config_model import AutoRestartScheduleConfig, BotConfig
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.components.input_card.generic_card import (
-    ComboBoxConfigCard,
-    JsonTemplateEditConfigCard,
     LineEditConfigCard,
     ShowDialogCard,
     SwitchConfigCard,
@@ -176,7 +174,7 @@ class AutoRestartDialog(MessageBoxBase):
         self.viewLayout.addLayout(self.grid_layout)
         self.widget.setMinimumWidth(600)
 
-    def fill_config(self, config: AutoRestartSchedule) -> None:
+    def fill_config(self, config: AutoRestartScheduleConfig) -> None:
         """使用配置数据填充表单
 
         Args:
@@ -193,7 +191,7 @@ class AutoRestartDialog(MessageBoxBase):
         """
         return self.get_config().model_dump()
 
-    def get_config(self) -> AutoRestartSchedule:
+    def get_config(self) -> AutoRestartScheduleConfig:
         """获取当前配置项的值
 
         Returns:
@@ -201,7 +199,7 @@ class AutoRestartDialog(MessageBoxBase):
         """
         interval_card_value = self.interval_card.get_value()
 
-        return AutoRestartSchedule(
+        return AutoRestartScheduleConfig(
             enable=self.enable_card.get_value(),
             time_unit=interval_card_value[0],
             duration=interval_card_value[1],
