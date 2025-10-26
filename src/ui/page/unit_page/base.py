@@ -297,8 +297,7 @@ class UpdateLogCard(HeaderCardWidget):
             text: Markdown格式的文本内容
         """
         css_style = "<style>pre { white-space: pre-wrap; }</style>"
-        formatted_text = re.sub(r"\r\n", "\n", text)
-        self.log_edit.setHtml(css_style + markdown(formatted_text, extensions=["nl2br"]))
+        self.log_edit.setHtml(css_style + markdown(text, extensions=["nl2br"]))
 
     def set_url(self, url: str) -> None:
         """设置外部链接URL

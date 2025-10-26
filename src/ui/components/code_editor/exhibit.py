@@ -27,7 +27,7 @@ class UpdateLogExhibit(QTextBrowser):
         self.setReadOnly(True)
         self.setOpenExternalLinks(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        setFont(self)
+        setFont(self, 16)
 
         WidgetStyleSheet.UPDATE_LOG_CARD.apply(self)
 
