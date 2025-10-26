@@ -44,7 +44,7 @@ class BotListPage(ScrollArea):
         用于刷新 view 中的 Bot Card
         """
         # 判断原有 bot config list 是否为空, 不为空则清空
-        if not self._bot_card_list:
+        if self._bot_card_list:
             self.remove_all_bot()
 
         # 读取配置文件

@@ -14,8 +14,10 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import (
+    AdvancedConfig,
     BotConfig,
     Config,
+    AutoRestartSchedule,
     ConnectConfig,
     HttpClientsConfig,
     HttpServersConfig,
@@ -107,8 +109,8 @@ class BotConfigWidget(ScrollArea):
             **{
                 "name": self.bot_name_card.get_value(),
                 "QQID": self.bot_qq_id_card.get_value(),
-                "musicSignUrl": self.music_sign_url.get_value(),
-                "autoRestartSchedule": self.auto_restart_dialog.get_value(),
+                "musicSignUrl": self.music_sign_url_card.get_value(),
+                "autoRestartSchedule": AutoRestartSchedule(**{"enable": False, "time_unit": "h", "duration": 6}),
             }
         )
 
@@ -205,7 +207,7 @@ class ConnectConfigWidget(ScrollArea):
     def get_config(self) -> BotConfig:
         """获取配置"""
         config_data = {
-            key: [card.get_value() for card in self.cards if isinstance(card, card_type)]
+            key: [card.get_config() for card in self.cards if isinstance(card, card_type)]
             for key, card_type in self.CONFIG_KEY_AND_CARD_DICT.items()
         }
         config_data["plugins"] = []
@@ -329,7 +331,7 @@ class AdvancedConfigWidget(ScrollArea):
     # ==================== 公共方法 ====================
     def get_config(self) -> BotConfig:
         """获取配置"""
-        return BotConfig(
+        return AdvancedConfig(
             **{
                 "autoStart": self.auto_start_card.get_value(),
                 "offlineNotice": self.offline_notice_card.get_value(),
@@ -372,135 +374,3 @@ class AdvancedConfigWidget(ScrollArea):
     def adjustSize(self) -> None:
         """重写方法以调整控件大小适应内容高度"""
         self.resize(self.width(), self.card_layout.heightForWidth(self.width()) + 46)
-
-
-class ConfigPage(QWidget):
-    """配置机器人页面"""
-
-    CONNECT_TYPE_AND_DIALOG = {
-        ConnectType.HTTP_SERVER: HttpServerConfigDialog,
-        ConnectType.HTTP_SSE_SERVER: HttpSSEServerConfigDialog,
-        ConnectType.HTTP_CLIENT: HttpClientConfigDialog,
-        ConnectType.WEBSOCKET_SERVER: WebsocketServerConfigDialog,
-        ConnectType.WEBSOCKET_CLIENT: WebsocketClientConfigDialog,
-    }
-
-    class PageEnum(Enum):
-        """页面枚举"""
-
-        BOT_WIDGET = 0
-        CONNECT_WIDGET = 1
-        ADVANCED_WIDGET = 2
-
-    def __init__(self, parent: QWidget | None = None):
-        """初始化页面"""
-        super().__init__(parent)
-        # 设置属性
-        self._config = None
-
-        # 创建控件
-        self.piovt = SegmentedWidget(self)
-        self.view = TransparentStackedWidget()
-        self.bot_widget = BotConfigWidget(self)
-        self.connect_widget = ConnectConfigWidget(self)
-        self.advanced_widget = AdvancedConfigWidget(self)
-        self.return_button = TransparentPushButton(FluentIcon.LEFT_ARROW, self.tr("返回"), self)
-        self.add_connect_button = TransparentPushButton(FluentIcon.ADD, self.tr("添加"), self)
-
-        # 设置控件
-        self.view.addWidget(self.bot_widget)
-        self.view.addWidget(self.connect_widget)
-        self.view.addWidget(self.advanced_widget)
-        self.view.setCurrentWidget(self.bot_widget)
-
-        self.piovt.addItem(
-            routeKey=f"bot_widget",
-            text=self.tr("基本配置"),
-            onClick=lambda: self.view.setCurrentWidget(self.bot_widget),
-        )
-        self.piovt.addItem(
-            routeKey="connect_widget",
-            text=self.tr("连接配置"),
-            onClick=lambda: self.view.setCurrentWidget(self.connect_widget),
-        )
-        self.piovt.addItem(
-            routeKey=f"advanced_widget",
-            text=self.tr("高级配置"),
-            onClick=lambda: self.view.setCurrentWidget(self.advanced_widget),
-        )
-        self.piovt.setCurrentItem("bot_widget")
-
-        self.add_connect_button.hide()
-
-        # 设置布局
-        self.top_layout = QHBoxLayout()
-        self.top_layout.setContentsMargins(0, 0, 0, 0)
-        self.top_layout.addWidget(self.piovt)
-        self.top_layout.addStretch(1)
-        self.top_layout.addWidget(self.add_connect_button)
-        self.top_layout.addWidget(self.return_button)
-
-        self.v_box_layout = QVBoxLayout(self)
-        self.v_box_layout.setContentsMargins(0, 0, 0, 0)
-        self.v_box_layout.addLayout(self.top_layout)
-        self.v_box_layout.addWidget(self.view, 1)
-
-        # 链接信号
-        self.view.currentChanged.connect(self.slot_view_current_index_changed)
-        self.add_connect_button.clicked.connect(self.slot_add_connect_button)
-        self.return_button.clicked.connect(self.slot_return_button)
-
-    # ==================== 公共函数===================
-    def fill_config(self, config: Config | None = None):
-        """填充配置"""
-        if config is None:
-            return
-
-        self._config = config
-        self.bot_widget.fill_config(self._config.bot)
-        self.connect_widget.fill_config(self._config.connect)
-        self.advanced_widget.fill_config(self._config.advanced)
-
-    # ==================== 槽函数 ====================
-    def slot_view_current_index_changed(self, index: int) -> None:
-        """当 view 切换时更新 piovt 的选中状态
-
-        Args:
-            index (int): 当前索引
-        """
-        match self.PageEnum(index):
-            case self.PageEnum.BOT_WIDGET:
-                self.piovt.setCurrentItem("bot_widget")
-                self.add_connect_button.hide()
-            case self.PageEnum.CONNECT_WIDGET:
-                self.piovt.setCurrentItem("connect_widget")
-                self.add_connect_button.show()
-            case self.PageEnum.ADVANCED_WIDGET:
-                self.piovt.setCurrentItem("advanced_widget")
-                self.add_connect_button.hide()
-
-    def slot_return_button(self) -> None:
-        """返回按钮槽函数"""
-        # 项目内模块导入
-        from src.ui.page.bot_page import BotPage
-
-        BotPage().view.setCurrentWidget(BotPage().bot_list_page)
-
-    def slot_add_connect_button(self) -> None:
-        """添加连接配置按钮槽函数"""
-        from src.ui.window.main_window import MainWindow
-
-        if not (_choose_connect_type_box := ChooseConfigTypeDialog(MainWindow())).exec():
-            # 获取用户选择的结果并判断是否取消
-            return
-
-        if (_connect_type := _choose_connect_type_box.get_value()) == ConnectType.NO_TYPE:
-            # 判断用户选择的类型, 如果没有选择则直接退出
-            return
-
-        if not (_connect_config_box := self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)(MainWindow())).exec():
-            # 判断用户在配置的时候是否选择了取消
-            return
-
-        # 拿到配置项添加卡片
-        self.connect_widget.add_card(_connect_config_box.get_config())

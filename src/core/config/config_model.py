@@ -49,7 +49,7 @@ class AutoRestartSchedule(BaseModel):
 class BotConfig(BaseModel):
     name: str
     QQID: str | int
-    musicSignUrl: str
+    musicSignUrl: str = ""
     autoRestartSchedule: AutoRestartSchedule
 
     @field_validator("name")
