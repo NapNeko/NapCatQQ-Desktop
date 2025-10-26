@@ -50,7 +50,7 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import (
-    BaseModel,
+    NetworkBaseConfig,
     Config,
     ConnectConfig,
     HttpClientsConfig,
@@ -64,7 +64,7 @@ from src.core.utils.run_napcat import manager_process
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
-from src.ui.page.add_page.msg_box import (
+from src.ui.page.bot_page.widget.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
     HttpSSEServerConfigDialog,
@@ -502,7 +502,9 @@ class FormateTag(PillPushButton):
 class ConfigCardBase(HeaderCardWidget):
     """配置卡片基类，提供通用的配置显示和操作功能"""
 
-    def __init__(self, config: BaseModel, parent: Optional[QObject] = None) -> None:
+    remove_signal = Signal(NetworkBaseConfig)
+
+    def __init__(self, config: NetworkBaseConfig, parent: Optional[QObject] = None) -> None:
         """初始化配置卡片基类
 
         Args:
@@ -524,8 +526,8 @@ class ConfigCardBase(HeaderCardWidget):
 
     def _create_widgets(self) -> None:
         """创建子控件"""
-        self.remove_button = TransparentToolButton(FluentIcon.DELETE, self)
         self.edit_button = TransparentToolButton(FluentIcon.EDIT, self)
+        self.remove_button = TransparentToolButton(FluentIcon.DELETE, self)
         self.config_view = QWidget(self)
 
     def _setup_layout(self) -> None:
@@ -535,8 +537,8 @@ class ConfigCardBase(HeaderCardWidget):
 
         # 设置布局
         self.headerLayout.addStretch(1)
-        self.headerLayout.addWidget(self.remove_button)
         self.headerLayout.addWidget(self.edit_button)
+        self.headerLayout.addWidget(self.remove_button)
         self.viewLayout.addWidget(self.config_view)
         self.viewLayout.setContentsMargins(16, 16, 16, 16)
 
@@ -546,19 +548,19 @@ class ConfigCardBase(HeaderCardWidget):
 
     def _connect_signals(self) -> None:
         """连接信号与槽"""
-        self.remove_button.clicked.connect(self._slot_remove_button_clicked)
         self.edit_button.clicked.connect(self._slot_edit_button_clicked)
+        self.remove_button.clicked.connect(self._slot_remove_button_clicked)
 
     # ==================== 公共方法 ====================
-    def fill_value(self) -> None:
+    def fill_config(self) -> None:
         """填充配置数据显示 - 由子类实现"""
         raise NotImplementedError("子类必须实现 fill_value 方法")
 
-    def get_value(self) -> BaseModel:
+    def get_config(self) -> NetworkBaseConfig:
         """获取配置数据
 
         Returns:
-            BaseModel: 配置数据模型
+            NetworkBaseConfig: 配置数据模型
         """
         return self.config
 
@@ -586,8 +588,7 @@ class ConfigCardBase(HeaderCardWidget):
             parent=self,
         )
         view.closed.connect(widget.close)
-        button.clicked.connect(lambda: add_page_singal_bus.remove_card_signal.emit(self))
-        button.clicked.connect(widget.close)
+        button.clicked.connect(lambda: self.remove_signal.emit(self.config))
 
     def _slot_edit_button_clicked(self) -> None:
         """处理编辑按钮点击事件 - 由子类实现"""
@@ -638,7 +639,7 @@ class HttpServerConfigCard(ConfigCardBase):
         self.config_view_layout.addWidget(self.msg_post_format_label, 2, 0, 1, 1)
         self.config_view_layout.addWidget(self.msg_post_format_config_label, 2, 1, 1, 5)
 
-    def fill_value(self) -> None:
+    def fill_config(self) -> None:
         """填充 HTTP 服务器配置数据"""
         self.host_config_label.setText(self.config.host)
         self.port_config_label.setText(str(self.config.port))
@@ -646,7 +647,7 @@ class HttpServerConfigCard(ConfigCardBase):
         self.websocket_config_label.update_status(self.config.enableWebsocket)
         self.msg_post_format_config_label.update_format(self.config.messagePostFormat)
 
-    def get_value(self) -> HttpServersConfig:
+    def get_config(self) -> HttpServersConfig:
         """获取 HTTP 服务器配置数据
 
         Returns:
@@ -662,7 +663,7 @@ class HttpServerConfigCard(ConfigCardBase):
         dialog = HttpServerConfigDialog(MainWindow(), cast(HttpServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
-            self.fill_value()
+            self.fill_config()
 
 
 class HttpSSEConfigCard(ConfigCardBase):
@@ -715,7 +716,7 @@ class HttpSSEConfigCard(ConfigCardBase):
         self.config_view_layout.addWidget(self.report_self_message_label, 2, 3, 1, 1)
         self.config_view_layout.addWidget(self.report_self_message_config_label, 2, 4, 1, 2)
 
-    def fill_value(self) -> None:
+    def fill_config(self) -> None:
         """填充 HTTP SSE 服务器配置数据"""
         self.host_config_label.setText(self.config.host)
         self.port_config_label.setText(str(self.config.port))
@@ -724,7 +725,7 @@ class HttpSSEConfigCard(ConfigCardBase):
         self.msg_post_format_config_label.update_format(self.config.messagePostFormat)
         self.report_self_message_config_label.update_status(self.config.reportSelfMessage)
 
-    def get_value(self) -> HttpSseServersConfig:
+    def get_config(self) -> HttpSseServersConfig:
         """获取 HTTP SSE 服务器配置数据
 
         Returns:
@@ -740,7 +741,7 @@ class HttpSSEConfigCard(ConfigCardBase):
         dialog = HttpSSEServerConfigDialog(MainWindow(), cast(HttpSseServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
-            self.fill_value()
+            self.fill_config()
 
 
 class HttpClientConfigCard(ConfigCardBase):
@@ -775,13 +776,13 @@ class HttpClientConfigCard(ConfigCardBase):
         self.config_view_layout.addWidget(self.report_self_message_label, 1, 4, 1, 1)
         self.config_view_layout.addWidget(self.report_self_message_config_label, 1, 5, 1, 1)
 
-    def fill_value(self) -> None:
+    def fill_config(self) -> None:
         """填充 HTTP 客户端配置数据"""
         self.url_config_label.setText(str(self.config.url))
         self.format_config_label.update_format(self.config.messagePostFormat)
         self.report_self_message_config_label.update_status(self.config.reportSelfMessage)
 
-    def get_value(self) -> HttpClientsConfig:
+    def get_config(self) -> HttpClientsConfig:
         """获取 HTTP 客户端配置数据
 
         Returns:
@@ -797,7 +798,7 @@ class HttpClientConfigCard(ConfigCardBase):
         dialog = HttpClientConfigDialog(MainWindow(), cast(HttpClientsConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
-            self.fill_value()
+            self.fill_config()
 
 
 class WebsocketServersConfigCard(ConfigCardBase):
@@ -850,7 +851,7 @@ class WebsocketServersConfigCard(ConfigCardBase):
         self.config_view_layout.addWidget(self.enable_force_push_event_label, 2, 3, 1, 1)
         self.config_view_layout.addWidget(self.enable_force_push_event_config_label, 2, 4, 1, 2)
 
-    def fill_value(self) -> None:
+    def fill_config(self) -> None:
         """填充 WebSocket 服务器配置数据"""
         self.host_config_label.setText(self.config.host)
         self.port_config_label.setText(str(self.config.port))
@@ -859,7 +860,7 @@ class WebsocketServersConfigCard(ConfigCardBase):
         self.report_self_message_config_label.update_status(self.config.reportSelfMessage)
         self.enable_force_push_event_config_label.update_status(self.config.enableForcePushEvent)
 
-    def get_value(self) -> WebsocketServersConfig:
+    def get_config(self) -> WebsocketServersConfig:
         """获取 WebSocket 服务器配置数据
 
         Returns:
@@ -875,7 +876,7 @@ class WebsocketServersConfigCard(ConfigCardBase):
         dialog = WebsocketServerConfigDialog(MainWindow(), cast(WebsocketServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
-            self.fill_value()
+            self.fill_config()
 
 
 class WebsocketClientConfigCard(ConfigCardBase):
@@ -922,7 +923,7 @@ class WebsocketClientConfigCard(ConfigCardBase):
         self.config_view_layout.addWidget(self.report_self_message_label, 2, 3, 1, 1)
         self.config_view_layout.addWidget(self.report_self_message_config_label, 2, 4, 1, 2)
 
-    def fill_value(self) -> None:
+    def fill_config(self) -> None:
         """填充 WebSocket 客户端配置数据"""
         self.url_config_label.setText(str(self.config.url))
         self.reconnect_interval_config_label.setText(str(self.config.reconnectInterval) + "ms")
@@ -930,7 +931,7 @@ class WebsocketClientConfigCard(ConfigCardBase):
         self.format_config_label.update_format(self.config.messagePostFormat)
         self.report_self_message_config_label.update_status(self.config.reportSelfMessage)
 
-    def get_value(self) -> WebsocketClientsConfig:
+    def get_config(self) -> WebsocketClientsConfig:
         """获取 WebSocket 客户端配置数据
 
         Returns:
@@ -946,4 +947,4 @@ class WebsocketClientConfigCard(ConfigCardBase):
         dialog = WebsocketClientConfigDialog(MainWindow(), cast(WebsocketClientsConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
-            self.fill_value()
+            self.fill_config()

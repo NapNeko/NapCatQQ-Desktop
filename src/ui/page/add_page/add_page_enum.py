@@ -6,6 +6,7 @@ from enum import Enum, auto
 class ConnectType(Enum):
     """连接类型枚举"""
 
+    NO_TYPE = auto()
     HTTP_SERVER = auto()
     HTTP_SSE_SERVER = auto()
     HTTP_CLIENT = auto()

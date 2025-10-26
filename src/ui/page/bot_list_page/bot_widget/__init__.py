@@ -24,7 +24,7 @@ from src.ui.components.code_editor.highlight import LogHighlighter
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.message_box import AskBox, ImageBox
 from src.ui.page.add_page.add_page_enum import ConnectType
-from src.ui.page.add_page.msg_box import (
+from src.ui.page.bot_page.widget.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
     HttpSSEServerConfigDialog,

@@ -5,6 +5,7 @@ Bot 配置页面
 # 标准库导入
 from ast import Lambda
 from enum import Enum
+from turtle import TPen
 
 # 第三方库导入
 from qfluentwidgets import ExpandLayout, FlowLayout, FluentIcon, ScrollArea, SegmentedWidget, TransparentPushButton
@@ -26,14 +27,23 @@ from src.core.config.config_model import (
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.components.input_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from src.ui.page.bot_page.widget.card import (
+from src.ui.page.add_page import card
+from src.ui.page.bot_page.widget import (
     ConfigCardBase,
     HttpClientConfigCard,
     HttpServerConfigCard,
     HttpSSEConfigCard,
     WebsocketClientConfigCard,
     WebsocketServersConfigCard,
+    ChooseConfigTypeDialog,
+    HttpClientConfigDialog,
+    HttpServerConfigDialog,
+    HttpSSEServerConfigDialog,
+    WebsocketClientConfigDialog,
+    WebsocketServerConfigDialog,
 )
+
+from src.ui.page.bot_page.bot_page_enum import ConnectType
 
 
 class BotConfigWidget(ScrollArea):
@@ -172,14 +182,25 @@ class ConnectConfigWidget(ScrollArea):
         self.card_layout.setSpacing(8)
 
     # ==================== 公共方法 ====================
-    def add_card(self, config: NetworkBaseConfig):
+    def add_card(self, config: NetworkBaseConfig) -> None:
         """添加卡片到列表"""
         if card_class := self.CINFIG_AND_CARD_DICT.get(type(config)):
             card = card_class(config, self.view)
+            card.remove_signal.connect(self.remove_card)
             self.cards.append(card)
             self.card_layout.addWidget(card)
             self.card_layout.update()
             self.updateGeometry()
+
+    def remove_card(self, config: NetworkBaseConfig) -> None:
+        """从列表删除卡片"""
+        for card in self.cards:
+            if card.config != config:
+                continue
+            self.card_layout.removeWidget(card)
+            card.setParent(None)
+            card.deleteLater()
+            self.cards.remove(card)
 
     def get_config(self) -> BotConfig:
         """获取配置"""
@@ -356,6 +377,14 @@ class AdvancedConfigWidget(ScrollArea):
 class ConfigPage(QWidget):
     """配置机器人页面"""
 
+    CONNECT_TYPE_AND_DIALOG = {
+        ConnectType.HTTP_SERVER: HttpServerConfigDialog,
+        ConnectType.HTTP_SSE_SERVER: HttpSSEServerConfigDialog,
+        ConnectType.HTTP_CLIENT: HttpClientConfigDialog,
+        ConnectType.WEBSOCKET_SERVER: WebsocketServerConfigDialog,
+        ConnectType.WEBSOCKET_CLIENT: WebsocketClientConfigDialog,
+    }
+
     class PageEnum(Enum):
         """页面枚举"""
 
@@ -375,6 +404,8 @@ class ConfigPage(QWidget):
         self.bot_widget = BotConfigWidget(self)
         self.connect_widget = ConnectConfigWidget(self)
         self.advanced_widget = AdvancedConfigWidget(self)
+        self.return_button = TransparentPushButton(FluentIcon.LEFT_ARROW, self.tr("返回"), self)
+        self.add_connect_button = TransparentPushButton(FluentIcon.ADD, self.tr("添加"), self)
 
         # 设置控件
         self.view.addWidget(self.bot_widget)
@@ -399,13 +430,15 @@ class ConfigPage(QWidget):
         )
         self.piovt.setCurrentItem("bot_widget")
 
-        self.return_button = TransparentPushButton(FluentIcon.LEFT_ARROW, self.tr("返回"), self)
+        self.add_connect_button.hide()
 
         # 设置布局
         self.top_layout = QHBoxLayout()
         self.top_layout.setContentsMargins(0, 0, 0, 0)
-        self.top_layout.addWidget(self.piovt, 1, Qt.AlignmentFlag.AlignLeft)
-        self.top_layout.addWidget(self.return_button, 1, Qt.AlignmentFlag.AlignRight)
+        self.top_layout.addWidget(self.piovt)
+        self.top_layout.addStretch(1)
+        self.top_layout.addWidget(self.add_connect_button)
+        self.top_layout.addWidget(self.return_button)
 
         self.v_box_layout = QVBoxLayout(self)
         self.v_box_layout.setContentsMargins(0, 0, 0, 0)
@@ -414,6 +447,7 @@ class ConfigPage(QWidget):
 
         # 链接信号
         self.view.currentChanged.connect(self.slot_view_current_index_changed)
+        self.add_connect_button.clicked.connect(self.slot_add_connect_button)
         self.return_button.clicked.connect(self.slot_return_button)
 
     # ==================== 公共函数===================
@@ -437,10 +471,13 @@ class ConfigPage(QWidget):
         match self.PageEnum(index):
             case self.PageEnum.BOT_WIDGET:
                 self.piovt.setCurrentItem("bot_widget")
+                self.add_connect_button.hide()
             case self.PageEnum.CONNECT_WIDGET:
                 self.piovt.setCurrentItem("connect_widget")
+                self.add_connect_button.show()
             case self.PageEnum.ADVANCED_WIDGET:
                 self.piovt.setCurrentItem("advanced_widget")
+                self.add_connect_button.hide()
 
     def slot_return_button(self) -> None:
         """返回按钮槽函数"""
@@ -448,3 +485,22 @@ class ConfigPage(QWidget):
         from src.ui.page.bot_page import BotPage
 
         BotPage().view.setCurrentWidget(BotPage().bot_list_page)
+
+    def slot_add_connect_button(self) -> None:
+        """添加连接配置按钮槽函数"""
+        from src.ui.window.main_window import MainWindow
+
+        if not (_choose_connect_type_box := ChooseConfigTypeDialog(MainWindow())).exec():
+            # 获取用户选择的结果并判断是否取消
+            return
+
+        if (_connect_type := _choose_connect_type_box.get_value()) == ConnectType.NO_TYPE:
+            # 判断用户选择的类型, 如果没有选择则直接退出
+            return
+
+        if not (_connect_config_box := self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)(MainWindow())).exec():
+            # 判断用户在配置的时候是否选择了取消
+            return
+
+        # 拿到配置项添加卡片
+        self.connect_widget.add_card(_connect_config_box.get_config())

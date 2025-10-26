@@ -19,8 +19,7 @@ from src.core.config.config_model import (
 )
 from src.core.utils import my_int
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
-from src.ui.page.add_page.add_page_enum import ConnectType
-from src.ui.page.add_page.signal_bus import add_page_singal_bus
+from src.ui.page.bot_page.bot_page_enum import ConnectType
 
 
 class ChooseConfigCard(SimpleCardWidget):
@@ -92,10 +91,10 @@ class ChooseConfigTypeDialog(MessageBoxBase):
 
         # 设置属性
         self.button_group.setExclusive(True)
-        self.button_group.addButton(self.http_server_config_button, 0)
-        self.button_group.addButton(self.http_sse_server_config_button, 1)
-        self.button_group.addButton(self.http_client_config_button, 2)
-        self.button_group.addButton(self.web_socket_server_config_button, 3)
+        self.button_group.addButton(self.http_server_config_button, 1)
+        self.button_group.addButton(self.http_sse_server_config_button, 2)
+        self.button_group.addButton(self.http_client_config_button, 3)
+        self.button_group.addButton(self.web_socket_server_config_button, 4)
         self.button_group.addButton(self.web_socket_client_config_button, 4)
         self.widget.setMinimumSize(850, 400)
 
@@ -112,16 +111,16 @@ class ChooseConfigTypeDialog(MessageBoxBase):
         self.viewLayout.addWidget(self.title_label)
         self.viewLayout.addLayout(self.card_layout, stretch=1)
 
-    @Slot()
-    def accept(self) -> None:
-        """重写接受方法，处理配置类型选择
+    def get_value(self) -> ConnectType:
+        """获取选择的值
 
-        当用户点击确定按钮时，发射选择的连接类型信号
+        Returns:
+            ConnectType: 连接类型枚举
         """
-        if (id := self.button_group.checkedId()) != -1:
-            add_page_singal_bus.choose_connect_type_signal.emit(list(ConnectType)[id])
+        if (checked_id := self.button_group.checkedId()) != -1:
+            return list(ConnectType)[checked_id]
 
-        super().accept()
+        return ConnectType.NO_TYPE
 
 
 class ConfigDialogBase(MessageBoxBase):

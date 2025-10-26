@@ -28,7 +28,7 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.ui.page.add_page.msg_box import (
+from src.ui.page.bot_page.widget.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
     HttpSSEServerConfigDialog,

@@ -3,7 +3,7 @@ from PySide6.QtCore import QObject, Signal
 
 # 项目内模块导入
 from src.ui.page.add_page.add_page_enum import ConnectType
-from src.ui.page.add_page.msg_box import ChooseConfigTypeDialog as OldChooseConfigTypeDialog
+from src.ui.page.bot_page.widget.msg_box import ChooseConfigTypeDialog as OldChooseConfigTypeDialog
 
 
 class ChooseConfigTypeDialog(OldChooseConfigTypeDialog):

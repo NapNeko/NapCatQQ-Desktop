@@ -13,7 +13,7 @@ from src.ui.page.add_page.add_top_card import AddTopCard
 from src.ui.page.add_page.advanced import AdvancedWidget
 from src.ui.page.add_page.bot_widget import BotWidget
 from src.ui.page.add_page.connect import ConnectWidget
-from src.ui.page.add_page.msg_box import (
+from src.ui.page.bot_page.widget.msg_box import (
     ChooseConfigTypeDialog,
     HttpClientConfigDialog,
     HttpServerConfigDialog,
