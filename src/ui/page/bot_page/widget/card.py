@@ -22,10 +22,9 @@ from qfluentwidgets import (
     ImageLabel,
     PillPushButton,
     ToolTipFilter,
-    TransparentDropDownToolButton,
     TransparentPushButton,
+    TransparentToolButton,
     setFont,
-    TransparentToolButton
 )
 from PySide6.QtCore import (
     QEasingCurve,
@@ -42,7 +41,7 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import QColor, QEnterEvent, QPixmap
-from PySide6.QtWidgets import QAbstractButton, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import Config, ConnectConfig
@@ -55,6 +54,7 @@ from src.ui.components.message_box import AskBox
 
 class BotCard(HeaderCardWidget):
     """Bot 卡片 Widget"""
+
     # 当自身被移除时发出信号 值为QQID
     remove_signal = Signal(str)
 
@@ -67,17 +67,18 @@ class BotCard(HeaderCardWidget):
         super().__init__(parent)
 
         # 设置属性
-        self.config = bot_config
+        self._config = bot_config
 
         # 创建控件
-        self.avatar_widget = BotAvatarWidget(int(self.config.bot.QQID), self)
-        self.info_widget = BotInfoWidget(self.config, self)
+        self.avatar_widget = BotAvatarWidget(int(self._config.bot.QQID), self)
+        self.info_widget = BotInfoWidget(self._config, self)
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
         self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
-        self.remove_batton = TransparentToolButton(FluentIcon.DELETE, self)
+        self.setting_button = TransparentToolButton(FluentIcon.SETTING, self)
+        self.remove_button = TransparentToolButton(FluentIcon.DELETE, self)
 
         # 设置控件
-        self.setTitle(f"{self.config.bot.name} ({self.config.bot.QQID})")
+        self.setTitle(f"{self._config.bot.name} ({self._config.bot.QQID})")
         self.setFixedSize(500, 240)
         self.stop_button.hide()
 
@@ -88,22 +89,24 @@ class BotCard(HeaderCardWidget):
         self.headerLayout.addStretch(1)
         self.headerLayout.addWidget(self.run_button)
         self.headerLayout.addWidget(self.stop_button)
-        self.headerLayout.addWidget(self.remove_batton)
+        self.headerLayout.addWidget(self.setting_button)
+        self.headerLayout.addWidget(self.remove_button)
 
         # 链接信号
         manager_process.process_changed_signal.connect(self.slot_process_changed_button)
         self.run_button.clicked.connect(self.slot_run_button)
         self.stop_button.clicked.connect(self.slot_stop_button)
-        self.remove_batton.clicked.connect(self.slot_remove_button)
+        self.setting_button.clicked.connect(self.slot_setting_button)
+        self.remove_button.clicked.connect(self.slot_remove_button)
 
     # ==================== 槽函数 ====================
     def slot_run_button(self) -> None:
         """处理运行按钮点击"""
-        manager_process.create_napcat_process(self.config)
+        manager_process.create_napcat_process(self._config)
 
     def slot_stop_button(self) -> None:
         """处理停止按钮点击"""
-        manager_process.stop_process(str(self.config.bot.QQID))
+        manager_process.stop_process(str(self._config.bot.QQID))
 
     def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
         """处理 NapCatQQ 进程变化时, 切换按钮显示
@@ -112,28 +115,31 @@ class BotCard(HeaderCardWidget):
             qq_id (str): QQ 号
             state (QProcess.ProcessState): 进程状态
         """
-        if qq_id != str(self.config.bot.QQID):
+        if qq_id != str(self._config.bot.QQID):
             return
 
         if state == QProcess.ProcessState.Running:
             self.run_button.hide()
             self.stop_button.show()
         else:
-            self.run_button.hide()
-            self.stop_button.show()
+            self.run_button.show()
+            self.stop_button.hide()
+
+    def slot_setting_button(self) -> None:
+        """处理配置按钮槽函数"""
+        from src.ui.page.bot_page import BotPage
+
+        BotPage().view.setCurrentWidget(BotPage().bot_config_page)
+        BotPage().bot_config_page.fill_config(self._config)
 
     def slot_remove_button(self) -> None:
         """处理移除自身槽函数"""
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if AskBox(
-            self.tr("确认移除 Bot"),
-            self.tr("确定要移除此 Bot 吗？\n此操作无法恢复!"),
-            MainWindow()
-        ).exec():
-            manager_process.stop_process(str(self.config.bot.QQID))
-            self.remove_signal.emit(str(self.config.bot.QQID))
+        if AskBox(self.tr("确认移除 Bot"), self.tr("确定要移除此 Bot 吗？\n此操作无法恢复!"), MainWindow()).exec():
+            manager_process.stop_process(str(self._config.bot.QQID))
+            self.remove_signal.emit(str(self._config.bot.QQID))
 
 
 class BotAvatarWidget(QWidget):
@@ -367,9 +373,11 @@ class BotInfoWidget(QWidget):
             # 创建新的计时器
             timer = QTimer(self)
             # 每秒更新一次运行时长显示
-            timer.timeout.connect(lambda: self._run_time_info.text_label.setText(
-                f"{int(monotonic() - self.start_time)//3600:02}:{(int(monotonic() - self.start_time)%3600)//60:02}:{int(monotonic() - self.start_time)%60:02}"
-            ))
+            timer.timeout.connect(
+                lambda: self._run_time_info.text_label.setText(
+                    f"{int(monotonic() - self.start_time)//3600:02}:{(int(monotonic() - self.start_time)%3600)//60:02}:{int(monotonic() - self.start_time)%60:02}"
+                )
+            )
             timer.start(1000)
             # 保存计时器引用
             self._run_time_timer = timer
@@ -395,9 +403,11 @@ class BotInfoWidget(QWidget):
             # 创建新的计时器
             timer = QTimer(self)
             # 每秒更新一次内存占用显示
-            timer.timeout.connect(lambda: self._memory_info.text_label.setText(
-                f"{manager_process.get_memory_usage(qq_id)} MB / {int(psutil.virtual_memory().total / (1024 * 1024))} MB"
-            ))
+            timer.timeout.connect(
+                lambda: self._memory_info.text_label.setText(
+                    f"{manager_process.get_memory_usage(qq_id)} MB / {int(psutil.virtual_memory().total / (1024 * 1024))} MB"
+                )
+            )
             timer.start(1000)
             # 保存计时器引用
             self._memory_timer = timer

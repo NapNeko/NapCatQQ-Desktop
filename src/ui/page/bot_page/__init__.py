@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from src.core.utils.singleton import singleton
 from src.ui.components.stacked_widget import TransparentStackedWidget
 
-from .sub_page import BotListPage
+from .sub_page import BotListPage, ConfigPage
 from .widget import HeaderWidget
 
 if TYPE_CHECKING:
@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 @singleton
 class BotPage(QWidget):
     """Bot 页面"""
+
+    header: HeaderWidget
+    view: TransparentStackedWidget
+    bot_list_page: BotListPage
+    bot_config_page: ConfigPage
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -51,9 +56,11 @@ class BotPage(QWidget):
         """设置 view 界面"""
         # 创建 sub page
         self.bot_list_page = BotListPage(self)
+        self.bot_config_page = ConfigPage(self)
 
         # 添加到 view
         self.view.addWidget(self.bot_list_page)
+        self.view.addWidget(self.bot_config_page)
 
         # 设置初始页面
         self.view.setCurrentWidget(self.bot_list_page)

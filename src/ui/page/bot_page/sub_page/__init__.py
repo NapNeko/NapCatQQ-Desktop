@@ -6,3 +6,4 @@
 """
 
 from .bot_list import BotListPage
+from .config import ConfigPage

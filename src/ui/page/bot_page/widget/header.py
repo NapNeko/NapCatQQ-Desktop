@@ -16,6 +16,7 @@ class HeaderWidget(QWidget):
     class PageEnum(Enum):
 
         BOT_LIST = 0
+        BOT_CONFIG = 1
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """构造函数
@@ -34,17 +35,22 @@ class HeaderWidget(QWidget):
         self.breadcrumb_bar.addItem("title", self.tr("Bot"))
         self.breadcrumb_bar.setSpacing(16)
         self.breadcrumb_bar.setEnabled(False)
+        self.setFixedHeight(48)
 
         # 设置布局
         self.v_box_layout.setContentsMargins(0, 0, 0, 0)
-        self.v_box_layout.setSpacing(8)
+        self.v_box_layout.setSpacing(6)
         self.v_box_layout.addWidget(self.breadcrumb_bar)
 
     def setup_breadcrumb_bar(self, index: int):
         """通过index设置对应的breadcrumb_bar"""
         self.breadcrumb_bar.clear()
 
-        match index:
-            case self.PageEnum.BOT_LIST.value:
+        match self.PageEnum(index):
+            case self.PageEnum.BOT_LIST:
                 self.breadcrumb_bar.addItem("title", self.tr("Bot"))
                 self.breadcrumb_bar.addItem("bot_list", self.tr("List"))
+            case self.PageEnum.BOT_CONFIG:
+                self.breadcrumb_bar.addItem("title", self.tr("Bot"))
+                self.breadcrumb_bar.addItem("bot_list", self.tr("List"))
+                self.breadcrumb_bar.addItem("bot_config", self.tr("Config"))
