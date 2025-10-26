@@ -129,7 +129,9 @@ class ConfigPage(QWidget):
 
     def clear_config(self) -> None:
         """清空配置"""
-        ...
+        self.bot_widget.clear_config()
+        self.connect_widget.clear_config()
+        self.advanced_widget.clear_config()
 
     # ==================== 槽函数 ====================
     def slot_view_current_index_changed(self, index: int) -> None:

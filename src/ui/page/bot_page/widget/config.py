@@ -227,6 +227,9 @@ class ConnectConfigWidget(ScrollArea):
 
     def clear_config(self) -> None:
         """清空配置"""
+        for card in self.cards:
+            card.setParent(None)
+            card.deleteLater()
         self.cards.clear()
         self.card_layout.takeAllWidgets()
 

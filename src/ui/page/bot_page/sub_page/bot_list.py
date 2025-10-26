@@ -2,8 +2,8 @@
 """这是 Bot 列表子页面模块"""
 
 # 第三方库导入
-from qfluentwidgets import FlowLayout, ScrollArea
-from PySide6.QtCore import Qt
+from qfluentwidgets import FlowLayout, ScrollArea, PrimaryToolButton, ToolButton, FluentIcon
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
@@ -26,6 +26,8 @@ class BotListPage(ScrollArea):
         # 创建视图和布局
         self.view = QWidget(self)
         self.view_layout = FlowLayout(self.view)
+        self.add_button = PrimaryToolButton(FluentIcon.ADD, self)
+        self.update_button = ToolButton(FluentIcon.UPDATE, self)
 
         # 设置控件
         self.setWidget(self.view)
@@ -34,8 +36,25 @@ class BotListPage(ScrollArea):
         self.view_layout.setContentsMargins(0, 0, 0, 0)
         self.view_layout.setSpacing(4)
 
+        self.add_button.setFixedSize(40, 40)
+        self.add_button.setIconSize(QSize(20, 20))
+        self.update_button.setFixedSize(40, 40)
+        self.update_button.setIconSize(QSize(20, 20))
+
+        # 连接信号
+        self.add_button.clicked.connect(self.slot_add_button)
+        self.update_button.clicked.connect(self.update_bot_list)
+
         # 调用方法
         self.update_bot_list()
+
+    # ==================== 重写方法 ===================
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        width = self.width() - self.add_button.width()
+        height = self.height() - self.add_button.height()
+        self.add_button.move(width - 16, height - 32)
+        self.update_button.move(width - 16, height - 82)
 
     # ==================== 公共方法 ====================
     def update_bot_list(self) -> None:
@@ -82,3 +101,12 @@ class BotListPage(ScrollArea):
         """
         self._bot_config_list.clear()
         self.view_layout.takeAllWidgets()
+
+    # =================== 槽函数 =======================
+    def slot_add_button(self) -> None:
+        """添加按钮槽函数"""
+        from src.ui.page.bot_page import BotPage
+
+        BotPage().view.setCurrentWidget(BotPage().add_config_page)
+        BotPage().add_config_page.clear_config()
+        BotPage().header.setup_breadcrumb_bar(2)

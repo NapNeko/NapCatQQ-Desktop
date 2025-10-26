@@ -335,8 +335,8 @@ class BotInfoWidget(QWidget):
             self.flow_layout.setSpacing(2)
             self.h_box_layout.setContentsMargins(0, 0, 0, 0)
             self.h_box_layout.setSpacing(8)
-            self.h_box_layout.addWidget(self.icon_widget)
-            self.h_box_layout.addLayout(self.flow_layout)
+            self.h_box_layout.addWidget(self.icon_widget, alignment=Qt.AlignmentFlag.AlignLeft)
+            self.h_box_layout.addLayout(self.flow_layout, 1)
 
     def __init__(self, config: Config, parent: BotCard) -> None:
         super().__init__(parent)

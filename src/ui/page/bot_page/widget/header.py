@@ -17,6 +17,7 @@ class HeaderWidget(QWidget):
 
         BOT_LIST = 0
         BOT_CONFIG = 1
+        ADD_CONFIG = 2
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """构造函数
@@ -54,3 +55,7 @@ class HeaderWidget(QWidget):
                 self.breadcrumb_bar.addItem("title", self.tr("Bot"))
                 self.breadcrumb_bar.addItem("bot_list", self.tr("List"))
                 self.breadcrumb_bar.addItem("bot_config", self.tr("Config"))
+            case self.PageEnum.ADD_CONFIG:
+                self.breadcrumb_bar.addItem("title", self.tr("Bot"))
+                self.breadcrumb_bar.addItem("bot_list", self.tr("List"))
+                self.breadcrumb_bar.addItem("bot_config", self.tr("Add"))

@@ -29,6 +29,7 @@ class BotPage(QWidget):
     view: TransparentStackedWidget
     bot_list_page: BotListPage
     bot_config_page: ConfigPage
+    add_config_page: ConfigPage
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -57,10 +58,12 @@ class BotPage(QWidget):
         # 创建 sub page
         self.bot_list_page = BotListPage(self)
         self.bot_config_page = ConfigPage(self)
+        self.add_config_page = self.bot_config_page
 
         # 添加到 view
         self.view.addWidget(self.bot_list_page)
         self.view.addWidget(self.bot_config_page)
+        self.view.addWidget(self.add_config_page)
 
         # 设置初始页面
         self.view.setCurrentWidget(self.bot_list_page)
