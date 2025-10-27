@@ -60,7 +60,7 @@ from src.core.config.config_model import (
     WebsocketServersConfig,
 )
 from src.core.network.urls import Urls
-from src.core.utils.run_napcat import manager_process
+from src.core.utils.run_napcat import manager_process, NapCatQQProcessLogger
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
@@ -79,7 +79,7 @@ class BotCard(HeaderCardWidget):
     # 当自身被移除时发出信号 值为QQID
     remove_signal = Signal(str)
 
-    def __init__(self, bot_config: Config, parent: QWidget | None = None) -> None:
+    def __init__(self, config: Config, parent: QWidget | None = None) -> None:
         """构造函数
 
         Args:
@@ -88,13 +88,15 @@ class BotCard(HeaderCardWidget):
         super().__init__(parent)
 
         # 设置属性
-        self._config = bot_config
+        self._config = config
+        self._log_manager = NapCatQQProcessLogger(str(config.bot.QQID))
 
         # 创建控件
         self.avatar_widget = BotAvatarWidget(int(self._config.bot.QQID), self)
         self.info_widget = BotInfoWidget(self._config, self)
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
         self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
+        self.log_button = TransparentToolButton(FluentIcon.DOCUMENT, self)
         self.setting_button = TransparentToolButton(FluentIcon.SETTING, self)
         self.remove_button = TransparentToolButton(FluentIcon.DELETE, self)
 
@@ -102,6 +104,7 @@ class BotCard(HeaderCardWidget):
         self.setTitle(f"{self._config.bot.name} ({self._config.bot.QQID})")
         self.setFixedSize(500, 240)
         self.stop_button.hide()
+        self.log_button.hide()
 
         # 设置布局
         self.viewLayout.addWidget(self.avatar_widget, 1)
@@ -110,6 +113,7 @@ class BotCard(HeaderCardWidget):
         self.headerLayout.addStretch(1)
         self.headerLayout.addWidget(self.run_button)
         self.headerLayout.addWidget(self.stop_button)
+        self.headerLayout.addWidget(self.log_button)
         self.headerLayout.addWidget(self.setting_button)
         self.headerLayout.addWidget(self.remove_button)
 
@@ -117,16 +121,18 @@ class BotCard(HeaderCardWidget):
         manager_process.process_changed_signal.connect(self.slot_process_changed_button)
         self.run_button.clicked.connect(self.slot_run_button)
         self.stop_button.clicked.connect(self.slot_stop_button)
+        self.log_button.clicked.connect(self.slot_log_button)
         self.setting_button.clicked.connect(self.slot_setting_button)
         self.remove_button.clicked.connect(self.slot_remove_button)
 
     # ==================== 槽函数 ====================
     def slot_run_button(self) -> None:
         """处理运行按钮点击"""
-        manager_process.create_napcat_process(self._config)
+        manager_process.create_napcat_process(self._config, self._log_manager)
 
     def slot_stop_button(self) -> None:
         """处理停止按钮点击"""
+        self._log_manager.clear()
         manager_process.stop_process(str(self._config.bot.QQID))
 
     def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
@@ -142,9 +148,19 @@ class BotCard(HeaderCardWidget):
         if state == QProcess.ProcessState.Running:
             self.run_button.hide()
             self.stop_button.show()
+            self.log_button.show()
         else:
             self.run_button.show()
             self.stop_button.hide()
+            self.log_button.hide()
+
+    def slot_log_button(self) -> None:
+        """处理日志按钮槽函数"""
+        # 项目内模块导入
+        from src.ui.page.bot_page import BotPage
+
+        BotPage().view.setCurrentWidget(BotPage().log_page)
+        BotPage().log_page.set_current_log_manager(self._log_manager)
 
     def slot_setting_button(self) -> None:
         """处理配置按钮槽函数"""
@@ -196,7 +212,7 @@ class BotAvatarWidget(QWidget):
                 pixmap.loadFromData(httpx.get(self._url.toString()).content)
                 self.avatar_pixmap_signal.emit(pixmap)
 
-            except httpx.HTTPStatusError | httpx.RequestError | httpx.TimeoutException as e:
+            except (httpx.HTTPStatusError, httpx.RequestError, httpx.TimeoutException) as e:
                 error_bar(
                     f"请求头像时发生错误!\n"
                     f"  - QQ号: {self._qq_id}\n"

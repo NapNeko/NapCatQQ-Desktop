@@ -441,7 +441,7 @@ class ShowDialogCard(ShowDialogCardBase):
         self._config = config
         self._dialog.fill_config(config)
 
-    def clear_config(self) -> None:
+    def clear(self) -> None:
         """清空配置"""
         self.ensure_instance()
         self._dialog.clear_config()

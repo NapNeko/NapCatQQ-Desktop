@@ -4,6 +4,7 @@
 """
 # 标准库导入
 from collections import deque
+import re
 
 # 第三方库导入
 import psutil
@@ -14,6 +15,43 @@ from src.core.config.config_model import Config
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
 from src.ui.components.info_bar import error_bar
+
+
+class NapCatQQProcessLogger(QObject):
+    """进程的日志缓冲区"""
+
+    handle_output_log_signal = Signal(str)
+
+    def __init__(self, qq_id: str) -> None:
+        super().__init__()
+        # 设置属性
+        self._qq_id = qq_id
+        self._log_storage = []
+
+    # ==================== 公共函数===================
+    def set_process(self, process: QProcess):
+        """设置 process 对象"""
+        self._process = process
+
+    def get_log(self) -> str:
+        """返回所有 log"""
+        print(self._log_storage)
+        return "".join(self._log_storage)
+
+    def clear(self) -> None:
+        """清理所有 log"""
+        self._log_storage.clear()
+
+    # ==================== 响应函数===================
+    def handle_output(self):
+        """处理日志数据"""
+        # 拿到解码后的数据
+        data = manager_process.get_process(self._qq_id).readAllStandardOutput().data().decode()
+        # 正则处理转义吗
+        data = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", data)
+        data = re.compile(r"\r+\n$").sub("\n", data)
+        self._log_storage.append(data)
+        self.handle_output_log_signal.emit(data)
 
 
 class ManagerNapCatQQProcess(QObject):
@@ -35,11 +73,12 @@ class ManagerNapCatQQProcess(QObject):
         self.napcat_process_dict: dict[str, QProcess] = {}
         logger.info("NapCatQQ 进程管理器已初始化")
 
-    def create_napcat_process(self, config: Config) -> None:
+    def create_napcat_process(self, config: Config, log: NapCatQQProcessLogger) -> None:
         """创建并配置 QProcess
 
         Args:
             config (Config): 配置对象
+            log (NapCatQQProcessLogger): 日志缓冲对象(需要实例)
 
         Returns:
             QProcess: 配置好的 QProcess 对象
@@ -67,9 +106,15 @@ class ManagerNapCatQQProcess(QObject):
             [
                 str(PathFunc().get_qq_path() / "QQ.exe"),
                 str(PathFunc().napcat_path / "NapCatWinBootHook.dll"),
-                config.bot.QQID,
+                str(config.bot.QQID),
             ]
         )
+
+        # 链接信号
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        process.readyReadStandardOutput.connect(log.handle_output)
+
+        # 启动进程
         process.start()
         logger.info(f"NapCatQQ 进程已创建并启动(QQID: {config.bot.QQID})")
 
@@ -103,7 +148,9 @@ class ManagerNapCatQQProcess(QObject):
         """
         process = self.get_process(qq_id)
 
-        if process and process.state() == QProcess.ProcessState.Running:
+        if (parent := psutil.Process(process.processId())).pid != 0:
+            [child.kill() for child in parent.children(recursive=True)]
+            parent.kill()
             process.kill()
             process.waitForFinished()
             process.deleteLater()
@@ -117,7 +164,7 @@ class ManagerNapCatQQProcess(QObject):
         if not (process := self.get_process(qq_id)) or process.state() != QProcess.ProcessState.Running:
             return 0
 
-        if (main_pid:=process.processId()) <= 0:
+        if (main_pid := process.processId()) <= 0:
             return 0
 
         try:

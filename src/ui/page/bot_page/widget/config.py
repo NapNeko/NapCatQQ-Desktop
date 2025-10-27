@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QWidget
 # 项目内模块导入
 from src.core.config.config_model import (
     AdvancedConfig,
-    AutoRestartScheduleConfig,
     BotConfig,
     ConnectConfig,
     HttpClientsConfig,
