@@ -50,17 +50,17 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import (
-    NetworkBaseConfig,
     Config,
     ConnectConfig,
     HttpClientsConfig,
     HttpServersConfig,
     HttpSseServersConfig,
+    NetworkBaseConfig,
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
 from src.core.network.urls import Urls
-from src.core.utils.run_napcat import manager_process, NapCatQQProcessLogger
+from src.core.utils.run_napcat import NapCatQQProcessLogger, manager_process
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
