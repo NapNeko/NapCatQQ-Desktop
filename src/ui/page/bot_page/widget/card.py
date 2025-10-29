@@ -47,6 +47,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QEnterEvent, QFont, QPixmap
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from creart import it
 
 # 项目内模块导入
 from src.core.config.config_model import (
@@ -60,7 +61,7 @@ from src.core.config.config_model import (
     WebsocketServersConfig,
 )
 from src.core.network.urls import Urls
-from src.core.utils.run_napcat import NapCatQQProcessLogger, manager_process
+from src.core.utils.run_napcat import ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
@@ -89,7 +90,6 @@ class BotCard(HeaderCardWidget):
 
         # 设置属性
         self._config = config
-        self._log_manager = NapCatQQProcessLogger(str(config.bot.QQID))
 
         # 创建控件
         self.avatar_widget = BotAvatarWidget(int(self._config.bot.QQID), self)
@@ -118,22 +118,32 @@ class BotCard(HeaderCardWidget):
         self.headerLayout.addWidget(self.remove_button)
 
         # 链接信号
-        manager_process.process_changed_signal.connect(self.slot_process_changed_button)
+        it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_process_changed_button)
         self.run_button.clicked.connect(self.slot_run_button)
         self.stop_button.clicked.connect(self.slot_stop_button)
         self.log_button.clicked.connect(self.slot_log_button)
         self.setting_button.clicked.connect(self.slot_setting_button)
         self.remove_button.clicked.connect(self.slot_remove_button)
 
+    # ==================== 公共方法 ==================
+    def update_info_card(self) -> None:
+        """更新信息卡片显示内容， 用于外部调用，刷新后调用"""
+        if (process := it(ManagerNapCatQQProcess).get_process(str(self._config.bot.QQID))) is None:
+            return
+
+        if (process := process.process) and process.state() == QProcess.ProcessState.Running:
+            self.slot_process_changed_button(str(self._config.bot.QQID), QProcess.ProcessState.Running)
+            self.info_widget.slot_run_time_start(str(self._config.bot.QQID), QProcess.ProcessState.Running)
+            self.info_widget.slot_memory_usage_start(str(self._config.bot.QQID), QProcess.ProcessState.Running)
+
     # ==================== 槽函数 ====================
     def slot_run_button(self) -> None:
         """处理运行按钮点击"""
-        manager_process.create_napcat_process(self._config, self._log_manager)
+        it(ManagerNapCatQQProcess).create_napcat_process(self._config)
 
     def slot_stop_button(self) -> None:
         """处理停止按钮点击"""
-        self._log_manager.clear()
-        manager_process.stop_process(str(self._config.bot.QQID))
+        it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
 
     def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
         """处理 NapCatQQ 进程变化时, 切换按钮显示
@@ -160,7 +170,7 @@ class BotCard(HeaderCardWidget):
         from src.ui.page.bot_page import BotPage
 
         BotPage().view.setCurrentWidget(BotPage().log_page)
-        BotPage().log_page.set_current_log_manager(self._log_manager)
+        BotPage().log_page.set_current_log_manager(self._config)
 
     def slot_setting_button(self) -> None:
         """处理配置按钮槽函数"""
@@ -176,7 +186,7 @@ class BotCard(HeaderCardWidget):
         from src.ui.window.main_window.window import MainWindow
 
         if AskBox(self.tr("确认移除 Bot"), self.tr("确定要移除此 Bot 吗？\n此操作无法恢复!"), MainWindow()).exec():
-            manager_process.stop_process(str(self._config.bot.QQID))
+            it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
             self.remove_signal.emit(str(self._config.bot.QQID))
 
 
@@ -358,6 +368,7 @@ class BotInfoWidget(QWidget):
         super().__init__(parent)
         # 设置属性
         self._config = config
+        self.start_time: Optional[float] = None
 
         # 创建控件
         self._run_time_info = self.InfoWidget(FluentIcon.DATE_TIME, f"未运行", self)
@@ -377,8 +388,8 @@ class BotInfoWidget(QWidget):
         self.setup_tooltip()
 
         # 链接信号
-        manager_process.process_changed_signal.connect(self.slot_run_time_start)
-        manager_process.process_changed_signal.connect(self.slot_memory_usage_start)
+        it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_run_time_start)
+        it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_memory_usage_start)
 
     def setup_tooltip(self) -> None:
         """设置工具提示"""
@@ -400,8 +411,10 @@ class BotInfoWidget(QWidget):
             return
 
         if state == QProcess.ProcessState.Running:
-            # 获取当前时间作为起始时间
-            self.start_time = monotonic()
+            # 判断 start_time 是否为 None, 为 None 代表第一次启动, 从 monotonic() 获取启动时间, 否则查找进程启动时间
+            self.start_time = (
+                it(ManagerNapCatQQProcess).get_process(qq_id).started_at if self.start_time is None else monotonic()
+            )
 
             # 检查是否已有计时器在运行
             if hasattr(self, "_timer"):
@@ -410,13 +423,12 @@ class BotInfoWidget(QWidget):
 
             # 创建新的计时器
             timer = QTimer(self)
+
             # 每秒更新一次运行时长显示
-            timer.timeout.connect(
-                lambda: self._run_time_info.text_label.setText(
-                    f"{int(monotonic() - self.start_time)//3600:02}:{(int(monotonic() - self.start_time)%3600)//60:02}:{int(monotonic() - self.start_time)%60:02}"
-                )
-            )
+            time_format = f"{int(monotonic() - self.start_time)//3600:02}:{(int(monotonic() - self.start_time)%3600)//60:02}:{int(monotonic() - self.start_time)%60:02}"
+            timer.timeout.connect(lambda: self._run_time_info.text_label.setText(time_format))
             timer.start(1000)
+
             # 保存计时器引用
             self._run_time_timer = timer
         else:
@@ -443,7 +455,7 @@ class BotInfoWidget(QWidget):
             # 每秒更新一次内存占用显示
             timer.timeout.connect(
                 lambda: self._memory_info.text_label.setText(
-                    f"{manager_process.get_memory_usage(qq_id)} MB / {int(psutil.virtual_memory().total / (1024 * 1024))} MB"
+                    f"{it(ManagerNapCatQQProcess).get_memory_usage(qq_id)} MB / {int(psutil.virtual_memory().total / (1024 * 1024))} MB"
                 )
             )
             timer.start(1000)
@@ -503,7 +515,7 @@ class FormateTag(PillPushButton):
         # 设置属性
         self.setFixedSize(48, 24)
         self.setCheckable(False)
-        self.setFont(QFont(self.font().family(), 8))
+        self.setFont(QFont(self.font().family(), 7))
         self.update_format(format_str)
 
     def update_format(self, format_str: str) -> None:

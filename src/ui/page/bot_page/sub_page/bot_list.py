@@ -78,6 +78,7 @@ class BotListPage(ScrollArea):
         for config in self._bot_config_list:
             card = BotCard(config)
             card.remove_signal.connect(self.remove_bot_by_qqid)
+            card.update_info_card()
             self._bot_card_list.append(card)
             self.view_layout.addWidget(card)
 
@@ -109,4 +110,4 @@ class BotListPage(ScrollArea):
 
         BotPage().view.setCurrentWidget(BotPage().add_config_page)
         BotPage().add_config_page.clear_config()
-        BotPage().header.setup_breadcrumb_bar(2)
+        BotPage().header.setup_breadcrumb_bar(999)

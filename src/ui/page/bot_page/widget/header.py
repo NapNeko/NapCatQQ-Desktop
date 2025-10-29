@@ -17,7 +17,10 @@ class HeaderWidget(QWidget):
 
         BOT_LIST = 0
         BOT_CONFIG = 1
-        ADD_CONFIG = 2
+        LOG_PAGE = 2
+
+        # 因为此处与 BOT_CONFIG 为同一个页面, 需要区分
+        ADD_CONFIG = 999
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """构造函数
@@ -46,7 +49,6 @@ class HeaderWidget(QWidget):
     def setup_breadcrumb_bar(self, index: int):
         """通过index设置对应的breadcrumb_bar"""
         self.breadcrumb_bar.clear()
-
         match self.PageEnum(index):
             case self.PageEnum.BOT_LIST:
                 self.breadcrumb_bar.addItem("title", self.tr("Bot"))
@@ -59,3 +61,7 @@ class HeaderWidget(QWidget):
                 self.breadcrumb_bar.addItem("title", self.tr("Bot"))
                 self.breadcrumb_bar.addItem("bot_list", self.tr("List"))
                 self.breadcrumb_bar.addItem("bot_config", self.tr("Add"))
+            case self.PageEnum.LOG_PAGE:
+                self.breadcrumb_bar.addItem("title", self.tr("Bot"))
+                self.breadcrumb_bar.addItem("bot_list", self.tr("List"))
+                self.breadcrumb_bar.addItem("bot_log", self.tr("Log"))
