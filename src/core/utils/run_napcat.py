@@ -47,7 +47,7 @@ class NapCatQQProcessLog(QObject):
         self._process = process
 
         # 日志存储
-        self._log_storage = []
+        self._log_storage = deque(maxlen=10000)
 
         # 连接信号
         self._process.readyReadStandardOutput.connect(self.handle_output)
