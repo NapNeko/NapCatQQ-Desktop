@@ -185,7 +185,11 @@ class BotCard(HeaderCardWidget):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if AskBox(self.tr("确认移除 Bot"), self.tr("确定要移除此 Bot 吗？\n此操作无法恢复!"), MainWindow()).exec():
+        if AskBox(
+            self.tr("确认移除 Bot"),
+            self.tr("确定要移除 Bot ({}) 吗？\n此操作无法恢复!".format(self._config.bot.QQID)),
+            MainWindow(),
+        ).exec():
             it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
             self.remove_signal.emit(str(self._config.bot.QQID))
 

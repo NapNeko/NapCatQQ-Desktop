@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from src.core.config.config_model import Config
 from src.ui.components.info_bar import success_bar, error_bar
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from src.ui.page.bot_page.bot_page_enum import ConnectType
+from src.ui.page.bot_page.utils.enum import ConnectType
 from src.ui.page.bot_page.widget import (
     ChooseConfigTypeDialog,
     HttpClientConfigDialog,

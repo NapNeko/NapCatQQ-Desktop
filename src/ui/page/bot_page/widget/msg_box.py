@@ -21,7 +21,7 @@ from src.core.config.config_model import (
 from src.core.utils import my_int
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 from src.ui.components.input_card.time_card import IntervalTimeConfigCard
-from src.ui.page.bot_page.bot_page_enum import ConnectType
+from src.ui.page.bot_page.utils.enum import ConnectType
 
 
 class ChooseConfigCard(SimpleCardWidget):
