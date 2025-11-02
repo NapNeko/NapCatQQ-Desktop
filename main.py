@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # 初始化字体
     FontManager.initialize_fonts()
 
-    if cfg.get(cfg.main_window):
+    if cfg.get(cfg.main_window) and cfg.get(cfg.elua_accepted):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 

@@ -83,7 +83,8 @@ class Config(QConfig):
     start_time = ConfigItem(group="Info", name="StartTime", default="")
     system_type = ConfigItem(group="Info", name="SystemType", default="")
     platform_type = ConfigItem(group="Info", name="PlatformType", default="")
-    main_window = ConfigItem(group="Info", name="main_window", default=False, validator=BoolValidator())
+    main_window = ConfigItem(group="Info", name="MainWindow", default=False, validator=BoolValidator())
+    elua_accepted = ConfigItem(group="Info", name="EulaAccepted", default=False, validator=BoolValidator())
 
     # 个性化项目
     language = OptionsConfigItem(
