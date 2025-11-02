@@ -13,7 +13,6 @@ pdm.lock
 .pdm-python
 Pipfile.lock
 poetry.lock
-requirements.txt
 
 ### 构建产物 ###
 # 构建和发布生成的文件
