@@ -443,6 +443,13 @@ class ManagerNapCatQQProcess(QObject):
         Returns:
             QProcess: 配置好的 QProcess 对象
         """
+        # 如果超过 4 个进程，则取消创建
+        if len(self.napcat_process_dict) >= 4:
+            from src.ui.components.info_bar import error_bar
+
+            error_bar("NapCatQQ 进程数量已达上限，无法创建新进程!")
+            return
+
         # 创建 QProcess
         process = self._create_napcat_process(config)
 
