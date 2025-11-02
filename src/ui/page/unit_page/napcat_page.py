@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 第三方库导入
+from creart import it
 from PySide6.QtCore import QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
@@ -7,9 +9,9 @@ from src.core.network.urls import Urls
 from src.core.utils.get_version import VersionData
 from src.core.utils.install_func import NapCatInstall
 from src.core.utils.path_func import PathFunc
+from src.core.utils.run_napcat import ManagerNapCatQQProcess
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox
-from src.ui.page.bot_list_page import BotListWidget
 from src.ui.page.unit_page.base import PageBase
 from src.ui.page.unit_page.status import ButtonStatus
 
@@ -81,19 +83,18 @@ class NapCatPage(PageBase):
     @Slot()
     def on_download(self) -> None:
         """处理下载按钮点击事件，开始下载 NapCat"""
-        if BotListWidget().get_bot_is_run():
-            # 项目内模块导入
-
+        if it(ManagerNapCatQQProcess).has_running_bot():
             # 项目内模块导入
             from src.ui.window.main_window import MainWindow
 
             box = AskBox(
                 self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), MainWindow()
             )
-            box.yesButton.clicked.connect(BotListWidget().stop_all_bot)
             box.yesButton.setText(self.tr("关闭全部"))
 
-            if not box.exec():
+            if box.exec():
+                it(ManagerNapCatQQProcess).stop_all_processes()
+            else:
                 return
 
         info_bar(self.tr("正在下载 NapCat"))

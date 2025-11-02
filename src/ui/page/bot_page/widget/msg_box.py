@@ -758,7 +758,7 @@ class QRCodeDialogFactory(QObject):
         if not self.qr_code_list and self.dialog is not None:
             self.dialog.done(MessageBoxBase.DialogCode.Rejected)
             self.dialog = None
-        else:
+        elif self.dialog is not None:
             self.dialog.update_qr_codes(self.qr_code_list)
 
     def show(self) -> None:

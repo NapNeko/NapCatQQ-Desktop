@@ -21,8 +21,6 @@ from PySide6.QtCore import QObject, QProcess, QRunnable, QThreadPool, QTimer, Si
 from src.core.config.config_model import Config
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
-from src.ui.components.info_bar import error_bar
-from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 
 
 # ==================== 数据模型 ====================
@@ -308,6 +306,8 @@ class NapCatQQLoginState(QObject):
         self._is_logged_in = is_login
 
         if is_login:
+            from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
+
             it(QRCodeDialogFactory).remove_qr_code(str(self.config.bot.QQID))
 
     def slot_update_online_status(self, online_status: bool) -> None:
@@ -324,6 +324,7 @@ class NapCatQQLoginState(QObject):
         Args:
             qr_code (str): 登录二维码
         """
+        from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 
         it(QRCodeDialogFactory).add_qr_code(str(self.config.bot.QQID), qr_code)
 
@@ -454,6 +455,8 @@ class ManagerNapCatQQProcess(QObject):
 
         # 确保进程已启动
         if not process.waitForStarted(5000):
+            from src.ui.components.info_bar import error_bar
+
             error_bar(f"NapCatQQ 进程启动失败!")
             return
 
@@ -476,6 +479,16 @@ class ManagerNapCatQQProcess(QObject):
         """
         return self.napcat_process_dict.get(qq_id, None)
 
+    def has_running_bot(self) -> bool:
+        """检查是否有正在运行的 Bot
+
+        Returns:
+            bool: 如果有正在运行的 Bot 则返回 True, 否则返回 False
+        """
+        return any(
+            process_model.state == QProcess.ProcessState.Running for process_model in self.napcat_process_dict.values()
+        )
+
     def stop_process(self, qq_id: str) -> None:
         """停止指定 QQ 号的 QProcess
 
@@ -496,6 +509,11 @@ class ManagerNapCatQQProcess(QObject):
 
         logger.info(f"NapCatQQ 进程已停止(QQID: {qq_id})")
         self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
+
+    def stop_all_processes(self) -> None:
+        """停止所有 NapCatQQ 进程"""
+        for qq_id in list(self.napcat_process_dict.keys()):
+            self.stop_process(qq_id)
 
     def get_memory_usage(self, qq_id: str) -> int:
         """获取指定 QQ 号的 NapCatQQ 进程树内存使用情况"""
