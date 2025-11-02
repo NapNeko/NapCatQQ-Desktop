@@ -95,7 +95,12 @@ class EulaPage(QWidget):
         from src.ui.window.guide_window.guide_window import GuideWindow
 
         cfg.set(cfg.elua_accepted, True)
-        GuideWindow().on_next_page()
+
+        # 如果主窗口打开过，则关闭向导窗口, 否则进入下一个页面
+        if cfg.get(cfg.main_window):
+            GuideWindow().close()
+        else:
+            GuideWindow().on_next_page()
 
     def slot_reject(self) -> None:
         """用户不同意EULA"""
