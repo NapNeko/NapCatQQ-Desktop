@@ -190,7 +190,8 @@ class BotCard(HeaderCardWidget):
             self.tr("确定要移除 Bot ({}) 吗？\n此操作无法恢复!".format(self._config.bot.QQID)),
             MainWindow(),
         ).exec():
-            it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
+            if it(ManagerNapCatQQProcess).get_process(str(self._config.bot.QQID)) is not None:
+                it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
             self.remove_signal.emit(str(self._config.bot.QQID))
 
 

@@ -75,5 +75,5 @@ class IntervalTimeConfigCard(SettingCard):
 
     def clear(self) -> None:
         """清空时间值"""
-        self.time_unit_combo_box.setCurrentIndex(-1)
+        self.time_unit_combo_box.setCurrentIndex(1)
         self.duration_spin_box.setValue(0)
