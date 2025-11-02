@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import Any, Callable, Dict, TypeVar
+from typing import Any, Callable, Dict, TypeVar, cast
 
 T = TypeVar("T", bound=type)
 
@@ -32,7 +32,7 @@ class Singleton(type):
             T: 类的唯一实例
         """
         if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+            cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
 
 
@@ -45,7 +45,7 @@ def singleton(cls: T) -> Callable[..., T]:
     Returns:
         Callable[..., T]: 返回类的唯一实例
     """
-    _instance: T = None
+    _instance: T = cast(T, None)
 
     def wrapper(*args: Any, **kwargs: Any) -> T:
         nonlocal _instance

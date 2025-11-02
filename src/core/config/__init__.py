@@ -83,7 +83,8 @@ class Config(QConfig):
     start_time = ConfigItem(group="Info", name="StartTime", default="")
     system_type = ConfigItem(group="Info", name="SystemType", default="")
     platform_type = ConfigItem(group="Info", name="PlatformType", default="")
-    main_window = ConfigItem(group="Info", name="main_window", default=False, validator=BoolValidator())
+    main_window = ConfigItem(group="Info", name="MainWindow", default=False, validator=BoolValidator())
+    elua_accepted = ConfigItem(group="Info", name="EulaAccepted", default=False, validator=BoolValidator())
 
     # 个性化项目
     language = OptionsConfigItem(
@@ -153,9 +154,8 @@ class Config(QConfig):
     title_tab_bar_close_mode = OptionsConfigItem(
         group="Personalize",
         name="TitleTabBarCloseButton",
-        default=TabCloseButtonDisplayMode.ON_HOVER,
-        validator=OptionsValidator(TabCloseButtonDisplayMode),
-        serializer=EnumSerializer(TabCloseButtonDisplayMode),
+        default="悬停显示",
+        validator=OptionsValidator(["始终显示", "悬停显示", "永不显示"]),
         restart=True,
     )
     title_tab_bar_min_width = RangeConfigItem(

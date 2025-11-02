@@ -3,6 +3,7 @@
 from typing import Any
 
 # 第三方库导入
+from pydantic import BaseModel
 from qfluentwidgets.common import FluentIcon, FluentIconBase, FluentStyleSheet, isDarkTheme
 from qfluentwidgets.components import (
     ComboBox,
@@ -287,7 +288,7 @@ class ComboBoxConfigCard(SettingCard):
         self.hBoxLayout.addSpacing(16)
 
     def fill_value(self, value: str) -> None:
-        self.comboBox.setCurrentIndex(self.texts.index(value))
+        self.comboBox.setCurrentText(value)
 
     def get_value(self) -> str:
         return self.comboBox.currentText()
@@ -394,68 +395,59 @@ class ShowDialogCardBase(SettingCard):
             parent (QWidget | None, optional): 父控件. Defaults to None.
         """
         super().__init__(icon, title, content, parent)
-        self.dialog = dialog
+        self._dialog = dialog
         self.button = TransparentPushButton(FluentIcon.SETTING, self.tr("点我配置"))
         self._value = None
 
-        self.button.clicked.connect(self.on_show_dialog)
+        self.button.clicked.connect(self.slot_button_show_dialog)
 
         self.hBoxLayout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
-    def on_show_dialog(self) -> None:
+    def slot_button_show_dialog(self) -> None:
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        self.dialog(MainWindow()).exec()
+        self._dialog(MainWindow()).exec()
 
 
 class ShowDialogCard(ShowDialogCardBase):
-    """显示对话框卡片, 可以对对话进行参数传入"""
+    """显示对话框卡片, 通过参数返回"""
 
-    def __init__(self, dialog, icon, title, fill_config=None, content=None, parent=None):
+    def __init__(self, dialog, icon, title, content=None, parent=None):
         super().__init__(dialog, icon, title, content, parent)
-        self.config = fill_config
-        self._dialog = dialog
+        self._dialog_class = dialog
 
-        if self.config:
-            self._dialog.fill_config(self.config)
-
-    def on_show_dialog(self):
-        """重写方法"""
-        if self.config:
-            self._dialog.fill_config(self.config)
-        else:
-            # 项目内模块导入
+    # ==================== 公共方法 ====================
+    def ensure_instance(self) -> None:
+        """用于确保 dialog 已经实例化"""
+        # 检测是否实例化, 如果没有实例化则实例化
+        if not isinstance(self._dialog, self._dialog_class):
             from src.ui.window.main_window import MainWindow
 
             self._dialog = self._dialog(MainWindow())
 
-        if self._dialog.exec():
-            self._value = self._dialog.get_value()
+    def get_value(self) -> BaseModel:
+        """获取配置"""
+        self.ensure_instance()
+        return self._dialog.get_config()
 
-    def get_value(self):
-        """需要判断 dialog 是否有过初始化, 如果没有则初始化一次, 然后拿到默认值"""
-        if self._value is None:
-
-            if self._dialog is None:
-                # 项目内模块导入
-                from src.ui.window.main_window import MainWindow
-
-                self._dialog = self._dialog(MainWindow())
-
-            self._value = self._dialog.get_value()
-        return self._value
-
-    def fill_config(self, config: Any) -> None:
+    def fill_value(self, config: BaseModel) -> None:
         """填充配置"""
+        if config is None:
+            return
 
-        # 项目内模块导入
-        from src.ui.window.main_window import MainWindow
-
-        self.config = config
-        self._dialog = self._dialog(MainWindow())
+        self.ensure_instance()
+        self._config = config
         self._dialog.fill_config(config)
 
     def clear(self) -> None:
-        pass
+        """清空配置"""
+        self.ensure_instance()
+        self._dialog.clear_config()
+
+    # ==================== 重写方法 ====================
+    def slot_button_show_dialog(self) -> None:
+        """重写以展示"""
+        self.ensure_instance()
+        self._dialog.exec()

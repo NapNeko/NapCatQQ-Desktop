@@ -1,0 +1,20 @@
+SetupWidget,
+SetupTopCard,
+General,
+Personalization,
+#SetupView {
+    background: transparent;
+    border-color: transparent;
+}
+
+General,
+Personalization,
+SetupScrollArea,
+#SetupView {
+    background: transparent;
+    border: none;
+}
+
+SetupWidget {
+    border-top-left-radius: 16px;
+}

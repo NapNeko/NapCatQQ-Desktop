@@ -4,6 +4,7 @@ import sys
 from typing import TYPE_CHECKING
 
 # 第三方库导入
+from creart import it
 from qfluentwidgets import Action, AvatarWidget, BodyLabel, CaptionLabel
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import SystemTrayMenu
@@ -12,9 +13,8 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QSystemTrayIcon, QWidget
 
 # 项目内模块导入
+from src.core.utils.run_napcat import ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon
-from src.ui.components.info_bar import success_bar
-from src.ui.page.bot_list_page import BotListWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -55,28 +55,9 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.menu.addSeparator()
         self.menu.addAction(
             Action(
-                icon=FIF.PLAY,
-                text=self.tr("运行所有机器人"),
-                triggered=lambda: (self.check_show_state(), BotListWidget().run_all_bot()),
-            )
-        )
-        self.menu.addAction(
-            Action(
-                icon=FIF.PAUSE,
-                text=self.tr("停止所有机器人"),
-                triggered=lambda: (
-                    self.check_show_state(),
-                    success_bar(self.tr("成功停止所有机器人运行")),
-                    self.stopAllBotBotSlot(),
-                ),
-            )
-        )
-        self.menu.addSeparator()
-        self.menu.addAction(
-            Action(
                 icon=FIF.CLOSE,
                 text=self.tr("关闭程序"),
-                triggered=lambda: (BotListWidget().stop_all_bot(), sys.exit()),
+                triggered=lambda: (it(ManagerNapCatQQProcess).stop_all_processes(), sys.exit()),
             )
         )
 
