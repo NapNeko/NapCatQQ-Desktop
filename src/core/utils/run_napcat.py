@@ -269,6 +269,13 @@ class NapCatQQLoginState(QObject):
         """
         return self._online_status
 
+    def remove(self) -> None:
+        """清理 Timer 和释放资源"""
+        self._auth_timer.stop()
+        self._auth_timer.deleteLater()
+        self._login_state_timer.stop()
+        self._login_state_timer.deleteLater()
+
     # ==================== 槽函数 ====================
     def slot_get_login_state(self) -> None:
         """获取登录状态"""
@@ -352,6 +359,12 @@ class ManagerNapCatQQLoginState(QObject):
             NapCatQQLoginState | None: 对应的登录状态对象, 如果不存在则返回 None
         """
         return self.napcat_login_state_dict.get(qq_id, None)
+
+    def remove_login_state(self, qq_id: str) -> None:
+        """移除指定 QQ 号的登录状态对象"""
+        if qq_id in self.napcat_login_state_dict:
+            self.napcat_login_state_dict[qq_id].remove()
+            self.napcat_login_state_dict.pop(qq_id)
 
 
 class ManagerNapCatQQProcess(QObject):
@@ -478,6 +491,8 @@ class ManagerNapCatQQProcess(QObject):
             process.waitForFinished()
             process.deleteLater()
             self.napcat_process_dict.pop(qq_id)
+
+        it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
 
         logger.info(f"NapCatQQ 进程已停止(QQID: {qq_id})")
         self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
