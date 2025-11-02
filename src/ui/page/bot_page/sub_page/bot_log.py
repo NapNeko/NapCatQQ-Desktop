@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget, QPlainTextEdit
 
 # 项目内模块导入
 from src.core.config import Config
-from src.core.utils.run_napcat import NapCatQQLogManager, NapCatQQProcessLog
+from src.core.utils.run_napcat import ManagerNapCatQQLog, NapCatQQProcessLog
 from src.ui.components.code_editor.exhibit import CodeExibit
 
 
@@ -58,7 +58,7 @@ class BotLogPage(QWidget):
         """设置当前展示的 Bot Log"""
 
         # 拿到 log 实例并判断是否为空
-        if (log := it(NapCatQQLogManager).get_log(str(config.bot.QQID))) is None:
+        if (log := it(ManagerNapCatQQLog).get_log(str(config.bot.QQID))) is None:
             self.log_view.setPlainText(self.tr("未找到对应的日志信息"))
             return
 
@@ -70,7 +70,7 @@ class BotLogPage(QWidget):
         self.set_current_config(config)
 
         # 连接信号
-        log.handle_output_log_signal.connect(self.slot_insert_log_view)
+        log.output_log_signal.connect(self.slot_insert_log_view)
 
     def set_current_config(self, config: Config) -> None:
         """设置当前配置"""
@@ -90,8 +90,8 @@ class BotLogPage(QWidget):
             return
 
         # 取消信号连接
-        if (log := it(NapCatQQLogManager).get_log(str(self._config.bot.QQID))) is not None:
-            log.handle_output_log_signal.disconnect(self.slot_insert_log_view)
+        if (log := it(ManagerNapCatQQLog).get_log(str(self._config.bot.QQID))) is not None:
+            log.output_log_signal.disconnect(self.slot_insert_log_view)
 
     def slot_set_log_view(self, data: str) -> None:
         """设置当前 log_view 内容"""

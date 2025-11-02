@@ -3,18 +3,20 @@
 ## 运行 NapCat 流程
 """
 # 标准库导入
+import hashlib
 import re
 from abc import ABC
-from calendar import c
 from collections import deque
 from dataclasses import dataclass
 from time import monotonic
 
 # 第三方库导入
+import httpx
 import psutil
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from PySide6.QtCore import QObject, QProcess, Signal
+from httpx import Client, post
+from PySide6.QtCore import QObject, QProcess, QRunnable, QThreadPool, QTimer, Signal
 
 # 项目内模块导入
 from src.core.config.config_model import Config
@@ -38,7 +40,10 @@ class NapCatProcessModel:
 class NapCatQQProcessLog(QObject):
     """进程的日志功能"""
 
-    handle_output_log_signal = Signal(str)
+    output_log_signal = Signal(str)
+
+    # 内部分发 log 信号
+    _log_dispatcher_signal = Signal(str)
 
     def __init__(self, config: Config, process: QProcess) -> None:
         super().__init__()
@@ -51,6 +56,7 @@ class NapCatQQProcessLog(QObject):
 
         # 连接信号
         self._process.readyReadStandardOutput.connect(self.handle_output)
+        self._log_dispatcher_signal.connect(self.slot_get_web_ui_port)
 
     # ==================== 公共函数===================
     def get_log_content(self) -> str:
@@ -66,14 +72,36 @@ class NapCatQQProcessLog(QObject):
         """处理日志数据"""
         # 拿到解码后的数据
         data = self._process.readAllStandardOutput().data().decode()
-        # 正则处理转义吗
+        # 正则处理转义字符
         data = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", data)
         data = re.compile(r"\r+\n$").sub("\n", data)
         self._log_storage.append(data)
-        self.handle_output_log_signal.emit(data)
+
+        # 信号发射
+        self.output_log_signal.emit(data)
+        self._log_dispatcher_signal.emit(data)
+
+    def slot_get_web_ui_port(self, data: str) -> None:
+        """从日志数据中提取 WebUI 端口 和 token
+
+        检测到以下类似的日志
+        [info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:xxx/webui?token=xxx
+
+        Args:
+            data (str): 日志数据
+        """
+        if (
+            match := re.compile(
+                r"\[info\] \[NapCat\] \[WebUi\] WebUi User Panel Url: http://127\.0\.0\.1:(\d+)/webui\?token=(\S+)"
+            ).search(data)
+        ) is not None:
+            # 通过 ManagerNapCatQQLoginState 创建登录状态管理器
+            it(ManagerNapCatQQLoginState).create_login_state(
+                config=self._config, port=int(match.group(1)), token=match.group(2)
+            )
 
 
-class NapCatQQLogManager(QObject):
+class ManagerNapCatQQLog(QObject):
     """NapCatQQ 日志管理器"""
 
     def __init__(self) -> None:
@@ -102,11 +130,205 @@ class NapCatQQLogManager(QObject):
         return self.napcat_log_dict.get(qq_id, None)
 
 
+class GetAuthStatusRunnable(QObject, QRunnable):
+    """获取 NapCatQQ Auth 信息的任务类"""
+
+    # 信号
+    login_auth_signal = Signal(str)
+
+    def __init__(self, port: int, token: str) -> None:
+        """获取 NapCatQQ Auth 信息的任务类
+
+        Args:
+            port (int): WebUI 端口
+            token (str): WebUI Token
+        """
+        QObject.__init__(self)
+        QRunnable.__init__(self)
+        # 设置属性
+        self.port = port
+        self.token = token
+
+    def run(self):
+        response = post(
+            f"http://localhost:{self.port}/api/auth/login",
+            json={"hash": hashlib.sha256((self.token + ".napcat").encode("utf-8")).hexdigest()},
+            headers={"Content-Type": "application/json"},
+        )
+        if response.status_code == 200:
+            self.login_auth_signal.emit(response.json().get("data", {}).get("Credential", ""))
+
+
+class GetLoginStatusRunnable(QObject, QRunnable):
+    """获取 NapCatQQ 登录状态的任务类"""
+
+    # 信号
+    login_status_signal = Signal(bool)
+    login_qrcode_signal = Signal(str)
+    online_status_signal = Signal(bool)
+
+    def __init__(self, port: int, token: str, auth: str) -> None:
+        """获取 NapCatQQ Auth 信息的任务类
+
+        Args:
+            port (int): WebUI 端口
+            token (str): WebUI Token
+        """
+        QObject.__init__(self)
+        QRunnable.__init__(self)
+        # 设置属性
+        self.port = port
+        self.token = token
+        self.auth = auth
+
+    def run(self) -> None:
+        """执行获取认证信息的任务"""
+        # 创建 HTTP 客户端
+        self.client = Client(base_url=f"http://localhost:{self.port}", timeout=5)
+        self.client.headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.auth}",
+        }
+
+        # # 获取登录状态
+        self.get_login_status()
+        # 获取在线状态
+        self.get_online_status()
+
+    def get_login_status(self) -> None:
+        """获取 NapCatQQ 登录状态"""
+        if (response := self.client.post("/api/QQLogin/CheckLoginStatus")).status_code == 200:
+            result = response.json().get("data", {})
+            self.login_status_signal.emit(result.get("isLogin", False))
+            self.login_qrcode_signal.emit(result.get("qrcodeurl", ""))
+
+    def get_online_status(self) -> None:
+        """获取 NapCatQQ 在线状态"""
+        if (response := self.client.post("/api/QQLogin/GetQQLoginInfo")).status_code == 200:
+            result = response.json().get("data", {})
+            self.online_status_signal.emit(result.get("online", False))
+
+
+class NapCatQQLoginState(QObject):
+    """NapCatQQ 登录状态类
+
+    负责管理 NapCatQQ 的登录状态
+    """
+
+    def __init__(self, config: Config, port: int, token: str) -> None:
+        """初始化 NapCatQQ 登录状态"""
+        super().__init__()
+        # 设置属性
+        self.config = config
+        self.port = port
+        self.token = token
+        self.auth = None
+
+        # 登录状态属性
+        self._is_logged_in = False
+        self._online_status = False
+
+        # 启动定时器以定期获取授权状态
+        self._auth_timer = QTimer(self)
+        self._auth_timer.timeout.connect(self.slot_get_auth_status)
+        self._auth_timer.start(30 * 60 * 1000)  # 30分钟
+
+        # 启动定时器定期获取登录状态
+        self._login_state_timer = QTimer(self)
+        self._login_state_timer.timeout.connect(self.slot_get_login_state)
+        self._login_state_timer.start(10 * 1000)  # 10秒
+
+        # 立即执行一次（在事件循环中）
+        QTimer.singleShot(0, self.slot_get_auth_status)
+        QTimer.singleShot(10 * 1000, self.slot_get_login_state)
+
+    # ==================== 公共方法 ==================
+    def get_login_state(self) -> bool:
+        """获取登录状态
+
+        Returns:
+            bool: 是否已登录
+        """
+        return self._is_logged_in
+
+    def get_online_status(self) -> bool:
+        """获取在线状态
+
+        Returns:
+            bool: 是否在线
+        """
+        return self._online_status
+
+    # ==================== 槽函数 ====================
+    def slot_get_login_state(self) -> None:
+        """获取登录状态"""
+        runner = GetLoginStatusRunnable(port=self.port, token=self.token, auth=self.auth)
+        runner.login_status_signal.connect(self.slot_update_login_state)
+        runner.online_status_signal.connect(self.slot_update_online_status)
+        QThreadPool.globalInstance().start(runner)
+
+    def slot_get_auth_status(self) -> None:
+        """获取认证状态"""
+        runner = GetAuthStatusRunnable(port=self.port, token=self.token)
+        runner.login_auth_signal.connect(self.slot_update_auth)
+        QThreadPool.globalInstance().start(runner)
+
+    def slot_update_auth(self, auth: str) -> None:
+        """更新认证信息
+
+        Args:
+            auth (str): 认证信息
+        """
+        self.auth = auth
+
+    def slot_update_login_state(self, is_login: bool) -> None:
+        """更新登录状态
+
+        Args:
+            is_login (bool): 是否已登录
+        """
+        self._is_logged_in = is_login
+
+    def slot_update_online_status(self, online_status: bool) -> None:
+        """更新在线状态
+
+        Args:
+            online_status (bool): 是否在线
+        """
+        self._online_status = online_status
+
+
 class ManagerNapCatQQLoginState(QObject):
-    """管理NapCatQQ登录状态"""
+    """NapCatQQ 登录状态管理类
+
+    负责管理 NapCatQQ 的登录状态
+    """
 
     def __init__(self) -> None:
+        """初始化 NapCatQQ 登录状态管理器"""
         super().__init__()
+        self.napcat_login_state_dict: dict[str, NapCatQQLoginState] = {}
+
+    def create_login_state(self, config: Config, port: int, token: str) -> None:
+        """创建并添加登录状态对象
+
+        Args:
+            config (Config): 配置对象
+            port (int): WebUI 端口
+            token (str): WebUI Token
+        """
+        self.napcat_login_state_dict[str(config.bot.QQID)] = NapCatQQLoginState(config=config, port=port, token=token)
+
+    def get_login_state(self, qq_id: str) -> NapCatQQLoginState | None:
+        """获取指定 QQ 号的登录状态对象
+
+        Args:
+            qq_id (str): QQ 号
+
+        Returns:
+            NapCatQQLoginState | None: 对应的登录状态对象, 如果不存在则返回 None
+        """
+        return self.napcat_login_state_dict.get(qq_id, None)
 
 
 class ManagerNapCatQQProcess(QObject):
@@ -188,7 +410,7 @@ class ManagerNapCatQQProcess(QObject):
         process = self._create_napcat_process(config)
 
         # 进行一些操作
-        it(NapCatQQLogManager).create_log(config, process)
+        it(ManagerNapCatQQLog).create_log(config, process)
 
         # 启动进程
         process.start()
@@ -269,7 +491,7 @@ class ManagerNapCatQQProcess(QObject):
 class ManagerNapCatQQLogManagerCreator(AbstractCreator, ABC):
     """NapCatQQ 日志管理器创建器"""
 
-    targets = (CreateTargetInfo("src.core.utils.run_napcat", "NapCatQQLogManager"),)
+    targets = (CreateTargetInfo("src.core.utils.run_napcat", "ManagerNapCatQQLog"),)
 
     @staticmethod
     def available() -> bool:
@@ -277,8 +499,8 @@ class ManagerNapCatQQLogManagerCreator(AbstractCreator, ABC):
         return exists_module("src.core.utils.run_napcat")
 
     @staticmethod
-    def create(create_type: type[NapCatQQLogManager]) -> NapCatQQLogManager:
-        """创建 NapCatQQLogManager 实例"""
+    def create(create_type: type[ManagerNapCatQQLog]) -> ManagerNapCatQQLog:
+        """创建 ManagerNapCatQQLog 实例"""
         return create_type()
 
 
