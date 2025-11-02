@@ -358,6 +358,9 @@ class BotInfoWidget(QWidget):
                     tag.setCheckable(False)
                     self.flow_layout.addWidget(tag)
 
+            if self.flow_layout.count() == 0:
+                self.hide()
+
             # 设置控件
             self.icon_widget.setFixedSize(16, 16)
 
