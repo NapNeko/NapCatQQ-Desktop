@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from time import monotonic
 
 # 第三方库导入
-import httpx
 import psutil
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
@@ -23,6 +22,7 @@ from src.core.config.config_model import Config
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
 from src.ui.components.info_bar import error_bar
+from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 
 
 # ==================== 数据模型 ====================
@@ -173,6 +173,7 @@ class GetLoginStatusRunnable(QObject, QRunnable):
         Args:
             port (int): WebUI 端口
             token (str): WebUI Token
+            auth (str): 认证信息
         """
         QObject.__init__(self)
         QRunnable.__init__(self)
@@ -197,10 +198,19 @@ class GetLoginStatusRunnable(QObject, QRunnable):
 
     def get_login_status(self) -> None:
         """获取 NapCatQQ 登录状态"""
-        if (response := self.client.post("/api/QQLogin/CheckLoginStatus")).status_code == 200:
-            result = response.json().get("data", {})
-            self.login_status_signal.emit(result.get("isLogin", False))
-            self.login_qrcode_signal.emit(result.get("qrcodeurl", ""))
+        if (response := self.client.post("/api/QQLogin/CheckLoginStatus")).status_code != 200:
+            return
+
+        # 解析结果
+        result = response.json().get("data", {})
+        is_login = result.get("isLogin", False)
+        qr_code = result.get("qrcodeurl", "")
+
+        # 发出信号
+        self.login_status_signal.emit(is_login)
+
+        if not is_login and qr_code:
+            self.login_qrcode_signal.emit(qr_code)
 
     def get_online_status(self) -> None:
         """获取 NapCatQQ 在线状态"""
@@ -236,11 +246,11 @@ class NapCatQQLoginState(QObject):
         # 启动定时器定期获取登录状态
         self._login_state_timer = QTimer(self)
         self._login_state_timer.timeout.connect(self.slot_get_login_state)
-        self._login_state_timer.start(10 * 1000)  # 10秒
+        self._login_state_timer.start(3 * 1000)  # 3秒
 
         # 立即执行一次（在事件循环中）
         QTimer.singleShot(0, self.slot_get_auth_status)
-        QTimer.singleShot(10 * 1000, self.slot_get_login_state)
+        QTimer.singleShot(3 * 1000, self.slot_get_login_state)
 
     # ==================== 公共方法 ==================
     def get_login_state(self) -> bool:
@@ -265,6 +275,7 @@ class NapCatQQLoginState(QObject):
         runner = GetLoginStatusRunnable(port=self.port, token=self.token, auth=self.auth)
         runner.login_status_signal.connect(self.slot_update_login_state)
         runner.online_status_signal.connect(self.slot_update_online_status)
+        runner.login_qrcode_signal.connect(self.slot_update_login_qrcode)
         QThreadPool.globalInstance().start(runner)
 
     def slot_get_auth_status(self) -> None:
@@ -289,6 +300,9 @@ class NapCatQQLoginState(QObject):
         """
         self._is_logged_in = is_login
 
+        if is_login:
+            it(QRCodeDialogFactory).remove_qr_code(str(self.config.bot.QQID))
+
     def slot_update_online_status(self, online_status: bool) -> None:
         """更新在线状态
 
@@ -296,6 +310,15 @@ class NapCatQQLoginState(QObject):
             online_status (bool): 是否在线
         """
         self._online_status = online_status
+
+    def slot_update_login_qrcode(self, qr_code: str) -> None:
+        """更新登录二维码
+
+        Args:
+            qr_code (str): 登录二维码
+        """
+
+        it(QRCodeDialogFactory).add_qr_code(str(self.config.bot.QQID), qr_code)
 
 
 class ManagerNapCatQQLoginState(QObject):

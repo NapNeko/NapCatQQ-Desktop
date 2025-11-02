@@ -1,12 +1,23 @@
 # -*- coding: utf-8 -*-
 
 # 第三方库导入
+import qrcode
+from abc import ABC
 from pydantic import ValidationError
 from qfluentwidgets import BodyLabel
 from qfluentwidgets import FluentIcon as FI
-from qfluentwidgets import MessageBoxBase, RadioButton, SimpleCardWidget, TitleLabel
+from qfluentwidgets import (
+    MessageBoxBase,
+    RadioButton,
+    SimpleCardWidget,
+    TitleLabel,
+    ImageLabel,
+    PipsPager,
+    PipsScrollButtonDisplayMode,
+)
 from PySide6.QtCore import QObject, Qt, Slot
-from PySide6.QtWidgets import QButtonGroup, QGridLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QButtonGroup, QGridLayout, QVBoxLayout, QWidget, QHBoxLayout
+from PySide6.QtGui import QPixmap
 
 # 项目内模块导入
 from src.core.config.config_model import (
@@ -22,6 +33,10 @@ from src.core.utils import my_int
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 from src.ui.components.input_card.time_card import IntervalTimeConfigCard
 from src.ui.page.bot_page.utils.enum import ConnectType
+from creart import add_creator, exists_module, it
+from creart.creator import AbstractCreator, CreateTargetInfo
+from src.ui.components.stacked_widget import TransparentStackedWidget
+from io import BytesIO
 
 
 class ChooseConfigCard(SimpleCardWidget):
@@ -594,3 +609,194 @@ class AutoRestartDialog(MessageBoxBase):
         """清空配置"""
         self.enable_card.clear()
         self.interval_card.clear()
+
+
+class QRCodeDialog(MessageBoxBase):
+    """显示二维码的对话框"""
+
+    def __init__(self, qr_code_list: list[dict[str, str]], parent: QWidget) -> None:
+        """初始化二维码对话框
+
+        Args:
+            parent: 父控件
+            qr_code_list: 二维码列表
+        """
+        super().__init__(parent=parent)
+        # 设置属性
+        self._qr_code_list = qr_code_list
+
+        # 创建控件
+        self.title_label = TitleLabel(self.tr("QQ 登录二维码"), self)
+        self.view = TransparentStackedWidget(self)
+        self.pips_pager = PipsPager(self)
+
+        # 设置属性
+        self.widget.setMinimumSize(530, 470)
+        self.pips_pager.setPageNumber(len(self._qr_code_list))
+        self.pips_pager.setVisibleNumber(len(self._qr_code_list))
+        self.pips_pager.setNextButtonDisplayMode(PipsScrollButtonDisplayMode.ON_HOVER)
+        self.pips_pager.setPreviousButtonDisplayMode(PipsScrollButtonDisplayMode.ON_HOVER)
+
+        # 设置布局
+        self.viewLayout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.viewLayout.addWidget(self.view, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.viewLayout.addWidget(self.pips_pager, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        # 连接信号
+        self.pips_pager.currentIndexChanged.connect(self.view.setCurrentIndex)
+        self.view.currentChanged.connect(self.slot_current_index_changed)
+
+        # 调用方法
+        self.add_qr_codes()
+
+    # ==================== 公共方法 ====================
+    def update_qr_codes(self, qr_code_list: list[dict[str, str]]) -> None:
+        """更新二维码列表
+
+        Args:
+            qr_code_list (list[dict[str, str]]): 二维码列表
+        """
+        # 判断是否有变化
+        if self._qr_code_list == qr_code_list:
+            return
+
+        self._qr_code_list = qr_code_list
+
+        # 移除 view 中的所有子控件
+        while self.view.count() > 0:
+            widget_to_remove = self.view.widget(0)
+            self.view.removeWidget(widget_to_remove)
+            widget_to_remove.deleteLater()
+
+        # 更新分页控件
+        self.pips_pager.setPageNumber(len(self._qr_code_list))
+        self.pips_pager.setVisibleNumber(len(self._qr_code_list))
+
+        # 重新添加二维码图片
+        self.add_qr_codes()
+
+    def add_qr_codes(self) -> None:
+        """添加二维码图片到视图"""
+        for qr_code_info in self._qr_code_list:
+            self.add_qr_code(qr_code_info["qq_id"], qr_code_info["qrcode_url"])
+
+    def add_qr_code(self, qq_id: str, qrcode_url: str) -> None:
+        """添加二维码图片到视图
+
+        Args:
+            qrcode_url (str): 二维码 URL
+        """
+        # 生成二维码图片并编码为 PNG 格式的字节
+        pil_img = qrcode.make(qrcode_url).get_image()
+        buffer = BytesIO()
+        pil_img.save(buffer, format="PNG")
+        qr_code_image_bytes = buffer.getvalue()
+
+        # 使用 QPixmap 加载图片数据并创建 ImageLabel
+        pixmap = QPixmap()
+        pixmap.loadFromData(qr_code_image_bytes)
+        image_label = ImageLabel(pixmap, self.view)
+        image_label.setObjectName(qq_id)
+
+        # 调整属性
+        image_label.scaledToHeight(260)
+
+        # 添加到视图堆栈
+        self.view.addWidget(image_label)
+
+    # ==================== 槽函数 ====================
+    def slot_current_index_changed(self, index: int) -> None:
+        """当前索引改变槽函数
+
+        Args:
+            index (int): 当前索引
+        """
+        if index == -1:
+            return
+        self.title_label.setText(self.tr(f"QQ 登录二维码 - {self.view.widget(index).objectName()}"))
+
+
+class QRCodeDialogFactory(QObject):
+    """显示二维码的对话框的工厂类"""
+
+    def __init__(self) -> None:
+        """初始化二维码对话框工厂类"""
+        super().__init__()
+        # 创建控件
+        self.dialog = None
+
+        # 二维码列表, 存储二维码的相关信息, 字典结构为{"qq_id": str, "qrcode_url": str}
+        self.qr_code_list: list[dict[str, str]] = []
+
+    # ==================== 公共方法 ====================
+    def add_qr_code(self, qq_id: str, qrcode_url: str) -> None:
+        """添加二维码信息到列表
+
+        Args:
+            qq_id (str): QQ 号
+            qrcode_url (str): 二维码 URL
+        """
+        # 如果列表中已存在相同 QQ 号的二维码信息, 则更新其 URL
+        for qr_code_info in self.qr_code_list:
+            if qr_code_info["qq_id"] == qq_id:
+                qr_code_info["qrcode_url"] = qrcode_url
+                break
+        else:
+            self.qr_code_list.append({"qq_id": qq_id, "qrcode_url": qrcode_url})
+
+        self.show()
+
+    def remove_qr_code(self, qq_id: str) -> None:
+        """从列表中移除二维码信息
+
+        Args:
+            qq_id (str): QQ 号
+        """
+        self.qr_code_list = [info for info in self.qr_code_list if info["qq_id"] != qq_id]
+
+        # 如果没有二维码信息了, 则关闭对话框
+        if not self.qr_code_list and self.dialog is not None:
+            self.dialog.done(MessageBoxBase.DialogCode.Rejected)
+            self.dialog = None
+        else:
+            self.dialog.update_qr_codes(self.qr_code_list)
+
+    def show(self) -> None:
+        """显示二维码对话框"""
+        # 判断二维码列表是否为空
+        if not self.qr_code_list:
+            return
+
+        # 判断是否已经exec()过, 如果是则更新内容
+        if self.dialog is not None:
+            self.dialog.update_qr_codes(self.qr_code_list)
+
+        else:
+            from src.ui.window.main_window import MainWindow
+
+            self.dialog = QRCodeDialog(self.qr_code_list, MainWindow())
+
+            # 清理对话框引用
+            if (
+                code := self.dialog.exec()
+            ) == MessageBoxBase.DialogCode.Accepted or code == MessageBoxBase.DialogCode.Rejected:
+                self.dialog = None
+
+
+class QRCodeDialogFactoryCreator(AbstractCreator, ABC):
+    """QRCodeDialogFactory 的创建器"""
+
+    targets = (CreateTargetInfo("src.ui.page.bot_page.widget.msg_box", "QRCodeDialogFactory"),)
+
+    @staticmethod
+    def available() -> bool:
+        """检查是否可用"""
+        return exists_module("src.ui.page.bot_page.widget.msg_box")
+
+    @classmethod
+    def create(cls, create_type: type[QRCodeDialogFactory]) -> QRCodeDialogFactory:
+        """创建 QRCodeDialogFactory 实例"""
+        return create_type()
+
+
+add_creator(QRCodeDialogFactoryCreator)
