@@ -5,7 +5,9 @@
 # 标准库导入
 import hashlib
 import re
+import time
 from abc import ABC
+from calendar import c
 from collections import deque
 from dataclasses import dataclass
 from time import monotonic
@@ -18,12 +20,13 @@ from httpx import Client, post
 from PySide6.QtCore import QObject, QProcess, QRunnable, QThreadPool, QTimer, Signal
 
 # 项目内模块导入
+from src.core.config import cfg
+from src.core.config.config_enum import TimeUnitEnum
 from src.core.config.config_model import Config
-from src.core.utils.logger import logger
-from src.core.utils.path_func import PathFunc
 from src.core.network.email import offline_email
 from src.core.network.webhook import offline_webhook
-from src.core.config import cfg
+from src.core.utils.logger import logger
+from src.core.utils.path_func import PathFunc
 
 
 # ==================== 数据模型 ====================
@@ -310,6 +313,7 @@ class NapCatQQLoginState(QObject):
         self._is_logged_in = is_login
 
         if is_login:
+            # 项目内模块导入
             from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 
             it(QRCodeDialogFactory).remove_qr_code(str(self.config.bot.QQID))
@@ -346,6 +350,7 @@ class NapCatQQLoginState(QObject):
         Args:
             qr_code (str): 登录二维码
         """
+        # 项目内模块导入
         from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 
         it(QRCodeDialogFactory).add_qr_code(str(self.config.bot.QQID), qr_code)
@@ -388,6 +393,66 @@ class ManagerNapCatQQLoginState(QObject):
         if qq_id in self.napcat_login_state_dict:
             self.napcat_login_state_dict[qq_id].remove()
             self.napcat_login_state_dict.pop(qq_id)
+
+
+class ManagerAutoRestartProcess(QObject):
+    """NapCatQQ 自动重启管理类"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.auto_restart_process_dict: dict[str, QTimer] = {}
+
+    def create_auto_restart_timer(self, config: Config) -> None:
+        """创建自动重启定时器
+
+        Args:
+            config (Config): 配置对象
+        """
+
+        # 必要的前置检查
+        if str(config.bot.QQID) in self.auto_restart_process_dict:
+            return
+
+        if not config.bot.autoRestartSchedule.enable:
+            return
+
+        # 计算时间间隔(毫秒)
+        time_unit_multipliers = {
+            TimeUnitEnum.MINUTE: 60,
+            TimeUnitEnum.HOUR: 3600,
+            TimeUnitEnum.DAY: 86400,
+            TimeUnitEnum.MONTH: 2592000,
+            TimeUnitEnum.YEAR: 31536000,
+        }
+        interval = (
+            config.bot.autoRestartSchedule.duration * time_unit_multipliers[config.bot.autoRestartSchedule.time_unit]
+        )
+        interval_ms = interval * 1000
+
+        # 创建定时器
+        timer = QTimer(self)
+        timer.setInterval(interval_ms)
+        timer.timeout.connect(lambda: it(ManagerNapCatQQProcess).restart_process(config))
+        timer.start()
+
+        # 添加到字典
+        self.auto_restart_process_dict[str(config.bot.QQID)] = timer
+        print(self.auto_restart_process_dict)
+
+    def remove_auto_restart_timer(self, qq_id: str) -> None:
+        """移除自动重启定时器
+
+        Args:
+            qq_id (str): QQ 号
+        """
+        print(qq_id)
+        if qq_id in self.auto_restart_process_dict:
+            print("removing")
+            self.auto_restart_process_dict[qq_id].stop()
+            self.auto_restart_process_dict[qq_id].timeout.disconnect()
+            self.auto_restart_process_dict[qq_id].deleteLater()
+            self.auto_restart_process_dict.pop(qq_id)
+            print(self.auto_restart_process_dict)
 
 
 class ManagerNapCatQQProcess(QObject):
@@ -467,6 +532,7 @@ class ManagerNapCatQQProcess(QObject):
         """
         # 如果超过 4 个进程，则取消创建
         if len(self.napcat_process_dict) >= 4:
+            # 项目内模块导入
             from src.ui.components.info_bar import error_bar
 
             error_bar("NapCatQQ 进程数量已达上限，无法创建新进程!")
@@ -477,6 +543,7 @@ class ManagerNapCatQQProcess(QObject):
 
         # 进行一些操作
         it(ManagerNapCatQQLog).create_log(config, process)
+        it(ManagerAutoRestartProcess).create_auto_restart_timer(config)
 
         # 启动进程
         process.start()
@@ -484,6 +551,7 @@ class ManagerNapCatQQProcess(QObject):
 
         # 确保进程已启动
         if not process.waitForStarted(5000):
+            # 项目内模块导入
             from src.ui.components.info_bar import error_bar
 
             error_bar(f"NapCatQQ 进程启动失败!")
@@ -543,6 +611,18 @@ class ManagerNapCatQQProcess(QObject):
         """停止所有 NapCatQQ 进程"""
         for qq_id in list(self.napcat_process_dict.keys()):
             self.stop_process(qq_id)
+
+    def restart_process(self, config: Config) -> None:
+        """重启指定 QQ 号的 QProcess
+
+        Args:
+            config (Config): 配置对象
+        """
+        if not self.get_process(str(config.bot.QQID)).process:
+            return
+
+        self.stop_process(str(config.bot.QQID))
+        self.create_napcat_process(config)
 
     def get_memory_usage(self, qq_id: str) -> int:
         """获取指定 QQ 号的 NapCatQQ 进程树内存使用情况"""
@@ -609,6 +689,25 @@ class ManagerNapCatQQLoginStateCreator(AbstractCreator, ABC):
 
 
 add_creator(ManagerNapCatQQLoginStateCreator)
+
+
+class ManagerAutoRestartProcessCreator(AbstractCreator, ABC):
+    """NapCatQQ 自动重启进程管理器创建器"""
+
+    targets = (CreateTargetInfo("src.core.utils.run_napcat", "ManagerAutoRestartProcess"),)
+
+    @staticmethod
+    def available() -> bool:
+        """检查是否可用"""
+        return exists_module("src.core.utils.run_napcat")
+
+    @staticmethod
+    def create(create_type: type[ManagerAutoRestartProcess]) -> ManagerAutoRestartProcess:
+        """创建 ManagerAutoRestartProcess 实例"""
+        return create_type()
+
+
+add_creator(ManagerAutoRestartProcessCreator)
 
 
 class ManagerNapCatQQProcessCreator(AbstractCreator, ABC):

@@ -61,7 +61,7 @@ from src.core.config.config_model import (
     WebsocketServersConfig,
 )
 from src.core.network.urls import Urls
-from src.core.utils.run_napcat import ManagerNapCatQQProcess
+from src.core.utils.run_napcat import ManagerNapCatQQProcess, ManagerAutoRestartProcess
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
@@ -144,6 +144,7 @@ class BotCard(HeaderCardWidget):
     def slot_stop_button(self) -> None:
         """处理停止按钮点击"""
         it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
+        it(ManagerAutoRestartProcess).remove_auto_restart_timer(str(self._config.bot.QQID))
 
     def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
         """处理 NapCatQQ 进程变化时, 切换按钮显示
@@ -190,8 +191,7 @@ class BotCard(HeaderCardWidget):
             self.tr("确定要移除 Bot ({}) 吗？\n此操作无法恢复!".format(self._config.bot.QQID)),
             MainWindow(),
         ).exec():
-            if it(ManagerNapCatQQProcess).get_process(str(self._config.bot.QQID)) is not None:
-                it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
+            self.stop_button.click()
             self.remove_signal.emit(str(self._config.bot.QQID))
 
 
