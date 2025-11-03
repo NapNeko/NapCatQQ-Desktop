@@ -16,6 +16,7 @@ from PySide6.QtCore import QFile, QObject, QRunnable, QThreadPool, Signal
 from src.core.config import cfg
 from src.core.config.config_model import Config
 from src.ui.components.info_bar import error_bar, success_bar
+from src.core.utils.file import QFluentFile
 
 
 class EncryptionType(Enum):
@@ -163,11 +164,11 @@ def test_email() -> None:
 
     file = QFile(":template/template/email/test_email.html")
     file.setOpenMode(QFile.OpenModeFlag.ReadOnly)
-    
+
     email_content = Template(file.readAll().data().decode("utf-8")).safe_substitute(
         {"disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S")}
     )
-    
+
     file.close()
 
     email = Email(

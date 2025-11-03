@@ -425,16 +425,19 @@ class BotInfoWidget(QWidget):
             )
 
             # 检查是否已有计时器在运行
-            if hasattr(self, "_timer"):
+            if hasattr(self, "_run_time_timer"):
                 self._run_time_timer.stop()
                 self._run_time_timer.deleteLater()
 
             # 创建新的计时器
             timer = QTimer(self)
 
-            # 每秒更新一次运行时长显示
-            time_format = f"{int(monotonic() - self.start_time)//3600:02}:{(int(monotonic() - self.start_time)%3600)//60:02}:{int(monotonic() - self.start_time)%60:02}"
-            timer.timeout.connect(lambda: self._run_time_info.text_label.setText(time_format))
+            # 每秒更新一次运行时长显示 格式 00:00:00
+            timer.timeout.connect(
+                lambda: self._run_time_info.text_label.setText(
+                    f"{int(monotonic() - self.start_time)//3600:02}:{(int(monotonic() - self.start_time)%3600)//60:02}:{int(monotonic() - self.start_time)%60:02}"
+                )
+            )
             timer.start(1000)
 
             # 保存计时器引用

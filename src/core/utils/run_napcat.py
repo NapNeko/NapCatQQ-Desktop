@@ -21,6 +21,9 @@ from PySide6.QtCore import QObject, QProcess, QRunnable, QThreadPool, QTimer, Si
 from src.core.config.config_model import Config
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
+from src.core.network.email import offline_email
+from src.core.network.webhook import offline_webhook
+from src.core.config import cfg
 
 
 # ==================== 数据模型 ====================
@@ -235,6 +238,7 @@ class NapCatQQLoginState(QObject):
         # 登录状态属性
         self._is_logged_in = False
         self._online_status = False
+        self._offline_notice = False
 
         # 启动定时器以定期获取授权状态
         self._auth_timer = QTimer(self)
@@ -317,6 +321,24 @@ class NapCatQQLoginState(QObject):
             online_status (bool): 是否在线
         """
         self._online_status = online_status
+
+        if online_status or not self._is_logged_in:
+            return
+
+        if self._offline_notice:
+            return
+
+        # 离线通知
+        if self.config.advanced.offlineNotice:
+            return
+
+        if cfg.get(cfg.bot_offline_web_hook_notice):
+            offline_webhook(self.config)
+        if cfg.get(cfg.bot_offline_email_notice):
+            offline_email(self.config)
+
+        # 更改状态
+        self._offline_notice = True
 
     def slot_update_login_qrcode(self, qr_code: str) -> None:
         """更新登录二维码
