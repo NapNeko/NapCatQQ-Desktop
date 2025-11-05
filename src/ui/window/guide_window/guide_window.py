@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import SplashScreen, Theme, setTheme
+from qfluentwidgets import Theme, setTheme
 from qfluentwidgets.components.widgets.stacked_widget import PopUpAniStackedWidget
 from qframelesswindow import FramelessWindow
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QVBoxLayout
 
 # 项目内模块导入
+from src.core.config import cfg
 from src.core.utils.singleton import singleton
 from src.ui.common.icon import StaticIcon
 from src.ui.window.guide_window.ask_page import AskPage
+from src.ui.window.guide_window.eula_page import EulaPage
 from src.ui.window.guide_window.finsh_page import FinshPage
 from src.ui.window.guide_window.install_page import InstallNapCatQQPage, InstallQQPage
 from src.ui.window.guide_window.welcome_page import WelcomePage
-from src.ui.window.guide_window.eula_page import EulaPage
 
 """引导用户执行初始化操作模块
 
@@ -118,6 +119,7 @@ class GuideWindow(FramelessWindow):
         from src.ui.window.main_window import MainWindow
 
         MainWindow().initialize()
+        cfg.set(cfg.main_window, True)
 
         super().close()
 

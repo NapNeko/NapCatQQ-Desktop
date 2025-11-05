@@ -42,6 +42,5 @@ if __name__ == "__main__":
         from src.ui.window.guide_window import GuideWindow
 
         GuideWindow().initialize()
-        cfg.set(cfg.main_window, True)
 
     sys.exit(app.exec())
