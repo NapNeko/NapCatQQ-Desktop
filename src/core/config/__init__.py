@@ -246,8 +246,11 @@ class Config(QConfig):
         try:
             with open(self._cfg.file, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.error(f"配置文件加载失败: {e.__class__.__name__}: {e.msg}, 使用默认配置")
+        except FileNotFoundError:
+            logger.debug(f"配置文件不存在: {self._cfg.file}, 使用默认配置")
+            cfg = {}
+        except json.JSONDecodeError as e:
+            logger.error(f"配置文件格式错误: {e.msg}, 使用默认配置")
             cfg = {}
 
         # 获取配置项

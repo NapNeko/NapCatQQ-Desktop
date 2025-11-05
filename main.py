@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QApplication
 from src.core.config import cfg
 from src.core.utils.mutex import SingleInstanceApplication
 from src.core.utils.path_func import PathFunc
-from src.resource import resource
 
 if __name__ == "__main__":
     # 实现单实例应用程序检查
@@ -27,6 +26,10 @@ if __name__ == "__main__":
         os.environ["QT_SCALE_FACTOR"] = str(cfg.get(cfg.dpi_scale))
 
     app = QApplication(sys.argv)
+
+    # 延迟加载资源文件（202,000行的编译资源），在QApplication创建后加载
+    # 这样可以显著提升启动速度
+    from src.resource import resource
 
     # 延迟加载字体，在窗口显示之前加载以提升启动速度
     # 字体加载移至窗口初始化时进行
