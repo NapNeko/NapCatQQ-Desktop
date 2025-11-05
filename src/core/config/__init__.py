@@ -61,7 +61,7 @@ from src.core.config.config_enum import CloseActionEnum, Language
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
 
-__version__ = "v1.7.2"
+__version__ = "v1.7.3"
 
 
 class LanguageSerializer(ConfigSerializer):
