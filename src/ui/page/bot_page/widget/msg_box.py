@@ -484,7 +484,7 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
                 "port": self.port_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
                 "enableForcePushEvent": self.force_push_event_card.get_value(),
-                "heartInterval": my_int(self.heart_interval_card.get_value(), 300000),
+                "heartInterval": my_int(self.heart_interval_card.get_value(), 30000),
                 **super().get_config().model_dump(),
             }
         )
@@ -551,8 +551,8 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
             **{
                 "url": self.url_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
-                "heartInterval": my_int(self.heart_interval_card.get_value(), 300000),
-                "reconnectInterval": my_int(self.reconnect_interval_card.get_value(), 300000),
+                "heartInterval": int(self.heart_interval_card.get_value(), 30000),
+                "reconnectInterval": int(self.reconnect_interval_card.get_value(), 30000),
                 **super().get_config().model_dump(),
             }
         )
