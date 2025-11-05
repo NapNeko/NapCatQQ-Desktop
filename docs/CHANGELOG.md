@@ -14,6 +14,7 @@
  - 双击时能启动多个NCD的问题
  - 消失的引导(忘了这茬了)
  - 删除连接配置时没反应的问题
+ - 点击添加连接配置选择 Client 出现 Server 的问题
 
 ## 😘 优化功能
  - 更新功能更加完善 [#80](https://github.com/NapNeko/NapCatQQ-Desktop/issues/80)
