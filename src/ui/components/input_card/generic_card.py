@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*
 # 第三方库导入
 from pydantic import BaseModel
-from qfluentwidgets.common import FluentIcon, FluentIconBase, FluentStyleSheet, isDarkTheme
+from qfluentwidgets.common import (
+    FluentIcon,
+    FluentIconBase,
+    FluentStyleSheet,
+    isDarkTheme,
+    ConfigItem,
+    setFontFamilies,
+    fontFamilies,
+)
 from qfluentwidgets.components import (
     ComboBox,
     Flyout,
@@ -31,6 +39,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from src.core.config import cfg
 
 # 项目内模块导入
 from src.ui.components.code_editor import JsonEditor
@@ -479,3 +488,53 @@ class VersionInfoCard(SettingCard):
         # 添加到布局
         self.hBoxLayout.addWidget(self.version_label, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(32)
+
+
+class FontFamilyConfigCatd(SettingCard):
+    """字体配置卡片"""
+
+    def __init__(
+        self,
+        configItem: ConfigItem,
+        icon: FluentIconBase,
+        title: str,
+        content: str | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        """初始化
+
+        Args:
+            configItem (ConfigItem): 配置项
+            icon (FluentIconBase): 图标
+            title (str): 标题
+            content (str | None, optional): 内容. Defaults to None.
+            parent (QWidget | None, optional): 父控件. Defaults to None.
+        """
+        super().__init__(icon, title, content, parent)
+        # 设置属性
+        self._configItem = configItem
+
+        # 字体选择下拉框
+        self.font_combo_box = ComboBox(self)
+        self.font_combo_box.addItems(cfg.get(cfg.fontFamilies) + self._get_system_font_families())
+        self.font_combo_box.setFixedWidth(165)
+
+        # 连接信号
+        self.font_combo_box.currentTextChanged.connect(self.slot_choose_font_family)
+
+        # 添加到布局
+        self.hBoxLayout.addWidget(self.font_combo_box, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
+
+    def _get_system_font_families(self) -> list[str]:
+        """获取系统字体列表"""
+        from PySide6.QtGui import QFontDatabase
+
+        font_db = QFontDatabase()
+        return font_db.families()
+
+    # ==================== 槽函数 ====================
+    def slot_choose_font_family(self) -> None:
+        """选择字体槽函数"""
+        if font_family := self.font_combo_box.currentText():
+            setFontFamilies([font_family, "Segoe UI", "Microsoft YaHei", "PingFang SC"], save=True)

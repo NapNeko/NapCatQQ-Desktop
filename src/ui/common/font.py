@@ -13,10 +13,7 @@ class FontManager:
     @classmethod
     def initialize_fonts(cls) -> None:
         if not cls._font_loaded:
-
-            fonts = fontFamilies()
-            fonts.insert(0, cls._load_single_font(":/font/font/JB-MAPLE.ttf"))
-            setFontFamilies(fonts)
+            cls._load_single_font(":/font/font/JB-MAPLE.ttf")
             cls._font_loaded = True
 
     @classmethod

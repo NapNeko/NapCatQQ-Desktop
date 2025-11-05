@@ -22,7 +22,12 @@ from PySide6.QtWidgets import QGridLayout, QWidget
 # 项目内模块导入
 from src.core.config import cfg
 from src.ui.components.info_bar import success_bar
-from src.ui.components.input_card.generic_card import ComboBoxConfigCard, ShowDialogCardBase, SwitchConfigCard
+from src.ui.components.input_card.generic_card import (
+    ComboBoxConfigCard,
+    ShowDialogCardBase,
+    SwitchConfigCard,
+    FontFamilyConfigCatd,
+)
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -69,6 +74,13 @@ class Personalization(ScrollArea):
             content=self.tr("选择主题色"),
             parent=self.theme_group,
         )
+        self.font_family_card = FontFamilyConfigCatd(
+            configItem=cfg.fontFamilies,
+            icon=FluentIcon.FONT,
+            title=self.tr("字体"),
+            content=self.tr("设置应用程序的字体"),
+            parent=self.theme_group,
+        )
         # 创建组 - 窗体
         self.window_group = SettingCardGroup(title=self.tr("窗体"), parent=self.view)
         # 创建项
@@ -101,6 +113,7 @@ class Personalization(ScrollArea):
 
         self.theme_group.addSettingCard(self.theme_card)
         self.theme_group.addSettingCard(self.theme_color_card)
+        self.theme_group.addSettingCard(self.font_family_card)
         # self.personalGroup.addSettingCard(self.languageCard)
 
         self.window_group.addSettingCard(self.zoom_card)

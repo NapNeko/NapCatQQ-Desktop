@@ -205,6 +205,19 @@ class Config(QConfig):
     def __init__(self):
         super().__init__()
 
+        # 修改 Config 初始化
+        self.fontFamilies.restart = True
+
+        # 连接重启提示信号
+        self.appRestartSig.connect(self.slot_restart_tips)
+
+    def slot_restart_tips(self) -> None:
+        """接收重启提示信号, 发出应用重启提示"""
+        # 项目内模块导入
+        from src.ui.components.info_bar import success_bar
+
+        success_bar(self.tr("配置在重启后生效"))
+
     @exceptionHandler()
     def load(self, file: str | Path = None, config: Self = None) -> None:
         """重写加载配置
