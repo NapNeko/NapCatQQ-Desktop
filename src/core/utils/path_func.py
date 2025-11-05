@@ -56,11 +56,17 @@ class PathFunc(metaclass=Singleton):
         self.bot_config_path = self.config_dir_path / "bot.json"
         self.napcat_config_path = self.napcat_path / "config"
 
-        # 检查迁移
-        self.path_migration()
+        # 延迟执行迁移检查，提升启动速度
+        # 迁移检查将在 path_validator 首次调用时执行
+        self._migration_checked = False
 
     def path_validator(self) -> None:
         """验证一系列路径"""
+
+        # 首次调用时执行迁移检查
+        if not self._migration_checked:
+            self.path_migration()
+            self._migration_checked = True
 
         paths_to_validate = [(self.tmp_path, "Tmp"), (self.config_dir_path, "config"), (self.napcat_path, "NapCat")]
 

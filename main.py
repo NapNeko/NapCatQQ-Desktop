@@ -11,7 +11,6 @@ from src.core.config import cfg
 from src.core.utils.mutex import SingleInstanceApplication
 from src.core.utils.path_func import PathFunc
 from src.resource import resource
-from src.ui.common.font import FontManager
 
 if __name__ == "__main__":
     # 实现单实例应用程序检查
@@ -29,8 +28,8 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    # 初始化字体
-    FontManager.initialize_fonts()
+    # 延迟加载字体，在窗口显示之前加载以提升启动速度
+    # 字体加载移至窗口初始化时进行
 
     if cfg.get(cfg.main_window) and cfg.get(cfg.elua_accepted):
         # 项目内模块导入

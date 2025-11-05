@@ -22,12 +22,20 @@ class Logger:
         """初始化日志记录器"""
         # Log 缓冲区
         self.log_buffer = []
+        self._log_path = None
+        self._initialized = False
 
     def load_config(self) -> None:
         """加载配置项"""
         self.log_buffer_size = 5000  # 日志缓冲区大小
         self.log_buffer_delete_size = 1000  # 删除缓冲区日志数量
         self.log_save_day = 7  # 日志保存天数
+
+    def _ensure_initialized(self) -> None:
+        """确保日志系统已初始化（延迟初始化）"""
+        if not self._initialized:
+            self.create_log_file()
+            self._initialized = True
 
     def create_log_file(self) -> None:
         """
@@ -38,12 +46,18 @@ class Logger:
         # 定义日志文件路径
         if not (log_dir := Path.cwd() / "log").exists():
             log_dir.mkdir(parents=True, exist_ok=True)
-        self.log_path = log_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+        self._log_path = log_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
 
         # 遍历日志文件夹, 删除过期日志文件(超过 7 天)
         for log_file in log_dir.iterdir():
             if (datetime.now() - datetime.fromtimestamp(log_file.stat().st_mtime)).days > self.log_save_day:
                 log_file.unlink()
+
+    @property
+    def log_path(self) -> Path:
+        """获取日志文件路径（延迟初始化）"""
+        self._ensure_initialized()
+        return self._log_path
 
     def clear_buffer(self) -> None:
         """清理日志缓冲区
@@ -155,4 +169,4 @@ class Logger:
 # 实例化日志记录器
 logger = Logger()
 logger.load_config()
-logger.create_log_file()
+# 日志文件创建延迟到首次写入时（提升启动速度）

@@ -39,6 +39,10 @@ class MainWindow(MSFluentWindow):
 
     def initialize(self) -> None:
         """初始化"""
+        # 初始化字体（延迟加载以提升启动速度）
+        from src.ui.common.font import FontManager
+        FontManager.initialize_fonts()
+
         # 调用方法
         self._set_window()
         self._set_item()

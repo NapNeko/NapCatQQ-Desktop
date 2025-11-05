@@ -48,6 +48,9 @@ class GuideWindow(FramelessWindow):
 
         调整窗体大小、位置、布局等
         """
+        # 初始化字体（延迟加载以提升启动速度）
+        from src.ui.common.font import FontManager
+        FontManager.initialize_fonts()
         # 设置主题
         setTheme(Theme.AUTO)
         self.show()
