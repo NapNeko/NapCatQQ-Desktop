@@ -51,6 +51,7 @@ class BotConfig(BaseModel):
     QQID: str | int
     musicSignUrl: str = ""
     autoRestartSchedule: AutoRestartScheduleConfig
+    offlineAutoRestart: bool = False
 
     @field_validator("name")
     @staticmethod

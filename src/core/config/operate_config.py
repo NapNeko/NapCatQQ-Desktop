@@ -32,6 +32,7 @@ def write_config(configs: List[Config]) -> None:
     """
     ## 写入 NCD 机器人配置文件
     """
+
     with open(str(PathFunc().bot_config_path), "w", encoding="utf-8") as file:
         json.dump([json.loads(config.model_dump_json()) for config in configs], file, indent=4, ensure_ascii=False)
 

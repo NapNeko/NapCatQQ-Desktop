@@ -3,6 +3,7 @@
 Bot 配置页面
 """
 # 第三方库导入
+from tkinter import SW
 from qfluentwidgets import ExpandLayout, FlowLayout, FluentIcon, ScrollArea
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
@@ -67,10 +68,22 @@ class BotConfigWidget(ScrollArea):
             content=self.tr("设置自动重启 Bot 的相关选项"),
             parent=self.view,
         )
+        self.offline_auto_restart_card = SwitchConfigCard(
+            icon=FluentIcon.HISTORY,
+            title=self.tr("掉线重启"),
+            content=self.tr("当 Bot 掉线时自动重启, 此项打开时, 不在发送掉线通知"),
+            parent=self.view,
+        )
 
         # 设置属性
         self._config = None
-        self.cards = [self.bot_name_card, self.bot_qq_id_card, self.music_sign_url_card, self.auto_restart_dialog_card]
+        self.cards = [
+            self.bot_name_card,
+            self.bot_qq_id_card,
+            self.music_sign_url_card,
+            self.auto_restart_dialog_card,
+            self.offline_auto_restart_card,
+        ]
 
         # 设置控件
         self.setWidget(self.view)
@@ -94,6 +107,7 @@ class BotConfigWidget(ScrollArea):
                 "QQID": self.bot_qq_id_card.get_value(),
                 "musicSignUrl": self.music_sign_url_card.get_value(),
                 "autoRestartSchedule": self.auto_restart_dialog_card.get_value(),
+                "offlineAutoRestart": self.offline_auto_restart_card.get_value(),
             }
         )
 
@@ -107,6 +121,7 @@ class BotConfigWidget(ScrollArea):
         self.bot_qq_id_card.fill_value(self._config.QQID)
         self.music_sign_url_card.fill_value(self._config.musicSignUrl)
         self.auto_restart_dialog_card.fill_value(self._config.autoRestartSchedule)
+        self.offline_auto_restart_card.fill_value(self._config.offlineAutoRestart)
 
     def clear_config(self) -> None:
         """清空配置"""

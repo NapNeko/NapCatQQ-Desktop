@@ -329,6 +329,10 @@ class NapCatQQLoginState(QObject):
         if online_status or not self._is_logged_in:
             return
 
+        if self.config.bot.offlineAutoRestart:
+            it(ManagerNapCatQQProcess).restart_process(self.config)
+            return
+
         if self._offline_notice:
             return
 
