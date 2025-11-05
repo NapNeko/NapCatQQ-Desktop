@@ -112,7 +112,7 @@ class ChooseConfigTypeDialog(MessageBoxBase):
         self.button_group.addButton(self.http_sse_server_config_button, 2)
         self.button_group.addButton(self.http_client_config_button, 3)
         self.button_group.addButton(self.web_socket_server_config_button, 4)
-        self.button_group.addButton(self.web_socket_client_config_button, 4)
+        self.button_group.addButton(self.web_socket_client_config_button, 5)
         self.widget.setMinimumSize(850, 400)
 
         # 设置布局
@@ -135,7 +135,9 @@ class ChooseConfigTypeDialog(MessageBoxBase):
             ConnectType: 连接类型枚举
         """
         if (checked_id := self.button_group.checkedId()) != -1:
-            return list(ConnectType)[checked_id]
+            # 将选中的 id 映射为 ConnectType。使用 ConnectType(checked_id) 比
+            # list(ConnectType)[checked_id] 更稳健（避免枚举顺序/索引不一致的问题）。
+            return ConnectType(checked_id)
 
         return ConnectType.NO_TYPE
 
