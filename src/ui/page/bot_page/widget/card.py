@@ -62,7 +62,7 @@ from src.core.config.config_model import (
 )
 from src.core.network.urls import Urls
 from src.core.utils.run_napcat import ManagerNapCatQQProcess, ManagerAutoRestartProcess
-from src.ui.common.icon import StaticIcon
+from src.ui.common.icon import StaticIcon, NapCatDesktopIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
 from src.ui.page.bot_page.widget.msg_box import (
@@ -96,7 +96,7 @@ class BotCard(HeaderCardWidget):
         self.info_widget = BotInfoWidget(self._config, self)
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
         self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
-        self.log_button = TransparentToolButton(FluentIcon.DOCUMENT, self)
+        self.log_button = TransparentToolButton(NapCatDesktopIcon.LOG, self)
         self.setting_button = TransparentToolButton(FluentIcon.SETTING, self)
         self.remove_button = TransparentToolButton(FluentIcon.DELETE, self)
 
@@ -125,6 +125,9 @@ class BotCard(HeaderCardWidget):
         self.setting_button.clicked.connect(self.slot_setting_button)
         self.remove_button.clicked.connect(self.slot_remove_button)
 
+        # 调用方法
+        self.set_tooltip()
+
     # ==================== 公共方法 ==================
     def update_info_card(self) -> None:
         """更新信息卡片显示内容， 用于外部调用，刷新后调用"""
@@ -135,6 +138,25 @@ class BotCard(HeaderCardWidget):
             self.slot_process_changed_button(str(self._config.bot.QQID), QProcess.ProcessState.Running)
             self.info_widget.slot_run_time_start(str(self._config.bot.QQID), QProcess.ProcessState.Running)
             self.info_widget.slot_memory_usage_start(str(self._config.bot.QQID), QProcess.ProcessState.Running)
+
+    # ==================== UI方法 ====================
+    def set_tooltip(self) -> None:
+        """设置工具提示"""
+        self.run_button.setToolTip(self.tr("启动 Bot"))
+        self.stop_button.setToolTip(self.tr("停止 Bot"))
+        self.log_button.setToolTip(self.tr("查看日志"))
+        self.setting_button.setToolTip(self.tr("配置 Bot"))
+        self.remove_button.setToolTip(self.tr("移除 Bot"))
+
+        for button in [
+            self.run_button,
+            self.stop_button,
+            self.log_button,
+            self.setting_button,
+            self.remove_button,
+        ]:
+            button.setToolTipDuration(1000)
+            button.installEventFilter(ToolTipFilter(button, showDelay=300))
 
     # ==================== 槽函数 ====================
     def slot_run_button(self) -> None:

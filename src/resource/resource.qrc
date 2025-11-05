@@ -20,6 +20,8 @@
         <file>icon/mono_icon/white/logo.svg</file>
         <file>icon/mono_icon/black/qq.svg</file>
         <file>icon/mono_icon/white/qq.svg</file>
+        <file>icon/mono_icon/black/log.svg</file>
+        <file>icon/mono_icon/white/log.svg</file>
     </qresource>
 
     <qresource prefix="color_icon">

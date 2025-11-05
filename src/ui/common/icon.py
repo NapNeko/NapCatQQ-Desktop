@@ -5,12 +5,15 @@ from enum import Enum
 # 第三方库导入
 from qfluentwidgets.common import FluentIconBase, Theme, getIconColor
 
+from src.core.utils.logger.log_data import Log
+
 
 class NapCatDesktopIcon(FluentIconBase, Enum):
     """主窗体所需要的图标"""
 
     LOGO = "logo"
     QQ = "qq"
+    LOG = "log"
 
     def path(self, theme=Theme.AUTO) -> str:
         return f":mono_icon/icon/mono_icon/{getIconColor(theme)}/{self.value}.svg"
