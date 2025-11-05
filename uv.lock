@@ -166,7 +166,7 @@ wheels = [
 
 [[package]]
 name = "napcatqq-desktop"
-version = "1.6.20"
+version = "1.7.5"
 source = { virtual = "." }
 dependencies = [
     { name = "creart" },
