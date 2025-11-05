@@ -1,7 +1,4 @@
-# -*- coding: utf-8 -*-
-# 标准库导入
-from typing import Any
-
+# -*- coding: utf-8 -*
 # 第三方库导入
 from pydantic import BaseModel
 from qfluentwidgets.common import FluentIcon, FluentIconBase, FluentStyleSheet, isDarkTheme
@@ -16,6 +13,7 @@ from qfluentwidgets.components import (
     TableWidget,
     TransparentPushButton,
     TransparentToolButton,
+    HyperlinkLabel,
 )
 from qfluentwidgets.components.settings import SettingCard
 from qfluentwidgets.components.settings.setting_card import SettingIconWidget
@@ -423,6 +421,7 @@ class ShowDialogCard(ShowDialogCardBase):
         """用于确保 dialog 已经实例化"""
         # 检测是否实例化, 如果没有实例化则实例化
         if not isinstance(self._dialog, self._dialog_class):
+            # 项目内模块导入
             from src.ui.window.main_window import MainWindow
 
             self._dialog = self._dialog(MainWindow())
@@ -451,3 +450,32 @@ class ShowDialogCard(ShowDialogCardBase):
         """重写以展示"""
         self.ensure_instance()
         self._dialog.exec()
+
+
+class VersionInfoCard(SettingCard):
+    """版本信息卡片"""
+
+    def __init__(
+        self,
+        icon: FluentIconBase,
+        title: str,
+        content: str | None = None,
+        version: str | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        """初始化
+
+        Args:
+            icon (FluentIconBase): 图标
+            title (str): 标题
+            content (str | None, optional): 内容. Defaults to None.
+            parent (QWidget | None, optional): 父控件. Defaults to None.
+        """
+        super().__init__(icon, title, content, parent)
+
+        # 版本信息标签
+        self.version_label = HyperlinkLabel(version, self)
+
+        # 添加到布局
+        self.hBoxLayout.addWidget(self.version_label, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(32)

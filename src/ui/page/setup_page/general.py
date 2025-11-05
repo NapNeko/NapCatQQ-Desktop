@@ -20,6 +20,7 @@ from src.ui.components.input_card.generic_card import (
     LineEditConfigCard,
     ShowDialogCardBase,
     SwitchConfigCard,
+    VersionInfoCard,
 )
 
 if TYPE_CHECKING:
@@ -78,16 +79,29 @@ class General(ScrollArea):
             parent=self.event_group,
         )
 
+        # 创建组 - 版本
+        self.version_group = SettingCardGroup(title=self.tr("版本"), parent=self.view)
+        # 创建项
+        self.ncd_version_card = VersionInfoCard(
+            icon=FI.INFO,
+            title=self.tr("NapCatQQ Desktop"),
+            content=self.tr("当前 NapCatQQ Desktop 版本信息"),
+            version=cfg.get(cfg.napcat_desktop_version),
+            parent=self.version_group,
+        )
+
     def _set_layout(self) -> None:
         """控件布局"""
         # 将卡片添加到组
         self.action_group.addSettingCard(self.close_button_card)
         self.event_group.addSettingCard(self.bot_offline_email_card)
         self.event_group.addSettingCard(self.bot_offline_webhook_card)
+        self.version_group.addSettingCard(self.ncd_version_card)
 
         # 添加到布局
         self.expand_layout.addWidget(self.action_group)
         self.expand_layout.addWidget(self.event_group)
+        self.expand_layout.addWidget(self.version_group)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
 
