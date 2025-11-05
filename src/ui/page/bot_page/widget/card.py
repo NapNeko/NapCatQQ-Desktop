@@ -606,9 +606,6 @@ class ConfigCardBase(HeaderCardWidget):
     # ==================== 槽函数 ====================
     def _slot_remove_button_clicked(self) -> None:
         """处理删除按钮点击事件"""
-        # 项目内模块导入
-        from src.ui.page.add_page.signal_bus import add_page_singal_bus
-
         view = TeachingTipView(
             title=self.tr("删除配置"),
             content=self.tr("确定要删除该配置吗?这个操作不可逆!"),
