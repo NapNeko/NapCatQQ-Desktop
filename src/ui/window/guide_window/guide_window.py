@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QVBoxLayout
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.utils.singleton import singleton
+from src.ui.common.font import FontManager
 from src.ui.common.icon import StaticIcon
 from src.ui.window.guide_window.ask_page import AskPage
 from src.ui.window.guide_window.eula_page import EulaPage
@@ -49,7 +50,6 @@ class GuideWindow(FramelessWindow):
         调整窗体大小、位置、布局等
         """
         # 初始化字体（延迟加载以提升启动速度）
-        from src.ui.common.font import FontManager
         FontManager.initialize_fonts()
         # 设置主题
         setTheme(Theme.AUTO)

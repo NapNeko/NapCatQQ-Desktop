@@ -11,6 +11,7 @@ from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
 from src.core.utils.run_napcat import ManagerNapCatQQProcess
 from src.core.utils.singleton import singleton
+from src.ui.common.font import FontManager
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.page import BotPage, HomeWidget, SetupWidget, UnitWidget
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
@@ -40,7 +41,6 @@ class MainWindow(MSFluentWindow):
     def initialize(self) -> None:
         """初始化"""
         # 初始化字体（延迟加载以提升启动速度）
-        from src.ui.common.font import FontManager
         FontManager.initialize_fonts()
 
         # 调用方法

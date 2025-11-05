@@ -57,6 +57,8 @@ class Logger:
     def log_path(self) -> Path:
         """获取日志文件路径（延迟初始化）"""
         self._ensure_initialized()
+        if self._log_path is None:
+            raise RuntimeError("日志文件路径初始化失败")
         return self._log_path
 
     def clear_buffer(self) -> None:
