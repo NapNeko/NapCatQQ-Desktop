@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # font_manager.py
 from PySide6.QtGui import QFontDatabase
-from qfluentwidgets import setFontFamilies, fontFamilies
 
 # 项目内模块导入
 from src.core.utils.logger import logger

@@ -39,9 +39,11 @@ from pathlib import Path
 from typing import Self
 
 # 第三方库导入
-from qfluentwidgets import RangeConfigItem, RangeValidator, TabCloseButtonDisplayMode, qconfig
 from qfluentwidgets.common import (
     BoolValidator,
+    RangeConfigItem,
+    RangeValidator,
+    qconfig,
     ColorConfigItem,
     ConfigItem,
     ConfigSerializer,
