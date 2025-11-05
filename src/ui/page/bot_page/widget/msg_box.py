@@ -29,7 +29,6 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.core.utils import my_int
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 from src.ui.components.input_card.time_card import IntervalTimeConfigCard
 from src.ui.page.bot_page.utils.enum import ConnectType
@@ -484,7 +483,7 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
                 "port": self.port_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
                 "enableForcePushEvent": self.force_push_event_card.get_value(),
-                "heartInterval": my_int(self.heart_interval_card.get_value(), 30000),
+                "heartInterval": int(self.heart_interval_card.get_value(), 30000),
                 **super().get_config().model_dump(),
             }
         )
