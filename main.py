@@ -7,20 +7,15 @@ import sys
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-# 项目内模块导入
-from src.core.utils.mutex import SingleInstanceApplication
-from src.core.utils.path_func import PathFunc
-
 if __name__ == "__main__":
-    # 实现单实例应用程序检查
+    # 实现单实例应用程序检查 - 延迟导入以加快启动
+    from src.core.utils.mutex import SingleInstanceApplication
     if SingleInstanceApplication().is_running():
         sys.exit()
 
-    # 执行路径验证
-    PathFunc().path_validator()
-
     # 设置DPI缩放 - 直接读取配置文件以避免加载qfluentwidgets
     # 这样可以在QApplication创建前应用DPI设置，同时避免加载大型UI库
+    from src.core.utils.path_func import PathFunc
     config_path = PathFunc().config_path
     dpi_scale = "Auto"  # 默认值
     try:
@@ -38,6 +33,9 @@ if __name__ == "__main__":
         os.environ["QT_SCALE_FACTOR"] = str(dpi_scale)
 
     app = QApplication(sys.argv)
+
+    # 执行路径验证 - 移至QApplication创建后，进一步加快启动响应
+    PathFunc().path_validator()
 
     # 延迟加载配置模块（包含qfluentwidgets），在QApplication创建后加载
     # qfluentwidgets是一个大型UI库，延迟加载可显著提升启动速度
