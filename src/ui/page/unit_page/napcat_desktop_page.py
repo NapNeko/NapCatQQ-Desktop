@@ -2,10 +2,11 @@
 # 标准库导入
 import subprocess
 import sys
+import os
 
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QThreadPool, QUrl, Slot
+from PySide6.QtCore import QIODevice, QTextStream, QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
@@ -17,6 +18,7 @@ from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox
 from src.ui.page.unit_page.base import PageBase
 from src.ui.page.unit_page.status import ButtonStatus
+from src.core.utils.file import QFluentFile
 
 
 class NCDPage(PageBase):
@@ -115,53 +117,53 @@ class NCDPage(PageBase):
         """下载完成后执行安装逻辑"""
         success_bar(self.tr("下载成功, 正在安装..."))
 
-        # 写入安装脚本
-        bat_content = "\n".join(
-            [
-                "@echo off",
-                "setlocal",
-                "",
-                "rem 定义应用程序路径",
-                'set "app_name=NapCatQQ-Desktop.exe"',
-                'set "current_app_path=%~dp0%app_name%"',
-                'set "new_app_path=%~dp0runtime\\tmp\\%app_name%"',
-                "",
-                "rem 等待旧版进程退出，如果其还在运行的话",
-                ":wait_for_exit",
-                'tasklist /FI "IMAGENAME eq %app_name%" 2>NUL | find /I /N "%app_name%">NUL',
-                'if "%ERRORLEVEL%"=="0" (',
-                "    echo Waiting for the application to exit...",
-                "    timeout /T 1 /NOBREAK > NUL",
-                "    goto wait_for_exit",
-                ")",
-                "",
-                "rem 删除旧版本",
-                'if exist "%current_app_path%" (',
-                '    del "%current_app_path%"',
-                ")",
-                "",
-                "rem 等待3秒钟",
-                "timeout /T 3 /NOBREAK > NUL",
-                "",
-                "rem 移动新版到应用程序目录",
-                'move "%new_app_path%" "%current_app_path%"',
-                "",
-                "rem 启动新版本应用程序",
-                'start "" "%current_app_path%"',
-                "",
-                "rem 删除自身",
-                'del "%~f0"',
-                "endlocal",
-            ]
-        )
+        # 从 Qt 资源读取安装脚本模板（优先），若失败则回退为一个最小脚本
+        bat_content = ""
+        try:
+            with QFluentFile(":/script/update.bat", QIODevice.ReadOnly | QIODevice.Text) as qfile:
+                ts = QTextStream(qfile)
+                bat_content = ts.readAll()
+        except Exception:
+            bat_content = ""
+
+        if not bat_content:
+            # 回退：生成一个最小的脚本以确保更新能继续进行（非理想，但能作为兜底）
+            bat_content = (
+                "@echo off\n"
+                "setlocal enabledelayedexpansion\n"
+                'set "new_app_dir=%~dp0runtime\\tmp"\n'
+                'set "new_app_path="\n'
+                'set "new_file_name="\n'
+                'for %%F in ("%new_app_dir%\\NapCatQQ-Desktop*.exe") do (\n'
+                '    set "new_app_path=%%~fF"\n'
+                '    set "new_file_name=%%~nxF"\n'
+                "    goto :found_new\n"
+                ")\n"
+                ":found_new\n"
+                "if not defined new_app_path (echo no new exe found && exit /b 1)\n"
+                'set "current_app_path=%~dp0%new_file_name%"\n'
+                'move /Y "%new_app_path%" "%current_app_path%"\n'
+                'start "" "%current_app_path%"\n'
+                'del "%~f0"\n'
+            )
         with open(str(PathFunc().base_path / "update.bat"), "w", encoding="utf-8") as file:
             file.write(bat_content)
 
-        # 创建进程
-        subprocess.Popen([str(PathFunc().base_path / "update.bat")], shell=True)
+        # 启动安装脚本（以系统方式打开，确保在主程序退出后依然运行）
+        bat_path = PathFunc().base_path / "update.bat"
+        try:
+            # 在 Windows 上优先使用 os.startfile，这会以默认程序方式运行 .bat 并立即返回
+            os.startfile(str(bat_path))
+        except Exception:
+            # 回退：通过 cmd /c start 启动并尝试隐藏控制台窗口（静默启动）
+            try:
+                subprocess.Popen(["cmd", "/c", "start", '""', str(bat_path)], creationflags=subprocess.CREATE_NO_WINDOW)
+            except Exception:
+                # 最后回退为简单的 start 调用（保证不阻塞）
+                subprocess.Popen(f'start "" "{str(bat_path)}"', shell=True)
 
-        # 退出程序
-        sys.exit()
+        # 退出程序，安装脚本会等待并替换可执行文件
+        sys.exit(0)
 
     @Slot()
     def on_error_finsh(self) -> None:

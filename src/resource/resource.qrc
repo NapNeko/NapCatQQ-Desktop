@@ -52,4 +52,8 @@
         <file>font/JB-MAPLE.ttf</file>
     </qresource>
 
+    <qresource prefix="script">
+        <file>script/update.bat</file>
+    </qresource>
+
 </RCC>
