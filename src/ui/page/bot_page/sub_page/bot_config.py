@@ -157,7 +157,8 @@ class ConfigPage(QWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        BotPage().view.setCurrentWidget(BotPage().bot_list_page)
+        page = it(BotPage)
+        page.view.setCurrentWidget(page.bot_list_page)
 
     def slot_save_config_button(self) -> None:
         """保存按钮槽函数"""
@@ -165,7 +166,8 @@ class ConfigPage(QWidget):
         if update_config(self.get_config()):
             from src.ui.page.bot_page import BotPage
 
-            BotPage().bot_list_page.update_bot_list()
+            page = it(BotPage)
+            page.bot_list_page.update_bot_list()
             success_bar(self.tr("保存配置成功"))
         else:
             error_bar(self.tr("保存配置文件时引发错误"))

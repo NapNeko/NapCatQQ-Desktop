@@ -85,7 +85,7 @@ class MainWindow(MSFluentWindow):
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
-            interface=BotPage(self),
+            interface=it(BotPage).initialize(self),
             icon=FluentIcon.ROBOT,
             text=self.tr("BOT"),
             position=NavigationItemPosition.TOP,

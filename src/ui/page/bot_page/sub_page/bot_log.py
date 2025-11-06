@@ -83,7 +83,8 @@ class BotLogPage(QWidget):
         from src.ui.page.bot_page import BotPage
 
         # 返回列表页面
-        BotPage().view.setCurrentWidget(BotPage().bot_list_page)
+        page = it(BotPage)
+        page.view.setCurrentWidget(page.bot_list_page)
 
         # 确保当前配置不是 None
         if self._config is None:

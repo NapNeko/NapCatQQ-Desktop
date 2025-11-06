@@ -192,16 +192,18 @@ class BotCard(HeaderCardWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        BotPage().view.setCurrentWidget(BotPage().log_page)
-        BotPage().log_page.set_current_log_manager(self._config)
+        page = it(BotPage)
+        page.view.setCurrentWidget(page.log_page)
+        page.log_page.set_current_log_manager(self._config)
 
     def slot_setting_button(self) -> None:
         """处理配置按钮槽函数"""
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        BotPage().view.setCurrentWidget(BotPage().bot_config_page)
-        BotPage().bot_config_page.fill_config(self._config)
+        page = it(BotPage)
+        page.view.setCurrentWidget(page.bot_config_page)
+        page.bot_config_page.fill_config(self._config)
 
     def slot_remove_button(self) -> None:
         """处理移除自身槽函数"""
