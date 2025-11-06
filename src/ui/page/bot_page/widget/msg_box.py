@@ -483,7 +483,7 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
                 "port": self.port_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
                 "enableForcePushEvent": self.force_push_event_card.get_value(),
-                "heartInterval": int(self.heart_interval_card.get_value(), 30000),
+                "heartInterval": self.heart_interval_card.get_value(),
                 **super().get_config().model_dump(),
             }
         )
@@ -550,8 +550,8 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
             **{
                 "url": self.url_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
-                "heartInterval": int(self.heart_interval_card.get_value(), 30000),
-                "reconnectInterval": int(self.reconnect_interval_card.get_value(), 30000),
+                "heartInterval": self.heart_interval_card.get_value(),
+                "reconnectInterval": self.reconnect_interval_card.get_value(),
                 **super().get_config().model_dump(),
             }
         )
@@ -775,7 +775,7 @@ class QRCodeDialogFactory(QObject):
         else:
             from src.ui.window.main_window import MainWindow
 
-            self.dialog = QRCodeDialog(self.qr_code_list, MainWindow())
+            self.dialog = QRCodeDialog(self.qr_code_list, it(MainWindow))
 
             # 清理对话框引用
             if (

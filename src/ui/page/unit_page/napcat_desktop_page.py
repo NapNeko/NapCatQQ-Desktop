@@ -89,7 +89,7 @@ class NCDPage(PageBase):
 
             from src.ui.window.main_window import MainWindow
 
-            box = AskBox(self.tr("警告"), self.tr("目前还有 Bot 正在运行, 此操作会关闭所有 Bot"), MainWindow())
+            box = AskBox(self.tr("警告"), self.tr("目前还有 Bot 正在运行, 此操作会关闭所有 Bot"), it(MainWindow))
             box.yesButton.setText(self.tr("关闭全部"))
 
             if box.exec():

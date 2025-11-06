@@ -6,12 +6,14 @@ Bot 配置页面
 from enum import Enum
 
 # 第三方库导入
+from creart import it
 from qfluentwidgets import FluentIcon, SegmentedWidget, TransparentPushButton
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import Config
-from src.ui.components.info_bar import success_bar, error_bar
+from src.core.config.operate_config import update_config
+from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.bot_page.utils.enum import ConnectType
 from src.ui.page.bot_page.widget import (
@@ -22,9 +24,7 @@ from src.ui.page.bot_page.widget import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
-
-from src.ui.page.bot_page.widget.config import BotConfigWidget, ConnectConfigWidget, AdvancedConfigWidget
-from src.core.config.operate_config import update_config
+from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget, ConnectConfigWidget
 
 
 class ConfigPage(QWidget):
@@ -156,15 +156,17 @@ class ConfigPage(QWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        BotPage().view.setCurrentWidget(BotPage().bot_list_page)
+        page = it(BotPage)
+        page.view.setCurrentWidget(page.bot_list_page)
 
     def slot_save_config_button(self) -> None:
         """保存按钮槽函数"""
 
         if update_config(self.get_config()):
+            # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
-            BotPage().bot_list_page.update_bot_list()
+            it(BotPage).bot_list_page.update_bot_list()
             success_bar(self.tr("保存配置成功"))
         else:
             error_bar(self.tr("保存配置文件时引发错误"))
@@ -174,7 +176,7 @@ class ConfigPage(QWidget):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        if not (_choose_connect_type_box := ChooseConfigTypeDialog(MainWindow())).exec():
+        if not (_choose_connect_type_box := ChooseConfigTypeDialog(it(MainWindow))).exec():
             # 获取用户选择的结果并判断是否取消
             return
 
@@ -182,7 +184,7 @@ class ConfigPage(QWidget):
             # 判断用户选择的类型, 如果没有选择则直接退出
             return
 
-        if not (_connect_config_box := self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)(MainWindow())).exec():
+        if not (_connect_config_box := self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)(it(MainWindow))).exec():
             # 判断用户在配置的时候是否选择了取消
             return
 

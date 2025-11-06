@@ -107,7 +107,9 @@ class BotListPage(ScrollArea):
     def slot_add_button(self) -> None:
         """添加按钮槽函数"""
         from src.ui.page.bot_page import BotPage
+        from creart import it
 
-        BotPage().view.setCurrentWidget(BotPage().add_config_page)
-        BotPage().add_config_page.clear_config()
-        BotPage().header.setup_breadcrumb_bar(999)
+        page = it(BotPage)
+        page.view.setCurrentWidget(page.add_config_page)
+        page.add_config_page.clear_config()
+        page.header.setup_breadcrumb_bar(999)

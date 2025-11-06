@@ -32,6 +32,7 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent:
     # 延迟导入以避免循环依赖
     # 项目内模块导入
     from src.ui.window.main_window.window import MainWindow
+    from creart import it
 
     InfoBar.info(
         title=title,
@@ -39,7 +40,7 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent:
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.BOTTOM_RIGHT,
-        parent=MainWindow() if parent is None else parent,
+        parent=it(MainWindow) if parent is None else parent,
     )
 
 
@@ -57,6 +58,7 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5000, p
     """
     # 项目内模块导入
     from src.ui.window.main_window.window import MainWindow
+    from creart import it
 
     InfoBar.success(
         title=title,
@@ -64,7 +66,7 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5000, p
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.BOTTOM_RIGHT,
-        parent=MainWindow() if parent is None else parent,
+        parent=it(MainWindow) if parent is None else parent,
     )
 
 
@@ -82,6 +84,7 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 1000
     """
     # 项目内模块导入
     from src.ui.window.main_window.window import MainWindow
+    from creart import it
 
     InfoBar.warning(
         title=title,
@@ -89,7 +92,7 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 1000
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.TOP_RIGHT,
-        parent=MainWindow() if parent is None else parent,
+        parent=it(MainWindow) if parent is None else parent,
     )
 
 
@@ -107,6 +110,7 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1, parent
     """
     # 项目内模块导入
     from src.ui.window.main_window.window import MainWindow
+    from creart import it
 
     InfoBar.error(
         title=title,
@@ -114,5 +118,5 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1, parent
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=NCDInfoBarPosition.TOP_RIGHT,
-        parent=MainWindow() if parent is None else parent,
+        parent=it(MainWindow) if parent is None else parent,
     )

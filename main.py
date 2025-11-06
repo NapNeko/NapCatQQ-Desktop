@@ -35,8 +35,9 @@ if __name__ == "__main__":
     if cfg.get(cfg.main_window) and cfg.get(cfg.elua_accepted):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
+        from creart import it
 
-        MainWindow().initialize()
+        it(MainWindow).initialize()
     else:
         # 项目内模块导入
         from src.ui.window.guide_window import GuideWindow

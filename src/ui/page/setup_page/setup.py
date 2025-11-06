@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+from abc import ABC
 from typing import TYPE_CHECKING, Self
 
+# 第三方库导入
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.utils.singleton import singleton
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.code_editor import CodeExibit
 from src.ui.components.stacked_widget import TransparentStackedWidget
@@ -18,7 +20,6 @@ if TYPE_CHECKING:
     from src.ui.window.main_window import MainWindow
 
 
-@singleton
 class SetupWidget(QWidget):
     """设置页面"""
 
@@ -79,3 +80,29 @@ class SetupWidget(QWidget):
         # 连接信号并初始化当前标签页
         self.view.setCurrentWidget(self.personalization)
         self.top_card.pivot.setCurrentItem(self.personalization.objectName())
+
+
+class SetupPageCreator(AbstractCreator, ABC):
+    """设置页面创建器"""
+
+    targets = (
+        CreateTargetInfo(
+            module="src.ui.page.setup_page.setup",
+            identify="SetupWidget",
+            humanized_name="设置页面",
+            description="NapCatQQ Desktop 设置页面",
+        ),
+    )
+
+    @staticmethod
+    def available() -> bool:
+        """判断设置页面模块是否可用"""
+        return exists_module("src.ui.page.setup_page.setup")
+
+    @staticmethod
+    def create(create_type: type[SetupWidget]) -> SetupWidget:
+        """创建设置页面实例"""
+        return create_type()
+
+
+add_creator(SetupPageCreator)

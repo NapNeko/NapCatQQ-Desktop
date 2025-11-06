@@ -192,16 +192,18 @@ class BotCard(HeaderCardWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        BotPage().view.setCurrentWidget(BotPage().log_page)
-        BotPage().log_page.set_current_log_manager(self._config)
+        page = it(BotPage)
+        page.view.setCurrentWidget(page.log_page)
+        page.log_page.set_current_log_manager(self._config)
 
     def slot_setting_button(self) -> None:
         """处理配置按钮槽函数"""
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        BotPage().view.setCurrentWidget(BotPage().bot_config_page)
-        BotPage().bot_config_page.fill_config(self._config)
+        page = it(BotPage)
+        page.view.setCurrentWidget(page.bot_config_page)
+        page.bot_config_page.fill_config(self._config)
 
     def slot_remove_button(self) -> None:
         """处理移除自身槽函数"""
@@ -210,8 +212,8 @@ class BotCard(HeaderCardWidget):
 
         if AskBox(
             self.tr("确认移除 Bot"),
-            self.tr("确定要移除 Bot ({}) 吗？\n此操作无法恢复!".format(self._config.bot.QQID)),
-            MainWindow(),
+            self.tr(f"确定要移除 Bot ({self._config.bot.QQID}) 吗？\n此操作无法恢复!"),
+            it(MainWindow),
         ).exec():
             self.stop_button.click()
             self.remove_signal.emit(str(self._config.bot.QQID))
@@ -223,10 +225,14 @@ class BotAvatarWidget(QWidget):
     封装了获取头像的功能, 便于维护
     """
 
-    class GetAvatarWoker(QObject, QRunnable):
-        """使用 QRunnable 异步获取头像"""
+    class GetAvatarWorker(QObject, QRunnable):
+        """使用 QRunnable 异步获取头像
 
-        avatar_pixmap_signal = Signal(QPixmap)
+        注意: 不在工作线程中创建/使用任何 GUI 对象(QPixmap/QWidget 等)。
+        仅下载原始字节并通过信号传回主线程处理。
+        """
+
+        avatar_bytes_signal = Signal(int, bytes)
 
         def __init__(self, qq_id: int) -> None:
             QObject.__init__(self)
@@ -243,11 +249,11 @@ class BotAvatarWidget(QWidget):
             self._url = url
 
         def run(self) -> None:
-            """通过 httpx 获取头像数据, 然后包装成 QPixmap"""
+            """在工作线程中下载头像原始数据并通过信号发送"""
             try:
-                pixmap = QPixmap()
-                pixmap.loadFromData(httpx.get(self._url.toString()).content)
-                self.avatar_pixmap_signal.emit(pixmap)
+                resp = httpx.get(self._url.toString(), timeout=10.0)
+                resp.raise_for_status()
+                self.avatar_bytes_signal.emit(self._qq_id, resp.content)
 
             except (httpx.HTTPStatusError, httpx.RequestError, httpx.TimeoutException) as e:
                 error_bar(
@@ -316,18 +322,39 @@ class BotAvatarWidget(QWidget):
 
     @qq_id.setter
     def qq_id(self, value: int) -> None:
+        # 保存请求的 qq_id，并把它作为当前活动请求的标识，用于忽略过时的 worker 结果
         self._qq_id = value
+        self._active_avatar_qq_id = value
 
-        worker = self.GetAvatarWoker(value)
-        worker.avatar_pixmap_signal.connect(
-            lambda pixmap: (
-                self.image_label.setImage(pixmap),
-                self.image_label.scaledToWidth(128),
-                self.image_label.setBorderRadius(8, 8, 8, 8),
-            )
-        )
+        worker = self.GetAvatarWorker(value)
+        # 在主线程中将字节转换为 QPixmap 并更新 UI，避免跨线程创建 GUI 对象
+        worker.avatar_bytes_signal.connect(self._on_avatar_bytes)
 
         QThreadPool.globalInstance().start(worker)
+
+    def _on_avatar_bytes(self, qq_id: int, data: bytes) -> None:
+        """将下载的头像字节转换为 QPixmap 并更新到 UI (主线程执行)
+
+        仅在收到的 qq_id 与当前活动请求一致时才更新，避免竞态条件导致显示过时头像。
+        """
+        # Only update UI if the avatar is for the latest requested qq_id
+        if qq_id != getattr(self, "_active_avatar_qq_id", None):
+            return
+
+        pixmap = QPixmap()
+        if pixmap.loadFromData(data):
+            self.image_label.setImage(pixmap)
+            self.image_label.scaledToWidth(128)
+            self.image_label.setBorderRadius(8, 8, 8, 8)
+        else:
+            # 加载失败时显示默认占位图，避免空白或保持旧头像
+            try:
+                self.image_label.setImage(StaticIcon.LOGO.path())
+                self.image_label.scaledToWidth(128)
+                self.image_label.setBorderRadius(8, 8, 8, 8)
+            except Exception:
+                # 最后兜底：记录错误到 info bar
+                error_bar(self.tr("头像数据无法解析，已使用占位图"))
 
 
 class BotInfoWidget(QWidget):
@@ -718,7 +745,7 @@ class HttpServerConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = HttpServerConfigDialog(MainWindow(), cast(HttpServersConfig, self.config))
+        dialog = HttpServerConfigDialog(it(MainWindow), cast(HttpServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -796,7 +823,7 @@ class HttpSSEConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = HttpSSEServerConfigDialog(MainWindow(), cast(HttpSseServersConfig, self.config))
+        dialog = HttpSSEServerConfigDialog(it(MainWindow), cast(HttpSseServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -853,7 +880,7 @@ class HttpClientConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = HttpClientConfigDialog(MainWindow(), cast(HttpClientsConfig, self.config))
+        dialog = HttpClientConfigDialog(it(MainWindow), cast(HttpClientsConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -931,7 +958,7 @@ class WebsocketServersConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = WebsocketServerConfigDialog(MainWindow(), cast(WebsocketServersConfig, self.config))
+        dialog = WebsocketServerConfigDialog(it(MainWindow), cast(WebsocketServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -1002,7 +1029,7 @@ class WebsocketClientConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = WebsocketClientConfigDialog(MainWindow(), cast(WebsocketClientsConfig, self.config))
+        dialog = WebsocketClientConfigDialog(it(MainWindow), cast(WebsocketClientsConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()

@@ -98,8 +98,9 @@ class HeaderWidget(QWidget):
             return
 
         from src.ui.page.bot_page import BotPage
+        from creart import it
 
-        page = BotPage()
+        page = it(BotPage)
 
         if key == "bot_list":
             target = self.PageEnum.BOT_LIST.value

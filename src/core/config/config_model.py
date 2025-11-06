@@ -26,6 +26,31 @@ from .config_enum import TimeUnitEnum
 """
 
 
+def _coerce_interval_default(v, default: int = 30000) -> int:
+    """将可能来自配置的间隔值规范化为整数，无法解析时返回默认值。
+
+    行为与之前重复实现保持一致：
+    - None -> default
+    - 空字符串或仅空白 -> default
+    - 纯数字字符串 -> 转为 int
+    - 其他无法转换的值 -> default
+    """
+    if v is None:
+        return default
+    if isinstance(v, str):
+        val = v.strip()
+        if val == "":
+            return default
+        try:
+            return int(val)
+        except ValueError:
+            return default
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
 class AutoRestartScheduleConfig(BaseModel):
     """自动重启计划配置"""
 
@@ -131,12 +156,24 @@ class WebsocketServersConfig(NetworkBaseConfig):
     enableForcePushEvent: bool = False
     heartInterval: int = 30000
 
+    @field_validator("heartInterval", mode="before")
+    @classmethod
+    def _coerce_heart_interval(cls, v):
+        """Coerce heartInterval using the shared helper."""
+        return _coerce_interval_default(v, 30000)
+
 
 class WebsocketClientsConfig(NetworkBaseConfig):
     url: WebsocketUrl
     reportSelfMessage: bool = False
     heartInterval: int = 30000
     reconnectInterval: int = 30000
+
+    @field_validator("heartInterval", "reconnectInterval", mode="before")
+    @classmethod
+    def _coerce_client_intervals(cls, v):
+        """Coerce client intervals using the shared helper."""
+        return _coerce_interval_default(v, 30000)
 
 
 class ConnectConfig(BaseModel):

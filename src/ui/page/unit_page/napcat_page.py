@@ -88,7 +88,7 @@ class NapCatPage(PageBase):
             from src.ui.window.main_window import MainWindow
 
             box = AskBox(
-                self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), MainWindow()
+                self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow)
             )
             box.yesButton.setText(self.tr("关闭全部"))
 

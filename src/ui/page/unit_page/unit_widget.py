@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
-from typing import TYPE_CHECKING, Optional, Self
+from typing import TYPE_CHECKING, Self
+from abc import ABC
 
+# 第三方库导入
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.utils.get_version import GetVersion
-from src.core.utils.singleton import singleton
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.unit_page.napcat_desktop_page import NCDPage
@@ -20,7 +22,6 @@ if TYPE_CHECKING:
     from src.ui.window.main_window import MainWindow
 
 
-@singleton
 class UnitWidget(QWidget):
     """单元页面控件，包含 NapCat、QQ 和 Desktop 三个标签页的版本信息管理"""
 
@@ -145,3 +146,29 @@ class UnitWidget(QWidget):
         """执行版本更新检查"""
         self.get_version.update()
         self.top_card.update_button.setEnabled(False)
+
+
+class UnitWidgetCreator(AbstractCreator, ABC):
+    """单元页面创建器"""
+
+    targets = (
+        CreateTargetInfo(
+            module="src.ui.page.unit_page.unit_widget",
+            identify="UnitWidget",
+            humanized_name="Unit 页面",
+            description="NapCatQQ Desktop 单元页面",
+        ),
+    )
+
+    @staticmethod
+    def available() -> bool:
+        """检查所需模块是否存在以支持创建 UnitWidget"""
+        return exists_module("src.ui.page.unit_page.unit_widget")
+
+    @staticmethod
+    def create(create_type: type[UnitWidget]) -> UnitWidget:
+        """创建并返回 UnitWidget 实例"""
+        return create_type()
+
+
+add_creator(UnitWidgetCreator)

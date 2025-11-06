@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
+from abc import ABC
+
 # 第三方库导入
-from creart import it
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 from qfluentwidgets import FluentIcon, MSFluentWindow, NavigationItemPosition, SplashScreen, Theme
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QIcon
@@ -10,7 +13,6 @@ from PySide6.QtWidgets import QApplication
 from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
 from src.core.utils.run_napcat import ManagerNapCatQQProcess
-from src.core.utils.singleton import singleton
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.page import BotPage, HomeWidget, SetupWidget, UnitWidget
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
@@ -25,7 +27,6 @@ Attributes:
 """
 
 
-@singleton
 class MainWindow(MSFluentWindow):
     """程序的主窗体"""
 
@@ -78,25 +79,25 @@ class MainWindow(MSFluentWindow):
 
         # 添加子页面
         self.addSubInterface(
-            interface=HomeWidget().initialize(self),
+            interface=it(HomeWidget).initialize(self),
             icon=FluentIcon.HOME,
             text=self.tr("主页"),
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
-            interface=BotPage(self),
+            interface=it(BotPage).initialize(self),
             icon=FluentIcon.ROBOT,
             text=self.tr("BOT"),
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
-            interface=UnitWidget()._setup_ui(self),
+            interface=it(UnitWidget)._setup_ui(self),
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             text=self.tr("组件"),
             position=NavigationItemPosition.BOTTOM,
         )
         self.addSubInterface(
-            interface=SetupWidget().initialize(self),
+            interface=it(SetupWidget).initialize(self),
             icon=FluentIcon.SETTING,
             text=self.tr("设置"),
             position=NavigationItemPosition.BOTTOM,
@@ -124,3 +125,29 @@ class MainWindow(MSFluentWindow):
                 super().close()
         else:
             self.hide()
+
+
+class MainWindowCreator(AbstractCreator, ABC):
+    """MainWindow 创建器"""
+
+    targets = (
+        CreateTargetInfo(
+            module="src.ui.window.main_window.window",
+            identify="MainWindow",
+            humanized_name="主窗口",
+            description="主窗口的创建器",
+        ),
+    )
+
+    @staticmethod
+    def available() -> bool:
+        """判断 MainWindow 模块是否可用"""
+        return exists_module("src.ui.window.main_window")
+
+    @staticmethod
+    def create(create_type: type[MainWindow]) -> MainWindow:
+        """创建 MainWindow 实例"""
+        return create_type()
+
+
+add_creator(MainWindowCreator)
