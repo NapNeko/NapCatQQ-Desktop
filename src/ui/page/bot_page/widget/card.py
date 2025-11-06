@@ -212,9 +212,7 @@ class BotCard(HeaderCardWidget):
 
         if AskBox(
             self.tr("确认移除 Bot"),
-            self.tr(
-                f"确定要移除 Bot ({self._config.bot.QQID}) 吗？\n此操作无法恢复!"
-            ),
+            self.tr(f"确定要移除 Bot ({self._config.bot.QQID}) 吗？\n此操作无法恢复!"),
             it(MainWindow),
         ).exec():
             self.stop_button.click()
@@ -234,7 +232,7 @@ class BotAvatarWidget(QWidget):
         仅下载原始字节并通过信号传回主线程处理。
         """
 
-        avatar_bytes_signal = Signal(bytes)
+        avatar_bytes_signal = Signal(int, bytes)
 
         def __init__(self, qq_id: int) -> None:
             QObject.__init__(self)
@@ -255,7 +253,7 @@ class BotAvatarWidget(QWidget):
             try:
                 resp = httpx.get(self._url.toString(), timeout=10.0)
                 resp.raise_for_status()
-                self.avatar_bytes_signal.emit(resp.content)
+                self.avatar_bytes_signal.emit(self._qq_id, resp.content)
 
             except (httpx.HTTPStatusError, httpx.RequestError, httpx.TimeoutException) as e:
                 error_bar(
@@ -324,7 +322,9 @@ class BotAvatarWidget(QWidget):
 
     @qq_id.setter
     def qq_id(self, value: int) -> None:
+        # 保存请求的 qq_id，并把它作为当前活动请求的标识，用于忽略过时的 worker 结果
         self._qq_id = value
+        self._active_avatar_qq_id = value
 
         worker = self.GetAvatarWorker(value)
         # 在主线程中将字节转换为 QPixmap 并更新 UI，避免跨线程创建 GUI 对象
@@ -332,13 +332,29 @@ class BotAvatarWidget(QWidget):
 
         QThreadPool.globalInstance().start(worker)
 
-    def _on_avatar_bytes(self, data: bytes) -> None:
-        """将下载的头像字节转换为 QPixmap 并更新到 UI (主线程执行)"""
+    def _on_avatar_bytes(self, qq_id: int, data: bytes) -> None:
+        """将下载的头像字节转换为 QPixmap 并更新到 UI (主线程执行)
+
+        仅在收到的 qq_id 与当前活动请求一致时才更新，避免竞态条件导致显示过时头像。
+        """
+        # Only update UI if the avatar is for the latest requested qq_id
+        if qq_id != getattr(self, "_active_avatar_qq_id", None):
+            return
+
         pixmap = QPixmap()
         if pixmap.loadFromData(data):
             self.image_label.setImage(pixmap)
             self.image_label.scaledToWidth(128)
             self.image_label.setBorderRadius(8, 8, 8, 8)
+        else:
+            # 加载失败时显示默认占位图，避免空白或保持旧头像
+            try:
+                self.image_label.setImage(StaticIcon.LOGO.path())
+                self.image_label.scaledToWidth(128)
+                self.image_label.setBorderRadius(8, 8, 8, 8)
+            except Exception:
+                # 最后兜底：记录错误到 info bar
+                error_bar(self.tr("头像数据无法解析，已使用占位图"))
 
 
 class BotInfoWidget(QWidget):
