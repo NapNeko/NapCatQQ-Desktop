@@ -72,27 +72,17 @@ pip install -r requirements.txt
 ### 🚀 运行所有测试（推荐，99 个测试）
 
 ```bash
-# 完整命令（推荐）
-pytest tests/test_config/test_config_enum.py \
-       tests/test_config/test_config_model_pydantic.py \
-       tests/test_config/test_operate_config.py \
-       tests/test_utils/test_singleton.py \
-       tests/test_utils/test_logger_enum.py \
-       tests/test_utils/test_logger_data.py \
-       tests/test_utils/test_mutex.py \
-       tests/test_utils/test_string_utils.py \
-       tests/test_example.py \
-       tests/test_network/ -v
+# 简单命令 - 运行所有测试（推荐）
+pytest tests/test_config/ tests/test_utils/ tests/test_network/ tests/test_example.py -v
 
-# 或使用简化版（不显示详细输出）
-pytest tests/test_config/test_config_enum.py tests/test_config/test_config_model_pydantic.py \
-       tests/test_config/test_operate_config.py tests/test_utils/test_singleton.py \
-       tests/test_utils/test_logger_enum.py tests/test_utils/test_logger_data.py \
-       tests/test_utils/test_mutex.py tests/test_utils/test_string_utils.py \
-       tests/test_example.py tests/test_network/
+# 不显示详细输出
+pytest tests/test_config/ tests/test_utils/ tests/test_network/ tests/test_example.py
+
+# 生成覆盖率报告
+pytest tests/test_config/ tests/test_utils/ tests/test_network/ tests/test_example.py --cov=src --cov-report=html
 ```
 
-**注意**：一些模板测试文件（`test_config_model.py`、`test_path_func.py`、`test_file.py`、`test_message_box.py`）需要 GUI 依赖，会导致导入错误。使用上述命令运行实际可用的 99 个测试。
+**注意**：模板测试文件（以 `.template` 结尾）包含需要 GUI 依赖的示例代码，pytest 不会自动收集它们。
 
 ### 运行特定模块
 
