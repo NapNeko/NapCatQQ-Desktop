@@ -226,9 +226,13 @@ class BotAvatarWidget(QWidget):
     """
 
     class GetAvatarWoker(QObject, QRunnable):
-        """使用 QRunnable 异步获取头像"""
+        """使用 QRunnable 异步获取头像
 
-        avatar_pixmap_signal = Signal(QPixmap)
+        注意: 不在工作线程中创建/使用任何 GUI 对象(QPixmap/QWidget 等)。
+        仅下载原始字节并通过信号传回主线程处理。
+        """
+
+        avatar_bytes_signal = Signal(bytes)
 
         def __init__(self, qq_id: int) -> None:
             QObject.__init__(self)
@@ -245,11 +249,11 @@ class BotAvatarWidget(QWidget):
             self._url = url
 
         def run(self) -> None:
-            """通过 httpx 获取头像数据, 然后包装成 QPixmap"""
+            """在工作线程中下载头像原始数据并通过信号发送"""
             try:
-                pixmap = QPixmap()
-                pixmap.loadFromData(httpx.get(self._url.toString()).content)
-                self.avatar_pixmap_signal.emit(pixmap)
+                resp = httpx.get(self._url.toString(), timeout=10.0)
+                resp.raise_for_status()
+                self.avatar_bytes_signal.emit(resp.content)
 
             except (httpx.HTTPStatusError, httpx.RequestError, httpx.TimeoutException) as e:
                 error_bar(
@@ -321,15 +325,18 @@ class BotAvatarWidget(QWidget):
         self._qq_id = value
 
         worker = self.GetAvatarWoker(value)
-        worker.avatar_pixmap_signal.connect(
-            lambda pixmap: (
-                self.image_label.setImage(pixmap),
-                self.image_label.scaledToWidth(128),
-                self.image_label.setBorderRadius(8, 8, 8, 8),
-            )
-        )
+        # 在主线程中将字节转换为 QPixmap 并更新 UI，避免跨线程创建 GUI 对象
+        worker.avatar_bytes_signal.connect(self._on_avatar_bytes)
 
         QThreadPool.globalInstance().start(worker)
+
+    def _on_avatar_bytes(self, data: bytes) -> None:
+        """将下载的头像字节转换为 QPixmap 并更新到 UI (主线程执行)"""
+        pixmap = QPixmap()
+        if pixmap.loadFromData(data):
+            self.image_label.setImage(pixmap)
+            self.image_label.scaledToWidth(128)
+            self.image_label.setBorderRadius(8, 8, 8, 8)
 
 
 class BotInfoWidget(QWidget):

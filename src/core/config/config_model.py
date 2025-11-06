@@ -131,12 +131,55 @@ class WebsocketServersConfig(NetworkBaseConfig):
     enableForcePushEvent: bool = False
     heartInterval: int = 30000
 
+    @field_validator("heartInterval", mode="before")
+    @classmethod
+    def _coerce_heart_interval(cls, v):
+        """允许传入空字符串/None/非数字时回退到默认值。
+
+        - 空或仅空白字符 -> 默认 30000
+        - 纯数字字符串 -> 转为 int
+        - 其他无法转换的类型/内容 -> 默认 30000
+        """
+        if v is None:
+            return 30000
+        if isinstance(v, str):
+            val = v.strip()
+            if val == "":
+                return 30000
+            try:
+                return int(val)
+            except ValueError:
+                return 30000
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 30000
+
 
 class WebsocketClientsConfig(NetworkBaseConfig):
     url: WebsocketUrl
     reportSelfMessage: bool = False
     heartInterval: int = 30000
     reconnectInterval: int = 30000
+
+    @field_validator("heartInterval", "reconnectInterval", mode="before")
+    @classmethod
+    def _coerce_client_intervals(cls, v):
+        """允许传入空字符串/None/非数字时回退到默认值 30000。"""
+        if v is None:
+            return 30000
+        if isinstance(v, str):
+            val = v.strip()
+            if val == "":
+                return 30000
+            try:
+                return int(val)
+            except ValueError:
+                return 30000
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 30000
 
 
 class ConnectConfig(BaseModel):
