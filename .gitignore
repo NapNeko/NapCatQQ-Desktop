@@ -48,9 +48,14 @@ NapCat/*
 
 ### 测试相关 ###
 /test/
-/tests/
 *.test
 *.test.py
+# 但保留 tests/ 目录 (用于 pytest 测试框架)
+# 忽略测试覆盖率报告
+.coverage
+htmlcov/
+coverage.xml
+.pytest_cache/
 
 ### 操作系统生成文件 ###
 # macOS
