@@ -8,6 +8,21 @@
 - **pytest**: 主测试框架
 - **pytest-qt**: 用于 PySide6/Qt GUI 组件测试
 - **pytest-cov**: 用于生成代码覆盖率报告
+- **pytest-mock**: 用于模拟外部依赖
+
+## 当前测试状态
+
+### ✅ 99 个测试全部通过
+```bash
+$ pytest tests/ -v
+============================== 99 passed in 1.67s ===============================
+```
+
+### 测试分布
+- **配置模块**: 35 个测试
+- **工具模块**: 35 个测试
+- **网络模块**: 23 个测试
+- **示例测试**: 6 个测试
 
 ## 目录结构
 
@@ -18,15 +33,21 @@ tests/
 ├── test_example.py       # 示例测试（验证框架工作）
 ├── test_config/          # 配置模块测试
 │   ├── __init__.py
-│   ├── test_config_model.py    # 配置模型测试
-│   └── test_config_helpers.py  # 配置辅助函数测试
+│   ├── test_config_enum.py         # 配置枚举测试 (6 tests)
+│   ├── test_config_model_pydantic.py  # Pydantic 模型测试 (15 tests)
+│   └── test_operate_config.py      # 配置文件读写测试 (14 tests)
 ├── test_utils/           # 工具模块测试
 │   ├── __init__.py
-│   ├── test_file.py            # 文件工具测试
-│   └── test_path_func.py       # 路径功能测试
-└── test_ui/              # UI 组件测试
+│   ├── test_singleton.py           # 单例模式测试 (4 tests)
+│   ├── test_logger_enum.py         # 日志枚举测试 (7 tests)
+│   ├── test_logger_data.py         # 日志数据模型测试 (12 tests)
+│   ├── test_mutex.py               # 互斥锁测试 (8 tests)
+│   └── test_string_utils.py        # 字符串工具测试 (17 tests)
+└── test_network/         # 网络模块测试
     ├── __init__.py
-    └── test_message_box.py     # 消息框组件测试
+    ├── test_urls.py                # URL 常量测试 (5 tests)
+    ├── test_email.py               # 邮件通知测试 (11 tests)
+    └── test_webhook.py             # Webhook 通知测试 (12 tests)
 ```
 
 ## 环境准备
@@ -48,16 +69,43 @@ pip install -r requirements.txt
 
 ## 运行测试
 
-### 运行所有测试
+### 运行所有测试（推荐）
 
 ```bash
-pytest
+# 运行所有可用测试（99 个）
+pytest tests/test_config/ tests/test_utils/ tests/test_network/ tests/test_example.py -v
+
+# 简化命令
+pytest tests/test_config/ tests/test_utils/ tests/test_network/ tests/test_example.py
+```
+
+### 运行特定模块
+
+```bash
+# 配置模块测试 (35 tests)
+pytest tests/test_config/
+
+# 工具模块测试 (35 tests)
+pytest tests/test_utils/
+
+# 网络模块测试 (23 tests)
+pytest tests/test_network/
+
+# 示例测试 (6 tests)
+pytest tests/test_example.py
 ```
 
 ### 运行特定测试文件
 
 ```bash
-pytest tests/test_example.py
+# 配置枚举测试
+pytest tests/test_config/test_config_enum.py
+
+# 单例模式测试
+pytest tests/test_utils/test_singleton.py
+
+# 邮件通知测试
+pytest tests/test_network/test_email.py
 ```
 
 ### 运行特定测试类或方法
