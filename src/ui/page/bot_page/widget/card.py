@@ -212,7 +212,9 @@ class BotCard(HeaderCardWidget):
 
         if AskBox(
             self.tr("确认移除 Bot"),
-            self.tr("确定要移除 Bot ({}) 吗？\n此操作无法恢复!".format(self._config.bot.QQID)),
+            self.tr(
+                f"确定要移除 Bot ({self._config.bot.QQID}) 吗？\n此操作无法恢复!"
+            ),
             it(MainWindow),
         ).exec():
             self.stop_button.click()
