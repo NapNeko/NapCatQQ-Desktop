@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+from abc import ABC
 from typing import TYPE_CHECKING, Self
 
 # 第三方库导入
@@ -81,7 +82,7 @@ class SetupWidget(QWidget):
         self.top_card.pivot.setCurrentItem(self.personalization.objectName())
 
 
-class SetupPageCreator(AbstractCreator):
+class SetupPageCreator(AbstractCreator, ABC):
     """设置页面创建器"""
 
     targets = (

@@ -6,13 +6,14 @@ Bot 配置页面
 from enum import Enum
 
 # 第三方库导入
+from creart import it
 from qfluentwidgets import FluentIcon, SegmentedWidget, TransparentPushButton
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
-from creart import it
 
 # 项目内模块导入
 from src.core.config.config_model import Config
-from src.ui.components.info_bar import success_bar, error_bar
+from src.core.config.operate_config import update_config
+from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.bot_page.utils.enum import ConnectType
 from src.ui.page.bot_page.widget import (
@@ -23,9 +24,7 @@ from src.ui.page.bot_page.widget import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
-
-from src.ui.page.bot_page.widget.config import BotConfigWidget, ConnectConfigWidget, AdvancedConfigWidget
-from src.core.config.operate_config import update_config
+from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget, ConnectConfigWidget
 
 
 class ConfigPage(QWidget):
@@ -164,10 +163,10 @@ class ConfigPage(QWidget):
         """保存按钮槽函数"""
 
         if update_config(self.get_config()):
+            # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
-            page = it(BotPage)
-            page.bot_list_page.update_bot_list()
+            it(BotPage).bot_list_page.update_bot_list()
             success_bar(self.tr("保存配置成功"))
         else:
             error_bar(self.tr("保存配置文件时引发错误"))

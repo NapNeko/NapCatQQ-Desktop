@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 from typing import TYPE_CHECKING, Self
+from abc import ABC
 
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
@@ -147,7 +148,7 @@ class UnitWidget(QWidget):
         self.top_card.update_button.setEnabled(False)
 
 
-class UnitWidgetCreator(AbstractCreator):
+class UnitWidgetCreator(AbstractCreator, ABC):
     """单元页面创建器"""
 
     targets = (

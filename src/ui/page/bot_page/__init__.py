@@ -9,7 +9,7 @@ from abc import ABC
 from typing import TYPE_CHECKING, Self
 
 # 第三方库导入
-from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
