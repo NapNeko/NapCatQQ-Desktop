@@ -775,7 +775,7 @@ class QRCodeDialogFactory(QObject):
         else:
             from src.ui.window.main_window import MainWindow
 
-            self.dialog = QRCodeDialog(self.qr_code_list, MainWindow())
+            self.dialog = QRCodeDialog(self.qr_code_list, it(MainWindow))
 
             # 清理对话框引用
             if (

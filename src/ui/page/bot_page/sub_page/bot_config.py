@@ -8,6 +8,7 @@ from enum import Enum
 # 第三方库导入
 from qfluentwidgets import FluentIcon, SegmentedWidget, TransparentPushButton
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from creart import it
 
 # 项目内模块导入
 from src.core.config.config_model import Config
@@ -174,7 +175,7 @@ class ConfigPage(QWidget):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        if not (_choose_connect_type_box := ChooseConfigTypeDialog(MainWindow())).exec():
+        if not (_choose_connect_type_box := ChooseConfigTypeDialog(it(MainWindow))).exec():
             # 获取用户选择的结果并判断是否取消
             return
 
@@ -182,7 +183,7 @@ class ConfigPage(QWidget):
             # 判断用户选择的类型, 如果没有选择则直接退出
             return
 
-        if not (_connect_config_box := self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)(MainWindow())).exec():
+        if not (_connect_config_box := self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)(it(MainWindow))).exec():
             # 判断用户在配置的时候是否选择了取消
             return
 

@@ -5,6 +5,7 @@ from qfluentwidgets.components.widgets.stacked_widget import PopUpAniStackedWidg
 from qframelesswindow import FramelessWindow
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QVBoxLayout
+from creart import it
 
 # 项目内模块导入
 from src.core.config import cfg
@@ -118,7 +119,7 @@ class GuideWindow(FramelessWindow):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        MainWindow().initialize()
+        it(MainWindow).initialize()
         cfg.set(cfg.main_window, True)
 
         super().close()

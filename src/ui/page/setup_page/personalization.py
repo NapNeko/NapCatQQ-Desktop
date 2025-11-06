@@ -28,6 +28,7 @@ from src.ui.components.input_card.generic_card import (
     SwitchConfigCard,
     FontFamilyConfigCatd,
 )
+from creart import it
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -138,7 +139,7 @@ class Personalization(ScrollArea):
         # 连接个性化相关
         self.theme_card.optionChanged.connect(self._on_theme_mode_changed)
         self.theme_color_card.colorChanged.connect(lambda color: setThemeColor(color, save=True, lazy=True))
-        self.window_opacity_card.valueChanged.connect(lambda value: MainWindow().setWindowOpacity(value / 100))
+        self.window_opacity_card.valueChanged.connect(lambda value: it(MainWindow).setWindowOpacity(value / 100))
 
     @staticmethod
     def _on_theme_mode_changed(theme) -> None:

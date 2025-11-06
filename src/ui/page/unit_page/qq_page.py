@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QThreadPool, QUrl, Slot
+from creart import it
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
@@ -160,7 +161,7 @@ class QQPage(PageBase):
         success_bar(self.tr("下载成功, 正在安装..."))
 
         # 创建询问弹出框
-        folder_box = FolderBox(self.tr("选择安装路径"), MainWindow())
+        folder_box = FolderBox(self.tr("选择安装路径"), it(MainWindow))
 
         if not folder_box.exec():
             # 如果没有点击确定按钮
@@ -176,7 +177,7 @@ class QQPage(PageBase):
         # 检查是否存在 dbghelp.dll 文件, 否则会导致安装失败
         if Path(Path(folder_box.get_value()) / "dbghelp.dll").exists():
             rm_dll_box = AskBox(
-                self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), MainWindow()
+                self.tr("检测到修补文件"), self.tr("您需要删除 dbghelp.dll 才能正确安装QQ"), it(MainWindow)
             )
             rm_dll_box.yesButton.setText(self.tr("删除"))
             if rm_dll_box.exec():

@@ -211,7 +211,7 @@ class BotCard(HeaderCardWidget):
         if AskBox(
             self.tr("确认移除 Bot"),
             self.tr("确定要移除 Bot ({}) 吗？\n此操作无法恢复!".format(self._config.bot.QQID)),
-            MainWindow(),
+            it(MainWindow),
         ).exec():
             self.stop_button.click()
             self.remove_signal.emit(str(self._config.bot.QQID))
@@ -718,7 +718,7 @@ class HttpServerConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = HttpServerConfigDialog(MainWindow(), cast(HttpServersConfig, self.config))
+        dialog = HttpServerConfigDialog(it(MainWindow), cast(HttpServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -796,7 +796,7 @@ class HttpSSEConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = HttpSSEServerConfigDialog(MainWindow(), cast(HttpSseServersConfig, self.config))
+        dialog = HttpSSEServerConfigDialog(it(MainWindow), cast(HttpSseServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -853,7 +853,7 @@ class HttpClientConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = HttpClientConfigDialog(MainWindow(), cast(HttpClientsConfig, self.config))
+        dialog = HttpClientConfigDialog(it(MainWindow), cast(HttpClientsConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -931,7 +931,7 @@ class WebsocketServersConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = WebsocketServerConfigDialog(MainWindow(), cast(WebsocketServersConfig, self.config))
+        dialog = WebsocketServerConfigDialog(it(MainWindow), cast(WebsocketServersConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -1002,7 +1002,7 @@ class WebsocketClientConfigCard(ConfigCardBase):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        dialog = WebsocketClientConfigDialog(MainWindow(), cast(WebsocketClientsConfig, self.config))
+        dialog = WebsocketClientConfigDialog(it(MainWindow), cast(WebsocketClientsConfig, self.config))
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()

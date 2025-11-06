@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from src.core.config import cfg
+from creart import it
 
 # 项目内模块导入
 from src.ui.components.code_editor import JsonEditor
@@ -415,7 +416,7 @@ class ShowDialogCardBase(SettingCard):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        self._dialog(MainWindow()).exec()
+        self._dialog(it(MainWindow)).exec()
 
 
 class ShowDialogCard(ShowDialogCardBase):
@@ -433,7 +434,7 @@ class ShowDialogCard(ShowDialogCardBase):
             # 项目内模块导入
             from src.ui.window.main_window import MainWindow
 
-            self._dialog = self._dialog(MainWindow())
+            self._dialog = self._dialog(it(MainWindow))
 
     def get_value(self) -> BaseModel:
         """获取配置"""

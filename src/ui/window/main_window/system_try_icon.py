@@ -89,12 +89,12 @@ class SystemTrayIcon(QSystemTrayIcon):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
-        if MainWindow().isMinimized():
-            MainWindow().showNormal()
+        if it(MainWindow).isMinimized():
+            it(MainWindow).showNormal()
         else:
-            MainWindow().show()
-        MainWindow().raise_()
-        MainWindow().activateWindow()
+            it(MainWindow).show()
+        it(MainWindow).raise_()
+        it(MainWindow).activateWindow()
 
 
 class NCDCard(QWidget):
