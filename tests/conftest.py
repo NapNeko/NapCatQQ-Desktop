@@ -10,7 +10,6 @@ from pathlib import Path
 
 # 第三方库导入
 import pytest
-from PySide6.QtWidgets import QApplication
 
 # 添加项目根目录到 Python 路径
 ROOT_DIR = Path(__file__).parent.parent
@@ -25,11 +24,16 @@ def qapp():
     scope="session" 表示整个测试会话只创建一次
     这对于 PySide6/PyQt 应用程序测试是必需的
     """
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-    yield app
-    # 不需要手动清理，pytest-qt 会处理
+    try:
+        from PySide6.QtWidgets import QApplication
+        
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        yield app
+        # 不需要手动清理，pytest-qt 会处理
+    except ImportError:
+        pytest.skip("PySide6 not installed, skipping GUI tests")
 
 
 @pytest.fixture
