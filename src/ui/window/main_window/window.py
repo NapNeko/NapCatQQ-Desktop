@@ -79,7 +79,7 @@ class MainWindow(MSFluentWindow):
 
         # 添加子页面
         self.addSubInterface(
-            interface=HomeWidget().initialize(self),
+            interface=it(HomeWidget).initialize(self),
             icon=FluentIcon.HOME,
             text=self.tr("主页"),
             position=NavigationItemPosition.TOP,

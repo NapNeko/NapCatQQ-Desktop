@@ -144,9 +144,6 @@ class Personalization(ScrollArea):
     @staticmethod
     def _on_theme_mode_changed(theme) -> None:
         """主题切换"""
-        # 项目内模块导入
-        from src.ui.page.home_page import HomeWidget
-
         setTheme(cfg.get(theme), save=True)
 
 
