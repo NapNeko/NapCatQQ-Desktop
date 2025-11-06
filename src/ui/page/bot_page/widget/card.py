@@ -225,7 +225,7 @@ class BotAvatarWidget(QWidget):
     封装了获取头像的功能, 便于维护
     """
 
-    class GetAvatarWoker(QObject, QRunnable):
+    class GetAvatarWorker(QObject, QRunnable):
         """使用 QRunnable 异步获取头像
 
         注意: 不在工作线程中创建/使用任何 GUI 对象(QPixmap/QWidget 等)。
@@ -324,7 +324,7 @@ class BotAvatarWidget(QWidget):
     def qq_id(self, value: int) -> None:
         self._qq_id = value
 
-        worker = self.GetAvatarWoker(value)
+        worker = self.GetAvatarWorker(value)
         # 在主线程中将字节转换为 QPixmap 并更新 UI，避免跨线程创建 GUI 对象
         worker.avatar_bytes_signal.connect(self._on_avatar_bytes)
 
