@@ -2,8 +2,9 @@
 """这是 Bot 列表子页面模块"""
 
 # 第三方库导入
-from qfluentwidgets import FlowLayout, ScrollArea, PrimaryToolButton, ToolButton, FluentIcon
-from PySide6.QtCore import Qt, QSize
+from creart import it
+from qfluentwidgets import FlowLayout, FluentIcon, PrimaryToolButton, ScrollArea, ToolButton
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
@@ -106,10 +107,19 @@ class BotListPage(ScrollArea):
     # =================== 槽函数 =======================
     def slot_add_button(self) -> None:
         """添加按钮槽函数"""
-        from src.ui.page.bot_page import BotPage
-        from creart import it
+        # 判断有没有安装 NapCatQQ
+        from src.core.utils.get_version import GetLocalVersionRunnable
 
-        page = it(BotPage)
-        page.view.setCurrentWidget(page.add_config_page)
-        page.add_config_page.clear_config()
-        page.header.setup_breadcrumb_bar(999)
+        if GetLocalVersionRunnable().get_napcat_version():
+            # 项目内模块导入
+            from src.ui.page.bot_page import BotPage
+
+            page = it(BotPage)
+            page.view.setCurrentWidget(page.add_config_page)
+            page.add_config_page.clear_config()
+            page.header.setup_breadcrumb_bar(999)
+
+        else:
+            from src.ui.components.info_bar import warning_bar
+
+            warning_bar("请先安装 NapCatQQ 后再添加 Bot 配置！")
