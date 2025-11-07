@@ -1,9 +1,26 @@
 name: Build Release
 
 on:
+  # 发布触发：推送 tag
   push:
     tags:
       - 'v*.*.*'
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (例如: 1.7.9 或 v1.7.9)'
+        required: false
+        type: string
+      skip_build:
+        description: '跳过构建（仅更新版本号）'
+        required: false
+        type: boolean
+        default: false
+  # 分支推送触发（用于测试）
+  push:
+    branches:
+      - 'release/**'
 
 permissions:
   contents: write
@@ -21,25 +38,87 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: "设置Python 3.12.6"
-        uses: actions/setup-python@v4
+      - name: "安装 uv"
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: '3.12.6'
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: "设置Python 3.12"
+        run: uv python install 3.12
+
+      - name: "缓存 uv 虚拟环境"
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
 
       - name: "安装依赖"
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          uv sync --frozen
+
+      - name: "提取版本号"
+        id: extract_version
+        shell: pwsh
+        run: |
+          # 从不同来源提取版本号
+          if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref }}" -like "refs/tags/*") {
+            # 从 tag 提取
+            $VERSION = "${{ github.ref }}" -replace "refs/tags/", ""
+          } elseif ("${{ github.event.inputs.version }}" -ne "") {
+            # 从手动输入提取
+            $VERSION = "${{ github.event.inputs.version }}"
+            if (-not ($VERSION -like "v*")) {
+              $VERSION = "v$VERSION"
+            }
+          } else {
+            # 从 pyproject.toml 提取当前版本
+            $content = Get-Content pyproject.toml -Raw
+            if ($content -match 'version\s*=\s*"([^"]+)"') {
+              $VERSION = "v$($matches[1])"
+            } else {
+              Write-Error "无法提取版本号"
+              exit 1
+            }
+          }
+          
+          echo "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          echo "提取的版本号: $VERSION"
+
+      - name: "更新版本号和生成更新日志"
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        shell: pwsh
+        run: |
+          $VERSION = "${{ steps.extract_version.outputs.VERSION }}"
+          echo "更新版本号到 $VERSION"
+          
+          # 运行版本更新脚本
+          uv run python script/utils/update_version.py $VERSION
+          
+          # 提交更改
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add pyproject.toml src/core/config/__init__.py docs/CHANGELOG.md
+          git diff --staged --quiet || git commit -m "🤖 自动更新版本号到 $VERSION"
+          
+          # 推送更改
+          git push origin HEAD:main || echo "推送失败或无更改"
 
       - name: "打包Debug版本"
+        if: ${{ !inputs.skip_build }}
         run: |
-          pyinstaller ./script/build_scripts/main_debug.spec
+          uv run pyinstaller ./script/build_scripts/main_debug.spec
 
       - name: "打包Release版本"
+        if: ${{ !inputs.skip_build }}
         run: |
-          pyinstaller ./script/build_scripts/main.spec
+          uv run pyinstaller ./script/build_scripts/main.spec
 
       - name: "验证文件存在"
+        if: ${{ !inputs.skip_build }}
         run: |
           Write-Host "检查文件是否存在:"
           if (Test-Path "dist/NapCatQQ-Desktop-debug.exe") {
@@ -58,9 +137,10 @@ jobs:
           Get-ChildItem -Path "dist" -Recurse | ForEach-Object { Write-Host "  $($_.FullName)" }
 
       - name: "设置标签和更新内容"
+        if: ${{ !inputs.skip_build && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
         id: get_info
         run: |
-          $TAG_NAME = $env:GITHUB_REF -replace "refs/tags/", ""
+          $TAG_NAME = "${{ steps.extract_version.outputs.VERSION }}"
           $BODY = Get-Content -Path "docs/CHANGELOG.md" -Raw
           
           echo "TAG_NAME=$TAG_NAME" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -69,6 +149,7 @@ jobs:
           echo "EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: "创建发布草稿并上传文件"
+        if: ${{ !inputs.skip_build && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
