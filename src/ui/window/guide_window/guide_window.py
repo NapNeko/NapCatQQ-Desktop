@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
+# 标准库导入
+from abc import ABC
+
 # 第三方库导入
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 from qfluentwidgets import Theme, setTheme
 from qfluentwidgets.components.widgets.stacked_widget import PopUpAniStackedWidget
 from qframelesswindow import FramelessWindow
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QVBoxLayout
-from creart import it
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.core.utils.singleton import singleton
 from src.ui.common.icon import StaticIcon
 from src.ui.window.guide_window.ask_page import AskPage
 from src.ui.window.guide_window.eula_page import EulaPage
@@ -24,7 +26,6 @@ Attributes:
 """
 
 
-@singleton
 class GuideWindow(FramelessWindow):
     """引导用户执行初始化操作窗体
 
@@ -157,3 +158,29 @@ class GuideWindow(FramelessWindow):
             self.view.setCurrentWidget(self.install_nc_page)
         elif isinstance(self.view.currentWidget(), InstallNapCatQQPage):
             self.view.setCurrentWidget(self.finish_page)
+
+
+class GuideWindowCreator(AbstractCreator, ABC):
+    """引导窗体创建类"""
+
+    targets = (
+        CreateTargetInfo(
+            module="src.ui.window.guide_window",
+            identify="GuideWindow",
+            humanized_name="引导窗体",
+            description="NapCatQQ Desktop 引导窗体",
+        ),
+    )
+
+    @classmethod
+    def available(cls) -> bool:
+        """检查创建器是否可用"""
+        return exists_module("src.ui.window.guide_window.guide_window")
+
+    @classmethod
+    def create(create_type: type[GuideWindow]) -> GuideWindow:
+        """创建引导窗体实例"""
+        return create_type()
+
+
+add_creator(GuideWindowCreator)

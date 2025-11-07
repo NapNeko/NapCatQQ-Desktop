@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
+from creart import it
 from qfluentwidgets import CardWidget, ImageLabel, StrongBodyLabel, SubtitleLabel
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
@@ -109,7 +110,7 @@ class BeginnerCard(CardWidget):
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
-        GuideWindow().on_next_page()
+        it(GuideWindow).on_next_page()
 
 
 class ExperiencedCard(CardWidget):
@@ -150,4 +151,4 @@ class ExperiencedCard(CardWidget):
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
-        GuideWindow().close()
+        it(GuideWindow).close()

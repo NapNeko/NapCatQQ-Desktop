@@ -43,6 +43,6 @@ if __name__ == "__main__":
         # 项目内模块导入
         from src.ui.window.guide_window import GuideWindow
 
-        GuideWindow().initialize()
+        it(GuideWindow).initialize()
 
     sys.exit(app.exec())

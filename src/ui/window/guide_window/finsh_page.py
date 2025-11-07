@@ -4,6 +4,7 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
+from creart import it
 from qfluentwidgets import BodyLabel, CaptionLabel
 from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import IconWidget, ImageLabel, SubtitleLabel, isDarkTheme
@@ -257,5 +258,5 @@ class NextCard(Card):
             # 项目内模块导入
             from src.ui.window.guide_window.guide_window import GuideWindow
 
-            GuideWindow().close()
+            it(GuideWindow).close()
         super().mousePressEvent(event)

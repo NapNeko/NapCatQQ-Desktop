@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
+from creart import it
 from qfluentwidgets import FluentIcon, HyperlinkButton, ImageLabel, PrimaryPushButton, SubtitleLabel, TitleLabel
 from PySide6.QtWidgets import QWidget
 
@@ -56,4 +57,4 @@ class WelcomePage(QWidget):
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
-        GuideWindow().on_next_page()
+        it(GuideWindow).on_next_page()

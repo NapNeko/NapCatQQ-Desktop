@@ -7,7 +7,6 @@ from abc import ABC
 
 # 项目内模块导入
 from src.core.utils.logger import LogSource, LogType, logger
-from src.core.utils.singleton import Singleton
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator
 
 

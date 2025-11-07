@@ -230,7 +230,7 @@ class InstallQQPage(InstallPageBase):
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
-        folder_box = FolderBox(self.tr("选择安装路径"), GuideWindow())
+        folder_box = FolderBox(self.tr("选择安装路径"), it(GuideWindow))
         folder_box.cancelButton.hide()
         folder_box.exec()
 
@@ -253,8 +253,8 @@ class InstallQQPage(InstallPageBase):
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
-        success_bar(self.tr("安装完成"), parent=GuideWindow())
-        GuideWindow().on_next_page()
+        success_bar(self.tr("安装完成"), parent=it(GuideWindow))
+        it(GuideWindow).on_next_page()
 
 
 class InstallNapCatQQPage(InstallPageBase):
@@ -298,5 +298,5 @@ class InstallNapCatQQPage(InstallPageBase):
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
-        success_bar(self.tr("安装完成"), parent=GuideWindow())
-        GuideWindow().on_next_page()
+        success_bar(self.tr("安装完成"), parent=it(GuideWindow))
+        it(GuideWindow).on_next_page()
