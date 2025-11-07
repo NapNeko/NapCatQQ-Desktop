@@ -205,11 +205,14 @@ class InstallQQPage(InstallPageBase):
 
     def get_download_url(self) -> QUrl:
         """获取最新 QQ 下载链接"""
-        response = httpx.get(Urls.QQ_Version.value.url())
-        ver_hash = response.json()["verHash"]
-        version = response.json()["version"].replace("-", ".")
-        download_url = f"https://dldir1.qq.com/qqfile/qq/QQNT/{ver_hash}/QQ{version}_x64.exe"
-        return QUrl(download_url)
+        try:
+            response = httpx.get(Urls.QQ_Version.value.url())
+            ver_hash = response.json()["verHash"]
+            version = response.json()["version"].replace("-", ".")
+            download_url = f"https://dldir1.qq.com/qqfile/qq/QQNT/{ver_hash}/QQ{version}_x64.exe"
+            return QUrl(download_url)
+        except httpx.ConnectTimeout:
+            self.set_status_text(self.tr("网络连接超时，请检查您的网络连接。"))
 
     def on_download(self) -> None:
         """下载"""
