@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.network.urls import Urls
+from src.ui.components.background import DottedBackground
 from src.ui.common.icon import StaticIcon
 from src.ui.common.style_sheet import PageStyleSheet
 
@@ -18,7 +19,7 @@ from src.ui.common.style_sheet import PageStyleSheet
 """
 
 
-class DisplayViewWidget(QWidget):
+class DisplayViewWidget(DottedBackground):
 
     def __init__(self) -> None:
         """初始化"""

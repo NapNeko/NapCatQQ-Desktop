@@ -10,9 +10,10 @@ from typing import TYPE_CHECKING, Self
 
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QVBoxLayout
 
 # 项目内模块导入
+from src.ui.components.background import DottedBackground
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.bot_page.sub_page import BotListPage, BotLogPage, ConfigPage
 from src.ui.page.bot_page.widget import HeaderWidget
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from src.ui.window.main_window import MainWindow
 
 
-class BotPage(QWidget):
+class BotPage(DottedBackground):
     """Bot 页面"""
 
     header: HeaderWidget
