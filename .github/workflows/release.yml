@@ -1,10 +1,12 @@
 name: Build Release
 
 on:
-  # 发布触发：推送 tag
+  # 推送触发：按 tag 或特定分支（合并到同一个 push 下以避免重复 key）
   push:
     tags:
       - 'v*.*.*'
+    branches:
+      - 'release/**'
   # 手动触发
   workflow_dispatch:
     inputs:
@@ -17,10 +19,6 @@ on:
         required: false
         type: boolean
         default: false
-  # 分支推送触发（用于测试）
-  push:
-    branches:
-      - 'release/**'
 
 permissions:
   contents: write
