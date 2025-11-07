@@ -136,7 +136,7 @@ jobs:
           Get-ChildItem -Path "dist" -Recurse | ForEach-Object { Write-Host "  $($_.FullName)" }
 
       - name: "设置标签和更新内容"
-        if: ${{ !inputs.skip_build && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !inputs.skip_build && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')) }}
         id: get_info
         run: |
           $TAG_NAME = "${{ steps.extract_version.outputs.VERSION }}"
@@ -148,7 +148,7 @@ jobs:
           echo "EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: "创建发布草稿并上传文件"
-        if: ${{ !inputs.skip_build && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !inputs.skip_build && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')) }}
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
