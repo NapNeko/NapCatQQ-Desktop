@@ -34,7 +34,8 @@ jobs:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           submodules: true
           fetch-depth: 0
-          persist-credentials: false
+          # 保持凭据以便后续步骤可以 push（使用上面提供的 PERSONAL_ACCESS_TOKEN）
+          persist-credentials: true
 
       - name: "安装 uv"
         uses: astral-sh/setup-uv@v4
@@ -86,7 +87,7 @@ jobs:
           echo "提取的版本号: $VERSION"
 
       - name: "更新版本号和生成更新日志"
-        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '') }}
         shell: pwsh
         run: |
           $VERSION = "${{ steps.extract_version.outputs.VERSION }}"
