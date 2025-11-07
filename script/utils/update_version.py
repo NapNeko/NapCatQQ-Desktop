@@ -98,19 +98,14 @@ def categorize_commits(commits: List[str]) -> Dict[str, List[str]]:
             continue
 
         # 匹配 conventional commit 格式
-        if commit.startswith("feat:") or commit.startswith("✨"):
+        if commit.startswith(("feat:", "✨")):
             # 移除前缀
             msg = re.sub(r"^(feat:|✨)\s*", "", commit)
             categories["feat"].append(msg)
-        elif commit.startswith("fix:") or commit.startswith("🐛"):
+        elif commit.startswith(("fix:", "🐛")):
             msg = re.sub(r"^(fix:|🐛)\s*", "", commit)
             categories["fix"].append(msg)
-        elif (
-            commit.startswith("perf:")
-            or commit.startswith("refactor:")
-            or commit.startswith("⚡")
-            or commit.startswith("♻️")
-        ):
+        elif commit.startswith(("perf:", "refactor:", "⚡", "♻️")):
             msg = re.sub(r"^(perf:|refactor:|⚡|♻️)\s*", "", commit)
             categories["perf"].append(msg)
 
@@ -164,8 +159,13 @@ def update_pyproject_version(version: str) -> None:
 
     content = file_path.read_text(encoding="utf-8")
 
-    # 替换版本号
-    new_content = re.sub(r'(version\s*=\s*)"[^"]+"', rf'\1"{version}"', content)
+    # 替换版本号 - 更具体的模式，匹配 [project] 段落中的 version
+    new_content = re.sub(
+        r'(\[project\][\s\S]*?^version\s*=\s*)"[^"]+"',
+        rf'\1"{version}"',
+        content,
+        flags=re.MULTILINE,
+    )
 
     if new_content == content:
         print(f"⚠️  未找到版本号模式: {file_path}")
@@ -207,17 +207,22 @@ def update_changelog(version: str, changelog_content: str) -> None:
     # 更新版本号标题
     content = re.sub(r"(# 🚀 v)\d+\.\d+\.\d+( - 累积更新)", r"\g<1>" + version + r"\g<2>", content)
 
-    # 查找并替换功能分类部分
-    # 从 "## Tips" 之前的内容到 "## 📝 使用须知" 之间的部分
-    pattern = r"(# 🚀 v\d+\.\d+\.\d+ - 累积更新\s*\n\s*\n)(.*?)(\n## 📝 使用须知)"
-
-    # 构建新的内容（版本标题 + 空行 + Tips部分 + 功能分类 + 空行）
-    tips_section = """
-## Tips
+    # 提取现有的 Tips 部分（如果存在）
+    tips_match = re.search(r"(## Tips.*?)(?=##\s*[✌️😭😘])", content, re.DOTALL)
+    tips_section = (
+        tips_match.group(1)
+        if tips_match
+        else """## Tips
 建议旧版本 1.6.17 及以下, 选择手动更新喔(不然真的可能出现奇怪的问题)
 
 """
+    )
 
+    # 查找并替换功能分类部分
+    # 从版本标题后到 "## 📝 使用须知" 之间的部分
+    pattern = r"(# 🚀 v\d+\.\d+\.\d+ - 累积更新\s*\n\s*\n)(.*?)(\n## 📝 使用须知)"
+
+    # 构建新的内容（版本标题 + 空行 + Tips部分 + 功能分类 + 空行）
     replacement = r"\g<1>" + tips_section + changelog_content + r"\n\g<3>"
 
     new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)

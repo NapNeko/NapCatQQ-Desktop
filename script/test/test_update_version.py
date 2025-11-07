@@ -11,6 +11,7 @@
 
 # 标准库导入
 import sys
+import traceback
 from pathlib import Path
 
 # 添加项目根目录到路径
@@ -137,9 +138,6 @@ def main():
         return 1
     except Exception as e:
         print(f"\n❌ 测试出错: {e}")
-        # 标准库导入
-        import traceback
-
         traceback.print_exc()
         return 1
 
