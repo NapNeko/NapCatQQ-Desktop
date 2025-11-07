@@ -21,8 +21,25 @@
 import re
 import subprocess
 import sys
+import io
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# 在 CI / Windows runner 上，stdout/stderr 默认编码可能不是 UTF-8
+# 打印 emoji（例如 🚀）时会抛出 UnicodeEncodeError（cp1252 无法编码这些字符）。
+# 尝试用 sys.stdout.reconfigure，如果不可用则回退到 TextIOWrapper。
+try:
+    # Python 3.7+ 支持 reconfigure
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    # 回退方案：用 TextIOWrapper 包装底层缓冲区
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    except Exception:
+        # 如果仍然失败，继续运行但可能会有输出问题；不过大多数 CI 环境会支持上面的方案
+        pass
 
 
 def run_git_command(command: str) -> str:
