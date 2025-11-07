@@ -7,6 +7,7 @@
 import json
 
 # 第三方库导入
+from creart import it
 import httpx
 from pydantic import BaseModel
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Signal
@@ -171,7 +172,7 @@ class GetLocalVersionRunnable(VersionRunnableBase):
     def get_napcat_version(self) -> str | None:
         """获取本地 NapCat 版本信息"""
         try:
-            with open(str(PathFunc().napcat_path / "package.json"), "r", encoding="utf-8") as f:
+            with open(str(it(PathFunc).napcat_path / "package.json"), "r", encoding="utf-8") as f:
                 # 读取到参数返回版本信息
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
@@ -182,7 +183,7 @@ class GetLocalVersionRunnable(VersionRunnableBase):
     def get_qq_version(self) -> str | None:
         """获取本地 QQ 版本信息"""
         try:
-            if (qq_path := PathFunc().get_qq_path()) is None:
+            if (qq_path := it(PathFunc).get_qq_path()) is None:
                 # 检查 QQ 目录是否存在
                 logger.error("获取 QQ 版本信息失败: 文件不存在")
                 return None

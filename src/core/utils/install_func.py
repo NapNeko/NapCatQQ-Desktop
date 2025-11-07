@@ -8,6 +8,8 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+# 第三方库导入
+from creart import it
 from PySide6.QtCore import QObject, QRunnable, QThread, QUrl, Signal
 
 # 项目内模块导入
@@ -47,8 +49,8 @@ class NapCatInstall(InstallBase):
 
     def __init__(self) -> None:
         super().__init__()
-        self.zip_file_path = PathFunc().tmp_path / "NapCat.Shell.zip"
-        self.install_path = PathFunc().napcat_path
+        self.zip_file_path = it(PathFunc).tmp_path / "NapCat.Shell.zip"
+        self.install_path = it(PathFunc).napcat_path
 
     def execute(self) -> None:
         """安装逻辑"""

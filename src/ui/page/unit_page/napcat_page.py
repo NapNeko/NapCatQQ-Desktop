@@ -35,7 +35,7 @@ class NapCatPage(PageBase):
         self.app_card.install_button.clicked.connect(self.on_download)
         self.app_card.update_button.clicked.connect(self.on_download)
         self.app_card.open_folder_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().napcat_path))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).napcat_path))
         )
 
     # ==================== 公共方法 ====================

@@ -39,11 +39,9 @@ from pathlib import Path
 from typing import Self
 
 # 第三方库导入
+from creart import it
 from qfluentwidgets.common import (
     BoolValidator,
-    RangeConfigItem,
-    RangeValidator,
-    qconfig,
     ColorConfigItem,
     ConfigItem,
     ConfigSerializer,
@@ -51,7 +49,10 @@ from qfluentwidgets.common import (
     OptionsConfigItem,
     OptionsValidator,
     QConfig,
+    RangeConfigItem,
+    RangeValidator,
     Theme,
+    qconfig,
 )
 from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import QLocale, Signal
@@ -282,7 +283,7 @@ class Config(QConfig):
 
 
 cfg = Config()
-qconfig.load(PathFunc().config_path, cfg)
+qconfig.load(it(PathFunc).config_path, cfg)
 cfg.set(cfg.start_time, time.time(), True)
 cfg.set(cfg.napcat_desktop_version, __version__, True)
 cfg.set(cfg.system_type, platform.system(), True)

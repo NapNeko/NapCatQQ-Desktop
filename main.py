@@ -12,6 +12,7 @@ from src.core.utils.mutex import SingleInstanceApplication
 from src.core.utils.path_func import PathFunc
 from src.resource import resource
 from src.ui.common.font import FontManager
+from creart import it
 
 if __name__ == "__main__":
     # 实现单实例应用程序检查
@@ -19,7 +20,7 @@ if __name__ == "__main__":
         sys.exit()
 
     # 执行路径验证
-    PathFunc().path_validator()
+    it(PathFunc).path_validator()
 
     # 设置DPI缩放
     if cfg.get(cfg.dpi_scale) == "Auto":

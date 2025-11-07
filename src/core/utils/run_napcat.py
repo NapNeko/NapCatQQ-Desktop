@@ -482,18 +482,20 @@ class ManagerNapCatQQProcess(QObject):
     def _get_env_variable(self) -> list[str]:
         """获取环境变量"""
         env = QProcess.systemEnvironment()
-        env.append(f"NAPCAT_PATCH_PACKAGE={PathFunc().napcat_path / 'qqnt.json'}")
-        env.append(f"NAPCAT_LOAD_PATH={PathFunc().napcat_path / 'loadNapCat.js'}")
-        env.append(f"NAPCAT_INJECT_PATH={PathFunc().napcat_path / 'NapCatWinBootHook.dll'}")
-        env.append(f"NAPCAT_LAUNCHER_PATH={PathFunc().napcat_path / 'NapCatWinBootMain.exe'}")
-        env.append(f"NAPCAT_MAIN_PATH={PathFunc().napcat_path / 'napcat.mjs'}")
+        env.append(f"NAPCAT_PATCH_PACKAGE={it(PathFunc).napcat_path / 'qqnt.json'}")
+        env.append(f"NAPCAT_LOAD_PATH={it(PathFunc).napcat_path / 'loadNapCat.js'}")
+        env.append(f"NAPCAT_INJECT_PATH={it(PathFunc).napcat_path / 'NapCatWinBootHook.dll'}")
+        env.append(f"NAPCAT_LAUNCHER_PATH={it(PathFunc).napcat_path / 'NapCatWinBootMain.exe'}")
+        env.append(f"NAPCAT_MAIN_PATH={it(PathFunc).napcat_path / 'napcat.mjs'}")
 
         return env
 
     def _write_load_script(self) -> None:
         """写入 loadNapCat.js 脚本文件"""
-        with open(str(PathFunc().napcat_path / "loadNapCat.js"), "w") as file:
-            file.write("(async () => {await import(" f"'{ (PathFunc().napcat_path / 'napcat.mjs').as_uri() }'" ")})()")
+        with open(str(it(PathFunc).napcat_path / "loadNapCat.js"), "w") as file:
+            file.write(
+                "(async () => {await import(" f"'{ (it(PathFunc).napcat_path / 'napcat.mjs').as_uri() }'" ")})()"
+            )
         logger.info("NapCatQQ 进程加载脚本已写入")
 
     def _create_napcat_process(self, config: Config) -> QProcess:
@@ -511,11 +513,11 @@ class ManagerNapCatQQProcess(QObject):
         # 创建 QProcess 并配置
         process = QProcess()
         process.setEnvironment(self._get_env_variable())
-        process.setProgram(str(PathFunc().napcat_path / "NapCatWinBootMain.exe"))
+        process.setProgram(str(it(PathFunc).napcat_path / "NapCatWinBootMain.exe"))
         process.setArguments(
             [
-                str(PathFunc().get_qq_path() / "QQ.exe"),
-                str(PathFunc().napcat_path / "NapCatWinBootHook.dll"),
+                str(it(PathFunc).get_qq_path() / "QQ.exe"),
+                str(it(PathFunc).napcat_path / "NapCatWinBootHook.dll"),
                 str(config.bot.QQID),
             ]
         )

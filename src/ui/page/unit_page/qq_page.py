@@ -90,7 +90,7 @@ class QQPage(PageBase):
         self.app_card.install_button.clicked.connect(self.on_download)
         self.app_card.update_button.clicked.connect(self.on_download)
         self.app_card.open_folder_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().get_qq_path()))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).get_qq_path()))
         )
 
     def update_page(self) -> None:
@@ -141,7 +141,7 @@ class QQPage(PageBase):
         # 项目内模块导入
         from src.core.network.downloader import QQDownloader
 
-        self.file_path = PathFunc().tmp_path / self.url.fileName()
+        self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         downloader = QQDownloader(self.url)
         downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
         downloader.download_finish_signal.connect(self.on_install)

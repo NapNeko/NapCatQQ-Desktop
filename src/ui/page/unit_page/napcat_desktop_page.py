@@ -40,7 +40,7 @@ class NCDPage(PageBase):
         self.app_card.install_button.clicked.connect(self.on_download)
         self.app_card.update_button.clicked.connect(self.on_download)
         self.app_card.open_folder_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(PathFunc().napcat_path))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).napcat_path))
         )
 
     # ==================== 公共方法 ====================
@@ -146,11 +146,11 @@ class NCDPage(PageBase):
                 'start "" "%current_app_path%"\n'
                 'del "%~f0"\n'
             )
-        with open(str(PathFunc().base_path / "update.bat"), "w", encoding="utf-8") as file:
+        with open(str(it(PathFunc).base_path / "update.bat"), "w", encoding="utf-8") as file:
             file.write(bat_content)
 
         # 启动安装脚本（以系统方式打开，确保在主程序退出后依然运行）
-        bat_path = PathFunc().base_path / "update.bat"
+        bat_path = it(PathFunc).base_path / "update.bat"
         try:
             # 在 Windows 上优先使用 os.startfile，这会以默认程序方式运行 .bat 并立即返回
             os.startfile(str(bat_path))

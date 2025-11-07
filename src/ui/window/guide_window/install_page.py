@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 # 第三方库导入
 import httpx
+from creart import it
 from qfluentwidgets import (
     BodyLabel,
     ImageLabel,
@@ -193,7 +194,7 @@ class InstallQQPage(InstallPageBase):
         super().__init__(parent)
         # 创建杂七杂八的控件
         self.url = self.get_download_url()
-        self.file_path = PathFunc().tmp_path / self.url.fileName()
+        self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         self.downloader = QQDownloader(self.url)
 
         # 设置属性
@@ -262,7 +263,7 @@ class InstallNapCatQQPage(InstallPageBase):
         super().__init__(parent)
         # 创建杂七杂八的控件
         self.url = Urls.NAPCATQQ_DOWNLOAD.value
-        self.file_path = PathFunc().tmp_path / self.url.fileName()
+        self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         self.downloader = GithubDownloader(self.url)
 
         # 设置属性

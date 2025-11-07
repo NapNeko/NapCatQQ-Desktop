@@ -4,6 +4,7 @@ from pathlib import Path
 
 # 第三方库导入
 import httpx
+from creart import it
 from PySide6.QtCore import QObject, QRunnable, QUrl, Signal
 
 # 项目内模块导入
@@ -55,7 +56,7 @@ class GithubDownloader(DownloaderBase):
         """
         super().__init__()
         self.url: QUrl = url
-        self.path: Path = PathFunc().tmp_path
+        self.path: Path = it(PathFunc).tmp_path
         self.file_name = self.url.fileName()
         self.mirror_urls = [QUrl(f"{mirror.toString()}/{self.url.toString()}") for mirror in Urls.MIRROR_SITE.value]
 
@@ -131,7 +132,7 @@ class QQDownloader(DownloaderBase):
     def __init__(self, url: QUrl) -> None:
         super().__init__()
         self.url: QUrl = url
-        self.path: Path = PathFunc().tmp_path
+        self.path: Path = it(PathFunc).tmp_path
 
     def run(self) -> None:
         """运行下载 QQ 的任务"""

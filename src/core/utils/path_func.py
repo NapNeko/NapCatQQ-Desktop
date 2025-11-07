@@ -3,13 +3,31 @@
 import shutil
 import winreg
 from pathlib import Path
+from abc import ABC
 
 # 项目内模块导入
 from src.core.utils.logger import LogSource, LogType, logger
 from src.core.utils.singleton import Singleton
+from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator
 
 
-class PathFunc(metaclass=Singleton):
+class OldVersionPath:
+    """旧版本路径类
+
+    用于存储旧版本的路径信息, 以便进行版本迁移
+    """
+
+    @staticmethod
+    def v1613() -> dict[str, Path]:
+        """NapCatQQ Desktop v1.6.13 及更早版本的路径, 仅包含文件夹变化"""
+        return {
+            "napcat_path": Path.cwd() / "NapCat",
+            "config_dir_path": Path.cwd() / "config",
+            "tmp_path": Path.cwd() / "tmp",
+        }
+
+
+class PathFunc:
     """路径处理类
 
     NapCatQQ Desktop 的路径处理类, 负责管理和验证应用程序所需的各种路径
@@ -22,21 +40,6 @@ class PathFunc(metaclass=Singleton):
         config_path (Path): 主配置文件路径
         bot_config_path (Path): 机器人配置文件路径
     """
-
-    class OldVersionPath:
-        """旧版本路径类
-
-        用于存储旧版本的路径信息, 以便进行版本迁移
-        """
-
-        @staticmethod
-        def _v1613() -> dict[str, Path]:
-            """NapCatQQ Desktop v1.6.13 及更早版本的路径, 仅包含文件夹变化"""
-            return {
-                "napcat_path": Path.cwd() / "NapCat",
-                "config_dir_path": Path.cwd() / "config",
-                "tmp_path": Path.cwd() / "tmp",
-            }
 
     def __init__(self) -> None:
         """初始化"""
@@ -89,7 +92,7 @@ class PathFunc(metaclass=Singleton):
         检查并迁移旧版本的路径到当前版本(目前只有v1.6.13及更早版本与当前版本不兼容)
         """
         # 获取旧版文件夹路径大全
-        old_paths = self.OldVersionPath._v1613()
+        old_paths = OldVersionPath.v1613()
 
         # 检查是否需要迁移
         if not Path(old_paths["config_dir_path"]).exists():
@@ -127,3 +130,29 @@ class PathFunc(metaclass=Singleton):
                     logger.warning(f"无法删除旧版文件夹 {old_path}, 请手动删除", LogType.FILE_FUNC, LogSource.CORE)
 
         logger.debug("路径迁移完成", LogType.FILE_FUNC, LogSource.CORE)
+
+
+class PathFuncCreator(AbstractCreator, ABC):
+    """路径处理类创建器"""
+
+    targets = (
+        CreateTargetInfo(
+            module="src.core.utils.path_func",
+            identify="PathFunc",
+            humanized_name="路径处理类",
+            description="NapCatQQ Desktop 路径处理类",
+        ),
+    )
+
+    @staticmethod
+    def available() -> bool:
+        """判断路径处理类模块是否可用"""
+        return exists_module("src.core.utils.path_func")
+
+    @staticmethod
+    def create(create_type: type[PathFunc]) -> PathFunc:
+        """创建路径处理类实例"""
+        return create_type()
+
+
+add_creator(PathFuncCreator)

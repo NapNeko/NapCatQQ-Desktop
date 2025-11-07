@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 第三方库导入
+from creart import it
 from PySide6.QtCore import QLockFile
 
 # 项目内模块导入
@@ -22,7 +24,7 @@ class SingleInstanceApplication:
         """初始化(懒加载锁文件)"""
         if SingleInstanceApplication._lock_file is None:
             # 确保临时目录存在
-            tmp_dir = PathFunc().tmp_path
+            tmp_dir = it(PathFunc).tmp_path
             tmp_dir.mkdir(parents=True, exist_ok=True)
 
             # 在运行时临时目录下创建锁文件
