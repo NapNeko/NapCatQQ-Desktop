@@ -208,7 +208,9 @@ def update_changelog(version: str, changelog_content: str) -> None:
     content = re.sub(r"(# 🚀 v)\d+\.\d+\.\d+( - 累积更新)", r"\g<1>" + version + r"\g<2>", content)
 
     # 提取现有的 Tips 部分（如果存在）
-    tips_match = re.search(r"(## Tips.*?)(?=##\s*[✌️😭😘])", content, re.DOTALL)
+    # 使用非贪婪匹配且限制匹配范围，避免 ReDoS 攻击
+    # 匹配从 "## Tips" 到下一个 "##" 开头的行
+    tips_match = re.search(r"(## Tips\n(?:[^#\n][^\n]*\n)*)", content, re.MULTILINE)
     tips_section = (
         tips_match.group(1)
         if tips_match
@@ -220,7 +222,8 @@ def update_changelog(version: str, changelog_content: str) -> None:
 
     # 查找并替换功能分类部分
     # 从版本标题后到 "## 📝 使用须知" 之间的部分
-    pattern = r"(# 🚀 v\d+\.\d+\.\d+ - 累积更新\s*\n\s*\n)(.*?)(\n## 📝 使用须知)"
+    # 使用非贪婪匹配，明确限定匹配范围，避免 ReDoS 攻击
+    pattern = r"(# 🚀 v\d+\.\d+\.\d+ - 累积更新\s*\n\s*\n)((?:(?!## 📝 使用须知)[\s\S])*?)(\n## 📝 使用须知)"
 
     # 构建新的内容（版本标题 + 空行 + Tips部分 + 功能分类 + 空行）
     replacement = r"\g<1>" + tips_section + changelog_content + r"\n\g<3>"
