@@ -27,6 +27,10 @@ jobs:
 
   release:
     runs-on: windows-latest
+    env:
+      # 强制 Python 在 runner 上使用 UTF-8 I/O，避免子进程/reader thread 的编码错误
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
     steps:
       - name: "检出代码"
         uses: actions/checkout@v4

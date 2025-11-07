@@ -50,12 +50,25 @@ def run_git_command(command: str) -> str:
             shell=True,
             capture_output=True,
             text=True,
+            # 强制使用 UTF-8 解码子进程输出，遇到无法解码的字节则用替换字符，避免 cp1252 导致的 UnicodeDecodeError
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
-        return result.stdout.strip()
+        # result.stdout 可能为 None（极少数情况），确保返回字符串
+        return (result.stdout or "").strip()
     except subprocess.CalledProcessError as e:
         print(f"❌ Git 命令执行失败: {command}")
-        print(f"错误: {e.stderr}")
+        # e.stderr 也可能是 bytes 或 None，统一解码与安全输出
+        try:
+            err_text = (
+                e.stderr
+                if isinstance(e.stderr, str)
+                else (e.stderr.decode("utf-8", errors="replace") if e.stderr else "")
+            )
+        except Exception:
+            err_text = "(无法解码的 stderr)"
+        print(f"错误: {err_text}")
         sys.exit(1)
 
 
