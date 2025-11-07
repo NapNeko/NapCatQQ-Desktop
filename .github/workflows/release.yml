@@ -107,8 +107,8 @@ jobs:
           git add pyproject.toml src/core/config/__init__.py docs/CHANGELOG.md
           git diff --staged --quiet || git commit -m "🤖 自动更新版本号到 $VERSION"
           
-          # 推送更改
-          git push origin HEAD:main || echo "推送失败或无更改"
+          # 推送更改（推送到 master 分支）
+          git push origin HEAD:master || echo "推送失败或无更改"
 
       - name: "打包Debug版本"
         if: ${{ !inputs.skip_build }}
