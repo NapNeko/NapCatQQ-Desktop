@@ -165,7 +165,7 @@ class GuideWindowCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.ui.window.guide_window",
+            module="src.ui.window.guide_window.guide_window",
             identify="GuideWindow",
             humanized_name="引导窗体",
             description="NapCatQQ Desktop 引导窗体",
@@ -178,7 +178,7 @@ class GuideWindowCreator(AbstractCreator, ABC):
         return exists_module("src.ui.window.guide_window.guide_window")
 
     @classmethod
-    def create(create_type: type[GuideWindow]) -> GuideWindow:
+    def create(cls, create_type: type[GuideWindow]) -> GuideWindow:
         """创建引导窗体实例"""
         return create_type()
 
