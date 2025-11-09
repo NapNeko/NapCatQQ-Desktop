@@ -41,36 +41,27 @@ jobs:
           # 保持凭据以便后续步骤可以 push（使用上面提供的 PERSONAL_ACCESS_TOKEN）
           persist-credentials: true
 
-      - name: "安装 uv"
-        uses: astral-sh/setup-uv@v5
+      - name: "设置 Python 3.12"
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
 
-      - name: "设置Python 3.12"
-        run: uv python install 3.12
-
-      - name: "安装 OpenSSL (确保 _ssl 可用)"
+      - name: "创建虚拟环境并安装依赖"
         shell: pwsh
         run: |
-          Write-Host "Installing OpenSSL via Chocolatey..."
-          choco install openssl.light -y || choco install openssl -y
-          # 尝试把常见的 OpenSSL bin 目录加入当前会话 PATH，便于后续步骤（pyinstaller/运行时）能加载到 DLL
-          $possible = @(
-            "C:\\Program Files\\OpenSSL-Win64\\bin",
-            "C:\\Program Files\\OpenSSL-Win32\\bin",
-            "C:\\Program Files\\OpenSSL\\bin",
-            "C:\\Program Files (x86)\\OpenSSL-Win32\\bin"
-          )
-          foreach ($p in $possible) {
-            if (Test-Path $p) {
-              Write-Host "Adding $p to PATH"
-              $env:Path = "$($env:Path);$p"
-              break
-            }
+          Write-Host "Creating virtualenv .venv and installing dependencies with pip..."
+          python -m venv .venv
+          # Activate in current PowerShell session
+          .\.venv\Scripts\Activate.ps1
+          python -m pip install --upgrade pip
+          if (Test-Path 'requirements.txt') {
+            python -m pip install -r requirements.txt
+          } else {
+            Write-Host 'requirements.txt not found, installing pyinstaller only'
+            python -m pip install pyinstaller
           }
-          Write-Host "PATH length:" $env:Path.Length
-
-      - name: "安装依赖"
-        run: |
-          uv sync
+          # Ensure PyInstaller is available
+          python -m pip install pyinstaller
 
       - name: "提取版本号"
         id: extract_version
@@ -123,12 +114,12 @@ jobs:
       - name: "打包Debug版本"
         if: ${{ !inputs.skip_build }}
         run: |
-          uv run pyinstaller ./script/build_scripts/main_debug.spec
+          .\.venv\Scripts\python.exe -m PyInstaller ./script/build_scripts/main_debug.spec
 
       - name: "打包Release版本"
         if: ${{ !inputs.skip_build }}
         run: |
-          uv run pyinstaller ./script/build_scripts/main.spec
+          .\.venv\Scripts\python.exe -m PyInstaller ./script/build_scripts/main.spec
 
       - name: "验证文件存在"
         if: ${{ !inputs.skip_build }}
