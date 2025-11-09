@@ -5,7 +5,6 @@
 # 标准库导入
 import hashlib
 import re
-import time
 from abc import ABC
 from calendar import c
 from collections import deque
@@ -27,6 +26,7 @@ from src.core.network.email import offline_email
 from src.core.network.webhook import offline_webhook
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
+from src.ui.components.info_bar import info_bar
 
 
 # ==================== 数据模型 ====================
@@ -324,28 +324,63 @@ class NapCatQQLoginState(QObject):
         Args:
             online_status (bool): 是否在线
         """
+        # 记录之前的在线状态以判断是否发生了 状态从在线->离线 的转变
+        prev_online = self._online_status
+
+        # 更新当前在线状态
         self._online_status = online_status
 
-        if online_status or not self._is_logged_in:
+        # 如果当前是在线，重置通知标志并直接返回
+        if online_status:
+            # 一旦恢复在线，允许之后再次发送离线通知
+            self._offline_notice = False
             return
 
+        # 只有当之前是在线并且当前已离线时，才触发离线逻辑
+        if not prev_online:
+            # 如果之前就已经离线，跳过（避免重复或启动时误判）
+            return
+
+        # 如果未登录则不进行离线通知/重启处理
+        if not self._is_logged_in:
+            return
+
+        # 如果配置为自动重启，优先发送通知（如果开启），然后再重启
         if self.config.bot.offlineAutoRestart:
+            # 只有在未曾发送过离线通知且配置允许时才发送
+            if not self._offline_notice and self.config.advanced.offlineNotice:
+                if cfg.get(cfg.bot_offline_web_hook_notice):
+                    offline_webhook(self.config)
+                    info_bar(self.tr("已发送离线通知到配置的 WebHook 地址"))
+
+                if cfg.get(cfg.bot_offline_email_notice):
+                    offline_email(self.config)
+                    info_bar(self.tr("已发送离线通知到配置的邮箱地址"))
+
+                # 标记已发送，避免重复
+                self._offline_notice = True
+
+            # 执行重启（无论是否发送了通知）
             it(ManagerNapCatQQProcess).restart_process(self.config)
             return
 
+        # 非自动重启场景：如果已经发送过通知则直接返回
         if self._offline_notice:
             return
 
-        # 离线通知
-        if self.config.advanced.offlineNotice:
+        # 离线通知：由用户配置决定是否发送
+        if not self.config.advanced.offlineNotice:
             return
 
         if cfg.get(cfg.bot_offline_web_hook_notice):
             offline_webhook(self.config)
+            info_bar(self.tr("已发送离线通知到配置的 WebHook 地址"))
+
         if cfg.get(cfg.bot_offline_email_notice):
             offline_email(self.config)
+            info_bar(self.tr("已发送离线通知到配置的邮箱地址"))
 
-        # 更改状态
+        # 标记已发送，避免重复通知
         self._offline_notice = True
 
     def slot_update_login_qrcode(self, qr_code: str) -> None:

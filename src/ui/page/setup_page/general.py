@@ -148,7 +148,7 @@ class BotOfflineEmailDialog(MessageBoxBase):
 
     def fill_config(self) -> None:
         """填充配置"""
-        self.enable_card.fill_value(cfg.get(cfg.title_tab_bar))
+        self.enable_card.fill_value(cfg.get(cfg.bot_offline_email_notice))
         self.receivers_card.fill_value(cfg.get(cfg.email_receiver))
         self.sender_card.fill_value(cfg.get(cfg.email_sender))
         self.token_card.fill_value(cfg.get(cfg.email_token))

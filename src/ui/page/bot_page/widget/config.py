@@ -71,7 +71,7 @@ class BotConfigWidget(ScrollArea):
         self.offline_auto_restart_card = SwitchConfigCard(
             icon=FluentIcon.HISTORY,
             title=self.tr("掉线重启"),
-            content=self.tr("当 Bot 掉线时自动重启, 此项打开时, 不在发送掉线通知"),
+            content=self.tr("当 Bot 掉线时自动重启, 与掉线通知可以配合使用"),
             parent=self.view,
         )
 
