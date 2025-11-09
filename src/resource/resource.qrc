@@ -16,8 +16,6 @@
     </qresource>
 
     <qresource prefix="mono_icon">
-        <file>icon/mono_icon/black/logo.svg</file>
-        <file>icon/mono_icon/white/logo.svg</file>
         <file>icon/mono_icon/black/qq.svg</file>
         <file>icon/mono_icon/white/qq.svg</file>
         <file>icon/mono_icon/black/log.svg</file>

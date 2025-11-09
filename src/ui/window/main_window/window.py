@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication
 from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
 from src.core.utils.run_napcat import ManagerNapCatQQProcess
-from src.ui.common.icon import NapCatDesktopIcon
+from src.ui.common.icon import StaticIcon
 from src.ui.page import BotPage, HomeWidget, SetupWidget, UnitWidget
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
 from src.ui.window.main_window.title_bar import CustomTitleBar
@@ -55,7 +55,7 @@ class MainWindow(MSFluentWindow):
         # 标题栏部分
         self.title_bar = CustomTitleBar(self)
         self.setTitleBar(self.title_bar)
-        self.setWindowIcon(QIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT)))
+        self.setWindowIcon(StaticIcon.LOGO.qicon())
         # 窗体大小以及设置打开时居中
         self.setMinimumSize(1148, 720)
         desktop = QApplication.screens()[0].availableGeometry()

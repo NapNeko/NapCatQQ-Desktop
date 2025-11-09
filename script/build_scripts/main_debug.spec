@@ -3,16 +3,16 @@
 block_cipher = None
 
 a = Analysis(
-    ['../../main.py'],  # 主入口文件
-    pathex=[],    # 可添加额外搜索路径
+    ['../../main.py'],
+    pathex=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],   # 可排除不需要的模块
+    excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
-    noarchive=True,  # 关键：必须设置为 True（单文件模式）
+    noarchive=True,
 )
 
 # 单文件模式不需要 COLLECT

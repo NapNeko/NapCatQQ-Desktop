@@ -11,7 +11,6 @@ from src.core.utils.logger.log_data import Log
 class NapCatDesktopIcon(FluentIconBase, Enum):
     """主窗体所需要的图标"""
 
-    LOGO = "logo"
     QQ = "qq"
     LOG = "log"
 

@@ -32,12 +32,7 @@ Attributes:
 
 
 class CustomTitleBar(MSFluentTitleBar):
-    """主窗口的标题栏, 继承自 MSFluentTitleBar
-
-    Attributes:
-        tab_bar (TabBar): 标题栏中的标签栏
-
-    """
+    """主窗口的标题栏, 继承自 MSFluentTitleBar"""
 
     def __init__(self, parent: "MainWindow") -> None:
         """初始化标题栏, 执行标题栏和按钮的配置
@@ -53,8 +48,7 @@ class CustomTitleBar(MSFluentTitleBar):
     def setup_title(self) -> None:
         """设置标题栏标题和图标"""
         self.setTitle("NapCatQQ Desktop")
-        self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
-        self.setWindowIcon(StaticIcon.LOGO.qicon())
+        self.setIcon(StaticIcon.LOGO.path())
 
     def setup_buttons(self) -> None:
         """设置标题栏按钮
@@ -80,24 +74,6 @@ class CustomTitleBar(MSFluentTitleBar):
             getattr(self, btn_name).clicked.connect(slot)
 
         self.buttonLayout.setContentsMargins(0, 8, 10, 0)
-
-    def canDrag(self, pos: QPoint) -> bool:
-        """判断是否可以拖动窗口
-
-        检查用户鼠标是否是在拖动区域内, 如果在标签栏区域内则不允许拖动窗口
-
-        Args:
-            pos (QPoint): 鼠标位置
-
-        Returns:
-            bool: 是否可以拖动窗口
-        """
-
-        if not super().canDrag(pos):
-            return False
-
-        pos.setX(pos.x() - self.tab_bar.x())
-        return not self.tab_bar.tabRegion().contains(pos)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         """重写窗口大小调整事件
