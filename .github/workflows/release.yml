@@ -43,18 +43,13 @@ jobs:
 
       - name: "安装 uv"
         uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
 
       - name: "设置Python 3.12"
         run: uv python install 3.12
 
       - name: "安装依赖"
         run: |
-          uv sync --frozen
-          # 减小 uv 缓存体积，避免缓存过大或包含不必要的二进制
-          uv cache prune --ci
+          uv sync --locked --no-cache --reinstall
 
       - name: "提取版本号"
         id: extract_version
