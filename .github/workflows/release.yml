@@ -42,7 +42,7 @@ jobs:
           persist-credentials: true
 
       - name: "安装 uv"
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -50,17 +50,11 @@ jobs:
       - name: "设置Python 3.12"
         run: uv python install 3.12
 
-      - name: "缓存 uv 虚拟环境"
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
       - name: "安装依赖"
         run: |
           uv sync --frozen
+          # 减小 uv 缓存体积，避免缓存过大或包含不必要的二进制
+          uv cache prune --ci
 
       - name: "提取版本号"
         id: extract_version
