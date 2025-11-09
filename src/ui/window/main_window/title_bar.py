@@ -39,8 +39,6 @@ class CustomTitleBar(MSFluentTitleBar):
 
     """
 
-    tab_bar: TabBar
-
     def __init__(self, parent: "MainWindow") -> None:
         """初始化标题栏, 执行标题栏和按钮的配置
 
@@ -53,25 +51,10 @@ class CustomTitleBar(MSFluentTitleBar):
         self.setup_buttons()
 
     def setup_title(self) -> None:
-        """设置标题栏标题和图标, 并配置标签栏
-
-        该方法会在标题栏中插入一个 TabBar 组件, 用于显示和管理标签页
-        """
+        """设置标题栏标题和图标"""
         self.setTitle("NapCatQQ Desktop")
         self.setIcon(NapCatDesktopIcon.LOGO.path(Theme.LIGHT))
         self.setWindowIcon(StaticIcon.LOGO.qicon())
-
-        self.tab_bar = TabBar(self)
-        self.tab_bar.setMovable(cfg.get(cfg.title_tab_bar_movable))
-        self.tab_bar.setTabMaximumWidth(cfg.get(cfg.title_tab_bar_max_width))
-        self.tab_bar.setTabMinimumWidth(cfg.get(cfg.title_tab_bar_min_width))
-        self.tab_bar.setTabShadowEnabled(cfg.get(cfg.title_tab_bar_shadow))
-        self.tab_bar.setScrollable(cfg.get(cfg.title_tab_bar_scrollable))
-        self.tab_bar.setCloseButtonDisplayMode(cfg.get(cfg.title_tab_bar_close_mode))
-        self.tab_bar.setAddButtonVisible(False)
-        self.tab_bar.tabCloseRequested.connect(self.tab_bar.removeTab)
-
-        self.hBoxLayout.insertWidget(4, self.tab_bar, 1)
 
     def setup_buttons(self) -> None:
         """设置标题栏按钮

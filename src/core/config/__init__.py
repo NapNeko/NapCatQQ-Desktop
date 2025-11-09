@@ -130,49 +130,6 @@ class Config(QConfig):
         default=100,
         validator=RangeValidator(10, 100),
     )
-    title_tab_bar = ConfigItem(
-        group="Personalize",
-        name="TitleTabBar",
-        default=False,
-        validator=BoolValidator(),
-    )
-    title_tab_bar_movable = ConfigItem(
-        group="Personalize",
-        name="TitleTabBarIsMovable",
-        default=False,
-        validator=BoolValidator(),
-    )
-    title_tab_bar_scrollable = ConfigItem(
-        group="Personalize",
-        name="TitleTabBarIsScrollable",
-        default=False,
-        validator=BoolValidator(),
-    )
-    title_tab_bar_shadow = ConfigItem(
-        group="Personalize",
-        name="TitleTabBarIsShadow",
-        default=False,
-        validator=BoolValidator(),
-    )
-    title_tab_bar_close_mode = OptionsConfigItem(
-        group="Personalize",
-        name="TitleTabBarCloseButton",
-        default="悬停显示",
-        validator=OptionsValidator(["始终显示", "悬停显示", "永不显示"]),
-        restart=True,
-    )
-    title_tab_bar_min_width = RangeConfigItem(
-        group="Personalize",
-        name="TitleTabBarMinWidth",
-        default=64,
-        validator=RangeValidator(32, 64),
-    )
-    title_tab_bar_max_width = RangeConfigItem(
-        group="Personalize",
-        name="TitleTabBarMaxWidth",
-        default=135,
-        validator=RangeValidator(64, 200),
-    )
 
     # 事件项
     bot_offline_email_notice = ConfigItem(
