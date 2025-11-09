@@ -98,8 +98,8 @@ jobs:
           $VERSION = "${{ steps.extract_version.outputs.VERSION }}"
           echo "更新版本号到 $VERSION"
           
-          # 运行版本更新脚本
-          uv run python script/utils/update_version.py $VERSION
+          # 运行版本更新脚本（使用虚拟环境中的 python）
+          .\.venv\Scripts\python.exe script/utils/update_version.py $VERSION
           
           # 提交更改
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
