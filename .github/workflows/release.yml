@@ -47,6 +47,27 @@ jobs:
       - name: "设置Python 3.12"
         run: uv python install 3.12
 
+      - name: "安装 OpenSSL (确保 _ssl 可用)"
+        shell: pwsh
+        run: |
+          Write-Host "Installing OpenSSL via Chocolatey..."
+          choco install openssl.light -y || choco install openssl -y
+          # 尝试把常见的 OpenSSL bin 目录加入当前会话 PATH，便于后续步骤（pyinstaller/运行时）能加载到 DLL
+          $possible = @(
+            "C:\\Program Files\\OpenSSL-Win64\\bin",
+            "C:\\Program Files\\OpenSSL-Win32\\bin",
+            "C:\\Program Files\\OpenSSL\\bin",
+            "C:\\Program Files (x86)\\OpenSSL-Win32\\bin"
+          )
+          foreach ($p in $possible) {
+            if (Test-Path $p) {
+              Write-Host "Adding $p to PATH"
+              $env:Path = "$($env:Path);$p"
+              break
+            }
+          }
+          Write-Host "PATH length:" $env:Path.Length
+
       - name: "安装依赖"
         run: |
           uv sync --locked --no-cache --reinstall
