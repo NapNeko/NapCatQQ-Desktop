@@ -75,18 +75,6 @@ class CustomTitleBar(MSFluentTitleBar):
 
         self.buttonLayout.setContentsMargins(0, 8, 10, 0)
 
-    def resizeEvent(self, event: QResizeEvent) -> None:
-        """重写窗口大小调整事件
-
-        该方法会在窗口大小调整时, 动态调整标签栏的最小宽度, 以适应窗口大小变化
-
-        Args:
-            event (QResizeEvent): 窗口大小调整事件
-        """
-
-        super().resizeEvent(event)
-        self.tab_bar.setMinimumWidth(self.width() - 400)
-
     def _replace_button(self, btn_class: TitleBarButton, btn_name: str) -> None:
         """替换标题栏按钮
 
