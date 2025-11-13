@@ -26,7 +26,7 @@ class Urls(Enum):
     # QQ 相关
     QQ_OFFICIAL_WEBSITE = QUrl("https://im.qq.com/index/")
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
-    QQ_Version = QUrl("https://nclatest.znin.net/get_qq_ver")
+    QQ_Version = QUrl("https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json")
 
     # 镜像站地址
     MIRROR_SITE = [

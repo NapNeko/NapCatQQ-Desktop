@@ -124,11 +124,17 @@ class GetRemoteVersionRunnable(VersionRunnableBase):
         return {"version": response["tag_name"], "update_log": response["body"]}
 
     def _parse_qq_response(self, response: dict) -> dict[str, str | None]:
-        """解析 QQ 版本响应格式"""
-        ver_hash = response["verHash"]
-        version = response["version"].replace("-", ".")
-        download_url = f"https://dldir1.qq.com/qqfile/qq/QQNT/{ver_hash}/QQ{version}_x64.exe"
-        return {"version": version, "download_url": download_url}
+        """解析 QQ 的新接口返回格式"""
+        if not response:
+            return {"version": None, "download_url": None}
+
+        try:
+            result = response.get("Windows")
+            return {"version": result.get("version", ""), "download_url": result.get("ntDownloadX64Url")}
+        except Exception as e:
+            logger.error(f"解析 QQ 版本信息失败: {e}")
+            self.error_signal.emit(f"解析 QQ 版本信息失败: {e}")
+            return {"version": None, "download_url": None}
 
     def request(self, url: QUrl, name: str) -> dict[str, str] | None:
         """网络请求"""
@@ -189,8 +195,8 @@ class GetLocalVersionRunnable(VersionRunnableBase):
                 return None
 
             with open(str(qq_path / "versions" / "config.json"), "r", encoding="utf-8") as file:
-                # 读取 config.json 文件获取版本信息
-                return json.load(file)["curVersion"].replace("-", ".")
+                # 读取 config.json 文件获取版本信息 数据为:9.9.23-41857 只返回'9.9.23'
+                return json.load(file)["curVersion"].split("-")[0]
         except FileNotFoundError:
             # 文件不存在则返回 None
             logger.error("获取 QQ 版本信息失败: 文件不存在")
