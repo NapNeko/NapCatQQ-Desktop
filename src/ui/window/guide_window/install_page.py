@@ -23,6 +23,7 @@ from src.core.network.downloader import GithubDownloader, QQDownloader
 from src.core.network.urls import Urls
 from src.core.utils.install_func import NapCatInstall, QQInstall
 from src.core.utils.path_func import PathFunc
+from src.core.utils.get_version import GetRemoteVersionRunnable
 from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
 from src.ui.components.info_bar import success_bar
 from src.ui.components.message_box import FolderBox
@@ -193,7 +194,11 @@ class InstallQQPage(InstallPageBase):
         """
         super().__init__(parent)
         # 创建杂七杂八的控件
-        self.url = self.get_download_url()
+        # self.url = self.get_download_url()
+        self.url = GetRemoteVersionRunnable().execute().qq_download_url
+        if self.url is None:
+            self.set_status_text(self.tr("获取 QQ 下载链接失败。"))
+        self.url = QUrl(self.url)
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         self.downloader = QQDownloader(self.url)
 
