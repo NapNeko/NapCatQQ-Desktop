@@ -42,12 +42,6 @@ NapNeko组织 - AQiaoYo
 
 2025年11月19日
 
----
-
-**使用说明：**
-- 请将公告中的 `你的项目地址` 和 `你的NapCatQQ地址` 替换为实际的 GitHub 仓库链接。
-- 发布日期（2025年10月27日）可以根据您的实际发布日期修改。
-
 ## 关于项目
 
 这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat
