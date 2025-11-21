@@ -12,6 +12,9 @@ dependencies = [
     "PySide6-Fluent-Widgets[full]>=1.9.1",
     "creart>=0.3.0",
     "qrcode>=8.2",
+    "pytest>=8.0.0",
+    "pytest-qt>=4.4.0",
+    "pytest-cov>=6.0.0",
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
@@ -43,3 +46,43 @@ no_lines_before = ["PYSIDE6"] # 确保在 PYSIDE6 之前没有空行
 import_heading_stdlib = "标准库导入"
 import_heading_thirdparty = "第三方库导入"
 import_heading_firstparty = "项目内模块导入"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+markers = [
+    "unit: 单元测试",
+    "integration: 集成测试",
+    "gui: GUI 测试",
+    "slow: 运行较慢的测试",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+]
