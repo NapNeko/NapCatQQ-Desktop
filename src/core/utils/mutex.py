@@ -46,6 +46,10 @@ class SingleInstanceApplication:
 
         lock = SingleInstanceApplication._lock_file
 
+        if lock is None:
+            # 理论上不应发生, 但增加健壮性检查
+            raise RuntimeError("Lock file not initialized")
+
         # 非阻塞尝试获取锁(1ms 超时), 获取失败视为已有实例运行
         if lock.tryLock(1):
             # 成功获得锁 -> 当前进程持有, 持续到进程退出
