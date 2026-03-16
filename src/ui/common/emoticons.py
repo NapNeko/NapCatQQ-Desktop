@@ -3,7 +3,7 @@
 from enum import Enum
 
 # 第三方库导入
-from qfluentwidgets.common import FluentIconBase
+from qfluentwidgets.common import FluentIconBase, Theme
 
 """表情包模块
 
@@ -29,5 +29,5 @@ class FuFuEmoticons(FluentIconBase, Enum):
     FU_12 = "g_fufu_12"
     FU_13 = "g_fufu_13"
 
-    def path(self) -> str:
+    def path(self, theme=Theme.AUTO) -> str:
         return f":emoticons/image/emoticons/fu_fu/{self.value}.gif"
