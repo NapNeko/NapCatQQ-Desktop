@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-# 标准库导入
-from typing import Optional
-
 from PySide6.QtCore import QRegularExpression, Qt
-from PySide6.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat
+from PySide6.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat, QTextDocument
 
 
 class LogHighlighter(QSyntaxHighlighter):
@@ -13,7 +10,7 @@ class LogHighlighter(QSyntaxHighlighter):
     时间戳显示为浅灰色，日志级别显示对应颜色。
     """
 
-    def __init__(self, parent: Optional[QTextCharFormat] = None) -> None:
+    def __init__(self, parent: QTextDocument) -> None:
         super().__init__(parent)
 
         # 初始化不同日志级别的文本格式
@@ -69,7 +66,7 @@ class NCDLogHighlighter(QSyntaxHighlighter):
     时间戳显示深绿色，日志级别显示对应颜色。
     """
 
-    def __init__(self, parent: Optional[QTextCharFormat] = None) -> None:
+    def __init__(self, parent: QTextDocument) -> None:
         super().__init__(parent)
 
         self.formats: dict[str, QTextCharFormat] = {
@@ -134,7 +131,7 @@ class JsonHighlighter(QSyntaxHighlighter):
         - 大括号和中括号
     """
 
-    def __init__(self, document) -> None:
+    def __init__(self, document: QTextDocument) -> None:
         super().__init__(document)
 
         # 配色

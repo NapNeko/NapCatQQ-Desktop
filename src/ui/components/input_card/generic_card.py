@@ -26,7 +26,9 @@ from qfluentwidgets.components import (
 from qfluentwidgets.components.settings import SettingCard
 from qfluentwidgets.components.settings.setting_card import SettingIconWidget
 from qfluentwidgets.components.widgets.flyout import FlyoutView
-from PySide6.QtCore import QObject, QSize, QStandardPaths, Qt
+from typing import Any
+
+from PySide6.QtCore import QSize, QStandardPaths, Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -88,7 +90,7 @@ class JsonTemplateEditConfigCard(QFrame):
         {"name": "当前时间", "string": "${disconnect_time}", "doc": "显示为当前的时间(发件时间)"},
     ]
 
-    def __init__(self, icon: FluentIconBase, title: str, parent: QObject | None = None) -> None:
+    def __init__(self, icon: FluentIconBase, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         # 创建控件
@@ -146,7 +148,7 @@ class JsonTemplateEditConfigCard(QFrame):
 
     def paintEvent(self, e):
         painter = QPainter(self)
-        painter.setRenderHints(QPainter.Antialiasing)
+        painter.setRenderHints(QPainter.RenderHint.Antialiasing)
 
         if isDarkTheme():
             painter.setBrush(QColor(255, 255, 255, 13))
@@ -202,12 +204,12 @@ class JsonTemplateEditConfigCard(QFrame):
         for row, item in enumerate(self.TEMPLATE_STRING):
             # 模板名称列
             name_item = QTableWidgetItem(item["name"])
-            name_item.setTextAlignment(Qt.AlignCenter)
+            name_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(row, 0, name_item)
 
             # 模板字符串列
             string_item = QTableWidgetItem(item["string"])
-            string_item.setTextAlignment(Qt.AlignCenter)
+            string_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(row, 1, string_item)
 
             # 介绍列
@@ -275,7 +277,7 @@ class ComboBoxConfigCard(SettingCard):
         title: str,
         texts: list[str] | None = None,
         content: str | None = None,
-        parent: QWidget = None,
+        parent: QWidget | None = None,
     ) -> None:
         """初始化
 
@@ -309,7 +311,12 @@ class SwitchConfigCard(SettingCard):
     """开关配置卡片"""
 
     def __init__(
-        self, icon: FluentIconBase, title: str, content: str = None, value: bool = False, parent: QWidget | None = None
+        self,
+        icon: FluentIconBase,
+        title: str,
+        content: str | None = None,
+        value: bool = False,
+        parent: QWidget | None = None,
     ) -> None:
         """初始化
 
@@ -340,7 +347,13 @@ class SwitchConfigCard(SettingCard):
 class FolderConfigCard(SettingCard):
     """文件夹选择配置卡片"""
 
-    def __init__(self, icon: FluentIconBase, title: str, content: str = None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        icon: FluentIconBase,
+        title: str,
+        content: str | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         """初始化
 
         Args:
@@ -387,7 +400,7 @@ class ShowDialogCardBase(SettingCard):
 
     def __init__(
         self,
-        dialog: MessageBoxBase,
+        dialog: Any,
         icon: FluentIconBase,
         title: str,
         content: str | None = None,
@@ -422,7 +435,14 @@ class ShowDialogCardBase(SettingCard):
 class ShowDialogCard(ShowDialogCardBase):
     """显示对话框卡片, 通过参数返回"""
 
-    def __init__(self, dialog, icon, title, content=None, parent=None):
+    def __init__(
+        self,
+        dialog: Any,
+        icon: FluentIconBase,
+        title: str,
+        content: str | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(dialog, icon, title, content, parent)
         self._dialog_class = dialog
 
@@ -484,7 +504,7 @@ class VersionInfoCard(SettingCard):
         super().__init__(icon, title, content, parent)
 
         # 版本信息标签
-        self.version_label = HyperlinkLabel(version, self)
+        self.version_label = HyperlinkLabel(version or "", self)
 
         # 添加到布局
         self.hBoxLayout.addWidget(self.version_label, 0, Qt.AlignmentFlag.AlignRight)

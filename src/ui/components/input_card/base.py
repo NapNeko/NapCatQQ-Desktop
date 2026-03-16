@@ -3,6 +3,7 @@
 from qfluentwidgets import BodyLabel, ExpandSettingCard, FluentIcon, FluentIconBase, LineEdit, SwitchButton
 from qfluentwidgets.components.settings.expand_setting_card import GroupSeparator
 from PySide6.QtCore import QEasingCurve, Qt
+from PySide6.QtGui import QIcon, QWheelEvent
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 
 
@@ -49,7 +50,8 @@ class GroupCardBase(ExpandSettingCard):
             content (str): 内容
             parent (QWidget, optional): 父控件. Defaults to None.
         """
-        super().__init__(icon, title, content, parent)
+        card_icon = icon if isinstance(icon, FluentIcon) else QIcon(icon.path())
+        super().__init__(card_icon, title, content, parent)
         self.itemList: list[ItemBase] = []
 
         # 调用方法
@@ -78,9 +80,14 @@ class GroupCardBase(ExpandSettingCard):
         item.show()
         self._adjustViewSize()
 
-    def wheelEvent(self, event) -> None:
+    def wheelEvent(self, e: QWheelEvent) -> None:
         """重写滚轮事件"""
         # 不知道为什么ExpandGroupSettingCard把wheelEvent屏蔽了
         # 检查是否在展开状态下，如果是，则传递滚轮事件给父级窗体
         if self.isExpand:
-            self.parent().wheelEvent(event)
+            parent = self.parentWidget()
+            if parent is not None:
+                parent.wheelEvent(e)
+                return
+
+        super().wheelEvent(e)
