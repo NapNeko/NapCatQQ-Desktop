@@ -10,7 +10,7 @@ from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QVBoxLayout, QWidget, QPlainTextEdit
 
 # 项目内模块导入
-from src.core.config import Config
+from src.core.config.config_model import Config
 from src.core.utils.run_napcat import ManagerNapCatQQLog, NapCatQQProcessLog
 from src.ui.components.code_editor.exhibit import CodeExibit
 

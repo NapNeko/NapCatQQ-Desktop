@@ -3,7 +3,6 @@
 Bot 配置页面
 """
 # 第三方库导入
-from tkinter import SW
 from qfluentwidgets import ExpandLayout, FlowLayout, FluentIcon, ScrollArea
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
@@ -203,7 +202,7 @@ class ConnectConfigWidget(ScrollArea):
             card.deleteLater()
             self.cards.remove(card)
 
-    def get_config(self) -> BotConfig:
+    def get_config(self) -> ConnectConfig:
         """获取配置"""
         config_data = {
             key: [card.get_config() for card in self.cards if isinstance(card, card_type)]
@@ -213,7 +212,7 @@ class ConnectConfigWidget(ScrollArea):
 
         return ConnectConfig(**config_data)
 
-    def fill_config(self, config: BotConfig | None = None) -> None:
+    def fill_config(self, config: ConnectConfig | None = None) -> None:
         """填充配置"""
         if config is None:
             return
@@ -340,7 +339,7 @@ class AdvancedConfigWidget(ScrollArea):
         self.adjustSize()
 
     # ==================== 公共方法 ====================
-    def get_config(self) -> BotConfig:
+    def get_config(self) -> AdvancedConfig:
         """获取配置"""
         return AdvancedConfig(
             **{
@@ -358,7 +357,7 @@ class AdvancedConfigWidget(ScrollArea):
             }
         )
 
-    def fill_config(self, config: BotConfig | None = None) -> None:
+    def fill_config(self, config: AdvancedConfig | None = None) -> None:
         """填充配置"""
         if config is None:
             return

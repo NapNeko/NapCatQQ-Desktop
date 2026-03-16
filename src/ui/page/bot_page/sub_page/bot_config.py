@@ -4,6 +4,7 @@ Bot 配置页面
 """
 # 标准库导入
 from enum import Enum
+from typing import Callable, cast
 
 # 第三方库导入
 from creart import it
@@ -11,7 +12,7 @@ from qfluentwidgets import FluentIcon, SegmentedWidget, TransparentPushButton
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.config.config_model import Config
+from src.core.config.config_model import AdvancedConfig, BotConfig, Config, ConnectConfig
 from src.core.config.operate_config import update_config
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.stacked_widget import TransparentStackedWidget
@@ -29,6 +30,11 @@ from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWi
 
 class ConfigPage(QWidget):
     """配置机器人页面"""
+
+    _config: Config | None
+    bot_widget: BotConfigWidget
+    connect_widget: ConnectConfigWidget
+    advanced_widget: AdvancedConfigWidget
 
     CONNECT_TYPE_AND_DIALOG = {
         ConnectType.HTTP_SERVER: HttpServerConfigDialog,
@@ -54,9 +60,9 @@ class ConfigPage(QWidget):
         # 创建控件
         self.piovt = SegmentedWidget(self)
         self.view = TransparentStackedWidget()
-        self.bot_widget = BotConfigWidget(self)
-        self.connect_widget = ConnectConfigWidget(self)
-        self.advanced_widget = AdvancedConfigWidget(self)
+        self.bot_widget = cast(BotConfigWidget, BotConfigWidget(self))
+        self.connect_widget = cast(ConnectConfigWidget, ConnectConfigWidget(self))
+        self.advanced_widget = cast(AdvancedConfigWidget, AdvancedConfigWidget(self))
         self.return_button = TransparentPushButton(FluentIcon.LEFT_ARROW, self.tr("返回"), self)
         self.add_connect_button = TransparentPushButton(FluentIcon.ADD, self.tr("添加"), self)
         self.save_config_button = TransparentPushButton(FluentIcon.SAVE, self.tr("保存"), self)
@@ -117,15 +123,27 @@ class ConfigPage(QWidget):
             }
         )
 
-    def fill_config(self, config: Config | None = None):
+    def fill_config(self, config: Config | None = None) -> None:
         """填充配置"""
         if config is None:
             return
 
         self._config = config
-        self.bot_widget.fill_config(self._config.bot)
-        self.connect_widget.fill_config(self._config.connect)
-        self.advanced_widget.fill_config(self._config.advanced)
+        bot_config = cast(BotConfig, config.bot)
+        connect_config = cast(ConnectConfig, config.connect)
+        advanced_config = cast(AdvancedConfig, config.advanced)
+
+        bot_widget = cast(BotConfigWidget, self.bot_widget)
+        connect_widget = cast(ConnectConfigWidget, self.connect_widget)
+        advanced_widget = cast(AdvancedConfigWidget, self.advanced_widget)
+
+        fill_bot_config = cast(Callable[[BotConfig | None], None], bot_widget.fill_config)
+        fill_connect_config = cast(Callable[[ConnectConfig | None], None], connect_widget.fill_config)
+        fill_advanced_config = cast(Callable[[AdvancedConfig | None], None], advanced_widget.fill_config)
+
+        fill_bot_config(bot_config)
+        fill_connect_config(connect_config)
+        fill_advanced_config(advanced_config)
 
     def clear_config(self) -> None:
         """清空配置"""
@@ -184,7 +202,11 @@ class ConfigPage(QWidget):
             # 判断用户选择的类型, 如果没有选择则直接退出
             return
 
-        if not (_connect_config_box := self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)(it(MainWindow))).exec():
+        dialog_class = self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)
+        if dialog_class is None:
+            return
+
+        if not (_connect_config_box := dialog_class(it(MainWindow))).exec():
             # 判断用户在配置的时候是否选择了取消
             return
 
