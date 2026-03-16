@@ -220,8 +220,8 @@ class GetVersion(QObject):
     remote_finish_signal = Signal(VersionData)
     local_finish_signal = Signal(VersionData)
 
-    def __init__(self, parent=...) -> None:
-        super().__init__()
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
 
     def update(self) -> None:
         """开始更新版本信息"""

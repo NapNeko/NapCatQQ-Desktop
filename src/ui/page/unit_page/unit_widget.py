@@ -30,14 +30,13 @@ class UnitWidget(DottedBackground):
     def __init__(self) -> None:
         """初始化 UnitWidget"""
         super().__init__()
-        # 预定义控件
-        self.view: TransparentStackedWidget | None = None
-        self.top_card: TopWidget | None = None
-        self.v_box_layout: QVBoxLayout | None = None
-        self.get_version: GetVersion | None = None
-        self.napcat_page: NapCatPage | None = None
-        self.qq_page: QQPage | None = None
-        self.ncd_page: NCDPage | None = None
+        self.v_box_layout = QVBoxLayout(self)
+        self.top_card = TopWidget(self)
+        self.get_version = GetVersion(self)
+        self.view = TransparentStackedWidget()
+        self.napcat_page = NapCatPage(self)
+        self.qq_page = QQPage(self)
+        self.ncd_page = NCDPage(self)
 
     def _setup_ui(self, parent: "MainWindow") -> Self:
         """初始化界面控件和布局
@@ -63,19 +62,11 @@ class UnitWidget(DottedBackground):
 
     def _create_widgets(self) -> None:
         """创建所有子控件"""
-        self.v_box_layout = QVBoxLayout(self)
-        self.top_card = TopWidget(self)
-        self.get_version = GetVersion(self)
         self._create_view()
 
     def _create_view(self) -> None:
         """创建并配置堆叠视图，包含三个版本信息页面"""
-        self.view = TransparentStackedWidget()
         self.view.setObjectName("UpdateView")
-
-        self.napcat_page = NapCatPage(self)
-        self.qq_page = QQPage(self)
-        self.ncd_page = NCDPage(self)
 
         self.view.addWidget(self.napcat_page)
         self.view.addWidget(self.qq_page)
@@ -139,9 +130,7 @@ class UnitWidget(DottedBackground):
         Args:
             index: 当前视图索引
         """
-        widget = self.view.widget(index)
-        if widget:
-            self.top_card.pivot.setCurrentItem(widget.objectName())
+        self.top_card.pivot.setCurrentItem(self.view.widget(index).objectName())
 
     @Slot()
     def on_update(self) -> None:
