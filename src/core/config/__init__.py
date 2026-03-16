@@ -68,8 +68,8 @@ __version__ = "v1.7.28"
 class LanguageSerializer(ConfigSerializer):
     """语言序列化"""
 
-    def serialize(self, language):
-        return language.value.name() if language != Language.AUTO else "Auto"
+    def serialize(self, value):
+        return value.value.name() if value != Language.AUTO else "Auto"
 
     def deserialize(self, value: str):
         return Language(QLocale(value)) if value != "Auto" else Language.AUTO
@@ -172,7 +172,7 @@ class Config(QConfig):
         self.appRestartSig.connect(self.app_restart_signal.emit)
 
     @exceptionHandler()
-    def load(self, file: str | Path = None, config: Self = None) -> None:
+    def load(self, file: str | Path | None = None, config: Self | None = None) -> None:
         """重写加载配置
 
         能够在程序更新后,如果有新增的配置项,能自动添加默认值
@@ -198,7 +198,7 @@ class Config(QConfig):
             with open(self._cfg.file, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.error(f"配置文件加载失败: {e.__class__.__name__}: {e.msg}, 使用默认配置")
+            logger.error(f"配置文件加载失败: {e.__class__.__name__}: {str(e)}, 使用默认配置")
             cfg = {}
 
         # 获取配置项
