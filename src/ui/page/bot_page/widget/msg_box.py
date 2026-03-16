@@ -144,12 +144,12 @@ class ChooseConfigTypeDialog(MessageBoxBase):
 class ConfigDialogBase(MessageBoxBase):
     """配置对话框基类，提供通用的配置界面和验证功能"""
 
-    def __init__(self, parent: QObject, config: NetworkBaseConfig) -> None:
+    def __init__(self, parent: QObject, config: NetworkBaseConfig | None) -> None:
         """初始化配置对话框基类
 
         Args:
             parent: 父级对象
-            config: 网络基础配置对象
+            config: 网络基础配置对象，可为 None
         """
         super().__init__(parent)
         # 属性
