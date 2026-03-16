@@ -11,6 +11,7 @@ from creart import it
 import httpx
 from pydantic import BaseModel
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Signal
+from collections.abc import Callable
 
 # 项目内模块导入
 from src.core.config import cfg
@@ -87,13 +88,15 @@ class GetRemoteVersionRunnable(VersionRunnableBase):
             ncd_update_log=ncd_version["update_log"],
         )
 
-    def _get_version(self, url: str, name: str, parser: callable) -> dict[str, str | None]:
+    def _get_version(
+        self, url: str | QUrl, name: str, parser: Callable[[dict], dict[str, str | None]]
+    ) -> dict[str, str | None]:
         """获取指定服务的版本信息
 
         Args:
-            url (str): 服务的 API URL
+            url (str | QUrl): 服务的 API URL
             name (str): 服务名称
-            parser (callable): 用于解析响应的函数
+            parser (Callable): 用于解析响应的函数
 
         Returns:
             dict: 包含版本信息的字典
@@ -110,9 +113,9 @@ class GetRemoteVersionRunnable(VersionRunnableBase):
             self.error_signal.emit(f"解析 {name} 版本信息失败: {e}")
             return self._get_error_value(name)
 
-    def _get_error_value(self, name: str) -> dict[str, None]:
+    def _get_error_value(self, name: str) -> dict[str, str | None]:
         """根据服务名称返回对应的错误值"""
-        error_values = {
+        error_values: dict[str, dict[str, str | None]] = {
             "QQ": {"version": None, "download_url": None},
             "NapCat": {"version": None, "update_log": None},
             "NapCatQQ Desktop": {"version": None, "update_log": None},
@@ -130,7 +133,10 @@ class GetRemoteVersionRunnable(VersionRunnableBase):
 
         try:
             result = response.get("Windows")
-            return {"version": result.get("version", ""), "download_url": result.get("ntDownloadX64Url")}
+            if result is not None:
+                return {"version": result.get("version", ""), "download_url": result.get("ntDownloadX64Url")}
+            else:
+                return {"version": None, "download_url": None}
         except Exception as e:
             logger.error(f"解析 QQ 版本信息失败: {e}")
             self.error_signal.emit(f"解析 QQ 版本信息失败: {e}")
@@ -215,7 +221,7 @@ class GetVersion(QObject):
     local_finish_signal = Signal(VersionData)
 
     def __init__(self, parent=...) -> None:
-        super().__init__(parent)
+        super().__init__()
 
     def update(self) -> None:
         """开始更新版本信息"""
