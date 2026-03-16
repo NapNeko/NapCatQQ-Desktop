@@ -121,6 +121,16 @@ jobs:
         run: |
           .\.venv\Scripts\python.exe -m PyInstaller ./script/build_scripts/main.spec
 
+      - name: "压缩Release目录版"
+        if: ${{ !inputs.skip_build }}
+        shell: pwsh
+        run: |
+          $zipPath = "dist/NapCatQQ-Desktop.zip"
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          Compress-Archive -Path "dist/NapCatQQ-Desktop" -DestinationPath $zipPath
+
       - name: "验证文件存在"
         if: ${{ !inputs.skip_build }}
         run: |
@@ -131,11 +141,17 @@ jobs:
           } else {
               Write-Host "✗ NapCatQQ-Desktop-debug.exe 不存在"
           }
-          if (Test-Path "dist/NapCatQQ-Desktop.exe") {
-              Write-Host "✓ NapCatQQ-Desktop.exe 存在"
-              Write-Host "文件大小:" (Get-Item "dist/NapCatQQ-Desktop.exe").Length "bytes"
+          if (Test-Path "dist/NapCatQQ-Desktop") {
+              Write-Host "✓ NapCatQQ-Desktop 目录存在"
+              Write-Host "目录文件数:" ((Get-ChildItem "dist/NapCatQQ-Desktop" -Recurse -File).Count)
           } else {
-              Write-Host "✗ NapCatQQ-Desktop.exe 不存在"
+              Write-Host "✗ NapCatQQ-Desktop 目录不存在"
+          }
+          if (Test-Path "dist/NapCatQQ-Desktop.zip") {
+              Write-Host "✓ NapCatQQ-Desktop.zip 存在"
+              Write-Host "文件大小:" (Get-Item "dist/NapCatQQ-Desktop.zip").Length "bytes"
+          } else {
+              Write-Host "✗ NapCatQQ-Desktop.zip 不存在"
           }
           Write-Host "dist目录内容:"
           Get-ChildItem -Path "dist" -Recurse | ForEach-Object { Write-Host "  $($_.FullName)" }
@@ -163,4 +179,4 @@ jobs:
           name: NapCatQQ Desktop Release ${{ env.TAG_NAME }}
           body: ${{ env.BODY }}
           files: |
-            dist/*.exe
+            dist/NapCatQQ-Desktop.zip

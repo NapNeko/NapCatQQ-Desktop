@@ -4,7 +4,9 @@ import shutil
 import winreg
 from pathlib import Path
 from abc import ABC
+
 # 项目内模块导入
+from src.core.utils.app_path import resolve_app_base_path
 from src.core.utils.logger import LogSource, LogType, logger
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator
 
@@ -16,12 +18,12 @@ class OldVersionPath:
     """
 
     @staticmethod
-    def v1613() -> dict[str, Path]:
+    def v1613(base_path: Path) -> dict[str, Path]:
         """NapCatQQ Desktop v1.6.13 及更早版本的路径, 仅包含文件夹变化"""
         return {
-            "napcat_path": Path.cwd() / "NapCat",
-            "config_dir_path": Path.cwd() / "config",
-            "tmp_path": Path.cwd() / "tmp",
+            "napcat_path": base_path / "NapCat",
+            "config_dir_path": base_path / "config",
+            "tmp_path": base_path / "tmp",
         }
 
 
@@ -43,7 +45,7 @@ class PathFunc:
         """初始化"""
 
         # 基础路径字段
-        self.base_path = Path.cwd()
+        self.base_path = resolve_app_base_path()
         self.runtime_path = self.base_path / "runtime"
 
         # 运行时路径字段
@@ -90,7 +92,7 @@ class PathFunc:
         检查并迁移旧版本的路径到当前版本(目前只有v1.6.13及更早版本与当前版本不兼容)
         """
         # 获取旧版文件夹路径大全
-        old_paths = OldVersionPath.v1613()
+        old_paths = OldVersionPath.v1613(self.base_path)
 
         # 检查是否需要迁移
         if not Path(old_paths["config_dir_path"]).exists():

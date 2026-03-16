@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 # 项目内模块导入
+from src.core.utils.app_path import resolve_app_base_path
 from src.core.utils.logger.log_data import Log, LogGroup, LogPosition
 from src.core.utils.logger.log_enum import LogLevel, LogSource, LogType
 from src.core.utils.logger.log_utils import capture_call_location
@@ -36,7 +37,7 @@ class Logger:
         """
 
         # 定义日志文件路径
-        if not (log_dir := Path.cwd() / "log").exists():
+        if not (log_dir := resolve_app_base_path() / "log").exists():
             log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = log_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
 
