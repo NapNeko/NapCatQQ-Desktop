@@ -26,7 +26,7 @@ def capture_call_location(func: Callable[..., Any]) -> Callable[..., Any]:
         # 获取调用者的位置信息
         pos = inspect.stack()[1]
         position = LogPosition(
-            module=pos.frame.f_globals.get("__name__"),
+            module=pos.frame.f_globals.get("__name__") or "",
             file=Path(pos.filename).name,
             line=pos.lineno,
         )
