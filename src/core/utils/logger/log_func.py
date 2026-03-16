@@ -72,7 +72,7 @@ class Logger:
             log_type (LogType): 日志类型
             log_source (LogSource): 日志来源
             log_position (LogPosition | None): 日志位置
-            log_group (LogGroup | None, optional): 日志组. Defaults to None.
+            log_group (LogGroup | None): 日志组，可为 None。
         """
         # 构造 Log
         log = Log(level, message, time, log_type, log_source, log_position)

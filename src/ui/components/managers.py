@@ -48,7 +48,7 @@ class TopLeftInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，默认为 None
+            parentSize: 消息条父组件大小，可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -88,7 +88,7 @@ class TopInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，默认为 None
+            parentSize: 消息条父组件大小，可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -129,7 +129,7 @@ class TopRightInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，默认为 None
+            parentSize: 消息条父组件大小，可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -169,7 +169,7 @@ class BottomLeftInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，默认为 None
+            parentSize: 消息条父组件大小，可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -209,7 +209,7 @@ class BottomInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，默认为 None
+            parentSize: 消息条父组件大小，可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -250,7 +250,7 @@ class BottomRightInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，默认为 None
+            parentSize: 消息条父组件大小，可为 None
 
         Returns:
             QPoint: 消息条的位置坐标

@@ -15,7 +15,7 @@ class SwitchItem(ItemBase):
 
         Args:
             title (str): Item 内容
-            parent (QWidget, optional): 父控件. Defaults to None.
+            parent (QWidget | None): 父控件，可为 None。
         """
         super().__init__(title, parent=parent)
         self.button = SwitchButton(self, IndicatorPosition.RIGHT)
@@ -41,7 +41,7 @@ class LineEditItem(ItemBase):
         Args:
             title (str): Item 内容
             placeholders (str): 输入框占位符
-            parent (QWidget, optional): 父控件. Defaults to None.
+            parent (QWidget | None): 父控件，可为 None。
         """
         super().__init__(title, parent=parent)
         self.lineEdit = LineEdit(self)

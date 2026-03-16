@@ -2,7 +2,7 @@
 
 # 标准库导入
 import json
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 # 第三方库导入
 from qfluentwidgets import FluentIcon, PlainTextEdit, TeachingTip, isDarkTheme
@@ -42,7 +42,7 @@ class CodeEditorBase(PlainTextEdit):
         """初始化代码编辑器
 
         Args:
-            parent (QWidget | None, optional): 父控件。默认为 None。
+            parent (QWidget | None): 父控件，可为 None。
         """
         super().__init__(parent)
 
@@ -260,7 +260,7 @@ class CodeEditor(CodeEditorBase):
     AUTO_COMPLETE_CHARS: dict[str, str] = {"{": "}", "[": "]", "(": ")", '"': '"', "'": "'"}
     INDENT_SIZE: int = 4
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """初始化代码编辑器"""
         super().__init__(parent)
         self._setup_ui()
@@ -398,7 +398,7 @@ class JsonEditor(CodeEditor):
     json_validated_signal = Signal(bool)
     json_error_signal = Signal(str, int)  # 错误信息, 行号
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """初始化 JSON 编辑器
 
         Args:

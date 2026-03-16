@@ -25,9 +25,9 @@ class WebHookData:
         """初始化 WebHookData, 动态从配置中获取值
 
         Args:
-            url (str | None, optional): WebHook 地址. Defaults to None.
-            secret (str | None, optional): WebHook 密钥. Defaults to None.
-            json (str | None, optional): WebHook JSON 内容. Defaults to None.
+            url (str | None): WebHook 地址，可为 None。
+            secret (str | None): WebHook 密钥，可为 None。
+            json (str | None): WebHook JSON 内容，可为 None。
         """
         self.url = url or cfg.get(cfg.web_hook_url)
         self.secret = secret or cfg.get(cfg.web_hook_secret)

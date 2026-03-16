@@ -7,7 +7,7 @@ from __future__ import annotations
 
 # 标准库导入
 from time import monotonic
-from typing import Optional, cast
+from typing import cast
 
 # 第三方库导入
 import httpx
@@ -86,7 +86,7 @@ class BotCard(HeaderCardWidget):
         """构造函数
 
         Args:
-            parent (QWidget | None, optional): 父控件. Defaults to None.
+            parent (QWidget | None): 父控件，可为 None。
         """
         super().__init__(parent)
 
@@ -427,7 +427,7 @@ class BotInfoWidget(QWidget):
         super().__init__(parent)
         # 设置属性
         self._config = config
-        self.start_time: Optional[float] = None
+        self.start_time: float | None = None
 
         # 创建控件
         self._run_time_info = self.InfoWidget(FluentIcon.DATE_TIME, f"未运行", self)
@@ -542,7 +542,7 @@ class EnableTag(PillPushButton):
     """显示启用/禁用状态的标签控件"""
 
     @singledispatchmethod
-    def __init__(self, status: bool, parent: Optional[QObject] = None) -> None:
+    def __init__(self, status: bool, parent: QObject | None = None) -> None:
         """初始化启用标签
 
         Args:
@@ -573,7 +573,7 @@ class FormateTag(PillPushButton):
     """消息格式显示标签控件"""
 
     @singledispatchmethod
-    def __init__(self, format_str: str, parent: Optional[QObject] = None) -> None:
+    def __init__(self, format_str: str, parent: QObject | None = None) -> None:
         """初始化格式标签
 
         Args:
@@ -603,7 +603,7 @@ class ConfigCardBase(HeaderCardWidget):
     remove_signal = Signal(NetworkBaseConfig)
 
     @singledispatchmethod
-    def __init__(self, config: NetworkBaseConfig, parent: Optional[QObject] = None) -> None:
+    def __init__(self, config: NetworkBaseConfig, parent: QObject | None = None) -> None:
         """初始化配置卡片基类
 
         Args:

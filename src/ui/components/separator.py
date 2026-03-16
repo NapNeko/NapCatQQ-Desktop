@@ -18,7 +18,7 @@ class Separator(QWidget):
         初始化分隔线组件
 
         Args:
-            parent: 父组件，默认为 None
+            parent: 父组件，可为 None
         """
         super().__init__(parent)
         self.setFixedSize(6, 16)

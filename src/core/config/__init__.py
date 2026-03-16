@@ -181,8 +181,8 @@ class Config(QConfig):
         但优先级为 config > file > self._cfg
 
         Args:
-            file (str | Path, optional): 配置文件路径. Defaults to None.
-            config (Self@Config, optional): 需要加载的配置类. Defaults to None.
+            file (str | Path | None): 配置文件路径，可为 None。
+            config (Self | None): 需要加载的配置类，可为 None。
         """
 
         # 处理 config 和 file 参数

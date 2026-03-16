@@ -26,7 +26,7 @@ class HeaderWidget(QWidget):
         """构造函数
 
         Args:
-            parent (QWidget | None, optional): 父控件. Defaults to None.
+            parent (QWidget | None): 父控件，可为 None。
         """
         super().__init__(parent)
 

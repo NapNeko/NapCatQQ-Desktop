@@ -1,8 +1,8 @@
 # coding:utf-8
 
 # 标准库导入
-from typing import Self, Optional
 from pathlib import Path
+from typing import Self
 
 # 第三方库导入
 from PySide6.QtCore import QFile
@@ -21,7 +21,7 @@ class QFluentFile(QFile):
             raise IOError(self.errorString())
         return self
 
-    def __exit__(self, exc_type: Optional[type], exc_val: Optional[BaseException], exc_tb: Optional[object]) -> bool:
+    def __exit__(self, exc_type: type | None, exc_val: BaseException | None, exc_tb: object | None) -> bool:
         """关闭文件"""
         self.close()
         return False

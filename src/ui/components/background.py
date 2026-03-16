@@ -6,8 +6,6 @@
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from qfluentwidgets import Theme
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter
@@ -69,7 +67,7 @@ class DottedBackground(QWidget):
         else:
             return QColor(120, 120, 120, 40)
 
-    def refresh_theme(self, theme: Optional[Theme] = None) -> None:
+    def refresh_theme(self, theme: Theme | None = None) -> None:
         """手动刷新主题颜色 (当主题在运行时改变时可调用)
 
         如果不传 `theme`, 则使用 cfg.theme

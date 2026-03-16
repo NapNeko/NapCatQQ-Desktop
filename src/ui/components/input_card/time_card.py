@@ -25,8 +25,8 @@ class IntervalTimeConfigCard(SettingCard):
         Args:
             icon (FluentIconBase): 图标
             title (str): 标题
-            content (str | None, optional): 呢容. Defaults to None.
-            parent (QWidget | None, optional): 父控件. Defaults to None.
+            content (str | None): 内容，可为 None。
+            parent (QWidget | None): 父控件，可为 None。
         """
         super().__init__(icon, title, content, parent)
         # 创建组件

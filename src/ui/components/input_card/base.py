@@ -14,7 +14,7 @@ class ItemBase(QWidget):
 
         Args:
             title (str): item的标题
-            parent (QWidget, optional): 父控件. Defaults to None.
+            parent (QWidget | None): 父控件，可为 None。
         """
         super().__init__(parent=parent)
         self.label = BodyLabel(title, self)
@@ -48,7 +48,7 @@ class GroupCardBase(ExpandSettingCard):
             icon (FluentIcon | FluentIconBase): 图标
             title (str): 标题
             content (str): 内容
-            parent (QWidget, optional): 父控件. Defaults to None.
+            parent (QWidget | None): 父控件，可为 None。
         """
         card_icon = icon if isinstance(icon, FluentIcon) else QIcon(icon.path())
         super().__init__(card_icon, title, content, parent)
