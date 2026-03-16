@@ -172,13 +172,13 @@ class GuideWindowCreator(AbstractCreator, ABC):
         ),
     )
 
-    @classmethod
-    def available(cls) -> bool:
+    @staticmethod
+    def available() -> bool:
         """检查创建器是否可用"""
         return exists_module("src.ui.window.guide_window.guide_window")
 
-    @classmethod
-    def create(cls, create_type: type[GuideWindow]) -> GuideWindow:
+    @staticmethod
+    def create(create_type):
         """创建引导窗体实例"""
         return create_type()
 

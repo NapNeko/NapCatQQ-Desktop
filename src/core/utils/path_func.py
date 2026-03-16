@@ -4,7 +4,6 @@ import shutil
 import winreg
 from pathlib import Path
 from abc import ABC
-
 # 项目内模块导入
 from src.core.utils.logger import LogSource, LogType, logger
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator
@@ -149,7 +148,7 @@ class PathFuncCreator(AbstractCreator, ABC):
         return exists_module("src.core.utils.path_func")
 
     @staticmethod
-    def create(create_type: type[PathFunc]) -> PathFunc:
+    def create(create_type):
         """创建路径处理类实例"""
         return create_type()
 

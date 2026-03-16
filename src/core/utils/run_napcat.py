@@ -8,7 +8,9 @@ import re
 from abc import ABC
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from time import monotonic
+from typing import cast
 
 # 第三方库导入
 import psutil
@@ -21,13 +23,16 @@ from PySide6.QtCore import QObject, QProcess, QRunnable, QThreadPool, QTimer, Si
 from src.core.config import cfg
 from src.core.config.config_enum import TimeUnitEnum
 from src.core.config.config_model import Config
-from src.core.network.email import create_offline_email_task
-from src.core.network.webhook import create_offline_webhook_task
+from src.core.network.email import Email, create_offline_email_task
+from src.core.network.webhook import WebHook, create_offline_webhook_task
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
 
 
 # ==================== 数据模型 ====================
+NotificationTask = Email | WebHook
+
+
 @dataclass
 class NapCatProcessModel:
     """NapCat 进程数据模型"""
@@ -73,7 +78,7 @@ class NapCatQQProcessLog(QObject):
     def handle_output(self):
         """处理日志数据"""
         # 拿到解码后的数据
-        data = self._process.readAllStandardOutput().data().decode()
+        data = bytes(self._process.readAllStandardOutput().data()).decode()
         # 正则处理转义字符
         data = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", data)
         data = re.compile(r"\r+\n$").sub("\n", data)
@@ -169,13 +174,13 @@ class GetLoginStatusRunnable(QObject, QRunnable):
     login_qrcode_signal = Signal(str)
     online_status_signal = Signal(bool)
 
-    def __init__(self, port: int, token: str, auth: str) -> None:
+    def __init__(self, port: int, token: str, auth: str | None) -> None:
         """获取 NapCatQQ Auth 信息的任务类
 
         Args:
             port (int): WebUI 端口
             token (str): WebUI Token
-            auth (str): 认证信息
+            auth (str | None): 认证信息
         """
         QObject.__init__(self)
         QRunnable.__init__(self)
@@ -186,6 +191,9 @@ class GetLoginStatusRunnable(QObject, QRunnable):
 
     def run(self) -> None:
         """执行获取认证信息的任务"""
+        if not self.auth:
+            return
+
         # 创建 HTTP 客户端
         self.client = Client(base_url=f"http://localhost:{self.port}", timeout=5)
         self.client.headers = {
@@ -238,7 +246,7 @@ class NapCatQQLoginState(QObject):
         self.config = config
         self.port = port
         self.token = token
-        self.auth = None
+        self.auth: str | None = None
 
         # 登录状态属性
         self._is_logged_in = False
@@ -288,15 +296,18 @@ class NapCatQQLoginState(QObject):
         """向 UI 层发布运行时通知"""
         self.notification_signal.emit(level, message)
 
-    def _start_notification_task(self, task: QObject, success_message: str) -> None:
+    def _start_notification_task(self, task: NotificationTask, success_message: str) -> None:
         """启动通知任务并将结果转发给 UI 层"""
         task.success_signal.connect(lambda _: self._emit_notification("success", success_message))
         task.error_signal.connect(lambda msg: self._emit_notification("error", msg))
-        QThreadPool.globalInstance().start(task)
+        QThreadPool.globalInstance().start(cast(QRunnable, task))
 
     # ==================== 槽函数 ====================
     def slot_get_login_state(self) -> None:
         """获取登录状态"""
+        if not self.auth:
+            return
+
         runner = GetLoginStatusRunnable(port=self.port, token=self.token, auth=self.auth)
         runner.login_status_signal.connect(self.slot_update_login_state)
         runner.online_status_signal.connect(self.slot_update_online_status)
@@ -436,10 +447,10 @@ class ManagerNapCatQQLoginState(QObject):
         login_state.qr_code_available_signal.connect(
             lambda emitted_qq_id, qr_code: self.qr_code_available_signal.emit(emitted_qq_id, qr_code)
         )
-        login_state.qr_code_removed_signal.connect(lambda emitted_qq_id: self.qr_code_removed_signal.emit(emitted_qq_id))
-        login_state.notification_signal.connect(
-            lambda level, message: self.notification_signal.emit(level, message)
+        login_state.qr_code_removed_signal.connect(
+            lambda emitted_qq_id: self.qr_code_removed_signal.emit(emitted_qq_id)
         )
+        login_state.notification_signal.connect(lambda level, message: self.notification_signal.emit(level, message))
         self.napcat_login_state_dict[qq_id] = login_state
 
     def get_login_state(self, qq_id: str) -> NapCatQQLoginState | None:
@@ -556,11 +567,12 @@ class ManagerNapCatQQProcess(QObject):
             )
         logger.info("NapCatQQ 进程加载脚本已写入")
 
-    def _create_napcat_process(self, config: Config) -> QProcess:
+    def _create_napcat_process(self, config: Config, qq_path: Path) -> QProcess:
         """创建并配置 QProcess
 
         Args:
             config (Config): 配置对象
+            qq_path (Path): QQ 安装目录
 
         Returns:
             QProcess: 配置好的 QProcess 对象
@@ -574,7 +586,7 @@ class ManagerNapCatQQProcess(QObject):
         process.setProgram(str(it(PathFunc).napcat_path / "NapCatWinBootMain.exe"))
         process.setArguments(
             [
-                str(it(PathFunc).get_qq_path() / "QQ.exe"),
+                str(qq_path / "QQ.exe"),
                 str(it(PathFunc).napcat_path / "NapCatWinBootHook.dll"),
                 str(config.bot.QQID),
             ]
@@ -599,8 +611,12 @@ class ManagerNapCatQQProcess(QObject):
             self.notification_signal.emit("error", "NapCatQQ 进程数量已达上限，无法创建新进程!")
             return
 
+        if (qq_path := it(PathFunc).get_qq_path()) is None:
+            self.notification_signal.emit("error", "未检测到 QQ 安装路径，无法启动 NapCatQQ 进程!")
+            return
+
         # 创建 QProcess
-        process = self._create_napcat_process(config)
+        process = self._create_napcat_process(config, qq_path)
 
         # 进行一些操作
         it(ManagerNapCatQQLog).create_log(config, process)
@@ -712,12 +728,14 @@ class ManagerNapCatQQProcess(QObject):
                 if (pid := queue.popleft()) in processed_pids:
                     continue
 
+                total_memory += psutil.Process(pid).memory_info().rss
+
                 for child in psutil.Process(pid).children():
                     if child.pid not in processed_pids:
                         queue.append(child.pid)
                 processed_pids.add(pid)
 
-            return int((total_memory := total_memory + psutil.Process(pid).memory_info().rss) / (1024 * 1024))
+            return int(total_memory / (1024 * 1024))
 
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return 0
@@ -735,7 +753,7 @@ class ManagerNapCatQQLogManagerCreator(AbstractCreator, ABC):
         return exists_module("src.core.utils.run_napcat")
 
     @staticmethod
-    def create(create_type: type[ManagerNapCatQQLog]) -> ManagerNapCatQQLog:
+    def create(create_type):
         """创建 ManagerNapCatQQLog 实例"""
         return create_type()
 
@@ -754,7 +772,7 @@ class ManagerNapCatQQLoginStateCreator(AbstractCreator, ABC):
         return exists_module("src.core.utils.run_napcat")
 
     @staticmethod
-    def create(create_type: type[ManagerNapCatQQLoginState]) -> ManagerNapCatQQLoginState:
+    def create(create_type):
         """创建 ManagerNapCatQQLoginState 实例"""
         return create_type()
 
@@ -773,7 +791,7 @@ class ManagerAutoRestartProcessCreator(AbstractCreator, ABC):
         return exists_module("src.core.utils.run_napcat")
 
     @staticmethod
-    def create(create_type: type[ManagerAutoRestartProcess]) -> ManagerAutoRestartProcess:
+    def create(create_type):
         """创建 ManagerAutoRestartProcess 实例"""
         return create_type()
 
@@ -792,7 +810,7 @@ class ManagerNapCatQQProcessCreator(AbstractCreator, ABC):
         return exists_module("src.core.utils.run_napcat")
 
     @staticmethod
-    def create(create_type: type[ManagerNapCatQQProcess]) -> ManagerNapCatQQProcess:
+    def create(create_type):
         """创建 ManagerNapCatQQProcess 实例"""
         return create_type()
 

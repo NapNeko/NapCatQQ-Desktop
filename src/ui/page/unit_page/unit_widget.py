@@ -168,7 +168,7 @@ class UnitWidgetCreator(AbstractCreator, ABC):
         return exists_module("src.ui.page.unit_page.unit_widget")
 
     @staticmethod
-    def create(create_type: type[UnitWidget]) -> UnitWidget:
+    def create(create_type):
         """创建并返回 UnitWidget 实例"""
         return create_type()
 

@@ -100,7 +100,7 @@ class BotPageCreator(AbstractCreator, ABC):
         return exists_module("src.ui.page.bot_page")
 
     @staticmethod
-    def create(create_type: type[BotPage]) -> BotPage:
+    def create(create_type):
         """创建 Bot 页面实例"""
         return create_type()
 

@@ -794,8 +794,8 @@ class QRCodeDialogFactoryCreator(AbstractCreator, ABC):
         """检查是否可用"""
         return exists_module("src.ui.page.bot_page.widget.msg_box")
 
-    @classmethod
-    def create(cls, create_type: type[QRCodeDialogFactory]) -> QRCodeDialogFactory:
+    @staticmethod
+    def create(create_type):
         """创建 QRCodeDialogFactory 实例"""
         return create_type()
 

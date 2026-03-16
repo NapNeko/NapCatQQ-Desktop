@@ -181,7 +181,7 @@ class MainWindowCreator(AbstractCreator, ABC):
         return exists_module("src.ui.window.main_window")
 
     @staticmethod
-    def create(create_type: type[MainWindow]) -> MainWindow:
+    def create(create_type):
         """创建 MainWindow 实例"""
         return create_type()
 

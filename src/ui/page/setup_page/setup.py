@@ -102,7 +102,7 @@ class SetupPageCreator(AbstractCreator, ABC):
         return exists_module("src.ui.page.setup_page.setup")
 
     @staticmethod
-    def create(create_type: type[SetupWidget]) -> SetupWidget:
+    def create(create_type):
         """创建设置页面实例"""
         return create_type()
 

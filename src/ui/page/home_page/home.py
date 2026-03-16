@@ -64,7 +64,7 @@ class HomePageCreator(AbstractCreator, ABC):
         return exists_module("src.ui.page.home_page.home")
 
     @staticmethod
-    def create(create_type: type[HomeWidget]) -> HomeWidget:
+    def create(create_type):
         """创建 Home 页面实例"""
         return create_type()
 
