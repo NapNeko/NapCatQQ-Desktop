@@ -60,6 +60,7 @@ def _filter_unused_qt_binaries(entries) -> tuple[object, int]:
     kept: list[tuple[str, str, str]] = []
     removed = 0
     excluded_names = {
+        "opengl32sw.dll",
         "Qt6Pdf.dll",
         "Qt6Qml.dll",
         "Qt6QmlMeta.dll",
