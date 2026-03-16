@@ -17,6 +17,7 @@ from src.core.utils.get_version import VersionData
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
 from src.core.utils.run_napcat import ManagerNapCatQQProcess
+from src.resource import resource as _resource  # noqa: F401
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox
 from src.ui.page.unit_page.base import PageBase
@@ -153,8 +154,9 @@ class NCDPage(PageBase):
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.update_page()  # 刷新一次页面
 
-    def _load_update_script(self) -> str:
-        """读取更新脚本模板，失败时使用内置兜底脚本。"""
+    @staticmethod
+    def _load_update_script() -> str:
+        """读取更新脚本模板，优先使用 Qt 资源，其次读取源码文件。"""
 
         resource_file = QFile(":/script/script/update.bat")
         if resource_file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
@@ -163,11 +165,8 @@ class NCDPage(PageBase):
             finally:
                 resource_file.close()
 
-        try:
-            script_path = Path(__file__).resolve().parents[3] / "resource" / "script" / "update.bat"
-            return script_path.read_text(encoding="utf-8")
-        except OSError:
-            return self._fallback_update_script()
+        script_path = Path(__file__).resolve().parents[3] / "resource" / "script" / "update.bat"
+        return script_path.read_text(encoding="utf-8")
 
     def _prepare_update_script(self) -> str:
         """生成带当前进程 PID 的更新脚本内容。"""
@@ -201,58 +200,3 @@ class NCDPage(PageBase):
             logger.warning(f"cmd start 启动更新脚本失败，尝试 shell 回退: {exc}")
 
         subprocess.Popen(f'start "" "{str(bat_path)}"', shell=True)
-
-    def _fallback_update_script(self) -> str:
-        """目录版更新脚本的最小兜底实现。"""
-
-        return (
-            "@echo off\n"
-            "setlocal enabledelayedexpansion\n"
-            'for %%I in ("%~dp0") do set "script_dir=%%~fI"\n'
-            'for %%I in ("%script_dir%\\..\\..") do set "app_root=%%~fI"\n'
-            'set "log=%app_root%\\update.log"\n'
-            'set "staged_app_dir=%app_root%\\_update_staging\\package\\NapCatQQ-Desktop"\n'
-            'set "staged_exe=%staged_app_dir%\\NapCatQQ-Desktop.exe"\n'
-            'set "installed_exe=%app_root%\\NapCatQQ-Desktop.exe"\n'
-            "net session >NUL 2>&1\n"
-            'if "%ERRORLEVEL%" NEQ "0" (\n'
-            '    echo [%date% %time%] 当前未以管理员运行，尝试以管理员权限重新启动 >> "%log%"\n'
-            '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath \'%~f0\' -ArgumentList \'%*\' -Verb RunAs"\n'
-            "    if errorlevel 1 (\n"
-            '        echo [%date% %time%] 无法以管理员权限重新启动，放弃更新 >> "%log%"\n'
-            "        goto :end\n"
-            "    )\n"
-            "    goto :end\n"
-            ")\n"
-            'if not exist "%staged_exe%" (echo staged package missing >> "%log%" & exit /b 1)\n'
-            "set /a max_wait=60\n"
-            "set /a waited=0\n"
-            ":wait_for_exit\n"
-            'if defined target_pid (\n'
-            '    tasklist /FI "PID eq %target_pid%" /NH | find /I "%target_pid%" >NUL\n'
-            ") else (\n"
-            '    tasklist /FI "IMAGENAME eq NapCatQQ-Desktop.exe" /NH | find /I "NapCatQQ-Desktop.exe" >NUL\n'
-            ")\n"
-            'if "%ERRORLEVEL%"=="0" (\n'
-            "    if !waited! GEQ !max_wait! (\n"
-            '        if defined target_pid (\n'
-            '            taskkill /PID "%target_pid%" /F >> "%log%" 2>&1\n'
-            "        ) else (\n"
-            '            taskkill /IM "NapCatQQ-Desktop.exe" /F >> "%log%" 2>&1\n'
-            "        )\n"
-            "    ) else (\n"
-            "        set /a waited+=1\n"
-            "        timeout /T 1 /NOBREAK > NUL\n"
-            "        goto wait_for_exit\n"
-            "    )\n"
-            ")\n"
-            'robocopy "%staged_app_dir%" "%app_root%" /MIR /R:3 /W:1 /NFL /NDL /NP /XD "%app_root%\\runtime" "%app_root%\\log" "%app_root%\\_update_staging" >> "%log%" 2>&1\n'
-            'set "copy_rc=%ERRORLEVEL%"\n'
-            "if !copy_rc! GEQ 8 exit /b 1\n"
-            'if not exist "%installed_exe%" exit /b 1\n'
-            'del /Q "%app_root%\\runtime\\tmp\\NapCatQQ-Desktop.zip" >> "%log%" 2>&1\n'
-            'rmdir /S /Q "%app_root%\\_update_staging" >> "%log%" 2>&1\n'
-            'start "" "%installed_exe%"\n'
-            'del "%~f0"\n'
-            ":end\n"
-        )

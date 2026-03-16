@@ -14,6 +14,7 @@ from src.core.utils.desktop_update import (
     UPDATE_EXE_NAME,
     prepare_desktop_update,
 )
+from src.ui.page.unit_page.napcat_desktop_page import NCDPage
 
 
 def test_prepare_desktop_update_extracts_valid_package(tmp_path: Path) -> None:
@@ -82,3 +83,28 @@ def test_prepare_desktop_update_removes_readonly_staging_dir(tmp_path: Path) -> 
 
     assert app_dir == tmp_path / "_update_staging" / "package" / UPDATE_APP_DIR_NAME
     assert not readonly_file.exists()
+
+
+def test_update_script_template_contains_backup_and_rollback() -> None:
+    """正式 updater 模板必须包含备份和回滚分支。"""
+
+    script_path = Path(__file__).resolve().parents[2] / "src" / "resource" / "script" / "update.bat"
+    script_content = script_path.read_text(encoding="utf-8")
+
+    assert 'set "backup_root=%app_root%\\_update_staging\\backup"' in script_content
+    assert 'set "backup_app_dir=%backup_root%\\NapCatQQ-Desktop"' in script_content
+    assert 'robocopy "%app_root%" "%backup_app_dir%" /MIR' in script_content
+    assert ":rollback" in script_content
+    assert 'robocopy "%backup_app_dir%" "%app_root%" /MIR' in script_content
+
+
+def test_load_update_script_contains_backup_and_rollback() -> None:
+    """页面模块读取到的 updater 模板必须包含备份和回滚分支。"""
+
+    script_content = NCDPage._load_update_script()
+
+    assert 'set "backup_root=%app_root%\\_update_staging\\backup"' in script_content
+    assert 'set "backup_app_dir=%backup_root%\\NapCatQQ-Desktop"' in script_content
+    assert 'robocopy "%app_root%" "%backup_app_dir%" /MIR' in script_content
+    assert ":rollback" in script_content
+    assert 'robocopy "%backup_app_dir%" "%app_root%" /MIR' in script_content
