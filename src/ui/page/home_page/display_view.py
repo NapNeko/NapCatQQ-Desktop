@@ -5,6 +5,7 @@ from qfluentwidgets.components import ImageLabel, PrimaryPushButton, PushButton,
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from typing import cast
 
 # 项目内模块导入
 from src.core.network.urls import Urls
@@ -100,8 +101,9 @@ class ButtonGroup(QWidget):
         """重写实现自动调整按钮大小"""
         super().resizeEvent(event)
         # 重新计算大小
-        new_button_width = max(100, self.parent().width() // 10)
-        new_button_height = max(30, self.parent().height() // 20)
+        parent = cast(QWidget, self.parent())
+        new_button_width = max(100, parent.width() // 10)
+        new_button_height = max(30, parent.height() // 20)
         self.github_button.setFixedSize(new_button_width, new_button_height)
         self.go_button.setFixedSize(new_button_width, new_button_height)
         # 重绘画面

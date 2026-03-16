@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 from abc import ABC
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, cast
 
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
@@ -38,7 +38,7 @@ class HomeWidget(TransparentStackedWidget):
         self.setCurrentWidget(self.display_view)
 
         # 链接信号
-        self.display_view.button_group.go_button.clicked.connect(lambda: self.parent().setCurrentIndex(1))
+        self.display_view.button_group.go_button.clicked.connect(lambda: cast(MainWindow, self.parent()).setCurrentIndex(1))
 
         # 应用样式表
         PageStyleSheet.HOME.apply(self)

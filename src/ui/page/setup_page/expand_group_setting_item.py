@@ -13,6 +13,7 @@ from qfluentwidgets import (
     ConfigItem,
     FluentIcon,
     LineEdit,
+    OptionsConfigItem,
     PushButton,
     RangeConfigItem,
     Slider,
@@ -194,7 +195,11 @@ class ComboBoxItem(ItemBase):
     """下拉选择框设置项"""
 
     def __init__(
-        self, config_item: ConfigItem, title: str, texts: list[str] | None = None, parent: QWidget | None = None
+        self,
+        config_item: OptionsConfigItem,
+        title: str,
+        texts: list[str] | None = None,
+        parent: QWidget | None = None,
     ) -> None:
         """
         初始化下拉选择框设置项
@@ -209,14 +214,16 @@ class ComboBoxItem(ItemBase):
 
         self.config_item = config_item
         self.combo_box = ComboBox(self)
+        options = list(config_item.options)
+        display_texts = texts or [str(option) for option in options]
 
         # 布局添加
         self.h_box_layout.addWidget(self.combo_box, 0, Qt.AlignmentFlag.AlignRight)
         self.h_box_layout.addSpacing(16)
 
         # 选项映射
-        self.option_to_text = {option: text for option, text in zip(config_item.options, texts)}
-        for text, option in zip(texts, config_item.options):
+        self.option_to_text = {option: text for option, text in zip(options, display_texts)}
+        for text, option in zip(display_texts, options):
             self.combo_box.addItem(text, userData=option)
 
         # 控件配置
