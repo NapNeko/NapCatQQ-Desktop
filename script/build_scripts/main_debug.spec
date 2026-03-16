@@ -1,35 +1,55 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import sys
+from pathlib import Path
+
+spec_dir = Path.cwd() / "script" / "build_scripts"
+if str(spec_dir) not in sys.path:
+    sys.path.insert(0, str(spec_dir))
+
+from runtime_assets import prepare_runtime_assets
+
 block_cipher = None
+project_root = Path.cwd()
+runtime_hooks = [str(spec_dir / "runtime_hook_qfluent_image_utils.py")]
+datas = prepare_runtime_assets(project_root, project_root / "build")
 
 a = Analysis(
     ['../../main.py'],
     pathex=[],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
+    runtime_hooks=runtime_hooks,
+    excludes=['numpy', 'scipy', 'pytest', 'matplotlib', 'pandas'],
+    datas=datas,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
-    noarchive=True,
 )
 
-# 单文件模式不需要 COLLECT
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
     a.scripts,
+    [],
+    exclude_binaries=True,
+    name='NapCatQQ-Desktop-debug',
+    debug=True,
+    strip=False,
+    upx=True,
+    console=True,
+    icon='icon.ico',
+    uac_admin=True,
+)
+
+coll = COLLECT(
+    exe,
     a.binaries,
     a.zipfiles,
     a.datas,
-    name='NapCatQQ-Desktop-debug',  # 输出文件名
-    debug=True,        # debug 版本显示详细调试信息
     strip=False,
-    upx=True,          # 启用 UPX 压缩
-    console=True,      # debug 版本显示控制台
-    icon='icon.ico',   # 图标
-    uac_admin=True,    # 请求管理员权限
-    runtime_tmpdir=None,  # 单文件运行时解压目录（None 为自动管理）
+    upx=True,
+    upx_exclude=[],
+    name='NapCatQQ-Desktop-debug',
 )
