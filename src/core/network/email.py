@@ -164,7 +164,7 @@ def create_test_email_task() -> Email:
     file = QFile(":template/template/email/test_email.html")
     file.setOpenMode(QFile.OpenModeFlag.ReadOnly)
 
-    email_content = Template(file.readAll().data().decode("utf-8")).safe_substitute(
+    email_content = Template(bytes(file.readAll().data()).decode("utf-8")).safe_substitute(
         {"disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S")}
     )
 
@@ -180,15 +180,19 @@ def create_test_email_task() -> Email:
 
 def create_offline_email_task(config: Config) -> Email:
     """构建离线通知邮件任务, 由调用方决定如何处理信号和启动任务"""
+    email_content = ""
 
     with QFluentFile(":template/template/email/bot_offline_notice.html", QFile.OpenModeFlag.ReadOnly) as file:
 
-        email_content = Template(file.readAll().data().decode("utf-8")).safe_substitute(
+        email_content = Template(bytes(file.readAll().data()).decode("utf-8")).safe_substitute(
             {
                 "bot_name": f"{config.bot.name} ({config.bot.QQID})",
                 "disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
             }
         )
+
+    if not email_content:
+        raise ValueError("邮件内容不能为空, 无法创建离线通知邮件任务")
 
     return Email(
         EmailData(
