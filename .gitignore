@@ -7,6 +7,7 @@ venv/
 .idea/
 .vscode/
 .codex/
+.nexus-map/
 
 ### 依赖管理 ###
 # Python 依赖和锁定文件
