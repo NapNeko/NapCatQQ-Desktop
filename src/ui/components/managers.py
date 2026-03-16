@@ -13,10 +13,12 @@ UI 组件位置调整模块
 
 # 标准库导入
 from enum import Enum
+from typing import cast
 
 # 第三方库导入
 from qfluentwidgets import InfoBar, InfoBarManager
 from PySide6.QtCore import QPoint, QSize
+from PySide6.QtWidgets import QWidget
 
 
 class NCDInfoBarPosition(Enum):
@@ -31,84 +33,89 @@ class NCDInfoBarPosition(Enum):
     NONE = 6
 
 
+def _parent_widget(infoBar: InfoBar) -> QWidget:
+    """将 InfoBar 的父对象收窄为 QWidget。"""
+    return cast(QWidget, infoBar.parent())
+
+
 @InfoBarManager.register(NCDInfoBarPosition.TOP_LEFT)
 class TopLeftInfoBarManager(InfoBarManager):
     """消息条左上方位置管理器"""
 
-    def _pos(self, info_bar: InfoBar, parent_size: QSize = None) -> QPoint:
+    def _pos(self, infoBar: InfoBar, parentSize: QSize | None = None) -> QPoint:
         """
         计算消息条的最终位置
 
         Args:
-            info_bar: 消息条实例
-            parent_size: 消息条父组件大小，默认为 None
+            infoBar: 消息条实例
+            parentSize: 消息条父组件大小，默认为 None
 
         Returns:
             QPoint: 消息条的位置坐标
         """
-        parent = info_bar.parent()
-        parent_size = parent_size or parent.size()
+        parent = _parent_widget(infoBar)
+        parentSize = parentSize or parent.size()
 
         x = self.margin + 64
         y = self.margin + 42
 
         # 累加之前所有信息栏的高度和间距
-        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y += bar.height() + self.spacing
 
         return QPoint(x, y)
 
-    def _slideStartPos(self, info_bar: InfoBar) -> QPoint:
+    def _slideStartPos(self, infoBar: InfoBar) -> QPoint:
         """
         计算信息栏滑动动画的起始位置
 
         Args:
-            info_bar: 要动画显示的信息栏对象
+            infoBar: 要动画显示的信息栏对象
 
         Returns:
             QPoint: 信息栏的起始位置（父组件左侧之外）
         """
-        return QPoint(-info_bar.width(), self._pos(info_bar).y())
+        return QPoint(-infoBar.width(), self._pos(infoBar).y())
 
 
 @InfoBarManager.register(NCDInfoBarPosition.TOP)
 class TopInfoBarManager(InfoBarManager):
     """消息条顶部居中位置管理器"""
 
-    def _pos(self, info_bar: InfoBar, parent_size: QSize = None) -> QPoint:
+    def _pos(self, infoBar: InfoBar, parentSize: QSize | None = None) -> QPoint:
         """
         计算消息条的最终位置
 
         Args:
-            info_bar: 消息条实例
-            parent_size: 消息条父组件大小，默认为 None
+            infoBar: 消息条实例
+            parentSize: 消息条父组件大小，默认为 None
 
         Returns:
             QPoint: 消息条的位置坐标
         """
-        parent = info_bar.parent()
-        parent_size = parent_size or parent.size()
+        parent = _parent_widget(infoBar)
+        parentSize = parentSize or parent.size()
 
-        x = (parent_size.width() - info_bar.width() + 40) // 2
+        x = (parentSize.width() - infoBar.width() + 40) // 2
         y = self.margin + 42
 
         # 累加之前所有信息栏的高度和间距
-        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y += bar.height() + self.spacing
 
         return QPoint(x, y)
 
-    def _slideStartPos(self, info_bar: InfoBar) -> QPoint:
+    def _slideStartPos(self, infoBar: InfoBar) -> QPoint:
         """
         计算信息栏滑动动画的起始位置
 
         Args:
-            info_bar: 要动画显示的信息栏对象
+            infoBar: 要动画显示的信息栏对象
 
         Returns:
             QPoint: 信息栏的起始位置（略微向上偏移）
         """
-        pos = self._pos(info_bar)
+        pos = self._pos(infoBar)
         return QPoint(pos.x(), pos.y() - 16)
 
 
@@ -116,120 +123,120 @@ class TopInfoBarManager(InfoBarManager):
 class TopRightInfoBarManager(InfoBarManager):
     """消息条右上方位置管理器"""
 
-    def _pos(self, info_bar: InfoBar, parent_size: QSize = None) -> QPoint:
+    def _pos(self, infoBar: InfoBar, parentSize: QSize | None = None) -> QPoint:
         """
         计算消息条的最终位置
 
         Args:
-            info_bar: 消息条实例
-            parent_size: 消息条父组件大小，默认为 None
+            infoBar: 消息条实例
+            parentSize: 消息条父组件大小，默认为 None
 
         Returns:
             QPoint: 消息条的位置坐标
         """
-        parent = info_bar.parent()
-        parent_size = parent_size or parent.size()
+        parent = _parent_widget(infoBar)
+        parentSize = parentSize or parent.size()
 
-        x = parent_size.width() - info_bar.width() - self.margin
+        x = parentSize.width() - infoBar.width() - self.margin
         y = self.margin + 42
 
         # 累加之前所有信息栏的高度和间距
-        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y += bar.height() + self.spacing
 
         return QPoint(x, y)
 
-    def _slideStartPos(self, info_bar: InfoBar) -> QPoint:
+    def _slideStartPos(self, infoBar: InfoBar) -> QPoint:
         """
         计算信息栏滑动动画的起始位置
 
         Args:
-            info_bar: 要动画显示的信息栏对象
+            infoBar: 要动画显示的信息栏对象
 
         Returns:
             QPoint: 信息栏的起始位置（父组件右侧之外）
         """
-        return QPoint(info_bar.parent().width(), self._pos(info_bar).y())
+        return QPoint(_parent_widget(infoBar).width(), self._pos(infoBar).y())
 
 
 @InfoBarManager.register(NCDInfoBarPosition.BOTTOM_LEFT)
 class BottomLeftInfoBarManager(InfoBarManager):
     """消息条左下方位置管理器"""
 
-    def _pos(self, info_bar: InfoBar, parent_size: QSize = None) -> QPoint:
+    def _pos(self, infoBar: InfoBar, parentSize: QSize | None = None) -> QPoint:
         """
         计算消息条的最终位置
 
         Args:
-            info_bar: 消息条实例
-            parent_size: 消息条父组件大小，默认为 None
+            infoBar: 消息条实例
+            parentSize: 消息条父组件大小，默认为 None
 
         Returns:
             QPoint: 消息条的位置坐标
         """
-        parent = info_bar.parent()
-        parent_size = parent_size or parent.size()
+        parent = _parent_widget(infoBar)
+        parentSize = parentSize or parent.size()
 
         x = self.margin + 64
-        y = parent_size.height() - info_bar.height() - self.margin
+        y = parentSize.height() - infoBar.height() - self.margin
 
         # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
-        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y -= bar.height() + self.spacing
 
         return QPoint(x, y)
 
-    def _slideStartPos(self, info_bar: InfoBar) -> QPoint:
+    def _slideStartPos(self, infoBar: InfoBar) -> QPoint:
         """
         计算信息栏滑动动画的起始位置
 
         Args:
-            info_bar: 要动画显示的信息栏对象
+            infoBar: 要动画显示的信息栏对象
 
         Returns:
             QPoint: 信息栏的起始位置
         """
-        return QPoint(self.margin + 64, self._pos(info_bar).y())
+        return QPoint(self.margin + 64, self._pos(infoBar).y())
 
 
 @InfoBarManager.register(NCDInfoBarPosition.BOTTOM)
 class BottomInfoBarManager(InfoBarManager):
     """消息条底部居中位置管理器"""
 
-    def _pos(self, info_bar: InfoBar, parent_size: QSize = None) -> QPoint:
+    def _pos(self, infoBar: InfoBar, parentSize: QSize | None = None) -> QPoint:
         """
         计算消息条的最终位置
 
         Args:
-            info_bar: 消息条实例
-            parent_size: 消息条父组件大小，默认为 None
+            infoBar: 消息条实例
+            parentSize: 消息条父组件大小，默认为 None
 
         Returns:
             QPoint: 消息条的位置坐标
         """
-        parent = info_bar.parent()
-        parent_size = parent_size or parent.size()
+        parent = _parent_widget(infoBar)
+        parentSize = parentSize or parent.size()
 
-        x = (parent_size.width() - info_bar.width() + 40) // 2
-        y = parent_size.height() - info_bar.height() - self.margin
+        x = (parentSize.width() - infoBar.width() + 40) // 2
+        y = parentSize.height() - infoBar.height() - self.margin
 
         # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
-        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y -= bar.height() + self.spacing
 
         return QPoint(x, y)
 
-    def _slideStartPos(self, info_bar: InfoBar) -> QPoint:
+    def _slideStartPos(self, infoBar: InfoBar) -> QPoint:
         """
         计算信息栏滑动动画的起始位置
 
         Args:
-            info_bar: 要动画显示的信息栏对象
+            infoBar: 要动画显示的信息栏对象
 
         Returns:
             QPoint: 信息栏的起始位置（略微向下偏移）
         """
-        pos = self._pos(info_bar)
+        pos = self._pos(infoBar)
         return QPoint(pos.x(), pos.y() + 16)
 
 
@@ -237,37 +244,37 @@ class BottomInfoBarManager(InfoBarManager):
 class BottomRightInfoBarManager(InfoBarManager):
     """消息条右下方位置管理器"""
 
-    def _pos(self, info_bar: InfoBar, parent_size: QSize = None) -> QPoint:
+    def _pos(self, infoBar: InfoBar, parentSize: QSize | None = None) -> QPoint:
         """
         计算消息条的最终位置
 
         Args:
-            info_bar: 消息条实例
-            parent_size: 消息条父组件大小，默认为 None
+            infoBar: 消息条实例
+            parentSize: 消息条父组件大小，默认为 None
 
         Returns:
             QPoint: 消息条的位置坐标
         """
-        parent = info_bar.parent()
-        parent_size = parent_size or parent.size()
+        parent = _parent_widget(infoBar)
+        parentSize = parentSize or parent.size()
 
-        x = parent_size.width() - info_bar.width() - self.margin
-        y = parent_size.height() - info_bar.height() - self.margin
+        x = parentSize.width() - infoBar.width() - self.margin
+        y = parentSize.height() - infoBar.height() - self.margin
 
         # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
-        for bar in self.infoBars[parent][: self.infoBars[parent].index(info_bar)]:
+        for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y -= bar.height() + self.spacing
 
         return QPoint(x, y)
 
-    def _slideStartPos(self, info_bar: InfoBar) -> QPoint:
+    def _slideStartPos(self, infoBar: InfoBar) -> QPoint:
         """
         计算信息栏滑动动画的起始位置
 
         Args:
-            info_bar: 要动画显示的信息栏对象
+            infoBar: 要动画显示的信息栏对象
 
         Returns:
             QPoint: 信息栏的起始位置（父组件右侧之外）
         """
-        return QPoint(info_bar.parent().width(), self._pos(info_bar).y())
+        return QPoint(_parent_widget(infoBar).width(), self._pos(infoBar).y())
