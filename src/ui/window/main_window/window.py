@@ -144,7 +144,7 @@ class MainWindow(MSFluentWindow):
         """移除已失效的登录二维码"""
         it(QRCodeDialogFactory).remove_qr_code(qq_id)
 
-    def close(self) -> None:
+    def close(self) -> bool:
         """重写关闭事件"""
         if cfg.get(cfg.close_button_action) == CloseActionEnum.CLOSE:
 
@@ -156,11 +156,13 @@ class MainWindow(MSFluentWindow):
                 msg_box = AskBox(self.tr("无法退出"), self.tr("有机器人正在运行, 请关闭它们后再退出程序"), self)
                 msg_box.cancelButton.hide()
                 msg_box.exec()
+                return False
 
             else:
-                super().close()
+                return super().close()
         else:
             self.hide()
+            return False
 
 
 class MainWindowCreator(AbstractCreator, ABC):

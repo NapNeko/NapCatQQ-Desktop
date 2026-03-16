@@ -143,7 +143,7 @@ class InstallPageBase(QWidget):
         """
         self.progress_bar.setValue(value)
 
-    def set_visibility(self, visible_buttons: dict, visible_progress_rings: dict, visible_status_label: dict) -> None:
+    def set_visibility(self, visible_buttons: dict, visible_progress_rings: dict, visible_status_label: bool) -> None:
         """设置按钮和进度环以及状态标签的可见性
 
         Args:
@@ -194,11 +194,11 @@ class InstallQQPage(InstallPageBase):
         """
         super().__init__(parent)
         # 创建杂七杂八的控件
-        # self.url = self.get_download_url()
-        self.url = GetRemoteVersionRunnable().execute().qq_download_url
-        if self.url is None:
+        download_url = GetRemoteVersionRunnable().execute().qq_download_url
+        if download_url is None:
             self.set_status_text(self.tr("获取 QQ 下载链接失败。"))
-        self.url = QUrl(self.url)
+            self.install_button.setEnabled(False)
+        self.url = QUrl(download_url or "")
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         self.downloader = QQDownloader(self.url)
 
@@ -219,6 +219,7 @@ class InstallQQPage(InstallPageBase):
             return QUrl(download_url)
         except httpx.ConnectTimeout:
             self.set_status_text(self.tr("网络连接超时，请检查您的网络连接。"))
+            return QUrl()
 
     def on_download(self) -> None:
         """下载"""

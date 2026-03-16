@@ -22,7 +22,7 @@ from qfluentwidgets import (
 )
 from PySide6.QtCore import QDir, Qt, QUrl
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout, QWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -183,12 +183,12 @@ class HyperlinkBox(MessageBoxBase):
 class FolderBox(MessageBoxBase):
     """文件夹消息框"""
 
-    def __init__(self, title: str, parent: "MainWindow") -> None:
+    def __init__(self, title: str, parent: QWidget) -> None:
         """初始化
 
         Args:
             title (str): 消息框标题
-            parent (MainWindow): 消息框父类
+            parent (QWidget): 消息框父类
         """
         super().__init__(parent=parent)
 

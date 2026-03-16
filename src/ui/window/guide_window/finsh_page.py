@@ -170,7 +170,7 @@ class Card(QWidget):
         """
         # 绘制圆角矩形背景
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         path = QPainterPath()
         rect = self.rect()
@@ -193,17 +193,17 @@ class Card(QWidget):
         # 圆角动画
         self.radius_anim = QPropertyAnimation(self, b"radius")
         self.radius_anim.setDuration(300)
-        self.radius_anim.setEasingCurve(QEasingCurve.OutQuad)
+        self.radius_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
         # 缩放动画
         self.scale_anim = QPropertyAnimation(self, b"scale")
         self.scale_anim.setDuration(300)
-        self.scale_anim.setEasingCurve(QEasingCurve.OutQuad)
+        self.scale_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
         # 颜色动画
         self.color_anim = QPropertyAnimation(self, b"background_color")
         self.color_anim.setDuration(300)
-        self.color_anim.setEasingCurve(QEasingCurve.OutQuad)
+        self.color_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
     # 自定义属性，用于动画
     def get_radius(self) -> int:

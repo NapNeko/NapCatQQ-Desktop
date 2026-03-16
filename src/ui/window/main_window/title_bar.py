@@ -75,7 +75,7 @@ class CustomTitleBar(MSFluentTitleBar):
 
         self.buttonLayout.setContentsMargins(0, 8, 10, 0)
 
-    def _replace_button(self, btn_class: TitleBarButton, btn_name: str) -> None:
+    def _replace_button(self, btn_class: type[TitleBarButton], btn_name: str) -> None:
         """替换标题栏按钮
 
         该方法会移除旧的按钮, 并添加新的按钮到标题栏中
@@ -116,7 +116,7 @@ class MaxBtn(MaximizeButton):
         """
         super().__init__(parent=parent)
 
-    def paintEvent(self, event: QPaintEvent) -> None:
+    def paintEvent(self, e: QPaintEvent) -> None:
         """重写绘制事件
 
         该方法会根据当前窗口状态绘制不同的图标, 并添加圆角矩形背景
@@ -169,7 +169,7 @@ class MinBtn(MinimizeButton):
         """
         super().__init__(parent=parent)
 
-    def paintEvent(self, event: QPaintEvent) -> None:
+    def paintEvent(self, e: QPaintEvent) -> None:
         """重写绘制事件
 
         该方法会绘制一个带有圆角矩形背景的最小化图标
@@ -202,15 +202,15 @@ class CloseBtn(CloseButton):
         _svgDom (QDomDocument): 用于存储 SVG 图标数据的 DOM 对象
     """
 
-    def __init__(self, parent: QPaintEvent) -> None:
+    def __init__(self, parent: CustomTitleBar) -> None:
         """初始化关闭按钮
 
         Args:
-            parent (QPaintEvent): 按钮的父组件
+            parent (CustomTitleBar): 按钮的父组件
         """
         super().__init__(parent=parent)
 
-    def paintEvent(self, event: QPaintEvent) -> None:
+    def paintEvent(self, e: QPaintEvent) -> None:
         """重写绘制事件
 
         该方法会绘制一个带有圆角矩形背景的关闭图标

@@ -108,7 +108,7 @@ class GuideWindow(FramelessWindow):
         self.vBoxLayout.addWidget(self.view)
         self.setLayout(self.vBoxLayout)
 
-    def close(self) -> None:
+    def close(self) -> bool:
         """关闭窗体
 
         关闭窗体时将窗体设置为不可见，并打开主窗体
@@ -123,7 +123,7 @@ class GuideWindow(FramelessWindow):
         it(MainWindow).initialize()
         cfg.set(cfg.main_window, True)
 
-        super().close()
+        return super().close()
 
     def mousePressEvent(self, event):
         """重写鼠标按下事件"""
