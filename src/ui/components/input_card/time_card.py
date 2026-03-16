@@ -5,9 +5,6 @@ UI 组件：时间选择卡片
 """
 
 
-# 标准库导入
-from ast import Dict
-
 # 第三方库导入
 from qfluentwidgets import ComboBox, CompactSpinBox, FluentIconBase, LineEdit, SettingCard
 from PySide6.QtCore import Qt
@@ -71,7 +68,11 @@ class IntervalTimeConfigCard(SettingCard):
         Returns:
             tuple: (TimeUnitEnum, int)
         """
-        return (self.time_unit_combo_box.currentData(), self.duration_spin_box.value())
+        current_unit = self.time_unit_combo_box.currentData()
+        if not isinstance(current_unit, TimeUnitEnum):
+            current_unit = TimeUnitEnum.HOUR
+
+        return (current_unit, self.duration_spin_box.value())
 
     def clear(self) -> None:
         """清空时间值"""

@@ -363,7 +363,7 @@ class FolderConfigCard(SettingCard):
             parent (QWidget | None, optional): 父控件. Defaults to None.
         """
         super().__init__(icon, title, content, parent)
-        self.default = content
+        self.default = content or ""
         self.chooseFolderButton = PushButton(icon=FluentIcon.FOLDER, text=self.tr("Choose Folder"))
         self.chooseFolderButton.clicked.connect(self.choose_folder)
 

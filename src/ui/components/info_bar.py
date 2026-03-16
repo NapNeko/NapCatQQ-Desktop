@@ -12,9 +12,15 @@
 # 第三方库导入
 from qfluentwidgets import InfoBar
 from PySide6.QtCore import QObject, Qt
+from typing import Any, cast
 
 # 项目内模块导入
 from src.ui.components.managers import NCDInfoBarPosition
+
+
+def _position(position: NCDInfoBarPosition) -> Any:
+    """将自定义 InfoBar 位置枚举转换为 qfluentwidgets 可接受的类型。"""
+    return cast(object, position)
 
 
 def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent: QObject | None = None) -> None:
@@ -39,7 +45,7 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent:
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
-        position=NCDInfoBarPosition.BOTTOM_RIGHT,
+        position=_position(NCDInfoBarPosition.BOTTOM_RIGHT),
         parent=it(MainWindow) if parent is None else parent,
     )
 
@@ -65,7 +71,7 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5000, p
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
-        position=NCDInfoBarPosition.BOTTOM_RIGHT,
+        position=_position(NCDInfoBarPosition.BOTTOM_RIGHT),
         parent=it(MainWindow) if parent is None else parent,
     )
 
@@ -91,7 +97,7 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 1000
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
-        position=NCDInfoBarPosition.TOP_RIGHT,
+        position=_position(NCDInfoBarPosition.TOP_RIGHT),
         parent=it(MainWindow) if parent is None else parent,
     )
 
@@ -117,6 +123,6 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1, parent
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
-        position=NCDInfoBarPosition.TOP_RIGHT,
+        position=_position(NCDInfoBarPosition.TOP_RIGHT),
         parent=it(MainWindow) if parent is None else parent,
     )
