@@ -49,7 +49,7 @@ class LogGroup:
         self.name = name
         self.log_type = log_type
         self.log_source = log_source
-        self.logs = []
+        self.logs: list[Log] = []
 
     def add(self, log: Log):
         self.logs.append(log)
@@ -61,4 +61,4 @@ class LogGroup:
         return self.__str__()
 
     def to_string(self):
-        return "\n".join([log.toString() for log in self.logs])
+        return "\n".join([log.to_string() for log in self.logs])

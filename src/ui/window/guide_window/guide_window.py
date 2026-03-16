@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QVBoxLayout
 
 # 项目内模块导入
 from src.core.config import cfg
+from src.core.utils.logger import LogSource, logger
 from src.ui.common.icon import StaticIcon
 from src.ui.window.guide_window.ask_page import AskPage
 from src.ui.window.guide_window.eula_page import EulaPage
@@ -50,6 +51,7 @@ class GuideWindow(FramelessWindow):
 
         调整窗体大小、位置、布局等
         """
+        logger.info("引导窗口初始化开始", log_source=LogSource.UI)
         # 设置主题
         setTheme(Theme.AUTO)
         self.show()
@@ -72,6 +74,7 @@ class GuideWindow(FramelessWindow):
         # 调用方法
         self.create_page()
         self.create_layout()
+        logger.info("引导窗口初始化完成", log_source=LogSource.UI)
 
     def create_page(self) -> None:
         """创建页面
@@ -96,6 +99,7 @@ class GuideWindow(FramelessWindow):
         self.view.addWidget(self.finish_page)
 
         self.view.setCurrentWidget(self.elua_page)
+        logger.info("引导窗口页面已创建，当前页=EulaPage", log_source=LogSource.UI)
 
     def create_layout(self) -> None:
         """创建布局
@@ -107,12 +111,14 @@ class GuideWindow(FramelessWindow):
         self.vBoxLayout.setSpacing(0)
         self.vBoxLayout.addWidget(self.view)
         self.setLayout(self.vBoxLayout)
+        logger.info("引导窗口布局创建完成", log_source=LogSource.UI)
 
     def close(self) -> bool:
         """关闭窗体
 
         关闭窗体时将窗体设置为不可见，并打开主窗体
         """
+        logger.info("引导窗口关闭，准备切换到主窗口", log_source=LogSource.UI)
 
         # 关闭时将窗体设置为不可见
         self.hide()
@@ -122,6 +128,7 @@ class GuideWindow(FramelessWindow):
 
         it(MainWindow).initialize()
         cfg.set(cfg.main_window, True)
+        logger.info("引导窗口已切换到主窗口并写入主窗口状态", log_source=LogSource.UI)
 
         return super().close()
 
@@ -148,16 +155,26 @@ class GuideWindow(FramelessWindow):
 
         页面顺序：欢迎页面 -> 询问页面 -> 安装 QQ 页面 -> 安装 NapCatQQ 页面 -> 完成页面
         """
+        current_name = type(self.view.currentWidget()).__name__
+        target_name = current_name
         if isinstance(self.view.currentWidget(), EulaPage):
             self.view.setCurrentWidget(self.welcome_page)
+            target_name = type(self.welcome_page).__name__
         elif isinstance(self.view.currentWidget(), WelcomePage):
             self.view.setCurrentWidget(self.ask_page)
+            target_name = type(self.ask_page).__name__
         elif isinstance(self.view.currentWidget(), AskPage):
             self.view.setCurrentWidget(self.install_qq_page)
+            target_name = type(self.install_qq_page).__name__
         elif isinstance(self.view.currentWidget(), InstallQQPage):
             self.view.setCurrentWidget(self.install_nc_page)
+            target_name = type(self.install_nc_page).__name__
         elif isinstance(self.view.currentWidget(), InstallNapCatQQPage):
             self.view.setCurrentWidget(self.finish_page)
+            target_name = type(self.finish_page).__name__
+
+        if target_name != current_name:
+            logger.info(f"引导窗口页面切换: {current_name} -> {target_name}", log_source=LogSource.UI)
 
 
 class GuideWindowCreator(AbstractCreator, ABC):

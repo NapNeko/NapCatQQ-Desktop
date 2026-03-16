@@ -12,9 +12,10 @@ from PySide6.QtWidgets import QApplication
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
+from src.core.utils.logger import LogSource, logger
 from src.core.utils.run_napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
-from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.common.icon import StaticIcon
+from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.page import BotPage, HomeWidget, SetupWidget, UnitWidget
 from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
@@ -42,6 +43,7 @@ class MainWindow(MSFluentWindow):
 
     def initialize(self) -> None:
         """初始化"""
+        logger.info("主窗口初始化开始", log_source=LogSource.UI)
         # 调用方法
         self._set_window()
         self._bind_core_events()
@@ -50,11 +52,13 @@ class MainWindow(MSFluentWindow):
 
         # 组件加载完成结束 SplashScreen
         self.splash_screen.finish()
+        logger.info("主窗口初始化完成", log_source=LogSource.UI)
 
     def _set_window(self) -> None:
         """
         设置窗体
         """
+        logger.info("开始配置主窗口基础属性", log_source=LogSource.UI)
         # 标题栏部分
         self.title_bar = CustomTitleBar(self)
         self.setTitleBar(self.title_bar)
@@ -74,6 +78,7 @@ class MainWindow(MSFluentWindow):
         self.show()
         # 挂起
         QApplication.processEvents()
+        logger.info("主窗口已显示并完成初始绘制", log_source=LogSource.UI)
 
     def _set_item(self) -> None:
         """
@@ -110,6 +115,7 @@ class MainWindow(MSFluentWindow):
         """设置托盘图标"""
         self.trayIcon = SystemTrayIcon(self)
         self.trayIcon.show()
+        logger.info("主窗口托盘图标初始化完成", log_source=LogSource.UI)
 
     def _bind_core_events(self) -> None:
         """将 core 层信号桥接到 UI 表现层"""
@@ -125,6 +131,7 @@ class MainWindow(MSFluentWindow):
         login_state_manager.qr_code_removed_signal.connect(self._remove_login_qr_code)
 
         self._core_events_bound = True
+        logger.info("主窗口已完成 core 信号绑定", log_source=LogSource.UI)
 
     def _show_core_notification(self, level: str, message: str) -> None:
         """根据 core 层通知级别选择对应的 UI 提示方式"""
@@ -146,22 +153,27 @@ class MainWindow(MSFluentWindow):
 
     def close(self) -> bool:
         """重写关闭事件"""
-        if cfg.get(cfg.close_button_action) == CloseActionEnum.CLOSE:
+        close_action = cfg.get(cfg.close_button_action)
+        logger.info(f"主窗口收到关闭请求, action={close_action.name}", log_source=LogSource.UI)
+        if close_action == CloseActionEnum.CLOSE:
 
             # 如果有机器人在线, 则提示用户关闭实例
             if it(ManagerNapCatQQProcess).has_running_bot():
                 # 项目内模块导入
                 from src.ui.components.message_box import AskBox
 
+                logger.warning("检测到仍有机器人运行，拒绝关闭主窗口", log_source=LogSource.UI)
                 msg_box = AskBox(self.tr("无法退出"), self.tr("有机器人正在运行, 请关闭它们后再退出程序"), self)
                 msg_box.cancelButton.hide()
                 msg_box.exec()
                 return False
 
             else:
+                logger.info("主窗口执行实际关闭", log_source=LogSource.UI)
                 return super().close()
         else:
             self.hide()
+            logger.info("主窗口关闭行为切换为最小化到托盘", log_source=LogSource.UI)
             return False
 
 

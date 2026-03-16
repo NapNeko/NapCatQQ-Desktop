@@ -9,13 +9,13 @@ from email.mime.text import MIMEText
 from enum import Enum
 from string import Template
 
-# 第三方库导入
 from PySide6.QtCore import QFile, QObject, QRunnable, Signal
 
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_model import Config
 from src.core.utils.file import QFluentFile
+from src.core.utils.logger import LogSource, LogType, logger
 
 
 class EncryptionType(Enum):
@@ -124,6 +124,15 @@ class Email(QObject, QRunnable):
         发送成功后发出 success_signal 信号, 发送失败发出 error_signal 信号
         该方法将在独立线程中运行, 不会阻塞主线程
         """
+        logger.info(
+            (
+                "开始发送邮件: "
+                f"server={self.data.smtp_server}:{self.data.smtp_port}, "
+                f"receiver={self.data.reciver_email}, encryption={self.data.encryption.name}"
+            ),
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
         msg = MIMEMultipart("related")
         msg["From"] = self.data.msg_from
         msg["To"] = self.data.msg_to
@@ -150,12 +159,37 @@ class Email(QObject, QRunnable):
                     server.login(self.data.sender_email, self.data.token)
                     server.sendmail(self.data.sender_email, self.data.reciver_email, msg.as_string())
             self.success_signal.emit("邮件发送成功")
+            logger.info(
+                f"邮件发送成功: receiver={self.data.reciver_email}, subject={self.data.msg_subject}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
         except smtplib.SMTPResponseException as e:
             self.error_signal.emit(f"创建邮件时出现错误, 请检查是否发件成功: {e.smtp_code} {e.smtp_error}")
+            logger.exception(
+                (
+                    "邮件发送失败(SMTPResponseException): "
+                    f"server={self.data.smtp_server}:{self.data.smtp_port}, "
+                    f"receiver={self.data.reciver_email}"
+                ),
+                e,
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
         except Exception as e:
             self.error_signal.emit(f"发送邮件时发生错误: {str(e)}")
+            logger.exception(
+                (
+                    "邮件发送失败: "
+                    f"server={self.data.smtp_server}:{self.data.smtp_port}, "
+                    f"receiver={self.data.reciver_email}"
+                ),
+                e,
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
 
 def create_test_email_task() -> Email:

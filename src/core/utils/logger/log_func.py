@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+import sys
+import threading
+import traceback
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+
+from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
 # 项目内模块导入
 from src.core.utils.app_path import resolve_app_base_path
@@ -18,11 +23,15 @@ class Logger:
 
     log_buffer_size: int
     log_buffer_delete_size: int
+    log_save_day: int
+    log_path: Path
 
     def __init__(self) -> None:
         """初始化日志记录器"""
         # Log 缓冲区
         self.log_buffer = []
+        self._hooks_installed = False
+        self._previous_qt_message_handler = None
 
     def load_config(self) -> None:
         """加载配置项"""
@@ -43,6 +52,9 @@ class Logger:
 
         # 遍历日志文件夹, 删除过期日志文件(超过 7 天)
         for log_file in log_dir.iterdir():
+            if not log_file.is_file():
+                continue
+
             if (datetime.now() - datetime.fromtimestamp(log_file.stat().st_mtime)).days > self.log_save_day:
                 log_file.unlink()
 
@@ -53,6 +65,23 @@ class Logger:
         """
         if len(self.log_buffer) >= self.log_buffer_size:
             self.log_buffer = self.log_buffer[self.log_buffer_delete_size :]
+
+    def _format_exception_message(
+        self,
+        message: str,
+        exc: BaseException,
+        exc_type: type[BaseException] | None = None,
+        exc_traceback=None,
+    ) -> str:
+        """构造包含异常栈的日志消息。"""
+        resolved_type = exc_type or type(exc)
+        details = f"{message}: {resolved_type.__name__}: {exc}"
+        trace_text = "".join(traceback.format_exception(resolved_type, exc, exc_traceback or exc.__traceback__)).strip()
+
+        if trace_text:
+            return f"{details}\n{trace_text}"
+
+        return details
 
     def _log(
         self,
@@ -136,6 +165,121 @@ class Logger:
         log_group: LogGroup | None = None,
     ):
         self._log(LogLevel.EROR, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
+
+    @capture_call_location
+    def critical(
+        self,
+        message: str,
+        log_type: LogType = LogType.NONE_TYPE,
+        log_source: LogSource = LogSource.NONE,
+        log_position: LogPosition | None = None,
+        log_group: LogGroup | None = None,
+    ):
+        self._log(LogLevel.CRIT, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
+
+    @capture_call_location
+    def exception(
+        self,
+        message: str,
+        exc: BaseException,
+        log_type: LogType = LogType.NONE_TYPE,
+        log_source: LogSource = LogSource.NONE,
+        log_position: LogPosition | None = None,
+        log_group: LogGroup | None = None,
+    ):
+        self._log(
+            LogLevel.EROR,
+            self._format_exception_message(message, exc),
+            datetime.now().timestamp(),
+            log_type,
+            log_source,
+            log_position,
+            log_group,
+        )
+
+    def _handle_sys_exception(self, exc_type: type[BaseException], exc: BaseException, exc_traceback) -> None:
+        """处理主线程未捕获异常。"""
+        if issubclass(exc_type, KeyboardInterrupt):
+            return
+
+        self._log(
+            LogLevel.CRIT,
+            self._format_exception_message("捕获未处理异常", exc, exc_type, exc_traceback),
+            datetime.now().timestamp(),
+            LogType.NONE_TYPE,
+            LogSource.CORE,
+            None,
+        )
+
+    def _handle_thread_exception(self, args: threading.ExceptHookArgs) -> None:
+        """处理线程未捕获异常。"""
+        if args.exc_type is None or args.exc_value is None:
+            return
+
+        thread_name = args.thread.name if args.thread is not None else "unknown"
+        self._log(
+            LogLevel.CRIT,
+            self._format_exception_message(
+                f"线程未处理异常(thread={thread_name})", args.exc_value, args.exc_type, args.exc_traceback
+            ),
+            datetime.now().timestamp(),
+            LogType.NONE_TYPE,
+            LogSource.CORE,
+            None,
+        )
+
+    def _handle_unraisable_exception(self, args) -> None:
+        """处理无法传播到调用方的异常。"""
+        if args.exc_value is None:
+            return
+
+        object_repr = repr(args.object) if getattr(args, "object", None) is not None else "unknown"
+        message = f"捕获无法传播的异常(object={object_repr})"
+        if getattr(args, "err_msg", None):
+            message = f"{message}: {args.err_msg}"
+
+        self._log(
+            LogLevel.CRIT,
+            self._format_exception_message(message, args.exc_value, args.exc_type, args.exc_traceback),
+            datetime.now().timestamp(),
+            LogType.NONE_TYPE,
+            LogSource.CORE,
+            None,
+        )
+
+    def _handle_qt_message(self, msg_type, context, message: str) -> None:
+        """接管 Qt 的 warning/critical/fatal 日志。"""
+        level_mapping = {
+            QtMsgType.QtDebugMsg: LogLevel.DBUG,
+            QtMsgType.QtInfoMsg: LogLevel.INFO,
+            QtMsgType.QtWarningMsg: LogLevel.WARN,
+            QtMsgType.QtCriticalMsg: LogLevel.EROR,
+            QtMsgType.QtFatalMsg: LogLevel.CRIT,
+        }
+        level = level_mapping.get(msg_type, LogLevel.INFO)
+
+        file_name = Path(context.file).name if getattr(context, "file", None) else "<qt>"
+        position = LogPosition(module=getattr(context, "category", "") or "qt", file=file_name, line=context.line or 0)
+        self._log(
+            level,
+            f"Qt message: {message}",
+            datetime.now().timestamp(),
+            LogType.NONE_TYPE,
+            LogSource.UI,
+            position,
+        )
+
+    def install_exception_hooks(self) -> None:
+        """安装 Python 和 Qt 的全局异常日志钩子。"""
+        if self._hooks_installed:
+            return
+
+        sys.excepthook = self._handle_sys_exception
+        threading.excepthook = self._handle_thread_exception
+        sys.unraisablehook = self._handle_unraisable_exception
+        self._previous_qt_message_handler = qInstallMessageHandler(self._handle_qt_message)
+        self._hooks_installed = True
+        self.info("已安装全局异常和 Qt 日志钩子", log_source=LogSource.CORE)
 
     @contextmanager
     def group(self, name: str, log_type: LogType, log_source: LogSource):

@@ -25,9 +25,8 @@ from src.core.config.config_enum import TimeUnitEnum
 from src.core.config.config_model import Config
 from src.core.network.email import Email, create_offline_email_task
 from src.core.network.webhook import WebHook, create_offline_webhook_task
-from src.core.utils.logger import logger
+from src.core.utils.logger import LogSource, LogType, logger
 from src.core.utils.path_func import PathFunc
-
 
 # ==================== 数据模型 ====================
 NotificationTask = Email | WebHook
@@ -608,10 +607,20 @@ class ManagerNapCatQQProcess(QObject):
         """
         # 如果超过 4 个进程，则取消创建
         if len(self.napcat_process_dict) >= 4:
+            logger.warning(
+                f"NapCatQQ 进程数量已达上限，拒绝创建新进程(QQID: {config.bot.QQID})",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
             self.notification_signal.emit("error", "NapCatQQ 进程数量已达上限，无法创建新进程!")
             return
 
         if (qq_path := it(PathFunc).get_qq_path()) is None:
+            logger.error(
+                f"未检测到 QQ 安装路径，无法启动 NapCatQQ 进程(QQID: {config.bot.QQID})",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
             self.notification_signal.emit("error", "未检测到 QQ 安装路径，无法启动 NapCatQQ 进程!")
             return
 
@@ -623,14 +632,20 @@ class ManagerNapCatQQProcess(QObject):
 
         # 启动进程
         process.start()
-        logger.info(f"NapCatQQ 进程已创建并启动(QQID: {config.bot.QQID})")
+        logger.info(f"NapCatQQ 进程已创建并发起启动(QQID: {config.bot.QQID})")
 
         # 确保进程已启动
         if not process.waitForStarted(5000):
+            logger.error(
+                f"NapCatQQ 进程启动失败(QQID: {config.bot.QQID}): {process.errorString()}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
             self.notification_signal.emit("error", "NapCatQQ 进程启动失败!")
             process.deleteLater()
             return
 
+        logger.info(f"NapCatQQ 进程启动成功(QQID: {config.bot.QQID})")
         it(ManagerAutoRestartProcess).create_auto_restart_timer(config)
 
         # 添加到进程字典
@@ -669,6 +684,7 @@ class ManagerNapCatQQProcess(QObject):
             qq_id (str): QQ 号
         """
         if (process_model := self.get_process(qq_id)) is None:
+            logger.warning(f"尝试停止不存在的 NapCatQQ 进程(QQID: {qq_id})", LogType.FILE_FUNC, LogSource.CORE)
             return
 
         process = process_model.process
@@ -703,8 +719,14 @@ class ManagerNapCatQQProcess(QObject):
             config (Config): 配置对象
         """
         if (process_model := self.get_process(str(config.bot.QQID))) is None or not process_model.process:
+            logger.warning(
+                f"尝试重启不存在的 NapCatQQ 进程(QQID: {config.bot.QQID})",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
             return
 
+        logger.info(f"开始重启 NapCatQQ 进程(QQID: {config.bot.QQID})", LogType.FILE_FUNC, LogSource.CORE)
         self.stop_process(str(config.bot.QQID))
         self.create_napcat_process(config)
 

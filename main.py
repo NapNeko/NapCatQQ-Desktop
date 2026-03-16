@@ -7,42 +7,85 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.core.utils.mutex import SingleInstanceApplication
-from src.core.utils.path_func import PathFunc
-from src.resource import resource
-from src.ui.common.font import FontManager
-from creart import it
+from src.core.utils.app_path import resolve_app_base_path
+from src.core.utils.logger import LogSource, logger
 
-if __name__ == "__main__":
+
+def run_application() -> int:
+    """启动桌面应用并返回事件循环退出码。"""
+    runtime_mode = "frozen" if getattr(sys, "frozen", False) else "source"
+    base_path = resolve_app_base_path()
+    logger.info(
+        f"应用启动: mode={runtime_mode}, base_path={base_path}, log_file={logger.log_path}",
+        log_source=LogSource.CORE,
+    )
+
+    # 第三方库导入
+    from creart import it
+
+    # 项目内模块导入
+    from src.core.config import cfg
+    from src.core.utils.mutex import SingleInstanceApplication
+    from src.core.utils.path_func import PathFunc
+    from src.resource import resource
+    from src.ui.common.font import FontManager
+
+    _ = resource
+
     # 实现单实例应用程序检查
     if SingleInstanceApplication().is_running():
-        sys.exit()
+        logger.warning("检测到已有实例正在运行，当前实例退出", log_source=LogSource.CORE)
+        return 0
+
+    logger.info("单实例检查通过", log_source=LogSource.CORE)
 
     # 执行路径验证
+    logger.info("开始执行路径校验", log_source=LogSource.CORE)
     it(PathFunc).path_validator()
+    logger.info("路径校验完成", log_source=LogSource.CORE)
 
-    # 设置DPI缩放
-    if cfg.get(cfg.dpi_scale) == "Auto":
+    # 设置 DPI 缩放
+    dpi_scale = cfg.get(cfg.dpi_scale)
+    if dpi_scale == "Auto":
         QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        logger.info("DPI 缩放策略: Auto(PassThrough)", log_source=LogSource.CORE)
     else:
-        os.environ["QT_SCALE_FACTOR"] = str(cfg.get(cfg.dpi_scale))
+        os.environ["QT_SCALE_FACTOR"] = str(dpi_scale)
+        logger.info(f"DPI 缩放策略: 手动({dpi_scale})", log_source=LogSource.CORE)
 
     app = QApplication(sys.argv)
+    logger.info("QApplication 创建完成", log_source=LogSource.UI)
 
     # 初始化字体
     FontManager.initialize_fonts()
+    logger.info("字体初始化完成", log_source=LogSource.UI)
 
     if cfg.get(cfg.main_window) and cfg.get(cfg.elua_accepted):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
-        from creart import it
 
+        logger.info("进入主窗口初始化流程", log_source=LogSource.UI)
         it(MainWindow).initialize()
     else:
         # 项目内模块导入
         from src.ui.window.guide_window import GuideWindow
 
+        logger.info("进入引导窗口初始化流程", log_source=LogSource.UI)
         it(GuideWindow).initialize()
 
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    logger.info(f"事件循环退出, exit_code={exit_code}", log_source=LogSource.CORE)
+    return exit_code
+
+
+if __name__ == "__main__":
+    logger.install_exception_hooks()
+
+    try:
+        sys.exit(run_application())
+    except SystemExit:
+        raise
+    except Exception as exc:
+        logger.critical("应用启动或运行过程中出现未处理异常", log_source=LogSource.CORE)
+        logger.exception("应用未处理异常详情", exc, log_source=LogSource.CORE)
+        sys.exit(1)

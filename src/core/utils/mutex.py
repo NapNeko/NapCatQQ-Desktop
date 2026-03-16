@@ -4,6 +4,7 @@ from creart import it
 from PySide6.QtCore import QLockFile
 
 # 项目内模块导入
+from src.core.utils.logger import LogSource, LogType, logger
 from src.core.utils.path_func import PathFunc
 
 """
@@ -33,6 +34,7 @@ class SingleInstanceApplication:
             # 默认 30s 认为锁陈旧, 可在异常退出后自动恢复
             lock.setStaleLockTime(30_000)
             SingleInstanceApplication._lock_file = lock
+            logger.info(f"单实例锁文件已初始化: {lock_path}", LogType.FILE_FUNC, LogSource.CORE)
 
     def is_running(self) -> bool:
         """检查是否已经有实例正在运行
@@ -53,6 +55,8 @@ class SingleInstanceApplication:
         # 非阻塞尝试获取锁(1ms 超时), 获取失败视为已有实例运行
         if lock.tryLock(1):
             # 成功获得锁 -> 当前进程持有, 持续到进程退出
+            logger.info("单实例锁获取成功", LogType.FILE_FUNC, LogSource.CORE)
             return False
         else:
+            logger.warning("单实例锁获取失败，检测到已有实例运行", LogType.FILE_FUNC, LogSource.CORE)
             return True

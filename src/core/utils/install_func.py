@@ -14,6 +14,7 @@ from PySide6.QtCore import QObject, QRunnable, Signal
 
 # 项目内模块导入
 from src.core.common.status import ButtonStatus, ProgressRingStatus
+from src.core.utils.logger import LogSource, LogType, logger
 from src.core.utils.path_func import PathFunc
 
 
@@ -55,6 +56,7 @@ class NapCatInstall(InstallBase):
     def execute(self) -> None:
         """安装逻辑"""
         try:
+            logger.info(f"开始安装 NapCat: target={self.install_path}", LogType.FILE_FUNC, LogSource.CORE)
             self.status_label_signal.emit("正在安装 NapCat")
             self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
             # 移除 NapCat 文件夹下除了 config 和 log 文件夹外的所有文件
@@ -65,9 +67,11 @@ class NapCatInstall(InstallBase):
         except Exception as e:
             self.status_label_signal.emit(self.tr("安装失败"))
             self.error_finish_signal.emit()
+            logger.exception("安装 NapCat 失败", e, LogType.FILE_FUNC, LogSource.CORE)
 
     def remove_old_file(self) -> None:
         """删除旧文件"""
+        logger.info(f"开始删除 NapCat 旧文件: target={self.install_path}", LogType.FILE_FUNC, LogSource.CORE)
         self.status_label_signal.emit("正在删除旧文件")
         for item in self.install_path.iterdir():
             if item.is_dir() and item.name not in ["config", "log"]:
@@ -75,14 +79,21 @@ class NapCatInstall(InstallBase):
             elif item.is_file():
                 item.unlink()
         self.status_label_signal.emit("旧文件删除成功")
+        logger.info("NapCat 旧文件删除完成", LogType.FILE_FUNC, LogSource.CORE)
 
     def unzip_file(self) -> None:
         """解压文件"""
+        logger.info(
+            f"开始解压 NapCat 安装包: source={self.zip_file_path}, target={self.install_path}",
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
         self.status_label_signal.emit("正在解压文件")
         with zipfile.ZipFile(self.zip_file_path, "r") as zip_ref:
             zip_ref.extractall(self.install_path)
         self.zip_file_path.unlink()  # 移除安装包
         self.install_finish_signal.emit()
+        logger.info("NapCat 安装完成", LogType.FILE_FUNC, LogSource.CORE)
 
 
 class QQInstall(InstallBase):
@@ -95,17 +106,22 @@ class QQInstall(InstallBase):
     def execute(self) -> None:
         """安装逻辑"""
         try:
+            logger.info(f"开始安装 QQ: installer={self.exe_path}", LogType.FILE_FUNC, LogSource.CORE)
             self.status_label_signal.emit("正在安装 QQ")
             self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
 
             # 启动 QQ 安装程序
-            if subprocess.run([str(self.exe_path), "/s"]).returncode == 0:
+            result = subprocess.run([str(self.exe_path), "/s"])
+            if result.returncode == 0:
                 self.install_finish_signal.emit()
+                logger.info("QQ 安装完成", LogType.FILE_FUNC, LogSource.CORE)
             else:
                 self.error_finish_signal.emit()
+                logger.error(f"QQ 安装程序返回非零退出码: {result.returncode}", LogType.FILE_FUNC, LogSource.CORE)
 
             self.exe_path.unlink()  # 移除安装包
 
         except Exception as e:
             self.status_label_signal.emit(self.tr(f"安装失败: {e}"))
             self.error_finish_signal.emit()
+            logger.exception("安装 QQ 失败", e, LogType.FILE_FUNC, LogSource.CORE)
