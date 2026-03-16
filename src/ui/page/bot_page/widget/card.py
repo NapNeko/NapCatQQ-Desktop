@@ -48,6 +48,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QEnterEvent, QFont, QPixmap
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
+from qfluentwidgets.common.overload import singledispatchmethod
 
 # 项目内模块导入
 from src.core.config.config_model import (
@@ -80,6 +81,7 @@ class BotCard(HeaderCardWidget):
     # 当自身被移除时发出信号 值为QQID
     remove_signal = Signal(str)
 
+    @singledispatchmethod
     def __init__(self, config: Config, parent: QWidget | None = None) -> None:
         """构造函数
 
@@ -469,9 +471,11 @@ class BotInfoWidget(QWidget):
 
         if state == QProcess.ProcessState.Running:
             # 判断 start_time 是否为 None, 为 None 代表第一次启动, 从 monotonic() 获取启动时间, 否则查找进程启动时间
-            self.start_time = (
-                it(ManagerNapCatQQProcess).get_process(qq_id).started_at if self.start_time is None else monotonic()
-            )
+            if self.start_time is None:
+                process_model = it(ManagerNapCatQQProcess).get_process(qq_id)
+                self.start_time = process_model.started_at if process_model is not None else monotonic()
+            else:
+                self.start_time = monotonic()
 
             # 检查是否已有计时器在运行
             if hasattr(self, "_run_time_timer"):
@@ -484,7 +488,11 @@ class BotInfoWidget(QWidget):
             # 每秒更新一次运行时长显示 格式 00:00:00
             timer.timeout.connect(
                 lambda: self._run_time_info.text_label.setText(
-                    f"{int(monotonic() - self.start_time)//3600:02}:{(int(monotonic() - self.start_time)%3600)//60:02}:{int(monotonic() - self.start_time)%60:02}"
+                    (
+                        f"{int(monotonic() - (self.start_time or 0.0))//3600:02}:"
+                        f"{(int(monotonic() - (self.start_time or 0.0))%3600)//60:02}:"
+                        f"{int(monotonic() - (self.start_time or 0.0))%60:02}"
+                    )
                 )
             )
             timer.start(1000)
@@ -533,6 +541,7 @@ class BotInfoWidget(QWidget):
 class EnableTag(PillPushButton):
     """显示启用/禁用状态的标签控件"""
 
+    @singledispatchmethod
     def __init__(self, status: bool, parent: Optional[QObject] = None) -> None:
         """初始化启用标签
 
@@ -563,6 +572,7 @@ class EnableTag(PillPushButton):
 class FormateTag(PillPushButton):
     """消息格式显示标签控件"""
 
+    @singledispatchmethod
     def __init__(self, format_str: str, parent: Optional[QObject] = None) -> None:
         """初始化格式标签
 
@@ -592,6 +602,7 @@ class ConfigCardBase(HeaderCardWidget):
 
     remove_signal = Signal(NetworkBaseConfig)
 
+    @singledispatchmethod
     def __init__(self, config: NetworkBaseConfig, parent: Optional[QObject] = None) -> None:
         """初始化配置卡片基类
 
@@ -603,10 +614,10 @@ class ConfigCardBase(HeaderCardWidget):
 
         # 属性
         self.config = config
-        self.config_view: Optional[QWidget] = None
-        self.config_view_layout: Optional[QGridLayout] = None
-        self.remove_button: Optional[TransparentToolButton] = None
-        self.edit_button: Optional[TransparentToolButton] = None
+        self.config_view: QWidget
+        self.config_view_layout: QGridLayout
+        self.remove_button: TransparentToolButton
+        self.edit_button: TransparentToolButton
 
         self._create_widgets()
         self._setup_layout()
@@ -683,7 +694,8 @@ class ConfigCardBase(HeaderCardWidget):
 class HttpServerConfigCard(ConfigCardBase):
     """HTTP 服务器配置卡片"""
 
-    def __init__(self, config: HttpServersConfig, parent: Optional[QObject] = None) -> None:
+    @singledispatchmethod
+    def __init__(self, config: HttpServersConfig, parent: QWidget | None = None) -> None:
         """初始化 HTTP 服务器配置卡片
 
         Args:
@@ -754,7 +766,8 @@ class HttpServerConfigCard(ConfigCardBase):
 class HttpSSEConfigCard(ConfigCardBase):
     """HTTP SSE 服务器配置卡片"""
 
-    def __init__(self, config: HttpSseServersConfig, parent: Optional[QObject] = None) -> None:
+    @singledispatchmethod
+    def __init__(self, config: HttpSseServersConfig, parent: QWidget | None = None) -> None:
         """初始化 HTTP SSE 服务器配置卡片
 
         Args:
@@ -832,7 +845,8 @@ class HttpSSEConfigCard(ConfigCardBase):
 class HttpClientConfigCard(ConfigCardBase):
     """HTTP 客户端配置卡片"""
 
-    def __init__(self, config: HttpClientsConfig, parent: Optional[QObject] = None) -> None:
+    @singledispatchmethod
+    def __init__(self, config: HttpClientsConfig, parent: QWidget | None = None) -> None:
         """初始化 HTTP 客户端配置卡片
 
         Args:
@@ -889,7 +903,8 @@ class HttpClientConfigCard(ConfigCardBase):
 class WebsocketServersConfigCard(ConfigCardBase):
     """WebSocket 服务器配置卡片"""
 
-    def __init__(self, config: WebsocketServersConfig, parent: Optional[QObject] = None) -> None:
+    @singledispatchmethod
+    def __init__(self, config: WebsocketServersConfig, parent: QWidget | None = None) -> None:
         """初始化 WebSocket 服务器配置卡片
 
         Args:
@@ -967,7 +982,8 @@ class WebsocketServersConfigCard(ConfigCardBase):
 class WebsocketClientConfigCard(ConfigCardBase):
     """WebSocket 客户端配置卡片"""
 
-    def __init__(self, config: WebsocketClientsConfig, parent: Optional[QObject] = None) -> None:
+    @singledispatchmethod
+    def __init__(self, config: WebsocketClientsConfig, parent: QWidget | None = None) -> None:
         """初始化 WebSocket 客户端配置卡片
 
         Args:
