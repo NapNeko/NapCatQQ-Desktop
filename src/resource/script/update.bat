@@ -38,11 +38,20 @@ rem 等待旧版进程退出（最多等待60秒，可根据需要调整）
 set /a max_wait=60
 set /a waited=0
 :wait_for_exit
-tasklist /FI "IMAGENAME eq NapCatQQ-Desktop.exe" /NH | find /I "NapCatQQ-Desktop.exe" >NUL
+if defined target_pid (
+    tasklist /FI "PID eq %target_pid%" /NH | find /I "%target_pid%" >NUL
+) else (
+    tasklist /FI "IMAGENAME eq NapCatQQ-Desktop.exe" /NH | find /I "NapCatQQ-Desktop.exe" >NUL
+)
 if "%ERRORLEVEL%"=="0" (
     if %waited% GEQ %max_wait% (
-        echo [%date% %time%] 等待超时: %waited% 秒，尝试强制结束 NapCatQQ-Desktop.exe >> "%log%"
-        taskkill /IM "NapCatQQ-Desktop.exe" /F >> "%log%" 2>&1
+        if defined target_pid (
+            echo [%date% %time%] 等待 PID %target_pid% 退出超时: %waited% 秒，尝试强制结束 >> "%log%"
+            taskkill /PID "%target_pid%" /F >> "%log%" 2>&1
+        ) else (
+            echo [%date% %time%] 等待 NapCatQQ-Desktop.exe 退出超时: %waited% 秒，尝试强制结束 >> "%log%"
+            taskkill /IM "NapCatQQ-Desktop.exe" /F >> "%log%" 2>&1
+        )
         timeout /T 1 /NOBREAK > NUL
     ) else (
         set /a waited+=1

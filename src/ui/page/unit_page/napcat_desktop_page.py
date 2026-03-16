@@ -7,13 +7,14 @@ from pathlib import Path
 
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QThreadPool, QUrl, Slot
+from PySide6.QtCore import QFile, QIODevice, QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
 from src.core.utils.desktop_update import UPDATE_ARCHIVE_NAME, prepare_desktop_update
 from src.core.utils.get_version import VersionData
+from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
 from src.core.utils.run_napcat import ManagerNapCatQQProcess
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
@@ -123,28 +124,25 @@ class NCDPage(PageBase):
 
         try:
             prepare_desktop_update(zip_path, base_path)
+            bat_content = self._prepare_update_script()
+            bat_path = it(PathFunc).tmp_path / "update.bat"
+            bat_path.write_text(bat_content, encoding="utf-8")
+            self._launch_update_script(bat_path)
         except ValueError as exc:
+            logger.error(f"准备更新失败: {exc}")
             error_bar(str(exc))
             self.update_page()
             return
-
-        # 从 Qt 资源读取安装脚本模板（优先），若失败则回退为一个最小脚本
-        bat_content = self._load_update_script()
-        bat_path = it(PathFunc).tmp_path / "update.bat"
-        with open(str(bat_path), "w", encoding="utf-8") as file:
-            file.write(bat_content)
-
-        # 启动安装脚本（以系统方式打开，确保在主程序退出后依然运行）
-        try:
-            # 在 Windows 上优先使用 os.startfile，这会以默认程序方式运行 .bat 并立即返回
-            os.startfile(str(bat_path))
-        except Exception:
-            # 回退：通过 cmd /c start 启动并尝试隐藏控制台窗口（静默启动）
-            try:
-                subprocess.Popen(["cmd", "/c", "start", '""', str(bat_path)], creationflags=subprocess.CREATE_NO_WINDOW)
-            except Exception:
-                # 最后回退为简单的 start 调用（保证不阻塞）
-                subprocess.Popen(f'start "" "{str(bat_path)}"', shell=True)
+        except OSError as exc:
+            logger.error(f"更新流程发生文件系统错误: {exc}")
+            error_bar(self.tr(f"更新失败: {exc}"))
+            self.update_page()
+            return
+        except Exception as exc:
+            logger.error(f"启动更新流程失败: {exc}")
+            error_bar(self.tr(f"启动更新失败: {exc}"))
+            self.update_page()
+            return
 
         # 退出程序，安装脚本会等待并替换可执行文件
         sys.exit(0)
@@ -158,11 +156,51 @@ class NCDPage(PageBase):
     def _load_update_script(self) -> str:
         """读取更新脚本模板，失败时使用内置兜底脚本。"""
 
+        resource_file = QFile(":/script/script/update.bat")
+        if resource_file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+            try:
+                return bytes(resource_file.readAll()).decode("utf-8")
+            finally:
+                resource_file.close()
+
         try:
             script_path = Path(__file__).resolve().parents[3] / "resource" / "script" / "update.bat"
             return script_path.read_text(encoding="utf-8")
         except OSError:
             return self._fallback_update_script()
+
+    def _prepare_update_script(self) -> str:
+        """生成带当前进程 PID 的更新脚本内容。"""
+
+        script_content = self._load_update_script()
+        target_pid_line = f'set "target_pid={os.getpid()}"'
+        script_lines = script_content.splitlines()
+
+        for index, line in enumerate(script_lines):
+            if line.strip().lower() == "setlocal enabledelayedexpansion":
+                script_lines.insert(index + 1, target_pid_line)
+                break
+        else:
+            script_lines.insert(0, target_pid_line)
+
+        return "\n".join(script_lines) + "\n"
+
+    def _launch_update_script(self, bat_path: Path) -> None:
+        """启动更新脚本，确保主程序退出后仍可继续执行。"""
+
+        try:
+            os.startfile(str(bat_path))
+            return
+        except OSError as exc:
+            logger.warning(f"os.startfile 启动更新脚本失败，尝试回退方案: {exc}")
+
+        try:
+            subprocess.Popen(["cmd", "/c", "start", '""', str(bat_path)], creationflags=subprocess.CREATE_NO_WINDOW)
+            return
+        except OSError as exc:
+            logger.warning(f"cmd start 启动更新脚本失败，尝试 shell 回退: {exc}")
+
+        subprocess.Popen(f'start "" "{str(bat_path)}"', shell=True)
 
     def _fallback_update_script(self) -> str:
         """目录版更新脚本的最小兜底实现。"""
@@ -176,14 +214,32 @@ class NCDPage(PageBase):
             'set "staged_app_dir=%app_root%\\_update_staging\\package\\NapCatQQ-Desktop"\n'
             'set "staged_exe=%staged_app_dir%\\NapCatQQ-Desktop.exe"\n'
             'set "installed_exe=%app_root%\\NapCatQQ-Desktop.exe"\n'
+            "net session >NUL 2>&1\n"
+            'if "%ERRORLEVEL%" NEQ "0" (\n'
+            '    echo [%date% %time%] 当前未以管理员运行，尝试以管理员权限重新启动 >> "%log%"\n'
+            '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath \'%~f0\' -ArgumentList \'%*\' -Verb RunAs"\n'
+            "    if errorlevel 1 (\n"
+            '        echo [%date% %time%] 无法以管理员权限重新启动，放弃更新 >> "%log%"\n'
+            "        goto :end\n"
+            "    )\n"
+            "    goto :end\n"
+            ")\n"
             'if not exist "%staged_exe%" (echo staged package missing >> "%log%" & exit /b 1)\n'
             "set /a max_wait=60\n"
             "set /a waited=0\n"
             ":wait_for_exit\n"
-            'tasklist /FI "IMAGENAME eq NapCatQQ-Desktop.exe" /NH | find /I "NapCatQQ-Desktop.exe" >NUL\n'
+            'if defined target_pid (\n'
+            '    tasklist /FI "PID eq %target_pid%" /NH | find /I "%target_pid%" >NUL\n'
+            ") else (\n"
+            '    tasklist /FI "IMAGENAME eq NapCatQQ-Desktop.exe" /NH | find /I "NapCatQQ-Desktop.exe" >NUL\n'
+            ")\n"
             'if "%ERRORLEVEL%"=="0" (\n'
             "    if !waited! GEQ !max_wait! (\n"
-            '        taskkill /IM "NapCatQQ-Desktop.exe" /F >> "%log%" 2>&1\n'
+            '        if defined target_pid (\n'
+            '            taskkill /PID "%target_pid%" /F >> "%log%" 2>&1\n'
+            "        ) else (\n"
+            '            taskkill /IM "NapCatQQ-Desktop.exe" /F >> "%log%" 2>&1\n'
+            "        )\n"
             "    ) else (\n"
             "        set /a waited+=1\n"
             "        timeout /T 1 /NOBREAK > NUL\n"
@@ -198,4 +254,5 @@ class NCDPage(PageBase):
             'rmdir /S /Q "%app_root%\\_update_staging" >> "%log%" 2>&1\n'
             'start "" "%installed_exe%"\n'
             'del "%~f0"\n'
+            ":end\n"
         )

@@ -43,3 +43,8 @@ no_lines_before = ["PYSIDE6"] # 确保在 PYSIDE6 之前没有空行
 import_heading_stdlib = "标准库导入"
 import_heading_thirdparty = "第三方库导入"
 import_heading_firstparty = "项目内模块导入"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
