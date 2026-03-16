@@ -6,6 +6,7 @@ venv/
 .python-version
 .idea/
 .vscode/
+.codex/
 
 ### 依赖管理 ###
 # Python 依赖和锁定文件
