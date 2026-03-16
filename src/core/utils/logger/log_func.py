@@ -13,7 +13,7 @@ from src.core.utils.logger.log_utils import capture_call_location
 class Logger:
     """NCD 内部日志记录器"""
 
-    log_buffer: list[Log]
+    log_buffer: list[Log | LogGroup]
 
     log_buffer_size: int
     log_buffer_delete_size: int
@@ -120,8 +120,8 @@ class Logger:
         message: str,
         log_type: LogType = LogType.NONE_TYPE,
         log_source: LogSource = LogSource.NONE,
-        log_position: LogPosition = None,
-        log_group: LogGroup = None,
+        log_position: LogPosition | None = None,
+        log_group: LogGroup | None = None,
     ):
         self._log(LogLevel.WARN, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
@@ -131,8 +131,8 @@ class Logger:
         message: str,
         log_type: LogType = LogType.NONE_TYPE,
         log_source: LogSource = LogSource.NONE,
-        log_position: LogPosition = None,
-        log_group: LogGroup = None,
+        log_position: LogPosition | None = None,
+        log_group: LogGroup | None = None,
     ):
         self._log(LogLevel.EROR, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
