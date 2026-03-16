@@ -219,7 +219,7 @@ class FolderBox(MessageBoxBase):
             self,
             self.tr("选择文件夹"),
             QDir.homePath(),
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks,
         )
         if folder:
             self.folder_path_edit.setText(folder)
