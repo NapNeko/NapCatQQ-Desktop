@@ -10,12 +10,11 @@ from enum import Enum
 from string import Template
 
 # 第三方库导入
-from PySide6.QtCore import QFile, QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QFile, QObject, QRunnable, Signal
 
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_model import Config
-from src.ui.components.info_bar import error_bar, success_bar
 from src.core.utils.file import QFluentFile
 
 
@@ -159,8 +158,8 @@ class Email(QObject, QRunnable):
             self.error_signal.emit(f"发送邮件时发生错误: {str(e)}")
 
 
-def test_email() -> None:
-    """测试邮件功能是否正常"""
+def create_test_email_task() -> Email:
+    """构建测试邮件任务, 由调用方决定如何处理信号和启动任务"""
 
     file = QFile(":template/template/email/test_email.html")
     file.setOpenMode(QFile.OpenModeFlag.ReadOnly)
@@ -171,21 +170,16 @@ def test_email() -> None:
 
     file.close()
 
-    email = Email(
+    return Email(
         EmailData(
             email_content=email_content,
             msg_subject="测试 NapCatQQ-Desktop 发件功能",
         )
     )
 
-    email.error_signal.connect(lambda msg: error_bar(msg))
-    email.success_signal.connect(lambda msg: success_bar(msg))
 
-    QThreadPool.globalInstance().start(email)
-
-
-def offline_email(config: Config) -> None:
-    """离线通知"""
+def create_offline_email_task(config: Config) -> Email:
+    """构建离线通知邮件任务, 由调用方决定如何处理信号和启动任务"""
 
     with QFluentFile(":template/template/email/bot_offline_notice.html", QFile.OpenModeFlag.ReadOnly) as file:
 
@@ -196,14 +190,9 @@ def offline_email(config: Config) -> None:
             }
         )
 
-    email = Email(
+    return Email(
         EmailData(
             email_content=email_content,
             msg_subject="NapCatQQ-Desktop 机器人离线通知",
         )
     )
-
-    email.error_signal.connect(lambda msg: error_bar(msg))
-    email.success_signal.connect(lambda msg: success_bar(msg))
-
-    QThreadPool.globalInstance().start(email)

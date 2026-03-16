@@ -12,9 +12,11 @@ from PySide6.QtWidgets import QApplication
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
-from src.core.utils.run_napcat import ManagerNapCatQQProcess
+from src.core.utils.run_napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.common.icon import StaticIcon
 from src.ui.page import BotPage, HomeWidget, SetupWidget, UnitWidget
+from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
 from src.ui.window.main_window.title_bar import CustomTitleBar
 
@@ -42,6 +44,7 @@ class MainWindow(MSFluentWindow):
         """初始化"""
         # 调用方法
         self._set_window()
+        self._bind_core_events()
         self._set_item()
         self._set_tray_icon()
 
@@ -107,6 +110,39 @@ class MainWindow(MSFluentWindow):
         """设置托盘图标"""
         self.trayIcon = SystemTrayIcon(self)
         self.trayIcon.show()
+
+    def _bind_core_events(self) -> None:
+        """将 core 层信号桥接到 UI 表现层"""
+        if getattr(self, "_core_events_bound", False):
+            return
+
+        process_manager = it(ManagerNapCatQQProcess)
+        login_state_manager = it(ManagerNapCatQQLoginState)
+
+        process_manager.notification_signal.connect(self._show_core_notification)
+        login_state_manager.notification_signal.connect(self._show_core_notification)
+        login_state_manager.qr_code_available_signal.connect(self._show_login_qr_code)
+        login_state_manager.qr_code_removed_signal.connect(self._remove_login_qr_code)
+
+        self._core_events_bound = True
+
+    def _show_core_notification(self, level: str, message: str) -> None:
+        """根据 core 层通知级别选择对应的 UI 提示方式"""
+        mapping = {
+            "info": info_bar,
+            "success": success_bar,
+            "warning": warning_bar,
+            "error": error_bar,
+        }
+        mapping.get(level, info_bar)(message, parent=self)
+
+    def _show_login_qr_code(self, qq_id: str, qr_code: str) -> None:
+        """展示登录二维码"""
+        it(QRCodeDialogFactory).add_qr_code(qq_id, qr_code)
+
+    def _remove_login_qr_code(self, qq_id: str) -> None:
+        """移除已失效的登录二维码"""
+        it(QRCodeDialogFactory).remove_qr_code(qq_id)
 
     def close(self) -> None:
         """重写关闭事件"""

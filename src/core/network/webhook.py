@@ -7,13 +7,12 @@ from string import Template
 
 # 第三方库导入
 import httpx
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, Signal
 
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_model import Config
 from src.core.utils.logger import logger
-from src.ui.components.info_bar import error_bar, success_bar
 
 
 @dataclass
@@ -101,21 +100,16 @@ class WebHook(QObject, QRunnable):
             return False
 
 
-def test_webhook():
-    """测试 WebHook 功能是否正常"""
+def create_test_webhook_task() -> WebHook:
+    """构建测试 WebHook 任务, 由调用方决定如何处理信号和启动任务"""
 
-    webhook = WebHook(WebHookData(json='{"text": "Hello, World!"}'))
-
-    webhook.error_signal.connect(lambda msg: error_bar(msg))
-    webhook.success_signal.connect(lambda msg: success_bar(msg))
-
-    QThreadPool.globalInstance().start(webhook)
+    return WebHook(WebHookData(json='{"text": "Hello, World!"}'))
 
 
-def offline_webhook(config: Config):
-    """离线通知"""
+def create_offline_webhook_task(config: Config) -> WebHook:
+    """构建离线通知 WebHook 任务, 由调用方决定如何处理信号和启动任务"""
 
-    webhook = WebHook(
+    return WebHook(
         WebHookData(
             json=Template(cfg.get(cfg.web_hook_json)).safe_substitute(
                 {
@@ -126,8 +120,3 @@ def offline_webhook(config: Config):
             ),
         )
     )
-
-    webhook.error_signal.connect(lambda msg: error_bar(msg))
-    webhook.success_signal.connect(lambda msg: success_bar(msg))
-
-    QThreadPool.globalInstance().start(webhook)

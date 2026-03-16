@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING
 from qfluentwidgets import ExpandLayout
 from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import MessageBoxBase, OptionsSettingCard, PushButton, ScrollArea, SettingCardGroup, TitleLabel
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, Qt, QThreadPool
 from PySide6.QtWidgets import QGridLayout, QWidget
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.core.network.email import EncryptionType, test_email
-from src.core.network.webhook import test_webhook
-from src.ui.components.info_bar import success_bar, warning_bar
+from src.core.network.email import EncryptionType, create_test_email_task
+from src.core.network.webhook import create_test_webhook_task
+from src.ui.components.info_bar import error_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
     JsonTemplateEditConfigCard,
@@ -144,7 +144,7 @@ class BotOfflineEmailDialog(MessageBoxBase):
         self.widget.setMinimumSize(500, 400)
 
         # 链接信号
-        self.test_email_button.clicked.connect(lambda: (self.save_config(), test_email()))
+        self.test_email_button.clicked.connect(self._send_test_email)
 
     def fill_config(self) -> None:
         """填充配置"""
@@ -175,6 +175,15 @@ class BotOfflineEmailDialog(MessageBoxBase):
         """接受按钮"""
         self.save_config()
         super().accept()
+
+    def _send_test_email(self) -> None:
+        """保存配置后发送测试邮件"""
+        self.save_config()
+
+        task = create_test_email_task()
+        task.success_signal.connect(lambda msg: success_bar(self.tr(msg)))
+        task.error_signal.connect(lambda msg: error_bar(msg))
+        QThreadPool.globalInstance().start(task)
 
 
 class BotOfflineWebHookDialog(MessageBoxBase):
@@ -211,7 +220,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         self.fill_config()
 
         # 链接信号
-        self.test_webhook_buttonn.clicked.connect(lambda: (self.save_config(), test_webhook()))
+        self.test_webhook_buttonn.clicked.connect(self._send_test_webhook)
 
     def fill_config(self) -> None:
         """填充配置"""
@@ -239,3 +248,12 @@ class BotOfflineWebHookDialog(MessageBoxBase):
 
         self.save_config()
         super().accept()
+
+    def _send_test_webhook(self) -> None:
+        """保存配置后发送测试请求"""
+        self.save_config()
+
+        task = create_test_webhook_task()
+        task.success_signal.connect(lambda msg: success_bar(self.tr(msg)))
+        task.error_signal.connect(lambda msg: error_bar(msg))
+        QThreadPool.globalInstance().start(task)

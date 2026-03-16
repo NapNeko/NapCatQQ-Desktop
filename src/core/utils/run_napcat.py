@@ -6,7 +6,6 @@
 import hashlib
 import re
 from abc import ABC
-from calendar import c
 from collections import deque
 from dataclasses import dataclass
 from time import monotonic
@@ -22,11 +21,10 @@ from PySide6.QtCore import QObject, QProcess, QRunnable, QThreadPool, QTimer, Si
 from src.core.config import cfg
 from src.core.config.config_enum import TimeUnitEnum
 from src.core.config.config_model import Config
-from src.core.network.email import offline_email
-from src.core.network.webhook import offline_webhook
+from src.core.network.email import create_offline_email_task
+from src.core.network.webhook import create_offline_webhook_task
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
-from src.ui.components.info_bar import info_bar
 
 
 # ==================== 数据模型 ====================
@@ -229,6 +227,10 @@ class NapCatQQLoginState(QObject):
     负责管理 NapCatQQ 的登录状态
     """
 
+    qr_code_available_signal = Signal(str, str)
+    qr_code_removed_signal = Signal(str)
+    notification_signal = Signal(str, str)
+
     def __init__(self, config: Config, port: int, token: str) -> None:
         """初始化 NapCatQQ 登录状态"""
         super().__init__()
@@ -280,6 +282,17 @@ class NapCatQQLoginState(QObject):
         self._auth_timer.deleteLater()
         self._login_state_timer.stop()
         self._login_state_timer.deleteLater()
+        self.qr_code_removed_signal.emit(str(self.config.bot.QQID))
+
+    def _emit_notification(self, level: str, message: str) -> None:
+        """向 UI 层发布运行时通知"""
+        self.notification_signal.emit(level, message)
+
+    def _start_notification_task(self, task: QObject, success_message: str) -> None:
+        """启动通知任务并将结果转发给 UI 层"""
+        task.success_signal.connect(lambda _: self._emit_notification("success", success_message))
+        task.error_signal.connect(lambda msg: self._emit_notification("error", msg))
+        QThreadPool.globalInstance().start(task)
 
     # ==================== 槽函数 ====================
     def slot_get_login_state(self) -> None:
@@ -313,10 +326,7 @@ class NapCatQQLoginState(QObject):
         self._is_logged_in = is_login
 
         if is_login:
-            # 项目内模块导入
-            from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
-
-            it(QRCodeDialogFactory).remove_qr_code(str(self.config.bot.QQID))
+            self.qr_code_removed_signal.emit(str(self.config.bot.QQID))
 
     def slot_update_online_status(self, online_status: bool) -> None:
         """更新在线状态
@@ -350,12 +360,14 @@ class NapCatQQLoginState(QObject):
             # 只有在未曾发送过离线通知且配置允许时才发送
             if not self._offline_notice and self.config.advanced.offlineNotice:
                 if cfg.get(cfg.bot_offline_web_hook_notice):
-                    offline_webhook(self.config)
-                    info_bar(self.tr("已发送离线通知到配置的 WebHook 地址"))
+                    self._start_notification_task(
+                        create_offline_webhook_task(self.config), self.tr("已发送离线通知到配置的 WebHook 地址")
+                    )
 
                 if cfg.get(cfg.bot_offline_email_notice):
-                    offline_email(self.config)
-                    info_bar(self.tr("已发送离线通知到配置的邮箱地址"))
+                    self._start_notification_task(
+                        create_offline_email_task(self.config), self.tr("已发送离线通知到配置的邮箱地址")
+                    )
 
                 # 标记已发送，避免重复
                 self._offline_notice = True
@@ -373,12 +385,14 @@ class NapCatQQLoginState(QObject):
             return
 
         if cfg.get(cfg.bot_offline_web_hook_notice):
-            offline_webhook(self.config)
-            info_bar(self.tr("已发送离线通知到配置的 WebHook 地址"))
+            self._start_notification_task(
+                create_offline_webhook_task(self.config), self.tr("已发送离线通知到配置的 WebHook 地址")
+            )
 
         if cfg.get(cfg.bot_offline_email_notice):
-            offline_email(self.config)
-            info_bar(self.tr("已发送离线通知到配置的邮箱地址"))
+            self._start_notification_task(
+                create_offline_email_task(self.config), self.tr("已发送离线通知到配置的邮箱地址")
+            )
 
         # 标记已发送，避免重复通知
         self._offline_notice = True
@@ -389,10 +403,7 @@ class NapCatQQLoginState(QObject):
         Args:
             qr_code (str): 登录二维码
         """
-        # 项目内模块导入
-        from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
-
-        it(QRCodeDialogFactory).add_qr_code(str(self.config.bot.QQID), qr_code)
+        self.qr_code_available_signal.emit(str(self.config.bot.QQID), qr_code)
 
 
 class ManagerNapCatQQLoginState(QObject):
@@ -400,6 +411,10 @@ class ManagerNapCatQQLoginState(QObject):
 
     负责管理 NapCatQQ 的登录状态
     """
+
+    qr_code_available_signal = Signal(str, str)
+    qr_code_removed_signal = Signal(str)
+    notification_signal = Signal(str, str)
 
     def __init__(self) -> None:
         """初始化 NapCatQQ 登录状态管理器"""
@@ -414,7 +429,18 @@ class ManagerNapCatQQLoginState(QObject):
             port (int): WebUI 端口
             token (str): WebUI Token
         """
-        self.napcat_login_state_dict[str(config.bot.QQID)] = NapCatQQLoginState(config=config, port=port, token=token)
+        qq_id = str(config.bot.QQID)
+        self.remove_login_state(qq_id)
+
+        login_state = NapCatQQLoginState(config=config, port=port, token=token)
+        login_state.qr_code_available_signal.connect(
+            lambda emitted_qq_id, qr_code: self.qr_code_available_signal.emit(emitted_qq_id, qr_code)
+        )
+        login_state.qr_code_removed_signal.connect(lambda emitted_qq_id: self.qr_code_removed_signal.emit(emitted_qq_id))
+        login_state.notification_signal.connect(
+            lambda level, message: self.notification_signal.emit(level, message)
+        )
+        self.napcat_login_state_dict[qq_id] = login_state
 
     def get_login_state(self, qq_id: str) -> NapCatQQLoginState | None:
         """获取指定 QQ 号的登录状态对象
@@ -476,7 +502,6 @@ class ManagerAutoRestartProcess(QObject):
 
         # 添加到字典
         self.auto_restart_process_dict[str(config.bot.QQID)] = timer
-        print(self.auto_restart_process_dict)
 
     def remove_auto_restart_timer(self, qq_id: str) -> None:
         """移除自动重启定时器
@@ -484,14 +509,11 @@ class ManagerAutoRestartProcess(QObject):
         Args:
             qq_id (str): QQ 号
         """
-        print(qq_id)
         if qq_id in self.auto_restart_process_dict:
-            print("removing")
             self.auto_restart_process_dict[qq_id].stop()
             self.auto_restart_process_dict[qq_id].timeout.disconnect()
             self.auto_restart_process_dict[qq_id].deleteLater()
             self.auto_restart_process_dict.pop(qq_id)
-            print(self.auto_restart_process_dict)
 
 
 class ManagerNapCatQQProcess(QObject):
@@ -502,6 +524,7 @@ class ManagerNapCatQQProcess(QObject):
 
     # 进程状态改变信号
     process_changed_signal = Signal(str, QProcess.ProcessState)
+    notification_signal = Signal(str, str)
 
     def __init__(self) -> None:
         """初始化 NapCatQQ 进程管理器
@@ -573,10 +596,7 @@ class ManagerNapCatQQProcess(QObject):
         """
         # 如果超过 4 个进程，则取消创建
         if len(self.napcat_process_dict) >= 4:
-            # 项目内模块导入
-            from src.ui.components.info_bar import error_bar
-
-            error_bar("NapCatQQ 进程数量已达上限，无法创建新进程!")
+            self.notification_signal.emit("error", "NapCatQQ 进程数量已达上限，无法创建新进程!")
             return
 
         # 创建 QProcess
@@ -584,7 +604,6 @@ class ManagerNapCatQQProcess(QObject):
 
         # 进行一些操作
         it(ManagerNapCatQQLog).create_log(config, process)
-        it(ManagerAutoRestartProcess).create_auto_restart_timer(config)
 
         # 启动进程
         process.start()
@@ -592,11 +611,11 @@ class ManagerNapCatQQProcess(QObject):
 
         # 确保进程已启动
         if not process.waitForStarted(5000):
-            # 项目内模块导入
-            from src.ui.components.info_bar import error_bar
-
-            error_bar(f"NapCatQQ 进程启动失败!")
+            self.notification_signal.emit("error", "NapCatQQ 进程启动失败!")
+            process.deleteLater()
             return
+
+        it(ManagerAutoRestartProcess).create_auto_restart_timer(config)
 
         # 添加到进程字典
         self.napcat_process_dict[str(config.bot.QQID)] = NapCatProcessModel(
@@ -633,15 +652,23 @@ class ManagerNapCatQQProcess(QObject):
         Args:
             qq_id (str): QQ 号
         """
-        process = self.get_process(qq_id).process
+        if (process_model := self.get_process(qq_id)) is None:
+            return
 
-        if (parent := psutil.Process(process.processId())).pid != 0:
-            [child.kill() for child in parent.children(recursive=True)]
-            parent.kill()
+        process = process_model.process
+
+        try:
+            if (parent := psutil.Process(process.processId())).pid != 0:
+                [child.kill() for child in parent.children(recursive=True)]
+                parent.kill()
+                process.kill()
+                process.waitForFinished()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
             process.kill()
             process.waitForFinished()
-            process.deleteLater()
-            self.napcat_process_dict.pop(qq_id)
+
+        process.deleteLater()
+        self.napcat_process_dict.pop(qq_id, None)
 
         it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
 
@@ -659,7 +686,7 @@ class ManagerNapCatQQProcess(QObject):
         Args:
             config (Config): 配置对象
         """
-        if not self.get_process(str(config.bot.QQID)).process:
+        if (process_model := self.get_process(str(config.bot.QQID))) is None or not process_model.process:
             return
 
         self.stop_process(str(config.bot.QQID))
@@ -667,7 +694,10 @@ class ManagerNapCatQQProcess(QObject):
 
     def get_memory_usage(self, qq_id: str) -> int:
         """获取指定 QQ 号的 NapCatQQ 进程树内存使用情况"""
-        if not (process := self.get_process(qq_id).process) or process.state() != QProcess.ProcessState.Running:
+        if (process_model := self.get_process(qq_id)) is None:
+            return 0
+
+        if not (process := process_model.process) or process.state() != QProcess.ProcessState.Running:
             return 0
 
         if (main_pid := process.processId()) <= 0:

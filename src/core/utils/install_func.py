@@ -10,11 +10,11 @@ from pathlib import Path
 
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QObject, QRunnable, QThread, QUrl, Signal
+from PySide6.QtCore import QObject, QRunnable, Signal
 
 # 项目内模块导入
+from src.core.common.status import ButtonStatus, ProgressRingStatus
 from src.core.utils.path_func import PathFunc
-from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus
 
 
 class InstallBase(QObject, QRunnable):

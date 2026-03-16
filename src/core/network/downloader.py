@@ -8,10 +8,10 @@ from creart import it
 from PySide6.QtCore import QObject, QRunnable, QUrl, Signal
 
 # 项目内模块导入
+from src.core.common.status import ButtonStatus, ProgressRingStatus
 from src.core.network.urls import Urls
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
-from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus
 
 
 class DownloaderBase(QObject, QRunnable):
