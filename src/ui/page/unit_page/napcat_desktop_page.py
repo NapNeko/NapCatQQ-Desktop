@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+import os
 import subprocess
 import sys
-import os
+from pathlib import Path
 
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QIODevice, QTextStream, QThreadPool, QUrl, Slot
+from PySide6.QtCore import QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
+from src.core.utils.desktop_update import UPDATE_ARCHIVE_NAME, prepare_desktop_update
 from src.core.utils.get_version import VersionData
 from src.core.utils.path_func import PathFunc
 from src.core.utils.run_napcat import ManagerNapCatQQProcess
@@ -18,7 +20,6 @@ from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox
 from src.ui.page.unit_page.base import PageBase
 from src.ui.page.unit_page.status import ButtonStatus
-from src.core.utils.file import QFluentFile
 
 
 class NCDPage(PageBase):
@@ -40,7 +41,7 @@ class NCDPage(PageBase):
         self.app_card.install_button.clicked.connect(self.on_download)
         self.app_card.update_button.clicked.connect(self.on_download)
         self.app_card.open_folder_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).napcat_path))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(it(PathFunc).base_path)))
         )
 
     # ==================== 公共方法 ====================
@@ -97,7 +98,7 @@ class NCDPage(PageBase):
             else:
                 return
 
-        info_bar(self.tr("正在下载 NapCat Desktop"))
+        info_bar(self.tr("正在下载 NapCat Desktop 整包 ZIP"))
 
         # 项目内模块导入
         from src.core.network.downloader import GithubDownloader
@@ -115,44 +116,25 @@ class NCDPage(PageBase):
     @Slot()
     def on_install(self) -> None:
         """下载完成后执行安装逻辑"""
-        success_bar(self.tr("下载成功, 正在安装..."))
+        success_bar(self.tr("下载成功, 正在准备目录版更新..."))
+
+        base_path = it(PathFunc).base_path
+        zip_path = it(PathFunc).tmp_path / UPDATE_ARCHIVE_NAME
+
+        try:
+            prepare_desktop_update(zip_path, base_path)
+        except ValueError as exc:
+            error_bar(str(exc))
+            self.update_page()
+            return
 
         # 从 Qt 资源读取安装脚本模板（优先），若失败则回退为一个最小脚本
-        bat_content = ""
-        try:
-            with QFluentFile(
-                ":/script/update.bat", QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text
-            ) as qfile:
-                ts = QTextStream(qfile)
-                bat_content = ts.readAll()
-        except Exception:
-            bat_content = ""
-
-        if not bat_content:
-            # 回退：生成一个最小的脚本以确保更新能继续进行（非理想，但能作为兜底）
-            bat_content = (
-                "@echo off\n"
-                "setlocal enabledelayedexpansion\n"
-                'set "new_app_dir=%~dp0runtime\\tmp"\n'
-                'set "new_app_path="\n'
-                'set "new_file_name="\n'
-                'for %%F in ("%new_app_dir%\\NapCatQQ-Desktop*.exe") do (\n'
-                '    set "new_app_path=%%~fF"\n'
-                '    set "new_file_name=%%~nxF"\n'
-                "    goto :found_new\n"
-                ")\n"
-                ":found_new\n"
-                "if not defined new_app_path (echo no new exe found && exit /b 1)\n"
-                'set "current_app_path=%~dp0%new_file_name%"\n'
-                'move /Y "%new_app_path%" "%current_app_path%"\n'
-                'start "" "%current_app_path%"\n'
-                'del "%~f0"\n'
-            )
-        with open(str(it(PathFunc).base_path / "update.bat"), "w", encoding="utf-8") as file:
+        bat_content = self._load_update_script()
+        bat_path = it(PathFunc).tmp_path / "update.bat"
+        with open(str(bat_path), "w", encoding="utf-8") as file:
             file.write(bat_content)
 
         # 启动安装脚本（以系统方式打开，确保在主程序退出后依然运行）
-        bat_path = it(PathFunc).base_path / "update.bat"
         try:
             # 在 Windows 上优先使用 os.startfile，这会以默认程序方式运行 .bat 并立即返回
             os.startfile(str(bat_path))
@@ -172,3 +154,48 @@ class NCDPage(PageBase):
         """下载错误处理逻辑"""
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.update_page()  # 刷新一次页面
+
+    def _load_update_script(self) -> str:
+        """读取更新脚本模板，失败时使用内置兜底脚本。"""
+
+        try:
+            script_path = Path(__file__).resolve().parents[3] / "resource" / "script" / "update.bat"
+            return script_path.read_text(encoding="utf-8")
+        except OSError:
+            return self._fallback_update_script()
+
+    def _fallback_update_script(self) -> str:
+        """目录版更新脚本的最小兜底实现。"""
+
+        return (
+            "@echo off\n"
+            "setlocal enabledelayedexpansion\n"
+            'for %%I in ("%~dp0") do set "script_dir=%%~fI"\n'
+            'for %%I in ("%script_dir%\\..\\..") do set "app_root=%%~fI"\n'
+            'set "log=%app_root%\\update.log"\n'
+            'set "staged_app_dir=%app_root%\\_update_staging\\package\\NapCatQQ-Desktop"\n'
+            'set "staged_exe=%staged_app_dir%\\NapCatQQ-Desktop.exe"\n'
+            'set "installed_exe=%app_root%\\NapCatQQ-Desktop.exe"\n'
+            'if not exist "%staged_exe%" (echo staged package missing >> "%log%" & exit /b 1)\n'
+            "set /a max_wait=60\n"
+            "set /a waited=0\n"
+            ":wait_for_exit\n"
+            'tasklist /FI "IMAGENAME eq NapCatQQ-Desktop.exe" /NH | find /I "NapCatQQ-Desktop.exe" >NUL\n'
+            'if "%ERRORLEVEL%"=="0" (\n'
+            "    if !waited! GEQ !max_wait! (\n"
+            '        taskkill /IM "NapCatQQ-Desktop.exe" /F >> "%log%" 2>&1\n'
+            "    ) else (\n"
+            "        set /a waited+=1\n"
+            "        timeout /T 1 /NOBREAK > NUL\n"
+            "        goto wait_for_exit\n"
+            "    )\n"
+            ")\n"
+            'robocopy "%staged_app_dir%" "%app_root%" /MIR /R:3 /W:1 /NFL /NDL /NP /XD "%app_root%\\runtime" "%app_root%\\log" "%app_root%\\_update_staging" >> "%log%" 2>&1\n'
+            'set "copy_rc=%ERRORLEVEL%"\n'
+            "if !copy_rc! GEQ 8 exit /b 1\n"
+            'if not exist "%installed_exe%" exit /b 1\n'
+            'del /Q "%app_root%\\runtime\\tmp\\NapCatQQ-Desktop.zip" >> "%log%" 2>&1\n'
+            'rmdir /S /Q "%app_root%\\_update_staging" >> "%log%" 2>&1\n'
+            'start "" "%installed_exe%"\n'
+            'del "%~f0"\n'
+        )

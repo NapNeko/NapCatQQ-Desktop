@@ -1,11 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
 
-rem 更新脚本 — 更健壮的实现
-rem 功能：提权（UAC）尝试、检测 runtime\tmp 中的 NapCatQQ-Desktop*.exe、支持已安装可执行的变体、等待并在超时后强制结束、move/copy 回退、最小化启动、新增日志，以及尽量自删除。
+rem 目录版更新脚本
+rem 运行位置：runtime\tmp\update.bat
+rem 功能：等待旧进程退出，将 staging 中的目录版整包镜像到应用目录，保留 runtime/log 数据，再重启新版本。
 
-rem 日志文件
-set "log=%~dp0update.log"
+for %%I in ("%~dp0") do set "script_dir=%%~fI"
+for %%I in ("%script_dir%\..\..") do set "app_root=%%~fI"
+set "log=%app_root%\update.log"
+set "staged_app_dir=%app_root%\_update_staging\package\NapCatQQ-Desktop"
+set "staged_exe=%staged_app_dir%\NapCatQQ-Desktop.exe"
+set "installed_exe=%app_root%\NapCatQQ-Desktop.exe"
 
 rem ---------- 提权检查 ----------
 rem 如果没有管理员权限，则尝试以管理员权限重新启动当前脚本（会触发 UAC）
@@ -24,55 +29,20 @@ rem ---------- 提权检查 结束 ----------
 
 echo [%date% %time%] 更新开始 > "%log%"
 
-rem 新旧程序路径与文件名检测
-set "new_app_dir=%~dp0runtime\tmp"
-set "new_app_path="
-set "new_file_name="
-
-rem 确保临时目录存在
-if not exist "%new_app_dir%" (
-    mkdir "%new_app_dir%"
-    echo [%date% %time%] 创建目录 %new_app_dir% >> "%log%"
-)
-
-rem 在临时目录查找新的可执行文件（支持通配符）
-for %%F in ("%new_app_dir%\NapCatQQ-Desktop*.exe") do (
-    set "new_app_path=%%~fF"
-    set "new_file_name=%%~nxF"
-    goto :found_new
-)
-:found_new
-if not defined new_app_path (
-    echo [%date% %time%] 新程序未找到: %new_app_dir%\NapCatQQ-Desktop*.exe >> "%log%"
+if not exist "%staged_exe%" (
+    echo [%date% %time%] 新目录版程序未找到: %staged_exe% >> "%log%"
     goto :end
 )
-
-rem 确定已安装目录下的可执行（优先替换已存在文件名），否则使用新文件名
-set "installed_app_path="
-set "installed_file_name="
-for %%G in ("%~dp0NapCatQQ-Desktop*.exe") do (
-    set "installed_app_path=%%~fG"
-    set "installed_file_name=%%~nxG"
-    goto :found_installed
-)
-:found_installed
-if not defined installed_app_path (
-    set "installed_file_name=%new_file_name%"
-    set "installed_app_path=%~dp0%new_file_name%"
-)
-
-rem 进程名用于检测运行的旧进程
-set "proc_name=%installed_file_name%"
 
 rem 等待旧版进程退出（最多等待60秒，可根据需要调整）
 set /a max_wait=60
 set /a waited=0
 :wait_for_exit
-tasklist /FI "IMAGENAME eq %proc_name%" /NH | find /I "%proc_name%" >NUL
+tasklist /FI "IMAGENAME eq NapCatQQ-Desktop.exe" /NH | find /I "NapCatQQ-Desktop.exe" >NUL
 if "%ERRORLEVEL%"=="0" (
     if %waited% GEQ %max_wait% (
-        echo [%date% %time%] 等待超时: %waited% 秒，尝试强制结束 %proc_name% >> "%log%"
-        taskkill /IM "%proc_name%" /F >> "%log%" 2>&1
+        echo [%date% %time%] 等待超时: %waited% 秒，尝试强制结束 NapCatQQ-Desktop.exe >> "%log%"
+        taskkill /IM "NapCatQQ-Desktop.exe" /F >> "%log%" 2>&1
         timeout /T 1 /NOBREAK > NUL
     ) else (
         set /a waited+=1
@@ -81,28 +51,26 @@ if "%ERRORLEVEL%"=="0" (
     )
 )
 
-rem 尝试移动新文件到应用目录（优先用 move，失败则复制覆盖）
-echo [%date% %time%] 尝试移动 %new_app_path% 到 %installed_app_path% >> "%log%"
-if exist "%new_app_path%" (
-    move /Y "%new_app_path%" "%installed_app_path%" >> "%log%" 2>&1
-    if errorlevel 1 (
-        echo [%date% %time%] move 失败，尝试复制覆盖 >> "%log%"
-        copy /Y "%new_app_path%" "%installed_app_path%" >> "%log%" 2>&1
-        if errorlevel 1 (
-            echo [%date% %time%] 复制失败，放弃更新 >> "%log%"
-            goto :end
-        ) else (
-            del /Q "%new_app_path%" >> "%log%" 2>&1
-        )
-    )
-) else (
-    echo [%date% %time%] 新程序未找到（移动前）: %new_app_path% >> "%log%"
+rem 使用 robocopy 镜像目录版程序，保留 runtime 和 log 数据目录
+echo [%date% %time%] 开始镜像目录版更新包到 %app_root% >> "%log%"
+robocopy "%staged_app_dir%" "%app_root%" /MIR /R:3 /W:1 /NFL /NDL /NP /XD "%app_root%\runtime" "%app_root%\log" "%app_root%\_update_staging" >> "%log%" 2>&1
+set "copy_rc=%ERRORLEVEL%"
+if %copy_rc% GEQ 8 (
+    echo [%date% %time%] robocopy 失败，错误码: %copy_rc% >> "%log%"
     goto :end
 )
 
-rem 启动新版本（最小化）
-echo [%date% %time%] 启动新程序: %installed_app_path% >> "%log%"
-start "" /MIN "%installed_app_path%" >> "%log%" 2>&1
+if not exist "%installed_exe%" (
+    echo [%date% %time%] 更新后未找到主程序: %installed_exe% >> "%log%"
+    goto :end
+)
+
+del /Q "%app_root%\runtime\tmp\NapCatQQ-Desktop.zip" >> "%log%" 2>&1
+rmdir /S /Q "%app_root%\_update_staging" >> "%log%" 2>&1
+
+rem 启动新版本
+echo [%date% %time%] 启动新程序: %installed_exe% >> "%log%"
+start "" /MIN "%installed_exe%" >> "%log%" 2>&1
 
 rem 尝试删除自身：优先直接删除，失败则启动一个最小化的 cmd 来延迟删除
 del "%~f0" >> "%log%" 2>&1
