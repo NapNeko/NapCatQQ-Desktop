@@ -2,7 +2,7 @@
 # 标准库导入
 import winreg
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QThreadPool, QUrl, Slot
 from creart import it
@@ -22,6 +22,8 @@ from src.ui.page.unit_page.status import ButtonStatus
 if TYPE_CHECKING:
     # 项目内模块导入
     from src.core.network.downloader import QQDownloader
+
+    QQDownloaderType = QQDownloader | None
 
 DESCRIPTION_TEXT = """
 ## **NapCatQQ与NTQQ的奇幻物语**  
@@ -66,7 +68,7 @@ class QQPage(PageBase):
         self.setObjectName("UnitQQPage")
         self.url: QUrl | None = None
         self.file_path: Path | None = None
-        self.downloader: "QQDownloader" | None = None
+        self.downloader: "QQDownloaderType" = None
         self.installer: QQInstall | None = None
 
         self._setup_ui()
@@ -90,7 +92,9 @@ class QQPage(PageBase):
         self.app_card.install_button.clicked.connect(self.on_download)
         self.app_card.update_button.clicked.connect(self.on_download)
         self.app_card.open_folder_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).get_qq_path()))
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(qq_path))
+            if (qq_path := it(PathFunc).get_qq_path()) is not None
+            else error_bar(self.tr("未检测到 QQ 安装路径"))
         )
 
     def update_page(self) -> None:
@@ -165,7 +169,8 @@ class QQPage(PageBase):
 
         if not folder_box.exec():
             # 如果没有点击确定按钮
-            self.file_path.unlink()
+            if self.file_path is not None:
+                self.file_path.unlink()
             info_bar(self.tr("取消安装"))
             return
 
@@ -184,11 +189,16 @@ class QQPage(PageBase):
                 # 用户点击了删除
                 Path(Path(folder_box.get_value()) / "dbghelp.dll").unlink()
             else:
-                self.file_path.unlink()
+                if self.file_path is not None:
+                    self.file_path.unlink()
                 info_bar(self.tr("取消安装"))
                 return
 
         # 开始安装
+        if self.file_path is None:
+            error_bar(self.tr("安装包路径为空"))
+            return
+
         installer = QQInstall(self.file_path)
         installer.status_label_signal.connect(self.app_card.set_status_text)
         installer.error_finish_signal.connect(self.on_error_finsh)

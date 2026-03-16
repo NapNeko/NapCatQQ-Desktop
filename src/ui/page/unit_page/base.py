@@ -6,6 +6,7 @@ from typing import Dict, Union
 
 # 第三方库导入
 from markdown import markdown
+from qfluentwidgets.common.overload import singledispatchmethod
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
@@ -257,6 +258,7 @@ class DisplayCard(SimpleCardWidget):
 class UpdateLogCard(HeaderCardWidget):
     """右侧的更新日志展示卡片"""
 
+    @singledispatchmethod
     def __init__(self, parent) -> None:
         """初始化更新日志卡片
 

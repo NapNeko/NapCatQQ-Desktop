@@ -120,7 +120,9 @@ class NCDPage(PageBase):
         # 从 Qt 资源读取安装脚本模板（优先），若失败则回退为一个最小脚本
         bat_content = ""
         try:
-            with QFluentFile(":/script/update.bat", QIODevice.ReadOnly | QIODevice.Text) as qfile:
+            with QFluentFile(
+                ":/script/update.bat", QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text
+            ) as qfile:
                 ts = QTextStream(qfile)
                 bat_content = ts.readAll()
         except Exception:
