@@ -2,7 +2,7 @@
 
 # 标准库导入
 import json
-from typing import Optional
+from typing import Any, Optional, cast
 
 # 第三方库导入
 from qfluentwidgets import FluentIcon, PlainTextEdit, TeachingTip, isDarkTheme
@@ -234,7 +234,8 @@ class CodeEditorBase(PlainTextEdit):
         extra_selections = []
 
         for line_number in self.selected_lines:
-            selection = QTextEdit.ExtraSelection()
+            # PySide 的类型桩未完整暴露 ExtraSelection 的动态字段
+            selection = cast(Any, QTextEdit.ExtraSelection())
             selection.format.setBackground(QColor(255, 255, 255, 25))
             selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
 
@@ -259,7 +260,7 @@ class CodeEditor(CodeEditorBase):
     AUTO_COMPLETE_CHARS: dict[str, str] = {"{": "}", "[": "]", "(": ")", '"': '"', "'": "'"}
     INDENT_SIZE: int = 4
 
-    def __init__(self, parent: Optional[PlainTextEdit] = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         """初始化代码编辑器"""
         super().__init__(parent)
         self._setup_ui()
@@ -524,18 +525,20 @@ class JsonEditor(CodeEditor):
         self.setTextCursor(cursor)
         self.centerCursor()
 
-        extra_selection = QTextEdit.ExtraSelection()
+        # PySide 的类型桩未完整暴露 ExtraSelection 的动态字段
+        extra_selection = cast(Any, QTextEdit.ExtraSelection())
         selection_format = extra_selection.format
         selection_format.setBackground(QColor(255, 0, 0, 50))
-        selection_format.setProperty(QTextFormat.FullWidthSelection, True)
+        selection_format.setProperty(QTextFormat.Property.FullWidthSelection, True)
         extra_selection.cursor = cursor
 
         self.setExtraSelections([extra_selection])
 
     def _show_success_tip(self) -> None:
         """显示 JSON 校验成功的提示"""
+        target = self.parentWidget() or self
         TeachingTip.create(
-            target=self.parent(),
+            target=target,
             title="JSON 语法正确!",
             content="校验完成, JSON 语法正确！",
             icon=FluentIcon.ACCEPT,
@@ -549,8 +552,9 @@ class JsonEditor(CodeEditor):
         Args:
             error: JSON 解码错误对象
         """
+        target = self.parentWidget() or self
         TeachingTip.create(
-            target=self.parent(),
+            target=target,
             title="JSON 语法错误!",
             content=f"校验完成, JSON 语法错误! 请检查高亮行上下几行\n {error}",
             icon=FluentIcon.CLOSE,
@@ -558,7 +562,7 @@ class JsonEditor(CodeEditor):
             parent=self,
         )
 
-    def paintEvent(self, event: QPaintEvent | None) -> None:
+    def paintEvent(self, event: QPaintEvent) -> None:
         """绘制文本及多层级缩进辅助线
 
         Args:
@@ -664,7 +668,7 @@ class JsonEditor(CodeEditor):
                 for line_number, top, bottom in visible_blocks:
                     if start + 1 <= line_number <= end:
                         painter.setPen(pen)
-                        painter.drawLine(x, top, x, bottom)
+                        painter.drawLine(x, int(top), x, int(bottom))
 
     def _draw_highlighted_level_lines(
         self,
@@ -691,4 +695,4 @@ class JsonEditor(CodeEditor):
                     for line_number, top, bottom in visible_blocks:
                         if start + 1 <= line_number <= end:
                             painter.setPen(pen)
-                            painter.drawLine(x, top, x, bottom)
+                            painter.drawLine(x, int(top), x, int(bottom))
