@@ -7,6 +7,7 @@ spec_dir = Path.cwd() / "script" / "build_scripts"
 if str(spec_dir) not in sys.path:
     sys.path.insert(0, str(spec_dir))
 
+from collection_filters import filter_analysis_collections
 from runtime_assets import prepare_runtime_assets
 
 block_cipher = None
@@ -26,6 +27,7 @@ a = Analysis(
     win_private_assemblies=False,
     cipher=block_cipher,
 )
+filter_analysis_collections(a, locales=("zh_CN",))
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
