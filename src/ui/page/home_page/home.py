@@ -38,12 +38,21 @@ class HomeWidget(TransparentStackedWidget):
         self.setCurrentWidget(self.display_view)
 
         # 链接信号
-        self.display_view.button_group.go_button.clicked.connect(lambda: cast(MainWindow, self.parent()).setCurrentIndex(1))
+        self.display_view.button_group.go_button.clicked.connect(self._open_unit_page)
 
         # 应用样式表
         PageStyleSheet.HOME.apply(self)
 
         return self
+
+    def _open_unit_page(self) -> None:
+        """跳转到组件页。"""
+        # 项目内模块导入
+        from src.ui.window.main_window import MainWindow
+
+        main_window = cast(MainWindow, self.parent())
+        if main_window is not None:
+            main_window.setCurrentIndex(1)
 
 
 class HomePageCreator(AbstractCreator, ABC):
