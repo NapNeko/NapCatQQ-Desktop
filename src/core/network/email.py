@@ -128,7 +128,7 @@ class Email(QObject, QRunnable):
             (
                 "开始发送邮件: "
                 f"server={self.data.smtp_server}:{self.data.smtp_port}, "
-                f"receiver={self.data.reciver_email}, encryption={self.data.encryption.name}"
+                f"receiver_configured={bool(self.data.reciver_email)}, encryption={self.data.encryption.name}"
             ),
             LogType.NETWORK,
             LogSource.CORE,
@@ -160,7 +160,7 @@ class Email(QObject, QRunnable):
                     server.sendmail(self.data.sender_email, self.data.reciver_email, msg.as_string())
             self.success_signal.emit("邮件发送成功")
             logger.info(
-                f"邮件发送成功: receiver={self.data.reciver_email}, subject={self.data.msg_subject}",
+                f"邮件发送成功: receiver_configured={bool(self.data.reciver_email)}, subject={self.data.msg_subject}",
                 LogType.NETWORK,
                 LogSource.CORE,
             )
@@ -171,7 +171,7 @@ class Email(QObject, QRunnable):
                 (
                     "邮件发送失败(SMTPResponseException): "
                     f"server={self.data.smtp_server}:{self.data.smtp_port}, "
-                    f"receiver={self.data.reciver_email}"
+                    f"receiver_configured={bool(self.data.reciver_email)}"
                 ),
                 e,
                 LogType.NETWORK,
@@ -184,7 +184,7 @@ class Email(QObject, QRunnable):
                 (
                     "邮件发送失败: "
                     f"server={self.data.smtp_server}:{self.data.smtp_port}, "
-                    f"receiver={self.data.reciver_email}"
+                    f"receiver_configured={bool(self.data.reciver_email)}"
                 ),
                 e,
                 LogType.NETWORK,

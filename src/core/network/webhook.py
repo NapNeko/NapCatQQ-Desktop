@@ -12,7 +12,7 @@ from PySide6.QtCore import QObject, QRunnable, Signal
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_model import Config
-from src.core.utils.logger import logger
+from src.core.utils.logger import LogSource, LogType, logger
 
 
 @dataclass
@@ -62,9 +62,20 @@ class WebHook(QObject, QRunnable):
         try:
             if not self.validate_and_format_json():
                 self.error_signal.emit("无效的 JSON 内容")
+                logger.warning("WebHook JSON 校验失败", LogType.NETWORK, LogSource.CORE)
                 return
 
-            logger.info("发送 WebHook 请求")
+            payload_size = len(self.data.json.encode("utf-8"))
+            logger.info(
+                (
+                    "发送 WebHook 请求: "
+                    f"configured={bool(self.data.url)}, "
+                    f"has_auth={bool(self.data.secret)}, "
+                    f"payload_bytes={payload_size}"
+                ),
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
             headers = (
                 {
@@ -77,19 +88,15 @@ class WebHook(QObject, QRunnable):
                 }
             )
 
-            logger.debug(f"WebHook URL: {self.data.url}")
-            logger.debug(f"WebHook Headers: {headers}")
-            logger.debug(f"WebHook JSON: {self.data.json}")
-
             response = httpx.post(self.data.url, json=self.data.json, headers=headers, timeout=10.0)
             response.raise_for_status()
             self.success_signal.emit("WebHook 发送成功")
 
-            logger.info(f"WebHook 请求成功, 状态码: {response.status_code}")
+            logger.info(f"WebHook 请求成功, status_code={response.status_code}", LogType.NETWORK, LogSource.CORE)
 
         except (httpx.RequestError, httpx.HTTPStatusError, Exception) as e:
             self.error_signal.emit(f"{e.__class__.__name__}: {str(e)}")
-            logger.error(f"WebHook 请求错误: {e.__class__.__name__}: {str(e)}")
+            logger.error(f"WebHook 请求错误: {e.__class__.__name__}", LogType.NETWORK, LogSource.CORE)
 
     def validate_and_format_json(self) -> bool:
         """验证并格式化 JSON 内容"""

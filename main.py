@@ -98,4 +98,5 @@ if __name__ == "__main__":
     except Exception as exc:
         logger.critical("应用启动或运行过程中出现未处理异常", log_source=LogSource.CORE)
         logger.exception("应用未处理异常详情", exc, log_source=LogSource.CORE)
+        logger.emit_crash_bundle("main", exc, type(exc), exc.__traceback__)
         sys.exit(1)
