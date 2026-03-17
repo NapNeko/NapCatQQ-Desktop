@@ -3,13 +3,50 @@
 import os
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
 from src.core.utils.app_path import resolve_app_base_path
 from src.core.utils.logger import LogSource, logger
 from src.core.utils.runtime_args import apply_runtime_launch_options, parse_runtime_launch_options
+
+
+class ExceptionLoggingApplication(QApplication):
+    """为 Qt 事件分发补充异常落盘，避免 UI 点击异常直接丢失上下文。"""
+
+    @staticmethod
+    def _describe_receiver(receiver: QObject | None) -> str:
+        if receiver is None:
+            return "receiver=<none>"
+
+        receiver_type = type(receiver).__name__
+        object_name = receiver.objectName() if receiver.objectName() else "<anonymous>"
+        return f"receiver={receiver_type}(objectName={object_name})"
+
+    @staticmethod
+    def _describe_event(event: QEvent | None) -> str:
+        if event is None:
+            return "event=<none>"
+
+        event_type = event.type()
+        event_name = getattr(event_type, "name", None) or str(int(event_type))
+        return f"event={event_name}"
+
+    def notify(self, receiver: QObject | None, event: QEvent | None) -> bool:
+        try:
+            return super().notify(receiver, event)
+        except Exception as exc:
+            context = ", ".join([self._describe_receiver(receiver), self._describe_event(event)])
+            logger.log_unhandled_exception(
+                "qt.notify",
+                f"Qt 事件处理未捕获异常({context})",
+                exc,
+                type(exc),
+                exc.__traceback__,
+                log_source=LogSource.UI,
+            )
+            return False
 
 
 def run_application() -> int:
@@ -63,7 +100,7 @@ def run_application() -> int:
         os.environ["QT_SCALE_FACTOR"] = str(dpi_scale)
         logger.info(f"DPI 缩放策略: 手动({dpi_scale})", log_source=LogSource.CORE)
 
-    app = QApplication(sys.argv)
+    app = ExceptionLoggingApplication(sys.argv)
     logger.info("QApplication 创建完成", log_source=LogSource.UI)
 
     # 初始化字体

@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 
 # 标准库导入
+import os
 import sys
 import threading
 from pathlib import Path
 
 # 第三方库导入
 import pytest
-from PySide6.QtCore import qInstallMessageHandler
+import main
+from PySide6.QtCore import Qt, qInstallMessageHandler
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QPushButton
 
 # 项目内模块导入
 import src.core.utils.install_func as install_func
@@ -22,6 +26,18 @@ def create_test_logger(tmp_path: Path) -> Logger:
     test_logger.log_path = tmp_path / "app.log"
     test_logger.log_path.write_text("", encoding="utf-8")
     return test_logger
+
+
+def ensure_exception_logging_app() -> main.ExceptionLoggingApplication:
+    """创建或复用测试用 QApplication。"""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance()
+    if app is None:
+        return main.ExceptionLoggingApplication([])
+    if isinstance(app, main.ExceptionLoggingApplication):
+        return app
+
+    pytest.skip("已有非 ExceptionLoggingApplication 的 QApplication 实例")
 
 
 def test_logger_critical_serializes_level_and_message(tmp_path: Path) -> None:
@@ -96,3 +112,80 @@ def test_qq_install_logs_exception_on_failure(tmp_path: Path, monkeypatch: pytes
 
     assert captured["message"] == "安装 QQ 失败"
     assert isinstance(captured["exc"], OSError)
+
+
+def test_exception_logging_application_logs_button_handler_exceptions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """按钮事件处理异常应由 Qt 应用异常兜底记录。"""
+    app = ensure_exception_logging_app()
+    captured: dict[str, object] = {}
+
+    def fake_log_unhandled_exception(
+        trigger: str,
+        message: str,
+        exc: BaseException,
+        exc_type: type[BaseException] | None = None,
+        exc_traceback=None,
+        log_source=None,
+    ) -> None:
+        captured["trigger"] = trigger
+        captured["message"] = message
+        captured["exc"] = exc
+        captured["exc_type"] = exc_type
+        captured["log_source"] = log_source
+
+    monkeypatch.setattr(main.logger, "log_unhandled_exception", fake_log_unhandled_exception)
+
+    class BoomButton(QPushButton):
+        def mousePressEvent(self, event) -> None:
+            raise RuntimeError("notify boom")
+
+    button = BoomButton("boom")
+    button.resize(120, 40)
+    button.show()
+
+    try:
+        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        app.processEvents()
+    finally:
+        button.close()
+
+    assert captured["trigger"] == "qt.notify"
+    assert "Qt 事件处理未捕获异常" in str(captured["message"])
+    assert isinstance(captured["exc"], RuntimeError)
+    assert captured["exc_type"] is RuntimeError
+
+
+def test_button_slot_exception_is_written_to_log(tmp_path: Path) -> None:
+    """按钮槽函数抛错时，应通过 sys.excepthook 落到日志。"""
+    app = ensure_exception_logging_app()
+    test_logger = create_test_logger(tmp_path)
+    previous_sys_excepthook = sys.excepthook
+    previous_thread_excepthook = threading.excepthook
+    previous_unraisablehook = sys.unraisablehook
+
+    try:
+        test_logger.install_exception_hooks()
+
+        button = QPushButton("slot-boom")
+
+        def raise_in_slot() -> None:
+            raise RuntimeError("slot boom")
+
+        button.clicked.connect(raise_in_slot)
+        button.resize(120, 40)
+        button.show()
+
+        try:
+            QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+            app.processEvents()
+        finally:
+            button.close()
+    finally:
+        sys.excepthook = previous_sys_excepthook
+        threading.excepthook = previous_thread_excepthook
+        sys.unraisablehook = previous_unraisablehook
+        qInstallMessageHandler(test_logger._previous_qt_message_handler)
+
+    content = test_logger.log_path.read_text(encoding="utf-8")
+    assert "捕获未处理异常" in content
+    assert "RuntimeError: slot boom" in content

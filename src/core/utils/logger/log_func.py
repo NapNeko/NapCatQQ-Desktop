@@ -210,15 +210,14 @@ class Logger:
         if issubclass(exc_type, KeyboardInterrupt):
             return
 
-        self._log(
-            LogLevel.CRIT,
-            self._format_exception_message("捕获未处理异常", exc, exc_type, exc_traceback),
-            datetime.now().timestamp(),
-            LogType.NONE_TYPE,
-            LogSource.CORE,
-            None,
+        self.log_unhandled_exception(
+            "sys.excepthook",
+            "捕获未处理异常",
+            exc,
+            exc_type,
+            exc_traceback,
+            log_source=LogSource.CORE,
         )
-        self.emit_crash_bundle("sys.excepthook", exc, exc_type, exc_traceback)
 
     def _handle_thread_exception(self, args: threading.ExceptHookArgs) -> None:
         """处理线程未捕获异常。"""
@@ -226,17 +225,14 @@ class Logger:
             return
 
         thread_name = args.thread.name if args.thread is not None else "unknown"
-        self._log(
-            LogLevel.CRIT,
-            self._format_exception_message(
-                f"线程未处理异常(thread={thread_name})", args.exc_value, args.exc_type, args.exc_traceback
-            ),
-            datetime.now().timestamp(),
-            LogType.NONE_TYPE,
-            LogSource.CORE,
-            None,
+        self.log_unhandled_exception(
+            "threading.excepthook",
+            f"线程未处理异常(thread={thread_name})",
+            args.exc_value,
+            args.exc_type,
+            args.exc_traceback,
+            log_source=LogSource.CORE,
         )
-        self.emit_crash_bundle("threading.excepthook", args.exc_value, args.exc_type, args.exc_traceback)
 
     def _handle_unraisable_exception(self, args) -> None:
         """处理无法传播到调用方的异常。"""
@@ -248,15 +244,34 @@ class Logger:
         if getattr(args, "err_msg", None):
             message = f"{message}: {args.err_msg}"
 
+        self.log_unhandled_exception(
+            "sys.unraisablehook",
+            message,
+            args.exc_value,
+            args.exc_type,
+            args.exc_traceback,
+            log_source=LogSource.CORE,
+        )
+
+    def log_unhandled_exception(
+        self,
+        trigger: str,
+        message: str,
+        exc: BaseException,
+        exc_type: type[BaseException] | None = None,
+        exc_traceback=None,
+        log_source: LogSource = LogSource.CORE,
+    ) -> None:
+        """统一记录未处理异常并生成诊断包。"""
         self._log(
             LogLevel.CRIT,
-            self._format_exception_message(message, args.exc_value, args.exc_type, args.exc_traceback),
+            self._format_exception_message(message, exc, exc_type, exc_traceback),
             datetime.now().timestamp(),
             LogType.NONE_TYPE,
-            LogSource.CORE,
+            log_source,
             None,
         )
-        self.emit_crash_bundle("sys.unraisablehook", args.exc_value, args.exc_type, args.exc_traceback)
+        self.emit_crash_bundle(trigger, exc, exc_type, exc_traceback)
 
     def _handle_qt_message(self, msg_type, context, message: str) -> None:
         """接管 Qt 的 warning/critical/fatal 日志。"""
