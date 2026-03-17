@@ -9,16 +9,26 @@ from PySide6.QtWidgets import QApplication
 # 项目内模块导入
 from src.core.utils.app_path import resolve_app_base_path
 from src.core.utils.logger import LogSource, logger
+from src.core.utils.runtime_args import apply_runtime_launch_options, parse_runtime_launch_options
 
 
 def run_application() -> int:
     """启动桌面应用并返回事件循环退出码。"""
+    runtime_options, filtered_argv = parse_runtime_launch_options(sys.argv)
+    apply_runtime_launch_options(runtime_options)
+    sys.argv[:] = filtered_argv
+
     runtime_mode = "frozen" if getattr(sys, "frozen", False) else "source"
     base_path = resolve_app_base_path()
     logger.info(
-        f"应用启动: mode={runtime_mode}, base_path={base_path}, log_file={logger.log_path}",
+        (
+            f"应用启动: mode={runtime_mode}, developer_mode={runtime_options.developer_mode}, "
+            f"base_path={base_path}, log_file={logger.log_path}"
+        ),
         log_source=LogSource.CORE,
     )
+    if runtime_options.developer_mode:
+        logger.warning("开发者模式已启用 (--developer-mode)", log_source=LogSource.CORE)
 
     # 第三方库导入
     from creart import it
