@@ -10,9 +10,11 @@ from PySide6.QtWidgets import QVBoxLayout
 from src.ui.components.background import DottedBackground
 
 # 项目内模块导入
+from src.core.utils.runtime_args import is_developer_mode_enabled
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.code_editor import CodeExibit
 from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.ui.page.setup_page.developer import Developer
 from src.ui.page.setup_page.general import General
 from src.ui.page.setup_page.personalization import Personalization
 from src.ui.page.setup_page.setup_top_card import SetupTopCard
@@ -63,10 +65,13 @@ class SetupWidget(DottedBackground):
         self.view = TransparentStackedWidget(self)
         self.general = General(self)
         self.personalization = Personalization(self)
+        self.developer = Developer(self) if is_developer_mode_enabled() else None
 
         # 设置控件
         self.view.addWidget(self.personalization)
         self.view.addWidget(self.general)
+        if self.developer is not None:
+            self.view.addWidget(self.developer)
 
         self.top_card.pivot.addItem(
             routeKey=self.personalization.objectName(),
@@ -78,6 +83,12 @@ class SetupWidget(DottedBackground):
             text=self.tr("常规"),
             onClick=lambda: self.view.setCurrentWidget(self.general),
         )
+        if self.developer is not None:
+            self.top_card.pivot.addItem(
+                routeKey=self.developer.objectName(),
+                text=self.tr("开发者"),
+                onClick=lambda: self.view.setCurrentWidget(self.developer),
+            )
 
         # 连接信号并初始化当前标签页
         self.view.setCurrentWidget(self.personalization)
