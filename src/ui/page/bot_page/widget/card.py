@@ -43,6 +43,7 @@ from PySide6.QtCore import (
     QThreadPool,
     QTimer,
     QUrlQuery,
+    Slot,
     Signal,
 )
 from PySide6.QtGui import QColor, QEnterEvent, QFont, QPixmap
@@ -94,7 +95,7 @@ class BotCard(HeaderCardWidget):
         self._config = config
 
         # 创建控件
-        self.avatar_widget = BotAvatarWidget(int(self._config.bot.QQID), self)
+        self.avatar_widget = BotAvatarWidget(str(self._config.bot.QQID), self)
         self.info_widget = BotInfoWidget(self._config, self)
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
         self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
@@ -234,16 +235,17 @@ class BotAvatarWidget(QWidget):
         仅下载原始字节并通过信号传回主线程处理。
         """
 
-        avatar_bytes_signal = Signal(int, bytes)
+        avatar_bytes_signal = Signal(str, bytes)
+        avatar_error_signal = Signal(str, str)
 
-        def __init__(self, qq_id: int) -> None:
+        def __init__(self, qq_id: str) -> None:
             QObject.__init__(self)
             QRunnable.__init__(self)
             # 解析出对应的头像 URL
             url = Urls.QQ_AVATAR.value
             query = QUrlQuery()
             query.addQueryItem("spec", "640")
-            query.addQueryItem("dst_uin", str(qq_id))
+            query.addQueryItem("dst_uin", qq_id)
             url.setQuery(query)
 
             # 设置属性
@@ -258,14 +260,17 @@ class BotAvatarWidget(QWidget):
                 self.avatar_bytes_signal.emit(self._qq_id, resp.content)
 
             except (httpx.HTTPStatusError, httpx.RequestError, httpx.TimeoutException) as e:
-                error_bar(
-                    f"请求头像时发生错误!\n"
-                    f"  - QQ号: {self._qq_id}\n"
-                    f"  - 错误类型: {e.__class__.__name__}\n"
-                    f"  - 错误信息: {e}"
+                self.avatar_error_signal.emit(
+                    self._qq_id,
+                    (
+                        "请求头像时发生错误!\n"
+                        f"  - QQ号: {self._qq_id}\n"
+                        f"  - 错误类型: {e.__class__.__name__}\n"
+                        f"  - 错误信息: {e}"
+                    ),
                 )
 
-    def __init__(self, qq_id: int, parent: BotCard) -> None:
+    def __init__(self, qq_id: str, parent: BotCard) -> None:
         super().__init__(parent)
         # 创建控件
         self.image_label = ImageLabel(self)
@@ -319,11 +324,11 @@ class BotAvatarWidget(QWidget):
 
     # ==================== 属性方法 ====================
     @property
-    def qq_id(self) -> int:
+    def qq_id(self) -> str:
         return self._qq_id
 
     @qq_id.setter
-    def qq_id(self, value: int) -> None:
+    def qq_id(self, value: str) -> None:
         # 保存请求的 qq_id，并把它作为当前活动请求的标识，用于忽略过时的 worker 结果
         self._qq_id = value
         self._active_avatar_qq_id = value
@@ -331,10 +336,27 @@ class BotAvatarWidget(QWidget):
         worker = self.GetAvatarWorker(value)
         # 在主线程中将字节转换为 QPixmap 并更新 UI，避免跨线程创建 GUI 对象
         worker.avatar_bytes_signal.connect(self._on_avatar_bytes)
+        worker.avatar_error_signal.connect(self._on_avatar_error)
 
         QThreadPool.globalInstance().start(worker)
 
-    def _on_avatar_bytes(self, qq_id: int, data: bytes) -> None:
+    @Slot(str, str)
+    def _on_avatar_error(self, qq_id: str, message: str) -> None:
+        """在主线程中处理头像下载失败提示。"""
+        if qq_id != getattr(self, "_active_avatar_qq_id", None):
+            return
+
+        error_bar(message)
+
+        try:
+            self.image_label.setImage(StaticIcon.LOGO.path())
+            self.image_label.scaledToWidth(128)
+            self.image_label.setBorderRadius(8, 8, 8, 8)
+        except Exception:
+            pass
+
+    @Slot(str, bytes)
+    def _on_avatar_bytes(self, qq_id: str, data: bytes) -> None:
         """将下载的头像字节转换为 QPixmap 并更新到 UI (主线程执行)
 
         仅在收到的 qq_id 与当前活动请求一致时才更新，避免竞态条件导致显示过时头像。
