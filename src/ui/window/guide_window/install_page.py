@@ -14,18 +14,18 @@ from qfluentwidgets import (
     ProgressBar,
     SubtitleLabel,
 )
-from PySide6.QtCore import Qt, QThreadPool, QUrl
+from PySide6.QtCore import Qt, QThreadPool, QUrl, Slot
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.network.downloader import GithubDownloader, QQDownloader
 from src.core.network.urls import Urls
+from src.core.utils.get_version import GetRemoteVersionRunnable, VersionData
 from src.core.utils.install_func import NapCatInstall, QQInstall
 from src.core.utils.path_func import PathFunc
-from src.core.utils.get_version import GetRemoteVersionRunnable
 from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
-from src.ui.components.info_bar import success_bar
+from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.message_box import FolderBox
 from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus, StatusLabel
 
@@ -182,6 +182,12 @@ class InstallPageBase(QWidget):
             self.STATUS_LABEL_VISIBILITY[StatusLabel.SHOW],
         )
 
+    @Slot()
+    def on_error_finish(self) -> None:
+        """统一处理安装引导页中的下载/安装失败。"""
+        self.on_switch_button(ButtonStatus.UNINSTALLED)
+        error_bar(self.tr("操作失败，请重试"), parent=self.window())
+
 
 class InstallQQPage(InstallPageBase):
     """安装 QQ 页面"""
@@ -193,14 +199,11 @@ class InstallQQPage(InstallPageBase):
             parent (GuideWindow): 主窗体
         """
         super().__init__(parent)
-        # 创建杂七杂八的控件
-        download_url = GetRemoteVersionRunnable().execute().qq_download_url
-        if download_url is None:
-            self.set_status_text(self.tr("获取 QQ 下载链接失败。"))
-            self.install_button.setEnabled(False)
-        self.url = QUrl(download_url or "")
-        self.file_path = it(PathFunc).tmp_path / self.url.fileName()
-        self.downloader = QQDownloader(self.url)
+        self.url: QUrl | None = None
+        self.file_path = None
+        self.downloader: QQDownloader | None = None
+        self.installer: QQInstall | None = None
+        self.remote_version_task: GetRemoteVersionRunnable | None = None
 
         # 设置属性
         self.set_icon(NapCatDesktopIcon.QQ.path())
@@ -208,6 +211,7 @@ class InstallQQPage(InstallPageBase):
 
         # 信号连接
         self.install_button.clicked.connect(self.on_download)
+        self._fetch_download_url()
 
     def get_download_url(self) -> QUrl:
         """获取最新 QQ 下载链接"""
@@ -221,16 +225,51 @@ class InstallQQPage(InstallPageBase):
             self.set_status_text(self.tr("网络连接超时，请检查您的网络连接。"))
             return QUrl()
 
+    def _fetch_download_url(self) -> None:
+        """异步获取 QQ 下载链接，避免阻塞引导窗口初始化。"""
+        if self.remote_version_task is not None:
+            return
+
+        self.set_status_text(self.tr("正在获取 QQ 下载链接..."))
+        self.on_switch_progress_ring(ProgressRingStatus.INDETERMINATE)
+        self.remote_version_task = GetRemoteVersionRunnable()
+        self.remote_version_task.version_signal.connect(self.on_remote_version_loaded)
+        QThreadPool.globalInstance().start(self.remote_version_task)
+
+    @Slot(object)
+    def on_remote_version_loaded(self, version_data: VersionData) -> None:
+        """接收远程版本信息，并提取 QQ 下载链接。"""
+        self.remote_version_task = None
+        download_url = version_data.qq_download_url
+        self.on_switch_button(ButtonStatus.UNINSTALLED)
+
+        if download_url is None:
+            self.url = None
+            self.file_path = None
+            error_bar(self.tr("获取 QQ 下载链接失败，请重试"), parent=self.window())
+            return
+
+        self.url = QUrl(download_url)
+        self.file_path = it(PathFunc).tmp_path / self.url.fileName()
+
+    @Slot()
     def on_download(self) -> None:
         """下载"""
+        if self.url is None:
+            self._fetch_download_url()
+            return
+
+        self.file_path = it(PathFunc).tmp_path / self.url.fileName()
+        self.downloader = QQDownloader(self.url)
         self.downloader.download_progress_signal.connect(self.set_progress_ring_value)
         self.downloader.download_finish_signal.connect(self.on_install)
         self.downloader.status_label_signal.connect(self.set_status_text)
+        self.downloader.error_finsh_signal.connect(self.on_error_finish)
         self.downloader.button_toggle_signal.connect(self.on_switch_button)
         self.downloader.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
-
         QThreadPool.globalInstance().start(self.downloader)
 
+    @Slot()
     def on_install(self) -> None:
         """安装"""
         # 项目内模块导入
@@ -246,14 +285,20 @@ class InstallQQPage(InstallPageBase):
         winreg.CloseKey(key)
 
         # 开始安装
+        if self.file_path is None:
+            self.on_error_finish()
+            return
+
         self.installer = QQInstall(self.file_path)
         self.installer.status_label_signal.connect(self.set_status_text)
+        self.installer.error_finish_signal.connect(self.on_error_finish)
         self.installer.button_toggle_signal.connect(self.on_switch_button)
         self.installer.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
         self.installer.install_finish_signal.connect(self.on_install_finsh)
 
         QThreadPool.globalInstance().start(self.installer)
 
+    @Slot()
     def on_install_finsh(self) -> None:
         """安装完成"""
         # 项目内模块导入
@@ -270,7 +315,8 @@ class InstallNapCatQQPage(InstallPageBase):
         # 创建杂七杂八的控件
         self.url = Urls.NAPCATQQ_DOWNLOAD.value
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
-        self.downloader = GithubDownloader(self.url)
+        self.downloader: GithubDownloader | None = None
+        self.installer: NapCatInstall | None = None
 
         # 设置属性
         self.set_icon(StaticIcon.LOGO.path())
@@ -279,26 +325,32 @@ class InstallNapCatQQPage(InstallPageBase):
         # 信号连接
         self.install_button.clicked.connect(self.on_download)
 
+    @Slot()
     def on_download(self) -> None:
         """下载"""
+        self.downloader = GithubDownloader(self.url)
         self.downloader.download_progress_signal.connect(self.set_progress_ring_value)
         self.downloader.download_finish_signal.connect(self.on_install)
         self.downloader.status_label_signal.connect(self.set_status_text)
+        self.downloader.error_finsh_signal.connect(self.on_error_finish)
         self.downloader.button_toggle_signal.connect(self.on_switch_button)
         self.downloader.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
 
         QThreadPool.globalInstance().start(self.downloader)
 
+    @Slot()
     def on_install(self) -> None:
         """安装"""
         self.installer = NapCatInstall()
         self.installer.status_label_signal.connect(self.set_status_text)
+        self.installer.error_finish_signal.connect(self.on_error_finish)
         self.installer.button_toggle_signal.connect(self.on_switch_button)
         self.installer.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
         self.installer.install_finish_signal.connect(self.install_finsh)
 
         QThreadPool.globalInstance().start(self.installer)
 
+    @Slot()
     def install_finsh(self) -> None:
         """安装完成"""
         # 项目内模块导入
