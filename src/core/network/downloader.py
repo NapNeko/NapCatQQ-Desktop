@@ -69,6 +69,7 @@ class GithubDownloader(DownloaderBase):
         if self.check_network():
             # 如果网络环境好, 则直接下载
             if self.download():
+                self.download_finish_signal.emit()  # 发送下载完成信号
                 return  # 下载成功, 直接返回
 
         for mirror_url in self.mirror_urls:
@@ -85,6 +86,7 @@ class GithubDownloader(DownloaderBase):
         try:
             self.status_label_signal.emit(self.tr(f" 开始下载 {self.file_name} ~ "))
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
+                response.raise_for_status()
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
                     # 尝试获取文件大小
                     self.status_label_signal.emit(self.tr("无法获取文件大小"))
@@ -140,6 +142,7 @@ class QQDownloader(DownloaderBase):
         # 开始下载 QQ
         try:
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
+                response.raise_for_status()
 
                 if (total_size := int(response.headers.get("content-length", 0))) == 0:
                     # 尝试获取文件大小
