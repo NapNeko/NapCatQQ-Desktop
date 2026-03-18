@@ -11,7 +11,6 @@ from typing import cast
 from src.core.network.urls import Urls
 from src.ui.components.background import DottedBackground
 from src.ui.common.icon import StaticIcon
-from src.ui.common.style_sheet import PageStyleSheet
 
 """
 这里我是真没招了,这里是这个项目最早的代码了,当时也没什么经验
@@ -39,9 +38,6 @@ class DisplayViewWidget(DottedBackground):
 
         # 进行布局
         self._set_layout()
-
-        # 应用样式表
-        PageStyleSheet.HOME.apply(self)
 
     def _set_layout(self) -> None:
         """对 ViewWidget 内控件进行布局"""
