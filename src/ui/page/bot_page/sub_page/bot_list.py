@@ -10,6 +10,8 @@ from PySide6.QtWidgets import QWidget
 # 项目内模块导入
 from src.core.config.config_model import Config
 from src.core.config.operate_config import delete_config, read_config
+from src.core.utils.logger.crash_bundle import mask_qqid
+from src.core.utils.logger import LogSource, logger
 from src.ui.components.info_bar import error_bar
 
 from ..widget.card import BotCard
@@ -71,10 +73,12 @@ class BotListPage(ScrollArea):
         # 读取配置文件
         if (configs := read_config()) == self._bot_config_list:
             # 如果读取的配置文件与现有配置文件一致, 则跳过
+            logger.trace("Bot 列表刷新跳过: 配置未发生变化", log_source=LogSource.UI)
             return
         else:
             # 不一致则赋值给属性
             self._bot_config_list = configs.copy()
+            logger.info(f"Bot 列表已刷新: count={len(self._bot_config_list)}", log_source=LogSource.UI)
 
         # 创建 Bot Card 并添加到布局
         for config in self._bot_config_list:
@@ -91,10 +95,13 @@ class BotListPage(ScrollArea):
         """
         target_config = next((config for config in self._bot_config_list if str(config.bot.QQID) == qqid), None)
         if target_config is None:
+            logger.warning(f"尝试移除不存在的 Bot 配置(QQID: {mask_qqid(qqid)})", log_source=LogSource.UI)
             error_bar(self.tr("未找到待移除的 Bot 配置"))
             return
 
+        logger.info(f"准备移除 Bot 配置(QQID: {mask_qqid(qqid)})", log_source=LogSource.UI)
         if not delete_config(target_config):
+            logger.error(f"移除 Bot 配置失败(QQID: {mask_qqid(qqid)})", log_source=LogSource.UI)
             error_bar(self.tr("移除 Bot 配置失败"))
             return
 
@@ -106,6 +113,7 @@ class BotListPage(ScrollArea):
                 self.view_layout.removeWidget(card)
                 card.setParent(None)
                 card.deleteLater()
+                logger.info(f"Bot 卡片已从列表移除(QQID: {mask_qqid(qqid)})", log_source=LogSource.UI)
                 break
 
     def remove_all_bot(self) -> None:
@@ -126,6 +134,7 @@ class BotListPage(ScrollArea):
             # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
+            logger.info("进入新增 Bot 配置流程", log_source=LogSource.UI)
             page = it(BotPage)
             page.view.setCurrentWidget(page.add_config_page)
             page.add_config_page.clear_config()
@@ -134,4 +143,5 @@ class BotListPage(ScrollArea):
         else:
             from src.ui.components.info_bar import warning_bar
 
+            logger.warning("新增 Bot 配置被拒绝: 未检测到 NapCatQQ 安装", log_source=LogSource.UI)
             warning_bar("请先安装 NapCatQQ 后再添加 Bot 配置！")

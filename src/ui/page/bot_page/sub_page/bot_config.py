@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from src.core.config.config_model import AdvancedConfig, BotConfig, Config, ConnectConfig
 from src.core.config.operate_config import update_config
 from src.core.utils.logger import LogSource, logger
+from src.core.utils.logger.crash_bundle import mask_qqid
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.bot_page.utils.enum import ConnectType
@@ -176,6 +177,7 @@ class ConfigPage(QWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
+        logger.info("Bot 配置页返回到 Bot 列表", log_source=LogSource.UI)
         page = it(BotPage)
         page.view.setCurrentWidget(page.bot_list_page)
 
@@ -188,13 +190,27 @@ class ConfigPage(QWidget):
             error_bar(self.tr("配置校验失败，请检查输入内容"))
             return
 
+        logger.info(
+            (
+                "准备保存 Bot 配置: "
+                f"QQID={mask_qqid(config.bot.QQID)}, "
+                f"http_servers={len(config.connect.httpServers)}, "
+                f"http_sse_servers={len(config.connect.httpSseServers)}, "
+                f"http_clients={len(config.connect.httpClients)}, "
+                f"ws_servers={len(config.connect.websocketServers)}, "
+                f"ws_clients={len(config.connect.websocketClients)}"
+            ),
+            log_source=LogSource.UI,
+        )
         if update_config(config):
             # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
             it(BotPage).bot_list_page.update_bot_list()
+            logger.info(f"Bot 配置保存成功(QQID: {mask_qqid(config.bot.QQID)})", log_source=LogSource.UI)
             success_bar(self.tr("保存配置成功"))
         else:
+            logger.error(f"Bot 配置保存失败(QQID: {mask_qqid(config.bot.QQID)})", log_source=LogSource.UI)
             error_bar(self.tr("保存配置文件时引发错误"))
 
     def slot_add_connect_button(self) -> None:
@@ -202,21 +218,28 @@ class ConfigPage(QWidget):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
+        logger.info("打开连接配置类型选择对话框", log_source=LogSource.UI)
         if not (_choose_connect_type_box := ChooseConfigTypeDialog(it(MainWindow))).exec():
             # 获取用户选择的结果并判断是否取消
+            logger.trace("连接配置类型选择已取消", log_source=LogSource.UI)
             return
 
         if (_connect_type := _choose_connect_type_box.get_value()) == ConnectType.NO_TYPE:
             # 判断用户选择的类型, 如果没有选择则直接退出
+            logger.trace("连接配置类型选择为空，终止添加流程", log_source=LogSource.UI)
             return
 
         dialog_class = self.CONNECT_TYPE_AND_DIALOG.get(_connect_type)
         if dialog_class is None:
+            logger.warning(f"未找到连接配置对话框: type={_connect_type}", log_source=LogSource.UI)
             return
 
         if not (_connect_config_box := dialog_class(it(MainWindow))).exec():
             # 判断用户在配置的时候是否选择了取消
+            logger.trace(f"连接配置填写已取消: type={_connect_type}", log_source=LogSource.UI)
             return
 
         # 拿到配置项添加卡片
-        self.connect_widget.add_card(_connect_config_box.get_config())
+        config = _connect_config_box.get_config()
+        self.connect_widget.add_card(config)
+        logger.info(f"连接配置已添加: type={type(config).__name__}, name={config.name}", log_source=LogSource.UI)

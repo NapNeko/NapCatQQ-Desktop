@@ -63,6 +63,8 @@ from src.core.config.config_model import (
     WebsocketServersConfig,
 )
 from src.core.network.urls import Urls
+from src.core.utils.logger import LogSource, logger
+from src.core.utils.logger.crash_bundle import mask_qqid
 from src.core.utils.run_napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon, NapCatDesktopIcon
 from src.ui.components.info_bar import error_bar
@@ -164,10 +166,12 @@ class BotCard(HeaderCardWidget):
     # ==================== 槽函数 ====================
     def slot_run_button(self) -> None:
         """处理运行按钮点击"""
+        logger.info(f"请求启动 Bot(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
         it(ManagerNapCatQQProcess).create_napcat_process(self._config)
 
     def slot_stop_button(self) -> None:
         """处理停止按钮点击"""
+        logger.info(f"请求停止 Bot(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
         it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
         it(ManagerAutoRestartProcess).remove_auto_restart_timer(str(self._config.bot.QQID))
 
@@ -195,6 +199,7 @@ class BotCard(HeaderCardWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
+        logger.info(f"打开 Bot 日志页(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
         page = it(BotPage)
         page.view.setCurrentWidget(page.log_page)
         page.log_page.set_current_log_manager(self._config)
@@ -204,6 +209,7 @@ class BotCard(HeaderCardWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
+        logger.info(f"打开 Bot 配置页(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
         page = it(BotPage)
         page.view.setCurrentWidget(page.bot_config_page)
         page.bot_config_page.fill_config(self._config)
@@ -220,6 +226,7 @@ class BotCard(HeaderCardWidget):
         ).exec():
             qq_id = str(self._config.bot.QQID)
             process_manager = it(ManagerNapCatQQProcess)
+            logger.info(f"确认移除 Bot(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
 
             if process_manager.get_process(qq_id) is not None:
                 process_manager.stop_process(qq_id)
