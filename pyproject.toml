@@ -47,4 +47,23 @@ import_heading_firstparty = "项目内模块导入"
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-cov>=6.2.1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["script/test"]
+python_files = ["test_*.py"]
+addopts = "-ra --basetemp=test-artifacts"
+cache_dir = "test-artifacts/.pytest_cache"
+filterwarnings = [
+    "ignore:Please import .*gaussian_filter.*:DeprecationWarning",
+]
+
+[tool.coverage.run]
+data_file = "test-artifacts/.coverage"
+
+[tool.coverage.html]
+directory = "test-artifacts/coverage-html"
+
+[tool.coverage.xml]
+output = "test-artifacts/coverage.xml"
