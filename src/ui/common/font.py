@@ -23,7 +23,7 @@ class FontManager:
             return ""
 
         if font_families := QFontDatabase.applicationFontFamilies(font_id):
-            logger.info(f"字体加载成功: {font_families[0]}")
+            logger.trace(f"字体加载成功: {font_families[0]}")
             return font_families[0]
 
         logger.error(f"未找到字体家族: {font_path}")
