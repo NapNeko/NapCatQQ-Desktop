@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from string import Template
+from typing import Any
 
 # 第三方库导入
 import httpx
@@ -60,7 +62,8 @@ class WebHook(QObject, QRunnable):
     def run(self) -> None:
         """发送 WebHook 请求"""
         try:
-            if not self.validate_and_format_json():
+            is_valid, payload = self.validate_and_format_json()
+            if not is_valid:
                 self.error_signal.emit("无效的 JSON 内容")
                 logger.warning("WebHook JSON 校验失败", LogType.NETWORK, LogSource.CORE)
                 return
@@ -88,7 +91,7 @@ class WebHook(QObject, QRunnable):
                 }
             )
 
-            response = httpx.post(self.data.url, json=self.data.json, headers=headers, timeout=10.0)
+            response = httpx.post(self.data.url, json=payload, headers=headers, timeout=10.0)
             response.raise_for_status()
             self.success_signal.emit("WebHook 发送成功")
 
@@ -98,13 +101,16 @@ class WebHook(QObject, QRunnable):
             self.error_signal.emit(f"{e.__class__.__name__}: {str(e)}")
             logger.error(f"WebHook 请求错误: {e.__class__.__name__}", LogType.NETWORK, LogSource.CORE)
 
-    def validate_and_format_json(self) -> bool:
-        """验证并格式化 JSON 内容"""
+    def validate_and_format_json(
+        self,
+    ) -> tuple[bool, Mapping[str, Any] | Sequence[Any] | str | int | float | bool | None]:
+        """验证并规范化 JSON 内容，返回可直接发送的 Python 对象。"""
         try:
-            self.data.json = json.dumps(json.loads(self.data.json), indent=4)
-            return True
+            payload = json.loads(self.data.json)
+            self.data.json = json.dumps(payload, indent=4, ensure_ascii=False)
+            return True, payload
         except json.JSONDecodeError:
-            return False
+            return False, None
 
 
 def create_test_webhook_task() -> WebHook:
