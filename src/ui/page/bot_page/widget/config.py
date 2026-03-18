@@ -118,6 +118,7 @@ class BotConfigWidget(ScrollArea):
         self._config = config
         self.bot_name_card.fill_value(self._config.name)
         self.bot_qq_id_card.fill_value(self._config.QQID)
+        self.bot_qq_id_card.setEnabled(False)
         self.music_sign_url_card.fill_value(self._config.musicSignUrl)
         self.auto_restart_dialog_card.fill_value(self._config.autoRestartSchedule)
         self.offline_auto_restart_card.fill_value(self._config.offlineAutoRestart)
@@ -126,6 +127,7 @@ class BotConfigWidget(ScrollArea):
         """清空配置"""
         for card in self.cards:
             card.clear()
+        self.bot_qq_id_card.setEnabled(True)
 
     # ==================== 重写方法 ====================
     def adjustSize(self) -> None:

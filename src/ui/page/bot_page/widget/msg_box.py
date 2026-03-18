@@ -144,6 +144,8 @@ class ChooseConfigTypeDialog(MessageBoxBase):
 class ConfigDialogBase(MessageBoxBase):
     """配置对话框基类，提供通用的配置界面和验证功能"""
 
+    _VALIDATION_HINT = " - 配置错误请重试"
+
     def __init__(self, parent: QObject, config: NetworkBaseConfig | None) -> None:
         """初始化配置对话框基类
 
@@ -191,22 +193,53 @@ class ConfigDialogBase(MessageBoxBase):
         # 禁用名字卡片（编辑模式下名称不可修改）
         self.name_card.setEnabled(False)
 
+    def _clear_validation_error(self) -> None:
+        """清理标题上的校验提示。"""
+        if self.title_label.text().endswith(self._VALIDATION_HINT):
+            self.title_label.setText(self.title_label.text()[: -len(self._VALIDATION_HINT)])
+
+    def _show_validation_error(self) -> None:
+        """在标题上追加校验提示。"""
+        self._clear_validation_error()
+        self.title_label.setText(self.title_label.text() + self._VALIDATION_HINT)
+
+    def _parse_required_int(self, raw_value: str, field_name: str, *, minimum: int = 1) -> int:
+        """解析必填正整数输入。"""
+        value = raw_value.strip()
+        if not value:
+            raise ValueError(f"{field_name} 不能为空")
+
+        try:
+            parsed = int(value)
+        except ValueError as error:
+            raise ValueError(f"{field_name} 必须是整数") from error
+
+        if parsed < minimum:
+            raise ValueError(f"{field_name} 不能小于 {minimum}")
+
+        return parsed
+
+    def _parse_optional_int(self, raw_value: str, field_name: str, *, default: int, minimum: int = 1) -> int:
+        """解析可留空的整数输入；留空时回落到默认值。"""
+        value = raw_value.strip()
+        if not value:
+            return default
+        return self._parse_required_int(value, field_name, minimum=minimum)
+
     @Slot()
     def accept(self) -> None:
         """重写接受方法，验证配置有效性
 
         在点击确定按钮时验证配置，如果验证失败显示错误信息
         """
+        self._clear_validation_error()
         try:
             # 验证配置
             self.get_config()
             # 关闭对话框
             super().accept()
-        except ValidationError as e:
-            # 显示错误信息
-            if "配置错误请重试" in self.title_label.text():
-                return
-            self.title_label.setText(self.title_label.text() + f" - 配置错误请重试")
+        except (ValidationError, ValueError):
+            self._show_validation_error()
 
     def get_config(self) -> NetworkBaseConfig:
         """获取配置数据
@@ -280,10 +313,11 @@ class HttpServerConfigDialog(ConfigDialogBase):
         Returns:
             HttpServersConfig: HTTP 服务器配置对象
         """
+        port = self._parse_required_int(self.port_card.get_value(), self.tr("Port"))
         return HttpServersConfig(
             **{
                 "host": self.host_card.get_value(),
-                "port": self.port_card.get_value(),
+                "port": port,
                 "enableCors": self.cors_card.get_value(),
                 "enableWebsocket": self.websocket_card.get_value(),
                 **super().get_config().model_dump(),
@@ -349,10 +383,11 @@ class HttpSSEServerConfigDialog(ConfigDialogBase):
         Returns:
             HttpSseServersConfig: HTTP SSE 服务器配置对象
         """
+        port = self._parse_required_int(self.port_card.get_value(), self.tr("Port"))
         return HttpSseServersConfig(
             **{
                 "host": self.host_card.get_value(),
-                "port": self.port_card.get_value(),
+                "port": port,
                 "enableCors": self.cors_card.get_value(),
                 "enableWebsocket": self.websocket_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
@@ -477,13 +512,17 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
         Returns:
             WebsocketServersConfig: WebSocket 服务器配置对象
         """
+        port = self._parse_required_int(self.port_card.get_value(), self.tr("Port"))
+        heart_interval = self._parse_optional_int(
+            self.heart_interval_card.get_value(), self.tr("心跳间隔"), default=30000
+        )
         return WebsocketServersConfig(
             **{
                 "host": self.host_card.get_value(),
-                "port": self.port_card.get_value(),
+                "port": port,
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
                 "enableForcePushEvent": self.force_push_event_card.get_value(),
-                "heartInterval": self.heart_interval_card.get_value(),
+                "heartInterval": heart_interval,
                 **super().get_config().model_dump(),
             }
         )
@@ -546,12 +585,18 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
         Returns:
             WebsocketClientsConfig: WebSocket 客户端配置对象
         """
+        heart_interval = self._parse_optional_int(
+            self.heart_interval_card.get_value(), self.tr("心跳间隔"), default=30000
+        )
+        reconnect_interval = self._parse_optional_int(
+            self.reconnect_interval_card.get_value(), self.tr("重连间隔"), default=30000
+        )
         return WebsocketClientsConfig(
             **{
                 "url": self.url_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
-                "heartInterval": self.heart_interval_card.get_value(),
-                "reconnectInterval": self.reconnect_interval_card.get_value(),
+                "heartInterval": heart_interval,
+                "reconnectInterval": reconnect_interval,
                 **super().get_config().model_dump(),
             }
         )

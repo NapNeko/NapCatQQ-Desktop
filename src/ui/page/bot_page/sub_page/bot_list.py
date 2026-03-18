@@ -9,7 +9,8 @@ from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import Config
-from src.core.config.operate_config import read_config
+from src.core.config.operate_config import delete_config, read_config
+from src.ui.components.info_bar import error_bar
 
 from ..widget.card import BotCard
 
@@ -88,6 +89,17 @@ class BotListPage(ScrollArea):
 
         用于移除 view 中指定 QQID 的 Bot Card
         """
+        target_config = next((config for config in self._bot_config_list if str(config.bot.QQID) == qqid), None)
+        if target_config is None:
+            error_bar(self.tr("未找到待移除的 Bot 配置"))
+            return
+
+        if not delete_config(target_config):
+            error_bar(self.tr("移除 Bot 配置失败"))
+            return
+
+        self._bot_config_list = [config for config in self._bot_config_list if str(config.bot.QQID) != qqid]
+
         for card in self._bot_card_list:
             if str(card._config.bot.QQID) == qqid:
                 self._bot_card_list.remove(card)
