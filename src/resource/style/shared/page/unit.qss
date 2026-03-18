@@ -1,0 +1,17 @@
+#UpdatePage,
+#UpdateView {
+    background: transparent;
+    border-color: transparent;
+}
+
+#UnitNapCatPage,
+#UnitQQPage,
+#UnitNCDPage,
+#UpdateView {
+    background: transparent;
+    border: none;
+}
+
+#UpdatePage {
+    border-top-left-radius: 16px;
+}

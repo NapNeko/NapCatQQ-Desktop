@@ -28,17 +28,11 @@
     </qresource>
 
     <qresource prefix="style">
-        <file>style/dark/page/home.qss</file>
-        <file>style/dark/page/setup.qss</file>
-        <file>style/dark/page/unit.qss</file>
-        <file>style/dark/widget/update_log_card.qss</file>
-        <file>style/dark/widget/code_editor.qss</file>
-
-        <file>style/light/page/home.qss</file>
-        <file>style/light/page/setup.qss</file>
-        <file>style/light/page/unit.qss</file>
-        <file>style/light/widget/update_log_card.qss</file>
-        <file>style/light/widget/code_editor.qss</file>
+        <file>style/shared/page/home.qss</file>
+        <file>style/shared/page/setup.qss</file>
+        <file>style/shared/page/unit.qss</file>
+        <file>style/shared/widget/update_log_card.qss</file>
+        <file>style/shared/widget/code_editor.qss</file>
     </qresource>
 
     <qresource prefix="template">

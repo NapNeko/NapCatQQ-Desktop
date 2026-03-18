@@ -1,0 +1,21 @@
+SetupTopCard,
+#setup_page,
+#SetupGeneralWidget,
+#SetupPersonalizationWidget,
+#SetupDeveloperWidget,
+#SetupView {
+    background: transparent;
+    border-color: transparent;
+}
+
+#SetupGeneralWidget,
+#SetupPersonalizationWidget,
+#SetupDeveloperWidget,
+#SetupView {
+    background: transparent;
+    border: none;
+}
+
+#setup_page {
+    border-top-left-radius: 16px;
+}

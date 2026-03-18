@@ -1,0 +1,12 @@
+PlainTextEdit {
+    color: palette(text);
+}
+
+PlainTextEdit::selection {
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+}
+
+QTextBrowser {
+    color: palette(text);
+}

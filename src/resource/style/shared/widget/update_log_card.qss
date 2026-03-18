@@ -1,0 +1,23 @@
+QTextBrowser {
+    color: palette(text);
+    background-color: transparent;
+    border: none;
+    border-radius: 5px;
+    padding: 2px 3px 2px 8px;
+}
+
+QTextBrowser:hover {
+    background-color: transparent;
+    border: none;
+}
+
+QTextBrowser:focus {
+    background-color: transparent;
+    border: none;
+}
+
+QTextBrowser:disabled {
+    background-color: transparent;
+    border: none;
+    color: palette(mid);
+}

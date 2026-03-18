@@ -1,0 +1,5 @@
+#home_page,
+#display_view {
+    background: transparent;
+    border: none;
+}
