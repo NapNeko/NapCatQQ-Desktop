@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
+import json
 from typing import TYPE_CHECKING
 
 # 第三方库导入
@@ -156,29 +157,52 @@ class BotOfflineEmailDialog(MessageBoxBase):
         self.stmp_server_port_card.fill_value(str(cfg.get(cfg.email_stmp_port)))
         self.encryption_card.fill_value(cfg.get(cfg.email_encryption))
 
-    def save_config(self) -> None:
-        """保存配置"""
+    def _collect_config_values(self) -> list[tuple[object, object]]:
+        """收集并预校验待保存的邮件配置。"""
         try:
-            cfg.set(cfg.bot_offline_email_notice, self.enable_card.get_value())
-            cfg.set(cfg.email_receiver, self.receivers_card.get_value())
-            cfg.set(cfg.email_sender, self.sender_card.get_value())
-            cfg.set(cfg.email_token, self.token_card.get_value())
-            cfg.set(cfg.email_stmp_server, self.stmp_server_card.get_value())
-            cfg.set(cfg.email_stmp_port, int(self.stmp_server_port_card.get_value()))
-            cfg.set(cfg.email_encryption, self.encryption_card.get_value())
+            smtp_port = int(self.stmp_server_port_card.get_value())
+        except ValueError as error:
+            raise ValueError("SMTP服务器端口必须为整数") from error
+
+        values = [
+            (cfg.bot_offline_email_notice, self.enable_card.get_value()),
+            (cfg.email_receiver, self.receivers_card.get_value()),
+            (cfg.email_sender, self.sender_card.get_value()),
+            (cfg.email_token, self.token_card.get_value()),
+            (cfg.email_stmp_server, self.stmp_server_card.get_value()),
+            (cfg.email_stmp_port, smtp_port),
+            (cfg.email_encryption, self.encryption_card.get_value()),
+        ]
+
+        for item, value in values:
+            if not item.validator.validate(value):
+                raise ValueError(f"配置项 {item.key} 的值无效")
+
+        return values
+
+    def save_config(self) -> bool:
+        """保存配置。"""
+        try:
+            values = self._collect_config_values()
+            for item, value in values:
+                cfg.set(item, value)
             success_bar(self.tr("配置已保存"))
             self.fill_config()
+            return True
         except ValueError:
             warning_bar(self.tr("配置保存失败，请检查输入是否正确"))
+            return False
 
     def accept(self) -> None:
         """接受按钮"""
-        self.save_config()
+        if not self.save_config():
+            return
         super().accept()
 
     def _send_test_email(self) -> None:
         """保存配置后发送测试邮件"""
-        self.save_config()
+        if not self.save_config():
+            return
 
         task = create_test_email_task()
         task.success_signal.connect(lambda msg: success_bar(self.tr(msg)))
@@ -229,29 +253,48 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         self.webhook_secret_card.fill_value(cfg.get(cfg.web_hook_secret))
         self.json_card.fill_value(cfg.get(cfg.web_hook_json))
 
-    def save_config(self) -> None:
-        """保存配置"""
+    def _collect_config_values(self) -> list[tuple[object, object]]:
+        """收集并预校验待保存的 WebHook 配置。"""
+        json_payload = self.json_card.get_value()
+        json.loads(json_payload)
+
+        values = [
+            (cfg.bot_offline_web_hook_notice, self.enable_card.get_value()),
+            (cfg.web_hook_url, self.webhook_url_card.get_value()),
+            (cfg.web_hook_secret, self.webhook_secret_card.get_value()),
+            (cfg.web_hook_json, json_payload),
+        ]
+
+        for item, value in values:
+            if not item.validator.validate(value):
+                raise ValueError(f"配置项 {item.key} 的值无效")
+
+        return values
+
+    def save_config(self) -> bool:
+        """保存配置。"""
         try:
-            cfg.set(cfg.bot_offline_web_hook_notice, self.enable_card.get_value())
-            cfg.set(cfg.web_hook_url, self.webhook_url_card.get_value())
-            cfg.set(cfg.web_hook_secret, self.webhook_secret_card.get_value())
-            cfg.set(cfg.web_hook_json, self.json_card.get_value())
+            values = self._collect_config_values()
+            for item, value in values:
+                cfg.set(item, value)
+            success_bar(self.tr("配置已保存"))
             self.fill_config()
-        except ValueError:
+            return True
+        except (TypeError, ValueError, json.JSONDecodeError):
             warning_bar(self.tr("配置保存失败，请检查输入是否正确"))
+            return False
 
     def accept(self) -> None:
         """接受按钮"""
-
-        if self.json_card.json_text_edit.check_json(False) is False:
+        if not self.save_config():
             return
 
-        self.save_config()
         super().accept()
 
     def _send_test_webhook(self) -> None:
         """保存配置后发送测试请求"""
-        self.save_config()
+        if not self.save_config():
+            return
 
         task = create_test_webhook_task()
         task.success_signal.connect(lambda msg: success_bar(self.tr(msg)))
