@@ -23,6 +23,8 @@ from src.core.network.downloader import GithubDownloader, QQDownloader
 from src.core.network.urls import Urls
 from src.core.utils.get_version import GetRemoteVersionRunnable, VersionData
 from src.core.utils.install_func import NapCatInstall, QQInstall
+from src.core.utils.logger import LogSource, logger
+from src.core.utils.logger.crash_bundle import summarize_path, summarize_url
 from src.core.utils.path_func import PathFunc
 from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
 from src.ui.components.info_bar import error_bar, success_bar
@@ -185,6 +187,7 @@ class InstallPageBase(QWidget):
     @Slot()
     def on_error_finish(self) -> None:
         """统一处理安装引导页中的下载/安装失败。"""
+        logger.error(f"引导安装页流程失败: page={type(self).__name__}", log_source=LogSource.UI)
         self.on_switch_button(ButtonStatus.UNINSTALLED)
         error_bar(self.tr("操作失败，请重试"), parent=self.window())
 
@@ -246,19 +249,29 @@ class InstallQQPage(InstallPageBase):
         if download_url is None:
             self.url = None
             self.file_path = None
+            logger.error("引导安装 QQ: 获取下载链接失败", log_source=LogSource.UI)
             error_bar(self.tr("获取 QQ 下载链接失败，请重试"), parent=self.window())
             return
 
         self.url = QUrl(download_url)
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
+        logger.info(
+            f"引导安装 QQ: 下载链接已就绪 source={summarize_url(self.url.toString())}",
+            log_source=LogSource.UI,
+        )
 
     @Slot()
     def on_download(self) -> None:
         """下载"""
         if self.url is None:
+            logger.warning("引导安装 QQ: 下载链接未就绪，重新获取", log_source=LogSource.UI)
             self._fetch_download_url()
             return
 
+        logger.info(
+            f"引导安装 QQ: 开始下载 installer={self.url.fileName()}, source={summarize_url(self.url.toString())}",
+            log_source=LogSource.UI,
+        )
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         self.downloader = QQDownloader(self.url)
         self.downloader.download_progress_signal.connect(self.set_progress_ring_value)
@@ -278,6 +291,7 @@ class InstallQQPage(InstallPageBase):
         folder_box = FolderBox(self.tr("选择安装路径"), it(GuideWindow))
         folder_box.cancelButton.hide()
         folder_box.exec()
+        logger.info("引导安装 QQ: 已确认安装路径", log_source=LogSource.UI)
 
         # 修改注册表, 让安装程序读取注册表按照路径安装
         key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Tencent\QQNT")
@@ -286,6 +300,7 @@ class InstallQQPage(InstallPageBase):
 
         # 开始安装
         if self.file_path is None:
+            logger.error("引导安装 QQ: 安装包路径为空", log_source=LogSource.UI)
             self.on_error_finish()
             return
 
@@ -304,6 +319,10 @@ class InstallQQPage(InstallPageBase):
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
+        logger.info(
+            f"引导安装 QQ 完成: installer={summarize_path(self.file_path) if self.file_path else '<empty-path>'}",
+            log_source=LogSource.UI,
+        )
         success_bar(self.tr("安装完成"), parent=it(GuideWindow))
         it(GuideWindow).on_next_page()
 
@@ -328,6 +347,10 @@ class InstallNapCatQQPage(InstallPageBase):
     @Slot()
     def on_download(self) -> None:
         """下载"""
+        logger.info(
+            f"引导安装 NapCat: 开始下载 package={self.url.fileName()}, source={summarize_url(self.url.toString())}",
+            log_source=LogSource.UI,
+        )
         self.downloader = GithubDownloader(self.url)
         self.downloader.download_progress_signal.connect(self.set_progress_ring_value)
         self.downloader.download_finish_signal.connect(self.on_install)
@@ -341,6 +364,7 @@ class InstallNapCatQQPage(InstallPageBase):
     @Slot()
     def on_install(self) -> None:
         """安装"""
+        logger.info("引导安装 NapCat: 下载完成，开始安装", log_source=LogSource.UI)
         self.installer = NapCatInstall()
         self.installer.status_label_signal.connect(self.set_status_text)
         self.installer.error_finish_signal.connect(self.on_error_finish)
@@ -356,5 +380,9 @@ class InstallNapCatQQPage(InstallPageBase):
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
+        logger.info(
+            f"引导安装 NapCat 完成: path={summarize_path(it(PathFunc).napcat_path)}",
+            log_source=LogSource.UI,
+        )
         success_bar(self.tr("安装完成"), parent=it(GuideWindow))
         it(GuideWindow).on_next_page()
