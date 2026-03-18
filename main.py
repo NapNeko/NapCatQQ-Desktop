@@ -51,6 +51,7 @@ class ExceptionLoggingApplication(QApplication):
 
 def run_application() -> int:
     """启动桌面应用并返回事件循环退出码。"""
+    raw_argv = list(sys.argv)
     runtime_options, filtered_argv = parse_runtime_launch_options(sys.argv)
     apply_runtime_launch_options(runtime_options)
     sys.argv[:] = filtered_argv
@@ -62,6 +63,10 @@ def run_application() -> int:
             f"应用启动: mode={runtime_mode}, developer_mode={runtime_options.developer_mode}, "
             f"base_path={base_path}, log_file={logger.log_path}"
         ),
+        log_source=LogSource.CORE,
+    )
+    logger.trace(
+        f"启动参数解析完成: raw_argv={raw_argv}, filtered_argv={filtered_argv}",
         log_source=LogSource.CORE,
     )
     if runtime_options.developer_mode:
@@ -93,6 +98,14 @@ def run_application() -> int:
 
     # 设置 DPI 缩放
     dpi_scale = cfg.get(cfg.dpi_scale)
+    logger.trace(
+        (
+            "窗口启动前状态: "
+            f"main_window={cfg.get(cfg.main_window)}, "
+            f"eula_accepted={cfg.get(cfg.elua_accepted)}, dpi_scale={dpi_scale}"
+        ),
+        log_source=LogSource.CORE,
+    )
     if dpi_scale == "Auto":
         QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
         logger.info("DPI 缩放策略: Auto(PassThrough)", log_source=LogSource.CORE)
