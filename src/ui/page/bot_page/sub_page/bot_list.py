@@ -78,7 +78,7 @@ class BotListPage(ScrollArea):
         else:
             # 不一致则赋值给属性
             self._bot_config_list = configs.copy()
-            logger.info(f"Bot 列表已刷新: count={len(self._bot_config_list)}", log_source=LogSource.UI)
+            logger.trace(f"Bot 列表已刷新: count={len(self._bot_config_list)}", log_source=LogSource.UI)
 
         # 创建 Bot Card 并添加到布局
         for config in self._bot_config_list:
@@ -134,7 +134,7 @@ class BotListPage(ScrollArea):
             # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
-            logger.info("进入新增 Bot 配置流程", log_source=LogSource.UI)
+            logger.trace("进入新增 Bot 配置流程", log_source=LogSource.UI)
             page = it(BotPage)
             page.view.setCurrentWidget(page.add_config_page)
             page.add_config_page.clear_config()

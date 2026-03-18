@@ -177,7 +177,7 @@ class ConfigPage(QWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        logger.info("Bot 配置页返回到 Bot 列表", log_source=LogSource.UI)
+        logger.trace("Bot 配置页返回到 Bot 列表", log_source=LogSource.UI)
         page = it(BotPage)
         page.view.setCurrentWidget(page.bot_list_page)
 
@@ -218,7 +218,7 @@ class ConfigPage(QWidget):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
-        logger.info("打开连接配置类型选择对话框", log_source=LogSource.UI)
+        logger.trace("打开连接配置类型选择对话框", log_source=LogSource.UI)
         if not (_choose_connect_type_box := ChooseConfigTypeDialog(it(MainWindow))).exec():
             # 获取用户选择的结果并判断是否取消
             logger.trace("连接配置类型选择已取消", log_source=LogSource.UI)

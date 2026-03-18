@@ -199,7 +199,7 @@ class BotCard(HeaderCardWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        logger.info(f"打开 Bot 日志页(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
+        logger.trace(f"打开 Bot 日志页(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
         page = it(BotPage)
         page.view.setCurrentWidget(page.log_page)
         page.log_page.set_current_log_manager(self._config)
@@ -209,7 +209,7 @@ class BotCard(HeaderCardWidget):
         # 项目内模块导入
         from src.ui.page.bot_page import BotPage
 
-        logger.info(f"打开 Bot 配置页(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
+        logger.trace(f"打开 Bot 配置页(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
         page = it(BotPage)
         page.view.setCurrentWidget(page.bot_config_page)
         page.bot_config_page.fill_config(self._config)
