@@ -63,7 +63,7 @@ from src.core.config.config_model import (
     WebsocketServersConfig,
 )
 from src.core.network.urls import Urls
-from src.core.utils.run_napcat import ManagerNapCatQQProcess, ManagerAutoRestartProcess
+from src.core.utils.run_napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon, NapCatDesktopIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
@@ -218,7 +218,15 @@ class BotCard(HeaderCardWidget):
             self.tr(f"确定要移除 Bot ({self._config.bot.QQID}) 吗？\n此操作无法恢复!"),
             it(MainWindow),
         ).exec():
-            self.stop_button.click()
+            qq_id = str(self._config.bot.QQID)
+            process_manager = it(ManagerNapCatQQProcess)
+
+            if process_manager.get_process(qq_id) is not None:
+                process_manager.stop_process(qq_id)
+            else:
+                it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
+
+            it(ManagerAutoRestartProcess).remove_auto_restart_timer(qq_id)
             self.remove_signal.emit(str(self._config.bot.QQID))
 
 
