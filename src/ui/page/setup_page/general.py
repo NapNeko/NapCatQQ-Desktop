@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QGridLayout, QWidget
 from src.core.config import cfg
 from src.core.network.email import EncryptionType, create_test_email_task
 from src.core.network.webhook import create_test_webhook_task
+from src.core.utils.logger import LogSource, logger
 from src.ui.components.info_bar import error_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
@@ -186,10 +187,21 @@ class BotOfflineEmailDialog(MessageBoxBase):
             values = self._collect_config_values()
             for item, value in values:
                 cfg.set(item, value)
+            logger.info(
+                (
+                    "邮件通知配置已保存: "
+                    f"enabled={self.enable_card.get_value()}, "
+                    f"receiver_configured={bool(self.receivers_card.get_value())}, "
+                    f"sender_configured={bool(self.sender_card.get_value())}, "
+                    f"server={self.stmp_server_card.get_value()}:{self.stmp_server_port_card.get_value()}"
+                ),
+                log_source=LogSource.UI,
+            )
             success_bar(self.tr("配置已保存"))
             self.fill_config()
             return True
-        except ValueError:
+        except ValueError as exc:
+            logger.warning(f"邮件通知配置保存失败: {exc}", log_source=LogSource.UI)
             warning_bar(self.tr("配置保存失败，请检查输入是否正确"))
             return False
 
@@ -204,6 +216,7 @@ class BotOfflineEmailDialog(MessageBoxBase):
         if not self.save_config():
             return
 
+        logger.info("准备发送测试邮件", log_source=LogSource.UI)
         task = create_test_email_task()
         task.success_signal.connect(lambda msg: success_bar(self.tr(msg)))
         task.error_signal.connect(lambda msg: error_bar(msg))
@@ -277,10 +290,21 @@ class BotOfflineWebHookDialog(MessageBoxBase):
             values = self._collect_config_values()
             for item, value in values:
                 cfg.set(item, value)
+            logger.info(
+                (
+                    "WebHook 通知配置已保存: "
+                    f"enabled={self.enable_card.get_value()}, "
+                    f"url_configured={bool(self.webhook_url_card.get_value())}, "
+                    f"secret_configured={bool(self.webhook_secret_card.get_value())}, "
+                    f"json_chars={len(self.json_card.get_value())}"
+                ),
+                log_source=LogSource.UI,
+            )
             success_bar(self.tr("配置已保存"))
             self.fill_config()
             return True
-        except (TypeError, ValueError, json.JSONDecodeError):
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            logger.warning(f"WebHook 通知配置保存失败: {exc}", log_source=LogSource.UI)
             warning_bar(self.tr("配置保存失败，请检查输入是否正确"))
             return False
 
@@ -296,6 +320,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         if not self.save_config():
             return
 
+        logger.info("准备发送测试 WebHook 请求", log_source=LogSource.UI)
         task = create_test_webhook_task()
         task.success_signal.connect(lambda msg: success_bar(self.tr(msg)))
         task.error_signal.connect(lambda msg: error_bar(msg))

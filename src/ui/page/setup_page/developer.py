@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QWidget
 # 项目内模块导入
 from src.core.utils.logger import LogSource, logger
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
+from src.ui.components.input_card.generic_card import SwitchConfigCard
 
 
 class ActionButtonCard(SettingCard):
@@ -54,6 +55,14 @@ class Developer(ScrollArea):
 
     def _create_config_cards(self) -> None:
         """创建开发者配置卡片。"""
+        self.log_group = SettingCardGroup(title=self.tr("日志"), parent=self.view)
+        self.trace_logging_card = SwitchConfigCard(
+            FI.DEVELOPER_TOOLS,
+            self.tr("启用 TRACE 日志"),
+            self.tr("仅对当前会话生效，用于输出更详细的开发者日志"),
+            logger.is_trace_logging_enabled(),
+            self.log_group,
+        )
         self.crash_group = SettingCardGroup(title=self.tr("崩溃诊断"), parent=self.view)
         self.export_bundle_card = ActionButtonCard(
             icon=FI.DEVELOPER_TOOLS,
@@ -82,13 +91,27 @@ class Developer(ScrollArea):
 
     def _set_layout(self) -> None:
         """控件布局。"""
+        self.log_group.addSettingCard(self.trace_logging_card)
         self.crash_group.addSettingCard(self.export_bundle_card)
         self.crash_group.addSettingCard(self.thread_exception_card)
         self.crash_group.addSettingCard(self.main_exception_card)
 
+        self.expand_layout.addWidget(self.log_group)
         self.expand_layout.addWidget(self.crash_group)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
+
+        self.trace_logging_card.switchButton.checkedChanged.connect(self._on_trace_logging_changed)
+
+    def _on_trace_logging_changed(self, enabled: bool) -> None:
+        """切换开发者 TRACE 日志开关。"""
+        logger.set_trace_logging_enabled(enabled)
+        logger.info(f"开发者模式切换 TRACE 日志: enabled={enabled}", log_source=LogSource.UI)
+        if enabled:
+            info_bar(self.tr("TRACE 日志已启用"), parent=self)
+            logger.trace("开发者模式 TRACE 日志已启用，后续将输出更详细上下文", log_source=LogSource.UI)
+        else:
+            info_bar(self.tr("TRACE 日志已关闭"), parent=self)
 
     def _export_test_crash_bundle(self) -> None:
         """手动生成一份测试用诊断包。"""
