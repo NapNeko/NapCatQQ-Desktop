@@ -125,15 +125,20 @@ def run_application() -> int:
     return exit_code
 
 
-if __name__ == "__main__":
+def main_entry() -> int:
+    """CLI 入口，负责安装全局异常钩子并返回进程退出码。"""
     logger.install_exception_hooks()
 
     try:
-        sys.exit(run_application())
+        return run_application()
     except SystemExit:
         raise
     except Exception as exc:
         logger.critical("应用启动或运行过程中出现未处理异常", log_source=LogSource.CORE)
         logger.exception("应用未处理异常详情", exc, log_source=LogSource.CORE)
         logger.emit_crash_bundle("main", exc, type(exc), exc.__traceback__)
-        sys.exit(1)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main_entry())
