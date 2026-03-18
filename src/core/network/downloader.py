@@ -10,7 +10,8 @@ from PySide6.QtCore import QObject, QRunnable, QUrl, Signal
 # 项目内模块导入
 from src.core.common.status import ButtonStatus, ProgressRingStatus
 from src.core.network.urls import Urls
-from src.core.utils.logger import logger
+from src.core.utils.logger import LogSource, LogType, logger
+from src.core.utils.logger.crash_bundle import summarize_url, summarize_path
 from src.core.utils.path_func import PathFunc
 
 
@@ -62,6 +63,11 @@ class GithubDownloader(DownloaderBase):
 
     def run(self) -> None:
         """运行下载 NapCatQQ 的任务"""
+        logger.info(
+            f"开始 Github 下载任务: file={self.file_name}, source={summarize_url(self.url.toString())}",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
         # 显示进度环为不确定进度环
         self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
 
@@ -74,6 +80,11 @@ class GithubDownloader(DownloaderBase):
 
         for mirror_url in self.mirror_urls:
             self.url = QUrl(mirror_url)
+            logger.warning(
+                f"切换下载镜像重试: file={self.file_name}, source={summarize_url(self.url.toString())}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
             if self.download():
                 self.download_finish_signal.emit()  # 发送下载完成信号
                 return
@@ -103,10 +114,21 @@ class GithubDownloader(DownloaderBase):
 
             # 下载完成
             self.status_label_signal.emit(self.tr("下载完成"))
+            logger.info(
+                (
+                    "Github 下载完成: "
+                    f"file={self.file_name}, bytes={total_size}, "
+                    f"output={summarize_path(self.path / self.url.fileName())}"
+                ),
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
             return True
 
         except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, Exception) as e:
-            logger.error(f"下载失败: {e}")
+            logger.error(
+                f"Github 下载失败: file={self.file_name}, source={summarize_url(self.url.toString())}, error={e}"
+            )
         finally:
             self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
         return False
@@ -138,6 +160,11 @@ class QQDownloader(DownloaderBase):
 
     def run(self) -> None:
         """运行下载 QQ 的任务"""
+        logger.info(
+            f"开始 QQ 下载任务: file={self.url.fileName()}, source={summarize_url(self.url.toString())}",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
 
         # 开始下载 QQ
         try:
@@ -162,9 +189,21 @@ class QQDownloader(DownloaderBase):
             # 下载完成
             self.download_finish_signal.emit()  # 发送下载完成信号
             self.status_label_signal.emit(self.tr("下载完成"))
+            logger.info(
+                (
+                    "QQ 下载完成: "
+                    f"file={self.url.fileName()}, bytes={total_size}, "
+                    f"output={summarize_path(self.path / self.url.fileName())}"
+                ),
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
         except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, Exception) as e:
             self.status_label_signal.emit(self.tr(f"下载失败: {e}"))
+            logger.error(
+                f"QQ 下载失败: file={self.url.fileName()}, source={summarize_url(self.url.toString())}, error={e}"
+            )
             self.error_finsh_signal.emit()
 
         finally:

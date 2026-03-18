@@ -59,6 +59,20 @@ class WebHook(QObject, QRunnable):
         # 自动销毁
         self.setAutoDelete(True)
 
+    @staticmethod
+    def _summarize_payload(payload: Mapping[str, Any] | Sequence[Any] | str | int | float | bool | None) -> str:
+        """生成便于调试的请求体摘要，避免直接输出完整内容。"""
+        if isinstance(payload, Mapping):
+            keys = list(payload.keys())
+            preview = ", ".join(str(key) for key in keys[:6])
+            suffix = "" if len(keys) <= 6 else ", ..."
+            return f"object(len={len(keys)}, keys=[{preview}{suffix}])"
+
+        if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
+            return f"array(len={len(payload)})"
+
+        return f"{type(payload).__name__}"
+
     def run(self) -> None:
         """发送 WebHook 请求"""
         try:
@@ -66,6 +80,11 @@ class WebHook(QObject, QRunnable):
             if not is_valid:
                 self.error_signal.emit("无效的 JSON 内容")
                 logger.warning("WebHook JSON 校验失败", LogType.NETWORK, LogSource.CORE)
+                logger.trace(
+                    f"WebHook JSON 原始内容摘要: chars={len(self.data.json)}, url={self.data.url}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
                 return
 
             payload_size = len(self.data.json.encode("utf-8"))
@@ -75,6 +94,15 @@ class WebHook(QObject, QRunnable):
                     f"configured={bool(self.data.url)}, "
                     f"has_auth={bool(self.data.secret)}, "
                     f"payload_bytes={payload_size}"
+                ),
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            logger.trace(
+                (
+                    "WebHook 请求细节: "
+                    f"url={self.data.url}, has_auth={bool(self.data.secret)}, "
+                    f"payload_summary={self._summarize_payload(payload)}"
                 ),
                 LogType.NETWORK,
                 LogSource.CORE,
