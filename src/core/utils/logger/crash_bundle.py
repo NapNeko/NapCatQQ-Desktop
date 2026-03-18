@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from PySide6.QtCore import QStandardPaths
 
@@ -52,6 +53,48 @@ def mask_qqid(value: Any) -> str:
     if not digits:
         return "***"
     return f"***{digits[-4:]}"
+
+
+def mask_email(value: Any) -> str:
+    """对邮箱进行掩码处理。"""
+    text = str(value or "").strip()
+    if "@" not in text:
+        return REDACTED_EMAIL
+
+    local_part, _, domain = text.partition("@")
+    if not local_part or not domain:
+        return REDACTED_EMAIL
+
+    prefix = local_part[:1]
+    return f"{prefix}***@{domain}"
+
+
+def summarize_url(value: Any) -> str:
+    """输出适合日志记录的 URL 摘要，不包含 query 和 token。"""
+    text = str(value or "").strip()
+    if not text:
+        return "<empty-url>"
+
+    parsed = urlsplit(text)
+    if not parsed.scheme or not parsed.netloc:
+        return "<invalid-url>"
+
+    path = parsed.path.rstrip("/")
+    tail = Path(path).name if path else ""
+    suffix = f"/.../{tail}" if tail else ""
+    return f"{parsed.scheme}://{parsed.netloc}{suffix}"
+
+
+def summarize_path(value: Any) -> str:
+    """输出适合日志记录的路径摘要，仅保留末尾两级。"""
+    text = str(value or "").strip()
+    if not text:
+        return "<empty-path>"
+
+    parts = Path(text).parts
+    if len(parts) >= 2:
+        return str(Path("...") / parts[-2] / parts[-1])
+    return str(Path("...") / Path(text).name)
 
 
 def sanitize_text_for_export(text: str) -> str:
@@ -188,8 +231,12 @@ def build_crash_bundle(output_dir: Path, payload: CrashBundlePayload) -> Path:
     """生成脱敏后的崩溃诊断包。"""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    archive_name = f"NapCatQQ-Desktop-crash-{payload.created_at.strftime('%Y%m%d-%H%M%S-%f')}.zip"
-    archive_path = output_dir / archive_name
+    base_name = f"NapCatQQ-Desktop-crash-{payload.created_at.strftime('%Y%m%d-%H%M%S-%f')}"
+    archive_path = output_dir / f"{base_name}.zip"
+    suffix = 1
+    while archive_path.exists():
+        archive_path = output_dir / f"{base_name}-{suffix}.zip"
+        suffix += 1
 
     app_log_text = ""
     if payload.log_path.exists():

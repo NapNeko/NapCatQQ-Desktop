@@ -13,6 +13,7 @@ from enum import Enum
 class LogLevel(Enum):
     """日志等级"""
 
+    TRCE = -1  # trace
     DBUG = 0  # debug
     INFO = 1  # information
     WARN = 2  # warning

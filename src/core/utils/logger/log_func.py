@@ -19,6 +19,7 @@ from src.core.utils.logger.crash_bundle import (
 from src.core.utils.logger.log_data import Log, LogGroup, LogPosition
 from src.core.utils.logger.log_enum import LogLevel, LogSource, LogType
 from src.core.utils.logger.log_utils import capture_call_location
+from src.core.utils.runtime_args import is_developer_mode_enabled
 
 
 class Logger:
@@ -40,6 +41,7 @@ class Logger:
         self._crash_bundle_lock = threading.Lock()
         self._crash_bundle_path: Path | None = None
         self._crash_bundle_active = False
+        self._trace_logging_enabled_override: bool | None = None
 
     def load_config(self) -> None:
         """加载配置项"""
@@ -91,6 +93,22 @@ class Logger:
 
         return details
 
+    def is_trace_logging_enabled(self) -> bool:
+        """判断当前会话是否启用了 TRACE 日志。"""
+        if self._trace_logging_enabled_override is not None:
+            return self._trace_logging_enabled_override
+        return is_developer_mode_enabled()
+
+    def set_trace_logging_enabled(self, enabled: bool | None) -> None:
+        """设置 TRACE 日志运行时开关。None 表示恢复默认策略。"""
+        self._trace_logging_enabled_override = enabled
+
+    def _should_emit(self, level: LogLevel) -> bool:
+        """判断指定等级的日志当前是否需要输出。"""
+        if level == LogLevel.TRCE and not self.is_trace_logging_enabled():
+            return False
+        return True
+
     def _log(
         self,
         level: LogLevel,
@@ -112,6 +130,9 @@ class Logger:
             log_position (LogPosition | None): 日志位置
             log_group (LogGroup | None): 日志组，可为 None。
         """
+        if not self._should_emit(level):
+            return
+
         # 构造 Log
         log = Log(level, message, time, log_type, log_source, log_position)
 
@@ -129,6 +150,17 @@ class Logger:
         self.clear_buffer()
         # 打印 log
         print(log)
+
+    @capture_call_location
+    def trace(
+        self,
+        message: str,
+        log_type: LogType = LogType.NONE_TYPE,
+        log_source: LogSource = LogSource.NONE,
+        log_position: LogPosition | None = None,
+        log_group: LogGroup | None = None,
+    ):
+        self._log(LogLevel.TRCE, message, datetime.now().timestamp(), log_type, log_source, log_position, log_group)
 
     @capture_call_location
     def debug(
@@ -276,7 +308,7 @@ class Logger:
     def _handle_qt_message(self, msg_type, context, message: str) -> None:
         """接管 Qt 的 warning/critical/fatal 日志。"""
         level_mapping = {
-            QtMsgType.QtDebugMsg: LogLevel.DBUG,
+            QtMsgType.QtDebugMsg: LogLevel.TRCE,
             QtMsgType.QtInfoMsg: LogLevel.INFO,
             QtMsgType.QtWarningMsg: LogLevel.WARN,
             QtMsgType.QtCriticalMsg: LogLevel.EROR,
