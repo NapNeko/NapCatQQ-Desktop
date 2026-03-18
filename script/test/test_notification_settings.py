@@ -214,3 +214,28 @@ def test_webhook_dialog_valid_save_allows_test_task(monkeypatch) -> None:
 
     dialog._send_test_webhook()
     assert len(fake_pool.started) == 1
+
+
+def test_webhook_dialog_open_with_empty_json_does_not_log_parse_error(monkeypatch) -> None:
+    """打开 WebHook 配置弹窗时，空 JSON 配置不应被当成非法 JSON 记录错误。"""
+    ensure_qapp()
+    patch_cfg_storage(
+        monkeypatch,
+        {
+            general_module.cfg.bot_offline_web_hook_notice.key: False,
+            general_module.cfg.web_hook_url.key: "",
+            general_module.cfg.web_hook_secret.key: "",
+            general_module.cfg.web_hook_json.key: "",
+        },
+    )
+
+    from src.ui.components.code_editor import editor as editor_module
+
+    error_logs: list[str] = []
+    monkeypatch.setattr(editor_module.logger, "error", lambda message: error_logs.append(message))
+
+    parent = create_dialog_parent()
+    dialog = BotOfflineWebHookDialog(parent)
+
+    assert dialog.json_card.json_text_edit.toPlainText() == ""
+    assert error_logs == []

@@ -160,7 +160,12 @@ class JsonTemplateEditConfigCard(QFrame):
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
 
     def fill_value(self, value: str) -> None:
-        self.json_text_edit.set_json(str(value))
+        text = str(value)
+        if not text.strip():
+            self.json_text_edit.clear()
+            return
+
+        self.json_text_edit.set_json(text)
 
     def get_value(self) -> str:
         return self.json_text_edit.get_json()
