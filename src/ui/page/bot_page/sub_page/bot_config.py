@@ -8,12 +8,14 @@ from typing import Callable, cast
 
 # 第三方库导入
 from creart import it
+from pydantic import ValidationError
 from qfluentwidgets import FluentIcon, SegmentedWidget, TransparentPushButton
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import AdvancedConfig, BotConfig, Config, ConnectConfig
 from src.core.config.operate_config import update_config
+from src.core.utils.logger import LogSource, logger
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.bot_page.utils.enum import ConnectType
@@ -179,8 +181,14 @@ class ConfigPage(QWidget):
 
     def slot_save_config_button(self) -> None:
         """保存按钮槽函数"""
+        try:
+            config = self.get_config()
+        except (ValidationError, ValueError) as exc:
+            logger.warning(f"配置校验失败: {exc}", log_source=LogSource.UI)
+            error_bar(self.tr("配置校验失败，请检查输入内容"))
+            return
 
-        if update_config(self.get_config()):
+        if update_config(config):
             # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
