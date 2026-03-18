@@ -19,6 +19,7 @@ import src.ui.common.font as font_module
 @pytest.fixture
 def logger_stub(monkeypatch: pytest.MonkeyPatch) -> None:
     """屏蔽启动流程中的真实日志写入。"""
+    monkeypatch.setattr(main.logger, "trace", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.logger, "info", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.logger, "warning", lambda *args, **kwargs: None)
 

@@ -10,7 +10,13 @@ import pytest
 
 # 项目内模块导入
 import src.core.utils.logger.log_func as log_func_module
-from src.core.utils.logger.crash_bundle import build_safe_config_summary, sanitize_text_for_export
+from src.core.utils.logger.crash_bundle import (
+    build_safe_config_summary,
+    mask_email,
+    sanitize_text_for_export,
+    summarize_path,
+    summarize_url,
+)
 from src.core.utils.logger.log_func import Logger
 
 
@@ -144,6 +150,13 @@ def test_sanitize_text_for_export_redacts_sensitive_values() -> None:
     assert "<redacted-email>" in sanitized
     assert "<redacted-url>" in sanitized
     assert "***1217" in sanitized
+
+
+def test_log_summary_helpers_keep_context_without_exposing_raw_values() -> None:
+    """日志摘要辅助函数应保留调试上下文且避免输出完整敏感值。"""
+    assert mask_email("sensitive.user@example.com") == "s***@example.com"
+    assert summarize_url("https://example.com/webhook/path?token=secret") == "https://example.com/.../path"
+    assert summarize_path("C:/Users/QIAO/Desktop/update.bat") == "...\\Desktop\\update.bat"
 
 
 def test_build_safe_config_summary_excludes_sensitive_values(tmp_path: Path) -> None:

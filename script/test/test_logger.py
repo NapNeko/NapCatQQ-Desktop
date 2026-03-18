@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 
 # 项目内模块导入
 import src.core.utils.install_func as install_func
+import src.core.utils.logger.log_func as log_func_module
 from src.core.utils.install_func import QQInstall
 from src.core.utils.logger.log_func import Logger
 
@@ -63,6 +64,56 @@ def test_logger_exception_writes_traceback(tmp_path: Path) -> None:
     content = test_logger.log_path.read_text(encoding="utf-8")
     assert "处理失败: ValueError: boom" in content
     assert "Traceback" in content
+
+
+def test_logger_trace_is_suppressed_without_developer_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """未启用开发者模式时，TRACE 日志不应落盘。"""
+    test_logger = create_test_logger(tmp_path)
+    monkeypatch.setattr(log_func_module, "is_developer_mode_enabled", lambda: False)
+
+    test_logger.trace("trace hidden")
+
+    assert test_logger.log_path.read_text(encoding="utf-8") == ""
+
+
+def test_logger_trace_is_emitted_in_developer_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """启用开发者模式时，TRACE 日志应写入日志文件。"""
+    test_logger = create_test_logger(tmp_path)
+    monkeypatch.setattr(log_func_module, "is_developer_mode_enabled", lambda: True)
+
+    test_logger.trace("trace visible")
+
+    content = test_logger.log_path.read_text(encoding="utf-8")
+    assert "[TRCE]" in content
+    assert "trace visible" in content
+
+
+def test_logger_trace_override_can_enable_without_developer_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """运行时开关应允许在非开发者模式下临时启用 TRACE 日志。"""
+    test_logger = create_test_logger(tmp_path)
+    monkeypatch.setattr(log_func_module, "is_developer_mode_enabled", lambda: False)
+    test_logger.set_trace_logging_enabled(True)
+
+    test_logger.trace("trace by override")
+
+    content = test_logger.log_path.read_text(encoding="utf-8")
+    assert "[TRCE]" in content
+    assert "trace by override" in content
+
+
+def test_logger_trace_override_can_disable_in_developer_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """运行时开关应允许在开发者模式下临时关闭 TRACE 日志。"""
+    test_logger = create_test_logger(tmp_path)
+    monkeypatch.setattr(log_func_module, "is_developer_mode_enabled", lambda: True)
+    test_logger.set_trace_logging_enabled(False)
+
+    test_logger.trace("trace disabled by override")
+
+    assert test_logger.log_path.read_text(encoding="utf-8") == ""
 
 
 def test_install_exception_hooks_write_unhandled_exception(tmp_path: Path) -> None:

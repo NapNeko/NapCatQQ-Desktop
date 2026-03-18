@@ -94,6 +94,7 @@ class FakeManagedProcess(FakeProcess):
 @pytest.fixture
 def mute_run_napcat_logger(monkeypatch: pytest.MonkeyPatch) -> None:
     """屏蔽 run_napcat 模块的真实日志副作用。"""
+    monkeypatch.setattr(run_napcat.logger, "trace", lambda *args, **kwargs: None)
     monkeypatch.setattr(run_napcat.logger, "info", lambda *args, **kwargs: None)
     monkeypatch.setattr(run_napcat.logger, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(run_napcat.logger, "error", lambda *args, **kwargs: None)
