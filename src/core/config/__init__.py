@@ -58,7 +58,7 @@ from PySide6.QtCore import QLocale, Signal
 
 # 项目内模块导入
 from src.core.config.config_enum import CloseActionEnum, Language
-from src.core.utils.logger import logger
+from src.core.utils.logger import LogSource, logger
 from src.core.utils.path_func import PathFunc
 
 __version__ = "v1.7.28"
@@ -192,6 +192,8 @@ class Config(QConfig):
         if isinstance(file, (str, Path)):
             self._cfg.file = Path(file)
 
+        logger.trace(f"开始加载配置文件: path={self._cfg.file}", log_source=LogSource.CORE)
+
         # 加载配置文件
         try:
             with open(self._cfg.file, "r", encoding="utf-8") as f:
@@ -227,6 +229,14 @@ class Config(QConfig):
 
         # 应用主题
         self.theme = self.get(self.theme_mode)
+        logger.trace(
+            (
+                "配置加载完成: "
+                f"path={self._cfg.file}, flat_keys={len(flat_cfg)}, "
+                f"matched_items={sum(1 for key in flat_cfg if key in items)}, theme={self.theme}"
+            ),
+            log_source=LogSource.CORE,
+        )
 
 
 cfg = Config()
