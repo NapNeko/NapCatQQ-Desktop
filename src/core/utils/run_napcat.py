@@ -326,6 +326,11 @@ class NapCatQQLoginState(QObject):
             auth (str): 认证信息
         """
         self.auth = auth
+        logger.trace(
+            f"NapCat 登录认证信息已更新(QQID: {self.config.bot.QQID}, has_auth={bool(auth)})",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
 
     def slot_update_login_state(self, is_login: bool) -> None:
         """更新登录状态
@@ -334,6 +339,11 @@ class NapCatQQLoginState(QObject):
             is_login (bool): 是否已登录
         """
         self._is_logged_in = is_login
+        logger.trace(
+            f"NapCat 登录状态更新(QQID: {self.config.bot.QQID}, is_login={is_login})",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
 
         if is_login:
             self.qr_code_removed_signal.emit(str(self.config.bot.QQID))
@@ -349,6 +359,16 @@ class NapCatQQLoginState(QObject):
 
         # 更新当前在线状态
         self._online_status = online_status
+        logger.trace(
+            (
+                "NapCat 在线状态更新: "
+                f"QQID={self.config.bot.QQID}, prev_online={prev_online}, online={online_status}, "
+                f"is_logged_in={self._is_logged_in}, offline_notice_sent={self._offline_notice}, "
+                f"offline_auto_restart={self.config.bot.offlineAutoRestart}"
+            ),
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
 
         # 如果当前是在线，重置通知标志并直接返回
         if online_status:
@@ -441,6 +461,11 @@ class ManagerNapCatQQLoginState(QObject):
         """
         qq_id = str(config.bot.QQID)
         self.remove_login_state(qq_id)
+        logger.trace(
+            f"创建 NapCat 登录状态管理器(QQID: {qq_id}, port={port}, has_token={bool(token)})",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
 
         login_state = NapCatQQLoginState(config=config, port=port, token=token)
         login_state.qr_code_available_signal.connect(
@@ -503,6 +528,16 @@ class ManagerAutoRestartProcess(QObject):
             config.bot.autoRestartSchedule.duration * time_unit_multipliers[config.bot.autoRestartSchedule.time_unit]
         )
         interval_ms = interval * 1000
+        logger.trace(
+            (
+                "创建自动重启定时器: "
+                f"QQID={config.bot.QQID}, enable={config.bot.autoRestartSchedule.enable}, "
+                f"duration={config.bot.autoRestartSchedule.duration}, "
+                f"time_unit={config.bot.autoRestartSchedule.time_unit}, interval_ms={interval_ms}"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
 
         # 创建定时器
         timer = QTimer(self)
@@ -605,6 +640,11 @@ class ManagerNapCatQQProcess(QObject):
         Returns:
             QProcess: 配置好的 QProcess 对象
         """
+        logger.trace(
+            f"收到 NapCatQQ 启动请求(QQID: {config.bot.QQID}, existing_processes={len(self.napcat_process_dict)})",
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
         # 如果超过 4 个进程，则取消创建
         if len(self.napcat_process_dict) >= 4:
             logger.warning(
@@ -615,7 +655,9 @@ class ManagerNapCatQQProcess(QObject):
             self.notification_signal.emit("error", "NapCatQQ 进程数量已达上限，无法创建新进程!")
             return
 
-        if (qq_path := it(PathFunc).get_qq_path()) is None:
+        path_func = it(PathFunc)
+
+        if (qq_path := path_func.get_qq_path()) is None:
             logger.error(
                 f"未检测到 QQ 安装路径，无法启动 NapCatQQ 进程(QQID: {config.bot.QQID})",
                 LogType.FILE_FUNC,
@@ -623,6 +665,16 @@ class ManagerNapCatQQProcess(QObject):
             )
             self.notification_signal.emit("error", "未检测到 QQ 安装路径，无法启动 NapCatQQ 进程!")
             return
+
+        logger.trace(
+            (
+                "NapCatQQ 进程启动参数已解析: "
+                f"QQID={config.bot.QQID}, qq_path={qq_path}, "
+                f"launcher={getattr(path_func, 'napcat_path', '<unknown>')}"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
 
         # 创建 QProcess
         process = self._create_napcat_process(config, qq_path)
@@ -688,10 +740,25 @@ class ManagerNapCatQQProcess(QObject):
             return
 
         process = process_model.process
+        logger.trace(
+            (
+                "开始停止 NapCatQQ 进程: "
+                f"QQID={qq_id}, pid={process.processId()}, "
+                f"state={getattr(process.state(), 'name', process.state())}"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
 
         try:
             if (parent := psutil.Process(process.processId())).pid != 0:
-                [child.kill() for child in parent.children(recursive=True)]
+                child_processes = parent.children(recursive=True)
+                logger.trace(
+                    f"检测到 NapCatQQ 子进程数量(QQID: {qq_id}, children={len(child_processes)})",
+                    LogType.FILE_FUNC,
+                    LogSource.CORE,
+                )
+                [child.kill() for child in child_processes]
                 parent.kill()
                 process.kill()
                 process.waitForFinished()
@@ -726,6 +793,15 @@ class ManagerNapCatQQProcess(QObject):
             )
             return
 
+        logger.trace(
+            (
+                "收到 NapCatQQ 重启请求: "
+                f"QQID={config.bot.QQID}, pid={process_model.process.processId()}, "
+                f"state={getattr(process_model.process.state(), 'name', process_model.process.state())}"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
         logger.info(f"开始重启 NapCatQQ 进程(QQID: {config.bot.QQID})", LogType.FILE_FUNC, LogSource.CORE)
         self.stop_process(str(config.bot.QQID))
         self.create_napcat_process(config)
