@@ -12,6 +12,7 @@ from src.ui.components.background import DottedBackground
 
 # 项目内模块导入
 from src.core.utils.get_version import GetVersion
+from src.core.utils.logger import LogSource, logger
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.unit_page.napcat_desktop_page import NCDPage
@@ -130,11 +131,13 @@ class UnitWidget(DottedBackground):
         Args:
             index: 当前视图索引
         """
+        logger.info(f"更新页标签切换: page={self.view.widget(index).objectName()}", log_source=LogSource.UI)
         self.top_card.pivot.setCurrentItem(self.view.widget(index).objectName())
 
     @Slot()
     def on_update(self) -> None:
         """执行版本更新检查"""
+        logger.info("开始执行版本更新检查", log_source=LogSource.UI)
         self.get_version.update()
         self.top_card.update_button.setEnabled(False)
 

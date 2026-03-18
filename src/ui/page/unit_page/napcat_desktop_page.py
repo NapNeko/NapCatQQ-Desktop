@@ -14,7 +14,8 @@ from PySide6.QtGui import QDesktopServices
 from src.core.network.urls import Urls
 from src.core.utils.desktop_update import UPDATE_ARCHIVE_NAME, prepare_desktop_update
 from src.core.utils.get_version import VersionData
-from src.core.utils.logger import logger
+from src.core.utils.logger import LogSource, logger
+from src.core.utils.logger.crash_bundle import summarize_path
 from src.core.utils.path_func import PathFunc
 from src.core.utils.run_napcat import ManagerNapCatQQProcess
 from src.resource import resource as _resource  # noqa: F401
@@ -88,6 +89,10 @@ class NCDPage(PageBase):
     @Slot()
     def on_download(self) -> None:
         """处理下载按钮点击事件，开始下载应用程序"""
+        logger.info(
+            f"请求下载/更新 Desktop: local={self.local_version}, remote={self.remote_version}",
+            log_source=LogSource.UI,
+        )
         if it(ManagerNapCatQQProcess).has_running_bot():
 
             from src.ui.window.main_window import MainWindow
@@ -96,8 +101,10 @@ class NCDPage(PageBase):
             box.yesButton.setText(self.tr("关闭全部"))
 
             if box.exec():
+                logger.warning("Desktop 更新前关闭全部 Bot 以继续执行", log_source=LogSource.UI)
                 it(ManagerNapCatQQProcess).stop_all_processes()
             else:
+                logger.info("Desktop 更新流程取消: 用户拒绝关闭运行中的 Bot", log_source=LogSource.UI)
                 return
 
         info_bar(self.tr("正在下载 NapCat Desktop 整包 ZIP"))
@@ -118,6 +125,7 @@ class NCDPage(PageBase):
     @Slot()
     def on_install(self) -> None:
         """下载完成后执行安装逻辑"""
+        logger.info("Desktop 下载完成，开始准备目录版更新", log_source=LogSource.UI)
         success_bar(self.tr("下载成功, 正在准备目录版更新..."))
 
         base_path = it(PathFunc).base_path
@@ -128,6 +136,13 @@ class NCDPage(PageBase):
             bat_content = self._prepare_update_script()
             bat_path = it(PathFunc).tmp_path / "update.bat"
             bat_path.write_text(bat_content, encoding="utf-8")
+            logger.info(
+                (
+                    "Desktop 更新脚本已生成: "
+                    f"archive={summarize_path(zip_path)}, script={summarize_path(bat_path)}"
+                ),
+                log_source=LogSource.UI,
+            )
             self._launch_update_script(bat_path)
         except ValueError as exc:
             logger.error(f"准备更新失败: {exc}")
@@ -146,11 +161,13 @@ class NCDPage(PageBase):
             return
 
         # 退出程序，安装脚本会等待并替换可执行文件
+        logger.warning("Desktop 更新脚本已启动，当前进程准备退出", log_source=LogSource.UI)
         sys.exit(0)
 
     @Slot()
     def on_error_finsh(self) -> None:
         """下载错误处理逻辑"""
+        logger.error("Desktop 下载或更新流程失败", log_source=LogSource.UI)
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.update_page()  # 刷新一次页面
 

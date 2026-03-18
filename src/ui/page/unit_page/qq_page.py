@@ -12,6 +12,8 @@ from PySide6.QtGui import QDesktopServices
 from src.core.network.urls import Urls
 from src.core.utils.get_version import VersionData
 from src.core.utils.install_func import QQInstall
+from src.core.utils.logger import LogSource, logger
+from src.core.utils.logger.crash_bundle import summarize_path, summarize_url
 from src.core.utils.path_func import PathFunc
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
@@ -139,8 +141,18 @@ class QQPage(PageBase):
     def on_download(self) -> None:
         """处理下载按钮点击事件, 开始下载QQ安装包"""
         if self.url is None:
+            logger.error("QQ 下载流程失败: 下载链接为空", log_source=LogSource.UI)
             error_bar(self.tr("QQ下载链接为空"))
             return
+
+        logger.info(
+            (
+                "请求下载/更新 QQ: "
+                f"local={self.local_version}, remote={self.remote_version}, "
+                f"source={summarize_url(self.url.toString())}"
+            ),
+            log_source=LogSource.UI,
+        )
 
         # 项目内模块导入
         from src.core.network.downloader import QQDownloader
@@ -162,6 +174,7 @@ class QQPage(PageBase):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
+        logger.info("QQ 下载完成，进入安装流程", log_source=LogSource.UI)
         success_bar(self.tr("下载成功, 正在安装..."))
 
         # 创建询问弹出框
@@ -171,6 +184,7 @@ class QQPage(PageBase):
             # 如果没有点击确定按钮
             if self.file_path is not None:
                 self.file_path.unlink()
+            logger.info("QQ 安装流程取消: 未确认安装路径", log_source=LogSource.UI)
             info_bar(self.tr("取消安装"))
             return
 
@@ -188,14 +202,17 @@ class QQPage(PageBase):
             if rm_dll_box.exec():
                 # 用户点击了删除
                 Path(Path(folder_box.get_value()) / "dbghelp.dll").unlink()
+                logger.warning("QQ 安装前已移除冲突文件 dbghelp.dll", log_source=LogSource.UI)
             else:
                 if self.file_path is not None:
                     self.file_path.unlink()
+                logger.info("QQ 安装流程取消: 用户拒绝删除 dbghelp.dll", log_source=LogSource.UI)
                 info_bar(self.tr("取消安装"))
                 return
 
         # 开始安装
         if self.file_path is None:
+            logger.error("QQ 安装流程失败: 安装包路径为空", log_source=LogSource.UI)
             error_bar(self.tr("安装包路径为空"))
             return
 
@@ -211,11 +228,16 @@ class QQPage(PageBase):
     @Slot()
     def on_install_finsh(self) -> None:
         """处理安装完成逻辑"""
+        logger.info(
+            f"QQ 安装完成: installer={summarize_path(self.file_path) if self.file_path else '<empty-path>'}",
+            log_source=LogSource.UI,
+        )
         success_bar(self.tr("安装成功 !"))
         self.app_card.switch_button(ButtonStatus.INSTALL)
 
     @Slot()
     def on_error_finsh(self) -> None:
         """处理错误结束逻辑"""
+        logger.error("QQ 下载或安装流程失败", log_source=LogSource.UI)
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.update_page()  # 刷新页面状态

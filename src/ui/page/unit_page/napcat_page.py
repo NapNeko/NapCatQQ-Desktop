@@ -8,6 +8,8 @@ from PySide6.QtGui import QDesktopServices
 from src.core.network.urls import Urls
 from src.core.utils.get_version import VersionData
 from src.core.utils.install_func import NapCatInstall
+from src.core.utils.logger import LogSource, logger
+from src.core.utils.logger.crash_bundle import summarize_path
 from src.core.utils.path_func import PathFunc
 from src.core.utils.run_napcat import ManagerNapCatQQProcess
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
@@ -83,6 +85,10 @@ class NapCatPage(PageBase):
     @Slot()
     def on_download(self) -> None:
         """处理下载按钮点击事件，开始下载 NapCat"""
+        logger.info(
+            f"请求下载/更新 NapCat: local={self.local_version}, remote={self.remote_version}",
+            log_source=LogSource.UI,
+        )
         if it(ManagerNapCatQQProcess).has_running_bot():
             # 项目内模块导入
             from src.ui.window.main_window import MainWindow
@@ -93,8 +99,10 @@ class NapCatPage(PageBase):
             box.yesButton.setText(self.tr("关闭全部"))
 
             if box.exec():
+                logger.warning("NapCat 安装前关闭全部 Bot 以继续执行", log_source=LogSource.UI)
                 it(ManagerNapCatQQProcess).stop_all_processes()
             else:
+                logger.info("NapCat 安装流程取消: 用户拒绝关闭运行中的 Bot", log_source=LogSource.UI)
                 return
 
         info_bar(self.tr("正在下载 NapCat"))
@@ -115,6 +123,7 @@ class NapCatPage(PageBase):
     @Slot()
     def on_install(self) -> None:
         """下载完成后开始安装 NapCat"""
+        logger.info("NapCat 下载完成，开始安装", log_source=LogSource.UI)
         success_bar(self.tr("下载成功, 正在安装..."))
         installer = NapCatInstall()
         installer.status_label_signal.connect(self.app_card.set_status_text)
@@ -128,11 +137,13 @@ class NapCatPage(PageBase):
     @Slot()
     def on_install_finsh(self) -> None:
         """安装完成后的处理逻辑"""
+        logger.info(f"NapCat 安装完成: path={summarize_path(it(PathFunc).napcat_path)}", log_source=LogSource.UI)
         success_bar(self.tr("安装成功 !"))
         self.app_card.switch_button(ButtonStatus.INSTALL)
 
     @Slot()
     def on_error_finsh(self) -> None:
         """下载或安装过程中发生错误时的处理逻辑"""
+        logger.error("NapCat 下载或安装流程失败", log_source=LogSource.UI)
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.update_page()  # 刷新一次页面
