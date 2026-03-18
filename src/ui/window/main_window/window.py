@@ -43,7 +43,7 @@ class MainWindow(MSFluentWindow):
 
     def initialize(self) -> None:
         """初始化"""
-        logger.info("主窗口初始化开始", log_source=LogSource.UI)
+        logger.trace("主窗口初始化开始", log_source=LogSource.UI)
         # 调用方法
         self._set_window()
         self._bind_core_events()
@@ -52,13 +52,13 @@ class MainWindow(MSFluentWindow):
 
         # 组件加载完成结束 SplashScreen
         self.splash_screen.finish()
-        logger.info("主窗口初始化完成", log_source=LogSource.UI)
+        logger.trace("主窗口初始化完成", log_source=LogSource.UI)
 
     def _set_window(self) -> None:
         """
         设置窗体
         """
-        logger.info("开始配置主窗口基础属性", log_source=LogSource.UI)
+        logger.trace("开始配置主窗口基础属性", log_source=LogSource.UI)
         # 标题栏部分
         self.title_bar = CustomTitleBar(self)
         self.setTitleBar(self.title_bar)
@@ -78,7 +78,7 @@ class MainWindow(MSFluentWindow):
         self.show()
         # 挂起
         QApplication.processEvents()
-        logger.info("主窗口已显示并完成初始绘制", log_source=LogSource.UI)
+        logger.trace("主窗口已显示并完成初始绘制", log_source=LogSource.UI)
 
     def _set_item(self) -> None:
         """
@@ -115,7 +115,7 @@ class MainWindow(MSFluentWindow):
         """设置托盘图标"""
         self.trayIcon = SystemTrayIcon(self)
         self.trayIcon.show()
-        logger.info("主窗口托盘图标初始化完成", log_source=LogSource.UI)
+        logger.trace("主窗口托盘图标初始化完成", log_source=LogSource.UI)
 
     def _bind_core_events(self) -> None:
         """将 core 层信号桥接到 UI 表现层"""
@@ -131,7 +131,7 @@ class MainWindow(MSFluentWindow):
         login_state_manager.qr_code_removed_signal.connect(self._remove_login_qr_code)
 
         self._core_events_bound = True
-        logger.info("主窗口已完成 core 信号绑定", log_source=LogSource.UI)
+        logger.trace("主窗口已完成 core 信号绑定", log_source=LogSource.UI)
 
     def _show_core_notification(self, level: str, message: str) -> None:
         """根据 core 层通知级别选择对应的 UI 提示方式"""

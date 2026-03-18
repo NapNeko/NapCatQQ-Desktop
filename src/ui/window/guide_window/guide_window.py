@@ -51,7 +51,7 @@ class GuideWindow(FramelessWindow):
 
         调整窗体大小、位置、布局等
         """
-        logger.info("引导窗口初始化开始", log_source=LogSource.UI)
+        logger.trace("引导窗口初始化开始", log_source=LogSource.UI)
         # 设置主题
         setTheme(Theme.AUTO)
         self.show()
@@ -74,7 +74,7 @@ class GuideWindow(FramelessWindow):
         # 调用方法
         self.create_page()
         self.create_layout()
-        logger.info("引导窗口初始化完成", log_source=LogSource.UI)
+        logger.trace("引导窗口初始化完成", log_source=LogSource.UI)
 
     def create_page(self) -> None:
         """创建页面
@@ -99,7 +99,7 @@ class GuideWindow(FramelessWindow):
         self.view.addWidget(self.finish_page)
 
         self.view.setCurrentWidget(self.elua_page)
-        logger.info("引导窗口页面已创建，当前页=EulaPage", log_source=LogSource.UI)
+        logger.trace("引导窗口页面已创建，当前页=EulaPage", log_source=LogSource.UI)
 
     def create_layout(self) -> None:
         """创建布局
@@ -111,7 +111,7 @@ class GuideWindow(FramelessWindow):
         self.vBoxLayout.setSpacing(0)
         self.vBoxLayout.addWidget(self.view)
         self.setLayout(self.vBoxLayout)
-        logger.info("引导窗口布局创建完成", log_source=LogSource.UI)
+        logger.trace("引导窗口布局创建完成", log_source=LogSource.UI)
 
     def close(self) -> bool:
         """关闭窗体
@@ -174,7 +174,7 @@ class GuideWindow(FramelessWindow):
             target_name = type(self.finish_page).__name__
 
         if target_name != current_name:
-            logger.info(f"引导窗口页面切换: {current_name} -> {target_name}", log_source=LogSource.UI)
+            logger.trace(f"引导窗口页面切换: {current_name} -> {target_name}", log_source=LogSource.UI)
 
 
 class GuideWindowCreator(AbstractCreator, ABC):
