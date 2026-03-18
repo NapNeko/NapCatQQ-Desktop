@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import random
+import re
 import string
-from typing import Literal
+from typing import Any, Literal
 
 # 第三方库导入
-from pydantic import BaseModel, Field, HttpUrl, WebsocketUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, WebsocketUrl, field_validator, model_validator
 
 from .config_enum import TimeUnitEnum
 
@@ -51,6 +52,28 @@ def _coerce_interval_default(v, default: int = 30000) -> int:
         return default
 
 
+_LEGACY_AUTO_RESTART_INTERVAL_PATTERN = re.compile(r"^\s*(\d+)\s*(m|h|d|mon|year)\s*$", re.IGNORECASE)
+
+
+def _parse_legacy_auto_restart_interval(value: Any) -> tuple[TimeUnitEnum, int] | None:
+    """解析旧版自动重启间隔字符串。"""
+    if isinstance(value, int) and value > 0:
+        return TimeUnitEnum.HOUR, value
+
+    if not isinstance(value, str):
+        return None
+
+    match = _LEGACY_AUTO_RESTART_INTERVAL_PATTERN.fullmatch(value.strip())
+    if match is None:
+        return None
+
+    duration = int(match.group(1))
+    if duration <= 0:
+        return None
+
+    return TimeUnitEnum(match.group(2).lower()), duration
+
+
 class AutoRestartScheduleConfig(BaseModel):
     """自动重启计划配置"""
 
@@ -69,6 +92,40 @@ class AutoRestartScheduleConfig(BaseModel):
         default=6,
         description="时间长度, 仅包含数字, 不包含单位",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_schedule(cls, data: Any) -> Any:
+        """兼容旧版 interval/taskType 结构。"""
+        if not isinstance(data, dict):
+            return data
+
+        if "time_unit" in data and "duration" in data:
+            return data
+
+        legacy_keys = {"taskType", "interval", "crontab", "jitter"}
+        if not legacy_keys.intersection(data):
+            return data
+
+        normalized_interval = _parse_legacy_auto_restart_interval(data.get("interval"))
+        time_unit = normalized_interval[0] if normalized_interval else TimeUnitEnum.HOUR
+        duration = normalized_interval[1] if normalized_interval else 6
+
+        task_type = str(data.get("taskType", "")).strip().lower()
+        if task_type in {"cron", "crontab"}:
+            enable = False
+        elif task_type in {"interval"}:
+            enable = bool(data.get("enable", True))
+        elif task_type in {"none", "disabled", "off", "false", "0"}:
+            enable = False
+        else:
+            enable = bool(data.get("enable", False))
+
+        return {
+            "enable": enable,
+            "time_unit": time_unit.value,
+            "duration": duration,
+        }
 
 
 class BotConfig(BaseModel):
@@ -220,38 +277,3 @@ class NapCatConfig(BaseModel):
     packetBackend: str = Field(default="auto", exclude=True)
     packetServer: str
     o3HookMode: Literal[0, 1] = 1
-
-
-DEFAULT_CONFIG = {
-    "bot": {
-        "name": "",
-        "QQID": "",
-        "musicSignUrl": "",
-        "autoRestartSchedule": {
-            "taskType": "none",
-            "interval": "6h",
-            "crontab": "0 4 * * *",
-            "jitter": 0,
-        },
-    },
-    "connect": {
-        "httpServers": [],
-        "httpSseServers": [],
-        "httpClients": [],
-        "websocketServers": [],
-        "websocketClients": [],
-        "plugins": [],
-    },
-    "advanced": {
-        "autoStart": False,
-        "offlineNotice": False,
-        "packetServer": "",
-        "packetBackend": "auto",
-        "enableLocalFile2Url": False,
-        "fileLog": False,
-        "consoleLog": True,
-        "fileLogLevel": "debug",
-        "consoleLogLevel": "info",
-        "o3HookMode": 1,
-    },
-}

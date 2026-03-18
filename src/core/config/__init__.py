@@ -52,7 +52,6 @@ from qfluentwidgets.common import (
     RangeConfigItem,
     RangeValidator,
     Theme,
-    qconfig,
 )
 from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import QLocale, Signal
@@ -218,22 +217,20 @@ class Config(QConfig):
 
         flat_cfg = dict(flatten(cfg))
 
+        for item in items.values():
+            item.value = item.defaultValue
+
         # 更新配置项
         for k, v in flat_cfg.items():
             if k in items:
                 items[k].deserializeFrom(v)
 
-        # 补齐默认值
-        for item in items.values():
-            if not getattr(item, "value", None):
-                item.value = item.default
-
         # 应用主题
-        self.theme = self.get(self._cfg.themeMode)
+        self.theme = self.get(self.theme_mode)
 
 
 cfg = Config()
-qconfig.load(it(PathFunc).config_path, cfg)
+cfg.load(it(PathFunc).config_path)
 cfg.set(cfg.start_time, time.time(), True)
 cfg.set(cfg.napcat_desktop_version, __version__, True)
 cfg.set(cfg.system_type, platform.system(), True)
