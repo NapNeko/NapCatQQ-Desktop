@@ -131,7 +131,7 @@ class UnitWidget(DottedBackground):
         Args:
             index: 当前视图索引
         """
-        logger.info(f"更新页标签切换: page={self.view.widget(index).objectName()}", log_source=LogSource.UI)
+        logger.trace(f"更新页标签切换: page={self.view.widget(index).objectName()}", log_source=LogSource.UI)
         self.top_card.pivot.setCurrentItem(self.view.widget(index).objectName())
 
     @Slot()
