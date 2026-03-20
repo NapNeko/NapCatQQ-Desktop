@@ -9,9 +9,10 @@ dependencies = [
     "psutil>=6.0.0",
     "markdown>=3.7",
     "pyinstaller>=6.16.0",
-    "PySide6-Fluent-Widgets[full]>=1.9.1",
+    "colorthief>=0.2.1",
     "creart>=0.3.0",
     "qrcode>=8.2",
+    "pyside6-fluent-widgets-qiao>=2.0.0",
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
