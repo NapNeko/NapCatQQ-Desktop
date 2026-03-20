@@ -5,6 +5,7 @@
 
 # 标准库导入
 import json
+import re
 
 # 第三方库导入
 from creart import it
@@ -183,14 +184,33 @@ class GetLocalVersionRunnable(VersionRunnableBase):
 
     def get_napcat_version(self) -> str | None:
         """获取本地 NapCat 版本信息"""
+        napcat_path = it(PathFunc).napcat_path
+
+        if version := self._get_napcat_version_from_mjs(napcat_path / "napcat.mjs"):
+            return version
+
         try:
-            with open(str(it(PathFunc).napcat_path / "package.json"), "r", encoding="utf-8") as f:
+            with open(str(napcat_path / "package.json"), "r", encoding="utf-8") as f:
                 # 读取到参数返回版本信息
                 return f"v{json.loads(f.read())['version']}"
         except FileNotFoundError:
             logger.error("获取 NapCat 版本信息失败: 文件不存在")
             self.error_signal.emit("获取 NapCat 版本信息失败: 文件不存在")
             return None
+
+    @staticmethod
+    def _get_napcat_version_from_mjs(mjs_path) -> str | None:
+        """从 napcat.mjs 中提取构建时内联的 NapCat 核心版本。"""
+        try:
+            content = mjs_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None
+
+        match = re.search(r'napCatVersion\s*=\s*.*?"(\d+\.\d+\.\d+(?:[-+][^"]+)?)"', content)
+        if match is None:
+            return None
+
+        return f"v{match.group(1)}"
 
     def get_qq_version(self) -> str | None:
         """获取本地 QQ 版本信息"""

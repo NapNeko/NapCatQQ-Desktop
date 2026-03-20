@@ -123,6 +123,27 @@ def test_local_version_reads_package_and_qq_files(monkeypatch, tmp_path: Path) -
     assert result.ncd_version == "v1.7.28"
 
 
+def test_local_version_prefers_napcat_mjs_embedded_version(monkeypatch, tmp_path: Path) -> None:
+    """本地 NapCat 版本应优先读取 napcat.mjs 中的真实核心版本。"""
+    mute_version_logger(monkeypatch)
+    napcat_path = tmp_path / "NapCatQQ"
+    napcat_path.mkdir(parents=True, exist_ok=True)
+    (napcat_path / "napcat.mjs").write_text(
+        'const napCatVersion = typeof (__vite_import_meta_env__) !== "undefined" && "4.17.52" || "1.0.0-dev";',
+        encoding="utf-8",
+    )
+    (napcat_path / "package.json").write_text(json.dumps({"version": "0.0.1"}), encoding="utf-8")
+
+    fake_path_func = SimpleNamespace(napcat_path=napcat_path, get_qq_path=lambda: None)
+    fake_cfg = SimpleNamespace(napcat_desktop_version="ncd_version", get=lambda item: "v1.7.28")
+    monkeypatch.setattr(get_version, "it", lambda cls: fake_path_func)
+    monkeypatch.setattr(get_version, "cfg", fake_cfg)
+
+    runner = get_version.GetLocalVersionRunnable()
+
+    assert runner.get_napcat_version() == "v4.17.52"
+
+
 def test_local_version_handles_missing_files(monkeypatch, tmp_path: Path) -> None:
     """本地版本文件缺失时应返回 None 并发出错误。"""
     mute_version_logger(monkeypatch)
