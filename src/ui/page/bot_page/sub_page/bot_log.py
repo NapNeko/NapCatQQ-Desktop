@@ -4,7 +4,7 @@
 from creart import it
 
 # 第三方库导入
-from qfluentwidgets import FluentIcon, TransparentPushButton, TransparentToolButton, setFont
+from qfluentwidgets import FluentIcon, TransparentPushButton, TransparentToolButton
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QVBoxLayout, QWidget, QPlainTextEdit
@@ -14,6 +14,7 @@ from src.core.config.config_model import Config
 from src.core.utils.run_napcat import ManagerNapCatQQLog, NapCatQQProcessLog
 from src.ui.common.card_surface import OpaqueHeaderCardWidget
 from src.ui.components.code_editor.exhibit import CodeExibit
+from src.ui.components.code_editor.highlight import LogHighlighter
 
 
 class BotLogPage(QWidget):
@@ -28,13 +29,14 @@ class BotLogPage(QWidget):
         # 创建控件
         self.view = OpaqueHeaderCardWidget(self)
         self.log_view = CodeExibit(self)
+        self.log_highlighter = LogHighlighter(self.log_view.document())
         self.font_enlarge_button = TransparentToolButton(FluentIcon.ADD, self.view)
         self.font_shrink_button = TransparentToolButton(FluentIcon.REMOVE, self.view)
         self.return_button = TransparentPushButton(FluentIcon.LEFT_ARROW, self.tr("返回"), self.view)
 
         # 设置控件
         self.view.setTitle(self.tr("Bot 日志"))
-        self.log_view.set_font_size(10)
+        self.log_view.set_font_size(12)
         self.log_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
 
         # 设置布局
