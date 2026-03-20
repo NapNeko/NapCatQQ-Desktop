@@ -6,22 +6,26 @@ from typing import Any, cast
 
 # 第三方库导入
 from qfluentwidgets import FluentIcon, PlainTextEdit, TeachingTip, isDarkTheme
-from PySide6.QtCore import QRect, QRectF, Qt, Signal
+from PySide6.QtCore import QRect, QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import (
     QColor,
     QKeyEvent,
     QMouseEvent,
     QPainter,
     QPaintEvent,
+    QPalette,
     QPen,
     QFont,
     QResizeEvent,
+    QTextCharFormat,
     QTextCursor,
     QTextFormat,
+    QSyntaxHighlighter,
 )
 from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTextEdit, QWidget
 
 # 项目内模块导入
+from src.core.config import cfg
 from src.core.utils.logger import logger
 from src.ui.common.font import FontManager
 from src.ui.common.style_sheet import WidgetStyleSheet
@@ -64,6 +68,8 @@ class CodeEditorBase(PlainTextEdit):
 
         # 应用样式
         WidgetStyleSheet.CODE_EDITOR.apply(self)
+        self._base_style_sheet = self.styleSheet()
+        self._apply_theme_palette()
 
         # 连接信号
         self._connect_signals()
@@ -73,6 +79,81 @@ class CodeEditorBase(PlainTextEdit):
         self.blockCountChanged.connect(self._on_update_line_number_area_width)
         self.updateRequest.connect(self._on_update_line_number_area)
         self.cursorPositionChanged.connect(self._on_handle_cursor_position_changed)
+        cfg.themeChanged.connect(self._queue_theme_palette_update)
+
+    def _apply_theme_palette(self, *args) -> None:
+        """显式同步编辑器前景色，避免主题切换后沿用错误的默认文本色。"""
+        theme = args[0] if args else None
+        dark = self._is_dark_theme(theme)
+        palette = self.palette()
+        text_color = self._theme_text_color(dark)
+        muted_color = QColor("#8b93a7") if dark else QColor("#6b7280")
+        selection_bg = QColor("#334155") if dark else QColor("#dbeafe")
+        selection_fg = QColor("#f8fafc") if dark else QColor("#0f172a")
+
+        palette.setColor(QPalette.ColorRole.Text, text_color)
+        palette.setColor(QPalette.ColorRole.WindowText, text_color)
+        palette.setColor(QPalette.ColorRole.PlaceholderText, muted_color)
+        palette.setColor(QPalette.ColorRole.Highlight, selection_bg)
+        palette.setColor(QPalette.ColorRole.HighlightedText, selection_fg)
+        self.setPalette(palette)
+        self.setStyleSheet(self._base_style_sheet + self._theme_style_sheet(dark))
+        self._apply_document_text_color(text_color)
+        self.viewport().update()
+        self.line_number_area.update()
+
+    def _queue_theme_palette_update(self, theme) -> None:
+        QTimer.singleShot(0, lambda: self._apply_theme_palette(theme))
+
+    @staticmethod
+    def _is_dark_theme(theme) -> bool:
+        if theme is None:
+            return isDarkTheme()
+
+        theme_name = getattr(theme, "name", "")
+        if theme_name == "DARK":
+            return True
+        if theme_name == "LIGHT":
+            return False
+        return isDarkTheme()
+
+    @staticmethod
+    def _theme_style_sheet(dark: bool) -> str:
+        text_color = CodeEditorBase._theme_text_color(dark).name()
+        selection_bg = "#334155" if dark else "#dbeafe"
+        selection_fg = "#f8fafc" if dark else "#0f172a"
+        return (
+            "\nQPlainTextEdit, PlainTextEdit {"
+            f"color: {text_color};"
+            "}"
+            "\nQPlainTextEdit::selection, PlainTextEdit::selection {"
+            f"background-color: {selection_bg};"
+            f"color: {selection_fg};"
+            "}"
+        )
+
+    @staticmethod
+    def _theme_text_color(dark: bool) -> QColor:
+        return QColor("#e6eaf2") if dark else QColor("#1f2937")
+
+    def _apply_document_text_color(self, text_color: QColor) -> None:
+        """同步文档默认字符格式，避免已有文本保留旧主题下的黑字。"""
+        fmt = QTextCharFormat()
+        fmt.setForeground(text_color)
+
+        current_cursor = self.textCursor()
+        scroll_pos = self.verticalScrollBar().value()
+
+        cursor = QTextCursor(self.document())
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.mergeCharFormat(fmt)
+        self.setCurrentCharFormat(fmt)
+        self.setTextCursor(current_cursor)
+        self.verticalScrollBar().setValue(scroll_pos)
+
+        for child in self.document().children():
+            if isinstance(child, QSyntaxHighlighter):
+                child.rehighlight()
 
     def _setup_font(self) -> None:
         """设置编辑器字体"""
@@ -190,6 +271,7 @@ class CodeEditorBase(PlainTextEdit):
         """
         scroll_pos = self.verticalScrollBar().value()
         super().setPlainText(text)
+        self._apply_document_text_color(self._theme_text_color(self._is_dark_theme(None)))
         QApplication.processEvents()
         self.verticalScrollBar().setValue(scroll_pos)
 
