@@ -1,62 +1,127 @@
 # -*- coding: utf-8 -*-
+import re
+
 from PySide6.QtCore import QRegularExpression, Qt
 from PySide6.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat, QTextDocument
 
 
 class LogHighlighter(QSyntaxHighlighter):
     """
-    日志高亮器，支持 DEBUG、INFO、WARN、ERROR 等日志级别高亮。
+    日志高亮器，兼容 NapCat / NCD 常见日志格式。
 
-    时间戳显示为浅灰色，日志级别显示对应颜色。
+    支持：
+        - `2026-03-20 22:02:45` / `03-20 22:02:45` 时间戳
+        - `[info]` / `[ERROR]` 等大小写混合日志级别
+        - URL、Windows 路径、引号中的启动命令
     """
 
     def __init__(self, parent: QTextDocument) -> None:
         super().__init__(parent)
 
-        # 初始化不同日志级别的文本格式
-        self.formats: dict[str, QTextCharFormat] = {
+        self.timestamp_format = QTextCharFormat()
+        self.timestamp_format.setForeground(QColor("#7f8c98"))
+
+        self.tag_format = QTextCharFormat()
+        self.tag_format.setForeground(QColor("#7aa2f7"))
+
+        self.url_format = QTextCharFormat()
+        self.url_format.setForeground(QColor("#4fd6be"))
+
+        self.path_format = QTextCharFormat()
+        self.path_format.setForeground(QColor("#e0af68"))
+
+        self.command_format = QTextCharFormat()
+        self.command_format.setForeground(QColor("#c678dd"))
+
+        self.level_formats: dict[str, QTextCharFormat] = {
+            "TRACE": QTextCharFormat(),
             "DEBUG": QTextCharFormat(),
             "INFO": QTextCharFormat(),
             "WARN": QTextCharFormat(),
+            "WARNING": QTextCharFormat(),
             "ERROR": QTextCharFormat(),
+            "FATAL": QTextCharFormat(),
+            "SUCCESS": QTextCharFormat(),
         }
+        self.level_formats["TRACE"].setForeground(QColor("#9aa5ce"))
+        self.level_formats["DEBUG"].setForeground(QColor("#c0caf5"))
+        self.level_formats["INFO"].setForeground(QColor("#73daca"))
+        self.level_formats["WARN"].setForeground(QColor("#e0af68"))
+        self.level_formats["WARNING"].setForeground(QColor("#e0af68"))
+        self.level_formats["ERROR"].setForeground(QColor("#f7768e"))
+        self.level_formats["FATAL"].setForeground(QColor("#ff4d6d"))
+        self.level_formats["SUCCESS"].setForeground(QColor("#9ece6a"))
 
-        # 设置日志级别前景色
-        self.formats["DEBUG"].setForeground(QColor(Qt.GlobalColor.darkRed))
-        self.formats["INFO"].setForeground(QColor(Qt.GlobalColor.green))
-        self.formats["WARN"].setForeground(QColor(Qt.GlobalColor.darkYellow))
-        self.formats["ERROR"].setForeground(QColor(Qt.GlobalColor.red))
+        self.timestamp_patterns = [
+            QRegularExpression(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{3})?"),
+            QRegularExpression(r"^\d{2}-\d{2} \d{2}:\d{2}:\d{2}"),
+        ]
 
-        # 日志级别顺序
-        self.log_levels = ["DEBUG", "INFO", "WARN", "ERROR"]
+        self.level_pattern = QRegularExpression(r"\[(trace|debug|info|warn|warning|error|fatal|success)\]")
+        self.level_pattern.setPatternOptions(QRegularExpression.PatternOption.CaseInsensitiveOption)
 
-        # 匹配日志时间戳和日志级别的正则表达式
-        self.pattern = QRegularExpression(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(DEBUG|INFO|WARN|ERROR)\]")
+        self.tag_pattern = QRegularExpression(r"\[(?!trace|debug|info|warn|warning|error|fatal|success)[^\[\]\r\n]+\]")
+        self.tag_pattern.setPatternOptions(QRegularExpression.PatternOption.CaseInsensitiveOption)
+
+        self.url_pattern = QRegularExpression(r"https?://[^\s\"']+")
+        self.path_pattern = QRegularExpression(r"(?:[A-Za-z]:\\|\\\\)[^\"'\r\n]+")
+        self.command_pattern = QRegularExpression(r"\"[^\"]+\"")
 
     def highlightBlock(self, text: str) -> None:
         """
         高亮当前文本块。
-
-        时间戳显示浅灰色，日志级别显示对应颜色。
         """
-        text_format = QTextCharFormat()
-        match = self.pattern.match(text)
-        if not match.hasMatch():
-            return
+        for pattern in self.timestamp_patterns:
+            match = pattern.match(text)
+            if match.hasMatch():
+                self.setFormat(match.capturedStart(), match.capturedLength(), self.timestamp_format)
+                break
 
-        # 高亮时间戳
-        timestamp_start = match.capturedStart(1)
-        timestamp_length = match.capturedLength(1)
-        text_format.setForeground(QColor(Qt.GlobalColor.lightGray))
-        self.setFormat(timestamp_start, timestamp_length, text_format)
+        self._apply_pattern(text, self.tag_pattern, self.tag_format)
+        self._highlight_levels(text)
+        self._apply_pattern(text, self.url_pattern, self.url_format)
+        self._highlight_paths(text)
+        self._apply_pattern(text, self.command_pattern, self.command_format)
 
-        # 高亮日志级别
-        log_level = match.captured(2)
-        if log_level in self.log_levels:
-            log_level_start = match.capturedStart(2)
-            log_level_length = match.capturedLength(2)
-            text_format.setForeground(self.formats[log_level].foreground().color())
-            self.setFormat(log_level_start, log_level_length, text_format)
+    def _apply_pattern(self, text: str, pattern: QRegularExpression, text_format: QTextCharFormat) -> None:
+        """按正则将格式应用到整行的所有匹配。"""
+        match_iter = pattern.globalMatch(text)
+        while match_iter.hasNext():
+            match = match_iter.next()
+            self.setFormat(match.capturedStart(), match.capturedLength(), text_format)
+
+    def _highlight_levels(self, text: str) -> None:
+        """高亮方括号中的日志级别。"""
+        match_iter = self.level_pattern.globalMatch(text)
+        while match_iter.hasNext():
+            match = match_iter.next()
+            level = match.captured(1).upper()
+            if level in self.level_formats:
+                self.setFormat(match.capturedStart(), match.capturedLength(), self.level_formats[level])
+
+    def _highlight_paths(self, text: str) -> None:
+        """高亮 Windows 路径，兼容带空格路径并裁剪掉尾随日志文本。"""
+        match_iter = self.path_pattern.globalMatch(text)
+        while match_iter.hasNext():
+            match = match_iter.next()
+            path_text = self._trim_path_match(match.captured())
+            if path_text:
+                self.setFormat(match.capturedStart(), len(path_text), self.path_format)
+
+    @staticmethod
+    def _trim_path_match(path_text: str) -> str:
+        """裁剪宽匹配结果，避免把路径后的普通文本一并高亮。"""
+        trimmed = path_text.rstrip()
+
+        for delimiter in (r"\s+\{", r"\s+\[", r"\s+\(", r"\s+--"):
+            if split_match := re.search(delimiter, trimmed):
+                trimmed = trimmed[: split_match.start()].rstrip()
+
+        # 若路径包含明确扩展名，则截断到扩展名结尾，避免吞掉后续说明文字。
+        if ext_match := re.search(r"\.[A-Za-z0-9_]{1,8}(?=$|[^A-Za-z0-9_])", trimmed):
+            trimmed = trimmed[: ext_match.end()]
+
+        return trimmed
 
 
 class NCDLogHighlighter(QSyntaxHighlighter):

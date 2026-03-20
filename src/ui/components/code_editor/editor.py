@@ -14,6 +14,7 @@ from PySide6.QtGui import (
     QPainter,
     QPaintEvent,
     QPen,
+    QFont,
     QResizeEvent,
     QTextCursor,
     QTextFormat,
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTextEdit, QWidget
 
 # 项目内模块导入
 from src.core.utils.logger import logger
+from src.ui.common.font import FontManager
 from src.ui.common.style_sheet import WidgetStyleSheet
 from src.ui.components.code_editor.controls import LineNumberArea
 from src.ui.components.code_editor.highlight import JsonHighlighter
@@ -75,6 +77,13 @@ class CodeEditorBase(PlainTextEdit):
     def _setup_font(self) -> None:
         """设置编辑器字体"""
         font = self.font()
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        font.setFixedPitch(True)
+        families = FontManager.code_font_families()
+        if hasattr(font, "setFamilies") and families:
+            font.setFamilies(families)
+        elif families:
+            font.setFamily(families[0])
         font.setPointSize(self.font_size)
         self.setFont(font)
 
