@@ -10,6 +10,7 @@ from qfluentwidgets.common.overload import singledispatchmethod
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
+    HeaderCardWidget,
     HyperlinkLabel,
     ImageLabel,
     IndeterminateProgressRing,
@@ -17,6 +18,7 @@ from qfluentwidgets import (
     ProgressRing,
     PushButton,
     ScrollArea,
+    SimpleCardWidget,
     TitleLabel,
     TransparentToolButton,
     isDarkTheme,
@@ -28,7 +30,6 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.ui.common.icon import StaticIcon
-from src.ui.common.card_surface import OpaqueHeaderCardWidget, OpaqueSimpleCardWidget
 from src.ui.components.code_editor import UpdateLogExhibit
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus, StatusLabel
@@ -210,7 +211,7 @@ class UpdateLogSkeleton(QWidget):
         painter.end()
 
 
-class DisplayCard(OpaqueSimpleCardWidget):
+class DisplayCard(SimpleCardWidget):
     """左侧的应用展示卡片, 包含图标、名称、状态和操作按钮"""
 
     # 按钮显示标识符
@@ -404,7 +405,7 @@ class DisplayCard(OpaqueSimpleCardWidget):
         )
 
 
-class UpdateLogCard(OpaqueHeaderCardWidget):
+class UpdateLogCard(HeaderCardWidget):
     """右侧的更新日志展示卡片"""
 
     @singledispatchmethod

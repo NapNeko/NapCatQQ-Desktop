@@ -6,9 +6,7 @@ from abc import ABC
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QVBoxLayout
-
-from src.ui.components.background import DottedBackground
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.utils.get_version import GetVersion
@@ -25,7 +23,7 @@ if TYPE_CHECKING:
     from src.ui.window.main_window import MainWindow
 
 
-class UnitWidget(DottedBackground):
+class UnitWidget(QWidget):
     """单元页面控件，包含 NapCat、QQ 和 Desktop 三个标签页的版本信息管理"""
 
     def __init__(self) -> None:

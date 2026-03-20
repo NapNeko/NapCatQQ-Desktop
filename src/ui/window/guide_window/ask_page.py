@@ -9,7 +9,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.ui.common.card_surface import OpaqueCardWidget
 from src.ui.common.emoticons import FuFuEmoticons
 
 if TYPE_CHECKING:
@@ -66,7 +65,7 @@ class AskPage(QWidget):
         self.v_box_layout.addStretch(1)
 
 
-class BeginnerCard(OpaqueCardWidget):
+class BeginnerCard(CardWidget):
     """新手卡片
 
     Attributes:
@@ -114,7 +113,7 @@ class BeginnerCard(OpaqueCardWidget):
         it(GuideWindow).on_next_page()
 
 
-class ExperiencedCard(OpaqueCardWidget):
+class ExperiencedCard(CardWidget):
     """老手卡片
 
     Attributes:

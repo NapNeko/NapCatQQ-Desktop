@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import BodyLabel, FluentIcon, FluentIconBase, LineEdit, SwitchButton
+from qfluentwidgets import BodyLabel, ExpandSettingCard, FluentIcon, FluentIconBase, LineEdit, SwitchButton
 from qfluentwidgets.components.settings.expand_setting_card import GroupSeparator
 from PySide6.QtCore import QEasingCurve, Qt
 from PySide6.QtGui import QIcon, QWheelEvent
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
-from src.ui.common.card_surface import OpaqueExpandSettingCard
 
 
 class ItemBase(QWidget):
@@ -38,7 +37,7 @@ class ItemBase(QWidget):
         self.hBoxLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
 
-class GroupCardBase(OpaqueExpandSettingCard):
+class GroupCardBase(ExpandSettingCard):
 
     def __init__(
         self, icon: FluentIcon | FluentIconBase, title: str, content: str, parent: QWidget | None = None

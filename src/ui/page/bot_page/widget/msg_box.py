@@ -9,6 +9,7 @@ from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import (
     MessageBoxBase,
     RadioButton,
+    SimpleCardWidget,
     TitleLabel,
     ImageLabel,
     PipsPager,
@@ -30,7 +31,6 @@ from src.core.config.config_model import (
 )
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 from src.ui.components.input_card.time_card import IntervalTimeConfigCard
-from src.ui.common.card_surface import OpaqueSimpleCardWidget
 from src.ui.page.bot_page.utils.enum import ConnectType
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
@@ -38,7 +38,7 @@ from src.ui.components.stacked_widget import TransparentStackedWidget
 from io import BytesIO
 
 
-class ChooseConfigCard(OpaqueSimpleCardWidget):
+class ChooseConfigCard(SimpleCardWidget):
     """选择配置类型的卡片控件"""
 
     def __init__(self, button: RadioButton, content: str, parent: "ChooseConfigTypeDialog") -> None:

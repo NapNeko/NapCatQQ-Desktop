@@ -5,9 +5,7 @@ from typing import TYPE_CHECKING, Self
 
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
-from PySide6.QtWidgets import QVBoxLayout
-
-from src.ui.components.background import DottedBackground
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.utils.runtime_args import is_developer_mode_enabled
@@ -24,7 +22,7 @@ if TYPE_CHECKING:
     from src.ui.window.main_window import MainWindow
 
 
-class SetupWidget(DottedBackground):
+class SetupWidget(QWidget):
     """设置页面"""
 
     top_card: SetupTopCard

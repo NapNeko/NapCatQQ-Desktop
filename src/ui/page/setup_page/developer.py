@@ -4,19 +4,18 @@ import threading
 from collections.abc import Callable
 
 # 第三方库导入
-from qfluentwidgets import ExpandLayout, PushButton, ScrollArea, SettingCardGroup
+from qfluentwidgets import ExpandLayout, PushButton, ScrollArea, SettingCard, SettingCardGroup
 from qfluentwidgets import FluentIcon as FI
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.core.utils.logger import LogSource, logger
-from src.ui.common.card_surface import OpaqueSettingCard
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import SwitchConfigCard
 
 
-class ActionButtonCard(OpaqueSettingCard):
+class ActionButtonCard(SettingCard):
     """带单个操作按钮的设置卡片。"""
 
     def __init__(

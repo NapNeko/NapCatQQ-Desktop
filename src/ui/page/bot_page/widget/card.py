@@ -18,6 +18,7 @@ from qfluentwidgets import (
     FlowLayout,
     FluentIcon,
     FluentIconBase,
+    HeaderCardWidget,
     ImageLabel,
     PillPushButton,
     PushButton,
@@ -66,7 +67,6 @@ from src.core.network.urls import Urls
 from src.core.utils.logger import LogSource, logger
 from src.core.utils.logger.crash_bundle import mask_qqid
 from src.core.utils.run_napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
-from src.ui.common.card_surface import OpaqueHeaderCardWidget
 from src.ui.common.icon import StaticIcon, NapCatDesktopIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
@@ -79,7 +79,7 @@ from src.ui.page.bot_page.widget.msg_box import (
 )
 
 
-class BotCard(OpaqueHeaderCardWidget):
+class BotCard(HeaderCardWidget):
     """Bot 卡片 Widget"""
 
     # 当自身被移除时发出信号 值为QQID
@@ -644,7 +644,7 @@ class FormateTag(PillPushButton):
         self.setText(format_str)
 
 
-class ConfigCardBase(OpaqueHeaderCardWidget):
+class ConfigCardBase(HeaderCardWidget):
     """配置卡片基类，提供通用的配置显示和操作功能"""
 
     remove_signal = Signal(NetworkBaseConfig)

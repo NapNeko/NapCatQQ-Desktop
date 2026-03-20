@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QThreadPool, QUrl, Slot
+from PySide6.QtCore import QThreadPool, QTimer, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
@@ -145,7 +145,19 @@ class NapCatPage(PageBase):
         logger.info(f"NapCat 安装完成: path={summarize_path(it(PathFunc).napcat_path)}", log_source=LogSource.UI)
         success_bar(self.tr("安装成功 !"))
         self.local_version = GetLocalVersionRunnable().get_napcat_version()
+        if self.local_version is None and self.remote_version is not None:
+            # 安装线程刚结束时，package.json 在个别机器上可能仍是旧视图；
+            # 先按已安装的远程版本更新 UI，再补一次完整刷新做最终校准。
+            self.local_version = self.remote_version
         self.update_page()
+        QTimer.singleShot(300, self._refresh_version_state_after_install)
+
+    def _refresh_version_state_after_install(self) -> None:
+        """安装完成后补一次完整版本刷新，确保按钮状态与本地版本一致。"""
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "on_update"):
+            logger.info("NapCat 安装完成后触发一次版本校准刷新", log_source=LogSource.UI)
+            parent.on_update()
 
     @Slot()
     def on_error_finsh(self) -> None:
