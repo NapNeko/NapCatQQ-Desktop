@@ -119,7 +119,7 @@ class UpdateLogSkeleton(QWidget):
         return QColor(255, 255, 255, 56) if isDarkTheme() else QColor(255, 255, 255, 150)
 
     def _panel_color(self) -> QColor:
-        return QColor(255, 255, 255, 10) if isDarkTheme() else QColor(255, 255, 255, 188)
+        return QColor(255, 255, 255, 0)
 
     def _draw_line(self, painter: QPainter, x: int, y: int, width: int, height: int) -> None:
         radius = height / 2
