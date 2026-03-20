@@ -3,13 +3,11 @@
 from typing import TYPE_CHECKING
 
 # 第三方库导入
-from qfluentwidgets import CustomColorSettingCard, ExpandLayout
+from qfluentwidgets import ExpandLayout
 from qfluentwidgets import FluentIcon
 from qfluentwidgets import FluentIcon as FI
 from qfluentwidgets import (
     MessageBoxBase,
-    OptionsSettingCard,
-    RangeSettingCard,
     ScrollArea,
     SettingCardGroup,
     TitleLabel,
@@ -22,6 +20,7 @@ from PySide6.QtWidgets import QGridLayout, QWidget
 # 项目内模块导入
 from src.core.config import cfg
 from src.ui.components.info_bar import success_bar
+from src.ui.common.card_surface import OpaqueCustomColorSettingCard, OpaqueOptionsSettingCard, OpaqueRangeSettingCard
 from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
     ShowDialogCardBase,
@@ -60,7 +59,7 @@ class Personalization(ScrollArea):
         # 创建组 - 主题
         self.theme_group = SettingCardGroup(title=self.tr("主题"), parent=self.view)
         # 创建项
-        self.theme_card = OptionsSettingCard(
+        self.theme_card = OpaqueOptionsSettingCard(
             configItem=cfg.theme_mode,
             icon=FluentIcon.BRUSH,
             title=self.tr("切换主题"),
@@ -68,7 +67,7 @@ class Personalization(ScrollArea):
             texts=[self.tr("明亮模式"), self.tr("极夜模式"), self.tr("跟随系统")],
             parent=self.theme_group,
         )
-        self.theme_color_card = CustomColorSettingCard(
+        self.theme_color_card = OpaqueCustomColorSettingCard(
             configItem=cfg.theme_color,
             icon=FluentIcon.PALETTE,
             title=self.tr("主题颜色"),
@@ -85,14 +84,14 @@ class Personalization(ScrollArea):
         # 创建组 - 窗体
         self.window_group = SettingCardGroup(title=self.tr("窗体"), parent=self.view)
         # 创建项
-        self.window_opacity_card = RangeSettingCard(
+        self.window_opacity_card = OpaqueRangeSettingCard(
             configItem=cfg.window_opacity,
             icon=FluentIcon.FIT_PAGE,
             title=self.tr("窗口透明度"),
             content=self.tr("设置窗口的透明度"),
             parent=self.window_group,
         )
-        self.zoom_card = OptionsSettingCard(
+        self.zoom_card = OpaqueOptionsSettingCard(
             configItem=cfg.dpi_scale,
             icon=FluentIcon.ZOOM,
             title=self.tr("界面缩放"),

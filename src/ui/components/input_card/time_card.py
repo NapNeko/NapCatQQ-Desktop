@@ -6,15 +6,16 @@ UI 组件：时间选择卡片
 
 
 # 第三方库导入
-from qfluentwidgets import ComboBox, CompactSpinBox, FluentIconBase, LineEdit, SettingCard
+from qfluentwidgets import ComboBox, CompactSpinBox, FluentIconBase, LineEdit
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.core.config.config_enum import TimeUnitEnum
+from src.ui.common.card_surface import OpaqueSettingCard
 
 
-class IntervalTimeConfigCard(SettingCard):
+class IntervalTimeConfigCard(OpaqueSettingCard):
     """间隔时间选择卡片"""
 
     def __init__(

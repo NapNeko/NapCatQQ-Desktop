@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 # 第三方库导入
 from qfluentwidgets import ExpandLayout
 from qfluentwidgets import FluentIcon as FI
-from qfluentwidgets import MessageBoxBase, OptionsSettingCard, PushButton, ScrollArea, SettingCardGroup, TitleLabel
+from qfluentwidgets import MessageBoxBase, PushButton, ScrollArea, SettingCardGroup, TitleLabel
 from PySide6.QtCore import QObject, Qt, QThreadPool
 from PySide6.QtWidgets import QGridLayout, QWidget
 
@@ -15,6 +15,7 @@ from src.core.config import cfg
 from src.core.network.email import EncryptionType, create_test_email_task
 from src.core.network.webhook import create_test_webhook_task
 from src.core.utils.logger import LogSource, logger
+from src.ui.common.card_surface import OpaqueOptionsSettingCard
 from src.ui.components.info_bar import error_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
@@ -54,7 +55,7 @@ class General(ScrollArea):
         # 创建组 - 行为
         self.action_group = SettingCardGroup(title=self.tr("行为"), parent=self.view)
         # 创建项
-        self.close_button_card = OptionsSettingCard(
+        self.close_button_card = OpaqueOptionsSettingCard(
             configItem=cfg.close_button_action,
             icon=FI.CLOSE,
             title=self.tr("关闭按钮"),

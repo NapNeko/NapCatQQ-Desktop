@@ -23,7 +23,7 @@ from qfluentwidgets.components import (
     TransparentToolButton,
     HyperlinkLabel,
 )
-from qfluentwidgets.components.settings import SettingCard
+from src.ui.common.card_surface import OpaqueSettingCard
 from qfluentwidgets.components.settings.setting_card import SettingIconWidget
 from qfluentwidgets.components.widgets.flyout import FlyoutView
 from typing import Any
@@ -151,11 +151,11 @@ class JsonTemplateEditConfigCard(QFrame):
         painter.setRenderHints(QPainter.RenderHint.Antialiasing)
 
         if isDarkTheme():
-            painter.setBrush(QColor(255, 255, 255, 13))
-            painter.setPen(QColor(0, 0, 0, 50))
+            painter.setBrush(QColor(36, 39, 46))
+            painter.setPen(QColor(255, 255, 255, 18))
         else:
-            painter.setBrush(QColor(255, 255, 255, 170))
-            painter.setPen(QColor(0, 0, 0, 19))
+            painter.setBrush(QColor(255, 255, 255))
+            painter.setPen(QColor(15, 23, 42, 18))
 
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
 
@@ -235,7 +235,7 @@ class JsonTemplateEditConfigCard(QFrame):
         self.json_text_edit.setTextCursor(cursor)
 
 
-class LineEditConfigCard(SettingCard):
+class LineEditConfigCard(OpaqueSettingCard):
     """单行文本输入配置卡片"""
 
     def __init__(
@@ -273,7 +273,7 @@ class LineEditConfigCard(SettingCard):
         self.lineEdit.clear()
 
 
-class ComboBoxConfigCard(SettingCard):
+class ComboBoxConfigCard(OpaqueSettingCard):
     """下拉选择配置卡片"""
 
     def __init__(
@@ -312,7 +312,7 @@ class ComboBoxConfigCard(SettingCard):
         self.comboBox.setCurrentIndex(0)
 
 
-class SwitchConfigCard(SettingCard):
+class SwitchConfigCard(OpaqueSettingCard):
     """开关配置卡片"""
 
     def __init__(
@@ -349,7 +349,7 @@ class SwitchConfigCard(SettingCard):
         self.switchButton.setChecked(False)
 
 
-class FolderConfigCard(SettingCard):
+class FolderConfigCard(OpaqueSettingCard):
     """文件夹选择配置卡片"""
 
     def __init__(
@@ -400,7 +400,7 @@ class FolderConfigCard(SettingCard):
         self.contentLabel.setText(self.default)
 
 
-class ShowDialogCardBase(SettingCard):
+class ShowDialogCardBase(OpaqueSettingCard):
     """显示对话框卡片, 只有一个按钮, 点击后显示对话框"""
 
     def __init__(
@@ -487,7 +487,7 @@ class ShowDialogCard(ShowDialogCardBase):
         self._dialog.exec()
 
 
-class VersionInfoCard(SettingCard):
+class VersionInfoCard(OpaqueSettingCard):
     """版本信息卡片"""
 
     def __init__(
@@ -516,7 +516,7 @@ class VersionInfoCard(SettingCard):
         self.hBoxLayout.addSpacing(32)
 
 
-class FontFamilyConfigCatd(SettingCard):
+class FontFamilyConfigCatd(OpaqueSettingCard):
     """字体配置卡片"""
 
     def __init__(

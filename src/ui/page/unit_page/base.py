@@ -10,7 +10,6 @@ from qfluentwidgets.common.overload import singledispatchmethod
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
-    HeaderCardWidget,
     HyperlinkLabel,
     ImageLabel,
     IndeterminateProgressRing,
@@ -18,7 +17,6 @@ from qfluentwidgets import (
     ProgressRing,
     PushButton,
     ScrollArea,
-    SimpleCardWidget,
     TitleLabel,
     TransparentToolButton,
     isDarkTheme,
@@ -30,6 +28,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.ui.common.icon import StaticIcon
+from src.ui.common.card_surface import OpaqueHeaderCardWidget, OpaqueSimpleCardWidget
 from src.ui.components.code_editor import UpdateLogExhibit
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus, StatusLabel
@@ -101,9 +100,6 @@ class UpdateLogSkeleton(QWidget):
     def _panel_color(self) -> QColor:
         return QColor(255, 255, 255, 10) if isDarkTheme() else QColor(255, 255, 255, 188)
 
-    def _outline_color(self) -> QColor:
-        return QColor(255, 255, 255, 16) if isDarkTheme() else QColor(15, 23, 42, 10)
-
     def _draw_line(self, painter: QPainter, x: int, y: int, width: int, height: int) -> None:
         radius = height / 2
         gradient = self._create_shimmer_gradient(x, y, width, band_scale=0.54)
@@ -145,7 +141,7 @@ class UpdateLogSkeleton(QWidget):
             painter.end()
             return
 
-        painter.setPen(self._outline_color())
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(self._panel_color())
         painter.drawRoundedRect(panel_rect, 18, 18)
 
@@ -194,7 +190,7 @@ class UpdateLogSkeleton(QWidget):
         painter.end()
 
 
-class DisplayCard(SimpleCardWidget):
+class DisplayCard(OpaqueSimpleCardWidget):
     """左侧的应用展示卡片, 包含图标、名称、状态和操作按钮"""
 
     # 按钮显示标识符
@@ -388,7 +384,7 @@ class DisplayCard(SimpleCardWidget):
         )
 
 
-class UpdateLogCard(HeaderCardWidget):
+class UpdateLogCard(OpaqueHeaderCardWidget):
     """右侧的更新日志展示卡片"""
 
     @singledispatchmethod
