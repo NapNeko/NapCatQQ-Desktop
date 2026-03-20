@@ -138,6 +138,9 @@ class UnitWidget(DottedBackground):
     def on_update(self) -> None:
         """执行版本更新检查"""
         logger.info("开始执行版本更新检查", log_source=LogSource.UI)
+        self.napcat_page.begin_version_refresh()
+        self.qq_page.begin_version_refresh()
+        self.ncd_page.begin_version_refresh()
         self.napcat_page.log_card.set_loading(True)
         self.ncd_page.log_card.set_loading(True)
         self.get_version.update()

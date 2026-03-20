@@ -6,7 +6,7 @@ from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
-from src.core.utils.get_version import VersionData
+from src.core.utils.get_version import GetLocalVersionRunnable, VersionData
 from src.core.utils.install_func import NapCatInstall
 from src.core.utils.logger import LogSource, logger
 from src.core.utils.logger.crash_bundle import summarize_path
@@ -73,7 +73,8 @@ class NapCatPage(PageBase):
             self.remote_version = version_data.napcat_version
             self.remote_log = version_data.napcat_update_log
 
-        self.update_page()
+        self.mark_remote_version_loaded()
+        self.update_page_if_ready()
 
     @Slot()
     def on_update_local_version(self, version_data: VersionData) -> None:
@@ -82,6 +83,9 @@ class NapCatPage(PageBase):
             self.local_version = None
         else:
             self.local_version = version_data.napcat_version
+
+        self.mark_local_version_loaded()
+        self.update_page_if_ready()
 
     @Slot()
     def on_download(self) -> None:
@@ -140,7 +144,8 @@ class NapCatPage(PageBase):
         """安装完成后的处理逻辑"""
         logger.info(f"NapCat 安装完成: path={summarize_path(it(PathFunc).napcat_path)}", log_source=LogSource.UI)
         success_bar(self.tr("安装成功 !"))
-        self.app_card.switch_button(ButtonStatus.INSTALL)
+        self.local_version = GetLocalVersionRunnable().get_napcat_version()
+        self.update_page()
 
     @Slot()
     def on_error_finsh(self) -> None:

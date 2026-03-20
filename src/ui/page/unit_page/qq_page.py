@@ -10,7 +10,7 @@ from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
-from src.core.utils.get_version import VersionData
+from src.core.utils.get_version import GetLocalVersionRunnable, VersionData
 from src.core.utils.install_func import QQInstall
 from src.core.utils.logger import LogSource, logger
 from src.core.utils.logger.crash_bundle import summarize_path, summarize_url
@@ -127,7 +127,8 @@ class QQPage(PageBase):
             self.remote_version = version_data.qq_version
             self.url = QUrl(version_data.qq_download_url)
 
-        self.update_page()
+        self.mark_remote_version_loaded()
+        self.update_page_if_ready()
 
     @Slot()
     def on_update_local_version(self, version_data: VersionData) -> None:
@@ -136,6 +137,9 @@ class QQPage(PageBase):
             self.local_version = None
         else:
             self.local_version = version_data.qq_version
+
+        self.mark_local_version_loaded()
+        self.update_page_if_ready()
 
     @Slot()
     def on_download(self) -> None:
@@ -233,7 +237,8 @@ class QQPage(PageBase):
             log_source=LogSource.UI,
         )
         success_bar(self.tr("安装成功 !"))
-        self.app_card.switch_button(ButtonStatus.INSTALL)
+        self.local_version = GetLocalVersionRunnable().get_qq_version()
+        self.update_page()
 
     @Slot()
     def on_error_finsh(self) -> None:

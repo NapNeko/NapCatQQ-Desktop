@@ -78,7 +78,8 @@ class NCDPage(PageBase):
             self.remote_version = version_data.ncd_version
             self.remote_log = version_data.ncd_update_log
 
-        self.update_page()
+        self.mark_remote_version_loaded()
+        self.update_page_if_ready()
 
     def on_update_local_version(self, version_data: VersionData) -> None:
         """更新本地版本信息"""
@@ -86,6 +87,9 @@ class NCDPage(PageBase):
             self.local_version = None
         else:
             self.local_version = version_data.ncd_version
+
+        self.mark_local_version_loaded()
+        self.update_page_if_ready()
 
     # ==================== 槽函数 ====================
     @Slot()

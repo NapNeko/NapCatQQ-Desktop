@@ -60,6 +60,26 @@ class PageBase(ScrollArea):
 
         self.local_version = None
         self.remote_version = None
+        self._local_version_loaded = False
+        self._remote_version_loaded = False
+
+    def begin_version_refresh(self) -> None:
+        """标记一次新的版本刷新开始，避免并发回调使用上一次的缓存结果。"""
+        self._local_version_loaded = False
+        self._remote_version_loaded = False
+
+    def mark_local_version_loaded(self) -> None:
+        """记录本地版本已完成读取。"""
+        self._local_version_loaded = True
+
+    def mark_remote_version_loaded(self) -> None:
+        """记录远程版本已完成读取。"""
+        self._remote_version_loaded = True
+
+    def update_page_if_ready(self) -> None:
+        """仅在本地与远程版本都返回后再刷新页面，避免竞态导致按钮状态错误。"""
+        if self._local_version_loaded and self._remote_version_loaded:
+            self.update_page()
 
 
 class UpdateLogSkeleton(QWidget):
