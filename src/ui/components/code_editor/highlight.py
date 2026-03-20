@@ -33,6 +33,18 @@ class LogHighlighter(QSyntaxHighlighter):
         self.command_format = QTextCharFormat()
         self.command_format.setForeground(QColor("#c678dd"))
 
+        self.json_key_format = QTextCharFormat()
+        self.json_key_format.setForeground(QColor("#8aadf4"))
+
+        self.json_string_value_format = QTextCharFormat()
+        self.json_string_value_format.setForeground(QColor("#a6e3a1"))
+
+        self.json_number_format = QTextCharFormat()
+        self.json_number_format.setForeground(QColor("#f5c2e7"))
+
+        self.json_boolean_format = QTextCharFormat()
+        self.json_boolean_format.setForeground(QColor("#f38ba8"))
+
         self.level_formats: dict[str, QTextCharFormat] = {
             "TRACE": QTextCharFormat(),
             "DEBUG": QTextCharFormat(),
@@ -65,7 +77,13 @@ class LogHighlighter(QSyntaxHighlighter):
 
         self.url_pattern = QRegularExpression(r"https?://[^\s\"']+")
         self.path_pattern = QRegularExpression(r"(?:[A-Za-z]:\\|\\\\)[^\"'\r\n]+")
-        self.command_pattern = QRegularExpression(r"\"[^\"]+\"")
+        self.command_pattern = QRegularExpression(
+            r"\"[^\"\r\n]*(?:\\|/|--|\.exe\b|\.dll\b|\.mjs\b|\.bat\b|\.cmd\b|\.ps1\b|\.py\b)[^\"\r\n]*\""
+        )
+        self.json_string_pattern = QRegularExpression(r'"([^"\\]|\\.)*"')
+        self.json_number_pattern = QRegularExpression(r"(?<=:)\s*-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?=\s*[,}])")
+        self.json_boolean_pattern = QRegularExpression(r"(?<=:)\s*(?:true|false|null)(?=\s*[,}])")
+        self.json_boolean_pattern.setPatternOptions(QRegularExpression.PatternOption.CaseInsensitiveOption)
 
     def highlightBlock(self, text: str) -> None:
         """
@@ -81,6 +99,9 @@ class LogHighlighter(QSyntaxHighlighter):
         self._highlight_levels(text)
         self._apply_pattern(text, self.url_pattern, self.url_format)
         self._highlight_paths(text)
+        self._highlight_json_strings(text)
+        self._apply_pattern(text, self.json_number_pattern, self.json_number_format)
+        self._apply_pattern(text, self.json_boolean_pattern, self.json_boolean_format)
         self._apply_pattern(text, self.command_pattern, self.command_format)
 
     def _apply_pattern(self, text: str, pattern: QRegularExpression, text_format: QTextCharFormat) -> None:
@@ -108,6 +129,22 @@ class LogHighlighter(QSyntaxHighlighter):
             if path_text:
                 self.setFormat(match.capturedStart(), len(path_text), self.path_format)
 
+    def _highlight_json_strings(self, text: str) -> None:
+        """高亮日志行中的 JSON 键名和值。"""
+        match_iter = self.json_string_pattern.globalMatch(text)
+        while match_iter.hasNext():
+            match = match_iter.next()
+            start = match.capturedStart()
+            length = match.capturedLength()
+
+            after = text[start + length :].lstrip()
+            if after.startswith(":"):
+                self.setFormat(start, length, self.json_key_format)
+            else:
+                before = text[:start].rstrip()
+                if before.endswith(":"):
+                    self.setFormat(start, length, self.json_string_value_format)
+
     @staticmethod
     def _trim_path_match(path_text: str) -> str:
         """裁剪宽匹配结果，避免把路径后的普通文本一并高亮。"""
@@ -117,9 +154,13 @@ class LogHighlighter(QSyntaxHighlighter):
             if split_match := re.search(delimiter, trimmed):
                 trimmed = trimmed[: split_match.start()].rstrip()
 
-        # 若路径包含明确扩展名，则截断到扩展名结尾，避免吞掉后续说明文字。
-        if ext_match := re.search(r"\.[A-Za-z0-9_]{1,8}(?=$|[^A-Za-z0-9_])", trimmed):
-            trimmed = trimmed[: ext_match.end()]
+        # 若路径包含明确文件扩展名，则截断到最后一个扩展名结尾。
+        # 这里要求扩展名中至少包含一个字母，避免把 `9.9.28-46494` 里的 `.28` 误判成扩展名。
+        ext_matches = list(re.finditer(r"\.([A-Za-z0-9_]{1,8})(?=$|[^A-Za-z0-9_])", trimmed))
+        for ext_match in reversed(ext_matches):
+            if any(ch.isalpha() for ch in ext_match.group(1)):
+                trimmed = trimmed[: ext_match.end()]
+                break
 
         return trimmed
 
