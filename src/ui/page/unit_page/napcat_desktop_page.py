@@ -39,6 +39,7 @@ class NCDPage(PageBase):
         self.app_card.set_name("NapCatQQ Desktop")
         self.app_card.set_hyper_label_name(self.tr("仓库地址"))
         self.app_card.set_hyper_label_url(Urls.NCD_REPO.value)
+        self.log_card.set_loading(True)
 
         # 连接信号槽
         self.app_card.install_button.clicked.connect(self.on_download)
@@ -53,6 +54,7 @@ class NCDPage(PageBase):
         if self.local_version is None:
             # 如果没有本地版本则显示安装按钮
             self.app_card.switch_button(ButtonStatus.UNINSTALLED)
+            self.log_card.setLog(self.remote_log)
             return
 
         if self.remote_version is None:

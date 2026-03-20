@@ -32,6 +32,7 @@ class NapCatPage(PageBase):
         self.app_card.set_name("NapCatQQ")
         self.app_card.set_hyper_label_name(self.tr("仓库地址"))
         self.app_card.set_hyper_label_url(Urls.NAPCATQQ_REPO.value)
+        self.log_card.set_loading(True)
 
         # 连接信号槽
         self.app_card.install_button.clicked.connect(self.on_download)
