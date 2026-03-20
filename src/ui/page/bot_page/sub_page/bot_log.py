@@ -4,9 +4,9 @@
 from creart import it
 
 # 第三方库导入
-from qfluentwidgets import FluentIcon, HeaderCardWidget, TransparentPushButton, TransparentToolButton
+from qfluentwidgets import FluentIcon, HeaderCardWidget, TransparentPushButton, TransparentToolButton, isDarkTheme
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QVBoxLayout, QWidget, QPlainTextEdit
 
 # 项目内模块导入
@@ -104,6 +104,9 @@ class BotLogPage(QWidget):
         """插入内容到 log_view"""
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
+        fmt = QTextCharFormat()
+        fmt.setForeground(QColor("#e6eaf2") if isDarkTheme() else QColor("#1f2937"))
+        cursor.setCharFormat(fmt)
         cursor.insertText(data)
         self.log_view.setTextCursor(cursor)
 
