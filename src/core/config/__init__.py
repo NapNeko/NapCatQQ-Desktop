@@ -31,10 +31,12 @@
 """
 
 # 标准库导入
+import contextlib
 import inspect
 import json
 import platform
 import time
+import warnings
 from pathlib import Path
 from typing import Self
 
@@ -52,6 +54,7 @@ from qfluentwidgets.common import (
     RangeConfigItem,
     RangeValidator,
     Theme,
+    qconfig,
 )
 from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import QLocale, Signal
@@ -227,8 +230,10 @@ class Config(QConfig):
             if k in items:
                 items[k].deserializeFrom(v)
 
+        self._sync_theme_config_items(flat_cfg)
+
         # 应用主题
-        self.theme = self.get(self.theme_mode)
+        self.theme = self.get(self.themeMode)
         logger.trace(
             (
                 "配置加载完成: "
@@ -238,6 +243,50 @@ class Config(QConfig):
             log_source=LogSource.CORE,
         )
 
+    def _sync_theme_config_items(self, flat_cfg: dict[str, object]) -> None:
+        """兼容旧版 Personalize 主题字段，并保持与 QFluentWidgets 字段一致。"""
+        has_legacy_theme_mode = self.theme_mode.key in flat_cfg
+        has_fluent_theme_mode = self.themeMode.key in flat_cfg
+        has_legacy_theme_color = self.theme_color.key in flat_cfg
+        has_fluent_theme_color = self.themeColor.key in flat_cfg
+
+        if has_legacy_theme_mode and not has_fluent_theme_mode:
+            self.themeMode.value = self.get(self.theme_mode)
+        else:
+            self.theme_mode.value = self.get(self.themeMode)
+
+        if has_legacy_theme_color and not has_fluent_theme_color:
+            self.themeColor.value = self.get(self.theme_color)
+        else:
+            self.theme_color.value = self.get(self.themeColor)
+
+
+def bind_qfluent_qconfig(config: Config) -> None:
+    """将 QFluentWidgets 全局 qconfig 绑定到项目配置，避免写到仓库根目录。"""
+    qconfig._cfg = config
+    qconfig.file = Path(config.file)
+    qconfig.theme = config.get(config.themeMode)
+
+    for signal_name, relay_name in (
+        ("themeChanged", "_napcat_theme_changed_relay"),
+        ("themeColorChanged", "_napcat_theme_color_changed_relay"),
+        ("appRestartSig", "_napcat_app_restart_relay"),
+    ):
+        old_relay = getattr(qconfig, relay_name, None)
+        if old_relay is not None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                with contextlib.suppress(RuntimeError, TypeError):
+                    getattr(config, signal_name).disconnect(old_relay)
+
+    qconfig._napcat_theme_changed_relay = lambda theme: qconfig.themeChanged.emit(theme)
+    qconfig._napcat_theme_color_changed_relay = lambda color: qconfig.themeColorChanged.emit(color)
+    qconfig._napcat_app_restart_relay = lambda: qconfig.appRestartSig.emit()
+
+    config.themeChanged.connect(qconfig._napcat_theme_changed_relay)
+    config.themeColorChanged.connect(qconfig._napcat_theme_color_changed_relay)
+    config.appRestartSig.connect(qconfig._napcat_app_restart_relay)
+
 
 cfg = Config()
 cfg.load(it(PathFunc).config_path)
@@ -245,3 +294,4 @@ cfg.set(cfg.start_time, time.time(), True)
 cfg.set(cfg.napcat_desktop_version, __version__, True)
 cfg.set(cfg.system_type, platform.system(), True)
 cfg.set(cfg.platform_type, platform.machine(), True)
+bind_qfluent_qconfig(cfg)

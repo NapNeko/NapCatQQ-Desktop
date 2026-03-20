@@ -4,7 +4,6 @@ from abc import ABC
 
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
-from qfluentwidgets import Theme, setTheme
 from qfluentwidgets.components.widgets.stacked_widget import PopUpAniStackedWidget
 from qframelesswindow import FramelessWindow
 from PySide6.QtCore import Qt
@@ -52,8 +51,6 @@ class GuideWindow(FramelessWindow):
         调整窗体大小、位置、布局等
         """
         logger.trace("引导窗口初始化开始", log_source=LogSource.UI)
-        # 设置主题
-        setTheme(Theme.AUTO)
         self.show()
 
         # 设置窗体图标
