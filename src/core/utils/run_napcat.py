@@ -67,20 +67,36 @@ class NapCatQQProcessLog(QObject):
     # ==================== 公共函数===================
     def get_log_content(self) -> str:
         """返回所有 log"""
-        return "".join(self._log_storage)
+        return self._sanitize_log_text("".join(self._log_storage))
 
     def clear(self) -> None:
         """清理所有 log"""
         self._log_storage.clear()
+
+    @staticmethod
+    def _sanitize_log_text(data: str) -> str:
+        """清洗日志文本中的 ANSI 转义、异常换行和多余空行。"""
+        if not data:
+            return ""
+
+        data = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", data)
+
+        # 将 `\r\n`、`\r\r\n`、孤立的 `\r` 统一折叠成单个 `\n`
+        data = re.sub(r"\r+\n", "\n", data)
+        data = re.sub(r"\r+", "\n", data)
+
+        # 压缩由异常换行导致的多余空白行
+        data = re.sub(r"\n{2,}", "\n", data)
+        return data
 
     # ==================== 响应函数===================
     def handle_output(self):
         """处理日志数据"""
         # 拿到解码后的数据
         data = bytes(self._process.readAllStandardOutput().data()).decode()
-        # 正则处理转义字符
-        data = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", data)
-        data = re.compile(r"\r+\n$").sub("\n", data)
+        data = self._sanitize_log_text(data)
+        if not data:
+            return
         self._log_storage.append(data)
 
         # 信号发射
