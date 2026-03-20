@@ -10,6 +10,7 @@ import pytest
 from PySide6.QtWidgets import QApplication, QWidget
 
 # 项目内模块导入
+from src.core.config.config_model import HttpServersConfig, WebsocketClientsConfig
 from src.ui.page.bot_page.widget import card as card_module
 
 
@@ -98,3 +99,22 @@ def test_remove_button_skips_stop_when_process_missing(monkeypatch: pytest.Monke
     assert login_state_removals == ["2477817352"]
     assert auto_restart_removals == ["2477817352"]
     assert emitted == ["2477817352"]
+
+
+def test_tag_widget_renders_enabled_connect_types(config_factory) -> None:
+    """网络标签应仅展示已配置的连接类型。"""
+    ensure_qapp()
+    config = config_factory(114514)
+    config.connect.httpServers.append(
+        HttpServersConfig(name="http", host="127.0.0.1", port=3000)
+    )
+    config.connect.websocketClients.append(
+        WebsocketClientsConfig(name="wsc", url="ws://127.0.0.1:3001/ws")
+    )
+
+    parent = QWidget()
+    widget = card_module.BotInfoWidget.TagWidget(config.connect, parent)
+
+    assert widget.flow_layout.count() == 2
+    assert widget.flow_layout.itemAt(0).widget().text() == "HTTPS"
+    assert widget.flow_layout.itemAt(1).widget().text() == "WSC"

@@ -19,7 +19,6 @@ from qfluentwidgets import (
     FluentIcon,
     FluentIconBase,
     HeaderCardWidget,
-    IconWidget,
     ImageLabel,
     PillPushButton,
     PushButton,
@@ -31,6 +30,7 @@ from qfluentwidgets import (
     TransparentToolButton,
     setFont,
 )
+from qfluentwidgets.components.widgets.icon_widget import IconWidget
 from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
@@ -44,6 +44,7 @@ from PySide6.QtCore import (
     QTimer,
     QUrlQuery,
     Slot,
+    QSize,
     Signal,
 )
 from PySide6.QtGui import QColor, QEnterEvent, QFont, QPixmap
@@ -116,11 +117,12 @@ class BotCard(HeaderCardWidget):
         self.viewLayout.addWidget(self.info_widget, 2)
 
         self.headerLayout.addStretch(1)
-        self.headerLayout.addWidget(self.run_button)
-        self.headerLayout.addWidget(self.stop_button)
-        self.headerLayout.addWidget(self.log_button)
-        self.headerLayout.addWidget(self.setting_button)
-        self.headerLayout.addWidget(self.remove_button)
+        self.headerLayout.setSpacing(8)
+        self.headerLayout.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.headerLayout.addWidget(self.stop_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.headerLayout.addWidget(self.log_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.headerLayout.addWidget(self.setting_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.headerLayout.addWidget(self.remove_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # 链接信号
         it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_process_changed_button)
@@ -316,8 +318,8 @@ class BotAvatarWidget(QWidget):
         # 保存当前位置作为起点
         current_pos = self.pos()
 
-        # 设置动画, 向上移动 10 个像素
-        target_pos = QPoint(current_pos.x(), current_pos.y() - 10)
+        # 设置动画, 向上移动 4 个像素
+        target_pos = QPoint(current_pos.x(), current_pos.y() - 4)
 
         # 启动动画
         self._float_ani.setStartValue(current_pos)
@@ -418,9 +420,15 @@ class BotInfoWidget(QWidget):
             self.h_box_layout = QHBoxLayout(self)
             self.h_box_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
             self.h_box_layout.setContentsMargins(0, 0, 0, 0)
-            self.h_box_layout.setSpacing(8)
-            self.h_box_layout.addWidget(self.icon_widget)
-            self.h_box_layout.addWidget(self.text_label)
+            self.h_box_layout.setSpacing(10)
+            self.h_box_layout.addWidget(self.icon_widget, 0)
+            self.h_box_layout.addSpacing(4)
+            self.h_box_layout.addWidget(self.text_label, 0)
+
+        def set_icon(self, icon: FluentIconBase, light: str = "#454655", dark: str = "#fff3fa") -> None:
+            """更新左侧图标。"""
+            self._icon = icon.colored(QColor(light), QColor(dark))
+            self.icon_widget.setIcon(self._icon)
 
     class TagWidget(QWidget):
 
@@ -467,14 +475,14 @@ class BotInfoWidget(QWidget):
         self.start_time: float | None = None
 
         # 创建控件
-        self._run_time_info = self.InfoWidget(FluentIcon.DATE_TIME, f"未运行", self)
-        self._memory_info = self.InfoWidget(FluentIcon.CALENDAR, f"-M / -M", self)
+        self._run_time_info = self.InfoWidget(FluentIcon.DATE_TIME, "未运行", self)
+        self._memory_info = self.InfoWidget(FluentIcon.SPEED_HIGH, "-M / -M", self)
         self._tag_info = self.TagWidget(self._config.connect, self)
 
         # 设置布局
         self.v_box_layout = QVBoxLayout(self)
         self.v_box_layout.setContentsMargins(0, 0, 0, 0)
-        self.v_box_layout.setSpacing(8)
+        self.v_box_layout.setSpacing(10)
         self.v_box_layout.addWidget(self._run_time_info)
         self.v_box_layout.addWidget(self._memory_info)
         self.v_box_layout.addWidget(self._tag_info)
@@ -507,6 +515,7 @@ class BotInfoWidget(QWidget):
             return
 
         if state == QProcess.ProcessState.Running:
+            self._run_time_info.set_icon(FluentIcon.DATE_TIME, light="#176c3a", dark="#7ee2a8")
             # 判断 start_time 是否为 None, 为 None 代表第一次启动, 从 monotonic() 获取启动时间, 否则查找进程启动时间
             if self.start_time is None:
                 process_model = it(ManagerNapCatQQProcess).get_process(qq_id)
@@ -537,6 +546,7 @@ class BotInfoWidget(QWidget):
             # 保存计时器引用
             self._run_time_timer = timer
         else:
+            self._run_time_info.set_icon(FluentIcon.DATE_TIME, light="#6b7280", dark="#cbd5e1")
             if hasattr(self, "_run_time_timer"):
                 self._run_time_timer.stop()
                 self._run_time_timer.deleteLater()
