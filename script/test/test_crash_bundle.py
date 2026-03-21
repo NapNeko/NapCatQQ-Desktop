@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 # 项目内模块导入
+import src.core.utils.logger.crash_bundle as crash_bundle_module
 import src.core.utils.logger.log_func as log_func_module
 from src.core.utils.logger.crash_bundle import (
     build_safe_config_summary,
@@ -186,9 +187,10 @@ def test_build_safe_config_summary_excludes_sensitive_values(tmp_path: Path) -> 
 def test_emit_crash_bundle_writes_redacted_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """崩溃诊断包必须只包含脱敏后的派生文件。"""
     repo_root = tmp_path / "repo"
+    data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
     desktop_dir = tmp_path / "desktop"
     desktop_dir.mkdir(parents=True, exist_ok=True)
-    sensitive_values = create_runtime_config_fixture(repo_root)
+    sensitive_values = create_runtime_config_fixture(data_root)
     log_path = repo_root / "log" / "app.log"
     test_logger = create_test_logger(log_path)
 
@@ -204,6 +206,7 @@ def test_emit_crash_bundle_writes_redacted_bundle(tmp_path: Path, monkeypatch: p
 
     monkeypatch.setattr(log_func_module, "resolve_app_base_path", lambda: repo_root)
     monkeypatch.setattr(log_func_module, "resolve_desktop_output_dir", lambda base_path=None: (desktop_dir, "desktop"))
+    monkeypatch.setattr(crash_bundle_module, "resolve_app_data_path", lambda: data_root)
 
     try:
         raise RuntimeError(
@@ -246,13 +249,15 @@ def test_emit_crash_bundle_writes_redacted_bundle(tmp_path: Path, monkeypatch: p
 def test_emit_crash_bundle_only_once_per_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """同一进程重复触发崩溃导出时只能生成一个 zip。"""
     repo_root = tmp_path / "repo"
+    data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
     desktop_dir = tmp_path / "desktop"
     desktop_dir.mkdir(parents=True, exist_ok=True)
-    create_runtime_config_fixture(repo_root)
+    create_runtime_config_fixture(data_root)
     test_logger = create_test_logger(repo_root / "log" / "app.log")
 
     monkeypatch.setattr(log_func_module, "resolve_app_base_path", lambda: repo_root)
     monkeypatch.setattr(log_func_module, "resolve_desktop_output_dir", lambda base_path=None: (desktop_dir, "desktop"))
+    monkeypatch.setattr(crash_bundle_module, "resolve_app_data_path", lambda: data_root)
 
     try:
         raise RuntimeError("first crash")
@@ -272,13 +277,15 @@ def test_emit_crash_bundle_only_once_per_process(tmp_path: Path, monkeypatch: py
 def test_emit_test_crash_bundle_does_not_consume_real_crash_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """手动测试导出不应占用正式崩溃诊断包的一次性名额。"""
     repo_root = tmp_path / "repo"
+    data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
     desktop_dir = tmp_path / "desktop"
     desktop_dir.mkdir(parents=True, exist_ok=True)
-    create_runtime_config_fixture(repo_root)
+    create_runtime_config_fixture(data_root)
     test_logger = create_test_logger(repo_root / "log" / "app.log")
 
     monkeypatch.setattr(log_func_module, "resolve_app_base_path", lambda: repo_root)
     monkeypatch.setattr(log_func_module, "resolve_desktop_output_dir", lambda base_path=None: (desktop_dir, "desktop"))
+    monkeypatch.setattr(crash_bundle_module, "resolve_app_data_path", lambda: data_root)
 
     test_bundle_path = test_logger.emit_test_crash_bundle()
 
