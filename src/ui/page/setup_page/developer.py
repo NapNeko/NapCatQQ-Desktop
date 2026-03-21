@@ -4,6 +4,7 @@ import threading
 from collections.abc import Callable
 
 # 第三方库导入
+from creart import it
 from qfluentwidgets import ExpandLayout, PushButton, ScrollArea, SettingCard, SettingCardGroup
 from qfluentwidgets import FluentIcon as FI
 from PySide6.QtCore import QTimer, Qt
@@ -11,6 +12,8 @@ from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.core.utils.logger import LogSource, logger
+from src.core.home import home_notice_debug_center
+from src.core.utils.run_napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import SwitchConfigCard
 
@@ -38,6 +41,8 @@ class ActionButtonCard(SettingCard):
 class Developer(ScrollArea):
     """开发者工具页面。"""
 
+    _TEST_QQ_ID = "114514"
+
     def __init__(self, parent) -> None:
         super().__init__(parent=parent)
         self.view = QWidget()
@@ -63,6 +68,7 @@ class Developer(ScrollArea):
             self.log_group,
         )
         self.crash_group = SettingCardGroup(title=self.tr("崩溃诊断"), parent=self.view)
+        self.notice_group = SettingCardGroup(title=self.tr("首页通知"), parent=self.view)
         self.export_bundle_card = ActionButtonCard(
             icon=FI.DEVELOPER_TOOLS,
             title=self.tr("生成脱敏崩溃包"),
@@ -87,6 +93,22 @@ class Developer(ScrollArea):
             callback=self._trigger_main_thread_exception,
             parent=self.crash_group,
         )
+        self.notice_batch_card = ActionButtonCard(
+            icon=FI.RINGER,
+            title=self.tr("触发首页通知样例"),
+            content=self.tr("向首页通知时间线和右上角提示同时注入一组测试通知"),
+            button_text=self.tr("触发通知"),
+            callback=self._trigger_home_notice_test,
+            parent=self.notice_group,
+        )
+        self.notice_clear_card = ActionButtonCard(
+            icon=FI.CANCEL,
+            title=self.tr("清除测试扫码通知"),
+            content=self.tr("移除开发者模式注入的测试扫码提醒"),
+            button_text=self.tr("清除通知"),
+            callback=self._clear_home_notice_test,
+            parent=self.notice_group,
+        )
 
     def _set_layout(self) -> None:
         """控件布局。"""
@@ -94,9 +116,12 @@ class Developer(ScrollArea):
         self.crash_group.addSettingCard(self.export_bundle_card)
         self.crash_group.addSettingCard(self.thread_exception_card)
         self.crash_group.addSettingCard(self.main_exception_card)
+        self.notice_group.addSettingCard(self.notice_batch_card)
+        self.notice_group.addSettingCard(self.notice_clear_card)
 
         self.expand_layout.addWidget(self.log_group)
         self.expand_layout.addWidget(self.crash_group)
+        self.expand_layout.addWidget(self.notice_group)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
 
@@ -138,6 +163,30 @@ class Developer(ScrollArea):
         logger.warning("开发者模式触发主线程未处理异常测试", log_source=LogSource.UI)
         warning_bar(self.tr("即将触发主线程未处理异常，当前进程会退出"), parent=self)
         QTimer.singleShot(150, self._raise_main_thread_exception)
+
+    def _trigger_home_notice_test(self) -> None:
+        """触发首页通知测试。"""
+        logger.info("开发者模式触发首页通知测试", log_source=LogSource.UI)
+
+        process_manager = it(ManagerNapCatQQProcess)
+        login_state_manager = it(ManagerNapCatQQLoginState)
+
+        process_manager.notification_signal.emit("info", "开发者模式: 检测到 NapCat 可更新到 v9.9.99。")
+        process_manager.notification_signal.emit("warning", "开发者模式: 测试 Bot 当前处于离线状态。")
+        process_manager.notification_signal.emit("error", "开发者模式: 测试启动失败，请检查 QQ 安装路径。")
+        login_state_manager.notification_signal.emit("success", "开发者模式: 已发送测试离线通知到配置的邮箱地址。")
+        login_state_manager.qr_code_available_signal.emit(self._TEST_QQ_ID, "developer://home-notice-test")
+        home_notice_debug_center.sampleRequested.emit()
+
+        success_bar(self.tr("已注入首页通知测试数据"), parent=self)
+        info_bar(self.tr("可切换到主页检查提醒、更新和扫码通知展示"), parent=self)
+
+    def _clear_home_notice_test(self) -> None:
+        """清除首页通知测试。"""
+        logger.info("开发者模式清除首页通知测试", log_source=LogSource.UI)
+        it(ManagerNapCatQQLoginState).qr_code_removed_signal.emit(self._TEST_QQ_ID)
+        home_notice_debug_center.clearRequested.emit()
+        success_bar(self.tr("已清除测试扫码通知"), parent=self)
 
     @staticmethod
     def _raise_main_thread_exception() -> None:
