@@ -50,7 +50,7 @@ class SetupWidget(QWidget):
         # 设置布局
         self.v_box_layout.addWidget(self.top_card)
         self.v_box_layout.addWidget(self.view)
-        self.v_box_layout.setContentsMargins(24, 20, 24, 10)
+        self.v_box_layout.setContentsMargins(24, 20, 24, 20)
         self.setLayout(self.v_box_layout)
 
         # 应用样式表

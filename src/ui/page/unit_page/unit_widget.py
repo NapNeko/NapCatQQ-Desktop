@@ -96,7 +96,7 @@ class UnitWidget(QWidget):
         """设置控件布局"""
         self.v_box_layout.addWidget(self.top_card)
         self.v_box_layout.addWidget(self.view)
-        self.v_box_layout.setContentsMargins(24, 20, 24, 10)
+        self.v_box_layout.setContentsMargins(24, 20, 24, 20)
         self.setLayout(self.v_box_layout)
 
     def _connect_signals(self) -> None:
