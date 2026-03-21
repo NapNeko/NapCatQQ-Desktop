@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
 from qfluentwidgets import SmoothScrollDelegate, isDarkTheme, setFont
+from qfluentwidgets.common.smooth_scroll import SmoothMode
 from qfluentwidgets.components.widgets.menu import TextEditMenu
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QMouseEvent, QPalette, QTextCharFormat, QTextCursor
@@ -12,10 +13,23 @@ from src.ui.common.style_sheet import WidgetStyleSheet
 from src.ui.components.code_editor.editor import CodeEditor
 
 
+def _set_linear_smooth_scroll(delegate: SmoothScrollDelegate) -> None:
+    """统一日志类文本控件的平滑滚动模式。"""
+    delegate.verticalSmoothScroll.setSmoothMode(SmoothMode.LINEAR)
+    delegate.horizonSmoothScroll.setSmoothMode(SmoothMode.LINEAR)
+
+
+def _tune_soft_text_scroll(delegate: SmoothScrollDelegate) -> None:
+    """为纯文本日志提供更柔和的滚动手感。"""
+    delegate.verticalSmoothScroll.setSmoothMode(SmoothMode.COSINE)
+
+
 class CodeExibit(CodeEditor):
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
+        _set_linear_smooth_scroll(self.scrollDelegate)
+        _tune_soft_text_scroll(self.scrollDelegate)
         self.setReadOnly(True)
 
 
@@ -26,6 +40,7 @@ class UpdateLogExhibit(QTextBrowser):
         super().__init__(parent)
         self._raw_html = ""
         self.scroll_delegate = SmoothScrollDelegate(self)
+        _set_linear_smooth_scroll(self.scroll_delegate)
         self.setReadOnly(True)
         self.setOpenExternalLinks(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
