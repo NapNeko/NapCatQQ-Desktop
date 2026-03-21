@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QBoxLayout, QHBoxLayout, QSizePolicy, QVBoxLayout,
 from qfluentwidgets import BodyLabel, CaptionLabel, SimpleCardWidget, isDarkTheme
 from qfluentwidgets.common.icon import drawIcon
 
-from src.core.utils.get_version import GetLocalVersionRunnable
+from src.core.home import HomeVersionService
 from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
 
 
@@ -80,7 +80,7 @@ class VersionCardsPanel(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._local_version = GetLocalVersionRunnable()
+        self._version_service = HomeVersionService()
         self._create_cards()
         self._set_layout()
 
@@ -104,18 +104,21 @@ class VersionCardsPanel(QWidget):
             self.box_layout.setDirection(direction)
 
     def refresh_versions(self) -> None:
-        self.napcat_card.setVersion(self._format_version("NapCat", self._local_version.get_napcat_version()))
-        self.qq_card.setVersion(self._format_version("QQ", self._local_version.get_qq_version()))
+        summary = self._version_service.get_summary()
+        self.napcat_card.setVersion(self._format_version("NapCat", summary.napcat_version))
+        self.qq_card.setVersion(self._format_version("QQ", summary.qq_version))
 
     def _create_napcat_data(self) -> VersionCardData:
+        summary = self._version_service.get_summary()
         return VersionCardData(
-            version=self._format_version("NapCat", self._local_version.get_napcat_version()),
+            version=self._format_version("NapCat", summary.napcat_version),
             icon=StaticIcon.LOGO,
         )
 
     def _create_qq_data(self) -> VersionCardData:
+        summary = self._version_service.get_summary()
         return VersionCardData(
-            version=self._format_version("QQ", self._local_version.get_qq_version()),
+            version=self._format_version("QQ", summary.qq_version),
             icon=NapCatDesktopIcon.QQ,
         )
 

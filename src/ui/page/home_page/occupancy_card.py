@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-import psutil
-from PySide6.QtCore import QObject, QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, Signal, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, Signal, QVariantAnimation
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, FluentIcon, SimpleCardWidget, StrongBodyLabel, isDarkTheme
 
 from src.core.config import cfg
+from src.core.home import OccupancySnapshot, SystemOccupancySampler
 
 
 def _clamp_percent(value: float) -> float:
@@ -26,13 +24,6 @@ def _mix_color(source: QColor | str, target: QColor | str, ratio: float) -> QCol
         round(source.blue() * (1 - ratio) + target.blue() * ratio),
         round(source.alpha() * (1 - ratio) + target.alpha() * ratio),
     )
-
-
-@dataclass(slots=True)
-class OccupancySnapshot:
-    cpu_percent: float
-    memory_percent: float
-
 
 class _MetricHistory:
     def __init__(self, size: int) -> None:
@@ -53,33 +44,6 @@ class _MetricHistory:
 
     def values(self) -> list[float]:
         return list(self._values)
-
-
-class _SystemOccupancySampler(QObject):
-    sampleChanged = Signal(float, float)
-
-    def __init__(self, interval_ms: int = 1200, parent: QObject | None = None) -> None:
-        super().__init__(parent)
-        self._initialized = False
-        self._timer = QTimer(self)
-        self._timer.setInterval(interval_ms)
-        self._timer.timeout.connect(self.poll_now)
-        psutil.cpu_percent(interval=None)
-
-    def start(self) -> None:
-        self._timer.start()
-        self.poll_now()
-
-    def poll_now(self) -> None:
-        cpu_percent = psutil.cpu_percent(interval=None)
-        if cpu_percent == 0 and not self._initialized:
-            cpu_percent = psutil.cpu_percent(interval=0.05)
-
-        memory_percent = psutil.virtual_memory().percent
-        self._initialized = True
-        self.sampleChanged.emit(cpu_percent, memory_percent)
-
-
 class _ColoredFluentIconWidget(QWidget):
     def __init__(self, icon: FluentIcon, color: QColor | str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -101,7 +65,7 @@ class _ColoredFluentIconWidget(QWidget):
 
 
 class _OccupancyCanvas(QWidget):
-    hoverValueChanged = Signal(int, float)
+    hoverValueChanged = Signal(float)
     hoverLeft = Signal()
 
     def __init__(self, accent_color: QColor | str, parent: QWidget | None = None) -> None:
@@ -109,8 +73,9 @@ class _OccupancyCanvas(QWidget):
         self._accent_color = QColor(accent_color)
         self._values: list[float] = [0.0] * 24
         self._animation_source_values: list[float] | None = None
+        self._incoming_value: float | None = None
         self._animation_progress = 1.0
-        self._hover_index: int | None = None
+        self._hover_x: float | None = None
 
         self.setMinimumHeight(148)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -119,8 +84,8 @@ class _OccupancyCanvas(QWidget):
         self._scroll_animation = QVariantAnimation(self)
         self._scroll_animation.setStartValue(0.0)
         self._scroll_animation.setEndValue(1.0)
-        self._scroll_animation.setDuration(860)
-        self._scroll_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._scroll_animation.setDuration(1180)
+        self._scroll_animation.setEasingCurve(QEasingCurve.Type.Linear)
         self._scroll_animation.valueChanged.connect(self._on_animation_value_changed)
         self._scroll_animation.finished.connect(self._on_animation_finished)
 
@@ -130,13 +95,15 @@ class _OccupancyCanvas(QWidget):
         self._accent_color = QColor(color)
         self.update()
 
+    def setScrollDuration(self, duration_ms: int) -> None:
+        self._scroll_animation.setDuration(max(120, int(duration_ms)))
+
     def setValues(self, values: list[float]) -> None:
         self._scroll_animation.stop()
         self._animation_source_values = None
+        self._incoming_value = None
         self._animation_progress = 1.0
         self._values = [_clamp_percent(value) for value in values] or [0.0]
-        if self._hover_index is not None:
-            self._hover_index = max(0, min(self._hover_index, len(self._values) - 1))
         self.update()
 
     def appendValue(self, value: float) -> None:
@@ -145,17 +112,16 @@ class _OccupancyCanvas(QWidget):
             self.setValues([normalized])
             return
 
-        self._animation_source_values = self._display_values()
+        self._animation_source_values = list(self._values)
+        self._incoming_value = normalized
         self._values = [*self._values[1:], normalized] if len(self._values) > 1 else [normalized]
-        if self._hover_index is not None:
-            self._hover_index = max(0, min(self._hover_index, len(self._values) - 1))
 
         self._animation_progress = 0.0
         self._scroll_animation.stop()
         self._scroll_animation.start()
 
     def paintEvent(self, event) -> None:
-        values = self._display_values()
+        values = self._render_values()
         if not values:
             return
 
@@ -168,8 +134,12 @@ class _OccupancyCanvas(QWidget):
 
         self._draw_grid(painter, chart_rect)
         points = self._build_points(chart_rect, values)
-        self._draw_fill(painter, chart_rect, points)
-        self._draw_curve(painter, points)
+        display_points = self._build_display_points(chart_rect, points)
+        painter.save()
+        painter.setClipRect(chart_rect.adjusted(-6, -6, 6, 6))
+        self._draw_fill(painter, chart_rect, display_points)
+        self._draw_curve(painter, display_points)
+        painter.restore()
         self._draw_hover_indicator(painter, chart_rect, points, values)
 
     def mouseMoveEvent(self, event) -> None:
@@ -179,19 +149,14 @@ class _OccupancyCanvas(QWidget):
             super().mouseMoveEvent(event)
             return
 
-        values = self._display_values()
+        values = self._render_values()
         if not values:
             return
 
-        if len(values) == 1:
-            hover_index = 0
-        else:
-            step_x = chart_rect.width() / (len(values) - 1)
-            hover_index = round((event.position().x() - chart_rect.left()) / step_x)
-            hover_index = max(0, min(len(values) - 1, hover_index))
-
-        self._hover_index = hover_index
-        self.hoverValueChanged.emit(hover_index, values[hover_index])
+        points = self._build_points(chart_rect, values)
+        self._hover_x = max(chart_rect.left(), min(event.position().x(), chart_rect.right()))
+        _, hover_value = self._point_and_value_at_x(points, values, self._hover_x)
+        self.hoverValueChanged.emit(hover_value)
         self.update()
         super().mouseMoveEvent(event)
 
@@ -223,11 +188,34 @@ class _OccupancyCanvas(QWidget):
         if len(values) == 1:
             return [QPointF(chart_rect.center().x(), self._value_to_y(values[0], chart_rect))]
 
-        step_x = chart_rect.width() / (len(values) - 1)
+        visible_count = len(self._values)
+        if visible_count <= 1:
+            visible_count = len(values)
+
+        step_x = chart_rect.width() / max(1, visible_count - 1)
+        shift = step_x * self._animation_progress if self._is_animating_scroll(values) else 0.0
         return [
-            QPointF(chart_rect.left() + step_x * index, self._value_to_y(value, chart_rect))
+            QPointF(chart_rect.left() + step_x * index - shift, self._value_to_y(value, chart_rect))
             for index, value in enumerate(values)
         ]
+
+    def _build_display_points(self, chart_rect: QRectF, points: list[QPointF]) -> list[QPointF]:
+        if len(points) < 2 or not self._is_animating_scroll(self._render_values()):
+            return points
+
+        display_points: list[QPointF] = []
+
+        if points[0].x() < chart_rect.left():
+            display_points.append(self._interpolate_point_at_x(points[0], points[1], chart_rect.left()))
+
+        display_points.extend(
+            point for point in points if chart_rect.left() <= point.x() <= chart_rect.right()
+        )
+
+        if points[-1].x() > chart_rect.right():
+            display_points.append(self._interpolate_point_at_x(points[-2], points[-1], chart_rect.right()))
+
+        return display_points or points
 
     def _draw_fill(self, painter: QPainter, chart_rect: QRectF, points: list[QPointF]) -> None:
         if len(points) < 2:
@@ -269,10 +257,10 @@ class _OccupancyCanvas(QWidget):
         points: list[QPointF],
         values: list[float],
     ) -> None:
-        if not points or self._hover_index is None:
+        if not points or self._hover_x is None:
             return
 
-        point = points[self._hover_index]
+        point, hover_value = self._point_and_value_at_x(points, values, self._hover_x)
         stem_color = QColor(self._accent_color)
         stem_color.setAlpha(120)
         painter.setPen(QPen(stem_color, 1.6))
@@ -292,7 +280,7 @@ class _OccupancyCanvas(QWidget):
         painter.setPen(QPen(QColor("#ffffff"), 3))
         painter.drawEllipse(point, 7, 7)
 
-        value_text = f"{round(values[self._hover_index])}%"
+        value_text = f"{round(hover_value)}%"
         font = QFont(self.font())
         font.setPixelSize(11)
         font.setWeight(QFont.Weight.DemiBold)
@@ -326,37 +314,78 @@ class _OccupancyCanvas(QWidget):
     def _value_to_y(value: float, chart_rect: QRectF) -> float:
         return chart_rect.bottom() - chart_rect.height() * (_clamp_percent(value) / 100.0)
 
-    def _display_values(self) -> list[float]:
-        if self._animation_source_values is None or len(self._animation_source_values) != len(self._values):
+    @staticmethod
+    def _interpolate_point_at_x(start: QPointF, end: QPointF, x: float) -> QPointF:
+        if end.x() == start.x():
+            return QPointF(x, end.y())
+
+        ratio = (x - start.x()) / (end.x() - start.x())
+        return QPointF(x, start.y() + (end.y() - start.y()) * ratio)
+
+    @staticmethod
+    def _point_and_value_at_x(points: list[QPointF], values: list[float], x: float) -> tuple[QPointF, float]:
+        if len(points) == 1 or len(values) == 1:
+            return points[0], values[0]
+
+        if x <= points[0].x():
+            return QPointF(x, points[0].y()), values[0]
+
+        for index in range(1, len(points)):
+            start = points[index - 1]
+            end = points[index]
+            if x > end.x():
+                continue
+
+            if end.x() == start.x():
+                return QPointF(x, end.y()), values[index]
+
+            ratio = (x - start.x()) / (end.x() - start.x())
+            point = QPointF(x, start.y() + (end.y() - start.y()) * ratio)
+            value = values[index - 1] + (values[index] - values[index - 1]) * ratio
+            return point, value
+
+        return QPointF(x, points[-1].y()), values[-1]
+
+    def _render_values(self) -> list[float]:
+        if (
+            self._animation_source_values is None
+            or self._incoming_value is None
+            or self._animation_progress >= 1.0
+        ):
             return list(self._values)
 
-        if self._animation_progress >= 1.0:
-            return list(self._values)
+        return [*self._animation_source_values, self._incoming_value]
 
-        displayed: list[float] = []
-        for index, start in enumerate(self._animation_source_values):
-            end = self._values[min(index + 1, len(self._values) - 1)] if index < len(self._values) - 1 else self._values[-1]
-            displayed.append(start + (end - start) * self._animation_progress)
-
-        return displayed
+    def _is_animating_scroll(self, values: list[float]) -> bool:
+        return (
+            self._animation_source_values is not None
+            and self._incoming_value is not None
+            and self._animation_progress < 1.0
+            and len(values) == len(self._values) + 1
+        )
 
     def _on_animation_value_changed(self, value) -> None:
         self._animation_progress = float(value)
-        if self._hover_index is not None:
-            values = self._display_values()
-            self.hoverValueChanged.emit(self._hover_index, values[self._hover_index])
+        if self._hover_x is not None:
+            values = self._render_values()
+            points = self._build_points(self._chart_rect(), values)
+            _, hover_value = self._point_and_value_at_x(points, values, self._hover_x)
+            self.hoverValueChanged.emit(hover_value)
         self.update()
 
     def _on_animation_finished(self) -> None:
         self._animation_progress = 1.0
         self._animation_source_values = None
+        self._incoming_value = None
+        if self._hover_x is not None:
+            self._hover_x = max(self._chart_rect().left(), min(self._hover_x, self._chart_rect().right()))
         self.update()
 
     def _clear_hover(self) -> None:
-        if self._hover_index is None:
+        if self._hover_x is None:
             return
 
-        self._hover_index = None
+        self._hover_x = None
         self.hoverLeft.emit()
         self.update()
 
@@ -428,6 +457,9 @@ class OccupancyChartWidget(SimpleCardWidget):
     def accentColor(self) -> QColor:
         return QColor(self._accent_color)
 
+    def setScrollDuration(self, duration_ms: int) -> None:
+        self.canvas.setScrollDuration(duration_ms)
+
     def setValueText(self, text: str) -> None:
         self._value_text = text
         if not self._hovering:
@@ -449,7 +481,7 @@ class OccupancyChartWidget(SimpleCardWidget):
         self.canvas.appendValue(normalized)
         self.setValue(normalized)
 
-    def _on_hover_value_changed(self, _index: int, value: float) -> None:
+    def _on_hover_value_changed(self, value: float) -> None:
         self._hovering = True
         self.value_label.setText(f"{round(value)}%")
 
@@ -468,7 +500,7 @@ class OccupancyPanel(QWidget):
         self._initialized = False
         self._cpu_history = _MetricHistory(self.HISTORY_SIZE)
         self._memory_history = _MetricHistory(self.HISTORY_SIZE)
-        self._sampler = _SystemOccupancySampler(parent=self)
+        self._sampler = SystemOccupancySampler(parent=self)
 
         self._create_widgets()
         self._set_layout()
@@ -486,6 +518,9 @@ class OccupancyPanel(QWidget):
             FluentIcon.IOT,
             self,
         )
+        scroll_duration = max(120, self._sampler.interval_ms() - 20)
+        self.cpu_chart.setScrollDuration(scroll_duration)
+        self.memory_chart.setScrollDuration(scroll_duration)
 
     def _set_layout(self) -> None:
         self.v_box_layout = QVBoxLayout(self)
