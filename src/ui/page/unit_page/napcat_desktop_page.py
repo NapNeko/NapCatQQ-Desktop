@@ -12,8 +12,13 @@ from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
-from src.core.utils.desktop_update import UPDATE_ARCHIVE_NAME, prepare_desktop_update
-from src.core.utils.get_version import VersionData
+from src.core.utils.desktop_update import (
+    UPDATE_ARCHIVE_NAME,
+    fetch_remote_update_script,
+    inject_target_pid,
+    prepare_desktop_update,
+)
+from src.core.utils.get_version import DesktopUpdateManifest, DesktopUpdatePlan, VersionData, resolve_desktop_update_plan
 from src.core.utils.logger import LogSource, logger
 from src.core.utils.logger.crash_bundle import summarize_path
 from src.core.utils.path_func import PathFunc
@@ -40,6 +45,7 @@ class NCDPage(PageBase):
         self.app_card.set_hyper_label_name(self.tr("仓库地址"))
         self.app_card.set_hyper_label_url(Urls.NCD_REPO.value)
         self.log_card.set_loading(True)
+        self._ncd_update_manifest: DesktopUpdateManifest | None = None
 
         # 连接信号槽
         self.app_card.install_button.clicked.connect(self.on_download)
@@ -67,10 +73,11 @@ class NCDPage(PageBase):
         else:
             self.app_card.switch_button(ButtonStatus.INSTALL)
 
-        self.log_card.setLog(self.remote_log)
+        self.log_card.setLog(self._get_display_log())
 
     def on_update_remote_version(self, version_data: VersionData) -> None:
         """更新远程版本信息和更新日志"""
+        self._ncd_update_manifest = version_data.ncd_update_manifest
         if version_data.ncd_version is None or version_data.ncd_update_log is None:
             self.remote_version = None
             self.remote_log = self.tr("无法获取 NapCat Desktop 版本信息, 请检查网络连接")
@@ -99,6 +106,12 @@ class NCDPage(PageBase):
             f"请求下载/更新 Desktop: local={self.local_version}, remote={self.remote_version}",
             log_source=LogSource.UI,
         )
+        update_plan = self._get_update_plan()
+        if update_plan is not None and update_plan.blocks_update():
+            min_version = update_plan.min_auto_update_version or self.tr("受支持版本")
+            error_bar(self.tr(f"当前版本过旧，不能直接自动升级。请先升级到 {min_version} 或重新安装。"))
+            return
+
         if it(ManagerNapCatQQProcess).has_running_bot():
 
             from src.ui.window.main_window import MainWindow
@@ -112,6 +125,9 @@ class NCDPage(PageBase):
             else:
                 logger.info("Desktop 更新流程取消: 用户拒绝关闭运行中的 Bot", log_source=LogSource.UI)
                 return
+
+        if update_plan is not None and update_plan.requires_remote_script():
+            info_bar(self.tr("检测到区间迁移规则，将使用仓库中的迁移脚本完成升级"))
 
         info_bar(self.tr("正在下载 NapCat Desktop 整包 ZIP"))
 
@@ -195,17 +211,59 @@ class NCDPage(PageBase):
         """生成带当前进程 PID 的更新脚本内容。"""
 
         script_content = self._load_update_script()
-        target_pid_line = f'set "target_pid={os.getpid()}"'
-        script_lines = script_content.splitlines()
+        if (update_plan := self._get_update_plan()) is not None and update_plan.requires_remote_script():
+            script_content = self._load_migration_update_script(update_plan)
+        return inject_target_pid(script_content, os.getpid())
 
-        for index, line in enumerate(script_lines):
-            if line.strip().lower() == "setlocal enabledelayedexpansion":
-                script_lines.insert(index + 1, target_pid_line)
-                break
-        else:
-            script_lines.insert(0, target_pid_line)
+    def _load_migration_update_script(self, update_plan: DesktopUpdatePlan) -> str:
+        """读取命中的迁移脚本。"""
 
-        return "\n".join(script_lines) + "\n"
+        if not update_plan.requires_remote_script() or update_plan.migration is None:
+            return self._load_update_script()
+
+        if not update_plan.migration.script_url:
+            raise ValueError("检测到版本迁移规则，但未配置迁移脚本地址")
+
+        logger.warning(
+            (
+                "Desktop 命中迁移规则，开始获取远端迁移脚本: "
+                f"local={self.local_version}, target={self.remote_version}, rule={update_plan.migration.id}"
+            ),
+            log_source=LogSource.UI,
+        )
+        return fetch_remote_update_script(update_plan.migration.script_url)
+
+    def _get_update_plan(self) -> DesktopUpdatePlan | None:
+        """解析当前 Desktop 更新决策。"""
+
+        return resolve_desktop_update_plan(self.local_version, self.remote_version, self._ncd_update_manifest)
+
+    def _get_display_log(self) -> str:
+        """为更新日志追加迁移或拦截提示。"""
+
+        update_plan = self._get_update_plan()
+        if update_plan is None:
+            return self.remote_log
+
+        if update_plan.blocks_update():
+            min_version = update_plan.min_auto_update_version or "受支持版本"
+            blocked_notice = (
+                "[自动更新已拦截]\n"
+                f"当前版本 {self.local_version} 过旧，不能直接自动升级到 {self.remote_version}。\n"
+                f"请先升级到 {min_version} 或重新安装。\n\n"
+            )
+            return blocked_notice + self.remote_log
+
+        if not update_plan.requires_remote_script():
+            return self.remote_log
+
+        summary = update_plan.summary or ""
+        migration_notice = (
+            "[区间迁移]\n"
+            f"升级到 {self.remote_version} 需要执行仓库提供的迁移脚本。\n"
+            f"{summary}\n\n"
+        )
+        return migration_notice + self.remote_log
 
     def _launch_update_script(self, bat_path: Path) -> None:
         """启动更新脚本，确保主程序退出后仍可继续执行。"""

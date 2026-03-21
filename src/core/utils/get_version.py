@@ -6,19 +6,82 @@
 # 标准库导入
 import json
 import re
+from collections.abc import Callable
 
 # 第三方库导入
 from creart import it
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Signal
-from collections.abc import Callable
 
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.network.urls import Urls
 from src.core.utils.logger import logger
 from src.core.utils.path_func import PathFunc
+
+
+class DesktopUpdateMigration(BaseModel):
+    """Desktop 版本区间迁移规则。"""
+
+    id: str
+    from_min: str | None = None
+    from_max: str | None = None
+    to_version: str | None = None
+    to_min: str | None = None
+    to_max: str | None = None
+    strategy: str = "remote_script"
+    script_url: str | None = None
+    summary: str | None = None
+
+    def matches(self, local_version: str | None, remote_version: str | None) -> bool:
+        """判断当前规则是否命中本地与目标版本组合。"""
+
+        if not local_version or not remote_version:
+            return False
+
+        if self.strategy == "remote_script" and not self.script_url:
+            return False
+
+        if not _version_in_range(local_version, self.from_min, self.from_max):
+            return False
+
+        if self.to_version:
+            return _compare_versions(remote_version, self.to_version) == 0
+
+        return _version_in_range(remote_version, self.to_min, self.to_max)
+
+
+class DesktopUpdateManifest(BaseModel):
+    """Desktop 远端升级策略清单。"""
+
+    schema_version: int = 2
+    min_auto_update_version: str | None = None
+    migrations: list[DesktopUpdateMigration] = []
+
+
+class DesktopUpdatePlan(BaseModel):
+    """Desktop 更新决策结果。"""
+
+    kind: str
+    summary: str | None = None
+    min_auto_update_version: str | None = None
+    migration: DesktopUpdateMigration | None = None
+
+    def requires_remote_script(self) -> bool:
+        """当前计划是否需要远端迁移脚本。"""
+
+        return bool(
+            self.kind == "migration"
+            and self.migration is not None
+            and self.migration.strategy == "remote_script"
+            and self.migration.script_url
+        )
+
+    def blocks_update(self) -> bool:
+        """当前计划是否阻止自动更新。"""
+
+        return self.kind == "unsupported"
 
 
 class VersionData(BaseModel):
@@ -35,6 +98,7 @@ class VersionData(BaseModel):
     # 更新日志
     napcat_update_log: str | None = None
     ncd_update_log: str | None = None
+    ncd_update_manifest: DesktopUpdateManifest | None = None
 
 
 class VersionRunnableBase(QObject, QRunnable):
@@ -79,6 +143,7 @@ class GetRemoteVersionRunnable(VersionRunnableBase):
         napcat_info = self._get_version(Urls.NAPCATQQ_REPO_API.value, "NapCat", self._parse_github_response)
         qq_version = self._get_version(Urls.QQ_Version.value, "QQ", self._parse_qq_response)
         ncd_version = self._get_version(Urls.NCD_REPO_API.value, "NapCatQQ Desktop", self._parse_github_response)
+        ncd_update_manifest = self._get_desktop_update_manifest()
 
         return VersionData(
             napcat_version=napcat_info["version"],
@@ -87,6 +152,7 @@ class GetRemoteVersionRunnable(VersionRunnableBase):
             qq_download_url=qq_version["download_url"],
             napcat_update_log=napcat_info["update_log"],
             ncd_update_log=ncd_version["update_log"],
+            ncd_update_manifest=ncd_update_manifest,
         )
 
     def _get_version(
@@ -143,17 +209,39 @@ class GetRemoteVersionRunnable(VersionRunnableBase):
             self.error_signal.emit(f"解析 QQ 版本信息失败: {e}")
             return {"version": None, "download_url": None}
 
-    def request(self, url: QUrl, name: str) -> dict[str, str] | None:
-        """网络请求"""
-        try:
-            with httpx.Client(timeout=5) as client:
-                response = client.get(url.url())
-                response.raise_for_status()
-                return response.json()
-        except (httpx.RequestError, httpx.HTTPStatusError) as e:
-            logger.error(f"获取 {name} 版本信息失败: {e}")
-            self.error_signal.emit(f"获取 {name} 版本信息失败: {e}")
+    def _get_desktop_update_manifest(self) -> DesktopUpdateManifest | None:
+        """获取 Desktop 的远端升级策略清单。"""
+
+        response = self.request(Urls.NCD_UPDATE_MANIFEST.value, "NapCatQQ Desktop 更新策略", use_mirrors=True)
+        if response is None:
             return None
+
+        try:
+            return DesktopUpdateManifest.model_validate(response)
+        except ValidationError as exc:
+            logger.error(f"解析 NapCatQQ Desktop 更新策略失败: {exc}")
+            self.error_signal.emit(f"解析 NapCatQQ Desktop 更新策略失败: {exc}")
+            return None
+
+    def request(self, url: QUrl, name: str, use_mirrors: bool = False) -> dict[str, str] | None:
+        """网络请求"""
+        request_urls = [url.url()]
+        if use_mirrors:
+            request_urls.extend(f"{mirror.toString().rstrip('/')}/{url.url()}" for mirror in Urls.MIRROR_SITE.value)
+
+        last_error: Exception | None = None
+        for candidate_url in request_urls:
+            try:
+                with httpx.Client(timeout=5, follow_redirects=True) as client:
+                    response = client.get(candidate_url)
+                    response.raise_for_status()
+                    return response.json()
+            except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
+                last_error = exc
+
+        logger.error(f"获取 {name} 版本信息失败: {last_error}")
+        self.error_signal.emit(f"获取 {name} 版本信息失败: {last_error}")
+        return None
 
 
 class GetLocalVersionRunnable(VersionRunnableBase):
@@ -254,3 +342,74 @@ class GetVersion(QObject):
         remote_runnable = GetRemoteVersionRunnable()
         remote_runnable.version_signal.connect(self.remote_finish_signal.emit)
         QThreadPool.globalInstance().start(remote_runnable)
+
+
+def resolve_desktop_update_plan(
+    local_version: str | None,
+    remote_version: str | None,
+    manifest: DesktopUpdateManifest | None,
+) -> DesktopUpdatePlan | None:
+    """根据本地版本、目标版本和 manifest 解析 Desktop 更新策略。"""
+
+    if not local_version or not remote_version:
+        return None
+
+    if _compare_versions(local_version, remote_version) >= 0:
+        return None
+
+    if manifest is None:
+        return None
+
+    if manifest.min_auto_update_version and _compare_versions(local_version, manifest.min_auto_update_version) < 0:
+        return DesktopUpdatePlan(
+            kind="unsupported",
+            summary="当前版本过旧，已超出自动升级支持范围。",
+            min_auto_update_version=manifest.min_auto_update_version,
+        )
+
+    for migration in manifest.migrations:
+        if migration.matches(local_version, remote_version):
+            return DesktopUpdatePlan(kind="migration", summary=migration.summary, migration=migration)
+
+    return None
+
+
+def _compare_versions(left: str, right: str) -> int:
+    """比较两个版本号。"""
+
+    left_parts = _normalize_version(left)
+    right_parts = _normalize_version(right)
+
+    for left_part, right_part in zip(left_parts, right_parts):
+        if left_part < right_part:
+            return -1
+        if left_part > right_part:
+            return 1
+
+    return 0
+
+
+def _normalize_version(version: str) -> tuple[int, ...]:
+    """将 v1.2.3 这类版本号归一化为整数元组。"""
+
+    match = re.search(r"(\d+(?:\.\d+)*)", version)
+    if match is None:
+        return (0,)
+
+    parts = tuple(int(part) for part in match.group(1).split("."))
+    if len(parts) >= 3:
+        return parts
+
+    return parts + (0,) * (3 - len(parts))
+
+
+def _version_in_range(version: str, min_version: str | None, max_version: str | None) -> bool:
+    """判断版本是否处于闭区间范围内。"""
+
+    if min_version and _compare_versions(version, min_version) < 0:
+        return False
+
+    if max_version and _compare_versions(version, max_version) > 0:
+        return False
+
+    return True

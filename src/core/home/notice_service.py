@@ -11,7 +11,7 @@ from PySide6.QtCore import QObject, QThreadPool, Signal
 
 from src.core.config import cfg
 from src.core.config.operate_config import read_config
-from src.core.utils.get_version import GetLocalVersionRunnable, GetRemoteVersionRunnable, VersionData
+from src.core.utils.get_version import GetLocalVersionRunnable, GetRemoteVersionRunnable, VersionData, resolve_desktop_update_plan
 from src.core.utils.run_napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.components.notice_timeline import (
     NoticeDismissMode,
@@ -367,14 +367,7 @@ class HomeNoticeService(QObject):
                 remote_version=remote.qq_version,
             )
         )
-        items.extend(
-            self._collect_version_update_items(
-                name="Desktop",
-                slug="desktop",
-                local_version=self._local_versions.ncd_version,
-                remote_version=remote.ncd_version,
-            )
-        )
+        items.extend(self._build_desktop_update_items(remote))
         return items
 
     def _build_announcement_items(self) -> list[NoticeTimelineItemData]:
@@ -464,6 +457,80 @@ class HomeNoticeService(QObject):
             ]
 
         return []
+
+    def _build_desktop_update_items(self, remote: VersionData) -> list[NoticeTimelineItemData]:
+        """构建 Desktop 专属更新提示。"""
+
+        local_version = self._local_versions.ncd_version
+        remote_version = remote.ncd_version
+
+        if remote_version is None:
+            if local_version is not None:
+                return [
+                    NoticeTimelineItemData(
+                        key="update:desktop:remote-unavailable",
+                        text="暂时无法获取 Desktop 的远程版本信息。",
+                        status=NoticeTimelineStatus.WARNING,
+                        dismiss_mode=NoticeDismissMode.SESSION,
+                    )
+                ]
+            return []
+
+        if local_version is None:
+            return [
+                NoticeTimelineItemData(
+                    key=f"update:desktop:install:{remote_version}",
+                    text=f"Desktop 当前未安装，可安装版本为 {remote_version}。",
+                    status=NoticeTimelineStatus.INFO,
+                    dismiss_mode=NoticeDismissMode.PERSISTENT,
+                )
+            ]
+
+        if local_version == remote_version:
+            return []
+
+        plan = resolve_desktop_update_plan(local_version, remote_version, remote.ncd_update_manifest)
+        if plan is None:
+            return [
+                NoticeTimelineItemData(
+                    key=f"update:desktop:{local_version}->{remote_version}",
+                    text=f"Desktop 可更新到 {remote_version}，当前版本为 {local_version}。",
+                    status=NoticeTimelineStatus.INFO,
+                    dismiss_mode=NoticeDismissMode.PERSISTENT,
+                )
+            ]
+
+        if plan.blocks_update():
+            min_version = plan.min_auto_update_version or "受支持版本"
+            summary = plan.summary or "当前版本过旧，不能直接自动更新。"
+            return [
+                NoticeTimelineItemData(
+                    key=f"update:desktop:unsupported:{local_version}->{remote_version}",
+                    text=f"Desktop 无法直接自动升级到 {remote_version}。{summary} 请先升级到 {min_version} 或重新安装。",
+                    status=NoticeTimelineStatus.ERROR,
+                    dismiss_mode=NoticeDismissMode.PERSISTENT,
+                )
+            ]
+
+        if plan.requires_remote_script():
+            summary = plan.summary or "此次升级包含目录或配置迁移。"
+            return [
+                NoticeTimelineItemData(
+                    key=f"update:desktop:migration:{local_version}->{remote_version}",
+                    text=f"Desktop 更新到 {remote_version} 需要执行仓库提供的迁移脚本。{summary}",
+                    status=NoticeTimelineStatus.WARNING,
+                    dismiss_mode=NoticeDismissMode.PERSISTENT,
+                )
+            ]
+
+        return [
+            NoticeTimelineItemData(
+                key=f"update:desktop:{local_version}->{remote_version}",
+                text=f"Desktop 可更新到 {remote_version}，当前版本为 {local_version}。",
+                status=NoticeTimelineStatus.INFO,
+                dismiss_mode=NoticeDismissMode.PERSISTENT,
+            )
+        ]
 
     @staticmethod
     def _section_status(items: list[NoticeTimelineItemData]) -> NoticeTimelineStatus:

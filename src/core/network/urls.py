@@ -13,6 +13,9 @@ class Urls(Enum):
     NCD_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/issues")
     NCD_REPO_API = QUrl("https://nclatest.znin.net/get_ncd_ver")
     NCD_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest/download/NapCatQQ-Desktop.zip")
+    NCD_UPDATE_MANIFEST = QUrl(
+        "https://raw.githubusercontent.com/NapNeko/NapCatQQ-Desktop/main/update/desktop_update_manifest.json"
+    )
 
     # NapCat 相关地址
     NAPCATQQ_REPO = QUrl("https://github.com/NapNeko/NapCatQQ")
