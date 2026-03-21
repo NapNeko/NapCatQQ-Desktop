@@ -29,20 +29,15 @@
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
+        <Property Id="ARPNOMODIFY" Value="1" />
+        <Property Id="REMOVE_APP_DATA" Secure="yes" />
+        <Property Id="NCDATAFOLDERPATH" Secure="yes">
+            <RegistrySearch Root="HKLM" Key="Software\NapCatQQ-Desktop" Name="DataDir" Type="raw" />
+        </Property>
+
         <Icon Id="AppIcon.ico" SourceFile="script\build_scripts\icon.ico" />
         <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
         <Property Id="ARPURLINFOABOUT" Value="https://github.com/NapNeko/NapCatQQ-Desktop" />
-        <SetProperty
-            Id="WixQuietExecCmdLine"
-            Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command &quot;$path='[NCDATAFOLDER]'; $shell=New-Object -ComObject WScript.Shell; $message='Delete NapCatQQ Desktop data stored in ProgramData?`n`n' + $path + '`n`nClick Yes to remove runtime, config, temp, and log data.'; if ($shell.Popup($message, 0, 'NapCatQQ Desktop', 4 + 32 + 256) -eq 6 -and (Test-Path -LiteralPath $path)) { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue }&quot;"
-            Before="PromptRemoveProgramData"
-            Sequence="execute" />
-        <CustomAction
-            Id="PromptRemoveProgramData"
-            BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-            DllEntry="WixQuietExec"
-            Execute="immediate"
-            Return="ignore" />
         <util:CloseApplication
             Id="CloseRunningDesktop"
             Target="$(ProductExeName)"
@@ -66,6 +61,124 @@
         </StandardDirectory>
 
         <StandardDirectory Id="DesktopFolder" />
+
+        <UI>
+            <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+            <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+            <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+
+            <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+
+            <DialogRef Id="CancelDlg" />
+            <DialogRef Id="ErrorDlg" />
+            <DialogRef Id="ExitDialog" />
+            <DialogRef Id="FatalError" />
+            <DialogRef Id="FilesInUse" />
+            <DialogRef Id="MaintenanceTypeDlg" />
+            <DialogRef Id="MaintenanceWelcomeDlg" />
+            <DialogRef Id="MsiRMFilesInUse" />
+            <DialogRef Id="OutOfDiskDlg" />
+            <DialogRef Id="OutOfRbDiskDlg" />
+            <DialogRef Id="PrepareDlg" />
+            <DialogRef Id="ProgressDlg" />
+            <DialogRef Id="ResumeDlg" />
+            <DialogRef Id="UserExit" />
+            <DialogRef Id="VerifyReadyDlg" />
+            <DialogRef Id="WaitForCostingDlg" />
+            <DialogRef Id="WelcomeDlg" />
+
+            <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+
+            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="1">
+                NOT Installed
+            </Publish>
+            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="2">
+                Installed AND PATCH
+            </Publish>
+
+            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="1">
+                NOT Installed
+            </Publish>
+            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="2">
+                Installed AND NOT PATCH
+            </Publish>
+            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="3">
+                Installed AND PATCH
+            </Publish>
+
+            <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg" Order="1">
+                1
+            </Publish>
+            <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg" Order="1">
+                1
+            </Publish>
+            <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="RemoveDataDlg" Order="1">
+                NCDATAFOLDERPATH
+            </Publish>
+            <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg" Order="2">
+                NOT NCDATAFOLDERPATH
+            </Publish>
+            <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg" Order="1">
+                1
+            </Publish>
+
+            <Dialog Id="RemoveDataDlg" Width="370" Height="270" Title="[ProductName] Setup">
+                <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.VerifyReadyDlgBannerBitmap)" />
+                <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+                <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+
+                <Control
+                    Id="Title"
+                    Type="Text"
+                    X="15"
+                    Y="15"
+                    Width="320"
+                    Height="15"
+                    Transparent="yes"
+                    NoPrefix="yes"
+                    Text="Ready to remove [ProductName]" />
+                <Control
+                    Id="Description"
+                    Type="Text"
+                    X="25"
+                    Y="70"
+                    Width="320"
+                    Height="50"
+                    NoPrefix="yes"
+                    Text="Choose whether to also delete runtime data stored under ProgramData before removing the application." />
+                <Control
+                    Id="ProgramDataPath"
+                    Type="Text"
+                    X="25"
+                    Y="128"
+                    Width="320"
+                    Height="18"
+                    NoPrefix="yes"
+                    Text="ProgramData path: [NCDATAFOLDERPATH]" />
+                <Control
+                    Id="RemoveDataCheckbox"
+                    Type="CheckBox"
+                    X="25"
+                    Y="155"
+                    Width="320"
+                    Height="18"
+                    Property="REMOVE_APP_DATA"
+                    CheckBoxValue="1"
+                    Text="Also delete runtime data in ProgramData" />
+                <Control Id="Back" Type="PushButton" X="156" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
+                    <Publish Event="NewDialog" Value="MaintenanceTypeDlg">1</Publish>
+                </Control>
+                <Control Id="Remove" Type="PushButton" X="212" Y="243" Width="80" Height="17" Default="yes" Text="Remove">
+                    <Publish Event="Remove" Value="All">1</Publish>
+                    <Publish Event="EndDialog" Value="Return">1</Publish>
+                </Control>
+                <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+                    <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+                </Control>
+            </Dialog>
+
+            <UIRef Id="WixUI_Common" />
+        </UI>
 
         <Component
             Id="ApplicationShortcutComponent"
@@ -101,6 +214,10 @@
             <CreateFolder>
                 <util:PermissionEx User="Users" GenericAll="yes" />
             </CreateFolder>
+            <util:RemoveFolderEx
+                Property="NCDATAFOLDERPATH"
+                On="uninstall"
+                Condition="REMOVE_APP_DATA AND NCDATAFOLDERPATH" />
             <RegistryValue
                 Root="HKLM"
                 Key="Software\NapCatQQ-Desktop"
@@ -115,12 +232,5 @@
             <ComponentRef Id="ApplicationDataDirectoryComponent" />
             <ComponentRef Id="ApplicationShortcutComponent" />
         </Feature>
-
-        <InstallExecuteSequence>
-            <Custom
-                Action="PromptRemoveProgramData"
-                After="RemoveFiles"
-                Condition="Installed AND REMOVE='ALL' AND NOT UPGRADINGPRODUCTCODE AND UILevel &gt;= 5" />
-        </InstallExecuteSequence>
     </Package>
 </Wix>
