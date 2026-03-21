@@ -6,12 +6,15 @@ import zipfile
 from pathlib import Path
 
 # 第三方库导入
+import httpx
 import pytest
 
 # 项目内模块导入
 from src.core.utils.desktop_update import (
     UPDATE_APP_DIR_NAME,
     UPDATE_EXE_NAME,
+    fetch_remote_update_script,
+    inject_target_pid,
     prepare_desktop_update,
 )
 from src.ui.page.unit_page.napcat_desktop_page import NCDPage
@@ -108,3 +111,55 @@ def test_load_update_script_contains_backup_and_rollback() -> None:
     assert 'robocopy "%app_root%" "%backup_app_dir%" /MIR' in script_content
     assert ":rollback" in script_content
     assert 'robocopy "%backup_app_dir%" "%app_root%" /MIR' in script_content
+
+
+def test_inject_target_pid_inserts_after_setlocal() -> None:
+    """target_pid 应注入到 setlocal 后，避免污染脚本头部。"""
+
+    content = "@echo off\nsetlocal enabledelayedexpansion\necho update\n"
+
+    result = inject_target_pid(content, 114514)
+
+    assert 'set "target_pid=114514"' in result
+    assert result.index('set "target_pid=114514"') > result.index("setlocal enabledelayedexpansion")
+
+
+def test_fetch_remote_update_script_uses_mirror_fallback(monkeypatch) -> None:
+    """远端脚本下载失败后应继续尝试镜像。"""
+
+    responses = iter(
+        [
+            httpx.RequestError("boom", request=httpx.Request("GET", "https://example.com")),
+            "@echo off\r\necho migrated\r\n",
+        ]
+    )
+
+    class FakeResponse:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, timeout: int, follow_redirects: bool) -> None:
+            self.timeout = timeout
+            self.follow_redirects = follow_redirects
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+            return None
+
+        def get(self, url: str):
+            result = next(responses)
+            if isinstance(result, Exception):
+                raise result
+            return FakeResponse(result)
+
+    monkeypatch.setattr("src.core.utils.desktop_update.httpx.Client", FakeClient)
+
+    result = fetch_remote_update_script("https://raw.githubusercontent.com/example/update.bat")
+
+    assert "@echo off" in result
