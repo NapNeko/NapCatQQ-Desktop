@@ -16,7 +16,7 @@ from PySide6.QtCore import QStandardPaths
 
 # 项目内模块导入
 from src.core.network.urls import Urls
-from src.core.utils.app_path import resolve_app_base_path
+from src.core.utils.app_path import resolve_app_base_path, resolve_app_data_path
 
 REDACTED_EMAIL = "<redacted-email>"
 REDACTED_SECRET = "<redacted-secret>"
@@ -144,8 +144,9 @@ def build_safe_config_summary(
     bot_config_path: Path | None = None,
 ) -> dict[str, Any]:
     """根据 allowlist 构建安全配置摘要。"""
-    runtime_config_path = config_path or resolve_app_base_path() / "runtime" / "config" / "config.json"
-    runtime_bot_config_path = bot_config_path or resolve_app_base_path() / "runtime" / "config" / "bot.json"
+    runtime_root = resolve_app_data_path() / "runtime"
+    runtime_config_path = config_path or runtime_root / "config" / "config.json"
+    runtime_bot_config_path = bot_config_path or runtime_root / "config" / "bot.json"
 
     config_data = _load_json_file(runtime_config_path)
     bot_data = _load_json_file(runtime_bot_config_path)
@@ -245,9 +246,10 @@ def build_crash_bundle(output_dir: Path, payload: CrashBundlePayload) -> Path:
     crash_report = _build_crash_report(payload)
     app_meta = _build_app_meta(payload.base_path, payload.log_path)
     paths_snapshot = _build_paths_snapshot(payload.base_path, payload.log_path, output_dir)
+    runtime_root = resolve_app_data_path() / "runtime"
     config_summary = build_safe_config_summary(
-        config_path=payload.base_path / "runtime" / "config" / "config.json",
-        bot_config_path=payload.base_path / "runtime" / "config" / "bot.json",
+        config_path=runtime_root / "config" / "config.json",
+        bot_config_path=runtime_root / "config" / "bot.json",
     )
 
     with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -283,7 +285,8 @@ def _build_crash_report(payload: CrashBundlePayload) -> str:
 
 def _build_app_meta(base_path: Path, log_path: Path) -> dict[str, Any]:
     """构建应用元信息。"""
-    config_data = _load_json_file(base_path / "runtime" / "config" / "config.json")
+    data_path = resolve_app_data_path()
+    config_data = _load_json_file(data_path / "runtime" / "config" / "config.json")
     info_section = _as_dict(config_data.get("Info"))
 
     return {
@@ -296,6 +299,7 @@ def _build_app_meta(base_path: Path, log_path: Path) -> dict[str, Any]:
         "pid": os.getpid(),
         "cwd": str(Path.cwd()),
         "base_path": str(base_path),
+        "data_path": str(data_path),
         "log_path": str(log_path),
         "start_time": info_section.get("StartTime"),
         "executable": sys.executable,
@@ -304,14 +308,16 @@ def _build_app_meta(base_path: Path, log_path: Path) -> dict[str, Any]:
 
 def _build_paths_snapshot(base_path: Path, log_path: Path, output_dir: Path) -> dict[str, Any]:
     """构建关键路径快照。"""
+    data_path = resolve_app_data_path()
     paths = {
         "base_path": base_path,
-        "runtime_path": base_path / "runtime",
-        "config_dir_path": base_path / "runtime" / "config",
-        "config_path": base_path / "runtime" / "config" / "config.json",
-        "bot_config_path": base_path / "runtime" / "config" / "bot.json",
-        "tmp_path": base_path / "runtime" / "tmp",
-        "napcat_path": base_path / "runtime" / "NapCatQQ",
+        "data_path": data_path,
+        "runtime_path": data_path / "runtime",
+        "config_dir_path": data_path / "runtime" / "config",
+        "config_path": data_path / "runtime" / "config" / "config.json",
+        "bot_config_path": data_path / "runtime" / "config" / "bot.json",
+        "tmp_path": data_path / "runtime" / "tmp",
+        "napcat_path": data_path / "runtime" / "NapCatQQ",
         "log_dir": log_path.parent,
         "current_log_path": log_path,
         "bundle_output_dir": output_dir,

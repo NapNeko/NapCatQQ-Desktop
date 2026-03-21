@@ -6,7 +6,7 @@ from pathlib import Path
 from abc import ABC
 
 # 项目内模块导入
-from src.core.utils.app_path import resolve_app_base_path
+from src.core.utils.app_path import resolve_app_base_path, resolve_app_data_path
 from src.core.utils.logger import LogSource, LogType, logger
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator
 
@@ -24,6 +24,16 @@ class OldVersionPath:
             "napcat_path": base_path / "NapCat",
             "config_dir_path": base_path / "config",
             "tmp_path": base_path / "tmp",
+        }
+
+    @staticmethod
+    def install_runtime_layout(base_path: Path) -> dict[str, Path]:
+        """旧版将可写运行时数据放在安装目录 runtime/ 下的路径布局。"""
+        runtime_root = base_path / "runtime"
+        return {
+            "napcat_path": runtime_root / "NapCatQQ",
+            "config_dir_path": runtime_root / "config",
+            "tmp_path": runtime_root / "tmp",
         }
 
 
@@ -46,7 +56,8 @@ class PathFunc:
 
         # 基础路径字段
         self.base_path = resolve_app_base_path()
-        self.runtime_path = self.base_path / "runtime"
+        self.data_path = resolve_app_data_path()
+        self.runtime_path = self.data_path / "runtime"
 
         # 运行时路径字段
         self.qq_path = None
@@ -91,43 +102,50 @@ class PathFunc:
 
         检查并迁移旧版本的路径到当前版本(目前只有v1.6.13及更早版本与当前版本不兼容)
         """
-        # 获取旧版文件夹路径大全
-        old_paths = OldVersionPath.v1613(self.base_path)
+        legacy_path_sets = [OldVersionPath.v1613(self.base_path)]
+        if self.data_path != self.base_path:
+            legacy_path_sets.append(OldVersionPath.install_runtime_layout(self.base_path))
 
         # 检查是否需要迁移
-        if not Path(old_paths["config_dir_path"]).exists():
+        if not any(path.exists() for old_paths in legacy_path_sets for path in old_paths.values()):
             logger.debug("无需进行路径迁移", LogType.FILE_FUNC, LogSource.CORE)
             return
 
         # 进行迁移
-        for path_name, old_path in old_paths.items():
-            if not old_path.exists():
-                # 不存在旧版文件则跳过
-                continue
+        for old_paths in legacy_path_sets:
+            for path_name, old_path in old_paths.items():
+                if not old_path.exists():
+                    # 不存在旧版文件则跳过
+                    continue
 
-            # 通过 getattr 获取新的路径
-            new_path = getattr(self, path_name)
+                # 通过 getattr 获取新的路径
+                new_path = getattr(self, path_name)
 
-            # 检查文件夹名称是否有改变
-            if old_path.name != new_path.name:
-                # 如果文件夹名称改变, 则直接移动整个文件夹
-                shutil.move(str(old_path), str(new_path))
-                logger.debug(f"已将旧版路径 {old_path} 整体迁移至 {new_path}", LogType.FILE_FUNC, LogSource.CORE)
+                if old_path.resolve() == new_path.resolve():
+                    continue
 
-            else:
-                # 如果文件夹名称未改变, 则逐个移动文件
-                for item in old_path.iterdir():
-                    target_path: Path = new_path / item.name
-                    target_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(item), str(target_path))
-                    logger.debug(f"已将旧版路径 {item} 迁移至 {target_path}", LogType.FILE_FUNC, LogSource.CORE)
+                new_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # 删除旧版空文件夹
-                try:
-                    old_path.rmdir()
-                    logger.debug(f"已删除旧版空文件夹 {old_path}", LogType.FILE_FUNC, LogSource.CORE)
-                except OSError:
-                    logger.warning(f"无法删除旧版文件夹 {old_path}, 请手动删除", LogType.FILE_FUNC, LogSource.CORE)
+                # 检查文件夹名称是否有改变
+                if old_path.name != new_path.name:
+                    # 如果文件夹名称改变, 则直接移动整个文件夹
+                    shutil.move(str(old_path), str(new_path))
+                    logger.debug(f"已将旧版路径 {old_path} 整体迁移至 {new_path}", LogType.FILE_FUNC, LogSource.CORE)
+
+                else:
+                    # 如果文件夹名称未改变, 则逐个移动文件
+                    for item in old_path.iterdir():
+                        target_path: Path = new_path / item.name
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(item), str(target_path))
+                        logger.debug(f"已将旧版路径 {item} 迁移至 {target_path}", LogType.FILE_FUNC, LogSource.CORE)
+
+                    # 删除旧版空文件夹
+                    try:
+                        old_path.rmdir()
+                        logger.debug(f"已删除旧版空文件夹 {old_path}", LogType.FILE_FUNC, LogSource.CORE)
+                    except OSError:
+                        logger.warning(f"无法删除旧版文件夹 {old_path}, 请手动删除", LogType.FILE_FUNC, LogSource.CORE)
 
         logger.debug("路径迁移完成", LogType.FILE_FUNC, LogSource.CORE)
 

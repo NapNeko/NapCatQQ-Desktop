@@ -41,9 +41,25 @@
             ElevatedCloseMessage="yes"
             RebootPrompt="no"
             Timeout="10" />
+        <CustomAction
+            Id="PromptRemoveProgramData"
+            Script="jscript"
+            ScriptSourceFile="script\build_scripts\prompt_remove_programdata.js"
+            Execute="deferred"
+            Impersonate="yes"
+            Return="ignore" />
+        <SetProperty
+            Id="PromptRemoveProgramData"
+            Value="[NCDATAFOLDER]|[UILevel]"
+            Before="PromptRemoveProgramData"
+            Sequence="execute" />
 
         <StandardDirectory Id="ProgramFiles64Folder">
             <Directory Id="INSTALLFOLDER" Name="$(ProductName)" />
+        </StandardDirectory>
+
+        <StandardDirectory Id="CommonAppDataFolder">
+            <Directory Id="NCDATAFOLDER" Name="$(ProductName)" />
         </StandardDirectory>
 
         <StandardDirectory Id="ProgramMenuFolder">
@@ -79,9 +95,33 @@
                 KeyPath="yes" />
         </Component>
 
+        <Component
+            Id="ApplicationDataDirectoryComponent"
+            Directory="NCDATAFOLDER"
+            Guid="CC367065-2D44-4513-B0F6-229E4A197A7C">
+            <CreateFolder>
+                <util:PermissionEx User="Users" GenericAll="yes" />
+            </CreateFolder>
+            <RegistryValue
+                Root="HKLM"
+                Key="Software\NapCatQQ-Desktop"
+                Name="DataDir"
+                Type="string"
+                Value="[NCDATAFOLDER]"
+                KeyPath="yes" />
+        </Component>
+
         <Feature Id="MainFeature" Title="$(ProductName)" Level="1">
             <Files Include="$(SourceDir)\**" Directory="INSTALLFOLDER" />
+            <ComponentRef Id="ApplicationDataDirectoryComponent" />
             <ComponentRef Id="ApplicationShortcutComponent" />
         </Feature>
+
+        <InstallExecuteSequence>
+            <Custom
+                Action="PromptRemoveProgramData"
+                After="RemoveFiles"
+                Condition="REMOVE='ALL' AND NOT UPGRADINGPRODUCTCODE" />
+        </InstallExecuteSequence>
     </Package>
 </Wix>

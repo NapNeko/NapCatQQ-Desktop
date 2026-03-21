@@ -10,7 +10,7 @@ from pathlib import Path
 from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
 # 项目内模块导入
-from src.core.utils.app_path import resolve_app_base_path
+from src.core.utils.app_path import resolve_app_data_path
 from src.core.utils.logger.crash_bundle import (
     CrashBundlePayload,
     build_crash_bundle,
@@ -56,7 +56,7 @@ class Logger:
         """
 
         # 定义日志文件路径
-        if not (log_dir := resolve_app_base_path() / "log").exists():
+        if not (log_dir := resolve_app_data_path() / "log").exists():
             log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = log_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
 
