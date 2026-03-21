@@ -85,6 +85,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: "安装 uv"
+        if: ${{ inputs.build_portable }}
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
       - name: "设置 .NET SDK"
         uses: actions/setup-dotnet@v4
         with:
@@ -121,16 +127,8 @@ jobs:
         if: ${{ inputs.build_portable }}
         shell: pwsh
         run: |
-          python -m venv .venv
-          .\.venv\Scripts\Activate.ps1
-          python -m pip install --upgrade pip
-          if (Test-Path "requirements.txt") {
-            python -m pip install -r requirements.txt
-          } else {
-            python -m pip install pyinstaller
-          }
-          python -m pip install pyinstaller
-          .\.venv\Scripts\python.exe -m PyInstaller ./script/build_scripts/main.spec
+          uv sync --frozen --no-dev
+          uv run --frozen pyinstaller ./script/build_scripts/main.spec
 
       - name: "下载目录版制品"
         if: ${{ !inputs.build_portable && inputs.portable_artifact_name != '' }}
@@ -201,6 +199,6 @@ jobs:
         with:
           name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 5
           path: |
             dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}

@@ -73,18 +73,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: "创建虚拟环境并安装依赖"
+      - name: "安装 uv"
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: "同步构建依赖"
         shell: pwsh
         run: |
-          python -m venv .venv
-          .\.venv\Scripts\Activate.ps1
-          python -m pip install --upgrade pip
-          if (Test-Path "requirements.txt") {
-            python -m pip install -r requirements.txt
-          } else {
-            python -m pip install pyinstaller
-          }
-          python -m pip install pyinstaller
+          uv sync --frozen --no-dev
 
       - name: "解析版本号"
         id: resolve_version
@@ -118,7 +115,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.resolve_version.outputs.VERSION }}"
-          .\.venv\Scripts\python.exe script/utils/update_version.py $version
+          uv run --frozen python script/utils/update_version.py $version
 
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -129,7 +126,7 @@ jobs:
       - name: "打包 Release 版本"
         shell: pwsh
         run: |
-          .\.venv\Scripts\python.exe -m PyInstaller ./script/build_scripts/main.spec
+          uv run --frozen pyinstaller ./script/build_scripts/main.spec
 
       - name: "压缩目录版"
         shell: pwsh
@@ -168,7 +165,7 @@ jobs:
         with:
           name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 5
           path: |
             dist/NapCatQQ-Desktop/**
             dist/NapCatQQ-Desktop.zip
