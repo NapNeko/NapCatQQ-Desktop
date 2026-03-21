@@ -96,6 +96,15 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: "缓存 .NET / WiX 依赖"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.nuget\packages
+            ~\.dotnet\toolResolverCache
+            ~\.wix
+          key: ${{ runner.os }}-dotnet-wix-${{ hashFiles('.config/dotnet-tools.json', '.github/workflows/build-msi.yml') }}
+
       - name: "解析版本号"
         id: resolve_version
         shell: pwsh
@@ -148,10 +157,9 @@ jobs:
       - name: "安装 WiX Toolset"
         shell: pwsh
         run: |
-          dotnet tool install --global wix --version 5.* || dotnet tool update --global wix --version 5.*
-          & "$env:USERPROFILE\.dotnet\tools\wix.exe" extension add -g WixToolset.Util.wixext/5.0.2
-          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          & "$env:USERPROFILE\.dotnet\tools\wix.exe" --version
+          dotnet tool restore
+          dotnet tool run wix extension add -g WixToolset.Util.wixext/5.0.2
+          dotnet tool run wix --version
 
       - name: "解析 MSI 文件名"
         id: resolve_msi
@@ -163,11 +171,10 @@ jobs:
       - name: "构建 MSI 安装包"
         shell: pwsh
         run: |
-          $wix = "$env:USERPROFILE\.dotnet\tools\wix.exe"
           $sourceDir = (Resolve-Path "dist/NapCatQQ-Desktop").Path
           $msiPath = "dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}"
 
-          & $wix build "script/build_scripts/main.wxs" `
+          dotnet tool run wix build "script/build_scripts/main.wxs" `
             -ext WixToolset.Util.wixext `
             -arch x64 `
             -d ProductVersion=${{ steps.resolve_version.outputs.VERSION_PLAIN }} `
