@@ -32,6 +32,17 @@
         <Icon Id="AppIcon.ico" SourceFile="script\build_scripts\icon.ico" />
         <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
         <Property Id="ARPURLINFOABOUT" Value="https://github.com/NapNeko/NapCatQQ-Desktop" />
+        <SetProperty
+            Id="WixQuietExecCmdLine"
+            Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command &quot;$path='[NCDATAFOLDER]'; $shell=New-Object -ComObject WScript.Shell; $message='Delete NapCatQQ Desktop data stored in ProgramData?`n`n' + $path + '`n`nClick Yes to remove runtime, config, temp, and log data.'; if ($shell.Popup($message, 0, 'NapCatQQ Desktop', 4 + 32 + 256) -eq 6 -and (Test-Path -LiteralPath $path)) { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue }&quot;"
+            Before="PromptRemoveProgramData"
+            Sequence="execute" />
+        <CustomAction
+            Id="PromptRemoveProgramData"
+            BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+            DllEntry="WixQuietExec"
+            Execute="immediate"
+            Return="ignore" />
         <util:CloseApplication
             Id="CloseRunningDesktop"
             Target="$(ProductExeName)"
@@ -104,5 +115,12 @@
             <ComponentRef Id="ApplicationDataDirectoryComponent" />
             <ComponentRef Id="ApplicationShortcutComponent" />
         </Feature>
+
+        <InstallExecuteSequence>
+            <Custom
+                Action="PromptRemoveProgramData"
+                After="RemoveFiles"
+                Condition="Installed AND REMOVE='ALL' AND NOT UPGRADINGPRODUCTCODE AND UILevel &gt;= 5" />
+        </InstallExecuteSequence>
     </Package>
 </Wix>
