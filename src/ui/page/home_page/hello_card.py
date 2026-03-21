@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 
 from src.core.config import cfg
 from src.ui.common.icon import NapCatDesktopIcon, SvgStaticIcon
@@ -27,11 +27,10 @@ class HelloCard(SimpleCardWidget):
         self.cat_girl_placeholder = QWidget(self)
 
         # 设置控件
-        self.setMaximumSize(500, 200)  # 临时性设置，后续可以根据设计稿调整
         self.setMinimumHeight(200)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.good_icon_label.setFixedSize(24, 24)
         self.welcome_label.setWordWrap(True)
-        self.welcome_label.setFixedWidth(self.width() // 2)
         self.cat_girl_icon_label.setFixedSize(150, 225)
         self.cat_girl_icon_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.cat_girl_placeholder.setFixedWidth(120)
@@ -49,6 +48,7 @@ class HelloCard(SimpleCardWidget):
         self.h_box_layout = QHBoxLayout(self)
         self.h_box_layout.addLayout(self.v_box_layout)
         self.h_box_layout.addWidget(self.cat_girl_placeholder)
+        self.h_box_layout.setStretch(0, 1)
 
         self.h_box_layout.setContentsMargins(32, 24, 24, 24)
 

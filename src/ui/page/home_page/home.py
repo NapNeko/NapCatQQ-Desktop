@@ -5,54 +5,77 @@ from typing import TYPE_CHECKING, Self
 
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.ui.common.style_sheet import PageStyleSheet
+from src.ui.components.background import DottedBackground
 from src.ui.page.home_page.hello_card import HelloCard
 from src.ui.page.home_page.notice_card import NoticeCard
-from src.ui.components.background import DottedBackground
-
-# 避免在模块顶层导入 MainWindowCreator 以防止循环导入；
-# 如果需要将 creator 之间的依赖关系声明给 creart，可在其他不产生循环的位置添加。
+from src.ui.page.home_page.occupancy_card import OccupancyPanel
+from src.ui.page.home_page.version_card import VersionCardsPanel
 
 if TYPE_CHECKING:
-    # 项目内模块导入
     from src.ui.window.main_window import MainWindow
 
 
-class HomeWidget(DottedBackground):
+class _HomeMainColumn(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.hello_card = HelloCard()
+        self.notice_card = NoticeCard()
+        self._set_layout()
 
+    def _set_layout(self) -> None:
+        self.v_box_layout = QVBoxLayout(self)
+        self.v_box_layout.setContentsMargins(0, 0, 0, 0)
+        self.v_box_layout.setSpacing(12)
+        self.v_box_layout.addWidget(self.hello_card)
+        self.v_box_layout.addWidget(self.notice_card)
+
+
+class _HomeSidebar(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.version_cards = VersionCardsPanel()
+        self.occupancy_panel = OccupancyPanel()
+        self._set_layout()
+
+    def _set_layout(self) -> None:
+        self.v_box_layout = QVBoxLayout(self)
+        self.v_box_layout.setContentsMargins(0, 0, 0, 0)
+        self.v_box_layout.setSpacing(12)
+        self.v_box_layout.addWidget(self.version_cards)
+        self.v_box_layout.addWidget(self.occupancy_panel)
+
+
+class HomeWidget(DottedBackground):
     def __init__(self) -> None:
         super().__init__()
 
     def initialize(self, parent: "MainWindow") -> Self:
-        """初始化"""
-        # 创建控件
-        self.hello_card = HelloCard()
-        self.notice_card = NoticeCard()
+        self._create_widgets()
+        self._init_widget(parent)
+        self._set_layout()
 
-        # 设置控件
+        PageStyleSheet.HOME.apply(self)
+        self.main_column.hello_card.attach_floating_icon(self)
+        return self
+
+    def _create_widgets(self) -> None:
+        self.main_column = _HomeMainColumn(self)
+        self.sidebar = _HomeSidebar(self)
+
+    def _init_widget(self, parent: "MainWindow") -> None:
         self.setParent(parent)
         self.setObjectName("home_page")
 
-        # 设置布局
-        self.v_box_layout = QVBoxLayout()
-        self.v_box_layout.addWidget(self.hello_card)
-        self.v_box_layout.addSpacing(4)
-        self.v_box_layout.addWidget(self.notice_card)
-
+    def _set_layout(self) -> None:
         self.h_box_layout = QHBoxLayout(self)
-        self.h_box_layout.addLayout(self.v_box_layout)
-        self.h_box_layout.addWidget(QWidget(), 1)  # 占位
-
         self.h_box_layout.setContentsMargins(24, 48, 24, 24)
-
-        # 应用样式表
-        PageStyleSheet.HOME.apply(self)
-        self.hello_card.attach_floating_icon(self)
-
-        return self
+        self.h_box_layout.setSpacing(12)
+        self.h_box_layout.addWidget(self.main_column, 7)
+        self.h_box_layout.addWidget(self.sidebar, 5)
 
 
 class HomePageCreator(AbstractCreator, ABC):
