@@ -20,11 +20,14 @@
         <file>icon/mono_icon/white/qq.svg</file>
         <file>icon/mono_icon/black/log.svg</file>
         <file>icon/mono_icon/white/log.svg</file>
+        <file>icon/mono_icon/black/good.svg</file>
+        <file>icon/mono_icon/white/good.svg</file>
     </qresource>
 
     <qresource prefix="color_icon">
         <file>icon/color_icon/logo.png</file>
         <file>icon/color_icon/napcat.png</file>
+        <file>icon/color_icon/cat_girl.svg</file>
     </qresource>
 
     <qresource prefix="style">
