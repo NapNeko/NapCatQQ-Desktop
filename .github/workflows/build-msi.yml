@@ -136,6 +136,9 @@ jobs:
         if: ${{ inputs.build_portable }}
         shell: pwsh
         run: |
+          if (Test-Path "dist/NapCatQQ-Desktop") {
+            Remove-Item "dist/NapCatQQ-Desktop" -Recurse -Force
+          }
           uv sync --frozen --no-dev
           uv run --frozen pyinstaller ./script/build_scripts/main.spec
 
@@ -159,7 +162,6 @@ jobs:
         run: |
           dotnet tool restore
           dotnet tool run wix extension add -g WixToolset.Util.wixext/5.0.2
-          dotnet tool run wix extension add -g WixToolset.UI.wixext/5.0.2
           dotnet tool run wix --version
 
       - name: "解析 MSI 文件名"
@@ -177,7 +179,6 @@ jobs:
 
           dotnet tool run wix build "script/build_scripts/main.wxs" `
             -ext WixToolset.Util.wixext `
-            -ext WixToolset.UI.wixext `
             -arch x64 `
             -d ProductVersion=${{ steps.resolve_version.outputs.VERSION_PLAIN }} `
             -d SourceDir="$sourceDir" `

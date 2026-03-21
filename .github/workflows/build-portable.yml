@@ -123,6 +123,16 @@ jobs:
           git diff --staged --quiet || git commit -m "🤖 自动更新版本号到 $version"
           git push origin HEAD:master || echo "推送失败或无更改"
 
+      - name: "清理旧构建目录"
+        shell: pwsh
+        run: |
+          if (Test-Path "dist/NapCatQQ-Desktop") {
+            Remove-Item "dist/NapCatQQ-Desktop" -Recurse -Force
+          }
+          if (Test-Path "dist/NapCatQQ-Desktop.zip") {
+            Remove-Item "dist/NapCatQQ-Desktop.zip" -Force
+          }
+
       - name: "打包 Release 版本"
         shell: pwsh
         run: |
