@@ -23,11 +23,6 @@ on:
         required: false
         default: false
         type: boolean
-      build_debug:
-        description: "目录版阶段是否同时构建 debug 版本"
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: write
@@ -40,7 +35,6 @@ jobs:
       version_plain: ${{ steps.resolve.outputs.VERSION_PLAIN }}
       publish_release: ${{ steps.resolve.outputs.PUBLISH_RELEASE }}
       sync_version_files: ${{ steps.resolve.outputs.SYNC_VERSION_FILES }}
-      build_debug: ${{ steps.resolve.outputs.BUILD_DEBUG }}
     steps:
       - name: "检出代码"
         uses: actions/checkout@v4
@@ -78,13 +72,10 @@ jobs:
           }
 
           $plain = $version -replace "^v", ""
-          $buildDebug = if ("${{ inputs.build_debug }}" -eq "false") { "false" } else { "true" }
-
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "VERSION_PLAIN=$plain" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "PUBLISH_RELEASE=$publishRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "SYNC_VERSION_FILES=$syncVersionFiles" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "BUILD_DEBUG=$buildDebug" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
   portable:
     needs: resolve
@@ -92,7 +83,6 @@ jobs:
     with:
       version: ${{ needs.resolve.outputs.version }}
       sync_version_files: ${{ fromJson(needs.resolve.outputs.sync_version_files) }}
-      build_debug: ${{ fromJson(needs.resolve.outputs.build_debug) }}
 
   msi:
     needs:
