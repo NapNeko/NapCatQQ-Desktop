@@ -4,10 +4,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, ScrollArea, StrongBodyLabel, isDarkTheme
+from qfluentwidgets import (
+    BodyLabel,
+    FluentIcon,
+    ScrollArea,
+    StrongBodyLabel,
+    ToolTipFilter,
+    TransparentToolButton,
+    isDarkTheme,
+)
+from qfluentwidgets.components.widgets.tool_tip import ToolTipPosition
 from qfluentwidgets.common.smooth_scroll import SmoothMode
 
 from src.core.config import cfg
@@ -20,10 +29,19 @@ class NoticeTimelineStatus(str, Enum):
     ERROR = "error"
 
 
+class NoticeDismissMode(str, Enum):
+    NONE = "none"
+    SESSION = "session"
+    PERSISTENT = "persistent"
+    SNOOZE = "snooze"
+
+
 @dataclass(slots=True)
 class NoticeTimelineItemData:
+    key: str
     text: str
     status: NoticeTimelineStatus = NoticeTimelineStatus.INFO
+    dismiss_mode: NoticeDismissMode = NoticeDismissMode.NONE
 
 
 @dataclass(slots=True)
@@ -106,6 +124,8 @@ class _TimelineRail(QWidget):
 
 
 class NoticeTimelineCard(QWidget):
+    dismissed = Signal(object)
+
     def __init__(self, item: NoticeTimelineItemData, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._item = item
@@ -113,17 +133,36 @@ class NoticeTimelineCard(QWidget):
         self.icon_widget = _StatusBadge(item.status, diameter=18, parent=self)
         self.text_label = BodyLabel(item.text, self)
         self.text_label.setWordWrap(True)
+        self.dismiss_button = TransparentToolButton(FluentIcon.CLOSE, self)
+        self.dismiss_button.setVisible(item.dismiss_mode != NoticeDismissMode.NONE)
+        self.dismiss_button.setToolTip(self._dismiss_tooltip(item.dismiss_mode))
+        self.dismiss_button.setToolTipDuration(1500)
+        self.dismiss_button.installEventFilter(
+            ToolTipFilter(self.dismiss_button, showDelay=300, position=ToolTipPosition.TOP_RIGHT)
+        )
+        self.dismiss_button.clicked.connect(lambda: self.dismissed.emit(self._item))
 
         self.h_box_layout = QHBoxLayout(self)
         self.h_box_layout.setContentsMargins(18, 14, 18, 14)
         self.h_box_layout.setSpacing(12)
         self.h_box_layout.addWidget(self.icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
         self.h_box_layout.addWidget(self.text_label, 1)
+        self.h_box_layout.addWidget(self.dismiss_button, 0, Qt.AlignmentFlag.AlignTop)
 
         self.setMinimumHeight(56)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         cfg.themeChanged.connect(self.update)
+
+    @staticmethod
+    def _dismiss_tooltip(mode: NoticeDismissMode) -> str:
+        if mode == NoticeDismissMode.SNOOZE:
+            return "稍后提醒"
+        if mode == NoticeDismissMode.PERSISTENT:
+            return "忽略此通知"
+        if mode == NoticeDismissMode.SESSION:
+            return "关闭本次提醒"
+        return ""
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -142,6 +181,8 @@ class NoticeTimelineCard(QWidget):
 
 
 class NoticeTimelineSection(QWidget):
+    itemDismissed = Signal(object)
+
     def __init__(self, section: NoticeTimelineSectionData, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._section = section
@@ -162,7 +203,9 @@ class NoticeTimelineSection(QWidget):
         self.items_layout.setSpacing(12)
 
         for item in section.items:
-            self.items_layout.addWidget(NoticeTimelineCard(item, self.items_container))
+            card = NoticeTimelineCard(item, self.items_container)
+            card.dismissed.connect(self.itemDismissed.emit)
+            self.items_layout.addWidget(card)
 
         self.body_layout = QHBoxLayout()
         self.body_layout.setContentsMargins(0, 0, 0, 0)
@@ -182,6 +225,8 @@ class NoticeTimelineSection(QWidget):
 
 
 class NoticeTimelineWidget(ScrollArea):
+    itemDismissed = Signal(object)
+
     def __init__(
         self,
         sections: list[NoticeTimelineSectionData] | None = None,
@@ -200,10 +245,10 @@ class NoticeTimelineWidget(ScrollArea):
         self.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSmoothMode(SmoothMode.LINEAR, Qt.Orientation.Vertical)
         self.enableTransparentBackground()
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         if sections:
             self.set_sections(sections)
@@ -230,6 +275,8 @@ class NoticeTimelineWidget(ScrollArea):
                 widget.deleteLater()
 
         for section in self._sections:
-            self.v_box_layout.addWidget(NoticeTimelineSection(section, self))
+            section_widget = NoticeTimelineSection(section, self)
+            section_widget.itemDismissed.connect(self.itemDismissed.emit)
+            self.v_box_layout.addWidget(section_widget)
 
         self.v_box_layout.addStretch(1)

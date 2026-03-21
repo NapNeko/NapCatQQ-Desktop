@@ -164,6 +164,10 @@ class Config(QConfig):
     web_hook_secret = ConfigItem(group="WebHook", name="WebHookSecret", default="")
     web_hook_json = ConfigItem(group="WebHook", name="WebHookJson", default="")
 
+    # 首页通知
+    home_notice_ignored_keys = ConfigItem(group="Home", name="IgnoredNoticeKeys", default="[]")
+    home_notice_snoozed_items = ConfigItem(group="Home", name="SnoozedNoticeItems", default="{}")
+
     def __init__(self):
         super().__init__()
 
