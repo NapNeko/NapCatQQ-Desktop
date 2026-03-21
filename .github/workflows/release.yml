@@ -1,182 +1,151 @@
-name: Build Release
+name: Release Pipeline
 
 on:
-  # 推送触发：按 tag 或特定分支（合并到同一个 push 下以避免重复 key）
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
     branches:
-      - 'release/**'
-  # 手动触发
+      - "release/**"
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (例如: 1.7.9 或 v1.7.9)'
+        description: "版本号，支持 1.7.28 或 v1.7.28；为空时从 pyproject.toml 读取"
         required: false
+        default: ""
         type: string
-      skip_build:
-        description: '跳过构建（仅更新版本号）'
+      sync_version_files:
+        description: "是否在构建目录版前同步版本文件"
         required: false
-        type: boolean
         default: false
+        type: boolean
+      publish_release:
+        description: "是否在本次手动运行中创建 GitHub Release"
+        required: false
+        default: false
+        type: boolean
+      build_debug:
+        description: "目录版阶段是否同时构建 debug 版本"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
 
 jobs:
-
-  release:
+  resolve:
     runs-on: windows-latest
-    env:
-      # 强制 Python 在 runner 上使用 UTF-8 I/O，避免子进程/reader thread 的编码错误
-      PYTHONUTF8: '1'
-      PYTHONIOENCODING: 'utf-8'
+    outputs:
+      version: ${{ steps.resolve.outputs.VERSION }}
+      version_plain: ${{ steps.resolve.outputs.VERSION_PLAIN }}
+      publish_release: ${{ steps.resolve.outputs.PUBLISH_RELEASE }}
+      sync_version_files: ${{ steps.resolve.outputs.SYNC_VERSION_FILES }}
+      build_debug: ${{ steps.resolve.outputs.BUILD_DEBUG }}
     steps:
       - name: "检出代码"
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          submodules: true
           fetch-depth: 0
-          # 保持凭据以便后续步骤可以 push（使用上面提供的 PERSONAL_ACCESS_TOKEN）
-          persist-credentials: true
 
-      - name: "设置 Python 3.12"
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
-      - name: "创建虚拟环境并安装依赖"
+      - name: "解析流程参数"
+        id: resolve
         shell: pwsh
         run: |
-          Write-Host "Creating virtualenv .venv and installing dependencies with pip..."
-          python -m venv .venv
-          # Activate in current PowerShell session
-          .\.venv\Scripts\Activate.ps1
-          python -m pip install --upgrade pip
-          if (Test-Path 'requirements.txt') {
-            python -m pip install -r requirements.txt
-          } else {
-            Write-Host 'requirements.txt not found, installing pyinstaller only'
-            python -m pip install pyinstaller
-          }
-          # Ensure PyInstaller is available
-          python -m pip install pyinstaller
+          $inputVersion = "${{ inputs.version }}"
 
-      - name: "提取版本号"
-        id: extract_version
-        shell: pwsh
-        run: |
-          # 从不同来源提取版本号
           if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref }}" -like "refs/tags/*") {
-            # 从 tag 提取
-            $VERSION = "${{ github.ref }}" -replace "refs/tags/", ""
-          } elseif ("${{ github.event.inputs.version }}" -ne "") {
-            # 从手动输入提取
-            $VERSION = "${{ github.event.inputs.version }}"
-            if (-not ($VERSION -like "v*")) {
-              $VERSION = "v$VERSION"
-            }
+            $version = "${{ github.ref }}" -replace "refs/tags/", ""
+            $publishRelease = "true"
+            $syncVersionFiles = "true"
+          } elseif ($inputVersion) {
+            $version = $inputVersion
+            $publishRelease = if ("${{ inputs.publish_release }}" -eq "true") { "true" } else { "false" }
+            $syncVersionFiles = if ("${{ inputs.sync_version_files }}" -eq "true") { "true" } else { "false" }
           } else {
-            # 从 pyproject.toml 提取当前版本
             $content = Get-Content pyproject.toml -Raw
             if ($content -match 'version\s*=\s*"([^"]+)"') {
-              $VERSION = "v$($matches[1])"
+              $version = $matches[1]
             } else {
-              Write-Error "无法提取版本号"
+              Write-Error "无法从 pyproject.toml 提取版本号"
               exit 1
             }
+            $publishRelease = "false"
+            $syncVersionFiles = "false"
           }
-          
-          echo "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          echo "提取的版本号: $VERSION"
 
-      - name: "更新版本号和生成更新日志"
-        if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '') }}
+          if (-not ($version -like "v*")) {
+            $version = "v$version"
+          }
+
+          $plain = $version -replace "^v", ""
+          $buildDebug = if ("${{ inputs.build_debug }}" -eq "false") { "false" } else { "true" }
+
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "VERSION_PLAIN=$plain" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "PUBLISH_RELEASE=$publishRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "SYNC_VERSION_FILES=$syncVersionFiles" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "BUILD_DEBUG=$buildDebug" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+  portable:
+    needs: resolve
+    uses: ./.github/workflows/build-portable.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      sync_version_files: ${{ fromJson(needs.resolve.outputs.sync_version_files) }}
+      build_debug: ${{ fromJson(needs.resolve.outputs.build_debug) }}
+
+  msi:
+    needs:
+      - resolve
+      - portable
+    uses: ./.github/workflows/build-msi.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      portable_artifact_name: ${{ needs.portable.outputs.artifact_name }}
+      build_portable: false
+
+  publish:
+    needs:
+      - resolve
+      - portable
+      - msi
+    if: ${{ needs.resolve.outputs.publish_release == 'true' }}
+    runs-on: windows-latest
+    steps:
+      - name: "检出代码"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "下载目录版制品"
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.portable.outputs.artifact_name }}
+          path: release-assets/portable
+
+      - name: "下载 MSI 制品"
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.msi.outputs.artifact_name }}
+          path: release-assets/msi
+
+      - name: "读取更新日志"
+        id: changelog
         shell: pwsh
         run: |
-          $VERSION = "${{ steps.extract_version.outputs.VERSION }}"
-          echo "更新版本号到 $VERSION"
-          
-          # 运行版本更新脚本（使用虚拟环境中的 python）
-          .\.venv\Scripts\python.exe script/utils/update_version.py $VERSION
-          
-          # 提交更改
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          git add pyproject.toml src/core/config/__init__.py docs/CHANGELOG.md
-          git diff --staged --quiet || git commit -m "🤖 自动更新版本号到 $VERSION"
-          
-          # 推送更改（推送到 master 分支）
-          git push origin HEAD:master || echo "推送失败或无更改"
+          $body = Get-Content -Path "docs/CHANGELOG.md" -Raw
+          "BODY<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $body | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: "打包Debug版本"
-        if: ${{ !inputs.skip_build }}
-        run: |
-          .\.venv\Scripts\python.exe -m PyInstaller ./script/build_scripts/main_debug.spec
-
-      - name: "打包Release版本"
-        if: ${{ !inputs.skip_build }}
-        run: |
-          .\.venv\Scripts\python.exe -m PyInstaller ./script/build_scripts/main.spec
-
-      - name: "压缩Release目录版"
-        if: ${{ !inputs.skip_build }}
-        shell: pwsh
-        run: |
-          $zipPath = "dist/NapCatQQ-Desktop.zip"
-          if (Test-Path $zipPath) {
-            Remove-Item $zipPath -Force
-          }
-          Compress-Archive -Path "dist/NapCatQQ-Desktop" -DestinationPath $zipPath
-
-      - name: "验证文件存在"
-        if: ${{ !inputs.skip_build }}
-        run: |
-          Write-Host "检查文件是否存在:"
-          if (Test-Path "dist/NapCatQQ-Desktop-debug.exe") {
-              Write-Host "✓ NapCatQQ-Desktop-debug.exe 存在"
-              Write-Host "文件大小:" (Get-Item "dist/NapCatQQ-Desktop-debug.exe").Length "bytes"
-          } else {
-              Write-Host "✗ NapCatQQ-Desktop-debug.exe 不存在"
-          }
-          if (Test-Path "dist/NapCatQQ-Desktop") {
-              Write-Host "✓ NapCatQQ-Desktop 目录存在"
-              Write-Host "目录文件数:" ((Get-ChildItem "dist/NapCatQQ-Desktop" -Recurse -File).Count)
-          } else {
-              Write-Host "✗ NapCatQQ-Desktop 目录不存在"
-          }
-          if (Test-Path "dist/NapCatQQ-Desktop.zip") {
-              Write-Host "✓ NapCatQQ-Desktop.zip 存在"
-              Write-Host "文件大小:" (Get-Item "dist/NapCatQQ-Desktop.zip").Length "bytes"
-          } else {
-              Write-Host "✗ NapCatQQ-Desktop.zip 不存在"
-          }
-          Write-Host "dist目录内容:"
-          Get-ChildItem -Path "dist" -Recurse | ForEach-Object { Write-Host "  $($_.FullName)" }
-
-      - name: "设置标签和更新内容"
-        if: ${{ !inputs.skip_build && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')) }}
-        id: get_info
-        run: |
-          $TAG_NAME = "${{ steps.extract_version.outputs.VERSION }}"
-          $BODY = Get-Content -Path "docs/CHANGELOG.md" -Raw
-          
-          echo "TAG_NAME=$TAG_NAME" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "BODY<<EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "$BODY" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "EOF" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: "创建发布草稿并上传文件"
-        if: ${{ !inputs.skip_build && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')) }}
-        id: create_release
+      - name: "创建发布并上传制品"
         uses: softprops/action-gh-release@v1
         with:
           draft: false
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ env.TAG_NAME }}
-          name: NapCatQQ Desktop Release ${{ env.TAG_NAME }}
-          body: ${{ env.BODY }}
+          tag_name: ${{ needs.resolve.outputs.version }}
+          name: NapCatQQ Desktop Release ${{ needs.resolve.outputs.version }}
+          body: ${{ steps.changelog.outputs.BODY }}
           files: |
-            dist/NapCatQQ-Desktop.zip
+            release-assets/portable/NapCatQQ-Desktop.zip
+            release-assets/msi/${{ needs.msi.outputs.msi_file_name }}

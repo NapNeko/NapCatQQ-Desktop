@@ -1,0 +1,206 @@
+name: Build MSI Package
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "版本号，支持 1.7.28 或 v1.7.28"
+        required: true
+        type: string
+      portable_artifact_name:
+        description: "目录版制品名；为空时在当前工作流内重建目录版"
+        required: false
+        default: ""
+        type: string
+      build_portable:
+        description: "是否在本工作流内先构建目录版"
+        required: false
+        default: false
+        type: boolean
+      upload_artifact_name:
+        description: "MSI 制品名；为空时自动按版本生成"
+        required: false
+        default: ""
+        type: string
+    outputs:
+      version:
+        description: "带 v 前缀的版本号"
+        value: ${{ jobs.build.outputs.version }}
+      version_plain:
+        description: "不带 v 前缀的版本号"
+        value: ${{ jobs.build.outputs.version_plain }}
+      artifact_name:
+        description: "上传的 MSI 制品名"
+        value: ${{ jobs.build.outputs.artifact_name }}
+      msi_file_name:
+        description: "MSI 文件名"
+        value: ${{ jobs.build.outputs.msi_file_name }}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号，支持 1.7.28 或 v1.7.28；为空时从 pyproject.toml 读取"
+        required: false
+        default: ""
+        type: string
+      build_portable:
+        description: "是否在本工作流内先构建目录版"
+        required: false
+        default: true
+        type: boolean
+      portable_artifact_name:
+        description: "同一次运行内若已有目录版制品，可填写其制品名"
+        required: false
+        default: ""
+        type: string
+      upload_artifact_name:
+        description: "MSI 制品名；为空时自动按版本生成"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    outputs:
+      version: ${{ steps.resolve_version.outputs.VERSION }}
+      version_plain: ${{ steps.resolve_version.outputs.VERSION_PLAIN }}
+      artifact_name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
+      msi_file_name: ${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}
+    steps:
+      - name: "检出代码"
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: "设置 Python 3.12"
+        if: ${{ inputs.build_portable }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: "设置 .NET SDK"
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: "解析版本号"
+        id: resolve_version
+        shell: pwsh
+        run: |
+          $inputVersion = "${{ inputs.version }}"
+
+          if ($inputVersion) {
+            $version = $inputVersion
+          } else {
+            $content = Get-Content pyproject.toml -Raw
+            if ($content -match 'version\s*=\s*"([^"]+)"') {
+              $version = $matches[1]
+            } else {
+              Write-Error "无法从 pyproject.toml 提取版本号"
+              exit 1
+            }
+          }
+
+          if (-not ($version -like "v*")) {
+            $version = "v$version"
+          }
+
+          $plain = $version -replace "^v", ""
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "VERSION_PLAIN=$plain" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Resolved version: $version"
+
+      - name: "构建目录版"
+        if: ${{ inputs.build_portable }}
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\Activate.ps1
+          python -m pip install --upgrade pip
+          if (Test-Path "requirements.txt") {
+            python -m pip install -r requirements.txt
+          } else {
+            python -m pip install pyinstaller
+          }
+          python -m pip install pyinstaller
+          .\.venv\Scripts\python.exe -m PyInstaller ./script/build_scripts/main.spec
+
+      - name: "下载目录版制品"
+        if: ${{ !inputs.build_portable && inputs.portable_artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.portable_artifact_name }}
+          path: dist
+
+      - name: "校验目录版输入"
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/NapCatQQ-Desktop")) {
+            Write-Error "缺少 dist/NapCatQQ-Desktop，无法生成 MSI"
+            exit 1
+          }
+
+      - name: "安装 WiX Toolset"
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.* || dotnet tool update --global wix --version 5.*
+          & "$env:USERPROFILE\.dotnet\tools\wix.exe" extension add -g WixToolset.Util.wixext/5.0.2
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & "$env:USERPROFILE\.dotnet\tools\wix.exe" --version
+
+      - name: "解析 MSI 文件名"
+        id: resolve_msi
+        shell: pwsh
+        run: |
+          $fileName = "NapCatQQ-Desktop-${{ steps.resolve_version.outputs.VERSION_PLAIN }}-x64.msi"
+          "MSI_FILE_NAME=$fileName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: "构建 MSI 安装包"
+        shell: pwsh
+        run: |
+          $wix = "$env:USERPROFILE\.dotnet\tools\wix.exe"
+          $sourceDir = (Resolve-Path "dist/NapCatQQ-Desktop").Path
+          $msiPath = "dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}"
+
+          & $wix build "script/build_scripts/main.wxs" `
+            -ext WixToolset.Util.wixext `
+            -arch x64 `
+            -d ProductVersion=${{ steps.resolve_version.outputs.VERSION_PLAIN }} `
+            -d SourceDir="$sourceDir" `
+            -o "$msiPath"
+
+      - name: "解析制品名"
+        id: resolve_artifact
+        shell: pwsh
+        run: |
+          $artifactName = "${{ inputs.upload_artifact_name }}"
+          if (-not $artifactName) {
+            $artifactName = "windows-msi-${{ steps.resolve_version.outputs.VERSION_PLAIN }}"
+          }
+          "ARTIFACT_NAME=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: "验证 MSI 输出"
+        shell: pwsh
+        run: |
+          $msiPath = "dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}"
+          if (-not (Test-Path $msiPath)) {
+            Write-Error "$msiPath 不存在"
+            exit 1
+          }
+          Write-Host "MSI size:" (Get-Item $msiPath).Length "bytes"
+
+      - name: "上传 MSI 制品"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}

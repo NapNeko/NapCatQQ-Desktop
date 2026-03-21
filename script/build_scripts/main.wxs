@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+    <?ifndef ProductName ?>
+        <?define ProductName = "NapCatQQ Desktop" ?>
+    <?endif?>
+    <?ifndef ProductExeName ?>
+        <?define ProductExeName = "NapCatQQ-Desktop.exe" ?>
+    <?endif?>
+    <?ifndef Manufacturer ?>
+        <?define Manufacturer = "Qiao" ?>
+    <?endif?>
+    <?ifndef ProductVersion ?>
+        <?define ProductVersion = "0.0.0" ?>
+    <?endif?>
+    <?ifndef SourceDir ?>
+        <?define SourceDir = "..\..\dist\NapCatQQ-Desktop" ?>
+    <?endif?>
+
+    <Package
+        Name="$(ProductName)"
+        Manufacturer="$(Manufacturer)"
+        Version="$(ProductVersion)"
+        UpgradeCode="5EBD6A58-1B0A-4700-B16F-7E3D7D62949D"
+        Language="1033"
+        Scope="perMachine"
+        InstallerVersion="500">
+
+        <SummaryInformation Description="$(ProductName)" Manufacturer="$(Manufacturer)" />
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+        <Icon Id="AppIcon.ico" SourceFile="script\build_scripts\icon.ico" />
+        <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+        <Property Id="ARPURLINFOABOUT" Value="https://github.com/NapNeko/NapCatQQ-Desktop" />
+        <util:CloseApplication
+            Id="CloseRunningDesktop"
+            Target="$(ProductExeName)"
+            Description="NapCatQQ Desktop is running and must be closed before setup can continue."
+            PromptToContinue="yes"
+            CloseMessage="yes"
+            ElevatedCloseMessage="yes"
+            RebootPrompt="no"
+            Timeout="10" />
+
+        <StandardDirectory Id="ProgramFiles64Folder">
+            <Directory Id="INSTALLFOLDER" Name="$(ProductName)" />
+        </StandardDirectory>
+
+        <StandardDirectory Id="ProgramMenuFolder">
+            <Directory Id="ApplicationProgramsFolder" Name="$(ProductName)" />
+        </StandardDirectory>
+
+        <StandardDirectory Id="DesktopFolder" />
+
+        <Component
+            Id="ApplicationShortcutComponent"
+            Directory="ApplicationProgramsFolder"
+            Guid="B1E6F3A7-2386-4BFE-BD0C-5F44A13E0D7A">
+            <Shortcut
+                Id="ApplicationStartMenuShortcut"
+                Name="$(ProductName)"
+                Description="$(ProductName)"
+                Target="[INSTALLFOLDER]$(ProductExeName)"
+                WorkingDirectory="INSTALLFOLDER" />
+            <Shortcut
+                Id="ApplicationDesktopShortcut"
+                Directory="DesktopFolder"
+                Name="$(ProductName)"
+                Description="$(ProductName)"
+                Target="[INSTALLFOLDER]$(ProductExeName)"
+                WorkingDirectory="INSTALLFOLDER" />
+            <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+            <RegistryValue
+                Root="HKLM"
+                Key="Software\NapCatQQ-Desktop"
+                Name="InstallDir"
+                Type="string"
+                Value="[INSTALLFOLDER]"
+                KeyPath="yes" />
+        </Component>
+
+        <Feature Id="MainFeature" Title="$(ProductName)" Level="1">
+            <Files Include="$(SourceDir)\**" Directory="INSTALLFOLDER" />
+            <ComponentRef Id="ApplicationShortcutComponent" />
+        </Feature>
+    </Package>
+</Wix>
