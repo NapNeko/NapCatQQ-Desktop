@@ -74,14 +74,14 @@ jobs:
       msi_file_name: ${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}
     steps:
       - name: "检出代码"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
           fetch-depth: 0
 
       - name: "设置 Python 3.12"
         if: ${{ inputs.build_portable }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -92,12 +92,12 @@ jobs:
           enable-cache: true
 
       - name: "设置 .NET SDK"
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
       - name: "缓存 .NET / WiX 依赖"
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~\.nuget\packages
@@ -204,7 +204,7 @@ jobs:
           Write-Host "MSI size:" (Get-Item $msiPath).Length "bytes"
 
       - name: "上传 MSI 制品"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
           if-no-files-found: error

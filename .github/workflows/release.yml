@@ -37,7 +37,7 @@ jobs:
       sync_version_files: ${{ steps.resolve.outputs.SYNC_VERSION_FILES }}
     steps:
       - name: "检出代码"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -103,7 +103,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: "检出代码"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 

@@ -61,7 +61,7 @@ jobs:
       artifact_name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
     steps:
       - name: "检出代码"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN || github.token }}
           submodules: true
@@ -69,7 +69,7 @@ jobs:
           persist-credentials: true
 
       - name: "设置 Python 3.12"
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -161,7 +161,7 @@ jobs:
           }
 
       - name: "上传目录版制品"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
           if-no-files-found: error
