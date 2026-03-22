@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 # 项目内模块导入
 import src.core.installation.installers as install_func
 import src.core.logging.log_func as log_func_module
+from src.core.logging.notification_center import log_output_notification_center
 from src.core.installation.installers import QQInstall
 from src.core.logging.log_func import Logger
 
@@ -64,6 +65,23 @@ def test_logger_exception_writes_traceback(tmp_path: Path) -> None:
     content = test_logger.log_path.read_text(encoding="utf-8")
     assert "处理失败: ValueError: boom" in content
     assert "Traceback" in content
+
+
+def test_logger_publishes_log_output_notification(tmp_path: Path) -> None:
+    """日志落盘后应广播实时输出事件。"""
+    test_logger = create_test_logger(tmp_path)
+    notifications: list[object] = []
+
+    log_output_notification_center.log_output_created.connect(notifications.append)
+    try:
+        test_logger.info("stream hello")
+    finally:
+        log_output_notification_center.log_output_created.disconnect(notifications.append)
+
+    assert notifications
+    notification = notifications[-1]
+    assert getattr(notification, "log_path") == test_logger.log_path
+    assert "stream hello" in getattr(notification, "line_text")
 
 
 def test_logger_trace_is_suppressed_without_developer_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
