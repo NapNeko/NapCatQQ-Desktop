@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -45,6 +45,13 @@ def _status_glyph(status: NoticeTimelineStatus) -> str:
     return glyphs[status]
 
 
+def _set_font_pixel_size(font: QFont, pixel_size: int) -> None:
+    app = QGuiApplication.instance()
+    screen = app.primaryScreen() if app is not None else None
+    dpi = screen.logicalDotsPerInchY() if screen is not None else 96.0
+    font.setPointSizeF(pixel_size * 72 / (dpi or 96.0))
+
+
 class _StatusBadge(QWidget):
     def __init__(self, status: NoticeTimelineStatus, diameter: int = 20, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -72,7 +79,7 @@ class _StatusBadge(QWidget):
 
         font = QFont(self.font())
         font.setBold(True)
-        font.setPixelSize(max(11, self._diameter - 9))
+        _set_font_pixel_size(font, max(11, self._diameter - 9))
         painter.setFont(font)
         painter.setPen(QColor("#ffffff"))
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, _status_glyph(self._status))

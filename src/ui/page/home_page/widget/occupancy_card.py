@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, Signal, QVariantAnimation
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, FluentIcon, SimpleCardWidget, StrongBodyLabel, isDarkTheme
 
@@ -24,6 +24,13 @@ def _mix_color(source: QColor | str, target: QColor | str, ratio: float) -> QCol
         round(source.blue() * (1 - ratio) + target.blue() * ratio),
         round(source.alpha() * (1 - ratio) + target.alpha() * ratio),
     )
+
+
+def _set_font_pixel_size(font: QFont, pixel_size: int) -> None:
+    app = QGuiApplication.instance()
+    screen = app.primaryScreen() if app is not None else None
+    dpi = screen.logicalDotsPerInchY() if screen is not None else 96.0
+    font.setPointSizeF(pixel_size * 72 / (dpi or 96.0))
 
 class _MetricHistory:
     def __init__(self, size: int) -> None:
@@ -170,7 +177,7 @@ class _OccupancyCanvas(QWidget):
         label_width = 38
 
         font = QFont(self.font())
-        font.setPixelSize(11)
+        _set_font_pixel_size(font, 11)
         font.setWeight(QFont.Weight.DemiBold)
         painter.setFont(font)
 
@@ -282,7 +289,7 @@ class _OccupancyCanvas(QWidget):
 
         value_text = f"{round(hover_value)}%"
         font = QFont(self.font())
-        font.setPixelSize(11)
+        _set_font_pixel_size(font, 11)
         font.setWeight(QFont.Weight.DemiBold)
         painter.setFont(font)
 
