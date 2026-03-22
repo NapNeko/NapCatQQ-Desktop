@@ -18,6 +18,7 @@ from src.core.logging.crash_bundle import (
 from src.core.logging.log_data import Log, LogGroup, LogPosition
 from src.core.logging.log_enum import LogLevel, LogSource, LogType
 from src.core.logging.log_utils import capture_call_location
+from src.core.logging.notification_center import CrashBundleNotification, crash_bundle_notification_center
 from src.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
 from src.core.platform.runtime_args import is_developer_mode_enabled
 
@@ -355,6 +356,7 @@ class Logger:
                 type(exc),
                 exc.__traceback__,
                 remember_bundle=False,
+                notify_user=False,
             )
 
     def _emit_crash_bundle(
@@ -364,6 +366,7 @@ class Logger:
         exc_type: type[BaseException] | None = None,
         exc_traceback=None,
         remember_bundle: bool = True,
+        notify_user: bool = True,
     ) -> Path | None:
         """生成崩溃诊断包，并按需记录首次崩溃产物。"""
         with self._crash_bundle_lock:
@@ -402,6 +405,14 @@ class Logger:
                 LogSource.CORE,
                 None,
             )
+            if notify_user:
+                crash_bundle_notification_center.publish(
+                    CrashBundleNotification(
+                        bundle_path=bundle_path,
+                        trigger=trigger,
+                        output_source=output_source,
+                    )
+                )
             return bundle_path
         except Exception as bundle_exc:
             self._log(
