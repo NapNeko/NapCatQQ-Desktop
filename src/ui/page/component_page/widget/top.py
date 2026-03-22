@@ -18,7 +18,6 @@ class TopWidget(QWidget):
 
         # 创建控件
         self.title_label = TitleLabel(self.tr("组件"), self)
-        self.subtitle_label = CaptionLabel(self.tr("下载或更新组件以获取最新的特性(或者是特性👀)"), self)
         self.pivot = SegmentedWidget()
         self.update_button = PrimaryPushButton(FluentIcon.UPDATE, self.tr("刷新"))
 
@@ -36,8 +35,6 @@ class TopWidget(QWidget):
         self.label_layout.setSpacing(0)
         self.label_layout.setContentsMargins(0, 0, 0, 0)
         self.label_layout.addWidget(self.title_label)
-        self.label_layout.addSpacing(5)
-        self.label_layout.addWidget(self.subtitle_label)
         self.label_layout.addSpacing(4)
         self.label_layout.addWidget(self.pivot)
 
