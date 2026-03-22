@@ -17,6 +17,47 @@ class Urls(Enum):
         "https://raw.githubusercontent.com/NapNeko/NapCatQQ-Desktop/main/update/desktop_update_manifest.json"
     )
 
+    @staticmethod
+    def get_ncd_download_url(version: str, install_type: str = "portable") -> QUrl:
+        """获取桌面端下载链接。
+
+        统一命名格式：
+        - 便携版: NapCatQQ-Desktop-{version}-portable-x64.zip
+        - MSI: NapCatQQ-Desktop-{version}-x64.msi
+
+        Args:
+            version: 版本号（如 "1.7.28"，不含 v 前缀）
+            install_type: 安装类型，"portable" 或 "msi"
+
+        Returns:
+            QUrl: 下载链接
+        """
+        base_url = "https://github.com/NapNeko/NapCatQQ-Desktop/releases/download"
+        tag = f"v{version}"
+
+        if install_type == "msi":
+            filename = f"NapCatQQ-Desktop-{version}-x64.msi"
+        else:
+            filename = f"NapCatQQ-Desktop-{version}-portable-x64.zip"
+
+        return QUrl(f"{base_url}/{tag}/{filename}")
+
+    @staticmethod
+    def get_ncd_latest_url(install_type: str = "portable") -> QUrl:
+        """获取最新版下载链接。
+
+        Note:
+            由于文件名包含版本号，无法使用固定的 latest 下载链接。
+            需要通过 API 获取实际版本号后再构造完整 URL。
+
+        Args:
+            install_type: 安装类型，"portable" 或 "msi"
+
+        Returns:
+            QUrl: 指向 releases 页面的链接（需要配合 API 使用）
+        """
+        return QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest")
+
     # NapCat 相关地址
     NAPCATQQ_REPO = QUrl("https://github.com/NapNeko/NapCatQQ")
     NAPCATQQ_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ/issues")

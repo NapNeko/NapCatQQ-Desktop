@@ -13,12 +13,17 @@ from PySide6.QtGui import QDesktopServices
 # 项目内模块导入
 from src.core.network.urls import Urls
 from src.core.utils.desktop_update import (
-    UPDATE_ARCHIVE_NAME,
+    UpdateManager,
     fetch_remote_update_script,
     inject_target_pid,
-    prepare_desktop_update,
 )
-from src.core.utils.get_version import DesktopUpdateManifest, DesktopUpdatePlan, VersionData, resolve_desktop_update_plan
+from src.core.utils.get_version import (
+    DesktopUpdateManifest,
+    DesktopUpdatePlan,
+    VersionData,
+    resolve_desktop_update_plan,
+)
+from src.core.utils.install_type import InstallType
 from src.core.utils.logger import LogSource, logger
 from src.core.utils.logger.crash_bundle import summarize_path
 from src.core.utils.path_func import PathFunc
@@ -46,6 +51,7 @@ class NCDPage(PageBase):
         self.app_card.set_hyper_label_url(Urls.NCD_REPO.value)
         self.log_card.set_loading(True)
         self._ncd_update_manifest: DesktopUpdateManifest | None = None
+        self._update_manager = UpdateManager()
 
         # 连接信号槽
         self.app_card.install_button.clicked.connect(self.on_download)
@@ -103,21 +109,29 @@ class NCDPage(PageBase):
     def on_download(self) -> None:
         """处理下载按钮点击事件，开始下载应用程序"""
         logger.info(
-            f"请求下载/更新 Desktop: local={self.local_version}, remote={self.remote_version}",
+            f"请求下载/更新 Desktop: local={self.local_version}, remote={self.remote_version}, "
+            f"install_type={self._update_manager.install_type.value}",
             log_source=LogSource.UI,
         )
+
+        from src.ui.window.main_window import MainWindow
+
+        # 检查更新拦截规则
         update_plan = self._get_update_plan()
         if update_plan is not None and update_plan.blocks_update():
             min_version = update_plan.min_auto_update_version or self.tr("受支持版本")
             error_bar(self.tr(f"当前版本过旧，不能直接自动升级。请先升级到 {min_version} 或重新安装。"))
             return
 
-        if it(ManagerNapCatQQProcess).has_running_bot():
-
-            from src.ui.window.main_window import MainWindow
-
-            box = AskBox(self.tr("警告"), self.tr("目前还有 Bot 正在运行, 此操作会关闭所有 Bot"), it(MainWindow))
-            box.yesButton.setText(self.tr("关闭全部"))
+        # 检查是否有运行的 Bot
+        has_bot = it(ManagerNapCatQQProcess).has_running_bot()
+        if has_bot:
+            box = AskBox(
+                self.tr("警告"),
+                self.tr("目前还有 Bot 正在运行，此操作会关闭所有 Bot。\n\n更新前请确保所有 Bot 数据已保存。"),
+                it(MainWindow),
+            )
+            box.yesButton.setText(self.tr("关闭全部并继续"))
 
             if box.exec():
                 logger.warning("Desktop 更新前关闭全部 Bot 以继续执行", log_source=LogSource.UI)
@@ -126,15 +140,26 @@ class NCDPage(PageBase):
                 logger.info("Desktop 更新流程取消: 用户拒绝关闭运行中的 Bot", log_source=LogSource.UI)
                 return
 
+        # 显示更新确认弹窗（根据安装类型显示不同提示）
+        if not self._show_update_confirmation(has_bot):
+            logger.info("Desktop 更新流程取消: 用户在确认弹窗中选择取消", log_source=LogSource.UI)
+            return
+
         if update_plan is not None and update_plan.requires_remote_script():
             info_bar(self.tr("检测到区间迁移规则，将使用仓库中的迁移脚本完成升级"))
 
-        info_bar(self.tr("正在下载 NapCat Desktop 整包 ZIP"))
+        # 根据安装类型显示不同的下载提示
+        if self._update_manager.is_msi_installation():
+            info_bar(self.tr("正在下载 NapCat Desktop MSI 安装包..."))
+        else:
+            info_bar(self.tr("正在下载 NapCat Desktop 便携版压缩包..."))
 
         # 项目内模块导入
         from src.core.network.downloader import GithubDownloader
 
-        downloader = GithubDownloader(Urls.NCD_DOWNLOAD.value)
+        # 获取下载 URL
+        download_url = self._get_download_url()
+        downloader = GithubDownloader(download_url)
         downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
         downloader.download_finish_signal.connect(self.on_install)
         downloader.status_label_signal.connect(self.app_card.set_status_text)
@@ -144,28 +169,153 @@ class NCDPage(PageBase):
 
         QThreadPool.globalInstance().start(downloader)
 
+    def _show_update_confirmation(self, has_running_bot: bool) -> bool:
+        """显示更新确认弹窗，告知用户更新流程和注意事项。
+
+        Args:
+            has_running_bot: 是否有正在运行的 Bot
+
+        Returns:
+            bool: 用户是否确认继续
+        """
+        from src.ui.window.main_window import MainWindow
+
+        # 根据安装类型构建不同的提示内容
+        if self._update_manager.is_msi_installation():
+            install_type_text = self.tr("MSI 安装版")
+            process_text = self.tr(
+                "更新流程:\n"
+                "1. 下载新版本 MSI 安装包\n"
+                "2. 关闭当前程序并等待完全退出\n"
+                "3. 以管理员权限运行 MSI 升级安装\n"
+                "4. 安装完成后自动启动新版本\n\n"
+                '注意: 安装过程中会弹出 UAC 权限请求，请点击"是"继续。'
+            )
+        else:
+            install_type_text = self.tr("便携版")
+            process_text = self.tr(
+                "更新流程:\n"
+                "1. 下载新版本压缩包\n"
+                "2. 关闭当前程序并等待完全退出\n"
+                "3. 解压并替换程序文件\n"
+                "4. 自动启动新版本\n\n"
+                "注意: 更新过程可能需要管理员权限。"
+            )
+
+        # 构建完整提示文本
+        warning_text = ""
+        if has_running_bot:
+            warning_text = self.tr("⚠️ 所有运行中的 Bot 将被强制关闭\n\n")
+
+        version_text = self.tr("版本: {} → {}\n\n").format(self.local_version or self.tr("未安装"), self.remote_version)
+
+        full_message = (
+            f"{version_text}"
+            f"安装类型: {install_type_text}\n\n"
+            f"{warning_text}"
+            f"{process_text}\n\n"
+            f"是否继续更新？"
+        )
+
+        box = AskBox(self.tr("确认更新"), full_message, it(MainWindow))
+        box.yesButton.setText(self.tr("开始更新"))
+        box.cancelButton.setText(self.tr("取消"))
+
+        from PySide6.QtWidgets import QDialog
+
+        return box.exec() == QDialog.DialogCode.Accepted
+
+    def _wait_for_process_exit(self, timeout_ms: int = 5000) -> bool:
+        """等待主程序进程完全退出。
+
+        Args:
+            timeout_ms: 最大等待时间（毫秒）
+
+        Returns:
+            bool: 进程是否已退出
+        """
+        import time
+        import psutil
+
+        current_pid = os.getpid()
+        start_time = time.time()
+
+        while (time.time() - start_time) * 1000 < timeout_ms:
+            try:
+                # 检查自己是否还在运行（理论上不可能）
+                if not psutil.pid_exists(current_pid):
+                    return True
+                # 短暂休眠避免 CPU 占用
+                time.sleep(0.1)
+            except Exception:
+                break
+
+        return True  # 超时后也继续，脚本会处理
+
+    def _get_download_url(self) -> QUrl:
+        """根据安装类型和版本获取下载 URL。
+
+        Returns:
+            QUrl: 下载链接
+        """
+        # 移除版本号中的 'v' 前缀
+        version = self.remote_version
+        if version and version.startswith("v"):
+            version = version[1:]
+
+        if not version:
+            # 降级到默认链接
+            return Urls.NCD_DOWNLOAD.value
+
+        # 根据安装类型选择包类型
+        if self._update_manager.is_msi_installation():
+            return Urls.get_ncd_download_url(version, "msi")
+        else:
+            return Urls.get_ncd_download_url(version, "portable")
+
     @Slot()
     def on_install(self) -> None:
         """下载完成后执行安装逻辑"""
-        logger.info("Desktop 下载完成，开始准备目录版更新", log_source=LogSource.UI)
-        success_bar(self.tr("下载成功, 正在准备目录版更新..."))
+        logger.info(
+            f"Desktop 下载完成，开始准备更新: install_type={self._update_manager.install_type.value}",
+            log_source=LogSource.UI,
+        )
+        success_bar(self.tr("下载成功, 正在准备更新..."))
 
         base_path = it(PathFunc).base_path
-        zip_path = it(PathFunc).tmp_path / UPDATE_ARCHIVE_NAME
+        # 根据安装类型获取下载的文件路径
+        package_filename = self._update_manager.get_update_filename(
+            self.remote_version.lstrip("v") if self.remote_version else ""
+        )
+        package_path = it(PathFunc).tmp_path / package_filename
 
         try:
-            prepare_desktop_update(zip_path, base_path)
-            bat_content = self._prepare_update_script()
-            bat_path = it(PathFunc).tmp_path / "update.bat"
-            bat_path.write_text(bat_content, encoding="utf-8")
-            logger.info(
-                (
-                    "Desktop 更新脚本已生成: "
-                    f"archive={summarize_path(zip_path)}, script={summarize_path(bat_path)}"
-                ),
-                log_source=LogSource.UI,
-            )
-            self._launch_update_script(bat_path)
+            # 使用 UpdateManager 准备和执行更新
+            staging_path = self._update_manager.prepare_update(package_path)
+            logger.info(f"更新包已准备: {summarize_path(staging_path)}", log_source=LogSource.UI)
+
+            if self._update_manager.is_msi_installation():
+                # MSI 版使用 update_msi.bat 脚本
+                # 脚本会处理：等待进程退出、申请管理员权限、执行 msiexec
+                bat_path = self._update_manager._strategy.get_update_script_path(staging_path)
+                process = self._update_manager.execute_update(staging_path, target_pid=os.getpid())
+                if process is None:
+                    raise RuntimeError("启动 MSI 更新失败")
+                logger.info(
+                    f"MSI 更新脚本已启动: PID={process.pid}, script={summarize_path(bat_path)}",
+                    log_source=LogSource.UI,
+                )
+            else:
+                # 便携版使用 update.bat 脚本
+                bat_content = self._prepare_update_script()
+                bat_path = it(PathFunc).tmp_path / "update.bat"
+                bat_path.write_text(bat_content, encoding="utf-8")
+                logger.info(
+                    f"便携版更新脚本已生成: script={summarize_path(bat_path)}",
+                    log_source=LogSource.UI,
+                )
+                self._launch_update_script(bat_path)
+
         except ValueError as exc:
             logger.error(f"准备更新失败: {exc}")
             error_bar(str(exc))
@@ -182,8 +332,8 @@ class NCDPage(PageBase):
             self.update_page()
             return
 
-        # 退出程序，安装脚本会等待并替换可执行文件
-        logger.warning("Desktop 更新脚本已启动，当前进程准备退出", log_source=LogSource.UI)
+        # 退出程序，安装脚本/MSI 会等待并替换可执行文件
+        logger.warning("Desktop 更新已启动，当前进程准备退出", log_source=LogSource.UI)
         sys.exit(0)
 
     @Slot()
@@ -200,7 +350,8 @@ class NCDPage(PageBase):
         resource_file = QFile(":/script/script/update.bat")
         if resource_file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
             try:
-                return bytes(resource_file.readAll()).decode("utf-8")
+                # QByteArray to bytes conversion - runtime works but type checker complains
+                return bytes(resource_file.readAll()).decode("utf-8")  # type: ignore
             finally:
                 resource_file.close()
 
@@ -241,9 +392,16 @@ class NCDPage(PageBase):
     def _get_display_log(self) -> str:
         """为更新日志追加迁移或拦截提示。"""
 
+        # 添加安装类型提示
+        install_type_hint = ""
+        if self._update_manager.is_msi_installation():
+            install_type_hint = "[MSI 安装版]\n"
+        elif self._update_manager.is_portable_installation():
+            install_type_hint = "[便携版]\n"
+
         update_plan = self._get_update_plan()
         if update_plan is None:
-            return self.remote_log
+            return install_type_hint + self.remote_log
 
         if update_plan.blocks_update():
             min_version = update_plan.min_auto_update_version or "受支持版本"
@@ -252,18 +410,16 @@ class NCDPage(PageBase):
                 f"当前版本 {self.local_version} 过旧，不能直接自动升级到 {self.remote_version}。\n"
                 f"请先升级到 {min_version} 或重新安装。\n\n"
             )
-            return blocked_notice + self.remote_log
+            return install_type_hint + blocked_notice + self.remote_log
 
         if not update_plan.requires_remote_script():
-            return self.remote_log
+            return install_type_hint + self.remote_log
 
         summary = update_plan.summary or ""
         migration_notice = (
-            "[区间迁移]\n"
-            f"升级到 {self.remote_version} 需要执行仓库提供的迁移脚本。\n"
-            f"{summary}\n\n"
+            "[区间迁移]\n" f"升级到 {self.remote_version} 需要执行仓库提供的迁移脚本。\n" f"{summary}\n\n"
         )
-        return migration_notice + self.remote_log
+        return install_type_hint + migration_notice + self.remote_log
 
     def _launch_update_script(self, bat_path: Path) -> None:
         """启动更新脚本，确保主程序退出后仍可继续执行。"""
