@@ -4,6 +4,7 @@
 # 标准库导入
 import platform
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 # 第三方库导入
@@ -19,7 +20,7 @@ from qfluentwidgets import (
     TitleLabel,
     setFont,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal
 from PySide6.QtWidgets import QButtonGroup, QGridLayout, QSizePolicy, QVBoxLayout, QWidget
 
 # 项目内模块导入
@@ -37,7 +38,43 @@ from src.core.logging import LogSource, logger
 from src.core.runtime.paths import PathFunc
 from src.ui.components.drop_folder_widget import DropFolderWidget
 from src.ui.components.info_bar import error_bar, success_bar, warning_bar
+from src.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
 from src.ui.components.stacked_widget import TransparentStackedWidget
+
+
+@dataclass(frozen=True)
+class _LegacyImportScanPayload:
+    scan_result: ImportScanResult
+    current_bot_count: int
+
+
+class _LegacyImportScanTask(QObject, QRunnable):
+    """旧版配置扫描后台任务。"""
+
+    finished = Signal(int, object)
+    failed = Signal(int, str, str)
+
+    def __init__(self, folder: Path, token: int) -> None:
+        QObject.__init__(self)
+        QRunnable.__init__(self)
+        self.folder = folder
+        self.token = token
+
+    def run(self) -> None:
+        try:
+            scan_result = scan_legacy_config_folder(self.folder)
+            current_bot_count = len(read_config())
+        except Exception as error:
+            self.failed.emit(self.token, type(error).__name__, str(error))
+            return
+
+        self.finished.emit(
+            self.token,
+            _LegacyImportScanPayload(
+                scan_result=scan_result,
+                current_bot_count=current_bot_count,
+            )
+        )
 
 
 class _LegacyImportDropPage(QWidget):
@@ -175,6 +212,88 @@ class _LegacyImportResultPage(QWidget):
         )
         self.conflict_count_title.setVisible(conflict_count > 0)
         self.conflict_count_value.setVisible(conflict_count > 0)
+
+
+class _LegacyImportScanSkeletonPage(QWidget):
+    """旧版配置扫描骨架屏。"""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+
+        self.v_box_layout = QVBoxLayout(self)
+        self.v_box_layout.setContentsMargins(0, 8, 0, 0)
+        self.v_box_layout.setSpacing(14)
+
+        self.title_label = BodyLabel(self.tr("正在识别旧版目录"), self)
+        self.hint_label = CaptionLabel(
+            self.tr("程序正在扫描 config.json、bot.json 以及历史目录布局，请稍候。"),
+            self,
+        )
+        self.hint_label.setWordWrap(True)
+        setFont(self.title_label, 17)
+        setFont(self.hint_label, 14)
+
+        self.step_card = SimpleCardWidget(self)
+        self.step_layout = QVBoxLayout(self.step_card)
+        self.step_layout.setContentsMargins(18, 16, 18, 16)
+        self.step_layout.setSpacing(8)
+        self.step_title = BodyLabel(self.tr("扫描阶段"), self.step_card)
+        self.step_hint = CaptionLabel(
+            self.tr(
+                "1. 分析目录结构并查找历史配置文件\n"
+                "2. 校验 config.json / bot.json 是否属于 NapCatQQ Desktop\n"
+                "3. 预计算可导入 Bot 数量和冲突项"
+            ),
+            self.step_card,
+        )
+        self.step_hint.setWordWrap(True)
+        setFont(self.step_title, 15)
+        setFont(self.step_hint, 14)
+        self.step_layout.addWidget(self.step_title)
+        self.step_layout.addWidget(self.step_hint)
+
+        self.canvas = SkeletonWidget(self._build_shapes, self, panel_margin=6, panel_radius=20)
+        self.canvas.setMinimumHeight(260)
+        self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        self.v_box_layout.addWidget(self.title_label)
+        self.v_box_layout.addWidget(self.hint_label)
+        self.v_box_layout.addWidget(self.step_card)
+        self.v_box_layout.addWidget(self.canvas, 1)
+    def _build_shapes(self, widget: QWidget) -> list[SkeletonShape]:
+        panel_rect = widget.rect().adjusted(6, 6, -6, -6)
+        if panel_rect.width() <= 0 or panel_rect.height() <= 0:
+            return []
+        x = panel_rect.x() + 10
+        y = panel_rect.y() + 8
+        width = panel_rect.width() - 20
+        shapes: list[SkeletonShape] = []
+
+        shapes.append(SkeletonShape(x, y, int(width * 0.18), 14, 0.88))
+        y += 30
+        shapes.append(SkeletonShape(x, y, int(width * 0.94), 88, 1.06, 18))
+        y += 112
+
+        shapes.append(SkeletonShape(x, y, int(width * 0.18), 14, 0.84))
+        y += 22
+        shapes.append(SkeletonShape(x, y, int(width * 0.92), 12, 0.92))
+        y += 26
+        shapes.append(SkeletonShape(x, y, int(width * 0.18), 14, 0.84))
+        y += 22
+        shapes.append(SkeletonShape(x, y, int(width * 0.88), 12, 0.92))
+        y += 30
+
+        shapes.append(SkeletonShape(x, y, int(width * 0.16), 14, 0.84))
+        y += 24
+        row_widths = (0.72, 0.48, 0.84)
+        for ratio in row_widths:
+            shapes.append(SkeletonShape(x, y, int(width * 0.22), 12, 0.86))
+            shapes.append(SkeletonShape(x + int(width * 0.28), y, int(width * ratio), 12, 0.96))
+            y += 22
+
+        y += 10
+        shapes.append(SkeletonShape(x, y, int(width * 0.94), 90, 1.04, 18))
+        return shapes
 
 
 class _LegacyImportOptionsPage(QWidget):
@@ -318,6 +437,8 @@ class LegacyImportDialog(MessageBoxBase):
 
         self._scan_result: ImportScanResult | None = None
         self._current_bot_count = 0
+        self._scan_token = 0
+        self._active_scan_task: _LegacyImportScanTask | None = None
 
         self.title_label = TitleLabel(self.tr("导入旧版配置"), self)
         self.content_label = CaptionLabel(
@@ -330,11 +451,13 @@ class LegacyImportDialog(MessageBoxBase):
         self.content_stack = TransparentStackedWidget(self)
         self.content_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.drop_page = _LegacyImportDropPage(self.content_stack)
+        self.scan_page = _LegacyImportScanSkeletonPage(self.content_stack)
         self.result_page = _LegacyImportResultPage(self.content_stack)
         self.options_page = _LegacyImportOptionsPage(self.content_stack)
         self.conflict_page = _LegacyImportConflictPage(self.content_stack)
 
         self.content_stack.addWidget(self.drop_page)
+        self.content_stack.addWidget(self.scan_page)
         self.content_stack.addWidget(self.result_page)
         self.content_stack.addWidget(self.options_page)
         self.content_stack.addWidget(self.conflict_page)
@@ -373,6 +496,14 @@ class LegacyImportDialog(MessageBoxBase):
         self.cancelButton.hide()
         self.select_folder_button.show()
 
+    def _show_scan_page(self) -> None:
+        self.content_stack.setCurrentWidget(self.scan_page)
+        self.yesButton.setEnabled(False)
+        self.yesButton.setText(self.tr("开始导入"))
+        self.cancelButton.setText(self.tr("取消"))
+        self.cancelButton.show()
+        self.select_folder_button.hide()
+
     def _show_options_page(self) -> None:
         self.content_stack.setCurrentWidget(self.options_page)
         self.yesButton.setText(self.tr("下一步") if self._requires_conflict_selection() else self.tr("开始导入"))
@@ -410,19 +541,22 @@ class LegacyImportDialog(MessageBoxBase):
 
     def _scan_folder(self, folder_path: object) -> None:
         folder = Path(str(folder_path))
-        try:
-            self._scan_result = scan_legacy_config_folder(folder)
-            self._current_bot_count = len(read_config())
-        except Exception as error:
-            logger.error(f"旧版配置扫描失败: {type(error).__name__}: {error}", log_source=LogSource.UI)
-            self._scan_result = None
-            self._current_bot_count = 0
-            self.conflict_page.clear()
-            self.yesButton.setEnabled(False)
-            self.options_page.update_scan_context(has_app_config=False, has_bot_mode=False)
-            self.content_stack.setCurrentWidget(self.drop_page)
-            error_bar(self.tr(f"扫描失败: {type(error).__name__}: {error}"), parent=self)
+        self._scan_token += 1
+        self._show_scan_page()
+
+        task = _LegacyImportScanTask(folder, self._scan_token)
+        self._active_scan_task = task
+        task.finished.connect(self._on_scan_finished)
+        task.failed.connect(self._on_scan_failed)
+        QThreadPool.globalInstance().start(task)
+
+    def _on_scan_finished(self, scan_token: int, payload: _LegacyImportScanPayload) -> None:
+        if scan_token != self._scan_token:
             return
+
+        self._active_scan_task = None
+        self._scan_result = payload.scan_result
+        self._current_bot_count = payload.current_bot_count
 
         has_app_config = self._scan_result.app_config_path is not None
         has_bot_mode = self._scan_result.bot_config_path is not None and self._current_bot_count > 0
@@ -436,6 +570,20 @@ class LegacyImportDialog(MessageBoxBase):
 
         if self._scan_result.warnings:
             warning_bar("\n".join(self._scan_result.warnings), title=self.tr("扫描结果"), parent=self)
+
+    def _on_scan_failed(self, scan_token: int, error_type: str, error_message: str) -> None:
+        if scan_token != self._scan_token:
+            return
+
+        self._active_scan_task = None
+        logger.error(f"旧版配置扫描失败: {error_type}: {error_message}", log_source=LogSource.UI)
+        self._scan_result = None
+        self._current_bot_count = 0
+        self.conflict_page.clear()
+        self.yesButton.setEnabled(False)
+        self.options_page.update_scan_context(has_app_config=False, has_bot_mode=False)
+        self._show_drop_page()
+        error_bar(self.tr(f"扫描失败: {error_type}: {error_message}"), parent=self)
 
     def _resolve_bot_import_plan(self) -> tuple[str, frozenset[int]]:
         if self._scan_result is None or self._scan_result.bot_config_path is None:
@@ -465,6 +613,12 @@ class LegacyImportDialog(MessageBoxBase):
             logger.warning(f"Bot 列表刷新失败: {type(error).__name__}: {error}", log_source=LogSource.UI)
 
     def reject(self) -> None:
+        if self.content_stack.currentWidget() is self.scan_page:
+            self._scan_token += 1
+            self._active_scan_task = None
+            super().reject()
+            return
+
         if self.content_stack.currentWidget() is self.conflict_page:
             self._show_options_page()
             return
@@ -474,6 +628,11 @@ class LegacyImportDialog(MessageBoxBase):
             return
 
         super().reject()
+
+    def done(self, result: int) -> None:
+        self._scan_token += 1
+        self._active_scan_task = None
+        super().done(result)
 
     def accept(self) -> None:
         if self._scan_result is None:
