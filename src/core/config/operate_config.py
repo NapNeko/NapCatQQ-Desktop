@@ -15,8 +15,8 @@ from creart import it
 
 # 项目内模块导入
 from src.core.config.config_model import Config, NapCatConfig, OneBotConfig
-from src.core.utils.logger import logger
-from src.core.utils.path_func import PathFunc
+from src.core.logging import logger
+from src.core.runtime.paths import PathFunc
 
 
 def _get_path_func() -> PathFunc:
@@ -289,3 +289,4 @@ def delete_config(config: Config) -> bool:
     except Exception as error:
         logger.error(f"在写入配置文件时引发 {type(error).__name__}: {error}")
         return False
+

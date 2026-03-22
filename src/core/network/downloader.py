@@ -10,9 +10,9 @@ from PySide6.QtCore import QObject, QRunnable, QUrl, Signal
 # 项目内模块导入
 from src.core.common.status import ButtonStatus, ProgressRingStatus
 from src.core.network.urls import Urls
-from src.core.utils.logger import LogSource, LogType, logger
-from src.core.utils.logger.crash_bundle import summarize_url, summarize_path
-from src.core.utils.path_func import PathFunc
+from src.core.logging import LogSource, LogType, logger
+from src.core.logging.crash_bundle import summarize_url, summarize_path
+from src.core.runtime.paths import PathFunc
 
 
 class DownloaderBase(QObject, QRunnable):
@@ -209,3 +209,4 @@ class QQDownloader(DownloaderBase):
         finally:
             # 无论是否出错,都会重置
             self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
+

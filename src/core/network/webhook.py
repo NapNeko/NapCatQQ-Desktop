@@ -14,7 +14,7 @@ from PySide6.QtCore import QObject, QRunnable, Signal
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_model import Config
-from src.core.utils.logger import LogSource, LogType, logger
+from src.core.logging import LogSource, LogType, logger
 
 
 @dataclass
@@ -161,3 +161,4 @@ def create_offline_webhook_task(config: Config) -> WebHook:
             ),
         )
     )
+

@@ -11,14 +11,15 @@ from PySide6.QtCore import QObject, QThreadPool, Signal
 
 from src.core.config import cfg
 from src.core.config.operate_config import read_config
-from src.core.utils.get_version import GetLocalVersionRunnable, GetRemoteVersionRunnable, VersionData, resolve_desktop_update_plan
-from src.core.utils.run_napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
-from src.ui.components.notice_timeline import (
+from src.core.desktop_update import resolve_desktop_update_plan
+from src.core.home.notice_model import (
     NoticeDismissMode,
     NoticeTimelineItemData,
     NoticeTimelineSectionData,
     NoticeTimelineStatus,
 )
+from src.core.versioning import LocalVersionTask, RemoteVersionTask, VersionSnapshot
+from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 
 
 @dataclass(slots=True)
@@ -43,8 +44,8 @@ class HomeNoticeService(QObject):
         self._debug_sections: list[NoticeTimelineSectionData] = []
         self._dismissed_session_keys: set[str] = set()
         self._local_versions = self._load_local_versions()
-        self._remote_versions: VersionData | None = None
-        self._remote_version_task: GetRemoteVersionRunnable | None = None
+        self._remote_versions: VersionSnapshot | None = None
+        self._remote_version_task: RemoteVersionTask | None = None
 
         self._process_manager = it(ManagerNapCatQQProcess)
         self._login_state_manager = it(ManagerNapCatQQLoginState)
@@ -88,19 +89,19 @@ class HomeNoticeService(QObject):
         home_notice_debug_center.clearRequested.connect(self._clear_debug_sections)
 
     @staticmethod
-    def _load_local_versions() -> VersionData:
-        return GetLocalVersionRunnable().execute()
+    def _load_local_versions() -> VersionSnapshot:
+        return LocalVersionTask().execute()
 
     def _request_remote_versions(self) -> None:
         if self._remote_version_task is not None:
             return
 
-        task = GetRemoteVersionRunnable()
+        task = RemoteVersionTask()
         task.version_signal.connect(self._on_remote_versions_loaded)
         self._remote_version_task = task
         QThreadPool.globalInstance().start(task)
 
-    def _on_remote_versions_loaded(self, version_data: VersionData) -> None:
+    def _on_remote_versions_loaded(self, version_data: VersionSnapshot) -> None:
         self._remote_versions = version_data
         self._remote_version_task = None
         self._emit_sections()
@@ -458,7 +459,7 @@ class HomeNoticeService(QObject):
 
         return []
 
-    def _build_desktop_update_items(self, remote: VersionData) -> list[NoticeTimelineItemData]:
+    def _build_desktop_update_items(self, remote: VersionSnapshot) -> list[NoticeTimelineItemData]:
         """构建 Desktop 专属更新提示。"""
 
         local_version = self._local_versions.ncd_version
@@ -634,3 +635,4 @@ class HomeNoticeDebugCenter(QObject):
 
 
 home_notice_debug_center = HomeNoticeDebugCenter()
+

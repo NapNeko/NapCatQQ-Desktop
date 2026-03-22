@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.core.utils.get_version import GetLocalVersionRunnable
+from src.core.versioning import LocalVersionTask
 
 
 @dataclass(slots=True)
@@ -17,7 +17,7 @@ class HomeVersionService:
     """首页版本信息服务。"""
 
     def __init__(self) -> None:
-        self._local_version = GetLocalVersionRunnable()
+        self._local_version = LocalVersionTask()
 
     def get_summary(self) -> VersionSummary:
         return VersionSummary(

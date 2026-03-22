@@ -61,8 +61,8 @@ from PySide6.QtCore import QLocale, Signal
 
 # 项目内模块导入
 from src.core.config.config_enum import CloseActionEnum, Language
-from src.core.utils.logger import LogSource, logger
-from src.core.utils.path_func import PathFunc
+from src.core.logging import LogSource, logger
+from src.core.runtime.paths import PathFunc
 
 __version__ = "v1.7.28"
 
@@ -299,3 +299,4 @@ cfg.set(cfg.napcat_desktop_version, __version__, True)
 cfg.set(cfg.system_type, platform.system(), True)
 cfg.set(cfg.platform_type, platform.machine(), True)
 bind_qfluent_qconfig(cfg)
+

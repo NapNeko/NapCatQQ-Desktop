@@ -14,8 +14,8 @@ from PySide6.QtCore import QFile, QObject, QRunnable, Signal
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_model import Config
-from src.core.utils.file import QFluentFile
-from src.core.utils.logger import LogSource, LogType, logger
+from src.core.qt.file import QFluentFile
+from src.core.logging import LogSource, LogType, logger
 
 
 class EncryptionType(Enum):
@@ -234,3 +234,4 @@ def create_offline_email_task(config: Config) -> Email:
             msg_subject="NapCatQQ-Desktop 机器人离线通知",
         )
     )
+
