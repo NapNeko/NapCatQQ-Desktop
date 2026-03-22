@@ -20,7 +20,7 @@
         Name="$(ProductName)"
         Manufacturer="$(Manufacturer)"
         Version="$(ProductVersion)"
-        UpgradeCode="F2BAF5B9-8C9C-4F27-BFF8-4E14857D6C42"
+        UpgradeCode="5EBD6A58-1B0A-4700-B16F-7E3D7D62949D"
         Language="1033"
         Scope="perMachine"
         InstallerVersion="500">
