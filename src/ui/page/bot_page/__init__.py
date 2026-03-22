@@ -9,13 +9,12 @@ from abc import ABC
 from typing import TYPE_CHECKING, Self
 
 # 第三方库导入
-from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-# 项目内模块导入
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from src.ui.page.bot_page.sub_page import BotListPage, BotLogPage, ConfigPage
-from src.ui.page.bot_page.widget import HeaderWidget
+from .sub_page import BotListPage, BotLogPage, ConfigPage
+from .widget import HeaderWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -105,3 +104,5 @@ class BotPageCreator(AbstractCreator, ABC):
 
 
 add_creator(BotPageCreator)
+
+__all__ = ["BotPage", "BotPageCreator"]

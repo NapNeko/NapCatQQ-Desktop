@@ -30,7 +30,7 @@ from src.core.runtime.paths import PathFunc
 from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.message_box import FolderBox
-from src.ui.page.component_page.status import ButtonStatus, ProgressRingStatus, StatusLabel
+from src.ui.page.component_page.utils import ButtonStatus, ProgressRingStatus, StatusLabel
 
 if TYPE_CHECKING:
     # 项目内模块导入
