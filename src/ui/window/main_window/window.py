@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
-from src.core.logging import LogSource, logger
+from src.core.logging import CrashBundleNotification, LogSource, crash_bundle_notification_center, logger
 from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
@@ -47,6 +47,7 @@ class MainWindow(MSFluentWindow):
         # 调用方法
         self._set_window()
         self._bind_core_events()
+        self._bind_crash_bundle_events()
         self._set_item()
         self._set_tray_icon()
 
@@ -133,6 +134,19 @@ class MainWindow(MSFluentWindow):
         self._core_events_bound = True
         logger.trace("主窗口已完成 core 信号绑定", log_source=LogSource.UI)
 
+    def _bind_crash_bundle_events(self) -> None:
+        """绑定崩溃诊断包生成事件。"""
+        if getattr(self, "_crash_bundle_events_bound", False):
+            return
+
+        crash_bundle_notification_center.crash_bundle_created.connect(self._show_crash_bundle_notification)
+        self._crash_bundle_events_bound = True
+
+        for notification in crash_bundle_notification_center.consume_pending():
+            self._show_crash_bundle_notification(notification)
+
+        logger.trace("主窗口已完成崩溃诊断包通知绑定", log_source=LogSource.UI)
+
     def _show_core_notification(self, level: str, message: str) -> None:
         """根据 core 层通知级别选择对应的 UI 提示方式"""
         mapping = {
@@ -150,6 +164,27 @@ class MainWindow(MSFluentWindow):
     def _remove_login_qr_code(self, qq_id: str) -> None:
         """移除已失效的登录二维码"""
         it(QRCodeDialogFactory).remove_qr_code(qq_id)
+
+    def _show_crash_bundle_notification(self, notification: CrashBundleNotification) -> None:
+        """提示用户崩溃诊断包已生成。"""
+        if not self.isVisible():
+            return
+
+        warning_bar(
+            self.tr(
+                f"检测到异常，已生成脱敏崩溃包 {notification.bundle_path.name}。"
+                "如果问题可复现或功能异常，请携带该文件提交 Issue。"
+            ),
+            title=self.tr("已生成崩溃包"),
+            duration=-1,
+            parent=self,
+        )
+        info_bar(
+            self.tr(f"输出位置: {notification.bundle_path}"),
+            title=self.tr("诊断包位置"),
+            duration=15000,
+            parent=self,
+        )
 
     def close(self) -> bool:
         """重写关闭事件"""

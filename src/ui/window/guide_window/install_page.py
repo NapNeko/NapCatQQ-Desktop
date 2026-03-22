@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 # 项目内模块导入
 from src.core.network.downloader import GithubDownloader, QQDownloader
 from src.core.network.urls import Urls
+from src.core.home import home_version_refresh_bus
 from src.core.versioning import RemoteVersionTask, VersionSnapshot
 from src.core.installation.installers import NapCatInstall, QQInstall
 from src.core.logging import LogSource, logger
@@ -323,6 +324,7 @@ class InstallQQPage(InstallPageBase):
             f"引导安装 QQ 完成: installer={summarize_path(self.file_path) if self.file_path else '<empty-path>'}",
             log_source=LogSource.UI,
         )
+        home_version_refresh_bus.request_refresh()
         success_bar(self.tr("安装完成"), parent=it(GuideWindow))
         it(GuideWindow).on_next_page()
 
@@ -384,6 +386,7 @@ class InstallNapCatQQPage(InstallPageBase):
             f"引导安装 NapCat 完成: path={summarize_path(it(PathFunc).napcat_path)}",
             log_source=LogSource.UI,
         )
+        home_version_refresh_bus.request_refresh()
         success_bar(self.tr("安装完成"), parent=it(GuideWindow))
         it(GuideWindow).on_next_page()
 

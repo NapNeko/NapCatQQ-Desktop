@@ -11,8 +11,9 @@ from PySide6.QtWidgets import QApplication, QVBoxLayout
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.core.logging import LogSource, logger
+from src.core.logging import CrashBundleNotification, LogSource, crash_bundle_notification_center, logger
 from src.ui.common.icon import StaticIcon
+from src.ui.components.info_bar import info_bar, warning_bar
 from src.ui.window.guide_window.ask_page import AskPage
 from src.ui.window.guide_window.eula_page import EulaPage
 from src.ui.window.guide_window.finsh_page import FinshPage
@@ -71,6 +72,7 @@ class GuideWindow(FramelessWindow):
         # 调用方法
         self.create_page()
         self.create_layout()
+        self.bind_crash_bundle_events()
         logger.trace("引导窗口初始化完成", log_source=LogSource.UI)
 
     def create_page(self) -> None:
@@ -109,6 +111,40 @@ class GuideWindow(FramelessWindow):
         self.vBoxLayout.addWidget(self.view)
         self.setLayout(self.vBoxLayout)
         logger.trace("引导窗口布局创建完成", log_source=LogSource.UI)
+
+    def bind_crash_bundle_events(self) -> None:
+        """绑定崩溃诊断包生成事件。"""
+        if getattr(self, "_crash_bundle_events_bound", False):
+            return
+
+        crash_bundle_notification_center.crash_bundle_created.connect(self.show_crash_bundle_notification)
+        self._crash_bundle_events_bound = True
+
+        for notification in crash_bundle_notification_center.consume_pending():
+            self.show_crash_bundle_notification(notification)
+
+        logger.trace("引导窗口已完成崩溃诊断包通知绑定", log_source=LogSource.UI)
+
+    def show_crash_bundle_notification(self, notification: CrashBundleNotification) -> None:
+        """提示用户崩溃诊断包已生成。"""
+        if not self.isVisible():
+            return
+
+        warning_bar(
+            self.tr(
+                f"检测到异常，已生成脱敏崩溃包 {notification.bundle_path.name}。"
+                "如果问题可复现或功能异常，请携带该文件提交 Issue。"
+            ),
+            title=self.tr("已生成崩溃包"),
+            duration=-1,
+            parent=self,
+        )
+        info_bar(
+            self.tr(f"输出位置: {notification.bundle_path}"),
+            title=self.tr("诊断包位置"),
+            duration=15000,
+            parent=self,
+        )
 
     def close(self) -> bool:
         """关闭窗体
