@@ -10,14 +10,15 @@ import httpx
 import pytest
 
 # 项目内模块导入
-from src.core.utils.desktop_update import (
+import src.core.desktop_update.scripts as desktop_update_scripts
+from src.core.desktop_update import (
     UPDATE_APP_DIR_NAME,
     UPDATE_EXE_NAME,
     fetch_remote_update_script,
     inject_target_pid,
     prepare_desktop_update,
 )
-from src.ui.page.unit_page.napcat_desktop_page import NCDPage
+from src.ui.page.component_page.desktop_page import DesktopPage
 
 
 def test_prepare_desktop_update_extracts_valid_package(tmp_path: Path) -> None:
@@ -104,7 +105,7 @@ def test_update_script_template_contains_backup_and_rollback() -> None:
 def test_load_update_script_contains_backup_and_rollback() -> None:
     """页面模块读取到的 updater 模板必须包含备份和回滚分支。"""
 
-    script_content = NCDPage._load_update_script()
+    script_content = DesktopPage._load_update_script()
 
     assert 'set "backup_root=%app_root%\\_update_staging\\backup"' in script_content
     assert 'set "backup_app_dir=%backup_root%\\NapCatQQ-Desktop"' in script_content
@@ -158,7 +159,7 @@ def test_fetch_remote_update_script_uses_mirror_fallback(monkeypatch) -> None:
                 raise result
             return FakeResponse(result)
 
-    monkeypatch.setattr("src.core.utils.desktop_update.httpx.Client", FakeClient)
+    monkeypatch.setattr(desktop_update_scripts.httpx, "Client", FakeClient)
 
     result = fetch_remote_update_script("https://raw.githubusercontent.com/example/update.bat")
 

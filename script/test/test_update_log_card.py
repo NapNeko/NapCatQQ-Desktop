@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import QApplication, QWidget
 
-from src.ui.page.unit_page.base import UpdateLogCard
+from src.ui.page.component_page.base import UpdateLogCard
 
 
 def ensure_qapp() -> QApplication:
@@ -22,6 +22,6 @@ def test_update_log_card_switches_between_loading_and_content() -> None:
     card.set_loading(True)
     assert card.content_stack.currentWidget() is card.skeleton
 
-    card.setLog("## Release Notes\n\n- Fixed")
+    card.set_log_markdown("## Release Notes\n\n- Fixed")
     assert card.content_stack.currentWidget() is card.log_edit
     assert "Release Notes" in card.log_edit.toPlainText()

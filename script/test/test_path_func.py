@@ -4,7 +4,7 @@
 from pathlib import Path
 
 # 项目内模块导入
-import src.core.utils.path_func as path_func_module
+import src.core.runtime.paths as path_func_module
 
 
 def mute_path_logger(monkeypatch) -> None:
@@ -86,3 +86,4 @@ def test_path_migration_moves_install_runtime_into_programdata(monkeypatch, tmp_
     assert not (install_root / "runtime" / "NapCatQQ").exists()
     assert not (install_root / "runtime" / "config").exists()
     assert not (install_root / "runtime" / "tmp").exists()
+

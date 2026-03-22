@@ -12,7 +12,7 @@ import pytest
 # 项目内模块导入
 import main
 import src.core.config as config_module
-import src.core.utils.mutex as mutex_module
+import src.core.platform.single_instance as mutex_module
 import src.ui.common.font as font_module
 
 
@@ -220,3 +220,4 @@ def test_main_entry_reraises_system_exit(monkeypatch: pytest.MonkeyPatch, logger
         main.main_entry()
 
     assert exc_info.value.code == 5
+

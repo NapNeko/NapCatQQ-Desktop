@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtCore import QProcess
 
 # 项目内模块导入
-import src.core.utils.run_napcat as run_napcat
+import src.core.runtime.napcat as run_napcat
 
 
 class FakeTimer:
@@ -454,3 +454,4 @@ def test_get_memory_usage_sums_process_tree(monkeypatch: pytest.MonkeyPatch, mut
     monkeypatch.setattr(run_napcat.psutil, "Process", lambda pid: FakePsProcess(pid))
 
     assert manager.get_memory_usage("556677") == 8
+

@@ -14,10 +14,10 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPushButton
 
 # 项目内模块导入
-import src.core.utils.install_func as install_func
-import src.core.utils.logger.log_func as log_func_module
-from src.core.utils.install_func import QQInstall
-from src.core.utils.logger.log_func import Logger
+import src.core.installation.installers as install_func
+import src.core.logging.log_func as log_func_module
+from src.core.installation.installers import QQInstall
+from src.core.logging.log_func import Logger
 
 
 def create_test_logger(tmp_path: Path) -> Logger:
@@ -240,3 +240,4 @@ def test_button_slot_exception_is_written_to_log(tmp_path: Path) -> None:
     content = test_logger.log_path.read_text(encoding="utf-8")
     assert "捕获未处理异常" in content
     assert "RuntimeError: slot boom" in content
+

@@ -4,7 +4,7 @@
 from types import SimpleNamespace
 
 # 项目内模块导入
-import src.core.utils.mutex as mutex_module
+import src.core.platform.single_instance as mutex_module
 
 
 class FakeLockFile:
@@ -58,3 +58,4 @@ def test_is_running_returns_true_when_lock_is_busy(monkeypatch, tmp_path) -> Non
     FakeLockFile.next_try_lock_result = False
 
     assert mutex_module.SingleInstanceApplication().is_running() is True
+

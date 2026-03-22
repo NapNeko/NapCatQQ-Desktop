@@ -6,8 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 # 项目内模块导入
-import src.core.utils.file as file_module
-import src.core.utils.install_func as install_func
+import src.core.qt.file as file_module
+import src.core.installation.installers as install_func
 
 
 def test_qfluent_file_supports_context_manager(tmp_path: Path) -> None:
@@ -114,3 +114,4 @@ def test_qq_install_nonzero_exit_emits_error_and_deletes_installer(monkeypatch, 
 
     assert errors == [True]
     assert not installer.exists()
+
