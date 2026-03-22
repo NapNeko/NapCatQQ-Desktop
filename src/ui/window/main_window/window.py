@@ -172,15 +172,15 @@ class MainWindow(MSFluentWindow):
 
         warning_bar(
             self.tr(
-                f"检测到异常，已生成脱敏崩溃包 {notification.bundle_path.name}。"
-                "如果问题可复现或功能异常，请携带该文件提交 Issue。"
+                f"检测到异常，已生成脱敏崩溃包\n{notification.bundle_path.name}\n"
+                "如问题可复现，请携带该文件提交 Issue。"
             ),
             title=self.tr("已生成崩溃包"),
             duration=-1,
             parent=self,
         )
         info_bar(
-            self.tr(f"输出位置: {notification.bundle_path}"),
+            self.tr(f"输出位置:\n{notification.bundle_path}"),
             title=self.tr("诊断包位置"),
             duration=15000,
             parent=self,
