@@ -554,8 +554,11 @@ class HomeNoticeService(QObject):
         return mapping.get(level, NoticeTimelineStatus.INFO)
 
     @staticmethod
-    def _summarize_release_notes(text: str) -> str:
-        lines = [re.sub(r"^[#\\-*\\s>]+", "", line).strip() for line in text.splitlines()]
+    def _summarize_release_notes(text: str | None) -> str:
+        if not text:
+            return "发布了新的版本。"
+
+        lines = [re.sub(r"^[#*>\s-]+", "", line).strip() for line in text.splitlines()]
         for line in lines:
             if line:
                 return line[:88]

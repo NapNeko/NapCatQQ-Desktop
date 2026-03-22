@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from PySide6.QtCore import QObject, Signal
+
 from src.core.versioning import LocalVersionTask
 
 
@@ -25,3 +27,16 @@ class HomeVersionService:
             qq_version=self._local_version.get_qq_version(),
             desktop_version=self._local_version.get_ncd_version(),
         )
+
+
+class HomeVersionRefreshBus(QObject):
+    """主页版本卡片刷新事件总线。"""
+
+    refresh_requested = Signal()
+
+    def request_refresh(self) -> None:
+        """通知主页版本卡片重新读取本地版本。"""
+        self.refresh_requested.emit()
+
+
+home_version_refresh_bus = HomeVersionRefreshBus()
