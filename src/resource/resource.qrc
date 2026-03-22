@@ -34,7 +34,11 @@
         <file>style/shared/page/home.qss</file>
         <file>style/shared/page/setup.qss</file>
         <file>style/shared/page/unit.qss</file>
+        <file>style/dark/widget/update_log_card.qss</file>
+        <file>style/light/widget/update_log_card.qss</file>
         <file>style/shared/widget/update_log_card.qss</file>
+        <file>style/dark/widget/code_editor.qss</file>
+        <file>style/light/widget/code_editor.qss</file>
         <file>style/shared/widget/code_editor.qss</file>
     </qresource>
 

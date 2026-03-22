@@ -1,0 +1,74 @@
+PlainTextEdit {
+    color: #1f2937;
+}
+
+PlainTextEdit::selection {
+    background-color: #dbeafe;
+    color: #0f172a;
+}
+
+QTextBrowser {
+    color: #1f2937;
+}
+
+QScrollBar:vertical {
+    background: rgba(252, 252, 252, 0.85);
+    width: 11px;
+    margin: 3px 0 3px 0;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:vertical {
+    background: rgba(0, 0, 0, 0.45);
+    min-height: 28px;
+    border-radius: 2px;
+    margin: 0 4px 0 4px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: rgba(0, 0, 0, 0.62);
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+    background: transparent;
+    border: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: transparent;
+    border-radius: 6px;
+}
+
+QScrollBar:horizontal {
+    background: rgba(252, 252, 252, 0.85);
+    height: 11px;
+    margin: 0 3px 0 3px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:horizontal {
+    background: rgba(0, 0, 0, 0.45);
+    min-width: 28px;
+    border-radius: 2px;
+    margin: 4px 0 4px 0;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: rgba(0, 0, 0, 0.62);
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+    background: transparent;
+    border: none;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: transparent;
+    border-radius: 6px;
+}
