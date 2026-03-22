@@ -34,11 +34,14 @@
 import contextlib
 import inspect
 import json
+import os
 import platform
 import time
+import uuid
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Self
+from typing import Any, Callable, Self
 
 # 第三方库导入
 from creart import it
@@ -65,6 +68,352 @@ from src.core.logging import LogSource, logger
 from src.core.runtime.paths import PathFunc
 
 __version__ = "v1.7.28"
+_CONFIG_MIGRATION_BACKUP_SUFFIX = ".bak"
+_CONFIG_MIGRATION_TMP_MARKER = "tmp"
+_LEGACY_CONFIG_VERSION = "v1.7.28"
+_CURRENT_CONFIG_COMPAT_VERSION = "v2.0"
+_LEGACY_BACKGROUND_KEYS = (
+    "BgHomePage",
+    "BgHomePageOpacity",
+    "BgHomePageLight",
+    "BgHomePageDark",
+    "BgAddPage",
+    "BgAddPageOpacity",
+    "BgAddPageLight",
+    "BgAddPageDark",
+    "BgListPage",
+    "BgListPageOpacity",
+    "BgListPageLight",
+    "BgListPageDark",
+    "BgUnitPage",
+    "BgUnitPageOpacity",
+    "BgUnitPageLight",
+    "BgUnitPageDark",
+    "BgSettingPage",
+    "BgSettingPageOpacity",
+    "BgSettingPageLight",
+    "BgSettingPageDark",
+)
+_LEGACY_TITLE_TAB_BAR_KEYS = (
+    "TitleTabBar",
+    "TitleTabBarIsMovable",
+    "TitleTabBarIsScrollable",
+    "TitleTabBarIsShadow",
+    "TitleTabBarCloseButton",
+    "TitleTabBarMinWidth",
+    "TitleTabBarMaxWidth",
+)
+
+
+@dataclass(frozen=True)
+class ConfigMigrationStep:
+    """单步配置迁移规则。
+
+    扩展约定:
+    1. 这里的版本是“配置兼容版本”，不是应用发布版本。
+    2. 只有配置结构发生不兼容调整时，才提升 `_CURRENT_CONFIG_COMPAT_VERSION`。
+    3. 如果程序升级了，但配置结构完全兼容，就不要改配置版本号。
+    4. 只定义 `from_version -> to_version` 的单步迁移，不要跨多版本跳跃。
+    5. 新规则只做“补齐/搬运/规范化”，不要覆盖用户已经存在的新结构值。
+    6. 新增结构变更时，先追加一个迁移函数，再把它注册到 `_CONFIG_MIGRATION_STEPS`。
+
+    例子:
+    - 程序从 v2.3 升到 v3.0，但配置结构没变:
+      `_CURRENT_CONFIG_COMPAT_VERSION` 仍然可以保持为 `v2.0`
+    - 只有配置结构真的从 v2 系切到 v3 系时，才新增 `v2.0 -> v3.0` 迁移
+    """
+
+    from_version: str
+    to_version: str
+    description: str
+    apply: Callable[[dict[str, object]], list[str]]
+
+
+def _deep_copy_json(data: Any) -> Any:
+    """复制 JSON 兼容结构，避免迁移时原地修改读取结果。"""
+    return json.loads(json.dumps(data, ensure_ascii=False))
+
+
+def _next_transaction_path(path: Path, marker: str) -> Path:
+    """生成配置迁移阶段使用的临时路径。"""
+    return path.with_name(f"{path.name}.{marker}.{uuid.uuid4().hex}")
+
+
+def _ensure_object(value: object) -> dict[str, object]:
+    """确保配置节点为对象，异常结构时安全重建为空对象。"""
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _set_nested_value(payload: dict[str, object], path: tuple[str, ...], value: object) -> bool:
+    """仅在目标键缺失时设置值，返回是否实际写入。"""
+    current = payload
+    for segment in path[:-1]:
+        child = current.get(segment)
+        if not isinstance(child, dict):
+            child = {}
+            current[segment] = child
+        current = child
+
+    leaf = path[-1]
+    if leaf in current:
+        return False
+
+    current[leaf] = value
+    return True
+
+
+def _pop_nested_value(payload: dict[str, object], path: tuple[str, ...]) -> object | None:
+    """弹出嵌套键。"""
+    current: dict[str, object] = payload
+    for segment in path[:-1]:
+        child = current.get(segment)
+        if not isinstance(child, dict):
+            return None
+        current = child
+    return current.pop(path[-1], None)
+
+
+def _remove_nested_key(payload: dict[str, object], path: tuple[str, ...]) -> bool:
+    """删除嵌套键并清理空对象。"""
+    parents: list[tuple[dict[str, object], str]] = []
+    current: dict[str, object] = payload
+    for segment in path[:-1]:
+        child = current.get(segment)
+        if not isinstance(child, dict):
+            return False
+        parents.append((current, segment))
+        current = child
+
+    if path[-1] not in current:
+        return False
+
+    del current[path[-1]]
+    while parents and not current:
+        parent, segment = parents.pop()
+        del parent[segment]
+        current = parent
+    return True
+
+
+def _move_nested_value(payload: dict[str, object], source: tuple[str, ...], target: tuple[str, ...]) -> bool:
+    """在目标键缺失时搬运旧值。"""
+    value = _pop_nested_value(payload, source)
+    if value is None:
+        return False
+    if not _set_nested_value(payload, target, value):
+        _set_nested_value(payload, source, value)
+        return False
+    return True
+
+
+def _cleanup_empty_sections(payload: dict[str, object]) -> None:
+    """清理迁移后残留的空分组。"""
+    empty_keys = [key for key, value in payload.items() if isinstance(value, dict) and not value]
+    for key in empty_keys:
+        del payload[key]
+
+
+def _migrate_app_v154_to_v160(payload: dict[str, object]) -> list[str]:
+    """v1.5.4 -> v1.6.0: 清理旧背景项并规范 CloseBtnAction 分组。"""
+    rules_applied: list[str] = []
+    if _move_nested_value(payload, ("Personalized", "CloseBtnAction"), ("General", "CloseBtnAction")):
+        rules_applied.append("Personalized.CloseBtnAction -> General.CloseBtnAction")
+
+    for key in _LEGACY_BACKGROUND_KEYS:
+        if _remove_nested_key(payload, ("Personalize", key)):
+            rules_applied.append(f"Personalize.{key} removed")
+
+    if _remove_nested_key(payload, ("HideTips", "HideUsingGoBtnTips")):
+        rules_applied.append("HideTips.HideUsingGoBtnTips removed")
+
+    _cleanup_empty_sections(payload)
+    return rules_applied
+
+
+def _migrate_app_v160_to_v170(payload: dict[str, object]) -> list[str]:
+    """v1.6.0 -> v1.7.0: 处理 MainWindow 键名调整。"""
+    rules_applied: list[str] = []
+    if _move_nested_value(payload, ("Info", "main_window"), ("Info", "MainWindow")):
+        rules_applied.append("Info.main_window -> Info.MainWindow")
+    return rules_applied
+
+
+def _migrate_app_v170_to_v1728(payload: dict[str, object]) -> list[str]:
+    """v1.7.0 -> v1.7.28: 补齐 EULA 并清理 TitleTabBar 历史键。"""
+    rules_applied: list[str] = []
+    if _set_nested_value(payload, ("Info", "EulaAccepted"), False):
+        rules_applied.append("Info.EulaAccepted default")
+
+    for key in _LEGACY_TITLE_TAB_BAR_KEYS:
+        if _remove_nested_key(payload, ("Personalize", key)):
+            rules_applied.append(f"Personalize.{key} removed")
+
+    _cleanup_empty_sections(payload)
+    return rules_applied
+
+
+def _migrate_app_v1728_to_v20(payload: dict[str, object]) -> list[str]:
+    """v1.7.28 -> v2.0: 同步 QFluentWidgets 和 Home 字段。"""
+    rules_applied: list[str] = []
+    personalize = _ensure_object(payload.get("Personalize"))
+    if "Personalize" in payload:
+        payload["Personalize"] = personalize
+
+    theme_mode = personalize.get("ThemeMode")
+    if theme_mode is not None and _set_nested_value(payload, ("QFluentWidgets", "ThemeMode"), theme_mode):
+        rules_applied.append("Personalize.ThemeMode -> QFluentWidgets.ThemeMode")
+
+    theme_color = personalize.get("ThemeColor")
+    if theme_color is not None and _set_nested_value(payload, ("QFluentWidgets", "ThemeColor"), theme_color):
+        rules_applied.append("Personalize.ThemeColor -> QFluentWidgets.ThemeColor")
+
+    if _set_nested_value(payload, ("Home", "IgnoredNoticeKeys"), "[]"):
+        rules_applied.append("Home.IgnoredNoticeKeys default")
+    if _set_nested_value(payload, ("Home", "SnoozedNoticeItems"), "{}"):
+        rules_applied.append("Home.SnoozedNoticeItems default")
+
+    return rules_applied
+
+
+_CONFIG_MIGRATION_STEPS: tuple[ConfigMigrationStep, ...] = (
+    ConfigMigrationStep(
+        from_version="v1.5.4",
+        to_version="v1.6.0",
+        description="清理旧背景项并规范 CloseBtnAction 分组",
+        apply=_migrate_app_v154_to_v160,
+    ),
+    ConfigMigrationStep(
+        from_version="v1.6.0",
+        to_version="v1.7.0",
+        description="处理 MainWindow 键名调整",
+        apply=_migrate_app_v160_to_v170,
+    ),
+    ConfigMigrationStep(
+        from_version="v1.7.0",
+        to_version="v1.7.28",
+        description="补齐 EulaAccepted 并清理 TitleTabBar 历史键",
+        apply=_migrate_app_v170_to_v1728,
+    ),
+    ConfigMigrationStep(
+        from_version="v1.7.28",
+        to_version="v2.0",
+        description="同步 QFluentWidgets 和 Home 字段",
+        apply=_migrate_app_v1728_to_v20,
+    ),
+)
+
+
+def _read_config_version(payload: dict[str, object]) -> str:
+    """读取配置兼容版本。
+
+    规则:
+    - 若 `Info.ConfigVersion` 存在且非空，优先使用。
+    - 若缺失该字段，则统一视为 `v1.7.28` 及以下的旧配置。
+    - `ConfigSchemaVersion` 是历史实验字段，如果用户本地残留了它，
+      当前阶段统一按“已迁移到当前兼容版本”处理，后续可在正式迁移规则中清理。
+    """
+    info = _ensure_object(payload.get("Info"))
+    config_version = info.get("ConfigVersion")
+    if isinstance(config_version, str) and config_version.strip():
+        return config_version.strip()
+
+    if "ConfigSchemaVersion" in info:
+        return _CURRENT_CONFIG_COMPAT_VERSION
+
+    personalize = _ensure_object(payload.get("Personalize"))
+    if any(key in personalize for key in _LEGACY_BACKGROUND_KEYS):
+        return "v1.5.4"
+    if "HideUsingGoBtnTips" in _ensure_object(payload.get("HideTips")):
+        return "v1.5.4"
+
+    if "main_window" in info:
+        return "v1.6.0"
+
+    if any(key in personalize for key in _LEGACY_TITLE_TAB_BAR_KEYS) or "EulaAccepted" not in info:
+        return "v1.7.0"
+
+    return _LEGACY_CONFIG_VERSION
+
+
+def _has_explicit_config_version(payload: dict[str, object]) -> bool:
+    """判断配置文件是否已显式写入 ConfigVersion。"""
+    info = _ensure_object(payload.get("Info"))
+    value = info.get("ConfigVersion")
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _write_config_version(payload: dict[str, object], version: str) -> bool:
+    """写入配置兼容版本，返回是否发生变化。"""
+    info = _ensure_object(payload.get("Info"))
+    payload["Info"] = info
+    if info.get("ConfigVersion") == version:
+        return False
+    info["ConfigVersion"] = version
+    return True
+
+
+def _migrate_config_payload(payload: object) -> tuple[dict[str, object], str, list[str]]:
+    """将旧版应用配置按兼容版本逐步迁移到当前结构。
+
+    注意:
+    - 这里的“版本”是配置兼容版本，不是应用发布版本。
+    - 若程序版本提升但配置结构不变，可继续保持同一个配置兼容版本。
+    - 迁移按 `vN -> vN+1` 顺序执行，避免直接从很老的结构跳到最新结构。
+    - 每一步都应保持幂等，重复执行不会覆盖用户的最新配置。
+    - 当前只保留迁移扩展口；具体规则等后续配置结构再次调整时再补。
+    """
+    if not isinstance(payload, dict):
+        return {}, _LEGACY_CONFIG_VERSION, []
+
+    migrated = _deep_copy_json(payload)
+    current_version = _read_config_version(migrated)
+    rules_applied: list[str] = []
+
+    visited_versions: set[str] = set()
+    while current_version != _CURRENT_CONFIG_COMPAT_VERSION and current_version not in visited_versions:
+        visited_versions.add(current_version)
+        step = next((item for item in _CONFIG_MIGRATION_STEPS if item.from_version == current_version), None)
+        if step is None:
+            break
+
+        step_rules = step.apply(migrated)
+        if step_rules:
+            rules_applied.extend(
+                f"{step.from_version}->{step.to_version}: {rule}" for rule in step_rules
+            )
+        else:
+            rules_applied.append(f"{step.from_version}->{step.to_version}: no-op")
+        current_version = step.to_version
+
+    return migrated, current_version, rules_applied
+
+
+def _persist_migrated_config(path: Path, payload: dict[str, object]) -> Path | None:
+    """以原子替换方式写回迁移后的配置，并保留一份备份。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = _next_transaction_path(path, _CONFIG_MIGRATION_TMP_MARKER)
+    backup_path = path.with_name(f"{path.name}{_CONFIG_MIGRATION_BACKUP_SUFFIX}")
+    backup_created = False
+
+    try:
+        with open(temp_path, "w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=4)
+
+        if path.exists() and not backup_path.exists():
+            os.replace(path, backup_path)
+            backup_created = True
+
+        os.replace(temp_path, path)
+        return backup_path if backup_created else None
+    except Exception:
+        with contextlib.suppress(FileNotFoundError):
+            temp_path.unlink()
+        if backup_created and backup_path.exists() and not path.exists():
+            with contextlib.suppress(OSError):
+                os.replace(backup_path, path)
+        raise
 
 
 class LanguageSerializer(ConfigSerializer):
@@ -85,6 +434,7 @@ class Config(QConfig):
 
     # 信息项
     napcat_desktop_version = ConfigItem(group="Info", name="NCDVersion", default="")
+    config_version = ConfigItem(group="Info", name="ConfigVersion", default=_CURRENT_CONFIG_COMPAT_VERSION)
     start_time = ConfigItem(group="Info", name="StartTime", default="")
     system_type = ConfigItem(group="Info", name="SystemType", default="")
     platform_type = ConfigItem(group="Info", name="PlatformType", default="")
@@ -208,6 +558,36 @@ class Config(QConfig):
         except (FileNotFoundError, json.JSONDecodeError) as e:
             logger.error(f"配置文件加载失败: {e.__class__.__name__}: {str(e)}, 使用默认配置")
             cfg = {}
+        else:
+            has_explicit_config_version = _has_explicit_config_version(cfg)
+            cfg, config_version, migration_rules = _migrate_config_payload(cfg)
+            version_written = _write_config_version(cfg, config_version)
+            logger.trace(
+                f"检测到配置兼容版本: path={self._cfg.file}, config_version={config_version}",
+                log_source=LogSource.CORE,
+            )
+            if migration_rules or (version_written and not has_explicit_config_version):
+                try:
+                    backup_path = _persist_migrated_config(Path(self._cfg.file), cfg)
+                except Exception as migration_error:
+                    logger.error(
+                        (
+                            "应用配置迁移写回失败，将继续使用内存中的迁移结果: "
+                            f"path={self._cfg.file}, target_config_version={_CURRENT_CONFIG_COMPAT_VERSION}, "
+                            f"rules={migration_rules}, error={type(migration_error).__name__}: {migration_error}"
+                        ),
+                        log_source=LogSource.CORE,
+                    )
+                else:
+                    logger.info(
+                        (
+                            "应用配置迁移/版本标记完成: "
+                            f"path={self._cfg.file}, target_config_version={_CURRENT_CONFIG_COMPAT_VERSION}, "
+                            f"rules={migration_rules}, "
+                            f"backup={backup_path if backup_path else 'existing-or-skipped'}"
+                        ),
+                        log_source=LogSource.CORE,
+                    )
 
         # 获取配置项
         items = {
