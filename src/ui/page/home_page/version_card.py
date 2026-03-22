@@ -4,12 +4,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPen, QShowEvent
 from PySide6.QtWidgets import QBoxLayout, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CaptionLabel, SimpleCardWidget, isDarkTheme
 from qfluentwidgets.common.icon import drawIcon
 
-from src.core.home import HomeVersionService
+from src.core.home import HomeVersionService, home_version_refresh_bus
 from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
 
 
@@ -81,8 +81,10 @@ class VersionCardsPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._version_service = HomeVersionService()
+        self._version_refresh_bus = home_version_refresh_bus
         self._create_cards()
         self._set_layout()
+        self._version_refresh_bus.refresh_requested.connect(self.refresh_versions)
 
     def _create_cards(self) -> None:
         self.napcat_card = VersionShowcaseCard(self._create_napcat_data(), self)
@@ -102,6 +104,10 @@ class VersionCardsPanel(QWidget):
         direction = QBoxLayout.Direction.TopToBottom if self.width() < 420 else QBoxLayout.Direction.LeftToRight
         if self.box_layout.direction() != direction:
             self.box_layout.setDirection(direction)
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        self.refresh_versions()
 
     def refresh_versions(self) -> None:
         summary = self._version_service.get_summary()

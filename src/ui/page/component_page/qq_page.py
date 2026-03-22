@@ -10,6 +10,7 @@ from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
+from src.core.home import home_version_refresh_bus
 from src.core.versioning import LocalVersionTask, VersionSnapshot
 from src.core.installation.installers import QQInstall
 from src.core.logging import LogSource, logger
@@ -239,6 +240,7 @@ class QQPage(PageBase):
         success_bar(self.tr("安装成功 !"))
         self.local_version = LocalVersionTask().get_qq_version()
         self.refresh_page_view()
+        home_version_refresh_bus.request_refresh()
 
     @Slot()
     def handle_operation_failed(self) -> None:

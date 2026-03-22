@@ -6,6 +6,7 @@ from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
 from src.core.network.urls import Urls
+from src.core.home import home_version_refresh_bus
 from src.core.versioning import LocalVersionTask, VersionSnapshot
 from src.core.installation.installers import NapCatInstall
 from src.core.logging import LogSource, logger
@@ -158,6 +159,7 @@ class NapCatPage(PageBase):
         if parent is not None and hasattr(parent, "refresh_versions"):
             logger.info("NapCat 安装完成后触发一次版本校准刷新", log_source=LogSource.UI)
             parent.refresh_versions()
+        home_version_refresh_bus.request_refresh()
 
     @Slot()
     def handle_operation_failed(self) -> None:
