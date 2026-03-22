@@ -24,6 +24,7 @@ from src.ui.components.input_card.generic_card import (
     SwitchConfigCard,
     VersionInfoCard,
 )
+from src.ui.page.setup_page.widget import LegacyImportDialog
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -92,6 +93,16 @@ class General(ScrollArea):
             parent=self.version_group,
         )
 
+        # 创建组 - 配置导入
+        self.import_group = SettingCardGroup(title=self.tr("配置导入"), parent=self.view)
+        self.legacy_import_card = ShowDialogCardBase(
+            dialog=LegacyImportDialog,
+            icon=FI.FOLDER_ADD,
+            title=self.tr("导入旧版配置"),
+            content=self.tr("拖拽或选择旧版配置目录，自动识别并迁移"),
+            parent=self.import_group,
+        )
+
     def _set_layout(self) -> None:
         """控件布局"""
         # 将卡片添加到组
@@ -99,11 +110,13 @@ class General(ScrollArea):
         self.event_group.addSettingCard(self.bot_offline_email_card)
         self.event_group.addSettingCard(self.bot_offline_webhook_card)
         self.version_group.addSettingCard(self.ncd_version_card)
+        self.import_group.addSettingCard(self.legacy_import_card)
 
         # 添加到布局
         self.expand_layout.addWidget(self.action_group)
         self.expand_layout.addWidget(self.event_group)
         self.expand_layout.addWidget(self.version_group)
+        self.expand_layout.addWidget(self.import_group)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
 

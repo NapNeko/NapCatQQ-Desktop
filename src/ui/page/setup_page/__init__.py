@@ -41,7 +41,7 @@ class SetupWidget(QWidget):
 
         self.v_box_layout.addWidget(self.top_card)
         self.v_box_layout.addWidget(self.view)
-        self.v_box_layout.setContentsMargins(24, 20, 24, 20)
+        self.v_box_layout.setContentsMargins(24, 20, 24, 16)
         self.setLayout(self.v_box_layout)
 
         PageStyleSheet.SETUP.apply(self)
