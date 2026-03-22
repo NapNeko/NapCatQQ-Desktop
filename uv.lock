@@ -2763,16 +2763,16 @@ wheels = [
 
 [[package]]
 name = "pyside6-fluent-widgets-qiao"
-version = "2.0.14"
+version = "2.0.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "darkdetect" },
     { name = "pyside6" },
     { name = "pysidesix-frameless-window" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cf/4d/05bef2f50d696bb3c04e55527410388213c4d00d7eaca43e3d6b2c704369/pyside6_fluent_widgets_qiao-2.0.14.tar.gz", hash = "sha256:a49207ceae4962f66c9d70cb2d3ff72e8529b011db543ee209d1b4096b52901b", size = 1606255, upload-time = "2026-03-22T16:38:32.982Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/85/b7a39c7fb8ecedb9bba72a14e264c8ee13acc48fe08e23473563b212fc44/pyside6_fluent_widgets_qiao-2.0.15.tar.gz", hash = "sha256:7bc4d8c51ff36606a1c51c3b4431deb819eecd2924fd8c7b1307a1b7fbe128ba", size = 1463066, upload-time = "2026-03-22T17:43:15.551Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/a5/b0f1f0eac82fd9c30f49a1b4c01931e23c8c66148b00d2480af93938cc74/pyside6_fluent_widgets_qiao-2.0.14-py3-none-any.whl", hash = "sha256:df2446f9d28f3ef04cc2358e4f931520df7aa7f1ace2e4b5dbe83fe57d3f729e", size = 1769565, upload-time = "2026-03-22T16:38:30.752Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/4b/ad85dc5d2ba20272c508a5f8da3b42a82f0315f71a55ec3c34dde66479ed/pyside6_fluent_widgets_qiao-2.0.15-py3-none-any.whl", hash = "sha256:6ab2abdad25b8535974607bb9d215dab9dcfa490ef93cbc2aa866c392f5fef0a", size = 1562549, upload-time = "2026-03-22T17:43:13.67Z" },
 ]
 
 [[package]]
