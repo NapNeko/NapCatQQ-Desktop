@@ -10,8 +10,8 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 # 项目内模块导入
 from src.core.platform.runtime_args import is_developer_mode_enabled
 from src.ui.common.style_sheet import PageStyleSheet
-from src.ui.components.code_editor import CodeExibit
 from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.ui.page.setup_page.desktop_log import DesktopLog
 from src.ui.page.setup_page.developer import Developer
 from src.ui.page.setup_page.general import General
 from src.ui.page.setup_page.personalization import Personalization
@@ -27,7 +27,6 @@ class SetupWidget(QWidget):
 
     top_card: SetupTopCard
     v_box_layout: QVBoxLayout
-    infoWidget: CodeExibit
 
     view: TransparentStackedWidget
     personalization: Personalization
@@ -63,11 +62,13 @@ class SetupWidget(QWidget):
         self.view = TransparentStackedWidget(self)
         self.general = General(self)
         self.personalization = Personalization(self)
+        self.desktop_log = DesktopLog(self)
         self.developer = Developer(self) if is_developer_mode_enabled() else None
 
         # 设置控件
         self.view.addWidget(self.personalization)
         self.view.addWidget(self.general)
+        self.view.addWidget(self.desktop_log)
         if self.developer is not None:
             self.view.addWidget(self.developer)
 
@@ -80,6 +81,11 @@ class SetupWidget(QWidget):
             routeKey=self.general.objectName(),
             text=self.tr("常规"),
             onClick=lambda: self.view.setCurrentWidget(self.general),
+        )
+        self.top_card.pivot.addItem(
+            routeKey=self.desktop_log.objectName(),
+            text=self.tr("日志"),
+            onClick=lambda: self.view.setCurrentWidget(self.desktop_log),
         )
         if self.developer is not None:
             self.top_card.pivot.addItem(
