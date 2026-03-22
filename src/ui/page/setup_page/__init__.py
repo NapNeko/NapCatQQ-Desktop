@@ -111,5 +111,3 @@ class SetupPageCreator(AbstractCreator, ABC):
 
 
 add_creator(SetupPageCreator)
-
-__all__ = ["SetupPageCreator", "SetupWidget"]
