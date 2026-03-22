@@ -100,15 +100,31 @@ class BotLogPage(QWidget):
         """设置当前 log_view 内容"""
         self.log_view.setPlainText(data)
 
+    def _is_log_view_pinned_to_bottom(self) -> bool:
+        """判断日志视图当前是否贴底。"""
+        scroll_bar = self.log_view.verticalScrollBar()
+        return scroll_bar.maximum() - scroll_bar.value() <= 2
+
     def slot_insert_log_view(self, data: str) -> None:
         """插入内容到 log_view"""
-        cursor = self.log_view.textCursor()
+        follow_tail = self._is_log_view_pinned_to_bottom()
+        current_cursor = self.log_view.textCursor()
+        scroll_bar = self.log_view.verticalScrollBar()
+        previous_scroll_value = scroll_bar.value()
+
+        cursor = QTextCursor(self.log_view.document())
         cursor.movePosition(QTextCursor.MoveOperation.End)
         fmt = QTextCharFormat()
         fmt.setForeground(QColor("#e6eaf2") if isDarkTheme() else QColor("#1f2937"))
         cursor.setCharFormat(fmt)
         cursor.insertText(data)
-        self.log_view.setTextCursor(cursor)
+
+        if follow_tail:
+            self.log_view.setTextCursor(cursor)
+            scroll_bar.setValue(scroll_bar.maximum())
+        else:
+            self.log_view.setTextCursor(current_cursor)
+            scroll_bar.setValue(previous_scroll_value)
 
     def slot_font_enlarge_button(self) -> None:
         """放大字体槽函数"""

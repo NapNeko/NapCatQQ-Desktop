@@ -21,6 +21,7 @@ from PySide6.QtGui import (
     QTextCursor,
     QTextFormat,
     QSyntaxHighlighter,
+    QWheelEvent,
 )
 from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTextEdit, QWidget
 
@@ -31,9 +32,10 @@ from src.ui.common.font import FontManager
 from src.ui.common.style_sheet import WidgetStyleSheet
 from src.ui.components.code_editor.controls import LineNumberArea
 from src.ui.components.code_editor.highlight import JsonHighlighter
+from src.ui.components.code_editor.smooth_scroll import SmoothTextScrollMixin
 
 
-class CodeEditorBase(PlainTextEdit):
+class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
     """代码编辑器基类
 
     功能：
@@ -51,6 +53,7 @@ class CodeEditorBase(PlainTextEdit):
             parent (QWidget | None): 父控件，可为 None。
         """
         super().__init__(parent)
+        self._disable_builtin_smooth_scroll_delegate()
 
         # 变量
         self.font_size: int = 12
@@ -69,10 +72,29 @@ class CodeEditorBase(PlainTextEdit):
         # 应用样式
         WidgetStyleSheet.CODE_EDITOR.apply(self)
         self._base_style_sheet = self.styleSheet()
+        self._init_smooth_scroll()
         self._apply_theme_palette()
 
         # 连接信号
         self._connect_signals()
+
+    def _disable_builtin_smooth_scroll_delegate(self) -> None:
+        """卸载 qfluentwidgets 自带的滚动代理，避免事件过滤异常。"""
+        if (delegate := getattr(self, "scrollDelegate", None)) is None:
+            return
+
+        self.removeEventFilter(delegate)
+        self.viewport().removeEventFilter(delegate)
+
+        for bar_name in ("vScrollBar", "hScrollBar"):
+            if (scroll_bar := getattr(delegate, bar_name, None)) is not None:
+                scroll_bar.hide()
+                scroll_bar.deleteLater()
+
+        delegate.deleteLater()
+        self.scrollDelegate = None
+        QPlainTextEdit.setVerticalScrollBarPolicy(self, Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        QPlainTextEdit.setHorizontalScrollBarPolicy(self, Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
     def _connect_signals(self) -> None:
         """连接所有信号与槽函数"""
@@ -274,6 +296,11 @@ class CodeEditorBase(PlainTextEdit):
         self._apply_document_text_color(self._theme_text_color(self._is_dark_theme(None)))
         QApplication.processEvents()
         self.verticalScrollBar().setValue(scroll_pos)
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        if self._handle_smooth_wheel_event(event):
+            return
+        super().wheelEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """处理鼠标点击多行选择

@@ -1,46 +1,31 @@
 # -*- coding: utf-8 -*-
 # 第三方库导入
-from qfluentwidgets import SmoothScrollDelegate, isDarkTheme, setFont
-from qfluentwidgets.common.smooth_scroll import SmoothMode
+from qfluentwidgets import isDarkTheme, setFont
 from qfluentwidgets.components.widgets.menu import TextEditMenu
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QColor, QDesktopServices, QMouseEvent, QPalette, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QDesktopServices, QMouseEvent, QPalette, QTextCharFormat, QTextCursor, QWheelEvent
 from PySide6.QtWidgets import QTextBrowser, QWidget
 
 # 项目内模块导入
 from src.core.config import cfg
 from src.ui.common.style_sheet import WidgetStyleSheet
 from src.ui.components.code_editor.editor import CodeEditor
-
-
-def _set_linear_smooth_scroll(delegate: SmoothScrollDelegate) -> None:
-    """统一日志类文本控件的平滑滚动模式。"""
-    delegate.verticalSmoothScroll.setSmoothMode(SmoothMode.LINEAR)
-    delegate.horizonSmoothScroll.setSmoothMode(SmoothMode.LINEAR)
-
-
-def _tune_soft_text_scroll(delegate: SmoothScrollDelegate) -> None:
-    """为纯文本日志提供更柔和的滚动手感。"""
-    delegate.verticalSmoothScroll.setSmoothMode(SmoothMode.COSINE)
+from src.ui.components.code_editor.smooth_scroll import SmoothTextScrollMixin
 
 
 class CodeExibit(CodeEditor):
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
-        _set_linear_smooth_scroll(self.scrollDelegate)
-        _tune_soft_text_scroll(self.scrollDelegate)
         self.setReadOnly(True)
 
 
-class UpdateLogExhibit(QTextBrowser):
+class UpdateLogExhibit(SmoothTextScrollMixin, QTextBrowser):
     """更新日志页面使用的透明文本框"""
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self._raw_html = ""
-        self.scroll_delegate = SmoothScrollDelegate(self)
-        _set_linear_smooth_scroll(self.scroll_delegate)
         self.setReadOnly(True)
         self.setOpenExternalLinks(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -51,6 +36,7 @@ class UpdateLogExhibit(QTextBrowser):
 
         WidgetStyleSheet.UPDATE_LOG_CARD.apply(self)
         self._base_style_sheet = self.styleSheet()
+        self._init_smooth_scroll()
         self._apply_theme_palette()
         cfg.themeChanged.connect(self._queue_theme_palette_update)
 
@@ -58,6 +44,11 @@ class UpdateLogExhibit(QTextBrowser):
         """为更新日志富文本注入主题相关的默认前景色。"""
         self._raw_html = text
         self._render_html()
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        if self._handle_smooth_wheel_event(event):
+            return
+        super().wheelEvent(event)
 
     def _apply_theme_palette(self, *args) -> None:
         dark = self._is_dark_theme(args[0] if args else None)
