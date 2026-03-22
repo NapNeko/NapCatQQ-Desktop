@@ -18,7 +18,12 @@ from src.core.logging.crash_bundle import (
 from src.core.logging.log_data import Log, LogGroup, LogPosition
 from src.core.logging.log_enum import LogLevel, LogSource, LogType
 from src.core.logging.log_utils import capture_call_location
-from src.core.logging.notification_center import CrashBundleNotification, crash_bundle_notification_center
+from src.core.logging.notification_center import (
+    CrashBundleNotification,
+    LogOutputNotification,
+    crash_bundle_notification_center,
+    log_output_notification_center,
+)
 from src.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
 from src.core.platform.runtime_args import is_developer_mode_enabled
 
@@ -136,6 +141,7 @@ class Logger:
 
         # 构造 Log
         log = Log(level, message, time, log_type, log_source, log_position)
+        serialized_log = log.to_string()
 
         if log_group:
             # 如果提供了 log_group，将日志添加到它的内部
@@ -146,9 +152,15 @@ class Logger:
 
         # 遍历日志列表, 追加到日志文件中
         with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(log.to_string() + "\n")
+            f.write(serialized_log + "\n")
         # 判断是否需要清理缓冲区
         self.clear_buffer()
+        log_output_notification_center.publish(
+            LogOutputNotification(
+                log_path=self.log_path,
+                line_text=serialized_log + "\n",
+            )
+        )
         # 打印 log
         print(log)
 

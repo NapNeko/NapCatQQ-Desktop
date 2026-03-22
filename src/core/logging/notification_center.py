@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""崩溃诊断包通知中心。"""
+"""日志域通知中心。"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +14,14 @@ class CrashBundleNotification:
     bundle_path: Path
     trigger: str
     output_source: str
+
+
+@dataclass(frozen=True, slots=True)
+class LogOutputNotification:
+    """日志输出后的通知载荷。"""
+
+    log_path: Path
+    line_text: str
 
 
 class CrashBundleNotificationCenter(QObject):
@@ -37,4 +45,15 @@ class CrashBundleNotificationCenter(QObject):
         return pending_notifications
 
 
+class LogOutputNotificationCenter(QObject):
+    """向 UI 广播日志追加事件。"""
+
+    log_output_created = Signal(object)
+
+    def publish(self, notification: LogOutputNotification) -> None:
+        """发布一条日志输出通知。"""
+        self.log_output_created.emit(notification)
+
+
 crash_bundle_notification_center = CrashBundleNotificationCenter()
+log_output_notification_center = LogOutputNotificationCenter()
