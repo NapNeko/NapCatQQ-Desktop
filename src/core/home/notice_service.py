@@ -42,6 +42,8 @@ class HomeNoticeService(QObject):
         super().__init__(parent)
         self._runtime_notices: list[_RuntimeNotice] = []
         self._debug_sections: list[NoticeTimelineSectionData] = []
+        self._debug_mode_active = False
+        self._debug_runtime_keys: set[str] = set()
         self._dismissed_session_keys: set[str] = set()
         self._local_versions = self._load_local_versions()
         self._remote_versions: VersionSnapshot | None = None
@@ -107,8 +109,12 @@ class HomeNoticeService(QObject):
         self._emit_sections()
 
     def _on_core_notification(self, level: str, message: str) -> None:
+        key = f"runtime:{level}:{message}"
+        if self._debug_mode_active and message.startswith("开发者模式:"):
+            self._debug_runtime_keys.add(key)
+
         self._append_runtime_notice(
-            key=f"runtime:{level}:{message}",
+            key=key,
             text=message,
             status=self._status_from_level(level),
             dismiss_mode=NoticeDismissMode.SESSION,
@@ -117,8 +123,12 @@ class HomeNoticeService(QObject):
 
     def _on_qr_code_available(self, qq_id: str, qr_code: str) -> None:
         del qr_code
+        key = f"qr:{qq_id}"
+        if self._debug_mode_active:
+            self._debug_runtime_keys.add(key)
+
         self._append_runtime_notice(
-            key=f"qr:{qq_id}",
+            key=key,
             text=f"QQ {qq_id} 需要扫码登录。",
             status=NoticeTimelineStatus.WARNING,
             dismiss_mode=NoticeDismissMode.SNOOZE,
@@ -150,8 +160,8 @@ class HomeNoticeService(QObject):
         self._runtime_notices = [notice for notice in self._runtime_notices if notice.key != key]
 
     def _emit_sections(self) -> None:
-        if self._debug_sections:
-            self.sectionsChanged.emit(self._debug_sections)
+        if self._debug_mode_active:
+            self.sectionsChanged.emit(self._debug_sections or self._build_debug_empty_sections())
             return
 
         self.sectionsChanged.emit(self._build_sections())
@@ -207,6 +217,7 @@ class HomeNoticeService(QObject):
         ]
 
     def _show_debug_sections(self) -> None:
+        self._debug_mode_active = True
         self._debug_sections = [
             NoticeTimelineSectionData(
                 title="提醒",
@@ -249,8 +260,8 @@ class HomeNoticeService(QObject):
                 status=NoticeTimelineStatus.SUCCESS,
                 items=[
                     NoticeTimelineItemData(
-                        key="debug:announcement:napcat:v9.9.99",
-                        text="NapCat v9.9.99: 修复多开登录与通知展示问题。",
+                        key="debug:announcement:maintain",
+                        text="开发者模式: 这是一个公告样例，用于预览非版本类公告提醒。",
                         status=NoticeTimelineStatus.SUCCESS,
                         dismiss_mode=NoticeDismissMode.PERSISTENT,
                     ),
@@ -260,9 +271,35 @@ class HomeNoticeService(QObject):
         self._emit_sections()
 
     def _clear_debug_sections(self) -> None:
-        self._runtime_notices = [notice for notice in self._runtime_notices if not notice.text.startswith("开发者模式:")]
+        self._runtime_notices = [notice for notice in self._runtime_notices if notice.key not in self._debug_runtime_keys]
+        self._dismissed_session_keys.difference_update(self._debug_runtime_keys)
+
+        snoozed_items = self._load_snoozed_items()
+        if any(key in snoozed_items for key in self._debug_runtime_keys):
+            for key in self._debug_runtime_keys:
+                snoozed_items.pop(key, None)
+            self._save_snoozed_items(snoozed_items)
+
+        self._debug_runtime_keys.clear()
+        self._debug_mode_active = False
         self._debug_sections = []
         self._emit_sections()
+
+    @staticmethod
+    def _build_debug_empty_sections() -> list[NoticeTimelineSectionData]:
+        return [
+            NoticeTimelineSectionData(
+                title="提醒",
+                status=NoticeTimelineStatus.SUCCESS,
+                items=[
+                    NoticeTimelineItemData(
+                        key="debug:empty",
+                        text="开发者模式测试提醒已全部关闭。",
+                        status=NoticeTimelineStatus.SUCCESS,
+                    )
+                ],
+            )
+        ]
 
     def _dismiss_debug_item(self, key: str) -> bool:
         if not self._debug_sections:
@@ -376,8 +413,17 @@ class HomeNoticeService(QObject):
         if remote is None:
             return []
 
+        # 只在当前整体处于“无版本动作可做”时展示当前版本公告，避免被其它组件的更新掩盖后误导用户。
+        if self._has_pending_version_actions(remote) or self._has_suppressed_version_actions():
+            return []
+
         items: list[NoticeTimelineItemData] = []
-        if remote.napcat_version and remote.napcat_update_log and remote.napcat_version != self._local_versions.napcat_version:
+        # 版本变更本身已经会在“更新”分组里提示，不再重复生成一条“公告”。
+        if (
+            remote.napcat_version
+            and remote.napcat_update_log
+            and remote.napcat_version == self._local_versions.napcat_version
+        ):
             items.append(
                 NoticeTimelineItemData(
                     key=f"announcement:napcat:{remote.napcat_version}",
@@ -387,7 +433,11 @@ class HomeNoticeService(QObject):
                 )
             )
 
-        if remote.ncd_version and remote.ncd_update_log and remote.ncd_version != self._local_versions.ncd_version:
+        if (
+            remote.ncd_version
+            and remote.ncd_update_log
+            and remote.ncd_version == self._local_versions.ncd_version
+        ):
             items.append(
                 NoticeTimelineItemData(
                     key=f"announcement:desktop:{remote.ncd_version}",
@@ -398,6 +448,18 @@ class HomeNoticeService(QObject):
             )
 
         return items
+
+    def _has_pending_version_actions(self, remote: VersionSnapshot) -> bool:
+        pairs = (
+            (self._local_versions.napcat_version, remote.napcat_version),
+            (self._local_versions.qq_version, remote.qq_version),
+            (self._local_versions.ncd_version, remote.ncd_version),
+        )
+        return any(remote_version is not None and local_version != remote_version for local_version, remote_version in pairs)
+
+    def _has_suppressed_version_actions(self) -> bool:
+        prefixes = ("update:napcat:", "update:qq:", "update:desktop:")
+        return any(key.startswith(prefixes) for key in self._load_ignored_keys())
 
     def _filter_items(self, items: list[NoticeTimelineItemData]) -> list[NoticeTimelineItemData]:
         ignored_keys = self._load_ignored_keys()
