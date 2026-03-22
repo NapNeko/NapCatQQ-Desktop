@@ -274,6 +274,38 @@ def test_emit_crash_bundle_only_once_per_process(tmp_path: Path, monkeypatch: py
     assert len(list(desktop_dir.glob("NapCatQQ-Desktop-crash-*.zip"))) == 1
 
 
+def test_emit_crash_bundle_publishes_user_notification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """生成崩溃诊断包时应向 UI 广播提醒事件。"""
+    repo_root = tmp_path / "repo"
+    data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
+    desktop_dir = tmp_path / "desktop"
+    desktop_dir.mkdir(parents=True, exist_ok=True)
+    create_runtime_config_fixture(data_root)
+    test_logger = create_test_logger(repo_root / "log" / "app.log")
+    published_notifications: list[object] = []
+
+    monkeypatch.setattr(log_func_module, "resolve_app_base_path", lambda: repo_root)
+    monkeypatch.setattr(log_func_module, "resolve_desktop_output_dir", lambda base_path=None: (desktop_dir, "desktop"))
+    monkeypatch.setattr(crash_bundle_module, "resolve_app_data_path", lambda: data_root)
+    monkeypatch.setattr(
+        log_func_module.crash_bundle_notification_center,
+        "publish",
+        lambda notification: published_notifications.append(notification),
+    )
+
+    try:
+        raise RuntimeError("crash for notification")
+    except RuntimeError as exc:
+        bundle_path = test_logger.emit_crash_bundle("test-notice", exc, type(exc), exc.__traceback__)
+
+    assert bundle_path is not None
+    assert len(published_notifications) == 1
+    notification = published_notifications[0]
+    assert notification.bundle_path == bundle_path
+    assert notification.trigger == "test-notice"
+    assert notification.output_source == "desktop"
+
+
 def test_emit_test_crash_bundle_does_not_consume_real_crash_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """手动测试导出不应占用正式崩溃诊断包的一次性名额。"""
     repo_root = tmp_path / "repo"
@@ -298,4 +330,31 @@ def test_emit_test_crash_bundle_does_not_consume_real_crash_export(tmp_path: Pat
     assert real_bundle_path is not None
     assert test_bundle_path != real_bundle_path
     assert len(list(desktop_dir.glob("NapCatQQ-Desktop-crash-*.zip"))) == 2
+
+
+def test_emit_test_crash_bundle_does_not_publish_user_notification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """手动测试导出不应触发异常崩溃提示。"""
+    repo_root = tmp_path / "repo"
+    data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
+    desktop_dir = tmp_path / "desktop"
+    desktop_dir.mkdir(parents=True, exist_ok=True)
+    create_runtime_config_fixture(data_root)
+    test_logger = create_test_logger(repo_root / "log" / "app.log")
+    published_notifications: list[object] = []
+
+    monkeypatch.setattr(log_func_module, "resolve_app_base_path", lambda: repo_root)
+    monkeypatch.setattr(log_func_module, "resolve_desktop_output_dir", lambda base_path=None: (desktop_dir, "desktop"))
+    monkeypatch.setattr(crash_bundle_module, "resolve_app_data_path", lambda: data_root)
+    monkeypatch.setattr(
+        log_func_module.crash_bundle_notification_center,
+        "publish",
+        lambda notification: published_notifications.append(notification),
+    )
+
+    bundle_path = test_logger.emit_test_crash_bundle()
+
+    assert bundle_path is not None
+    assert published_notifications == []
 
