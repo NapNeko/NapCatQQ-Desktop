@@ -1,4 +1,4 @@
-#UpdatePage,
+#ComponentPage,
 #UpdateView {
     background: transparent;
     border-color: transparent;
@@ -12,6 +12,6 @@
     border: none;
 }
 
-#UpdatePage {
+#ComponentPage {
     border-top-left-radius: 16px;
 }

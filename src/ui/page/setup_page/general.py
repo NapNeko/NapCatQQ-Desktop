@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QGridLayout, QWidget
 from src.core.config import cfg
 from src.core.network.email import EncryptionType, create_test_email_task
 from src.core.network.webhook import create_test_webhook_task
-from src.core.utils.logger import LogSource, logger
+from src.core.logging import LogSource, logger
 from src.ui.components.info_bar import error_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
@@ -325,3 +325,4 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         task.success_signal.connect(lambda msg: success_bar(self.tr(msg)))
         task.error_signal.connect(lambda msg: error_bar(msg))
         QThreadPool.globalInstance().start(task)
+

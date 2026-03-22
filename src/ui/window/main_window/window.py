@@ -12,11 +12,11 @@ from PySide6.QtWidgets import QApplication
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
-from src.core.utils.logger import LogSource, logger
-from src.core.utils.run_napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.core.logging import LogSource, logger
+from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
-from src.ui.page import BotPage, HomeWidget, SetupWidget, UnitWidget
+from src.ui.page import BotPage, ComponentPage, HomeWidget, SetupWidget
 from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
 from src.ui.window.main_window.title_bar import CustomTitleBar
@@ -99,7 +99,7 @@ class MainWindow(MSFluentWindow):
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
-            interface=it(UnitWidget)._setup_ui(self),
+            interface=it(ComponentPage).initialize(self),
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             text=self.tr("组件"),
             position=NavigationItemPosition.BOTTOM,
@@ -201,3 +201,4 @@ class MainWindowCreator(AbstractCreator, ABC):
 
 
 add_creator(MainWindowCreator)
+

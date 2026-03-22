@@ -15,8 +15,8 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 # 项目内模块导入
 from src.core.config.config_model import AdvancedConfig, BotConfig, Config, ConnectConfig
 from src.core.config.operate_config import update_config
-from src.core.utils.logger import LogSource, logger
-from src.core.utils.logger.crash_bundle import mask_qqid
+from src.core.logging import LogSource, logger
+from src.core.logging.crash_bundle import mask_qqid
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.bot_page.utils.enum import ConnectType
@@ -243,3 +243,4 @@ class ConfigPage(QWidget):
         config = _connect_config_box.get_config()
         self.connect_widget.add_card(config)
         logger.info(f"连接配置已添加: type={type(config).__name__}, name={config.name}", log_source=LogSource.UI)
+

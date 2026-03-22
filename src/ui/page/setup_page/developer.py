@@ -4,7 +4,6 @@ import os
 import subprocess
 import threading
 from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 # 第三方库导入
@@ -16,11 +15,13 @@ from qfluentwidgets import FluentIcon as FI
 
 # 项目内模块导入
 from src.core.home import home_notice_debug_center
-from src.core.utils.desktop_update import MsiUpdateStrategy, inject_target_pid
-from src.core.utils.install_type import InstallType, detect_install_type
-from src.core.utils.logger import LogSource, logger
-from src.core.utils.path_func import PathFunc
-from src.core.utils.run_napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.core.desktop_update import MsiUpdateStrategy, inject_target_pid
+from src.core.installation.install_type import detect_install_type
+from src.core.logging import LogSource, logger
+from src.core.runtime.paths import PathFunc
+from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.core.desktop_update.templates import load_msi_update_script, load_portable_update_script
+from src.ui.page.component_page.presentation import build_install_type_details, build_update_confirmation_message
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import SwitchConfigCard
 from src.ui.components.message_box import AskBox
@@ -258,42 +259,13 @@ class Developer(ScrollArea):
         install_type = detect_install_type()
         has_bot = it(ManagerNapCatQQProcess).has_running_bot()
 
-        # 根据安装类型构建不同的提示内容
-        if install_type == InstallType.MSI:
-            install_type_text = self.tr("MSI 安装版")
-            process_text = self.tr(
-                "更新流程:\n"
-                "1. 下载新版本 MSI 安装包\n"
-                "2. 关闭当前程序并等待完全退出\n"
-                "3. 以管理员权限运行 MSI 升级安装\n"
-                "4. 安装完成后自动启动新版本\n\n"
-                '注意: 安装过程中会弹出 UAC 权限请求，请点击"是"继续。'
-            )
-        else:
-            install_type_text = self.tr("便携版")
-            process_text = self.tr(
-                "更新流程:\n"
-                "1. 下载新版本压缩包\n"
-                "2. 关闭当前程序并等待完全退出\n"
-                "3. 解压并替换程序文件\n"
-                "4. 自动启动新版本\n\n"
-                "注意: 更新过程可能需要管理员权限。"
-            )
-
-        # 构建完整提示文本
-        warning_text = ""
-        if has_bot:
-            warning_text = self.tr("⚠️ 所有运行中的 Bot 将被强制关闭\n\n")
-
-        version_text = self.tr("版本: {} → {}\n\n").format(self.tr("当前版本"), self.tr("新版本"))
-
-        full_message = (
-            f"[开发者模式测试]\n\n"
-            f"{version_text}"
-            f"安装类型: {install_type_text}\n\n"
-            f"{warning_text}"
-            f"{process_text}\n\n"
-            f"是否继续更新？"
+        full_message = build_update_confirmation_message(
+            translate=self.tr,
+            install_type=install_type,
+            local_version=None,
+            remote_version=None,
+            has_running_bot=has_bot,
+            test_mode=True,
         )
 
         # 运行时动态导入避免循环导入
@@ -322,22 +294,7 @@ class Developer(ScrollArea):
         install_type = detect_install_type()
         base_path = it(PathFunc).base_path
 
-        # 构建详细信息
-        details = [
-            f"检测到的安装类型: {install_type.value}",
-            f"应用路径: {base_path}",
-        ]
-
-        # 检查具体特征
-        if install_type == InstallType.MSI:
-            details.append(self.tr("注册表项: HKLM\\Software\\NapCatQQ-Desktop\\InstallDir"))
-            details.append(self.tr("更新将使用 MSI 安装包 (.msi)"))
-        elif install_type == InstallType.PORTABLE:
-            has_internal = (base_path / "_internal").exists()
-            details.append(f"_internal 目录存在: {has_internal}")
-            details.append(self.tr("更新将使用便携版压缩包 (.zip)"))
-        else:
-            details.append(self.tr("无法确定安装类型，将使用便携版更新"))
+        details = build_install_type_details(self.tr, install_type, base_path)
 
         info_text = "\n".join(details)
         logger.info(f"安装类型检测结果:\n{info_text}", log_source=LogSource.UI)
@@ -362,11 +319,8 @@ class Developer(ScrollArea):
         logger.info("开发者模式生成 MSI 更新脚本", log_source=LogSource.UI)
 
         try:
-            strategy = MsiUpdateStrategy()
-            script_content = strategy.load_update_script()
-
-            # 注入测试 PID
-            script_content = strategy._inject_target_pid(script_content, os.getpid())
+            MsiUpdateStrategy()  # 保留实例化验证
+            script_content = inject_target_pid(load_msi_update_script(), os.getpid())
 
             # 保存到临时目录
             tmp_path = it(PathFunc).tmp_path / "update_msi_test.bat"
@@ -392,12 +346,7 @@ class Developer(ScrollArea):
         logger.info("开发者模式生成便携版更新脚本", log_source=LogSource.UI)
 
         try:
-            # 直接读取文件系统上的脚本（避免 Qt 资源类型检查问题）
-            script_path = Path(__file__).resolve().parents[3] / "resource" / "script" / "update.bat"
-            script_content = script_path.read_text(encoding="utf-8")
-
-            # 注入测试 PID
-            script_content = inject_target_pid(script_content, os.getpid())
+            script_content = inject_target_pid(load_portable_update_script(), os.getpid())
 
             # 保存到临时目录
             tmp_path = it(PathFunc).tmp_path / "update_test.bat"
@@ -413,3 +362,4 @@ class Developer(ScrollArea):
         except Exception as e:
             logger.error(f"生成便携版脚本失败: {e}", log_source=LogSource.UI)
             error_bar(self.tr(f"生成脚本失败: {e}"), parent=self)
+

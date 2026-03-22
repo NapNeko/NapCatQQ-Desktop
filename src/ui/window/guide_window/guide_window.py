@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QVBoxLayout
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.core.utils.logger import LogSource, logger
+from src.core.logging import LogSource, logger
 from src.ui.common.icon import StaticIcon
 from src.ui.window.guide_window.ask_page import AskPage
 from src.ui.window.guide_window.eula_page import EulaPage
@@ -198,3 +198,4 @@ class GuideWindowCreator(AbstractCreator, ABC):
 
 
 add_creator(GuideWindowCreator)
+

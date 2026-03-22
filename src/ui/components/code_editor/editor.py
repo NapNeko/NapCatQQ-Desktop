@@ -26,7 +26,7 @@ from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTextEdit, QWidget
 
 # 项目内模块导入
 from src.core.config import cfg
-from src.core.utils.logger import logger
+from src.core.logging import logger
 from src.ui.common.font import FontManager
 from src.ui.common.style_sheet import WidgetStyleSheet
 from src.ui.components.code_editor.controls import LineNumberArea
@@ -787,3 +787,4 @@ class JsonEditor(CodeEditor):
                         if start + 1 <= line_number <= end:
                             painter.setPen(pen)
                             painter.drawLine(x, int(top), x, int(bottom))
+

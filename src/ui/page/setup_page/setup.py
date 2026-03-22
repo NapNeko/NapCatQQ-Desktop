@@ -8,7 +8,7 @@ from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.utils.runtime_args import is_developer_mode_enabled
+from src.core.platform.runtime_args import is_developer_mode_enabled
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.code_editor import CodeExibit
 from src.ui.components.stacked_widget import TransparentStackedWidget
@@ -117,3 +117,4 @@ class SetupPageCreator(AbstractCreator, ABC):
 
 
 add_creator(SetupPageCreator)
+

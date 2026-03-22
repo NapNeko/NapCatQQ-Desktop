@@ -13,7 +13,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QSystemTrayIcon, QWidget
 
 # 项目内模块导入
-from src.core.utils.run_napcat import ManagerNapCatQQProcess
+from src.core.runtime.napcat import ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon
 
 if TYPE_CHECKING:
@@ -123,3 +123,4 @@ class NCDCard(QWidget):
         self.avatar.move(2, 6)
         self.nameLabel.move(64, 13)
         self.licenseLabel.move(64, 32)
+

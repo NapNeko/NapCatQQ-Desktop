@@ -64,9 +64,9 @@ from src.core.config.config_model import (
     WebsocketServersConfig,
 )
 from src.core.network.urls import Urls
-from src.core.utils.logger import LogSource, logger
-from src.core.utils.logger.crash_bundle import mask_qqid
-from src.core.utils.run_napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.core.logging import LogSource, logger
+from src.core.logging.crash_bundle import mask_qqid
+from src.core.runtime.napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon, NapCatDesktopIcon
 from src.ui.components.info_bar import error_bar
 from src.ui.components.message_box import AskBox
@@ -1096,3 +1096,4 @@ class WebsocketClientConfigCard(ConfigCardBase):
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
+

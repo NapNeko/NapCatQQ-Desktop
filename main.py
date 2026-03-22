@@ -7,9 +7,9 @@ from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.core.utils.app_path import resolve_app_base_path
-from src.core.utils.logger import LogSource, logger
-from src.core.utils.runtime_args import apply_runtime_launch_options, parse_runtime_launch_options
+from src.core.platform.app_paths import resolve_app_base_path
+from src.core.logging import LogSource, logger
+from src.core.platform.runtime_args import apply_runtime_launch_options, parse_runtime_launch_options
 
 
 class ExceptionLoggingApplication(QApplication):
@@ -77,8 +77,8 @@ def run_application() -> int:
 
     # 项目内模块导入
     from src.core.config import cfg
-    from src.core.utils.mutex import SingleInstanceApplication
-    from src.core.utils.path_func import PathFunc
+    from src.core.platform.single_instance import SingleInstanceApplication
+    from src.core.runtime.paths import PathFunc
     from src.resource import resource
     from src.ui.common.font import FontManager
 
@@ -155,3 +155,4 @@ def main_entry() -> int:
 
 if __name__ == "__main__":
     sys.exit(main_entry())
+

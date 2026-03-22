@@ -21,15 +21,15 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 # 项目内模块导入
 from src.core.network.downloader import GithubDownloader, QQDownloader
 from src.core.network.urls import Urls
-from src.core.utils.get_version import GetRemoteVersionRunnable, VersionData
-from src.core.utils.install_func import NapCatInstall, QQInstall
-from src.core.utils.logger import LogSource, logger
-from src.core.utils.logger.crash_bundle import summarize_path, summarize_url
-from src.core.utils.path_func import PathFunc
+from src.core.versioning import RemoteVersionTask, VersionSnapshot
+from src.core.installation.installers import NapCatInstall, QQInstall
+from src.core.logging import LogSource, logger
+from src.core.logging.crash_bundle import summarize_path, summarize_url
+from src.core.runtime.paths import PathFunc
 from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
 from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.components.message_box import FolderBox
-from src.ui.page.unit_page.status import ButtonStatus, ProgressRingStatus, StatusLabel
+from src.ui.page.component_page.status import ButtonStatus, ProgressRingStatus, StatusLabel
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -206,14 +206,14 @@ class InstallQQPage(InstallPageBase):
         self.file_path = None
         self.downloader: QQDownloader | None = None
         self.installer: QQInstall | None = None
-        self.remote_version_task: GetRemoteVersionRunnable | None = None
+        self.remote_version_task: RemoteVersionTask | None = None
 
         # 设置属性
         self.set_icon(NapCatDesktopIcon.QQ.path())
         self.set_title(self.tr("安装 QQ 客户端"))
 
         # 信号连接
-        self.install_button.clicked.connect(self.on_download)
+        self.install_button.clicked.connect(self.handle_download_requested)
         self._fetch_download_url()
 
     def get_download_url(self) -> QUrl:
@@ -235,12 +235,12 @@ class InstallQQPage(InstallPageBase):
 
         self.set_status_text(self.tr("正在获取 QQ 下载链接..."))
         self.on_switch_progress_ring(ProgressRingStatus.INDETERMINATE)
-        self.remote_version_task = GetRemoteVersionRunnable()
-        self.remote_version_task.version_signal.connect(self.on_remote_version_loaded)
+        self.remote_version_task = RemoteVersionTask()
+        self.remote_version_task.version_signal.connect(self.apply_remote_version_data)
         QThreadPool.globalInstance().start(self.remote_version_task)
 
     @Slot(object)
-    def on_remote_version_loaded(self, version_data: VersionData) -> None:
+    def apply_remote_version_data(self, version_data: VersionSnapshot) -> None:
         """接收远程版本信息，并提取 QQ 下载链接。"""
         self.remote_version_task = None
         download_url = version_data.qq_download_url
@@ -261,8 +261,8 @@ class InstallQQPage(InstallPageBase):
         )
 
     @Slot()
-    def on_download(self) -> None:
-        """下载"""
+    def handle_download_requested(self) -> None:
+        """下载。"""
         if self.url is None:
             logger.warning("引导安装 QQ: 下载链接未就绪，重新获取", log_source=LogSource.UI)
             self._fetch_download_url()
@@ -275,7 +275,7 @@ class InstallQQPage(InstallPageBase):
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         self.downloader = QQDownloader(self.url)
         self.downloader.download_progress_signal.connect(self.set_progress_ring_value)
-        self.downloader.download_finish_signal.connect(self.on_install)
+        self.downloader.download_finish_signal.connect(self.handle_install_requested)
         self.downloader.status_label_signal.connect(self.set_status_text)
         self.downloader.error_finsh_signal.connect(self.on_error_finish)
         self.downloader.button_toggle_signal.connect(self.on_switch_button)
@@ -283,8 +283,8 @@ class InstallQQPage(InstallPageBase):
         QThreadPool.globalInstance().start(self.downloader)
 
     @Slot()
-    def on_install(self) -> None:
-        """安装"""
+    def handle_install_requested(self) -> None:
+        """安装。"""
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
@@ -309,13 +309,13 @@ class InstallQQPage(InstallPageBase):
         self.installer.error_finish_signal.connect(self.on_error_finish)
         self.installer.button_toggle_signal.connect(self.on_switch_button)
         self.installer.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
-        self.installer.install_finish_signal.connect(self.on_install_finsh)
+        self.installer.install_finish_signal.connect(self.handle_install_finished)
 
         QThreadPool.globalInstance().start(self.installer)
 
     @Slot()
-    def on_install_finsh(self) -> None:
-        """安装完成"""
+    def handle_install_finished(self) -> None:
+        """安装完成。"""
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
@@ -342,18 +342,18 @@ class InstallNapCatQQPage(InstallPageBase):
         self.set_title(self.tr("安装 NapCatQQ"))
 
         # 信号连接
-        self.install_button.clicked.connect(self.on_download)
+        self.install_button.clicked.connect(self.handle_download_requested)
 
     @Slot()
-    def on_download(self) -> None:
-        """下载"""
+    def handle_download_requested(self) -> None:
+        """下载。"""
         logger.info(
             f"引导安装 NapCat: 开始下载 package={self.url.fileName()}, source={summarize_url(self.url.toString())}",
             log_source=LogSource.UI,
         )
         self.downloader = GithubDownloader(self.url)
         self.downloader.download_progress_signal.connect(self.set_progress_ring_value)
-        self.downloader.download_finish_signal.connect(self.on_install)
+        self.downloader.download_finish_signal.connect(self.handle_install_requested)
         self.downloader.status_label_signal.connect(self.set_status_text)
         self.downloader.error_finsh_signal.connect(self.on_error_finish)
         self.downloader.button_toggle_signal.connect(self.on_switch_button)
@@ -362,21 +362,21 @@ class InstallNapCatQQPage(InstallPageBase):
         QThreadPool.globalInstance().start(self.downloader)
 
     @Slot()
-    def on_install(self) -> None:
-        """安装"""
+    def handle_install_requested(self) -> None:
+        """安装。"""
         logger.info("引导安装 NapCat: 下载完成，开始安装", log_source=LogSource.UI)
         self.installer = NapCatInstall()
         self.installer.status_label_signal.connect(self.set_status_text)
         self.installer.error_finish_signal.connect(self.on_error_finish)
         self.installer.button_toggle_signal.connect(self.on_switch_button)
         self.installer.progress_ring_toggle_signal.connect(self.on_switch_progress_ring)
-        self.installer.install_finish_signal.connect(self.install_finsh)
+        self.installer.install_finish_signal.connect(self.handle_install_finished)
 
         QThreadPool.globalInstance().start(self.installer)
 
     @Slot()
-    def install_finsh(self) -> None:
-        """安装完成"""
+    def handle_install_finished(self) -> None:
+        """安装完成。"""
         # 项目内模块导入
         from src.ui.window.guide_window.guide_window import GuideWindow
 
@@ -386,3 +386,4 @@ class InstallNapCatQQPage(InstallPageBase):
         )
         success_bar(self.tr("安装完成"), parent=it(GuideWindow))
         it(GuideWindow).on_next_page()
+

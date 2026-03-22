@@ -10,8 +10,8 @@ from PySide6.QtWidgets import QWidget
 # 项目内模块导入
 from src.core.config.config_model import Config
 from src.core.config.operate_config import delete_config, read_config
-from src.core.utils.logger.crash_bundle import mask_qqid
-from src.core.utils.logger import LogSource, logger
+from src.core.logging.crash_bundle import mask_qqid
+from src.core.logging import LogSource, logger
 from src.ui.components.info_bar import error_bar
 
 from ..widget.card import BotCard
@@ -128,9 +128,9 @@ class BotListPage(ScrollArea):
     def slot_add_button(self) -> None:
         """添加按钮槽函数"""
         # 判断有没有安装 NapCatQQ
-        from src.core.utils.get_version import GetLocalVersionRunnable
+        from src.core.versioning import LocalVersionTask
 
-        if GetLocalVersionRunnable().get_napcat_version():
+        if LocalVersionTask().get_napcat_version():
             # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
@@ -145,3 +145,4 @@ class BotListPage(ScrollArea):
 
             logger.warning("新增 Bot 配置被拒绝: 未检测到 NapCatQQ 安装", log_source=LogSource.UI)
             warning_bar("请先安装 NapCatQQ 后再添加 Bot 配置！")
+
