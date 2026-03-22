@@ -24,13 +24,14 @@ from qfluentwidgets import (
     isDarkTheme,
     setFont,
 )
-from PySide6.QtCore import QSize, Qt, QTimer, QUrl
-from PySide6.QtGui import QColor, QDesktopServices, QFont, QImage, QLinearGradient, QPainter, QPaintEvent, QPixmap
+from PySide6.QtCore import QSize, Qt, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.ui.common.icon import StaticIcon
 from src.ui.components.code_editor import UpdateLogExhibit
+from src.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from ..utils import ButtonStatus, ProgressRingStatus, StatusLabel
 
@@ -82,132 +83,68 @@ class PageBase(ScrollArea):
         if self._local_version_loaded and self._remote_version_loaded:
             self.refresh_page_view()
 
-class UpdateLogSkeleton(QWidget):
+
+class UpdateLogSkeleton(SkeletonWidget):
     """更新日志加载骨架屏。"""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._phase = 0.0
-        self._timer = QTimer(self)
-        self._timer.setInterval(32)
-        self._timer.timeout.connect(self._advance_phase)
-
+        super().__init__(self._build_shapes, parent, panel_margin=4, panel_radius=18)
         self.setMinimumWidth(320)
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        if not self._timer.isActive():
-            self._timer.start()
-
-    def hideEvent(self, event) -> None:
-        self._timer.stop()
-        super().hideEvent(event)
-
-    def _advance_phase(self) -> None:
-        self._phase += 0.018
-        if self._phase > 1.0:
-            self._phase = 0.0
-        self.update()
 
     def _base_color(self) -> QColor:
-        return QColor(255, 255, 255, 20) if isDarkTheme() else QColor(15, 23, 42, 12)
+        return QColor(255, 255, 255, 22) if isDarkTheme() else QColor(15, 23, 42, 14)
 
     def _highlight_color(self) -> QColor:
-        return QColor(255, 255, 255, 56) if isDarkTheme() else QColor(255, 255, 255, 150)
+        return QColor(255, 255, 255, 52) if isDarkTheme() else QColor(255, 255, 255, 108)
 
-    def _panel_color(self) -> QColor:
-        return QColor(255, 255, 255, 0)
-
-    def _draw_line(self, painter: QPainter, x: int, y: int, width: int, height: int) -> None:
-        radius = height / 2
-        gradient = self._create_shimmer_gradient(x, y, width, band_scale=0.54)
-
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(gradient)
-        painter.drawRoundedRect(x, y, width, height, radius, radius)
-
-    def _draw_block(self, painter: QPainter, x: int, y: int, width: int, height: int, radius: int = 14) -> None:
-        gradient = self._create_shimmer_gradient(x, y, width, band_scale=0.62)
-
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(gradient)
-        painter.drawRoundedRect(x, y, width, height, radius, radius)
-
-    def _create_shimmer_gradient(self, x: int, y: int, width: int, *, band_scale: float) -> QLinearGradient:
-        """创建横向移动的 shimmer 渐变，高光带会在可视区外完成重置。"""
-        band_width = max(96.0, width * band_scale)
-        travel = width + band_width * 2
-        start_x = x - band_width + travel * self._phase
-        gradient = QLinearGradient(start_x, y, start_x + band_width, y)
-
-        gradient.setColorAt(0.0, self._base_color())
-        gradient.setColorAt(0.32, self._base_color())
-        gradient.setColorAt(0.5, self._highlight_color())
-        gradient.setColorAt(0.68, self._base_color())
-        gradient.setColorAt(1.0, self._base_color())
-        return gradient
-
-    def paintEvent(self, event: QPaintEvent) -> None:
-        super().paintEvent(event)
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        margin = 14
-        panel_rect = self.rect().adjusted(margin, margin, -margin, -margin)
+    def _build_shapes(self, widget: QWidget) -> list[SkeletonShape]:
+        panel_rect = widget.rect().adjusted(8, 10, -8, -10)
         if panel_rect.width() <= 0 or panel_rect.height() <= 0:
-            painter.end()
-            return
+            return []
+        x = panel_rect.x() + 14
+        y = panel_rect.y() + 12
+        width = panel_rect.width() - 28
+        shapes: list[SkeletonShape] = []
 
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(self._panel_color())
-        painter.drawRoundedRect(panel_rect, 18, 18)
-
-        x = panel_rect.x() + 20
-        y = panel_rect.y() + 18
-        width = panel_rect.width() - 40
-
-        self._draw_line(painter, x, y, int(width * 0.46), 18)
+        shapes.append(SkeletonShape(x, y, int(width * 0.46), 18, 1.08))
         y += 30
 
         chip_gap = 10
         chip_widths = [82, 108, 74]
         for chip_width in chip_widths:
-            self._draw_line(painter, x, y, chip_width, 12)
+            shapes.append(SkeletonShape(x, y, chip_width, 12, 1.0))
             x += chip_width + chip_gap
 
-        x = panel_rect.x() + 20
+        x = panel_rect.x() + 14
         y += 28
 
-        self._draw_block(painter, x, y, int(width * 0.92), 72, radius=18)
+        shapes.append(SkeletonShape(x, y, int(width * 0.94), 72, 1.22, 18))
         y += 92
 
         section_widths = [0.64, 0.88, 0.77, 0.52]
-        self._draw_line(painter, x, y, int(width * 0.34), 16)
+        shapes.append(SkeletonShape(x, y, int(width * 0.34), 16, 1.04))
         y += 28
         for ratio in section_widths:
-            self._draw_line(painter, x, y, int(width * ratio), 12)
+            shapes.append(SkeletonShape(x, y, int(width * ratio), 12, 1.02))
             y += 20
 
         y += 16
-        self._draw_line(painter, x, y, int(width * 0.28), 16)
+        shapes.append(SkeletonShape(x, y, int(width * 0.28), 16, 1.04))
         y += 28
 
         left_col_width = int(width * 0.44)
         right_col_width = int(width * 0.38)
         card_height = 84
-        self._draw_block(painter, x, y, left_col_width, card_height)
-        self._draw_block(painter, x + left_col_width + 16, y, right_col_width, card_height)
+        shapes.append(SkeletonShape(x, y, left_col_width, card_height, 1.14, 14))
+        shapes.append(SkeletonShape(x + left_col_width + 16, y, right_col_width, card_height, 1.1, 14))
 
         y += card_height + 24
         footer_widths = [0.90, 0.73, 0.82]
         for ratio in footer_widths:
-            self._draw_line(painter, x, y, int(width * ratio), 12)
+            shapes.append(SkeletonShape(x, y, int(width * ratio), 12, 1.0))
             y += 18
 
-        painter.end()
+        return shapes
 
 
 class DisplayCard(SimpleCardWidget):
