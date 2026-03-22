@@ -283,13 +283,22 @@ def bind_qfluent_qconfig(config: Config) -> None:
                 with contextlib.suppress(RuntimeError, TypeError):
                     getattr(config, signal_name).disconnect(old_relay)
 
-    qconfig._napcat_theme_changed_relay = lambda theme: qconfig.themeChanged.emit(theme)
-    qconfig._napcat_theme_color_changed_relay = lambda color: qconfig.themeColorChanged.emit(color)
-    qconfig._napcat_app_restart_relay = lambda: qconfig.appRestartSig.emit()
+    def relay_theme_changed(theme: Theme) -> None:
+        qconfig.themeChanged.emit(theme)
 
-    config.themeChanged.connect(qconfig._napcat_theme_changed_relay)
-    config.themeColorChanged.connect(qconfig._napcat_theme_color_changed_relay)
-    config.appRestartSig.connect(qconfig._napcat_app_restart_relay)
+    def relay_theme_color_changed(color: object) -> None:
+        qconfig.themeColorChanged.emit(color)
+
+    def relay_app_restart() -> None:
+        qconfig.appRestartSig.emit()
+
+    setattr(qconfig, "_napcat_theme_changed_relay", relay_theme_changed)
+    setattr(qconfig, "_napcat_theme_color_changed_relay", relay_theme_color_changed)
+    setattr(qconfig, "_napcat_app_restart_relay", relay_app_restart)
+
+    config.themeChanged.connect(relay_theme_changed)
+    config.themeColorChanged.connect(relay_theme_color_changed)
+    config.appRestartSig.connect(relay_app_restart)
 
 
 cfg = Config()
