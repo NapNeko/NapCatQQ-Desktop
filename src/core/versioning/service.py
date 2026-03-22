@@ -4,6 +4,7 @@
 import json
 import re
 from collections.abc import Callable
+from pathlib import Path
 
 from creart import it
 import httpx
@@ -51,6 +52,8 @@ class VersionTaskBase(QObject, QRunnable):
 
 class RemoteVersionTask(VersionTaskBase):
     """远端版本信息拉取任务。"""
+
+    _manifest_fallback_logged = False
 
     def execute(self) -> VersionSnapshot:
         napcat_info = self._get_version(Urls.NAPCATQQ_REPO_API.value, "NapCat", self._parse_github_response)
@@ -110,18 +113,40 @@ class RemoteVersionTask(VersionTaskBase):
             return {"version": None, "download_url": None}
 
     def _get_desktop_update_manifest(self) -> DesktopUpdateManifest | None:
-        response = self.request(Urls.NCD_UPDATE_MANIFEST.value, "NapCatQQ Desktop 更新策略", use_mirrors=True)
-        if response is None:
-            return None
+        response = self.request(
+            Urls.NCD_UPDATE_MANIFEST.value,
+            "NapCatQQ Desktop 更新策略",
+            use_mirrors=True,
+            emit_error=False,
+        )
+        if response is not None:
+            try:
+                return DesktopUpdateManifest.model_validate(response)
+            except ValidationError as exc:
+                return self._fallback_desktop_update_manifest(f"解析远端更新策略失败: {exc}")
 
+        return self._fallback_desktop_update_manifest("获取远端更新策略失败")
+
+    def _fallback_desktop_update_manifest(self, reason: str) -> DesktopUpdateManifest | None:
+        manifest_path = Path(__file__).resolve().parents[3] / "update" / "desktop_update_manifest.json"
         try:
-            return DesktopUpdateManifest.model_validate(response)
-        except ValidationError as exc:
-            logger.error(f"解析 NapCatQQ Desktop 更新策略失败: {exc}")
-            self.error_signal.emit(f"解析 NapCatQQ Desktop 更新策略失败: {exc}")
+            manifest = DesktopUpdateManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, ValidationError, ValueError) as exc:
+            logger.warning(f"NapCatQQ Desktop 更新策略不可用: {reason}; 本地清单加载失败: {exc}")
             return None
 
-    def request(self, url: QUrl, name: str, use_mirrors: bool = False) -> dict[str, str] | None:
+        if not self.__class__._manifest_fallback_logged:
+            logger.warning(f"NapCatQQ Desktop 更新策略远端不可用，已回退到本地内置清单: {reason}")
+            self.__class__._manifest_fallback_logged = True
+        return manifest
+
+    def request(
+        self,
+        url: QUrl,
+        name: str,
+        use_mirrors: bool = False,
+        emit_error: bool = True,
+    ) -> dict[str, str] | None:
         request_urls = [url.url()]
         if use_mirrors:
             request_urls.extend(f"{mirror.toString().rstrip('/')}/{url.url()}" for mirror in Urls.MIRROR_SITE.value)
@@ -136,8 +161,9 @@ class RemoteVersionTask(VersionTaskBase):
             except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
                 last_error = exc
 
-        logger.error(f"获取 {name} 版本信息失败: {last_error}")
-        self.error_signal.emit(f"获取 {name} 版本信息失败: {last_error}")
+        if emit_error:
+            logger.error(f"获取 {name} 版本信息失败: {last_error}")
+            self.error_signal.emit(f"获取 {name} 版本信息失败: {last_error}")
         return None
 
 

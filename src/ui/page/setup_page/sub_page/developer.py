@@ -225,12 +225,13 @@ class Developer(ScrollArea):
         process_manager = it(ManagerNapCatQQProcess)
         login_state_manager = it(ManagerNapCatQQLoginState)
 
+        # 先切入 debug 上下文，再注入运行时测试信号，避免清理时混入真实提醒集合。
+        home_notice_debug_center.sampleRequested.emit()
         process_manager.notification_signal.emit("info", "开发者模式: 检测到 NapCat 可更新到 v9.9.99。")
         process_manager.notification_signal.emit("warning", "开发者模式: 测试 Bot 当前处于离线状态。")
         process_manager.notification_signal.emit("error", "开发者模式: 测试启动失败，请检查 QQ 安装路径。")
         login_state_manager.notification_signal.emit("success", "开发者模式: 已发送测试离线通知到配置的邮箱地址。")
         login_state_manager.qr_code_available_signal.emit(self._TEST_QQ_ID, "developer://home-notice-test")
-        home_notice_debug_center.sampleRequested.emit()
 
         success_bar(self.tr("已注入首页通知测试数据"), parent=self)
         info_bar(self.tr("可切换到主页检查提醒、更新和扫码通知展示"), parent=self)

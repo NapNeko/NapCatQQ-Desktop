@@ -12,6 +12,7 @@
 # 第三方库导入
 from qfluentwidgets import InfoBar
 from PySide6.QtCore import QObject, Qt
+from PySide6.QtWidgets import QWidget
 from typing import Any, cast
 
 # 项目内模块导入
@@ -21,6 +22,20 @@ from src.ui.components.managers import NCDInfoBarPosition
 def _position(position: NCDInfoBarPosition) -> Any:
     """将自定义 InfoBar 位置枚举转换为 qfluentwidgets 可接受的类型。"""
     return cast(object, position)
+
+
+def _resolve_parent(parent: QObject | None) -> QWidget:
+    """统一将消息条父级收敛到顶层窗口，避免子页面和主窗口各自堆叠。"""
+    if isinstance(parent, QWidget):
+        window = parent.window()
+        if isinstance(window, QWidget):
+            return window
+        return parent
+
+    from src.ui.window.main_window.window import MainWindow
+    from creart import it
+
+    return it(MainWindow)
 
 
 def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent: QObject | None = None) -> None:
@@ -37,16 +52,13 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent:
     """
     # 延迟导入以避免循环依赖
     # 项目内模块导入
-    from src.ui.window.main_window.window import MainWindow
-    from creart import it
-
     InfoBar.info(
         title=title,
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=_position(NCDInfoBarPosition.BOTTOM_RIGHT),
-        parent=it(MainWindow) if parent is None else parent,
+        parent=_resolve_parent(parent),
     )
 
 
@@ -63,16 +75,13 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5000, p
         parent: 父级组件, 如为None则使用主窗口作为父级
     """
     # 项目内模块导入
-    from src.ui.window.main_window.window import MainWindow
-    from creart import it
-
     InfoBar.success(
         title=title,
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=_position(NCDInfoBarPosition.BOTTOM_RIGHT),
-        parent=it(MainWindow) if parent is None else parent,
+        parent=_resolve_parent(parent),
     )
 
 
@@ -89,16 +98,13 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 1000
         parent: 父级组件, 如为None则使用主窗口作为父级
     """
     # 项目内模块导入
-    from src.ui.window.main_window.window import MainWindow
-    from creart import it
-
     InfoBar.warning(
         title=title,
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=_position(NCDInfoBarPosition.TOP_RIGHT),
-        parent=it(MainWindow) if parent is None else parent,
+        parent=_resolve_parent(parent),
     )
 
 
@@ -115,14 +121,11 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1, parent
         parent: 父级组件, 如为None则使用主窗口作为父级
     """
     # 项目内模块导入
-    from src.ui.window.main_window.window import MainWindow
-    from creart import it
-
     InfoBar.error(
         title=title,
         content=content,
         orient=Qt.Orientation.Vertical,
         duration=duration,
         position=_position(NCDInfoBarPosition.TOP_RIGHT),
-        parent=it(MainWindow) if parent is None else parent,
+        parent=_resolve_parent(parent),
     )
