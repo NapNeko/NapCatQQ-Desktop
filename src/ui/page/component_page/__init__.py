@@ -135,5 +135,3 @@ class ComponentPageCreator(AbstractCreator, ABC):
 
 
 add_creator(ComponentPageCreator)
-
-__all__ = ["ComponentPage", "ComponentPageCreator"]
