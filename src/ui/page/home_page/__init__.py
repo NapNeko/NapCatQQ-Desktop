@@ -98,5 +98,3 @@ class HomePageCreator(AbstractCreator, ABC):
 
 
 add_creator(HomePageCreator)
-
-__all__ = ["HomePageCreator", "HomeWidget"]
