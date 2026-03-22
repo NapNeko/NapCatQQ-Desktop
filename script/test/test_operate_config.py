@@ -11,6 +11,7 @@ import pytest
 import src.core.config.operate_config as operate_config
 from src.core.config.config_enum import TimeUnitEnum
 from src.core.config.config_model import (
+    BOT_CONFIG_COMPAT_VERSION,
     AdvancedConfig,
     AutoRestartScheduleConfig,
     BotConfig,
@@ -87,6 +88,16 @@ def payload(model) -> dict | list:
     return json.loads(model.model_dump_json())
 
 
+def expected_bot_root(configs: list[Config]) -> dict:
+    """构造当前 bot.json 根结构。"""
+    return {
+        "info": {
+            "configVersion": BOT_CONFIG_COMPAT_VERSION,
+        },
+        "bots": [payload(config) for config in configs],
+    }
+
+
 def expected_onebot_config(config: Config) -> dict:
     """构造预期的 onebot JSON。"""
     return payload(
@@ -114,6 +125,54 @@ def expected_napcat_config(config: Config) -> dict:
     )
 
 
+def make_v15_legacy_payload() -> list[dict]:
+    """构造 v1.4/v1.5 旧版 bot.json 结构。"""
+    return [
+        {
+            "bot": {
+                "name": "LegacyBot",
+                "QQID": "114514",
+                "messagePostFormat": "array",
+                "reportSelfMessage": True,
+                "musicSignUrl": "https://example.com/music/114514",
+                "heartInterval": "45000",
+                "token": "legacy-token",
+            },
+            "connect": {
+                "http": {
+                    "enable": True,
+                    "host": "127.0.0.1",
+                    "port": 3000,
+                    "secret": "",
+                    "enableHeart": False,
+                    "enablePost": True,
+                    "postUrls": ["https://example.com/post"],
+                },
+                "ws": {
+                    "enable": True,
+                    "host": "127.0.0.1",
+                    "port": 3001,
+                },
+                "reverseWs": {
+                    "enable": True,
+                    "urls": ["ws://example.com/ws"],
+                },
+            },
+            "advanced": {
+                "debug": True,
+                "localFile2url": True,
+                "fileLog": True,
+                "consoleLog": False,
+                "enableLocalFile2Url": "debug",
+                "consoleLogLevel": "info",
+                "autoStart": True,
+                "offline_notice": True,
+                "packetServer": "http://packet.example.com",
+            },
+        }
+    ]
+
+
 def test_read_config_returns_empty_when_file_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """缺少 bot.json 时不应创建新文件。"""
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
@@ -130,6 +189,88 @@ def test_read_config_keeps_invalid_file_untouched(tmp_path: Path, monkeypatch: p
 
     assert operate_config.read_config() == []
     assert fake_path_func.bot_config_path.read_text(encoding="utf-8") == "{invalid json"
+
+
+def test_read_config_keeps_invalid_root_object_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """非法对象根节点不应被静默迁移为空配置。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    invalid_payload = {
+        "info": {
+            "configVersion": BOT_CONFIG_COMPAT_VERSION,
+        },
+        "items": [],
+    }
+    write_json(fake_path_func.bot_config_path, invalid_payload)
+
+    assert operate_config.read_config() == []
+    assert read_json(fake_path_func.bot_config_path) == invalid_payload
+
+
+def test_read_config_migrates_legacy_root_list_to_versioned_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """legacy 纯列表根节点应迁移到带版本号的对象根结构。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    legacy_payload = [payload(make_config(114514, "LegacyRoot"))]
+    write_json(fake_path_func.bot_config_path, legacy_payload)
+
+    configs = operate_config.read_config()
+
+    assert len(configs) == 1
+    assert configs[0].bot.QQID == 114514
+    assert read_json(fake_path_func.bot_config_path) == expected_bot_root(configs)
+    assert read_json(fake_path_func.bot_config_path.with_name("bot.json.bak")) == legacy_payload
+
+
+def test_read_config_migrates_v15_network_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """v1.4/v1.5 的旧网络结构应迁移为当前 connect 列表结构。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    legacy_payload = make_v15_legacy_payload()
+    write_json(fake_path_func.bot_config_path, legacy_payload)
+
+    configs = operate_config.read_config()
+
+    assert len(configs) == 1
+    config = configs[0]
+
+    assert config.advanced.parseMultMsg is False
+    assert config.advanced.offlineNotice is True
+    assert config.advanced.enableLocalFile2Url is True
+    assert config.advanced.fileLogLevel == "debug"
+    assert len(config.connect.httpServers) == 1
+    assert len(config.connect.httpClients) == 1
+    assert len(config.connect.websocketServers) == 1
+    assert len(config.connect.websocketClients) == 1
+    assert config.connect.httpServers[0].host == "127.0.0.1"
+    assert config.connect.httpClients[0].url.unicode_string() == "https://example.com/post"
+    assert config.connect.websocketClients[0].url.unicode_string() == "ws://example.com/ws"
+    assert config.connect.websocketClients[0].enable is True
+
+    migrated_root = read_json(fake_path_func.bot_config_path)
+    assert migrated_root["info"]["configVersion"] == BOT_CONFIG_COMPAT_VERSION
+    assert "debug" not in migrated_root["bots"][0]["advanced"]
+    assert "localFile2url" not in migrated_root["bots"][0]["advanced"]
+    assert "offline_notice" not in migrated_root["bots"][0]["advanced"]
+    assert "http" not in migrated_root["bots"][0]["connect"]
+    assert "ws" not in migrated_root["bots"][0]["connect"]
+    assert "reverseWs" not in migrated_root["bots"][0]["connect"]
+    assert read_json(fake_path_func.bot_config_path.with_name("bot.json.bak")) == legacy_payload
+
+
+def test_read_config_preserves_legacy_reverse_ws_enable_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """旧版 reverseWs.enable 为 false 时，迁移后不应被强制打开。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    legacy_payload = make_v15_legacy_payload()
+    legacy_payload[0]["connect"]["reverseWs"]["enable"] = False
+    write_json(fake_path_func.bot_config_path, legacy_payload)
+
+    configs = operate_config.read_config()
+
+    assert len(configs) == 1
+    assert len(configs[0].connect.websocketClients) == 1
+    assert configs[0].connect.websocketClients[0].enable is False
 
 
 def test_read_config_normalizes_legacy_interval_schedule(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -185,7 +326,7 @@ def test_update_config_writes_all_files_atomically(tmp_path: Path, monkeypatch: 
     onebot_path = fake_path_func.napcat_config_path / "onebot11_114514.json"
     napcat_path = fake_path_func.napcat_config_path / "napcat_114514.json"
 
-    assert read_json(fake_path_func.bot_config_path) == [payload(config)]
+    assert read_json(fake_path_func.bot_config_path) == expected_bot_root([config])
     assert read_json(onebot_path) == expected_onebot_config(config)
     assert read_json(napcat_path) == expected_napcat_config(config)
 
@@ -219,7 +360,7 @@ def test_update_config_rolls_back_when_replace_fails(tmp_path: Path, monkeypatch
     onebot_path = fake_path_func.napcat_config_path / "onebot11_114514.json"
     napcat_path = fake_path_func.napcat_config_path / "napcat_114514.json"
 
-    original_bot_payload = [payload(old_config)]
+    original_bot_payload = expected_bot_root([old_config])
     original_onebot_payload = expected_onebot_config(old_config)
     original_napcat_payload = expected_napcat_config(old_config)
 
@@ -252,13 +393,13 @@ def test_delete_config_removes_saved_files(tmp_path: Path, monkeypatch: pytest.M
     onebot_path = fake_path_func.napcat_config_path / "onebot11_114514.json"
     napcat_path = fake_path_func.napcat_config_path / "napcat_114514.json"
 
-    write_json(fake_path_func.bot_config_path, [payload(target_config), payload(remain_config)])
+    write_json(fake_path_func.bot_config_path, expected_bot_root([target_config, remain_config]))
     write_json(onebot_path, expected_onebot_config(target_config))
     write_json(napcat_path, expected_napcat_config(target_config))
 
     assert operate_config.delete_config(target_config) is True
 
-    assert read_json(fake_path_func.bot_config_path) == [payload(remain_config)]
+    assert read_json(fake_path_func.bot_config_path) == expected_bot_root([remain_config])
     assert not onebot_path.exists()
     assert not napcat_path.exists()
 
@@ -270,10 +411,10 @@ def test_delete_config_succeeds_when_derived_files_are_missing(
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     target_config = make_config(114514, "DeleteMissing")
 
-    write_json(fake_path_func.bot_config_path, [payload(target_config)])
+    write_json(fake_path_func.bot_config_path, expected_bot_root([target_config]))
 
     assert operate_config.delete_config(target_config) is True
-    assert read_json(fake_path_func.bot_config_path) == []
+    assert read_json(fake_path_func.bot_config_path) == expected_bot_root([])
 
 
 def test_delete_config_rolls_back_when_commit_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -284,7 +425,7 @@ def test_delete_config_rolls_back_when_commit_fails(tmp_path: Path, monkeypatch:
     onebot_path = fake_path_func.napcat_config_path / "onebot11_114514.json"
     napcat_path = fake_path_func.napcat_config_path / "napcat_114514.json"
 
-    original_bot_payload = [payload(target_config)]
+    original_bot_payload = expected_bot_root([target_config])
     original_onebot_payload = expected_onebot_config(target_config)
     original_napcat_payload = expected_napcat_config(target_config)
 
