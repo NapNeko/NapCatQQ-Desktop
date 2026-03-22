@@ -18,21 +18,3 @@ from .msg_box import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
-
-__all__ = [
-    "AutoRestartDialog",
-    "BotCard",
-    "ChooseConfigTypeDialog",
-    "ConfigCardBase",
-    "HeaderWidget",
-    "HttpClientConfigCard",
-    "HttpClientConfigDialog",
-    "HttpSSEConfigCard",
-    "HttpSSEServerConfigDialog",
-    "HttpServerConfigCard",
-    "HttpServerConfigDialog",
-    "WebsocketClientConfigCard",
-    "WebsocketClientConfigDialog",
-    "WebsocketServerConfigDialog",
-    "WebsocketServersConfigCard",
-]

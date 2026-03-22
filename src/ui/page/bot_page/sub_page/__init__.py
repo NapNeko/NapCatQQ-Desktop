@@ -8,5 +8,3 @@
 from .bot_list import BotListPage
 from .bot_config import ConfigPage
 from .bot_log import BotLogPage
-
-__all__ = ["BotListPage", "BotLogPage", "ConfigPage"]

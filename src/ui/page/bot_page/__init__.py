@@ -104,5 +104,3 @@ class BotPageCreator(AbstractCreator, ABC):
 
 
 add_creator(BotPageCreator)
-
-__all__ = ["BotPage", "BotPageCreator"]
