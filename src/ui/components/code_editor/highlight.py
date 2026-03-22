@@ -65,6 +65,7 @@ class LogHighlighter(QSyntaxHighlighter):
         self.level_formats["SUCCESS"].setForeground(QColor("#9ece6a"))
 
         self.timestamp_patterns = [
+            QRegularExpression(r"^\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{3})?"),
             QRegularExpression(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{3})?"),
             QRegularExpression(r"^\d{2}-\d{2} \d{2}:\d{2}:\d{2}"),
         ]

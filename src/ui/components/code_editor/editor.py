@@ -294,8 +294,7 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
         scroll_pos = self.verticalScrollBar().value()
         super().setPlainText(text)
         self._apply_document_text_color(self._theme_text_color(self._is_dark_theme(None)))
-        QApplication.processEvents()
-        self.verticalScrollBar().setValue(scroll_pos)
+        self.verticalScrollBar().setValue(min(scroll_pos, self.verticalScrollBar().maximum()))
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         if self._handle_smooth_wheel_event(event):
