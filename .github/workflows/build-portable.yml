@@ -126,12 +126,12 @@ jobs:
       - name: "清理旧构建目录"
         shell: pwsh
         run: |
+          $version = "${{ steps.resolve_version.outputs.VERSION_PLAIN }}"
           if (Test-Path "dist/NapCatQQ-Desktop") {
             Remove-Item "dist/NapCatQQ-Desktop" -Recurse -Force
           }
-          if (Test-Path "dist/NapCatQQ-Desktop.zip") {
-            Remove-Item "dist/NapCatQQ-Desktop.zip" -Force
-          }
+          # 清理可能存在的旧版本 ZIP
+          Get-ChildItem "dist" -Filter "NapCatQQ-Desktop-*.zip" | Remove-Item -Force -ErrorAction SilentlyContinue
 
       - name: "打包 Release 版本"
         shell: pwsh
@@ -141,11 +141,14 @@ jobs:
       - name: "压缩目录版"
         shell: pwsh
         run: |
-          $zipPath = "dist/NapCatQQ-Desktop.zip"
+          $version = "${{ steps.resolve_version.outputs.VERSION_PLAIN }}"
+          $zipName = "NapCatQQ-Desktop-${version}-x64.zip"
+          $zipPath = "dist/$zipName"
           if (Test-Path $zipPath) {
             Remove-Item $zipPath -Force
           }
           Compress-Archive -Path "dist/NapCatQQ-Desktop" -DestinationPath $zipPath
+          Write-Host "Created: $zipPath"
 
       - name: "解析制品名"
         id: resolve_artifact
@@ -161,14 +164,17 @@ jobs:
       - name: "验证输出"
         shell: pwsh
         run: |
+          $version = "${{ steps.resolve_version.outputs.VERSION_PLAIN }}"
+          $zipName = "NapCatQQ-Desktop-${version}-x64.zip"
           if (-not (Test-Path "dist/NapCatQQ-Desktop")) {
             Write-Error "dist/NapCatQQ-Desktop 不存在"
             exit 1
           }
-          if (-not (Test-Path "dist/NapCatQQ-Desktop.zip")) {
-            Write-Error "dist/NapCatQQ-Desktop.zip 不存在"
+          if (-not (Test-Path "dist/$zipName")) {
+            Write-Error "dist/$zipName 不存在"
             exit 1
           }
+          Write-Host "验证通过: dist/$zipName"
 
       - name: "上传目录版制品"
         uses: actions/upload-artifact@v6
@@ -178,4 +184,4 @@ jobs:
           retention-days: 5
           path: |
             dist/NapCatQQ-Desktop/**
-            dist/NapCatQQ-Desktop.zip
+            dist/NapCatQQ-Desktop-*-x64.zip

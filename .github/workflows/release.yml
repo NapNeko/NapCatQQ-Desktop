@@ -128,6 +128,25 @@ jobs:
           $body | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: "重命名 ZIP 文件（统一命名）"
+        shell: pwsh
+        run: |
+          $version = "${{ needs.resolve.outputs.version }}"
+          $plainVersion = $version -replace "^v", ""
+          $oldZip = "release-assets/portable/NapCatQQ-Desktop-${plainVersion}-x64.zip"
+          $newZip = "release-assets/portable/NapCatQQ-Desktop-${plainVersion}-portable-x64.zip"
+          if (Test-Path $oldZip) {
+            Rename-Item $oldZip $newZip
+            Write-Host "Renamed: $oldZip -> $newZip"
+          } else {
+            # 兼容旧命名
+            $legacyZip = "release-assets/portable/NapCatQQ-Desktop.zip"
+            if (Test-Path $legacyZip) {
+              Rename-Item $legacyZip $newZip
+              Write-Host "Renamed: $legacyZip -> $newZip"
+            }
+          }
+
       - name: "创建发布并上传制品"
         uses: softprops/action-gh-release@v1
         with:
@@ -137,5 +156,5 @@ jobs:
           name: NapCatQQ Desktop Release ${{ needs.resolve.outputs.version }}
           body: ${{ steps.changelog.outputs.BODY }}
           files: |
-            release-assets/portable/NapCatQQ-Desktop.zip
+            release-assets/portable/NapCatQQ-Desktop-*-portable-x64.zip
             release-assets/msi/${{ needs.msi.outputs.msi_file_name }}
