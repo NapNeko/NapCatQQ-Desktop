@@ -106,7 +106,7 @@ class ApiDebugPage(QWidget):
 
         content_layout = QVBoxLayout(self.content_widget)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(16)
+        content_layout.setSpacing(8)
         content_layout.addWidget(self.top_bar)
         content_layout.addWidget(self.root_splitter, 1)
 
@@ -372,7 +372,9 @@ class ApiDebugPage(QWidget):
 
     def _set_loading_state(self) -> None:
         self._set_enabled_state(False)
-        self.detail_panel.set_empty_state("正在加载接口...", "正在从当前 Bot 的 WebUI Debug 接口获取 Action schema。")
+        self.detail_panel.set_loading_state(
+            "正在加载接口", "正在从当前 Bot 的 WebUI Debug 接口获取 Action schema，请稍候。"
+        )
 
     def _set_unavailable_state(self, title: str, message: str) -> None:
         self._set_enabled_state(False)

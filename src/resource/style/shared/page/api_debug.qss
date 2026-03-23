@@ -40,12 +40,39 @@ QWidget#api_debug_page TextBrowser {
 
 QWidget#api_debug_page ListWidget::item,
 QWidget#api_debug_page QListWidget::item {
-    padding: 8px 10px;
+    padding: 0;
     border-radius: 10px;
     margin-bottom: 4px;
+    background: transparent;
+}
+
+QWidget#api_debug_page ListWidget::item:hover,
+QWidget#api_debug_page QListWidget::item:hover {
+    background: transparent;
 }
 
 QWidget#api_debug_page ListWidget::item:selected,
 QWidget#api_debug_page QListWidget::item:selected {
-    background: rgba(59, 130, 246, 0.16);
+    background: transparent;
+}
+
+QWidget#ApiDebugActionItem {
+    background: transparent;
+}
+
+QWidget#ApiDebugActionItemAccent {
+    background: transparent;
+}
+
+QLabel#ApiDebugActionItemTitle {
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(24, 24, 27, 0.96);
+    background: transparent;
+}
+
+QLabel#ApiDebugActionItemSummary {
+    font-size: 12px;
+    color: rgba(82, 82, 91, 0.86);
+    background: transparent;
 }

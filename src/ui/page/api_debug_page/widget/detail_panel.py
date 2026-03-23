@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
+    BodyLabel,
     CaptionLabel,
     CardWidget,
     FluentIcon,
@@ -19,6 +20,7 @@ from qfluentwidgets import (
 from src.core.api_debug import ApiDebugExecutionResult
 from src.ui.components.code_editor.editor import JsonEditor
 from src.ui.components.code_editor.exhibit import CodeExibit
+from src.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from ..shared import ApiDebugChip, pretty_json
 
@@ -105,8 +107,10 @@ class ActionDetailPanel(CardWidget):
         self.detail_state_stack = TransparentStackedWidget(self)
         self.detail_state_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
         self.detail_content_page = QWidget(self.detail_state_stack)
+        self.detail_loading_page = QWidget(self.detail_state_stack)
         self.detail_empty_page = QWidget(self.detail_state_stack)
         self.detail_state_stack.addWidget(self.detail_content_page)
+        self.detail_state_stack.addWidget(self.detail_loading_page)
         self.detail_state_stack.addWidget(self.detail_empty_page)
 
         self.action_title = TitleLabel("选择接口", self.detail_content_page)
@@ -183,6 +187,24 @@ class ActionDetailPanel(CardWidget):
         content_layout.addWidget(self.detail_pivot)
         content_layout.addWidget(self.detail_stack, 1)
 
+        self.loading_title = BodyLabel("正在加载接口", self.detail_loading_page)
+        self.loading_hint = CaptionLabel(
+            "正在从当前 Bot 的 WebUI Debug 接口获取 Action schema，请稍候。",
+            self.detail_loading_page,
+        )
+        self.loading_hint.setWordWrap(True)
+        self.loading_hint.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.loading_skeleton = SkeletonWidget(self._build_loading_skeleton_shapes, self.detail_loading_page, panel_margin=0)
+        self.loading_skeleton.setMinimumHeight(220)
+        self.loading_skeleton.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        loading_layout = QVBoxLayout(self.detail_loading_page)
+        loading_layout.setContentsMargins(28, 24, 28, 24)
+        loading_layout.setSpacing(12)
+        loading_layout.addWidget(self.loading_title)
+        loading_layout.addWidget(self.loading_hint)
+        loading_layout.addWidget(self.loading_skeleton, 1)
+
         self.empty_title = StrongBodyLabel("选择一个接口开始调试", self.detail_empty_page)
         self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_hint = CaptionLabel("左侧会展示当前 Bot 可用的 Action 接口与简要说明。", self.detail_empty_page)
@@ -229,12 +251,30 @@ class ActionDetailPanel(CardWidget):
         self.empty_hint.setText(message)
         self.detail_state_stack.setCurrentWidget(self.detail_empty_page)
 
+    def set_loading_state(self, title: str, message: str) -> None:
+        self.loading_title.setText(title)
+        self.loading_hint.setText(message)
+        self.detail_state_stack.setCurrentWidget(self.detail_loading_page)
+
     def set_enabled_state(self, enabled: bool) -> None:
         self.generate_button.setEnabled(enabled)
         self.send_button.setEnabled(enabled)
         self.params_editor.setEnabled(enabled)
         if enabled:
             self.detail_state_stack.setCurrentWidget(self.detail_content_page)
+
+    def _build_loading_skeleton_shapes(self, widget: QWidget) -> list[SkeletonShape]:
+        width = max(320, widget.width() - 56)
+        x = 0
+        y = 8
+        shapes: list[SkeletonShape] = [
+            SkeletonShape(x, y, int(width * 0.22), 18, 1.08),
+            SkeletonShape(x, y + 34, int(width * 0.54), 12, 0.96),
+            SkeletonShape(x, y + 58, int(width * 0.38), 12, 0.92),
+            SkeletonShape(x, y + 98, int(width * 0.96), 40, 1.02, 12),
+            SkeletonShape(x, y + 156, int(width * 0.96), 220, 1.08, 16),
+        ]
+        return shapes
 
     def _setup_tooltips(self) -> None:
         self.generate_button.setToolTip("根据当前 schema 自动生成一份默认参数")

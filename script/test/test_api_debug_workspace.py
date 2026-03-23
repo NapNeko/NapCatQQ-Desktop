@@ -245,7 +245,7 @@ def test_interface_debug_page_loads_schema_and_restores_draft(tmp_path) -> None:
     assert not hasattr(page, "mode_pivot")
     assert not hasattr(page, "search_dialog")
     assert page.catalog_panel.search_button.toolTip() == "打开接口搜索对话框"
-    assert page.action_title.text() == "send_msg"
+    assert page.action_title.text() == "/send_msg"
     assert "发送消息" in page.docs_view.toPlainText()
     assert json.loads(page.params_editor.toPlainText()) == {"message": "hello"}
 
@@ -270,7 +270,7 @@ def test_interface_debug_page_generates_default_payload_for_new_selection(tmp_pa
     page.initialize(host)
     page._apply_schema(schema)
 
-    assert page.action_title.text() == "get_friend_list"
+    assert page.action_title.text() == "/get_friend_list"
     assert json.loads(page.params_editor.toPlainText()) == {"refresh": False}
     assert "请求 Schema" in page.docs_view.toPlainText()
 
@@ -278,7 +278,7 @@ def test_interface_debug_page_generates_default_payload_for_new_selection(tmp_pa
     host.close()
 
 
-def test_interface_debug_page_catalog_uses_uniform_delegate_items(tmp_path) -> None:
+def test_interface_debug_page_catalog_uses_uniform_item_widgets(tmp_path) -> None:
     ensure_qapp()
     schema = ApiDebugActionSchema(
         action="delete_group_album_media",
@@ -295,17 +295,19 @@ def test_interface_debug_page_catalog_uses_uniform_delegate_items(tmp_path) -> N
     page.catalog_panel.set_schemas([schema], "delete_group_album_media")
 
     item = page.catalog_panel.list_widget.item(0)
+    widget = page.catalog_panel.list_widget.itemWidget(item)
 
-    assert page.catalog_panel.list_widget.itemWidget(item) is None
     assert item.data(Qt.ItemDataRole.UserRole) == "delete_group_album_media"
-    assert item.text().startswith("delete_group_album_media\n删除群相册媒体")
+    assert widget is not None
+    assert widget.title_label.text() == "/delete_group_album_media"
+    assert widget.summary_label.text() == "删除群相册媒体"
     assert item.sizeHint().height() == 60
 
     page.close()
     host.close()
 
 
-def test_interface_debug_page_catalog_item_uses_two_line_text(tmp_path) -> None:
+def test_interface_debug_page_catalog_item_marks_selected_state(tmp_path) -> None:
     ensure_qapp()
     schema = ApiDebugActionSchema(
         action="delete_group_album_media",
@@ -322,8 +324,10 @@ def test_interface_debug_page_catalog_item_uses_two_line_text(tmp_path) -> None:
     page.catalog_panel.set_schemas([schema], "delete_group_album_media")
 
     item = page.catalog_panel.list_widget.item(0)
+    widget = page.catalog_panel.list_widget.itemWidget(item)
 
-    assert "\n" in item.text()
+    assert widget is not None
+    assert widget.property("selected") is True
 
     page.close()
     host.close()
@@ -399,6 +403,31 @@ def test_interface_debug_page_shows_unavailable_state_without_webui(tmp_path) ->
     assert page.empty_container.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Maximum
     assert not page.send_button.isEnabled()
     assert not page.params_editor.isEnabled()
+
+
+def test_interface_debug_page_uses_dedicated_loading_state(tmp_path) -> None:
+    ensure_qapp()
+    context = ApiDebugBotContext(
+        bot_id="114514",
+        bot_name="TestBot",
+        webui_base_url="http://127.0.0.1:6099",
+        webui_token="token",
+    )
+
+    page = api_debug_page_module.ApiDebugPage()
+    page.workspace_store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    page.workspace_state = page.workspace_store.load()
+    page.context_service = SimpleNamespace(list_bot_contexts=lambda: [context])
+    page._run_async = lambda func, **kwargs: None
+    host = QWidget()
+    page.initialize(host)
+
+    assert page.detail_state_stack.currentWidget() is page.detail_panel.detail_loading_page
+    assert page.detail_panel.loading_title.text() == "正在加载接口"
+    assert page.detail_panel.loading_skeleton.minimumHeight() == 220
+
+    page.close()
+    host.close()
 
 
 def test_interface_debug_page_filters_internal_and_dot_actions(tmp_path) -> None:
