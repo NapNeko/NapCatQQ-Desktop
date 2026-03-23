@@ -30,7 +30,7 @@ class DropFolderWidget(QWidget):
         self._ripple_progress = 0.0
         self._ripple_opacity = 0.0
         self.setAcceptDrops(True)
-        self.setMinimumHeight(320)
+        self.setMinimumHeight(260)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.title_label = BodyLabel(self.tr("拖拽文件夹到此处"), self)

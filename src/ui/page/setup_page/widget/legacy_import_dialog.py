@@ -253,7 +253,7 @@ class _LegacyImportScanSkeletonPage(QWidget):
         self.step_layout.addWidget(self.step_hint)
 
         self.canvas = SkeletonWidget(self._build_shapes, self, panel_margin=6, panel_radius=20)
-        self.canvas.setMinimumHeight(260)
+        self.canvas.setMinimumHeight(220)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.v_box_layout.addWidget(self.title_label)
@@ -449,7 +449,7 @@ class LegacyImportDialog(MessageBoxBase):
         setFont(self.content_label, 15)
 
         self.content_stack = TransparentStackedWidget(self)
-        self.content_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.content_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.drop_page = _LegacyImportDropPage(self.content_stack)
         self.scan_page = _LegacyImportScanSkeletonPage(self.content_stack)
         self.result_page = _LegacyImportResultPage(self.content_stack)
@@ -467,7 +467,7 @@ class LegacyImportDialog(MessageBoxBase):
         self.viewLayout.addWidget(self.content_label)
         self.viewLayout.addWidget(self.content_stack)
 
-        self.widget.setMinimumSize(560, 360)
+        self.widget.setMinimumWidth(560)
         self.select_folder_button = PushButton(self.tr("重新选择目录"), self.widget)
         setFont(self.select_folder_button, 14)
         self.select_folder_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -489,12 +489,14 @@ class LegacyImportDialog(MessageBoxBase):
         self.cancelButton.setText(self.tr("取消"))
         self.cancelButton.show()
         self.select_folder_button.hide()
+        self._sync_dialog_height()
 
     def _show_result_page(self) -> None:
         self.content_stack.setCurrentWidget(self.result_page)
         self.yesButton.setText(self.tr("下一步") if self._has_configurable_options() else self.tr("开始导入"))
         self.cancelButton.hide()
         self.select_folder_button.show()
+        self._sync_dialog_height()
 
     def _show_scan_page(self) -> None:
         self.content_stack.setCurrentWidget(self.scan_page)
@@ -503,6 +505,7 @@ class LegacyImportDialog(MessageBoxBase):
         self.cancelButton.setText(self.tr("取消"))
         self.cancelButton.show()
         self.select_folder_button.hide()
+        self._sync_dialog_height()
 
     def _show_options_page(self) -> None:
         self.content_stack.setCurrentWidget(self.options_page)
@@ -510,6 +513,7 @@ class LegacyImportDialog(MessageBoxBase):
         self.cancelButton.setText(self.tr("返回结果"))
         self.cancelButton.show()
         self.select_folder_button.hide()
+        self._sync_dialog_height()
 
     def _show_conflict_page(self) -> None:
         self.content_stack.setCurrentWidget(self.conflict_page)
@@ -517,10 +521,17 @@ class LegacyImportDialog(MessageBoxBase):
         self.cancelButton.setText(self.tr("返回导入选项"))
         self.cancelButton.show()
         self.select_folder_button.hide()
+        self._sync_dialog_height()
 
     def _refresh_current_page_buttons(self) -> None:
         if self.content_stack.currentWidget() is self.options_page:
             self._show_options_page()
+
+    def _sync_dialog_height(self) -> None:
+        self.viewLayout.activate()
+        self.widget.adjustSize()
+        target_height = max(420, min(self.widget.sizeHint().height(), 640))
+        self.widget.resize(self.widget.width(), target_height)
 
     def _has_configurable_options(self) -> bool:
         if self._scan_result is None:
