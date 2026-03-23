@@ -8,6 +8,7 @@ import pytest
 from PySide6.QtWidgets import QApplication, QWidget
 
 # 项目内模块导入
+import src.ui.page.bot_page.widget.msg_box as msg_box_module
 from src.ui.page.bot_page.widget.msg_box import (
     HttpServerConfigDialog,
     WebsocketClientConfigDialog,
@@ -65,3 +66,42 @@ def test_websocket_client_dialog_blank_intervals_fall_back_to_defaults() -> None
 
     assert config.heartInterval == 30000
     assert config.reconnectInterval == 30000
+
+
+def test_connect_dialog_accept_shows_error_bar_without_closing(monkeypatch) -> None:
+    """字段校验失败时应弹出错误提示，并保留对话框内容。"""
+    parent = create_dialog_parent()
+    dialog = HttpServerConfigDialog(parent)
+    captured: dict[str, str] = {}
+
+    def fake_error_bar(content: str, *args, **kwargs) -> None:
+        captured["error"] = content
+
+    monkeypatch.setattr(msg_box_module, "error_bar", fake_error_bar)
+    dialog.port_card.fill_value("bad-port")
+    dialog.accept()
+
+    assert "Port" in captured.get("error", "")
+    assert dialog.result() == 0
+    assert dialog.title_label.text() == "HTTP Server"
+
+
+def test_connect_dialog_duplicate_name_shows_error_bar_without_closing(monkeypatch) -> None:
+    """名称冲突应在对话框内提示，而不是关闭后才失败。"""
+    parent = create_dialog_parent()
+    dialog = HttpServerConfigDialog(parent)
+    captured: dict[str, str] = {}
+
+    def fake_error_bar(content: str, *args, **kwargs) -> None:
+        captured["error"] = content
+
+    monkeypatch.setattr(msg_box_module, "error_bar", fake_error_bar)
+    dialog.set_name_conflict_validator(lambda _name: "连接配置名称不能重复")
+    dialog.name_card.fill_value("duplicate")
+    dialog.host_card.fill_value("127.0.0.1")
+    dialog.port_card.fill_value("3000")
+    dialog.accept()
+
+    assert captured.get("error") == "连接配置名称不能重复"
+    assert dialog.result() == 0
+    assert dialog.name_card.get_value() == "duplicate"

@@ -3,6 +3,7 @@
 # 第三方库导入
 import qrcode
 from abc import ABC
+from typing import Callable
 from pydantic import ValidationError
 from qfluentwidgets import BodyLabel
 from qfluentwidgets import FluentIcon as FI
@@ -33,6 +34,7 @@ from src.core.config.config_model import (
 )
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 from src.ui.components.input_card.time_card import IntervalTimeConfigCard
+from src.ui.components.info_bar import error_bar
 from src.ui.page.bot_page.utils.enum import ConnectType
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
@@ -146,8 +148,6 @@ class ChooseConfigTypeDialog(MessageBoxBase):
 class ConfigDialogBase(MessageBoxBase):
     """配置对话框基类，提供通用的配置界面和验证功能"""
 
-    _VALIDATION_HINT = " - 配置错误请重试"
-
     def __init__(self, parent: QObject, config: NetworkBaseConfig | None) -> None:
         """初始化配置对话框基类
 
@@ -158,6 +158,7 @@ class ConfigDialogBase(MessageBoxBase):
         super().__init__(parent)
         # 属性
         self.config = config
+        self._name_conflict_validator: Callable[[str], str | None] | None = None
 
         # 创建控件
         self.title_label = TitleLabel(self)
@@ -195,15 +196,17 @@ class ConfigDialogBase(MessageBoxBase):
         # 禁用名字卡片（编辑模式下名称不可修改）
         self.name_card.setEnabled(False)
 
-    def _clear_validation_error(self) -> None:
-        """清理标题上的校验提示。"""
-        if self.title_label.text().endswith(self._VALIDATION_HINT):
-            self.title_label.setText(self.title_label.text()[: -len(self._VALIDATION_HINT)])
+    def set_name_conflict_validator(self, validator: Callable[[str], str | None] | None) -> None:
+        """设置名称冲突校验器，返回错误文本时阻止关闭对话框。"""
+        self._name_conflict_validator = validator
 
-    def _show_validation_error(self) -> None:
-        """在标题上追加校验提示。"""
-        self._clear_validation_error()
-        self.title_label.setText(self.title_label.text() + self._VALIDATION_HINT)
+    def _validate_before_accept(self, config: NetworkBaseConfig) -> None:
+        """执行对话框关闭前的业务校验。"""
+        if self._name_conflict_validator is None:
+            return
+
+        if (error_message := self._name_conflict_validator(config.name)) is not None:
+            raise ValueError(error_message)
 
     def _parse_required_int(self, raw_value: str, field_name: str, *, minimum: int = 1) -> int:
         """解析必填正整数输入。"""
@@ -234,14 +237,13 @@ class ConfigDialogBase(MessageBoxBase):
 
         在点击确定按钮时验证配置，如果验证失败显示错误信息
         """
-        self._clear_validation_error()
         try:
-            # 验证配置
-            self.get_config()
+            config = self.get_config()
+            self._validate_before_accept(config)
             # 关闭对话框
             super().accept()
-        except (ValidationError, ValueError):
-            self._show_validation_error()
+        except (ValidationError, ValueError) as exc:
+            error_bar(str(exc), parent=self)
 
     def get_config(self) -> NetworkBaseConfig:
         """获取配置数据

@@ -12,6 +12,9 @@ from src.core.config.config_model import (
     AdvancedConfig,
     AutoRestartScheduleConfig,
     BotConfig,
+    ConnectConfig,
+    HttpClientsConfig,
+    HttpServersConfig,
     WebsocketClientsConfig,
     WebsocketServersConfig,
     _coerce_interval_default,
@@ -96,3 +99,12 @@ def test_advanced_config_normalizes_bypass_payload_and_fills_missing_keys() -> N
     assert advanced.bypass.process is False
     assert advanced.bypass.container is False
     assert advanced.bypass.js is False
+
+
+def test_connect_config_rejects_duplicate_names_across_protocol_types() -> None:
+    """单个 Bot 内不同协议的连接名称也必须唯一。"""
+    with pytest.raises(ValueError, match="连接配置名称不能重复"):
+        ConnectConfig(
+            httpServers=[HttpServersConfig(name="shared", host="127.0.0.1", port=3000)],
+            httpClients=[HttpClientsConfig(name=" shared ", url="https://127.0.0.1:3001")],
+        )

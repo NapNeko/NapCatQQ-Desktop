@@ -234,7 +234,14 @@ class ConfigPage(QWidget):
             logger.warning(f"未找到连接配置对话框: type={_connect_type}", log_source=LogSource.UI)
             return
 
-        if not (_connect_config_box := dialog_class(it(MainWindow))).exec():
+        def validate_name_conflict(name: str) -> str | None:
+            if self.connect_widget.has_config_name(name):
+                return self.tr("连接配置名称不能重复")
+            return None
+
+        _connect_config_box = dialog_class(it(MainWindow))
+        _connect_config_box.set_name_conflict_validator(validate_name_conflict)
+        if not _connect_config_box.exec():
             # 判断用户在配置的时候是否选择了取消
             logger.trace(f"连接配置填写已取消: type={_connect_type}", log_source=LogSource.UI)
             return

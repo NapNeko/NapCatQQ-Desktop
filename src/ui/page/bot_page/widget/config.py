@@ -196,6 +196,17 @@ class ConnectConfigWidget(ScrollArea):
             self.card_layout.update()
             self.updateGeometry()
 
+    def has_config_name(self, name: str) -> bool:
+        """检查是否已存在同名网络配置。"""
+        normalized_name = name.strip().casefold()
+        if not normalized_name:
+            return False
+
+        for card in self.cards:
+            if card.config.name.strip().casefold() == normalized_name:
+                return True
+        return False
+
     def remove_card(self, config: NetworkBaseConfig) -> None:
         """从列表删除卡片"""
         for card in self.cards:

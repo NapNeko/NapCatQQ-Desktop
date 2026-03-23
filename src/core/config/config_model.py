@@ -428,6 +428,13 @@ def _normalize_bypass_payload(payload: object) -> tuple[dict[str, bool], list[st
     return normalized, rules_applied
 
 
+def _normalize_connect_name_key(name: object) -> str:
+    """规范化连接配置名称，用于重复检测。"""
+    if not isinstance(name, str):
+        return ""
+    return name.strip().casefold()
+
+
 class AutoRestartScheduleConfig(BaseModel):
     """自动重启计划配置"""
 
@@ -562,6 +569,36 @@ class ConnectConfig(BaseModel):
     websocketServers: list[WebsocketServersConfig] = Field(default_factory=list)
     websocketClients: list[WebsocketClientsConfig] = Field(default_factory=list)
     plugins: list = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_names(self) -> "ConnectConfig":
+        """要求单个 Bot 内所有网络配置名称唯一。"""
+        seen_names: dict[str, str] = {}
+        duplicate_names: list[str] = []
+
+        for config in (
+            *self.httpServers,
+            *self.httpSseServers,
+            *self.httpClients,
+            *self.websocketServers,
+            *self.websocketClients,
+        ):
+            normalized_name = _normalize_connect_name_key(config.name)
+            if not normalized_name:
+                continue
+
+            original_name = config.name.strip()
+            if normalized_name in seen_names:
+                duplicate_names.append(seen_names[normalized_name])
+                continue
+
+            seen_names[normalized_name] = original_name
+
+        if duplicate_names:
+            duplicates_text = "、".join(dict.fromkeys(duplicate_names))
+            raise ValueError(f"连接配置名称不能重复: {duplicates_text}")
+
+        return self
 
 
 class BypassConfig(BaseModel):

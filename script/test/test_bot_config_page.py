@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
 import src.ui.page.bot_page.sub_page.bot_config as bot_config_module
+from src.core.config.config_model import HttpClientsConfig, HttpServersConfig
 from src.ui.page.bot_page.sub_page.bot_config import ConfigPage
 
 
@@ -38,6 +39,33 @@ def test_save_invalid_config_shows_error_without_calling_update(monkeypatch) -> 
     monkeypatch.setattr(bot_config_module.logger, "warning", lambda *args, **kwargs: None)
 
     page.bot_widget.bot_qq_id_card.fill_value("not-a-number")
+    page.slot_save_config_button()
+
+    assert captured.get("update_called") is not True
+    assert captured.get("error") == "配置校验失败，请检查输入内容"
+
+    page.close()
+
+
+def test_save_duplicate_connect_names_shows_error_without_calling_update(monkeypatch) -> None:
+    """连接配置名称重复时应阻止保存。"""
+    ensure_qapp()
+    page = ConfigPage()
+    captured: dict[str, object] = {}
+
+    def fake_update_config(_config) -> bool:
+        captured["update_called"] = True
+        return True
+
+    def fake_error_bar(content: str, *args, **kwargs) -> None:
+        captured["error"] = content
+
+    monkeypatch.setattr(bot_config_module, "update_config", fake_update_config)
+    monkeypatch.setattr(bot_config_module, "error_bar", fake_error_bar)
+    monkeypatch.setattr(bot_config_module.logger, "warning", lambda *args, **kwargs: None)
+
+    page.connect_widget.add_card(HttpServersConfig(name="shared", host="127.0.0.1", port=3000))
+    page.connect_widget.add_card(HttpClientsConfig(name="shared", url="https://127.0.0.1:3001"))
     page.slot_save_config_button()
 
     assert captured.get("update_called") is not True
