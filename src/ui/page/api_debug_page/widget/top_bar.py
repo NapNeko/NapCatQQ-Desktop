@@ -1,9 +1,17 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QBoxLayout, QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import CaptionLabel, CardWidget, ComboBox, FluentIcon, TitleLabel, TransparentToolButton
+from qfluentwidgets import (
+    CaptionLabel,
+    CardWidget,
+    ComboBox,
+    FluentIcon,
+    TitleLabel,
+    ToolTipFilter,
+    ToolButton,
+)
 
 from src.core.api_debug import ApiDebugBotContext
 from ..shared import find_index_by_data
@@ -12,7 +20,6 @@ from ..shared import find_index_by_data
 class ApiDebugTopBar(CardWidget):
     """页面顶部上下文栏。"""
 
-    search_requested = Signal()
     refresh_requested = Signal()
     bot_changed = Signal(str)
 
@@ -24,9 +31,8 @@ class ApiDebugTopBar(CardWidget):
         self.subtitle_label.setWordWrap(False)
         self.bot_combo = ComboBox(self)
         self.bot_combo.setMinimumWidth(180)
-        self.search_button = TransparentToolButton(FluentIcon.SEARCH, self)
-        self.search_button.setToolTip("Ctrl+K 搜索接口")
-        self.refresh_button = TransparentToolButton(FluentIcon.UPDATE, self)
+        self.bot_combo.setMaximumWidth(220)
+        self.refresh_button = ToolButton(FluentIcon.UPDATE, self)
         self.refresh_button.setToolTip("刷新接口列表")
 
         label_layout = QVBoxLayout()
@@ -38,8 +44,8 @@ class ApiDebugTopBar(CardWidget):
         tools_layout = QHBoxLayout()
         tools_layout.setContentsMargins(0, 0, 0, 0)
         tools_layout.setSpacing(8)
+        tools_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         tools_layout.addWidget(self.bot_combo)
-        tools_layout.addWidget(self.search_button)
         tools_layout.addWidget(self.refresh_button)
 
         self.header_layout = QBoxLayout(QBoxLayout.Direction.LeftToRight)
@@ -49,9 +55,11 @@ class ApiDebugTopBar(CardWidget):
         self.header_layout.addLayout(tools_layout, 0)
         self.setLayout(self.header_layout)
 
-        self.bot_combo.currentIndexChanged.connect(lambda: self.bot_changed.emit(str(self.bot_combo.currentData() or "")))
-        self.search_button.clicked.connect(self.search_requested.emit)
+        self.bot_combo.currentIndexChanged.connect(
+            lambda: self.bot_changed.emit(str(self.bot_combo.currentData() or ""))
+        )
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
+        self._setup_tooltips()
 
     def populate_bots(self, contexts: list[ApiDebugBotContext], selected_bot_id: str) -> None:
         self.bot_combo.blockSignals(True)
@@ -64,7 +72,10 @@ class ApiDebugTopBar(CardWidget):
         self.bot_combo.setCurrentIndex(index if index >= 0 else 0)
         self.bot_combo.blockSignals(False)
 
-    def sync_layout(self, width: int) -> None:
-        compact = width < 1040
-        self.header_layout.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-        self.bot_combo.setMinimumWidth(160 if compact else 180)
+    def _setup_tooltips(self) -> None:
+        self.bot_combo.setToolTip("选择调试使用的 Bot")
+        self.bot_combo.setToolTipDuration(1000)
+        self.bot_combo.installEventFilter(ToolTipFilter(self.bot_combo, showDelay=300))
+
+        self.refresh_button.setToolTipDuration(1000)
+        self.refresh_button.installEventFilter(ToolTipFilter(self.refresh_button, showDelay=300))

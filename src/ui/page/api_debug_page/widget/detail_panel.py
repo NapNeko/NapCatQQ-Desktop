@@ -13,6 +13,7 @@ from qfluentwidgets import (
     StrongBodyLabel,
     TextBrowser,
     TitleLabel,
+    ToolTipFilter,
 )
 
 from src.core.api_debug import ApiDebugExecutionResult
@@ -109,20 +110,30 @@ class ActionDetailPanel(CardWidget):
         self.detail_state_stack.addWidget(self.detail_empty_page)
 
         self.action_title = TitleLabel("选择接口", self.detail_content_page)
-        self.action_summary = CaptionLabel("从左侧接口目录选择一个 Action", self.detail_content_page)
+        self.action_summary = CaptionLabel("选择左侧接口后可查看参数、文档并执行调试", self.detail_content_page)
         self.action_summary.setWordWrap(True)
-        self.action_tags = CaptionLabel("", self.detail_content_page)
-        self.action_tags.setWordWrap(True)
         self.generate_button = PushButton(FluentIcon.ROTATE, "生成预设参数", self.detail_content_page)
         self.send_button = PrimaryPushButton(FluentIcon.SEND, "发送调试请求", self.detail_content_page)
 
-        info_header = QWidget(self.detail_content_page)
-        info_actions = QHBoxLayout(info_header)
-        info_actions.setContentsMargins(0, 0, 0, 0)
-        info_actions.setSpacing(8)
-        info_actions.addStretch(1)
-        info_actions.addWidget(self.generate_button)
-        info_actions.addWidget(self.send_button)
+        header_widget = QWidget(self.detail_content_page)
+        header_layout = QVBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(8)
+
+        action_buttons_layout = QHBoxLayout()
+        action_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        action_buttons_layout.setSpacing(8)
+        action_buttons_layout.addWidget(self.generate_button)
+        action_buttons_layout.addWidget(self.send_button)
+
+        title_row_layout = QHBoxLayout()
+        title_row_layout.setContentsMargins(0, 0, 0, 0)
+        title_row_layout.setSpacing(12)
+        title_row_layout.addWidget(self.action_title, 1, Qt.AlignmentFlag.AlignVCenter)
+        title_row_layout.addLayout(action_buttons_layout, 0)
+
+        header_layout.addLayout(title_row_layout)
+        header_layout.addWidget(self.action_summary)
 
         self.detail_pivot = SegmentedWidget(self.detail_content_page)
         self.detail_stack = TransparentStackedWidget(self.detail_content_page)
@@ -151,7 +162,7 @@ class ActionDetailPanel(CardWidget):
 
         self.docs_label = StrongBodyLabel("接口文档", self.docs_page)
         self.docs_view = TextBrowser(self.docs_page)
-        self.docs_view.setPlainText("选择接口后可查看说明、标签和 schema。")
+        self.docs_view.setPlainText("选择接口后可查看说明与请求/返回 schema。")
 
         docs_layout = QVBoxLayout(self.docs_page)
         docs_layout.setContentsMargins(0, 0, 0, 0)
@@ -167,17 +178,14 @@ class ActionDetailPanel(CardWidget):
 
         content_layout = QVBoxLayout(self.detail_content_page)
         content_layout.setContentsMargins(20, 18, 20, 18)
-        content_layout.setSpacing(12)
-        content_layout.addWidget(self.action_title)
-        content_layout.addWidget(self.action_summary)
-        content_layout.addWidget(self.action_tags)
-        content_layout.addWidget(info_header)
+        content_layout.setSpacing(10)
+        content_layout.addWidget(header_widget)
         content_layout.addWidget(self.detail_pivot)
         content_layout.addWidget(self.detail_stack, 1)
 
         self.empty_title = StrongBodyLabel("选择一个接口开始调试", self.detail_empty_page)
         self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_hint = CaptionLabel("左侧会展示当前 Bot 可用的 Action 接口、说明和标签。", self.detail_empty_page)
+        self.empty_hint = CaptionLabel("左侧会展示当前 Bot 可用的 Action 接口与简要说明。", self.detail_empty_page)
         self.empty_hint.setWordWrap(True)
         self.empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_container = QWidget(self.detail_empty_page)
@@ -208,6 +216,7 @@ class ActionDetailPanel(CardWidget):
             "docs": self.docs_page,
             "result": self.result_page,
         }
+        self._setup_tooltips()
         self.show_detail_page("params")
 
     def show_detail_page(self, route_key: str) -> None:
@@ -226,3 +235,12 @@ class ActionDetailPanel(CardWidget):
         self.params_editor.setEnabled(enabled)
         if enabled:
             self.detail_state_stack.setCurrentWidget(self.detail_content_page)
+
+    def _setup_tooltips(self) -> None:
+        self.generate_button.setToolTip("根据当前 schema 自动生成一份默认参数")
+        self.send_button.setToolTip("向当前 Bot 的调试接口发送本次调用")
+        self.detail_pivot.setToolTip("切换参数、文档和结果视图")
+
+        for widget in [self.generate_button, self.send_button, self.detail_pivot]:
+            widget.setToolTipDuration(1000)
+            widget.installEventFilter(ToolTipFilter(widget, showDelay=300))

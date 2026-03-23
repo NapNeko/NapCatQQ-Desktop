@@ -44,6 +44,7 @@ class ApiDebugPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        self._host_window: MainWindow | None = None
         self.context_service = ApiDebugContextService(config_reader=read_config)
         self.workspace_store = ApiDebugWorkspaceStore()
         self.workspace_state = self.workspace_store.load()
@@ -54,10 +55,9 @@ class ApiDebugPage(QWidget):
         self.current_context: ApiDebugBotContext | None = None
         self.current_auth = ApiDebugAuthConfig()
         self.current_session: ApiDebugActionSession | None = None
-        self._last_layout_width = -1
-        self._last_splitter_mode = ""
 
     def initialize(self, parent: "MainWindow") -> Self:
+        self._host_window = parent
         self.setParent(parent)
         self.setObjectName("api_debug_page")
 
@@ -65,10 +65,9 @@ class ApiDebugPage(QWidget):
         self._build_layout()
         self._expose_detail_aliases()
         self._bind_signals()
+        self._apply_static_layout()
 
-        self.catalog_panel.search_edit.setText(self.workspace_state.action_draft.search_query)
         self.reload_contexts()
-        self._sync_responsive_layout(force=True)
         PageStyleSheet.API_DEBUG.apply(self)
         return self
 
@@ -82,7 +81,6 @@ class ApiDebugPage(QWidget):
         self.catalog_panel = ActionCatalogPanel(self)
         self.catalog_panel.setObjectName("ApiDebugSideCard")
         self.catalog_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)
-        self.search_dialog = ApiDebugSearchDialog(self)
 
         self.root_splitter = QSplitter(Qt.Orientation.Horizontal, self.content_widget)
         self.root_splitter.setChildrenCollapsible(False)
@@ -117,6 +115,10 @@ class ApiDebugPage(QWidget):
         layout.setSpacing(16)
         layout.addWidget(self.content_widget)
 
+    def _apply_static_layout(self) -> None:
+        self.root_splitter.setOrientation(Qt.Orientation.Horizontal)
+        self.root_splitter.setSizes([300, 860])
+
     def _expose_detail_aliases(self) -> None:
         self.detail_card = self.detail_panel
         self.detail_state_stack = self.detail_panel.detail_state_stack
@@ -124,7 +126,6 @@ class ApiDebugPage(QWidget):
         self.detail_empty_page = self.detail_panel.detail_empty_page
         self.action_title = self.detail_panel.action_title
         self.action_summary = self.detail_panel.action_summary
-        self.action_tags = self.detail_panel.action_tags
         self.generate_button = self.detail_panel.generate_button
         self.send_button = self.detail_panel.send_button
         self.detail_pivot = self.detail_panel.detail_pivot
@@ -140,21 +141,16 @@ class ApiDebugPage(QWidget):
         self.empty_container = self.detail_panel.empty_container
 
     def _bind_signals(self) -> None:
-        self.top_bar.search_requested.connect(self._open_search)
         self.top_bar.refresh_requested.connect(self.reload_contexts)
         self.top_bar.bot_changed.connect(self._handle_bot_changed)
+        self.catalog_panel.search_requested.connect(self._open_search)
         self.catalog_panel.action_selected.connect(self._apply_schema)
-        self.catalog_panel.search_changed.connect(self._handle_search_changed)
         self.generate_button.clicked.connect(self._generate_payload_for_current_action)
         self.send_button.clicked.connect(self._send_current_action)
         self.params_editor.textChanged.connect(self._sync_state)
 
         self.search_shortcut = QShortcut("Ctrl+K", self)
         self.search_shortcut.activated.connect(self._open_search)
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._sync_responsive_layout()
 
     def minimumSizeHint(self) -> QSize:
         return QSize(self.STABLE_MINIMUM_SIZE_HINT)
@@ -212,20 +208,20 @@ class ApiDebugPage(QWidget):
         )
 
     def _handle_schema_success(self, schemas: list[ApiDebugActionSchema]) -> None:
-        self.schemas = schemas
-        if not schemas:
+        self.schemas = [schema for schema in schemas if self._is_displayable_schema(schema)]
+        if not self.schemas:
             self.catalog_panel.set_schemas([], "")
-            self._set_unavailable_state("当前没有可调试接口", "运行中的 WebUI 没有返回任何 Action schema。")
+            self._set_unavailable_state("当前没有可展示接口", "当前 WebUI 返回的调试接口已被过滤或不可对外展示。")
             return
 
         selected_action = self.workspace_state.action_draft.action
         draft_params_text = self.workspace_state.action_draft.params_text
-        if not any(schema.action == selected_action for schema in schemas):
-            selected_action = schemas[0].action
+        if not any(schema.action == selected_action for schema in self.schemas):
+            selected_action = self.schemas[0].action
 
-        self.catalog_panel.set_schemas(schemas, selected_action)
+        self.catalog_panel.set_schemas(self.schemas, selected_action)
         self.catalog_panel.set_selected_action(selected_action)
-        current_schema = next((schema for schema in schemas if schema.action == selected_action), schemas[0])
+        current_schema = next((schema for schema in self.schemas if schema.action == selected_action), self.schemas[0])
         self._apply_schema(current_schema)
         if selected_action == self.workspace_state.action_draft.action and draft_params_text.strip():
             self.params_editor.setPlainText(draft_params_text)
@@ -248,9 +244,8 @@ class ApiDebugPage(QWidget):
             self.workspace_state.action_draft.params_text.strip()
         )
         self.workspace_state.action_draft.action = schema.action
-        self.action_title.setText(schema.action)
+        self.action_title.setText(f"/{schema.action}")
         self.action_summary.setText(schema.summary.strip() or schema.description.strip() or "暂无接口说明")
-        self.action_tags.setText(f"标签: {', '.join(schema.action_tags)}" if schema.action_tags else "标签: 未分类")
         self.docs_view.setPlainText(self._build_docs_text(schema))
         if restore_existing_params:
             self.params_editor.setPlainText(self.workspace_state.action_draft.params_text)
@@ -332,6 +327,8 @@ class ApiDebugPage(QWidget):
         self.send_button.setText("发送调试请求")
 
     def _open_search(self) -> None:
+        dialog_parent = self._host_window or self
+        search_dialog = ApiDebugSearchDialog(dialog_parent)
         items = [
             ApiDebugSearchItem(
                 item_id=f"action:{schema.action}",
@@ -342,21 +339,19 @@ class ApiDebugPage(QWidget):
             )
             for schema in self.schemas
         ]
-        self.search_dialog.set_items(items)
-        chosen = self.search_dialog.open_and_choose()
+        search_dialog.set_items(items)
+        chosen = search_dialog.open_and_choose(self.workspace_state.action_draft.search_query)
         if chosen is None:
             return
+        self.workspace_state.action_draft.search_query = search_dialog.search_edit.text().strip()
         action_name = str(chosen.payload.get("action", "")).strip()
         if action_name:
             self.catalog_panel.set_selected_action(action_name)
+            self._persist_workspace()
 
     def _handle_bot_changed(self, bot_id: str) -> None:
         self.workspace_state.selected_bot_id = bot_id
         self._apply_context(self._current_context())
-        self._persist_workspace()
-
-    def _handle_search_changed(self, text: str) -> None:
-        self.workspace_state.action_draft.search_query = text
         self._persist_workspace()
 
     def _sync_state(self) -> None:
@@ -395,32 +390,21 @@ class ApiDebugPage(QWidget):
             f"接口名称\n{schema.action}",
             f"摘要\n{schema.summary.strip() or '暂无'}",
             f"说明\n{schema.description.strip() or schema.summary.strip() or '暂无'}",
-            f"标签\n{', '.join(schema.action_tags) if schema.action_tags else '未分类'}",
             f"请求 Schema\n{pretty_json(schema.payload_schema if schema.payload_schema is not None else {})}",
             f"返回 Schema\n{pretty_json(schema.return_schema if schema.return_schema is not None else {})}",
         ]
         return "\n\n".join(sections)
 
-    def _sync_responsive_layout(self, *, force: bool = False) -> None:
-        available_width = self._content_width()
-        if not force and available_width == self._last_layout_width:
-            return
-
-        self._last_layout_width = available_width
-        self.top_bar.sync_layout(available_width)
-        splitter_mode = "wide" if available_width >= 1360 else "default"
-        self.root_splitter.setOrientation(Qt.Orientation.Horizontal)
-
-        if force or splitter_mode != self._last_splitter_mode:
-            left_width = 320 if splitter_mode == "wide" else 300
-            right_width = max(720, available_width - left_width - 24)
-            self.root_splitter.setSizes([left_width, right_width])
-            self._last_splitter_mode = splitter_mode
-
-    def _content_width(self) -> int:
-        outer_width = max(0, self.width() - 24)
-        bounded_width = min(outer_width, self.content_widget.maximumWidth()) if hasattr(self, "content_widget") else 0
-        return max(0, bounded_width - 24)
+    @staticmethod
+    def _is_displayable_schema(schema: ApiDebugActionSchema) -> bool:
+        if schema.action.startswith("."):
+            return False
+        summary_text = f"{schema.summary} {schema.description}".lower()
+        if "内部" in summary_text or "internal" in summary_text:
+            return False
+        if any("内部" in tag or "internal" in tag.lower() for tag in schema.action_tags):
+            return False
+        return True
 
     def _run_async(
         self,

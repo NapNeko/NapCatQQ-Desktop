@@ -11,7 +11,6 @@ from typing import Any, Callable
 # 第三方库导入
 from PySide6.QtCore import QObject, QRunnable, Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog,
     QGridLayout,
     QHBoxLayout,
     QListWidgetItem,
@@ -25,11 +24,13 @@ from qfluentwidgets import (
     ComboBox,
     LineEdit,
     ListWidget,
+    MessageBoxBase,
     PillPushButton,
     PushButton,
     SearchLineEdit,
     SegmentedWidget,
     StrongBodyLabel,
+    TitleLabel,
 )
 
 # 项目内模块导入
@@ -127,44 +128,42 @@ class ApiDebugChip(PillPushButton):
         self.setText(text)
 
 
-class ApiDebugSearchDialog(QDialog):
-    """Ctrl+K 全局搜索弹窗。"""
+class ApiDebugSearchDialog(MessageBoxBase):
+    """Action 搜索对话框。"""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("搜索调试资源")
-        self.resize(620, 520)
         self.items: list[ApiDebugSearchItem] = []
         self.selected_item: ApiDebugSearchItem | None = None
 
+        self.title_label = TitleLabel("搜索接口", self)
         self.search_edit = SearchLineEdit(self)
-        self.search_edit.setPlaceholderText("搜索 Action、历史、预设、目标")
+        self.search_edit.setPlaceholderText("搜索 Action 名称或简要说明")
         self.result_list = ListWidget(self)
-        self.close_button = PushButton("关闭", self)
         self.result_list.setUniformItemSizes(False)
+        self.widget.setMinimumSize(620, 520)
+        self.yesButton.setText("定位接口")
+        self.cancelButton.setText("关闭")
+        self.yesButton.setEnabled(False)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-        layout.addWidget(self.search_edit)
-        layout.addWidget(self.result_list, 1)
-        button_layout = QHBoxLayout()
-        button_layout.addStretch(1)
-        button_layout.addWidget(self.close_button)
-        layout.addLayout(button_layout)
+        self.viewLayout.addWidget(self.title_label)
+        self.viewLayout.addWidget(self.search_edit)
+        self.viewLayout.addWidget(self.result_list, 1)
 
         self.search_edit.textChanged.connect(self._rebuild_list)
         self.result_list.itemActivated.connect(self._accept_item)
         self.result_list.itemDoubleClicked.connect(self._accept_item)
-        self.close_button.clicked.connect(self.reject)
+        self.result_list.currentItemChanged.connect(self._handle_current_item_changed)
+        self.yesButton.clicked.connect(self._accept_current_item)
 
     def set_items(self, items: list[ApiDebugSearchItem]) -> None:
         self.items = items
         self._rebuild_list()
 
-    def open_and_choose(self) -> ApiDebugSearchItem | None:
+    def open_and_choose(self, keyword: str = "") -> ApiDebugSearchItem | None:
         self.selected_item = None
-        self.search_edit.clear()
+        self.search_edit.setText(keyword)
+        self.search_edit.selectAll()
         self.search_edit.setFocus()
         if self.exec():
             return self.selected_item
@@ -189,11 +188,23 @@ class ApiDebugSearchDialog(QDialog):
 
         if self.result_list.count():
             self.result_list.setCurrentRow(0)
+        else:
+            self.selected_item = None
+            self.yesButton.setEnabled(False)
 
     def _accept_item(self, item: QListWidgetItem) -> None:
         payload = item.data(Qt.ItemDataRole.UserRole)
         if isinstance(payload, ApiDebugSearchItem):
             self.selected_item = payload
+            self.accept()
+
+    def _handle_current_item_changed(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None) -> None:
+        payload = current.data(Qt.ItemDataRole.UserRole) if current is not None else None
+        self.selected_item = payload if isinstance(payload, ApiDebugSearchItem) else None
+        self.yesButton.setEnabled(self.selected_item is not None)
+
+    def _accept_current_item(self) -> None:
+        if self.selected_item is not None:
             self.accept()
 
 

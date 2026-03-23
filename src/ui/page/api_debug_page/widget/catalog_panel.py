@@ -2,8 +2,17 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtWidgets import QListWidgetItem, QVBoxLayout, QWidget
-from qfluentwidgets import CaptionLabel, CardWidget, ComboBox, ListWidget, SearchLineEdit, StrongBodyLabel
+from PySide6.QtWidgets import QListWidgetItem, QHBoxLayout, QVBoxLayout, QWidget
+from qfluentwidgets import (
+    CaptionLabel,
+    CardWidget,
+    ComboBox,
+    FluentIcon,
+    ListWidget,
+    StrongBodyLabel,
+    ToolTipFilter,
+    ToolButton,
+)
 
 from src.core.api_debug import ApiDebugActionSchema
 from src.ui.components.stacked_widget import TransparentStackedWidget
@@ -14,7 +23,7 @@ class ActionCatalogPanel(CardWidget):
     """左侧 Action 接口目录。"""
 
     action_selected = Signal(object)
-    search_changed = Signal(str)
+    search_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -22,10 +31,9 @@ class ActionCatalogPanel(CardWidget):
         self._refreshing = False
 
         self.title_label = StrongBodyLabel("接口目录", self)
-        self.search_edit = SearchLineEdit(self)
-        self.search_edit.setPlaceholderText("搜索接口名称、说明或标签")
         self.tag_combo = ComboBox(self)
         self.tag_combo.addItem("全部标签", userData="")
+        self.search_button = ToolButton(FluentIcon.SEARCH, self)
         self.list_widget = ListWidget(self)
         self.list_widget.setWordWrap(True)
         self.list_widget.setTextElideMode(Qt.TextElideMode.ElideRight)
@@ -46,19 +54,26 @@ class ActionCatalogPanel(CardWidget):
         self.content_stack.addWidget(self.list_widget)
         self.content_stack.addWidget(self.empty_page)
 
+        filter_row = QWidget(self)
+        filter_layout = QHBoxLayout(filter_row)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        filter_layout.setSpacing(8)
+        filter_layout.addWidget(self.tag_combo, 1)
+        filter_layout.addWidget(self.search_button)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         layout.addWidget(self.title_label)
-        layout.addWidget(self.search_edit)
-        layout.addWidget(self.tag_combo)
+        layout.addWidget(filter_row)
         layout.addWidget(self.content_stack, 1)
         layout.addWidget(self.footer_label)
 
-        self.search_edit.textChanged.connect(self._handle_search_changed)
+        self.search_button.clicked.connect(self.search_requested.emit)
         self.tag_combo.currentIndexChanged.connect(self._refresh_list)
         self.list_widget.currentItemChanged.connect(self._emit_current_action)
         self.footer_label.hide()
+        self._setup_tooltips()
 
     def set_schemas(self, schemas: list[ApiDebugActionSchema], selected_action: str = "") -> None:
         self.schemas = schemas
@@ -71,9 +86,11 @@ class ActionCatalogPanel(CardWidget):
             if str(item.data(Qt.ItemDataRole.UserRole) or "") == action_name:
                 self.list_widget.setCurrentItem(item)
                 return
-
-    def search_keyword(self) -> str:
-        return self.search_edit.text().strip()
+        if str(self.tag_combo.currentData() or ""):
+            self.tag_combo.blockSignals(True)
+            self.tag_combo.setCurrentIndex(0)
+            self.tag_combo.blockSignals(False)
+            self._refresh_list(selected_action=action_name)
 
     def _rebuild_tags(self) -> None:
         previous_tag = str(self.tag_combo.currentData() or "")
@@ -87,29 +104,14 @@ class ActionCatalogPanel(CardWidget):
         self.tag_combo.setCurrentIndex(index if index >= 0 else 0)
         self.tag_combo.blockSignals(False)
 
-    def _handle_search_changed(self, text: str) -> None:
-        self.search_changed.emit(text.strip())
-        self._refresh_list()
-
     def _refresh_list(self, *_args, selected_action: str = "") -> None:
         self._refreshing = True
         previous_action = selected_action or self._current_action_name()
-        keyword = self.search_keyword().lower()
         selected_tag = str(self.tag_combo.currentData() or "")
         filtered: list[ApiDebugActionSchema] = []
 
         for schema in self.schemas:
             if selected_tag and selected_tag not in schema.action_tags:
-                continue
-            haystack = " ".join(
-                [
-                    schema.action,
-                    schema.summary,
-                    schema.description,
-                    " ".join(schema.action_tags),
-                ]
-            ).lower()
-            if keyword and keyword not in haystack:
                 continue
             filtered.append(schema)
 
@@ -117,13 +119,11 @@ class ActionCatalogPanel(CardWidget):
         current_row = -1
         for index, schema in enumerate(filtered):
             summary = schema.summary.strip() or schema.description.strip() or "无说明"
-            tags_text = " / ".join(schema.action_tags[:2])
-            second_line = summary if not tags_text else f"{summary} · {tags_text}"
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, schema.action)
-            item.setText(f"{schema.action}\n{second_line}")
-            item.setToolTip(f"{schema.action}\n{summary}")
-            item.setSizeHint(QSize(0, 72))
+            item.setText(f"/{schema.action}\n{summary}")
+            item.setToolTip(f"{summary}")
+            item.setSizeHint(QSize(0, 60))
             self.list_widget.addItem(item)
             if schema.action == previous_action:
                 current_row = index
@@ -153,3 +153,11 @@ class ActionCatalogPanel(CardWidget):
     def _current_action_name(self) -> str:
         item = self.list_widget.currentItem()
         return str(item.data(Qt.ItemDataRole.UserRole) or "") if item is not None else ""
+
+    def _setup_tooltips(self) -> None:
+        self.search_button.setToolTip("打开接口搜索对话框")
+        self.search_button.setToolTipDuration(1000)
+        self.search_button.installEventFilter(ToolTipFilter(self.search_button, showDelay=300))
+        self.tag_combo.setToolTip("按标签筛选接口")
+        self.tag_combo.setToolTipDuration(1000)
+        self.tag_combo.installEventFilter(ToolTipFilter(self.tag_combo, showDelay=300))

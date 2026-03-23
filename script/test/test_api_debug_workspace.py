@@ -241,9 +241,10 @@ def test_interface_debug_page_loads_schema_and_restores_draft(tmp_path) -> None:
 
     assert page.top_bar.title_label.text() == "接口调试"
     assert page.top_bar.bot_combo.currentText() == "TestBot (114514)"
-    assert page.top_bar.bot_combo.minimumWidth() in {160, 180}
+    assert page.top_bar.bot_combo.minimumWidth() == 180
     assert not hasattr(page, "mode_pivot")
-    assert page.catalog_panel.search_edit.text() == "send"
+    assert not hasattr(page, "search_dialog")
+    assert page.catalog_panel.search_button.toolTip() == "打开接口搜索对话框"
     assert page.action_title.text() == "send_msg"
     assert "发送消息" in page.docs_view.toPlainText()
     assert json.loads(page.params_editor.toPlainText()) == {"message": "hello"}
@@ -298,7 +299,7 @@ def test_interface_debug_page_catalog_uses_uniform_delegate_items(tmp_path) -> N
     assert page.catalog_panel.list_widget.itemWidget(item) is None
     assert item.data(Qt.ItemDataRole.UserRole) == "delete_group_album_media"
     assert item.text().startswith("delete_group_album_media\n删除群相册媒体")
-    assert item.sizeHint().height() == 72
+    assert item.sizeHint().height() == 60
 
     page.close()
     host.close()
@@ -399,6 +400,35 @@ def test_interface_debug_page_shows_unavailable_state_without_webui(tmp_path) ->
     assert not page.send_button.isEnabled()
     assert not page.params_editor.isEnabled()
 
+
+def test_interface_debug_page_filters_internal_and_dot_actions(tmp_path) -> None:
+    ensure_qapp()
+    visible_schema = ApiDebugActionSchema(action="send_msg", summary="发送消息")
+    dot_schema = ApiDebugActionSchema(action=".ocr_image", summary="图片 OCR 识别")
+    internal_schema = ApiDebugActionSchema(action="debug_internal", summary="内部调试接口")
+    context = ApiDebugBotContext(
+        bot_id="114514",
+        bot_name="TestBot",
+        webui_base_url="http://127.0.0.1:6099",
+        webui_token="token",
+    )
+
+    page = api_debug_page_module.ApiDebugPage()
+    page.workspace_store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    page.workspace_state = page.workspace_store.load()
+    page.workspace_state.selected_bot_id = "114514"
+    page.context_service = SimpleNamespace(list_bot_contexts=lambda: [context])
+    page._run_async = lambda func, **kwargs: kwargs["on_success"](func())
+    page.action_service.fetch_schemas = lambda *_args, **_kwargs: [visible_schema, dot_schema, internal_schema]
+
+    host = QWidget()
+    page.initialize(host)
+
+    assert [page.catalog_panel.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(page.catalog_panel.list_widget.count())] == ["send_msg"]
+
+    page.close()
+    host.close()
+
     page.close()
     host.close()
 
@@ -432,11 +462,8 @@ def test_interface_debug_page_uses_bounded_expanding_content_layout(tmp_path) ->
     QApplication.processEvents()
     assert host.size() == initial_size
 
-    page._sync_responsive_layout(force=True)
     assert page.root_splitter.orientation() == Qt.Orientation.Horizontal
-    host.resize(980, 900)
-    QApplication.processEvents()
-    page._sync_responsive_layout(force=True)
+    assert page.root_splitter.sizes()[0] > 0
     assert page.root_splitter.orientation() == Qt.Orientation.Horizontal
 
     page.close()
