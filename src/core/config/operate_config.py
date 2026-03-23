@@ -109,6 +109,7 @@ def _build_napcat_config(config: Config) -> NapCatConfig:
             "packetBackend": config.advanced.packetBackend,
             "packetServer": config.advanced.packetServer,
             "o3HookMode": config.advanced.o3HookMode,
+            "bypass": config.advanced.bypass,
         }
     )
 

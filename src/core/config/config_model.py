@@ -33,6 +33,14 @@ DEFAULT_AUTO_RESTART_SCHEDULE_PAYLOAD = {
     "time_unit": TimeUnitEnum.HOUR.value,
     "duration": 6,
 }
+DEFAULT_BYPASS_PAYLOAD = {
+    "hook": False,
+    "window": False,
+    "module": False,
+    "process": False,
+    "container": False,
+    "js": False,
+}
 _LEGACY_AUTO_RESTART_INTERVAL_PATTERN = re.compile(r"^\s*(\d+)\s*(m|h|d|mon|year)\s*$", re.IGNORECASE)
 _LOG_LEVEL_CHOICES = {"debug", "info", "error"}
 
@@ -41,7 +49,12 @@ def _clone_payload(data: Any) -> Any:
     """复制任意 JSON 兼容结构。"""
     import json
 
-    return json.loads(json.dumps(data, ensure_ascii=False))
+    def _default(value: object) -> Any:
+        if isinstance(value, BaseModel):
+            return json.loads(value.model_dump_json())
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+    return json.loads(json.dumps(data, ensure_ascii=False, default=_default))
 
 
 def _ensure_dict(value: object) -> dict[str, object]:
@@ -345,6 +358,10 @@ def _migrate_legacy_advanced_fields(
         normalized["packetServer"] = ""
         rules_applied.append("advanced.packetServer default")
 
+    bypass_payload, bypass_rules = _normalize_bypass_payload(normalized.get("bypass"))
+    normalized["bypass"] = bypass_payload
+    rules_applied.extend(bypass_rules)
+
     return normalized, rules_applied
 
 
@@ -394,6 +411,21 @@ def _migrate_bot_entry_payload(payload: object) -> tuple[dict[str, object], list
     migrated["advanced"] = advanced_payload
 
     return migrated, rules_applied
+
+
+def _normalize_bypass_payload(payload: object) -> tuple[dict[str, bool], list[str]]:
+    """规范化新版 bypass 配置并补齐缺失键。"""
+    rules_applied: list[str] = []
+    source = _ensure_dict(payload)
+    normalized: dict[str, bool] = {}
+
+    for key, default in DEFAULT_BYPASS_PAYLOAD.items():
+        raw_value = source.get(key, default)
+        normalized[key] = _normalize_bool(raw_value, default)
+        if key not in source:
+            rules_applied.append(f"advanced.bypass.{key} default")
+
+    return normalized, rules_applied
 
 
 class AutoRestartScheduleConfig(BaseModel):
@@ -532,18 +564,35 @@ class ConnectConfig(BaseModel):
     plugins: list = Field(default_factory=list)
 
 
+class BypassConfig(BaseModel):
+    hook: bool = False
+    window: bool = False
+    module: bool = False
+    process: bool = False
+    container: bool = False
+    js: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_bypass_payload(cls, data: Any) -> Any:
+        """兼容缺省、异常结构和布尔字符串。"""
+        normalized, _ = _normalize_bypass_payload(data)
+        return normalized
+
+
 class AdvancedConfig(BaseModel):
     autoStart: bool = False
     offlineNotice: bool = False
     parseMultMsg: bool = False
     packetServer: str = ""
-    packetBackend: str = Field(default="auto", exclude=True)
+    packetBackend: str = "auto"
     enableLocalFile2Url: bool = False
     fileLog: bool = False
     consoleLog: bool = True
     fileLogLevel: Literal["debug", "info", "error"] = "debug"
     consoleLogLevel: Literal["debug", "info", "error"] = "info"
     o3HookMode: Literal[0, 1] = 1
+    bypass: BypassConfig = Field(default_factory=BypassConfig)
 
 
 class Config(BaseModel):
@@ -586,9 +635,10 @@ class NapCatConfig(BaseModel):
     consoleLog: bool
     fileLogLevel: str
     consoleLogLevel: str
-    packetBackend: str = Field(default="auto", exclude=True)
+    packetBackend: str = "auto"
     packetServer: str
     o3HookMode: Literal[0, 1] = 1
+    bypass: BypassConfig = Field(default_factory=BypassConfig)
 
 
 def _coerce_interval_default(value, default: int = 30000) -> int:
