@@ -121,6 +121,7 @@ def expected_napcat_config(config: Config) -> dict:
             packetBackend=config.advanced.packetBackend,
             packetServer=config.advanced.packetServer,
             o3HookMode=config.advanced.o3HookMode,
+            bypass=config.advanced.bypass,
         )
     )
 
@@ -237,6 +238,12 @@ def test_read_config_migrates_v15_network_shape(tmp_path: Path, monkeypatch: pyt
     assert config.advanced.offlineNotice is True
     assert config.advanced.enableLocalFile2Url is True
     assert config.advanced.fileLogLevel == "debug"
+    assert config.advanced.bypass.hook is False
+    assert config.advanced.bypass.window is False
+    assert config.advanced.bypass.module is False
+    assert config.advanced.bypass.process is False
+    assert config.advanced.bypass.container is False
+    assert config.advanced.bypass.js is False
     assert len(config.connect.httpServers) == 1
     assert len(config.connect.httpClients) == 1
     assert len(config.connect.websocketServers) == 1
@@ -254,6 +261,14 @@ def test_read_config_migrates_v15_network_shape(tmp_path: Path, monkeypatch: pyt
     assert "http" not in migrated_root["bots"][0]["connect"]
     assert "ws" not in migrated_root["bots"][0]["connect"]
     assert "reverseWs" not in migrated_root["bots"][0]["connect"]
+    assert migrated_root["bots"][0]["advanced"]["bypass"] == {
+        "hook": False,
+        "window": False,
+        "module": False,
+        "process": False,
+        "container": False,
+        "js": False,
+    }
     assert read_json(fake_path_func.bot_config_path.with_name("bot.json.bak")) == legacy_payload
 
 

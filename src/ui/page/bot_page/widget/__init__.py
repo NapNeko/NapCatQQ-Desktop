@@ -10,6 +10,7 @@ from .card import (
     WebsocketServersConfigCard,
 )
 from .msg_box import (
+    AdvancedBackendDialog,
     AutoRestartDialog,
     ChooseConfigTypeDialog,
     HttpClientConfigDialog,

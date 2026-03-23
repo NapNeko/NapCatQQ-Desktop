@@ -7,8 +7,8 @@ import os
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.core.config.config_model import AutoRestartScheduleConfig, BotConfig
-from src.ui.page.bot_page.widget.config import BotConfigWidget
+from src.core.config.config_model import AdvancedConfig, AutoRestartScheduleConfig, BypassConfig, BotConfig
+from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget
 
 
 def ensure_qapp() -> QApplication:
@@ -63,3 +63,67 @@ def test_bot_qqid_card_is_reenabled_after_returning_to_new_mode() -> None:
 
     assert widget.bot_qq_id_card.isEnabled() is True
     assert widget.bot_qq_id_card.lineEdit.isEnabled() is True
+
+
+def test_advanced_config_widget_round_trips_grouped_and_dialog_fields() -> None:
+    """高级配置页应保留分组主项和底层对话框项。"""
+    ensure_qapp()
+    widget = AdvancedConfigWidget()
+    config = AdvancedConfig(
+        autoStart=True,
+        offlineNotice=True,
+        parseMultMsg=True,
+        packetServer="ws://127.0.0.1:3001",
+        packetBackend="disable",
+        enableLocalFile2Url=True,
+        fileLog=True,
+        consoleLog=False,
+        fileLogLevel="info",
+        consoleLogLevel="error",
+        o3HookMode=0,
+        bypass=BypassConfig(hook=True, module=True, js=True),
+    )
+
+    widget.fill_config(config)
+    restored = widget.get_config()
+
+    assert restored.autoStart is True
+    assert restored.offlineNotice is True
+    assert restored.parseMultMsg is True
+    assert restored.enableLocalFile2Url is True
+    assert restored.packetServer == "ws://127.0.0.1:3001"
+    assert restored.packetBackend == "disable"
+    assert restored.o3HookMode == 0
+    assert restored.bypass.hook is True
+    assert restored.bypass.module is True
+    assert restored.bypass.js is True
+    assert restored.bypass.window is False
+    assert restored.fileLogLevel == "info"
+    assert restored.consoleLogLevel == "error"
+    assert widget.file_log_level_card.isEnabled() is True
+    assert widget.console_level_card.isEnabled() is False
+
+
+def test_advanced_config_widget_clear_resets_backend_and_log_state() -> None:
+    """清空高级配置时应恢复默认值并关闭低频开关。"""
+    ensure_qapp()
+    widget = AdvancedConfigWidget()
+
+    widget.fill_config(
+        AdvancedConfig(
+            fileLog=True,
+            consoleLog=True,
+            packetBackend="disable",
+            packetServer="ws://example.com",
+            bypass=BypassConfig(hook=True, window=True),
+        )
+    )
+    widget.clear_config()
+    restored = widget.get_config()
+
+    assert restored.packetBackend == "auto"
+    assert restored.packetServer == ""
+    assert restored.o3HookMode == 1
+    assert restored.bypass == BypassConfig()
+    assert widget.file_log_level_card.isEnabled() is False
+    assert widget.console_level_card.isEnabled() is False

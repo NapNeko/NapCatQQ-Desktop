@@ -9,6 +9,7 @@ import pytest
 # 项目内模块导入
 from src.core.config.config_enum import TimeUnitEnum
 from src.core.config.config_model import (
+    AdvancedConfig,
     AutoRestartScheduleConfig,
     BotConfig,
     WebsocketClientsConfig,
@@ -75,3 +76,23 @@ def test_websocket_configs_coerce_blank_intervals_to_defaults() -> None:
     assert server.heartInterval == 30000
     assert client.heartInterval == 30000
     assert client.reconnectInterval == 30000
+
+
+def test_advanced_config_normalizes_bypass_payload_and_fills_missing_keys() -> None:
+    """新版 bypass 配置应兼容布尔字符串并补齐缺失字段。"""
+    advanced = AdvancedConfig.model_validate(
+        {
+            "bypass": {
+                "hook": "true",
+                "module": 1,
+                "process": 0,
+            }
+        }
+    )
+
+    assert advanced.bypass.hook is True
+    assert advanced.bypass.window is False
+    assert advanced.bypass.module is True
+    assert advanced.bypass.process is False
+    assert advanced.bypass.container is False
+    assert advanced.bypass.js is False

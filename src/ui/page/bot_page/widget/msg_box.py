@@ -21,7 +21,9 @@ from PySide6.QtGui import QPixmap
 
 # 项目内模块导入
 from src.core.config.config_model import (
+    AdvancedConfig,
     AutoRestartScheduleConfig,
+    BypassConfig,
     HttpClientsConfig,
     HttpServersConfig,
     HttpSseServersConfig,
@@ -655,6 +657,108 @@ class AutoRestartDialog(MessageBoxBase):
         """清空配置"""
         self.enable_card.clear()
         self.interval_card.clear()
+
+
+class AdvancedBackendDialog(MessageBoxBase):
+    """底层与反检测配置对话框。"""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent=parent)
+
+        self.title_label = TitleLabel(self.tr("底层与反检测"), self)
+        self.tip_label = BodyLabel(
+            self.tr("低频配置项。仅在需要排查兼容性、抓包链路或反检测行为时再调整，修改后需重启 Bot 生效。"),
+            self,
+        )
+        self.packet_backend_card = LineEditConfigCard(
+            FI.DEVELOPER_TOOLS,
+            self.tr("Packet Backend"),
+            "auto",
+            self.tr("设置 Packet Backend，默认保持 auto"),
+        )
+        self.packet_server_card = LineEditConfigCard(
+            FI.LINK,
+            self.tr("Packet Server"),
+            "",
+            self.tr("设置 Packet Server 地址，留空则使用默认值"),
+        )
+        self.o3_hook_mode_card = ComboBoxConfigCard(
+            FI.CODE,
+            self.tr("O3 Hook 模式"),
+            ["0", "1"],
+            self.tr("切换 NapCat 的 O3 Hook 模式"),
+        )
+        self.bypass_hook_card = SwitchConfigCard(FI.VPN, self.tr("Hook 反检测"), self.tr("隐藏 Hook 特征"))
+        self.bypass_window_card = SwitchConfigCard(FI.HOME, self.tr("Window 反检测"), self.tr("伪装窗口特征"))
+        self.bypass_module_card = SwitchConfigCard(FI.TAG, self.tr("Module 反检测"), self.tr("隐藏模块加载特征"))
+        self.bypass_process_card = SwitchConfigCard(FI.COMMAND_PROMPT, self.tr("Process 反检测"), self.tr("隐藏进程特征"))
+        self.bypass_container_card = SwitchConfigCard(
+            FI.FOLDER, self.tr("Container 反检测"), self.tr("隐藏容器环境特征")
+        )
+        self.bypass_js_card = SwitchConfigCard(FI.CODE, self.tr("JS 反检测"), self.tr("启用 JS 侧反检测"))
+
+        self.tip_label.setWordWrap(True)
+
+        self.grid_layout = QGridLayout()
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_layout.setSpacing(8)
+        self.grid_layout.addWidget(self.packet_backend_card, 0, 0, 1, 2)
+        self.grid_layout.addWidget(self.o3_hook_mode_card, 0, 2, 1, 2)
+        self.grid_layout.addWidget(self.packet_server_card, 1, 0, 1, 4)
+        self.grid_layout.addWidget(self.bypass_hook_card, 2, 0, 1, 2)
+        self.grid_layout.addWidget(self.bypass_window_card, 2, 2, 1, 2)
+        self.grid_layout.addWidget(self.bypass_module_card, 3, 0, 1, 2)
+        self.grid_layout.addWidget(self.bypass_process_card, 3, 2, 1, 2)
+        self.grid_layout.addWidget(self.bypass_container_card, 4, 0, 1, 2)
+        self.grid_layout.addWidget(self.bypass_js_card, 4, 2, 1, 2)
+
+        self.viewLayout.addWidget(self.title_label)
+        self.viewLayout.addWidget(self.tip_label)
+        self.viewLayout.addLayout(self.grid_layout)
+        self.widget.setMinimumSize(760, 520)
+
+    def get_config(self) -> AdvancedConfig:
+        """获取底层配置。"""
+        return AdvancedConfig(
+            packetBackend=self.packet_backend_card.get_value().strip() or "auto",
+            packetServer=self.packet_server_card.get_value().strip(),
+            o3HookMode=int(self.o3_hook_mode_card.get_value() or "1"),
+            bypass=BypassConfig(
+                hook=self.bypass_hook_card.get_value(),
+                window=self.bypass_window_card.get_value(),
+                module=self.bypass_module_card.get_value(),
+                process=self.bypass_process_card.get_value(),
+                container=self.bypass_container_card.get_value(),
+                js=self.bypass_js_card.get_value(),
+            ),
+        )
+
+    def fill_config(self, config: AdvancedConfig | None = None) -> None:
+        """填充底层配置。"""
+        if config is None:
+            return
+
+        self.packet_backend_card.fill_value(config.packetBackend)
+        self.packet_server_card.fill_value(config.packetServer)
+        self.o3_hook_mode_card.fill_value(str(config.o3HookMode))
+        self.bypass_hook_card.fill_value(config.bypass.hook)
+        self.bypass_window_card.fill_value(config.bypass.window)
+        self.bypass_module_card.fill_value(config.bypass.module)
+        self.bypass_process_card.fill_value(config.bypass.process)
+        self.bypass_container_card.fill_value(config.bypass.container)
+        self.bypass_js_card.fill_value(config.bypass.js)
+
+    def clear_config(self) -> None:
+        """清空底层配置。"""
+        self.packet_backend_card.fill_value("auto")
+        self.packet_server_card.clear()
+        self.o3_hook_mode_card.fill_value("1")
+        self.bypass_hook_card.clear()
+        self.bypass_window_card.clear()
+        self.bypass_module_card.clear()
+        self.bypass_process_card.clear()
+        self.bypass_container_card.clear()
+        self.bypass_js_card.clear()
 
 
 class QRCodeDialog(MessageBoxBase):

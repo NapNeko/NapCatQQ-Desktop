@@ -3,7 +3,8 @@
 Bot 配置页面
 """
 # 第三方库导入
-from qfluentwidgets import ExpandLayout, FlowLayout, FluentIcon, ScrollArea
+from creart import it
+from qfluentwidgets import ExpandLayout, FlowLayout, FluentIcon, PushButton, ScrollArea, SettingCard, SettingCardGroup
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
@@ -27,6 +28,7 @@ from src.ui.page.bot_page.widget import (
     HttpSSEConfigCard,
     WebsocketClientConfigCard,
     WebsocketServersConfigCard,
+    AdvancedBackendDialog,
     AutoRestartDialog,
 )
 
@@ -234,128 +236,194 @@ class ConnectConfigWidget(ScrollArea):
 class AdvancedConfigWidget(ScrollArea):
     """Bot 高级设置页面"""
 
+    class BackendConfigCard(SettingCard):
+        """底层配置入口卡片。"""
+
+        def __init__(self, parent: QWidget | None = None) -> None:
+            super().__init__(
+                FluentIcon.DEVELOPER_TOOLS,
+                self.tr("底层与反检测"),
+                self.tr("Packet、O3 Hook 与 bypass 等低频配置，默认情况下无需调整"),
+                parent,
+            )
+            self._dialog: AdvancedBackendDialog | None = None
+            self._config = AdvancedConfig()
+            self.button = PushButton(self.tr("展开配置"), self)
+            self.button.clicked.connect(self.slot_show_dialog)
+            self.hBoxLayout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
+            self.hBoxLayout.addSpacing(16)
+            self._refresh_summary()
+
+        def _ensure_dialog(self) -> AdvancedBackendDialog:
+            """惰性创建对话框，避免把对话框控件挂进当前页面。"""
+            if self._dialog is None:
+                from src.ui.window.main_window import MainWindow
+
+                self._dialog = AdvancedBackendDialog(it(MainWindow))
+            return self._dialog
+
+        def _refresh_summary(self) -> None:
+            config = self._config
+            enabled_bypass_count = sum(
+                [
+                    config.bypass.hook,
+                    config.bypass.window,
+                    config.bypass.module,
+                    config.bypass.process,
+                    config.bypass.container,
+                    config.bypass.js,
+                ]
+            )
+            packet_server_text = self.tr("已配置") if config.packetServer else self.tr("默认")
+            self.setContent(
+                self.tr(
+                    "Packet={0} · Server={1} · O3 Hook={2} · 反检测启用 {3}/6"
+                ).format(config.packetBackend, packet_server_text, config.o3HookMode, enabled_bypass_count)
+            )
+
+        def slot_show_dialog(self) -> None:
+            dialog = self._ensure_dialog()
+            dialog.fill_config(self._config)
+            if dialog.exec():
+                self._config = dialog.get_config()
+                self._refresh_summary()
+                return
+
+        def get_value(self) -> AdvancedConfig:
+            return self._config
+
+        def fill_value(self, config: AdvancedConfig | None = None) -> None:
+            if config is None:
+                return
+
+            self._config = config.model_copy(deep=True)
+            if self._dialog is not None:
+                self._dialog.fill_config(self._config)
+            self._refresh_summary()
+
+        def clear(self) -> None:
+            self._config = AdvancedConfig()
+            if self._dialog is not None:
+                self._dialog.clear_config()
+            self._refresh_summary()
+
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        # 创建控件
         self.view = QWidget()
+        self.expand_layout = ExpandLayout(self.view)
+        self.runtime_group = SettingCardGroup(self.tr("运行与消息"), self.view)
+        self.log_group = SettingCardGroup(self.tr("日志与诊断"), self.view)
+        self.engine_group = SettingCardGroup(self.tr("底层配置"), self.view)
 
         self.auto_start_card = SwitchConfigCard(
             icon=FluentIcon.PLAY,
             title=self.tr("自动启动"),
             content=self.tr("是否在启动时自动启动 bot"),
-            parent=self.view,
+            parent=self.runtime_group,
         )
         self.offline_notice_card = SwitchConfigCard(
             icon=FluentIcon.MEGAPHONE,
             title=self.tr("掉线通知"),
             content=self.tr("当Bot状态为 离线 时, 发送通知"),
-            parent=self.view,
+            parent=self.runtime_group,
         )
         self.parse_mult_message_card = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("解析合并转发消息"),
             content=self.tr("是否解析合并转发消息"),
-            parent=self.view,
-        )
-        self.packet_server_card = LineEditConfigCard(
-            icon=FluentIcon.COMMAND_PROMPT,
-            title=self.tr("Packet Server"),
-            content=self.tr("设置 Packet Server 地址, 为空则使用默认值"),
-            parent=self.view,
-        )
-        self.packet_backend_card = LineEditConfigCard(
-            icon=FluentIcon.COMMAND_PROMPT,
-            title=self.tr("Packet Backend"),
-            content=self.tr("设置 Packet Backend, 为空则使用默认值"),
-            parent=self.view,
+            parent=self.runtime_group,
         )
         self.local_file_to_url_card = SwitchConfigCard(
             icon=FluentIcon.SHARE,
             title=self.tr("LocalFile2Url"),
             content=self.tr("是否将本地文件转换为URL, 如果获取不到url则使用base64字段返回文件内容"),
             value=True,
-            parent=self.view,
+            parent=self.runtime_group,
         )
         self.file_log_card = SwitchConfigCard(
             icon=FluentIcon.SAVE_AS,
             title=self.tr("文件日志"),
             content=self.tr("是否要将日志记录到文件"),
-            parent=self.view,
+            parent=self.log_group,
         )
         self.console_log_card = SwitchConfigCard(
             icon=FluentIcon.COMMAND_PROMPT,
             title=self.tr("控制台日志"),
             content=self.tr("是否启用控制台日志"),
             value=True,
-            parent=self.view,
+            parent=self.log_group,
         )
         self.file_log_level_card = ComboBoxConfigCard(
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             title=self.tr("文件日志等级"),
             content=self.tr("设置文件日志输出等级"),
             texts=["debug", "info", "error"],
-            parent=self.view,
+            parent=self.log_group,
         )
         self.console_level_card = ComboBoxConfigCard(
             icon=FluentIcon.EMOJI_TAB_SYMBOLS,
             title=self.tr("控制台日志等级"),
             content=self.tr("设置控制台日志输出等级"),
             texts=["info", "debug", "error"],
-            parent=self.view,
+            parent=self.log_group,
         )
-        self.o3_hook_mode_card = ComboBoxConfigCard(
-            icon=FluentIcon.EMOJI_TAB_SYMBOLS,
-            title=self.tr("O3 Hook 模式"),
-            content=self.tr("设置 O3 Hook 模式"),
-            texts=["0", "1"],
-            parent=self.view,
-        )
+        self.backend_config_card = self.BackendConfigCard(self.engine_group)
 
-        # 设置属性
         self._config = None
-        self.cards = [
+        self.runtime_cards = [
             self.auto_start_card,
             self.offline_notice_card,
             self.parse_mult_message_card,
-            self.packet_server_card,
-            self.packet_backend_card,
             self.local_file_to_url_card,
+        ]
+        self.log_cards = [
             self.file_log_card,
             self.console_log_card,
             self.file_log_level_card,
             self.console_level_card,
-            self.o3_hook_mode_card,
         ]
+        self.cards = self.runtime_cards + self.log_cards + [self.backend_config_card]
 
-        # 设置控件
         self.setWidget(self.view)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setWidgetResizable(True)
+        self.view.setObjectName("BotAdvancedConfigView")
 
-        # 创建布局
-        self.card_layout = ExpandLayout(self.view)
-        self.card_layout.setContentsMargins(0, 0, 0, 0)
-        self.card_layout.setSpacing(2)
-        for card in self.cards:
-            self.card_layout.addWidget(card)
+        for card in self.runtime_cards:
+            self.runtime_group.addSettingCard(card)
+        for card in self.log_cards:
+            self.log_group.addSettingCard(card)
+        self.engine_group.addSettingCard(self.backend_config_card)
+
+        self.expand_layout.addWidget(self.runtime_group)
+        self.expand_layout.addWidget(self.log_group)
+        self.expand_layout.addWidget(self.engine_group)
+        self.expand_layout.setContentsMargins(0, 0, 0, 0)
+        self.view.setLayout(self.expand_layout)
+
+        self.file_log_card.switchButton.checkedChanged.connect(self._sync_log_level_card_state)
+        self.console_log_card.switchButton.checkedChanged.connect(self._sync_log_level_card_state)
+        self._sync_log_level_card_state()
         self.adjustSize()
 
     # ==================== 公共方法 ====================
     def get_config(self) -> AdvancedConfig:
         """获取配置"""
+        backend_config = self.backend_config_card.get_value()
         return AdvancedConfig(
             **{
                 "autoStart": self.auto_start_card.get_value(),
                 "offlineNotice": self.offline_notice_card.get_value(),
                 "parseMultMsg": self.parse_mult_message_card.get_value(),
-                "packetServer": self.packet_server_card.get_value(),
-                "packetBackend": self.packet_backend_card.get_value(),
+                "packetServer": backend_config.packetServer,
+                "packetBackend": backend_config.packetBackend,
                 "enableLocalFile2Url": self.local_file_to_url_card.get_value(),
                 "fileLog": self.file_log_card.get_value(),
                 "consoleLog": self.console_log_card.get_value(),
                 "fileLogLevel": self.file_log_level_card.get_value(),
                 "consoleLogLevel": self.console_level_card.get_value(),
-                "o3HookMode": int(self.o3_hook_mode_card.get_value()),
+                "o3HookMode": backend_config.o3HookMode,
+                "bypass": backend_config.bypass,
             }
         )
 
@@ -368,21 +436,26 @@ class AdvancedConfigWidget(ScrollArea):
         self.auto_start_card.fill_value(self._config.autoStart)
         self.offline_notice_card.fill_value(self._config.offlineNotice)
         self.parse_mult_message_card.fill_value(self._config.parseMultMsg)
-        self.packet_server_card.fill_value(self._config.packetServer)
-        self.packet_backend_card.fill_value(self._config.packetBackend)
         self.local_file_to_url_card.fill_value(self._config.enableLocalFile2Url)
         self.file_log_card.fill_value(self._config.fileLog)
         self.console_log_card.fill_value(self._config.consoleLog)
         self.file_log_level_card.fill_value(self._config.fileLogLevel)
         self.console_level_card.fill_value(self._config.consoleLogLevel)
-        self.o3_hook_mode_card.fill_value(str(self._config.o3HookMode))
+        self.backend_config_card.fill_value(self._config)
+        self._sync_log_level_card_state()
 
     def clear_config(self) -> None:
         """清空配置"""
         for card in self.cards:
             card.clear()
+        self._sync_log_level_card_state()
+
+    def _sync_log_level_card_state(self, *_args) -> None:
+        """根据日志开关同步日志等级输入的可编辑状态。"""
+        self.file_log_level_card.setEnabled(self.file_log_card.get_value())
+        self.console_level_card.setEnabled(self.console_log_card.get_value())
 
     # ==================== 重写方法 ====================
     def adjustSize(self) -> None:
         """重写方法以调整控件大小适应内容高度"""
-        self.resize(self.width(), self.card_layout.heightForWidth(self.width()) + 46)
+        self.resize(self.width(), self.expand_layout.heightForWidth(self.width()) + 46)
