@@ -32,6 +32,7 @@ class _ResourceStyleSheet(StyleSheetBase):
 class PageStyleSheet(_ResourceStyleSheet, Enum):
     """页面样式表"""
 
+    API_DEBUG = "api_debug"
     HOME = "home"
     # BOT = "bot"
     SETUP = "setup"

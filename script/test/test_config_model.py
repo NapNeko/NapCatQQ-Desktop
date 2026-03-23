@@ -12,6 +12,7 @@ from src.core.config.config_model import (
     AdvancedConfig,
     AutoRestartScheduleConfig,
     BotConfig,
+    Config,
     ConnectConfig,
     HttpClientsConfig,
     HttpServersConfig,
@@ -108,3 +109,15 @@ def test_connect_config_rejects_duplicate_names_across_protocol_types() -> None:
             httpServers=[HttpServersConfig(name="shared", host="127.0.0.1", port=3000)],
             httpClients=[HttpClientsConfig(name=" shared ", url="https://127.0.0.1:3001")],
         )
+
+
+def test_config_accepts_pydantic_submodels_without_json_serialization_error() -> None:
+    """Config 构造时应能安全处理已实例化的子模型。"""
+    config = Config(
+        bot=BotConfig(name="TestBot", QQID=123456),
+        connect=ConnectConfig(),
+        advanced=AdvancedConfig(),
+    )
+
+    assert config.bot.name == "TestBot"
+    assert config.bot.QQID == 123456

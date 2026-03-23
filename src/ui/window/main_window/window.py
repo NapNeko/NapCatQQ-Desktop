@@ -16,7 +16,7 @@ from src.core.logging import CrashBundleNotification, LogSource, crash_bundle_no
 from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
-from src.ui.page import BotPage, ComponentPage, HomeWidget, SetupWidget
+from src.ui.page import ApiDebugPage, BotPage, ComponentPage, HomeWidget, SetupWidget
 from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
 from src.ui.window.main_window.title_bar import CustomTitleBar
@@ -97,6 +97,12 @@ class MainWindow(MSFluentWindow):
             interface=it(BotPage).initialize(self),
             icon=FluentIcon.ROBOT,
             text=self.tr("BOT"),
+            position=NavigationItemPosition.TOP,
+        )
+        self.addSubInterface(
+            interface=it(ApiDebugPage).initialize(self),
+            icon=FluentIcon.DEVELOPER_TOOLS,
+            text=self.tr("接口调试"),
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
@@ -236,4 +242,3 @@ class MainWindowCreator(AbstractCreator, ABC):
 
 
 add_creator(MainWindowCreator)
-
