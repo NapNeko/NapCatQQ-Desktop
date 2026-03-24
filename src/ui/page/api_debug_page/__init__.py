@@ -26,6 +26,7 @@ from src.core.api_debug import (
     SchemaDefaultGenerator,
 )
 from src.core.config.operate_config import read_config
+from src.core.logging import LogSource, logger
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.info_bar import success_bar, warning_bar
 from .shared import ApiDebugSearchDialog, CallableTask, pretty_json
@@ -359,7 +360,13 @@ class ApiDebugPage(QWidget):
         self._persist_workspace()
 
     def _persist_workspace(self) -> None:
-        self.workspace_store.save(self.workspace_state)
+        try:
+            self.workspace_store.save(self.workspace_state)
+        except OSError as error:
+            logger.warning(
+                f"保存接口调试工作台状态失败: {type(error).__name__}: {error}",
+                log_source=LogSource.UI,
+            )
 
     def _current_context(self) -> ApiDebugBotContext | None:
         return next(

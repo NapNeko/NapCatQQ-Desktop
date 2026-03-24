@@ -38,6 +38,7 @@ from src.core.api_debug.models import (
     ApiDebugResponseBodyType,
 )
 from src.core.config.config_model import HttpServersConfig, WebsocketServersConfig
+import src.core.api_debug.workspace_store as workspace_store_module
 import src.ui.page.api_debug_page as api_debug_page_module
 from src.ui.window.main_window import window as main_window_module
 
@@ -185,6 +186,26 @@ def test_workspace_store_redacts_sensitive_values(tmp_path) -> None:
     assert raw_payload["http_draft"]["body"]["token"] == "<redacted>"
 
 
+def test_workspace_store_retries_replace_when_file_is_temporarily_locked(tmp_path, monkeypatch) -> None:
+    store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    state = ApiDebugWorkspaceState(selected_bot_id="114514")
+    attempts = {"count": 0}
+    original_replace = workspace_store_module.os.replace
+
+    def flaky_replace(src, dst):
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise PermissionError(5, "拒绝访问。", str(dst))
+        return original_replace(src, dst)
+
+    monkeypatch.setattr(workspace_store_module.os, "replace", flaky_replace)
+
+    store.save(state)
+
+    assert attempts["count"] == 3
+    assert json.loads((tmp_path / "workspace.json").read_text(encoding="utf-8"))["selected_bot_id"] == "114514"
+
+
 def test_websocket_service_injects_query_token_and_logs_messages() -> None:
     ensure_qapp()
     fake_socket = FakeSocket()
@@ -273,6 +294,28 @@ def test_interface_debug_page_generates_default_payload_for_new_selection(tmp_pa
     assert page.action_title.text() == "/get_friend_list"
     assert json.loads(page.params_editor.toPlainText()) == {"refresh": False}
     assert "请求 Schema" in page.docs_view.toPlainText()
+
+    page.close()
+    host.close()
+
+
+def test_interface_debug_page_persist_workspace_does_not_raise_on_save_error(tmp_path, monkeypatch) -> None:
+    ensure_qapp()
+
+    page = api_debug_page_module.ApiDebugPage()
+    page.workspace_store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    page.workspace_state = page.workspace_store.load()
+    page.context_service = SimpleNamespace(list_bot_contexts=lambda: [])
+    host = QWidget()
+    page.initialize(host)
+
+    monkeypatch.setattr(
+        page.workspace_store,
+        "save",
+        lambda _state: (_ for _ in ()).throw(PermissionError(5, "拒绝访问。", "workspace.json")),
+    )
+
+    page._persist_workspace()
 
     page.close()
     host.close()

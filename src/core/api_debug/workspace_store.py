@@ -4,6 +4,8 @@
 # 标准库导入
 import json
 import os
+import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,7 @@ from src.core.api_debug.models import (
     ApiDebugHttpDraft,
     ApiDebugWebSocketDraft,
 )
+from src.core.logging import LogSource, LogType, logger
 from src.core.runtime.paths import PathFunc
 
 _SENSITIVE_FIELDS = {
@@ -44,6 +47,7 @@ class ApiDebugWorkspaceStore:
 
     def __init__(self, storage_path: Path | None = None) -> None:
         self.storage_path = storage_path or (it(PathFunc).config_dir_path / "api_debug_workspace.json")
+        self._write_lock = threading.Lock()
 
     def load(self) -> ApiDebugWorkspaceState:
         """读取状态，不存在时返回默认值。"""
@@ -118,17 +122,36 @@ class ApiDebugWorkspaceStore:
 
     def _write_payload(self, payload: dict[str, Any]) -> None:
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = self.storage_path.with_name(f"{self.storage_path.name}.{uuid.uuid4().hex}.tmp")
-        try:
-            with open(temp_path, "w", encoding="utf-8") as file:
-                json.dump(payload, file, ensure_ascii=False, indent=2)
-            os.replace(temp_path, self.storage_path)
-        finally:
-            try:
-                if temp_path.exists():
-                    temp_path.unlink()
-            except OSError:
-                pass
+        last_error: OSError | None = None
+
+        with self._write_lock:
+            for attempt in range(6):
+                temp_path = self.storage_path.with_name(f"{self.storage_path.name}.{uuid.uuid4().hex}.tmp")
+                try:
+                    with open(temp_path, "w", encoding="utf-8") as file:
+                        json.dump(payload, file, ensure_ascii=False, indent=2)
+                        file.flush()
+                        os.fsync(file.fileno())
+
+                    os.replace(temp_path, self.storage_path)
+                    return
+                except OSError as error:
+                    last_error = error
+                    logger.warning(
+                        f"写入接口调试工作台状态失败，准备重试: {type(error).__name__}: {error}",
+                        LogType.FILE_FUNC,
+                        LogSource.CORE,
+                    )
+                    time.sleep(0.02 * (attempt + 1))
+                finally:
+                    try:
+                        if temp_path.exists():
+                            temp_path.unlink()
+                    except OSError:
+                        pass
+
+        if last_error is not None:
+            raise last_error
 
     @staticmethod
     def _parse_mode(value: Any) -> ApiDebugMode:
