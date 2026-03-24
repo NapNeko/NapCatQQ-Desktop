@@ -2,6 +2,21 @@ QWidget#api_debug_page {
     background: transparent;
 }
 
+QWidget#ApiDebugDetailPanel,
+QWidget#ApiDebugDocsContainer {
+    background: transparent;
+}
+
+QLabel#ApiDebugGroupLabel {
+    font-weight: 400;
+    color: rgba(82, 82, 91, 0.82);
+}
+
+QLabel#ApiDebugActionName {
+    font-weight: 400;
+    color: rgba(24, 24, 27, 0.96);
+}
+
 QWidget#api_debug_page CardWidget {
     border-radius: 14px;
 }
@@ -20,8 +35,53 @@ CardWidget#ApiDebugInspectorCard {
     background: rgba(127, 127, 127, 0.02);
 }
 
+CardWidget#ApiDebugStickyCard,
+CardWidget#ApiDebugDebugCard {
+    border: 1px solid rgba(127, 127, 127, 0.08);
+    background: rgba(255, 255, 255, 0.56);
+}
+
+CardWidget#ApiDebugSchemaCard {
+    border: 1px solid rgba(127, 127, 127, 0.06);
+    background: rgba(255, 255, 255, 0.22);
+}
+
+QWidget#ApiDebugSchemaContent {
+    background: transparent;
+}
+
 QWidget#api_debug_page QSplitter::handle {
     background: transparent;
+}
+
+QWidget#api_debug_page QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    margin: 4px 2px 4px 0;
+    border-radius: 3px;
+}
+
+QWidget#api_debug_page QScrollBar::handle:vertical {
+    background: rgba(127, 127, 127, 0.42);
+    border-radius: 3px;
+    min-height: 32px;
+}
+
+QWidget#api_debug_page QScrollBar::handle:vertical:hover {
+    background: rgba(127, 127, 127, 0.64);
+}
+
+QWidget#api_debug_page QScrollBar::add-line:vertical,
+QWidget#api_debug_page QScrollBar::sub-line:vertical,
+QWidget#api_debug_page QScrollBar::add-page:vertical,
+QWidget#api_debug_page QScrollBar::sub-page:vertical,
+QWidget#api_debug_page QScrollBar::add-line:horizontal,
+QWidget#api_debug_page QScrollBar::sub-line:horizontal,
+QWidget#api_debug_page QScrollBar::add-page:horizontal,
+QWidget#api_debug_page QScrollBar::sub-page:horizontal {
+    background: transparent;
+    height: 0;
+    width: 0;
 }
 
 PillPushButton#ApiDebugChip,
@@ -33,6 +93,7 @@ QPushButton#ApiDebugChip {
 
 QWidget#api_debug_page ListWidget,
 QWidget#api_debug_page QListWidget,
+QWidget#api_debug_page QTreeWidget,
 QWidget#api_debug_page TextBrowser {
     border: 0;
     background: transparent;
@@ -56,23 +117,72 @@ QWidget#api_debug_page QListWidget::item:selected {
     background: transparent;
 }
 
-QWidget#ApiDebugActionItem {
-    background: transparent;
+QWidget#api_debug_page QTreeWidget::item {
+    padding: 6px 0;
 }
 
-QWidget#ApiDebugActionItemAccent {
-    background: transparent;
-}
-
-QLabel#ApiDebugActionItemTitle {
-    font-size: 15px;
+QLabel#ApiDebugMethodChip {
+    color: white;
+    border-radius: 4px;
+    padding: 3px 8px;
     font-weight: 600;
-    color: rgba(24, 24, 27, 0.96);
-    background: transparent;
 }
 
-QLabel#ApiDebugActionItemSummary {
-    font-size: 12px;
-    color: rgba(82, 82, 91, 0.86);
+QLabel#ApiDebugRouteLabel {
+    font-size: 14px;
+}
+
+QLabel#ApiDebugContentTypeChip {
+    color: rgba(49, 65, 88, 0.92);
+    background: rgba(148, 163, 184, 0.10);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 6px;
+    padding: 2px 8px;
+}
+
+QWidget#ApiDebugParamRow {
+    border-radius: 8px;
+    background: rgba(127, 127, 127, 0.02);
+}
+
+QLabel#ApiDebugParamName {
+    font-size: 13px;
+}
+
+QLabel#ApiDebugParamType {
+    color: rgba(37, 99, 235, 0.92);
+}
+
+QLabel#ApiDebugParamDescription,
+QLabel#ApiDebugParamRequired {
+    color: rgba(82, 82, 91, 0.88);
+}
+
+QWidget#ApiDebugBodyDivider {
+    background: rgba(127, 127, 127, 0.32);
+    border-radius: 1px;
+}
+
+QWidget#ApiDebugExampleBar {
+    background: transparent;
+    border-radius: 0 0 12px 12px;
+}
+
+QPushButton#ApiDebugExampleToggle {
+    text-align: left;
+    border: 0;
+    border-radius: 0 0 12px 12px;
+    background: transparent;
+    padding: 12px 14px;
+    color: rgba(24, 24, 27, 0.90);
+    font-weight: 500;
+}
+
+QPushButton#ApiDebugExampleToggle:hover {
+    background: rgba(127, 127, 127, 0.04);
+}
+
+ScrollArea#ApiDebugDocsScroll {
+    border: 0;
     background: transparent;
 }
