@@ -30,7 +30,7 @@ from src.core.logging import LogSource, logger
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.info_bar import success_bar, warning_bar
 from .shared import ApiDebugSearchDialog, CallableTask, pretty_json
-from .widget import ActionCatalogPanel, ActionDetailPanel, ApiDebugTopBar
+from .widget import ActionCatalogPanel, ActionDetailPanel
 
 if TYPE_CHECKING:
     from src.ui.window.main_window import MainWindow
@@ -78,14 +78,13 @@ class ApiDebugPage(QWidget):
         self.content_widget.setMaximumWidth(1680)
         self.content_widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Ignored)
 
-        self.top_bar = ApiDebugTopBar(self)
         self.catalog_panel = ActionCatalogPanel(self)
         self.catalog_panel.setObjectName("ApiDebugSideCard")
         self.catalog_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)
 
         self.root_splitter = QSplitter(Qt.Orientation.Horizontal, self.content_widget)
         self.root_splitter.setChildrenCollapsible(False)
-        self.root_splitter.setHandleWidth(8)
+        self.root_splitter.setHandleWidth(12)
         self.root_splitter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
         self.root_splitter.addWidget(self.catalog_panel)
 
@@ -94,7 +93,7 @@ class ApiDebugPage(QWidget):
         self.detail_panel = ActionDetailPanel(self.detail_widget)
         self.root_splitter.addWidget(self.detail_widget)
 
-        self.catalog_panel.setMinimumWidth(300)
+        self.catalog_panel.setMinimumWidth(250)
         self.detail_widget.setMinimumWidth(640)
         self.root_splitter.setStretchFactor(0, 3)
         self.root_splitter.setStretchFactor(1, 7)
@@ -107,8 +106,7 @@ class ApiDebugPage(QWidget):
 
         content_layout = QVBoxLayout(self.content_widget)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(8)
-        content_layout.addWidget(self.top_bar)
+        content_layout.setSpacing(0)
         content_layout.addWidget(self.root_splitter, 1)
 
         layout = QHBoxLayout(self)
@@ -125,27 +123,31 @@ class ApiDebugPage(QWidget):
         self.detail_state_stack = self.detail_panel.detail_state_stack
         self.detail_content_page = self.detail_panel.detail_content_page
         self.detail_empty_page = self.detail_panel.detail_empty_page
+        self.category_label = self.detail_panel.category_label
         self.action_title = self.detail_panel.action_title
-        self.action_summary = self.detail_panel.action_summary
+        self.request_method_chip = self.detail_panel.request_method_chip
+        self.request_route_label = self.detail_panel.request_route_label
+        self.debug_button = self.detail_panel.debug_button
         self.generate_button = self.detail_panel.generate_button
         self.send_button = self.detail_panel.send_button
-        self.detail_pivot = self.detail_panel.detail_pivot
-        self.detail_stack = self.detail_panel.detail_stack
-        self.params_page = self.detail_panel.params_page
-        self.docs_page = self.detail_panel.docs_page
-        self.result_page = self.detail_panel.result_page
         self.params_editor = self.detail_panel.params_editor
-        self.docs_view = self.detail_panel.docs_view
+        self.docs_view = self.detail_panel.example_view
+        self.example_view = self.detail_panel.example_view
+        self.response_view = self.detail_panel.response_view
+        self.docs_scroll = self.detail_panel.docs_scroll
+        self.debug_card = self.detail_panel.debug_card
         self.result_card = self.detail_panel.result_card
         self.empty_title = self.detail_panel.empty_title
         self.empty_hint = self.detail_panel.empty_hint
         self.empty_container = self.detail_panel.empty_container
 
     def _bind_signals(self) -> None:
-        self.top_bar.refresh_requested.connect(self.reload_contexts)
-        self.top_bar.bot_changed.connect(self._handle_bot_changed)
+        self.catalog_panel.refresh_requested.connect(self.reload_contexts)
+        self.catalog_panel.bot_changed.connect(self._handle_bot_changed)
         self.catalog_panel.search_requested.connect(self._open_search)
         self.catalog_panel.action_selected.connect(self._apply_schema)
+        self.debug_button.clicked.connect(self.detail_panel.show_debug_panel)
+        self.detail_panel.debug_close_button.clicked.connect(self.detail_panel.hide_debug_panel)
         self.generate_button.clicked.connect(self._generate_payload_for_current_action)
         self.send_button.clicked.connect(self._send_current_action)
         self.params_editor.textChanged.connect(self._sync_state)
@@ -175,7 +177,7 @@ class ApiDebugPage(QWidget):
             selected_bot_id = ""
 
         self.workspace_state.selected_bot_id = selected_bot_id
-        self.top_bar.populate_bots(self.contexts, selected_bot_id)
+        self.catalog_panel.populate_bots(self.contexts, selected_bot_id)
         self._apply_context(self._current_context())
         self._persist_workspace()
 
@@ -221,7 +223,7 @@ class ApiDebugPage(QWidget):
             selected_action = self.schemas[0].action
 
         self.catalog_panel.set_schemas(self.schemas, selected_action)
-        self.catalog_panel.set_selected_action(selected_action)
+        self.catalog_panel.set_selected_action(selected_action, expand_parent=False)
         current_schema = next((schema for schema in self.schemas if schema.action == selected_action), self.schemas[0])
         self._apply_schema(current_schema)
         if selected_action == self.workspace_state.action_draft.action and draft_params_text.strip():
@@ -237,7 +239,7 @@ class ApiDebugPage(QWidget):
     def _apply_schema(self, schema: ApiDebugActionSchema | None) -> None:
         if schema is None:
             self.workspace_state.action_draft.action = ""
-            self._set_empty_detail_state("没有匹配的接口", "调整搜索条件或标签过滤后再试。")
+            self._set_empty_detail_state("没有匹配的接口", "请通过左侧分类树或搜索对话框重新选择接口。")
             self._persist_workspace()
             return
 
@@ -245,16 +247,19 @@ class ApiDebugPage(QWidget):
             self.workspace_state.action_draft.params_text.strip()
         )
         self.workspace_state.action_draft.action = schema.action
-        self.action_title.setText(f"/{schema.action}")
-        self.action_summary.setText(schema.summary.strip() or schema.description.strip() or "暂无接口说明")
-        self.docs_view.setPlainText(self._build_docs_text(schema))
         if restore_existing_params:
             self.params_editor.setPlainText(self.workspace_state.action_draft.params_text)
         else:
             self._fill_default_params(schema)
+        self.detail_panel.apply_schema(
+            schema,
+            category_name=self.catalog_panel.category_name(schema),
+            display_name=self.catalog_panel.display_name(schema),
+            example_text=self.params_editor.toPlainText(),
+            request_method=self._request_method_for_schema(schema),
+        )
         self.result_card.reset()
         self._set_enabled_state(True)
-        self.detail_panel.show_detail_page("params")
         self._persist_workspace()
 
     def _fill_default_params(self, schema: ApiDebugActionSchema) -> None:
@@ -281,6 +286,7 @@ class ApiDebugPage(QWidget):
             return
 
         params = json.loads(self.params_editor.toPlainText() or "{}")
+        self.detail_panel.show_debug_panel()
         self.send_button.setEnabled(False)
         self.send_button.setText("发送中...")
         self._run_async(
@@ -310,8 +316,8 @@ class ApiDebugPage(QWidget):
         )
 
     def _handle_execute_result(self, result: ApiDebugExecutionResult) -> None:
+        self.detail_panel.show_debug_panel()
         self.result_card.apply_result(result)
-        self.detail_panel.show_detail_page("result")
         if result.error is None:
             success_bar("接口调用成功", parent=self)
         else:
@@ -319,8 +325,8 @@ class ApiDebugPage(QWidget):
 
     def _handle_execute_error(self, message: str) -> None:
         self.current_session = None
+        self.detail_panel.show_debug_panel()
         self.result_card.reset(message)
-        self.detail_panel.show_detail_page("result")
         warning_bar(message, title="接口调用失败", parent=self)
 
     def _reset_send_button(self) -> None:
@@ -333,8 +339,8 @@ class ApiDebugPage(QWidget):
         items = [
             ApiDebugSearchItem(
                 item_id=f"action:{schema.action}",
-                title=schema.action,
-                subtitle=schema.summary.strip() or "接口调试",
+                title=self.catalog_panel.display_name(schema),
+                subtitle=f"{self.catalog_panel.category_name(schema)} · /{schema.action}",
                 mode=ApiDebugMode.ACTION,
                 payload={"action": schema.action},
             )
@@ -354,6 +360,11 @@ class ApiDebugPage(QWidget):
         self.workspace_state.selected_bot_id = bot_id
         self._apply_context(self._current_context())
         self._persist_workspace()
+
+    @staticmethod
+    def _request_method_for_schema(schema: ApiDebugActionSchema) -> str:
+        _ = schema
+        return "POST"
 
     def _sync_state(self) -> None:
         self.workspace_state.action_draft.params_text = self.params_editor.toPlainText()
@@ -393,16 +404,6 @@ class ApiDebugPage(QWidget):
 
     def _set_enabled_state(self, enabled: bool) -> None:
         self.detail_panel.set_enabled_state(enabled)
-
-    def _build_docs_text(self, schema: ApiDebugActionSchema) -> str:
-        sections = [
-            f"接口名称\n{schema.action}",
-            f"摘要\n{schema.summary.strip() or '暂无'}",
-            f"说明\n{schema.description.strip() or schema.summary.strip() or '暂无'}",
-            f"请求 Schema\n{pretty_json(schema.payload_schema if schema.payload_schema is not None else {})}",
-            f"返回 Schema\n{pretty_json(schema.return_schema if schema.return_schema is not None else {})}",
-        ]
-        return "\n\n".join(sections)
 
     @staticmethod
     def _is_displayable_schema(schema: ApiDebugActionSchema) -> bool:
