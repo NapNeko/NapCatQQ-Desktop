@@ -260,14 +260,27 @@ def test_interface_debug_page_loads_schema_and_restores_draft(tmp_path) -> None:
     host = QWidget()
     page.initialize(host)
 
-    assert page.top_bar.title_label.text() == "接口调试"
-    assert page.top_bar.bot_combo.currentText() == "TestBot (114514)"
-    assert page.top_bar.bot_combo.minimumWidth() == 180
+    assert not hasattr(page, "top_bar")
+    assert page.catalog_panel.bot_combo.currentText() == "TestBot (114514)"
+    assert page.catalog_panel.bot_combo.minimumWidth() == 180
     assert not hasattr(page, "mode_pivot")
     assert not hasattr(page, "search_dialog")
-    assert page.catalog_panel.search_button.toolTip() == "打开接口搜索对话框"
-    assert page.action_title.text() == "/send_msg"
-    assert "发送消息" in page.docs_view.toPlainText()
+    assert page.catalog_panel.search_edit.toolTip() == "打开接口搜索对话框"
+    assert page.catalog_panel.search_edit.isReadOnly() is True
+    assert page.category_label.text() == "msg"
+    assert page.action_title.text() == "发送消息"
+    assert page.request_method_chip.text() == "POST"
+    assert page.request_route_label.text() == "/send_msg"
+    assert page.detail_panel.pinned_meta_card.isHidden() is True
+    assert page.docs_scroll.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert page.catalog_panel.footer_label.isHidden() is True
+    assert page.detail_panel.body_params_title.text() == "Body 参数"
+    assert page.detail_panel.body_content_type_chip.text() == "application/json"
+    assert page.detail_panel.body_header_divider.height() == 1
+    assert page.detail_panel.example_toggle_button.text() == "示例  ▼"
+    assert page.detail_panel.params_rows_layout.count() == 1
+    assert "message_id" in page.response_view.toPlainText()
+    assert page.debug_card.isHidden() is True
     assert json.loads(page.params_editor.toPlainText()) == {"message": "hello"}
 
     page.close()
@@ -291,9 +304,10 @@ def test_interface_debug_page_generates_default_payload_for_new_selection(tmp_pa
     page.initialize(host)
     page._apply_schema(schema)
 
-    assert page.action_title.text() == "/get_friend_list"
+    assert page.action_title.text() == "好友列表"
+    assert page.request_route_label.text() == "/get_friend_list"
     assert json.loads(page.params_editor.toPlainText()) == {"refresh": False}
-    assert "请求 Schema" in page.docs_view.toPlainText()
+    assert page.detail_panel.params_rows_layout.count() == 1
 
     page.close()
     host.close()
@@ -321,7 +335,7 @@ def test_interface_debug_page_persist_workspace_does_not_raise_on_save_error(tmp
     host.close()
 
 
-def test_interface_debug_page_catalog_uses_uniform_item_widgets(tmp_path) -> None:
+def test_interface_debug_page_catalog_groups_actions_as_tree(tmp_path) -> None:
     ensure_qapp()
     schema = ApiDebugActionSchema(
         action="delete_group_album_media",
@@ -337,20 +351,20 @@ def test_interface_debug_page_catalog_uses_uniform_item_widgets(tmp_path) -> Non
     page.initialize(host)
     page.catalog_panel.set_schemas([schema], "delete_group_album_media")
 
-    item = page.catalog_panel.list_widget.item(0)
-    widget = page.catalog_panel.list_widget.itemWidget(item)
+    category_item = page.catalog_panel.tree_widget.topLevelItem(0)
+    action_item = category_item.child(0)
 
-    assert item.data(Qt.ItemDataRole.UserRole) == "delete_group_album_media"
-    assert widget is not None
-    assert widget.title_label.text() == "/delete_group_album_media"
-    assert widget.summary_label.text() == "删除群相册媒体"
-    assert item.sizeHint().height() == 60
+    assert page.catalog_panel.tree_widget.topLevelItemCount() == 1
+    assert category_item.text(0) == "group"
+    assert category_item.isExpanded() is False
+    assert action_item.data(0, Qt.ItemDataRole.UserRole) == "delete_group_album_media"
+    assert action_item.text(0) == "删除群相册媒体"
 
     page.close()
     host.close()
 
 
-def test_interface_debug_page_catalog_item_marks_selected_state(tmp_path) -> None:
+def test_interface_debug_page_catalog_selects_tree_leaf_item(tmp_path) -> None:
     ensure_qapp()
     schema = ApiDebugActionSchema(
         action="delete_group_album_media",
@@ -366,11 +380,34 @@ def test_interface_debug_page_catalog_item_marks_selected_state(tmp_path) -> Non
     page.initialize(host)
     page.catalog_panel.set_schemas([schema], "delete_group_album_media")
 
-    item = page.catalog_panel.list_widget.item(0)
-    widget = page.catalog_panel.list_widget.itemWidget(item)
+    current_item = page.catalog_panel.tree_widget.currentItem()
 
-    assert widget is not None
-    assert widget.property("selected") is True
+    assert current_item is not None
+    assert current_item.text(0) == "删除群相册媒体"
+    assert current_item.data(0, Qt.ItemDataRole.UserRole) == "delete_group_album_media"
+
+    page.close()
+    host.close()
+
+
+def test_interface_debug_page_debug_panel_hidden_until_requested(tmp_path) -> None:
+    ensure_qapp()
+    schema = ApiDebugActionSchema(action="send_msg", summary="发送消息", action_tags=["msg"])
+
+    page = api_debug_page_module.ApiDebugPage()
+    page.workspace_store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    page.workspace_state = page.workspace_store.load()
+    page.context_service = SimpleNamespace(list_bot_contexts=lambda: [])
+    host = QWidget()
+    page.initialize(host)
+    page._apply_schema(schema)
+
+    assert page.debug_card.isHidden() is True
+
+    page.debug_button.click()
+    QApplication.processEvents()
+
+    assert page.debug_card.isHidden() is False
 
     page.close()
     host.close()
@@ -406,7 +443,9 @@ def test_interface_debug_page_send_request_shows_result(tmp_path) -> None:
     page.current_session = None
     page.schemas = [schema]
     page._run_async = lambda func, **kwargs: kwargs["on_success"](func()) if "on_success" in kwargs else func()
-    page.action_service.create_session = lambda *_args, **_kwargs: SimpleNamespace(base_url="http://127.0.0.1:6099", adapter_name="debug-primary")
+    page.action_service.create_session = lambda *_args, **_kwargs: SimpleNamespace(
+        base_url="http://127.0.0.1:6099", adapter_name="debug-primary"
+    )
     page.action_service.call_action = lambda *_args, **_kwargs: result
     host = QWidget()
     page.initialize(host)
@@ -418,6 +457,7 @@ def test_interface_debug_page_send_request_shows_result(tmp_path) -> None:
 
     page._send_current_action()
 
+    assert page.debug_card.isHidden() is False
     assert page.result_card.status_chip.text() == "200"
     assert page.result_card.content_view.toPlainText() == '{\n  "status": "ok"\n}'
 
@@ -496,7 +536,12 @@ def test_interface_debug_page_filters_internal_and_dot_actions(tmp_path) -> None
     host = QWidget()
     page.initialize(host)
 
-    assert [page.catalog_panel.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(page.catalog_panel.list_widget.count())] == ["send_msg"]
+    category_item = page.catalog_panel.tree_widget.topLevelItem(0)
+
+    assert page.catalog_panel.tree_widget.topLevelItemCount() == 1
+    assert category_item.childCount() == 1
+    assert category_item.isExpanded() is False
+    assert category_item.child(0).data(0, Qt.ItemDataRole.UserRole) == "send_msg"
 
     page.close()
     host.close()
@@ -554,7 +599,9 @@ def test_main_window_registers_interface_debug_between_bot_and_component(monkeyp
 
     recorded = []
     monkeypatch.setattr(main_window_module, "it", lambda cls: FakePage(cls.__name__))
-    monkeypatch.setattr(main_window_module.MainWindow, "addSubInterface", lambda self, **kwargs: recorded.append(kwargs["text"]))
+    monkeypatch.setattr(
+        main_window_module.MainWindow, "addSubInterface", lambda self, **kwargs: recorded.append(kwargs["text"])
+    )
 
     window = main_window_module.MainWindow()
     window._set_item()
