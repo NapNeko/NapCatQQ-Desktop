@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -88,18 +88,21 @@ class _ApiDebugParamRow(QWidget):
 class _CardDivider(QWidget):
     """使用绘制事件保证可见的细分割线。"""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *, inset: int = 0) -> None:
         super().__init__(parent)
         self.setFixedHeight(2)
+        self._inset = max(0, inset)
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(QColor(127, 127, 127, 96))
+        pen = QPen(QColor(127, 127, 127, 32))
         pen.setWidth(1)
         painter.setPen(pen)
         y = self.height() / 2
-        painter.drawLine(0, int(y), self.width(), int(y))
+        start_x = self._inset
+        end_x = max(start_x, self.width() - self._inset)
+        painter.drawLine(start_x, int(y), end_x, int(y))
 
 
 class _ExampleFooterBar(QWidget):
@@ -115,6 +118,43 @@ class _ExampleFooterBar(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(255, 255, 255, 0))
         painter.drawRoundedRect(self.rect(), 12, 12)
+
+
+class _ExampleToggleBar(QWidget):
+    """使用绘制事件的透明示例展开栏。"""
+
+    clicked = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._expanded = False
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMinimumHeight(42)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self._expanded = expanded
+        self.update()
+
+    def mousePressEvent(self, event) -> None:  # noqa: ANN001
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        text_rect = self.rect().adjusted(14, 0, -14, 0)
+        painter.setPen(QColor(24, 24, 27, 230))
+        font = QFont(self.font())
+        font.setWeight(QFont.Weight.Medium)
+        painter.setFont(font)
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "示例")
+
+        arrow = "▲" if self._expanded else "▼"
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"示例  {arrow}")
 
 
 class ActionResultCard(QWidget):
@@ -170,7 +210,7 @@ class ActionResultCard(QWidget):
             self.content_view.setPlainText("没有响应体")
 
         if result.error is not None:
-            payload = {
+            payload: dict[str, object] = {
                 "kind": result.error.kind.value,
                 "message": result.error.message,
             }
@@ -263,23 +303,25 @@ class ActionDetailPanel(QWidget):
 
         self.body_params_card = CardWidget(self.docs_container)
         self.body_params_card.setObjectName("ApiDebugSchemaCard")
-        self.body_content_widget = QWidget(self.body_params_card)
-        self.body_content_widget.setObjectName("ApiDebugSchemaContent")
-        self.body_params_title = StrongBodyLabel("Body 参数", self.body_content_widget)
-        self.body_content_type_chip = CaptionLabel("application/json", self.body_content_widget)
+        self.body_header_widget = QWidget(self.body_params_card)
+        self.body_header_widget.setObjectName("ApiDebugSchemaContent")
+        self.body_params_title = StrongBodyLabel("Body 参数", self.body_header_widget)
+        self.body_content_type_chip = CaptionLabel("application/json", self.body_header_widget)
         self.body_content_type_chip.setObjectName("ApiDebugContentTypeChip")
-        self.body_header_divider = _CardDivider(self.body_params_card)
+        self.body_header_divider = _CardDivider(self.body_params_card, inset=0)
         self.body_header_divider.setObjectName("ApiDebugBodyDivider")
-        self.params_rows_container = QWidget(self.body_content_widget)
+        self.body_rows_widget = QWidget(self.body_params_card)
+        self.body_rows_widget.setObjectName("ApiDebugSchemaContent")
+        self.params_rows_container = QWidget(self.body_rows_widget)
         self.params_rows_layout = QVBoxLayout(self.params_rows_container)
         self.params_rows_layout.setContentsMargins(0, 0, 0, 0)
         self.params_rows_layout.setSpacing(6)
         self.example_bar = _ExampleFooterBar(self.body_params_card)
         self.example_bar.setObjectName("ApiDebugExampleBar")
-        self.example_toggle_button = PushButton("示例  ▼", self.example_bar)
+        self.example_toggle_button = _ExampleToggleBar(self.example_bar)
         self.example_toggle_button.setObjectName("ApiDebugExampleToggle")
         self.example_toggle_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.example_footer_divider = _CardDivider(self.example_bar)
+        self.example_footer_divider = _CardDivider(self.example_bar, inset=0)
         self.example_footer_divider.setObjectName("ApiDebugBodyDivider")
         self.example_view = CodeExibit(self.body_params_card)
         self.example_view.setMinimumHeight(160)
@@ -291,11 +333,15 @@ class ActionDetailPanel(QWidget):
         body_header_layout.addWidget(self.body_content_type_chip, 0, Qt.AlignmentFlag.AlignVCenter)
         body_header_layout.addStretch(1)
 
-        body_content_layout = QVBoxLayout(self.body_content_widget)
-        body_content_layout.setContentsMargins(12, 12, 12, 12)
-        body_content_layout.setSpacing(10)
-        body_content_layout.addLayout(body_header_layout)
-        body_content_layout.addWidget(self.params_rows_container)
+        body_header_widget_layout = QVBoxLayout(self.body_header_widget)
+        body_header_widget_layout.setContentsMargins(12, 12, 12, 12)
+        body_header_widget_layout.setSpacing(0)
+        body_header_widget_layout.addLayout(body_header_layout)
+
+        body_rows_layout = QVBoxLayout(self.body_rows_widget)
+        body_rows_layout.setContentsMargins(12, 12, 12, 12)
+        body_rows_layout.setSpacing(0)
+        body_rows_layout.addWidget(self.params_rows_container)
 
         example_bar_layout = QVBoxLayout(self.example_bar)
         example_bar_layout.setContentsMargins(0, 0, 0, 0)
@@ -306,8 +352,9 @@ class ActionDetailPanel(QWidget):
         body_card_layout = QVBoxLayout(self.body_params_card)
         body_card_layout.setContentsMargins(0, 0, 0, 0)
         body_card_layout.setSpacing(0)
-        body_card_layout.addWidget(self.body_content_widget)
+        body_card_layout.addWidget(self.body_header_widget)
         body_card_layout.addWidget(self.body_header_divider)
+        body_card_layout.addWidget(self.body_rows_widget)
         body_card_layout.addWidget(self.example_bar)
         body_card_layout.addWidget(self.example_view)
 
@@ -531,7 +578,7 @@ class ActionDetailPanel(QWidget):
 
     def _set_example_visible(self, visible: bool) -> None:
         self.example_view.setVisible(visible)
-        self.example_toggle_button.setText("示例  ▲" if visible else "示例  ▼")
+        self.example_toggle_button.set_expanded(visible)
 
     def _toggle_example_card(self) -> None:
         self._set_example_visible(not self.example_view.isVisible())
