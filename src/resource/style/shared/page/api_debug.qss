@@ -172,14 +172,14 @@ QPushButton#ApiDebugExampleToggle {
     text-align: left;
     border: 0;
     border-radius: 0 0 12px 12px;
-    background: transparent;
+    background: rgba(0, 0, 0, 0);
     padding: 12px 14px;
     color: rgba(24, 24, 27, 0.90);
     font-weight: 500;
 }
 
 QPushButton#ApiDebugExampleToggle:hover {
-    background: rgba(127, 127, 127, 0.04);
+    background: rgba(0, 0, 0, 0);
 }
 
 ScrollArea#ApiDebugDocsScroll {
