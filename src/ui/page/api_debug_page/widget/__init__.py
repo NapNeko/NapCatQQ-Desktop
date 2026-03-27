@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from .catalog_panel import ActionCatalogPanel
-from .detail_panel import ActionDetailPanel, ActionResultCard
+from .debug_card import ActionResultCard
+from .detail_panel import ActionDetailPanel
 
 __all__ = [
     "ActionCatalogPanel",

@@ -133,7 +133,7 @@ class ApiDebugPage(QWidget):
         self.params_editor = self.detail_panel.params_editor
         self.docs_view = self.detail_panel.example_view
         self.example_view = self.detail_panel.example_view
-        self.response_view = self.detail_panel.response_view
+        self.response_view = self.detail_panel.response_schema_view
         self.docs_scroll = self.detail_panel.docs_scroll
         self.debug_card = self.detail_panel.debug_card
         self.result_card = self.detail_panel.result_card
@@ -255,7 +255,7 @@ class ApiDebugPage(QWidget):
             schema,
             category_name=self.catalog_panel.category_name(schema),
             display_name=self.catalog_panel.display_name(schema),
-            example_text=self.params_editor.toPlainText(),
+            example_text=self._schema_example_text(schema),
             request_method=self._request_method_for_schema(schema),
         )
         self.result_card.reset()
@@ -265,6 +265,10 @@ class ApiDebugPage(QWidget):
     def _fill_default_params(self, schema: ApiDebugActionSchema) -> None:
         payload = self.schema_generator.build_default(schema.payload_schema, schema.payload_example)
         self.params_editor.set_json(pretty_json(payload))
+
+    def _schema_example_text(self, schema: ApiDebugActionSchema) -> str:
+        payload = self.schema_generator.build_default(schema.payload_schema, schema.payload_example)
+        return pretty_json(payload)
 
     def _generate_payload_for_current_action(self) -> None:
         schema = self._current_schema()
