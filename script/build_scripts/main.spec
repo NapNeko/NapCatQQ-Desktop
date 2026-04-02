@@ -18,7 +18,7 @@ datas = prepare_runtime_assets(project_root, project_root / "build")
 icon_path = prepare_build_icon(project_root, project_root / "build")
 
 a = Analysis(
-    ['../../main.py'],
+    [str(project_root / 'main.py')],
     pathex=[],
     hookspath=[],
     hooksconfig={},
