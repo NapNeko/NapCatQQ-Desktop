@@ -18,12 +18,23 @@
 """
 
 # 标准库导入
+import argparse
+import io
 import re
 import subprocess
 import sys
-import io
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# 尝试导入 AI changelog 生成器（可选依赖）
+try:
+    from script.changelog_generator.integrations import (
+        UpdateVersionIntegration,
+        generate_ai_changelog,
+    )
+    AI_GENERATOR_AVAILABLE = True
+except ImportError:
+    AI_GENERATOR_AVAILABLE = False
 
 # 在 CI / Windows runner 上，stdout/stderr 默认编码可能不是 UTF-8
 # 打印 emoji（例如 🚀）时会抛出 UnicodeEncodeError（cp1252 无法编码这些字符）。
@@ -269,13 +280,35 @@ def update_changelog(version: str, changelog_content: str) -> None:
 
 def main():
     """主函数"""
-    if len(sys.argv) < 2:
-        print("用法: python script/utils/update_version.py <version_tag>")
-        print("示例: python script/utils/update_version.py v1.7.9")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="版本号自动更新和更新日志生成脚本",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  python script/utils/update_version.py v1.7.9
+  python script/utils/update_version.py v1.7.9 --use-ai
+  python script/utils/update_version.py v1.7.9 --from v1.7.8
+        """,
+    )
+    parser.add_argument("version", help="版本号 (例如: v1.7.9 或 1.7.9)")
+    parser.add_argument("--from", dest="from_tag", help="起始标签 (默认: 上一个标签)")
+    parser.add_argument(
+        "--use-ai",
+        dest="use_ai",
+        action="store_true",
+        help="使用 AI 生成更新日志 (需要配置 API 密钥)",
+    )
+    parser.add_argument(
+        "--ai-preview",
+        dest="ai_preview",
+        action="store_true",
+        help="预览 AI 生成内容但不保存",
+    )
+
+    args = parser.parse_args()
 
     # 获取版本号
-    tag = sys.argv[1]
+    tag = args.version
     version = get_version_from_tag(tag)
     version_with_v = f"v{version}"
 
@@ -283,43 +316,85 @@ def main():
     print()
 
     # 获取上一个版本 tag
-    prev_tag = get_previous_tag()
-    if prev_tag:
-        print(f"📌 上一个版本: {prev_tag}")
+    if args.from_tag:
+        prev_tag = args.from_tag
+        print(f"📌 使用指定的起始版本: {prev_tag}")
     else:
-        print("📌 未找到上一个版本，将使用所有历史 commit")
+        prev_tag = get_previous_tag()
+        if prev_tag:
+            print(f"📌 上一个版本: {prev_tag}")
+        else:
+            print("📌 未找到上一个版本，将使用所有历史 commit")
     print()
 
-    # 获取 commit 记录
-    print("📝 收集 commit 记录...")
-    commits = get_commits_between_tags(prev_tag)
-    print(f"   找到 {len(commits)} 个 commit")
+    # 判断使用 AI 生成还是传统方式
+    if args.use_ai or args.ai_preview:
+        if not AI_GENERATOR_AVAILABLE:
+            print("❌ AI 生成器不可用，请确保已安装依赖:")
+            print("   - script/changelog_generator/ 目录存在")
+            print("\n将使用传统方式生成更新日志...\n")
+            use_ai = False
+        else:
+            use_ai = True
+    else:
+        use_ai = False
+
+    if use_ai:
+        print("🤖 使用 AI 生成更新日志...")
+        try:
+            changelog_content = generate_ai_changelog(version, prev_tag)
+
+            if args.ai_preview:
+                print("\n" + "=" * 60)
+                print("📋 AI 生成内容预览：")
+                print("=" * 60 + "\n")
+                print(changelog_content)
+                print("\n" + "=" * 60)
+                print("⚠️ 预览模式，未保存到文件")
+                print("=" * 60)
+                return
+
+            # 使用 AI 生成的内容
+            UpdateVersionIntegration.update_changelog_file(version, changelog_content)
+            print("✅ AI 更新日志已生成\n")
+        except Exception as e:
+            print(f"⚠️ AI 生成失败: {e}")
+            print("将回退到传统方式生成...\n")
+            use_ai = False
+
+    if not use_ai:
+        # 获取 commit 记录
+        print("📝 收集 commit 记录...")
+        commits = get_commits_between_tags(prev_tag)
+        print(f"   找到 {len(commits)} 个 commit")
+        print()
+
+        # 分类 commit
+        print("🔖 分类 commit...")
+        categories = categorize_commits(commits)
+        print(f"   新增功能: {len(categories['feat'])} 个")
+        print(f"   修复功能: {len(categories['fix'])} 个")
+        print(f"   优化功能: {len(categories['perf'])} 个")
+        print()
+
+        # 生成更新日志内容
+        changelog_content = generate_changelog_content(categories)
+
+        # 更新文件
+        print("📝 更新版本号...")
+        update_pyproject_version(version)
+        update_init_version(version)
+        update_changelog(version, changelog_content)
+
     print()
-
-    # 分类 commit
-    print("🔖 分类 commit...")
-    categories = categorize_commits(commits)
-    print(f"   新增功能: {len(categories['feat'])} 个")
-    print(f"   修复功能: {len(categories['fix'])} 个")
-    print(f"   优化功能: {len(categories['perf'])} 个")
-    print()
-
-    # 生成更新日志内容
-    changelog_content = generate_changelog_content(categories)
-
-    # 更新文件
-    print("📝 更新版本号...")
-    update_pyproject_version(version)
-    update_init_version(version)
-    update_changelog(version, changelog_content)
-    print()
-
     print(f"✅ 版本更新完成: {version_with_v}")
-    print()
-    print("📋 更新日志预览：")
-    print("-" * 60)
-    print(changelog_content)
-    print("-" * 60)
+
+    if not use_ai:
+        print()
+        print("📋 更新日志预览：")
+        print("-" * 60)
+        print(changelog_content)
+        print("-" * 60)
 
 
 if __name__ == "__main__":

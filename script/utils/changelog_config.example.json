@@ -1,0 +1,8 @@
+{
+  "_comment": "复制此文件到 ~/.config/ncd/changelog_config.json 并填入你的 API Key",
+  "api_key": "sk-or-v1-...",
+  "api_url": "https://openrouter.ai/api/v1/chat/completions",
+  "model": "z-ai/glm-4.5-air:free",
+  "max_tokens": 5000,
+  "temperature": 0.2
+}
