@@ -42,6 +42,9 @@ tmp/
 .env.local
 PatchConfig.json
 
+# AI 更新日志生成脚本的本地配置
+script/utils/.env
+
 ### 特定项目忽略 ###
 # 项目特定目录和文件
 NapCat/*

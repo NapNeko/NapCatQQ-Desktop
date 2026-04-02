@@ -15,15 +15,13 @@ AI 驱动的更新日志生成脚本（本地使用版）
     python generate_changelog_ai.py v1.7.28          # 自动查找上一个 tag
     python generate_changelog_ai.py v1.7.28 v1.7.27  # 指定对比版本
 
-环境变量配置：
-    export OPENAI_API_KEY="sk-..."                    # API 密钥（必需）
-    export OPENAI_API_URL="https://..."               # API 地址（可选）
-    export OPENAI_MODEL="gpt-4"                       # 模型名称（可选）
+本地配置（不提交到 Git）：
+    1. 复制 .env.example 为 .env
+    2. 在 .env 中填入你的 API Key
 
-注意：此脚本仅在本地使用，配置文件不会被提交到 Git 仓库
+注意：.env 文件已被 .gitignore 忽略，不会提交到仓库
 """
 
-import json
 import os
 import re
 import subprocess
@@ -97,32 +95,55 @@ SYSTEM_PROMPT = """# NapCatQQ Desktop 发布说明生成器
 """
 
 
+def load_env_file():
+    """加载 .env 文件（本地使用，不提交到仓库）"""
+    script_dir = Path(__file__).parent
+    env_path = script_dir / ".env"
+    
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+
+
 def get_config() -> dict:
-    """从环境变量读取配置（本地使用，不提交到仓库）"""
+    """读取配置（优先 .env 文件，其次环境变量）"""
     config = DEFAULT_CONFIG.copy()
     
-    # 必需：API Key
+    # 先加载 .env 文件
+    load_env_file()
+    
+    # 读取 API Key（必需）
     api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         print("❌ 错误：未配置 API Key")
         print("")
-        print("请在本地环境变量中配置：")
-        print("  export OPENAI_API_KEY='sk-...'")
-        print("  # 或")
-        print("  export OPENROUTER_API_KEY='sk-or-v1-...'")
+        print("请在脚本目录创建 .env 文件：")
+        print(f"  {Path(__file__).parent / '.env'}")
         print("")
-        print("可选环境变量：")
-        print(f"  export OPENAI_API_URL='{DEFAULT_CONFIG['api_url']}'  # API 地址")
-        print(f"  export OPENAI_MODEL='{DEFAULT_CONFIG['model']}'      # 模型名称")
+        print(".env 文件内容示例：")
+        print('  OPENAI_API_KEY="sk-or-v1-..."')
+        print('  # 或')
+        print('  OPENROUTER_API_KEY="sk-or-v1-..."')
+        print("")
+        print("可选配置：")
+        print(f'  OPENAI_API_URL="{DEFAULT_CONFIG["api_url"]}"')
+        print(f'  OPENAI_MODEL="{DEFAULT_CONFIG["model"]}"')
         sys.exit(1)
     
     config["api_key"] = api_key
     
-    # 可选：自定义 API URL
+    # 可选配置
     if "OPENAI_API_URL" in os.environ:
         config["api_url"] = os.environ["OPENAI_API_URL"]
-    
-    # 可选：自定义模型
     if "OPENAI_MODEL" in os.environ:
         config["model"] = os.environ["OPENAI_MODEL"]
     
@@ -151,11 +172,9 @@ def run_git_command(command: str) -> str:
 def get_previous_tag(current_tag: str) -> Optional[str]:
     """获取上一个版本 tag"""
     try:
-        # 获取所有 tag 按版本排序
         tags = run_git_command("git tag -l --sort=-v:refname")
         tag_list = [t for t in tags.split("\n") if t.strip()]
         
-        # 找到当前 tag 的索引
         for i, tag in enumerate(tag_list):
             if tag == current_tag and i + 1 < len(tag_list):
                 return tag_list[i + 1]
@@ -183,10 +202,7 @@ def get_file_stats(from_tag: Optional[str], to_tag: str) -> tuple:
     else:
         diff_range = to_tag
     
-    # 获取统计信息
     stats = run_git_command(f"git diff --stat {diff_range}")
-    
-    # 获取变更文件列表
     files = run_git_command(f"git diff --name-only {diff_range}")
     file_list = [f for f in files.split("\n") if f.strip()]
     
@@ -203,7 +219,6 @@ def generate_changelog_with_ai(
 ) -> str:
     """调用 AI API 生成更新日志"""
     
-    # 构建用户提示
     user_content = f"""当前版本: {current_tag}
 上一版本: {previous_tag or "(首次发布)"}
 
@@ -218,7 +233,6 @@ def generate_changelog_with_ai(
 {chr(10).join(f"- {f}" for f in file_list[:50])}
 """
     
-    # 构建请求体
     payload = {
         "model": config["model"],
         "messages": [
@@ -229,7 +243,6 @@ def generate_changelog_with_ai(
         "max_tokens": config["max_tokens"],
     }
     
-    # 调用 API
     headers = {
         "Authorization": f"Bearer {config['api_key']}",
         "Content-Type": "application/json",
@@ -248,10 +261,8 @@ def generate_changelog_with_ai(
         
         result = response.json()
         
-        # 提取生成的内容
         if "choices" in result and len(result["choices"]) > 0:
             content = result["choices"][0]["message"]["content"]
-            # 替换版本号占位符
             content = content.replace("{VERSION}", current_tag)
             if previous_tag:
                 content = content.replace("{PREV_VERSION}", previous_tag)
@@ -274,7 +285,6 @@ def generate_fallback_changelog(
     """备用：使用简单规则生成更新日志"""
     lines = [f"# {current_tag}", ""]
     
-    # 简单的分类
     fixes = []
     features = []
     others = []
@@ -317,10 +327,11 @@ def main():
         print("  python generate_changelog_ai.py v1.7.28")
         print("  python generate_changelog_ai.py v1.7.28 v1.7.27")
         print("")
-        print("环境变量配置（本地使用）：")
-        print("  export OPENAI_API_KEY='sk-...'")
-        print("  export OPENAI_API_URL='https://openrouter.ai/api/v1/chat/completions'")
-        print("  export OPENAI_MODEL='z-ai/glm-4.5-air:free'")
+        print("本地配置（不提交到 Git）：")
+        print(f"  创建文件: {Path(__file__).parent / '.env'}")
+        print("  内容:")
+        print('    OPENAI_API_KEY="sk-or-v1-..."')
+        print('    OPENAI_MODEL="z-ai/glm-4.5-air:free"')
         sys.exit(1)
     
     current_tag = sys.argv[1]
@@ -328,7 +339,6 @@ def main():
     
     print(f"🚀 生成更新日志: {current_tag}")
     
-    # 如果没有提供上一个 tag，自动查找
     if not previous_tag:
         previous_tag = get_previous_tag(current_tag)
         if previous_tag:
@@ -336,10 +346,8 @@ def main():
         else:
             print("📌 未找到上一版本，将使用所有历史 commit")
     
-    # 读取配置（仅从环境变量）
     config = get_config()
     
-    # 获取 commit 列表
     print("📝 收集 commit 记录...")
     commits = get_commits_between_tags(previous_tag, current_tag)
     print(f"   找到 {len(commits)} 个 commit")
@@ -348,36 +356,29 @@ def main():
         print("⚠️ 没有找到任何 commit，退出")
         sys.exit(0)
     
-    # 获取文件变化统计
     print("📊 获取文件变化统计...")
     file_stats, file_list = get_file_stats(previous_tag, current_tag)
     
-    # 生成更新日志
     print("🎯 生成更新日志...")
     changelog = generate_changelog_with_ai(
         config, current_tag, previous_tag, commits, file_stats, file_list
     )
     
-    # 输出结果
     print("\n" + "=" * 60)
     print("生成的更新日志：")
     print("=" * 60)
     print(changelog)
     print("=" * 60)
     
-    # 保存到文件
     output_file = Path(f"CHANGELOG_{current_tag}.md")
     output_file.write_text(changelog, encoding="utf-8")
     print(f"\n✅ 已保存到: {output_file}")
     
-    # 同时更新 docs/CHANGELOG.md（可选）
     docs_changelog = Path("docs/CHANGELOG.md")
     if docs_changelog.exists():
         response = input("\n是否更新 docs/CHANGELOG.md? (y/n): ")
         if response.lower() == "y":
-            # 读取现有内容
             existing = docs_changelog.read_text(encoding="utf-8")
-            # 在标题后插入新内容
             new_content = existing.replace(
                 "# 🚀 NapCatQQ Desktop 更新日志",
                 f"# 🚀 NapCatQQ Desktop 更新日志\n\n{changelog}"
