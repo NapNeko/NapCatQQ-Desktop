@@ -12,22 +12,17 @@ class Urls(Enum):
     NCD_REPO = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop")
     NCD_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/issues")
     NCD_REPO_API = QUrl("https://nclatest.znin.net/get_ncd_ver")
-    NCD_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest/download/NapCatQQ-Desktop.zip")
-    NCD_UPDATE_MANIFEST = QUrl(
-        "https://raw.githubusercontent.com/NapNeko/NapCatQQ-Desktop/main/update/desktop_update_manifest.json"
-    )
+    NCD_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest/download/NapCatQQ-Desktop-x64.msi")
 
     @staticmethod
-    def get_ncd_download_url(version: str, install_type: str = "portable") -> QUrl:
+    def get_ncd_download_url(version: str, install_type: str = "msi") -> QUrl:
         """获取桌面端下载链接。
 
-        统一命名格式：
-        - 便携版: NapCatQQ-Desktop-{version}-portable-x64.zip
-        - MSI: NapCatQQ-Desktop-{version}-x64.msi
+        Desktop 应用内更新统一使用 MSI 安装包。
 
         Args:
             version: 版本号（如 "1.7.28"，不含 v 前缀）
-            install_type: 安装类型，"portable" 或 "msi"
+            install_type: 保留参数，仅兼容旧调用；当前始终返回 MSI 包地址
 
         Returns:
             QUrl: 下载链接
@@ -35,15 +30,12 @@ class Urls(Enum):
         base_url = "https://github.com/NapNeko/NapCatQQ-Desktop/releases/download"
         tag = f"v{version}"
 
-        if install_type == "msi":
-            filename = f"NapCatQQ-Desktop-{version}-x64.msi"
-        else:
-            filename = f"NapCatQQ-Desktop-{version}-portable-x64.zip"
+        filename = f"NapCatQQ-Desktop-{version}-x64.msi"
 
         return QUrl(f"{base_url}/{tag}/{filename}")
 
     @staticmethod
-    def get_ncd_latest_url(install_type: str = "portable") -> QUrl:
+    def get_ncd_latest_url(install_type: str = "msi") -> QUrl:
         """获取最新版下载链接。
 
         Note:
@@ -51,7 +43,7 @@ class Urls(Enum):
             需要通过 API 获取实际版本号后再构造完整 URL。
 
         Args:
-            install_type: 安装类型，"portable" 或 "msi"
+            install_type: 保留参数，仅兼容旧调用
 
         Returns:
             QUrl: 指向 releases 页面的链接（需要配合 API 使用）
