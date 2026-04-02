@@ -56,6 +56,7 @@ jobs:
       - name: "检出代码"
         uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.version }}  # 检出对应 tag 的代码
           submodules: true
           fetch-depth: 0
 
