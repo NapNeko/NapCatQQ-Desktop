@@ -45,7 +45,9 @@ def get_download_message(translate: Callable[[str], str], install_type: InstallT
 
     if install_type == InstallType.MSI:
         return translate("正在下载 NapCat Desktop MSI 安装包...")
-    return translate("正在下载 NapCat Desktop 便携版压缩包...")
+    if install_type == InstallType.PORTABLE:
+        return translate("正在下载 NapCat Desktop MSI 安装包，准备将当前便携版迁移为 MSI 安装...")
+    return translate("正在下载 NapCat Desktop MSI 安装包...")
 
 
 def get_install_type_log_prefix(install_type: InstallType) -> str:
@@ -54,8 +56,8 @@ def get_install_type_log_prefix(install_type: InstallType) -> str:
     if install_type == InstallType.MSI:
         return "[MSI 安装版]\n"
     if install_type == InstallType.PORTABLE:
-        return "[便携版]\n"
-    return ""
+        return "[便携版→MSI 迁移]\n"
+    return "[未知安装类型→MSI 安装]\n"
 
 
 def build_install_type_details(
@@ -75,9 +77,9 @@ def build_install_type_details(
         details.append(translate("更新将使用 MSI 安装包 (.msi)"))
     elif install_type == InstallType.PORTABLE:
         details.append(f"_internal 目录存在: {(base_path / '_internal').exists()}")
-        details.append(translate("更新将使用便携版压缩包 (.zip)"))
+        details.append(translate("检测到当前为便携版，应用内更新已改为下载 MSI 安装包并迁移到 MSI 安装版"))
     else:
-        details.append(translate("无法确定安装类型，将使用便携版更新"))
+        details.append(translate("无法确定安装类型，应用内更新将按 MSI 安装包处理"))
 
     return details
 
@@ -91,20 +93,33 @@ def _get_install_type_copy(translate: Callable[[str], str], install_type: Instal
                 "1. 下载新版本 MSI 安装包\n"
                 "2. 关闭当前程序并等待完全退出\n"
                 "3. 以管理员权限运行 MSI 升级安装\n"
-                "4. 安装完成后自动启动新版本\n\n"
+                "4. 安装完成后继续使用新的 MSI 版本\n\n"
                 '注意: 安装过程中会弹出 UAC 权限请求，请点击"是"继续。'
             ),
         )
 
+    if install_type == InstallType.PORTABLE:
+        return (
+            translate("便携版（将迁移到 MSI 安装版）"),
+            translate(
+                "更新流程:\n"
+                "1. 下载新版本 MSI 安装包\n"
+                "2. 关闭当前便携版程序并等待完全退出\n"
+                "3. 以管理员权限启动 MSI 安装，迁移到正式安装版\n"
+                "4. 安装完成后请从 MSI 安装位置继续使用新版本\n\n"
+                '注意: 便携版 ZIP 覆盖更新已停用，安装过程中会弹出 UAC 权限请求，请点击"是"继续。'
+            ),
+        )
+
     return (
-        translate("便携版"),
+        translate("未知安装类型（按 MSI 安装处理）"),
         translate(
             "更新流程:\n"
-            "1. 下载新版本压缩包\n"
+            "1. 下载新版本 MSI 安装包\n"
             "2. 关闭当前程序并等待完全退出\n"
-            "3. 解压并替换程序文件\n"
-            "4. 自动启动新版本\n\n"
-            "注意: 更新过程可能需要管理员权限。"
+            "3. 以管理员权限启动 MSI 安装\n"
+            "4. 安装完成后请从 MSI 安装位置继续使用新版本\n\n"
+            '注意: 当前无法确认安装类型，因此不会再执行 ZIP 覆盖更新。'
         ),
     )
 

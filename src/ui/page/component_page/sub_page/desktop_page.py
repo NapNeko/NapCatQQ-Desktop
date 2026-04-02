@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import os
-import subprocess
 import sys
-from pathlib import Path
 
 # 第三方库导入
 from creart import it
@@ -11,8 +9,7 @@ from PySide6.QtCore import QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
-from src.core.desktop_update import DesktopUpdateManifest, DesktopUpdatePlan, UpdateManager
-from src.core.desktop_update import fetch_remote_update_script, inject_target_pid, resolve_desktop_update_plan
+from src.core.desktop_update import UpdateManager
 from src.core.network.urls import Urls
 from src.core.versioning import VersionSnapshot
 from src.core.logging import LogSource, logger
@@ -20,7 +17,6 @@ from src.core.logging.crash_bundle import summarize_path
 from src.core.runtime.paths import PathFunc
 from src.core.runtime.napcat import ManagerNapCatQQProcess
 from src.resource import resource as _resource  # noqa: F401
-from src.core.desktop_update.templates import load_portable_update_script
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox
 from ..utils import (
@@ -47,7 +43,6 @@ class DesktopPage(PageBase):
         self.app_card.set_hyper_label_name(self.tr("仓库地址"))
         self.app_card.set_hyper_label_url(Urls.NCD_REPO.value)
         self.log_card.set_loading(True)
-        self._ncd_update_manifest: DesktopUpdateManifest | None = None
         self._update_manager = UpdateManager()
 
         # 连接信号槽
@@ -80,7 +75,6 @@ class DesktopPage(PageBase):
 
     def apply_remote_version_data(self, version_data: VersionSnapshot) -> None:
         """应用远程版本信息和更新日志。"""
-        self._ncd_update_manifest = version_data.ncd_update_manifest
         if version_data.ncd_version is None or version_data.ncd_update_log is None:
             self.remote_version = None
             self.remote_log = self.tr("无法获取 NapCat Desktop 版本信息, 请检查网络连接")
@@ -113,13 +107,6 @@ class DesktopPage(PageBase):
 
         from src.ui.window.main_window import MainWindow
 
-        # 检查更新拦截规则
-        update_plan = self._get_update_plan()
-        if update_plan is not None and update_plan.blocks_update():
-            min_version = update_plan.min_auto_update_version or self.tr("受支持版本")
-            error_bar(self.tr(f"当前版本过旧，不能直接自动升级。请先升级到 {min_version} 或重新安装。"))
-            return
-
         # 检查是否有运行的 Bot
         has_bot = it(ManagerNapCatQQProcess).has_running_bot()
         if has_bot:
@@ -141,9 +128,6 @@ class DesktopPage(PageBase):
         if not self._show_update_confirmation(has_bot):
             logger.info("Desktop 更新流程取消: 用户在确认弹窗中选择取消", log_source=LogSource.UI)
             return
-
-        if update_plan is not None and update_plan.requires_remote_script():
-            info_bar(self.tr("检测到区间迁移规则，将使用仓库中的迁移脚本完成升级"))
 
         info_bar(get_download_message(self.tr, self._update_manager.install_type))
 
@@ -204,11 +188,7 @@ class DesktopPage(PageBase):
             # 降级到默认链接
             return Urls.NCD_DOWNLOAD.value
 
-        # 根据安装类型选择包类型
-        if self._update_manager.is_msi_installation():
-            return Urls.get_ncd_download_url(version, "msi")
-        else:
-            return Urls.get_ncd_download_url(version, "portable")
+        return Urls.get_ncd_download_url(version, "msi")
 
     @Slot()
     def handle_install_requested(self) -> None:
@@ -230,27 +210,20 @@ class DesktopPage(PageBase):
             staging_path = self._update_manager.prepare_update(package_path)
             logger.info(f"更新包已准备: {summarize_path(staging_path)}", log_source=LogSource.UI)
 
-            if self._update_manager.is_msi_installation():
-                # MSI 版使用 update_msi.bat 脚本
-                # 脚本会处理：等待进程退出、申请管理员权限、执行 msiexec
-                bat_path = self._update_manager._strategy.get_update_script_path(staging_path)
-                process = self._update_manager.execute_update(staging_path, target_pid=os.getpid())
-                if process is None:
-                    raise RuntimeError("启动 MSI 更新失败")
-                logger.info(
-                    f"MSI 更新脚本已启动: PID={process.pid}, script={summarize_path(bat_path)}",
+            if self._update_manager.requires_msi_migration():
+                logger.warning(
+                    f"当前安装类型将迁移到 MSI 安装版: type={self._update_manager.install_type.value}",
                     log_source=LogSource.UI,
                 )
-            else:
-                # 便携版使用 update.bat 脚本
-                bat_content = self._prepare_update_script()
-                bat_path = it(PathFunc).tmp_path / "update.bat"
-                bat_path.write_text(bat_content, encoding="utf-8")
-                logger.info(
-                    f"便携版更新脚本已生成: script={summarize_path(bat_path)}",
-                    log_source=LogSource.UI,
-                )
-                self._launch_update_script(bat_path)
+
+            bat_path = self._update_manager._strategy.get_update_script_path(staging_path)
+            process = self._update_manager.execute_update(staging_path, target_pid=os.getpid())
+            if process is None:
+                raise RuntimeError("启动 MSI 更新失败")
+            logger.info(
+                f"MSI 更新脚本已启动: PID={process.pid}, script={summarize_path(bat_path)}",
+                log_source=LogSource.UI,
+            )
 
         except ValueError as exc:
             logger.error(f"准备更新失败: {exc}")
@@ -279,84 +252,9 @@ class DesktopPage(PageBase):
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.refresh_page_view()
 
-    @staticmethod
-    def _load_update_script() -> str:
-        """兼容旧调用路径，读取便携版更新脚本模板。"""
-
-        return load_portable_update_script()
-
-    def _prepare_update_script(self) -> str:
-        """生成带当前进程 PID 的更新脚本内容。"""
-
-        script_content = load_portable_update_script()
-        if (update_plan := self._get_update_plan()) is not None and update_plan.requires_remote_script():
-            script_content = self._load_migration_update_script(update_plan)
-        return inject_target_pid(script_content, os.getpid())
-
-    def _load_migration_update_script(self, update_plan: DesktopUpdatePlan) -> str:
-        """读取命中的迁移脚本。"""
-
-        if not update_plan.requires_remote_script() or update_plan.migration is None:
-            return load_portable_update_script()
-
-        if not update_plan.migration.script_url:
-            raise ValueError("检测到版本迁移规则，但未配置迁移脚本地址")
-
-        logger.warning(
-            (
-                "Desktop 命中迁移规则，开始获取远端迁移脚本: "
-                f"local={self.local_version}, target={self.remote_version}, rule={update_plan.migration.id}"
-            ),
-            log_source=LogSource.UI,
-        )
-        return fetch_remote_update_script(update_plan.migration.script_url)
-
-    def _get_update_plan(self) -> DesktopUpdatePlan | None:
-        """解析当前 Desktop 更新决策。"""
-
-        return resolve_desktop_update_plan(self.local_version, self.remote_version, self._ncd_update_manifest)
-
     def _get_display_log(self) -> str:
-        """为更新日志追加迁移或拦截提示。"""
+        """为更新日志追加安装类型提示。"""
 
         install_type_hint = get_install_type_log_prefix(self._update_manager.install_type)
-
-        update_plan = self._get_update_plan()
-        if update_plan is None:
-            return install_type_hint + self.remote_log
-
-        if update_plan.blocks_update():
-            min_version = update_plan.min_auto_update_version or "受支持版本"
-            blocked_notice = (
-                "[自动更新已拦截]\n"
-                f"当前版本 {self.local_version} 过旧，不能直接自动升级到 {self.remote_version}。\n"
-                f"请先升级到 {min_version} 或重新安装。\n\n"
-            )
-            return install_type_hint + blocked_notice + self.remote_log
-
-        if not update_plan.requires_remote_script():
-            return install_type_hint + self.remote_log
-
-        summary = update_plan.summary or ""
-        migration_notice = (
-            "[区间迁移]\n" f"升级到 {self.remote_version} 需要执行仓库提供的迁移脚本。\n" f"{summary}\n\n"
-        )
-        return install_type_hint + migration_notice + self.remote_log
-
-    def _launch_update_script(self, bat_path: Path) -> None:
-        """启动更新脚本，确保主程序退出后仍可继续执行。"""
-
-        try:
-            os.startfile(str(bat_path))
-            return
-        except OSError as exc:
-            logger.warning(f"os.startfile 启动更新脚本失败，尝试回退方案: {exc}")
-
-        try:
-            subprocess.Popen(["cmd", "/c", "start", '""', str(bat_path)], creationflags=subprocess.CREATE_NO_WINDOW)
-            return
-        except OSError as exc:
-            logger.warning(f"cmd start 启动更新脚本失败，尝试 shell 回退: {exc}")
-
-        subprocess.Popen(f'start "" "{str(bat_path)}"', shell=True)
+        return install_type_hint + self.remote_log
 
