@@ -17,7 +17,7 @@ from qfluentwidgets import (
 
 from src.core.api_debug import ApiDebugActionSchema, ApiDebugBotContext
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from ..shared import find_index_by_data
+from ..common import find_index_by_data
 
 
 class _DialogSearchLineEdit(SearchLineEdit):
@@ -171,7 +171,6 @@ class ActionCatalogPanel(CardWidget):
             for schema in sorted(grouped[category_name], key=lambda item: (self.display_name(item), item.action)):
                 child_item = QTreeWidgetItem([self.display_name(schema)])
                 child_item.setData(0, Qt.ItemDataRole.UserRole, schema.action)
-                child_item.setToolTip(0, self._build_action_tooltip(schema))
                 parent_item.addChild(child_item)
                 self._action_items[schema.action] = child_item
             parent_item.setExpanded(False)
@@ -213,19 +212,12 @@ class ActionCatalogPanel(CardWidget):
         if item.parent() is None:
             item.setExpanded(not item.isExpanded())
 
-    def _build_action_tooltip(self, schema: ApiDebugActionSchema) -> str:
-        lines = [f"分类：{self.category_name(schema)}", f"Action：/{schema.action}"]
-        description = schema.description.strip() or schema.summary.strip()
-        if description:
-            lines.append(f"说明：{description}")
-        return "\n".join(lines)
-
     def _setup_tooltips(self) -> None:
         self.search_edit.setToolTip("打开接口搜索对话框")
         self.search_edit.setToolTipDuration(1000)
         self.search_edit.installEventFilter(ToolTipFilter(self.search_edit, showDelay=300))
 
-        self.bot_combo.setToolTip("选择调试使用的 Bot")
+        self.bot_combo.setToolTip("选择用于查看接口文档的 Bot")
         self.bot_combo.setToolTipDuration(1000)
         self.bot_combo.installEventFilter(ToolTipFilter(self.bot_combo, showDelay=300))
 
