@@ -14,7 +14,7 @@ on:
         default: ""
         type: string
       sync_version_files:
-        description: "是否在构建目录版前同步版本文件"
+        description: "是否在构建前同步版本文件"
         required: false
         default: false
         type: boolean
@@ -77,27 +77,16 @@ jobs:
           "PUBLISH_RELEASE=$publishRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "SYNC_VERSION_FILES=$syncVersionFiles" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-  portable:
-    needs: resolve
-    uses: ./.github/workflows/build-portable.yml
-    with:
-      version: ${{ needs.resolve.outputs.version }}
-      sync_version_files: ${{ fromJson(needs.resolve.outputs.sync_version_files) }}
-
   msi:
-    needs:
-      - resolve
-      - portable
+    needs: resolve
     uses: ./.github/workflows/build-msi.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
-      portable_artifact_name: ${{ needs.portable.outputs.artifact_name }}
-      build_portable: false
+      build_portable: true
 
   publish:
     needs:
       - resolve
-      - portable
       - msi
     if: ${{ needs.resolve.outputs.publish_release == 'true' }}
     runs-on: windows-latest
@@ -106,12 +95,6 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
-      - name: "下载目录版制品"
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.portable.outputs.artifact_name }}
-          path: release-assets/portable
 
       - name: "下载 MSI 制品"
         uses: actions/download-artifact@v4
@@ -128,25 +111,6 @@ jobs:
           $body | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: "重命名 ZIP 文件（统一命名）"
-        shell: pwsh
-        run: |
-          $version = "${{ needs.resolve.outputs.version }}"
-          $plainVersion = $version -replace "^v", ""
-          $oldZip = "release-assets/portable/NapCatQQ-Desktop-${plainVersion}-x64.zip"
-          $newZip = "release-assets/portable/NapCatQQ-Desktop-${plainVersion}-portable-x64.zip"
-          if (Test-Path $oldZip) {
-            Rename-Item $oldZip $newZip
-            Write-Host "Renamed: $oldZip -> $newZip"
-          } else {
-            # 兼容旧命名
-            $legacyZip = "release-assets/portable/NapCatQQ-Desktop.zip"
-            if (Test-Path $legacyZip) {
-              Rename-Item $legacyZip $newZip
-              Write-Host "Renamed: $legacyZip -> $newZip"
-            }
-          }
-
       - name: "创建发布并上传制品"
         uses: softprops/action-gh-release@v1
         with:
@@ -156,5 +120,4 @@ jobs:
           name: NapCatQQ Desktop Release ${{ needs.resolve.outputs.version }}
           body: ${{ steps.changelog.outputs.BODY }}
           files: |
-            release-assets/portable/NapCatQQ-Desktop-*-portable-x64.zip
             release-assets/msi/${{ needs.msi.outputs.msi_file_name }}
