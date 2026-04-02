@@ -7,6 +7,7 @@
 # 标准库导入
 import enum
 import logging
+import os
 from pathlib import Path
 
 # 第三方库导入
@@ -64,13 +65,13 @@ def detect_install_type(app_path: Path | None = None) -> InstallType:
             # 源码运行时从项目根目录获取
             app_path = Path(__file__).parent.parent.parent.parent
 
-    app_path = app_path.resolve()
+    app_path = app_path.absolute()
 
     # 优先检查 MSI 注册表项
     if HAS_WINREG:
         msi_install_dir = _get_msi_install_dir_from_registry()
         if msi_install_dir is not None:
-            if Path(msi_install_dir).resolve() == app_path:
+            if _normalize_path_for_compare(msi_install_dir) == _normalize_path_for_compare(app_path):
                 logger.debug(f"检测到 MSI 安装版: {app_path}")
                 return InstallType.MSI
             else:
@@ -106,6 +107,8 @@ def _get_msi_install_dir_from_registry() -> str | None:
             return str(install_dir) if install_dir else None
     except FileNotFoundError:
         pass
+    except PermissionError as e:
+        logger.debug(f"读取 64 位注册表被拒绝: {e}")
     except OSError as e:
         logger.debug(f"读取 64 位注册表失败: {e}")
 
@@ -118,6 +121,8 @@ def _get_msi_install_dir_from_registry() -> str | None:
             return str(install_dir) if install_dir else None
     except FileNotFoundError:
         pass
+    except PermissionError as e:
+        logger.debug(f"读取 32 位注册表被拒绝: {e}")
     except OSError as e:
         logger.debug(f"读取 32 位注册表失败: {e}")
 
@@ -141,6 +146,12 @@ def _is_portable_installation(app_path: Path) -> bool:
         bool: 是否为便携版
     """
     return (app_path / "_internal").is_dir()
+
+
+def _normalize_path_for_compare(path: str | Path) -> str:
+    """按 Windows 规则规范路径，避免 `resolve()` 带来的副作用。"""
+
+    return os.path.normcase(os.path.normpath(str(Path(path).absolute())))
 
 
 def get_update_file_pattern(install_type: InstallType, version: str) -> str:
