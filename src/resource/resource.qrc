@@ -53,7 +53,7 @@
     </qresource>
 
     <qresource prefix="script">
-        <file>script/update.bat</file>
+        <file>script/update_msi.bat</file>
     </qresource>
 
 </RCC>
