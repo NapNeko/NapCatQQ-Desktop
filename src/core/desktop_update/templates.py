@@ -5,19 +5,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QFile, QIODevice
 
-from src.core.desktop_update.constants import MSI_UPDATE_SCRIPT_FILENAME, PORTABLE_UPDATE_SCRIPT_FILENAME
+from src.core.desktop_update.constants import MSI_UPDATE_SCRIPT_FILENAME
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent / "script"
-
-
-def load_portable_update_script() -> str:
-    """读取便携版更新脚本模板。"""
-
-    return _load_script(
-        resource_path=":/script/script/update.bat",
-        fallback_path=SCRIPT_DIR / PORTABLE_UPDATE_SCRIPT_FILENAME,
-    )
+SCRIPT_DIR = Path(__file__).resolve().parents[2] / "resource" / "script"
 
 
 def load_msi_update_script() -> str:
