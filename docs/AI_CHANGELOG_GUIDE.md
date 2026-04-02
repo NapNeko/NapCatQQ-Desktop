@@ -1,8 +1,8 @@
-# AI 更新日志生成指南
+# AI 更新日志生成指南（本地使用）
 
 ## 简介
 
-本项目支持使用 AI 自动生成格式化的更新日志。通过对比两个 Git Tag 之间的 Commit 记录，AI 会自动分类、合并、生成符合项目规范的更新日志。
+此脚本仅在**本地使用**，通过环境变量配置 API Key，配置文件不会提交到 Git 仓库。
 
 ## 前置要求
 
@@ -11,25 +11,19 @@
 pip install httpx
 ```
 
-## 配置
-
-### 1. 创建配置文件
+## 配置（本地环境变量）
 
 ```bash
-mkdir -p ~/.config/ncd
-cp script/utils/changelog_config.example.json ~/.config/ncd/changelog_config.json
-```
+# 必需：API Key
+export OPENAI_API_KEY="sk-..."
+# 或
+export OPENROUTER_API_KEY="sk-or-v1-..."
 
-### 2. 编辑配置文件
+# 可选：自定义 API 地址（默认使用 OpenRouter）
+export OPENAI_API_URL="https://openrouter.ai/api/v1/chat/completions"
 
-```json
-{
-  "api_key": "你的API密钥",
-  "api_url": "https://openrouter.ai/api/v1/chat/completions",
-  "model": "z-ai/glm-4.5-air:free",
-  "max_tokens": 5000,
-  "temperature": 0.2
-}
+# 可选：自定义模型（默认使用免费模型）
+export OPENAI_MODEL="z-ai/glm-4.5-air:free"
 ```
 
 ### API 提供商推荐
@@ -40,15 +34,7 @@ cp script/utils/changelog_config.example.json ~/.config/ncd/changelog_config.jso
 | SiliconFlow | `https://api.siliconflow.cn/v1/chat/completions` | 需要 API Key |
 | OpenAI | `https://api.openai.com/v1/chat/completions` | 需要付费 |
 
-### 环境变量方式（可选）
-
-如果不想创建配置文件，也可以设置环境变量：
-
-```bash
-export OPENAI_API_KEY="sk-..."
-# 或
-export OPENROUTER_API_KEY="sk-or-v1-..."
-```
+**注意**：这些配置只在你的本地终端生效，不会被提交到 Git 仓库。
 
 ## 使用方法
 
@@ -111,36 +97,27 @@ python script/utils/generate_changelog_ai.py v1.7.28 v1.7.27
 | 智能分类 | ❌（简单正则） | ✅（语义理解） |
 | 合并相似项 | ❌ | ✅ |
 | 生成质量 | 一般 | 更好 |
+| 配置方式 | 无需配置 | 本地环境变量 |
 
 ## 建议的工作流程
 
-### 方案一：纯 AI 生成（推荐）
-
 ```bash
-# 1. 手动更新版本号到 pyproject.toml
-# 2. 提交并打 tag
+# 1. 确保已配置环境变量
+export OPENAI_API_KEY="sk-or-v1-..."
+
+# 2. 手动更新版本号到 pyproject.toml
+# 3. 提交并打 tag
 git add -A
 git commit -m "chore: bump version to v1.7.28"
 git tag v1.7.28
 
-# 3. 生成更新日志
+# 4. 生成本地更新日志
 python script/utils/generate_changelog_ai.py v1.7.28
 
-# 4. 更新 CHANGELOG.md
-# （按提示输入 y 更新 docs/CHANGELOG.md）
+# 5. 按提示更新 docs/CHANGELOG.md
 
-# 5. 推送
+# 6. 推送
 git push origin main --tags
-```
-
-### 方案二：与 update_version.py 结合
-
-```bash
-# 1. 使用旧脚本更新版本号（如果不需要 AI 生成）
-python script/utils/update_version.py v1.7.28
-
-# 2. 或使用 AI 脚本仅生成日志
-python script/utils/generate_changelog_ai.py v1.7.28
 ```
 
 ## 故障排除
@@ -152,9 +129,9 @@ python script/utils/generate_changelog_ai.py v1.7.28
 使用默认模板生成...
 ```
 
+- 检查环境变量是否设置：`echo $OPENAI_API_KEY`
 - 检查 API Key 是否正确
 - 检查网络连接
-- 检查 API URL 是否可访问
 
 ### 没有生成任何内容
 
@@ -165,9 +142,11 @@ python script/utils/generate_changelog_ai.py v1.7.28
 
 - 尝试更换模型（如使用更强的 GPT-4）
 - 手动编辑生成的日志
-- 调整 `temperature` 参数（越低越稳定）
+- 调整模型参数（无法调整，需要修改脚本）
 
-## 参考
+## 隐私说明
 
-- 参考项目：[NapCatQQ](https://github.com/NapNeko/NapCatQQ)
-- OpenRouter: https://openrouter.ai/
+- API Key 仅存储在本地环境变量中
+- 不会被写入任何文件
+- 不会被提交到 Git 仓库
+- 脚本本身也不包含任何敏感信息

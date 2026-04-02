@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI 驱动的更新日志生成脚本
+AI 驱动的更新日志生成脚本（本地使用版）
 
 功能：
 1. 通过对比两个 git tag 获取变更
@@ -15,15 +15,12 @@ AI 驱动的更新日志生成脚本
     python generate_changelog_ai.py v1.7.28          # 自动查找上一个 tag
     python generate_changelog_ai.py v1.7.28 v1.7.27  # 指定对比版本
 
-配置文件：
-    ~/.config/ncd/changelog_config.json
-    {
-        "api_key": "your-api-key",
-        "api_url": "https://openrouter.ai/api/v1/chat/completions",
-        "model": "z-ai/glm-4.5-air:free",
-        "max_tokens": 5000,
-        "temperature": 0.2
-    }
+环境变量配置：
+    export OPENAI_API_KEY="sk-..."                    # API 密钥（必需）
+    export OPENAI_API_URL="https://..."               # API 地址（可选）
+    export OPENAI_MODEL="gpt-4"                       # 模型名称（可选）
+
+注意：此脚本仅在本地使用，配置文件不会被提交到 Git 仓库
 """
 
 import json
@@ -101,35 +98,33 @@ SYSTEM_PROMPT = """# NapCatQQ Desktop 发布说明生成器
 
 
 def get_config() -> dict:
-    """读取配置文件"""
-    config_path = Path.home() / ".config" / "ncd" / "changelog_config.json"
+    """从环境变量读取配置（本地使用，不提交到仓库）"""
+    config = DEFAULT_CONFIG.copy()
     
-    if config_path.exists():
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    else:
-        config = {}
-    
-    # 合并默认配置
-    for key, value in DEFAULT_CONFIG.items():
-        if key not in config:
-            config[key] = value
-    
-    # 检查 API key
-    if "api_key" not in config or not config["api_key"]:
-        # 尝试从环境变量读取
-        config["api_key"] = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
-    
-    if not config.get("api_key"):
+    # 必需：API Key
+    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
         print("❌ 错误：未配置 API Key")
-        print(f"请在 {config_path} 中配置 api_key，或设置环境变量 OPENAI_API_KEY / OPENROUTER_API_KEY")
-        print("\n配置文件示例：")
-        print(json.dumps({
-            "api_key": "sk-...",
-            "api_url": "https://openrouter.ai/api/v1/chat/completions",
-            "model": "z-ai/glm-4.5-air:free",
-        }, indent=2, ensure_ascii=False))
+        print("")
+        print("请在本地环境变量中配置：")
+        print("  export OPENAI_API_KEY='sk-...'")
+        print("  # 或")
+        print("  export OPENROUTER_API_KEY='sk-or-v1-...'")
+        print("")
+        print("可选环境变量：")
+        print(f"  export OPENAI_API_URL='{DEFAULT_CONFIG['api_url']}'  # API 地址")
+        print(f"  export OPENAI_MODEL='{DEFAULT_CONFIG['model']}'      # 模型名称")
         sys.exit(1)
+    
+    config["api_key"] = api_key
+    
+    # 可选：自定义 API URL
+    if "OPENAI_API_URL" in os.environ:
+        config["api_url"] = os.environ["OPENAI_API_URL"]
+    
+    # 可选：自定义模型
+    if "OPENAI_MODEL" in os.environ:
+        config["model"] = os.environ["OPENAI_MODEL"]
     
     return config
 
@@ -321,6 +316,11 @@ def main():
         print("示例:")
         print("  python generate_changelog_ai.py v1.7.28")
         print("  python generate_changelog_ai.py v1.7.28 v1.7.27")
+        print("")
+        print("环境变量配置（本地使用）：")
+        print("  export OPENAI_API_KEY='sk-...'")
+        print("  export OPENAI_API_URL='https://openrouter.ai/api/v1/chat/completions'")
+        print("  export OPENAI_MODEL='z-ai/glm-4.5-air:free'")
         sys.exit(1)
     
     current_tag = sys.argv[1]
@@ -336,7 +336,7 @@ def main():
         else:
             print("📌 未找到上一版本，将使用所有历史 commit")
     
-    # 读取配置
+    # 读取配置（仅从环境变量）
     config = get_config()
     
     # 获取 commit 列表
