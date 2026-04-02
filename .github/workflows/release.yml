@@ -1,11 +1,9 @@
-name: Release Pipeline
+name: Release MSI
 
 on:
   push:
     tags:
       - "v*.*.*"
-    branches:
-      - "release/**"
   workflow_dispatch:
     inputs:
       version:
@@ -14,12 +12,7 @@ on:
         default: ""
         type: string
       sync_version_files:
-        description: "是否在构建前同步版本文件"
-        required: false
-        default: false
-        type: boolean
-      publish_release:
-        description: "是否在本次手动运行中创建 GitHub Release"
+        description: "是否同步版本文件到代码仓库"
         required: false
         default: false
         type: boolean
@@ -31,30 +24,24 @@ jobs:
   resolve:
     runs-on: windows-latest
     outputs:
-      version: ${{ steps.resolve.outputs.VERSION }}
-      version_plain: ${{ steps.resolve.outputs.VERSION_PLAIN }}
-      publish_release: ${{ steps.resolve.outputs.PUBLISH_RELEASE }}
-      sync_version_files: ${{ steps.resolve.outputs.SYNC_VERSION_FILES }}
+      version: ${{ steps.version.outputs.VERSION }}
+      version_plain: ${{ steps.version.outputs.VERSION_PLAIN }}
     steps:
       - name: "检出代码"
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: "解析流程参数"
-        id: resolve
+      - name: "解析版本号"
+        id: version
         shell: pwsh
         run: |
           $inputVersion = "${{ inputs.version }}"
 
           if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref }}" -like "refs/tags/*") {
             $version = "${{ github.ref }}" -replace "refs/tags/", ""
-            $publishRelease = "true"
-            $syncVersionFiles = "true"
           } elseif ($inputVersion) {
             $version = $inputVersion
-            $publishRelease = if ("${{ inputs.publish_release }}" -eq "true") { "true" } else { "false" }
-            $syncVersionFiles = if ("${{ inputs.sync_version_files }}" -eq "true") { "true" } else { "false" }
           } else {
             $content = Get-Content pyproject.toml -Raw
             if ($content -match 'version\s*=\s*"([^"]+)"') {
@@ -63,8 +50,6 @@ jobs:
               Write-Error "无法从 pyproject.toml 提取版本号"
               exit 1
             }
-            $publishRelease = "false"
-            $syncVersionFiles = "false"
           }
 
           if (-not ($version -like "v*")) {
@@ -74,10 +59,9 @@ jobs:
           $plain = $version -replace "^v", ""
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "VERSION_PLAIN=$plain" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "PUBLISH_RELEASE=$publishRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "SYNC_VERSION_FILES=$syncVersionFiles" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "版本: $version"
 
-  msi:
+  build-msi:
     needs: resolve
     uses: ./.github/workflows/build-msi.yml
     with:
@@ -87,8 +71,7 @@ jobs:
   publish:
     needs:
       - resolve
-      - msi
-    if: ${{ needs.resolve.outputs.publish_release == 'true' }}
+      - build-msi
     runs-on: windows-latest
     steps:
       - name: "检出代码"
@@ -96,28 +79,33 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: "同步版本文件"
+        if: ${{ inputs.sync_version_files || github.event_name == 'push' }}
+        shell: pwsh
+        run: |
+          $version = "${{ needs.resolve.outputs.version }}"
+          uv sync --frozen --no-dev
+          uv run --frozen python script/utils/update_version.py $version
+
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add pyproject.toml src/core/config/__init__.py docs/CHANGELOG.md
+          git diff --staged --quiet || git commit -m "chore: 同步版本号到 $version"
+          git push origin HEAD:${{ github.ref_name }} || Write-Host "无需推送"
+
       - name: "下载 MSI 制品"
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.msi.outputs.artifact_name }}
-          path: release-assets/msi
+          name: ${{ needs.build-msi.outputs.artifact_name }}
+          path: release-assets
 
-      - name: "读取更新日志"
-        id: changelog
-        shell: pwsh
-        run: |
-          $body = Get-Content -Path "docs/CHANGELOG.md" -Raw
-          "BODY<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          $body | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: "创建发布并上传制品"
+      - name: "发布到 GitHub Releases"
+        if: ${{ github.event_name == 'push' }}
         uses: softprops/action-gh-release@v1
         with:
           draft: false
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ needs.resolve.outputs.version }}
-          name: NapCatQQ Desktop Release ${{ needs.resolve.outputs.version }}
-          body: ${{ steps.changelog.outputs.BODY }}
-          files: |
-            release-assets/msi/${{ needs.msi.outputs.msi_file_name }}
+          name: NapCatQQ Desktop ${{ needs.resolve.outputs.version }}
+          body_path: docs/CHANGELOG.md
+          files: release-assets/*.msi
