@@ -20,7 +20,7 @@ from src.core.installation.install_type import detect_install_type
 from src.core.logging import LogSource, logger
 from src.core.runtime.paths import PathFunc
 from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
-from src.core.desktop_update.templates import load_msi_update_script, load_portable_update_script
+from src.core.desktop_update.templates import load_msi_update_script
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import SwitchConfigCard
 from src.ui.components.message_box import AskBox
@@ -129,7 +129,7 @@ class Developer(ScrollArea):
         self.test_update_confirm_card = ActionButtonCard(
             icon=FI.UPDATE,
             title=self.tr("测试更新确认弹窗"),
-            content=self.tr("模拟显示更新前的确认弹窗，测试 MSI/便携版的不同提示"),
+            content=self.tr("模拟显示更新前的确认弹窗，测试 MSI 升级与便携版迁移提示"),
             button_text=self.tr("显示确认弹窗"),
             callback=self._test_update_confirmation,
             parent=self.update_test_group,
@@ -150,14 +150,6 @@ class Developer(ScrollArea):
             callback=self._test_generate_msi_script,
             parent=self.update_test_group,
         )
-        self.test_portable_script_card = ActionButtonCard(
-            icon=FI.FOLDER,
-            title=self.tr("测试便携版更新脚本"),
-            content=self.tr("生成并打开 update.bat 脚本供检查（不会执行）"),
-            button_text=self.tr("生成脚本"),
-            callback=self._test_generate_portable_script,
-            parent=self.update_test_group,
-        )
 
     def _set_layout(self) -> None:
         """控件布局。"""
@@ -170,7 +162,6 @@ class Developer(ScrollArea):
         self.update_test_group.addSettingCard(self.test_update_confirm_card)
         self.update_test_group.addSettingCard(self.test_install_type_card)
         self.update_test_group.addSettingCard(self.test_msi_script_card)
-        self.update_test_group.addSettingCard(self.test_portable_script_card)
 
         self.expand_layout.addWidget(self.log_group)
         self.expand_layout.addWidget(self.crash_group)
@@ -251,7 +242,7 @@ class Developer(ScrollArea):
     def _test_update_confirmation(self) -> None:
         """测试更新确认弹窗。
 
-        模拟显示更新前的确认弹窗，展示 MSI 和便携版的不同提示文本，
+        模拟显示更新前的确认弹窗，展示 MSI 升级与便携版迁移到 MSI 的不同提示文本，
         以及 Bot 状态检测结果的集成效果。
         """
         logger.info("开发者模式测试更新确认弹窗", log_source=LogSource.UI)
@@ -288,7 +279,7 @@ class Developer(ScrollArea):
         """检测安装类型并显示详细信息。
 
         检测当前运行实例的安装类型（MSI/便携版/未知），
-        并显示详细的诊断信息，包括注册表路径、_internal 目录等。
+        并显示当前实例在统一 MSI 更新链路下的诊断信息。
         """
         logger.info("开发者模式检测安装类型", log_source=LogSource.UI)
 
@@ -338,29 +329,4 @@ class Developer(ScrollArea):
             logger.error(f"生成 MSI 脚本失败: {e}", log_source=LogSource.UI)
             error_bar(self.tr(f"生成脚本失败: {e}"), parent=self)
 
-    def _test_generate_portable_script(self) -> None:
-        """生成并显示便携版更新脚本（仅用于检查，不会执行）。
-
-        从 Qt 资源或文件系统加载 update.bat 模板，注入当前进程 PID，
-        保存到临时目录并打开文件位置供检查。
-        """
-        logger.info("开发者模式生成便携版更新脚本", log_source=LogSource.UI)
-
-        try:
-            script_content = inject_target_pid(load_portable_update_script(), os.getpid())
-
-            # 保存到临时目录
-            tmp_path = it(PathFunc).tmp_path / "update_test.bat"
-            tmp_path.write_text(script_content, encoding="utf-8")
-
-            success_bar(self.tr(f"便携版脚本已生成: {tmp_path.name}"), parent=self)
-            info_bar(self.tr(f"位置: {tmp_path}"), parent=self)
-            logger.info(f"便携版测试脚本已生成: {tmp_path}", log_source=LogSource.UI)
-
-            # 打开文件位置
-            subprocess.Popen(f'explorer /select,"{tmp_path}"', shell=True)
-
-        except Exception as e:
-            logger.error(f"生成便携版脚本失败: {e}", log_source=LogSource.UI)
-            error_bar(self.tr(f"生成脚本失败: {e}"), parent=self)
 
