@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QObject, QSize, Qt, Signal
+from PySide6.QtCore import QObject, QPoint, QSize, Qt, Signal
 from PySide6.QtNetwork import QAbstractSocket, QNetworkRequest
 from PySide6.QtWidgets import QApplication, QSizePolicy, QVBoxLayout, QWidget
 
@@ -413,6 +413,142 @@ def test_interface_debug_page_debug_panel_hidden_until_requested(tmp_path) -> No
     host.close()
 
 
+def test_interface_debug_page_debug_panel_pushes_docs_area_when_opened(tmp_path) -> None:
+    ensure_qapp()
+    schema = ApiDebugActionSchema(
+        action="send_msg",
+        summary="发送消息",
+        payload_schema={"type": "object", "properties": {"message": {"type": "string"}}},
+    )
+
+    host = QWidget()
+    host.resize(1500, 900)
+    host_layout = QVBoxLayout(host)
+    host_layout.setContentsMargins(0, 0, 0, 0)
+
+    page = api_debug_page_module.ApiDebugPage()
+    page.workspace_store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    page.workspace_state = page.workspace_store.load()
+    page.context_service = SimpleNamespace(list_bot_contexts=lambda: [])
+    page.initialize(host)
+    host_layout.addWidget(page)
+    page._apply_schema(schema)
+    host.show()
+    QApplication.processEvents()
+
+    before_docs_width = page.docs_scroll.width()
+    before_panel_width = page.detail_panel.debug_panel_container.width()
+
+    page.debug_button.click()
+    QApplication.processEvents()
+
+    after_docs_width = page.docs_scroll.width()
+    after_panel_width = page.detail_panel.debug_panel_container.width()
+    docs_top_left = page.docs_scroll.mapTo(page.detail_panel.detail_content_page, QPoint(0, 0))
+    debug_top_left = page.detail_panel.debug_panel_container.mapTo(page.detail_panel.detail_content_page, QPoint(0, 0))
+
+    assert before_panel_width == 0
+    assert after_panel_width >= 400
+    assert after_docs_width < before_docs_width
+    assert docs_top_left.x() + page.docs_scroll.width() <= debug_top_left.x()
+
+    page.close()
+    host.close()
+
+
+def test_interface_debug_page_debug_panel_uses_bounded_editor_height(tmp_path) -> None:
+    ensure_qapp()
+    schema = ApiDebugActionSchema(
+        action="send_msg",
+        summary="发送消息",
+        payload_schema={"type": "object", "properties": {"message": {"type": "string"}}},
+    )
+
+    page = api_debug_page_module.ApiDebugPage()
+    page.workspace_store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    page.workspace_state = page.workspace_store.load()
+    page.context_service = SimpleNamespace(list_bot_contexts=lambda: [])
+    host = QWidget()
+    page.initialize(host)
+    page._apply_schema(schema)
+
+    assert page.params_editor.minimumHeight() == 160
+    assert page.params_editor.maximumHeight() == 280
+    assert page.debug_card.section_splitter.orientation() == Qt.Orientation.Vertical
+    assert page.debug_card.section_splitter.handleWidth() == 10
+    assert page.debug_card.section_splitter.childrenCollapsible() is True
+    assert page.params_label.text() == "Body"
+    assert page.result_card.title_label.text() == "返回结果"
+
+    page.debug_button.click()
+    QApplication.processEvents()
+
+    assert page.result_card.content_view.minimumHeight() == 160
+    assert page.params_editor.height() <= 280
+
+    page.close()
+    host.close()
+
+
+def test_interface_debug_page_debug_panel_uses_floating_workbench_style(tmp_path) -> None:
+    ensure_qapp()
+    schema = ApiDebugActionSchema(action="send_msg", summary="发送消息")
+
+    page = api_debug_page_module.ApiDebugPage()
+    page.workspace_store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    page.workspace_state = page.workspace_store.load()
+    page.context_service = SimpleNamespace(list_bot_contexts=lambda: [])
+    host = QWidget()
+    page.initialize(host)
+    page._apply_schema(schema)
+
+    debug_container_margins = page.detail_panel.debug_panel_container.layout().contentsMargins()
+
+    assert debug_container_margins.top() == 8
+    assert debug_container_margins.bottom() == 12
+    assert page.debug_card.top_section.objectName() == "ApiDebugParamsSection"
+    assert page.debug_card.runtime_title.text() == "在线运行"
+    assert page.debug_card.runtime_meta_card.objectName() == "ApiDebugRuntimeMetaCard"
+    assert page.generate_button.isHidden() is True
+    assert page.send_button.minimumHeight() == 28
+    assert page.debug_card.runtime_meta_card.minimumHeight() == 28
+    assert page.debug_card.action_bar.layout().stretch(0) == 3
+    assert page.debug_card.action_bar.layout().stretch(1) == 1
+    assert page.send_button.text() == "发送"
+    assert page.runtime_route_label.text() == "/send_msg"
+
+
+def test_interface_debug_page_splitter_can_fold_to_section_hints(tmp_path) -> None:
+    ensure_qapp()
+    schema = ApiDebugActionSchema(action="send_msg", summary="发送消息")
+
+    page = api_debug_page_module.ApiDebugPage()
+    page.workspace_store = ApiDebugWorkspaceStore(storage_path=tmp_path / "workspace.json")
+    page.workspace_state = page.workspace_store.load()
+    page.context_service = SimpleNamespace(list_bot_contexts=lambda: [])
+    host = QWidget()
+    page.initialize(host)
+    page._apply_schema(schema)
+    page.debug_button.click()
+    QApplication.processEvents()
+
+    page.debug_card.section_splitter.setSizes([0, 600])
+    QApplication.processEvents()
+    assert page.debug_card.top_content_container.isHidden() is True
+    assert page.debug_card.runtime_title.text() == "在线运行"
+
+    page.debug_card.section_splitter.setSizes([600, 0])
+    QApplication.processEvents()
+    assert page.result_card.content_container.isHidden() is True
+    assert page.result_card.title_label.text() == "返回结果"
+
+    page.close()
+    host.close()
+
+    page.close()
+    host.close()
+
+
 def test_interface_debug_page_send_request_shows_result(tmp_path) -> None:
     ensure_qapp()
     schema = ApiDebugActionSchema(action="send_msg", summary="发送消息", payload_schema={"type": "object"})
@@ -569,6 +705,7 @@ def test_interface_debug_page_uses_bounded_expanding_content_layout(tmp_path) ->
 
     assert page.content_widget.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.MinimumExpanding
     assert page.content_widget.maximumWidth() == 1680
+    assert page.detail_widget.minimumWidth() == 520
     assert page.minimumSizeHint() == api_debug_page_module.ApiDebugPage.STABLE_MINIMUM_SIZE_HINT
     assert page.sizeHint() == api_debug_page_module.ApiDebugPage.STABLE_SIZE_HINT
     assert page.hasHeightForWidth() is False
