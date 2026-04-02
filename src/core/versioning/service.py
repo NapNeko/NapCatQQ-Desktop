@@ -4,15 +4,13 @@
 import json
 import re
 from collections.abc import Callable
-from pathlib import Path
 
 from creart import it
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Signal
 
 from src.core.config import cfg
-from src.core.desktop_update import DesktopUpdateManifest
 from src.core.network.urls import Urls
 from src.core.logging import logger
 from src.core.runtime.paths import PathFunc
@@ -27,7 +25,6 @@ class VersionSnapshot(BaseModel):
     qq_download_url: str | None = None
     napcat_update_log: str | None = None
     ncd_update_log: str | None = None
-    ncd_update_manifest: DesktopUpdateManifest | None = None
 
 
 class VersionTaskBase(QObject, QRunnable):
@@ -53,13 +50,10 @@ class VersionTaskBase(QObject, QRunnable):
 class RemoteVersionTask(VersionTaskBase):
     """远端版本信息拉取任务。"""
 
-    _manifest_fallback_logged = False
-
     def execute(self) -> VersionSnapshot:
         napcat_info = self._get_version(Urls.NAPCATQQ_REPO_API.value, "NapCat", self._parse_github_response)
         qq_version = self._get_version(Urls.QQ_Version.value, "QQ", self._parse_qq_response)
         ncd_version = self._get_version(Urls.NCD_REPO_API.value, "NapCatQQ Desktop", self._parse_github_response)
-        ncd_update_manifest = self._get_desktop_update_manifest()
 
         return VersionSnapshot(
             napcat_version=napcat_info["version"],
@@ -68,7 +62,6 @@ class RemoteVersionTask(VersionTaskBase):
             qq_download_url=qq_version["download_url"],
             napcat_update_log=napcat_info["update_log"],
             ncd_update_log=ncd_version["update_log"],
-            ncd_update_manifest=ncd_update_manifest,
         )
 
     def _get_version(
@@ -111,34 +104,6 @@ class RemoteVersionTask(VersionTaskBase):
             logger.error(f"解析 QQ 版本信息失败: {exc}")
             self.error_signal.emit(f"解析 QQ 版本信息失败: {exc}")
             return {"version": None, "download_url": None}
-
-    def _get_desktop_update_manifest(self) -> DesktopUpdateManifest | None:
-        response = self.request(
-            Urls.NCD_UPDATE_MANIFEST.value,
-            "NapCatQQ Desktop 更新策略",
-            use_mirrors=True,
-            emit_error=False,
-        )
-        if response is not None:
-            try:
-                return DesktopUpdateManifest.model_validate(response)
-            except ValidationError as exc:
-                return self._fallback_desktop_update_manifest(f"解析远端更新策略失败: {exc}")
-
-        return self._fallback_desktop_update_manifest("获取远端更新策略失败")
-
-    def _fallback_desktop_update_manifest(self, reason: str) -> DesktopUpdateManifest | None:
-        manifest_path = Path(__file__).resolve().parents[3] / "update" / "desktop_update_manifest.json"
-        try:
-            manifest = DesktopUpdateManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, ValidationError, ValueError) as exc:
-            logger.warning(f"NapCatQQ Desktop 更新策略不可用: {reason}; 本地清单加载失败: {exc}")
-            return None
-
-        if not self.__class__._manifest_fallback_logged:
-            logger.warning(f"NapCatQQ Desktop 更新策略远端不可用，已回退到本地内置清单: {reason}")
-            self.__class__._manifest_fallback_logged = True
-        return manifest
 
     def request(
         self,
