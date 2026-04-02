@@ -20,6 +20,7 @@ from src.core.api_debug import ApiDebugActionSchema
 from src.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from .debug_card import ActionDebugCard
+from .method_badge import MethodBadge, apply_method_badge
 from .schema_card import ApiDebugSchemaCard
 
 
@@ -30,12 +31,11 @@ class _ActionMetaCard(CardWidget):
         super().__init__(parent)
         self.setObjectName("ApiDebugStickyCard")
 
-        self.method_chip = CaptionLabel("POST", self)
-        self.method_chip.setObjectName("ApiDebugMethodChip")
+        self.method_chip = MethodBadge("POST", self)
         self.route_label = StrongBodyLabel("/action_name", self)
         self.route_label.setObjectName("ApiDebugRouteLabel")
         self.route_label.setWordWrap(True)
-        self.debug_button = PrimaryPushButton("调试", self)
+        self.debug_button = PrimaryPushButton("查看示例", self)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -44,18 +44,8 @@ class _ActionMetaCard(CardWidget):
         layout.addWidget(self.route_label, 1, Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self.debug_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
-    def set_method_style(self, method_text: str, method_type: str, background: str) -> None:
-        self.method_chip.setText(method_text)
-        self.method_chip.setProperty("methodType", method_type)
-        self.method_chip.setStyleSheet(
-            "QLabel {"
-            "color: white;"
-            f"background: {background};"
-            "border-radius: 4px;"
-            "padding: 3px 8px;"
-            "font-weight: 600;"
-            "}"
-        )
+    def set_method_style(self, method_text: str) -> None:
+        apply_method_badge(self.method_chip, method_text)
 
     def set_route(self, route_text: str) -> None:
         self.route_label.setText(route_text)
@@ -68,6 +58,9 @@ class ActionDetailPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("ApiDebugDetailPanel")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        self._debug_panel_collapsed_width = 0
+        self._debug_panel_min_width = 400
+        self._debug_panel_max_width = 460
 
         self.detail_state_stack = TransparentStackedWidget(self)
         self.detail_state_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
@@ -146,17 +139,28 @@ class ActionDetailPanel(QWidget):
         docs_layout.addWidget(self.response_card)
         docs_layout.addStretch(1)
 
-        self.debug_card = ActionDebugCard(self.detail_content_page)
-        self.debug_card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.debug_panel_container = QWidget(self.detail_content_page)
+        self.debug_panel_container.setObjectName("ApiDebugDebugPanelContainer")
+        self.debug_panel_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+
+        self.debug_card = ActionDebugCard(self.debug_panel_container)
+        self.debug_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.debug_close_button = self.debug_card.debug_close_button
         self.generate_button = self.debug_card.generate_button
         self.send_button = self.debug_card.send_button
         self.params_label = self.debug_card.params_label
-        self.params_hint = self.debug_card.params_hint
         self.params_editor = self.debug_card.params_editor
         self.result_card = self.debug_card.result_card
+        self.runtime_route_label = self.debug_card.runtime_meta_card.route_label
+        self.runtime_method_chip = self.debug_card.runtime_meta_card.method_chip
+
+        debug_panel_layout = QVBoxLayout(self.debug_panel_container)
+        debug_panel_layout.setContentsMargins(8, 8, 6, 12)
+        debug_panel_layout.setSpacing(0)
+        debug_panel_layout.addWidget(self.debug_card, 1)
 
         left_column = QWidget(self.detail_content_page)
+        left_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         left_column_layout = QVBoxLayout(left_column)
         left_column_layout.setContentsMargins(0, 0, 0, 0)
         left_column_layout.setSpacing(8)
@@ -165,9 +169,9 @@ class ActionDetailPanel(QWidget):
 
         body_layout = QHBoxLayout()
         body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(20)
+        body_layout.setSpacing(24)
         body_layout.addWidget(left_column, 1)
-        body_layout.addWidget(self.debug_card, 0)
+        body_layout.addWidget(self.debug_panel_container, 0)
 
         content_layout = QVBoxLayout(self.detail_content_page)
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -194,7 +198,7 @@ class ActionDetailPanel(QWidget):
         loading_layout.addWidget(self.loading_hint)
         loading_layout.addWidget(self.loading_skeleton, 1)
 
-        self.empty_title = StrongBodyLabel("选择一个接口开始调试", self.detail_empty_page)
+        self.empty_title = StrongBodyLabel("选择一个接口查看文档", self.detail_empty_page)
         self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_hint = CaptionLabel("左侧会展示当前 Bot 可用的 Action 接口与简要说明。", self.detail_empty_page)
         self.empty_hint.setWordWrap(True)
@@ -229,7 +233,7 @@ class ActionDetailPanel(QWidget):
         self.docs_scroll.verticalScrollBar().valueChanged.connect(self._sync_pinned_meta_card)
         self._set_example_visible(False)
         self.pinned_meta_card.hide()
-        self.hide_debug_panel()
+        self._set_debug_panel_visible(False)
 
     def apply_schema(
         self,
@@ -246,6 +250,7 @@ class ActionDetailPanel(QWidget):
         route_text = f"/{schema.action}"
         self.sticky_meta_card.set_route(route_text)
         self.pinned_meta_card.set_route(route_text)
+        self.debug_card.runtime_meta_card.set_route(route_text)
         self._rebuild_param_rows(schema.payload_schema)
         wrapped_response_schema = self._build_response_schema(schema.return_schema)
         self._rebuild_response_rows(wrapped_response_schema)
@@ -257,27 +262,46 @@ class ActionDetailPanel(QWidget):
 
     @Slot()
     def show_debug_panel(self) -> None:
-        self.debug_card.show()
+        self._set_debug_panel_visible(True)
         if self.params_editor.isEnabled():
             self.params_editor.setFocus(Qt.FocusReason.OtherFocusReason)
 
     @Slot()
     def hide_debug_panel(self) -> None:
-        self.debug_card.hide()
+        self._set_debug_panel_visible(False)
+
+    def resizeEvent(self, event) -> None:  # noqa: ANN001
+        super().resizeEvent(event)
+        if not self.debug_card.isHidden():
+            self.debug_panel_container.setFixedWidth(self._debug_panel_target_width())
+
+    def _set_debug_panel_visible(self, visible: bool) -> None:
+        target_width = self._debug_panel_target_width() if visible else self._debug_panel_collapsed_width
+        self.debug_panel_container.setMinimumWidth(target_width)
+        self.debug_panel_container.setMaximumWidth(target_width)
+        self.debug_panel_container.setFixedWidth(target_width)
+        self.debug_panel_container.setVisible(visible)
+        self.debug_card.setVisible(visible)
+        self._refresh_body_layout()
+
+    def _debug_panel_target_width(self) -> int:
+        available_width = max(self.width(), self.detail_state_stack.width(), self.detail_content_page.width())
+        if available_width <= 0:
+            return self._debug_panel_min_width
+        return max(self._debug_panel_min_width, min(self._debug_panel_max_width, int(available_width * 0.36)))
+
+    def _refresh_body_layout(self) -> None:
+        parent_layout = self.detail_content_page.layout()
+        if parent_layout is not None:
+            parent_layout.invalidate()
+            parent_layout.activate()
+        self.updateGeometry()
 
     def _apply_request_method(self, request_method: str) -> None:
         method_text = (request_method or "POST").upper()
-        method_type = method_text.lower()
-        background_map = {
-            "get": "rgba(22, 163, 74, 0.96)",
-            "post": "rgba(37, 99, 235, 0.98)",
-            "put": "rgba(234, 88, 12, 0.98)",
-            "delete": "rgba(220, 38, 38, 0.98)",
-            "patch": "rgba(147, 51, 234, 0.98)",
-        }
-        background = background_map.get(method_type, "rgba(71, 85, 105, 0.96)")
-        self.sticky_meta_card.set_method_style(method_text, method_type, background)
-        self.pinned_meta_card.set_method_style(method_text, method_type, background)
+        self.sticky_meta_card.set_method_style(method_text)
+        self.pinned_meta_card.set_method_style(method_text)
+        self.debug_card.runtime_meta_card.set_method_style(method_text)
 
     def _sync_pinned_meta_card(self, *_args) -> None:
         threshold = max(0, self.sticky_meta_card.y())
@@ -412,10 +436,10 @@ class ActionDetailPanel(QWidget):
         if self.example_toggle_button is None:
             return
 
-        self.debug_button.setToolTip("打开右侧调试面板")
+        self.debug_button.setToolTip("打开右侧接口示例面板")
         self.generate_button.setToolTip("根据当前 schema 自动生成一份默认参数")
-        self.send_button.setToolTip("向当前 Bot 的调试接口发送本次调用")
-        self.debug_close_button.setToolTip("收起右侧调试面板")
+        self.send_button.setToolTip("向当前 Bot 调用一次当前接口")
+        self.debug_close_button.setToolTip("收起右侧接口示例面板")
         self.example_toggle_button.setToolTip("展开或收起请求参数示例")
 
         for widget in [
