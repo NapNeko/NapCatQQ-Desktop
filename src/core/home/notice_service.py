@@ -11,7 +11,6 @@ from PySide6.QtCore import QObject, QThreadPool, Signal
 
 from src.core.config import cfg
 from src.core.config.operate_config import read_config
-from src.core.desktop_update import resolve_desktop_update_plan
 from src.core.home.notice_model import (
     NoticeDismissMode,
     NoticeTimelineItemData,
@@ -551,40 +550,6 @@ class HomeNoticeService(QObject):
 
         if local_version == remote_version:
             return []
-
-        plan = resolve_desktop_update_plan(local_version, remote_version, remote.ncd_update_manifest)
-        if plan is None:
-            return [
-                NoticeTimelineItemData(
-                    key=f"update:desktop:{local_version}->{remote_version}",
-                    text=f"Desktop 可更新到 {remote_version}，当前版本为 {local_version}。",
-                    status=NoticeTimelineStatus.INFO,
-                    dismiss_mode=NoticeDismissMode.PERSISTENT,
-                )
-            ]
-
-        if plan.blocks_update():
-            min_version = plan.min_auto_update_version or "受支持版本"
-            summary = plan.summary or "当前版本过旧，不能直接自动更新。"
-            return [
-                NoticeTimelineItemData(
-                    key=f"update:desktop:unsupported:{local_version}->{remote_version}",
-                    text=f"Desktop 无法直接自动升级到 {remote_version}。{summary} 请先升级到 {min_version} 或重新安装。",
-                    status=NoticeTimelineStatus.ERROR,
-                    dismiss_mode=NoticeDismissMode.PERSISTENT,
-                )
-            ]
-
-        if plan.requires_remote_script():
-            summary = plan.summary or "此次升级包含目录或配置迁移。"
-            return [
-                NoticeTimelineItemData(
-                    key=f"update:desktop:migration:{local_version}->{remote_version}",
-                    text=f"Desktop 更新到 {remote_version} 需要执行仓库提供的迁移脚本。{summary}",
-                    status=NoticeTimelineStatus.WARNING,
-                    dismiss_mode=NoticeDismissMode.PERSISTENT,
-                )
-            ]
 
         return [
             NoticeTimelineItemData(
