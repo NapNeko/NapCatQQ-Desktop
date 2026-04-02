@@ -216,10 +216,22 @@ def get_previous_tag(current_tag: str):
 
 def get_commits_between(from_tag, to_tag: str) -> list:
     """获取 commit 列表"""
+    # 检查目标 tag 是否存在
+    tag_exists = run_command(f"git tag -l {to_tag}", check=False)
+    
     if from_tag:
-        commit_range = f"{from_tag}..{to_tag}"
+        if tag_exists:
+            # 两个 tag 都存在
+            commit_range = f"{from_tag}..{to_tag}"
+        else:
+            # 目标 tag 不存在，从 from_tag 到 HEAD
+            commit_range = f"{from_tag}..HEAD"
     else:
-        commit_range = to_tag
+        if tag_exists:
+            commit_range = to_tag
+        else:
+            # 没有 from_tag，目标 tag 也不存在，取最近 20 条
+            commit_range = "-20"
     
     commits = run_command(f"git log {commit_range} --pretty=format:'%s (%h)'")
     return [c for c in commits.split("\n") if c.strip()]
@@ -409,8 +421,12 @@ def main():
     current_tag = f"v{version}"
     previous_tag = get_previous_tag(current_tag)
     
-    if previous_tag:
-        print(f"  对比: {previous_tag} -> {current_tag}")
+    # 检查当前 tag 是否已存在
+    tag_exists = run_command(f"git tag -l {current_tag}", check=False)
+    if tag_exists:
+        print(f"  对比: {previous_tag or '初始'} -> {current_tag}")
+    else:
+        print(f"  对比: {previous_tag or '初始'} -> HEAD (将创建 {current_tag})")
     
     commits = get_commits_between(previous_tag, current_tag)
     print(f"  找到 {len(commits)} 个 commit")
