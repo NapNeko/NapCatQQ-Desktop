@@ -370,6 +370,11 @@ def create_tag(version: str) -> None:
     print(f"  ✓ 已创建 tag: {tag}")
 
 
+def get_current_branch() -> str:
+    """获取当前分支名"""
+    return run_command("git branch --show-current")
+
+
 def push_changes(version: str, auto_push: bool) -> None:
     """推送"""
     if not auto_push:
@@ -377,8 +382,9 @@ def push_changes(version: str, auto_push: bool) -> None:
             print("  ⏭ 跳过推送")
             return
     
-    print("\n  🚀 推送中...")
-    run_command("git push origin main")
+    branch = get_current_branch()
+    print(f"\n  🚀 推送到 {branch}...")
+    run_command(f"git push origin {branch}")
     run_command(f"git push origin v{version}")
     print("  ✓ 推送完成")
 
