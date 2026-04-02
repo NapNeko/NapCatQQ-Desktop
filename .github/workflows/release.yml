@@ -78,6 +78,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: "安装 uv"
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
       - name: "同步版本文件"
         if: ${{ inputs.sync_version_files || github.event_name == 'push' }}
         shell: pwsh
