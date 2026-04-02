@@ -233,7 +233,7 @@ def get_commits_between(from_tag, to_tag: str) -> list:
             # 没有 from_tag，目标 tag 也不存在，取最近 20 条
             commit_range = "-20"
     
-    commits = run_command(f"git log {commit_range} --pretty=format:'%s (%h)'")
+    commits = run_command(f'git log {commit_range} --pretty=format:"%s (%h)"')
     return [c for c in commits.split("\n") if c.strip()]
 
 
