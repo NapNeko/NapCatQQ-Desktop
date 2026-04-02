@@ -171,6 +171,6 @@ jobs:
         with:
           name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
           path: |
             dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}
