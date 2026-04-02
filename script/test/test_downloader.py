@@ -111,6 +111,38 @@ def test_github_downloader_download_returns_false_when_content_length_missing(
     assert not (tmp_path / "NapCat.Shell.zip").exists()
 
 
+def test_github_downloader_cleans_partial_file_when_stream_breaks(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """下载中断后不应留下 `.part` 残留文件。"""
+
+    class BrokenResponse(DummyStreamResponse):
+        def iter_bytes(self):
+            yield b"pa"
+            raise httpx.RequestError("boom", request=httpx.Request("GET", "https://example.com/NapCat.Shell.zip"))
+
+    downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
+    downloader.path = tmp_path
+    monkeypatch.setattr("src.core.network.downloader.httpx.stream", lambda *args, **kwargs: BrokenResponse())
+
+    assert downloader.download() is False
+    assert not (tmp_path / "NapCat.Shell.zip").exists()
+    assert not (tmp_path / "NapCat.Shell.zip.part").exists()
+
+
+def test_github_downloader_reraises_unknown_exception(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """未知异常不应被静默吞掉。"""
+
+    class WeirdResponse(DummyStreamResponse):
+        def iter_bytes(self):
+            raise RuntimeError("unexpected")
+
+    downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
+    downloader.path = tmp_path
+    monkeypatch.setattr("src.core.network.downloader.httpx.stream", lambda *args, **kwargs: WeirdResponse())
+
+    with pytest.raises(RuntimeError, match="unexpected"):
+        downloader.download()
+
+
 def test_github_downloader_check_network_returns_false_on_request_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """网络探测异常时应安全返回 False。"""
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))

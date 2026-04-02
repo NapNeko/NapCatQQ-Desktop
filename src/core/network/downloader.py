@@ -94,6 +94,8 @@ class GithubDownloader(DownloaderBase):
 
     def download(self) -> bool:
         """下载文件"""
+        target_path = self.path / self.url.fileName()
+        partial_path = target_path.with_name(f"{target_path.name}.part")
         try:
             self.status_label_signal.emit(self.tr(f" 开始下载 {self.file_name} ~ "))
             with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
@@ -106,11 +108,16 @@ class GithubDownloader(DownloaderBase):
                 # 设置进度条为 进度模式
                 self.progress_ring_toggle_signal.emit(ProgressRingStatus.DETERMINATE)
 
-                with open(f"{self.path / self.url.fileName()}", "wb") as file:
+                if partial_path.exists():
+                    partial_path.unlink()
+
+                with open(partial_path, "wb") as file:
                     self.status_label_signal.emit(self.tr(f"正在下载 {self.file_name} ~ "))
                     for chunk in response.iter_bytes():
                         file.write(chunk)  # 写入字节
                         self.download_progress_signal.emit(int((file.tell() / total_size) * 100))  # 设置进度条
+
+                partial_path.replace(target_path)
 
             # 下载完成
             self.status_label_signal.emit(self.tr("下载完成"))
@@ -118,17 +125,26 @@ class GithubDownloader(DownloaderBase):
                 (
                     "Github 下载完成: "
                     f"file={self.file_name}, bytes={total_size}, "
-                    f"output={summarize_path(self.path / self.url.fileName())}"
+                    f"output={summarize_path(target_path)}"
                 ),
                 LogType.NETWORK,
                 LogSource.CORE,
             )
             return True
 
-        except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, Exception) as e:
+        except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, OSError) as e:
+            if partial_path.exists():
+                partial_path.unlink(missing_ok=True)
             logger.error(
                 f"Github 下载失败: file={self.file_name}, source={summarize_url(self.url.toString())}, error={e}"
             )
+        except Exception as exc:
+            if partial_path.exists():
+                partial_path.unlink(missing_ok=True)
+            logger.error(
+                f"Github 下载发生未知错误: file={self.file_name}, source={summarize_url(self.url.toString())}, error={exc}"
+            )
+            raise
         finally:
             self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
         return False
@@ -165,6 +181,8 @@ class QQDownloader(DownloaderBase):
             LogType.NETWORK,
             LogSource.CORE,
         )
+        target_path = self.path / self.url.fileName()
+        partial_path = target_path.with_name(f"{target_path.name}.part")
 
         # 开始下载 QQ
         try:
@@ -180,11 +198,16 @@ class QQDownloader(DownloaderBase):
                 # 设置进度条为 进度模式
                 self.progress_ring_toggle_signal.emit(ProgressRingStatus.DETERMINATE)
 
-                with open(f"{self.path / self.url.fileName()}", "wb") as file:
+                if partial_path.exists():
+                    partial_path.unlink()
+
+                with open(partial_path, "wb") as file:
                     self.status_label_signal.emit(self.tr("正在下载 QQ ~ "))
                     for chunk in response.iter_bytes():
                         file.write(chunk)  # 写入字节
                         self.download_progress_signal.emit(int((file.tell() / total_size) * 100))  # 设置进度条
+
+                partial_path.replace(target_path)
 
             # 下载完成
             self.download_finish_signal.emit()  # 发送下载完成信号
@@ -193,18 +216,27 @@ class QQDownloader(DownloaderBase):
                 (
                     "QQ 下载完成: "
                     f"file={self.url.fileName()}, bytes={total_size}, "
-                    f"output={summarize_path(self.path / self.url.fileName())}"
+                    f"output={summarize_path(target_path)}"
                 ),
                 LogType.NETWORK,
                 LogSource.CORE,
             )
 
-        except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, Exception) as e:
+        except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, OSError) as e:
+            if partial_path.exists():
+                partial_path.unlink(missing_ok=True)
             self.status_label_signal.emit(self.tr(f"下载失败: {e}"))
             logger.error(
                 f"QQ 下载失败: file={self.url.fileName()}, source={summarize_url(self.url.toString())}, error={e}"
             )
             self.error_finsh_signal.emit()
+        except Exception as exc:
+            if partial_path.exists():
+                partial_path.unlink(missing_ok=True)
+            logger.error(
+                f"QQ 下载发生未知错误: file={self.url.fileName()}, source={summarize_url(self.url.toString())}, error={exc}"
+            )
+            raise
 
         finally:
             # 无论是否出错,都会重置
