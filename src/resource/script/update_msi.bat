@@ -6,16 +6,24 @@ rem 运行位置：runtime\tmp\update_msi.bat
 rem 功能：等待旧进程退出，以管理员权限运行 MSI 升级安装
 
 for %%I in ("%~dp0") do set "script_dir=%%~fI"
-for %%I in ("%script_dir%\..\..") do set "app_root=%%~fI"
-set "log=%app_root%\msi_update.log"
-set "msi_path=%app_root%\runtime\tmp\NapCatQQ-Desktop.msi"
+if not defined target_pid set "target_pid=%~1"
+if not defined app_root set "app_root=%~2"
+if not defined msi_path set "msi_path=%~3"
+if not defined log set "log=%~4"
+
+if "%target_pid%"=="0" set "target_pid="
+if "%target_pid%"=="__NONE__" set "target_pid="
+
+if not defined app_root for %%I in ("%script_dir%\..\..") do set "app_root=%%~fI"
+if not defined log set "log=%script_dir%\msi_update.log"
+if not defined msi_path set "msi_path=%app_root%\runtime\tmp\NapCatQQ-Desktop.msi"
 
 rem ---------- 提权检查 ----------
 rem 如果没有管理员权限，则尝试以管理员权限重新启动当前脚本（会触发 UAC）
 net session >NUL 2>&1
 if "%ERRORLEVEL%" NEQ "0" (
     echo [%date% %time%] 当前未以管理员运行，尝试以管理员权限重新启动 >> "%log%"
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '%*' -Verb RunAs"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath \"%~f0\" -ArgumentList '%*' -Verb RunAs"
     if errorlevel 1 (
         echo [%date% %time%] 无法以管理员权限重新启动，放弃更新 >> "%log%"
         goto :end
@@ -82,6 +90,12 @@ if %msi_rc% EQU 0 (
     del /F /Q "%msi_path%" >> "%log%" 2>&1
     rem 启动新版本（可选，MSI 通常不需要，因为 MajorUpgrade 会处理）
     rem start "" "%app_root%\NapCatQQ-Desktop.exe"
+) else if %msi_rc% EQU 3010 (
+    echo [%date% %time%] MSI 升级安装成功，但系统要求重启 >> "%log%"
+    del /F /Q "%msi_path%" >> "%log%" 2>&1
+) else if %msi_rc% EQU 1641 (
+    echo [%date% %time%] MSI 已触发重启并继续安装 >> "%log%"
+    del /F /Q "%msi_path%" >> "%log%" 2>&1
 ) else (
     echo [%date% %time%] MSI 升级安装失败，返回码: %msi_rc% >> "%log%"
     rem 保留 MSI 文件以便排查问题
