@@ -66,7 +66,6 @@ jobs:
     uses: ./.github/workflows/build-msi.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
-      build_portable: true
 
   publish:
     needs:
