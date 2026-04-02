@@ -4,15 +4,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtCore import QPointF, QSize, Qt, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtGui import QFont, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QFont, QFontMetrics, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import CaptionLabel, CardWidget, StrongBodyLabel
 
 from src.core.config import cfg
 from src.ui.components.code_editor.exhibit import CodeExibit
-from ..shared import pretty_json
+from ..common import pretty_json
 
 
 class _CardDivider(QWidget):
@@ -98,6 +98,88 @@ class _SchemaFieldNode:
     children: list["_SchemaFieldNode"] = field(default_factory=list)
 
 
+class _PaintedChip(QWidget):
+    """自绘文本卡片。"""
+
+    def __init__(
+        self,
+        text: str,
+        parent: QWidget | None = None,
+        *,
+        text_color: QColor | None = None,
+        background_color: QColor | None = None,
+        border_color: QColor | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._text = text
+        self._text_color = text_color or QColor(24, 24, 27, 230)
+        self._background_color = background_color or QColor(255, 255, 255, 24)
+        self._border_color = border_color or QColor(255, 255, 255, 0)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    def sizeHint(self) -> QSize:
+        metrics = QFontMetrics(self._chip_font())
+        return QSize(metrics.horizontalAdvance(self._text) + 18, metrics.height() + 8)
+
+    def minimumSizeHint(self) -> QSize:
+        return self.sizeHint()
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(self._border_color)
+        pen.setWidth(1)
+        painter.setPen(pen)
+        painter.setBrush(self._background_color)
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 6, 6)
+
+        painter.setPen(self._text_color)
+        painter.setFont(self._chip_font())
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._text)
+
+    @staticmethod
+    def _chip_font() -> QFont:
+        font = QFont()
+        font.setPointSizeF(9)
+        font.setWeight(QFont.Weight.DemiBold)
+        return font
+
+
+class _ParamNameChip(_PaintedChip):
+    """字段名称自绘卡片。"""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        cfg.themeChanged.connect(self._refresh_palette)
+        cfg.themeColorChanged.connect(self._refresh_palette)
+        self._refresh_palette()
+
+    def _refresh_palette(self, *_args) -> None:
+        theme_color = QColor(cfg.get(cfg.themeColor))
+        if not theme_color.isValid():
+            theme_color = QColor("#2563eb")
+
+        self._text_color = theme_color.darker(120)
+        self._background_color = QColor(theme_color)
+        self._background_color.setAlpha(26)
+        self._border_color = QColor(theme_color)
+        self._border_color.setAlpha(58)
+        self.update()
+
+
+class _EnumChip(_PaintedChip):
+    """枚举值自绘卡片。"""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(
+            text,
+            parent,
+            text_color=QColor(63, 63, 70, 235),
+            background_color=QColor(113, 113, 122, 26),
+            border_color=QColor(113, 113, 122, 30),
+        )
+
+
 class ApiDebugParamRow(QWidget):
     """参数行。"""
 
@@ -114,8 +196,7 @@ class ApiDebugParamRow(QWidget):
         super().__init__(parent)
         self.setObjectName("ApiDebugParamRow")
 
-        self.name_label = CaptionLabel(name, self)
-        self.name_label.setObjectName("ApiDebugParamName")
+        self.name_label = _ParamNameChip(name, self)
         self.type_label = CaptionLabel(type_name, self)
         self.type_label.setObjectName("ApiDebugParamType")
         self.description_label = CaptionLabel(description or "-", self)
@@ -125,9 +206,7 @@ class ApiDebugParamRow(QWidget):
         self.enum_hint_label = CaptionLabel("枚举值:", self)
         self.enum_hint_label.setObjectName("ApiDebugParamDescription")
         self.enum_hint_label.hide()
-        self.enum_chip_widgets: list[CaptionLabel] = []
-
-        self._apply_name_chip_style()
+        self.enum_chip_widgets: list[_EnumChip] = []
 
         left_layout = QHBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -139,8 +218,7 @@ class ApiDebugParamRow(QWidget):
             self.enum_hint_label.show()
             left_layout.addWidget(self.enum_hint_label, 0)
             for enum_value in enum_values:
-                chip = CaptionLabel(enum_value, self)
-                self._apply_enum_chip_style(chip)
+                chip = _EnumChip(enum_value, self)
                 self.enum_chip_widgets.append(chip)
                 left_layout.addWidget(chip, 0)
 
@@ -150,39 +228,6 @@ class ApiDebugParamRow(QWidget):
         layout.addLayout(left_layout, 0)
         layout.addStretch(1)
         layout.addWidget(self.required_label, 0)
-
-    def _apply_name_chip_style(self) -> None:
-        theme_color = QColor(cfg.get(cfg.themeColor))
-        if not theme_color.isValid():
-            theme_color = QColor("#2563eb")
-
-        text_color = theme_color.darker(120).name()
-        fill_color = QColor(theme_color)
-        fill_color.setAlpha(26)
-        border_color = QColor(theme_color)
-        border_color.setAlpha(58)
-        self.name_label.setStyleSheet(
-            "QLabel {"
-            f"color: {text_color};"
-            f"background: {fill_color.name(QColor.NameFormat.HexArgb)};"
-            f"border: 1px solid {border_color.name(QColor.NameFormat.HexArgb)};"
-            "border-radius: 6px;"
-            "padding: 2px 8px;"
-            "font-weight: 600;"
-            "}"
-        )
-
-    @staticmethod
-    def _apply_enum_chip_style(label: CaptionLabel) -> None:
-        label.setStyleSheet(
-            "QLabel {"
-            "color: rgba(63, 63, 70, 0.92);"
-            "background: rgba(113, 113, 122, 0.10);"
-            "border: 1px solid rgba(113, 113, 122, 0.12);"
-            "border-radius: 6px;"
-            "padding: 2px 8px;"
-            "}"
-        )
 
 
 class _TreeToggleIcon(QWidget):
@@ -235,6 +280,10 @@ class _TreeToggleIcon(QWidget):
 class _SchemaNodeWidget(QWidget):
     """树形 schema 节点。"""
 
+    _TREE_LINE_COLOR = QColor(148, 163, 184, 72)
+    _TREE_LINE_ACTIVE_COLOR = QColor(99, 102, 241, 82)
+    _TREE_INDENT = 22
+
     def __init__(self, node: _SchemaFieldNode, parent: QWidget | None = None, *, depth: int = 0) -> None:
         super().__init__(parent)
         self._node = node
@@ -244,6 +293,7 @@ class _SchemaNodeWidget(QWidget):
 
         self.arrow_label = _TreeToggleIcon(self)
         self.arrow_label.set_active(self._has_children)
+        self.arrow_label.setVisible(self._has_children)
         self.row_widget = ApiDebugParamRow(
             node.name,
             node.type_name,
@@ -253,30 +303,30 @@ class _SchemaNodeWidget(QWidget):
             enum_values=node.enum_values,
         )
 
-        header = QWidget(self)
-        header_layout = QHBoxLayout(header)
+        self.header = QWidget(self)
+        header_layout = QHBoxLayout(self.header)
         header_layout.setContentsMargins(4, 0, 0, 0)
         header_layout.setSpacing(6)
         header_layout.addWidget(self.arrow_label, 0, Qt.AlignmentFlag.AlignVCenter)
         header_layout.addWidget(self.row_widget, 1, Qt.AlignmentFlag.AlignVCenter)
 
         self.children_container = QWidget(self)
-        children_layout = QVBoxLayout(self.children_container)
-        children_layout.setContentsMargins(28, 6, 0, 0)
-        children_layout.setSpacing(6)
+        self.children_layout = QVBoxLayout(self.children_container)
+        self.children_layout.setContentsMargins(self._TREE_INDENT, 6, 0, 0)
+        self.children_layout.setSpacing(8)
         for child in node.children:
-            children_layout.addWidget(_SchemaNodeWidget(child, self.children_container, depth=depth + 1))
+            self.children_layout.addWidget(_SchemaNodeWidget(child, self.children_container, depth=depth + 1))
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(header)
+        layout.addWidget(self.header)
         layout.addWidget(self.children_container)
 
         self.children_container.setVisible(self._has_children)
         if self._has_children:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
-            header.installEventFilter(self)
+            self.header.installEventFilter(self)
             self.arrow_label.installEventFilter(self)
             self.row_widget.installEventFilter(self)
 
@@ -298,18 +348,36 @@ class _SchemaNodeWidget(QWidget):
         if self._depth <= 0:
             return
 
+        anchor_x = self._branch_anchor_x()
+        row_center_y = self.header.geometry().center().y()
+        row_left = max(anchor_x + 6, self.row_widget.geometry().left() - 8)
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(QColor(63, 63, 70, 54))
-        pen.setWidth(1)
-        painter.setPen(pen)
 
-        anchor_x = 15
-        row_center_y = self.row_widget.geometry().center().y()
-        painter.drawLine(anchor_x, 0, anchor_x, row_center_y)
-        painter.drawLine(anchor_x, row_center_y, self.row_widget.geometry().left() - 8, row_center_y)
+        trunk_pen = QPen(self._TREE_LINE_COLOR)
+        trunk_pen.setWidth(1)
+        trunk_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        trunk_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(trunk_pen)
+
+        top_y = max(0, self.header.geometry().top())
+        painter.drawLine(anchor_x, top_y, anchor_x, row_center_y)
+        painter.drawLine(anchor_x, row_center_y, row_left, row_center_y)
+
         if self._has_children and self.children_container.isVisible():
-            painter.drawLine(anchor_x, row_center_y, anchor_x, self.height())
+            active_pen = QPen(self._TREE_LINE_ACTIVE_COLOR)
+            active_pen.setWidth(1)
+            active_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            active_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(active_pen)
+            bottom_y = max(row_center_y, self.children_container.geometry().bottom() - 2)
+            painter.drawLine(anchor_x, row_center_y, anchor_x, bottom_y)
+
+    def _branch_anchor_x(self) -> int:
+        if self.arrow_label.isVisible():
+            return self.header.geometry().left() + self.arrow_label.geometry().center().x()
+        return self.row_widget.geometry().left() - 14
 
 
 class ApiDebugSchemaCard(CardWidget):
