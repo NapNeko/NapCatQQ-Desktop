@@ -102,7 +102,7 @@ class MainWindow(MSFluentWindow):
         self.addSubInterface(
             interface=it(ApiDebugPage).initialize(self),
             icon=FluentIcon.DEVELOPER_TOOLS,
-            text=self.tr("接口调试"),
+            text=self.tr("接口文档"),
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(

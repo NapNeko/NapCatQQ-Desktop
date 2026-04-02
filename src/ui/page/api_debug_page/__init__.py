@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""独立接口调试页面。"""
+"""独立接口文档页面。"""
 
 import json
 from abc import ABC
@@ -29,7 +29,8 @@ from src.core.config.operate_config import read_config
 from src.core.logging import LogSource, logger
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.info_bar import success_bar, warning_bar
-from .shared import ApiDebugSearchDialog, CallableTask, pretty_json
+from .common import CallableTask, pretty_json
+from .dialogs import ApiDebugSearchDialog
 from .widget import ActionCatalogPanel, ActionDetailPanel
 
 if TYPE_CHECKING:
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 
 
 class ApiDebugPage(QWidget):
-    """独立接口调试页面。"""
+    """独立接口文档页面。"""
 
     STABLE_MINIMUM_SIZE_HINT = QSize(1120, 720)
     STABLE_SIZE_HINT = QSize(1120, 720)
@@ -94,7 +95,7 @@ class ApiDebugPage(QWidget):
         self.root_splitter.addWidget(self.detail_widget)
 
         self.catalog_panel.setMinimumWidth(250)
-        self.detail_widget.setMinimumWidth(640)
+        self.detail_widget.setMinimumWidth(520)
         self.root_splitter.setStretchFactor(0, 3)
         self.root_splitter.setStretchFactor(1, 7)
 
@@ -190,13 +191,13 @@ class ApiDebugPage(QWidget):
 
         if context is None:
             self.current_auth = ApiDebugAuthConfig()
-            self._set_unavailable_state("当前没有可调试的 Bot", "请先启动 Bot 和 WebUI。")
+            self._set_unavailable_state("当前没有可用文档来源", "请先启动 Bot 和 WebUI。")
             return
 
         base_url = context.preferred_action_base_url()
         if not base_url:
             self.current_auth = ApiDebugAuthConfig()
-            self._set_unavailable_state("当前 Bot 暂不可调试", "没有发现运行中的 WebUI Debug 接口。")
+            self._set_unavailable_state("当前 Bot 暂不可用", "没有发现可读取的 WebUI Action 接口。")
             return
 
         self.current_auth = ApiDebugAuthConfig.webui_session(
@@ -214,7 +215,7 @@ class ApiDebugPage(QWidget):
         self.schemas = [schema for schema in schemas if self._is_displayable_schema(schema)]
         if not self.schemas:
             self.catalog_panel.set_schemas([], "")
-            self._set_unavailable_state("当前没有可展示接口", "当前 WebUI 返回的调试接口已被过滤或不可对外展示。")
+            self._set_unavailable_state("当前没有可展示接口", "当前 WebUI 返回的接口文档已被过滤或不可对外展示。")
             return
 
         selected_action = self.workspace_state.action_draft.action
@@ -234,7 +235,7 @@ class ApiDebugPage(QWidget):
         self.schemas = []
         self.catalog_panel.set_schemas([], "")
         self._set_unavailable_state("接口列表加载失败", message)
-        warning_bar(message, title="接口调试不可用", parent=self)
+        warning_bar(message, title="接口文档暂不可用", parent=self)
 
     def _apply_schema(self, schema: ApiDebugActionSchema | None) -> None:
         if schema is None:
@@ -283,7 +284,7 @@ class ApiDebugPage(QWidget):
             warning_bar("请先选择一个接口", parent=self)
             return
         if self.current_context is None or not self.current_context.preferred_action_base_url():
-            warning_bar("当前 Bot 没有可用的 WebUI Debug 接口", parent=self)
+            warning_bar("当前 Bot 没有可用的 WebUI Action 接口", parent=self)
             return
         if not self.params_editor.check_json(show_tips=False):
             warning_bar("参数 JSON 无效", title="无法发送", parent=self)
@@ -292,7 +293,7 @@ class ApiDebugPage(QWidget):
         params = json.loads(self.params_editor.toPlainText() or "{}")
         self.detail_panel.show_debug_panel()
         self.send_button.setEnabled(False)
-        self.send_button.setText("发送中...")
+        self.send_button.setText("调用中")
         self._run_async(
             lambda: self._execute_action(schema.action, params),
             on_success=self._handle_execute_result,
@@ -335,7 +336,7 @@ class ApiDebugPage(QWidget):
 
     def _reset_send_button(self) -> None:
         self.send_button.setEnabled(True)
-        self.send_button.setText("发送调试请求")
+        self.send_button.setText("调用接口")
 
     def _open_search(self) -> None:
         dialog_parent = self._host_window or self
@@ -379,7 +380,7 @@ class ApiDebugPage(QWidget):
             self.workspace_store.save(self.workspace_state)
         except OSError as error:
             logger.warning(
-                f"保存接口调试工作台状态失败: {type(error).__name__}: {error}",
+                f"保存接口文档工作台状态失败: {type(error).__name__}: {error}",
                 log_source=LogSource.UI,
             )
 
@@ -395,7 +396,7 @@ class ApiDebugPage(QWidget):
     def _set_loading_state(self) -> None:
         self._set_enabled_state(False)
         self.detail_panel.set_loading_state(
-            "正在加载接口", "正在从当前 Bot 的 WebUI Debug 接口获取 Action schema，请稍候。"
+            "正在加载接口", "正在从当前 Bot 的 WebUI Action 接口获取文档 schema，请稍候。"
         )
 
     def _set_unavailable_state(self, title: str, message: str) -> None:
@@ -439,14 +440,14 @@ class ApiDebugPage(QWidget):
 
 
 class ApiDebugPageCreator(AbstractCreator, ABC):
-    """接口调试页面创建器。"""
+    """接口文档页面创建器。"""
 
     targets = (
         CreateTargetInfo(
             module="src.ui.page.api_debug_page",
             identify="ApiDebugPage",
-            humanized_name="接口调试页面",
-            description="NapCatQQ Desktop 接口调试页",
+            humanized_name="接口文档页面",
+            description="NapCatQQ Desktop 接口文档页",
         ),
     )
 
