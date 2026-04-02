@@ -2,10 +2,11 @@
 # 标准库导入
 import os
 import sys
+from time import monotonic, sleep
 
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QThreadPool, QUrl, Slot
+from PySide6.QtCore import QCoreApplication, QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
@@ -119,7 +120,16 @@ class DesktopPage(PageBase):
 
             if box.exec():
                 logger.warning("Desktop 更新前关闭全部 Bot 以继续执行", log_source=LogSource.UI)
-                it(ManagerNapCatQQProcess).stop_all_processes()
+                process_manager = it(ManagerNapCatQQProcess)
+                process_manager.stop_all_processes()
+                deadline = monotonic() + 5
+                while process_manager.has_running_bot() and monotonic() < deadline:
+                    sleep(0.1)
+
+                if process_manager.has_running_bot():
+                    logger.error("Desktop 更新前关闭 Bot 失败，仍有进程未退出", log_source=LogSource.UI)
+                    error_bar(self.tr("仍有 Bot 未完全退出，请稍后重试更新。"))
+                    return
             else:
                 logger.info("Desktop 更新流程取消: 用户拒绝关闭运行中的 Bot", log_source=LogSource.UI)
                 return
@@ -220,6 +230,8 @@ class DesktopPage(PageBase):
             process = self._update_manager.execute_update(staging_path, target_pid=os.getpid())
             if process is None:
                 raise RuntimeError("启动 MSI 更新失败")
+            if process.poll() is not None:
+                raise RuntimeError(f"MSI 更新脚本启动后立即退出: code={process.returncode}")
             logger.info(
                 f"MSI 更新脚本已启动: PID={process.pid}, script={summarize_path(bat_path)}",
                 log_source=LogSource.UI,
@@ -243,6 +255,11 @@ class DesktopPage(PageBase):
 
         # 退出程序，安装脚本/MSI 会等待并替换可执行文件
         logger.warning("Desktop 更新已启动，当前进程准备退出", log_source=LogSource.UI)
+        if not QThreadPool.globalInstance().waitForDone(5000):
+            logger.warning("等待后台线程退出超时，继续执行应用退出", log_source=LogSource.UI)
+        if (app := QCoreApplication.instance()) is not None:
+            app.quit()
+            return
         sys.exit(0)
 
     @Slot()
