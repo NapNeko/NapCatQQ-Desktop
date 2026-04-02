@@ -10,7 +10,6 @@ import httpx
 
 # 项目内模块导入
 import src.core.versioning.service as versioning
-from src.core.desktop_update import DesktopUpdateManifest, DesktopUpdateMigration, resolve_desktop_update_plan
 
 
 def mute_version_logger(monkeypatch) -> None:
@@ -29,7 +28,6 @@ def test_remote_version_execute_assembles_three_sources(monkeypatch) -> None:
         ]
     )
     monkeypatch.setattr(runner, "_get_version", lambda *args, **kwargs: next(sequence))
-    monkeypatch.setattr(runner, "_get_desktop_update_manifest", lambda: None)
 
     result = runner.execute()
 
@@ -39,7 +37,6 @@ def test_remote_version_execute_assembles_three_sources(monkeypatch) -> None:
     assert result.qq_download_url == "https://qq.example.com"
     assert result.napcat_update_log == "napcat log"
     assert result.ncd_update_log == "ncd log"
-    assert result.ncd_update_manifest is None
 
 
 def test_remote_version_request_handles_network_error(monkeypatch) -> None:
@@ -103,88 +100,6 @@ def test_parse_qq_response_emits_error_when_windows_payload_is_invalid(monkeypat
     assert result == {"version": None, "download_url": None}
     assert len(errors) == 1
     assert "解析 QQ 版本信息失败" in errors[0]
-
-
-def test_get_desktop_update_manifest_returns_manifest_entry(monkeypatch) -> None:
-    """远端 manifest 应能解析出迁移规则。"""
-    runner = versioning.RemoteVersionTask()
-    monkeypatch.setattr(
-        runner,
-        "request",
-        lambda *args, **kwargs: {
-            "schema_version": 2,
-            "min_auto_update_version": "v1.8.0",
-            "migrations": [
-                {
-                    "id": "cfg-layout-v2",
-                    "from_min": "v1.8.0",
-                    "from_max": "v1.9.99",
-                    "to_version": "v2.0.0",
-                    "script_url": "https://example.com/update.bat",
-                    "summary": "需要迁移配置目录",
-                }
-            ],
-        },
-    )
-
-    result = runner._get_desktop_update_manifest()
-
-    assert result is not None
-    assert result.min_auto_update_version == "v1.8.0"
-    assert len(result.migrations) == 1
-    assert result.migrations[0].id == "cfg-layout-v2"
-    assert result.migrations[0].to_version == "v2.0.0"
-    assert result.migrations[0].script_url == "https://example.com/update.bat"
-
-
-def test_desktop_update_migration_matches_only_target_window() -> None:
-    """迁移规则应只在指定的本地和目标版本窗口内生效。"""
-    migration = DesktopUpdateMigration(
-        id="cfg-layout-v2",
-        from_min="v1.7.0",
-        from_max="v1.7.99",
-        to_version="v2.0.0",
-        script_url="https://example.com/update.bat",
-    )
-
-    assert migration.matches("v1.7.9", "v2.0.0") is True
-    assert migration.matches("v1.8.0", "v2.0.0") is False
-    assert migration.matches("v1.7.9", "v2.1.0") is False
-
-
-def test_resolve_desktop_update_plan_returns_unsupported_for_too_old_local_version() -> None:
-    """低于最小自动升级版本时应直接阻止自动更新。"""
-    manifest = DesktopUpdateManifest(schema_version=2, min_auto_update_version="v1.8.0", migrations=[])
-
-    result = resolve_desktop_update_plan("v1.7.9", "v2.0.0", manifest)
-
-    assert result is not None
-    assert result.blocks_update() is True
-    assert result.min_auto_update_version == "v1.8.0"
-
-
-def test_resolve_desktop_update_plan_returns_migration_when_rule_matches() -> None:
-    """命中区间规则时应返回迁移计划。"""
-    manifest = DesktopUpdateManifest(
-        schema_version=2,
-        min_auto_update_version="v1.8.0",
-        migrations=[
-            DesktopUpdateMigration(
-                id="cfg-layout-v2",
-                from_min="v1.8.0",
-                from_max="v1.9.99",
-                to_version="v2.0.0",
-                script_url="https://example.com/update.bat",
-            )
-        ],
-    )
-
-    result = resolve_desktop_update_plan("v1.8.5", "v2.0.0", manifest)
-
-    assert result is not None
-    assert result.requires_remote_script() is True
-    assert result.migration is not None
-    assert result.migration.id == "cfg-layout-v2"
 
 
 def test_local_version_reads_package_and_qq_files(monkeypatch, tmp_path: Path) -> None:
