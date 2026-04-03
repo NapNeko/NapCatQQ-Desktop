@@ -28,8 +28,8 @@ if "%ERRORLEVEL%" NEQ "0" (
     echo UAC.ShellExecute "cmd.exe", "/c """"%~f0"""" %*", "", "runas", 1 >> "%uac_helper%"
     "%uac_helper%"
     if errorlevel 1 (
-        echo [%date% %time%] 无法以管理员权限重新启动，放弃更新 >> "%log%"
-        goto :end
+        echo [%date% %time%] 无法以管理员权限重新启动，启用兜底策略 >> "%log%"
+        goto :fallback_to_manual
     )
     rem 管理员实例已发起，退出当前实例
     goto :end
@@ -41,7 +41,7 @@ echo [%date% %time%] MSI 更新开始 > "%log%"
 rem 检查 MSI 文件是否存在
 if not exist "%msi_path%" (
     echo [%date% %time%] MSI 文件未找到: %msi_path% >> "%log%"
-    goto :end
+    goto :fallback_to_manual
 )
 
 rem ---------- 等待旧版进程退出 ----------
@@ -102,7 +102,18 @@ if %msi_rc% EQU 0 (
 ) else (
     echo [%date% %time%] MSI 升级安装失败，返回码: %msi_rc% >> "%log%"
     rem 保留 MSI 文件以便排查问题
+    goto :fallback_to_manual
 )
+
+:fallback_to_manual
+echo [%date% %time%] 尝试打开安装包位置并提示用户手动安装 >> "%log%"
+if exist "%msi_path%" (
+    explorer /select,"%msi_path%"
+) else (
+    explorer "%script_dir%"
+)
+mshta "javascript:var sh=new ActiveXObject('WScript.Shell'); sh.Popup('更新程序遇到问题，无法自动完成安装。\n\n请手动运行安装包完成升级。', 0, 'NapCatQQ Desktop 更新提示', 48);close()"
+goto :end
 
 :end
 echo [%date% %time%] MSI 更新脚本结束 >> "%log%"
