@@ -17,6 +17,7 @@ from src.core.desktop_update.constants import (
 from src.core.desktop_update.scripts import inject_script_variables
 from src.core.installation.install_type import InstallType, detect_install_type, get_update_file_pattern
 from src.core.desktop_update.templates import load_msi_update_script
+from src.core.platform.app_paths import resolve_app_data_path
 
 logger = logging.getLogger(__name__)
 
@@ -129,12 +130,14 @@ class UpdateManager:
             base_path = _get_default_base_path()
 
         self.base_path = base_path.resolve()
+        self.data_path = resolve_app_data_path()
         self.install_type = detect_install_type(self.base_path)
         self._strategy = MsiUpdateStrategy()
 
         logger.info(
             "更新管理器初始化: "
-            f"current_install_type={self.install_type.value}, update_channel=msi, path={self.base_path}"
+            f"current_install_type={self.install_type.value}, update_channel=msi, "
+            f"base_path={self.base_path}, data_path={self.data_path}"
         )
 
     @property
@@ -149,7 +152,7 @@ class UpdateManager:
         return get_update_file_pattern(InstallType.MSI, version)
 
     def prepare_update(self, package_path: Path) -> Path:
-        return self._strategy.prepare(package_path, self.base_path)
+        return self._strategy.prepare(package_path, self.data_path)
 
     def get_update_script_path(self, staging_path: Path) -> Path | None:
         return self._strategy.get_update_script_path(staging_path)
