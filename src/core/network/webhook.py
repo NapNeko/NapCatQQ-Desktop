@@ -22,18 +22,23 @@ class WebHookData:
     url: str
     secret: str
     json: str
+    method: str = "POST"  # 新增字段，默认 POST
 
-    def __init__(self, url: str | None = None, secret: str | None = None, json: str | None = None) -> None:
+    def __init__(
+        self, url: str | None = None, secret: str | None = None, json: str | None = None, method: str | None = None
+    ) -> None:
         """初始化 WebHookData, 动态从配置中获取值
 
         Args:
             url (str | None): WebHook 地址，可为 None。
             secret (str | None): WebHook 密钥，可为 None。
             json (str | None): WebHook JSON 内容，可为 None。
+            method (str | None): HTTP 方法，可为 None，默认为 POST。
         """
         self.url = url or cfg.get(cfg.web_hook_url)
         self.secret = secret or cfg.get(cfg.web_hook_secret)
         self.json = json or cfg.get(cfg.web_hook_json)
+        self.method = method or cfg.get(cfg.web_hook_method) or "POST"
 
 
 class WebHook(QObject, QRunnable):
@@ -119,7 +124,19 @@ class WebHook(QObject, QRunnable):
                 }
             )
 
-            response = httpx.post(self.data.url, json=payload, headers=headers, timeout=10.0)
+            # 根据 method 字段选择使用 GET 或 POST
+            method = self.data.method.upper()
+            if method == "GET":
+                response = httpx.get(
+                    self.data.url,
+                    params=payload if isinstance(payload, dict) else None,
+                    headers=headers,
+                    timeout=10.0,
+                )
+            else:
+                # 默认使用 POST
+                response = httpx.post(self.data.url, json=payload, headers=headers, timeout=10.0)
+
             response.raise_for_status()
             self.success_signal.emit("WebHook 发送成功")
 
@@ -143,8 +160,7 @@ class WebHook(QObject, QRunnable):
 
 def create_test_webhook_task() -> WebHook:
     """构建测试 WebHook 任务, 由调用方决定如何处理信号和启动任务"""
-
-    return WebHook(WebHookData(json='{"text": "Hello, World!"}'))
+    return WebHook(WebHookData())
 
 
 def create_offline_webhook_task(config: Config) -> WebHook:
@@ -161,4 +177,3 @@ def create_offline_webhook_task(config: Config) -> WebHook:
             ),
         )
     )
-

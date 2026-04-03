@@ -51,9 +51,19 @@ class RemoteVersionTask(VersionTaskBase):
     """远端版本信息拉取任务。"""
 
     def execute(self) -> VersionSnapshot:
-        napcat_info = self._get_version(Urls.NAPCATQQ_REPO_API.value, "NapCat", self._parse_github_response)
+        napcat_info = self._get_version_with_fallback(
+            Urls.NAPCATQQ_REPO_API.value,
+            Urls.NAPCATQQ_REPO_API_FALLBACK.value,
+            "NapCat",
+            self._parse_github_response,
+        )
         qq_version = self._get_version(Urls.QQ_Version.value, "QQ", self._parse_qq_response)
-        ncd_version = self._get_version(Urls.NCD_REPO_API.value, "NapCatQQ Desktop", self._parse_github_response)
+        ncd_version = self._get_version_with_fallback(
+            Urls.NCD_REPO_API.value,
+            Urls.NCD_REPO_API_FALLBACK.value,
+            "NapCatQQ Desktop",
+            self._parse_github_response,
+        )
 
         return VersionSnapshot(
             napcat_version=napcat_info["version"],
@@ -68,6 +78,32 @@ class RemoteVersionTask(VersionTaskBase):
         self, url: str | QUrl, name: str, parser: Callable[[dict], dict[str, str | None]]
     ) -> dict[str, str | None]:
         response = self.request(QUrl(url), name)
+
+        if response is None:
+            return self._get_error_value(name)
+
+        try:
+            return parser(response)
+        except KeyError as exc:
+            logger.error(f"解析 {name} 版本信息失败: {exc}")
+            self.error_signal.emit(f"解析 {name} 版本信息失败: {exc}")
+            return self._get_error_value(name)
+
+    def _get_version_with_fallback(
+        self,
+        primary_url: str | QUrl,
+        fallback_url: str | QUrl,
+        name: str,
+        parser: Callable[[dict], dict[str, str | None]],
+    ) -> dict[str, str | None]:
+        """获取版本信息，主 URL 失败时使用兜底 URL。"""
+        # 先尝试主 URL（镜像站）
+        response = self.request(QUrl(primary_url), name, emit_error=False)
+
+        # 如果镜像站失败，尝试 GitHub 官方 API
+        if response is None:
+            logger.warning(f"{name} 镜像站请求失败，尝试 GitHub 官方 API...")
+            response = self.request(QUrl(fallback_url), name, emit_error=True)
 
         if response is None:
             return self._get_error_value(name)

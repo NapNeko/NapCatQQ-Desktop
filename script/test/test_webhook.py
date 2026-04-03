@@ -62,11 +62,13 @@ def patch_cfg_get(monkeypatch: pytest.MonkeyPatch, overrides: dict[str, str]) ->
 
 def test_create_test_webhook_task_sends_parsed_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     """测试 WebHook 请求体应以解析后的 JSON 对象发送。"""
+    user_config_json = '{"text": "Test from user config"}'
     patch_cfg_get(
         monkeypatch,
         {
             webhook_module.cfg.web_hook_url.key: "https://example.com/webhook",
             webhook_module.cfg.web_hook_secret.key: "secret-token",
+            webhook_module.cfg.web_hook_json.key: user_config_json,
         },
     )
 
@@ -92,9 +94,9 @@ def test_create_test_webhook_task_sends_parsed_payload(monkeypatch: pytest.Monke
     task.run()
 
     assert captured["url"] == "https://example.com/webhook"
-    assert captured["json"] == {"text": "Hello, World!"}
+    assert captured["json"] == json.loads(user_config_json)
     assert not isinstance(captured["json"], str)
-    assert task.data.json == json.dumps({"text": "Hello, World!"}, indent=4, ensure_ascii=False)
+    assert task.data.json == json.dumps(json.loads(user_config_json), indent=4, ensure_ascii=False)
 
 
 def test_create_offline_webhook_task_renders_template_and_sends_object(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,3 +153,52 @@ def test_invalid_json_emits_error_and_skips_send(monkeypatch: pytest.MonkeyPatch
     task.run()
 
     assert emitted == ["无效的 JSON 内容"]
+
+
+def test_webhook_get_request_sends_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    """测试 GET 请求应将解析后的 JSON 作为 params 发送。"""
+    user_config_json = '{"device_key": "abc123", "title": "Test"}'
+    patch_cfg_get(
+        monkeypatch,
+        {
+            webhook_module.cfg.web_hook_url.key: "https://example.com/webhook",
+            webhook_module.cfg.web_hook_secret.key: "secret-token",
+            webhook_module.cfg.web_hook_json.key: user_config_json,
+            webhook_module.cfg.web_hook_method.key: "GET",
+        },
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status() -> None:
+            return None
+
+    def fake_get(url, *, params=None, headers=None, timeout=None):
+        captured["url"] = url
+        captured["params"] = params
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(webhook_module.httpx, "get", fake_get)
+    # 确保 post 不会被调用
+    monkeypatch.setattr(
+        webhook_module.httpx,
+        "post",
+        lambda *args, **kwargs: pytest.fail("GET 请求不应触发 httpx.post"),
+    )
+
+    task = create_test_webhook_task()
+    task.run()
+
+    assert captured["url"] == "https://example.com/webhook"
+    assert captured["params"] == json.loads(user_config_json)
+    assert captured["headers"] == {
+        "Authorization": "Bearer secret-token",
+        "Content-Type": "application/json",
+    }
+    assert captured["timeout"] == 10.0

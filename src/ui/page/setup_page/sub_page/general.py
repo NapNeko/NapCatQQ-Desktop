@@ -245,6 +245,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         self.title_label = TitleLabel(self.tr("机器人离线通知[Webhook]"), self)
         self.enable_card = SwitchConfigCard(FI.IOT, self.tr("启用Webhook通知"))
         self.webhook_url_card = LineEditConfigCard(FI.ROBOT, self.tr("Webhook地址"), "https://example.com/webhook")
+        self.method_card = ComboBoxConfigCard(FI.SEND, self.tr("请求方法"), ["POST", "GET"])
         self.webhook_secret_card = LineEditConfigCard(FI.VPN, self.tr("Webhook 密钥"), "Secret")
         self.json_card = JsonTemplateEditConfigCard(FI.CODE, self.tr("Webhook JSON"))
         self.test_webhook_buttonn = PushButton(self.tr("发送测试请求"), self)
@@ -253,8 +254,9 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         self.grid_layout = QGridLayout()
         self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 4)
         self.grid_layout.addWidget(self.webhook_url_card, 1, 0, 1, 4)
-        self.grid_layout.addWidget(self.webhook_secret_card, 2, 0, 1, 4)
-        self.grid_layout.addWidget(self.json_card, 3, 0, 1, 4)
+        self.grid_layout.addWidget(self.method_card, 2, 0, 1, 4)
+        self.grid_layout.addWidget(self.webhook_secret_card, 3, 0, 1, 4)
+        self.grid_layout.addWidget(self.json_card, 4, 0, 1, 4)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
         self.grid_layout.setSpacing(8)
 
@@ -276,6 +278,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         """填充配置"""
         self.enable_card.fill_value(cfg.get(cfg.bot_offline_web_hook_notice))
         self.webhook_url_card.fill_value(cfg.get(cfg.web_hook_url))
+        self.method_card.fill_value(cfg.get(cfg.web_hook_method))
         self.webhook_secret_card.fill_value(cfg.get(cfg.web_hook_secret))
         self.json_card.fill_value(cfg.get(cfg.web_hook_json))
 
@@ -287,6 +290,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         values = [
             (cfg.bot_offline_web_hook_notice, self.enable_card.get_value()),
             (cfg.web_hook_url, self.webhook_url_card.get_value()),
+            (cfg.web_hook_method, self.method_card.get_value()),
             (cfg.web_hook_secret, self.webhook_secret_card.get_value()),
             (cfg.web_hook_json, json_payload),
         ]

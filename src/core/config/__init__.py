@@ -513,6 +513,12 @@ class Config(QConfig):
     web_hook_url = ConfigItem(group="WebHook", name="WebHookUrl", default="")
     web_hook_secret = ConfigItem(group="WebHook", name="WebHookSecret", default="")
     web_hook_json = ConfigItem(group="WebHook", name="WebHookJson", default="")
+    web_hook_method = OptionsConfigItem(
+        group="WebHook",
+        name="WebHookMethod",
+        default="POST",
+        validator=OptionsValidator(["POST", "GET"]),
+    )
 
     # 首页通知
     home_notice_ignored_keys = ConfigItem(group="Home", name="IgnoredNoticeKeys", default="[]")

@@ -8,8 +8,8 @@ import os
 from PySide6.QtWidgets import QApplication, QWidget
 
 # 项目内模块导入
-import src.ui.page.setup_page.general as general_module
-from src.ui.page.setup_page.general import BotOfflineEmailDialog, BotOfflineWebHookDialog
+import src.ui.page.setup_page.sub_page.general as general_module
+from src.ui.page.setup_page.sub_page.general import BotOfflineEmailDialog, BotOfflineWebHookDialog
 
 
 class DummySignal:
@@ -160,6 +160,7 @@ def test_webhook_dialog_invalid_json_does_not_save_or_start_task(monkeypatch) ->
             general_module.cfg.web_hook_url.key: "https://old.example.com/webhook",
             general_module.cfg.web_hook_secret.key: "old-secret",
             general_module.cfg.web_hook_json.key: '{"msg":"old"}',
+            general_module.cfg.web_hook_method.key: "POST",
         },
     )
 
@@ -194,6 +195,7 @@ def test_webhook_dialog_valid_save_allows_test_task(monkeypatch) -> None:
             general_module.cfg.web_hook_url.key: "",
             general_module.cfg.web_hook_secret.key: "",
             general_module.cfg.web_hook_json.key: '{"msg":"old"}',
+            general_module.cfg.web_hook_method.key: "POST",
         },
     )
 
@@ -226,6 +228,7 @@ def test_webhook_dialog_open_with_empty_json_does_not_log_parse_error(monkeypatc
             general_module.cfg.web_hook_url.key: "",
             general_module.cfg.web_hook_secret.key: "",
             general_module.cfg.web_hook_json.key: "",
+            general_module.cfg.web_hook_method.key: "POST",
         },
     )
 

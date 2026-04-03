@@ -12,6 +12,7 @@ class Urls(Enum):
     NCD_REPO = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop")
     NCD_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/issues")
     NCD_REPO_API = QUrl("https://nclatest.znin.net/get_ncd_ver")
+    NCD_REPO_API_FALLBACK = QUrl("https://api.github.com/repos/NapNeko/NapCatQQ-Desktop/releases/latest")
     NCD_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest/download/NapCatQQ-Desktop-x64.msi")
 
     @staticmethod
@@ -54,6 +55,7 @@ class Urls(Enum):
     NAPCATQQ_REPO = QUrl("https://github.com/NapNeko/NapCatQQ")
     NAPCATQQ_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ/issues")
     NAPCATQQ_REPO_API = QUrl("https://nclatest.znin.net")
+    NAPCATQQ_REPO_API_FALLBACK = QUrl("https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest")
     NAPCATQQ_DOCUMENT = QUrl("https://napneko.github.io/")
 
     # 直接写入下载地址, 不请求 API 获取, 期望达到节省时间的目的
