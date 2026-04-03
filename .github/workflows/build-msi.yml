@@ -114,11 +114,13 @@ jobs:
       - name: "构建应用"
         shell: pwsh
         run: |
-          if (Test-Path "dist/NapCatQQ-Desktop") {
-            Remove-Item "dist/NapCatQQ-Desktop" -Recurse -Force
+          foreach ($path in @("build/main", "build/generated_assets", "dist/NapCatQQ-Desktop")) {
+            if (Test-Path $path) {
+              Remove-Item $path -Recurse -Force
+            }
           }
           uv sync --frozen --no-dev
-          uv run --frozen pyinstaller ./script/build_scripts/main.spec
+          uv run --frozen pyinstaller --clean ./script/build_scripts/main.spec
 
       - name: "安装 WiX Toolset"
         shell: pwsh

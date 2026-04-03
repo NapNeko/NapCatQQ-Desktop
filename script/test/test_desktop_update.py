@@ -2,29 +2,29 @@
 
 # 标准库导入
 from pathlib import Path
-import subprocess
 
 # 第三方库导入
 import pytest
 
 # 项目内模块导入
 import src.core.desktop_update.manager as desktop_update_manager
-from src.core.desktop_update import MINIMUM_MSI_SIZE_BYTES, MSI_UPDATE_FILENAME, MsiUpdateStrategy, UpdateManager
-from src.core.desktop_update.constants import MSI_LOG_FILE, MSI_UPDATE_SCRIPT_FILENAME
+from src.core.desktop_update import MINIMUM_MSI_SIZE_BYTES, MSI_UPDATE_FILENAME, MsiUpdateStrategy, UpdateLaunchResult, UpdateManager
+from src.core.desktop_update.constants import MSI_LOG_FILE
 from src.core.desktop_update.scripts import inject_script_variables, inject_target_pid
 from src.core.desktop_update.templates import load_msi_update_script
 from src.core.installation.install_type import InstallType
 
 
-def test_msi_update_strategy_copies_package_to_runtime_tmp(tmp_path: Path) -> None:
-    """MSI 更新应将安装包复制到统一的 runtime/tmp 目录。"""
+def test_msi_update_strategy_preserves_package_filename_when_copying_to_runtime_tmp(tmp_path: Path) -> None:
+    """MSI 更新应保留原始文件名，不再强制改成固定名。"""
 
-    package_path = tmp_path / "release.msi"
+    package_path = tmp_path / "downloads" / "NapCatQQ-Desktop-2.0.13-x64.msi"
+    package_path.parent.mkdir(parents=True)
     package_path.write_bytes(b"0" * MINIMUM_MSI_SIZE_BYTES)
 
     staging_path = MsiUpdateStrategy().prepare(package_path, tmp_path)
 
-    assert staging_path == tmp_path / "runtime" / "tmp" / MSI_UPDATE_FILENAME
+    assert staging_path == tmp_path / "runtime" / "tmp" / package_path.name
     assert staging_path.read_bytes() == package_path.read_bytes()
 
 
@@ -43,7 +43,8 @@ def test_msi_update_strategy_falls_back_to_system_temp_when_app_dir_unwritable(
 ) -> None:
     """安装目录不可写时应回退到系统临时目录。"""
 
-    package_path = tmp_path / "release.msi"
+    package_path = tmp_path / "downloads" / "NapCatQQ-Desktop-2.0.13-x64.msi"
+    package_path.parent.mkdir(parents=True)
     package_path.write_bytes(b"0" * MINIMUM_MSI_SIZE_BYTES)
     fallback_root = tmp_path / "system-temp"
     original_copy2 = desktop_update_manager.shutil.copy2
@@ -58,8 +59,20 @@ def test_msi_update_strategy_falls_back_to_system_temp_when_app_dir_unwritable(
 
     staging_path = MsiUpdateStrategy().prepare(package_path, tmp_path)
 
-    assert staging_path == fallback_root / "NapCatQQ-Desktop" / "update" / MSI_UPDATE_FILENAME
+    assert staging_path == fallback_root / "NapCatQQ-Desktop" / "update" / package_path.name
     assert staging_path.read_bytes() == package_path.read_bytes()
+
+
+def test_msi_update_strategy_reuses_package_already_in_runtime_tmp(tmp_path: Path) -> None:
+    """下载文件已在 runtime/tmp 时应直接复用该版本号包。"""
+
+    package_path = tmp_path / "runtime" / "tmp" / "NapCatQQ-Desktop-2.0.13-x64.msi"
+    package_path.parent.mkdir(parents=True)
+    package_path.write_bytes(b"0" * MINIMUM_MSI_SIZE_BYTES)
+
+    staging_path = MsiUpdateStrategy().prepare(package_path, tmp_path)
+
+    assert staging_path == package_path
 
 
 def test_update_manager_always_uses_msi_strategy_for_portable_install(
@@ -113,106 +126,89 @@ def test_inject_target_pid_inserts_after_setlocal() -> None:
     assert result.index('set "target_pid=114514"') > result.index("setlocal enabledelayedexpansion")
 
 
-def test_msi_update_strategy_execute_update_passes_pid_args_and_uses_new_console(
+def test_msi_update_strategy_builds_msiexec_launch_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """应直接构造 msiexec 命令，而不是依赖 bat 中转。"""
+
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    staging_path = tmp_path / "NapCatQQ-Desktop-2.0.13-x64.msi"
+    expected_arguments = desktop_update_manager.subprocess.list2cmdline(
+        [
+            "/i",
+            str(staging_path),
+            "/quiet",
+            "/norestart",
+            "/l*v",
+            str(tmp_path / "msi_install.log"),
+        ]
+    )
+
+    executable, arguments = MsiUpdateStrategy.build_msi_launch_command(
+        staging_path,
+        tmp_path,
+    )
+
+    assert executable == r"C:\Windows\System32\msiexec.exe"
+    assert arguments == expected_arguments
+
+
+def test_msi_update_strategy_execute_update_launches_msiexec_directly(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """启动脚本时应传递 PID/路径参数，并仅使用新控制台标志。"""
+    """更新应直接拉起 msiexec，并记录诊断日志。"""
 
     strategy = MsiUpdateStrategy()
-    staging_path = tmp_path / MSI_UPDATE_FILENAME
+    staging_path = tmp_path / "NapCatQQ-Desktop-2.0.13-x64.msi"
     staging_path.write_bytes(b"0" * MINIMUM_MSI_SIZE_BYTES)
     captured: dict[str, object] = {}
+    expected_arguments = desktop_update_manager.subprocess.list2cmdline(
+        [
+            "/i",
+            str(staging_path),
+            "/quiet",
+            "/norestart",
+            "/l*v",
+            str(tmp_path / "msi_install.log"),
+        ]
+    )
 
-    class FakeProcess:
-        pid = 9527
-        returncode = None
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
 
-        @staticmethod
-        def poll():
-            return None
-
-    monkeypatch.setattr(strategy, "load_update_script", lambda: "@echo off\nsetlocal enabledelayedexpansion\necho hi\n")
-    def fake_popen(command, shell, cwd, creationflags):
-        captured["command"] = command
-        captured["shell"] = shell
+    def fake_launch(executable: str, arguments: str, cwd: str) -> UpdateLaunchResult:
+        captured["executable"] = executable
+        captured["arguments"] = arguments
         captured["cwd"] = cwd
-        captured["creationflags"] = creationflags
-        return FakeProcess()
+        return UpdateLaunchResult(pid=9527)
 
-    monkeypatch.setattr(desktop_update_manager.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(strategy, "_launch_msi_process", fake_launch)
 
-    process = strategy.execute_update(staging_path, tmp_path, target_pid=114514)
+    result = strategy.execute_update(staging_path, tmp_path, target_pid=114514)
 
-    assert process is not None
-    assert captured["shell"] is False
+    assert result == UpdateLaunchResult(pid=9527)
+    assert captured["executable"] == r"C:\Windows\System32\msiexec.exe"
+    assert captured["arguments"] == expected_arguments
     assert captured["cwd"] == str(tmp_path)
-    assert captured["creationflags"] == subprocess.CREATE_NEW_CONSOLE
-    assert captured["command"] == [
-        str(tmp_path / MSI_UPDATE_SCRIPT_FILENAME),
-        "114514",
-        str(tmp_path),
-        str(staging_path),
-        str(tmp_path / MSI_LOG_FILE),
-    ]
 
-    script_content = (tmp_path / MSI_UPDATE_SCRIPT_FILENAME).read_text(encoding="utf-8")
-    assert 'set "target_pid=114514"' in script_content
-    assert f'set "msi_path={staging_path}"' in script_content
-    assert f'set "log={tmp_path / MSI_LOG_FILE}"' in script_content
+    update_log = (tmp_path / MSI_LOG_FILE).read_text(encoding="utf-8")
+    assert "准备直接启动 MSI 更新" in update_log
+    assert "target_pid=114514" in update_log
+    assert "MSI 进程已成功启动" in update_log
 
 
-def test_msi_update_strategy_execute_update_accepts_quick_exit_after_launch(
+def test_msi_update_strategy_execute_update_logs_failure_when_launch_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """脚本进程即使很快退出，也不应被误判为启动失败。"""
+    """直接启动 msiexec 失败时应返回 None 并记录原因。"""
 
     strategy = MsiUpdateStrategy()
-    staging_path = tmp_path / MSI_UPDATE_FILENAME
+    staging_path = tmp_path / "NapCatQQ-Desktop-2.0.13-x64.msi"
     staging_path.write_bytes(b"0" * MINIMUM_MSI_SIZE_BYTES)
 
-    class FakeProcess:
-        pid = 9529
-        returncode = 0
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    monkeypatch.setattr(strategy, "_launch_msi_process", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("denied")))
 
-        @staticmethod
-        def poll():
-            return 0
+    result = strategy.execute_update(staging_path, tmp_path, target_pid=None)
 
-    monkeypatch.setattr(strategy, "load_update_script", lambda: "@echo off\nsetlocal enabledelayedexpansion\necho hi\n")
-    monkeypatch.setattr(desktop_update_manager.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
-
-    process = strategy.execute_update(staging_path, tmp_path, target_pid=114514)
-
-    assert process is not None
-    assert process.returncode == 0
-
-
-def test_msi_update_strategy_execute_update_uses_pid_none_marker_when_target_pid_missing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """未提供 PID 时应传递显式占位符，而不是空字符串。"""
-
-    strategy = MsiUpdateStrategy()
-    staging_path = tmp_path / MSI_UPDATE_FILENAME
-    staging_path.write_bytes(b"0" * MINIMUM_MSI_SIZE_BYTES)
-    captured: dict[str, object] = {}
-
-    class FakeProcess:
-        pid = 9528
-        returncode = None
-
-        @staticmethod
-        def poll():
-            return None
-
-    monkeypatch.setattr(strategy, "load_update_script", lambda: "@echo off\nsetlocal enabledelayedexpansion\necho hi\n")
-    def fake_popen(command, shell, cwd, creationflags):
-        captured["command"] = command
-        return FakeProcess()
-
-    monkeypatch.setattr(desktop_update_manager.subprocess, "Popen", fake_popen)
-
-    process = strategy.execute_update(staging_path, tmp_path, target_pid=None)
-
-    assert process is not None
-    assert captured["command"][1] == MsiUpdateStrategy.PID_NONE_MARKER
+    assert result is None
+    update_log = (tmp_path / MSI_LOG_FILE).read_text(encoding="utf-8")
+    assert "target_pid=0" in update_log
+    assert "启动 MSI 失败: denied" in update_log

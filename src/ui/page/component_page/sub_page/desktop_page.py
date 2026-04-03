@@ -226,12 +226,12 @@ class DesktopPage(PageBase):
                     log_source=LogSource.UI,
                 )
 
-            bat_path = self._update_manager._strategy.get_update_script_path(staging_path)
-            process = self._update_manager.execute_update(staging_path, target_pid=os.getpid())
-            if process is None:
+            launch_result = self._update_manager.execute_update(staging_path, target_pid=os.getpid())
+            if launch_result is None:
                 raise RuntimeError("启动 MSI 更新失败")
+            pid_text = launch_result.pid if launch_result.pid is not None else "unknown"
             logger.info(
-                f"MSI 更新脚本已启动: PID={process.pid}, script={summarize_path(bat_path)}",
+                f"MSI 更新进程已启动: PID={pid_text}, package={summarize_path(staging_path)}",
                 log_source=LogSource.UI,
             )
 

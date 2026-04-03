@@ -9,6 +9,7 @@ from src.core.desktop_update.constants import (
 )
 from src.core.desktop_update.manager import (
     MsiUpdateStrategy,
+    UpdateLaunchResult,
     UpdateManager,
 )
 from src.core.desktop_update.scripts import inject_target_pid
