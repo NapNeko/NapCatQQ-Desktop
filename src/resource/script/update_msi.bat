@@ -86,7 +86,7 @@ rem /i - 安装
 rem /quiet - 静默安装
 rem /norestart - 不重启
 rem /l*v - 详细日志
-start /wait msiexec /i "%msi_path%" /quiet /norestart /l*v "%app_root%\msi_install.log" REINSTALL=ALL REINSTALLMODE=vomus
+"%SystemRoot%\System32\msiexec.exe" /i "%msi_path%" /quiet /norestart /l*v "%app_root%\msi_install.log" REINSTALL=ALL REINSTALLMODE=vomus
 
 set "msi_rc=%ERRORLEVEL%"
 echo [%date% %time%] MSI 安装完成，返回码: %msi_rc% >> "%log%"
@@ -98,12 +98,15 @@ if %msi_rc% EQU 0 (
     del /F /Q "%msi_path%" >> "%log%" 2>&1
     rem 启动新版本（可选，MSI 通常不需要，因为 MajorUpgrade 会处理）
     rem start "" "%app_root%\NapCatQQ-Desktop.exe"
+    goto :end
 ) else if %msi_rc% EQU 3010 (
     echo [%date% %time%] MSI 升级安装成功，但系统要求重启 >> "%log%"
     del /F /Q "%msi_path%" >> "%log%" 2>&1
+    goto :end
 ) else if %msi_rc% EQU 1641 (
     echo [%date% %time%] MSI 已触发重启并继续安装 >> "%log%"
     del /F /Q "%msi_path%" >> "%log%" 2>&1
+    goto :end
 ) else (
     echo [%date% %time%] MSI 升级安装失败，返回码: %msi_rc% >> "%log%"
     rem 保留 MSI 文件以便排查问题

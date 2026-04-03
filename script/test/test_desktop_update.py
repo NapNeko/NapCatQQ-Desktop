@@ -81,12 +81,14 @@ def test_load_msi_update_script_contains_msiexec_flow() -> None:
     """MSI 模板必须包含提权与 msiexec 升级命令。"""
 
     script_content = load_msi_update_script()
+    normalized = script_content.replace("\r\n", "\n")
 
     assert "UAC.ShellExecute" in script_content
     assert "runas" in script_content
     assert 'set "msi_path=%app_root%\\runtime\\tmp\\NapCatQQ-Desktop.msi"' in script_content
     assert 'set "msi_path=%app_root%\\runtime\\tmp\\NapCatQQ-Desktop.msi"' in script_content
-    assert 'msiexec /i "%msi_path%" /quiet /norestart' in script_content
+    assert '"%SystemRoot%\\System32\\msiexec.exe" /i "%msi_path%" /quiet /norestart' in script_content
+    assert 'echo [%date% %time%] MSI 升级安装成功 >> "%log%"\n    rem 删除已使用的 MSI 文件\n    del /F /Q "%msi_path%" >> "%log%" 2>&1\n    rem 启动新版本（可选，MSI 通常不需要，因为 MajorUpgrade 会处理）\n    rem start "" "%app_root%\\NapCatQQ-Desktop.exe"\n    goto :end' in normalized
 
 
 def test_inject_script_variables_inserts_multiple_lines_after_setlocal() -> None:
@@ -128,8 +130,6 @@ def test_msi_update_strategy_execute_update_passes_pid_args_and_uses_new_console
             return None
 
     monkeypatch.setattr(strategy, "load_update_script", lambda: "@echo off\nsetlocal enabledelayedexpansion\necho hi\n")
-    monkeypatch.setattr(desktop_update_manager.time, "sleep", lambda *_args, **_kwargs: None)
-
     def fake_popen(command, shell, cwd, creationflags):
         captured["command"] = command
         captured["shell"] = shell
@@ -159,6 +159,32 @@ def test_msi_update_strategy_execute_update_passes_pid_args_and_uses_new_console
     assert f'set "log={tmp_path / MSI_LOG_FILE}"' in script_content
 
 
+def test_msi_update_strategy_execute_update_accepts_quick_exit_after_launch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """脚本进程即使很快退出，也不应被误判为启动失败。"""
+
+    strategy = MsiUpdateStrategy()
+    staging_path = tmp_path / MSI_UPDATE_FILENAME
+    staging_path.write_bytes(b"0" * MINIMUM_MSI_SIZE_BYTES)
+
+    class FakeProcess:
+        pid = 9529
+        returncode = 0
+
+        @staticmethod
+        def poll():
+            return 0
+
+    monkeypatch.setattr(strategy, "load_update_script", lambda: "@echo off\nsetlocal enabledelayedexpansion\necho hi\n")
+    monkeypatch.setattr(desktop_update_manager.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+
+    process = strategy.execute_update(staging_path, tmp_path, target_pid=114514)
+
+    assert process is not None
+    assert process.returncode == 0
+
+
 def test_msi_update_strategy_execute_update_uses_pid_none_marker_when_target_pid_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -178,8 +204,6 @@ def test_msi_update_strategy_execute_update_uses_pid_none_marker_when_target_pid
             return None
 
     monkeypatch.setattr(strategy, "load_update_script", lambda: "@echo off\nsetlocal enabledelayedexpansion\necho hi\n")
-    monkeypatch.setattr(desktop_update_manager.time, "sleep", lambda *_args, **_kwargs: None)
-
     def fake_popen(command, shell, cwd, creationflags):
         captured["command"] = command
         return FakeProcess()

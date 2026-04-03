@@ -5,7 +5,6 @@ import logging
 import shutil
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 
 from src.core.desktop_update.constants import (
@@ -99,11 +98,6 @@ class MsiUpdateStrategy:
                 cwd=str(script_path.parent),
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
-            for _ in range(5):
-                time.sleep(0.2)
-                if process.poll() is not None:
-                    logger.error(f"MSI 更新脚本启动后立即退出: code={process.returncode}, script={script_path}")
-                    return None
             return process
         except OSError as exc:
             logger.error(f"启动 MSI 更新脚本失败: {exc}")
