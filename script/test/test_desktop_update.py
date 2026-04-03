@@ -88,6 +88,8 @@ def test_load_msi_update_script_contains_msiexec_flow() -> None:
     assert 'set "msi_path=%app_root%\\runtime\\tmp\\NapCatQQ-Desktop.msi"' in script_content
     assert 'set "msi_path=%app_root%\\runtime\\tmp\\NapCatQQ-Desktop.msi"' in script_content
     assert '"%SystemRoot%\\System32\\msiexec.exe" /i "%msi_path%" /quiet /norestart' in script_content
+    assert "REINSTALL=ALL" not in script_content
+    assert "REINSTALLMODE=vomus" not in script_content
     assert 'echo [%date% %time%] MSI 升级安装成功 >> "%log%"\n    rem 删除已使用的 MSI 文件\n    del /F /Q "%msi_path%" >> "%log%" 2>&1\n    rem 启动新版本（可选，MSI 通常不需要，因为 MajorUpgrade 会处理）\n    rem start "" "%app_root%\\NapCatQQ-Desktop.exe"\n    goto :end' in normalized
 
 

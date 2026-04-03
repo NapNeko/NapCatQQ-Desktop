@@ -86,7 +86,8 @@ rem /i - 安装
 rem /quiet - 静默安装
 rem /norestart - 不重启
 rem /l*v - 详细日志
-"%SystemRoot%\System32\msiexec.exe" /i "%msi_path%" /quiet /norestart /l*v "%app_root%\msi_install.log" REINSTALL=ALL REINSTALLMODE=vomus
+rem 不传 REINSTALL*，避免把 MajorUpgrade 误跑成维护模式
+"%SystemRoot%\System32\msiexec.exe" /i "%msi_path%" /quiet /norestart /l*v "%app_root%\msi_install.log"
 
 set "msi_rc=%ERRORLEVEL%"
 echo [%date% %time%] MSI 安装完成，返回码: %msi_rc% >> "%log%"
