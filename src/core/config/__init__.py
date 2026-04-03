@@ -67,7 +67,7 @@ from src.core.config.config_enum import CloseActionEnum, Language
 from src.core.logging import LogSource, logger
 from src.core.runtime.paths import PathFunc
 
-__version__ = "v2.0.6"
+__version__ = "v2.0.7"
 _CONFIG_MIGRATION_BACKUP_SUFFIX = ".bak"
 _CONFIG_MIGRATION_TMP_MARKER = "tmp"
 _LEGACY_CONFIG_VERSION = "v1.7.28"
