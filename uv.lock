@@ -199,7 +199,7 @@ wheels = [
 
 [[package]]
 name = "napcatqq-desktop"
-version = "2.0.4"
+version = "2.0.6"
 source = { virtual = "." }
 dependencies = [
     { name = "colorthief" },
