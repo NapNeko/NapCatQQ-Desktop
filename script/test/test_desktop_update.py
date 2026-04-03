@@ -82,8 +82,9 @@ def test_load_msi_update_script_contains_msiexec_flow() -> None:
 
     script_content = load_msi_update_script()
 
-    assert "Start-Process -FilePath" in script_content
-    assert "-ArgumentList '%*' -Verb RunAs" in script_content
+    assert "UAC.ShellExecute" in script_content
+    assert "runas" in script_content
+    assert 'set "msi_path=%app_root%\\runtime\\tmp\\NapCatQQ-Desktop.msi"' in script_content
     assert 'set "msi_path=%app_root%\\runtime\\tmp\\NapCatQQ-Desktop.msi"' in script_content
     assert 'msiexec /i "%msi_path%" /quiet /norestart' in script_content
 
