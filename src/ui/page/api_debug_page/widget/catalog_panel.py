@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QHBoxLayout, QTreeWidget, QTreeWidgetItem, QVBoxLa
 from qfluentwidgets import (
     CaptionLabel,
     CardWidget,
+    SimpleCardWidget,
     ComboBox,
     FluentIcon,
     SearchLineEdit,
@@ -45,7 +46,7 @@ class _DialogSearchLineEdit(SearchLineEdit):
         super().keyPressEvent(event)
 
 
-class ActionCatalogPanel(CardWidget):
+class ActionCatalogPanel(SimpleCardWidget):
     """左侧 Action 接口目录。"""
 
     action_selected = Signal(object)

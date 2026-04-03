@@ -1,0 +1,25 @@
+/* 亮色主题 - 接口文档页面卡片背景 */
+
+CardWidget#ApiDebugMainCard,
+CardWidget#ApiDebugSideCard {
+    background: rgba(255, 255, 255, 0.72);
+}
+
+CardWidget#ApiDebugStickyCard,
+CardWidget#ApiDebugDebugCard {
+    background: rgba(255, 255, 255, 0.94);
+}
+
+CardWidget#ApiDebugStickyCard {
+    background: rgba(255, 255, 255, 0.56);
+}
+
+CardWidget#ApiDebugRuntimeMetaCard {
+    background: rgba(255, 255, 255, 0.98);
+}
+
+QWidget#ApiDebugEditorShell,
+QWidget#ApiDebugResultSection,
+QWidget#ApiDebugParamsSection {
+    background: rgba(248, 250, 252, 0.94);
+}
