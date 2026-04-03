@@ -24,8 +24,13 @@ net session >NUL 2>&1
 if "%ERRORLEVEL%" NEQ "0" (
     echo [%date% %time%] 当前未以管理员运行，尝试以管理员权限重新启动 >> "%log%"
     set "uac_helper=%TEMP%\update_msi_uac_helper.vbs"
+    set "launcher=%TEMP%\update_msi_launcher.bat"
+    rem 生成中转启动器，避免 VBS 字符串中处理含空格的复杂参数
+    echo @echo off > "%launcher%"
+    echo call "%~f0" %* >> "%launcher%"
+    echo del /F /Q "%%~f0" >> "%launcher%"
     echo Set UAC = CreateObject^("Shell.Application"^) > "%uac_helper%"
-    echo UAC.ShellExecute "cmd.exe", "/c """"%~f0"""" %*", "", "runas", 1 >> "%uac_helper%"
+    echo UAC.ShellExecute "%launcher%", "", "", "runas", 1 >> "%uac_helper%"
     "%uac_helper%"
     if errorlevel 1 (
         echo [%date% %time%] 无法以管理员权限重新启动，启用兜底策略 >> "%log%"
