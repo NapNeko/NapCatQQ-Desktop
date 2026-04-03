@@ -5,6 +5,7 @@ from abc import ABC
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 from qfluentwidgets.components.widgets.stacked_widget import PopUpAniStackedWidget
+from qfluentwidgets import FluentWidget, setTheme, Theme
 from qframelesswindow import FramelessWindow
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QVBoxLayout
@@ -62,6 +63,9 @@ class GuideWindow(FramelessWindow):
         desktop = QApplication.screens()[0].availableGeometry()
         width, height = desktop.width(), desktop.height()
         self.move(width // 2 - self.width() // 2, height // 2 - self.height() // 2)
+
+        # 自动主题
+        setTheme(Theme.AUTO)
 
         # 隐藏无用的东西
         self.titleBar.hide()
@@ -234,4 +238,3 @@ class GuideWindowCreator(AbstractCreator, ABC):
 
 
 add_creator(GuideWindowCreator)
-
