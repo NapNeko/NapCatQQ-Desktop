@@ -171,14 +171,23 @@ class GetAuthStatusRunnable(QObject, QRunnable):
         self.port = port
         self.token = token
 
-    def run(self):
-        response = post(
-            f"http://localhost:{self.port}/api/auth/login",
-            json={"hash": hashlib.sha256((self.token + ".napcat").encode("utf-8")).hexdigest()},
-            headers={"Content-Type": "application/json"},
-        )
-        if response.status_code == 200:
-            self.login_auth_signal.emit(response.json().get("data", {}).get("Credential", ""))
+    def run(self) -> None:
+        """执行获取认证信息的任务"""
+        try:
+            response = post(
+                f"http://localhost:{self.port}/api/auth/login",
+                json={"hash": hashlib.sha256((self.token + ".napcat").encode("utf-8")).hexdigest()},
+                headers={"Content-Type": "application/json"},
+                timeout=5,
+            )
+            if response.status_code == 200:
+                self.login_auth_signal.emit(response.json().get("data", {}).get("Credential", ""))
+        except Exception as e:
+            logger.trace(
+                f"获取认证信息失败: {type(e).__name__}: {e}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
 
 class GetLoginStatusRunnable(QObject, QRunnable):
@@ -216,32 +225,56 @@ class GetLoginStatusRunnable(QObject, QRunnable):
             "Authorization": f"Bearer {self.auth}",
         }
 
-        # # 获取登录状态
-        self.get_login_status()
-        # 获取在线状态
-        self.get_online_status()
+        try:
+            # 获取登录状态
+            self.get_login_status()
+            # 获取在线状态
+            self.get_online_status()
+        except Exception as e:
+            # 捕获所有异常，避免未处理异常导致崩溃
+            logger.trace(
+                f"获取 NapCat 登录状态失败: {type(e).__name__}: {e}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
     def get_login_status(self) -> None:
         """获取 NapCatQQ 登录状态"""
-        if (response := self.client.post("/api/QQLogin/CheckLoginStatus")).status_code != 200:
-            return
+        try:
+            response = self.client.post("/api/QQLogin/CheckLoginStatus")
+            if response.status_code != 200:
+                return
 
-        # 解析结果
-        result = response.json().get("data", {})
-        is_login = result.get("isLogin", False)
-        qr_code = result.get("qrcodeurl", "")
+            # 解析结果
+            result = response.json().get("data", {})
+            is_login = result.get("isLogin", False)
+            qr_code = result.get("qrcodeurl", "")
 
-        # 发出信号
-        self.login_status_signal.emit(is_login)
+            # 发出信号
+            self.login_status_signal.emit(is_login)
 
-        if not is_login and qr_code:
-            self.login_qrcode_signal.emit(qr_code)
+            if not is_login and qr_code:
+                self.login_qrcode_signal.emit(qr_code)
+        except Exception as e:
+            logger.trace(
+                f"获取登录状态失败: {type(e).__name__}: {e}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
     def get_online_status(self) -> None:
         """获取 NapCatQQ 在线状态"""
-        if (response := self.client.post("/api/QQLogin/GetQQLoginInfo")).status_code == 200:
-            result = response.json().get("data", {})
-            self.online_status_signal.emit(result.get("online", False))
+        try:
+            response = self.client.post("/api/QQLogin/GetQQLoginInfo")
+            if response.status_code == 200:
+                result = response.json().get("data", {})
+                self.online_status_signal.emit(result.get("online", False))
+        except Exception as e:
+            logger.trace(
+                f"获取在线状态失败: {type(e).__name__}: {e}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
 
 class NapCatQQLoginState(QObject):
