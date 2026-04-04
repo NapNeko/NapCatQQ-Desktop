@@ -9,9 +9,13 @@ from abc import ABC
 from typing import TYPE_CHECKING, Self
 
 # 第三方库导入
-from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
+from src.core.config.operate_config import read_config
+from src.core.logging import LogSource, logger
+from src.core.logging.crash_bundle import mask_qqid
+from src.core.runtime.napcat import ManagerNapCatQQProcess
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from .sub_page import BotListPage, BotLogPage, ConfigPage
 from .widget import HeaderWidget
@@ -55,8 +59,25 @@ class BotPage(QWidget):
         # 调用方法
         self.conncet_signal()
         self.setup_view()
+        self._auto_start_bots()
 
         return self
+
+    def _auto_start_bots(self) -> None:
+        """自动启动配置了 autoStart 的 Bot"""
+        configs = read_config()
+        process_manager = it(ManagerNapCatQQProcess)
+
+        for config in configs:
+            if config.advanced.autoStart:
+                qq_id = str(config.bot.QQID)
+                # 检查是否已经在运行
+                if process_manager.get_process(qq_id) is not None:
+                    logger.trace(f"自动启动跳过: Bot 已在运行(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
+                    continue
+
+                logger.info(f"自动启动 Bot(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
+                process_manager.create_napcat_process(config)
 
     def setup_view(self) -> None:
         """设置 view 界面"""
