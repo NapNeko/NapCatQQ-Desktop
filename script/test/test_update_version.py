@@ -1,146 +1,221 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-测试版本更新脚本的功能
-
-验证：
-1. 版本号提取和验证
-2. 文件更新功能
-3. Commit 分类功能
-"""
 
 # 标准库导入
-import sys
-import traceback
+import subprocess
 from pathlib import Path
 
-# 添加项目根目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 # 项目内模块导入
-from script.utils.update_version import (
+from script.utils.release_helpers import (
+    AUTO_RELEASE_NOTES_BEGIN,
+    AUTO_RELEASE_NOTES_END,
+    CommitEntry,
     categorize_commits,
-    generate_changelog_content,
-    get_version_from_tag,
+    parse_version,
+    perform_release,
+    render_auto_release_notes,
+    render_changelog_document,
+    resolve_previous_tag,
+    sync_release_metadata,
 )
 
 
-def test_version_extraction():
-    """测试版本号提取"""
-    print("测试版本号提取...")
-
-    # 测试带 v 前缀的 tag
-    assert get_version_from_tag("v1.7.9") == "1.7.9"
-    assert get_version_from_tag("v2.0.0") == "2.0.0"
-
-    # 测试不带 v 前缀的 tag
-    assert get_version_from_tag("1.7.9") == "1.7.9"
-    assert get_version_from_tag("2.0.0") == "2.0.0"
-
-    print("✅ 版本号提取测试通过")
+def test_parse_version_accepts_plain_and_tagged_values() -> None:
+    info = parse_version("v2.0.17")
+    assert info.version == "2.0.17"
+    assert info.tag == "v2.0.17"
+    assert parse_version("2.0.17").tag == "v2.0.17"
 
 
-def test_commit_categorization():
-    """测试 Commit 分类"""
-    print("\n测试 Commit 分类...")
+def test_resolve_previous_tag_skips_current_or_newer_tags(tmp_path: Path) -> None:
+    repo = _init_test_repo(tmp_path)
+    (repo / "history.txt").write_text("init\n", encoding="utf-8")
+    _commit_all(repo, "feat: 初始化项目")
+    (repo / "history.txt").write_text("v2.0.15\n", encoding="utf-8")
+    _git(repo, "tag", "v2.0.15")
+    _commit_all(repo, "fix: 修复旧问题")
+    (repo / "history.txt").write_text("v2.0.16\n", encoding="utf-8")
+    _git(repo, "tag", "v2.0.16")
+    _commit_all(repo, "feat: 当前版本新功能")
 
-    commits = [
-        "feat: 添加用户管理功能",
-        "fix: 修复登录失败问题",
-        "perf: 优化启动速度",
-        "refactor: 重构用户模块",
-        "✨ 添加主题切换功能",
-        "🐛 修复内存泄漏",
-        "⚡ 提升性能",
-        "♻️ 代码重构",
-        "docs: 更新文档",  # 应该被忽略
-        "chore: 更新依赖",  # 应该被忽略
+    assert resolve_previous_tag("v2.0.17", root=repo) == "v2.0.16"
+
+
+def test_categorize_commits_filters_release_metadata_and_keeps_other_updates() -> None:
+    categories = categorize_commits(
+        [
+            CommitEntry("1", "feat(bot): 实现 Bot 自动启动功能"),
+            CommitEntry("2", "fix(runtime): 修复登录状态检查异常未捕获导致崩溃"),
+            CommitEntry("3", "chore(resource): 更新 Qt 资源版本至 6.10.2"),
+            CommitEntry("4", "chore(release): 发布 v2.0.17"),
+            CommitEntry("5", "chore: release v2.0.17"),
+            CommitEntry("6", "chore: 更新 napcatqq-desktop 版本至 2.0.17"),
+            CommitEntry("7", "Merge branch 'master'"),
+            CommitEntry("8", "更新 README"),
+        ]
+    )
+
+    assert categories["feat"] == ["实现 Bot 自动启动功能"]
+    assert categories["fix"] == ["修复登录状态检查异常未捕获导致崩溃"]
+    assert categories["other"] == ["更新 Qt 资源版本至 6.10.2", "更新 README"]
+
+
+def test_render_auto_release_notes_includes_other_section() -> None:
+    notes = render_auto_release_notes(
+        {
+            "feat": ["实现 Bot 自动启动功能"],
+            "fix": [],
+            "perf": [],
+            "other": ["更新 README"],
+        }
+    )
+
+    assert "## ✨ 新增功能" in notes
+    assert "## 🧰 其他更新" in notes
+    assert "- 更新 README" in notes
+
+
+def test_render_changelog_document_replaces_only_marker_block() -> None:
+    existing = """# 🚀 NapCatQQ Desktop 更新日志（v2.0.16）
+
+## Tips
+- 手动说明
+
+<!-- BEGIN AUTO RELEASE NOTES -->
+旧内容
+<!-- END AUTO RELEASE NOTES -->
+
+## ⚠️ 重要提醒
+- 保留
+"""
+
+    updated = render_changelog_document("v2.0.17", "## ✨ 新增功能\n- 新增功能", existing_content=existing)
+
+    assert "# 🚀 NapCatQQ Desktop 更新日志（v2.0.17）" in updated
+    assert "旧内容" not in updated
+    assert "## ⚠️ 重要提醒\n- 保留" in updated
+    assert AUTO_RELEASE_NOTES_BEGIN in updated
+    assert AUTO_RELEASE_NOTES_END in updated
+
+
+def test_sync_release_metadata_updates_files_and_filters_release_commits(tmp_path: Path) -> None:
+    repo = _seed_release_repo(tmp_path)
+    _git(repo, "tag", "v2.0.16")
+    _commit_release_change(repo, "feat(bot): 实现 Bot 自动启动功能")
+    _commit_release_change(repo, "fix(runtime): 修复登录状态检查异常未捕获导致崩溃")
+    _commit_release_change(repo, "chore(release): 发布 v2.0.17")
+    _commit_release_change(repo, "chore: 更新 napcatqq-desktop 版本至 2.0.17")
+
+    def fake_lock(root: Path) -> None:
+        lock_path = root / "uv.lock"
+        lock_path.write_text(
+            lock_path.read_text(encoding="utf-8").replace('version = "2.0.16"', 'version = "2.0.17"', 1),
+            encoding="utf-8",
+        )
+
+    result = sync_release_metadata("v2.0.17", root=repo, lock_executor=fake_lock)
+
+    assert result.previous_tag == "v2.0.16"
+    assert [commit.subject for commit in result.included_commits] == [
+        "feat(bot): 实现 Bot 自动启动功能",
+        "fix(runtime): 修复登录状态检查异常未捕获导致崩溃",
     ]
-
-    categories = categorize_commits(commits)
-
-    # 验证分类结果
-    assert len(categories["feat"]) == 2, f"Expected 2 feat commits, got {len(categories['feat'])}"
-    assert len(categories["fix"]) == 2, f"Expected 2 fix commits, got {len(categories['fix'])}"
-    assert len(categories["perf"]) == 4, f"Expected 4 perf commits, got {len(categories['perf'])}"
-
-    # 验证内容
-    assert "添加用户管理功能" in categories["feat"]
-    assert "添加主题切换功能" in categories["feat"]
-    assert "修复登录失败问题" in categories["fix"]
-    assert "修复内存泄漏" in categories["fix"]
-    assert "优化启动速度" in categories["perf"]
-
-    print("✅ Commit 分类测试通过")
+    assert 'version = "2.0.17"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert '__version__ = "v2.0.17"' in (repo / "src/core/config/__init__.py").read_text(encoding="utf-8")
+    changelog = (repo / "docs/CHANGELOG.md").read_text(encoding="utf-8")
+    assert AUTO_RELEASE_NOTES_BEGIN in changelog
+    assert "实现 Bot 自动启动功能" in changelog
+    assert 'version = "2.0.17"' in (repo / "uv.lock").read_text(encoding="utf-8")
 
 
-def test_changelog_generation():
-    """测试更新日志生成"""
-    print("\n测试更新日志生成...")
+def test_perform_release_creates_single_release_commit_and_tag(tmp_path: Path) -> None:
+    repo = _seed_release_repo(tmp_path)
+    _git(repo, "tag", "v2.0.16")
+    _commit_release_change(repo, "feat(bot): 实现 Bot 自动启动功能")
+    _commit_release_change(repo, "fix(runtime): 修复登录状态检查异常未捕获导致崩溃")
 
-    categories = {
-        "feat": ["添加用户管理功能", "添加主题切换"],
-        "fix": ["修复登录问题"],
-        "perf": ["优化性能"],
-    }
+    def fake_lock(root: Path) -> None:
+        lock_path = root / "uv.lock"
+        lock_path.write_text(
+            lock_path.read_text(encoding="utf-8").replace('version = "2.0.16"', 'version = "2.0.17"', 1),
+            encoding="utf-8",
+        )
 
-    changelog = generate_changelog_content(categories)
+    result = perform_release("v2.0.17", root=repo, lock_executor=fake_lock)
 
-    # 验证生成的内容包含所有分类
-    assert "## ✌️ 新增功能" in changelog
-    assert "## 😭 修复功能" in changelog
-    assert "## 😘 优化功能" in changelog
-
-    # 验证内容
-    assert "添加用户管理功能" in changelog
-    assert "修复登录问题" in changelog
-    assert "优化性能" in changelog
-
-    print("✅ 更新日志生成测试通过")
+    assert result.sync.previous_tag == "v2.0.16"
+    assert _git(repo, "rev-parse", "HEAD") == result.commit_sha
+    assert _git(repo, "rev-list", "-n", "1", "v2.0.17") == result.commit_sha
+    assert _git(repo, "log", "--pretty=%s", "-1") == "chore(release): 发布 v2.0.17"
+    assert 'version = "2.0.17"' in (repo / "uv.lock").read_text(encoding="utf-8")
 
 
-def test_empty_changelog():
-    """测试空更新日志"""
-    print("\n测试空更新日志...")
-
-    categories = {
-        "feat": [],
-        "fix": [],
-        "perf": [],
-    }
-
-    changelog = generate_changelog_content(categories)
-
-    # 应该生成默认内容
-    assert "累积更新" in changelog or "Bug修复" in changelog
-
-    print("✅ 空更新日志测试通过")
+def _init_test_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    return repo
 
 
-def main():
-    """运行所有测试"""
-    print("=" * 60)
-    print("版本更新脚本功能测试")
-    print("=" * 60)
+def _seed_release_repo(tmp_path: Path) -> Path:
+    repo = _init_test_repo(tmp_path)
+    (repo / "docs").mkdir(parents=True, exist_ok=True)
+    (repo / "src/core/config").mkdir(parents=True, exist_ok=True)
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "NapCatQQ-Desktop"\nversion = "2.0.16"\n',
+        encoding="utf-8",
+    )
+    (repo / "src/core/config/__init__.py").write_text(
+        '__version__ = "v2.0.16"\n',
+        encoding="utf-8",
+    )
+    (repo / "docs/CHANGELOG.md").write_text(
+        """# 🚀 NapCatQQ Desktop 更新日志（v2.0.16）
 
-    try:
-        test_version_extraction()
-        test_commit_categorization()
-        test_changelog_generation()
-        test_empty_changelog()
+## Tips
+- 手动说明
 
-        print("\n" + "=" * 60)
-        print("✅ 所有测试通过！")
-        print("=" * 60)
-        return 0
-    except AssertionError as e:
-        print(f"\n❌ 测试失败: {e}")
-        return 1
-    except Exception as e:
-        print(f"\n❌ 测试出错: {e}")
-        traceback.print_exc()
-        return 1
+<!-- BEGIN AUTO RELEASE NOTES -->
+## 🧰 其他更新
+- 旧发布说明
+<!-- END AUTO RELEASE NOTES -->
+
+## ⚠️ 重要提醒
+- 保留
+""",
+        encoding="utf-8",
+    )
+    (repo / "uv.lock").write_text(
+        '[[package]]\nname = "napcatqq-desktop"\nversion = "2.0.16"\n',
+        encoding="utf-8",
+    )
+    _commit_all(repo, "chore: init")
+    return repo
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+def _commit_release_change(repo: Path, message: str) -> None:
+    marker = repo / "commits.log"
+    current = marker.read_text(encoding="utf-8") if marker.exists() else ""
+    marker.write_text(current + message + "\n", encoding="utf-8")
+    _commit_all(repo, message)
+
+
+def _commit_all(repo: Path, message: str) -> None:
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", message)
+
+
+def _git(repo: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)} failed: {(result.stderr or result.stdout).strip()}")
+    return (result.stdout or "").strip()
