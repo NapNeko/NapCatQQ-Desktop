@@ -11,11 +11,6 @@ on:
         required: false
         default: ""
         type: string
-      sync_version_files:
-        description: "是否同步版本文件到代码仓库"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -66,6 +61,7 @@ jobs:
     uses: ./.github/workflows/build-msi.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
+      git_ref: ${{ github.ref }}
 
   publish:
     needs:
@@ -77,25 +73,6 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
-      - name: "安装 uv"
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: "同步版本文件"
-        if: ${{ inputs.sync_version_files || github.event_name == 'push' }}
-        shell: pwsh
-        run: |
-          $version = "${{ needs.resolve.outputs.version }}"
-          uv sync --frozen --no-dev
-          uv run --frozen python script/utils/update_version.py $version
-
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add pyproject.toml src/core/config/__init__.py docs/CHANGELOG.md
-          git diff --staged --quiet || git commit -m "chore: 同步版本号到 $version"
-          git push origin HEAD:${{ github.ref_name }} || Write-Host "无需推送"
 
       - name: "下载 MSI 制品"
         uses: actions/download-artifact@v4
