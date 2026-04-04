@@ -102,6 +102,7 @@ class BotCard(HeaderCardWidget):
         self.info_widget = BotInfoWidget(self._config, self)
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
         self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
+        self.web_ui_button = TransparentToolButton(FluentIcon.CONNECT, self)
         self.log_button = TransparentToolButton(NapCatDesktopIcon.LOG, self)
         self.setting_button = TransparentToolButton(FluentIcon.SETTING, self)
         self.remove_button = TransparentToolButton(FluentIcon.DELETE, self)
@@ -111,6 +112,7 @@ class BotCard(HeaderCardWidget):
         self.setFixedSize(500, 240)
         self.stop_button.hide()
         self.log_button.hide()
+        self.web_ui_button.hide()
 
         # 设置布局
         self.viewLayout.addWidget(self.avatar_widget, 1)
@@ -121,6 +123,7 @@ class BotCard(HeaderCardWidget):
         self.headerLayout.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.stop_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.log_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.headerLayout.addWidget(self.web_ui_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.setting_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.remove_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -129,6 +132,7 @@ class BotCard(HeaderCardWidget):
         self.run_button.clicked.connect(self.slot_run_button)
         self.stop_button.clicked.connect(self.slot_stop_button)
         self.log_button.clicked.connect(self.slot_log_button)
+        self.web_ui_button.clicked.connect(self.slot_web_ui_button)
         self.setting_button.clicked.connect(self.slot_setting_button)
         self.remove_button.clicked.connect(self.slot_remove_button)
 
@@ -152,6 +156,7 @@ class BotCard(HeaderCardWidget):
         self.run_button.setToolTip(self.tr("启动 Bot"))
         self.stop_button.setToolTip(self.tr("停止 Bot"))
         self.log_button.setToolTip(self.tr("查看日志"))
+        self.web_ui_button.setToolTip(self.tr("打开 WebUI"))
         self.setting_button.setToolTip(self.tr("配置 Bot"))
         self.remove_button.setToolTip(self.tr("移除 Bot"))
 
@@ -159,6 +164,7 @@ class BotCard(HeaderCardWidget):
             self.run_button,
             self.stop_button,
             self.log_button,
+            self.web_ui_button,
             self.setting_button,
             self.remove_button,
         ]:
@@ -191,10 +197,12 @@ class BotCard(HeaderCardWidget):
             self.run_button.hide()
             self.stop_button.show()
             self.log_button.show()
+            self.web_ui_button.show()
         else:
             self.run_button.show()
             self.stop_button.hide()
             self.log_button.hide()
+            self.web_ui_button.hide()
 
     def slot_log_button(self) -> None:
         """处理日志按钮槽函数"""
@@ -205,6 +213,26 @@ class BotCard(HeaderCardWidget):
         page = it(BotPage)
         page.view.setCurrentWidget(page.log_page)
         page.log_page.set_current_log_manager(self._config)
+
+    def slot_web_ui_button(self) -> None:
+        """处理 WebUI 按钮槽函数，打开 Bot 的 WebUI"""
+        qq_id = str(self._config.bot.QQID)
+        login_state = it(ManagerNapCatQQLoginState).get_login_state(qq_id)
+
+        if login_state is None:
+            error_bar(self.tr("WebUI 未就绪"), self.tr("该 Bot 尚未启动或 WebUI 信息未获取"), parent=self)
+            logger.warning(f"打开 WebUI 失败：Bot 未就绪(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
+            return
+
+        # 构建 WebUI URL
+        web_ui_url = f"http://127.0.0.1:{login_state.port}/webui?token={login_state.token}"
+
+        # 打开浏览器
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        QDesktopServices.openUrl(QUrl(web_ui_url))
+        logger.info(f"已打开 WebUI(QQID: {mask_qqid(qq_id)}, url={web_ui_url})", log_source=LogSource.UI)
 
     def slot_setting_button(self) -> None:
         """处理配置按钮槽函数"""
@@ -1096,4 +1124,3 @@ class WebsocketClientConfigCard(ConfigCardBase):
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
-
