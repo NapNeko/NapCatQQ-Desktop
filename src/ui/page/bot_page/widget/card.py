@@ -68,7 +68,7 @@ from src.core.logging import LogSource, logger
 from src.core.logging.crash_bundle import mask_qqid
 from src.core.runtime.napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.ui.common.icon import StaticIcon, NapCatDesktopIcon
-from src.ui.components.info_bar import error_bar
+from src.ui.components.info_bar import error_bar, warning_bar
 from src.ui.components.message_box import AskBox
 from src.ui.page.bot_page.widget.msg_box import (
     HttpClientConfigDialog,
@@ -249,19 +249,22 @@ class BotCard(HeaderCardWidget):
         # 项目内模块导入
         from src.ui.window.main_window.window import MainWindow
 
+        qq_id = str(self._config.bot.QQID)
+        process_manager = it(ManagerNapCatQQProcess)
+
+        if process_manager.get_process(qq_id) is not None:
+            logger.warning(f"拒绝移除运行中的 Bot(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
+            warning_bar(self.tr("请先停止正在运行的 Bot，再执行移除"))
+            return
+
         if AskBox(
             self.tr("确认移除 Bot"),
             self.tr(f"确定要移除 Bot ({self._config.bot.QQID}) 吗？\n此操作无法恢复!"),
             it(MainWindow),
         ).exec():
-            qq_id = str(self._config.bot.QQID)
-            process_manager = it(ManagerNapCatQQProcess)
             logger.info(f"确认移除 Bot(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
 
-            if process_manager.get_process(qq_id) is not None:
-                process_manager.stop_process(qq_id)
-            else:
-                it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
+            it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
 
             it(ManagerAutoRestartProcess).remove_auto_restart_timer(qq_id)
             self.remove_signal.emit(str(self._config.bot.QQID))
