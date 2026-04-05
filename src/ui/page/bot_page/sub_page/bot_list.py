@@ -88,6 +88,28 @@ class BotListPage(ScrollArea):
             self._bot_card_list.append(card)
             self.view_layout.addWidget(card)
 
+    def _is_card_alive(self, card: BotCard) -> bool:
+        """判断 Bot Card 是否仍然有效。"""
+        try:
+            card.parent()
+        except RuntimeError:
+            logger.warning("检测到已失效的 Bot 卡片引用，已跳过处理", log_source=LogSource.UI)
+            return False
+
+        return True
+
+    def _dispose_card(self, card: BotCard) -> None:
+        """安全移除单个 Bot Card。"""
+        if not self._is_card_alive(card):
+            return
+
+        try:
+            self.view_layout.removeWidget(card)
+            card.setParent(None)
+            card.deleteLater()
+        except RuntimeError:
+            logger.warning("移除 Bot 卡片时检测到对象已失效，已跳过剩余清理", log_source=LogSource.UI)
+
     def remove_bot_by_qqid(self, qqid: str) -> None:
         """通过 QQID 移除 Bot Card
 
@@ -107,22 +129,38 @@ class BotListPage(ScrollArea):
 
         self._bot_config_list = [config for config in self._bot_config_list if str(config.bot.QQID) != qqid]
 
+        target_card: BotCard | None = None
+        remaining_cards: list[BotCard] = []
+
         for card in self._bot_card_list:
-            if str(card._config.bot.QQID) == qqid:
-                self._bot_card_list.remove(card)
-                self.view_layout.removeWidget(card)
-                card.setParent(None)
-                card.deleteLater()
-                logger.info(f"Bot 卡片已从列表移除(QQID: {mask_qqid(qqid)})", log_source=LogSource.UI)
-                break
+            if not self._is_card_alive(card):
+                continue
+
+            if target_card is None and str(card._config.bot.QQID) == qqid:
+                target_card = card
+                continue
+
+            remaining_cards.append(card)
+
+        self._bot_card_list = remaining_cards
+
+        if target_card is None:
+            logger.warning(f"Bot 卡片不存在或已失效(QQID: {mask_qqid(qqid)})", log_source=LogSource.UI)
+            return
+
+        self._dispose_card(target_card)
+        logger.info(f"Bot 卡片已从列表移除(QQID: {mask_qqid(qqid)})", log_source=LogSource.UI)
 
     def remove_all_bot(self) -> None:
         """移除所有 Bot Card
 
         用于移除 view 中的所有 Bot Card
         """
+        for card in self._bot_card_list:
+            self._dispose_card(card)
+
+        self._bot_card_list.clear()
         self._bot_config_list.clear()
-        self.view_layout.takeAllWidgets()
 
     # =================== 槽函数 =======================
     def slot_add_button(self) -> None:
