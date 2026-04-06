@@ -24,7 +24,7 @@ from src.ui.components.input_card.generic_card import (
     SwitchConfigCard,
     VersionInfoCard,
 )
-from src.ui.page.setup_page.widget import LegacyImportDialog
+from src.ui.page.setup_page.widget import ConfigExportDialog, LegacyImportDialog
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -102,6 +102,13 @@ class General(ScrollArea):
             content=self.tr("拖拽或选择旧版配置目录，自动识别并迁移"),
             parent=self.import_group,
         )
+        self.config_export_card = ShowDialogCardBase(
+            dialog=ConfigExportDialog,
+            icon=FI.SHARE,
+            title=self.tr("导出当前配置"),
+            content=self.tr("将当前应用配置与 Bot 配置导出到指定目录"),
+            parent=self.import_group,
+        )
 
     def _set_layout(self) -> None:
         """控件布局"""
@@ -111,6 +118,7 @@ class General(ScrollArea):
         self.event_group.addSettingCard(self.bot_offline_webhook_card)
         self.version_group.addSettingCard(self.ncd_version_card)
         self.import_group.addSettingCard(self.legacy_import_card)
+        self.import_group.addSettingCard(self.config_export_card)
 
         # 添加到布局
         self.expand_layout.addWidget(self.action_group)
@@ -342,4 +350,3 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         task.success_signal.connect(lambda msg: success_bar(self.tr(msg)))
         task.error_signal.connect(lambda msg: error_bar(msg))
         QThreadPool.globalInstance().start(task)
-
