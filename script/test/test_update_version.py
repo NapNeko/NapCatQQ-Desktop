@@ -10,6 +10,7 @@ from script.utils.release_helpers import (
     AUTO_RELEASE_NOTES_END,
     CommitEntry,
     categorize_commits,
+    collect_diff_stats,
     parse_version,
     perform_release,
     render_auto_release_notes,
@@ -127,6 +128,40 @@ def test_sync_release_metadata_updates_files_and_filters_release_commits(tmp_pat
     assert 'version = "2.0.17"' in (repo / "uv.lock").read_text(encoding="utf-8")
 
 
+def test_sync_release_metadata_accepts_ai_notes_override(tmp_path: Path) -> None:
+    repo = _seed_release_repo(tmp_path)
+    _git(repo, "tag", "v2.0.16")
+    _commit_release_change(repo, "feat(bot): 实现 Bot 自动启动功能")
+
+    def fake_lock(root: Path) -> None:
+        lock_path = root / "uv.lock"
+        lock_path.write_text(
+            lock_path.read_text(encoding="utf-8").replace('version = "2.0.16"', 'version = "2.0.17"', 1),
+            encoding="utf-8",
+        )
+
+    result = sync_release_metadata(
+        "v2.0.17",
+        root=repo,
+        lock_executor=fake_lock,
+        auto_notes_override="## ✨ 新增功能\n- AI 改写后的说明",
+    )
+
+    assert result.auto_notes == "## ✨ 新增功能\n- AI 改写后的说明"
+    changelog = (repo / "docs/CHANGELOG.md").read_text(encoding="utf-8")
+    assert "AI 改写后的说明" in changelog
+
+
+def test_collect_diff_stats_uses_empty_tree_when_no_previous_tag(tmp_path: Path) -> None:
+    repo = _seed_release_repo(tmp_path)
+    _commit_release_change(repo, "feat(bot): 实现 Bot 自动启动功能")
+
+    stats, files = collect_diff_stats(None, root=repo)
+
+    assert stats
+    assert "commits.log" in files
+
+
 def test_perform_release_creates_single_release_commit_and_tag(tmp_path: Path) -> None:
     repo = _seed_release_repo(tmp_path)
     _git(repo, "tag", "v2.0.16")
@@ -147,6 +182,30 @@ def test_perform_release_creates_single_release_commit_and_tag(tmp_path: Path) -
     assert _git(repo, "rev-list", "-n", "1", "v2.0.17") == result.commit_sha
     assert _git(repo, "log", "--pretty=%s", "-1") == "chore(release): 发布 v2.0.17"
     assert 'version = "2.0.17"' in (repo / "uv.lock").read_text(encoding="utf-8")
+
+
+def test_perform_release_uses_ai_notes_override(tmp_path: Path) -> None:
+    repo = _seed_release_repo(tmp_path)
+    _git(repo, "tag", "v2.0.16")
+    _commit_release_change(repo, "feat(bot): 实现 Bot 自动启动功能")
+
+    def fake_lock(root: Path) -> None:
+        lock_path = root / "uv.lock"
+        lock_path.write_text(
+            lock_path.read_text(encoding="utf-8").replace('version = "2.0.16"', 'version = "2.0.17"', 1),
+            encoding="utf-8",
+        )
+
+    result = perform_release(
+        "v2.0.17",
+        root=repo,
+        lock_executor=fake_lock,
+        auto_notes_override="## 🐛 修复功能\n- AI 确认后的说明",
+    )
+
+    changelog = (repo / "docs/CHANGELOG.md").read_text(encoding="utf-8")
+    assert "AI 确认后的说明" in changelog
+    assert result.sync.auto_notes == "## 🐛 修复功能\n- AI 确认后的说明"
 
 
 def _init_test_repo(tmp_path: Path) -> Path:
