@@ -251,6 +251,27 @@ def collect_commits(
     return commits
 
 
+def collect_diff_stats(
+    previous_tag: str | None,
+    *,
+    root: Path = REPO_ROOT,
+    to_ref: str = "HEAD",
+) -> tuple[str, list[str]]:
+    """采集两个引用之间的文件统计与文件列表。"""
+    if previous_tag:
+        diff_args = ["git", "diff", "--stat", f"{previous_tag}..{to_ref}"]
+        name_args = ["git", "diff", "--name-only", f"{previous_tag}..{to_ref}"]
+    else:
+        empty_tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+        diff_args = ["git", "diff", "--stat", empty_tree, to_ref]
+        name_args = ["git", "diff", "--name-only", empty_tree, to_ref]
+
+    stats = run_command(diff_args, cwd=root)
+    files_output = run_command(name_args, cwd=root)
+    files = [line.strip() for line in files_output.splitlines() if line.strip()]
+    return stats, files
+
+
 def is_release_metadata_commit(subject: str) -> bool:
     """判断是否属于发布元数据提交。"""
     stripped = subject.strip()
@@ -429,6 +450,7 @@ def sync_release_metadata(
     to_ref: str = "HEAD",
     run_lock: bool = True,
     lock_executor: Callable[[Path], None] | None = None,
+    auto_notes_override: str | None = None,
 ) -> SyncResult:
     """同步发布相关文件。"""
     version_info = parse_version(version) if isinstance(version, str) else version
@@ -436,7 +458,7 @@ def sync_release_metadata(
     commits = collect_commits(previous_tag, root=root, to_ref=to_ref)
     included_commits = [commit for commit in commits if not is_release_metadata_commit(commit.subject)]
     categories = categorize_commits(included_commits)
-    auto_notes = render_auto_release_notes(categories)
+    auto_notes = (auto_notes_override or "").strip() or render_auto_release_notes(categories)
 
     update_pyproject_version(version_info, root=root)
     update_init_version(version_info, root=root)
@@ -516,6 +538,7 @@ def perform_release(
     from_tag: str | None = None,
     push: bool = False,
     lock_executor: Callable[[Path], None] | None = None,
+    auto_notes_override: str | None = None,
 ) -> ReleaseResult:
     """执行完整本地发布流程。"""
     ensure_clean_worktree(root=root)
@@ -529,6 +552,7 @@ def perform_release(
         from_tag=from_tag,
         run_lock=True,
         lock_executor=lock_executor,
+        auto_notes_override=auto_notes_override,
     )
     commit_sha = create_release_commit(version_info, root=root)
     create_tag(version_info, root=root)
