@@ -40,6 +40,7 @@ class DesktopPage(PageBase):
         """
         super().__init__(parent=parent)
         self.setObjectName("UpdateDesktopPage")
+        self.downloader = None
         self.app_card.set_name("NapCatQQ Desktop")
         self.app_card.set_hyper_label_name(self.tr("仓库地址"))
         self.app_card.set_hyper_label_url(Urls.NCD_REPO.value)
@@ -49,6 +50,8 @@ class DesktopPage(PageBase):
         # 连接信号槽
         self.app_card.install_button.clicked.connect(self.handle_download_requested)
         self.app_card.update_button.clicked.connect(self.handle_download_requested)
+        self.app_card.pause_button.clicked.connect(self.handle_pause_requested)
+        self.app_card.cancel_button.clicked.connect(self.handle_cancel_requested)
         self.app_card.open_folder_button.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(it(PathFunc).base_path)))
         )
@@ -56,6 +59,10 @@ class DesktopPage(PageBase):
     # ==================== 公共方法 ====================
     def refresh_page_view(self) -> None:
         """根据本地和远程版本信息刷新页面状态。"""
+        if self.restore_operation_view():
+            self.log_card.set_log_markdown(self._get_display_log())
+            return
+
         if self.local_version is None:
             # 如果没有本地版本则显示安装按钮
             self.app_card.switch_button(ButtonStatus.UNINSTALLED)
@@ -100,6 +107,12 @@ class DesktopPage(PageBase):
     @Slot()
     def handle_download_requested(self) -> None:
         """处理下载按钮点击事件，开始下载应用程序。"""
+        if self.is_operation_in_progress():
+            logger.warning("Desktop 更新请求已忽略: 当前已有任务正在执行", log_source=LogSource.UI)
+            info_bar(self.tr("Desktop 正在下载或准备更新，请稍候"))
+            self.restore_operation_view()
+            return
+
         logger.info(
             f"请求下载/更新 Desktop: local={self.local_version}, remote={self.remote_version}, "
             f"install_type={self._update_manager.install_type.value}",
@@ -139,7 +152,13 @@ class DesktopPage(PageBase):
             logger.info("Desktop 更新流程取消: 用户在确认弹窗中选择取消", log_source=LogSource.UI)
             return
 
+        self.begin_download_operation(self.tr("正在准备下载更新包..."))
         info_bar(get_download_message(self.tr, self._update_manager.install_type))
+
+        self._start_download()
+
+    def _start_download(self) -> None:
+        """启动或继续 Desktop 更新包下载。"""
 
         # 项目内模块导入
         from src.core.network.downloader import GithubDownloader
@@ -147,14 +166,55 @@ class DesktopPage(PageBase):
         # 获取下载 URL
         download_url = self._get_download_url()
         downloader = GithubDownloader(download_url)
-        downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
+        self.downloader = downloader
+        downloader.download_progress_signal.connect(self.update_operation_progress_value)
         downloader.download_finish_signal.connect(self.handle_install_requested)
-        downloader.status_label_signal.connect(self.app_card.set_status_text)
+        downloader.download_paused_signal.connect(self.handle_download_paused)
+        downloader.download_canceled_signal.connect(self.handle_download_canceled)
+        downloader.status_label_signal.connect(self.update_operation_status_text)
         downloader.error_finsh_signal.connect(self.handle_operation_failed)
-        downloader.button_toggle_signal.connect(self.app_card.switch_button)
-        downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+        downloader.progress_ring_toggle_signal.connect(self.update_operation_progress_ring)
 
         QThreadPool.globalInstance().start(downloader)
+
+    @Slot()
+    def handle_pause_requested(self) -> None:
+        """暂停或继续 Desktop 更新包下载。"""
+        if self.is_operation_paused():
+            logger.info("Desktop 更新包下载继续", log_source=LogSource.UI)
+            self.resume_operation(self.tr("正在继续下载更新包..."))
+            self._start_download()
+            return
+
+        if self.downloader is None:
+            return
+
+        logger.info("Desktop 收到暂停下载请求", log_source=LogSource.UI)
+        self.update_operation_status_text(self.tr("正在暂停更新包下载..."))
+        self.downloader.request_pause()
+
+    @Slot()
+    def handle_cancel_requested(self) -> None:
+        """取消 Desktop 更新包下载。"""
+        package_filename = self._update_manager.get_update_filename(self.remote_version.lstrip("v") if self.remote_version else "")
+        package_path = it(PathFunc).tmp_path / package_filename
+
+        if self.is_operation_paused():
+            from src.core.network.downloader import DownloaderBase
+
+            DownloaderBase.safe_unlink(package_path.with_name(f"{package_path.name}.part"))
+            self.end_operation()
+            self.downloader = None
+            self.refresh_page_view()
+            info_bar(self.tr("已取消更新包下载"))
+            return
+
+        if self.downloader is None:
+            return
+
+        logger.info("Desktop 收到取消下载请求", log_source=LogSource.UI)
+        self.update_operation_status_text(self.tr("正在取消更新包下载..."))
+        self.downloader.request_cancel()
 
     def _show_update_confirmation(self, has_running_bot: bool) -> bool:
         """显示更新确认弹窗，告知用户更新流程和注意事项。
@@ -208,6 +268,8 @@ class DesktopPage(PageBase):
             log_source=LogSource.UI,
         )
         success_bar(self.tr("下载成功, 正在准备更新..."))
+        self.downloader = None
+        self.begin_install_operation(self.tr("正在准备更新..."))
 
         # 根据安装类型获取下载的文件路径
         package_filename = self._update_manager.get_update_filename(
@@ -236,16 +298,22 @@ class DesktopPage(PageBase):
             )
 
         except ValueError as exc:
+            self.end_operation()
+            self.downloader = None
             logger.error(f"准备更新失败: {exc}")
             error_bar(str(exc))
             self.refresh_page_view()
             return
         except OSError as exc:
+            self.end_operation()
+            self.downloader = None
             logger.error(f"更新流程发生文件系统错误: {exc}")
             error_bar(self.tr(f"更新失败: {exc}"))
             self.refresh_page_view()
             return
         except Exception as exc:
+            self.end_operation()
+            self.downloader = None
             logger.error(f"启动更新流程失败: {exc}")
             error_bar(self.tr(f"启动更新失败: {exc}"))
             self.refresh_page_view()
@@ -261,8 +329,24 @@ class DesktopPage(PageBase):
         sys.exit(0)
 
     @Slot()
+    def handle_download_paused(self) -> None:
+        """处理 Desktop 更新包下载暂停。"""
+        self.downloader = None
+        self.pause_operation(self.tr("更新包下载已暂停"))
+
+    @Slot()
+    def handle_download_canceled(self) -> None:
+        """处理 Desktop 更新包下载取消。"""
+        self.downloader = None
+        self.end_operation()
+        self.refresh_page_view()
+        info_bar(self.tr("已取消更新包下载"))
+
+    @Slot()
     def handle_operation_failed(self) -> None:
         """下载错误处理逻辑。"""
+        self.end_operation()
+        self.downloader = None
         logger.error("Desktop 下载或更新流程失败", log_source=LogSource.UI)
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.refresh_page_view()

@@ -94,6 +94,8 @@ class QQPage(PageBase):
         """连接信号与槽"""
         self.app_card.install_button.clicked.connect(self.handle_download_requested)
         self.app_card.update_button.clicked.connect(self.handle_download_requested)
+        self.app_card.pause_button.clicked.connect(self.handle_pause_requested)
+        self.app_card.cancel_button.clicked.connect(self.handle_cancel_requested)
         self.app_card.open_folder_button.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(qq_path))
             if (qq_path := it(PathFunc).get_qq_path()) is not None
@@ -102,6 +104,9 @@ class QQPage(PageBase):
 
     def refresh_page_view(self) -> None:
         """根据本地和远程版本信息刷新页面状态。"""
+        if self.restore_operation_view():
+            return
+
         if self.local_version is None:
             # 如果没有本地版本则显示安装按钮
             self.app_card.switch_button(ButtonStatus.UNINSTALLED)
@@ -145,6 +150,12 @@ class QQPage(PageBase):
     @Slot()
     def handle_download_requested(self) -> None:
         """处理下载按钮点击事件，开始下载 QQ 安装包。"""
+        if self.is_operation_in_progress():
+            logger.warning("QQ 下载请求已忽略: 当前已有任务正在执行", log_source=LogSource.UI)
+            info_bar(self.tr("QQ 正在下载或安装，请稍候"))
+            self.restore_operation_view()
+            return
+
         if self.url is None:
             logger.error("QQ 下载流程失败: 下载链接为空", log_source=LogSource.UI)
             error_bar(self.tr("QQ下载链接为空"))
@@ -162,16 +173,64 @@ class QQPage(PageBase):
         # 项目内模块导入
         from src.core.network.downloader import QQDownloader
 
+        self.begin_download_operation(self.tr("正在准备下载 QQ..."))
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
-        downloader = QQDownloader(self.url)
-        downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
-        downloader.download_finish_signal.connect(self.handle_install_requested)
-        downloader.status_label_signal.connect(self.app_card.set_status_text)
-        downloader.error_finsh_signal.connect(self.handle_operation_failed)
-        downloader.button_toggle_signal.connect(self.app_card.switch_button)
-        downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+        self._start_download()
 
-        QThreadPool.globalInstance().start(downloader)
+    def _start_download(self) -> None:
+        """启动或继续 QQ 下载。"""
+        # 项目内模块导入
+        from src.core.network.downloader import QQDownloader
+
+        self.downloader = QQDownloader(self.url)
+        self.downloader.download_progress_signal.connect(self.update_operation_progress_value)
+        self.downloader.download_finish_signal.connect(self.handle_install_requested)
+        self.downloader.download_paused_signal.connect(self.handle_download_paused)
+        self.downloader.download_canceled_signal.connect(self.handle_download_canceled)
+        self.downloader.status_label_signal.connect(self.update_operation_status_text)
+        self.downloader.error_finsh_signal.connect(self.handle_operation_failed)
+        self.downloader.progress_ring_toggle_signal.connect(self.update_operation_progress_ring)
+
+        QThreadPool.globalInstance().start(self.downloader)
+
+    @Slot()
+    def handle_pause_requested(self) -> None:
+        """暂停或继续当前 QQ 下载。"""
+        if self.is_operation_paused():
+            logger.info("QQ 下载继续", log_source=LogSource.UI)
+            self.resume_operation(self.tr("正在继续下载 QQ..."))
+            self._start_download()
+            return
+
+        if self.downloader is None:
+            return
+
+        logger.info("QQ 收到暂停下载请求", log_source=LogSource.UI)
+        self.update_operation_status_text(self.tr("正在暂停 QQ 下载..."))
+        self.downloader.request_pause()
+
+    @Slot()
+    def handle_cancel_requested(self) -> None:
+        """取消当前 QQ 下载。"""
+        if self.file_path is None:
+            return
+
+        if self.is_operation_paused():
+            from src.core.network.downloader import DownloaderBase
+
+            DownloaderBase.safe_unlink(self.file_path.with_name(f"{self.file_path.name}.part"))
+            self.end_operation()
+            self.downloader = None
+            self.refresh_page_view()
+            info_bar(self.tr("已取消 QQ 下载"))
+            return
+
+        if self.downloader is None:
+            return
+
+        logger.info("QQ 收到取消下载请求", log_source=LogSource.UI)
+        self.update_operation_status_text(self.tr("正在取消 QQ 下载..."))
+        self.downloader.request_cancel()
 
     @Slot()
     def handle_install_requested(self) -> None:
@@ -181,6 +240,8 @@ class QQPage(PageBase):
 
         logger.info("QQ 下载完成，进入安装流程", log_source=LogSource.UI)
         success_bar(self.tr("下载成功, 正在安装..."))
+        self.downloader = None
+        self.begin_install_operation(self.tr("正在安装 QQ"))
 
         # 创建询问弹出框
         folder_box = FolderBox(self.tr("选择安装路径"), it(MainWindow))
@@ -189,8 +250,12 @@ class QQPage(PageBase):
             # 如果没有点击确定按钮
             if self.file_path is not None:
                 self.file_path.unlink()
+            self.end_operation()
+            self.downloader = None
+            self.installer = None
             logger.info("QQ 安装流程取消: 未确认安装路径", log_source=LogSource.UI)
             info_bar(self.tr("取消安装"))
+            self.refresh_page_view()
             return
 
         # 修改注册表, 设置安装路径
@@ -211,8 +276,12 @@ class QQPage(PageBase):
             else:
                 if self.file_path is not None:
                     self.file_path.unlink()
+                self.end_operation()
+                self.downloader = None
+                self.installer = None
                 logger.info("QQ 安装流程取消: 用户拒绝删除 dbghelp.dll", log_source=LogSource.UI)
                 info_bar(self.tr("取消安装"))
+                self.refresh_page_view()
                 return
 
         # 开始安装
@@ -221,18 +290,34 @@ class QQPage(PageBase):
             error_bar(self.tr("安装包路径为空"))
             return
 
-        installer = QQInstall(self.file_path)
-        installer.status_label_signal.connect(self.app_card.set_status_text)
-        installer.error_finish_signal.connect(self.handle_operation_failed)
-        installer.button_toggle_signal.connect(self.app_card.switch_button)
-        installer.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
-        installer.install_finish_signal.connect(self.handle_install_finished)
+        self.installer = QQInstall(self.file_path)
+        self.installer.status_label_signal.connect(self.update_operation_status_text)
+        self.installer.error_finish_signal.connect(self.handle_operation_failed)
+        self.installer.progress_ring_toggle_signal.connect(self.update_operation_progress_ring)
+        self.installer.install_finish_signal.connect(self.handle_install_finished)
 
-        QThreadPool.globalInstance().start(installer)
+        QThreadPool.globalInstance().start(self.installer)
+
+    @Slot()
+    def handle_download_paused(self) -> None:
+        """处理 QQ 下载暂停。"""
+        self.downloader = None
+        self.pause_operation(self.tr("QQ 下载已暂停"))
+
+    @Slot()
+    def handle_download_canceled(self) -> None:
+        """处理 QQ 下载取消。"""
+        self.downloader = None
+        self.end_operation()
+        self.refresh_page_view()
+        info_bar(self.tr("已取消 QQ 下载"))
 
     @Slot()
     def handle_install_finished(self) -> None:
         """处理安装完成逻辑。"""
+        self.end_operation()
+        self.downloader = None
+        self.installer = None
         logger.info(
             f"QQ 安装完成: installer={summarize_path(self.file_path) if self.file_path else '<empty-path>'}",
             log_source=LogSource.UI,
@@ -245,6 +330,9 @@ class QQPage(PageBase):
     @Slot()
     def handle_operation_failed(self) -> None:
         """处理错误结束逻辑。"""
+        self.end_operation()
+        self.downloader = None
+        self.installer = None
         logger.error("QQ 下载或安装流程失败", log_source=LogSource.UI)
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.refresh_page_view()

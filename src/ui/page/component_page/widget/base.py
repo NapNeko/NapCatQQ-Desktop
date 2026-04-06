@@ -64,6 +64,12 @@ class PageBase(ScrollArea):
         self.remote_version = None
         self._local_version_loaded = False
         self._remote_version_loaded = False
+        self._operation_in_progress = False
+        self._operation_paused = False
+        self._operation_controls_visible = False
+        self._operation_status_text = ""
+        self._operation_progress_value = 0
+        self._operation_progress_status = ProgressRingStatus.NONE
 
     def begin_version_refresh(self) -> None:
         """标记一次新的版本刷新开始，避免并发回调使用上一次的缓存结果。"""
@@ -82,6 +88,102 @@ class PageBase(ScrollArea):
         """仅在本地与远程版本都返回后再刷新页面，避免竞态导致按钮状态错误。"""
         if self._local_version_loaded and self._remote_version_loaded:
             self.refresh_page_view()
+
+    def is_operation_in_progress(self) -> bool:
+        """当前页面是否仍有下载/安装任务正在执行。"""
+        return self._operation_in_progress
+
+    def is_operation_paused(self) -> bool:
+        """当前下载是否处于暂停状态。"""
+        return self._operation_in_progress and self._operation_paused
+
+    def begin_download_operation(self, status_text: str | None = None) -> None:
+        """进入可暂停/取消的下载状态。"""
+        self.begin_operation(status_text=status_text)
+        self._operation_paused = False
+        self._operation_controls_visible = True
+        self.restore_operation_view()
+
+    def begin_install_operation(self, status_text: str | None = None) -> None:
+        """进入安装状态，隐藏下载控制按钮。"""
+        self.begin_operation(status_text=status_text)
+        self._operation_paused = False
+        self._operation_controls_visible = False
+        self.restore_operation_view()
+
+    def begin_operation(self, status_text: str | None = None) -> None:
+        """进入操作中状态，并锁定页面按钮显示。"""
+        self._operation_in_progress = True
+        self._operation_progress_value = 0
+        self._operation_progress_status = ProgressRingStatus.INDETERMINATE
+        self._operation_paused = False
+        if status_text is not None:
+            self._operation_status_text = status_text
+        self.restore_operation_view()
+
+    def pause_operation(self, status_text: str | None = None) -> None:
+        """将当前下载状态切换为已暂停。"""
+        self._operation_in_progress = True
+        self._operation_paused = True
+        self._operation_controls_visible = True
+        if status_text is not None:
+            self._operation_status_text = status_text
+        self.restore_operation_view()
+
+    def resume_operation(self, status_text: str | None = None) -> None:
+        """恢复暂停中的下载状态。"""
+        self._operation_in_progress = True
+        self._operation_paused = False
+        self._operation_controls_visible = True
+        if status_text is not None:
+            self._operation_status_text = status_text
+        self.restore_operation_view()
+
+    def update_operation_status_text(self, text: str) -> None:
+        """更新当前操作的状态文本。"""
+        self._operation_status_text = text
+        self.app_card.set_status_text(text)
+
+    def update_operation_progress_value(self, value: int) -> None:
+        """更新当前操作的进度值。"""
+        self._operation_progress_value = value
+        self.app_card.set_progress_ring_value(value)
+
+    def update_operation_progress_ring(self, status: ProgressRingStatus) -> None:
+        """更新当前操作的进度环模式。"""
+        self._operation_progress_status = status
+        if self._operation_controls_visible:
+            self.app_card.switch_download_controls(status=status, paused=self._operation_paused)
+            return
+
+        self.app_card.switch_progress_ring(status)
+
+    def end_operation(self) -> None:
+        """结束当前下载/安装操作状态。"""
+        self._operation_in_progress = False
+        self._operation_paused = False
+        self._operation_controls_visible = False
+        self._operation_status_text = ""
+        self._operation_progress_value = 0
+        self._operation_progress_status = ProgressRingStatus.NONE
+
+    def restore_operation_view(self) -> bool:
+        """当页面刷新时恢复正在执行中的操作视图。"""
+        if not self._operation_in_progress:
+            return False
+
+        if self._operation_status_text:
+            self.app_card.set_status_text(self._operation_status_text)
+        self.app_card.set_progress_ring_value(self._operation_progress_value)
+
+        status = self._operation_progress_status
+        if status == ProgressRingStatus.NONE:
+            status = ProgressRingStatus.INDETERMINATE
+        if self._operation_controls_visible:
+            self.app_card.switch_download_controls(status=status, paused=self._operation_paused)
+        else:
+            self.app_card.switch_progress_ring(status)
+        return True
 
 
 class UpdateLogSkeleton(SkeletonWidget):
@@ -152,10 +254,10 @@ class DisplayCard(SimpleCardWidget):
 
     # 按钮显示标识符
     BUTTON_VISIBILITY: Dict[ButtonStatus, Dict[str, bool]] = {
-        ButtonStatus.INSTALL: {"install": False, "update": False, "openFolder": True},
-        ButtonStatus.UNINSTALLED: {"install": True, "update": False, "openFolder": False},
-        ButtonStatus.UPDATE: {"install": False, "update": True, "openFolder": False},
-        ButtonStatus.NONE: {"install": False, "update": False, "openFolder": False},
+        ButtonStatus.INSTALL: {"install": False, "update": False, "openFolder": True, "pause": False, "cancel": False},
+        ButtonStatus.UNINSTALLED: {"install": True, "update": False, "openFolder": False, "pause": False, "cancel": False},
+        ButtonStatus.UPDATE: {"install": False, "update": True, "openFolder": False, "pause": False, "cancel": False},
+        ButtonStatus.NONE: {"install": False, "update": False, "openFolder": False, "pause": False, "cancel": False},
     }
 
     # 进度条显示标识符
@@ -185,11 +287,14 @@ class DisplayCard(SimpleCardWidget):
         self.install_button = PrimaryPushButton(self.tr("安装"), self)
         self.update_button = PrimaryPushButton(self.tr("更新"), self)
         self.open_folder_button = PushButton(self.tr("打开文件夹"), self)
+        self.pause_button = PushButton(self.tr("暂停"), self)
+        self.cancel_button = PushButton(self.tr("取消"), self)
 
         self.indeterminate_progress_ring = IndeterminateProgressRing(self)
         self.progress_ring = ProgressRing(self)
 
         self.v_box_layout = QVBoxLayout()
+        self.download_control_layout = QHBoxLayout()
 
         # 设置控件属性
         self._setup_widget_properties()
@@ -211,6 +316,8 @@ class DisplayCard(SimpleCardWidget):
         self.install_button.setMinimumWidth(140)
         self.update_button.setMinimumWidth(140)
         self.open_folder_button.setMinimumWidth(140)
+        self.pause_button.setMinimumWidth(140)
+        self.cancel_button.setMinimumWidth(140)
 
         self.indeterminate_progress_ring.setFixedSize(QSize(72, 72))
         self.progress_ring.setFixedSize(QSize(72, 72))
@@ -226,6 +333,8 @@ class DisplayCard(SimpleCardWidget):
         self.status_label.hide()
         self.indeterminate_progress_ring.hide()
         self.progress_ring.hide()
+        self.pause_button.hide()
+        self.cancel_button.hide()
 
     def _setup_layout(self) -> None:
         """设置卡片布局"""
@@ -242,6 +351,15 @@ class DisplayCard(SimpleCardWidget):
         self.v_box_layout.addWidget(self.open_folder_button, 2, Qt.AlignmentFlag.AlignHCenter)
         self.v_box_layout.addWidget(self.indeterminate_progress_ring, 2, Qt.AlignmentFlag.AlignHCenter)
         self.v_box_layout.addWidget(self.progress_ring, 2, Qt.AlignmentFlag.AlignHCenter)
+        self.v_box_layout.addSpacing(12)
+
+        self.download_control_layout.setContentsMargins(0, 0, 0, 0)
+        self.download_control_layout.setSpacing(12)
+        self.download_control_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.download_control_layout.addWidget(self.pause_button)
+        self.download_control_layout.addWidget(self.cancel_button)
+        self.v_box_layout.addLayout(self.download_control_layout)
+
         self.v_box_layout.addSpacing(20)
         self.v_box_layout.addWidget(self.status_label, 0, Qt.AlignmentFlag.AlignHCenter)
         self.v_box_layout.addStretch(3)
@@ -310,6 +428,8 @@ class DisplayCard(SimpleCardWidget):
         self.install_button.setVisible(visible_buttons.get("install", False))
         self.update_button.setVisible(visible_buttons.get("update", False))
         self.open_folder_button.setVisible(visible_buttons.get("openFolder", False))
+        self.pause_button.setVisible(visible_buttons.get("pause", False))
+        self.cancel_button.setVisible(visible_buttons.get("cancel", False))
 
         self.indeterminate_progress_ring.setVisible(visible_progress_rings.get("indeterminate", False))
         self.progress_ring.setVisible(visible_progress_rings.get("determinate", False))
@@ -336,6 +456,15 @@ class DisplayCard(SimpleCardWidget):
         """
         self.set_visibility(
             self.BUTTON_VISIBILITY[ButtonStatus.NONE],
+            self.PROGRESS_RING_VISIBILITY[status],
+            self.STATUS_LABEL_VISIBILITY[StatusLabel.SHOW],
+        )
+
+    def switch_download_controls(self, status: ProgressRingStatus, paused: bool = False) -> None:
+        """显示下载中的控制按钮，并保留进度展示。"""
+        self.pause_button.setText(self.tr("继续") if paused else self.tr("暂停"))
+        self.set_visibility(
+            {"install": False, "update": False, "openFolder": False, "pause": True, "cancel": True},
             self.PROGRESS_RING_VISIBILITY[status],
             self.STATUS_LABEL_VISIBILITY[StatusLabel.SHOW],
         )

@@ -30,6 +30,8 @@ class NapCatPage(PageBase):
         """
         super().__init__(parent=parent)
         self.setObjectName("UnitNapCatPage")
+        self.downloader = None
+        self.installer = None
         self.app_card.set_name("NapCatQQ")
         self.app_card.set_hyper_label_name(self.tr("仓库地址"))
         self.app_card.set_hyper_label_url(Urls.NAPCATQQ_REPO.value)
@@ -38,6 +40,8 @@ class NapCatPage(PageBase):
         # 连接信号槽
         self.app_card.install_button.clicked.connect(self.handle_download_requested)
         self.app_card.update_button.clicked.connect(self.handle_download_requested)
+        self.app_card.pause_button.clicked.connect(self.handle_pause_requested)
+        self.app_card.cancel_button.clicked.connect(self.handle_cancel_requested)
         self.app_card.open_folder_button.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(it(PathFunc).napcat_path))
         )
@@ -45,6 +49,10 @@ class NapCatPage(PageBase):
     # ==================== 公共方法 ====================
     def refresh_page_view(self) -> None:
         """根据本地和远程版本信息刷新页面状态。"""
+        if self.restore_operation_view():
+            self.log_card.set_log_markdown(self.remote_log)
+            return
+
         if self.local_version is None:
             # 如果没有本地版本则显示安装按钮
             self.app_card.switch_button(ButtonStatus.UNINSTALLED)
@@ -91,6 +99,12 @@ class NapCatPage(PageBase):
     @Slot()
     def handle_download_requested(self) -> None:
         """处理下载按钮点击事件，开始下载 NapCat。"""
+        if self.is_operation_in_progress():
+            logger.warning("NapCat 下载请求已忽略: 当前已有任务正在执行", log_source=LogSource.UI)
+            info_bar(self.tr("NapCat 正在下载或安装，请稍候"))
+            self.restore_operation_view()
+            return
+
         logger.info(
             f"请求下载/更新 NapCat: local={self.local_version}, remote={self.remote_version}",
             log_source=LogSource.UI,
@@ -111,38 +125,103 @@ class NapCatPage(PageBase):
                 logger.info("NapCat 安装流程取消: 用户拒绝关闭运行中的 Bot", log_source=LogSource.UI)
                 return
 
+        self.begin_download_operation(self.tr("正在准备下载 NapCat..."))
         info_bar(self.tr("正在下载 NapCat"))
+
+        self._start_download()
+
+    def _start_download(self) -> None:
+        """启动或继续 NapCat 下载。"""
 
         # 项目内模块导入
         from src.core.network.downloader import GithubDownloader
 
         downloader = GithubDownloader(Urls.NAPCATQQ_DOWNLOAD.value)
-        downloader.download_progress_signal.connect(self.app_card.set_progress_ring_value)
+        self.downloader = downloader
+        downloader.download_progress_signal.connect(self.update_operation_progress_value)
         downloader.download_finish_signal.connect(self.handle_install_requested)
-        downloader.status_label_signal.connect(self.app_card.set_status_text)
+        downloader.download_paused_signal.connect(self.handle_download_paused)
+        downloader.download_canceled_signal.connect(self.handle_download_canceled)
+        downloader.status_label_signal.connect(self.update_operation_status_text)
         downloader.error_finsh_signal.connect(self.handle_operation_failed)
-        downloader.button_toggle_signal.connect(self.app_card.switch_button)
-        downloader.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+        downloader.progress_ring_toggle_signal.connect(self.update_operation_progress_ring)
 
         QThreadPool.globalInstance().start(downloader)
+
+    @Slot()
+    def handle_pause_requested(self) -> None:
+        """暂停或继续当前 NapCat 下载。"""
+        if self.is_operation_paused():
+            logger.info("NapCat 下载继续", log_source=LogSource.UI)
+            self.resume_operation(self.tr("正在继续下载 NapCat..."))
+            self._start_download()
+            return
+
+        if self.downloader is None:
+            return
+
+        logger.info("NapCat 收到暂停下载请求", log_source=LogSource.UI)
+        self.update_operation_status_text(self.tr("正在暂停 NapCat 下载..."))
+        self.downloader.request_pause()
+
+    @Slot()
+    def handle_cancel_requested(self) -> None:
+        """取消当前 NapCat 下载。"""
+        package_path = it(PathFunc).tmp_path / Urls.NAPCATQQ_DOWNLOAD.value.fileName()
+
+        if self.is_operation_paused():
+            from src.core.network.downloader import DownloaderBase
+
+            DownloaderBase.safe_unlink(package_path.with_name(f"{package_path.name}.part"))
+            self.end_operation()
+            self.downloader = None
+            self.refresh_page_view()
+            info_bar(self.tr("已取消 NapCat 下载"))
+            return
+
+        if self.downloader is None:
+            return
+
+        logger.info("NapCat 收到取消下载请求", log_source=LogSource.UI)
+        self.update_operation_status_text(self.tr("正在取消 NapCat 下载..."))
+        self.downloader.request_cancel()
 
     @Slot()
     def handle_install_requested(self) -> None:
         """下载完成后开始安装 NapCat。"""
         logger.info("NapCat 下载完成，开始安装", log_source=LogSource.UI)
         success_bar(self.tr("下载成功, 正在安装..."))
+        self.downloader = None
+        self.begin_install_operation(self.tr("正在安装 NapCat"))
         installer = NapCatInstall()
-        installer.status_label_signal.connect(self.app_card.set_status_text)
+        self.installer = installer
+        installer.status_label_signal.connect(self.update_operation_status_text)
         installer.error_finish_signal.connect(self.handle_operation_failed)
-        installer.button_toggle_signal.connect(self.app_card.switch_button)
-        installer.progress_ring_toggle_signal.connect(self.app_card.switch_progress_ring)
+        installer.progress_ring_toggle_signal.connect(self.update_operation_progress_ring)
         installer.install_finish_signal.connect(self.handle_install_finished)
 
         QThreadPool.globalInstance().start(installer)
 
     @Slot()
+    def handle_download_paused(self) -> None:
+        """处理 NapCat 下载暂停。"""
+        self.downloader = None
+        self.pause_operation(self.tr("NapCat 下载已暂停"))
+
+    @Slot()
+    def handle_download_canceled(self) -> None:
+        """处理 NapCat 下载取消。"""
+        self.downloader = None
+        self.end_operation()
+        self.refresh_page_view()
+        info_bar(self.tr("已取消 NapCat 下载"))
+
+    @Slot()
     def handle_install_finished(self) -> None:
         """安装完成后的处理逻辑。"""
+        self.end_operation()
+        self.downloader = None
+        self.installer = None
         logger.info(f"NapCat 安装完成: path={summarize_path(it(PathFunc).napcat_path)}", log_source=LogSource.UI)
         success_bar(self.tr("安装成功 !"))
         self.local_version = LocalVersionTask().get_napcat_version()
@@ -164,6 +243,9 @@ class NapCatPage(PageBase):
     @Slot()
     def handle_operation_failed(self) -> None:
         """下载或安装过程中发生错误时的处理逻辑。"""
+        self.end_operation()
+        self.downloader = None
+        self.installer = None
         logger.error("NapCat 下载或安装流程失败", log_source=LogSource.UI)
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.refresh_page_view()
