@@ -18,11 +18,22 @@ class DropFolderWidget(QWidget):
     """支持拖拽或浏览文件夹的通用控件。"""
 
     folder_selected = Signal(object)
+    path_selected = Signal(object)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        title_text: str | None = None,
+        browse_text: str | None = None,
+        dialog_title: str | None = None,
+        accepted_file_suffixes: tuple[str, ...] = (),
+    ) -> None:
         super().__init__(parent)
 
         self._folder_path: Path | None = None
+        self._dialog_title = dialog_title or self.tr("选择旧版配置目录")
+        self._accepted_file_suffixes = tuple(suffix.lower() for suffix in accepted_file_suffixes)
         self._hover_active = False
         self._drag_active = False
         self._hover_progress = 0.0
@@ -33,9 +44,9 @@ class DropFolderWidget(QWidget):
         self.setMinimumHeight(260)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self.title_label = BodyLabel(self.tr("拖拽文件夹到此处"), self)
+        self.title_label = BodyLabel(title_text or self.tr("拖拽文件夹到此处"), self)
         self.or_label = BodyLabel(self.tr("或者"), self)
-        self.browse_button = TransparentPushButton(self.tr("浏览文件夹"), self)
+        self.browse_button = TransparentPushButton(browse_text or self.tr("浏览文件夹"), self)
         self.path_label = CaptionLabel("", self)
 
         setFont(self.title_label, 18)
@@ -73,7 +84,7 @@ class DropFolderWidget(QWidget):
 
         folder = QFileDialog.getExistingDirectory(
             self,
-            self.tr("选择旧版配置目录"),
+            self._dialog_title,
             QDir.homePath(),
             QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks,
         )
@@ -88,7 +99,9 @@ class DropFolderWidget(QWidget):
         self._folder_path = folder_path
         self.path_label.setText(str(folder_path))
         self.path_label.show()
-        self.folder_selected.emit(folder_path)
+        self.path_selected.emit(folder_path)
+        if folder_path.is_dir():
+            self.folder_selected.emit(folder_path)
         self.update()
 
     def enterEvent(self, event: QEnterEvent) -> None:
@@ -103,8 +116,8 @@ class DropFolderWidget(QWidget):
         super().leaveEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        folder_path = self._extract_folder_path(event)
-        if folder_path is None:
+        selected_path = self._extract_path(event)
+        if selected_path is None:
             event.ignore()
             return
 
@@ -115,7 +128,7 @@ class DropFolderWidget(QWidget):
         event.acceptProposedAction()
 
     def dragMoveEvent(self, event: QDragMoveEvent) -> None:
-        if self._extract_folder_path(event) is None:
+        if self._extract_path(event) is None:
             event.ignore()
             return
         if not self._drag_active:
@@ -129,7 +142,7 @@ class DropFolderWidget(QWidget):
         super().dragLeaveEvent(event)
 
     def dropEvent(self, event: QDropEvent) -> None:
-        folder_path = self._extract_folder_path(event)
+        folder_path = self._extract_path(event)
         self._drag_active = False
         if folder_path is None:
             self._stop_drag_animation(keep_hover=self._hover_active)
@@ -344,13 +357,19 @@ class DropFolderWidget(QWidget):
 
     drag_progress = Property(float, get_drag_progress, set_drag_progress)
 
-    @staticmethod
-    def _extract_folder_path(event) -> Path | None:
+    def _extract_path(self, event) -> Path | None:
         urls = event.mimeData().urls()
         if len(urls) != 1 or not urls[0].isLocalFile():
             return None
 
-        folder_path = Path(urls[0].toLocalFile())
-        if not folder_path.exists() or not folder_path.is_dir():
+        selected_path = Path(urls[0].toLocalFile())
+        if not selected_path.exists():
             return None
-        return folder_path
+
+        if selected_path.is_dir():
+            return selected_path
+
+        if selected_path.is_file() and selected_path.suffix.lower() in self._accepted_file_suffixes:
+            return selected_path
+
+        return None
