@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 from pathlib import Path
+from threading import Event, Lock
+from typing import ClassVar
 
 # 第三方库导入
 import httpx
@@ -28,6 +30,10 @@ class DownloaderBase(QObject, QRunnable):
     download_progress_signal = Signal(int)
     # 下载完成
     download_finish_signal = Signal()
+    # 下载暂停
+    download_paused_signal = Signal()
+    # 下载取消
+    download_canceled_signal = Signal()
     # 引发错误导致结束
     error_finsh_signal = Signal()
 
@@ -38,9 +44,114 @@ class DownloaderBase(QObject, QRunnable):
     # 状态标签
     status_label_signal = Signal(str)
 
+    _active_target_lock: ClassVar[Lock] = Lock()
+    _active_target_paths: ClassVar[set[str]] = set()
+
     def __init__(self) -> None:
         QObject.__init__(self)
         QRunnable.__init__(self)
+        self._pause_requested = Event()
+        self._cancel_requested = Event()
+
+    @staticmethod
+    def _target_key(target_path: Path) -> str:
+        """将目标路径规范化为可用于并发保护的键。"""
+        return str(target_path.resolve(strict=False))
+
+    def try_acquire_target(self, target_path: Path) -> bool:
+        """尝试为当前下载目标获取独占锁，避免重复写入同一文件。"""
+        target_key = self._target_key(target_path)
+        with self._active_target_lock:
+            if target_key in self._active_target_paths:
+                self.status_label_signal.emit(self.tr("当前下载任务仍在进行，请稍候"))
+                logger.warning(
+                    f"检测到重复下载请求，已忽略: target={summarize_path(target_path)}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                self.error_finsh_signal.emit()
+                return False
+
+            self._active_target_paths.add(target_key)
+        return True
+
+    @classmethod
+    def release_target(cls, target_path: Path) -> None:
+        """释放下载目标锁。"""
+        target_key = cls._target_key(target_path)
+        with cls._active_target_lock:
+            cls._active_target_paths.discard(target_key)
+
+    @staticmethod
+    def safe_unlink(path: Path) -> bool:
+        """安全删除文件，避免清理失败导致线程崩溃。"""
+        if not path.exists():
+            return True
+
+        try:
+            path.unlink(missing_ok=True)
+            return True
+        except PermissionError as exc:
+            logger.warning(
+                f"清理下载临时文件失败(文件被占用): path={summarize_path(path)}, error={exc}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+        except OSError as exc:
+            logger.warning(
+                f"清理下载临时文件失败: path={summarize_path(path)}, error={exc}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+
+        return False
+
+    def request_pause(self) -> None:
+        """请求暂停当前下载。"""
+        self._pause_requested.set()
+
+    def request_cancel(self) -> None:
+        """请求取消当前下载。"""
+        self._cancel_requested.set()
+
+    def _ensure_not_interrupted(self, partial_path: Path) -> None:
+        """在下载循环中检查暂停/取消请求。"""
+        if self._cancel_requested.is_set():
+            raise DownloadCanceledError
+
+        if self._pause_requested.is_set():
+            raise DownloadPausedError
+
+    @staticmethod
+    def _resolve_total_size(response, existing_size: int) -> int:
+        """解析下载总大小，兼容 Range 续传。"""
+        content_length = int(response.headers.get("content-length", 0) or 0)
+        if getattr(response, "status_code", 200) == 206:
+            content_range = response.headers.get("content-range", "")
+            if "/" in content_range:
+                total_text = content_range.rsplit("/", 1)[-1]
+                if total_text.isdigit():
+                    return int(total_text)
+            if content_length > 0:
+                return existing_size + content_length
+        return content_length
+
+    def _build_download_request(self, partial_path: Path) -> tuple[dict[str, str], bool, int]:
+        """根据已有分片文件生成下载请求参数。"""
+        existing_size = partial_path.stat().st_size if partial_path.exists() else 0
+        headers: dict[str, str] = {}
+        is_resume = existing_size > 0
+        if is_resume:
+            headers["Range"] = f"bytes={existing_size}-"
+        return headers, is_resume, existing_size
+
+
+class DownloadPausedError(Exception):
+    """下载被主动暂停。"""
+
+
+class DownloadCanceledError(Exception):
+    """下载被主动取消。"""
 
 
 class GithubDownloader(DownloaderBase):
@@ -63,44 +174,69 @@ class GithubDownloader(DownloaderBase):
 
     def run(self) -> None:
         """运行下载 NapCatQQ 的任务"""
+        target_path = self.path / self.file_name
+        if not self.try_acquire_target(target_path):
+            return
+
+        final_progress_status = ProgressRingStatus.INDETERMINATE
+
         logger.info(
             f"开始 Github 下载任务: file={self.file_name}, source={summarize_url(self.url.toString())}",
             LogType.NETWORK,
             LogSource.CORE,
         )
-        # 显示进度环为不确定进度环
-        self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
+        try:
+            # 显示进度环为不确定进度环
+            self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
 
-        # 检查网络环境
-        if self.check_network():
-            # 如果网络环境好, 则直接下载
-            if self.download():
-                self.download_finish_signal.emit()  # 发送下载完成信号
-                return  # 下载成功, 直接返回
+            # 检查网络环境
+            if self.check_network():
+                # 如果网络环境好, 则直接下载
+                if self.download():
+                    self.download_finish_signal.emit()  # 发送下载完成信号
+                    return  # 下载成功, 直接返回
 
-        for mirror_url in self.mirror_urls:
-            self.url = QUrl(mirror_url)
-            logger.warning(
-                f"切换下载镜像重试: file={self.file_name}, source={summarize_url(self.url.toString())}",
-                LogType.NETWORK,
-                LogSource.CORE,
-            )
-            if self.download():
-                self.download_finish_signal.emit()  # 发送下载完成信号
-                return
+            for mirror_url in self.mirror_urls:
+                self.url = QUrl(mirror_url)
+                logger.warning(
+                    f"切换下载镜像重试: file={self.file_name}, source={summarize_url(self.url.toString())}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                if self.download():
+                    self.download_finish_signal.emit()  # 发送下载完成信号
+                    return
 
-        self.status_label_signal.emit(self.tr("下载失败"))
-        self.error_finsh_signal.emit()
+            self.status_label_signal.emit(self.tr("下载失败"))
+            self.error_finsh_signal.emit()
+        except DownloadPausedError:
+            final_progress_status = ProgressRingStatus.NONE
+            self.status_label_signal.emit(self.tr("下载已暂停"))
+            logger.info(f"Github 下载已暂停: file={self.file_name}", LogType.NETWORK, LogSource.CORE)
+            self.download_paused_signal.emit()
+        except DownloadCanceledError:
+            final_progress_status = ProgressRingStatus.NONE
+            self.status_label_signal.emit(self.tr("下载已取消"))
+            logger.info(f"Github 下载已取消: file={self.file_name}", LogType.NETWORK, LogSource.CORE)
+            self.download_canceled_signal.emit()
+        finally:
+            if final_progress_status != ProgressRingStatus.NONE:
+                self.progress_ring_toggle_signal.emit(final_progress_status)
+            self.release_target(target_path)
 
     def download(self) -> bool:
         """下载文件"""
-        target_path = self.path / self.url.fileName()
+        target_path = self.path / self.file_name
         partial_path = target_path.with_name(f"{target_path.name}.part")
         try:
-            self.status_label_signal.emit(self.tr(f" 开始下载 {self.file_name} ~ "))
-            with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
+            headers, is_resume, existing_size = self._build_download_request(partial_path)
+            self.status_label_signal.emit(
+                self.tr(f"继续下载 {self.file_name} ~ ") if is_resume else self.tr(f" 开始下载 {self.file_name} ~ ")
+            )
+            with httpx.stream("GET", self.url.url(), follow_redirects=True, headers=headers) as response:
                 response.raise_for_status()
-                if (total_size := int(response.headers.get("content-length", 0))) == 0:
+                total_size = self._resolve_total_size(response, existing_size)
+                if total_size == 0:
                     # 尝试获取文件大小
                     self.status_label_signal.emit(self.tr("无法获取文件大小"))
                     return False
@@ -108,14 +244,23 @@ class GithubDownloader(DownloaderBase):
                 # 设置进度条为 进度模式
                 self.progress_ring_toggle_signal.emit(ProgressRingStatus.DETERMINATE)
 
-                if partial_path.exists():
-                    partial_path.unlink()
+                use_resume_mode = is_resume and getattr(response, "status_code", 200) == 206
+                if partial_path.exists() and not use_resume_mode and not self.safe_unlink(partial_path):
+                    self.status_label_signal.emit(self.tr("检测到上一次下载仍未结束，请稍候重试"))
+                    return False
 
-                with open(partial_path, "wb") as file:
-                    self.status_label_signal.emit(self.tr(f"正在下载 {self.file_name} ~ "))
+                current_bytes = existing_size if use_resume_mode else 0
+                write_mode = "ab" if use_resume_mode else "wb"
+
+                with open(partial_path, write_mode) as file:
+                    self.status_label_signal.emit(
+                        self.tr(f"正在继续下载 {self.file_name} ~ ") if use_resume_mode else self.tr(f"正在下载 {self.file_name} ~ ")
+                    )
                     for chunk in response.iter_bytes():
+                        self._ensure_not_interrupted(partial_path)
                         file.write(chunk)  # 写入字节
-                        self.download_progress_signal.emit(int((file.tell() / total_size) * 100))  # 设置进度条
+                        current_bytes += len(chunk)
+                        self.download_progress_signal.emit(int((current_bytes / total_size) * 100))  # 设置进度条
 
                 partial_path.replace(target_path)
 
@@ -132,21 +277,22 @@ class GithubDownloader(DownloaderBase):
             )
             return True
 
+        except DownloadPausedError:
+            raise
+        except DownloadCanceledError:
+            self.safe_unlink(partial_path)
+            raise
         except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, OSError) as e:
-            if partial_path.exists():
-                partial_path.unlink(missing_ok=True)
+            self.safe_unlink(partial_path)
             logger.error(
                 f"Github 下载失败: file={self.file_name}, source={summarize_url(self.url.toString())}, error={e}"
             )
         except Exception as exc:
-            if partial_path.exists():
-                partial_path.unlink(missing_ok=True)
+            self.safe_unlink(partial_path)
             logger.error(
                 f"Github 下载发生未知错误: file={self.file_name}, source={summarize_url(self.url.toString())}, error={exc}"
             )
             raise
-        finally:
-            self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
         return False
 
     def check_network(self) -> bool:
@@ -176,20 +322,26 @@ class QQDownloader(DownloaderBase):
 
     def run(self) -> None:
         """运行下载 QQ 的任务"""
+        final_progress_status = ProgressRingStatus.INDETERMINATE
         logger.info(
             f"开始 QQ 下载任务: file={self.url.fileName()}, source={summarize_url(self.url.toString())}",
             LogType.NETWORK,
             LogSource.CORE,
         )
         target_path = self.path / self.url.fileName()
+        if not self.try_acquire_target(target_path):
+            return
+
         partial_path = target_path.with_name(f"{target_path.name}.part")
 
         # 开始下载 QQ
         try:
-            with httpx.stream("GET", self.url.url(), follow_redirects=True) as response:
+            headers, is_resume, existing_size = self._build_download_request(partial_path)
+            with httpx.stream("GET", self.url.url(), follow_redirects=True, headers=headers) as response:
                 response.raise_for_status()
 
-                if (total_size := int(response.headers.get("content-length", 0))) == 0:
+                total_size = self._resolve_total_size(response, existing_size)
+                if total_size == 0:
                     # 尝试获取文件大小
                     self.status_label_signal.emit(self.tr("无法获取文件大小"))
                     self.error_finsh_signal.emit()
@@ -198,14 +350,22 @@ class QQDownloader(DownloaderBase):
                 # 设置进度条为 进度模式
                 self.progress_ring_toggle_signal.emit(ProgressRingStatus.DETERMINATE)
 
-                if partial_path.exists():
-                    partial_path.unlink()
+                use_resume_mode = is_resume and getattr(response, "status_code", 200) == 206
+                if partial_path.exists() and not use_resume_mode and not self.safe_unlink(partial_path):
+                    self.status_label_signal.emit(self.tr("检测到上一次下载仍未结束，请稍候重试"))
+                    self.error_finsh_signal.emit()
+                    return
 
-                with open(partial_path, "wb") as file:
-                    self.status_label_signal.emit(self.tr("正在下载 QQ ~ "))
+                current_bytes = existing_size if use_resume_mode else 0
+                write_mode = "ab" if use_resume_mode else "wb"
+
+                with open(partial_path, write_mode) as file:
+                    self.status_label_signal.emit(self.tr("正在继续下载 QQ ~ ") if use_resume_mode else self.tr("正在下载 QQ ~ "))
                     for chunk in response.iter_bytes():
+                        self._ensure_not_interrupted(partial_path)
                         file.write(chunk)  # 写入字节
-                        self.download_progress_signal.emit(int((file.tell() / total_size) * 100))  # 设置进度条
+                        current_bytes += len(chunk)
+                        self.download_progress_signal.emit(int((current_bytes / total_size) * 100))  # 设置进度条
 
                 partial_path.replace(target_path)
 
@@ -223,16 +383,25 @@ class QQDownloader(DownloaderBase):
             )
 
         except (httpx.RequestError, httpx.HTTPStatusError, PermissionError, OSError) as e:
-            if partial_path.exists():
-                partial_path.unlink(missing_ok=True)
+            self.safe_unlink(partial_path)
             self.status_label_signal.emit(self.tr(f"下载失败: {e}"))
             logger.error(
                 f"QQ 下载失败: file={self.url.fileName()}, source={summarize_url(self.url.toString())}, error={e}"
             )
             self.error_finsh_signal.emit()
+        except DownloadPausedError:
+            final_progress_status = ProgressRingStatus.NONE
+            self.status_label_signal.emit(self.tr("下载已暂停"))
+            logger.info(f"QQ 下载已暂停: file={self.url.fileName()}", LogType.NETWORK, LogSource.CORE)
+            self.download_paused_signal.emit()
+        except DownloadCanceledError:
+            final_progress_status = ProgressRingStatus.NONE
+            self.safe_unlink(partial_path)
+            self.status_label_signal.emit(self.tr("下载已取消"))
+            logger.info(f"QQ 下载已取消: file={self.url.fileName()}", LogType.NETWORK, LogSource.CORE)
+            self.download_canceled_signal.emit()
         except Exception as exc:
-            if partial_path.exists():
-                partial_path.unlink(missing_ok=True)
+            self.safe_unlink(partial_path)
             logger.error(
                 f"QQ 下载发生未知错误: file={self.url.fileName()}, source={summarize_url(self.url.toString())}, error={exc}"
             )
@@ -240,5 +409,7 @@ class QQDownloader(DownloaderBase):
 
         finally:
             # 无论是否出错,都会重置
-            self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
+            if final_progress_status != ProgressRingStatus.NONE:
+                self.progress_ring_toggle_signal.emit(final_progress_status)
+            self.release_target(target_path)
 
