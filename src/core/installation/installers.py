@@ -59,6 +59,7 @@ class NapCatInstall(InstallBase):
             logger.info(f"开始安装 NapCat: target={self.install_path}", LogType.FILE_FUNC, LogSource.CORE)
             self.status_label_signal.emit("正在安装 NapCat")
             self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
+            self.ensure_install_path()
             # 移除 NapCat 文件夹下除了 config 和 log 文件夹外的所有文件
             self.remove_old_file()
             # 解压文件
@@ -69,10 +70,24 @@ class NapCatInstall(InstallBase):
             self.error_finish_signal.emit()
             logger.exception("安装 NapCat 失败", e, LogType.FILE_FUNC, LogSource.CORE)
 
+    def ensure_install_path(self) -> None:
+        """确保安装目录存在。"""
+        if self.install_path.exists():
+            return
+
+        logger.warning(
+            f"NapCat 安装目录不存在，准备重新创建: target={self.install_path}",
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+        self.install_path.mkdir(parents=True, exist_ok=True)
+
     def remove_old_file(self) -> None:
         """删除旧文件"""
         logger.info(f"开始删除 NapCat 旧文件: target={self.install_path}", LogType.FILE_FUNC, LogSource.CORE)
         self.status_label_signal.emit("正在删除旧文件")
+        self.ensure_install_path()
+
         for item in self.install_path.iterdir():
             if item.is_dir() and item.name not in ["config", "log"]:
                 shutil.rmtree(item)
@@ -89,6 +104,7 @@ class NapCatInstall(InstallBase):
             LogSource.CORE,
         )
         self.status_label_signal.emit("正在解压文件")
+        self.ensure_install_path()
         with zipfile.ZipFile(self.zip_file_path, "r") as zip_ref:
             zip_ref.extractall(self.install_path)
         self.zip_file_path.unlink()  # 移除安装包
