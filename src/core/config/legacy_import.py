@@ -14,6 +14,7 @@
 # 标准库导入
 import json
 import shutil
+import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from json import JSONDecodeError
@@ -57,6 +58,7 @@ _APP_CONFIG_GROUP_KEYS = {
     "WebHook",
 }
 _AUXILIARY_GLOB_PATTERNS = ("onebot11_*.json", "napcat_*.json")
+_MAX_IMPORT_ARCHIVE_SIZE_BYTES = 50 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -72,13 +74,22 @@ class ImportConflictItem:
 class ImportScanResult:
     """扫描旧版配置目录后的结果。"""
 
-    root_path: Path
+    source_path: Path
+    scan_root_path: Path
+    source_kind: Literal["directory", "zip"]
     app_config_path: Path | None
     bot_config_path: Path | None
     auxiliary_paths: tuple[Path, ...]
     imported_bot_count: int
     conflicts: tuple[ImportConflictItem, ...]
     warnings: tuple[str, ...]
+    cleanup_path: Path | None = None
+
+    @property
+    def root_path(self) -> Path:
+        """兼容旧字段名，返回实际扫描根目录。"""
+
+        return self.scan_root_path
 
 
 @dataclass(frozen=True)
@@ -216,18 +227,42 @@ def _current_bot_configs_for_conflicts(warnings: list[str]) -> list[Config]:
         return []
 
 
-def scan_legacy_config_folder(folder: Path) -> ImportScanResult:
-    """扫描旧版配置目录。"""
-    root_path = folder.expanduser().resolve()
-    if not root_path.exists():
-        raise FileNotFoundError(f"旧版配置目录不存在: {root_path}")
-    if not root_path.is_dir():
-        raise NotADirectoryError(f"拖入目标不是文件夹: {root_path}")
+def _build_archive_extract_dir(path_func: PathFunc) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    extract_dir = path_func.tmp_path / "legacy-import" / "archive" / timestamp
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    return extract_dir
 
-    warnings: list[str] = []
-    app_config_path = _select_best_app_config(root_path, warnings)
-    bot_config_path, imported_bot_configs = _select_best_bot_config(root_path, warnings)
-    auxiliary_paths = _collect_auxiliary_paths(root_path)
+
+def _safe_extract_zip(archive_path: Path, extract_dir: Path) -> None:
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        for member in archive.infolist():
+            member_path = extract_dir / member.filename
+            resolved_member_path = member_path.resolve()
+            if not str(resolved_member_path).startswith(str(extract_dir.resolve())):
+                raise ValueError(f"ZIP 导入包包含非法路径: {member.filename}")
+        archive.extractall(extract_dir)
+
+
+def _scan_legacy_config_root(
+    scan_root_path: Path,
+    *,
+    source_path: Path,
+    source_kind: Literal["directory", "zip"],
+    cleanup_path: Path | None = None,
+    initial_warnings: list[str] | None = None,
+) -> ImportScanResult:
+    """扫描已准备好的导入根目录。"""
+
+    if not scan_root_path.exists():
+        raise FileNotFoundError(f"旧版配置目录不存在: {scan_root_path}")
+    if not scan_root_path.is_dir():
+        raise NotADirectoryError(f"拖入目标不是文件夹: {scan_root_path}")
+
+    warnings = list(initial_warnings or [])
+    app_config_path = _select_best_app_config(scan_root_path, warnings)
+    bot_config_path, imported_bot_configs = _select_best_bot_config(scan_root_path, warnings)
+    auxiliary_paths = _collect_auxiliary_paths(scan_root_path)
 
     current_configs = _current_bot_configs_for_conflicts(warnings)
     current_by_qqid = {int(config.bot.QQID): config for config in current_configs}
@@ -245,14 +280,57 @@ def scan_legacy_config_folder(folder: Path) -> ImportScanResult:
         warnings.append("未识别到可导入的旧版 config.json 或 bot.json")
 
     return ImportScanResult(
-        root_path=root_path,
+        source_path=source_path,
+        scan_root_path=scan_root_path,
+        source_kind=source_kind,
         app_config_path=app_config_path,
         bot_config_path=bot_config_path,
         auxiliary_paths=auxiliary_paths,
         imported_bot_count=len(imported_bot_configs),
         conflicts=conflicts,
         warnings=tuple(warnings),
+        cleanup_path=cleanup_path,
     )
+
+
+def scan_legacy_import_source(path: Path) -> ImportScanResult:
+    """扫描旧版配置导入源，支持目录和 ZIP 包。"""
+
+    source_path = path.expanduser().resolve()
+    if not source_path.exists():
+        raise FileNotFoundError(f"导入源不存在: {source_path}")
+
+    if source_path.is_dir():
+        return _scan_legacy_config_root(
+            source_path,
+            source_path=source_path,
+            source_kind="directory",
+        )
+
+    if source_path.suffix.lower() != ".zip":
+        raise ValueError(f"当前仅支持导入文件夹或 ZIP 包: {source_path.name}")
+
+    archive_size = source_path.stat().st_size
+    if archive_size > _MAX_IMPORT_ARCHIVE_SIZE_BYTES:
+        max_mb = _MAX_IMPORT_ARCHIVE_SIZE_BYTES // (1024 * 1024)
+        actual_mb = archive_size / (1024 * 1024)
+        raise ValueError(f"ZIP 导入包过大: {actual_mb:.1f} MB，当前限制为 {max_mb} MB")
+
+    path_func = _get_path_func()
+    extract_dir = _build_archive_extract_dir(path_func)
+    _safe_extract_zip(source_path, extract_dir)
+    return _scan_legacy_config_root(
+        extract_dir,
+        source_path=source_path,
+        source_kind="zip",
+        cleanup_path=extract_dir,
+        initial_warnings=["当前正在从 ZIP 导入包中读取配置，导入完成后会自动清理临时解包目录"],
+    )
+
+
+def scan_legacy_config_folder(folder: Path) -> ImportScanResult:
+    """扫描旧版配置目录。"""
+    return scan_legacy_import_source(folder)
 
 
 def _load_import_app_payload(path: Path) -> dict[str, object]:
