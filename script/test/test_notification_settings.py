@@ -70,6 +70,7 @@ def patch_cfg_storage(monkeypatch, initial_values: dict[str, object]) -> dict[st
 
     monkeypatch.setattr(general_module.cfg, "get", fake_get)
     monkeypatch.setattr(general_module.cfg, "set", fake_set)
+    monkeypatch.setattr(general_module, "info_bar", lambda *args, **kwargs: None)
     monkeypatch.setattr(general_module, "success_bar", lambda *args, **kwargs: None)
     monkeypatch.setattr(general_module, "warning_bar", lambda *args, **kwargs: None)
     monkeypatch.setattr(general_module, "error_bar", lambda *args, **kwargs: None)
@@ -151,6 +152,32 @@ def test_email_dialog_valid_save_allows_test_task(monkeypatch) -> None:
     assert len(fake_pool.started) == 1
 
 
+def test_email_dialog_enabling_notice_shows_bot_level_hint(monkeypatch) -> None:
+    """首次开启邮件通知时应提示 Bot 仍可单独配置是否通知。"""
+    ensure_qapp()
+    patch_cfg_storage(
+        monkeypatch,
+        {
+            general_module.cfg.bot_offline_email_notice.key: False,
+            general_module.cfg.email_receiver.key: "receiver@example.com",
+            general_module.cfg.email_sender.key: "sender@example.com",
+            general_module.cfg.email_token.key: "token",
+            general_module.cfg.email_stmp_server.key: "smtp.example.com",
+            general_module.cfg.email_stmp_port.key: 465,
+            general_module.cfg.email_encryption.key: "SSL",
+        },
+    )
+    info_messages: list[str] = []
+    monkeypatch.setattr(general_module, "info_bar", lambda content, *args, **kwargs: info_messages.append(content))
+
+    parent = create_dialog_parent()
+    dialog = BotOfflineEmailDialog(parent)
+    dialog.enable_card.fill_value(True)
+
+    assert dialog.save_config() is True
+    assert info_messages == ["已启用全局邮件通知，Bot 可在高级配置中单独设置是否通知"]
+
+
 def test_webhook_dialog_invalid_json_does_not_save_or_start_task(monkeypatch) -> None:
     """WebHook JSON 非法时不应保存，也不应启动测试任务。"""
     ensure_qapp()
@@ -217,6 +244,30 @@ def test_webhook_dialog_valid_save_allows_test_task(monkeypatch) -> None:
 
     dialog._send_test_webhook()
     assert len(fake_pool.started) == 1
+
+
+def test_webhook_dialog_enabling_notice_shows_bot_level_hint(monkeypatch) -> None:
+    """首次开启 WebHook 通知时应提示 Bot 仍可单独配置是否通知。"""
+    ensure_qapp()
+    patch_cfg_storage(
+        monkeypatch,
+        {
+            general_module.cfg.bot_offline_web_hook_notice.key: False,
+            general_module.cfg.web_hook_url.key: "https://example.com/webhook",
+            general_module.cfg.web_hook_secret.key: "secret",
+            general_module.cfg.web_hook_json.key: '{"msg":"new"}',
+            general_module.cfg.web_hook_method.key: "POST",
+        },
+    )
+    info_messages: list[str] = []
+    monkeypatch.setattr(general_module, "info_bar", lambda content, *args, **kwargs: info_messages.append(content))
+
+    parent = create_dialog_parent()
+    dialog = BotOfflineWebHookDialog(parent)
+    dialog.enable_card.fill_value(True)
+
+    assert dialog.save_config() is True
+    assert info_messages == ["已启用全局 WebHook 通知，Bot 可在高级配置中单独设置是否通知"]
 
 
 def test_webhook_dialog_open_with_empty_json_does_not_log_parse_error(monkeypatch) -> None:

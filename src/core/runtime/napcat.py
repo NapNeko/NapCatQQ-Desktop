@@ -300,6 +300,8 @@ class NapCatQQLoginState(QObject):
         self._is_logged_in = False
         self._online_status = False
         self._offline_notice = False
+        self._login_invalidated_while_online = False
+        self._suppress_qrcode_until_online = False
 
         # 启动定时器以定期获取授权状态
         self._auth_timer = QTimer(self)
@@ -387,6 +389,7 @@ class NapCatQQLoginState(QObject):
         Args:
             is_login (bool): 是否已登录
         """
+        prev_login = self._is_logged_in
         self._is_logged_in = is_login
         logger.trace(
             f"NapCat 登录状态更新(QQID: {self.config.bot.QQID}, is_login={is_login})",
@@ -395,7 +398,18 @@ class NapCatQQLoginState(QObject):
         )
 
         if is_login:
+            self._login_invalidated_while_online = False
+            self._suppress_qrcode_until_online = False
             self.qr_code_removed_signal.emit(str(self.config.bot.QQID))
+            return
+
+        if prev_login and self._online_status:
+            self._login_invalidated_while_online = True
+            logger.trace(
+                f"NapCat 检测到登录状态在在线期间失效(QQID: {self.config.bot.QQID})，等待在线状态确认后处理二维码",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
     def slot_update_online_status(self, online_status: bool) -> None:
         """更新在线状态
@@ -405,6 +419,7 @@ class NapCatQQLoginState(QObject):
         """
         # 记录之前的在线状态以判断是否发生了 状态从在线->离线 的转变
         prev_online = self._online_status
+        login_invalidated_while_online = self._login_invalidated_while_online
 
         # 更新当前在线状态
         self._online_status = online_status
@@ -413,7 +428,9 @@ class NapCatQQLoginState(QObject):
                 "NapCat 在线状态更新: "
                 f"QQID={self.config.bot.QQID}, prev_online={prev_online}, online={online_status}, "
                 f"is_logged_in={self._is_logged_in}, offline_notice_sent={self._offline_notice}, "
-                f"offline_auto_restart={self.config.bot.offlineAutoRestart}"
+                f"offline_auto_restart={self.config.bot.offlineAutoRestart}, "
+                f"login_invalidated_while_online={login_invalidated_while_online}, "
+                f"suppress_qrcode_until_online={self._suppress_qrcode_until_online}"
             ),
             LogType.NETWORK,
             LogSource.CORE,
@@ -423,6 +440,8 @@ class NapCatQQLoginState(QObject):
         if online_status:
             # 一旦恢复在线，允许之后再次发送离线通知
             self._offline_notice = False
+            self._login_invalidated_while_online = False
+            self._suppress_qrcode_until_online = False
             return
 
         # 只有当之前是在线并且当前已离线时，才触发离线逻辑
@@ -430,8 +449,13 @@ class NapCatQQLoginState(QObject):
             # 如果之前就已经离线，跳过（避免重复或启动时误判）
             return
 
+        if login_invalidated_while_online:
+            self._login_invalidated_while_online = False
+            self._suppress_qrcode_until_online = True
+            self.qr_code_removed_signal.emit(str(self.config.bot.QQID))
+
         # 如果未登录则不进行离线通知/重启处理
-        if not self._is_logged_in:
+        if not self._is_logged_in and not login_invalidated_while_online:
             return
 
         # 如果配置为自动重启，优先发送通知（如果开启），然后再重启
@@ -482,6 +506,14 @@ class NapCatQQLoginState(QObject):
         Args:
             qr_code (str): 登录二维码
         """
+        if self._login_invalidated_while_online or self._suppress_qrcode_until_online:
+            logger.trace(
+                f"NapCat 跳过展示已失效的登录二维码(QQID: {self.config.bot.QQID})",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return
+
         self.qr_code_available_signal.emit(str(self.config.bot.QQID), qr_code)
 
 

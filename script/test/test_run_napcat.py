@@ -175,6 +175,55 @@ def test_login_state_offline_autorestart_sends_notifications_and_restarts_once(
     assert login_state._offline_notice is True
 
 
+def test_login_state_offline_after_login_loss_still_sends_notifications_and_skips_stale_qrcode(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """掉线导致登录失效时仍应发送通知，并跳过无效二维码。"""
+    notifications: list[tuple[object, str]] = []
+    qrcodes: list[tuple[str, str]] = []
+    removed: list[str] = []
+
+    monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
+    monkeypatch.setattr(
+        run_napcat,
+        "cfg",
+        SimpleNamespace(
+            bot_offline_web_hook_notice="webhook",
+            bot_offline_email_notice="email",
+            get=lambda item: True,
+        ),
+    )
+    monkeypatch.setattr(run_napcat, "create_offline_webhook_task", lambda config: ("webhook-task", config.bot.QQID))
+    monkeypatch.setattr(run_napcat, "create_offline_email_task", lambda config: ("email-task", config.bot.QQID))
+
+    config = config_factory(556677)
+    config.bot.offlineAutoRestart = False
+    config.advanced.offlineNotice = True
+
+    login_state = run_napcat.NapCatQQLoginState(config=config, port=8080, token="token")
+    monkeypatch.setattr(
+        login_state,
+        "_start_notification_task",
+        lambda task, message: notifications.append((task, message)),
+    )
+    login_state.qr_code_available_signal.connect(lambda qq_id, qr_code: qrcodes.append((qq_id, qr_code)))
+    login_state.qr_code_removed_signal.connect(removed.append)
+    login_state._is_logged_in = True
+    login_state._online_status = True
+
+    login_state.slot_update_login_state(False)
+    login_state.slot_update_login_qrcode("https://example.com/stale-qr")
+    login_state.slot_update_online_status(False)
+
+    assert notifications == [
+        (("webhook-task", 556677), "已发送离线通知到配置的 WebHook 地址"),
+        (("email-task", 556677), "已发送离线通知到配置的邮箱地址"),
+    ]
+    assert qrcodes == []
+    assert removed == ["556677"]
+    assert login_state._suppress_qrcode_until_online is True
+
+
 def test_get_auth_status_runnable_emits_credential(monkeypatch: pytest.MonkeyPatch) -> None:
     """认证任务在接口成功时应发出 Credential。"""
     monkeypatch.setattr(
@@ -252,6 +301,22 @@ def test_login_state_emits_qrcode_removed_when_login_succeeds(
 
     assert login_state.get_login_state() is True
     assert removed == ["998877"]
+
+
+def test_login_state_emits_qrcode_when_not_logged_in_initially(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """初始未登录场景仍应正常展示二维码。"""
+    monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
+    emitted: list[tuple[str, str]] = []
+
+    login_state = run_napcat.NapCatQQLoginState(config=config_factory(123456), port=8080, token="token")
+    login_state.qr_code_available_signal.connect(lambda qq_id, qr_code: emitted.append((qq_id, qr_code)))
+
+    login_state.slot_update_login_state(False)
+    login_state.slot_update_login_qrcode("https://example.com/valid-qr")
+
+    assert emitted == [("123456", "https://example.com/valid-qr")]
 
 
 def test_create_napcat_process_emits_error_when_qq_path_missing(

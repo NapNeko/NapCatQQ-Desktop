@@ -7,6 +7,7 @@ import os
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
+import src.ui.page.bot_page.widget.config as config_widget_module
 from src.core.config.config_model import AdvancedConfig, AutoRestartScheduleConfig, BypassConfig, BotConfig
 from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget
 
@@ -104,9 +105,10 @@ def test_advanced_config_widget_round_trips_grouped_and_dialog_fields() -> None:
     assert widget.console_level_card.isEnabled() is False
 
 
-def test_advanced_config_widget_clear_resets_backend_and_log_state() -> None:
+def test_advanced_config_widget_clear_resets_backend_and_log_state(monkeypatch) -> None:
     """清空高级配置时应恢复默认值并关闭低频开关。"""
     ensure_qapp()
+    monkeypatch.setattr(config_widget_module.cfg, "get", lambda item: False)
     widget = AdvancedConfigWidget()
 
     widget.fill_config(
@@ -127,3 +129,23 @@ def test_advanced_config_widget_clear_resets_backend_and_log_state() -> None:
     assert restored.bypass == BypassConfig()
     assert widget.file_log_level_card.isEnabled() is False
     assert widget.console_level_card.isEnabled() is False
+    assert restored.offlineNotice is False
+
+
+def test_advanced_config_widget_clear_enables_offline_notice_when_global_notice_enabled(monkeypatch) -> None:
+    """新增 Bot 时若全局邮件或 WebHook 通知已开启，应默认勾选单独掉线通知。"""
+    ensure_qapp()
+    monkeypatch.setattr(
+        config_widget_module.cfg,
+        "get",
+        lambda item: item in {
+            config_widget_module.cfg.bot_offline_email_notice,
+            config_widget_module.cfg.bot_offline_web_hook_notice,
+        },
+    )
+    widget = AdvancedConfigWidget()
+
+    widget.clear_config()
+    restored = widget.get_config()
+
+    assert restored.offlineNotice is True

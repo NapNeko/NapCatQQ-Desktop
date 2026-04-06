@@ -194,15 +194,15 @@ class Email(QObject, QRunnable):
 
 def create_test_email_task() -> Email:
     """构建测试邮件任务, 由调用方决定如何处理信号和启动任务"""
+    email_content = ""
 
-    file = QFile(":template/template/email/test_email.html")
-    file.setOpenMode(QFile.OpenModeFlag.ReadOnly)
+    with QFluentFile(":template/template/email/test_email.html", QFile.OpenModeFlag.ReadOnly) as file:
+        email_content = Template(bytes(file.readAll().data()).decode("utf-8")).safe_substitute(
+            {"disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S")}
+        )
 
-    email_content = Template(bytes(file.readAll().data()).decode("utf-8")).safe_substitute(
-        {"disconnect_time": datetime.now().strftime("%Y/%m/%d %H:%M:%S")}
-    )
-
-    file.close()
+    if not email_content:
+        raise ValueError("邮件内容不能为空, 无法创建测试邮件任务")
 
     return Email(
         EmailData(
@@ -217,7 +217,6 @@ def create_offline_email_task(config: Config) -> Email:
     email_content = ""
 
     with QFluentFile(":template/template/email/bot_offline_notice.html", QFile.OpenModeFlag.ReadOnly) as file:
-
         email_content = Template(bytes(file.readAll().data()).decode("utf-8")).safe_substitute(
             {
                 "bot_name": f"{config.bot.name} ({config.bot.QQID})",
@@ -234,4 +233,3 @@ def create_offline_email_task(config: Config) -> Email:
             msg_subject="NapCatQQ-Desktop 机器人离线通知",
         )
     )
-

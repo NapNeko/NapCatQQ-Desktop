@@ -36,6 +36,7 @@ class NapCatPage(PageBase):
         self.app_card.set_hyper_label_name(self.tr("仓库地址"))
         self.app_card.set_hyper_label_url(Urls.NAPCATQQ_REPO.value)
         self.log_card.set_loading(True)
+        self.log_card.set_url(Urls.NAPCATQQ_REPO.value.url())
 
         # 连接信号槽
         self.app_card.install_button.clicked.connect(self.handle_download_requested)
@@ -249,4 +250,3 @@ class NapCatPage(PageBase):
         logger.error("NapCat 下载或安装流程失败", log_source=LogSource.UI)
         error_bar(self.tr("下载时发生错误, 详情查看 设置 > Log"))
         self.refresh_page_view()
-

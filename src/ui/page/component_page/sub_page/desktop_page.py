@@ -45,6 +45,7 @@ class DesktopPage(PageBase):
         self.app_card.set_hyper_label_name(self.tr("仓库地址"))
         self.app_card.set_hyper_label_url(Urls.NCD_REPO.value)
         self.log_card.set_loading(True)
+        self.log_card.set_url(Urls.NCD_REPO.value.url())
         self._update_manager = UpdateManager()
 
         # 连接信号槽
@@ -196,7 +197,9 @@ class DesktopPage(PageBase):
     @Slot()
     def handle_cancel_requested(self) -> None:
         """取消 Desktop 更新包下载。"""
-        package_filename = self._update_manager.get_update_filename(self.remote_version.lstrip("v") if self.remote_version else "")
+        package_filename = self._update_manager.get_update_filename(
+            self.remote_version.lstrip("v") if self.remote_version else ""
+        )
         package_path = it(PathFunc).tmp_path / package_filename
 
         if self.is_operation_paused():
@@ -356,4 +359,3 @@ class DesktopPage(PageBase):
 
         install_type_hint = get_install_type_log_prefix(self._update_manager.install_type)
         return install_type_hint + self.remote_log
-

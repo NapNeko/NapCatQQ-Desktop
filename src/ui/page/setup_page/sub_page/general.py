@@ -15,7 +15,7 @@ from src.core.config import cfg
 from src.core.network.email import EncryptionType, create_test_email_task
 from src.core.network.webhook import create_test_webhook_task
 from src.core.logging import LogSource, logger
-from src.ui.components.info_bar import error_bar, success_bar, warning_bar
+from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
     JsonTemplateEditConfigCard,
@@ -205,6 +205,7 @@ class BotOfflineEmailDialog(MessageBoxBase):
     def save_config(self) -> bool:
         """保存配置。"""
         try:
+            was_enabled = bool(cfg.get(cfg.bot_offline_email_notice))
             values = self._collect_config_values()
             for item, value in values:
                 cfg.set(item, value)
@@ -219,6 +220,8 @@ class BotOfflineEmailDialog(MessageBoxBase):
                 log_source=LogSource.UI,
             )
             success_bar(self.tr("配置已保存"))
+            if not was_enabled and self.enable_card.get_value():
+                info_bar(self.tr("已启用全局邮件通知，Bot 可在高级配置中单独设置是否通知"), parent=self)
             self.fill_config()
             return True
         except ValueError as exc:
@@ -312,6 +315,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
     def save_config(self) -> bool:
         """保存配置。"""
         try:
+            was_enabled = bool(cfg.get(cfg.bot_offline_web_hook_notice))
             values = self._collect_config_values()
             for item, value in values:
                 cfg.set(item, value)
@@ -326,6 +330,8 @@ class BotOfflineWebHookDialog(MessageBoxBase):
                 log_source=LogSource.UI,
             )
             success_bar(self.tr("配置已保存"))
+            if not was_enabled and self.enable_card.get_value():
+                info_bar(self.tr("已启用全局 WebHook 通知，Bot 可在高级配置中单独设置是否通知"), parent=self)
             self.fill_config()
             return True
         except (TypeError, ValueError, json.JSONDecodeError) as exc:

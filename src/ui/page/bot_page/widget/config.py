@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
+from src.core.config import cfg
 from src.core.config.config_model import (
     AdvancedConfig,
     BotConfig,
@@ -459,6 +460,9 @@ class AdvancedConfigWidget(ScrollArea):
         """清空配置"""
         for card in self.cards:
             card.clear()
+        self.offline_notice_card.fill_value(
+            cfg.get(cfg.bot_offline_email_notice) or cfg.get(cfg.bot_offline_web_hook_notice)
+        )
         self._sync_log_level_card_state()
 
     def _sync_log_level_card_state(self, *_args) -> None:
