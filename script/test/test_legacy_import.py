@@ -2,6 +2,7 @@
 
 # 标准库导入
 import json
+import zipfile
 from pathlib import Path
 
 # 第三方库导入
@@ -36,6 +37,12 @@ def read_json(path: Path):
 
 def payload(model) -> dict | list:
     return json.loads(model.model_dump_json())
+
+
+def write_zip_json(zip_path: Path, filename: str, payload) -> None:
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, mode="a", compression=zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr(filename, json.dumps(payload, ensure_ascii=False, indent=4))
 
 
 def patch_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> DummyPathFunc:
@@ -176,3 +183,49 @@ def test_apply_legacy_config_import_append_overwrites_selected_conflicts(
     assert bot_names_by_qqid[556677] == "ImportedC"
     assert (fake_path_func.napcat_config_path / "onebot11_556677.json").exists()
     assert (fake_path_func.napcat_config_path / "napcat_556677.json").exists()
+
+
+def test_scan_legacy_import_source_supports_zip_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config_factory
+) -> None:
+    patch_runtime(monkeypatch, tmp_path)
+    current_config = config_factory(114514, "CurrentBot")
+    monkeypatch.setattr(legacy_import, "_read_config_file", lambda strict: [current_config])
+
+    archive_path = tmp_path / "source" / "legacy-config.zip"
+    imported_bot = config_factory(114514, "ImportedBot")
+    write_zip_json(
+        archive_path,
+        "runtime/config/config.json",
+        {
+            "Info": {"main_window": True},
+            "Personalize": {"ThemeMode": "Dark"},
+        },
+    )
+    write_zip_json(archive_path, "runtime/config/bot.json", [payload(imported_bot)])
+
+    result = legacy_import.scan_legacy_import_source(archive_path)
+
+    assert result.source_path == archive_path.resolve()
+    assert result.source_kind == "zip"
+    assert result.cleanup_path is not None
+    assert result.cleanup_path.exists()
+    assert result.imported_bot_count == 1
+    assert len(result.conflicts) == 1
+    assert result.app_config_path is not None
+    assert result.bot_config_path is not None
+    assert result.app_config_path.is_file()
+    assert result.bot_config_path.is_file()
+
+
+def test_scan_legacy_import_source_rejects_oversized_zip_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patch_runtime(monkeypatch, tmp_path)
+    archive_path = tmp_path / "source" / "oversized.zip"
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_path.write_bytes(b"x" * 128)
+    monkeypatch.setattr(legacy_import, "_MAX_IMPORT_ARCHIVE_SIZE_BYTES", 16)
+
+    with pytest.raises(ValueError, match="ZIP 导入包过大"):
+        legacy_import.scan_legacy_import_source(archive_path)

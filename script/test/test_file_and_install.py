@@ -68,6 +68,26 @@ def test_napcat_install_remove_old_file_preserves_config_and_log(monkeypatch, tm
     assert not (install_root / "old.txt").exists()
 
 
+def test_napcat_install_remove_old_file_creates_missing_install_root(monkeypatch, tmp_path: Path) -> None:
+    """安装目录缺失时，删除旧文件前应自动创建目录而不是报错。"""
+    mute_install_logger(monkeypatch)
+    install_root = tmp_path / "NapCatQQ"
+    tmp_root = tmp_path / "tmp"
+    tmp_root.mkdir()
+
+    monkeypatch.setattr(
+        install_func,
+        "it",
+        lambda cls: SimpleNamespace(tmp_path=tmp_root, napcat_path=install_root),
+    )
+
+    task = install_func.NapCatInstall()
+    task.remove_old_file()
+
+    assert install_root.exists()
+    assert install_root.is_dir()
+
+
 def test_napcat_install_unzip_file_extracts_package_and_removes_zip(monkeypatch, tmp_path: Path) -> None:
     """解压 NapCat 安装包后应写入目标目录并删除 zip 文件。"""
     mute_install_logger(monkeypatch)
@@ -94,6 +114,31 @@ def test_napcat_install_unzip_file_extracts_package_and_removes_zip(monkeypatch,
     assert (install_root / "module" / "file.txt").read_text(encoding="utf-8") == "payload"
     assert not zip_path.exists()
     assert finished == [True]
+
+
+def test_napcat_install_unzip_file_creates_missing_install_root(monkeypatch, tmp_path: Path) -> None:
+    """安装目录缺失时，解压逻辑应自动创建目标目录。"""
+    mute_install_logger(monkeypatch)
+    install_root = tmp_path / "NapCatQQ"
+    tmp_root = tmp_path / "tmp"
+    tmp_root.mkdir()
+    zip_path = tmp_root / "NapCat.Shell.zip"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("module/file.txt", "payload")
+
+    monkeypatch.setattr(
+        install_func,
+        "it",
+        lambda cls: SimpleNamespace(tmp_path=tmp_root, napcat_path=install_root),
+    )
+
+    task = install_func.NapCatInstall()
+    task.unzip_file()
+
+    assert install_root.exists()
+    assert (install_root / "module" / "file.txt").read_text(encoding="utf-8") == "payload"
+    assert not zip_path.exists()
 
 
 def test_qq_install_nonzero_exit_emits_error_and_deletes_installer(monkeypatch, tmp_path: Path) -> None:

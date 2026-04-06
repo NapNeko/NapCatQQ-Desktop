@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 # 项目内模块导入
 import src.ui.page.setup_page.sub_page.general as general_module
 from src.ui.page.setup_page.sub_page.general import BotOfflineEmailDialog, BotOfflineWebHookDialog
+from src.ui.page.setup_page.widget.config_export_dialog import ConfigExportDialog
 
 
 class DummySignal:
@@ -242,3 +243,22 @@ def test_webhook_dialog_open_with_empty_json_does_not_log_parse_error(monkeypatc
 
     assert dialog.json_card.json_text_edit.toPlainText() == ""
     assert error_logs == []
+
+
+def test_general_page_contains_config_export_card() -> None:
+    """设置页应提供当前配置导出入口。"""
+    parent = create_dialog_parent()
+    page = general_module.General(parent)
+
+    assert hasattr(page, "config_export_card")
+    assert page.config_export_card is not None
+
+
+def test_config_export_dialog_yes_button_disabled_before_choose_directory(monkeypatch) -> None:
+    """未选择目录前不可执行导出。"""
+    ensure_qapp()
+    monkeypatch.setattr(general_module, "warning_bar", lambda *args, **kwargs: None)
+    parent = create_dialog_parent()
+    dialog = ConfigExportDialog(parent)
+
+    assert dialog.yesButton.isEnabled() is False
