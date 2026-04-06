@@ -35,14 +35,15 @@ uv --version
 2. 解析目标版本号
 3. 自动查找上一个语义化版本 tag
 4. 收集 `上一个 tag..HEAD` 的提交
-5. 过滤发布元数据提交
-6. 更新 `pyproject.toml`
-7. 更新 `src/core/config/__init__.py`
-8. 更新 `docs/CHANGELOG.md`
-9. 执行真实的 `uv lock`
-10. 创建单个 release commit
-11. 创建 `vX.Y.Z` tag
-12. 可选推送分支和 tag
+5. 进入 AI 交互式发布说明改稿流程
+6. 过滤发布元数据提交
+7. 更新 `pyproject.toml`
+8. 更新 `src/core/config/__init__.py`
+9. 更新 `docs/CHANGELOG.md`
+10. 执行真实的 `uv lock`
+11. 创建单个 release commit
+12. 创建 `vX.Y.Z` tag
+13. 可选推送分支和 tag
 
 ### 2. `script/utils/update_version.py`
 
@@ -54,6 +55,22 @@ uv --version
 - 想单独更新版本文件
 - 调试 changelog 分类逻辑
 
+### 3. `script/utils/generate_changelog_ai.py`
+
+AI 辅助改稿工具，用于单独预演或调试发布说明：
+
+1. 自动收集两个版本之间的 commit 和文件变更
+2. 先生成一版 AI 发布说明草稿
+3. 在控制台中持续接收你的修改意见
+4. 反复调用 AI 改稿，直到你满意
+5. 你确认后，再写回 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+
+适用场景：
+
+- 想在不执行正式发布的情况下，单独预演 AI 更新日志
+- 想调试提示词、模型配置或改稿节奏
+- 想先试写一版，再决定是否正式发布
+
 ## 三、标准发布流程
 
 ### 方式 A：本地生成 release，但先不推送
@@ -61,6 +78,8 @@ uv --version
 ```powershell
 python script/utils/release.py 2.0.18
 ```
+
+执行时会先进入 AI 交互式发布说明确认；只有你在控制台确认满意后，脚本才会继续真正发布。
 
 执行完成后会得到：
 
@@ -110,10 +129,18 @@ python script/utils/update_version.py 2.0.18
 python script/utils/update_version.py 2.0.18 --no-lock
 ```
 
+如果你想在不正式发布的前提下，先和 AI 来回改稿，可以用：
+
+```powershell
+python script/utils/generate_changelog_ai.py v2.0.18
+```
+
 注意：
 
 - `update_version.py` 会直接改工作区文件。
 - 只是它不会帮你提交、打 tag 或推送。
+- `generate_changelog_ai.py` 只有在你确认后才会写回 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
+- `release.py` 现在默认会在正式发布前进入 AI 交互改稿流程。
 
 ## 五、手动指定起始 tag
 
@@ -151,6 +178,8 @@ python script/utils/update_version.py 2.0.18 --from v2.0.16
 
 1. 标题中的当前版本号
 2. 自动生成区域中的发布说明
+
+同样地，[`script/utils/generate_changelog_ai.py`](script/utils/generate_changelog_ai.py) 在你确认写回 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) 时，也会自动同步这两部分。
 
 这样做的目的：
 

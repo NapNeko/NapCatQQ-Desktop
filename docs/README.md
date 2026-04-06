@@ -12,6 +12,7 @@
 - [资源文件管理](resources/resource_management.md) - 图片、字体等资源文件的管理规范
 - [版本控制规范](workflow/version_control.md) - 分支、Issue和PR的管理流程
 - [发布使用说明](RELEASE_WORKFLOW.md) - 当前版本发布、CHANGELOG 和 CI 的正确使用方式
+- [AI 更新日志使用指南](AI_CHANGELOG_USAGE.md) - 本地交互式生成和改稿更新日志的当前用法
 
 ## 规范的重要性
 
