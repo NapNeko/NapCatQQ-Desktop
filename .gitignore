@@ -57,6 +57,7 @@ NapCat/*
 *.test
 *.test.py
 test-artifacts/
+example/
 
 ### 操作系统生成文件 ###
 # macOS
