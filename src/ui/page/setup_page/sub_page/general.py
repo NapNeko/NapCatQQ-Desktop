@@ -111,15 +111,6 @@ class General(ScrollArea):
             parent=self.import_group,
         )
 
-        # 创建组 - 远程管理
-        self.remote_group = SettingCardGroup(title=self.tr("远程管理"), parent=self.view)
-        self.remote_config_card = ShowDialogCardBase(
-            dialog=RemoteConnectionDialog,
-            icon=FI.GLOBE,
-            title=self.tr("Linux Core 连接"),
-            content=self.tr("配置 SSH 连接、远端工作目录与基础安全策略"),
-            parent=self.remote_group,
-        )
 
     def _set_layout(self) -> None:
         """控件布局"""
@@ -130,14 +121,12 @@ class General(ScrollArea):
         self.version_group.addSettingCard(self.ncd_version_card)
         self.import_group.addSettingCard(self.legacy_import_card)
         self.import_group.addSettingCard(self.config_export_card)
-        self.remote_group.addSettingCard(self.remote_config_card)
 
         # 添加到布局
         self.expand_layout.addWidget(self.action_group)
         self.expand_layout.addWidget(self.event_group)
         self.expand_layout.addWidget(self.version_group)
         self.expand_layout.addWidget(self.import_group)
-        self.expand_layout.addWidget(self.remote_group)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
 
@@ -405,7 +394,7 @@ class RemoteConnectionDialog(MessageBoxBase):
         self.enable_card = SwitchConfigCard(FI.GLOBE, self.tr("启用远程模式"))
         self.host_card = LineEditConfigCard(FI.GLOBE, self.tr("SSH 主机"), "example.com")
         self.port_card = LineEditConfigCard(FI.INFO, self.tr("SSH 端口"), "22")
-        self.username_card = LineEditConfigCard(FI.CONTACT, self.tr("用户名"), "root")
+        self.username_card = LineEditConfigCard(FI.CONNECT, self.tr("用户名"), "root")
         self.auth_method_card = ComboBoxConfigCard(FI.KEY, self.tr("认证方式"), ["key", "password"])
         self.private_key_path_card = LineEditConfigCard(
             FI.DOCUMENT, self.tr("私钥路径"), "C:/Users/NAME/.ssh/id_ed25519"
