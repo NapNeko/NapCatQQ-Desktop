@@ -28,6 +28,7 @@ from src.core.logging import logger
 from src.core.runtime.paths import PathFunc
 
 _BOT_CONFIG_MIGRATION_BACKUP_SUFFIX = ".bak"
+_MISSING = object()
 
 
 def _get_path_func() -> PathFunc:
@@ -38,6 +39,118 @@ def _get_path_func() -> PathFunc:
 def _model_to_payload(model: Config | OneBotConfig | NapCatConfig | ConfigCollection) -> Any:
     """将 Pydantic 模型转换为可序列化 JSON 结构。"""
     return json_payload(model)
+
+
+def _deep_merge_patch(target: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    """将补丁字典递归合并到目标字典。"""
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_merge_patch(target[key], value)
+        else:
+            target[key] = value
+    return target
+
+
+def _three_way_merge_full(base: Any, local: Any, remote: Any) -> Any:
+    """对完整配置做三方合并，local 冲突优先。"""
+    if isinstance(base, dict) and isinstance(local, dict) and isinstance(remote, dict):
+        merged: dict[str, Any] = {}
+        for key in set(base) | set(local) | set(remote):
+            base_value = base.get(key, _MISSING)
+            local_value = local.get(key, _MISSING)
+            remote_value = remote.get(key, _MISSING)
+
+            if base_value is _MISSING:
+                merged[key] = remote_value if local_value is _MISSING else local_value
+                continue
+            if local_value is _MISSING:
+                merged[key] = remote_value if remote_value is not _MISSING else base_value
+                continue
+            if remote_value is _MISSING:
+                merged[key] = local_value
+                continue
+
+            merged[key] = _three_way_merge_full(base_value, local_value, remote_value)
+        return merged
+
+    if local == base:
+        return remote
+    if remote == base or local == remote:
+        return local
+    return local
+
+
+def _merge_external_patch(base: Any, local: Any, external_patch: Any) -> Any:
+    """按外部补丁范围做三方合并，返回仅包含补丁键的结果。"""
+    if isinstance(external_patch, dict):
+        merged: dict[str, Any] = {}
+        base_dict = base if isinstance(base, dict) else {}
+        local_dict = local if isinstance(local, dict) else {}
+        for key, value in external_patch.items():
+            merged[key] = _merge_external_patch(base_dict.get(key, _MISSING), local_dict.get(key, _MISSING), value)
+        return merged
+
+    if local is _MISSING or local == base:
+        return external_patch
+    if external_patch == base or local == external_patch:
+        return local
+    return local
+
+
+def _read_json_payload(path: Path) -> object:
+    with open(path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _load_external_model(path: Path, model_type: type[OneBotConfig] | type[NapCatConfig]) -> OneBotConfig | NapCatConfig | None:
+    """读取外部派生配置；格式非法时跳过合并。"""
+    try:
+        payload = _read_json_payload(path)
+        return model_type(**payload)
+    except FileNotFoundError:
+        return None
+    except Exception as error:
+        logger.warning(f"读取外部配置失败，已跳过合并: path={path}, error={type(error).__name__}: {error}")
+        return None
+
+
+def _build_external_config_patch(path_func: PathFunc, qqid: int) -> dict[str, Any]:
+    """从 onebot/napcat 派生配置构造外部补丁。"""
+    patch: dict[str, Any] = {}
+    onebot_path = path_func.napcat_config_path / f"onebot11_{qqid}.json"
+    napcat_path = path_func.napcat_config_path / f"napcat_{qqid}.json"
+
+    if isinstance(onebot_config := _load_external_model(onebot_path, OneBotConfig), OneBotConfig):
+        _deep_merge_patch(
+            patch,
+            {
+                "bot": {"musicSignUrl": onebot_config.musicSignUrl},
+                "connect": _model_to_payload(onebot_config.network),
+                "advanced": {
+                    "enableLocalFile2Url": onebot_config.enableLocalFile2Url,
+                    "parseMultMsg": onebot_config.parseMultMsg,
+                },
+            },
+        )
+
+    if isinstance(napcat_config := _load_external_model(napcat_path, NapCatConfig), NapCatConfig):
+        _deep_merge_patch(
+            patch,
+            {
+                "advanced": {
+                    "fileLog": napcat_config.fileLog,
+                    "consoleLog": napcat_config.consoleLog,
+                    "fileLogLevel": napcat_config.fileLogLevel,
+                    "consoleLogLevel": napcat_config.consoleLogLevel,
+                    "packetBackend": napcat_config.packetBackend,
+                    "packetServer": napcat_config.packetServer,
+                    "o3HookMode": napcat_config.o3HookMode,
+                    "bypass": _model_to_payload(napcat_config.bypass),
+                }
+            },
+        )
+
+    return patch
 
 
 def _next_transaction_path(path: Path, marker: str) -> Path:
@@ -265,28 +378,57 @@ def check_duplicate_bot(config: Config) -> bool:
     return False
 
 
-def update_config(config: Config) -> bool:
+def merge_config_for_update(config: Config, base_config: Config | None = None) -> Config:
+    """将当前编辑结果与磁盘配置、WebUI 派生配置做无感合并。"""
+    path_func = _get_path_func()
+    current_configs = _read_config_file(strict=True)
+    current_saved_config = next((item for item in current_configs if item.bot.QQID == config.bot.QQID), None)
+
+    if base_config is None:
+        base_config = current_saved_config
+
+    if base_config is None:
+        return config
+
+    base_payload = _model_to_payload(base_config)
+    local_payload = _model_to_payload(config)
+    merged_payload = local_payload
+
+    if current_saved_config is not None:
+        current_payload = _model_to_payload(current_saved_config)
+        merged_payload = _three_way_merge_full(base_payload, local_payload, current_payload)
+
+    external_patch = _build_external_config_patch(path_func, int(config.bot.QQID))
+    if external_patch:
+        merged_external_patch = _merge_external_patch(base_payload, local_payload, external_patch)
+        merged_payload = _deep_merge_patch(merged_payload, merged_external_patch)
+
+    return Config(**merged_payload)
+
+
+def update_config(config: Config, base_config: Config | None = None, *, skip_merge: bool = False) -> bool:
     """
     ## 更新配置到配置文件
     """
     try:
         path_func = _get_path_func()
+        config_to_save = config if skip_merge else merge_config_for_update(config, base_config=base_config)
         configs = _read_config_file(strict=True)
 
         for index, saved_config in enumerate(configs):
-            if saved_config.bot.QQID == config.bot.QQID:
-                configs[index] = config
+            if saved_config.bot.QQID == config_to_save.bot.QQID:
+                configs[index] = config_to_save
                 break
         else:
-            configs.append(config)
+            configs.append(config_to_save)
 
         payloads = {
             path_func.bot_config_path: serialize_bot_config_collection(configs),
-            path_func.napcat_config_path / f"onebot11_{config.bot.QQID}.json": _model_to_payload(
-                _build_onebot_config(config)
+            path_func.napcat_config_path / f"onebot11_{config_to_save.bot.QQID}.json": _model_to_payload(
+                _build_onebot_config(config_to_save)
             ),
-            path_func.napcat_config_path / f"napcat_{config.bot.QQID}.json": _model_to_payload(
-                _build_napcat_config(config)
+            path_func.napcat_config_path / f"napcat_{config_to_save.bot.QQID}.json": _model_to_payload(
+                _build_napcat_config(config_to_save)
             ),
         }
 

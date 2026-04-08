@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import AdvancedConfig, BotConfig, Config, ConnectConfig
-from src.core.config.operate_config import update_config
+from src.core.config.operate_config import merge_config_for_update, update_config
 from src.core.logging import LogSource, logger
 from src.core.logging.crash_bundle import mask_qqid
 from src.ui.components.info_bar import error_bar, success_bar
@@ -131,7 +131,7 @@ class ConfigPage(QWidget):
         if config is None:
             return
 
-        self._config = config
+        self._config = config.model_copy(deep=True)
         bot_config = cast(BotConfig, config.bot)
         connect_config = cast(ConnectConfig, config.connect)
         advanced_config = cast(AdvancedConfig, config.advanced)
@@ -150,6 +150,7 @@ class ConfigPage(QWidget):
 
     def clear_config(self) -> None:
         """清空配置"""
+        self._config = None
         self.bot_widget.clear_config()
         self.connect_widget.clear_config()
         self.advanced_widget.clear_config()
@@ -190,27 +191,30 @@ class ConfigPage(QWidget):
             error_bar(self.tr("配置校验失败，请检查输入内容"))
             return
 
+        merged_config = merge_config_for_update(config, base_config=self._config)
+
         logger.info(
             (
                 "准备保存 Bot 配置: "
-                f"QQID={mask_qqid(config.bot.QQID)}, "
-                f"http_servers={len(config.connect.httpServers)}, "
-                f"http_sse_servers={len(config.connect.httpSseServers)}, "
-                f"http_clients={len(config.connect.httpClients)}, "
-                f"ws_servers={len(config.connect.websocketServers)}, "
-                f"ws_clients={len(config.connect.websocketClients)}"
+                f"QQID={mask_qqid(merged_config.bot.QQID)}, "
+                f"http_servers={len(merged_config.connect.httpServers)}, "
+                f"http_sse_servers={len(merged_config.connect.httpSseServers)}, "
+                f"http_clients={len(merged_config.connect.httpClients)}, "
+                f"ws_servers={len(merged_config.connect.websocketServers)}, "
+                f"ws_clients={len(merged_config.connect.websocketClients)}"
             ),
             log_source=LogSource.UI,
         )
-        if update_config(config):
+        if update_config(merged_config, base_config=merged_config, skip_merge=True):
             # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
             it(BotPage).bot_list_page.update_bot_list()
-            logger.info(f"Bot 配置保存成功(QQID: {mask_qqid(config.bot.QQID)})", log_source=LogSource.UI)
+            self.fill_config(merged_config)
+            logger.info(f"Bot 配置保存成功(QQID: {mask_qqid(merged_config.bot.QQID)})", log_source=LogSource.UI)
             success_bar(self.tr("保存配置成功"))
         else:
-            logger.error(f"Bot 配置保存失败(QQID: {mask_qqid(config.bot.QQID)})", log_source=LogSource.UI)
+            logger.error(f"Bot 配置保存失败(QQID: {mask_qqid(merged_config.bot.QQID)})", log_source=LogSource.UI)
             error_bar(self.tr("保存配置文件时引发错误"))
 
     def slot_add_connect_button(self) -> None:
