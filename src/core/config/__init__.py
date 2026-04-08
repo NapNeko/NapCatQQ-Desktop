@@ -65,6 +65,7 @@ from PySide6.QtCore import QLocale, Signal
 # 项目内模块导入
 from src.core.config.config_enum import CloseActionEnum, Language
 from src.core.logging import LogSource, logger
+from src.core.remote.models import LinuxCorePaths, SSHCredentials
 from src.core.runtime.paths import PathFunc
 
 __version__ = "v2.0.19"
@@ -524,6 +525,40 @@ class Config(QConfig):
     home_notice_ignored_keys = ConfigItem(group="Home", name="IgnoredNoticeKeys", default="[]")
     home_notice_snoozed_items = ConfigItem(group="Home", name="SnoozedNoticeItems", default="{}")
 
+    # 远程模式项
+    remote_enabled = ConfigItem(group="Remote", name="Enabled", default=False, validator=BoolValidator())
+    remote_host = ConfigItem(group="Remote", name="Host", default="")
+    remote_port = RangeConfigItem(group="Remote", name="Port", default=22, validator=RangeValidator(1, 65535))
+    remote_username = ConfigItem(group="Remote", name="Username", default="")
+    remote_auth_method = OptionsConfigItem(
+        group="Remote",
+        name="AuthMethod",
+        default="key",
+        validator=OptionsValidator(["key", "password"]),
+    )
+    remote_private_key_path = ConfigItem(group="Remote", name="PrivateKeyPath", default="")
+    remote_allow_agent = ConfigItem(group="Remote", name="AllowAgent", default=False, validator=BoolValidator())
+    remote_look_for_keys = ConfigItem(group="Remote", name="LookForKeys", default=False, validator=BoolValidator())
+    remote_host_key_policy = OptionsConfigItem(
+        group="Remote",
+        name="HostKeyPolicy",
+        default="reject",
+        validator=OptionsValidator(["reject", "warning", "auto_add"]),
+    )
+    remote_connect_timeout = RangeConfigItem(
+        group="Remote",
+        name="ConnectTimeout",
+        default=10,
+        validator=RangeValidator(1, 120),
+    )
+    remote_command_timeout = RangeConfigItem(
+        group="Remote",
+        name="CommandTimeout",
+        default=20,
+        validator=RangeValidator(1, 600),
+    )
+    remote_workspace_dir = ConfigItem(group="Remote", name="WorkspaceDir", default="$HOME/NapCatCore")
+
     def __init__(self):
         super().__init__()
 
@@ -644,6 +679,40 @@ class Config(QConfig):
             self.themeMode.value = self.get(self.theme_mode)
         else:
             self.theme_mode.value = self.get(self.themeMode)
+
+    def build_ssh_credentials(self) -> SSHCredentials:
+        """从当前配置构建 SSH 凭据对象。
+
+        安全策略：
+        - 不从配置文件读取或持久化密码
+        - 默认拒绝未知主机指纹
+        - 默认关闭 agent 与自动扫描本地密钥
+        """
+        return SSHCredentials(
+            host=str(self.get(self.remote_host) or ""),
+            port=int(self.get(self.remote_port) or 22),
+            username=str(self.get(self.remote_username) or ""),
+            auth_method=str(self.get(self.remote_auth_method) or "key"),
+            private_key_path=str(self.get(self.remote_private_key_path) or "") or None,
+            connect_timeout=float(self.get(self.remote_connect_timeout) or 10),
+            command_timeout=float(self.get(self.remote_command_timeout) or 20),
+            host_key_policy=str(self.get(self.remote_host_key_policy) or "reject"),
+            allow_agent=bool(self.get(self.remote_allow_agent)),
+            look_for_keys=bool(self.get(self.remote_look_for_keys)),
+        )
+
+    def build_linux_core_paths(self) -> LinuxCorePaths:
+        """从当前配置构建 Linux Core 路径布局。"""
+        workspace_dir = str(self.get(self.remote_workspace_dir) or "$HOME/NapCatCore")
+        workspace_dir = workspace_dir.rstrip("/")
+        return LinuxCorePaths(
+            workspace_dir=workspace_dir,
+            runtime_dir=f"{workspace_dir}/runtime",
+            config_dir=f"{workspace_dir}/runtime/config",
+            log_dir=f"{workspace_dir}/runtime/log",
+            tmp_dir=f"{workspace_dir}/runtime/tmp",
+            package_dir=f"{workspace_dir}/packages",
+        )
 
         if has_legacy_theme_color and not has_fluent_theme_color:
             self.themeColor.value = self.get(self.theme_color)
