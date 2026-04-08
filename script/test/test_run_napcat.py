@@ -12,6 +12,20 @@ from PySide6.QtCore import QProcess
 import src.core.runtime.napcat as run_napcat
 
 
+class FakeSignal:
+    """最小可用的 Qt Signal 替身。"""
+
+    def __init__(self) -> None:
+        self._callbacks = []
+
+    def connect(self, callback) -> None:
+        self._callbacks.append(callback)
+
+    def emit(self, *args, **kwargs) -> None:
+        for callback in list(self._callbacks):
+            callback(*args, **kwargs)
+
+
 class FakeTimer:
     """最小可用的 QTimer 替身。"""
 
@@ -50,6 +64,8 @@ class FakeProcess:
         self.started = started
         self.start_called = False
         self.deleted = False
+        self.stateChanged = FakeSignal()
+        self.finished = FakeSignal()
 
     def start(self) -> None:
         self.start_called = True
@@ -270,6 +286,24 @@ def test_get_login_status_runnable_emits_login_qrcode_and_online(monkeypatch: py
     assert online_states == [True]
 
 
+def test_get_login_status_runnable_requests_auth_refresh_once_when_unauthorized() -> None:
+    """鉴权失效时应立即请求刷新认证，且同一轮询仅请求一次。"""
+    responses = {
+        "/api/QQLogin/CheckLoginStatus": SimpleNamespace(status_code=401),
+        "/api/QQLogin/GetQQLoginInfo": SimpleNamespace(status_code=401),
+    }
+    refresh_requests: list[str] = []
+
+    runner = run_napcat.GetLoginStatusRunnable(port=3000, token="token", auth="stale-auth")
+    runner.client = SimpleNamespace(post=lambda path: responses[path])
+    runner.auth_refresh_requested_signal.connect(lambda: refresh_requests.append("refresh"))
+
+    runner.get_login_status()
+    runner.get_online_status()
+
+    assert refresh_requests == ["refresh"]
+
+
 def test_login_state_remove_stops_timers_and_emits_removed(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
@@ -317,6 +351,28 @@ def test_login_state_emits_qrcode_when_not_logged_in_initially(
     login_state.slot_update_login_qrcode("https://example.com/valid-qr")
 
     assert emitted == [("123456", "https://example.com/valid-qr")]
+
+
+def test_login_state_requests_auth_refresh_immediately_when_poll_detects_unauthorized(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """状态轮询收到鉴权失效时不应再等 30 分钟。"""
+    monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
+    auth_refreshes: list[str] = []
+
+    login_state = run_napcat.NapCatQQLoginState(config=config_factory(556688), port=8080, token="token")
+    login_state.auth = "stale-auth"
+    monkeypatch.setattr(login_state, "slot_get_auth_status", lambda: auth_refreshes.append("refresh"))
+    monkeypatch.setattr(
+        run_napcat.QThreadPool,
+        "globalInstance",
+        lambda: SimpleNamespace(start=lambda runnable: runnable.auth_refresh_requested_signal.emit()),
+    )
+
+    login_state.slot_get_login_state()
+
+    assert auth_refreshes == ["refresh"]
+    assert login_state.auth is None
 
 
 def test_create_napcat_process_emits_error_when_qq_path_missing(
@@ -415,6 +471,37 @@ def test_create_napcat_process_starts_process_and_registers_state(
     assert stored.state == QProcess.ProcessState.Running
     assert stored.started_at > 0
     assert state_changes == [("445566", QProcess.ProcessState.Running)]
+
+
+def test_create_napcat_process_cleans_up_state_when_process_finishes_unexpectedly(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """进程异常退出时应立刻清理状态，避免 UI 假在线。"""
+    manager = run_napcat.ManagerNapCatQQProcess()
+    removed_login_states: list[str] = []
+    state_changes: list[tuple[str, QProcess.ProcessState]] = []
+    manager.process_changed_signal.connect(lambda qq_id, state: state_changes.append((qq_id, state)))
+
+    process = FakeProcess(started=True)
+    monkeypatch.setattr(manager, "_create_napcat_process", lambda config, qq_path: process)
+    monkeypatch.setattr(
+        run_napcat,
+        "it",
+        lambda cls: {
+            "PathFunc": SimpleNamespace(get_qq_path=lambda: Path("C:/Program Files/Tencent/QQ")),
+            "ManagerNapCatQQLog": SimpleNamespace(create_log=lambda config, proc: None),
+            "ManagerAutoRestartProcess": SimpleNamespace(create_auto_restart_timer=lambda config: None),
+            "ManagerNapCatQQLoginState": SimpleNamespace(remove_login_state=lambda qq_id: removed_login_states.append(qq_id)),
+        }[cls.__name__],
+    )
+
+    manager.create_napcat_process(config_factory(554433))
+    process.finished.emit(1, QProcess.ExitStatus.CrashExit)
+
+    assert removed_login_states == ["554433"]
+    assert process.deleted is True
+    assert manager.napcat_process_dict == {}
+    assert state_changes == [("554433", QProcess.ProcessState.Running), ("554433", QProcess.ProcessState.NotRunning)]
 
 
 def test_auto_restart_timer_uses_schedule_duration(
