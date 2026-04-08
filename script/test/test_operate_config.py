@@ -19,6 +19,8 @@ from src.core.config.config_model import (
     ConnectConfig,
     NapCatConfig,
     OneBotConfig,
+    WebsocketClientsConfig,
+    WebsocketServersConfig,
 )
 
 
@@ -344,6 +346,113 @@ def test_update_config_writes_all_files_atomically(tmp_path: Path, monkeypatch: 
     assert read_json(fake_path_func.bot_config_path) == expected_bot_root([config])
     assert read_json(onebot_path) == expected_onebot_config(config)
     assert read_json(napcat_path) == expected_napcat_config(config)
+
+
+def test_update_config_preserves_websocket_entries_in_bot_and_onebot_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """保存带 WebSocket 配置的 Bot 时，不应在 bot.json 或 onebot 配置里丢失。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    config = make_config(114514, "WebsocketBot")
+    config.connect.websocketServers.append(
+        WebsocketServersConfig(
+            name="wss-main",
+            host="127.0.0.1",
+            port=3001,
+            enable=True,
+            reportSelfMessage=True,
+            enableForcePushEvent=True,
+            heartInterval=45000,
+        )
+    )
+    config.connect.websocketClients.append(
+        WebsocketClientsConfig(
+            name="wsc-main",
+            url="ws://127.0.0.1:3002/ws",
+            enable=True,
+            reportSelfMessage=True,
+            heartInterval=46000,
+            reconnectInterval=47000,
+        )
+    )
+
+    assert operate_config.update_config(config) is True
+
+    saved_configs = operate_config.read_config()
+    assert len(saved_configs) == 1
+    assert len(saved_configs[0].connect.websocketServers) == 1
+    assert len(saved_configs[0].connect.websocketClients) == 1
+    assert saved_configs[0].connect.websocketServers[0].name == "wss-main"
+    assert saved_configs[0].connect.websocketServers[0].port == 3001
+    assert saved_configs[0].connect.websocketClients[0].name == "wsc-main"
+    assert saved_configs[0].connect.websocketClients[0].url.unicode_string() == "ws://127.0.0.1:3002/ws"
+
+    onebot_path = fake_path_func.napcat_config_path / "onebot11_114514.json"
+    onebot_payload = read_json(onebot_path)
+    assert len(onebot_payload["network"]["websocketServers"]) == 1
+    assert len(onebot_payload["network"]["websocketClients"]) == 1
+    assert onebot_payload["network"]["websocketServers"][0]["name"] == "wss-main"
+    assert onebot_payload["network"]["websocketClients"][0]["name"] == "wsc-main"
+
+
+def test_merge_config_for_update_preserves_webui_changes_when_desktop_edits_other_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WebUI 修改派生配置、Desktop 修改其他字段时，应无感合并两边改动。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    base_config = make_config(114514, "BaseBot")
+    write_json(fake_path_func.bot_config_path, expected_bot_root([base_config]))
+    write_json(fake_path_func.napcat_config_path / "onebot11_114514.json", expected_onebot_config(base_config))
+    write_json(fake_path_func.napcat_config_path / "napcat_114514.json", expected_napcat_config(base_config))
+
+    webui_onebot_payload = expected_onebot_config(base_config)
+    webui_onebot_payload["network"]["websocketClients"] = [
+        payload(
+            WebsocketClientsConfig(
+                name="webui-wsc",
+                url="ws://127.0.0.1:3002/ws",
+                reportSelfMessage=True,
+                heartInterval=46000,
+                reconnectInterval=47000,
+            )
+        )
+    ]
+    write_json(fake_path_func.napcat_config_path / "onebot11_114514.json", webui_onebot_payload)
+
+    local_draft = base_config.model_copy(deep=True)
+    local_draft.bot.name = "DesktopRenamed"
+
+    merged = operate_config.merge_config_for_update(local_draft, base_config=base_config)
+
+    assert merged.bot.name == "DesktopRenamed"
+    assert len(merged.connect.websocketClients) == 1
+    assert merged.connect.websocketClients[0].name == "webui-wsc"
+    assert merged.connect.websocketClients[0].url.unicode_string() == "ws://127.0.0.1:3002/ws"
+
+
+def test_merge_config_for_update_prefers_desktop_changes_on_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """同一字段两边都改时，应以 Desktop 当前保存值为准。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    base_config = make_config(114514, "BaseBot")
+    base_config.connect.websocketClients.append(
+        WebsocketClientsConfig(name="shared", url="ws://127.0.0.1:3001/ws")
+    )
+    write_json(fake_path_func.bot_config_path, expected_bot_root([base_config]))
+    write_json(fake_path_func.napcat_config_path / "onebot11_114514.json", expected_onebot_config(base_config))
+    write_json(fake_path_func.napcat_config_path / "napcat_114514.json", expected_napcat_config(base_config))
+
+    webui_onebot_payload = expected_onebot_config(base_config)
+    webui_onebot_payload["network"]["websocketClients"][0]["url"] = "ws://127.0.0.1:4000/ws"
+    write_json(fake_path_func.napcat_config_path / "onebot11_114514.json", webui_onebot_payload)
+
+    local_draft = base_config.model_copy(deep=True)
+    local_draft.connect.websocketClients[0] = WebsocketClientsConfig(name="shared", url="ws://127.0.0.1:5000/ws")
+
+    merged = operate_config.merge_config_for_update(local_draft, base_config=base_config)
+
+    assert merged.connect.websocketClients[0].url.unicode_string() == "ws://127.0.0.1:5000/ws"
 
 
 def test_update_config_fails_when_existing_bot_file_is_invalid(
