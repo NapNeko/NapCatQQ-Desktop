@@ -100,10 +100,15 @@ def test_remove_button_blocks_running_bot(monkeypatch: pytest.MonkeyPatch, confi
         get_process=lambda qq_id: object(),
         stop_process=lambda qq_id: stop_calls.append(qq_id),
     )
-    fake_login_state_manager = SimpleNamespace(remove_login_state=lambda qq_id: login_state_removals.append(qq_id))
+    fake_login_state_manager = SimpleNamespace(
+        qr_code_available_signal=DummySignal(),
+        qr_code_removed_signal=DummySignal(),
+        remove_login_state=lambda qq_id: login_state_removals.append(qq_id),
+    )
     fake_auto_restart_manager = SimpleNamespace(
         remove_auto_restart_timer=lambda qq_id: auto_restart_removals.append(qq_id)
     )
+    fake_qr_code_factory = SimpleNamespace(has_qr_code=lambda qq_id: False)
 
     fake_main_window_module = ModuleType("src.ui.window.main_window.window")
     fake_main_window_module.MainWindow = type("MainWindow", (), {})
@@ -120,6 +125,7 @@ def test_remove_button_blocks_running_bot(monkeypatch: pytest.MonkeyPatch, confi
             "ManagerNapCatQQProcess": fake_process_manager,
             "ManagerNapCatQQLoginState": fake_login_state_manager,
             "ManagerAutoRestartProcess": fake_auto_restart_manager,
+            "QRCodeDialogFactory": fake_qr_code_factory,
             "MainWindow": object(),
         }[cls.__name__],
     )
