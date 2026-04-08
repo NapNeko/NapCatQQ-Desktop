@@ -197,6 +197,7 @@ class GetLoginStatusRunnable(QObject, QRunnable):
     login_status_signal = Signal(bool)
     login_qrcode_signal = Signal(str)
     online_status_signal = Signal(bool)
+    auth_refresh_requested_signal = Signal()
 
     def __init__(self, port: int, token: str, auth: str | None) -> None:
         """获取 NapCatQQ Auth 信息的任务类
@@ -212,6 +213,15 @@ class GetLoginStatusRunnable(QObject, QRunnable):
         self.port = port
         self.token = token
         self.auth = auth
+        self._auth_refresh_requested = False
+
+    def _request_auth_refresh(self) -> None:
+        """在鉴权失效时请求立即刷新 auth。"""
+        if self._auth_refresh_requested:
+            return
+
+        self._auth_refresh_requested = True
+        self.auth_refresh_requested_signal.emit()
 
     def run(self) -> None:
         """执行获取认证信息的任务"""
@@ -242,6 +252,15 @@ class GetLoginStatusRunnable(QObject, QRunnable):
         """获取 NapCatQQ 登录状态"""
         try:
             response = self.client.post("/api/QQLogin/CheckLoginStatus")
+            if response.status_code in (401, 403):
+                logger.trace(
+                    f"获取登录状态鉴权失效，准备刷新认证(QQ WebUI port={self.port}, status={response.status_code})",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                self._request_auth_refresh()
+                return
+
             if response.status_code != 200:
                 return
 
@@ -266,6 +285,15 @@ class GetLoginStatusRunnable(QObject, QRunnable):
         """获取 NapCatQQ 在线状态"""
         try:
             response = self.client.post("/api/QQLogin/GetQQLoginInfo")
+            if response.status_code in (401, 403):
+                logger.trace(
+                    f"获取在线状态鉴权失效，准备刷新认证(QQ WebUI port={self.port}, status={response.status_code})",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                self._request_auth_refresh()
+                return
+
             if response.status_code == 200:
                 result = response.json().get("data", {})
                 self.online_status_signal.emit(result.get("online", False))
@@ -302,6 +330,7 @@ class NapCatQQLoginState(QObject):
         self._offline_notice = False
         self._login_invalidated_while_online = False
         self._suppress_qrcode_until_online = False
+        self._last_auth_refresh_attempt_at = 0.0
 
         # 启动定时器以定期获取授权状态
         self._auth_timer = QTimer(self)
@@ -356,19 +385,35 @@ class NapCatQQLoginState(QObject):
     def slot_get_login_state(self) -> None:
         """获取登录状态"""
         if not self.auth:
+            self.slot_request_auth_refresh()
             return
 
         runner = GetLoginStatusRunnable(port=self.port, token=self.token, auth=self.auth)
         runner.login_status_signal.connect(self.slot_update_login_state)
         runner.online_status_signal.connect(self.slot_update_online_status)
         runner.login_qrcode_signal.connect(self.slot_update_login_qrcode)
+        runner.auth_refresh_requested_signal.connect(self.slot_request_auth_refresh)
         QThreadPool.globalInstance().start(runner)
 
     def slot_get_auth_status(self) -> None:
         """获取认证状态"""
+        self._last_auth_refresh_attempt_at = monotonic()
         runner = GetAuthStatusRunnable(port=self.port, token=self.token)
         runner.login_auth_signal.connect(self.slot_update_auth)
         QThreadPool.globalInstance().start(runner)
+
+    def slot_request_auth_refresh(self) -> None:
+        """在登录状态轮询鉴权失效时，立即刷新 auth。"""
+        if monotonic() - self._last_auth_refresh_attempt_at < 5:
+            return
+
+        self.auth = None
+        logger.trace(
+            f"NapCat 请求立即刷新认证(QQID: {self.config.bot.QQID})",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
+        self.slot_get_auth_status()
 
     def slot_update_auth(self, auth: str) -> None:
         """更新认证信息
@@ -710,6 +755,39 @@ class ManagerNapCatQQProcess(QObject):
 
         return process
 
+    def _handle_process_state_changed(self, qq_id: str, state: QProcess.ProcessState) -> None:
+        """同步底层 QProcess 状态，避免 UI 卡在旧状态。"""
+        if (process_model := self.napcat_process_dict.get(qq_id)) is not None:
+            process_model.state = state
+
+        self.process_changed_signal.emit(qq_id, state)
+
+    def _handle_process_finished(
+        self,
+        qq_id: str,
+        process: QProcess,
+        exit_code: int,
+        exit_status: QProcess.ExitStatus,
+    ) -> None:
+        """处理 NapCat 进程异常或自然退出后的清理。"""
+        process_model = self.napcat_process_dict.get(qq_id)
+        if process_model is None or process_model.process is not process:
+            return
+
+        logger.warning(
+            (
+                "NapCatQQ 进程已退出: "
+                f"QQID={qq_id}, exit_code={exit_code}, "
+                f"exit_status={getattr(exit_status, 'name', exit_status)}"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+        process.deleteLater()
+        self.napcat_process_dict.pop(qq_id, None)
+        it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
+        self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
+
     # ==================== 公共函数===================
     def create_napcat_process(self, config: Config) -> None:
         """创建并配置 QProcess
@@ -759,6 +837,14 @@ class ManagerNapCatQQProcess(QObject):
 
         # 创建 QProcess
         process = self._create_napcat_process(config, qq_path)
+        qq_id = str(config.bot.QQID)
+
+        process.stateChanged.connect(lambda state, emitted_qq_id=qq_id: self._handle_process_state_changed(emitted_qq_id, state))
+        process.finished.connect(
+            lambda exit_code, exit_status, emitted_qq_id=qq_id, emitted_process=process: self._handle_process_finished(
+                emitted_qq_id, emitted_process, exit_code, exit_status
+            )
+        )
 
         # 进行一些操作
         it(ManagerNapCatQQLog).create_log(config, process)
@@ -782,12 +868,12 @@ class ManagerNapCatQQProcess(QObject):
         it(ManagerAutoRestartProcess).create_auto_restart_timer(config)
 
         # 添加到进程字典
-        self.napcat_process_dict[str(config.bot.QQID)] = NapCatProcessModel(
-            qq_id=str(config.bot.QQID), process=process, state=QProcess.ProcessState.Running, started_at=monotonic()
+        self.napcat_process_dict[qq_id] = NapCatProcessModel(
+            qq_id=qq_id, process=process, state=QProcess.ProcessState.Running, started_at=monotonic()
         )
 
         # 发出新进程创建信号
-        self.process_changed_signal.emit(str(config.bot.QQID), process.state())
+        self.process_changed_signal.emit(qq_id, process.state())
 
     def get_process(self, qq_id: str) -> NapCatProcessModel | None:
         """获取指定 QQ 号的 QProcess
