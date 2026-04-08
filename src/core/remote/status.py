@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -82,11 +83,28 @@ class RemoteRuntimeService:
         这里保留命令注入位，后续会由部署层/配置层生成标准启动命令。
         """
         self.backend.run(command, check=True)
+        self.write_status_payload(
+            {
+                "running": True,
+                "updated_at": self._current_timestamp(),
+                "last_action": "start",
+                "log_file": self._infer_default_log_path(),
+            }
+        )
 
     def stop(self) -> None:
         """停止远端进程。"""
         self.backend.run(
             f'test -f "{self.paths.pid_file}" && kill $(cat "{self.paths.pid_file}") >/dev/null 2>&1 || true'
+        )
+        self.write_status_payload(
+            {
+                "running": False,
+                "pid": None,
+                "updated_at": self._current_timestamp(),
+                "last_action": "stop",
+                "log_file": self._infer_default_log_path(),
+            }
         )
 
     def restart(self, command: str) -> None:
@@ -94,8 +112,45 @@ class RemoteRuntimeService:
         self.stop()
         self.start(command)
 
+    def write_status_payload(self, payload: dict[str, Any]) -> None:
+        """写入远端状态文件。
+
+        这是 P1 阶段的最小状态协议落点，后续可以继续扩展字段，
+        但必须保持 JSON 对象结构稳定。
+        """
+        serialized = json.dumps(payload, ensure_ascii=False, indent=2)
+        escaped = serialized.replace("'", "'\"'\"'")
+        self.backend.run(f"cat <<'EOF' > \"{self.paths.status_file}\"\n{escaped}\nEOF", check=True)
+
+    @staticmethod
+    def build_status_payload(
+        *,
+        running: bool,
+        pid: int | None = None,
+        qq: str | None = None,
+        version: str | None = None,
+        log_file: str | None = None,
+        last_action: str | None = None,
+        last_error: str | None = None,
+    ) -> dict[str, Any]:
+        """构建标准 `status.json` 结构。"""
+        return {
+            "running": running,
+            "pid": pid,
+            "qq": qq,
+            "version": version,
+            "log_file": log_file,
+            "last_action": last_action,
+            "last_error": last_error,
+            "updated_at": RemoteRuntimeService._current_timestamp(),
+        }
+
     def _infer_default_log_path(self) -> str:
         return PurePosixPath(self.paths.log_dir, "napcat.log").as_posix()
+
+    @staticmethod
+    def _current_timestamp() -> str:
+        return datetime.now().astimezone().isoformat(timespec="seconds")
 
     @staticmethod
     def _parse_status_payload(raw_text: str) -> dict[str, Any]:

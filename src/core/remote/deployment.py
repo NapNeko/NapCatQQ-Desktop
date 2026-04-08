@@ -3,11 +3,15 @@
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from src.core.config.config_export import ExportExecutionPlan, apply_config_export, scan_current_config_export
+
 from .execution_backend import ExecutionBackend
 from .models import LinuxCorePaths, RemoteCommandResult
+from .templates import build_linux_deploy_script
 
 
 @dataclass(slots=True)
@@ -19,6 +23,27 @@ class LinuxCoreDeploymentProbe:
     has_bash: bool
     has_tar: bool
     has_unzip: bool
+
+
+@dataclass(slots=True)
+class RemoteConfigSyncResult:
+    """远端配置同步结果。"""
+
+    remote_archive_path: str
+    archive_name: str
+    app_exported: bool
+    bot_exported: bool
+    exported_bot_count: int
+    exported_files: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+
+@dataclass(slots=True)
+class RemoteDeployScriptResult:
+    """远端部署脚本执行结果。"""
+
+    remote_script_path: str
+    script_result: RemoteCommandResult
 
 
 class LinuxCoreDeployment:
@@ -77,3 +102,70 @@ class LinuxCoreDeployment:
         self.backend.ensure_directory(self.paths.tmp_dir)
         self.backend.upload_file(local_archive, remote_path)
         return remote_path
+
+    def export_and_upload_current_config(
+        self,
+        *,
+        export_app_config: bool = True,
+        export_bot_config: bool = True,
+        remote_filename: str = "config-export.zip",
+    ) -> RemoteConfigSyncResult:
+        """导出当前本地配置并上传到远端。
+
+        该方法负责衔接本地配置导出服务与远端上传流程，
+        是 P1 MVP 阶段“本地配置 -> 远端配置包”闭环的第一步。
+        """
+        with tempfile.TemporaryDirectory(prefix="napcat-remote-export-") as temp_dir:
+            scan_result = scan_current_config_export(Path(temp_dir))
+            execution_result = apply_config_export(
+                ExportExecutionPlan(
+                    scan_result=scan_result,
+                    export_app_config=export_app_config,
+                    export_bot_config=export_bot_config,
+                )
+            )
+            remote_archive_path = self.upload_config_archive(
+                execution_result.archive_path,
+                remote_filename=remote_filename,
+            )
+
+        return RemoteConfigSyncResult(
+            remote_archive_path=remote_archive_path,
+            archive_name=remote_filename,
+            app_exported=execution_result.app_exported,
+            bot_exported=execution_result.bot_exported,
+            exported_bot_count=execution_result.exported_bot_count,
+            exported_files=execution_result.exported_files,
+            warnings=execution_result.warnings,
+        )
+
+    def upload_deploy_script(self, remote_filename: str = "deploy_napcat.sh") -> str:
+        """上传远端部署脚本。"""
+        script_content = build_linux_deploy_script(
+            {
+                "workspace_dir": self.paths.workspace_dir,
+                "runtime_dir": self.paths.runtime_dir,
+                "config_dir": self.paths.config_dir,
+                "log_dir": self.paths.log_dir,
+                "tmp_dir": self.paths.tmp_dir,
+                "package_dir": self.paths.package_dir,
+                "config_archive": PurePosixPath(self.paths.tmp_dir, "config-export.zip").as_posix(),
+                "status_file": self.paths.status_file,
+            }
+        )
+
+        with tempfile.TemporaryDirectory(prefix="napcat-remote-script-") as temp_dir:
+            local_script_path = Path(temp_dir) / remote_filename
+            local_script_path.write_text(script_content, encoding="utf-8")
+            remote_script_path = PurePosixPath(self.paths.tmp_dir, remote_filename).as_posix()
+            self.backend.ensure_directory(self.paths.tmp_dir)
+            self.backend.upload_file(local_script_path, remote_script_path)
+
+        self.backend.run(f'chmod +x "{remote_script_path}"', check=True)
+        return remote_script_path
+
+    def run_deploy_script(self, remote_script_path: str | None = None) -> RemoteDeployScriptResult:
+        """执行远端部署脚本。"""
+        script_path = remote_script_path or PurePosixPath(self.paths.tmp_dir, "deploy_napcat.sh").as_posix()
+        result = self.backend.run(f'bash "{script_path}"', check=False)
+        return RemoteDeployScriptResult(remote_script_path=script_path, script_result=result)

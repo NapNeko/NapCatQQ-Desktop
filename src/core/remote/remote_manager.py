@@ -7,7 +7,12 @@ from pathlib import Path
 
 from src.core.logging import LogSource, LogType, logger
 
-from .deployment import LinuxCoreDeployment, LinuxCoreDeploymentProbe
+from .deployment import (
+    LinuxCoreDeployment,
+    LinuxCoreDeploymentProbe,
+    RemoteConfigSyncResult,
+    RemoteDeployScriptResult,
+)
 from .execution_backend import RemoteExecutionBackend
 from .models import LinuxCorePaths, SSHCredentials
 from .ssh_client import SSHClient
@@ -57,6 +62,28 @@ class RemoteManager:
     def upload_config_archive(self, local_archive: str | Path, remote_filename: str = "config-export.zip") -> str:
         """上传配置导出包。"""
         return self.deployment.upload_config_archive(local_archive, remote_filename)
+
+    def export_and_upload_current_config(
+        self,
+        *,
+        export_app_config: bool = True,
+        export_bot_config: bool = True,
+        remote_filename: str = "config-export.zip",
+    ) -> RemoteConfigSyncResult:
+        """导出当前配置并上传到远端。"""
+        return self.deployment.export_and_upload_current_config(
+            export_app_config=export_app_config,
+            export_bot_config=export_bot_config,
+            remote_filename=remote_filename,
+        )
+
+    def upload_deploy_script(self, remote_filename: str = "deploy_napcat.sh") -> str:
+        """上传远端部署脚本。"""
+        return self.deployment.upload_deploy_script(remote_filename)
+
+    def run_deploy_script(self, remote_script_path: str | None = None) -> RemoteDeployScriptResult:
+        """执行远端部署脚本。"""
+        return self.deployment.run_deploy_script(remote_script_path)
 
     def get_status(self) -> RemoteNapCatStatus:
         """获取远端运行状态。"""
