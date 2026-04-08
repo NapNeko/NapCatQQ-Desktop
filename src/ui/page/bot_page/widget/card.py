@@ -74,6 +74,7 @@ from src.ui.page.bot_page.widget.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
     HttpSSEServerConfigDialog,
+    QRCodeDialogFactory,
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
@@ -103,6 +104,7 @@ class BotCard(HeaderCardWidget):
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
         self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
         self.web_ui_button = TransparentToolButton(FluentIcon.CONNECT, self)
+        self.qr_code_button = TransparentToolButton(FluentIcon.QRCODE, self)
         self.log_button = TransparentToolButton(NapCatDesktopIcon.LOG, self)
         self.setting_button = TransparentToolButton(FluentIcon.SETTING, self)
         self.remove_button = TransparentToolButton(FluentIcon.DELETE, self)
@@ -113,6 +115,7 @@ class BotCard(HeaderCardWidget):
         self.stop_button.hide()
         self.log_button.hide()
         self.web_ui_button.hide()
+        self.qr_code_button.hide()
 
         # 设置布局
         self.viewLayout.addWidget(self.avatar_widget, 1)
@@ -124,20 +127,26 @@ class BotCard(HeaderCardWidget):
         self.headerLayout.addWidget(self.stop_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.log_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.web_ui_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.headerLayout.addWidget(self.qr_code_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.setting_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.remove_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # 链接信号
         it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_process_changed_button)
+        it(ManagerNapCatQQLoginState).qr_code_available_signal.connect(self.slot_qr_code_available)
+        it(ManagerNapCatQQLoginState).qr_code_removed_signal.connect(self.slot_qr_code_removed)
         self.run_button.clicked.connect(self.slot_run_button)
         self.stop_button.clicked.connect(self.slot_stop_button)
         self.log_button.clicked.connect(self.slot_log_button)
         self.web_ui_button.clicked.connect(self.slot_web_ui_button)
+        self.qr_code_button.clicked.connect(self.slot_qr_code_button)
         self.setting_button.clicked.connect(self.slot_setting_button)
         self.remove_button.clicked.connect(self.slot_remove_button)
 
         # 调用方法
         self.set_tooltip()
+        if it(QRCodeDialogFactory).has_qr_code(str(self._config.bot.QQID)):
+            self.qr_code_button.show()
 
     # ==================== 公共方法 ==================
     def update_info_card(self) -> None:
@@ -157,6 +166,7 @@ class BotCard(HeaderCardWidget):
         self.stop_button.setToolTip(self.tr("停止 Bot"))
         self.log_button.setToolTip(self.tr("查看日志"))
         self.web_ui_button.setToolTip(self.tr("打开 WebUI"))
+        self.qr_code_button.setToolTip(self.tr("查看登录二维码"))
         self.setting_button.setToolTip(self.tr("配置 Bot"))
         self.remove_button.setToolTip(self.tr("移除 Bot"))
 
@@ -165,6 +175,7 @@ class BotCard(HeaderCardWidget):
             self.stop_button,
             self.log_button,
             self.web_ui_button,
+            self.qr_code_button,
             self.setting_button,
             self.remove_button,
         ]:
@@ -233,6 +244,23 @@ class BotCard(HeaderCardWidget):
 
         QDesktopServices.openUrl(QUrl(web_ui_url))
         logger.info(f"已打开 WebUI(QQID: {mask_qqid(qq_id)}, url={web_ui_url})", log_source=LogSource.UI)
+
+    def slot_qr_code_button(self) -> None:
+        """处理二维码按钮槽函数。"""
+        it(QRCodeDialogFactory).show(str(self._config.bot.QQID))
+
+    def slot_qr_code_available(self, qq_id: str, qr_code: str) -> None:
+        """当前 Bot 有待扫码二维码时显示入口按钮。"""
+        del qr_code
+        if qq_id != str(self._config.bot.QQID):
+            return
+        self.qr_code_button.show()
+
+    def slot_qr_code_removed(self, qq_id: str) -> None:
+        """当前 Bot 的二维码失效后隐藏入口按钮。"""
+        if qq_id != str(self._config.bot.QQID):
+            return
+        self.qr_code_button.hide()
 
     def slot_setting_button(self) -> None:
         """处理配置按钮槽函数"""

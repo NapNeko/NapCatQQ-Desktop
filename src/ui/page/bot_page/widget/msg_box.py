@@ -32,9 +32,10 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
+from src.core.runtime.napcat import ManagerNapCatQQLoginState
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 from src.ui.components.input_card.time_card import IntervalTimeConfigCard
-from src.ui.components.info_bar import error_bar
+from src.ui.components.info_bar import error_bar, success_bar
 from src.ui.page.bot_page.utils.enum import ConnectType
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
@@ -775,7 +776,8 @@ class QRCodeDialog(MessageBoxBase):
         """
         super().__init__(parent=parent)
         # 设置属性
-        self._qr_code_list = qr_code_list
+        self._qr_code_list = self._clone_qr_code_list(qr_code_list)
+        self.dismissed_by_user = False
 
         # 创建控件
         self.title_label = TitleLabel(self.tr("QQ 登录二维码"), self)
@@ -788,6 +790,8 @@ class QRCodeDialog(MessageBoxBase):
         self.pips_pager.setVisibleNumber(len(self._qr_code_list))
         self.pips_pager.setNextButtonDisplayMode(PipsScrollButtonDisplayMode.ON_HOVER)
         self.pips_pager.setPreviousButtonDisplayMode(PipsScrollButtonDisplayMode.ON_HOVER)
+        self.yesButton.setText(self.tr("刷新二维码"))
+        self.cancelButton.setText(self.tr("取消"))
 
         # 设置布局
         self.viewLayout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -800,19 +804,62 @@ class QRCodeDialog(MessageBoxBase):
 
         # 调用方法
         self.add_qr_codes()
+        self.set_current_qq_id(self._qr_code_list[0]["qq_id"] if self._qr_code_list else None)
 
     # ==================== 公共方法 ====================
-    def update_qr_codes(self, qr_code_list: list[dict[str, str]]) -> None:
+    @staticmethod
+    def _clone_qr_code_list(qr_code_list: list[dict[str, str]]) -> list[dict[str, str]]:
+        """复制二维码列表，避免外部原地更新导致视图失效。"""
+        return [info.copy() for info in qr_code_list]
+
+    def get_current_qq_id(self) -> str | None:
+        """获取当前展示页对应的 QQ 号。"""
+        index = self.view.currentIndex()
+        if index == -1 or index >= len(self._qr_code_list):
+            return None
+        return self._qr_code_list[index]["qq_id"]
+
+    def get_visible_qq_ids(self) -> list[str]:
+        """获取当前对话框中可见的全部 QQ 号。"""
+        return [info["qq_id"] for info in self._qr_code_list]
+
+    def set_current_qq_id(self, qq_id: str | None) -> None:
+        """将视图定位到指定 QQ 号对应的二维码。"""
+        if not self._qr_code_list:
+            self.title_label.setText(self.tr("QQ 登录二维码"))
+            return
+
+        target_qq_id = qq_id or self._qr_code_list[0]["qq_id"]
+        for index, qr_code_info in enumerate(self._qr_code_list):
+            if qr_code_info["qq_id"] != target_qq_id:
+                continue
+
+            self.pips_pager.setCurrentIndex(index)
+            self.view.setCurrentIndex(index)
+            self.slot_current_index_changed(index)
+            return
+
+        self.pips_pager.setCurrentIndex(0)
+        self.view.setCurrentIndex(0)
+        self.slot_current_index_changed(0)
+
+    def update_qr_codes(self, qr_code_list: list[dict[str, str]], preferred_qq_id: str | None = None) -> None:
         """更新二维码列表
 
         Args:
             qr_code_list (list[dict[str, str]]): 二维码列表
+            preferred_qq_id (str | None): 优先展示的 QQ 号
         """
+        current_qq_id = preferred_qq_id or self.get_current_qq_id()
+        cloned_qr_code_list = self._clone_qr_code_list(qr_code_list)
+
         # 判断是否有变化
-        if self._qr_code_list == qr_code_list:
+        if self._qr_code_list == cloned_qr_code_list:
+            if preferred_qq_id is not None:
+                self.set_current_qq_id(preferred_qq_id)
             return
 
-        self._qr_code_list = qr_code_list
+        self._qr_code_list = cloned_qr_code_list
 
         # 移除 view 中的所有子控件
         while self.view.count() > 0:
@@ -826,6 +873,7 @@ class QRCodeDialog(MessageBoxBase):
 
         # 重新添加二维码图片
         self.add_qr_codes()
+        self.set_current_qq_id(current_qq_id)
 
     def add_qr_codes(self) -> None:
         """添加二维码图片到视图"""
@@ -856,6 +904,26 @@ class QRCodeDialog(MessageBoxBase):
         # 添加到视图堆栈
         self.view.addWidget(image_label)
 
+    def accept(self) -> None:
+        """刷新当前页二维码，不关闭对话框。"""
+        qq_id = self.get_current_qq_id()
+        if qq_id is None:
+            return
+
+        login_state = it(ManagerNapCatQQLoginState).get_login_state(qq_id)
+        if login_state is None:
+            error_bar(self.tr("二维码刷新失败，该 Bot 当前未处于可扫码状态"), parent=self)
+            return
+
+        login_state.slot_request_auth_refresh()
+        login_state.slot_get_login_state()
+        success_bar(self.tr("已请求刷新二维码，如二维码仍无效请尝试重启 NapCat"), parent=self)
+
+    def reject(self) -> None:
+        """记录用户主动取消，供工厂抑制后续自动弹窗。"""
+        self.dismissed_by_user = True
+        super().reject()
+
     # ==================== 槽函数 ====================
     def slot_current_index_changed(self, index: int) -> None:
         """当前索引改变槽函数
@@ -879,6 +947,8 @@ class QRCodeDialogFactory(QObject):
 
         # 二维码列表, 存储二维码的相关信息, 字典结构为{"qq_id": str, "qrcode_url": str}
         self.qr_code_list: list[dict[str, str]] = []
+        self._auto_shown_qq_ids: set[str] = set()
+        self._dismissed_qq_ids: set[str] = set()
 
     # ==================== 公共方法 ====================
     def add_qr_code(self, qq_id: str, qrcode_url: str) -> None:
@@ -896,7 +966,16 @@ class QRCodeDialogFactory(QObject):
         else:
             self.qr_code_list.append({"qq_id": qq_id, "qrcode_url": qrcode_url})
 
-        self.show()
+        if self.dialog is not None:
+            self._auto_shown_qq_ids.add(qq_id)
+            self.dialog.update_qr_codes(self.qr_code_list)
+            return
+
+        if qq_id in self._dismissed_qq_ids or qq_id in self._auto_shown_qq_ids:
+            return
+
+        self._auto_shown_qq_ids.add(qq_id)
+        self.show(qq_id)
 
     def remove_qr_code(self, qq_id: str) -> None:
         """从列表中移除二维码信息
@@ -905,6 +984,8 @@ class QRCodeDialogFactory(QObject):
             qq_id (str): QQ 号
         """
         self.qr_code_list = [info for info in self.qr_code_list if info["qq_id"] != qq_id]
+        self._auto_shown_qq_ids.discard(qq_id)
+        self._dismissed_qq_ids.discard(qq_id)
 
         # 如果没有二维码信息了, 则关闭对话框
         if not self.qr_code_list and self.dialog is not None:
@@ -913,7 +994,11 @@ class QRCodeDialogFactory(QObject):
         elif self.dialog is not None:
             self.dialog.update_qr_codes(self.qr_code_list)
 
-    def show(self) -> None:
+    def has_qr_code(self, qq_id: str) -> bool:
+        """判断指定 QQ 是否存在待扫码二维码。"""
+        return any(info["qq_id"] == qq_id for info in self.qr_code_list)
+
+    def show(self, preferred_qq_id: str | None = None) -> None:
         """显示二维码对话框"""
         # 判断二维码列表是否为空
         if not self.qr_code_list:
@@ -921,17 +1006,21 @@ class QRCodeDialogFactory(QObject):
 
         # 判断是否已经exec()过, 如果是则更新内容
         if self.dialog is not None:
-            self.dialog.update_qr_codes(self.qr_code_list)
+            self.dialog.update_qr_codes(self.qr_code_list, preferred_qq_id)
 
         else:
             from src.ui.window.main_window import MainWindow
 
             self.dialog = QRCodeDialog(self.qr_code_list, it(MainWindow))
+            self.dialog.set_current_qq_id(preferred_qq_id)
+            dialog = self.dialog
 
             # 清理对话框引用
             if (
-                code := self.dialog.exec()
+                code := dialog.exec()
             ) == MessageBoxBase.DialogCode.Accepted or code == MessageBoxBase.DialogCode.Rejected:
+                if dialog.dismissed_by_user:
+                    self._dismissed_qq_ids.update(dialog.get_visible_qq_ids())
                 self.dialog = None
 
 
