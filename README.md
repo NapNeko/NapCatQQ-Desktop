@@ -15,6 +15,9 @@
 
 ---
 
+<img width="1722" height="1080" alt="6d3def2669ba6e01bc278c4df8c50761" src="https://github.com/user-attachments/assets/cd5dd4de-1e02-4970-bb19-9ac79b2aa142" />
+
+
 ## 🔜 预告：Linux 版本即将到来
 
 **v2.1 开发中** —— Desktop 即将跨平台！
