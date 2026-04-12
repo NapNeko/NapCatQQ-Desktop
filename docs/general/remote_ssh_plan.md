@@ -253,8 +253,43 @@ $HOME/NapCatCore/
 4. 在 UI 中补充初始化工作区 / 探测环境 / 部署入口
 5. 将远端状态展示接入主页或独立页面
 
-## 10. 决策结论
+## 10. 架构演进
 
-当前项目的最优路线是：
+### 10.1 双模式架构（当前）
 
-**坚持 SSH 直连方案作为第一阶段正式路线，用最小权限、最少侵入、最低用户门槛完成远程管理闭环；远端常驻软件只作为后续增强选项，不作为当前前提。**
+项目已演进为支持两种远程管理模式：
+
+**模式一：SSH 直连**
+- 适用场景：简单部署、一次性配置
+- 特点：无需服务端，直接 SSH/SFTP 操作
+- 局限：状态同步依赖轮询，日志实时性受限
+
+**模式二：Agent/Daemon**
+- 适用场景：长期监控、实时日志、频繁操作
+- 特点：Go Daemon 常驻运行，WebSocket + JSON-RPC 2.0 通信
+- 优势：状态实时推送、日志流式传输、自动重连
+
+### 10.2 技术栈
+
+**Daemon (Go)**
+- WebSocket: gorilla/websocket
+- 协议: JSON-RPC 2.0
+- 进程管理: os/exec
+- 日志流: 环形缓冲区 + Server-Sent Events
+
+**Desktop (Python)**
+- WebSocket: QtWebSockets
+- 协议: jsonrpc_protocol.py
+- 架构: AgentBackend (ExecutionBackend 子类)
+
+### 10.3 决策结论
+
+**当前路线**：
+- 保持 SSH 直连作为基础能力
+- 新增 Agent/Daemon 模式作为增强能力
+- 用户在远程页可选择连接模式（SSH 或 Agent）
+- 两种模式共享 UI 层，通过 ExecutionBackend 抽象隔离
+
+**远景规划**：
+- 稳定 Daemon 功能后，Agent 模式可作为默认推荐
+- SSH 模式保留作为 fallback 和首次部署手段
