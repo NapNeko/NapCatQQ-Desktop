@@ -8,8 +8,8 @@ import pytest
 from PySide6.QtWidgets import QApplication, QWidget
 
 # 项目内模块导入
-import src.ui.page.bot_page.widget.msg_box as msg_box_module
-from src.ui.page.bot_page.widget.msg_box import (
+import src.desktop.ui.page.bot_page.widget.msg_box as msg_box_module
+from src.desktop.ui.page.bot_page.widget.msg_box import (
     HttpServerConfigDialog,
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,

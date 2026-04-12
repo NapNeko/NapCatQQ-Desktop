@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import QApplication, QWidget
 
-from src.ui.page.component_page.base import UpdateLogCard
+from src.desktop.ui.page.component_page.base import UpdateLogCard
 
 
 def ensure_qapp() -> QApplication:

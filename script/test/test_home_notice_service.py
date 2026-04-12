@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from src.core.home.notice_service import HomeNoticeService
+from src.desktop.core.home.notice_service import HomeNoticeService
 
 
 def test_summarize_release_notes_strips_markdown_prefixes() -> None:

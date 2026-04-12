@@ -14,8 +14,8 @@ markdown_module.markdown = lambda text, *args, **kwargs: text
 sys.modules.setdefault("markdown", markdown_module)
 
 # 项目内模块导入
-import src.ui.page.bot_page.sub_page.bot_config as bot_config_module
-from src.core.config.config_model import (
+import src.desktop.ui.page.bot_page.sub_page.bot_config as bot_config_module
+from src.desktop.core.config.config_model import (
     AdvancedConfig,
     BotConfig,
     Config,
@@ -25,7 +25,7 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.ui.page.bot_page.sub_page.bot_config import ConfigPage
+from src.desktop.ui.page.bot_page.sub_page.bot_config import ConfigPage
 
 
 def ensure_qapp() -> QApplication:

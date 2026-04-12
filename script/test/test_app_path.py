@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 # 项目内模块导入
-from src.core.platform.app_paths import APP_DATA_DIR_NAME, resolve_app_base_path, resolve_app_data_path
+from src.desktop.core.platform.app_paths import APP_DATA_DIR_NAME, resolve_app_base_path, resolve_app_data_path
 
 
 def test_resolve_app_base_path_uses_repo_root_in_source_mode(monkeypatch: pytest.MonkeyPatch) -> None:

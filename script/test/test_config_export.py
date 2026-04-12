@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 # 项目内模块导入
-import src.core.config as app_config_module
-import src.core.config.config_export as config_export
+import src.desktop.core.config as app_config_module
+import src.desktop.core.config.config_export as config_export
 
 
 class DummyPathFunc:

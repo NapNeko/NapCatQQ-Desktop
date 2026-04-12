@@ -5,9 +5,9 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QWidget
 
-from src.core.logging import LogLevel, logger
-from src.ui.page.setup_page.desktop_log import DesktopLog
-from src.ui.page.setup_page import setup as setup_page_module
+from src.desktop.core.logging import LogLevel, logger
+from src.desktop.ui.page.setup_page.desktop_log import DesktopLog
+from src.desktop.ui.page.setup_page import setup as setup_page_module
 
 
 def ensure_qapp() -> QApplication:

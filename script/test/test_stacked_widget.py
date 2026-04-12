@@ -3,7 +3,7 @@
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget
 
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 
 
 def ensure_qapp() -> QApplication:

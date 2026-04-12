@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 # 项目内模块导入
-import src.core.network.email as email_module
+import src.desktop.core.network.email as email_module
 
 
 def patch_email_cfg(monkeypatch: pytest.MonkeyPatch) -> None:

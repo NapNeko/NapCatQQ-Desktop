@@ -15,7 +15,7 @@ markdown_module.markdown = lambda text, *args, **kwargs: text
 sys.modules.setdefault("markdown", markdown_module)
 
 # 项目内模块导入
-import src.ui.page.bot_page.widget.msg_box as msg_box_module
+import src.desktop.ui.page.bot_page.widget.msg_box as msg_box_module
 
 
 def ensure_qapp() -> QApplication:

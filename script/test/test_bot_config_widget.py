@@ -7,9 +7,9 @@ import os
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-import src.ui.page.bot_page.widget.config as config_widget_module
-from src.core.config.config_model import AdvancedConfig, AutoRestartScheduleConfig, BypassConfig, BotConfig
-from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget
+import src.desktop.ui.page.bot_page.widget.config as config_widget_module
+from src.desktop.core.config.config_model import AdvancedConfig, AutoRestartScheduleConfig, BypassConfig, BotConfig
+from src.desktop.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget
 
 
 def ensure_qapp() -> QApplication:

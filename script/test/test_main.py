@@ -11,9 +11,9 @@ import pytest
 
 # 项目内模块导入
 import main
-import src.core.config as config_module
-import src.core.platform.single_instance as mutex_module
-import src.ui.common.font as font_module
+import src.desktop.core.config as config_module
+import src.desktop.core.platform.single_instance as mutex_module
+import src.desktop.ui.common.font as font_module
 
 
 @pytest.fixture

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import httpx
 
 # 项目内模块导入
-import src.core.versioning.service as versioning
+import src.desktop.core.versioning.service as versioning
 
 
 def mute_version_logger(monkeypatch) -> None:

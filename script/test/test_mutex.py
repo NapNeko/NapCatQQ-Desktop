@@ -4,7 +4,7 @@
 from types import SimpleNamespace
 
 # 项目内模块导入
-import src.core.platform.single_instance as mutex_module
+import src.desktop.core.platform.single_instance as mutex_module
 
 
 class FakeLockFile:

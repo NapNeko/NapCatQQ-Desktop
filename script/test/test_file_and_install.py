@@ -6,8 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 # 项目内模块导入
-import src.core.qt.file as file_module
-import src.core.installation.installers as install_func
+import src.desktop.core.qt.file as file_module
+import src.desktop.core.installation.installers as install_func
 
 
 def test_qfluent_file_supports_context_manager(tmp_path: Path) -> None:

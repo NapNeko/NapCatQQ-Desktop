@@ -4,8 +4,8 @@
 import pytest
 
 # 项目内模块导入
-import src.ui.common.style_sheet as style_sheet_module
-from src.ui.common.style_sheet import PageStyleSheet, WidgetStyleSheet
+import src.desktop.ui.common.style_sheet as style_sheet_module
+from src.desktop.ui.common.style_sheet import PageStyleSheet, WidgetStyleSheet
 from qfluentwidgets import Theme
 
 

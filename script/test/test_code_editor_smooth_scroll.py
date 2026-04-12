@@ -5,7 +5,7 @@ import os
 from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QApplication
 
-from src.ui.components.code_editor.exhibit import CodeExibit, UpdateLogExhibit
+from src.desktop.ui.components.code_editor.exhibit import CodeExibit, UpdateLogExhibit
 
 
 class FakeWheelEvent:

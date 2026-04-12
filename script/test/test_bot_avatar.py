@@ -5,8 +5,8 @@ import httpx
 import pytest
 
 # 项目内模块导入
-from src.ui.page.bot_page.widget import card as card_module
-from src.ui.page.bot_page.widget.card import BotAvatarWidget
+from src.desktop.ui.page.bot_page.widget import card as card_module
+from src.desktop.ui.page.bot_page.widget.card import BotAvatarWidget
 
 
 def test_get_avatar_worker_emits_error_signal_instead_of_touching_ui(monkeypatch: pytest.MonkeyPatch) -> None:

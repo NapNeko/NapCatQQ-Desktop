@@ -14,11 +14,11 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPushButton
 
 # 项目内模块导入
-import src.core.installation.installers as install_func
-import src.core.logging.log_func as log_func_module
-from src.core.logging.notification_center import log_output_notification_center
-from src.core.installation.installers import QQInstall
-from src.core.logging.log_func import Logger
+import src.desktop.core.installation.installers as install_func
+import src.desktop.core.logging.log_func as log_func_module
+from src.desktop.core.logging.notification_center import log_output_notification_center
+from src.desktop.core.installation.installers import QQInstall
+from src.desktop.core.logging.log_func import Logger
 
 
 def create_test_logger(tmp_path: Path) -> Logger:

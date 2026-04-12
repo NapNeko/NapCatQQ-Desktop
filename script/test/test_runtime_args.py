@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # 项目内模块导入
-from src.core.platform.runtime_args import parse_runtime_launch_options
+from src.desktop.core.platform.runtime_args import parse_runtime_launch_options
 
 
 def test_parse_runtime_launch_options_enables_developer_mode() -> None:

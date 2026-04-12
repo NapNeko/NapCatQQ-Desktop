@@ -13,7 +13,7 @@ from PySide6.QtNetwork import QAbstractSocket, QNetworkRequest
 from PySide6.QtWidgets import QApplication, QSizePolicy, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.api_debug import (
+from src.desktop.core.api_debug import (
     ApiDebugAuthConfig,
     ApiDebugBotContext,
     ApiDebugContextService,
@@ -26,7 +26,7 @@ from src.core.api_debug import (
     ApiDebugWorkspaceStore,
     SchemaDefaultGenerator,
 )
-from src.core.api_debug.models import (
+from src.desktop.core.api_debug.models import (
     ApiDebugActionSchema,
     ApiDebugBodyType,
     ApiDebugBuiltRequest,
@@ -37,10 +37,10 @@ from src.core.api_debug.models import (
     ApiDebugResponse,
     ApiDebugResponseBodyType,
 )
-from src.core.config.config_model import HttpServersConfig, WebsocketServersConfig
-import src.core.api_debug.workspace_store as workspace_store_module
-import src.ui.page.api_debug_page as api_debug_page_module
-from src.ui.window.main_window import window as main_window_module
+from src.desktop.core.config.config_model import HttpServersConfig, WebsocketServersConfig
+import src.desktop.core.api_debug.workspace_store as workspace_store_module
+import src.desktop.ui.page.api_debug_page as api_debug_page_module
+from src.desktop.ui.window.main_window import window as main_window_module
 
 
 def ensure_qapp() -> QApplication:

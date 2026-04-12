@@ -4,7 +4,7 @@
 from pathlib import Path
 
 # 项目内模块导入
-import src.core.runtime.paths as path_func_module
+import src.desktop.core.runtime.paths as path_func_module
 
 
 def mute_path_logger(monkeypatch) -> None:

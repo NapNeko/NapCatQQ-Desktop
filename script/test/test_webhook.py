@@ -7,15 +7,15 @@ import json
 import pytest
 
 # 项目内模块导入
-import src.core.network.webhook as webhook_module
-from src.core.config.config_model import (
+import src.desktop.core.network.webhook as webhook_module
+from src.desktop.core.config.config_model import (
     AdvancedConfig,
     AutoRestartScheduleConfig,
     BotConfig,
     Config,
     ConnectConfig,
 )
-from src.core.network.webhook import WebHook, WebHookData, create_offline_webhook_task, create_test_webhook_task
+from src.desktop.core.network.webhook import WebHook, WebHookData, create_offline_webhook_task, create_test_webhook_task
 
 
 def make_config(qqid: int = 114514, name: str = "WebhookBot") -> Config:

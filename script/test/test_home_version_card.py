@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 from PySide6.QtWidgets import QApplication
 
-from src.core.home import VersionSummary, home_version_refresh_bus
-from src.ui.page.home_page.version_card import VersionCardsPanel
+from src.desktop.core.home import VersionSummary, home_version_refresh_bus
+from src.desktop.ui.page.home_page.version_card import VersionCardsPanel
 
 
 def ensure_qapp() -> QApplication:

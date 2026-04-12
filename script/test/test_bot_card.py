@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 # 项目内模块导入
 sys.modules.setdefault("qrcode", ModuleType("qrcode"))
-from src.core.config.config_model import HttpServersConfig, WebsocketClientsConfig
+from src.desktop.core.config.config_model import HttpServersConfig, WebsocketClientsConfig
 
 
 def load_card_module():

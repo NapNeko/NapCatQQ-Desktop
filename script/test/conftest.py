@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 # 项目内模块导入
-from src.core.config.config_model import (
+from src.desktop.core.config.config_model import (
     AdvancedConfig,
     AutoRestartScheduleConfig,
     BotConfig,

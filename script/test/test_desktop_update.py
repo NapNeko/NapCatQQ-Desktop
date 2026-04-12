@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 
 # 项目内模块导入
-import src.core.desktop_update.manager as desktop_update_manager
-from src.core.desktop_update import MINIMUM_MSI_SIZE_BYTES, MSI_UPDATE_FILENAME, MsiUpdateStrategy, UpdateLaunchResult, UpdateManager
-from src.core.desktop_update.constants import MSI_LOG_FILE
-from src.core.desktop_update.scripts import inject_script_variables, inject_target_pid
-from src.core.desktop_update.templates import load_msi_update_script
-from src.core.installation.install_type import InstallType
+import src.desktop.core.desktop_update.manager as desktop_update_manager
+from src.desktop.core.desktop_update import MINIMUM_MSI_SIZE_BYTES, MSI_UPDATE_FILENAME, MsiUpdateStrategy, UpdateLaunchResult, UpdateManager
+from src.desktop.core.desktop_update.constants import MSI_LOG_FILE
+from src.desktop.core.desktop_update.scripts import inject_script_variables, inject_target_pid
+from src.desktop.core.desktop_update.templates import load_msi_update_script
+from src.desktop.core.installation.install_type import InstallType
 
 
 def test_msi_update_strategy_preserves_package_filename_when_copying_to_runtime_tmp(tmp_path: Path) -> None:

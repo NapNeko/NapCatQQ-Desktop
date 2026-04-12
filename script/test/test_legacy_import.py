@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 
 # 项目内模块导入
-import src.core.config as app_config_module
-import src.core.config.legacy_import as legacy_import
-from src.core.config.config_model import BOT_CONFIG_COMPAT_VERSION, serialize_bot_config_collection
+import src.desktop.core.config as app_config_module
+import src.desktop.core.config.legacy_import as legacy_import
+from src.desktop.core.config.config_model import BOT_CONFIG_COMPAT_VERSION, serialize_bot_config_collection
 
 
 class DummyPathFunc:

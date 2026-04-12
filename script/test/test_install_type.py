@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import src.core.installation.install_type as install_type
+import src.desktop.core.installation.install_type as install_type
 
 
 def test_detect_install_type_matches_registry_path_case_insensitively(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

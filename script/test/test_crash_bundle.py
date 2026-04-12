@@ -9,16 +9,16 @@ from pathlib import Path
 import pytest
 
 # 项目内模块导入
-import src.core.logging.crash_bundle as crash_bundle_module
-import src.core.logging.log_func as log_func_module
-from src.core.logging.crash_bundle import (
+import src.desktop.core.logging.crash_bundle as crash_bundle_module
+import src.desktop.core.logging.log_func as log_func_module
+from src.desktop.core.logging.crash_bundle import (
     build_safe_config_summary,
     mask_email,
     sanitize_text_for_export,
     summarize_path,
     summarize_url,
 )
-from src.core.logging.log_func import Logger
+from src.desktop.core.logging.log_func import Logger
 
 
 def create_test_logger(log_path: Path) -> Logger:

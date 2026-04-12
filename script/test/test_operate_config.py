@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 # 项目内模块导入
-import src.core.config.operate_config as operate_config
-from src.core.config.config_enum import TimeUnitEnum
-from src.core.config.config_model import (
+import src.desktop.core.config.operate_config as operate_config
+from src.desktop.core.config.config_enum import TimeUnitEnum
+from src.desktop.core.config.config_model import (
     BOT_CONFIG_COMPAT_VERSION,
     AdvancedConfig,
     AutoRestartScheduleConfig,

@@ -3,7 +3,7 @@
 import importlib.util
 from pathlib import Path
 
-from src.core.installation.install_type import InstallType
+from src.desktop.core.installation.install_type import InstallType
 
 
 _PRESENTATION_PATH = Path(__file__).resolve().parents[2] / "src" / "ui" / "page" / "component_page" / "utils" / "presentation.py"

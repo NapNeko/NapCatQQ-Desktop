@@ -8,9 +8,9 @@ import os
 from PySide6.QtWidgets import QApplication, QWidget
 
 # 项目内模块导入
-import src.ui.page.setup_page.sub_page.general as general_module
-from src.ui.page.setup_page.sub_page.general import BotOfflineEmailDialog, BotOfflineWebHookDialog
-from src.ui.page.setup_page.widget.config_export_dialog import ConfigExportDialog
+import src.desktop.ui.page.setup_page.sub_page.general as general_module
+from src.desktop.ui.page.setup_page.sub_page.general import BotOfflineEmailDialog, BotOfflineWebHookDialog
+from src.desktop.ui.page.setup_page.widget.config_export_dialog import ConfigExportDialog
 
 
 class DummySignal:
@@ -284,7 +284,7 @@ def test_webhook_dialog_open_with_empty_json_does_not_log_parse_error(monkeypatc
         },
     )
 
-    from src.ui.components.code_editor import editor as editor_module
+    from src.desktop.ui.components.code_editor import editor as editor_module
 
     error_logs: list[str] = []
     monkeypatch.setattr(editor_module.logger, "error", lambda message: error_logs.append(message))

@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtCore import QProcess
 
 # 项目内模块导入
-import src.core.runtime.napcat as run_napcat
+import src.desktop.core.runtime.napcat as run_napcat
 
 
 class FakeSignal:

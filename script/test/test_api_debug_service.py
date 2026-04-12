@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 
 # 项目内模块导入
-from src.core.api_debug import (
+from src.desktop.core.api_debug import (
     ApiDebugAuthConfig,
     ApiDebugAuthInjector,
     ApiDebugBodyType,

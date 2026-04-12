@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtCore import QUrl
 
 # 项目内模块导入
-from src.core.network.downloader import DownloaderBase, GithubDownloader, QQDownloader
+from src.desktop.core.network.downloader import DownloaderBase, GithubDownloader, QQDownloader
 
 
 class DummyStreamResponse:

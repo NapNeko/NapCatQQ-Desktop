@@ -7,8 +7,8 @@ import random
 import pytest
 
 # 项目内模块导入
-from src.core.config.config_enum import TimeUnitEnum
-from src.core.config.config_model import (
+from src.desktop.core.config.config_enum import TimeUnitEnum
+from src.desktop.core.config.config_model import (
     AdvancedConfig,
     AutoRestartScheduleConfig,
     BotConfig,

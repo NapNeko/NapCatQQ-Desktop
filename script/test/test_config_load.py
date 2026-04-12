@@ -9,10 +9,10 @@ from qfluentwidgets.common import BoolValidator, ConfigItem
 from PySide6.QtGui import QColor
 
 # 项目内模块导入
-import src.core.config as app_config_module
-from src.core.config.config_enum import CloseActionEnum
-from src.core.config import Config as AppConfig
-from src.core.config import bind_qfluent_qconfig
+import src.desktop.core.config as app_config_module
+from src.desktop.core.config.config_enum import CloseActionEnum
+from src.desktop.core.config import Config as AppConfig
+from src.desktop.core.config import bind_qfluent_qconfig
 
 
 class SampleConfig(AppConfig):
@@ -116,8 +116,38 @@ def test_config_load_migrates_main_window_and_cleans_removed_keys(tmp_path) -> N
     assert migrated["Info"]["MainWindow"] is True
     assert migrated["General"]["CloseBtnAction"] == 1
     assert "main_window" not in migrated["Info"]
-    assert "BgHomePage" not in migrated["Personalize"]
-    assert "TitleTabBar" not in migrated["Personalize"]
+    assert "Personalize" not in migrated or "BgHomePage" not in migrated["Personalize"]
+    assert "Personalize" not in migrated or "TitleTabBar" not in migrated["Personalize"]
+
+
+def test_config_load_removes_transient_remote_password_field(tmp_path) -> None:
+    """远程密码属于临时凭据，不应继续保留在配置文件中。"""
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "Info": {
+                    "ConfigVersion": "v2.0",
+                },
+                "Remote": {
+                    "Host": "example.com",
+                    "Password": "secret",
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    config = SampleConfig()
+    config.load(config_path)
+
+    migrated = json.loads(config_path.read_text(encoding="utf-8"))
+
+    assert migrated["Info"]["ConfigVersion"] == app_config_module._CURRENT_CONFIG_COMPAT_VERSION
+    assert migrated["Remote"]["Host"] == "example.com"
+    assert "Password" not in migrated["Remote"]
 
 
 def test_read_config_version_inferrs_pre_v160_shape() -> None:
