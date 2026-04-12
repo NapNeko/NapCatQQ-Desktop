@@ -8,8 +8,8 @@ import hashlib
 import httpx
 
 # 项目内模块导入
-from src.core.api_debug.errors import ApiDebugAuthError
-from src.core.api_debug.models import ApiDebugAuthConfig, ApiDebugAuthType, ApiDebugBuiltRequest
+from src.desktop.core.api_debug.errors import ApiDebugAuthError
+from src.desktop.core.api_debug.models import ApiDebugAuthConfig, ApiDebugAuthType, ApiDebugBuiltRequest
 
 
 class ApiDebugAuthInjector:

@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING, Self
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-from src.core.platform.runtime_args import is_developer_mode_enabled
-from src.ui.common.style_sheet import PageStyleSheet
-from src.ui.components.stacked_widget import TransparentStackedWidget
-from .sub_page import DesktopLog, Developer, General, Personalization, Remote
+from src.desktop.core.platform.runtime_args import is_developer_mode_enabled
+from src.desktop.ui.common.style_sheet import PageStyleSheet
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
+from .sub_page import DesktopLog, Developer, General, Personalization
 from .widget import SetupTopCard
 
 if TYPE_CHECKING:
-    from src.ui.window.main_window import MainWindow
+    from src.desktop.ui.window.main_window import MainWindow
 
 
 class SetupWidget(QWidget):
@@ -52,13 +52,11 @@ class SetupWidget(QWidget):
         self.view = TransparentStackedWidget(self)
         self.general = General(self)
         self.personalization = Personalization(self)
-        self.remote = Remote(self)
         self.desktop_log = DesktopLog(self)
         self.developer = Developer(self) if is_developer_mode_enabled() else None
 
         self.view.addWidget(self.personalization)
         self.view.addWidget(self.general)
-        self.view.addWidget(self.remote)
         self.view.addWidget(self.desktop_log)
         if self.developer is not None:
             self.view.addWidget(self.developer)
@@ -72,11 +70,6 @@ class SetupWidget(QWidget):
             routeKey=self.general.objectName(),
             text=self.tr("常规"),
             onClick=lambda: self.view.setCurrentWidget(self.general),
-        )
-        self.top_card.pivot.addItem(
-            routeKey=self.remote.objectName(),
-            text=self.tr("远程"),
-            onClick=lambda: self.view.setCurrentWidget(self.remote),
         )
         self.top_card.pivot.addItem(
             routeKey=self.desktop_log.objectName(),
@@ -99,7 +92,7 @@ class SetupPageCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.ui.page.setup_page",
+            module="src.desktop.ui.page.setup_page",
             identify="SetupWidget",
             humanized_name="设置页面",
             description="NapCatQQ Desktop 设置页面",

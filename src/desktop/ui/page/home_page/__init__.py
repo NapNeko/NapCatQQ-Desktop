@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Self
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
-from src.ui.common.style_sheet import PageStyleSheet
-from src.ui.components.background import DottedBackground
+from src.desktop.ui.common.style_sheet import PageStyleSheet
+from src.desktop.ui.components.background import DottedBackground
 from .widget import HelloCard, NoticeCard, OccupancyPanel, VersionCardsPanel
 
 if TYPE_CHECKING:
-    from src.ui.window.main_window import MainWindow
+    from src.desktop.ui.window.main_window import MainWindow
 
 
 class _HomeMainColumn(QWidget):
@@ -79,7 +79,7 @@ class HomePageCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.ui.page.home_page",
+            module="src.desktop.ui.page.home_page",
             identify="HomeWidget",
             humanized_name="Home 页面",
             description="NapCatQQ Desktop 主页面",

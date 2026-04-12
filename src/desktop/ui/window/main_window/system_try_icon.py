@@ -13,12 +13,12 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QSystemTrayIcon, QWidget
 
 # 项目内模块导入
-from src.core.runtime.napcat import ManagerNapCatQQProcess
-from src.ui.common.icon import StaticIcon
+from src.desktop.core.runtime.napcat import ManagerNapCatQQProcess
+from src.desktop.ui.common.icon import StaticIcon
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window.window import MainWindow
+    from src.desktop.ui.window.main_window.window import MainWindow
 
 
 """系统托盘图标模块
@@ -87,7 +87,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         根据主窗口当前的显示状态, 进行显示或隐藏操作
         """
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
+        from src.desktop.ui.window.main_window.window import MainWindow
 
         if it(MainWindow).isMinimized():
             it(MainWindow).showNormal()

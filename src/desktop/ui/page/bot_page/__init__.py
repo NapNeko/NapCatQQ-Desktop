@@ -12,17 +12,17 @@ from typing import TYPE_CHECKING, Self
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-from src.core.config.operate_config import read_config
-from src.core.logging import LogSource, logger
-from src.core.logging.crash_bundle import mask_qqid
-from src.core.runtime.napcat import ManagerNapCatQQProcess
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.core.config.operate_config import read_config
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.logging.crash_bundle import mask_qqid
+from src.desktop.core.runtime.napcat import ManagerNapCatQQProcess
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 from .sub_page import BotListPage, BotLogPage, ConfigPage
 from .widget import HeaderWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.desktop.ui.window.main_window import MainWindow
 
 
 class BotPage(QWidget):
@@ -106,7 +106,7 @@ class BotPageCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.ui.page.bot_page",
+            module="src.desktop.ui.page.bot_page",
             identify="BotPage",
             humanized_name="Bot 页面",
             description="NapCatQQ Desktop Bot 页面",

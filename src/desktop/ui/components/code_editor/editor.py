@@ -26,13 +26,13 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTextEdit, QWidget
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.core.logging import logger
-from src.ui.common.font import FontManager
-from src.ui.common.style_sheet import WidgetStyleSheet
-from src.ui.components.code_editor.controls import LineNumberArea
-from src.ui.components.code_editor.highlight import JsonHighlighter
-from src.ui.components.code_editor.smooth_scroll import SmoothTextScrollMixin
+from src.desktop.core.config import cfg
+from src.desktop.core.logging import logger
+from src.desktop.ui.common.font import FontManager
+from src.desktop.ui.common.style_sheet import WidgetStyleSheet
+from src.desktop.ui.components.code_editor.controls import LineNumberArea
+from src.desktop.ui.components.code_editor.highlight import JsonHighlighter
+from src.desktop.ui.components.code_editor.smooth_scroll import SmoothTextScrollMixin
 
 
 class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):

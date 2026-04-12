@@ -8,12 +8,12 @@ from qfluentwidgets import FluentIcon, HyperlinkButton, ImageLabel, PrimaryPushB
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.core.network.urls import Urls
-from src.ui.common.icon import StaticIcon
+from src.desktop.core.network.urls import Urls
+from src.desktop.ui.common.icon import StaticIcon
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.guide_window.guide_window import GuideWindow
+    from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
 
 class WelcomePage(QWidget):
@@ -55,6 +55,6 @@ class WelcomePage(QWidget):
     def on_click(self) -> None:
         """点击事件"""
         # 项目内模块导入
-        from src.ui.window.guide_window.guide_window import GuideWindow
+        from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
         it(GuideWindow).on_next_page()

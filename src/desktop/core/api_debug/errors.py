@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 # 项目内模块导入
-from src.core.api_debug.models import ApiDebugError, ApiDebugErrorKind
+from src.desktop.core.api_debug.models import ApiDebugError, ApiDebugErrorKind
 
 
 class ApiDebugException(Exception):

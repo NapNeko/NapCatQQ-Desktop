@@ -11,7 +11,7 @@ from PySide6.QtGui import QColor, QDragEnterEvent, QDragMoveEvent, QDropEvent, Q
 from PySide6.QtWidgets import QFileDialog, QSizePolicy, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.config import cfg
+from src.desktop.core.config import cfg
 
 
 class DropFolderWidget(QWidget):

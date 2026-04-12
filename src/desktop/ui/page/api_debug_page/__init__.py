@@ -12,7 +12,7 @@ from PySide6.QtCore import QSize, Qt, QThreadPool
 from PySide6.QtGui import QShortcut
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QSplitter, QVBoxLayout, QWidget
 
-from src.core.api_debug import (
+from src.desktop.core.api_debug import (
     ActionDebugService,
     ApiDebugActionSchema,
     ApiDebugActionSession,
@@ -25,16 +25,16 @@ from src.core.api_debug import (
     ApiDebugWorkspaceStore,
     SchemaDefaultGenerator,
 )
-from src.core.config.operate_config import read_config
-from src.core.logging import LogSource, logger
-from src.ui.common.style_sheet import PageStyleSheet
-from src.ui.components.info_bar import success_bar, warning_bar
+from src.desktop.core.config.operate_config import read_config
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.ui.common.style_sheet import PageStyleSheet
+from src.desktop.ui.components.info_bar import success_bar, warning_bar
 from .common import CallableTask, pretty_json
 from .dialogs import ApiDebugSearchDialog
 from .widget import ActionCatalogPanel, ActionDetailPanel
 
 if TYPE_CHECKING:
-    from src.ui.window.main_window import MainWindow
+    from src.desktop.ui.window.main_window import MainWindow
 
 
 class ApiDebugPage(QWidget):
@@ -444,7 +444,7 @@ class ApiDebugPageCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.ui.page.api_debug_page",
+            module="src.desktop.ui.page.api_debug_page",
             identify="ApiDebugPage",
             humanized_name="接口文档页面",
             description="NapCatQQ Desktop 接口文档页",

@@ -68,14 +68,57 @@ class SSHCredentials:
 
 @dataclass(slots=True)
 class LinuxCorePaths:
-    """Linux Core 的远端目录布局。"""
+    """Linux Core 的远端目录布局。
 
-    workspace_dir: str = "$HOME/NapCatCore"
-    runtime_dir: str = "$HOME/NapCatCore/runtime"
-    config_dir: str = "$HOME/NapCatCore/runtime/config"
-    log_dir: str = "$HOME/NapCatCore/runtime/log"
-    tmp_dir: str = "$HOME/NapCatCore/runtime/tmp"
-    package_dir: str = "$HOME/NapCatCore/packages"
+    适配标准 NapCat 安装器路径:
+    - 基础目录: $HOME/Napcat
+    - QQ 安装: $HOME/Napcat/opt/QQ
+    - NapCat: $HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat
+    - 运行目录: $HOME/Napcat/run
+    - 日志目录: $HOME/Napcat/log
+    """
+
+    workspace_dir: str = "$HOME/Napcat"
+    runtime_dir: str = "$HOME/Napcat/run"
+    config_dir: str = "$HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/config"
+    log_dir: str = "$HOME/Napcat/log"
+    tmp_dir: str = "$HOME/Napcat/tmp"
+    package_dir: str = "$HOME/Napcat/packages"
+
+    @property
+    def install_base_dir(self) -> str:
+        """Rootless LinuxQQ/NapCat 安装目录。"""
+        return self.workspace_dir
+
+    @property
+    def qq_base_path(self) -> str:
+        """Rootless LinuxQQ 基础目录。"""
+        return f"{self.workspace_dir}/opt/QQ"
+
+    @property
+    def target_folder(self) -> str:
+        """NapCat 注入目录。"""
+        return f"{self.qq_base_path}/resources/app/app_launcher"
+
+    @property
+    def napcat_dir(self) -> str:
+        """NapCat 安装目录。"""
+        return f"{self.target_folder}/napcat"
+
+    @property
+    def qq_executable(self) -> str:
+        """LinuxQQ 可执行文件路径。"""
+        return f"{self.qq_base_path}/qq"
+
+    @property
+    def launcher_script(self) -> str:
+        """远端标准启动脚本路径。"""
+        return f"{self.workspace_dir}/napcat.sh"
+
+    @property
+    def qq_package_json_path(self) -> str:
+        """QQ package.json 文件路径。"""
+        return f"{self.qq_base_path}/resources/app/package.json"
 
     @property
     def pid_file(self) -> str:
@@ -86,6 +129,11 @@ class LinuxCorePaths:
     def status_file(self) -> str:
         """NapCat 远端状态文件路径。"""
         return f"{self.runtime_dir}/status.json"
+
+    @property
+    def log_file(self) -> str:
+        """NapCat 远端日志文件路径。"""
+        return f"{self.log_dir}/napcat.log"
 
 
 @dataclass(slots=True)

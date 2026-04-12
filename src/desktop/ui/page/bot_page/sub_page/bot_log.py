@@ -10,10 +10,10 @@ from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QVBoxLayout, QWidget, QPlainTextEdit
 
 # 项目内模块导入
-from src.core.config.config_model import Config
-from src.core.runtime.napcat import ManagerNapCatQQLog, NapCatQQProcessLog
-from src.ui.components.code_editor.exhibit import CodeExibit
-from src.ui.components.code_editor.highlight import LogHighlighter
+from src.desktop.core.config.config_model import Config
+from src.desktop.core.runtime.napcat import ManagerNapCatQQLog, NapCatQQProcessLog
+from src.desktop.ui.components.code_editor.exhibit import CodeExibit
+from src.desktop.ui.components.code_editor.highlight import LogHighlighter
 
 
 class BotLogPage(QWidget):
@@ -82,7 +82,7 @@ class BotLogPage(QWidget):
     def slot_return_button(self) -> None:
         """返回按钮槽函数"""
         # 项目内模块导入
-        from src.ui.page.bot_page import BotPage
+        from src.desktop.ui.page.bot_page import BotPage
 
         # 返回列表页面
         page = it(BotPage)

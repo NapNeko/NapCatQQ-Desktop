@@ -29,10 +29,10 @@ from PySide6.QtGui import QColor, QDesktopServices, QFont, QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.ui.common.icon import StaticIcon
-from src.ui.components.code_editor import UpdateLogExhibit
-from src.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.ui.common.icon import StaticIcon
+from src.desktop.ui.components.code_editor import UpdateLogExhibit
+from src.desktop.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 from ..utils import ButtonStatus, ProgressRingStatus, StatusLabel
 
 

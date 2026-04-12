@@ -8,15 +8,15 @@ from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-from src.core.logging import LogSource, logger
-from src.core.versioning import VersionService
-from src.ui.common.style_sheet import PageStyleSheet
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.versioning import VersionService
+from src.desktop.ui.common.style_sheet import PageStyleSheet
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 from .sub_page import DesktopPage, NapCatPage, QQPage
 from .widget import TopWidget
 
 if TYPE_CHECKING:
-    from src.ui.window.main_window import MainWindow
+    from src.desktop.ui.window.main_window import MainWindow
 
 
 class ComponentPage(QWidget):
@@ -118,7 +118,7 @@ class ComponentPageCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.ui.page.component_page",
+            module="src.desktop.ui.page.component_page",
             identify="ComponentPage",
             humanized_name="组件页面",
             description="NapCatQQ Desktop 组件页面",

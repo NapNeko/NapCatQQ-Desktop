@@ -2,9 +2,9 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 
-from src.core.config import cfg
-from src.ui.common.icon import NapCatDesktopIcon, SvgStaticIcon
-from src.ui.components.theme_color_label import ThemeColorTitleLabel, ThemeColorTone
+from src.desktop.core.config import cfg
+from src.desktop.ui.common.icon import NapCatDesktopIcon, SvgStaticIcon
+from src.desktop.ui.components.theme_color_label import ThemeColorTitleLabel, ThemeColorTone
 
 from qfluentwidgets import BodyLabel, SimpleCardWidget
 from qfluentwidgets.components.widgets.icon_widget import IconWidget

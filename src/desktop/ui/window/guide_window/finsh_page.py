@@ -13,13 +13,13 @@ from PySide6.QtGui import QColor, QDesktopServices, QEnterEvent, QPainter, QPain
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.network.urls import Urls
-from src.ui.common.emoticons import FuFuEmoticons
-from src.ui.components.separator import Separator
+from src.desktop.core.network.urls import Urls
+from src.desktop.ui.common.emoticons import FuFuEmoticons
+from src.desktop.ui.components.separator import Separator
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.guide_window.guide_window import GuideWindow
+    from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
 
 class FinshPage(QWidget):
@@ -256,7 +256,7 @@ class NextCard(Card):
         """鼠标点击事件"""
         if event.button() == Qt.MouseButton.LeftButton:
             # 项目内模块导入
-            from src.ui.window.guide_window.guide_window import GuideWindow
+            from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
             it(GuideWindow).close()
         super().mousePressEvent(event)

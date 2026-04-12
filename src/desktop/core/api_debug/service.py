@@ -9,14 +9,14 @@ from typing import Callable
 import httpx
 
 # 项目内模块导入
-from src.core.api_debug.auth import ApiDebugAuthInjector
-from src.core.api_debug.builder import ApiDebugRequestBuilder
-from src.core.api_debug.errors import ApiDebugErrorMiddleware
-from src.core.api_debug.history import ApiDebugHistoryManager
-from src.core.api_debug.models import ApiDebugAuthConfig, ApiDebugExecutionResult, ApiDebugRequestConfig
-from src.core.api_debug.parser import ApiDebugResponseParser
-from src.core.logging import LogSource, LogType, logger
-from src.core.logging.crash_bundle import summarize_url
+from src.desktop.core.api_debug.auth import ApiDebugAuthInjector
+from src.desktop.core.api_debug.builder import ApiDebugRequestBuilder
+from src.desktop.core.api_debug.errors import ApiDebugErrorMiddleware
+from src.desktop.core.api_debug.history import ApiDebugHistoryManager
+from src.desktop.core.api_debug.models import ApiDebugAuthConfig, ApiDebugExecutionResult, ApiDebugRequestConfig
+from src.desktop.core.api_debug.parser import ApiDebugResponseParser
+from src.desktop.core.logging import LogSource, LogType, logger
+from src.desktop.core.logging.crash_bundle import summarize_url
 
 ClientFactory = Callable[..., httpx.Client]
 

@@ -9,11 +9,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.ui.common.emoticons import FuFuEmoticons
+from src.desktop.ui.common.emoticons import FuFuEmoticons
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.guide_window.guide_window import GuideWindow
+    from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
 
 class AskPage(QWidget):
@@ -108,7 +108,7 @@ class BeginnerCard(CardWidget):
     def on_click(self) -> None:
         """点击事件"""
         # 项目内模块导入
-        from src.ui.window.guide_window.guide_window import GuideWindow
+        from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
         it(GuideWindow).on_next_page()
 
@@ -149,6 +149,6 @@ class ExperiencedCard(CardWidget):
     def on_click(self) -> None:
         """点击事件"""
         # 项目内模块导入
-        from src.ui.window.guide_window.guide_window import GuideWindow
+        from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
         it(GuideWindow).close()

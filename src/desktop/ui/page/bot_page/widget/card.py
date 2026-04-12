@@ -53,7 +53,7 @@ from creart import it
 from qfluentwidgets.common.overload import singledispatchmethod
 
 # 项目内模块导入
-from src.core.config.config_model import (
+from src.desktop.core.config.config_model import (
     Config,
     ConnectConfig,
     HttpClientsConfig,
@@ -63,14 +63,14 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.core.network.urls import Urls
-from src.core.logging import LogSource, logger
-from src.core.logging.crash_bundle import mask_qqid
-from src.core.runtime.napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
-from src.ui.common.icon import StaticIcon, NapCatDesktopIcon
-from src.ui.components.info_bar import error_bar, warning_bar
-from src.ui.components.message_box import AskBox
-from src.ui.page.bot_page.widget.msg_box import (
+from src.desktop.core.network.urls import Urls
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.logging.crash_bundle import mask_qqid
+from src.desktop.core.runtime.napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.desktop.ui.common.icon import StaticIcon, NapCatDesktopIcon
+from src.desktop.ui.components.info_bar import error_bar, warning_bar
+from src.desktop.ui.components.message_box import AskBox
+from src.desktop.ui.page.bot_page.widget.msg_box import (
     HttpClientConfigDialog,
     HttpServerConfigDialog,
     HttpSSEServerConfigDialog,
@@ -218,7 +218,7 @@ class BotCard(HeaderCardWidget):
     def slot_log_button(self) -> None:
         """处理日志按钮槽函数"""
         # 项目内模块导入
-        from src.ui.page.bot_page import BotPage
+        from src.desktop.ui.page.bot_page import BotPage
 
         logger.trace(f"打开 Bot 日志页(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
         page = it(BotPage)
@@ -265,7 +265,7 @@ class BotCard(HeaderCardWidget):
     def slot_setting_button(self) -> None:
         """处理配置按钮槽函数"""
         # 项目内模块导入
-        from src.ui.page.bot_page import BotPage
+        from src.desktop.ui.page.bot_page import BotPage
 
         logger.trace(f"打开 Bot 配置页(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
         page = it(BotPage)
@@ -275,7 +275,7 @@ class BotCard(HeaderCardWidget):
     def slot_remove_button(self) -> None:
         """处理移除自身槽函数"""
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
+        from src.desktop.ui.window.main_window.window import MainWindow
 
         qq_id = str(self._config.bot.QQID)
         process_manager = it(ManagerNapCatQQProcess)
@@ -861,7 +861,7 @@ class HttpServerConfigCard(ConfigCardBase):
     def _slot_edit_button_clicked(self) -> None:
         """处理编辑按钮点击事件"""
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
+        from src.desktop.ui.window.main_window.window import MainWindow
 
         dialog = HttpServerConfigDialog(it(MainWindow), cast(HttpServersConfig, self.config))
         if dialog.exec():
@@ -940,7 +940,7 @@ class HttpSSEConfigCard(ConfigCardBase):
     def _slot_edit_button_clicked(self) -> None:
         """处理编辑按钮点击事件"""
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
+        from src.desktop.ui.window.main_window.window import MainWindow
 
         dialog = HttpSSEServerConfigDialog(it(MainWindow), cast(HttpSseServersConfig, self.config))
         if dialog.exec():
@@ -998,7 +998,7 @@ class HttpClientConfigCard(ConfigCardBase):
     def _slot_edit_button_clicked(self) -> None:
         """处理编辑按钮点击事件"""
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
+        from src.desktop.ui.window.main_window.window import MainWindow
 
         dialog = HttpClientConfigDialog(it(MainWindow), cast(HttpClientsConfig, self.config))
         if dialog.exec():
@@ -1077,7 +1077,7 @@ class WebsocketServersConfigCard(ConfigCardBase):
     def _slot_edit_button_clicked(self) -> None:
         """处理编辑按钮点击事件"""
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
+        from src.desktop.ui.window.main_window.window import MainWindow
 
         dialog = WebsocketServerConfigDialog(it(MainWindow), cast(WebsocketServersConfig, self.config))
         if dialog.exec():
@@ -1149,7 +1149,7 @@ class WebsocketClientConfigCard(ConfigCardBase):
     def _slot_edit_button_clicked(self) -> None:
         """处理编辑按钮点击事件"""
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
+        from src.desktop.ui.window.main_window.window import MainWindow
 
         dialog = WebsocketClientConfigDialog(it(MainWindow), cast(WebsocketClientsConfig, self.config))
         if dialog.exec():

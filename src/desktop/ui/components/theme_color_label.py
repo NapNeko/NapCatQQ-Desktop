@@ -15,7 +15,7 @@ from qfluentwidgets.components.widgets.label import (
     TitleLabel,
 )
 
-from src.core.config import cfg
+from src.desktop.core.config import cfg
 
 
 def _mix_color(source: QColor, target: QColor | str, ratio: float) -> QColor:

@@ -9,8 +9,8 @@ from typing import Any
 import httpx
 
 # 项目内模块导入
-from src.core.api_debug.errors import ApiDebugRequestBuildError
-from src.core.api_debug.models import ApiDebugBodyType, ApiDebugBuiltRequest, ApiDebugRequestConfig
+from src.desktop.core.api_debug.errors import ApiDebugRequestBuildError
+from src.desktop.core.api_debug.models import ApiDebugBodyType, ApiDebugBuiltRequest, ApiDebugRequestConfig
 
 
 class ApiDebugRequestBuilder:

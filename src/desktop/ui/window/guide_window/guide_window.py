@@ -11,15 +11,15 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QVBoxLayout
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.core.logging import CrashBundleNotification, LogSource, crash_bundle_notification_center, logger
-from src.ui.common.icon import StaticIcon
-from src.ui.components.info_bar import info_bar, warning_bar
-from src.ui.window.guide_window.ask_page import AskPage
-from src.ui.window.guide_window.eula_page import EulaPage
-from src.ui.window.guide_window.finsh_page import FinshPage
-from src.ui.window.guide_window.install_page import InstallNapCatQQPage, InstallQQPage
-from src.ui.window.guide_window.welcome_page import WelcomePage
+from src.desktop.core.config import cfg
+from src.desktop.core.logging import CrashBundleNotification, LogSource, crash_bundle_notification_center, logger
+from src.desktop.ui.common.icon import StaticIcon
+from src.desktop.ui.components.info_bar import info_bar, warning_bar
+from src.desktop.ui.window.guide_window.ask_page import AskPage
+from src.desktop.ui.window.guide_window.eula_page import EulaPage
+from src.desktop.ui.window.guide_window.finsh_page import FinshPage
+from src.desktop.ui.window.guide_window.install_page import InstallNapCatQQPage, InstallQQPage
+from src.desktop.ui.window.guide_window.welcome_page import WelcomePage
 
 """引导用户执行初始化操作模块
 
@@ -161,7 +161,7 @@ class GuideWindow(FramelessWindow):
         self.hide()
 
         # 项目内模块导入
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         it(MainWindow).initialize()
         cfg.set(cfg.main_window, True)
@@ -219,7 +219,7 @@ class GuideWindowCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.ui.window.guide_window.guide_window",
+            module="src.desktop.ui.window.guide_window.guide_window",
             identify="GuideWindow",
             humanized_name="引导窗体",
             description="NapCatQQ Desktop 引导窗体",
@@ -229,7 +229,7 @@ class GuideWindowCreator(AbstractCreator, ABC):
     @staticmethod
     def available() -> bool:
         """检查创建器是否可用"""
-        return exists_module("src.ui.window.guide_window.guide_window")
+        return exists_module("src.desktop.ui.window.guide_window.guide_window")
 
     @staticmethod
     def create(create_type):

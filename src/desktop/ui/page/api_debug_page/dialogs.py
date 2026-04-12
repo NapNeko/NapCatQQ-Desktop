@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QListWidgetItem, QWidget
 from qfluentwidgets import ListWidget, MessageBoxBase, SearchLineEdit, TitleLabel
 
-from src.core.api_debug.models import ApiDebugSearchItem
+from src.desktop.core.api_debug.models import ApiDebugSearchItem
 
 
 class ApiDebugSearchDialog(MessageBoxBase):

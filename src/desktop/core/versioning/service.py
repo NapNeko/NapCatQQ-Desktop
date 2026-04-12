@@ -10,10 +10,10 @@ import httpx
 from pydantic import BaseModel
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Signal
 
-from src.core.config import cfg
-from src.core.network.urls import Urls
-from src.core.logging import logger
-from src.core.runtime.paths import PathFunc
+from src.desktop.core.config import cfg
+from src.desktop.core.network.urls import Urls
+from src.desktop.core.logging import logger
+from src.desktop.core.runtime.paths import PathFunc
 
 
 class VersionSnapshot(BaseModel):

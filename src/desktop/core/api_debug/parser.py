@@ -9,7 +9,7 @@ import json
 import httpx
 
 # 项目内模块导入
-from src.core.api_debug.models import ApiDebugResponse, ApiDebugResponseBodyType
+from src.desktop.core.api_debug.models import ApiDebugResponse, ApiDebugResponseBodyType
 
 
 class ApiDebugResponseParser:

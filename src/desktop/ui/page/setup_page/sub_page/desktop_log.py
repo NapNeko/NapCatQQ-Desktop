@@ -18,9 +18,9 @@ from PySide6.QtGui import QAction, QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QPlainTextEdit, QSizePolicy, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.logging import LogLevel, LogOutputNotification, log_output_notification_center, logger
-from src.ui.components.code_editor import CodeExibit, LogHighlighter
-from src.ui.components.info_bar import error_bar, warning_bar
+from src.desktop.core.logging import LogLevel, LogOutputNotification, log_output_notification_center, logger
+from src.desktop.ui.components.code_editor import CodeExibit, LogHighlighter
+from src.desktop.ui.components.info_bar import error_bar, warning_bar
 
 
 class LogLevelFilterComboBox(ComboBox):

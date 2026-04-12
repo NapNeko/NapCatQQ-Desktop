@@ -11,7 +11,7 @@ from qfluentwidgets.common import FluentIconBase, Theme, getIconColor
 from qfluentwidgets.common.icon import SvgIconEngine, drawSvgIcon
 
 # 项目内模块导入
-from src.core.config import cfg
+from src.desktop.core.config import cfg
 
 
 def _mix_color(source: QColor, target: QColor | str, ratio: float) -> QColor:

@@ -11,13 +11,13 @@ from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtWidgets import QGridLayout, QLineEdit, QWidget
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.core.logging import LogSource, logger
-from src.core.network.email import EncryptionType, create_test_email_task
-from src.core.network.webhook import create_test_webhook_task
-from src.core.remote import RemoteManager, SSHCredentials
-from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
-from src.ui.components.input_card.generic_card import (
+from src.desktop.core.config import cfg
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.network.email import EncryptionType, create_test_email_task
+from src.desktop.core.network.webhook import create_test_webhook_task
+from src.desktop.core.remote import RemoteManager, SSHCredentials
+from src.desktop.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
+from src.desktop.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
     JsonTemplateEditConfigCard,
     LineEditConfigCard,
@@ -25,7 +25,7 @@ from src.ui.components.input_card.generic_card import (
     SwitchConfigCard,
     VersionInfoCard,
 )
-from src.ui.page.setup_page.widget import ConfigExportDialog, LegacyImportDialog
+from src.desktop.ui.page.setup_page.widget import ConfigExportDialog, LegacyImportDialog
 
 if TYPE_CHECKING:
     # 项目内模块导入
@@ -408,7 +408,7 @@ class RemoteConnectionDialog(MessageBoxBase):
         )
         self.connect_timeout_card = LineEditConfigCard(FI.STOP_WATCH, self.tr("连接超时(秒)"), "10")
         self.command_timeout_card = LineEditConfigCard(FI.STOP_WATCH, self.tr("命令超时(秒)"), "20")
-        self.workspace_dir_card = LineEditConfigCard(FI.FOLDER, self.tr("远端工作目录"), "$HOME/NapCatCore")
+        self.workspace_dir_card = LineEditConfigCard(FI.FOLDER, self.tr("远端工作目录"), "$HOME/Napcat")
         self.test_button = PushButton(self.tr("测试连接"), self)
 
         self.grid_layout = QGridLayout()

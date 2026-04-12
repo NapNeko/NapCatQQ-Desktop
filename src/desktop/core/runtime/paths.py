@@ -6,8 +6,8 @@ from pathlib import Path
 from abc import ABC
 
 # 项目内模块导入
-from src.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
-from src.core.logging import LogSource, LogType, logger
+from src.desktop.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
+from src.desktop.core.logging import LogSource, LogType, logger
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator
 
 
@@ -155,7 +155,7 @@ class PathFuncCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.core.runtime.paths",
+            module="src.desktop.core.runtime.paths",
             identify="PathFunc",
             humanized_name="路径处理类",
             description="NapCatQQ Desktop 路径处理类",
@@ -165,7 +165,7 @@ class PathFuncCreator(AbstractCreator, ABC):
     @staticmethod
     def available() -> bool:
         """判断路径处理类模块是否可用"""
-        return exists_module("src.core.runtime.paths")
+        return exists_module("src.desktop.core.runtime.paths")
 
     @staticmethod
     def create(create_type):

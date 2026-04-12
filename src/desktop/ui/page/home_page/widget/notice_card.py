@@ -4,8 +4,8 @@ from PySide6.QtWidgets import QSizePolicy, QVBoxLayout
 
 from qfluentwidgets import SimpleCardWidget
 
-from src.core.home import HomeNoticeService
-from src.ui.components.notice_timeline import (
+from src.desktop.core.home import HomeNoticeService
+from src.desktop.ui.components.notice_timeline import (
     NoticeTimelineWidget,
 )
 

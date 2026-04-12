@@ -16,8 +16,8 @@ from qfluentwidgets import (
     ToolButton,
 )
 
-from src.core.api_debug import ApiDebugActionSchema, ApiDebugBotContext
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.core.api_debug import ApiDebugActionSchema, ApiDebugBotContext
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 from ..common import find_index_by_data
 
 

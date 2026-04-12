@@ -8,7 +8,7 @@ import socket
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from src.core.logging import LogSource, LogType, logger
+from src.desktop.core.logging import LogSource, LogType, logger
 
 from .errors import RemoteCommandError, SSHAuthenticationError, SSHConnectionError, SSHHostKeyError
 from .models import RemoteCommandResult, SSHCredentials
@@ -31,6 +31,7 @@ class SSHClient:
     def __init__(self, credentials: SSHCredentials) -> None:
         self.credentials = credentials
         self._client: "paramiko.SSHClient | None" = None
+        self._remote_home_dir: str | None = None
 
     def connect(self) -> None:
         """建立 SSH 连接。"""
@@ -91,6 +92,7 @@ class SSHClient:
 
         self._client.close()
         self._client = None
+        self._remote_home_dir = None
         logger.info(
             f"SSH 连接已关闭: host={self.credentials.host}, username={self.credentials.username}",
             LogType.NETWORK,
@@ -137,24 +139,40 @@ class SSHClient:
         local_file = Path(local_path)
         if not local_file.exists():
             raise FileNotFoundError(f"待上传文件不存在: {local_file}")
+        resolved_remote_path = self._resolve_sftp_path(remote_path)
 
+        logger.info(
+            (
+                "开始上传远端文件: "
+                f"local={local_file}, remote={remote_path}, resolved_remote={resolved_remote_path}, "
+                f"size={local_file.stat().st_size}"
+            ),
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
         self.ensure_remote_directory(PurePosixPath(remote_path).parent.as_posix())
 
         try:
             with client.open_sftp() as sftp:
-                sftp.put(str(local_file), remote_path)
+                sftp.put(str(local_file), resolved_remote_path)
         except (OSError, paramiko.SSHException) as exc:
             raise SSHConnectionError(f"上传文件失败: {exc}") from exc
+        logger.info(
+            f"远端文件上传完成: remote={resolved_remote_path}",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
 
     def download_file(self, remote_path: str, local_path: str | Path) -> None:
         """下载单个文件。"""
         client = self._require_client()
         local_file = Path(local_path)
         local_file.parent.mkdir(parents=True, exist_ok=True)
+        resolved_remote_path = self._resolve_sftp_path(remote_path)
 
         try:
             with client.open_sftp() as sftp:
-                sftp.get(remote_path, str(local_file))
+                sftp.get(resolved_remote_path, str(local_file))
         except (OSError, paramiko.SSHException) as exc:
             raise SSHConnectionError(f"下载文件失败: {exc}") from exc
 
@@ -184,6 +202,31 @@ class SSHClient:
         if self._client is None:
             raise SSHConnectionError("SSH 尚未连接，请先调用 connect()")
         return self._client
+
+    def _resolve_sftp_path(self, remote_path: str) -> str:
+        """将 shell 风格路径转换为 SFTP 可识别的绝对路径。"""
+        if remote_path.startswith("$HOME"):
+            home_dir = self._get_remote_home_directory()
+            suffix = remote_path[len("$HOME") :]
+            return f"{home_dir}{suffix}"
+        return remote_path
+
+    def _get_remote_home_directory(self) -> str:
+        """查询远端用户家目录，并在当前连接内缓存。"""
+        if self._remote_home_dir:
+            return self._remote_home_dir
+
+        result = self.run('printf %s "$HOME"', check=True)
+        home_dir = result.stdout.strip()
+        if not home_dir:
+            raise SSHConnectionError("无法解析远端 HOME 目录")
+        self._remote_home_dir = home_dir
+        logger.info(
+            f"已解析远端 HOME 目录: host={self.credentials.host}, home={home_dir}",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
+        return home_dir
 
     @staticmethod
     def _quote_remote_argument(value: str) -> str:

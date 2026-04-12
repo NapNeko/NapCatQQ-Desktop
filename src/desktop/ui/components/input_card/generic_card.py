@@ -41,11 +41,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from src.core.config import cfg
+from src.desktop.core.config import cfg
 from creart import it
 
 # 项目内模块导入
-from src.ui.components.code_editor import JsonEditor
+from src.desktop.ui.components.code_editor import JsonEditor
 
 """通用配置卡片
 
@@ -432,7 +432,7 @@ class ShowDialogCardBase(SettingCard):
 
     def slot_button_show_dialog(self) -> None:
         # 项目内模块导入
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         self._dialog(it(MainWindow)).exec()
 
@@ -457,7 +457,7 @@ class ShowDialogCard(ShowDialogCardBase):
         # 检测是否实例化, 如果没有实例化则实例化
         if not isinstance(self._dialog, self._dialog_class):
             # 项目内模块导入
-            from src.ui.window.main_window import MainWindow
+            from src.desktop.ui.window.main_window import MainWindow
 
             self._dialog = self._dialog(it(MainWindow))
 

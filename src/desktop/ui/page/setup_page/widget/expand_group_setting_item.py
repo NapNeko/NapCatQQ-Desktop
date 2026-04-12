@@ -23,7 +23,7 @@ from PySide6.QtCore import QDir, Qt, Signal, Slot
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.config import cfg
+from src.desktop.core.config import cfg
 
 
 class ItemBase(QWidget):

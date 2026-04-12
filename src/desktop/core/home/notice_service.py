@@ -9,16 +9,16 @@ from time import time
 from creart import it
 from PySide6.QtCore import QObject, QThreadPool, Signal
 
-from src.core.config import cfg
-from src.core.config.operate_config import read_config
-from src.core.home.notice_model import (
+from src.desktop.core.config import cfg
+from src.desktop.core.config.operate_config import read_config
+from src.desktop.core.home.notice_model import (
     NoticeDismissMode,
     NoticeTimelineItemData,
     NoticeTimelineSectionData,
     NoticeTimelineStatus,
 )
-from src.core.versioning import LocalVersionTask, RemoteVersionTask, VersionSnapshot
-from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.desktop.core.versioning import LocalVersionTask, RemoteVersionTask, VersionSnapshot
+from src.desktop.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 
 
 @dataclass(slots=True)

@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.core.config.config_enum import TimeUnitEnum
+from src.desktop.core.config.config_enum import TimeUnitEnum
 
 
 class IntervalTimeConfigCard(SettingCard):

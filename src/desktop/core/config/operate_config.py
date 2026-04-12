@@ -14,7 +14,7 @@ from typing import Any, List
 from creart import it
 
 # 项目内模块导入
-from src.core.config.config_model import (
+from src.desktop.core.config.config_model import (
     BOT_CONFIG_COMPAT_VERSION,
     Config,
     ConfigCollection,
@@ -24,8 +24,8 @@ from src.core.config.config_model import (
     migrate_bot_config_payload,
     serialize_bot_config_collection,
 )
-from src.core.logging import logger
-from src.core.runtime.paths import PathFunc
+from src.desktop.core.logging import logger
+from src.desktop.core.runtime.paths import PathFunc
 
 _BOT_CONFIG_MIGRATION_BACKUP_SUFFIX = ".bak"
 _MISSING = object()

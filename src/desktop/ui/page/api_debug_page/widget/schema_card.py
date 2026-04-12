@@ -10,8 +10,8 @@ from PySide6.QtGui import QFont, QFontMetrics, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import CaptionLabel, CardWidget, StrongBodyLabel
 
-from src.core.config import cfg
-from src.ui.components.code_editor.exhibit import CodeExibit
+from src.desktop.core.config import cfg
+from src.desktop.ui.components.code_editor.exhibit import CodeExibit
 from ..common import pretty_json
 
 

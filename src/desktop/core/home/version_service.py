@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
 
-from src.core.versioning import LocalVersionTask
+from src.desktop.core.versioning import LocalVersionTask
 
 
 @dataclass(slots=True)

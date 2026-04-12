@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QFile, QIODevice
 
-from src.core.desktop_update.constants import MSI_UPDATE_SCRIPT_FILENAME
+from src.desktop.core.desktop_update.constants import MSI_UPDATE_SCRIPT_FILENAME
 
 
 SCRIPT_DIR = Path(__file__).resolve().parents[2] / "resource" / "script"

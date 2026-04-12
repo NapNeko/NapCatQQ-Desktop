@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
 """接口调试核心能力导出。"""
 
-from src.core.api_debug.auth import (
+from src.desktop.core.api_debug.auth import (
     ApiDebugAuthInjector,
     create_bearer_auth_from_network_config,
     create_bearer_auth_from_token,
     create_webui_auth_from_login_state,
 )
-from src.core.api_debug.action_service import ActionDebugService
-from src.core.api_debug.builder import ApiDebugRequestBuilder
-from src.core.api_debug.context import ApiDebugContextService
-from src.core.api_debug.errors import (
+from src.desktop.core.api_debug.action_service import ActionDebugService
+from src.desktop.core.api_debug.builder import ApiDebugRequestBuilder
+from src.desktop.core.api_debug.context import ApiDebugContextService
+from src.desktop.core.api_debug.errors import (
     ApiDebugAuthError,
     ApiDebugErrorMiddleware,
     ApiDebugException,
     ApiDebugHistoryError,
     ApiDebugRequestBuildError,
 )
-from src.core.api_debug.history import ApiDebugHistoryManager
-from src.core.api_debug.models import (
+from src.desktop.core.api_debug.history import ApiDebugHistoryManager
+from src.desktop.core.api_debug.models import (
     ApiDebugActionDraft,
     ApiDebugActionSchema,
     ApiDebugActionSession,
@@ -48,11 +48,11 @@ from src.core.api_debug.models import (
     ApiDebugWebSocketState,
     ApiDebugWorkspaceState,
 )
-from src.core.api_debug.parser import ApiDebugResponseParser
-from src.core.api_debug.schema_defaults import SchemaDefaultGenerator
-from src.core.api_debug.service import ApiDebugService
-from src.core.api_debug.websocket_service import ApiDebugWebSocketService
-from src.core.api_debug.workspace_store import ApiDebugWorkspaceStore
+from src.desktop.core.api_debug.parser import ApiDebugResponseParser
+from src.desktop.core.api_debug.schema_defaults import SchemaDefaultGenerator
+from src.desktop.core.api_debug.service import ApiDebugService
+from src.desktop.core.api_debug.websocket_service import ApiDebugWebSocketService
+from src.desktop.core.api_debug.workspace_store import ApiDebugWorkspaceStore
 
 __all__ = [
     "ActionDebugService",

@@ -14,21 +14,21 @@ from qfluentwidgets import ExpandLayout, PushButton, ScrollArea, SettingCard, Se
 from qfluentwidgets import FluentIcon as FI
 
 # 项目内模块导入
-from src.core.home import home_notice_debug_center
-from src.core.desktop_update import MsiUpdateStrategy, inject_target_pid
-from src.core.installation.install_type import detect_install_type
-from src.core.logging import LogSource, logger
-from src.core.runtime.paths import PathFunc
-from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
-from src.core.desktop_update.templates import load_msi_update_script
-from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
-from src.ui.components.input_card.generic_card import SwitchConfigCard
-from src.ui.components.message_box import AskBox
-from src.ui.page.component_page.utils import build_install_type_details, build_update_confirmation_message
+from src.desktop.core.home import home_notice_debug_center
+from src.desktop.core.desktop_update import MsiUpdateStrategy, inject_target_pid
+from src.desktop.core.installation.install_type import detect_install_type
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.runtime.paths import PathFunc
+from src.desktop.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.desktop.core.desktop_update.templates import load_msi_update_script
+from src.desktop.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
+from src.desktop.ui.components.input_card.generic_card import SwitchConfigCard
+from src.desktop.ui.components.message_box import AskBox
+from src.desktop.ui.page.component_page.utils import build_install_type_details, build_update_confirmation_message
 
 if TYPE_CHECKING:
     # 避免循环导入
-    from src.ui.window.main_window import MainWindow
+    from src.desktop.ui.window.main_window import MainWindow
 
 
 class ActionButtonCard(SettingCard):
@@ -261,7 +261,7 @@ class Developer(ScrollArea):
         )
 
         # 运行时动态导入避免循环导入
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         box = AskBox(self.tr("确认更新 [测试]"), full_message, it(MainWindow))
         box.yesButton.setText(self.tr("开始更新"))
@@ -292,7 +292,7 @@ class Developer(ScrollArea):
         logger.info(f"安装类型检测结果:\n{info_text}", log_source=LogSource.UI)
 
         # 运行时动态导入避免循环导入
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         # 显示信息弹窗
         msg = QMessageBox(it(MainWindow))

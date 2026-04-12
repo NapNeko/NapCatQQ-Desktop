@@ -10,16 +10,16 @@ from PySide6.QtCore import QCoreApplication, QThreadPool, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
-from src.core.desktop_update import UpdateManager
-from src.core.network.urls import Urls
-from src.core.versioning import VersionSnapshot
-from src.core.logging import LogSource, logger
-from src.core.logging.crash_bundle import summarize_path
-from src.core.runtime.paths import PathFunc
-from src.core.runtime.napcat import ManagerNapCatQQProcess
-from src.resource import resource as _resource  # noqa: F401
-from src.ui.components.info_bar import error_bar, info_bar, success_bar
-from src.ui.components.message_box import AskBox
+from src.desktop.core.desktop_update import UpdateManager
+from src.desktop.core.network.urls import Urls
+from src.desktop.core.versioning import VersionSnapshot
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.logging.crash_bundle import summarize_path
+from src.desktop.core.runtime.paths import PathFunc
+from src.desktop.core.runtime.napcat import ManagerNapCatQQProcess
+from src.desktop.resource import resource as _resource  # noqa: F401
+from src.desktop.ui.components.info_bar import error_bar, info_bar, success_bar
+from src.desktop.ui.components.message_box import AskBox
 from ..utils import (
     ButtonStatus,
     build_update_confirmation_message,
@@ -120,7 +120,7 @@ class DesktopPage(PageBase):
             log_source=LogSource.UI,
         )
 
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         # 检查是否有运行的 Bot
         has_bot = it(ManagerNapCatQQProcess).has_running_bot()
@@ -162,7 +162,7 @@ class DesktopPage(PageBase):
         """启动或继续 Desktop 更新包下载。"""
 
         # 项目内模块导入
-        from src.core.network.downloader import GithubDownloader
+        from src.desktop.core.network.downloader import GithubDownloader
 
         # 获取下载 URL
         download_url = self._get_download_url()
@@ -203,7 +203,7 @@ class DesktopPage(PageBase):
         package_path = it(PathFunc).tmp_path / package_filename
 
         if self.is_operation_paused():
-            from src.core.network.downloader import DownloaderBase
+            from src.desktop.core.network.downloader import DownloaderBase
 
             DownloaderBase.safe_unlink(package_path.with_name(f"{package_path.name}.part"))
             self.end_operation()
@@ -228,7 +228,7 @@ class DesktopPage(PageBase):
         Returns:
             bool: 用户是否确认继续
         """
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         full_message = build_update_confirmation_message(
             translate=self.tr,

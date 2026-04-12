@@ -4,7 +4,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from src.core.installation.install_type import InstallType
+from src.desktop.core.installation.install_type import InstallType
 
 
 def build_update_confirmation_message(

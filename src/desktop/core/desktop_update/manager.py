@@ -11,14 +11,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from src.core.desktop_update.constants import (
+from src.desktop.core.desktop_update.constants import (
     MINIMUM_MSI_SIZE_BYTES,
     MSI_LOG_FILE,
     MSI_UPDATE_SCRIPT_FILENAME,
 )
-from src.core.installation.install_type import InstallType, detect_install_type, get_update_file_pattern
-from src.core.desktop_update.templates import load_msi_update_script
-from src.core.platform.app_paths import resolve_app_data_path
+from src.desktop.core.installation.install_type import InstallType, detect_install_type, get_update_file_pattern
+from src.desktop.core.desktop_update.templates import load_msi_update_script
+from src.desktop.core.platform.app_paths import resolve_app_data_path
 
 logger = logging.getLogger(__name__)
 

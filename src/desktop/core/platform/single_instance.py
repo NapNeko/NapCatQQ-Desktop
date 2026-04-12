@@ -4,8 +4,8 @@ from creart import it
 from PySide6.QtCore import QLockFile
 
 # 项目内模块导入
-from src.core.logging import LogSource, LogType, logger
-from src.core.runtime.paths import PathFunc
+from src.desktop.core.logging import LogSource, LogType, logger
+from src.desktop.core.runtime.paths import PathFunc
 
 """
 确保应用程序的单实例运行, 使用共享内存和系统信号量, 防止多个实例同时运行

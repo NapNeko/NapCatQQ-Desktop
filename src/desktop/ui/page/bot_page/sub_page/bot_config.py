@@ -13,14 +13,14 @@ from qfluentwidgets import FluentIcon, SegmentedWidget, TransparentPushButton
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.config.config_model import AdvancedConfig, BotConfig, Config, ConnectConfig
-from src.core.config.operate_config import merge_config_for_update, update_config
-from src.core.logging import LogSource, logger
-from src.core.logging.crash_bundle import mask_qqid
-from src.ui.components.info_bar import error_bar, success_bar
-from src.ui.components.stacked_widget import TransparentStackedWidget
-from src.ui.page.bot_page.utils.enum import ConnectType
-from src.ui.page.bot_page.widget import (
+from src.desktop.core.config.config_model import AdvancedConfig, BotConfig, Config, ConnectConfig
+from src.desktop.core.config.operate_config import merge_config_for_update, update_config
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.logging.crash_bundle import mask_qqid
+from src.desktop.ui.components.info_bar import error_bar, success_bar
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.ui.page.bot_page.utils.enum import ConnectType
+from src.desktop.ui.page.bot_page.widget import (
     ChooseConfigTypeDialog,
     HttpClientConfigDialog,
     HttpServerConfigDialog,
@@ -28,7 +28,7 @@ from src.ui.page.bot_page.widget import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
-from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget, ConnectConfigWidget
+from src.desktop.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget, ConnectConfigWidget
 
 
 class ConfigPage(QWidget):
@@ -176,7 +176,7 @@ class ConfigPage(QWidget):
     def slot_return_button(self) -> None:
         """返回按钮槽函数"""
         # 项目内模块导入
-        from src.ui.page.bot_page import BotPage
+        from src.desktop.ui.page.bot_page import BotPage
 
         logger.trace("Bot 配置页返回到 Bot 列表", log_source=LogSource.UI)
         page = it(BotPage)
@@ -207,7 +207,7 @@ class ConfigPage(QWidget):
         )
         if update_config(merged_config, base_config=merged_config, skip_merge=True):
             # 项目内模块导入
-            from src.ui.page.bot_page import BotPage
+            from src.desktop.ui.page.bot_page import BotPage
 
             it(BotPage).bot_list_page.update_bot_list()
             self.fill_config(merged_config)
@@ -220,7 +220,7 @@ class ConfigPage(QWidget):
     def slot_add_connect_button(self) -> None:
         """添加连接配置按钮槽函数"""
         # 项目内模块导入
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         logger.trace("打开连接配置类型选择对话框", log_source=LogSource.UI)
         if not (_choose_connect_type_box := ChooseConfigTypeDialog(it(MainWindow))).exec():

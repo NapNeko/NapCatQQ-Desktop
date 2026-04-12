@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QWidget
 from typing import Any, cast
 
 # 项目内模块导入
-from src.ui.components.managers import NCDInfoBarPosition
+from src.desktop.ui.components.managers import NCDInfoBarPosition
 
 
 def _position(position: NCDInfoBarPosition) -> Any:
@@ -32,7 +32,7 @@ def _resolve_parent(parent: QObject | None) -> QWidget:
             return window
         return parent
 
-    from src.ui.window.main_window.window import MainWindow
+    from src.desktop.ui.window.main_window.window import MainWindow
     from creart import it
 
     return it(MainWindow)

@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QWidget
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.components.code_editor.editor import CodeEditorBase
+    from src.desktop.ui.components.code_editor.editor import CodeEditorBase
 
 
 class LineNumberArea(QWidget):

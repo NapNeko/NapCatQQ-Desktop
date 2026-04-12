@@ -10,12 +10,12 @@ from PySide6.QtGui import QPainter, QPainterPath, QPaintEvent, QPen, QResizeEven
 from PySide6.QtSvg import QSvgRenderer
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
+from src.desktop.core.config import cfg
+from src.desktop.ui.common.icon import NapCatDesktopIcon, StaticIcon
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.desktop.ui.window.main_window import MainWindow
 
 
 """NapCatQQ Desktop 主窗口标题栏模块

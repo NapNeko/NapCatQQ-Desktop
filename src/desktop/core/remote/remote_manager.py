@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.core.logging import LogSource, LogType, logger
+from src.desktop.core.logging import LogSource, LogType, logger
 
 from .deployment import (
     LinuxCoreDeployment,

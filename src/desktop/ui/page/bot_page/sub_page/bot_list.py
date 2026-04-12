@@ -8,11 +8,11 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.core.config.config_model import Config
-from src.core.config.operate_config import delete_config, read_config
-from src.core.logging.crash_bundle import mask_qqid
-from src.core.logging import LogSource, logger
-from src.ui.components.info_bar import error_bar
+from src.desktop.core.config.config_model import Config
+from src.desktop.core.config.operate_config import delete_config, read_config
+from src.desktop.core.logging.crash_bundle import mask_qqid
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.ui.components.info_bar import error_bar
 
 from ..widget.card import BotCard
 
@@ -166,11 +166,11 @@ class BotListPage(ScrollArea):
     def slot_add_button(self) -> None:
         """添加按钮槽函数"""
         # 判断有没有安装 NapCatQQ
-        from src.core.versioning import LocalVersionTask
+        from src.desktop.core.versioning import LocalVersionTask
 
         if LocalVersionTask().get_napcat_version():
             # 项目内模块导入
-            from src.ui.page.bot_page import BotPage
+            from src.desktop.ui.page.bot_page import BotPage
 
             logger.trace("进入新增 Bot 配置流程", log_source=LogSource.UI)
             page = it(BotPage)
@@ -179,7 +179,7 @@ class BotListPage(ScrollArea):
             page.header.setup_breadcrumb_bar(999)
 
         else:
-            from src.ui.components.info_bar import warning_bar
+            from src.desktop.ui.components.info_bar import warning_bar
 
             logger.warning("新增 Bot 配置被拒绝: 未检测到 NapCatQQ 安装", log_source=LogSource.UI)
             warning_bar("请先安装 NapCatQQ 后再添加 Bot 配置！")

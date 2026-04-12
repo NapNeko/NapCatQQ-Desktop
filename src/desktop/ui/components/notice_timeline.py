@@ -16,8 +16,8 @@ from qfluentwidgets import (
 from qfluentwidgets.components.widgets.tool_tip import ToolTipPosition
 from qfluentwidgets.common.smooth_scroll import SmoothMode
 
-from src.core.config import cfg
-from src.core.home.notice_model import (
+from src.desktop.core.config import cfg
+from src.desktop.core.home.notice_model import (
     NoticeDismissMode,
     NoticeTimelineItemData,
     NoticeTimelineSectionData,

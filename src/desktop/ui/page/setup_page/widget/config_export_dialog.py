@@ -11,17 +11,17 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QGridLayout, QSizePolicy, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.config.config_export import (
+from src.desktop.core.config.config_export import (
     ExportExecutionPlan,
     ExportExecutionResult,
     ExportScanResult,
     apply_config_export,
     scan_current_config_export,
 )
-from src.core.logging import LogSource, logger
-from src.ui.components.drop_folder_widget import DropFolderWidget
-from src.ui.components.info_bar import error_bar, success_bar, warning_bar
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.ui.components.drop_folder_widget import DropFolderWidget
+from src.desktop.ui.components.info_bar import error_bar, success_bar, warning_bar
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 
 
 class _DialogSectionCard(SimpleCardWidget):

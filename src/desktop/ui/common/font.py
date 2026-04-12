@@ -3,7 +3,7 @@
 from PySide6.QtGui import QFontDatabase
 
 # 项目内模块导入
-from src.core.logging import logger
+from src.desktop.core.logging import logger
 
 
 class FontManager:

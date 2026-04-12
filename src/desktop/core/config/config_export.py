@@ -9,10 +9,10 @@ from datetime import datetime
 from pathlib import Path
 
 # 项目内模块导入
-import src.core.config as app_config_module
-from src.core.config import _CURRENT_CONFIG_COMPAT_VERSION, _migrate_config_payload, _write_config_version
-from src.core.config.config_model import BOT_CONFIG_COMPAT_VERSION, serialize_bot_config_collection
-from src.core.config.operate_config import _get_path_func, read_config
+import src.desktop.core.config as app_config_module
+from src.desktop.core.config import _CURRENT_CONFIG_COMPAT_VERSION, _migrate_config_payload, _write_config_version
+from src.desktop.core.config.config_model import BOT_CONFIG_COMPAT_VERSION, serialize_bot_config_collection
+from src.desktop.core.config.operate_config import _get_path_func, read_config
 
 _EXPORT_FORMAT_VERSION = "v1"
 

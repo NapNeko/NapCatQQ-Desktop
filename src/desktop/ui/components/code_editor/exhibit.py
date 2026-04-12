@@ -7,10 +7,10 @@ from PySide6.QtGui import QColor, QDesktopServices, QMouseEvent, QPalette, QText
 from PySide6.QtWidgets import QTextBrowser, QWidget
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.ui.common.style_sheet import WidgetStyleSheet
-from src.ui.components.code_editor.editor import CodeEditor
-from src.ui.components.code_editor.smooth_scroll import SmoothTextScrollMixin
+from src.desktop.core.config import cfg
+from src.desktop.ui.common.style_sheet import WidgetStyleSheet
+from src.desktop.ui.components.code_editor.editor import CodeEditor
+from src.desktop.ui.components.code_editor.smooth_scroll import SmoothTextScrollMixin
 
 
 class CodeExibit(CodeEditor):

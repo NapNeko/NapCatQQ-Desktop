@@ -20,13 +20,13 @@ from httpx import Client, post
 from PySide6.QtCore import QObject, QProcess, QRunnable, QThreadPool, QTimer, Signal
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.core.config.config_enum import TimeUnitEnum
-from src.core.config.config_model import Config
-from src.core.network.email import Email, create_offline_email_task
-from src.core.network.webhook import WebHook, create_offline_webhook_task
-from src.core.logging import LogSource, LogType, logger
-from src.core.runtime.paths import PathFunc
+from src.desktop.core.config import cfg
+from src.desktop.core.config.config_enum import TimeUnitEnum
+from src.desktop.core.config.config_model import Config
+from src.desktop.core.network.email import Email, create_offline_email_task
+from src.desktop.core.network.webhook import WebHook, create_offline_webhook_task
+from src.desktop.core.logging import LogSource, LogType, logger
+from src.desktop.core.runtime.paths import PathFunc
 
 # ==================== 数据模型 ====================
 NotificationTask = Email | WebHook
@@ -1010,12 +1010,12 @@ class ManagerNapCatQQProcess(QObject):
 class ManagerNapCatQQLogManagerCreator(AbstractCreator, ABC):
     """NapCatQQ 日志管理器创建器"""
 
-    targets = (CreateTargetInfo("src.core.runtime.napcat", "ManagerNapCatQQLog"),)
+    targets = (CreateTargetInfo("src.desktop.core.runtime.napcat", "ManagerNapCatQQLog"),)
 
     @staticmethod
     def available() -> bool:
         """检查是否可用"""
-        return exists_module("src.core.runtime.napcat")
+        return exists_module("src.desktop.core.runtime.napcat")
 
     @staticmethod
     def create(create_type):
@@ -1029,12 +1029,12 @@ add_creator(ManagerNapCatQQLogManagerCreator)
 class ManagerNapCatQQLoginStateCreator(AbstractCreator, ABC):
     """NapCatQQ 登录状态管理器创建器"""
 
-    targets = (CreateTargetInfo("src.core.runtime.napcat", "ManagerNapCatQQLoginState"),)
+    targets = (CreateTargetInfo("src.desktop.core.runtime.napcat", "ManagerNapCatQQLoginState"),)
 
     @staticmethod
     def available() -> bool:
         """检查是否可用"""
-        return exists_module("src.core.runtime.napcat")
+        return exists_module("src.desktop.core.runtime.napcat")
 
     @staticmethod
     def create(create_type):
@@ -1048,12 +1048,12 @@ add_creator(ManagerNapCatQQLoginStateCreator)
 class ManagerAutoRestartProcessCreator(AbstractCreator, ABC):
     """NapCatQQ 自动重启进程管理器创建器"""
 
-    targets = (CreateTargetInfo("src.core.runtime.napcat", "ManagerAutoRestartProcess"),)
+    targets = (CreateTargetInfo("src.desktop.core.runtime.napcat", "ManagerAutoRestartProcess"),)
 
     @staticmethod
     def available() -> bool:
         """检查是否可用"""
-        return exists_module("src.core.runtime.napcat")
+        return exists_module("src.desktop.core.runtime.napcat")
 
     @staticmethod
     def create(create_type):
@@ -1067,12 +1067,12 @@ add_creator(ManagerAutoRestartProcessCreator)
 class ManagerNapCatQQProcessCreator(AbstractCreator, ABC):
     """NapCatQQ 进程管理器创建器"""
 
-    targets = (CreateTargetInfo("src.core.runtime.napcat", "ManagerNapCatQQProcess"),)
+    targets = (CreateTargetInfo("src.desktop.core.runtime.napcat", "ManagerNapCatQQProcess"),)
 
     @staticmethod
     def available() -> bool:
         """检查是否可用"""
-        return exists_module("src.core.runtime.napcat")
+        return exists_module("src.desktop.core.runtime.napcat")
 
     @staticmethod
     def create(create_type):

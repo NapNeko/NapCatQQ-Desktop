@@ -12,10 +12,10 @@ from string import Template
 from PySide6.QtCore import QFile, QObject, QRunnable, Signal
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.core.config.config_model import Config
-from src.core.qt.file import QFluentFile
-from src.core.logging import LogSource, LogType, logger
+from src.desktop.core.config import cfg
+from src.desktop.core.config.config_model import Config
+from src.desktop.core.qt.file import QFluentFile
+from src.desktop.core.logging import LogSource, LogType, logger
 
 
 class EncryptionType(Enum):

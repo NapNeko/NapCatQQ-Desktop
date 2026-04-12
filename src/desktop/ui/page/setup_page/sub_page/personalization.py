@@ -21,9 +21,9 @@ from PySide6.QtCore import QObject, Qt
 from PySide6.QtWidgets import QGridLayout, QWidget
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.ui.components.info_bar import success_bar
-from src.ui.components.input_card.generic_card import (
+from src.desktop.core.config import cfg
+from src.desktop.ui.components.info_bar import success_bar
+from src.desktop.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
     ShowDialogCardBase,
     SwitchConfigCard,
@@ -33,7 +33,7 @@ from creart import it
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.main_window import MainWindow
+    from src.desktop.ui.window.main_window import MainWindow
 
 
 class Personalization(ScrollArea):
@@ -122,7 +122,7 @@ class Personalization(ScrollArea):
     def _connect_signal(self) -> None:
         """信号处理"""
         # 项目内模块导入
-        from src.ui.window.main_window.window import MainWindow
+        from src.desktop.ui.window.main_window.window import MainWindow
 
         # 连接重启提示
         cfg.app_restart_signal.connect(lambda: success_bar(self.tr("配置在重启后生效")))

@@ -4,7 +4,7 @@ from qfluentwidgets import IndicatorPosition, LineEdit, SwitchButton
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.ui.components.input_card.base import ItemBase
+from src.desktop.ui.components.input_card.base import ItemBase
 
 
 class SwitchItem(ItemBase):

@@ -8,10 +8,10 @@ from typing import Callable
 from creart import it
 
 # 项目内模块导入
-from src.core.api_debug.auth import create_bearer_auth_from_network_config, create_webui_auth_from_login_state
-from src.core.api_debug.models import ApiDebugBotContext, ApiDebugEndpointSummary, ApiDebugTargetType
-from src.core.config.operate_config import read_config
-from src.core.runtime.napcat import ManagerNapCatQQLoginState
+from src.desktop.core.api_debug.auth import create_bearer_auth_from_network_config, create_webui_auth_from_login_state
+from src.desktop.core.api_debug.models import ApiDebugBotContext, ApiDebugEndpointSummary, ApiDebugTargetType
+from src.desktop.core.config.operate_config import read_config
+from src.desktop.core.runtime.napcat import ManagerNapCatQQLoginState
 
 
 ConfigReader = Callable[[], list[object]]

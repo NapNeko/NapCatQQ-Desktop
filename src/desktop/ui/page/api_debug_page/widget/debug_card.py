@@ -13,9 +13,9 @@ from qfluentwidgets import (
     ToolButton,
 )
 
-from src.core.api_debug import ApiDebugExecutionResult
-from src.ui.components.code_editor.editor import JsonEditor
-from src.ui.components.code_editor.exhibit import CodeExibit
+from src.desktop.core.api_debug import ApiDebugExecutionResult
+from src.desktop.ui.components.code_editor.editor import JsonEditor
+from src.desktop.ui.components.code_editor.exhibit import CodeExibit
 from ..common import pretty_json
 from ..shared import ApiDebugChip
 from .method_badge import MethodBadge, apply_method_badge

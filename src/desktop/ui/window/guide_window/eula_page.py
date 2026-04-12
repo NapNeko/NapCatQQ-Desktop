@@ -11,13 +11,13 @@ from qfluentwidgets import PrimaryPushButton, PushButton, TitleLabel
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.ui.components.code_editor.exhibit import UpdateLogExhibit
+from src.desktop.core.config import cfg
+from src.desktop.ui.components.code_editor.exhibit import UpdateLogExhibit
 
 if TYPE_CHECKING:
 
     # 项目内模块导入
-    from src.ui.window.guide_window.guide_window import GuideWindow
+    from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
 EULA_CONTENT = """
 ## 1. 许可与使用范围
@@ -93,7 +93,7 @@ class EulaPage(QWidget):
     def slot_accept(self) -> None:
         """用户同意EULA"""
         # 项目内模块导入
-        from src.ui.window.guide_window.guide_window import GuideWindow
+        from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
         cfg.set(cfg.elua_accepted, True)
 

@@ -9,22 +9,22 @@ from creart import it
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
-from src.core.network.urls import Urls
-from src.core.home import home_version_refresh_bus
-from src.core.versioning import LocalVersionTask, VersionSnapshot
-from src.core.installation.installers import QQInstall
-from src.core.logging import LogSource, logger
-from src.core.logging.crash_bundle import summarize_path, summarize_url
-from src.core.runtime.paths import PathFunc
-from src.ui.common.icon import NapCatDesktopIcon
-from src.ui.components.info_bar import error_bar, info_bar, success_bar
-from src.ui.components.message_box import AskBox, FolderBox
+from src.desktop.core.network.urls import Urls
+from src.desktop.core.home import home_version_refresh_bus
+from src.desktop.core.versioning import LocalVersionTask, VersionSnapshot
+from src.desktop.core.installation.installers import QQInstall
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.logging.crash_bundle import summarize_path, summarize_url
+from src.desktop.core.runtime.paths import PathFunc
+from src.desktop.ui.common.icon import NapCatDesktopIcon
+from src.desktop.ui.components.info_bar import error_bar, info_bar, success_bar
+from src.desktop.ui.components.message_box import AskBox, FolderBox
 from ..utils import ButtonStatus
 from ..widget import PageBase
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.core.network.downloader import QQDownloader
+    from src.desktop.core.network.downloader import QQDownloader
 
     QQDownloaderType = QQDownloader | None
 
@@ -171,7 +171,7 @@ class QQPage(PageBase):
         )
 
         # 项目内模块导入
-        from src.core.network.downloader import QQDownloader
+        from src.desktop.core.network.downloader import QQDownloader
 
         self.begin_download_operation(self.tr("正在准备下载 QQ..."))
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
@@ -180,7 +180,7 @@ class QQPage(PageBase):
     def _start_download(self) -> None:
         """启动或继续 QQ 下载。"""
         # 项目内模块导入
-        from src.core.network.downloader import QQDownloader
+        from src.desktop.core.network.downloader import QQDownloader
 
         self.downloader = QQDownloader(self.url)
         self.downloader.download_progress_signal.connect(self.update_operation_progress_value)
@@ -216,7 +216,7 @@ class QQPage(PageBase):
             return
 
         if self.is_operation_paused():
-            from src.core.network.downloader import DownloaderBase
+            from src.desktop.core.network.downloader import DownloaderBase
 
             DownloaderBase.safe_unlink(self.file_path.with_name(f"{self.file_path.name}.part"))
             self.end_operation()
@@ -236,7 +236,7 @@ class QQPage(PageBase):
     def handle_install_requested(self) -> None:
         """处理下载完成后的安装逻辑。"""
         # 项目内模块导入
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         logger.info("QQ 下载完成，进入安装流程", log_source=LogSource.UI)
         success_bar(self.tr("下载成功, 正在安装..."))

@@ -9,8 +9,8 @@ from PySide6.QtWidgets import QBoxLayout, QHBoxLayout, QSizePolicy, QVBoxLayout,
 from qfluentwidgets import BodyLabel, CaptionLabel, SimpleCardWidget, isDarkTheme
 from qfluentwidgets.common.icon import drawIcon
 
-from src.core.home import HomeVersionService, home_version_refresh_bus
-from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
+from src.desktop.core.home import HomeVersionService, home_version_refresh_bus
+from src.desktop.ui.common.icon import NapCatDesktopIcon, StaticIcon
 
 
 @dataclass(slots=True)

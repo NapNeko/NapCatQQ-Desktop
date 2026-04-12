@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QButtonGroup, QGridLayout, QVBoxLayout, QWidget, Q
 from PySide6.QtGui import QPixmap
 
 # 项目内模块导入
-from src.core.config.config_model import (
+from src.desktop.core.config.config_model import (
     AdvancedConfig,
     AutoRestartScheduleConfig,
     BypassConfig,
@@ -32,14 +32,14 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.core.runtime.napcat import ManagerNapCatQQLoginState
-from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
-from src.ui.components.input_card.time_card import IntervalTimeConfigCard
-from src.ui.components.info_bar import error_bar, success_bar
-from src.ui.page.bot_page.utils.enum import ConnectType
+from src.desktop.core.runtime.napcat import ManagerNapCatQQLoginState
+from src.desktop.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
+from src.desktop.ui.components.input_card.time_card import IntervalTimeConfigCard
+from src.desktop.ui.components.info_bar import error_bar, success_bar
+from src.desktop.ui.page.bot_page.utils.enum import ConnectType
 from creart import add_creator, exists_module, it
 from creart.creator import AbstractCreator, CreateTargetInfo
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 from io import BytesIO
 
 
@@ -1009,7 +1009,7 @@ class QRCodeDialogFactory(QObject):
             self.dialog.update_qr_codes(self.qr_code_list, preferred_qq_id)
 
         else:
-            from src.ui.window.main_window import MainWindow
+            from src.desktop.ui.window.main_window import MainWindow
 
             self.dialog = QRCodeDialog(self.qr_code_list, it(MainWindow))
             self.dialog.set_current_qq_id(preferred_qq_id)

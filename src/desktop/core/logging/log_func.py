@@ -10,22 +10,22 @@ from pathlib import Path
 from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
 # 项目内模块导入
-from src.core.logging.crash_bundle import (
+from src.desktop.core.logging.crash_bundle import (
     CrashBundlePayload,
     build_crash_bundle,
     resolve_desktop_output_dir,
 )
-from src.core.logging.log_data import Log, LogGroup, LogPosition
-from src.core.logging.log_enum import LogLevel, LogSource, LogType
-from src.core.logging.log_utils import capture_call_location
-from src.core.logging.notification_center import (
+from src.desktop.core.logging.log_data import Log, LogGroup, LogPosition
+from src.desktop.core.logging.log_enum import LogLevel, LogSource, LogType
+from src.desktop.core.logging.log_utils import capture_call_location
+from src.desktop.core.logging.notification_center import (
     CrashBundleNotification,
     LogOutputNotification,
     crash_bundle_notification_center,
     log_output_notification_center,
 )
-from src.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
-from src.core.platform.runtime_args import is_developer_mode_enabled
+from src.desktop.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
+from src.desktop.core.platform.runtime_args import is_developer_mode_enabled
 
 
 class Logger:

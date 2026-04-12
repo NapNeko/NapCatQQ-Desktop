@@ -63,10 +63,10 @@ from qfluentwidgets.common.exception_handler import exceptionHandler
 from PySide6.QtCore import QLocale, Signal
 
 # 项目内模块导入
-from src.core.config.config_enum import CloseActionEnum, Language
-from src.core.logging import LogSource, logger
-from src.core.remote.models import LinuxCorePaths, SSHCredentials
-from src.core.runtime.paths import PathFunc
+from src.desktop.core.config.config_enum import CloseActionEnum, Language
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.remote.models import LinuxCorePaths, SSHCredentials
+from src.desktop.core.runtime.paths import PathFunc
 
 __version__ = "v2.0.20"
 _CONFIG_MIGRATION_BACKUP_SUFFIX = ".bak"
@@ -381,14 +381,26 @@ def _migrate_config_payload(payload: object) -> tuple[dict[str, object], str, li
 
         step_rules = step.apply(migrated)
         if step_rules:
-            rules_applied.extend(
-                f"{step.from_version}->{step.to_version}: {rule}" for rule in step_rules
-            )
+            rules_applied.extend(f"{step.from_version}->{step.to_version}: {rule}" for rule in step_rules)
         else:
             rules_applied.append(f"{step.from_version}->{step.to_version}: no-op")
         current_version = step.to_version
 
+    transient_rules = _remove_transient_config_fields(migrated)
+    if transient_rules:
+        rules_applied.extend(transient_rules)
+
     return migrated, current_version, rules_applied
+
+
+def _remove_transient_config_fields(payload: dict[str, object]) -> list[str]:
+    """清理不应持久化到磁盘的临时配置字段。"""
+    rules_applied: list[str] = []
+    if _remove_nested_key(payload, ("Remote", "Password")):
+        rules_applied.append("transient: Remote.Password removed")
+
+    _cleanup_empty_sections(payload)
+    return rules_applied
 
 
 def _persist_migrated_config(path: Path, payload: dict[str, object]) -> Path | None:
@@ -557,7 +569,7 @@ class Config(QConfig):
         default=20,
         validator=RangeValidator(1, 600),
     )
-    remote_workspace_dir = ConfigItem(group="Remote", name="WorkspaceDir", default="$HOME/NapCatCore")
+    remote_workspace_dir = ConfigItem(group="Remote", name="WorkspaceDir", default="$HOME/Napcat")
 
     def __init__(self):
         super().__init__()
@@ -702,15 +714,24 @@ class Config(QConfig):
         )
 
     def build_linux_core_paths(self) -> LinuxCorePaths:
-        """从当前配置构建 Linux Core 路径布局。"""
-        workspace_dir = str(self.get(self.remote_workspace_dir) or "$HOME/NapCatCore")
+        """从当前配置构建 Linux Core 路径布局。
+
+        使用标准 NapCat 安装器路径:
+        - workspace: $HOME/Napcat
+        - runtime: $HOME/Napcat/run
+        - config: $HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/config
+        - log: $HOME/Napcat/log
+        - tmp: $HOME/Napcat/tmp
+        - packages: $HOME/Napcat/packages
+        """
+        workspace_dir = str(self.get(self.remote_workspace_dir) or "$HOME/Napcat")
         workspace_dir = workspace_dir.rstrip("/")
         return LinuxCorePaths(
             workspace_dir=workspace_dir,
-            runtime_dir=f"{workspace_dir}/runtime",
-            config_dir=f"{workspace_dir}/runtime/config",
-            log_dir=f"{workspace_dir}/runtime/log",
-            tmp_dir=f"{workspace_dir}/runtime/tmp",
+            runtime_dir=f"{workspace_dir}/run",
+            config_dir=f"{workspace_dir}/opt/QQ/resources/app/app_launcher/napcat/config",
+            log_dir=f"{workspace_dir}/log",
+            tmp_dir=f"{workspace_dir}/tmp",
             package_dir=f"{workspace_dir}/packages",
         )
 
@@ -763,4 +784,3 @@ cfg.set(cfg.napcat_desktop_version, __version__, True)
 cfg.set(cfg.system_type, platform.system(), True)
 cfg.set(cfg.platform_type, platform.machine(), True)
 bind_qfluent_qconfig(cfg)
-

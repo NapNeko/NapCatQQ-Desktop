@@ -22,19 +22,19 @@ from pathlib import Path
 from typing import Literal
 
 # 项目内模块导入
-from src.core.config import (
+from src.desktop.core.config import (
     _CURRENT_CONFIG_COMPAT_VERSION,
     _migrate_config_payload,
     _write_config_version,
 )
-from src.core.config.config_model import (
+from src.desktop.core.config.config_model import (
     BOT_CONFIG_COMPAT_VERSION,
     Config,
     ConfigCollection,
     migrate_bot_config_payload,
     serialize_bot_config_collection,
 )
-from src.core.config.operate_config import (
+from src.desktop.core.config.operate_config import (
     _apply_json_transaction,
     _build_napcat_config,
     _build_onebot_config,
@@ -42,8 +42,8 @@ from src.core.config.operate_config import (
     _model_to_payload,
     _read_config_file,
 )
-from src.core.logging import logger
-from src.core.runtime.paths import PathFunc
+from src.desktop.core.logging import logger
+from src.desktop.core.runtime.paths import PathFunc
 
 _APP_CONFIG_GROUP_KEYS = {
     "Info",

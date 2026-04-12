@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from creart import it
 
 # 项目内模块导入
-from src.core.api_debug.models import (
+from src.desktop.core.api_debug.models import (
     ApiDebugAuthConfig,
     ApiDebugAuthType,
     ApiDebugBodyType,
@@ -27,8 +27,8 @@ from src.core.api_debug.models import (
     ApiDebugHttpDraft,
     ApiDebugWebSocketDraft,
 )
-from src.core.logging import LogSource, LogType, logger
-from src.core.runtime.paths import PathFunc
+from src.desktop.core.logging import LogSource, LogType, logger
+from src.desktop.core.runtime.paths import PathFunc
 
 _SENSITIVE_FIELDS = {
     "authorization",

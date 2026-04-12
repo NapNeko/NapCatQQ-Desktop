@@ -5,10 +5,10 @@
 from typing import Any
 
 # 项目内模块导入
-from src.core.api_debug.models import ApiDebugActionSchema, ApiDebugActionSession, ApiDebugAuthConfig
-from src.core.api_debug.service import ApiDebugService
-from src.core.api_debug.errors import ApiDebugException
-from src.core.api_debug.models import ApiDebugBodyType, ApiDebugRequestConfig
+from src.desktop.core.api_debug.models import ApiDebugActionSchema, ApiDebugActionSession, ApiDebugAuthConfig
+from src.desktop.core.api_debug.service import ApiDebugService
+from src.desktop.core.api_debug.errors import ApiDebugException
+from src.desktop.core.api_debug.models import ApiDebugBodyType, ApiDebugRequestConfig
 
 
 class ActionDebugService:

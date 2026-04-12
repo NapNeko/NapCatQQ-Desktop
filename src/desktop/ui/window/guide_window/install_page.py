@@ -19,22 +19,22 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.network.downloader import GithubDownloader, QQDownloader
-from src.core.network.urls import Urls
-from src.core.home import home_version_refresh_bus
-from src.core.versioning import RemoteVersionTask, VersionSnapshot
-from src.core.installation.installers import NapCatInstall, QQInstall
-from src.core.logging import LogSource, logger
-from src.core.logging.crash_bundle import summarize_path, summarize_url
-from src.core.runtime.paths import PathFunc
-from src.ui.common.icon import NapCatDesktopIcon, StaticIcon
-from src.ui.components.info_bar import error_bar, success_bar
-from src.ui.components.message_box import FolderBox
-from src.ui.page.component_page.utils import ButtonStatus, ProgressRingStatus, StatusLabel
+from src.desktop.core.network.downloader import GithubDownloader, QQDownloader
+from src.desktop.core.network.urls import Urls
+from src.desktop.core.home import home_version_refresh_bus
+from src.desktop.core.versioning import RemoteVersionTask, VersionSnapshot
+from src.desktop.core.installation.installers import NapCatInstall, QQInstall
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.logging.crash_bundle import summarize_path, summarize_url
+from src.desktop.core.runtime.paths import PathFunc
+from src.desktop.ui.common.icon import NapCatDesktopIcon, StaticIcon
+from src.desktop.ui.components.info_bar import error_bar, success_bar
+from src.desktop.ui.components.message_box import FolderBox
+from src.desktop.ui.page.component_page.utils import ButtonStatus, ProgressRingStatus, StatusLabel
 
 if TYPE_CHECKING:
     # 项目内模块导入
-    from src.ui.window.guide_window.guide_window import GuideWindow
+    from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
 
 class InstallPageBase(QWidget):
@@ -287,7 +287,7 @@ class InstallQQPage(InstallPageBase):
     def handle_install_requested(self) -> None:
         """安装。"""
         # 项目内模块导入
-        from src.ui.window.guide_window.guide_window import GuideWindow
+        from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
         folder_box = FolderBox(self.tr("选择安装路径"), it(GuideWindow))
         folder_box.cancelButton.hide()
@@ -318,7 +318,7 @@ class InstallQQPage(InstallPageBase):
     def handle_install_finished(self) -> None:
         """安装完成。"""
         # 项目内模块导入
-        from src.ui.window.guide_window.guide_window import GuideWindow
+        from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
         logger.info(
             f"引导安装 QQ 完成: installer={summarize_path(self.file_path) if self.file_path else '<empty-path>'}",
@@ -380,7 +380,7 @@ class InstallNapCatQQPage(InstallPageBase):
     def handle_install_finished(self) -> None:
         """安装完成。"""
         # 项目内模块导入
-        from src.ui.window.guide_window.guide_window import GuideWindow
+        from src.desktop.ui.window.guide_window.guide_window import GuideWindow
 
         logger.info(
             f"引导安装 NapCat 完成: path={summarize_path(it(PathFunc).napcat_path)}",

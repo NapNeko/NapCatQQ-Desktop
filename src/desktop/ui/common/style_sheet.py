@@ -5,7 +5,7 @@ from enum import Enum
 # 第三方库导入
 from qfluentwidgets import StyleSheetBase, Theme, qconfig
 from PySide6.QtCore import QFile
-from src.resource import resource as _resource  # noqa: F401
+from src.desktop.resource import resource as _resource  # noqa: F401
 
 
 def _resolve_theme(theme: Theme) -> Theme:
@@ -35,6 +35,7 @@ class PageStyleSheet(_ResourceStyleSheet, Enum):
     API_DEBUG = "api_debug"
     HOME = "home"
     # BOT = "bot"
+    REMOTE = "remote"
     SETUP = "setup"
     UNIT = "unit"
 

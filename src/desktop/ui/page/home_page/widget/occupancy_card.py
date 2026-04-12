@@ -6,8 +6,8 @@ from PySide6.QtGui import QColor, QFont, QGuiApplication, QLinearGradient, QPain
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, FluentIcon, SimpleCardWidget, StrongBodyLabel, isDarkTheme
 
-from src.core.config import cfg
-from src.core.home import OccupancySnapshot, SystemOccupancySampler
+from src.desktop.core.config import cfg
+from src.desktop.core.home import OccupancySnapshot, SystemOccupancySampler
 
 
 def _clamp_percent(value: float) -> float:

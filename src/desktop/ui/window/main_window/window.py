@@ -10,16 +10,16 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.core.config.config_enum import CloseActionEnum
-from src.core.logging import CrashBundleNotification, LogSource, crash_bundle_notification_center, logger
-from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
-from src.ui.common.icon import StaticIcon
-from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
-from src.ui.page import ApiDebugPage, BotPage, ComponentPage, HomeWidget, SetupWidget
-from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
-from src.ui.window.main_window.system_try_icon import SystemTrayIcon
-from src.ui.window.main_window.title_bar import CustomTitleBar
+from src.desktop.core.config import cfg
+from src.desktop.core.config.config_enum import CloseActionEnum
+from src.desktop.core.logging import CrashBundleNotification, LogSource, crash_bundle_notification_center, logger
+from src.desktop.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.desktop.ui.common.icon import StaticIcon
+from src.desktop.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
+from src.desktop.ui.page import ApiDebugPage, BotPage, ComponentPage, HomeWidget, RemotePage, SetupWidget
+from src.desktop.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
+from src.desktop.ui.window.main_window.system_try_icon import SystemTrayIcon
+from src.desktop.ui.window.main_window.title_bar import CustomTitleBar
 
 """NapCatQQ Desktop 主窗口模块
 
@@ -97,6 +97,12 @@ class MainWindow(MSFluentWindow):
             interface=it(BotPage).initialize(self),
             icon=FluentIcon.ROBOT,
             text=self.tr("BOT"),
+            position=NavigationItemPosition.TOP,
+        )
+        self.addSubInterface(
+            interface=it(RemotePage).initialize(self),
+            icon=FluentIcon.GLOBE,
+            text=self.tr("远程"),
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
@@ -201,7 +207,7 @@ class MainWindow(MSFluentWindow):
             # 如果有机器人在线, 则提示用户关闭实例
             if it(ManagerNapCatQQProcess).has_running_bot():
                 # 项目内模块导入
-                from src.ui.components.message_box import AskBox
+                from src.desktop.ui.components.message_box import AskBox
 
                 logger.warning("检测到仍有机器人运行，拒绝关闭主窗口", log_source=LogSource.UI)
                 msg_box = AskBox(self.tr("无法退出"), self.tr("有机器人正在运行, 请关闭它们后再退出程序"), self)
@@ -223,7 +229,7 @@ class MainWindowCreator(AbstractCreator, ABC):
 
     targets = (
         CreateTargetInfo(
-            module="src.ui.window.main_window.window",
+            module="src.desktop.ui.window.main_window.window",
             identify="MainWindow",
             humanized_name="主窗口",
             description="主窗口的创建器",

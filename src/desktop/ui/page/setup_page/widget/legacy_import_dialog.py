@@ -26,22 +26,22 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal
 from PySide6.QtWidgets import QButtonGroup, QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 
 # 项目内模块导入
-import src.core.config as app_config_module
-from src.core.config import cfg
-from src.core.config.legacy_import import (
+import src.desktop.core.config as app_config_module
+from src.desktop.core.config import cfg
+from src.desktop.core.config.legacy_import import (
     ImportConflictItem,
     ImportExecutionPlan,
     ImportScanResult,
     apply_legacy_config_import,
     scan_legacy_import_source,
 )
-from src.core.config.operate_config import read_config
-from src.core.logging import LogSource, logger
-from src.core.runtime.paths import PathFunc
-from src.ui.components.drop_folder_widget import DropFolderWidget
-from src.ui.components.info_bar import error_bar, success_bar, warning_bar
-from src.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.core.config.operate_config import read_config
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.runtime.paths import PathFunc
+from src.desktop.ui.components.drop_folder_widget import DropFolderWidget
+from src.desktop.ui.components.info_bar import error_bar, success_bar, warning_bar
+from src.desktop.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 
 
 @dataclass(frozen=True)
@@ -704,7 +704,7 @@ class LegacyImportDialog(MessageBoxBase):
 
     def _refresh_bot_list(self) -> None:
         try:
-            from src.ui.page.bot_page import BotPage
+            from src.desktop.ui.page.bot_page import BotPage
 
             it(BotPage).bot_list_page.update_bot_list()
         except Exception as error:

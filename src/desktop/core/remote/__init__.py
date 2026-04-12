@@ -14,6 +14,24 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    # JSON-RPC 2.0 Agent 模式
+    from .agent_backend import AgentBackend
+    from .agent_client import AgentClient, AgentConnectionConfig
+    from .daemon_config import DaemonConfigManager, DaemonConnection
+    from .daemon_deployer import DaemonDeployer, DeployResult, ServerInfo
+    from .jsonrpc_protocol import (
+        ErrorCode,
+        JsonRpcError,
+        JsonRpcNotification,
+        JsonRpcRequest,
+        JsonRpcResponse,
+        LogEntry,
+        NapCatMethod,
+        NapCatNotification,
+        NapCatStatus,
+        SystemInfo,
+    )
+    # SSH/Local 模式
     from .deployment import LinuxCoreDeployment, LinuxCoreDeploymentProbe, RemoteConfigSyncResult, RemoteDeployScriptResult
     from .errors import (
         RemoteCommandError,
@@ -31,6 +49,26 @@ if TYPE_CHECKING:
 
 
 _EXPORT_MAP = {
+    # JSON-RPC 2.0 Agent 模式
+    "AgentBackend": ".agent_backend",
+    "AgentClient": ".agent_client",
+    "AgentConnectionConfig": ".agent_client",
+    "DaemonConfigManager": ".daemon_config",
+    "DaemonConnection": ".daemon_config",
+    "DaemonDeployer": ".daemon_deployer",
+    "DeployResult": ".daemon_deployer",
+    "ServerInfo": ".daemon_deployer",
+    "ErrorCode": ".jsonrpc_protocol",
+    "JsonRpcError": ".jsonrpc_protocol",
+    "JsonRpcNotification": ".jsonrpc_protocol",
+    "JsonRpcRequest": ".jsonrpc_protocol",
+    "JsonRpcResponse": ".jsonrpc_protocol",
+    "LogEntry": ".jsonrpc_protocol",
+    "NapCatMethod": ".jsonrpc_protocol",
+    "NapCatNotification": ".jsonrpc_protocol",
+    "NapCatStatus": ".jsonrpc_protocol",
+    "SystemInfo": ".jsonrpc_protocol",
+    # SSH/Local 模式
     "ExecutionBackend": ".execution_backend",
     "LinuxCoreDeployment": ".deployment",
     "LinuxCoreDeploymentProbe": ".deployment",
@@ -48,8 +86,8 @@ _EXPORT_MAP = {
     "RemoteRuntimeService": ".status",
     "SSHAuthenticationError": ".errors",
     "SSHClient": ".ssh_client",
-    "SSHConnectionError": ".errors",
     "SSHCredentials": ".models",
+    "SSHConnectionError": ".errors",
     "SSHHostKeyError": ".errors",
     "build_linux_deploy_script": ".templates",
     "load_linux_deploy_script": ".templates",

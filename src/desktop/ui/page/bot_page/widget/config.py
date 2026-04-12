@@ -9,8 +9,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
-from src.core.config import cfg
-from src.core.config.config_model import (
+from src.desktop.core.config import cfg
+from src.desktop.core.config.config_model import (
     AdvancedConfig,
     BotConfig,
     ConnectConfig,
@@ -21,9 +21,9 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.ui.common.icon import NapCatDesktopIcon
-from src.ui.components.input_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard, ShowDialogCard
-from src.ui.page.bot_page.widget import (
+from src.desktop.ui.common.icon import NapCatDesktopIcon
+from src.desktop.ui.components.input_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard, ShowDialogCard
+from src.desktop.ui.page.bot_page.widget import (
     HttpClientConfigCard,
     HttpServerConfigCard,
     HttpSSEConfigCard,
@@ -269,7 +269,7 @@ class AdvancedConfigWidget(ScrollArea):
         def _ensure_dialog(self) -> AdvancedBackendDialog:
             """惰性创建对话框，避免把对话框控件挂进当前页面。"""
             if self._dialog is None:
-                from src.ui.window.main_window import MainWindow
+                from src.desktop.ui.window.main_window import MainWindow
 
                 self._dialog = AdvancedBackendDialog(it(MainWindow))
             return self._dialog

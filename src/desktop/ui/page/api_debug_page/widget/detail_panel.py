@@ -16,9 +16,9 @@ from qfluentwidgets import (
 )
 from qfluentwidgets.common.smooth_scroll import SmoothMode
 
-from src.core.api_debug import ApiDebugActionSchema
-from src.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
-from src.ui.components.stacked_widget import TransparentStackedWidget
+from src.desktop.core.api_debug import ApiDebugActionSchema
+from src.desktop.ui.components.skeleton_widget import SkeletonShape, SkeletonWidget
+from src.desktop.ui.components.stacked_widget import TransparentStackedWidget
 from .debug_card import ActionDebugCard
 from .method_badge import MethodBadge, apply_method_badge
 from .schema_card import ApiDebugSchemaCard

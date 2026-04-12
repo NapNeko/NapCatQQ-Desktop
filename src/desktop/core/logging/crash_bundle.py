@@ -15,8 +15,8 @@ from urllib.parse import urlsplit
 from PySide6.QtCore import QStandardPaths
 
 # 项目内模块导入
-from src.core.network.urls import Urls
-from src.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
+from src.desktop.core.network.urls import Urls
+from src.desktop.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
 
 REDACTED_EMAIL = "<redacted-email>"
 REDACTED_SECRET = "<redacted-secret>"

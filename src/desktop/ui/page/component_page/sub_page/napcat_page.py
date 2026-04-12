@@ -5,16 +5,16 @@ from PySide6.QtCore import QThreadPool, QTimer, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 
 # 项目内模块导入
-from src.core.network.urls import Urls
-from src.core.home import home_version_refresh_bus
-from src.core.versioning import LocalVersionTask, VersionSnapshot
-from src.core.installation.installers import NapCatInstall
-from src.core.logging import LogSource, logger
-from src.core.logging.crash_bundle import summarize_path
-from src.core.runtime.paths import PathFunc
-from src.core.runtime.napcat import ManagerNapCatQQProcess
-from src.ui.components.info_bar import error_bar, info_bar, success_bar
-from src.ui.components.message_box import AskBox
+from src.desktop.core.network.urls import Urls
+from src.desktop.core.home import home_version_refresh_bus
+from src.desktop.core.versioning import LocalVersionTask, VersionSnapshot
+from src.desktop.core.installation.installers import NapCatInstall
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.logging.crash_bundle import summarize_path
+from src.desktop.core.runtime.paths import PathFunc
+from src.desktop.core.runtime.napcat import ManagerNapCatQQProcess
+from src.desktop.ui.components.info_bar import error_bar, info_bar, success_bar
+from src.desktop.ui.components.message_box import AskBox
 from ..utils import ButtonStatus
 from ..widget import PageBase
 
@@ -112,7 +112,7 @@ class NapCatPage(PageBase):
         )
         if it(ManagerNapCatQQProcess).has_running_bot():
             # 项目内模块导入
-            from src.ui.window.main_window import MainWindow
+            from src.desktop.ui.window.main_window import MainWindow
 
             box = AskBox(
                 self.tr("失败"), self.tr("存在 Bot 运行,无法执行操作,是否关闭所有 Bot 以继续执行"), it(MainWindow)
@@ -135,7 +135,7 @@ class NapCatPage(PageBase):
         """启动或继续 NapCat 下载。"""
 
         # 项目内模块导入
-        from src.core.network.downloader import GithubDownloader
+        from src.desktop.core.network.downloader import GithubDownloader
 
         downloader = GithubDownloader(Urls.NAPCATQQ_DOWNLOAD.value)
         self.downloader = downloader
@@ -171,7 +171,7 @@ class NapCatPage(PageBase):
         package_path = it(PathFunc).tmp_path / Urls.NAPCATQQ_DOWNLOAD.value.fileName()
 
         if self.is_operation_paused():
-            from src.core.network.downloader import DownloaderBase
+            from src.desktop.core.network.downloader import DownloaderBase
 
             DownloaderBase.safe_unlink(package_path.with_name(f"{package_path.name}.part"))
             self.end_operation()

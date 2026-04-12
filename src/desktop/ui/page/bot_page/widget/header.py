@@ -97,7 +97,7 @@ class HeaderWidget(QWidget):
         if self._suppress_breadcrumb_signals or self._changing_view:
             return
 
-        from src.ui.page.bot_page import BotPage
+        from src.desktop.ui.page.bot_page import BotPage
         from creart import it
 
         page = it(BotPage)

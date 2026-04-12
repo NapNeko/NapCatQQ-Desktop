@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget
 
-from src.core.config import cfg
+from src.desktop.core.config import cfg
 
 
 class DottedBackground(QWidget):

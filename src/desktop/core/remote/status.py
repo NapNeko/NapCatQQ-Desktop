@@ -49,33 +49,113 @@ class RemoteRuntimeService:
         self.paths = paths or LinuxCorePaths()
 
     def get_status(self) -> RemoteNapCatStatus:
-        """读取远端状态。"""
-        pid_result = self.backend.run(f'test -f "{self.paths.pid_file}" && cat "{self.paths.pid_file}" || true')
-        status_result = self.backend.run(f'test -f "{self.paths.status_file}" && cat "{self.paths.status_file}" || true')
+        """读取远端状态。
 
-        pid_text = pid_result.stdout.strip()
-        pid = int(pid_text) if pid_text.isdigit() else None
+        适配标准 NapCat 安装器的进程检测方式：
+        - 通过 pgrep 查找 qq --no-sandbox -q 进程
+        - 从命令行提取 QQ 号
+        - 优先使用 napcat.mjs 中的版本信息
+        """
+        # 首先尝试使用标准 NapCat 方式检测进程
+        pgrep_result = self.backend.run(r"pgrep -f '.*/qq --no-sandbox -q [0-9]{4,}' || true")
+
+        pid = None
         running = False
-        if pid is not None:
-            process_check = self.backend.run(f"kill -0 {pid} >/dev/null 2>&1")
-            running = process_check.ok
+        qq_account = None
 
+        if pgrep_result.ok and pgrep_result.stdout.strip():
+            # 找到进程，提取 PID 和 QQ 号
+            pids = pgrep_result.stdout.strip().split('\n')
+            if pids:
+                # 使用第一个 PID
+                pid = int(pids[0].strip())
+                # 验证进程是否真正存活
+                process_check = self.backend.run(f"kill -0 {pid} >/dev/null 2>&1")
+                running = process_check.ok
+
+                # 从命令行提取 QQ 号
+                if running:
+                    cmdline_result = self.backend.run(f"ps -o cmd= -p {pid} 2>/dev/null || true")
+                    if cmdline_result.ok:
+                        import re
+                        match = re.search(r'--no-sandbox\s+-q\s+([0-9]{4,})', cmdline_result.stdout)
+                        if match:
+                            qq_account = match.group(1)
+
+        # 回退到 PID 文件方式（用于兼容我们的 launcher 脚本）
+        if not running:
+            pid_result = self.backend.run(f'test -f "{self.paths.pid_file}" && cat "{self.paths.pid_file}" || true')
+            pid_text = pid_result.stdout.strip()
+            if pid_text.isdigit():
+                pid = int(pid_text)
+                process_check = self.backend.run(f"kill -0 {pid} >/dev/null 2>&1")
+                running = process_check.ok
+
+        # 读取状态文件
+        status_result = self.backend.run(f'test -f "{self.paths.status_file}" && cat "{self.paths.status_file}" || true')
         payload = self._parse_status_payload(status_result.stdout)
+
+        # 尝试从 napcat.mjs 读取版本
+        version = self._as_string(payload.get("version"))
+        if not version:
+            version_result = self.backend.run(
+                f"grep 'const version = ' '{self.paths.napcat_dir}/napcat.mjs' 2>/dev/null | "
+                r"sed -n 's/.*const version = \"\([^\"]*\)\".*/\1/p' || true"
+            )
+            if version_result.ok:
+                version = version_result.stdout.strip() or None
+
         return RemoteNapCatStatus(
             running=running,
             pid=pid,
-            qq=self._as_string(payload.get("qq")),
-            version=self._as_string(payload.get("version")),
+            qq=qq_account or self._as_string(payload.get("qq")),
+            version=version,
             log_file=self._as_string(payload.get("log_file")),
             raw_payload=payload,
         )
 
     def tail_log(self, log_path: str | None = None, *, lines: int = 200) -> RemoteLogTail:
-        """读取远端日志尾部。"""
-        target_path = log_path or self._infer_default_log_path()
+        """读取远端日志尾部。
+
+        适配标准 NapCat 日志路径:
+        - 默认查找 $HOME/Napcat/log/napcat_*.log
+        - 优先读取当前运行实例的日志
+        """
         safe_lines = max(1, lines)
+
+        if log_path:
+            target_path = log_path
+        else:
+            # 尝试找到当前运行实例的日志
+            target_path = self._infer_running_log_path() or self._infer_default_log_path()
+
         result = self.backend.run(f'test -f "{target_path}" && tail -n {safe_lines} "{target_path}" || true')
         return RemoteLogTail(path=target_path, content=result.stdout, lines=safe_lines)
+
+    def _infer_running_log_path(self) -> str | None:
+        """尝试从运行中的进程推断日志路径。"""
+        # 获取当前运行的 QQ 号
+        result = self.backend.run(r"pgrep -f '.*/qq --no-sandbox -q [0-9]{4,}' || true")
+        if not result.ok or not result.stdout.strip():
+            return None
+
+        pids = result.stdout.strip().split('\n')
+        if not pids:
+            return None
+
+        # 获取第一个进程的命令行
+        cmdline_result = self.backend.run(f"ps -o cmd= -p {pids[0].strip()} 2>/dev/null || true")
+        if not cmdline_result.ok:
+            return None
+
+        # 提取 QQ 号
+        import re
+        match = re.search(r'--no-sandbox\s+-q\s+([0-9]{4,})', cmdline_result.stdout)
+        if match:
+            qq = match.group(1)
+            return f"{self.paths.log_dir}/napcat_{qq}.log"
+
+        return None
 
     def start(self, command: str) -> None:
         """启动远端进程。
@@ -83,33 +163,26 @@ class RemoteRuntimeService:
         这里保留命令注入位，后续会由部署层/配置层生成标准启动命令。
         """
         self.backend.run(command, check=True)
-        self.write_status_payload(
-            {
-                "running": True,
-                "updated_at": self._current_timestamp(),
-                "last_action": "start",
-                "log_file": self._infer_default_log_path(),
-            }
-        )
+        status = self.get_status()
+        if not status.running or status.pid is None:
+            raise RuntimeError("远端启动命令已执行，但未检测到运行中的 NapCat 进程")
 
-    def stop(self) -> None:
+    def stop(self, command: str | None = None) -> None:
         """停止远端进程。"""
-        self.backend.run(
-            f'test -f "{self.paths.pid_file}" && kill $(cat "{self.paths.pid_file}") >/dev/null 2>&1 || true'
-        )
-        self.write_status_payload(
-            {
-                "running": False,
-                "pid": None,
-                "updated_at": self._current_timestamp(),
-                "last_action": "stop",
-                "log_file": self._infer_default_log_path(),
-            }
-        )
+        if command:
+            self.backend.run(command, check=True)
+        else:
+            self.backend.run(
+                f'test -f "{self.paths.pid_file}" && kill $(cat "{self.paths.pid_file}") >/dev/null 2>&1 || true',
+                check=False,
+            )
+        status = self.get_status()
+        if status.running:
+            raise RuntimeError("远端停止命令已执行，但 NapCat 进程仍在运行")
 
-    def restart(self, command: str) -> None:
+    def restart(self, command: str, stop_command: str | None = None) -> None:
         """重启远端进程。"""
-        self.stop()
+        self.stop(stop_command)
         self.start(command)
 
     def write_status_payload(self, payload: dict[str, Any]) -> None:

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 # 项目内模块导入
-from src.core.logging.log_data import LogPosition
+from src.desktop.core.logging.log_data import LogPosition
 
 
 def capture_call_location(func: Callable[..., Any]) -> Callable[..., Any]:

@@ -13,8 +13,8 @@ from typing import Any
 from creart import it
 
 # 项目内模块导入
-from src.core.api_debug.errors import ApiDebugHistoryError
-from src.core.api_debug.models import (
+from src.desktop.core.api_debug.errors import ApiDebugHistoryError
+from src.desktop.core.api_debug.models import (
     ApiDebugBuiltRequest,
     ApiDebugError,
     ApiDebugErrorKind,
@@ -23,8 +23,8 @@ from src.core.api_debug.models import (
     ApiDebugHistoryRequestSnapshot,
     ApiDebugHistoryResponseSnapshot,
 )
-from src.core.logging import logger
-from src.core.runtime.paths import PathFunc
+from src.desktop.core.logging import logger
+from src.desktop.core.runtime.paths import PathFunc
 
 _SENSITIVE_FIELD_NAMES = {
     "authorization",

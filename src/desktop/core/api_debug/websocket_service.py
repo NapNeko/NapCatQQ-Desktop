@@ -13,7 +13,7 @@ from PySide6.QtNetwork import QAbstractSocket, QNetworkRequest
 from PySide6.QtWebSockets import QWebSocket
 
 # 项目内模块导入
-from src.core.api_debug.models import (
+from src.desktop.core.api_debug.models import (
     ApiDebugActionSession,
     ApiDebugAuthConfig,
     ApiDebugAuthType,
