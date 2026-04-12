@@ -1,0 +1,13 @@
+/* RemotePage 样式 */
+
+#RemotePage {
+    background: transparent;
+    border-color: transparent;
+}
+
+#connectionCard,
+#statusCard,
+#deployCard {
+    background: transparent;
+    border: none;
+}
