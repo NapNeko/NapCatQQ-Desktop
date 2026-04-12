@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "selected_bot_id": "",
+  "selected_mode": "http",
+  "root_splitter_sizes": {},
+  "detail_splitter_sizes": {},
+  "http_draft": {
+    "url": "",
+    "method": "GET",
+    "headers": {},
+    "query_params": {},
+    "body_type": "none",
+    "body": null,
+    "auth": {
+      "auth_type": "none",
+      "token": "",
+      "session_credential": "",
+      "use_query_token": false
+    },
+    "endpoint_id": "",
+    "target_type": "manual_http"
+  },
+  "action_draft": {
+    "action": "",
+    "search_query": "",
+    "params_text": "{}",
+    "endpoint_id": ""
+  },
+  "websocket_draft": {
+    "url": "",
+    "message_text": "{}",
+    "auth": {
+      "auth_type": "none",
+      "token": "",
+      "session_credential": "",
+      "use_query_token": false
+    },
+    "endpoint_id": "",
+    "target_type": "onebot_websocket",
+    "auto_scroll": true
+  },
+  "presets": []
+}

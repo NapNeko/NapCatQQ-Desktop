@@ -1,0 +1,68 @@
+{
+    "Event": {
+        "BotOfflineEmailNotice": false,
+        "BotOfflineWebHookNotice": false
+    },
+    "General": {
+        "CloseBtnAction": 0
+    },
+    "Info": {
+        "ConfigVersion": "v2.1",
+        "EulaAccepted": true,
+        "MainWindow": true,
+        "NCDVersion": "v2.0.20",
+        "PlatformType": "AMD64",
+        "StartTime": 1775962636.258156,
+        "SystemType": "Windows"
+    },
+    "Personalized": {
+        "DpiScale": "Auto"
+    },
+    "Email": {
+        "EmailEncryption": "SSL",
+        "EmailReceiver": "",
+        "EmailSender": "",
+        "EmailStmpPort": 465,
+        "EmailStmpServer": "",
+        "EmailToken": ""
+    },
+    "QFluentWidgets": {
+        "FontFamilies": [
+            "Segoe UI",
+            "Microsoft YaHei",
+            "PingFang SC"
+        ],
+        "ThemeColor": "#ff009faa",
+        "ThemeMode": "Auto"
+    },
+    "Home": {
+        "IgnoredNoticeKeys": "[]",
+        "SnoozedNoticeItems": "{}"
+    },
+    "Personalize": {
+        "Language": "Auto",
+        "ThemeColor": "#ff009faa",
+        "ThemeMode": "Auto",
+        "WindowOpacity": 100
+    },
+    "Remote": {
+        "AllowAgent": false,
+        "AuthMethod": "key",
+        "CommandTimeout": 20,
+        "ConnectTimeout": 10,
+        "Enabled": false,
+        "Host": "",
+        "HostKeyPolicy": "reject",
+        "LookForKeys": false,
+        "Port": 22,
+        "PrivateKeyPath": "",
+        "Username": "",
+        "WorkspaceDir": "$HOME/Napcat"
+    },
+    "WebHook": {
+        "WebHookJson": "",
+        "WebHookMethod": "POST",
+        "WebHookSecret": "",
+        "WebHookUrl": ""
+    }
+}
