@@ -7,9 +7,9 @@ from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtWidgets import QApplication
 
 # 项目内模块导入
-from src.core.platform.app_paths import resolve_app_base_path
-from src.core.logging import LogSource, logger
-from src.core.platform.runtime_args import apply_runtime_launch_options, parse_runtime_launch_options
+from src.desktop.core.platform.app_paths import resolve_app_base_path
+from src.desktop.core.logging import LogSource, logger
+from src.desktop.core.platform.runtime_args import apply_runtime_launch_options, parse_runtime_launch_options
 
 
 class ExceptionLoggingApplication(QApplication):
@@ -76,11 +76,11 @@ def run_application() -> int:
     from creart import it
 
     # 项目内模块导入
-    from src.core.config import cfg
-    from src.core.platform.single_instance import SingleInstanceApplication
-    from src.core.runtime.paths import PathFunc
-    from src.resource import resource
-    from src.ui.common.font import FontManager
+    from src.desktop.core.config import cfg
+    from src.desktop.core.platform.single_instance import SingleInstanceApplication
+    from src.desktop.core.runtime.paths import PathFunc
+    from src.desktop.resource import resource
+    from src.desktop.ui.common.font import FontManager
 
     _ = resource
 
@@ -122,13 +122,13 @@ def run_application() -> int:
 
     if cfg.get(cfg.main_window) and cfg.get(cfg.elua_accepted):
         # 项目内模块导入
-        from src.ui.window.main_window import MainWindow
+        from src.desktop.ui.window.main_window import MainWindow
 
         logger.info("进入主窗口初始化流程", log_source=LogSource.UI)
         it(MainWindow).initialize()
     else:
         # 项目内模块导入
-        from src.ui.window.guide_window import GuideWindow
+        from src.desktop.ui.window.guide_window import GuideWindow
 
         logger.info("进入引导窗口初始化流程", log_source=LogSource.UI)
         it(GuideWindow).initialize()
