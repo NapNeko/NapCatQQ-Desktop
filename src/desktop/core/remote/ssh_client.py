@@ -176,6 +176,76 @@ class SSHClient:
         except (OSError, paramiko.SSHException) as exc:
             raise SSHConnectionError(f"下载文件失败: {exc}") from exc
 
+    def read_text(self, remote_path: str, *, encoding: str = "utf-8") -> str:
+        """读取远端文本文件全部内容。"""
+        client = self._require_client()
+        resolved = self._resolve_sftp_path(remote_path)
+        try:
+            with client.open_sftp() as sftp, sftp.open(resolved, "rb") as handle:
+                data = handle.read()
+        except (OSError, paramiko.SSHException) as exc:
+            raise SSHConnectionError(f"读取远端文件失败: {exc}") from exc
+        return data.decode(encoding, errors="replace")
+
+    def write_text(self, remote_path: str, content: str, *, encoding: str = "utf-8") -> None:
+        """写入远端文本文件, 父目录不存在时自动创建。"""
+        client = self._require_client()
+        resolved = self._resolve_sftp_path(remote_path)
+        parent = PurePosixPath(remote_path).parent.as_posix()
+        if parent and parent != ".":
+            self.ensure_remote_directory(parent)
+        try:
+            with client.open_sftp() as sftp, sftp.open(resolved, "wb") as handle:
+                handle.write(content.encode(encoding))
+        except (OSError, paramiko.SSHException) as exc:
+            raise SSHConnectionError(f"写入远端文件失败: {exc}") from exc
+
+    def remote_exists(self, remote_path: str) -> bool:
+        """判断远端路径是否存在(文件或目录)。"""
+        client = self._require_client()
+        resolved = self._resolve_sftp_path(remote_path)
+        try:
+            with client.open_sftp() as sftp:
+                try:
+                    sftp.stat(resolved)
+                    return True
+                except FileNotFoundError:
+                    return False
+        except (OSError, paramiko.SSHException) as exc:
+            raise SSHConnectionError(f"探测远端路径失败: {exc}") from exc
+
+    def remote_listdir(self, remote_path: str) -> list[tuple[str, bool, int]]:
+        """列出远端目录条目, 返回 ``(name, is_dir, size)`` 三元组列表。"""
+        import stat as _stat
+
+        client = self._require_client()
+        resolved = self._resolve_sftp_path(remote_path)
+        try:
+            with client.open_sftp() as sftp:
+                entries = sftp.listdir_attr(resolved)
+        except (OSError, paramiko.SSHException) as exc:
+            raise SSHConnectionError(f"列出远端目录失败: {exc}") from exc
+        return [
+            (entry.filename, _stat.S_ISDIR(entry.st_mode or 0), entry.st_size or 0)
+            for entry in entries
+        ]
+
+    def remote_remove(self, remote_path: str, *, recursive: bool = False) -> None:
+        """删除远端文件或目录(目录需 ``recursive=True``)。"""
+        quoted = self._quote_remote_argument(remote_path)
+        if recursive:
+            self.run(f"rm -rf -- {quoted}", check=True)
+        else:
+            self.run(f"rm -f -- {quoted}", check=True)
+
+    @property
+    def is_connected(self) -> bool:
+        """当前是否持有可用 SSH 会话。"""
+        if self._client is None:
+            return False
+        transport = self._client.get_transport()
+        return transport is not None and transport.is_active()
+
     def __enter__(self) -> "SSHClient":
         self.connect()
         return self

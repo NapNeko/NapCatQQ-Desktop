@@ -14,24 +14,6 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    # JSON-RPC 2.0 Agent 模式
-    from .agent_backend import AgentBackend
-    from .agent_client import AgentClient, AgentConnectionConfig
-    from .daemon_config import DaemonConfigManager, DaemonConnection
-    from .daemon_deployer import DaemonDeployer, DeployResult, ServerInfo
-    from .jsonrpc_protocol import (
-        ErrorCode,
-        JsonRpcError,
-        JsonRpcNotification,
-        JsonRpcRequest,
-        JsonRpcResponse,
-        LogEntry,
-        NapCatMethod,
-        NapCatNotification,
-        NapCatStatus,
-        SystemInfo,
-    )
-    # SSH/Local 模式
     from .deployment import LinuxCoreDeployment, LinuxCoreDeploymentProbe, RemoteConfigSyncResult, RemoteDeployScriptResult
     from .errors import (
         RemoteCommandError,
@@ -43,32 +25,15 @@ if TYPE_CHECKING:
     from .execution_backend import ExecutionBackend, LocalExecutionBackend, RemoteExecutionBackend
     from .models import LinuxCorePaths, RemoteCommandResult, SSHCredentials
     from .remote_manager import RemoteManager
+    from .server_manager import ServerManager
+    from .servers import DeploymentState, ServerProfile, ServerRegistry
     from .ssh_client import SSHClient
     from .status import RemoteLogTail, RemoteNapCatStatus, RemoteRuntimeService
     from .templates import build_linux_deploy_script, load_linux_deploy_script
 
 
 _EXPORT_MAP = {
-    # JSON-RPC 2.0 Agent 模式
-    "AgentBackend": ".agent_backend",
-    "AgentClient": ".agent_client",
-    "AgentConnectionConfig": ".agent_client",
-    "DaemonConfigManager": ".daemon_config",
-    "DaemonConnection": ".daemon_config",
-    "DaemonDeployer": ".daemon_deployer",
-    "DeployResult": ".daemon_deployer",
-    "ServerInfo": ".daemon_deployer",
-    "ErrorCode": ".jsonrpc_protocol",
-    "JsonRpcError": ".jsonrpc_protocol",
-    "JsonRpcNotification": ".jsonrpc_protocol",
-    "JsonRpcRequest": ".jsonrpc_protocol",
-    "JsonRpcResponse": ".jsonrpc_protocol",
-    "LogEntry": ".jsonrpc_protocol",
-    "NapCatMethod": ".jsonrpc_protocol",
-    "NapCatNotification": ".jsonrpc_protocol",
-    "NapCatStatus": ".jsonrpc_protocol",
-    "SystemInfo": ".jsonrpc_protocol",
-    # SSH/Local 模式
+    "DeploymentState": ".servers",
     "ExecutionBackend": ".execution_backend",
     "LinuxCoreDeployment": ".deployment",
     "LinuxCoreDeploymentProbe": ".deployment",
@@ -84,6 +49,9 @@ _EXPORT_MAP = {
     "RemoteManager": ".remote_manager",
     "RemoteNapCatStatus": ".status",
     "RemoteRuntimeService": ".status",
+    "ServerManager": ".server_manager",
+    "ServerProfile": ".servers",
+    "ServerRegistry": ".servers",
     "SSHAuthenticationError": ".errors",
     "SSHClient": ".ssh_client",
     "SSHCredentials": ".models",
