@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import shlex
 import socket
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -17,6 +18,60 @@ try:
     import paramiko
 except ImportError:  # pragma: no cover - 依赖缺失时在运行期给出清晰错误
     paramiko = None
+
+
+class _LineSplitter:
+    """累积式行切分器, 用于 [`SSHClient.exec_stream`](src/desktop/core/remote/ssh_client.py)。
+
+    切分规则:
+
+    - ``\\r\\n`` 视为一个换行 (避免 PTY 模式下行尾 CRLF 产生空白行)
+    - 单独的 ``\\r`` 也作为换行 (curl 进度条等场景)
+    - 单独的 ``\\n`` 作为换行
+    - ``\\r`` 落在缓冲最末尾时延迟到下一次 ``feed`` 再决断, 防止跨读取边界的 CRLF 退化为两次切分
+
+    线程不安全, 每个 SSH 通道独占一个实例。
+    """
+
+    __slots__ = ("_buffer",)
+
+    def __init__(self) -> None:
+        self._buffer = ""
+
+    def feed(self, chunk: str) -> list[str]:
+        """喂入新读到的字符串, 返回本次新切出的行(不含行尾)。"""
+        self._buffer += chunk
+        lines: list[str] = []
+        while True:
+            cr_pos = self._buffer.find("\r")
+            lf_pos = self._buffer.find("\n")
+            candidates = [pos for pos in (cr_pos, lf_pos) if pos != -1]
+            if not candidates:
+                break
+            cut = min(candidates)
+            # 边界: \r 在末尾时延迟, 等下一次 feed 来确认是 CRLF 还是孤立 \r
+            if self._buffer[cut] == "\r" and cut == len(self._buffer) - 1:
+                break
+            line = self._buffer[:cut]
+            # \r\n 紧挨着, 一次性消费两个字符
+            if (
+                self._buffer[cut] == "\r"
+                and cut + 1 < len(self._buffer)
+                and self._buffer[cut + 1] == "\n"
+            ):
+                self._buffer = self._buffer[cut + 2 :]
+            else:
+                self._buffer = self._buffer[cut + 1 :]
+            lines.append(line)
+        return lines
+
+    def flush(self) -> list[str]:
+        """流读取结束时调用, 把残留缓冲作为最后一行返回。"""
+        if not self._buffer:
+            return []
+        last = self._buffer
+        self._buffer = ""
+        return [last]
 
 
 class SSHClient:
@@ -122,8 +177,129 @@ class SSHClient:
                 stdout=stdout.read().decode("utf-8", errors="replace"),
                 stderr=stderr.read().decode("utf-8", errors="replace"),
             )
-        except (paramiko.SSHException, socket.timeout, TimeoutError, OSError) as exc:
-            raise SSHConnectionError(f"远程命令执行异常: {exc}") from exc
+        except (socket.timeout, TimeoutError) as exc:
+            raise SSHConnectionError(
+                f"远程命令在 {effective_timeout:.0f}s 内无新输出而被 SSH 层超时中断 "
+                f"(可能是远端阻塞或网络问题): {exc!r}"
+            ) from exc
+        except (paramiko.SSHException, OSError) as exc:
+            raise SSHConnectionError(f"远程命令执行异常: {exc!r}") from exc
+
+        if check and not result.ok:
+            raise RemoteCommandError(command=result.command, exit_status=result.exit_status, stderr=result.stderr)
+        return result
+
+    def exec_stream(
+        self,
+        command: str,
+        *,
+        on_stdout_line: Callable[[str], None] | None = None,
+        on_stderr_line: Callable[[str], None] | None = None,
+        timeout: float | None = None,
+        check: bool = False,
+        merge_stderr: bool = False,
+    ) -> RemoteCommandResult:
+        """执行远程命令并流式读取 stdout / stderr。
+
+        与 [`run`](src/desktop/core/remote/ssh_client.py) 不同, 该方法在命令仍在运行时即可
+        通过回调把每一行 stdout / stderr 投递给上层, 用于解析 P1 部署脚本的
+        ``[PROGRESS] N message`` 进度协议。
+
+        Args:
+            command: 远端 shell 命令
+            on_stdout_line: 每收到一行 stdout 触发的回调; 异常会被捕获并记录但不会中断命令
+            on_stderr_line: 每收到一行 stderr 触发的回调
+            timeout: 单次命令的最大耗时(秒); 默认使用凭据的 ``command_timeout``
+            check: 退出码非 0 时抛 [`RemoteCommandError`](src/desktop/core/remote/errors.py)
+            merge_stderr: 当为 True 时启用 PTY, 远端 bash 进入行缓冲, 且 stderr 会合并到 stdout
+                并实时发往 ``on_stdout_line``。适合"展示部署终端"场景, 牺牲 stream 区分度换取实时性。
+
+        Returns:
+            完整的命令结果, ``stdout`` / ``stderr`` 为流式累积后的合并文本(以 ``\n`` 分隔)。
+            当 ``merge_stderr=True`` 时, ``stderr`` 字段为空, 所有输出都进入 ``stdout``。
+        """
+        client = self._require_client()
+        effective_timeout = timeout or self.credentials.command_timeout
+
+        logger.trace(
+            (
+                "执行流式远程命令: "
+                f"host={self.credentials.host}, timeout={effective_timeout}, "
+                f"merge_stderr={merge_stderr}, command={command}"
+            ),
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
+
+        try:
+            _stdin, stdout, stderr = client.exec_command(
+                command,
+                timeout=effective_timeout,
+                get_pty=merge_stderr,
+            )
+            captured_stdout: list[str] = []
+            captured_stderr: list[str] = []
+
+            # PTY 模式下行尾可能是 ``\r\n``; 同时 ``readline`` 在分块读取时
+            # 部分行可能只到 ``\r``。统一按 ``\r`` 与 ``\n`` 切分以避免 curl 等
+            # 工具的 carriage-return 进度条吃掉多行内容。
+            splitter = _LineSplitter()
+            for raw_line in iter(stdout.readline, ""):
+                for line in splitter.feed(raw_line):
+                    captured_stdout.append(line)
+                    if on_stdout_line is not None:
+                        try:
+                            on_stdout_line(line)
+                        except Exception as exc:  # noqa: BLE001 - 回调失败不应中断命令
+                            logger.warning(
+                                f"on_stdout_line 回调异常: {exc}",
+                                LogType.NETWORK,
+                                LogSource.CORE,
+                            )
+            # 缓冲尾部的最后一行 (没有终结换行) 也要发出
+            for line in splitter.flush():
+                captured_stdout.append(line)
+                if on_stdout_line is not None:
+                    try:
+                        on_stdout_line(line)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            f"on_stdout_line 回调异常: {exc}",
+                            LogType.NETWORK,
+                            LogSource.CORE,
+                        )
+
+            exit_status = stdout.channel.recv_exit_status()
+
+            # PTY 模式下 stderr 已经混入 stdout, paramiko 的 stderr 流通常为空
+            if not merge_stderr:
+                stderr_text = stderr.read().decode("utf-8", errors="replace")
+                if stderr_text:
+                    for line in stderr_text.splitlines():
+                        captured_stderr.append(line)
+                        if on_stderr_line is not None:
+                            try:
+                                on_stderr_line(line)
+                            except Exception as exc:  # noqa: BLE001
+                                logger.warning(
+                                    f"on_stderr_line 回调异常: {exc}",
+                                    LogType.NETWORK,
+                                    LogSource.CORE,
+                                )
+
+            result = RemoteCommandResult(
+                command=command,
+                exit_status=exit_status,
+                stdout="\n".join(captured_stdout),
+                stderr="\n".join(captured_stderr),
+            )
+        except (socket.timeout, TimeoutError) as exc:
+            raise SSHConnectionError(
+                f"远程命令在 {effective_timeout:.0f}s 内无新输出而被 SSH 层超时中断 "
+                f"(可能是远端阻塞或网络问题): {exc!r}"
+            ) from exc
+        except (paramiko.SSHException, OSError) as exc:
+            raise SSHConnectionError(f"远程命令执行异常: {exc!r}") from exc
 
         if check and not result.ok:
             raise RemoteCommandError(command=result.command, exit_status=result.exit_status, stderr=result.stderr)

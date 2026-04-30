@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePosixPath
@@ -95,15 +96,22 @@ class RemoteRuntimeService:
         status_result = self.backend.run(f'test -f "{self.paths.status_file}" && cat "{self.paths.status_file}" || true')
         payload = self._parse_status_payload(status_result.stdout)
 
-        # 尝试从 napcat.mjs 读取版本
+        # 尝试从 napcat.mjs 读取版本 (与本地 VersioningService / deployment._detect_napcat_version
+        # 完全对齐: shell 抓 ``napCatVersion`` 到下一个分号的小窗口, Python 端非贪婪提取版本号)
         version = self._as_string(payload.get("version"))
         if not version:
-            version_result = self.backend.run(
-                f"grep 'const version = ' '{self.paths.napcat_dir}/napcat.mjs' 2>/dev/null | "
-                r"sed -n 's/.*const version = \"\([^\"]*\)\".*/\1/p' || true"
+            mjs_grep = self.backend.run(
+                f'grep -oE \'napCatVersion[^;]*\' "{self.paths.napcat_dir}/napcat.mjs" '
+                "2>/dev/null | head -n1 || true"
             )
-            if version_result.ok:
-                version = version_result.stdout.strip() or None
+            if mjs_grep.ok and mjs_grep.stdout.strip():
+                match = re.search(
+                    r'napCatVersion\s*=\s*.*?"(\d+\.\d+\.\d+(?:[-+][^"]+)?)"',
+                    mjs_grep.stdout,
+                )
+                if match:
+                    version = match.group(1).strip() or None
+        # 故意不回退 package.json: NapCat.Shell.zip 里 version 恒为 "0.0.1" 误导性强
 
         return RemoteNapCatStatus(
             running=running,

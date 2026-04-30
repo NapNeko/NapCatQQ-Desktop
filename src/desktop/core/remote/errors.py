@@ -34,3 +34,20 @@ class RemoteCommandError(RemoteError):
         if self.stderr.strip():
             message += f" | stderr={self.stderr.strip()}"
         return message
+
+
+class RemoteDeploymentError(RemoteError):
+    """远端部署流程异常(P1)。
+
+    包装 [`RemoteCommandError`](src/desktop/core/remote/errors.py) / [`SSHConnectionError`](src/desktop/core/remote/errors.py)
+    等底层异常, 附带阶段标签便于上层定位失败步骤。
+    """
+
+    def __init__(self, stage: str, message: str, *, cause: Exception | None = None) -> None:
+        self.stage = stage
+        self.cause = cause
+        super().__init__(f"[{stage}] {message}")
+
+
+class RemoteDeploymentInProgressError(RemoteError):
+    """远端正在部署, 拒绝并发部署请求(P1)。"""

@@ -31,6 +31,9 @@ class SSHCredentials:
     private_key_passphrase: str | None = None
     connect_timeout: float = 10.0
     command_timeout: float = 20.0
+    # 部署脚本类长耗时命令的超时(秒); apt-get / curl 大文件下载等可能远超 command_timeout
+    # 默认 30 分钟, 覆盖最坏情况(慢网络下完整安装)
+    script_timeout: float = 1800.0
     host_key_policy: HostKeyPolicy = "reject"
     allow_agent: bool = False
     look_for_keys: bool = False
@@ -47,6 +50,8 @@ class SSHCredentials:
             raise ValueError("SSH 连接超时时间必须大于 0")
         if self.command_timeout <= 0:
             raise ValueError("SSH 命令超时时间必须大于 0")
+        if self.script_timeout <= 0:
+            raise ValueError("SSH 脚本超时时间必须大于 0")
 
         if self.auth_method == "password":
             if not self.password:

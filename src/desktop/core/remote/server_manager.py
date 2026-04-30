@@ -15,7 +15,8 @@
 from __future__ import annotations
 
 from abc import ABC
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,13 +25,28 @@ from PySide6.QtCore import QObject, Signal
 
 from src.desktop.core.logging import LogSource, LogType, logger
 
-from .errors import RemoteError
+from .errors import RemoteDeploymentError, RemoteDeploymentInProgressError, RemoteError
 from .models import SSHCredentials
 from .servers import DeploymentState, ServerProfile, ServerRegistry
 from .ssh_client import SSHClient
 
 if TYPE_CHECKING:
     from src.desktop.core.operation.remote_backend import RemoteBackend
+
+
+# 进度回调签名: (message, percent_0_to_100)
+DeploymentProgressCallback = Callable[[str, int], None]
+
+
+@dataclass(slots=True)
+class DeploymentResult:
+    """[`ServerManager.deploy_server`](src/desktop/core/remote/server_manager.py) 的返回值。"""
+
+    server_id: str
+    ok: bool
+    message: str
+    napcat_version: str | None = None
+    qq_version: str | None = None
 
 
 def _default_storage_path() -> Path:
@@ -63,6 +79,11 @@ class ServerManager(QObject):
     server_updated = Signal(str)
     server_removed = Signal(str)
     server_state_changed = Signal(str, str)
+    # P1: 部署阶段进度 / 完结信号
+    deployment_progress = Signal(str, str, int)  # (server_id, message, percent)
+    deployment_finished = Signal(str, bool, str)  # (server_id, ok, message)
+    # P1.5: 部署期间每行远端 stdout(含合并的 stderr) 实时回显
+    deployment_log = Signal(str, str)  # (server_id, line)
 
     def __init__(self, storage_path: str | Path | None = None, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -73,6 +94,8 @@ class ServerManager(QObject):
         self._password_cache: dict[str, str] = {}
         # 服务器 ID -> RemoteBackend 实例(惰性创建并缓存)
         self._backend_cache: dict[str, "RemoteBackend"] = {}
+        # P1: 服务器 ID -> 是否正在部署(防并发)
+        self._deploying: set[str] = set()
 
         # 仅在首次启动(磁盘上无 servers.json)时尝试迁移旧版单服务器配置
         if not had_storage_file:
@@ -221,6 +244,268 @@ class ServerManager(QObject):
         if not result.ok:
             return False, f"远端命令返回非零状态: {result.stderr or result.stdout}"
         return True, "SSH 连接测试成功"
+
+    # ==================== 部署编排（P1） ====================
+    def is_deploying(self, server_id: str) -> bool:
+        """是否有正在进行中的部署任务。"""
+        return server_id in self._deploying
+
+    def deploy_server(
+        self,
+        server_id: str,
+        *,
+        progress_callback: DeploymentProgressCallback | None = None,
+        force_napcat_update: bool = False,
+        force_linuxqq_reinstall: bool = False,
+    ) -> DeploymentResult:
+        """**同步**执行远端部署(应在后台线程调用)。
+
+        编排 install_qq + install_napcat 两步, 把进度区间映射到统一的 0–100。
+
+        Raises:
+            KeyError: 服务器档案不存在
+            RemoteDeploymentInProgressError: 已有部署任务在跑
+            RemoteDeploymentError: 部署中途失败(stage 字段标记失败步骤)
+        """
+        profile = self._registry.get(server_id)
+        if profile is None:
+            raise KeyError(f"服务器档案不存在: {server_id}")
+
+        if server_id in self._deploying:
+            raise RemoteDeploymentInProgressError(
+                f"服务器 {profile.name} 正在部署中, 请等待当前任务完成"
+            )
+
+        self._deploying.add(server_id)
+        # 进入 DEPLOYING 状态(写盘 + 信号)
+        self.set_deployment_state(server_id, DeploymentState.DEPLOYING)
+
+        def _emit_progress(message: str, percent: int) -> None:
+            self.deployment_progress.emit(server_id, message, percent)
+            if progress_callback is not None:
+                try:
+                    progress_callback(message, percent)
+                except Exception as exc:  # noqa: BLE001 - 回调失败不阻断
+                    logger.warning(
+                        f"deploy_server 外部 progress_callback 抛错: {exc}",
+                        LogType.NETWORK,
+                        LogSource.CORE,
+                    )
+
+        # P1.5: 把每行远端日志 emit 为 deployment_log 信号
+        def _emit_log_line(line: str) -> None:
+            self.deployment_log.emit(server_id, line)
+
+        backend = None
+        try:
+            _emit_progress("准备 SSH 连接", 0)
+            backend = self.get_backend(server_id)
+            backend.connect()
+
+            # ----- Stage 1: install_qq, 0-50 -----
+            def _qq_progress(message: str, percent: int) -> None:
+                # 0-100 -> 0-50
+                _emit_progress(f"[LinuxQQ] {message}", int(percent / 2))
+
+            try:
+                backend.install_qq(
+                    progress=_qq_progress,
+                    log_callback=_emit_log_line,
+                    force_reinstall=force_linuxqq_reinstall,
+                )
+            except Exception as exc:  # noqa: BLE001 - 统一封装为 RemoteDeploymentError
+                raise RemoteDeploymentError(
+                    "install_qq",
+                    f"LinuxQQ 安装失败: {exc}",
+                    cause=exc,
+                ) from exc
+
+            # ----- Stage 2: install_napcat, 50-100 -----
+            def _napcat_progress(message: str, percent: int) -> None:
+                _emit_progress(f"[NapCat] {message}", 50 + int(percent / 2))
+
+            try:
+                backend.install_napcat(
+                    progress=_napcat_progress,
+                    log_callback=_emit_log_line,
+                    force_update=force_napcat_update,
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise RemoteDeploymentError(
+                    "install_napcat",
+                    f"NapCat 安装失败: {exc}",
+                    cause=exc,
+                ) from exc
+
+            # ----- 探测安装信息并写回档案 -----
+            _emit_progress("探测远端版本", 98)
+            installation = backend.detect_installation()
+            updated_profile = self._registry.get(server_id)
+            if updated_profile is not None:
+                updated_profile.napcat_version = installation.napcat_version
+                updated_profile.qq_version = installation.qq_version
+                updated_profile.deployment_state = DeploymentState.DEPLOYED
+                self._registry.update(updated_profile)
+                self.server_state_changed.emit(server_id, DeploymentState.DEPLOYED.value)
+                self.server_updated.emit(server_id)
+
+            _emit_progress("部署完成", 100)
+            success_message = (
+                f"部署成功: NapCat={installation.napcat_version or '未探测到'}, "
+                f"QQ={installation.qq_version or '未探测到'}"
+            )
+            self.deployment_finished.emit(server_id, True, success_message)
+            return DeploymentResult(
+                server_id=server_id,
+                ok=True,
+                message=success_message,
+                napcat_version=installation.napcat_version,
+                qq_version=installation.qq_version,
+            )
+
+        except RemoteDeploymentError as exc:
+            self.set_deployment_state(server_id, DeploymentState.FAILED)
+            self.deployment_finished.emit(server_id, False, str(exc))
+            logger.warning(
+                f"远端部署失败: id={server_id}, stage={exc.stage}, msg={exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            raise
+        except Exception as exc:  # noqa: BLE001
+            self.set_deployment_state(server_id, DeploymentState.FAILED)
+            wrapped = RemoteDeploymentError("unknown", f"部署阶段异常: {exc}", cause=exc)
+            self.deployment_finished.emit(server_id, False, str(wrapped))
+            logger.exception(
+                f"远端部署阶段未捕获异常: id={server_id}",
+                exc,
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            raise wrapped from exc
+        finally:
+            self._deploying.discard(server_id)
+            # 失败时不主动 close, 调用方决定是否复用; 成功时也保留连接给后续操作
+            _ = backend  # noqa: F841 - keep alive reference comment
+
+    # ==================== 仅版本探测 (轻量, 不部署) ====================
+    def redetect_versions(self, server_id: str) -> tuple[str | None, str | None]:
+        """**同步** 重新探测远端 NapCat / QQ 版本号并写回档案。
+
+        相比 [`deploy_server`](src/desktop/core/remote/server_manager.py) 不会重新执行
+        安装脚本, 仅跑 ``detect_installation`` 即可, 用于:
+        - 部署完成后的"刷新"按钮
+        - 启动时对已部署服务器自动同步版本
+
+        Returns:
+            ``(napcat_version, qq_version)`` 元组, 任一字段可能为 None。
+
+        Raises:
+            KeyError: 服务器档案不存在
+        """
+        profile = self._registry.get(server_id)
+        if profile is None:
+            raise KeyError(f"服务器档案不存在: {server_id}")
+
+        backend = self.get_backend(server_id)
+        backend.connect()
+        installation = backend.detect_installation()
+
+        # 写回档案 (即使返回 None 也写, 避免旧值误导)
+        updated = self._registry.get(server_id)
+        if updated is not None:
+            updated.napcat_version = installation.napcat_version
+            updated.qq_version = installation.qq_version
+            self._registry.update(updated)
+            self.server_updated.emit(server_id)
+            logger.info(
+                f"远端版本探测完成: id={server_id}, "
+                f"napcat={installation.napcat_version}, qq={installation.qq_version}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+        return installation.napcat_version, installation.qq_version
+
+    # ==================== 回滚安装 (开发者调试用) ====================
+    def rollback_server(
+        self,
+        server_id: str,
+        *,
+        include_qq: bool = True,
+        log_callback: Callable[[str], None] | None = None,
+    ) -> None:
+        """**同步**清空远端 NapCat (可选含 QQ) 安装, 重置部署状态为 UNDEPLOYED。
+
+        主要面向开发者反复测试部署场景。**会破坏远端文件**, 调用前需用户确认。
+
+        Args:
+            server_id: 服务器档案 ID
+            include_qq: 是否同时清理 QQ 安装与下载的安装包(默认 True)
+            log_callback: 每条阶段日志的可选回调, 便于在控制台展示
+
+        Raises:
+            KeyError: 服务器档案不存在
+            RemoteDeploymentInProgressError: 当前正在部署/回滚中
+        """
+        profile = self._registry.get(server_id)
+        if profile is None:
+            raise KeyError(f"服务器档案不存在: {server_id}")
+
+        if server_id in self._deploying:
+            raise RemoteDeploymentInProgressError(
+                f"服务器 {profile.name} 正在部署/回滚中, 请等待完成"
+            )
+
+        def _log(line: str) -> None:
+            self.deployment_log.emit(server_id, line)
+            if log_callback is not None:
+                try:
+                    log_callback(line)
+                except Exception:  # noqa: BLE001
+                    pass
+
+        self._deploying.add(server_id)
+        try:
+            _log(f"[INFO] 开始回滚远端安装: include_qq={include_qq}")
+            self.deployment_progress.emit(server_id, "准备 SSH 连接", 5)
+            backend = self.get_backend(server_id)
+            backend.connect()
+            _log("[INFO] SSH 已连接, 开始清理...")
+            self.deployment_progress.emit(server_id, "清理远端文件", 30)
+
+            # 直接复用 LinuxCoreDeployment.clean_environment
+            backend.deployment.clean_environment(include_qq=include_qq)
+            self.deployment_progress.emit(server_id, "重置档案状态", 90)
+
+            # 重置档案状态
+            updated = self._registry.get(server_id)
+            if updated is not None:
+                updated.napcat_version = None
+                updated.qq_version = None
+                updated.deployment_state = DeploymentState.UNDEPLOYED
+                self._registry.update(updated)
+                self.server_state_changed.emit(server_id, DeploymentState.UNDEPLOYED.value)
+                self.server_updated.emit(server_id)
+
+            _log("[OK] 回滚完成, 服务器已重置为未部署状态")
+            self.deployment_progress.emit(server_id, "回滚完成", 100)
+            self.deployment_finished.emit(server_id, True, "回滚完成: 远端环境已清空")
+            logger.info(
+                f"远端回滚完成: id={server_id}, include_qq={include_qq}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log(f"[ERROR] 回滚失败: {exc}")
+            self.deployment_finished.emit(server_id, False, f"回滚失败: {exc}")
+            logger.warning(
+                f"远端回滚失败: id={server_id}, exc={exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            raise
+        finally:
+            self._deploying.discard(server_id)
 
     # ==================== 资源清理 ====================
     def shutdown(self) -> None:

@@ -12,10 +12,10 @@ P0 阶段实现范围:
 - 进程查询: ``get_process_status`` / ``get_memory_usage``
 - 日志: ``read_log`` / ``tail_log`` (映射到 [`RemoteRuntimeService.tail_log`](src/desktop/core/remote/status.py))
 
-P1 阶段补全(目前抛 NotImplementedError):
-- 安装写入: ``install_napcat`` / ``install_qq`` (远端部署 MVP, 复用 [`LinuxCoreDeployment`](src/desktop/core/remote/deployment.py))
+P1 阶段补全:
+- 安装写入: ``install_napcat`` / ``install_qq`` (远端部署 MVP, 委托 [`LinuxCoreDeployment`](src/desktop/core/remote/deployment.py))
 
-P2 阶段补全:
+P2 阶段补全(目前抛 NotImplementedError):
 - 进程启停: ``start_napcat`` / ``stop_napcat`` (基于 [`Config`](src/desktop/core/config/config_model.py) 渲染启动命令)
 - WebUI: ``get_webui_endpoint`` (含 SSH 隧道生命周期管理)
 """
@@ -26,6 +26,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from src.desktop.core.remote.deployment import LinuxCoreDeployment
 from src.desktop.core.remote.execution_backend import RemoteExecutionBackend
 from src.desktop.core.remote.models import LinuxCorePaths, SSHCredentials
 from src.desktop.core.remote.ssh_client import SSHClient
@@ -47,10 +48,6 @@ if TYPE_CHECKING:
 _QQ_VERSION_PACKAGE_PATTERN = re.compile(r'"version"\s*:\s*"([^"]+)"')
 _PS_RSS_PATTERN = re.compile(r"^\s*(\d+)\s*$")
 
-_P1_DEFER_MESSAGE = (
-    "RemoteBackend 当前方法已在 OperationBackend 接口中定义, "
-    "实现排期: P1 阶段(远端部署 MVP), 复用 LinuxCoreDeployment 落地"
-)
 _P2_DEFER_MESSAGE = (
     "RemoteBackend 当前方法已在 OperationBackend 接口中定义, "
     "实现排期: P2 阶段(远端 Bot 运行闭环 + WebUI 透传)"
@@ -71,6 +68,13 @@ class RemoteBackend(OperationBackend):
         self.ssh_client = SSHClient(credentials)
         self._exec_backend = RemoteExecutionBackend(self.ssh_client)
         self._runtime = RemoteRuntimeService(self._exec_backend, self.paths)
+        # P1: 部署器委托给 LinuxCoreDeployment, 共用同一个 RemoteExecutionBackend
+        self._deployment = LinuxCoreDeployment(self._exec_backend, self.paths)
+
+    @property
+    def deployment(self) -> LinuxCoreDeployment:
+        """暴露底层部署器供 ServerManager / 测试直接使用。"""
+        return self._deployment
 
     # ==================== 生命周期 ====================
     def connect(self) -> None:
@@ -172,23 +176,62 @@ class RemoteBackend(OperationBackend):
         archive_path: str | Path | None = None,
         *,
         progress: ProgressCallback | None = None,
+        log_callback=None,
+        force_update: bool = False,
     ) -> None:
-        raise NotImplementedError(_P1_DEFER_MESSAGE)
+        """P1: 远端安装/更新 NapCat。
 
-    def install_qq(self, *, progress: ProgressCallback | None = None) -> None:
-        raise NotImplementedError(_P1_DEFER_MESSAGE)
+        ``archive_path`` 当前未使用 (远端脚本自行 ``curl`` 下载官方 release),
+        预留接口以便 P3 支持 Desktop 本地上传安装包到内网无外网场景。
+
+        ``force_update=True`` 强制重新下载并解压 NapCat;
+        默认情况下脚本会复用远端已有 NapCat 安装。
+
+        ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显。
+        """
+        if archive_path is not None:
+            # P1 不实现自定义包路径, 但仍允许调用方传参（直接忽略并 logger.warning 比抛错更友好）
+            from src.desktop.core.logging import LogSource, LogType, logger as _logger
+
+            _logger.warning(
+                f"RemoteBackend.install_napcat 暂未支持 archive_path 参数(P3 处理): {archive_path}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+        self._ensure_connected()
+        self._deployment.install_napcat(
+            progress=progress,
+            log_callback=log_callback,
+            force_update=force_update,
+        )
+
+    def install_qq(
+        self,
+        *,
+        progress: ProgressCallback | None = None,
+        log_callback=None,
+        force_reinstall: bool = False,
+    ) -> None:
+        """P1: 远端安装 LinuxQQ rootless。
+
+        ``force_reinstall=True`` 强制重装(会先备份 NapCat 配置再 ``rm -rf $install_base_dir/opt`` 后重新解压)。
+        ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显。
+        """
+        self._ensure_connected()
+        self._deployment.install_linuxqq(
+            progress=progress,
+            log_callback=log_callback,
+            force_reinstall=force_reinstall,
+        )
 
     def detect_napcat_version(self) -> str | None:
-        """从 ``{napcat_dir}/napcat.mjs`` 中 ``const version = "..."`` 读取。"""
+        """探测远端 NapCat 版本号。
+
+        委托到 [`LinuxCoreDeployment._detect_napcat_version`](src/desktop/core/remote/deployment.py),
+        支持现代 ``napCatVersion = "..."`` / 历史 ``const version = "..."`` 与 ``package.json`` 兜底。
+        """
         self._ensure_connected()
-        result = self._exec_backend.run(
-            f"grep 'const version = ' '{self.paths.napcat_dir}/napcat.mjs' 2>/dev/null | "
-            r"sed -n 's/.*const version = \"\([^\"]*\)\".*/\1/p' || true"
-        )
-        if not result.ok:
-            return None
-        version = result.stdout.strip()
-        return version or None
+        return self._deployment._detect_napcat_version()  # noqa: SLF001 - 同包私有方法
 
     def detect_qq_path(self) -> str | None:
         """探测远端 QQ 安装路径 ``{paths.qq_base_path}``; 若不存在返回 None。"""

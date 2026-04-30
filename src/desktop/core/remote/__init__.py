@@ -14,9 +14,17 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .deployment import LinuxCoreDeployment, LinuxCoreDeploymentProbe, RemoteConfigSyncResult, RemoteDeployScriptResult
+    from .deployment import (
+        InstallStepResult,
+        LinuxCoreDeployment,
+        LinuxCoreDeploymentProbe,
+        RemoteConfigSyncResult,
+        RemoteDeployScriptResult,
+    )
     from .errors import (
         RemoteCommandError,
+        RemoteDeploymentError,
+        RemoteDeploymentInProgressError,
         RemoteError,
         SSHAuthenticationError,
         SSHConnectionError,
@@ -25,16 +33,24 @@ if TYPE_CHECKING:
     from .execution_backend import ExecutionBackend, LocalExecutionBackend, RemoteExecutionBackend
     from .models import LinuxCorePaths, RemoteCommandResult, SSHCredentials
     from .remote_manager import RemoteManager
-    from .server_manager import ServerManager
+    from .server_manager import DeploymentResult, ServerManager
     from .servers import DeploymentState, ServerProfile, ServerRegistry
     from .ssh_client import SSHClient
     from .status import RemoteLogTail, RemoteNapCatStatus, RemoteRuntimeService
-    from .templates import build_linux_deploy_script, load_linux_deploy_script
+    from .templates import (
+        build_install_linuxqq_script,
+        build_install_napcat_script,
+        build_linux_deploy_script,
+        build_napcat_launcher_script,
+        load_linux_deploy_script,
+    )
 
 
 _EXPORT_MAP = {
+    "DeploymentResult": ".server_manager",
     "DeploymentState": ".servers",
     "ExecutionBackend": ".execution_backend",
+    "InstallStepResult": ".deployment",
     "LinuxCoreDeployment": ".deployment",
     "LinuxCoreDeploymentProbe": ".deployment",
     "LinuxCorePaths": ".models",
@@ -43,6 +59,8 @@ _EXPORT_MAP = {
     "RemoteCommandResult": ".models",
     "RemoteConfigSyncResult": ".deployment",
     "RemoteDeployScriptResult": ".deployment",
+    "RemoteDeploymentError": ".errors",
+    "RemoteDeploymentInProgressError": ".errors",
     "RemoteError": ".errors",
     "RemoteExecutionBackend": ".execution_backend",
     "RemoteLogTail": ".status",
@@ -57,7 +75,10 @@ _EXPORT_MAP = {
     "SSHCredentials": ".models",
     "SSHConnectionError": ".errors",
     "SSHHostKeyError": ".errors",
+    "build_install_linuxqq_script": ".templates",
+    "build_install_napcat_script": ".templates",
     "build_linux_deploy_script": ".templates",
+    "build_napcat_launcher_script": ".templates",
     "load_linux_deploy_script": ".templates",
 }
 
