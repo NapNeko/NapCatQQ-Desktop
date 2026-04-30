@@ -33,6 +33,7 @@
     <qresource prefix="style">
         <file>style/shared/page/api_debug.qss</file>
         <file>style/shared/page/home.qss</file>
+        <file>style/shared/page/remote.qss</file>
         <file>style/shared/page/setup.qss</file>
         <file>style/shared/page/unit.qss</file>
         <file>style/dark/widget/update_log_card.qss</file>
