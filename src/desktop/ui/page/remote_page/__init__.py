@@ -25,6 +25,7 @@ from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     PrimaryPushButton,
+    ProgressBar,
     PushButton,
     StrongBodyLabel,
     SubtitleLabel,
@@ -38,6 +39,8 @@ from src.desktop.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.desktop.ui.components.message_box import AskBox
 
 from .connection_tester import ConnectionTester
+from .deployment_console import DeploymentConsoleDialog
+from .deployment_runner import DeploymentRunner, RedetectRunner
 from .server_edit_dialog import ServerEditDialog
 
 if TYPE_CHECKING:
@@ -205,12 +208,32 @@ class ServerDetailPanel(QFrame):
             self._field_labels[key] = value
 
         layout.addWidget(self.fields_widget)
+
+        # P1: 部署进度区
+        self.progress_widget = QWidget(self)
+        progress_layout = QVBoxLayout(self.progress_widget)
+        progress_layout.setContentsMargins(0, 8, 0, 0)
+        progress_layout.setSpacing(4)
+        self.progress_title = StrongBodyLabel("部署进度", self.progress_widget)
+        self.progress_bar = ProgressBar(self.progress_widget)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_message = CaptionLabel("", self.progress_widget)
+        self.progress_message.setStyleSheet("color: #8a8a8a;")
+        self.progress_message.setWordWrap(True)
+        progress_layout.addWidget(self.progress_title)
+        progress_layout.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.progress_message)
+        layout.addWidget(self.progress_widget)
+        self.progress_widget.hide()
+
         layout.addStretch()
 
     def show_empty(self) -> None:
         self._profile = None
         self.empty_label.show()
         self.fields_widget.hide()
+        self.progress_widget.hide()
 
     def show_profile(self, profile: ServerProfile) -> None:
         self._profile = profile
@@ -238,6 +261,18 @@ class ServerDetailPanel(QFrame):
             return "--"
         return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
+    # ---------- P1: 部署进度 ----------
+    def show_progress(self, message: str, percent: int) -> None:
+        """显示部署进度。"""
+        self.progress_widget.show()
+        self.progress_bar.setValue(max(0, min(100, percent)))
+        self.progress_message.setText(f"{percent}% — {message}" if message else f"{percent}%")
+
+    def hide_progress(self) -> None:
+        self.progress_widget.hide()
+        self.progress_bar.setValue(0)
+        self.progress_message.setText("")
+
 
 # ============================================================
 # 主页面
@@ -249,6 +284,8 @@ class RemotePage(QWidget):
         super().__init__()
         self._selected_id: str | None = None
         self._cards: dict[str, ServerCard] = {}
+        # P1.5: server_id -> 已打开的部署控制台 (避免对同一台服务器重复弹窗)
+        self._consoles: dict[str, DeploymentConsoleDialog] = {}
 
     def initialize(self, parent: "MainWindow") -> "RemotePage":
         """页面初始化, 由主窗口在创建时调用。"""
@@ -279,11 +316,13 @@ class RemotePage(QWidget):
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
         self.add_btn = PrimaryPushButton(FI.ADD, "添加服务器", self)
+        self.deploy_btn = PrimaryPushButton(FI.SEND, "部署", self)
         self.edit_btn = PushButton(FI.EDIT, "编辑", self)
         self.test_btn = PushButton(FI.GLOBE, "测试连接", self)
         self.delete_btn = PushButton(FI.DELETE, "删除", self)
         self.refresh_btn = PushButton(FI.SYNC, "刷新", self)
         toolbar.addWidget(self.add_btn)
+        toolbar.addWidget(self.deploy_btn)
         toolbar.addWidget(self.edit_btn)
         toolbar.addWidget(self.test_btn)
         toolbar.addWidget(self.delete_btn)
@@ -329,10 +368,11 @@ class RemotePage(QWidget):
         self._list_layout.insertWidget(0, self._empty_label)
 
         self.add_btn.clicked.connect(self._on_add)
+        self.deploy_btn.clicked.connect(self._on_deploy)
         self.edit_btn.clicked.connect(self._on_edit)
         self.test_btn.clicked.connect(self._on_test)
         self.delete_btn.clicked.connect(self._on_delete)
-        self.refresh_btn.clicked.connect(self._reload)
+        self.refresh_btn.clicked.connect(self._on_refresh)
 
         self._update_button_state()
 
@@ -342,6 +382,9 @@ class RemotePage(QWidget):
         manager.server_updated.connect(lambda *_: self._reload())
         manager.server_removed.connect(lambda *_: self._reload())
         manager.server_state_changed.connect(lambda *_: self._reload())
+        # P1: 部署进度 / 完成
+        manager.deployment_progress.connect(self._on_deployment_progress)
+        manager.deployment_finished.connect(self._on_deployment_finished)
 
     # ---------- 列表渲染 ----------
     def _reload(self) -> None:
@@ -394,9 +437,18 @@ class RemotePage(QWidget):
 
     def _update_button_state(self) -> None:
         has_selection = self._selected_id is not None and self._selected_id in self._cards
-        self.edit_btn.setEnabled(has_selection)
-        self.test_btn.setEnabled(has_selection)
-        self.delete_btn.setEnabled(has_selection)
+        manager = it(ServerManager)
+        is_deploying_selected = (
+            has_selection and self._selected_id is not None and manager.is_deploying(self._selected_id)
+        )
+        any_deploying = bool(getattr(manager, "_deploying", set()))
+
+        self.edit_btn.setEnabled(has_selection and not is_deploying_selected)
+        self.test_btn.setEnabled(has_selection and not is_deploying_selected)
+        self.delete_btn.setEnabled(has_selection and not is_deploying_selected)
+        self.deploy_btn.setEnabled(has_selection and not is_deploying_selected)
+        # 部署进行时禁用添加, 防止干扰
+        self.add_btn.setEnabled(not any_deploying)
 
     # ---------- 操作回调 ----------
     def _on_add(self) -> None:
@@ -465,6 +517,135 @@ class RemotePage(QWidget):
                 manager.update_server(profile)
         else:
             error_bar(f"[{name}] {message}", parent=self)
+
+    # ---------- P1: 部署 ----------
+    def _on_deploy(self) -> None:
+        if not self._selected_id:
+            return
+        manager = it(ServerManager)
+        profile = manager.get_server(self._selected_id)
+        if profile is None:
+            return
+
+        if manager.is_deploying(profile.id):
+            info_bar(f"[{profile.name}] 正在部署中, 请耐心等待", parent=self)
+            return
+
+        # 密码认证模式必须先有缓存密码
+        if profile.credentials.auth_method == "password":
+            password = manager._password_cache.get(profile.id)  # noqa: SLF001
+            if not password:
+                error_bar("密码认证模式下未保存密码, 请先编辑并填写密码", parent=self)
+                return
+
+        # 已部署时二次确认
+        if profile.deployment_state == DeploymentState.DEPLOYED:
+            ask = AskBox(
+                "确认重新部署",
+                f"服务器 “{profile.name}” 已处于已部署状态。\n\n"
+                "重新部署会重新执行 LinuxQQ 与 NapCat 的安装脚本（脚本会自动跳过已存在的组件）。\n"
+                "是否继续？",
+                self.window(),
+            )
+            if not ask.exec():
+                return
+
+        info_bar(f"[{profile.name}] 开始部署...", parent=self)
+        self._detail_panel.show_progress("准备部署", 0)
+        self._update_button_state()
+
+        # P1.5: 弹出独立的部署控制台
+        self._open_or_focus_console(profile.id, profile.name)
+
+        runner = DeploymentRunner(profile.id)
+        runner.signals.finished.connect(self._on_deployment_runner_finished)
+        QThreadPool.globalInstance().start(runner)
+
+    def _open_or_focus_console(self, server_id: str, server_name: str) -> None:
+        """打开或前置 DeploymentConsoleDialog。"""
+        existing = self._consoles.get(server_id)
+        if existing is not None and existing.isVisible():
+            # 已有控制台窗口, 直接前置并返回
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        console = DeploymentConsoleDialog(server_id, server_name, parent=self.window())
+        # 用户手动关闭后从字典中移除, 释放引用
+        console.destroyed.connect(lambda *_args, sid=server_id: self._consoles.pop(sid, None))
+        self._consoles[server_id] = console
+        console.show()
+        console.raise_()
+        console.activateWindow()
+
+    def _on_deployment_progress(self, server_id: str, message: str, percent: int) -> None:
+        # 仅在当前选中卡片对应的服务器上展示
+        if server_id != self._selected_id:
+            return
+        self._detail_panel.show_progress(message, percent)
+
+    def _on_deployment_finished(self, server_id: str, ok: bool, message: str) -> None:
+        manager = it(ServerManager)
+        profile = manager.get_server(server_id)
+        name = profile.name if profile is not None else server_id
+        if ok:
+            success_bar(f"[{name}] {message}", parent=self)
+        else:
+            error_bar(f"[{name}] {message}", parent=self)
+
+        if server_id == self._selected_id:
+            self._detail_panel.hide_progress()
+        self._update_button_state()
+
+    def _on_deployment_runner_finished(self, server_id: str) -> None:
+        # runner 收尾(已经由 deployment_finished 处理 UI), 这里仅做按钮状态保险刷新
+        if server_id == self._selected_id:
+            self._update_button_state()
+
+    # ---------- 刷新: 重载列表 + 后台重新探测远端版本 ----------
+    def _on_refresh(self) -> None:
+        """刷新按钮: 重载 UI + 对所有已部署的服务器后台触发版本探测。
+
+        目的: 部署完成时若版本未探测到 (历史 bug 或新装), 用户点刷新即可补全。
+        """
+        self._reload()
+        manager = it(ServerManager)
+        triggered: list[str] = []
+        for profile in manager.list_servers():
+            if profile.deployment_state is not DeploymentState.DEPLOYED:
+                continue
+            if manager.is_deploying(profile.id):
+                continue
+            runner = RedetectRunner(profile.id)
+            runner.signals.finished.connect(self._on_redetect_finished)
+            QThreadPool.globalInstance().start(runner)
+            triggered.append(profile.name)
+        if triggered:
+            info_bar(
+                f"正在后台探测 {len(triggered)} 台已部署服务器的版本号: "
+                f"{', '.join(triggered)}",
+                parent=self,
+            )
+
+    def _on_redetect_finished(
+        self,
+        server_id: str,
+        ok: bool,
+        napcat_version: object,
+        qq_version: object,
+        error_msg: str,
+    ) -> None:
+        manager = it(ServerManager)
+        profile = manager.get_server(server_id)
+        name = profile.name if profile is not None else server_id
+        if not ok:
+            error_bar(f"[{name}] 版本探测失败: {error_msg}", parent=self)
+            return
+        success_bar(
+            f"[{name}] 探测完成: NapCat={napcat_version or '未探测到'}, "
+            f"QQ={qq_version or '未探测到'}",
+            parent=self,
+        )
 
     def _on_delete(self) -> None:
         if not self._selected_id:

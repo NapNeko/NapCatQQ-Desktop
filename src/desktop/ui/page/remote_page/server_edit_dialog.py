@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QDir
@@ -24,6 +25,7 @@ from qfluentwidgets import (
 )
 
 from src.desktop.core.remote import ServerProfile, SSHCredentials
+from src.desktop.core.remote.ssh_keys import scan_local_ssh_keys
 
 if TYPE_CHECKING:
     pass
@@ -93,8 +95,8 @@ class ServerEditDialog(MessageBoxBase):
         auth_layout: QVBoxLayout = auth_block.layout()  # type: ignore[assignment]
 
         self.method_combo = ComboBox(auth_block)
-        self.method_combo.addItem("私钥", "key")
-        self.method_combo.addItem("密码", "password")
+        self.method_combo.addItem("私钥", userData="key")
+        self.method_combo.addItem("密码", userData="password")
         self.method_combo.setFixedWidth(120)
         method_container = QHBoxLayout()
         method_container.addWidget(BodyLabel("方式:", auth_block))
@@ -102,19 +104,53 @@ class ServerEditDialog(MessageBoxBase):
         method_container.addStretch()
         auth_layout.addLayout(method_container)
 
-        # 私钥
+        # 私钥: LineEdit (主要输入) + 扫描候选下拉 (快捷选择) + 浏览按钮
+        # 不使用 EditableComboBox: 其多重继承 (LineEdit + ComboBoxBase) 行为太难推断。
         self.key_widget = QWidget(auth_block)
         key_row = QHBoxLayout(self.key_widget)
         key_row.setContentsMargins(0, 0, 0, 0)
         key_row.setSpacing(6)
+
         self.key_edit = LineEdit(self.key_widget)
-        self.key_edit.setPlaceholderText("~/.ssh/id_rsa")
+        self.key_edit.setClearButtonEnabled(True)
+
+        scanned_keys = scan_local_ssh_keys()
+        self._scanned_keys: tuple[str, ...] = tuple(scanned_keys)
+
+        if scanned_keys:
+            self.key_edit.setText(scanned_keys[0])
+            self.key_edit.setPlaceholderText("已默认填入优先密钥, 可手动修改")
+        else:
+            self.key_edit.setPlaceholderText("~/.ssh/id_rsa（未扫描到本地密钥, 请手输或浏览）")
+
+        self.key_scan_combo = ComboBox(self.key_widget)
+        self.key_scan_combo.setFixedWidth(120)
+        self.key_scan_combo.setToolTip("从本地扫描到的 SSH 私钥快捷选择")
+        if scanned_keys:
+            for path in scanned_keys:
+                self.key_scan_combo.addItem(Path(path).name, userData=path)
+            self.key_scan_combo.currentIndexChanged.connect(self._on_scan_combo_changed)
+        else:
+            self.key_scan_combo.addItem("(无扫描结果)")
+            self.key_scan_combo.setEnabled(False)
+
         self.key_browse_btn = ToolButton(FI.FOLDER, self.key_widget)
         self.key_browse_btn.setFixedSize(32, 32)
+        self.key_browse_btn.setToolTip("浏览选择其他位置的私钥文件")
+
         key_row.addWidget(BodyLabel("私钥:", self.key_widget))
         key_row.addWidget(self.key_edit, 1)
+        key_row.addWidget(self.key_scan_combo)
         key_row.addWidget(self.key_browse_btn)
         auth_layout.addWidget(self.key_widget)
+
+        if scanned_keys:
+            scan_hint = CaptionLabel(
+                f"已默认填入本地扫描到的 {len(scanned_keys)} 个密钥中优先级最高的一个, 可点击中间按钮切换",
+                auth_block,
+            )
+            scan_hint.setStyleSheet("color: #8a8a8a;")
+            auth_layout.addWidget(scan_hint)
 
         # 密码
         self.pwd_widget = QWidget(auth_block)
@@ -148,9 +184,9 @@ class ServerEditDialog(MessageBoxBase):
         adv_layout.addLayout(timeout_row)
 
         self.policy_combo = ComboBox(adv_block)
-        self.policy_combo.addItem("严格检查（推荐）", "reject")
-        self.policy_combo.addItem("警告（不推荐）", "warning")
-        self.policy_combo.addItem("自动添加（仅测试环境）", "auto_add")
+        self.policy_combo.addItem("严格检查（推荐）", userData="reject")
+        self.policy_combo.addItem("警告（不推荐）", userData="warning")
+        self.policy_combo.addItem("自动添加（仅测试环境）", userData="auto_add")
         self.policy_combo.setFixedWidth(220)
         policy_container = QHBoxLayout()
         policy_container.addWidget(BodyLabel("主机指纹策略:", adv_block))
@@ -228,6 +264,14 @@ class ServerEditDialog(MessageBoxBase):
     def _apply_method_visibility(self, method: str) -> None:
         self.key_widget.setVisible(method == "key")
         self.pwd_widget.setVisible(method == "password")
+
+    def _on_scan_combo_changed(self, index: int) -> None:
+        """扫描候选选中 → 同步到主 LineEdit。"""
+        if index < 0:
+            return
+        path = self.key_scan_combo.itemData(index)
+        if isinstance(path, str) and path:
+            self.key_edit.setText(path)
 
     def _on_browse_key(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
