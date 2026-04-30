@@ -270,3 +270,62 @@ class TestServerRegistry:
         assert profile.id in ids
         assert profile.id in registry
         assert "not-an-id" not in registry
+
+
+# ==================== 本地 SSH 密钥扫描 ====================
+class TestScanLocalSSHKeys:
+    """覆盖 [`scan_local_ssh_keys`](src/desktop/core/remote/ssh_keys.py)
+    的关键行为, 注意此辅助函数与计划 §6.2 安全基线兼容: 仅作 UI 候选, 不会自动建立连接。"""
+
+    def test_returns_empty_when_no_ssh_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 模拟 home 目录下没有 .ssh
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+        from src.desktop.core.remote.ssh_keys import scan_local_ssh_keys
+
+        assert scan_local_ssh_keys() == []
+
+    def test_picks_existing_keys_in_priority_order(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_home = tmp_path / "home"
+        ssh_dir = fake_home / ".ssh"
+        ssh_dir.mkdir(parents=True)
+        # 故意按相反顺序创建文件, 验证函数仍按优先级排序
+        (ssh_dir / "id_rsa").write_text("rsa-key", encoding="utf-8")
+        (ssh_dir / "id_ed25519").write_text("ed25519-key", encoding="utf-8")
+        # 干扰文件
+        (ssh_dir / "id_rsa.pub").write_text("public-key-should-be-skipped", encoding="utf-8")
+        (ssh_dir / "config").write_text("Host *", encoding="utf-8")
+        (ssh_dir / "known_hosts").write_text("", encoding="utf-8")
+
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        from src.desktop.core.remote.ssh_keys import scan_local_ssh_keys
+
+        keys = scan_local_ssh_keys()
+        assert len(keys) == 2
+        # ed25519 优先级高于 rsa
+        assert keys[0].endswith("id_ed25519")
+        assert keys[1].endswith("id_rsa")
+        # 公钥与配置文件不应被收录
+        assert not any(k.endswith(".pub") for k in keys)
+        assert not any(k.endswith("config") for k in keys)
+        assert not any(k.endswith("known_hosts") for k in keys)
+
+    def test_skips_non_existing_standard_names(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_home = tmp_path / "home"
+        ssh_dir = fake_home / ".ssh"
+        ssh_dir.mkdir(parents=True)
+        # 只有 id_ecdsa 存在
+        (ssh_dir / "id_ecdsa").write_text("ecdsa-key", encoding="utf-8")
+
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        from src.desktop.core.remote.ssh_keys import scan_local_ssh_keys
+
+        keys = scan_local_ssh_keys()
+        assert len(keys) == 1
+        assert keys[0].endswith("id_ecdsa")
