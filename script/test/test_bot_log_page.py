@@ -4,7 +4,7 @@ import os
 
 from PySide6.QtWidgets import QApplication
 
-from src.desktop.ui.page.bot_page.sub_page.bot_log import BotLogPage
+from src.ui.page.bot_page.sub_page.bot_log import BotLogPage
 
 
 def ensure_qapp() -> QApplication:

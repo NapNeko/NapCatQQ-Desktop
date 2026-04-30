@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`LocalBackend`](src/desktop/core/operation/local_backend.py) 单元测试。
+"""[`LocalBackend`](src/core/operation/local_backend.py) 单元测试。
 
 覆盖 P0 阶段已实现的方法：文件 8 op + 检测类 (``detect_napcat_version`` / ``detect_qq_path`` / ``detect_installation``)。
 进程 / 安装写入 / 日志 / WebUI 这些 NotImplementedError 也单独验证。
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from src.desktop.core.operation import (
+from src.core.operation import (
     FileEntry,
     InstallationInfo,
     LocalBackend,
@@ -150,7 +150,7 @@ class TestDetection:
     def test_detect_qq_path_returns_none_when_missing(
         self, backend: LocalBackend, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from src.desktop.core.runtime.paths import PathFunc
+        from src.core.runtime.paths import PathFunc
 
         monkeypatch.setattr(PathFunc, "get_qq_path", staticmethod(lambda: None))
         assert backend.detect_qq_path() is None
@@ -170,7 +170,7 @@ class TestDetection:
         napcat_dir.mkdir()
         (napcat_dir / "napcat.mjs").write_text('const version = "0.5.0"', encoding="utf-8")
 
-        from src.desktop.core.runtime.paths import PathFunc
+        from src.core.runtime.paths import PathFunc
 
         monkeypatch.setattr(PathFunc, "get_qq_path", staticmethod(lambda: qq_path))
         monkeypatch.setattr(LocalBackend, "_resolve_napcat_path", staticmethod(lambda: napcat_dir))

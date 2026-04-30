@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`_LineSplitter`](src/desktop/core/remote/ssh_client.py) 单元测试。
+"""[`_LineSplitter`](src/core/remote/ssh_client.py) 单元测试。
 
 回归保护点:
 
@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from src.desktop.core.remote.ssh_client import _LineSplitter
+from src.core.remote.ssh_client import _LineSplitter
 
 
 class TestLineSplitterCRLF:

@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 # 项目内模块导入
-import src.desktop.core.config.operate_config as operate_config
-from src.desktop.core.config.config_enum import TimeUnitEnum
-from src.desktop.core.config.config_model import (
+import src.core.config.operate_config as operate_config
+from src.core.config.config_enum import TimeUnitEnum
+from src.core.config.config_model import (
     BOT_CONFIG_COMPAT_VERSION,
     AdvancedConfig,
     AutoRestartScheduleConfig,
@@ -571,3 +571,112 @@ def test_delete_config_rolls_back_when_commit_fails(tmp_path: Path, monkeypatch:
     assert read_json(fake_path_func.bot_config_path) == original_bot_payload
     assert read_json(onebot_path) == original_onebot_payload
     assert read_json(napcat_path) == original_napcat_payload
+
+
+# ==================== P2.4: 远端配置同步钩子 ====================
+class _RemoteConfigSyncSpy:
+    """``RemoteBackend`` 替身, 仅记录配置同步调用."""
+
+    def __init__(self) -> None:
+        self.write_calls: list[Config] = []
+        self.delete_calls: list[str] = []
+
+    def write_bot_runtime_config(self, config: Config) -> tuple[str, str]:
+        self.write_calls.append(config)
+        return ("/remote/onebot.json", "/remote/napcat.json")
+
+    def delete_bot_runtime_config(self, qq_id: str) -> None:
+        self.delete_calls.append(qq_id)
+
+
+def _patch_resolver_to_spy(monkeypatch: pytest.MonkeyPatch, spy: _RemoteConfigSyncSpy) -> None:
+    """让 ``operate_config._sync_*_remote`` 调用的 resolver 直接返回 spy."""
+    from src.core.operation import resolver as resolver_module
+
+    monkeypatch.setattr(resolver_module, "resolve_backend_for_bot", lambda config, **_: spy)
+
+
+def test_update_config_skips_remote_sync_for_local_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``runtime_target='local'`` 时不应触发任何远端 backend 调用。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)  # noqa: F841
+    spy = _RemoteConfigSyncSpy()
+    _patch_resolver_to_spy(monkeypatch, spy)
+
+    config = make_config(114514, "LocalBot")
+    assert operate_config.update_config(config) is True
+
+    # spy 始终为空: local Bot 不会进入 resolver 路径
+    assert spy.write_calls == []
+
+
+def test_update_config_triggers_remote_sync_for_remote_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``runtime_target=server_id`` 时应在本地保存后调用 ``write_bot_runtime_config``."""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)  # noqa: F841
+    spy = _RemoteConfigSyncSpy()
+    _patch_resolver_to_spy(monkeypatch, spy)
+
+    config = make_config(114514, "RemoteBot")
+    config.bot.runtime_target = "srv-uuid-1"
+
+    assert operate_config.update_config(config) is True
+
+    assert len(spy.write_calls) == 1
+    assert spy.write_calls[0].bot.QQID == 114514
+    assert spy.write_calls[0].bot.runtime_target == "srv-uuid-1"
+
+
+def test_update_config_remote_sync_failure_does_not_block_local_save(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """远端同步抛错时, 本地保存仍应返回 True."""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+
+    class FailingSpy(_RemoteConfigSyncSpy):
+        def write_bot_runtime_config(self, config: Config) -> tuple[str, str]:
+            raise RuntimeError("simulated SSH failure")
+
+    spy = FailingSpy()
+    _patch_resolver_to_spy(monkeypatch, spy)
+
+    config = make_config(114514, "RemoteBot")
+    config.bot.runtime_target = "srv-uuid-1"
+
+    assert operate_config.update_config(config) is True
+    # 本地 bot.json 仍应正确写出
+    assert read_json(fake_path_func.bot_config_path)["bots"][0]["bot"]["QQID"] == 114514
+
+
+def test_delete_config_triggers_remote_delete_for_remote_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """删除时, 远端 backend 应收到 ``delete_bot_runtime_config(qq_id)`` 调用。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    spy = _RemoteConfigSyncSpy()
+    _patch_resolver_to_spy(monkeypatch, spy)
+
+    config = make_config(114514, "RemoteBot")
+    config.bot.runtime_target = "srv-uuid-1"
+
+    write_json(fake_path_func.bot_config_path, expected_bot_root([config]))
+
+    assert operate_config.delete_config(config) is True
+    assert spy.delete_calls == ["114514"]
+
+
+def test_delete_config_skips_remote_delete_for_local_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """local Bot 删除不触发远端清理。"""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    spy = _RemoteConfigSyncSpy()
+    _patch_resolver_to_spy(monkeypatch, spy)
+
+    config = make_config(114514, "LocalBot")
+    write_json(fake_path_func.bot_config_path, expected_bot_root([config]))
+
+    assert operate_config.delete_config(config) is True
+    assert spy.delete_calls == []

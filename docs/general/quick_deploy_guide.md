@@ -41,7 +41,7 @@
 ### 2. 通过 Python API
 
 ```python
-from src.desktop.core.remote import DaemonDeployer, SSHCredentials
+from src.core.remote import DaemonDeployer, SSHCredentials
 
 # 准备 SSH 凭据
 credentials = SSHCredentials(
@@ -161,7 +161,7 @@ Token 使用系统密钥库存储：
 - **Linux**: Secret Service API (GNOME Keyring/KWallet)
 
 ```python
-from src.desktop.core.remote import DaemonConfigManager
+from src.core.remote import DaemonConfigManager
 
 # 获取配置管理器
 manager = DaemonConfigManager()
@@ -269,7 +269,7 @@ Linux:   ~/.config/NapCatQQ/daemon_connections.json
 ### 通过 Desktop
 
 ```python
-from src.desktop.core.remote import DaemonDeployer, SSHCredentials
+from src.core.remote import DaemonDeployer, SSHCredentials
 
 deployer = DaemonDeployer()
 deployer.uninstall(credentials)

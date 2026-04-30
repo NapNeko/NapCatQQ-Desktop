@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""[`LinuxCoreDeployment.install_linuxqq`](src/desktop/core/remote/deployment.py)
-与 [`install_napcat`](src/desktop/core/remote/deployment.py) 单元测试。
+"""[`LinuxCoreDeployment.install_linuxqq`](src/core/remote/deployment.py)
+与 [`install_napcat`](src/core/remote/deployment.py) 单元测试。
 
 测试以 [`FakeExecutionBackend`](script/test/test_remote_deploy_probe.py)
 为基础, 验证脚本上传顺序、进度协议解析、错误传播。
@@ -14,13 +14,13 @@ from typing import Iterable
 
 import pytest
 
-from src.desktop.core.remote.deployment import (
+from src.core.remote.deployment import (
     InstallStepResult,
     LinuxCoreDeployment,
 )
-from src.desktop.core.remote.errors import RemoteCommandError
-from src.desktop.core.remote.execution_backend import ExecutionBackend
-from src.desktop.core.remote.models import LinuxCorePaths, RemoteCommandResult
+from src.core.remote.errors import RemoteCommandError
+from src.core.remote.execution_backend import ExecutionBackend
+from src.core.remote.models import LinuxCorePaths, RemoteCommandResult
 
 
 @dataclass
@@ -296,8 +296,8 @@ class TestScriptTimeout:
     """
 
     def test_run_script_uses_ssh_script_timeout(self) -> None:
-        from src.desktop.core.remote.execution_backend import RemoteExecutionBackend
-        from src.desktop.core.remote.models import RemoteCommandResult
+        from src.core.remote.execution_backend import RemoteExecutionBackend
+        from src.core.remote.models import RemoteCommandResult
 
         # 构造一个最小可用的伪 SSHClient
         class _FakeCredentials:

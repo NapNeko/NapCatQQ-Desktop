@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`LinuxCoreDeployment.probe_environment`](src/desktop/core/remote/deployment.py) 单元测试。"""
+"""[`LinuxCoreDeployment.probe_environment`](src/core/remote/deployment.py) 单元测试。"""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from src.desktop.core.remote.deployment import LinuxCoreDeployment
-from src.desktop.core.remote.execution_backend import ExecutionBackend
-from src.desktop.core.remote.models import LinuxCorePaths, RemoteCommandResult
+from src.core.remote.deployment import LinuxCoreDeployment
+from src.core.remote.execution_backend import ExecutionBackend
+from src.core.remote.models import LinuxCorePaths, RemoteCommandResult
 
 
 @dataclass

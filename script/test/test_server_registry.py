@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`ServerProfile`](src/desktop/core/remote/servers.py) 与 [`ServerRegistry`](src/desktop/core/remote/servers.py) 单元测试。
+"""[`ServerProfile`](src/core/remote/servers.py) 与 [`ServerRegistry`](src/core/remote/servers.py) 单元测试。
 
 P0 验收要点:
 - 序列化往返保留所有字段(密码与 passphrase 除外)
@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from src.desktop.core.remote.models import LinuxCorePaths, SSHCredentials
-from src.desktop.core.remote.servers import (
+from src.core.remote.models import LinuxCorePaths, SSHCredentials
+from src.core.remote.servers import (
     DeploymentState,
     ServerProfile,
     ServerRegistry,
@@ -274,7 +274,7 @@ class TestServerRegistry:
 
 # ==================== 本地 SSH 密钥扫描 ====================
 class TestScanLocalSSHKeys:
-    """覆盖 [`scan_local_ssh_keys`](src/desktop/core/remote/ssh_keys.py)
+    """覆盖 [`scan_local_ssh_keys`](src/core/remote/ssh_keys.py)
     的关键行为, 注意此辅助函数与计划 §6.2 安全基线兼容: 仅作 UI 候选, 不会自动建立连接。"""
 
     def test_returns_empty_when_no_ssh_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -283,7 +283,7 @@ class TestScanLocalSSHKeys:
         fake_home.mkdir()
         monkeypatch.setattr(Path, "home", lambda: fake_home)
 
-        from src.desktop.core.remote.ssh_keys import scan_local_ssh_keys
+        from src.core.remote.ssh_keys import scan_local_ssh_keys
 
         assert scan_local_ssh_keys() == []
 
@@ -302,7 +302,7 @@ class TestScanLocalSSHKeys:
         (ssh_dir / "known_hosts").write_text("", encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: fake_home)
-        from src.desktop.core.remote.ssh_keys import scan_local_ssh_keys
+        from src.core.remote.ssh_keys import scan_local_ssh_keys
 
         keys = scan_local_ssh_keys()
         assert len(keys) == 2
@@ -324,7 +324,7 @@ class TestScanLocalSSHKeys:
         (ssh_dir / "id_ecdsa").write_text("ecdsa-key", encoding="utf-8")
 
         monkeypatch.setattr(Path, "home", lambda: fake_home)
-        from src.desktop.core.remote.ssh_keys import scan_local_ssh_keys
+        from src.core.remote.ssh_keys import scan_local_ssh_keys
 
         keys = scan_local_ssh_keys()
         assert len(keys) == 1

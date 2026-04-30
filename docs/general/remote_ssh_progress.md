@@ -42,16 +42,16 @@
 | 文件                                             | 说明                   |
 | ------------------------------------------------ | ---------------------- |
 | src/daemon/ (整个目录)                           | Go Daemon 项目         |
-| src/desktop/core/remote/agent_backend.py         | Agent 执行后端         |
-| src/desktop/core/remote/agent_client.py          | WebSocket Agent 客户端 |
-| src/desktop/core/remote/jsonrpc_protocol.py      | JSON-RPC 2.0 协议定义  |
-| src/desktop/core/remote/daemon_config.py         | Daemon 配置管理        |
-| src/desktop/core/remote/daemon_deployer.py       | Daemon 部署器          |
-| src/desktop/ui/page/remote_page/agent_handler.py | Agent UI 处理器        |
-| src/desktop/ui/page/remote_page/agent_panel.py   | Agent 配置面板         |
+| src/core/remote/agent_backend.py         | Agent 执行后端         |
+| src/core/remote/agent_client.py          | WebSocket Agent 客户端 |
+| src/core/remote/jsonrpc_protocol.py      | JSON-RPC 2.0 协议定义  |
+| src/core/remote/daemon_config.py         | Daemon 配置管理        |
+| src/core/remote/daemon_deployer.py       | Daemon 部署器          |
+| src/ui/page/remote_page/agent_handler.py | Agent UI 处理器        |
+| src/ui/page/remote_page/agent_panel.py   | Agent 配置面板         |
 
-- [ ] 清理 src/desktop/core/remote/__init__.py（移除 Agent/Daemon 导出）
-- [ ] 清理 src/desktop/ui/page/remote_page/__init__.py（移除 Agent 依赖）
+- [ ] 清理 src/core/remote/__init__.py（移除 Agent/Daemon 导出）
+- [ ] 清理 src/ui/page/remote_page/__init__.py（移除 Agent 依赖）
 
 ---
 
@@ -120,14 +120,14 @@ untime_target 字段
 
 | 模块                                         | 用途                    | v2 定位                              |
 | -------------------------------------------- | ----------------------- | ------------------------------------ |
-| src/desktop/core/remote/ssh_client.py        | SSH 连接封装 (paramiko) | RemoteBackend 底层，需升级为持久连接 |
-| src/desktop/core/remote/models.py            | SSH 凭据 + 远端路径模型 | 扩展为服务器配置模型                 |
-| src/desktop/core/remote/errors.py            | SSH 错误类型            | 保留                                 |
-| src/desktop/core/remote/execution_backend.py | 执行抽象层              | 重构为 OperationBackend              |
-| src/desktop/core/remote/deployment.py        | 部署逻辑                | 重构为 RemoteBackend 安装方法        |
-| src/desktop/core/remote/status.py            | 状态查询                | 重构为 RemoteBackend 状态方法        |
-| src/desktop/core/remote/templates.py         | 脚本模板                | 保留                                 |
-| src/desktop/core/remote/remote_manager.py    | 连接管理                | 重构为服务器管理器                   |
+| src/core/remote/ssh_client.py        | SSH 连接封装 (paramiko) | RemoteBackend 底层，需升级为持久连接 |
+| src/core/remote/models.py            | SSH 凭据 + 远端路径模型 | 扩展为服务器配置模型                 |
+| src/core/remote/errors.py            | SSH 错误类型            | 保留                                 |
+| src/core/remote/execution_backend.py | 执行抽象层              | 重构为 OperationBackend              |
+| src/core/remote/deployment.py        | 部署逻辑                | 重构为 RemoteBackend 安装方法        |
+| src/core/remote/status.py            | 状态查询                | 重构为 RemoteBackend 状态方法        |
+| src/core/remote/templates.py         | 脚本模板                | 保留                                 |
+| src/core/remote/remote_manager.py    | 连接管理                | 重构为服务器管理器                   |
 | src/resource/script/remote_deploy_napcat.sh  | 部署脚本                | 保留并完善                           |
 
 ---

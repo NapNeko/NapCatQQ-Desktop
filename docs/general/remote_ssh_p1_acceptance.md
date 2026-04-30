@@ -97,7 +97,7 @@ python -m pytest script/test/test_remote_deploy_probe.py \
 ### 3.1 模块结构
 
 ```
-src/desktop/
+src/
 ├── core/
 │   ├── operation/
 │   │   └── remote_backend.py      P1: install_qq / install_napcat 实现 (委托 LinuxCoreDeployment)
@@ -254,8 +254,8 @@ class ServerManager(QObject):
 
 ### 7.4 新增模块
 
-- `@/d:/NapCat-Project/NapCatQQ-Desktop-V1/src/desktop/ui/page/remote_page/deployment_console.py` — `DeploymentConsoleDialog` 独立弹窗
-- `@/d:/NapCat-Project/NapCatQQ-Desktop-V1/src/desktop/ui/page/remote_page/__init__.py` — `RemotePage._open_or_focus_console` + 控制台字典管理
+- `@/d:/NapCat-Project/NapCatQQ-Desktop-V1/src/ui/page/remote_page/deployment_console.py` — `DeploymentConsoleDialog` 独立弹窗
+- `@/d:/NapCat-Project/NapCatQQ-Desktop-V1/src/ui/page/remote_page/__init__.py` — `RemotePage._open_or_focus_console` + 控制台字典管理
 
 ### 7.5 自动化测试
 
@@ -308,12 +308,12 @@ const napCatVersion = typeof (__vite_import_meta_env__) !== "undefined" && "4.18
 
 两个独立 bug 叠加：
 
-1. **正则字符类问题**：远端探测用 `[^"]*"(\d+\.\d+\.\d+...)"`，只能跨过等号到**第一个**引号 → 卡在 `"undefined"`，捕获组 `\d+` 校验失败 → 返回 `None`。本地 [`VersioningService._get_napcat_version_from_mjs`](src/desktop/core/versioning/service.py) 用 `.*?` 非贪婪能跨越多个引号字面量找到 `"4.18.1"`。
+1. **正则字符类问题**：远端探测用 `[^"]*"(\d+\.\d+\.\d+...)"`，只能跨过等号到**第一个**引号 → 卡在 `"undefined"`，捕获组 `\d+` 校验失败 → 返回 `None`。本地 [`VersioningService._get_napcat_version_from_mjs`](src/core/versioning/service.py) 用 `.*?` 非贪婪能跨越多个引号字面量找到 `"4.18.1"`。
 2. **shell 引号阻断 `$HOME` 展开**：grep 路径用单引号 `'$HOME/Napcat/...'`，bash 在单引号下**不展开变量** → 实际打开了名为 `$HOME/...` 的不存在文件。`LinuxCorePaths` 默认值含 `$HOME` 字面量，必须由 bash 展开。
 
 #### 8.1.3 修复
 
-**正则对齐本地**（[`deployment.py:48-59`](src/desktop/core/remote/deployment.py)）：
+**正则对齐本地**（[`deployment.py:48-59`](src/core/remote/deployment.py)）：
 
 ```python
 _NAPCAT_VERSION_PATTERN = re.compile(
@@ -321,7 +321,7 @@ _NAPCAT_VERSION_PATTERN = re.compile(
 )
 ```
 
-**shell 命令路径双引号**（[`deployment.py:241-248`](src/desktop/core/remote/deployment.py) / [`status.py:103-106`](src/desktop/core/remote/status.py)）：
+**shell 命令路径双引号**（[`deployment.py:241-248`](src/core/remote/deployment.py) / [`status.py:103-106`](src/core/remote/status.py)）：
 
 ```bash
 grep -oE 'napCatVersion[^;]*' "$napcat_dir/napcat.mjs" 2>/dev/null | head -n1 || true
@@ -364,10 +364,10 @@ def redetect_versions(self, server_id: str) -> tuple[str | None, str | None]:
     ...
 ```
 
-UI 端 [`RemotePage._on_refresh`](src/desktop/ui/page/remote_page/__init__.py) 改造为：
+UI 端 [`RemotePage._on_refresh`](src/ui/page/remote_page/__init__.py) 改造为：
 
 1. `self._reload()` 重渲染列表（保留旧行为）
-2. 遍历所有 `DEPLOYED` 服务器（跳过正在部署的），对每台后台触发 [`RedetectRunner`](src/desktop/ui/page/remote_page/deployment_runner.py)
+2. 遍历所有 `DEPLOYED` 服务器（跳过正在部署的），对每台后台触发 [`RedetectRunner`](src/ui/page/remote_page/deployment_runner.py)
 3. 每台完成后通过 `success_bar` / `error_bar` 反馈，`server_updated` 信号让卡片自动重绘
 
 ### 8.3 重构：开发者回滚 UI 归位到 设置→开发者
@@ -380,25 +380,25 @@ UI 端 [`RemotePage._on_refresh`](src/desktop/ui/page/remote_page/__init__.py) �
 
 | 删除                                                       | 新增                                                                                                                    |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `RemotePage.rollback_btn` 工具栏按钮                       | [`RemoteRollbackCard`](src/desktop/ui/page/setup_page/sub_page/developer.py) 仿 `ActionButtonCard` 自定义 `SettingCard` |
+| `RemotePage.rollback_btn` 工具栏按钮                       | [`RemoteRollbackCard`](src/ui/page/setup_page/sub_page/developer.py) 仿 `ActionButtonCard` 自定义 `SettingCard` |
 | `RemotePage._on_rollback` / `_on_rollback_runner_finished` | `Developer.remote_group` 新分组 "远程部署调试"                                                                          |
 | `is_developer_mode_enabled` 在 `RemotePage` 的判断分支     | 卡片内嵌 `ComboBox` 列出所有服务器 + 状态标签（`已部署 4.18.1` / `未部署` / `失败`）                                    |
 
-`Developer` 页面整体由 [`SetupWidget.__init__`](src/desktop/ui/page/setup_page/__init__.py) 的 `is_developer_mode_enabled()` 守卫，新分组天然只在 `--dev` 启动时存在。
+`Developer` 页面整体由 [`SetupWidget.__init__`](src/ui/page/setup_page/__init__.py) 的 `is_developer_mode_enabled()` 守卫，新分组天然只在 `--dev` 启动时存在。
 
 `RemoteRollbackCard` 行为：
 
 1. `installEventFilter` 监听 ComboBox 鼠标按下 → 重新查询 `ServerManager`，避免与 `RemotePage` 的添加/删除不同步
 2. 点 **执行回滚** → `AskBox` 危险二次确认（列出会清空的所有目录）
-3. 弹独立 [`DeploymentConsoleDialog`](src/desktop/ui/page/remote_page/deployment_console.py)，复用其对 `deployment_log/progress/finished` 的订阅
-4. 后台 [`RollbackRunner`](src/desktop/ui/page/remote_page/deployment_runner.py) 跑 `ServerManager.rollback_server`
+3. 弹独立 [`DeploymentConsoleDialog`](src/ui/page/remote_page/deployment_console.py)，复用其对 `deployment_log/progress/finished` 的订阅
+4. 后台 [`RollbackRunner`](src/ui/page/remote_page/deployment_runner.py) 跑 `ServerManager.rollback_server`
 
 #### 8.3.3 命名规范
 
 `_RollbackRunner` / `_RedetectRunner` 跨包导入需要公开命名，去下划线：
 
-- `_RollbackRunner` → [`RollbackRunner`](src/desktop/ui/page/remote_page/deployment_runner.py)
-- `_RedetectRunner` → [`RedetectRunner`](src/desktop/ui/page/remote_page/deployment_runner.py)
+- `_RollbackRunner` → [`RollbackRunner`](src/ui/page/remote_page/deployment_runner.py)
+- `_RedetectRunner` → [`RedetectRunner`](src/ui/page/remote_page/deployment_runner.py)
 
 ### 8.4 测试基线更新
 

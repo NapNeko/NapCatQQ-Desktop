@@ -93,7 +93,7 @@ def deploy_server(
 
 ### 1.6 后台运行器
 
-新增 `src/desktop/ui/page/remote_page/deployment_runner.py`：
+新增 `src/ui/page/remote_page/deployment_runner.py`：
 
 ```python
 class DeploymentRunner(QRunnable):

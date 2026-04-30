@@ -303,13 +303,13 @@ SSH 是唯一的远程通信通道。相比 v1 自建的 5 层安全架构，SSH
 
 | 模块                                          | 用途         | 改造方向                        |
 | --------------------------------------------- | ------------ | ------------------------------- |
-| `src/desktop/core/remote/ssh_client.py`       | SSH 连接     | 作为 RemoteBackend 的底层       |
-| `src/desktop/core/remote/models.py`           | 远程连接模型 | 扩展为服务器配置模型            |
-| `src/desktop/core/remote/errors.py`           | 错误类型     | 保留                            |
-| `src/desktop/core/remote/deployment.py`       | 部署逻辑     | 重构为 RemoteBackend 的安装方法 |
-| `src/desktop/core/remote/status.py`           | 状态查询     | 重构为 RemoteBackend 的状态方法 |
-| `src/desktop/core/remote/templates.py`        | 脚本模板     | 保留                            |
-| `src/desktop/core/remote/remote_manager.py`   | 连接管理     | 重构为服务器管理器              |
+| `src/core/remote/ssh_client.py`       | SSH 连接     | 作为 RemoteBackend 的底层       |
+| `src/core/remote/models.py`           | 远程连接模型 | 扩展为服务器配置模型            |
+| `src/core/remote/errors.py`           | 错误类型     | 保留                            |
+| `src/core/remote/deployment.py`       | 部署逻辑     | 重构为 RemoteBackend 的安装方法 |
+| `src/core/remote/status.py`           | 状态查询     | 重构为 RemoteBackend 的状态方法 |
+| `src/core/remote/templates.py`        | 脚本模板     | 保留                            |
+| `src/core/remote/remote_manager.py`   | 连接管理     | 重构为服务器管理器              |
 | `src/resource/script/remote_deploy_napcat.sh` | 部署脚本     | 保留并完善                      |
 
 ### 8.2 应当移除或归档的模块
@@ -317,11 +317,11 @@ SSH 是唯一的远程通信通道。相比 v1 自建的 5 层安全架构，SSH
 | 模块                                          | 原因                    |
 | --------------------------------------------- | ----------------------- |
 | `src/daemon/` (整个 Go Daemon 项目)           | 不需要独立常驻服务      |
-| `src/desktop/core/remote/agent_client.py`     | Daemon 客户端，不再需要 |
-| `src/desktop/core/remote/agent_backend.py`    | Daemon 后端，不再需要   |
-| `src/desktop/core/remote/jsonrpc_protocol.py` | 自建协议，不再需要      |
-| `src/desktop/core/remote/daemon_deployer.py`  | Daemon 部署器，不再需要 |
-| `src/desktop/core/remote/daemon_config.py`    | Daemon 配置，不再需要   |
+| `src/core/remote/agent_client.py`     | Daemon 客户端，不再需要 |
+| `src/core/remote/agent_backend.py`    | Daemon 后端，不再需要   |
+| `src/core/remote/jsonrpc_protocol.py` | 自建协议，不再需要      |
+| `src/core/remote/daemon_deployer.py`  | Daemon 部署器，不再需要 |
+| `src/core/remote/daemon_config.py`    | Daemon 配置，不再需要   |
 
 > 建议将这些文件移到 `archive/daemon-v1/` 目录，而非直接删除，以备后续参考。
 
@@ -329,12 +329,12 @@ SSH 是唯一的远程通信通道。相比 v1 自建的 5 层安全架构，SSH
 
 | 文件                                          | 改动                                                         |
 | --------------------------------------------- | ------------------------------------------------------------ |
-| `src/desktop/core/runtime/napcat.py`          | `ManagerNapCatQQProcess` 通过 backend 间接操作，本地逻辑不变 |
-| `src/desktop/core/config/operate_config.py`   | 文件读写通过 backend 抽象，本地逻辑不变                      |
-| `src/desktop/core/config/config_model.py`     | `BotConfig` 增加 `runtime_target` 字段                       |
-| `src/desktop/core/installation/installers.py` | 安装逻辑通过 backend 抽象                                    |
-| `src/desktop/ui/page/bot_page/`               | Bot 添加/编辑页增加运行位置选择                              |
-| `src/desktop/ui/page/remote_page/`            | 重构为服务器管理页（非双模式切换页）                         |
+| `src/core/runtime/napcat.py`          | `ManagerNapCatQQProcess` 通过 backend 间接操作，本地逻辑不变 |
+| `src/core/config/operate_config.py`   | 文件读写通过 backend 抽象，本地逻辑不变                      |
+| `src/core/config/config_model.py`     | `BotConfig` 增加 `runtime_target` 字段                       |
+| `src/core/installation/installers.py` | 安装逻辑通过 backend 抽象                                    |
+| `src/ui/page/bot_page/`               | Bot 添加/编辑页增加运行位置选择                              |
+| `src/ui/page/remote_page/`            | 重构为服务器管理页（非双模式切换页）                         |
 
 ---
 

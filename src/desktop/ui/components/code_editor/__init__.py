@@ -1,4 +1,0 @@
-# 项目内模块导入
-from src.desktop.ui.components.code_editor.editor import CodeEditor, JsonEditor
-from src.desktop.ui.components.code_editor.exhibit import CodeExibit, UpdateLogExhibit
-from src.desktop.ui.components.code_editor.highlight import LogHighlighter, NCDLogHighlighter

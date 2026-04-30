@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`ServerManager.deploy_server`](src/desktop/core/remote/server_manager.py) 编排测试。
+"""[`ServerManager.deploy_server`](src/core/remote/server_manager.py) 编排测试。
 
 通过 monkey-patch ``ServerManager.get_backend`` 返回伪造的 RemoteBackend, 验证:
 - 状态机 UNDEPLOYED -> DEPLOYING -> DEPLOYED
@@ -17,14 +17,14 @@ from pathlib import Path
 
 import pytest
 
-from src.desktop.core.operation.backend import InstallationInfo
-from src.desktop.core.remote.errors import (
+from src.core.operation.backend import InstallationInfo
+from src.core.remote.errors import (
     RemoteDeploymentError,
     RemoteDeploymentInProgressError,
 )
-from src.desktop.core.remote.models import LinuxCorePaths, SSHCredentials
-from src.desktop.core.remote.server_manager import DeploymentResult, ServerManager
-from src.desktop.core.remote.servers import DeploymentState, ServerProfile
+from src.core.remote.models import LinuxCorePaths, SSHCredentials
+from src.core.remote.server_manager import DeploymentResult, ServerManager
+from src.core.remote.servers import DeploymentState, ServerProfile
 
 
 # ==================== fixtures & helpers ====================
@@ -374,7 +374,7 @@ class TestDeploymentLogSignal:
 
 # ==================== rollback ====================
 class TestRollback:
-    """回滚测试: 验证 [`ServerManager.rollback_server`](src/desktop/core/remote/server_manager.py)。"""
+    """回滚测试: 验证 [`ServerManager.rollback_server`](src/core/remote/server_manager.py)。"""
 
     def test_rollback_calls_clean_environment_and_resets_state(self, manager_factory) -> None:
         manager, backend, server_id = manager_factory()

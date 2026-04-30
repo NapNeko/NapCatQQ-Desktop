@@ -9,10 +9,10 @@ from qfluentwidgets.common import BoolValidator, ConfigItem
 from PySide6.QtGui import QColor
 
 # 项目内模块导入
-import src.desktop.core.config as app_config_module
-from src.desktop.core.config.config_enum import CloseActionEnum
-from src.desktop.core.config import Config as AppConfig
-from src.desktop.core.config import bind_qfluent_qconfig
+import src.core.config as app_config_module
+from src.core.config.config_enum import CloseActionEnum
+from src.core.config import Config as AppConfig
+from src.core.config import bind_qfluent_qconfig
 
 
 class SampleConfig(AppConfig):

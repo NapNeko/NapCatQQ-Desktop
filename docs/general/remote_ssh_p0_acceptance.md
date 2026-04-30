@@ -10,15 +10,15 @@
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/desktop/core/operation/__init__.py` | 延迟导入 facade |
-| `src/desktop/core/operation/backend.py` | `OperationBackend` ABC + 数据模型（`FileEntry` / `ProcessStatus` / `WebUIEndpoint` / `InstallationInfo` / `ProgressCallback`） |
-| `src/desktop/core/operation/local_backend.py` | `LocalBackend` 本地实现（文件 8 op + 检测 3 op 完整；进程 / 安装写入 / 日志 / WebUI 留 `NotImplementedError` 标注 P2） |
-| `src/desktop/core/operation/remote_backend.py` | `RemoteBackend` 骨架（文件 8 op + 检测 3 op + 进程查询 + 日志 完整；启停 / 安装写入 / WebUI 留 `NotImplementedError` 标注 P1/P2） |
-| `src/desktop/core/remote/servers.py` | `ServerProfile` + `ServerRegistry`（密码不落盘，原子写） |
-| `src/desktop/core/remote/server_manager.py` | `ServerManager`（多服务器实例管理 + Qt 信号 + 旧 `cfg.remote_*` 自动迁移 + creart 单例） |
-| `src/desktop/ui/page/remote_page/connection_tester.py` | 后台 SSH 连接测试 `QRunnable` |
-| `src/desktop/ui/page/remote_page/server_edit_dialog.py` | 添加 / 编辑服务器档案对话框 |
-| `src/desktop/ui/page/remote_page/__init__.py` | `RemotePage` v2 重写（列表 + 详情 + 工具栏） |
+| `src/core/operation/__init__.py` | 延迟导入 facade |
+| `src/core/operation/backend.py` | `OperationBackend` ABC + 数据模型（`FileEntry` / `ProcessStatus` / `WebUIEndpoint` / `InstallationInfo` / `ProgressCallback`） |
+| `src/core/operation/local_backend.py` | `LocalBackend` 本地实现（文件 8 op + 检测 3 op 完整；进程 / 安装写入 / 日志 / WebUI 留 `NotImplementedError` 标注 P2） |
+| `src/core/operation/remote_backend.py` | `RemoteBackend` 骨架（文件 8 op + 检测 3 op + 进程查询 + 日志 完整；启停 / 安装写入 / WebUI 留 `NotImplementedError` 标注 P1/P2） |
+| `src/core/remote/servers.py` | `ServerProfile` + `ServerRegistry`（密码不落盘，原子写） |
+| `src/core/remote/server_manager.py` | `ServerManager`（多服务器实例管理 + Qt 信号 + 旧 `cfg.remote_*` 自动迁移 + creart 单例） |
+| `src/ui/page/remote_page/connection_tester.py` | 后台 SSH 连接测试 `QRunnable` |
+| `src/ui/page/remote_page/server_edit_dialog.py` | 添加 / 编辑服务器档案对话框 |
+| `src/ui/page/remote_page/__init__.py` | `RemotePage` v2 重写（列表 + 详情 + 工具栏） |
 | `script/test/test_local_backend.py` | LocalBackend 26 个测试 |
 | `script/test/test_server_registry.py` | ServerProfile / ServerRegistry 20 个测试 |
 
@@ -26,8 +26,8 @@
 
 | 路径 | 改动 |
 | --- | --- |
-| `src/desktop/core/remote/ssh_client.py` | 新增 5 个 SFTP 高层 op：`read_text` / `write_text` / `remote_exists` / `remote_listdir` / `remote_remove`，以及 `is_connected` 属性 |
-| `src/desktop/core/remote/__init__.py` | 增加 `DeploymentState` / `ServerProfile` / `ServerRegistry` / `ServerManager` 导出 |
+| `src/core/remote/ssh_client.py` | 新增 5 个 SFTP 高层 op：`read_text` / `write_text` / `remote_exists` / `remote_listdir` / `remote_remove`，以及 `is_connected` 属性 |
+| `src/core/remote/__init__.py` | 增加 `DeploymentState` / `ServerProfile` / `ServerRegistry` / `ServerManager` 导出 |
 
 ### 1.3 归档文件
 
