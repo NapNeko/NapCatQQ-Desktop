@@ -15,6 +15,7 @@ import psutil
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
+    CheckBox,
     FlowLayout,
     FluentIcon,
     FluentIconBase,
@@ -86,6 +87,8 @@ class BotCard(HeaderCardWidget):
 
     # 当自身被移除时发出信号 值为QQID
     remove_signal = Signal(str)
+    # P4 F2: 批量模式下勾选状态变化, 参数为 (qq_id, checked)
+    batch_check_changed_signal = Signal(str, bool)
 
     @singledispatchmethod
     def __init__(self, config: Config, parent: QWidget | None = None) -> None:
@@ -98,8 +101,11 @@ class BotCard(HeaderCardWidget):
 
         # 设置属性
         self._config = config
+        # P4 F2: 批量模式标记 + 复选框
+        self._batch_mode: bool = False
 
         # 创建控件
+        self.batch_check = CheckBox(self)  # P4 F2: 批量模式复选框
         self.avatar_widget = BotAvatarWidget(str(self._config.bot.QQID), self)
         self.info_widget = BotInfoWidget(self._config, self)
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
@@ -117,11 +123,14 @@ class BotCard(HeaderCardWidget):
         self.log_button.hide()
         self.web_ui_button.hide()
         self.qr_code_button.hide()
+        self.batch_check.hide()  # 默认隐藏, 进入批量模式才显示
 
         # 设置布局
         self.viewLayout.addWidget(self.avatar_widget, 1)
         self.viewLayout.addWidget(self.info_widget, 2)
 
+        # 批量模式复选框放在 header 最左侧
+        self.headerLayout.insertWidget(0, self.batch_check, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addStretch(1)
         self.headerLayout.setSpacing(8)
         self.headerLayout.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -143,6 +152,7 @@ class BotCard(HeaderCardWidget):
         self.qr_code_button.clicked.connect(self.slot_qr_code_button)
         self.setting_button.clicked.connect(self.slot_setting_button)
         self.remove_button.clicked.connect(self.slot_remove_button)
+        self.batch_check.toggled.connect(self._on_batch_check_toggled)
 
         # 调用方法
         self.set_tooltip()
@@ -150,6 +160,39 @@ class BotCard(HeaderCardWidget):
             self.qr_code_button.show()
 
     # ==================== 公共方法 ==================
+    # ---------- P4 F2: 批量模式 ----------
+    def set_batch_mode(self, enabled: bool, *, checked: bool = False) -> None:
+        """切换批量模式; 启用时显示左上复选框, 关闭时隐藏并清空勾选.
+
+        Args:
+            enabled: True 进入批量模式, False 退出.
+            checked: 进入批量模式时初始勾选状态; 退出模式忽略.
+        """
+        self._batch_mode = enabled
+        if enabled:
+            # 阻断信号防止 setChecked 触发不必要的 batch_check_changed 回声
+            self.batch_check.blockSignals(True)
+            self.batch_check.setChecked(checked)
+            self.batch_check.blockSignals(False)
+            self.batch_check.show()
+        else:
+            self.batch_check.blockSignals(True)
+            self.batch_check.setChecked(False)
+            self.batch_check.blockSignals(False)
+            self.batch_check.hide()
+
+    def is_batch_mode(self) -> bool:
+        """当前是否处于批量模式."""
+        return self._batch_mode
+
+    def is_batch_selected(self) -> bool:
+        """批量模式下是否被勾选; 非批量模式返回 False."""
+        return self._batch_mode and self.batch_check.isChecked()
+
+    def _on_batch_check_toggled(self, checked: bool) -> None:
+        """复选框状态变化, 通过信号上抛 (qq_id, checked)."""
+        self.batch_check_changed_signal.emit(str(self._config.bot.QQID), checked)
+
     def update_info_card(self) -> None:
         """更新信息卡片显示内容， 用于外部调用，刷新后调用.
 
