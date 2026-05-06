@@ -703,13 +703,66 @@ class SSHClient:
             raise SSHConnectionError("当前环境未安装 paramiko，无法启用远程 SSH 能力")
 
     def _apply_host_key_policy(self, client: "paramiko.SSHClient") -> None:
+        """根据 [`SSHCredentials.host_key_policy`](src/core/remote/models.py) 配置 paramiko policy.
+
+        P4 F5.1 行为:
+
+        - ``"reject"`` / ``"warning"`` / ``"auto_add"``: 与 P3 行为一致.
+        - ``"interactive"``: 走 [`InteractiveHostKeyPolicy`](src/core/remote/host_key_policy.py),
+          回调由 UI 启动期通过
+          [`register_host_key_callback`](src/core/remote/host_key_policy.py) 注入;
+          回调缺失时安全兜底为 ``reject_all_callback`` (拒绝所有未知主机), 比无声
+          ``AutoAddPolicy`` 更符合 §6.2 安全基线.
+
+        所有政策都会先 ``load_system_host_keys()`` + 再尝试加载用户级
+        [`KnownHostsStore`](src/core/remote/host_key_policy.py); 已存在的指纹
+        校验由 paramiko 自身完成 (变更指纹会抛 ``BadHostKeyException``,
+        本 policy 不参与).
+        """
         client.load_system_host_keys()
-        if self.credentials.host_key_policy == "reject":
+        # 加载应用级 known_hosts (与系统 ~/.ssh/known_hosts 互不污染)
+        try:
+            from .host_key_policy import KnownHostsStore, default_known_hosts_path
+
+            user_store = KnownHostsStore(default_known_hosts_path())
+            user_store_keys = user_store.load()
+            for hostname in user_store_keys.keys():
+                # paramiko HostKeys 的 keys() 返回 [host_entry] 列表, 直接合并到 client
+                for key_type, key in user_store_keys[hostname].items():
+                    client.get_host_keys().add(hostname, key_type, key)
+        except Exception as exc:  # noqa: BLE001 - 文件损坏 / 权限不足都不应阻断
+            logger.trace(
+                f"加载应用级 known_hosts 失败 (忽略): {exc!r}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+
+        policy = self.credentials.host_key_policy
+        if policy == "reject":
             client.set_missing_host_key_policy(paramiko.RejectPolicy())
             return
-        if self.credentials.host_key_policy == "warning":
+        if policy == "warning":
             client.set_missing_host_key_policy(paramiko.WarningPolicy())
             return
+        if policy == "interactive":
+            # 延迟 import 避免与 host_key_policy 之间的循环 (paramiko 同时被两边引用)
+            from .host_key_policy import (
+                InteractiveHostKeyPolicy,
+                KnownHostsStore as _KH,
+                default_known_hosts_path as _default_path,
+                get_registered_callback,
+                reject_all_callback,
+            )
+
+            callback = get_registered_callback() or reject_all_callback
+            interactive = InteractiveHostKeyPolicy(
+                callback=callback,
+                store=_KH(_default_path()),
+                port=self.credentials.port,
+            )
+            client.set_missing_host_key_policy(interactive)
+            return
+        # 默认 / "auto_add"
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
     def _require_client(self) -> "paramiko.SSHClient":
