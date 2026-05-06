@@ -45,6 +45,10 @@ escape_json_string() {
   printf '"%s"' "$escaped"
 }
 
+# Launcher 脚本版本号; 每次脚本语义有破坏性变化时 +1, 便于排错.
+# v2: P3 修复 stop 不彻底 (xvfb-run wrapper PID vs qq PID) + 启动时切日志.
+LAUNCHER_VERSION="2"
+
 # 校验 qq_id 仅包含 4-12 位数字 (与 status.py 的 pgrep 模式 ``[0-9]{4,}`` 兼容).
 require_qq_id() {
   local qq_id="$1"
@@ -122,10 +126,30 @@ current_pid_for() {
   return 1
 }
 
-# fallback: 直接通过 pgrep 查找命令行中含 ``-q <qq_id>`` 的 qq 进程.
+# fallback: 直接通过 pgrep 查找命令行中含 ``-q <qq_id>`` 的 qq 进程, 取首个.
 pgrep_pid_for() {
   local qq_id="$1"
   pgrep -f "qq --no-sandbox -q ${qq_id}\$" 2>/dev/null | head -n 1 || true
+}
+
+# 列出所有命令行匹配 ``qq --no-sandbox -q <qq_id>`` 的进程 PID (一行一个).
+# 用于 stop_napcat 兜底: nohup + xvfb-run 启动时, $! 拿到的是 xvfb-run
+# wrapper PID, 杀它后 qq 子进程可能游离成孤儿; 必须 pgrep 全量收回 PID.
+pgrep_pids_for() {
+  local qq_id="$1"
+  pgrep -f "qq --no-sandbox -q ${qq_id}\$" 2>/dev/null || true
+}
+
+# 切日志: 把当前 .log 改名为 .prev 保留排错, 同时建一个空文件让 nohup 写入.
+# NapCat 启动时输出会写到干净文件, Desktop 端 ``tail_log`` / ``WebUI URL grep``
+# 都只看本次启动的内容, 解决"启动日志包含历史多次启动"的 bug (P3 W3.E).
+rotate_log_file() {
+  local log_path="$1"
+  if [ -f "$log_path" ]; then
+    # mv 是 atomic on same fs; -f 覆盖旧的 .prev
+    mv -f "$log_path" "${log_path}.prev" 2>/dev/null || true
+  fi
+  : > "$log_path"
 }
 
 start_napcat() {
@@ -136,12 +160,30 @@ start_napcat() {
   local log_path pid_path
   log_path="$(resolve_log_file "$qq_id")"
   pid_path="$(resolve_pid_file "$qq_id")"
-  touch "$log_path"
 
   if pid="$(current_pid_for "$qq_id")"; then
     write_status "$qq_id" true "already_running" "$pid" null
     echo "[OK] qq=${qq_id} already running pid=${pid}"
     return 0
+  fi
+
+  # 兜底: PID 文件已失效但 pgrep 仍找到 qq 孤儿进程 (xvfb-run wrapper 已死,
+  # qq 自己仍登录着) → 必须先彻底清掉, 否则新 launch 会撞上"已登录,无法重复登录".
+  local orphan_pids
+  orphan_pids="$(pgrep_pids_for "$qq_id")"
+  if [ -n "$orphan_pids" ]; then
+    echo "[WARN] qq=${qq_id} found orphan pids before start: $(echo "$orphan_pids" | tr '\n' ' '); cleaning up" >&2
+    while IFS= read -r op; do
+      [ -z "$op" ] && continue
+      kill "$op" >/dev/null 2>&1 || true
+    done <<< "$orphan_pids"
+    sleep 2
+    while IFS= read -r op; do
+      [ -z "$op" ] && continue
+      if kill -0 "$op" >/dev/null 2>&1; then
+        kill -9 "$op" >/dev/null 2>&1 || true
+      fi
+    done <<< "$orphan_pids"
   fi
 
   if [ ! -x "$qq_executable" ]; then
@@ -157,6 +199,9 @@ start_napcat() {
     echo "[ERROR] $error_text" >&2
     return 1
   fi
+
+  # 切日志: 启动前把上一轮的 .log 归档为 .prev, 让本次 nohup 写入干净文件.
+  rotate_log_file "$log_path"
 
   nohup xvfb-run -a "$qq_executable" --no-sandbox -q "$qq_id" >> "$log_path" 2>&1 &
   local pid="$!"
@@ -181,6 +226,52 @@ start_napcat() {
   return 4
 }
 
+# 收 PID 候选集去重后逐一 SIGTERM/SIGKILL; 不依赖 ``current_pid_for`` 的单点 PID.
+_kill_all_qq_processes() {
+  local qq_id="$1"
+  # 候选集: PID 文件 + 命令行匹配; 用换行分隔, sort -u 去重
+  local pid_path
+  pid_path="$(resolve_pid_file "$qq_id")"
+  local file_pid=""
+  if [ -f "$pid_path" ]; then
+    file_pid="$(cat "$pid_path" 2>/dev/null || true)"
+  fi
+  local pgrep_list
+  pgrep_list="$(pgrep_pids_for "$qq_id")"
+
+  local candidates
+  candidates="$(printf '%s\n%s\n' "$file_pid" "$pgrep_list" | grep -v '^$' | sort -u || true)"
+  if [ -z "$candidates" ]; then
+    return 0
+  fi
+
+  # SIGTERM 阶段
+  while IFS= read -r tp; do
+    [ -z "$tp" ] && continue
+    kill "$tp" >/dev/null 2>&1 || true
+  done <<< "$candidates"
+  # 给 QQ 客户端 3s 平滑退出窗口
+  sleep 3
+  # SIGKILL 阶段
+  while IFS= read -r tp; do
+    [ -z "$tp" ] && continue
+    if kill -0 "$tp" >/dev/null 2>&1; then
+      kill -9 "$tp" >/dev/null 2>&1 || true
+    fi
+  done <<< "$candidates"
+
+  # 二次兜底: 仍有同 qq_id 的 qq 进程 → 再 pgrep 一遍 KILL
+  sleep 1
+  local lingering
+  lingering="$(pgrep_pids_for "$qq_id")"
+  if [ -n "$lingering" ]; then
+    while IFS= read -r tp; do
+      [ -z "$tp" ] && continue
+      kill -9 "$tp" >/dev/null 2>&1 || true
+    done <<< "$lingering"
+  fi
+}
+
 stop_napcat() {
   local qq_id="$1"
   require_qq_id "$qq_id"
@@ -188,26 +279,8 @@ stop_napcat() {
   local pid_path
   pid_path="$(resolve_pid_file "$qq_id")"
 
-  local pid=""
-  if pid="$(current_pid_for "$qq_id")"; then
-    kill "$pid" >/dev/null 2>&1 || true
-    # 给 QQ 客户端 3s 平滑退出窗口.
-    sleep 3
-    if kill -0 "$pid" >/dev/null 2>&1; then
-      kill -9 "$pid" >/dev/null 2>&1 || true
-    fi
-  else
-    # PID 文件已失效, 但 pgrep 仍可能找到孤儿进程 (例如 launcher 之外被 nohup 拉起的)
-    local fallback_pid
-    fallback_pid="$(pgrep_pid_for "$qq_id")"
-    if [ -n "$fallback_pid" ]; then
-      kill "$fallback_pid" >/dev/null 2>&1 || true
-      sleep 3
-      if kill -0 "$fallback_pid" >/dev/null 2>&1; then
-        kill -9 "$fallback_pid" >/dev/null 2>&1 || true
-      fi
-    fi
-  fi
+  _kill_all_qq_processes "$qq_id"
+
   rm -f "$pid_path"
   write_status "$qq_id" false "stop" null null
   echo "[OK] qq=${qq_id} stopped"
@@ -261,9 +334,15 @@ case "${1:-}" in
   list)
     list_napcat
     ;;
+  version)
+    # P3: Desktop 端可通过此命令探测远端 launcher 版本; 不匹配时提示用户
+    # 走 "维护 ▾ → 强制更新 NapCat" 重新部署 launcher.
+    printf '%s\n' "$LAUNCHER_VERSION"
+    ;;
   *)
     echo "Usage: $0 {start|stop|restart|status|log-path} <qq_id>" >&2
     echo "       $0 list" >&2
+    echo "       $0 version" >&2
     exit 2
     ;;
 esac
