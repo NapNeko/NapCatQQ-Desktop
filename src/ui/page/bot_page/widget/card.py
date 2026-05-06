@@ -657,8 +657,15 @@ class BotInfoWidget(QWidget):
     def _on_monitor_interval_changed(self, interval_ms: int) -> None:
         """监控间隔配置变化时更新定时器（仅更新内存监控）"""
         # 只更新内存监控定时器，运行时长固定1秒
-        if hasattr(self, "_memory_timer") and self._memory_timer.isActive():
-            self._memory_timer.setInterval(interval_ms)
+        timer = getattr(self, "_memory_timer", None)
+        if timer is None:
+            return
+        try:
+            if timer.isActive():
+                timer.setInterval(interval_ms)
+        except RuntimeError:
+            # 底层 C++ 对象已被 deleteLater 释放，忽略本次更新
+            pass
 
 
 class EnableTag(PillPushButton):
