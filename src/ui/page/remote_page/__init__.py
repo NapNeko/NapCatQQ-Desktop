@@ -12,10 +12,10 @@ from abc import ABC
 from typing import TYPE_CHECKING
 
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
-from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtCore import QSize, Qt, QThreadPool, Signal
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QFormLayout,
-    QHBoxLayout,
     QVBoxLayout,
     QWidget,
 )
@@ -25,13 +25,13 @@ from qfluentwidgets import (
     FlowLayout,
     HeaderCardWidget,
     InfoBadge,
-    PrimaryPushButton,
+    PrimaryToolButton,
     ProgressBar,
     ScrollArea,
     StrongBodyLabel,
     TitleLabel,
+    ToolButton,
     ToolTipFilter,
-    TransparentPushButton,
     TransparentToolButton,
     FluentIcon as FI,
 )
@@ -343,44 +343,73 @@ class RemotePage(QWidget):
         root.addWidget(self.title_label)
         root.addWidget(self.subtitle_label)
 
-        # ---- 顶部工具栏: 仅 2 个全局动作 ----
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(8)
-        self.add_btn = PrimaryPushButton(FI.ADD, "添加服务器", self)
-        self.refresh_btn = TransparentPushButton(FI.SYNC, "刷新", self)
-        toolbar.addWidget(self.add_btn)
-        toolbar.addStretch()
-        toolbar.addWidget(self.refresh_btn)
-        root.addLayout(toolbar)
-
         # ---- 多列卡片流 (FlowLayout) ----
         self._scroll = ScrollArea(self)
         self._scroll.setObjectName("remoteScrollArea")
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(ScrollArea.Shape.NoFrame)
-        
+
         self._list_inner = QWidget(self._scroll)
         self._list_inner.setObjectName("listInnerWidget")
         self._list_layout = FlowLayout(self._list_inner)
         self._list_layout.setContentsMargins(0, 0, 4, 0)
         self._list_layout.setSpacing(12)
-        
+
         self._scroll.setWidget(self._list_inner)
         root.addWidget(self._scroll, 1)
 
         # 空态文案
         self._empty_label = BodyLabel(
-            "尚未添加任何服务器, 点击 “添加服务器” 开始。", self
+            "尚未添加任何服务器, 点击右下角 + 按钮添加。", self
         )
         self._empty_label.setObjectName("listEmptyLabel")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._list_layout.addWidget(self._empty_label)
+
+        # ---- 浮动操作按钮 (FAB), 与 BotListPage 视觉对齐 ----
+        # 父级直接挂在 RemotePage 上, 由 resizeEvent 浮动定位到右下角;
+        # 不进入任何 layout, 始终覆盖在 ScrollArea 之上.
+        self.add_btn = PrimaryToolButton(FI.ADD, self)
+        self.refresh_btn = ToolButton(FI.UPDATE, self)
+        for btn, tip in (
+            (self.add_btn, "添加服务器"),
+            (self.refresh_btn, "刷新"),
+        ):
+            btn.setFixedSize(40, 40)
+            btn.setIconSize(QSize(20, 20))
+            btn.setToolTip(tip)
+            btn.setToolTipDuration(1500)
+            btn.installEventFilter(ToolTipFilter(btn, showDelay=300))
+        # 保证浮在卡片之上 (Qt 同父子级按添加顺序绘制, 后插入者更高)
+        self.add_btn.raise_()
+        self.refresh_btn.raise_()
 
         # ---- 信号 ----
         self.add_btn.clicked.connect(self._on_add)
         self.refresh_btn.clicked.connect(self._on_refresh)
 
         self._refresh_card_states()
+
+    # ---------- 重写方法 ----------
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt 重写
+        """页面尺寸变化时把 FAB 钉在 ScrollArea 区域的右下角.
+
+        视觉对齐目标: [`BotListPage.resizeEvent`](src/ui/page/bot_page/sub_page/bot_list.py).
+        ``BotListPage`` 本身继承 ``ScrollArea``, 它的 ``self.width()/height()`` 直接
+        就是滚动区域大小; 而 ``RemotePage`` 是 QWidget, 上方还有 title / subtitle,
+        因此我们改用 ``self._scroll`` 的几何信息来计算锚点, 避免 FAB 跟着标题区
+        位移. 偏移量(-16 / -32 / -82)与 BotListPage 完全相同.
+        """
+        super().resizeEvent(event)  # 触发 Qt 布局, 此后 self._scroll 尺寸即为新值
+        if not hasattr(self, "add_btn") or not hasattr(self, "_scroll"):
+            return
+
+        # ScrollArea 在 RemotePage 坐标系下的位置 + 大小
+        scroll_geom = self._scroll.geometry()
+        x = scroll_geom.x() + scroll_geom.width() - self.add_btn.width() - 16
+        y_base = scroll_geom.y() + scroll_geom.height() - self.add_btn.height()
+        self.add_btn.move(x, y_base - 32)
+        self.refresh_btn.move(x, y_base - 82)
 
     def _connect_manager_signals(self) -> None:
         manager = it(ServerManager)
