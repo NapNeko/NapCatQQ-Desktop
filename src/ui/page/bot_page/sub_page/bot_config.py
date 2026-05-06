@@ -280,7 +280,9 @@ class ConfigPage(QWidget):
         self._migration_signals = runnable.signals
         runnable.signals.progress.connect(self._on_migration_progress)
         runnable.signals.finished.connect(self._on_migration_finished)
-        info_bar(self.tr(f"开始迁移: {source_label} → {dest_label}..."))
+        # P3 perf: 进度 / 完成反馈走 ProgressInfoBar 桥
+        # ([`BotMigrationRunnable`](src/core/operation/migration.py) 自带 begin/end 上报),
+        # 这里不再叠加 info_bar 的"开始迁移"提示.
         logger.info(
             (
                 f"启动运行位置迁移 (配置已先行写盘): qq_id={mask_qqid(qq_id)}, "
@@ -295,16 +297,16 @@ class ConfigPage(QWidget):
         logger.trace(f"迁移进度 {percent}%: {message}", log_source=LogSource.UI)
 
     def _on_migration_finished(self, ok: bool, message: str) -> None:
-        """搬运 runnable 收尾回调; ``bot.json`` 已在 dispatch 之前写盘, 这里只做提示."""
+        """搬运 runnable 收尾回调; ``bot.json`` 已在 dispatch 之前写盘.
+
+        P3 perf: 成败反馈交由 ProgressInfoBar 桥
+        ([`BotMigrationRunnable.run`](src/core/operation/migration.py) 在 finally 里
+        把 success/message 推到 [`BackgroundTaskCenter`](src/core/runtime/background_tasks.py));
+        这里仅记录日志 + 释放 signals 引用.
+        """
         if ok:
-            success_bar(self.tr(f"迁移完成: {message}"))
             logger.info(f"运行位置迁移成功: {message}", log_source=LogSource.UI)
         else:
-            error_bar(
-                self.tr(
-                    f"迁移搬运失败 (配置已切换, 但目标端文件可能不全, 请重试): {message}"
-                )
-            )
             logger.warning(f"运行位置迁移搬运失败: {message}", log_source=LogSource.UI)
         # 释放对 signals 的强引用, 让 runnable 与 signals 进入正常 GC 路径
         self._migration_signals = None
@@ -315,6 +317,12 @@ class ConfigPage(QWidget):
         Returns:
             ``True`` 表示本地 ``bot.json`` 写盘成功 (远端同步失败仍算成功);
             ``False`` 表示本地写盘失败, 调用方应中止后续流程.
+
+        P3 perf: 远端 Bot 的"保存"语义包含本地写盘 + 远端 SFTP 同步两步, 远端那步
+        会异步派发给 ``_RemoteConfigOpRunnable`` → ProgressInfoBar 桥. 如果这里
+        立刻弹 ``success_bar("保存配置成功")`` 会让用户在远端 SSH 还在跑时就误判完成,
+        因此远端 Bot 路径**不弹**本地 success_bar, 完整反馈交由桥; 本地 Bot
+        (``runtime_target == RUNTIME_TARGET_LOCAL``) 不走桥, 仍弹 success_bar.
         """
         if update_config(merged_config, base_config=merged_config, skip_merge=True):
             from src.ui.page.bot_page import BotPage
@@ -325,7 +333,9 @@ class ConfigPage(QWidget):
                 f"Bot 配置保存成功(QQID: {mask_qqid(merged_config.bot.QQID)})",
                 log_source=LogSource.UI,
             )
-            success_bar(self.tr("保存配置成功"))
+            target = merged_config.bot.runtime_target or RUNTIME_TARGET_LOCAL
+            if target == RUNTIME_TARGET_LOCAL:
+                success_bar(self.tr("保存配置成功"))
             return True
         logger.error(
             f"Bot 配置保存失败(QQID: {mask_qqid(merged_config.bot.QQID)})",

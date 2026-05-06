@@ -50,7 +50,7 @@ class HeaderWidget(QWidget):
 
         # 设置布局
         self.v_box_layout.setContentsMargins(0, 0, 0, 0)
-        self.v_box_layout.setSpacing(6)
+        self.v_box_layout.setSpacing(0)
         self.v_box_layout.addWidget(self.breadcrumb_bar)
 
     def setup_breadcrumb_bar(self, index: int):

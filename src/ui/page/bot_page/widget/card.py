@@ -157,12 +157,20 @@ class BotCard(HeaderCardWidget):
         [`NapCatProcessModel`](src/core/runtime/napcat.py) (带 ``process`` 字段),
         也可能返回远端 [`RemoteProcessRecord`](src/core/runtime/napcat.py) (没有 ``process``).
         两类 record 都暴露 ``state`` 字段, 这里统一以 ``state`` 判断, 避免硬依赖 QProcess.
+
+        P3 perf: 同步反映 ``Starting`` 状态, 让 BotList 重建后仍保留启动中指示.
         """
         record = it(ManagerNapCatQQProcess).get_process(str(self._config.bot.QQID))
-        if record is None or record.state != QProcess.ProcessState.Running:
+        if record is None:
             return
 
         qq_id = str(self._config.bot.QQID)
+        if record.state == QProcess.ProcessState.Starting:
+            self.slot_process_changed_button(qq_id, QProcess.ProcessState.Starting)
+            return
+        if record.state != QProcess.ProcessState.Running:
+            return
+
         self.slot_process_changed_button(qq_id, QProcess.ProcessState.Running)
         self.info_widget.slot_run_time_start(qq_id, QProcess.ProcessState.Running)
         self.info_widget.slot_memory_usage_start(qq_id, QProcess.ProcessState.Running)
@@ -203,7 +211,12 @@ class BotCard(HeaderCardWidget):
         it(ManagerAutoRestartProcess).remove_auto_restart_timer(str(self._config.bot.QQID))
 
     def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
-        """处理 NapCatQQ 进程变化时, 切换按钮显示
+        """处理 NapCatQQ 进程变化时, 切换按钮显示.
+
+        P3 perf: 区分 ``Starting`` / ``Running`` / ``NotRunning``. ``Starting`` 时
+        卡片本身仅把 "启动" 按钮 disable + 文案改 "启动中…", 卡片视觉保持稳定;
+        进度反馈与最终成败统一在主窗口右上角的
+        [`ProgressInfoBar`](src/ui/components/progress_info_bar_bridge.py) 上展示.
 
         Args:
             qq_id (str): QQ 号
@@ -211,6 +224,20 @@ class BotCard(HeaderCardWidget):
         """
         if qq_id != str(self._config.bot.QQID):
             return
+
+        if state == QProcess.ProcessState.Starting:
+            # 启动中: run_button 灰掉 + 文案改, 其他按钮维持现状
+            self.run_button.show()
+            self.run_button.setEnabled(False)
+            self.run_button.setText(self.tr("启动中…"))
+            self.stop_button.hide()
+            self.log_button.hide()
+            self.web_ui_button.hide()
+            return
+
+        # 离开 Starting: 还原按钮可用性与文案
+        self.run_button.setEnabled(True)
+        self.run_button.setText(self.tr("启动"))
 
         if state == QProcess.ProcessState.Running:
             self.run_button.hide()
