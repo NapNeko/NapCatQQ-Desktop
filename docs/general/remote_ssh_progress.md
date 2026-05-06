@@ -12,13 +12,14 @@
 
 ## 当前阶段
 
-当前处于：**P3 已完成 ✅ (核心范围 A/B/C/E/F), D/G 推迟**
+当前处于：**P3 已完成 ✅ (核心范围 A/B/C/E/F + perf 子阶段 A/B/C/D), D/G 推迟**
 
 各阶段计划与验收文档：
 - P0 → [`remote_ssh_p0_acceptance.md`](./remote_ssh_p0_acceptance.md)
 - P1 → [`remote_ssh_p1_plan.md`](./remote_ssh_p1_plan.md) / [`remote_ssh_p1_acceptance.md`](./remote_ssh_p1_acceptance.md)
 - P2 → [`remote_ssh_p2_acceptance.md`](./remote_ssh_p2_acceptance.md)
 - P3 → [`remote_ssh_p3_plan.md`](./remote_ssh_p3_plan.md) / [`remote_ssh_p3_acceptance.md`](./remote_ssh_p3_acceptance.md)
+- P3 perf → [需求](../requirements/2026-05-06-remote-ssh-p3-perf.md) / [`remote_ssh_p3_perf_acceptance.md`](./remote_ssh_p3_perf_acceptance.md)
 
 ### 总体判断
 
@@ -29,6 +30,7 @@
 - v2 P1.5（独立部署控制台）**已完成 87/87**
 - v2 P2（远端 Bot 运行闭环）**已完成 244/244**
 - v2 P3（体验优化与稳态收尾）**已完成 317/317**, 含 P3 新增 73 个 (W1·14 + W2·16 + W3·B 14 + W3·E 7 + 邻接 22)
+- v2 P3 perf（启动流程异步化与状态可见性, 进度反馈走组件库 ProgressInfoBar）**已完成**, 新增 41 测试 (background_task_center·13 + bot_card_starting·5 + runnable_wiring·5 + run_napcat·4 适配 + operate_config_async·5 + progress_info_bar_bridge·9)
 
 ---
 
