@@ -25,6 +25,12 @@ if TYPE_CHECKING:
         ProgressCallback,
         WebUIEndpoint,
     )
+    from .batch_dispatcher import (
+        BatchAction,
+        BatchDispatcher,
+        BatchOutcome,
+        Executor,
+    )
     from .local_backend import LocalBackend
     from .remote_backend import RemoteBackend
     from .resolver import (
@@ -41,6 +47,10 @@ _EXPORT_MAP = {
     "ProcessStatus": ".backend",
     "ProgressCallback": ".backend",
     "WebUIEndpoint": ".backend",
+    "BatchAction": ".batch_dispatcher",
+    "BatchDispatcher": ".batch_dispatcher",
+    "BatchOutcome": ".batch_dispatcher",
+    "Executor": ".batch_dispatcher",
     "LocalBackend": ".local_backend",
     "RemoteBackend": ".remote_backend",
     "BackendResolutionError": ".resolver",
