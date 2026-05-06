@@ -337,14 +337,20 @@ class NapCatQQLoginState(QObject):
         self._auth_timer.timeout.connect(self.slot_get_auth_status)
         self._auth_timer.start(30 * 60 * 1000)  # 30分钟
 
-        # 启动定时器定期获取登录状态
+        # 启动定时器定期获取登录状态（使用配置的间隔）
         self._login_state_timer = QTimer(self)
         self._login_state_timer.timeout.connect(self.slot_get_login_state)
-        self._login_state_timer.start(3 * 1000)  # 3秒
+        login_check_interval = cfg.get(cfg.bot_login_check_interval)
+        self._login_state_timer.start(login_check_interval)
+
+        # 监听配置变化
+        cfg.bot_login_check_interval.valueChanged.connect(self._on_login_check_interval_changed)
 
         # 立即执行一次（在事件循环中）
         QTimer.singleShot(0, self.slot_get_auth_status)
-        QTimer.singleShot(3 * 1000, self.slot_get_login_state)
+        # 未登录 bot 的首次登录态/二维码刷新应在 1 秒后触发
+        # 不应被常规轮询配置间隔（可能被设置得很大）所延迟
+        QTimer.singleShot(1000, self.slot_get_login_state)
 
     # ==================== 公共方法 ==================
     def get_login_state(self) -> bool:
@@ -365,11 +371,34 @@ class NapCatQQLoginState(QObject):
 
     def remove(self) -> None:
         """清理 Timer 和释放资源"""
+        # 断开配置监听
+        try:
+            cfg.bot_login_check_interval.valueChanged.disconnect(self._on_login_check_interval_changed)
+        except (RuntimeError, TypeError):
+            pass
+        
         self._auth_timer.stop()
         self._auth_timer.deleteLater()
         self._login_state_timer.stop()
         self._login_state_timer.deleteLater()
         self.qr_code_removed_signal.emit(str(self.config.bot.QQID))
+
+    def _on_login_check_interval_changed(self, interval_ms: int) -> None:
+        """登录检查间隔配置变化时更新定时器（仅在已登录时生效）"""
+        # 只有在已登录状态下才应用新的配置间隔
+        if self._is_logged_in:
+            self._login_state_timer.setInterval(interval_ms)
+            logger.trace(
+                f"NapCat 登录状态检查间隔已更新(QQID: {self.config.bot.QQID}, interval={interval_ms}ms)",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+        else:
+            logger.trace(
+                f"NapCat 未登录状态，保持1秒检查间隔(QQID: {self.config.bot.QQID}, configured={interval_ms}ms)",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
     def _emit_notification(self, level: str, message: str) -> None:
         """向 UI 层发布运行时通知"""
@@ -441,6 +470,27 @@ class NapCatQQLoginState(QObject):
             LogType.NETWORK,
             LogSource.CORE,
         )
+
+        # 根据登录状态调整检查间隔
+        if is_login:
+            # 已登录，使用配置的间隔
+            configured_interval = cfg.get(cfg.bot_login_check_interval)
+            if self._login_state_timer.interval() != configured_interval:
+                self._login_state_timer.setInterval(configured_interval)
+                logger.trace(
+                    f"NapCat 已登录，恢复配置的检查间隔(QQID: {self.config.bot.QQID}, interval={configured_interval}ms)",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+        else:
+            # 未登录，强制使用1秒检查
+            if self._login_state_timer.interval() != 1000:
+                self._login_state_timer.setInterval(1000)
+                logger.trace(
+                    f"NapCat 未登录，强制使用1秒检查间隔(QQID: {self.config.bot.QQID})",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
 
         if is_login:
             self._login_invalidated_while_online = False

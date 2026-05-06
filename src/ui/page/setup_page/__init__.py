@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from src.core.platform.runtime_args import is_developer_mode_enabled
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from .sub_page import DesktopLog, Developer, General, Personalization
+from .sub_page import DesktopLog, Developer, General, Performance, Personalization
 from .widget import SetupTopCard
 
 if TYPE_CHECKING:
@@ -52,11 +52,13 @@ class SetupWidget(QWidget):
         self.view = TransparentStackedWidget(self)
         self.general = General(self)
         self.personalization = Personalization(self)
+        self.performance = Performance(self)
         self.desktop_log = DesktopLog(self)
         self.developer = Developer(self) if is_developer_mode_enabled() else None
 
         self.view.addWidget(self.personalization)
         self.view.addWidget(self.general)
+        self.view.addWidget(self.performance)
         self.view.addWidget(self.desktop_log)
         if self.developer is not None:
             self.view.addWidget(self.developer)
@@ -70,6 +72,11 @@ class SetupWidget(QWidget):
             routeKey=self.general.objectName(),
             text=self.tr("常规"),
             onClick=lambda: self.view.setCurrentWidget(self.general),
+        )
+        self.top_card.pivot.addItem(
+            routeKey=self.performance.objectName(),
+            text=self.tr("性能"),
+            onClick=lambda: self.view.setCurrentWidget(self.performance),
         )
         self.top_card.pivot.addItem(
             routeKey=self.desktop_log.objectName(),

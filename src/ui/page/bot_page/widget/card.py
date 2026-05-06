@@ -53,6 +53,7 @@ from creart import it
 from qfluentwidgets.common.overload import singledispatchmethod
 
 # 项目内模块导入
+from src.core.config import cfg
 from src.core.config.config_model import (
     Config,
     ConnectConfig,
@@ -553,6 +554,7 @@ class BotInfoWidget(QWidget):
         # 链接信号
         it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_run_time_start)
         it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_memory_usage_start)
+        cfg.bot_memory_monitor_interval.valueChanged.connect(self._on_monitor_interval_changed)
 
     def setup_tooltip(self) -> None:
         """设置工具提示"""
@@ -587,7 +589,7 @@ class BotInfoWidget(QWidget):
                 self._run_time_timer.stop()
                 self._run_time_timer.deleteLater()
 
-            # 创建新的计时器
+            # 创建新的计时器 - 运行时长固定1秒更新
             timer = QTimer(self)
 
             # 每秒更新一次运行时长显示 格式 00:00:00
@@ -600,7 +602,7 @@ class BotInfoWidget(QWidget):
                     )
                 )
             )
-            timer.start(1000)
+            timer.start(1000)  # 固定1秒
 
             # 保存计时器引用
             self._run_time_timer = timer
@@ -626,13 +628,15 @@ class BotInfoWidget(QWidget):
 
             # 创建新的计时器
             timer = QTimer(self)
-            # 每秒更新一次内存占用显示
+            # 使用配置的更新间隔
+            update_interval = cfg.get(cfg.bot_memory_monitor_interval)
+            # 每隔指定时间更新一次内存占用显示
             timer.timeout.connect(
                 lambda: self._memory_info.text_label.setText(
                     f"{it(ManagerNapCatQQProcess).get_memory_usage(qq_id)} MB / {int(psutil.virtual_memory().total / (1024 * 1024))} MB"
                 )
             )
-            timer.start(1000)
+            timer.start(update_interval)
             # 保存计时器引用
             self._memory_timer = timer
         else:
@@ -642,6 +646,19 @@ class BotInfoWidget(QWidget):
                 del self._memory_timer
 
             self._memory_info.text_label.setText("-M / -M")
+
+    def _on_monitor_interval_changed(self, interval_ms: int) -> None:
+        """监控间隔配置变化时更新定时器（仅更新内存监控）"""
+        # 只更新内存监控定时器，运行时长固定1秒
+        timer = getattr(self, "_memory_timer", None)
+        if timer is None:
+            return
+        try:
+            if timer.isActive():
+                timer.setInterval(interval_ms)
+        except RuntimeError:
+            # 底层 C++ 对象已被 deleteLater 释放，忽略本次更新
+            pass
 
 
 class EnableTag(PillPushButton):

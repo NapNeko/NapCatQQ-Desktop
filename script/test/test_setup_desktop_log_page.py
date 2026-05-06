@@ -29,11 +29,12 @@ def test_setup_widget_inserts_desktop_log_between_general_and_developer(monkeypa
     host = QWidget()
     widget = setup_page_module.SetupWidget().initialize(host)
 
-    assert widget.view.count() == 4
+    assert widget.view.count() == 5
     assert widget.view.widget(0) is widget.personalization
     assert widget.view.widget(1) is widget.general
-    assert widget.view.widget(2) is widget.desktop_log
-    assert widget.view.widget(3) is widget.developer
+    assert widget.view.widget(2) is widget.performance
+    assert widget.view.widget(3) is widget.desktop_log
+    assert widget.view.widget(4) is widget.developer
 
     widget.close()
     host.close()

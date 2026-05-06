@@ -507,13 +507,20 @@ class OccupancyPanel(QWidget):
         self._initialized = False
         self._cpu_history = _MetricHistory(self.HISTORY_SIZE)
         self._memory_history = _MetricHistory(self.HISTORY_SIZE)
-        self._sampler = SystemOccupancySampler(parent=self)
+        
+        # 从配置读取采样间隔
+        interval_ms = cfg.get(cfg.performance_monitor_interval)
+        self._sampler = SystemOccupancySampler(interval_ms=interval_ms, parent=self)
 
         self._create_widgets()
         self._set_layout()
         self._connect_signals()
 
-        self._sampler.start()
+        # 根据配置决定是否启动监控
+        if cfg.get(cfg.performance_monitor_enabled):
+            self._sampler.start()
+        else:
+            self._show_disabled_state()
 
     def _create_widgets(self) -> None:
         cpu_color, memory_color = self._theme_accent_colors()
@@ -542,6 +549,8 @@ class OccupancyPanel(QWidget):
         self._sampler.sampleChanged.connect(self._on_sample_changed)
         cfg.themeChanged.connect(self._apply_theme_accent_colors)
         cfg.themeColorChanged.connect(self._apply_theme_accent_colors)
+        cfg.performance_monitor_enabled.valueChanged.connect(self._on_monitor_enabled_changed)
+        cfg.performance_monitor_interval.valueChanged.connect(self._on_monitor_interval_changed)
 
     def _on_sample_changed(self, cpu_percent: float, memory_percent: float) -> None:
         snapshot = OccupancySnapshot(cpu_percent=cpu_percent, memory_percent=memory_percent)
@@ -562,6 +571,32 @@ class OccupancyPanel(QWidget):
         cpu_color, memory_color = self._theme_accent_colors()
         self.cpu_chart.setAccentColor(cpu_color)
         self.memory_chart.setAccentColor(memory_color)
+
+    def _on_monitor_enabled_changed(self, enabled: bool) -> None:
+        """监控开关变化时的处理"""
+        if enabled:
+            self._initialized = False
+            self._sampler.start()
+        else:
+            self._sampler.stop()
+            self._show_disabled_state()
+
+    def _on_monitor_interval_changed(self, interval_ms: int) -> None:
+        """采样间隔变化时的处理"""
+        self._sampler.set_interval(interval_ms)
+        scroll_duration = max(120, interval_ms - 20)
+        self.cpu_chart.setScrollDuration(scroll_duration)
+        self.memory_chart.setScrollDuration(scroll_duration)
+
+    def _show_disabled_state(self) -> None:
+        """显示监控已关闭状态"""
+        # 重置历史数据为0
+        self._cpu_history.reset(0.0)
+        self._memory_history.reset(0.0)
+        self.cpu_chart.setValues(self._cpu_history.values())
+        self.memory_chart.setValues(self._memory_history.values())
+        self.cpu_chart.setValueText("已关闭")
+        self.memory_chart.setValueText("已关闭")
 
     @staticmethod
     def _theme_accent_colors() -> tuple[QColor, QColor]:

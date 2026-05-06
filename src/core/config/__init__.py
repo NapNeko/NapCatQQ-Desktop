@@ -524,6 +524,29 @@ class Config(QConfig):
     home_notice_ignored_keys = ConfigItem(group="Home", name="IgnoredNoticeKeys", default="[]")
     home_notice_snoozed_items = ConfigItem(group="Home", name="SnoozedNoticeItems", default="{}")
 
+    # 性能监控设置
+    performance_monitor_enabled = ConfigItem(
+        group="Performance", name="MonitorEnabled", default=True, validator=BoolValidator()
+    )
+    performance_monitor_interval = RangeConfigItem(
+        group="Performance",
+        name="MonitorInterval",
+        default=1200,
+        validator=RangeValidator(500, 10000),
+    )
+    bot_login_check_interval = RangeConfigItem(
+        group="Performance",
+        name="BotLoginCheckInterval",
+        default=3000,
+        validator=RangeValidator(500, 60000),
+    )
+    bot_memory_monitor_interval = RangeConfigItem(
+        group="Performance",
+        name="BotMemoryMonitorInterval",
+        default=1000,
+        validator=RangeValidator(500, 10000),
+    )
+
     def __init__(self):
         super().__init__()
 

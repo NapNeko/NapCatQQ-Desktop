@@ -33,7 +33,7 @@ class FakeTimer:
 
     def __init__(self, parent=None) -> None:
         self.parent = parent
-        self.interval = None
+        self._interval: int | None = None
         self.timeout = SimpleNamespace(
             connect=lambda callback: setattr(self, "_callback", callback),
             disconnect=lambda: setattr(self, "_disconnected", True),
@@ -41,10 +41,13 @@ class FakeTimer:
 
     def start(self, interval=None) -> None:
         if interval is not None:
-            self.interval = interval
+            self._interval = interval
+
+    def interval(self) -> int | None:
+        return self._interval
 
     def setInterval(self, interval: int) -> None:
-        self.interval = interval
+        self._interval = interval
 
     def stop(self) -> None:
         self.stopped = True
@@ -156,7 +159,8 @@ def test_login_state_offline_autorestart_sends_notifications_and_restarts_once(
         SimpleNamespace(
             bot_offline_web_hook_notice="webhook",
             bot_offline_email_notice="email",
-            get=lambda item: True,
+            bot_login_check_interval=SimpleNamespace(value=3000, valueChanged=FakeSignal()),
+            get=lambda item: getattr(item, "value", True),
         ),
     )
     monkeypatch.setattr(run_napcat, "create_offline_webhook_task", lambda config: ("webhook-task", config.bot.QQID))
@@ -206,7 +210,8 @@ def test_login_state_offline_after_login_loss_still_sends_notifications_and_skip
         SimpleNamespace(
             bot_offline_web_hook_notice="webhook",
             bot_offline_email_notice="email",
-            get=lambda item: True,
+            bot_login_check_interval=SimpleNamespace(value=3000, valueChanged=FakeSignal()),
+            get=lambda item: getattr(item, "value", True),
         ),
     )
     monkeypatch.setattr(run_napcat, "create_offline_webhook_task", lambda config: ("webhook-task", config.bot.QQID))
@@ -521,7 +526,7 @@ def test_auto_restart_timer_uses_schedule_duration(
     manager.create_auto_restart_timer(config)
 
     timer = manager.auto_restart_process_dict["121212"]
-    assert timer.interval == 2 * 3600 * 1000
+    assert timer.interval() == 2 * 3600 * 1000
 
     timer._callback()
     assert restart_requests == [121212]
@@ -607,3 +612,92 @@ def test_get_memory_usage_sums_process_tree(monkeypatch: pytest.MonkeyPatch, mut
 
     assert manager.get_memory_usage("556677") == 8
 
+
+
+def _make_fake_cfg(login_check_interval: int) -> SimpleNamespace:
+    """构造一个仅覆盖登录间隔配置项的 cfg 替身。
+
+    使用 SimpleNamespace 包装登录间隔配置项，并提供可触发 valueChanged 的 set 方法，
+    避免写入真实 QConfig 后落盘污染开发机的 runtime 配置。
+    """
+    interval_item = SimpleNamespace(value=login_check_interval, valueChanged=FakeSignal())
+
+    def fake_get(item):
+        return item.value
+
+    def fake_set(item, value):
+        item.value = value
+        item.valueChanged.emit(value)
+
+    return SimpleNamespace(
+        bot_offline_web_hook_notice="webhook",
+        bot_offline_email_notice="email",
+        bot_login_check_interval=interval_item,
+        get=fake_get,
+        set=fake_set,
+    )
+
+
+def test_login_state_uses_1s_interval_when_not_logged_in(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """未登录时应强制使用1秒检查间隔，忽略配置的较大值。"""
+    monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
+    monkeypatch.setattr(run_napcat, "cfg", _make_fake_cfg(30000))
+
+    login_state = run_napcat.NapCatQQLoginState(config=config_factory(123456), port=8080, token="token")
+    timer = login_state._login_state_timer
+
+    # 初始状态应该使用配置的间隔
+    assert timer.interval() == 30000
+
+    # 模拟未登录状态更新 -> 应切换到 1 秒检查
+    login_state.slot_update_login_state(False)
+    assert timer.interval() == 1000
+
+    # 模拟登录成功 -> 应恢复配置的间隔
+    login_state.slot_update_login_state(True)
+    assert timer.interval() == 30000
+
+
+def test_login_state_config_change_only_applies_when_logged_in(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """配置间隔变化时，只在已登录状态下才应用新间隔。"""
+    monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
+    fake_cfg = _make_fake_cfg(3000)
+    monkeypatch.setattr(run_napcat, "cfg", fake_cfg)
+
+    login_state = run_napcat.NapCatQQLoginState(config=config_factory(654321), port=8080, token="token")
+    timer = login_state._login_state_timer
+
+    # 设置为未登录状态，并把当前 timer 间隔置为 1s（与运行时一致）
+    login_state._is_logged_in = False
+    timer.setInterval(1000)
+
+    # 未登录时改变配置不应该应用新值
+    fake_cfg.set(fake_cfg.bot_login_check_interval, 5000)
+    assert timer.interval() == 1000
+
+    # 已登录时再次改配置应当生效
+    login_state._is_logged_in = True
+    fake_cfg.set(fake_cfg.bot_login_check_interval, 10000)
+    assert timer.interval() == 10000
+
+
+def test_login_state_first_check_uses_1s_regardless_of_config(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """首次登录状态检查应该在 1 秒后触发，不受配置间隔影响。"""
+    monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
+    monkeypatch.setattr(run_napcat, "cfg", _make_fake_cfg(60000))
+    # 隔离 FakeTimer 的类级 single_shots，避免跨用例残留
+    monkeypatch.setattr(FakeTimer, "single_shots", [])
+
+    run_napcat.NapCatQQLoginState(config=config_factory(789012), port=8080, token="token")
+
+    # 应该有两个 singleShot 调用：立即执行的 auth + 1 秒后的登录状态检查
+    assert len(FakeTimer.single_shots) == 2
+    assert FakeTimer.single_shots[0][0] == 0
+    # 即使配置为 60s，首次登录态检查仍应固定 1s
+    assert FakeTimer.single_shots[1][0] == 1000
