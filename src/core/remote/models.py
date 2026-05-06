@@ -9,7 +9,10 @@ from typing import Literal
 
 
 SSHAuthMethod = Literal["password", "key"]
-HostKeyPolicy = Literal["reject", "auto_add", "warning"]
+# P4 F5.1: 新增 ``"interactive"`` 政策, 让首次连接通过
+# [`HostKeyConfirmDialog`](src/ui/components/host_key_confirm_dialog.py)
+# 弹窗确认; 旧值保留, 已存盘配置 (``reject`` / ``auto_add`` / ``warning``) 完全兼容.
+HostKeyPolicy = Literal["reject", "auto_add", "warning", "interactive"]
 
 
 @dataclass(slots=True)
