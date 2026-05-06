@@ -454,7 +454,45 @@ class RemoteBotOperationRunnable(QObject, QRunnable):
         self._config = config
         self._action = action
 
+    # P3 perf: ``start`` / ``stop`` 是用户可感知的、单次会话只触发一次的动作,
+    # 上报给 BackgroundTaskCenter 以驱动 ProgressInfoBar; ``poll`` 是 5s 一次的
+    # 静默轮询, 上报会让 InfoBar 频繁闪烁, 故不上报.
+    _TASK_LABELS = {
+        "start": "启动远端 Bot {qq_id}",
+        "stop": "停止远端 Bot {qq_id}",
+    }
+    _TASK_CONTENTS = {
+        "start": "正在通过 SSH 启动 NapCat 进程…",
+        "stop": "正在通过 SSH 停止 NapCat 进程…",
+    }
+    _TASK_SUCCESS_MESSAGES = {
+        "start": "Bot {qq_id} 启动成功",
+        "stop": "Bot {qq_id} 已停止",
+    }
+
+    def _task_id(self) -> str | None:
+        if self._action not in self._TASK_LABELS:
+            return None
+        return f"remote-bot-{self._action}-{self._qq_id}"
+
     def run(self) -> None:  # noqa: D401 - QRunnable 框架约定
+        # 延迟导入避免循环依赖 (background_tasks 在测试环境下可能未被 creart 初始化)
+        task_id = self._task_id()
+        center = None
+        if task_id is not None:
+            try:
+                from creart import it
+                from src.core.runtime.background_tasks import BackgroundTaskCenter
+
+                center = it(BackgroundTaskCenter)
+                label = self._TASK_LABELS[self._action].format(qq_id=self._qq_id)
+                content = self._TASK_CONTENTS.get(self._action, "")
+                center.begin(task_id, label, content=content)
+            except Exception:  # noqa: BLE001 - center 不可用时不应阻断 SSH 主流程
+                center = None
+
+        success = False
+        failure_message = ""
         try:
             # 延迟导入避免循环依赖
             from src.core.operation.resolver import resolve_backend_for_bot
@@ -465,6 +503,7 @@ class RemoteBotOperationRunnable(QObject, QRunnable):
             if self._action == "start":
                 status = backend.start_napcat(self._qq_id, self._config)
                 self.operation_finished_signal.emit(self._qq_id, self._action, status)
+                success = True
                 return
 
             if self._action == "stop":
@@ -477,6 +516,7 @@ class RemoteBotOperationRunnable(QObject, QRunnable):
                         pass
                 backend.stop_napcat(self._qq_id)
                 self.operation_finished_signal.emit(self._qq_id, self._action, None)
+                success = True
                 return
 
             if self._action == "poll":
@@ -495,21 +535,31 @@ class RemoteBotOperationRunnable(QObject, QRunnable):
                 self.operation_finished_signal.emit(
                     self._qq_id, self._action, (status, endpoint)
                 )
+                # poll 不上报 center, 这里 success 状态无意义
                 return
 
-            self.operation_failed_signal.emit(
-                self._qq_id, self._action, f"未知远端操作: {self._action}"
-            )
+            failure_message = f"未知远端操作: {self._action}"
+            self.operation_failed_signal.emit(self._qq_id, self._action, failure_message)
         except Exception as exc:  # noqa: BLE001 - 边界处统一捕获, 把详细错误回到 UI 线程
+            failure_message = f"{type(exc).__name__}: {exc}"
             logger.warning(
-                f"远端 Bot {self._action} 操作失败(QQID: {self._qq_id}): "
-                f"{type(exc).__name__}: {exc}",
+                f"远端 Bot {self._action} 操作失败(QQID: {self._qq_id}): {failure_message}",
                 LogType.NETWORK,
                 LogSource.CORE,
             )
-            self.operation_failed_signal.emit(
-                self._qq_id, self._action, f"{type(exc).__name__}: {exc}"
-            )
+            self.operation_failed_signal.emit(self._qq_id, self._action, failure_message)
+        finally:
+            if center is not None and task_id is not None:
+                try:
+                    if success:
+                        success_message = self._TASK_SUCCESS_MESSAGES.get(self._action, "").format(
+                            qq_id=self._qq_id
+                        )
+                        center.end(task_id, success=True, message=success_message)
+                    else:
+                        center.fail(task_id, failure_message or f"{self._action} 失败")
+                except Exception:  # noqa: BLE001
+                    pass
 
 
 class GetAuthStatusRunnable(QObject, QRunnable):
@@ -1206,6 +1256,57 @@ class ManagerNapCatQQProcess(QObject):
         it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
         self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
 
+    def _handle_local_start_error(
+        self,
+        qq_id: str,
+        process: QProcess,
+        error: QProcess.ProcessError,
+    ) -> None:
+        """本地 NapCat QProcess 启动 / 运行期错误回调 (P3 perf).
+
+        关键场景:
+
+        - ``QProcess.ProcessError.FailedToStart``: 启动器找不到 / 权限不足 / 子进程立即崩溃,
+          ``finished`` 信号不会被 emit, 必须由 :meth:`_handle_local_start_error` 自己负责
+          清理 ``napcat_process_dict`` 并 emit ``NotRunning`` 让 UI 退出 ``Starting`` 态.
+        - 其他错误 (Crashed / Timedout / WriteError / ReadError / UnknownError):
+          进程已经成功启动过, ``finished`` 会负责清理, 这里仅记录 trace.
+        """
+        process_model = self.napcat_process_dict.get(qq_id)
+        if process_model is None or process_model.process is not process:
+            return
+
+        if error == QProcess.ProcessError.FailedToStart:
+            logger.error(
+                (
+                    "NapCatQQ 进程启动失败(QQID: "
+                    f"{qq_id}, error={getattr(error, 'name', error)}): "
+                    f"{process.errorString()}"
+                ),
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+            self.napcat_process_dict.pop(qq_id, None)
+            process.deleteLater()
+            it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
+            it(ManagerAutoRestartProcess).remove_auto_restart_timer(qq_id)
+            self.notification_signal.emit(
+                "error", f"NapCatQQ 进程启动失败: {process.errorString()}"
+            )
+            self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
+            return
+
+        # 非 FailedToStart 的运行期错误: finished 会接管清理, 这里仅 trace
+        logger.trace(
+            (
+                "NapCatQQ 进程运行期错误(QQID: "
+                f"{qq_id}, error={getattr(error, 'name', error)}): "
+                f"{process.errorString()}"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+
     # ==================== 公共函数===================
     def create_napcat_process(self, config: Config) -> None:
         """创建并配置 QProcess
@@ -1269,7 +1370,14 @@ class ManagerNapCatQQProcess(QObject):
         process = self._create_napcat_process(config, qq_path)
         qq_id = str(config.bot.QQID)
 
-        process.stateChanged.connect(lambda state, emitted_qq_id=qq_id: self._handle_process_state_changed(emitted_qq_id, state))
+        process.stateChanged.connect(
+            lambda state, emitted_qq_id=qq_id: self._handle_process_state_changed(emitted_qq_id, state)
+        )
+        process.errorOccurred.connect(
+            lambda error, emitted_qq_id=qq_id, emitted_process=process: self._handle_local_start_error(
+                emitted_qq_id, emitted_process, error
+            )
+        )
         process.finished.connect(
             lambda exit_code, exit_status, emitted_qq_id=qq_id, emitted_process=process: self._handle_process_finished(
                 emitted_qq_id, emitted_process, exit_code, exit_status
@@ -1279,31 +1387,28 @@ class ManagerNapCatQQProcess(QObject):
         # 进行一些操作
         it(ManagerNapCatQQLog).create_log(config, process)
 
-        # 启动进程
+        # P3 perf: 在调 ``process.start()`` 之前先把 model 注册到字典 (Starting 态),
+        # 这样 ``process.stateChanged`` 在主线程派发时, ``_handle_process_state_changed``
+        # 找得到 model 并把状态推平到 Running.
+        # 同时让 BotCard 立即看到 ``Starting`` 态, 进入"启动中..."指示.
+        self.napcat_process_dict[qq_id] = NapCatProcessModel(
+            qq_id=qq_id,
+            process=process,
+            state=QProcess.ProcessState.Starting,
+            started_at=monotonic(),
+        )
+        self.process_changed_signal.emit(qq_id, QProcess.ProcessState.Starting)
+
+        # 启动进程; 不再 ``waitForStarted(5000)`` 阻塞主线程 (旧实现 N 个 autoStart Bot
+        # 串行 5s 累积阻塞 UI 数十秒).
+        # 启动结果由 ``process.stateChanged`` (-> Running) 与 ``process.errorOccurred``
+        # (-> FailedToStart) 异步驱动.
         process.start()
         logger.info(f"NapCatQQ 进程已创建并发起启动(QQID: {config.bot.QQID})")
 
-        # 确保进程已启动
-        if not process.waitForStarted(5000):
-            logger.error(
-                f"NapCatQQ 进程启动失败(QQID: {config.bot.QQID}): {process.errorString()}",
-                LogType.FILE_FUNC,
-                LogSource.CORE,
-            )
-            self.notification_signal.emit("error", "NapCatQQ 进程启动失败!")
-            process.deleteLater()
-            return
-
-        logger.info(f"NapCatQQ 进程启动成功(QQID: {config.bot.QQID})")
+        # 自动重启 timer 与启动是否成功无强耦合; 即使 errorOccurred 触发,
+        # ``_handle_local_start_error`` 内部会再调一次 remove_auto_restart_timer 兜底.
         it(ManagerAutoRestartProcess).create_auto_restart_timer(config)
-
-        # 添加到进程字典
-        self.napcat_process_dict[qq_id] = NapCatProcessModel(
-            qq_id=qq_id, process=process, state=QProcess.ProcessState.Running, started_at=monotonic()
-        )
-
-        # 发出新进程创建信号
-        self.process_changed_signal.emit(qq_id, process.state())
 
     def get_process(self, qq_id: str) -> NapCatProcessModel | RemoteProcessRecord | None:
         """获取指定 QQ 号的进程记录.
@@ -1574,7 +1679,17 @@ class ManagerNapCatQQProcess(QObject):
             self._handle_remote_poll_result(qq_id, payload)
 
     def _on_remote_op_failed(self, qq_id: str, action: str, error: str) -> None:
-        """远端 SSH 操作失败的统一回调 (主线程)."""
+        """远端 SSH 操作失败的统一回调 (主线程).
+
+        P3 perf: 启动 / 停止失败的用户提示已由
+        [`RemoteBotOperationRunnable`](src/core/runtime/napcat.py) 内的
+        ``center.fail(task_id, error)`` 推到
+        [`ProgressInfoBarBridge`](src/ui/components/progress_info_bar_bridge.py),
+        在右上 ProgressInfoBar 切到 ❌ + 详细错误文案展示, 不再通过
+        ``notification_signal`` 额外弹 error_bar / warning_bar (避免双重提示).
+        本地 QProcess 启动失败 (``_handle_local_start_error``) 仍走 notification_signal,
+        因为本地路径不上报 BackgroundTaskCenter.
+        """
         if action == "start":
             # 启动失败: 移除记录, 通知 UI
             record = self.remote_process_dict.pop(qq_id, None)
@@ -1587,7 +1702,6 @@ class ManagerNapCatQQProcess(QObject):
                 LogType.FILE_FUNC,
                 LogSource.CORE,
             )
-            self.notification_signal.emit("error", f"远端 NapCat Bot 启动失败: {error}")
             self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
             return
 
@@ -1602,7 +1716,6 @@ class ManagerNapCatQQProcess(QObject):
                 LogType.FILE_FUNC,
                 LogSource.CORE,
             )
-            self.notification_signal.emit("warning", f"远端 NapCat Bot 停止时报错: {error}")
             self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
             it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
             return

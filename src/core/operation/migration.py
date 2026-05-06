@@ -365,6 +365,33 @@ class BotMigrationRunnable(QRunnable):
         # 把 service 的同步信号桥接到 runnable 的信号 (跨线程)
         service.progress_signal.connect(self.signals.progress.emit)
         service.finished_signal.connect(self.signals.finished.emit)
+
+        # 捕获 service.finished_signal 的 (success, message), 给 BackgroundTaskCenter 用
+        result: dict[str, object] = {"success": False, "message": ""}
+
+        def _capture_result(success: bool, message: str) -> None:
+            result["success"] = bool(success)
+            result["message"] = message or ""
+
+        service.finished_signal.connect(_capture_result)
+
+        # P3 perf: 上报到全局 BackgroundTaskCenter, 完成时把 success/message 传给
+        # ProgressInfoBar 桥, ✅/❌ + 文案自动展示. 任意原因失败仍要 end, 用 try/finally 兜底.
+        task_id = f"bot-migration-{self._plan.qq_id}"
+        center = None
+        try:
+            from creart import it
+            from src.core.runtime.background_tasks import BackgroundTaskCenter
+
+            center = it(BackgroundTaskCenter)
+            center.begin(
+                task_id,
+                f"迁移 Bot {self._plan.qq_id} ({self._plan.source_target} → {self._plan.dest_target})",
+                content="正在搬运数据并切换 runtime_target…",
+            )
+        except Exception:  # noqa: BLE001 - center 不可用时不阻断主流程
+            center = None
+
         try:
             service.execute(self._plan)
         except BotMigrationError as exc:
@@ -381,3 +408,18 @@ class BotMigrationRunnable(QRunnable):
                 LogSource.CORE,
             )
             self.signals.finished.emit(False, f"迁移异常: {type(exc).__name__}: {exc}")
+        finally:
+            if center is not None:
+                try:
+                    success = bool(result.get("success"))
+                    message = str(result.get("message") or "")
+                    if success:
+                        center.end(
+                            task_id,
+                            success=True,
+                            message=message or f"Bot {self._plan.qq_id} 迁移完成",
+                        )
+                    else:
+                        center.fail(task_id, message or "迁移失败")
+                except Exception:  # noqa: BLE001
+                    pass

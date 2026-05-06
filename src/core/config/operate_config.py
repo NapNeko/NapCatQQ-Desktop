@@ -480,24 +480,21 @@ def delete_config(config: Config) -> bool:
 
 
 # ==================== P2.4: 远端配置同步钩子 ====================
-def _sync_bot_runtime_config_to_remote(config: Config) -> None:
-    """如果 Bot 绑定到远端, 把 onebot11/napcat JSON 推到远端工作区.
+def _do_remote_sync_blocking(config: Config) -> None:
+    """**同步**把 Bot 配置推到远端 (P3 perf W3 拆分点).
 
-    仅当 ``runtime_target != 'local'`` 时触发. 失败时仅记录 warning, 不抛出.
+    把原 :func:`_sync_bot_runtime_config_to_remote` 的核心 SSH 工作抽出来,
+    供同步路径 (无 Qt 上下文 / 测试) 与异步路径 (Qt UI 线程派发到 QThreadPool) 共用.
 
-    设计要点:
+    设计要点 (与历史一致):
+
     - 解析失败 (server_id 不存在 / SSH 不通) 不应让本地保存返回 False;
       用户应当看到本地保存成功, 然后由 UI 后续展示远端同步状态.
-    - 调用方应在本地 ``_apply_json_transaction`` 提交成功**之后**才触发同步,
-      以避免本地写盘失败时把陈旧配置推到远端.
     - **顶层 try/except Exception 兜底**: 任何未预期异常 (paramiko/keyring/...)
       都被吞下转 warning, 绝不让远端同步副作用使本地的 ``bot.json`` 写盘看起来失败.
       这是 P3 阶段修复的实测 bug —— 远端 SSH 抖动会让 update_config 返回 False,
       用户感知"切了 runtime_target 完全没生效", 但其实本地早就写盘了.
     """
-    if config.bot.runtime_target == RUNTIME_TARGET_LOCAL:
-        return
-
     try:
         try:
             # 延迟导入避免循环依赖 (operation -> remote -> ssh, 在测试环境下
@@ -541,15 +538,11 @@ def _sync_bot_runtime_config_to_remote(config: Config) -> None:
         )
 
 
-def _delete_bot_runtime_config_from_remote(config: Config) -> None:
-    """删除远端的 onebot11/napcat 配置文件; 仅在 Bot 绑定到远端时触发.
+def _do_remote_delete_blocking(config: Config) -> None:
+    """**同步**删除远端 Bot 配置 (P3 perf W3 拆分点).
 
-    与 [`_sync_bot_runtime_config_to_remote`](src/core/config/operate_config.py)
-    采用相同的"顶层 except Exception 兜底"策略, 远端清理失败不影响本地删除语义.
+    与 :func:`_do_remote_sync_blocking` 对称的同步实现, 供同步与异步两条路径共享.
     """
-    if config.bot.runtime_target == RUNTIME_TARGET_LOCAL:
-        return
-
     try:
         try:
             from src.core.operation.resolver import (
@@ -581,3 +574,197 @@ def _delete_bot_runtime_config_from_remote(config: Config) -> None:
             f"远端配置删除失败 (QQID={config.bot.QQID}, "
             f"target={config.bot.runtime_target}): {type(exc).__name__}: {exc}"
         )
+
+
+# ==================== P3 perf W3: 异步派发开关 ====================
+# 测试钩子: 单测可通过 monkeypatch / fixture 把它设为 True, 强制走同步路径,
+# 让"派发完立刻断言 spy 调用"的旧 case 仍能在共享 QApp 的 pytest 进程里通过.
+# 生产代码不应触碰它.
+_FORCE_SYNC_REMOTE_CONFIG = False
+
+
+def _try_dispatch_remote_op_async(action: str, config: Config) -> bool:
+    """P3 perf W3: 把远端配置同步 / 删除推到 QThreadPool 后台线程, 不阻塞 UI.
+
+    Args:
+        action: ``"sync"`` 或 ``"delete"``, 决定 runnable 内部走哪条同步函数.
+        config: 上下文 [`Config`](src/core/config/config_model.py).
+
+    Returns:
+        - ``True``: 已成功派发到 QThreadPool, 调用方应直接返回, 不再走同步路径.
+        - ``False``: 当前不在 Qt 上下文 (没有 QApplication 实例) / 派发失败 /
+          测试钩子 :data:`_FORCE_SYNC_REMOTE_CONFIG` 为 True, 调用方应回退到同步执行.
+
+    设计取舍:
+
+    - 检查 ``QApplication.instance()`` 是判断"是否在 UI 进程内运行"的最可靠信号.
+      在 ``test_operate_config.py`` 这类无 QApp 的纯 logic test 中, 我们必然走同步,
+      保留向下兼容; 在真正的 UI 进程里, 走异步避免"保存配置卡 N 秒"的体感.
+    - :data:`_FORCE_SYNC_REMOTE_CONFIG` 用于解决"同进程跨 case 残留 QApp"的污染:
+      pytest 一次进程跑很多 UI 用例时, 第一个创建的 QApp 不会被销毁, 之后的同步
+      期望 case 会误入异步分支; 显式 toggle 让旧 case 不必感知这个细节.
+    - 任何异常 (Qt 模块缺失 / pool 无法初始化 / runnable 构造失败) 一律回退同步,
+      避免新代码路径带来的 regression 把保存功能整体破坏.
+    """
+    if _FORCE_SYNC_REMOTE_CONFIG:
+        return False
+
+    try:
+        from PySide6.QtCore import QThreadPool
+        from PySide6.QtWidgets import QApplication
+    except Exception:  # noqa: BLE001
+        return False
+
+    if QApplication.instance() is None:
+        return False
+
+    try:
+        runnable = _RemoteConfigOpRunnable(action=action, config=config)
+        QThreadPool.globalInstance().start(runnable)
+        return True
+    except Exception as exc:  # noqa: BLE001 - 派发失败回退同步, 不破坏保存语义
+        logger.warning(
+            f"远端配置 {action} 异步派发失败, 回退同步执行 (QQID={config.bot.QQID}): "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return False
+
+
+def _sync_bot_runtime_config_to_remote(config: Config) -> None:
+    """如果 Bot 绑定到远端, 把 onebot11/napcat JSON 推到远端工作区.
+
+    P3 perf W3: 调用方不再阻塞在 SSH 写文件上 — 在 UI 进程内会派发到 QThreadPool;
+    在无 Qt 上下文的环境 (单测 / CLI) 仍走同步, 维持兼容. 失败时仅记录 warning, 不抛出.
+
+    要求:
+
+    - 调用方应在本地 ``_apply_json_transaction`` 提交成功**之后**才触发同步,
+      以避免本地写盘失败时把陈旧配置推到远端.
+    """
+    if config.bot.runtime_target == RUNTIME_TARGET_LOCAL:
+        return
+
+    if _try_dispatch_remote_op_async("sync", config):
+        return
+
+    _do_remote_sync_blocking(config)
+
+
+def _delete_bot_runtime_config_from_remote(config: Config) -> None:
+    """删除远端的 onebot11/napcat 配置文件; 仅在 Bot 绑定到远端时触发.
+
+    P3 perf W3: 与 :func:`_sync_bot_runtime_config_to_remote` 对称, UI 进程内派发到
+    QThreadPool 后台线程, 无 Qt 上下文时回退同步.
+    """
+    if config.bot.runtime_target == RUNTIME_TARGET_LOCAL:
+        return
+
+    if _try_dispatch_remote_op_async("delete", config):
+        return
+
+    _do_remote_delete_blocking(config)
+
+
+# ==================== P3 perf W3: 异步 runnable ====================
+def _import_runnable_base():
+    """延迟导入 ``QRunnable`` 与 ``QObject`` 基类.
+
+    分离出来便于测试时 monkeypatch; 同时把 PySide6 重型导入限制在 UI 上下文.
+    """
+    from PySide6.QtCore import QObject, QRunnable
+
+    return QObject, QRunnable
+
+
+def _make_runnable_class():
+    """构造 ``_RemoteConfigOpRunnable`` 类型 (惰性, 仅在 UI 进程触发).
+
+    把它写成"按需构造", 避免 PySide6 在 import operate_config 时被强制加载,
+    保持纯 logic test (test_operate_config.py) 与无 Qt 头依赖的 CI 路径正常.
+    """
+    QObject, QRunnable = _import_runnable_base()
+
+    class _RemoteConfigOpRunnable(QObject, QRunnable):
+        """P3 perf W3: 在 QThreadPool 上跑远端配置同步 / 删除, 顺带挂到
+        [`BackgroundTaskCenter`](src/core/runtime/background_tasks.py).
+        """
+
+        _ACTION_LABELS = {
+            "sync": "同步配置到远端 Bot {qq_id}",
+            "delete": "删除远端 Bot {qq_id} 的配置",
+        }
+        _ACTION_CONTENTS = {
+            "sync": "正在通过 SFTP 推送 onebot11 / napcat JSON…",
+            "delete": "正在通过 SSH 删除远端配置…",
+        }
+        _ACTION_SUCCESS = {
+            "sync": "Bot {qq_id} 配置已同步",
+            "delete": "Bot {qq_id} 远端配置已清理",
+        }
+
+        def __init__(self, *, action: str, config: Config) -> None:
+            QObject.__init__(self)
+            QRunnable.__init__(self)
+            self._action = action
+            self._config = config
+            self.setAutoDelete(True)
+
+        def run(self) -> None:  # noqa: D401 - QRunnable 框架约定
+            qq_id = str(self._config.bot.QQID)
+            task_id = f"remote-config-{self._action}-{qq_id}"
+            label = self._ACTION_LABELS.get(self._action, "远端配置操作 {qq_id}").format(qq_id=qq_id)
+            content = self._ACTION_CONTENTS.get(self._action, "")
+
+            center = None
+            try:
+                from creart import it as _it
+                from src.core.runtime.background_tasks import BackgroundTaskCenter
+
+                center = _it(BackgroundTaskCenter)
+                center.begin(task_id, label, content=content)
+            except Exception:  # noqa: BLE001 - center 不可用时仍执行 SSH 写, 不影响主流程
+                center = None
+
+            success = False
+            failure_message = ""
+            try:
+                if self._action == "sync":
+                    _do_remote_sync_blocking(self._config)
+                    success = True
+                elif self._action == "delete":
+                    _do_remote_delete_blocking(self._config)
+                    success = True
+                else:
+                    failure_message = f"未知远端配置操作: action={self._action}"
+                    logger.warning(f"{failure_message}, QQID={qq_id}")
+            except Exception as exc:  # noqa: BLE001 - 兜底; blocking 函数本身已 try/except
+                failure_message = f"{type(exc).__name__}: {exc}"
+                logger.warning(
+                    f"远端配置 {self._action} runnable 抛异常 (QQID={qq_id}): {failure_message}"
+                )
+            finally:
+                if center is not None:
+                    try:
+                        if success:
+                            success_msg = self._ACTION_SUCCESS.get(self._action, "").format(
+                                qq_id=qq_id
+                            )
+                            center.end(task_id, success=True, message=success_msg)
+                        else:
+                            center.fail(
+                                task_id, failure_message or f"远端配置 {self._action} 失败"
+                            )
+                    except Exception:  # noqa: BLE001
+                        pass
+
+    return _RemoteConfigOpRunnable
+
+
+def _RemoteConfigOpRunnable(*, action: str, config: Config):  # noqa: N802 - 保持类语义的工厂签名
+    """对外暴露的 runnable 构造点. 被 :func:`_try_dispatch_remote_op_async` 与单测复用.
+
+    内部走 :func:`_make_runnable_class` 惰性构造, 这样 ``import operate_config`` 不必拉
+    PySide6 模块树.
+    """
+    cls = _make_runnable_class()
+    return cls(action=action, config=config)
