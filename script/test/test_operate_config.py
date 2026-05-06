@@ -41,6 +41,20 @@ def patch_path_func(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> DummyPat
     return fake_path_func
 
 
+@pytest.fixture(autouse=True)
+def _force_sync_remote_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """P3 perf W3: 旧 case 的"派发完立刻断言 spy"语义依赖同步路径.
+
+    一次 pytest 进程会有别的 UI 用例创建 QApplication 并不销毁, 之后我们的
+    ``_try_dispatch_remote_op_async`` 会进入 ``QThreadPool`` 异步分支,
+    导致 ``spy.write_calls`` / ``spy.delete_calls`` 在断言时还没刷新.
+    显式把 :data:`operate_config._FORCE_SYNC_REMOTE_CONFIG` 翻为 True 就能屏蔽
+    这个污染, 不影响 [`test_operate_config_remote_async.py`](script/test/test_operate_config_remote_async.py)
+    单独验证异步路径.
+    """
+    monkeypatch.setattr(operate_config, "_FORCE_SYNC_REMOTE_CONFIG", True)
+
+
 def make_config(qqid: int, name: str = "TestBot") -> Config:
     """构造一份可写入的完整 Bot 配置。"""
     return Config(
