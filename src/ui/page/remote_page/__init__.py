@@ -487,7 +487,13 @@ class RemotePage(QWidget):
     # 操作回调 - 由卡片信号触发或测试代码直接调用
     # ============================================================
     def _on_add(self) -> None:
-        dialog = ServerEditDialog(self.window())
+        manager = it(ServerManager)
+        # P4 F5.2: 让对话框使用与 ServerManager 同款的 CredentialStore, 复用其
+        # ``is_available`` 探测结果, 避免实例间结论不一致.
+        dialog = ServerEditDialog(
+            self.window(),
+            credential_store=manager.credential_store(),
+        )
         if dialog.exec():
             try:
                 profile = dialog.get_profile()
@@ -495,8 +501,11 @@ class RemotePage(QWidget):
             except ValueError as exc:
                 error_bar(str(exc), parent=self)
                 return
-            manager = it(ServerManager)
-            manager.add_server(profile, password=password)
+            manager.add_server(
+                profile,
+                password=password,
+                remember_password=dialog.wants_remember_password(),
+            )
             self._active_server_id = profile.id
             success_bar(f"已添加服务器: {profile.name}", parent=self)
 
@@ -509,7 +518,14 @@ class RemotePage(QWidget):
         if profile is None:
             return
         existing_password = manager._password_cache.get(profile.id)  # noqa: SLF001
-        dialog = ServerEditDialog(self.window(), profile=profile, existing_password=existing_password)
+        # P4 F5.2: 把 keyring 当前是否记忆了该服务器的密码透传给对话框默认勾选项.
+        dialog = ServerEditDialog(
+            self.window(),
+            profile=profile,
+            existing_password=existing_password,
+            credential_store=manager.credential_store(),
+            existing_remember_password=manager.has_remembered_password(profile.id),
+        )
         if dialog.exec():
             try:
                 updated = dialog.get_profile()
@@ -517,7 +533,12 @@ class RemotePage(QWidget):
             except ValueError as exc:
                 error_bar(str(exc), parent=self)
                 return
-            manager.update_server(updated, password=password)
+            # 用户取消勾选 -> 显式 False (从 keyring 删除); 仍勾选 -> True (写入)
+            manager.update_server(
+                updated,
+                password=password,
+                remember_password=dialog.wants_remember_password(),
+            )
             success_bar(f"已更新服务器: {updated.name}", parent=self)
 
     def _on_test(self, server_id: str | None = None) -> None:
