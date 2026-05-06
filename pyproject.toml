@@ -13,7 +13,7 @@ dependencies = [
     "colorthief>=0.2.1",
     "creart>=0.3.0",
     "qrcode>=8.2",
-    "pyside6-fluent-widgets-qiao>=2.0.0",
+    "pyside6-fluent-widgets-qiao>=2.0.17",
     "keyring>=25.0.0",
     "pywin32-ctypes>=0.2.0; sys_platform == 'win32'",
 ]
