@@ -607,3 +607,103 @@ def test_get_memory_usage_sums_process_tree(monkeypatch: pytest.MonkeyPatch, mut
 
     assert manager.get_memory_usage("556677") == 8
 
+
+
+def test_login_state_uses_1s_interval_when_not_logged_in(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """未登录时应强制使用1秒检查间隔，忽略配置的较大值。"""
+    from src.core.config import cfg
+    
+    # 设置一个较大的配置间隔
+    original_interval = cfg.get(cfg.bot_login_check_interval)
+    cfg.set(cfg.bot_login_check_interval, 30000)  # 30秒
+    
+    try:
+        fake_timer = FakeTimer()
+        monkeypatch.setattr(run_napcat, "QTimer", lambda parent: fake_timer)
+        
+        login_state = run_napcat.NapCatQQLoginState(config=config_factory(123456), port=8080, token="token")
+        
+        # 初始状态应该使用配置的间隔
+        assert fake_timer.interval == 30000
+        
+        # 模拟未登录状态更新
+        login_state.slot_update_login_state(False)
+        
+        # 应该切换到1秒检查
+        assert fake_timer.interval == 1000
+        
+        # 模拟登录成功
+        login_state.slot_update_login_state(True)
+        
+        # 应该恢复配置的间隔
+        assert fake_timer.interval == 30000
+    finally:
+        cfg.set(cfg.bot_login_check_interval, original_interval)
+
+
+def test_login_state_config_change_only_applies_when_logged_in(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """配置间隔变化时，只在已登录状态下才应用新间隔。"""
+    from src.core.config import cfg
+    
+    original_interval = cfg.get(cfg.bot_login_check_interval)
+    
+    try:
+        fake_timer = FakeTimer()
+        monkeypatch.setattr(run_napcat, "QTimer", lambda parent: fake_timer)
+        
+        login_state = run_napcat.NapCatQQLoginState(config=config_factory(654321), port=8080, token="token")
+        
+        # 设置为未登录状态
+        login_state._is_logged_in = False
+        fake_timer.interval = 1000
+        
+        # 改变配置
+        cfg.set(cfg.bot_login_check_interval, 5000)
+        
+        # 未登录时不应该应用新配置
+        assert fake_timer.interval == 1000
+        
+        # 设置为已登录状态
+        login_state._is_logged_in = True
+        
+        # 再次改变配置
+        cfg.set(cfg.bot_login_check_interval, 10000)
+        
+        # 已登录时应该应用新配置
+        assert fake_timer.interval == 10000
+    finally:
+        cfg.set(cfg.bot_login_check_interval, original_interval)
+
+
+def test_login_state_first_check_uses_1s_regardless_of_config(
+    monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
+) -> None:
+    """首次登录状态检查应该在1秒后触发，不受配置间隔影响。"""
+    from src.core.config import cfg
+    
+    original_interval = cfg.get(cfg.bot_login_check_interval)
+    cfg.set(cfg.bot_login_check_interval, 60000)  # 60秒
+    
+    try:
+        single_shots = []
+        
+        def fake_single_shot(delay, callback):
+            single_shots.append((delay, callback))
+        
+        monkeypatch.setattr(run_napcat.QTimer, "singleShot", fake_single_shot)
+        monkeypatch.setattr(run_napcat, "QTimer", lambda parent: FakeTimer())
+        
+        run_napcat.NapCatQQLoginState(config=config_factory(789012), port=8080, token="token")
+        
+        # 应该有两个 singleShot 调用
+        assert len(single_shots) == 2
+        # 第一个是立即执行的 auth 检查
+        assert single_shots[0][0] == 0
+        # 第二个是1秒后的登录状态检查，不是60秒
+        assert single_shots[1][0] == 1000
+    finally:
+        cfg.set(cfg.bot_login_check_interval, original_interval)

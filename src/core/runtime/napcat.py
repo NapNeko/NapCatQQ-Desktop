@@ -348,7 +348,9 @@ class NapCatQQLoginState(QObject):
 
         # 立即执行一次（在事件循环中）
         QTimer.singleShot(0, self.slot_get_auth_status)
-        QTimer.singleShot(login_check_interval, self.slot_get_login_state)
+        # 未登录 bot 的首次登录态/二维码刷新应在 1 秒后触发
+        # 不应被常规轮询配置间隔（可能被设置得很大）所延迟
+        QTimer.singleShot(1000, self.slot_get_login_state)
 
     # ==================== 公共方法 ==================
     def get_login_state(self) -> bool:
