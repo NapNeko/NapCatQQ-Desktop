@@ -50,10 +50,24 @@ class MainWindow(MSFluentWindow):
         self._bind_crash_bundle_events()
         self._set_item()
         self._set_tray_icon()
+        self._install_progress_info_bar_bridge()
 
         # 组件加载完成结束 SplashScreen
         self.splash_screen.finish()
         logger.trace("主窗口初始化完成", log_source=LogSource.UI)
+
+    def _install_progress_info_bar_bridge(self) -> None:
+        """挂载 [`ProgressInfoBarBridge`](src/ui/components/progress_info_bar_bridge.py).
+
+        P3 perf: 让 [`BackgroundTaskCenter`](src/core/runtime/background_tasks.py) 的
+        ``begin/end`` 自动在 MainWindow 右上角弹出 / 收尾 ``ProgressInfoBar``,
+        BotPage Header 不再自维护状态条, BotCard 也不再嵌入进度环 — 全部走该桥.
+        """
+        # 项目内模块导入: 局部 import 避免主窗口顶层依赖 qfluentwidgets.ProgressInfoBar
+        # (老版本 qfluentwidgets-qiao 没有该 symbol, 启动期保护性容错).
+        from src.ui.components.progress_info_bar_bridge import ProgressInfoBarBridge
+
+        self._progress_info_bar_bridge = ProgressInfoBarBridge(self)
 
     def _set_window(self) -> None:
         """
