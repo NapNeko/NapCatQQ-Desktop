@@ -12,17 +12,23 @@
 
 ## 当前阶段
 
-当前处于：**P1 已完成 ✅, 准备推进 P2（远端 Bot 运行闭环）**
+当前处于：**P3 已完成 ✅ (核心范围 A/B/C/E/F), D/G 推迟**
 
-详细 P1 设计与任务分解见 [`remote_ssh_p1_plan.md`](./remote_ssh_p1_plan.md), 验收报告见 [`remote_ssh_p1_acceptance.md`](./remote_ssh_p1_acceptance.md)。
+各阶段计划与验收文档：
+- P0 → [`remote_ssh_p0_acceptance.md`](./remote_ssh_p0_acceptance.md)
+- P1 → [`remote_ssh_p1_plan.md`](./remote_ssh_p1_plan.md) / [`remote_ssh_p1_acceptance.md`](./remote_ssh_p1_acceptance.md)
+- P2 → [`remote_ssh_p2_acceptance.md`](./remote_ssh_p2_acceptance.md)
+- P3 → [`remote_ssh_p3_plan.md`](./remote_ssh_p3_plan.md) / [`remote_ssh_p3_acceptance.md`](./remote_ssh_p3_acceptance.md)
 
 ### 总体判断
 
 - v1 的 SSH 基础设施（SSH 客户端、SFTP、错误模型、部署骨架）**已复用**
 - v1 的 Agent/Daemon 全套代码已归档至 `archive/daemon-v1/`
-- v2 P0（操作抽象层 + 服务器管理）**已完成并通过 49/49 自动化测试**, 详见 [`remote_ssh_p0_acceptance.md`](./remote_ssh_p0_acceptance.md)
-- v2 P1（远端部署 MVP）**已完成并通过 32/32 P1 测试 + 49/49 P0 回归测试 = 81/81**, 详见 [`remote_ssh_p1_acceptance.md`](./remote_ssh_p1_acceptance.md)
-- v2 P1.5（独立部署控制台）**已完成并通过 6/6 P1.5 测试 + 81/81 回归测试 = 87/87**, 详见 [`remote_ssh_p1_acceptance.md`](./remote_ssh_p1_acceptance.md) §7
+- v2 P0（操作抽象层 + 服务器管理）**已完成 49/49**
+- v2 P1（远端部署 MVP）**已完成 81/81**
+- v2 P1.5（独立部署控制台）**已完成 87/87**
+- v2 P2（远端 Bot 运行闭环）**已完成 244/244**
+- v2 P3（体验优化与稳态收尾）**已完成 317/317**, 含 P3 新增 73 个 (W1·14 + W2·16 + W3·B 14 + W3·E 7 + 邻接 22)
 
 ---
 
@@ -39,9 +45,9 @@
 
 归档清单：
 
-| 文件                                             | 说明                   |
-| ------------------------------------------------ | ---------------------- |
-| src/daemon/ (整个目录)                           | Go Daemon 项目         |
+| 文件                                     | 说明                   |
+| ---------------------------------------- | ---------------------- |
+| src/daemon/ (整个目录)                   | Go Daemon 项目         |
 | src/core/remote/agent_backend.py         | Agent 执行后端         |
 | src/core/remote/agent_client.py          | WebSocket Agent 客户端 |
 | src/core/remote/jsonrpc_protocol.py      | JSON-RPC 2.0 协议定义  |
@@ -92,25 +98,34 @@
 
 ### P2：远端 Bot 运行闭环
 
-状态：**未开始**
+状态：**已完成 ✅** (验收报告: [`remote_ssh_p2_acceptance.md`](./remote_ssh_p2_acceptance.md))
 
-- [ ] BotConfig 增加 
-untime_target 字段
-- [ ] 远端启动/停止 NapCat 进程
-- [ ] 远端配置读写（SFTP）
-- [ ] 远端日志读取
-- [ ] SSH 端口转发 + WebUI API 透传
-- [ ] Bot 页面增加运行位置选择
+- [x] BotConfig 增加 runtime_target 字段
+- [x] 远端启动/停止 NapCat 进程
+- [x] 远端配置读写（SFTP）
+- [x] 远端日志读取 (RemoteNapCatQQLog)
+- [x] SSH 端口转发 + WebUI API 透传
+- [x] Bot 页面增加运行位置选择
 
 ### P3：体验优化
 
-状态：**未开始**
+状态：**已完成 ✅ (核心范围 A/B/C/E/F)** (验收报告: [`remote_ssh_p3_acceptance.md`](./remote_ssh_p3_acceptance.md))
 
-- [ ] 远端版本检测与更新
-- [ ] Bot 运行位置迁移
-- [ ] SSH 断线重连
-- [ ] 多服务器管理
-- [ ] 首页远程状态展示
+- [x] **A** 远端版本检测与强制更新 (RemotePage 维护菜单)
+- [x] **B** Bot 运行位置迁移服务 + 向导对话框 (BotMigrationService / MigrationDialog)
+- [x] **C** SSH 持久连接升级 (keepalive + 自动重连一次)
+- [x] **E** 远端 BotPage 日志面板体验优化 (退避 + 标题后缀)
+- [x] **F** 部署失败 / 手动回滚 UI 入口 (RollbackConfirmBox)
+- [ ] **D** 多服务器/Bot 状态聚合面板 (推迟到 P3.5/P4)
+- [ ] **G** 体验细节: 指纹确认对话框 / keyring / 私钥拖拽 / 错误文案统一 (推迟到 P3.5/P4)
+
+### P4：高级能力
+
+状态：**未规划**, 预期范围:
+- 自动切换 (本地不可用 → 远端)
+- 批量 Bot 管理
+- 远端资源监控 (CPU / 内存 / 磁盘)
+- B 的 NapCat 持久数据搬运 (账号缓存/数据库)
 
 ---
 
@@ -118,17 +133,17 @@ untime_target 字段
 
 以下模块在 v1 中已完成，可直接用于 v2：
 
-| 模块                                         | 用途                    | v2 定位                              |
-| -------------------------------------------- | ----------------------- | ------------------------------------ |
-| src/core/remote/ssh_client.py        | SSH 连接封装 (paramiko) | RemoteBackend 底层，需升级为持久连接 |
-| src/core/remote/models.py            | SSH 凭据 + 远端路径模型 | 扩展为服务器配置模型                 |
-| src/core/remote/errors.py            | SSH 错误类型            | 保留                                 |
-| src/core/remote/execution_backend.py | 执行抽象层              | 重构为 OperationBackend              |
-| src/core/remote/deployment.py        | 部署逻辑                | 重构为 RemoteBackend 安装方法        |
-| src/core/remote/status.py            | 状态查询                | 重构为 RemoteBackend 状态方法        |
-| src/core/remote/templates.py         | 脚本模板                | 保留                                 |
-| src/core/remote/remote_manager.py    | 连接管理                | 重构为服务器管理器                   |
-| src/resource/script/remote_deploy_napcat.sh  | 部署脚本                | 保留并完善                           |
+| 模块                                        | 用途                    | v2 定位                              |
+| ------------------------------------------- | ----------------------- | ------------------------------------ |
+| src/core/remote/ssh_client.py               | SSH 连接封装 (paramiko) | RemoteBackend 底层，需升级为持久连接 |
+| src/core/remote/models.py                   | SSH 凭据 + 远端路径模型 | 扩展为服务器配置模型                 |
+| src/core/remote/errors.py                   | SSH 错误类型            | 保留                                 |
+| src/core/remote/execution_backend.py        | 执行抽象层              | 重构为 OperationBackend              |
+| src/core/remote/deployment.py               | 部署逻辑                | 重构为 RemoteBackend 安装方法        |
+| src/core/remote/status.py                   | 状态查询                | 重构为 RemoteBackend 状态方法        |
+| src/core/remote/templates.py                | 脚本模板                | 保留                                 |
+| src/core/remote/remote_manager.py           | 连接管理                | 重构为服务器管理器                   |
+| src/resource/script/remote_deploy_napcat.sh | 部署脚本                | 保留并完善                           |
 
 ---
 
