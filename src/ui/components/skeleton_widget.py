@@ -51,12 +51,19 @@ class SkeletonWidget(QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        if not self._timer.isActive():
+        if not self._timer.isActive() and self.isVisible():
             self._timer.start()
 
     def hideEvent(self, event) -> None:
-        self._timer.stop()
+        if self._timer.isActive():
+            self._timer.stop()
         super().hideEvent(event)
+
+    def closeEvent(self, event) -> None:
+        """确保关闭时停止定时器"""
+        if self._timer.isActive():
+            self._timer.stop()
+        super().closeEvent(event)
 
     def _advance_phase(self) -> None:
         self._phase += 0.012

@@ -31,6 +31,14 @@ class SystemOccupancySampler(QObject):
         self._timer.start()
         self.poll_now()
 
+    def stop(self) -> None:
+        """停止采样"""
+        self._timer.stop()
+
+    def set_interval(self, interval_ms: int) -> None:
+        """设置采样间隔"""
+        self._timer.setInterval(interval_ms)
+
     def interval_ms(self) -> int:
         return self._timer.interval()
 
