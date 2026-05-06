@@ -64,8 +64,9 @@ class BotLogPage(QWidget):
             self.log_view.setPlainText(self.tr("未找到对应的日志信息"))
             return
 
-        # 设置控件
-        self.view.setTitle(self.tr(f"Bot 日志({str(config.bot.QQID)})"))
+        # P3.W3.E: 远端 Bot 在标题后缀显示 "· 远端 [服务器名]", 便于一眼区分
+        title_suffix = self._compose_title_suffix(config)
+        self.view.setTitle(self.tr(f"Bot 日志({str(config.bot.QQID)}){title_suffix}"))
         self.slot_set_log_view(log.get_log_content())
 
         # 调用方法
@@ -73,6 +74,27 @@ class BotLogPage(QWidget):
 
         # 连接信号
         log.output_log_signal.connect(self.slot_insert_log_view)
+
+    @staticmethod
+    def _compose_title_suffix(config: Config) -> str:
+        """根据 ``runtime_target`` 构造标题后缀; 本地返回空串."""
+        # 项目内模块导入
+        from src.core.config.config_model import RUNTIME_TARGET_LOCAL
+
+        target = config.bot.runtime_target or RUNTIME_TARGET_LOCAL
+        if target == RUNTIME_TARGET_LOCAL:
+            return ""
+        try:
+            # 项目内模块导入
+            from src.core.remote.server_manager import ServerManager
+
+            manager = it(ServerManager)
+            profile = manager.get_server(target)
+            if profile is not None:
+                return f" · 远端 [{profile.name}]"
+        except Exception:  # noqa: BLE001 - creart 不可用时回退到 server_id
+            pass
+        return f" · 远端 [{target}]"
 
     def set_current_config(self, config: Config) -> None:
         """设置当前配置"""

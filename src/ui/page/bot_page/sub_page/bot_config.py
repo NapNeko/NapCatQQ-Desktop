@@ -10,14 +10,16 @@ from typing import Callable, cast
 from creart import it
 from pydantic import ValidationError
 from qfluentwidgets import FluentIcon, SegmentedWidget, TransparentPushButton
+from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 # 项目内模块导入
-from src.core.config.config_model import AdvancedConfig, BotConfig, Config, ConnectConfig
+from src.core.config.config_model import RUNTIME_TARGET_LOCAL, AdvancedConfig, BotConfig, Config, ConnectConfig
 from src.core.config.operate_config import merge_config_for_update, update_config
 from src.core.logging import LogSource, logger
 from src.core.logging.crash_bundle import mask_qqid
-from src.ui.components.info_bar import error_bar, success_bar
+from src.core.operation.migration import BotMigrationRunnable, derive_plan_from_bot_config
+from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from src.ui.page.bot_page.utils.enum import ConnectType
 from src.ui.page.bot_page.widget import (
@@ -29,6 +31,7 @@ from src.ui.page.bot_page.widget import (
     WebsocketServerConfigDialog,
 )
 from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWidget, ConnectConfigWidget
+from src.ui.page.bot_page.widget.migration_dialog import MigrationDialog
 
 
 class ConfigPage(QWidget):
@@ -205,17 +208,164 @@ class ConfigPage(QWidget):
             ),
             log_source=LogSource.UI,
         )
+
+        # P3.W3.B: 检测 runtime_target 变化 -> 走迁移路径
+        old_target = (
+            self._config.bot.runtime_target if self._config is not None else RUNTIME_TARGET_LOCAL
+        )
+        new_target = merged_config.bot.runtime_target or RUNTIME_TARGET_LOCAL
+        if self._config is not None and old_target != new_target:
+            self._handle_target_migration(merged_config, old_target=old_target, new_target=new_target)
+            return
+
+        # 原路径: 直接保存 (未切换运行位置)
+        self._persist_config(merged_config)
+
+    # ==================== P3.W3.B: 运行位置迁移 ====================
+    def _handle_target_migration(
+        self,
+        merged_config: Config,
+        *,
+        old_target: str,
+        new_target: str,
+    ) -> None:
+        """弹 [`MigrationDialog`](src/ui/page/bot_page/widget/migration_dialog.py) 二次确认,
+        接受后顺序: 停旧 Bot → 立即写盘新 ``runtime_target`` → 后台搬运配置文件.
+
+        为什么是这个顺序 (P3.W3.B v2):
+        - **先写盘后搬运**: 用户点"确认迁移"后立刻在主线程持久化新 ``runtime_target``,
+          UI / bot 列表同步反映, 解决"看起来啥都没保存"的 bug
+          (旧实现把 update_config 放到 runnable 完成后的 lambda 回调里,
+           跨线程 + setAutoDelete 释放时机存在 GC race, 部分场景 lambda 不被回调)
+        - **失败语义**: 后台搬运失败时, ``bot.json`` 已经是新 target,
+          目标端可能缺 onebot11/napcat 文件; 用户重新点保存 (target 没变, 走原路径)
+          或回切再切 (走反向迁移) 都能恢复. 这是可接受的弱一致, 远好于"啥都没动"
+        """
+        qq_id = str(merged_config.bot.QQID)
+        source_label = self._format_target_label(old_target)
+        dest_label = self._format_target_label(new_target)
+
+        dialog = MigrationDialog(qq_id, source_label, dest_label, self.window())
+        if not dialog.exec():
+            error_bar(self.tr("已取消迁移; 本次修改未保存"))
+            logger.info(
+                f"用户取消运行位置迁移: qq_id={mask_qqid(qq_id)}, {old_target} -> {new_target}",
+                log_source=LogSource.UI,
+            )
+            return
+        move_data = dialog.get_move_persistent_data()
+
+        # 主线程: 停止源端如果在跑; 失败不阻断迁移
+        self._stop_bot_if_running_locally(qq_id)
+
+        # ① 立即写盘 + 刷新 UI: 让 bot 列表 / 当前页面同步反映新 target
+        if not self._persist_config(merged_config):
+            # _persist_config 内部已 error_bar, 这里仅日志补充
+            logger.warning(
+                f"迁移前持久化配置失败, 已中止迁移: qq_id={mask_qqid(qq_id)}",
+                log_source=LogSource.UI,
+            )
+            return
+
+        # ② 后台 runnable 搬运 NapCat 配置文件 (onebot11/napcat JSON)
+        plan = derive_plan_from_bot_config(
+            qq_id=qq_id,
+            old_target=old_target,
+            new_target=new_target,
+            move_persistent_data=move_data,
+        )
+        runnable = BotMigrationRunnable(plan)
+        # 把 signals 挂到 self 持有的属性, 防止 lambda + runnable.setAutoDelete(True)
+        # 触发的 GC race 把 finished slot 提前回收
+        self._migration_signals = runnable.signals
+        runnable.signals.progress.connect(self._on_migration_progress)
+        runnable.signals.finished.connect(self._on_migration_finished)
+        info_bar(self.tr(f"开始迁移: {source_label} → {dest_label}..."))
+        logger.info(
+            (
+                f"启动运行位置迁移 (配置已先行写盘): qq_id={mask_qqid(qq_id)}, "
+                f"{old_target} -> {new_target}, move_data={move_data}"
+            ),
+            log_source=LogSource.UI,
+        )
+        QThreadPool.globalInstance().start(runnable)
+
+    def _on_migration_progress(self, message: str, percent: int) -> None:
+        # 进度量轻, 在 UI 仅输出 trace 日志; 不弹频繁 InfoBar 避免骚扰
+        logger.trace(f"迁移进度 {percent}%: {message}", log_source=LogSource.UI)
+
+    def _on_migration_finished(self, ok: bool, message: str) -> None:
+        """搬运 runnable 收尾回调; ``bot.json`` 已在 dispatch 之前写盘, 这里只做提示."""
+        if ok:
+            success_bar(self.tr(f"迁移完成: {message}"))
+            logger.info(f"运行位置迁移成功: {message}", log_source=LogSource.UI)
+        else:
+            error_bar(
+                self.tr(
+                    f"迁移搬运失败 (配置已切换, 但目标端文件可能不全, 请重试): {message}"
+                )
+            )
+            logger.warning(f"运行位置迁移搬运失败: {message}", log_source=LogSource.UI)
+        # 释放对 signals 的强引用, 让 runnable 与 signals 进入正常 GC 路径
+        self._migration_signals = None
+
+    def _persist_config(self, merged_config: Config) -> bool:
+        """走 update_config 并刷新 UI; 被原 saving 路径与 P3.W3.B 迁移路径复用.
+
+        Returns:
+            ``True`` 表示本地 ``bot.json`` 写盘成功 (远端同步失败仍算成功);
+            ``False`` 表示本地写盘失败, 调用方应中止后续流程.
+        """
         if update_config(merged_config, base_config=merged_config, skip_merge=True):
-            # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
             it(BotPage).bot_list_page.update_bot_list()
             self.fill_config(merged_config)
-            logger.info(f"Bot 配置保存成功(QQID: {mask_qqid(merged_config.bot.QQID)})", log_source=LogSource.UI)
+            logger.info(
+                f"Bot 配置保存成功(QQID: {mask_qqid(merged_config.bot.QQID)})",
+                log_source=LogSource.UI,
+            )
             success_bar(self.tr("保存配置成功"))
-        else:
-            logger.error(f"Bot 配置保存失败(QQID: {mask_qqid(merged_config.bot.QQID)})", log_source=LogSource.UI)
-            error_bar(self.tr("保存配置文件时引发错误"))
+            return True
+        logger.error(
+            f"Bot 配置保存失败(QQID: {mask_qqid(merged_config.bot.QQID)})",
+            log_source=LogSource.UI,
+        )
+        error_bar(self.tr("保存配置文件时引发错误"))
+        return False
+
+    @staticmethod
+    def _format_target_label(target: str) -> str:
+        """把 ``runtime_target`` 转为人读名称; 远端尝试查 ServerProfile.name."""
+        if not target or target == RUNTIME_TARGET_LOCAL:
+            return "本地"
+        try:
+            from src.core.remote.server_manager import ServerManager
+
+            manager = it(ServerManager)
+            profile = manager.get_server(target)
+            if profile is not None:
+                return f"远端 [{profile.name}]"
+        except Exception:  # noqa: BLE001 - creart 不可用时退化到 server_id
+            pass
+        return f"远端 [{target}]"
+
+    def _stop_bot_if_running_locally(self, qq_id: str) -> None:
+        """迁移前尝试停源端 Bot (本地 / 远端均可); 任何异常仅 warning 不阻迁移.
+
+        [`ManagerNapCatQQProcess.stop_process`](src/core/runtime/napcat.py) 同时覆盖
+        本地 ``QProcess`` 与远端 SSH 分支, 调用是幂等的 (Bot 未在跑时静默成功).
+        """
+        try:
+            from src.core.runtime.napcat import ManagerNapCatQQProcess
+
+            manager = it(ManagerNapCatQQProcess)
+            manager.stop_process(qq_id)
+        except Exception as exc:  # noqa: BLE001 - 停 Bot 失败不应阻断迁移
+            logger.warning(
+                f"迁移前停 Bot 失败 (忽略): qq_id={mask_qqid(qq_id)}, exc={exc}",
+                log_source=LogSource.UI,
+            )
 
     def slot_add_connect_button(self) -> None:
         """添加连接配置按钮槽函数"""

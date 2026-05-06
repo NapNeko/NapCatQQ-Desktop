@@ -9,27 +9,30 @@ v2 = VS Code Remote 模型: 本地 UI 透明代理远端 NapCat Core,
 from __future__ import annotations
 
 from abc import ABC
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool, Signal
 from PySide6.QtWidgets import (
-    QFrame,
+    QFormLayout,
     QHBoxLayout,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
+    FlowLayout,
+    HeaderCardWidget,
+    InfoBadge,
     PrimaryPushButton,
     ProgressBar,
-    PushButton,
+    ScrollArea,
     StrongBodyLabel,
-    SubtitleLabel,
     TitleLabel,
+    ToolTipFilter,
+    TransparentPushButton,
+    TransparentToolButton,
     FluentIcon as FI,
 )
 
@@ -40,230 +43,247 @@ from src.ui.components.message_box import AskBox
 
 from .connection_tester import ConnectionTester
 from .deployment_console import DeploymentConsoleDialog
-from .deployment_runner import DeploymentRunner, RedetectRunner
+from .deployment_runner import DeploymentRunner, RedetectRunner, RollbackRunner
+from .maintenance_dialog import MaintenanceDialog, RollbackConfirmBox
 from .server_edit_dialog import ServerEditDialog
 
 if TYPE_CHECKING:
     from src.ui.window.main_window import MainWindow
 
 
-_DEPLOYMENT_LABEL = {
-    DeploymentState.UNDEPLOYED: ("未部署", "#8a8a8a"),
-    DeploymentState.DEPLOYING: ("部署中", "#0078d4"),
-    DeploymentState.DEPLOYED: ("已部署", "#107c10"),
-    DeploymentState.FAILED: ("部署失败", "#d83b01"),
+# 部署状态展示元数据: (文案, 语义等级 - 用于 InfoBadge / QSS 选择器)
+# 等级走 Fluent 语义色, 颜色由主题决定, 不再硬编码 hex.
+_DEPLOYMENT_META: dict[DeploymentState, tuple[str, str]] = {
+    DeploymentState.UNDEPLOYED: ("未部署", "info"),
+    DeploymentState.DEPLOYING: ("部署中", "attention"),
+    DeploymentState.DEPLOYED: ("已部署", "success"),
+    DeploymentState.FAILED: ("部署失败", "error"),
 }
 
 
-# ============================================================
-# 服务器卡片
-# ============================================================
-class ServerCard(QFrame):
-    """单台服务器的列表项。"""
+def _make_state_badge(state: DeploymentState, parent: QWidget | None = None) -> InfoBadge:
+    """根据部署状态创建 Fluent 语义化徽章。
 
-    def __init__(self, profile: ServerProfile, *, selected: bool = False, parent: QWidget | None = None) -> None:
+    颜色由 qfluentwidgets 主题色板决定, 自动适配深/浅色主题。
+    """
+    text, level = _DEPLOYMENT_META[state]
+    if level == "success":
+        return InfoBadge.success(text, parent=parent)
+    if level == "error":
+        return InfoBadge.error(text, parent=parent)
+    if level == "attention":
+        return InfoBadge.attension(text, parent=parent)  # qfluentwidgets API 拼写
+    return InfoBadge.info(text, parent=parent)
+
+
+# ============================================================
+# 服务器卡片 (自包含: 表单信息 + 头部动作 + 部署进度)
+# ============================================================
+class ServerCard(HeaderCardWidget):
+    """单台服务器的自包含管理卡片 (Fluent HeaderCardWidget).
+
+    布局原则 (按用户反馈对齐 v3):
+    - 所有动作按钮放置在 Header 顶栏, Body 区不含交互控件
+    - Body 用 QFormLayout 表单展示结构化信息 (主机 / 登录 / NapCat / LinuxQQ)
+    - 部署按钮在 DEPLOYED 状态隐藏 (context-aware)
+    - 维护操作 (刷新版本 / 强制更新 / 强制重装 / 回滚) 全部收纳在 [`MaintenanceDialog`]
+    - 部署进度条仅部署 / 强制更新 / 回滚 时可见
+
+    Header 布局: [title] [stretch] [InfoBadge] [test] [edit] [delete] [deploy] [maintenance]
+
+    所有动作通过 Qt 信号上抛给 [`RemotePage`], 卡片本身不做业务决策。
+    """
+
+    deploy_requested = Signal(str)        # server_id
+    test_requested = Signal(str)
+    edit_requested = Signal(str)
+    delete_requested = Signal(str)
+    maintenance_requested = Signal(str)   # 打开维护对话框
+
+    def __init__(self, profile: ServerProfile, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._profile = profile
-        self._selected = selected
+        self._state_badge: InfoBadge | None = None
         self.setObjectName("serverCard")
-        self.setProperty("selected", selected)
-        self.setMinimumHeight(72)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setTitle(profile.name)
         self._build_layout()
-        self._apply_style()
 
     @property
     def profile(self) -> ServerProfile:
         return self._profile
 
-    def set_selected(self, selected: bool) -> None:
-        self._selected = selected
-        self.setProperty("selected", selected)
-        self._apply_style()
+    @property
+    def server_id(self) -> str:
+        return self._profile.id
 
+    # ---------- 构建 ----------
     def _build_layout(self) -> None:
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(12)
+        """卡片内部布局.
 
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(2)
+        Header (从左到右):
+            title | stretch | InfoBadge(状态) | test | edit | delete | deploy | maintenance
 
-        self.name_label = StrongBodyLabel(self._profile.name, self)
-        info_layout.addWidget(self.name_label)
+        Body (QFormLayout 表单):
+            主机:    {host}:{port}
+            登录:    {user} (使用{私钥|密码})
+            NapCat:  {version|未探测}
+            LinuxQQ: {version|未探测}
+
+        Body 下方: ProgressBar + CaptionLabel (默认隐藏)
+        """
+        self.setFixedWidth(440)
+
+        # ---------------- Header 区: 状态徽章 + 动作按钮组 ----------------
+        self.headerLayout.addStretch()
+
+        self._state_badge = _make_state_badge(self._profile.deployment_state, parent=self)
+        self.headerLayout.addWidget(self._state_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.headerLayout.addSpacing(8)
+
+        # 通用工具按钮 (始终可见)
+        self.test_btn = TransparentToolButton(FI.GLOBE, self)
+        self.edit_btn = TransparentToolButton(FI.EDIT, self)
+        self.delete_btn = TransparentToolButton(FI.DELETE, self)
+        # 状态相关按钮 (动态显示/隐藏 by update_button_state)
+        self.deploy_btn = TransparentToolButton(FI.SEND, self)
+        self.maintenance_btn = TransparentToolButton(FI.SETTING, self)
+
+        self.test_btn.setToolTip(self.tr("测试 SSH 连接"))
+        self.edit_btn.setToolTip(self.tr("编辑服务器配置"))
+        self.delete_btn.setToolTip(self.tr("删除服务器"))
+        self.deploy_btn.setToolTip(self.tr("部署 NapCat"))
+        self.maintenance_btn.setToolTip(self.tr("维护 (刷新版本 / 强制更新 / 回滚)"))
+
+        for btn in (
+            self.test_btn,
+            self.edit_btn,
+            self.delete_btn,
+            self.deploy_btn,
+            self.maintenance_btn,
+        ):
+            btn.setFixedSize(30, 30)
+            btn.setToolTipDuration(1500)
+            btn.installEventFilter(ToolTipFilter(btn, showDelay=300))
+            self.headerLayout.addWidget(btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        # ---------------- Body 区: QFormLayout 结构化信息 ----------------
+        body_widget = QWidget(self)
+        body_widget.setObjectName("serverCardBody")
+
+        form = QFormLayout(body_widget)
+        form.setContentsMargins(20, 4, 20, 12)
+        form.setHorizontalSpacing(16)
+        form.setVerticalSpacing(8)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         cred = self._profile.credentials
-        endpoint = f"{cred.username}@{cred.host}:{cred.port}"
-        self.endpoint_label = CaptionLabel(endpoint, self)
-        info_layout.addWidget(self.endpoint_label)
+        auth_text = self.tr("私钥") if cred.auth_method == "key" else self.tr("密码")
 
-        layout.addLayout(info_layout, 1)
+        self.host_value = BodyLabel(f"{cred.host}:{cred.port}", self)
+        self.host_value.setObjectName("serverCardValue")
+        self.login_value = BodyLabel(f"{cred.username} ({auth_text})", self)
+        self.login_value.setObjectName("serverCardValue")
+        self.napcat_value = BodyLabel(self._format_version(self._profile.napcat_version), self)
+        self.napcat_value.setObjectName("serverCardValue")
+        self.qq_value = BodyLabel(self._format_version(self._profile.qq_version), self)
+        self.qq_value.setObjectName("serverCardValue")
 
-        state_text, state_color = _DEPLOYMENT_LABEL[self._profile.deployment_state]
-        self.state_label = CaptionLabel(state_text, self)
-        self.state_label.setStyleSheet(f"color: {state_color}; font-weight: 600;")
-        layout.addWidget(self.state_label)
+        form.addRow(self._make_label("主机"), self.host_value)
+        form.addRow(self._make_label("登录"), self.login_value)
+        form.addRow(self._make_label("NapCat"), self.napcat_value)
+        form.addRow(self._make_label("LinuxQQ"), self.qq_value)
 
-    def _apply_style(self) -> None:
-        if self._selected:
-            self.setStyleSheet(
-                """
-                #serverCard {
-                    background: rgba(0, 120, 212, 0.12);
-                    border: 1px solid rgba(0, 120, 212, 0.6);
-                    border-radius: 8px;
-                }
-                """
-            )
-        else:
-            self.setStyleSheet(
-                """
-                #serverCard {
-                    background: rgba(128, 128, 128, 0.05);
-                    border: 1px solid rgba(128, 128, 128, 0.15);
-                    border-radius: 8px;
-                }
-                #serverCard:hover {
-                    background: rgba(128, 128, 128, 0.10);
-                }
-                """
-            )
+        self.viewLayout.addWidget(body_widget, 1)
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt 重写
-        if event.button() == Qt.MouseButton.LeftButton:
-            page = self._find_page()
-            if page is not None:
-                page.select_server(self._profile.id)
-        super().mousePressEvent(event)
-
-    def _find_page(self) -> "RemotePage | None":
-        widget: QWidget | None = self.parentWidget()
-        while widget is not None:
-            if isinstance(widget, RemotePage):
-                return widget
-            widget = widget.parentWidget()
-        return None
-
-
-# ============================================================
-# 详情面板
-# ============================================================
-class ServerDetailPanel(QFrame):
-    """选中服务器的详情展示。"""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("detailPanel")
-        self.setStyleSheet(
-            """
-            #detailPanel {
-                background: rgba(128, 128, 128, 0.04);
-                border: 1px solid rgba(128, 128, 128, 0.12);
-                border-radius: 8px;
-            }
-            """
-        )
-        self._profile: ServerProfile | None = None
-        self._build_layout()
-        self.show_empty()
-
-    def _build_layout(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(10)
-
-        self.title_label = SubtitleLabel("服务器详情", self)
-        layout.addWidget(self.title_label)
-
-        self.empty_label = BodyLabel("尚未选中任何服务器", self)
-        self.empty_label.setStyleSheet("color: #8a8a8a;")
-        layout.addWidget(self.empty_label)
-
-        self.fields_widget = QWidget(self)
-        fields_layout = QVBoxLayout(self.fields_widget)
-        fields_layout.setContentsMargins(0, 0, 0, 0)
-        fields_layout.setSpacing(6)
-        self._field_labels: dict[str, BodyLabel] = {}
-        for key, caption in (
-            ("name", "名称"),
-            ("endpoint", "SSH 端点"),
-            ("auth", "认证方式"),
-            ("state", "部署状态"),
-            ("napcat_version", "NapCat 版本"),
-            ("qq_version", "QQ 版本"),
-            ("created_at", "创建时间"),
-            ("last_connected_at", "最近连接"),
-            ("notes", "备注"),
-        ):
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            cap = CaptionLabel(f"{caption}:", self.fields_widget)
-            cap.setFixedWidth(90)
-            cap.setStyleSheet("color: #8a8a8a;")
-            value = BodyLabel("--", self.fields_widget)
-            value.setWordWrap(True)
-            row.addWidget(cap, 0, Qt.AlignmentFlag.AlignTop)
-            row.addWidget(value, 1)
-            fields_layout.addLayout(row)
-            self._field_labels[key] = value
-
-        layout.addWidget(self.fields_widget)
-
-        # P1: 部署进度区
+        # ---------------- 部署进度区 (默认隐藏) ----------------
         self.progress_widget = QWidget(self)
-        progress_layout = QVBoxLayout(self.progress_widget)
-        progress_layout.setContentsMargins(0, 8, 0, 0)
-        progress_layout.setSpacing(4)
-        self.progress_title = StrongBodyLabel("部署进度", self.progress_widget)
+        self.progress_widget.setObjectName("serverCardProgress")
+        prog_lay = QVBoxLayout(self.progress_widget)
+        prog_lay.setContentsMargins(20, 0, 20, 12)
+        prog_lay.setSpacing(4)
         self.progress_bar = ProgressBar(self.progress_widget)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_message = CaptionLabel("", self.progress_widget)
-        self.progress_message.setStyleSheet("color: #8a8a8a;")
+        self.progress_message.setObjectName("serverCardProgressMessage")
         self.progress_message.setWordWrap(True)
-        progress_layout.addWidget(self.progress_title)
-        progress_layout.addWidget(self.progress_bar)
-        progress_layout.addWidget(self.progress_message)
-        layout.addWidget(self.progress_widget)
+        prog_lay.addWidget(self.progress_bar)
+        prog_lay.addWidget(self.progress_message)
+        self.viewLayout.addWidget(self.progress_widget)
         self.progress_widget.hide()
 
-        layout.addStretch()
-
-    def show_empty(self) -> None:
-        self._profile = None
-        self.empty_label.show()
-        self.fields_widget.hide()
-        self.progress_widget.hide()
-
-    def show_profile(self, profile: ServerProfile) -> None:
-        self._profile = profile
-        self.empty_label.hide()
-        self.fields_widget.show()
-
-        cred = profile.credentials
-        state_text, _ = _DEPLOYMENT_LABEL[profile.deployment_state]
-
-        self._field_labels["name"].setText(profile.name)
-        self._field_labels["endpoint"].setText(f"{cred.username}@{cred.host}:{cred.port}")
-        self._field_labels["auth"].setText("私钥" if cred.auth_method == "key" else "密码")
-        self._field_labels["state"].setText(state_text)
-        self._field_labels["napcat_version"].setText(profile.napcat_version or "未探测")
-        self._field_labels["qq_version"].setText(profile.qq_version or "未探测")
-        self._field_labels["created_at"].setText(self._format_timestamp(profile.created_at))
-        self._field_labels["last_connected_at"].setText(
-            self._format_timestamp(profile.last_connected_at) if profile.last_connected_at else "尚未连接"
-        )
-        self._field_labels["notes"].setText(profile.notes or "无")
+        # ---------------- 信号绑定 ----------------
+        sid = self._profile.id
+        self.deploy_btn.clicked.connect(lambda: self.deploy_requested.emit(sid))
+        self.test_btn.clicked.connect(lambda: self.test_requested.emit(sid))
+        self.edit_btn.clicked.connect(lambda: self.edit_requested.emit(sid))
+        self.delete_btn.clicked.connect(lambda: self.delete_requested.emit(sid))
+        self.maintenance_btn.clicked.connect(lambda: self.maintenance_requested.emit(sid))
 
     @staticmethod
-    def _format_timestamp(ts: float | None) -> str:
-        if not ts:
-            return "--"
-        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    def _make_label(text: str) -> StrongBodyLabel:
+        """表单左侧字段名 (粗体, 较暗色)."""
+        label = StrongBodyLabel(f"{text}")
+        label.setObjectName("serverCardFieldLabel")
+        return label
 
-    # ---------- P1: 部署进度 ----------
+    @staticmethod
+    def _format_version(version: str | None) -> str:
+        return version if version else "未探测"
+
+    # ---------- 公共 API: 由 RemotePage 调用 ----------
+    def update_profile(self, profile: ServerProfile) -> None:
+        """根据新 profile 刷新所有表单字段 (server_id 必须保持一致)。"""
+        self._profile = profile
+        self.setTitle(profile.name)
+        cred = profile.credentials
+        auth_text = self.tr("私钥") if cred.auth_method == "key" else self.tr("密码")
+        self.host_value.setText(f"{cred.host}:{cred.port}")
+        self.login_value.setText(f"{cred.username} ({auth_text})")
+        self.napcat_value.setText(self._format_version(profile.napcat_version))
+        self.qq_value.setText(self._format_version(profile.qq_version))
+        # 状态徽章重建 (InfoBadge level 不可热切换)
+        if self._state_badge is not None:
+            self.headerLayout.removeWidget(self._state_badge)
+            self._state_badge.setParent(None)
+            self._state_badge.deleteLater()
+        self._state_badge = _make_state_badge(profile.deployment_state, parent=self)
+        # 重建后插回到 stretch 之后, 工具按钮之前
+        # headerLayout 结构: [title] [stretch] [badge] [spacer] [tools...]
+        # removeWidget 不会重排 layout 中其他 item 的索引, 直接 insertWidget 在 stretch 之后即可
+        # 简化处理: 取 stretch 后第一个非 button 位置, 直接 addWidget 到末尾会破坏顺序
+        # 故采用 insertWidget(1) — index 0 是 title (由 HeaderCardWidget 管理),
+        # index 1 是 stretch, 我们插在 stretch 之后 (index 2 即 stretch 后)
+        self.headerLayout.insertWidget(2, self._state_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def update_button_state(self, *, is_deploying_self: bool) -> None:
+        """根据当前部署状态更新各按钮的 visible / enabled 标志.
+
+        规则:
+          - 部署进行时所有交互按钮禁用 (避免叠加触发)
+          - deploy_btn:      DEPLOYED 隐藏; UNDEPLOYED / FAILED / DEPLOYING 显示
+          - maintenance_btn: 始终显示, 仅 DEPLOYED / FAILED 时可点 (FAILED 用于回滚)
+        """
+        state = self._profile.deployment_state
+        not_busy = not is_deploying_self
+
+        # 通用按钮: 任何非 busy 状态都可用
+        self.test_btn.setEnabled(not_busy)
+        self.edit_btn.setEnabled(not_busy)
+        self.delete_btn.setEnabled(not_busy)
+
+        # 部署: DEPLOYED 隐藏 (没必要再显示)
+        self.deploy_btn.setVisible(state is not DeploymentState.DEPLOYED)
+        self.deploy_btn.setEnabled(not_busy)
+
+        # 维护: 始终可见, 但仅 DEPLOYED + FAILED 可用
+        # (FAILED 状态下用户仍可通过维护 -> 回滚 来清理失败残留)
+        self.maintenance_btn.setEnabled(
+            not_busy and state in (DeploymentState.DEPLOYED, DeploymentState.FAILED)
+        )
+
+    # ---------- 部署进度 ----------
     def show_progress(self, message: str, percent: int) -> None:
-        """显示部署进度。"""
         self.progress_widget.show()
         self.progress_bar.setValue(max(0, min(100, percent)))
         self.progress_message.setText(f"{percent}% — {message}" if message else f"{percent}%")
@@ -275,17 +295,27 @@ class ServerDetailPanel(QFrame):
 
 
 # ============================================================
-# 主页面
+# 主页面 - 单列卡片流
 # ============================================================
 class RemotePage(QWidget):
-    """远程服务器管理页面。"""
+    """远程服务器管理页面。
+
+    架构: 单列垂直滚动的 [`ServerCard`] 卡片流, 每张卡片自包含全部信息和操作。
+    去掉了 master-detail 双栏布局, 也无 “选中” 视觉概念。
+
+    历史兼容: 为保持 [`script.test.test_remote_page_actions`] 测试稳定,
+    本页保留 ``self._active_server_id`` 与 [`select_server`] 方法。卡片信号触发
+    `_on_xxx` 时会自动设置 ``_active_server_id``; 测试 / 程序内部以无参方式调用
+    `_on_xxx` 时会回退到该字段。
+    """
 
     def __init__(self) -> None:
         super().__init__()
-        self._selected_id: str | None = None
         self._cards: dict[str, ServerCard] = {}
         # P1.5: server_id -> 已打开的部署控制台 (避免对同一台服务器重复弹窗)
         self._consoles: dict[str, DeploymentConsoleDialog] = {}
+        # 兼容旧测试: 卡片信号触发 / select_server 时设置, 无参 _on_xxx 回退至此
+        self._active_server_id: str | None = None
 
     def initialize(self, parent: "MainWindow") -> "RemotePage":
         """页面初始化, 由主窗口在创建时调用。"""
@@ -313,68 +343,44 @@ class RemotePage(QWidget):
         root.addWidget(self.title_label)
         root.addWidget(self.subtitle_label)
 
+        # ---- 顶部工具栏: 仅 2 个全局动作 ----
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
         self.add_btn = PrimaryPushButton(FI.ADD, "添加服务器", self)
-        self.deploy_btn = PrimaryPushButton(FI.SEND, "部署", self)
-        self.edit_btn = PushButton(FI.EDIT, "编辑", self)
-        self.test_btn = PushButton(FI.GLOBE, "测试连接", self)
-        self.delete_btn = PushButton(FI.DELETE, "删除", self)
-        self.refresh_btn = PushButton(FI.SYNC, "刷新", self)
+        self.refresh_btn = TransparentPushButton(FI.SYNC, "刷新", self)
         toolbar.addWidget(self.add_btn)
-        toolbar.addWidget(self.deploy_btn)
-        toolbar.addWidget(self.edit_btn)
-        toolbar.addWidget(self.test_btn)
-        toolbar.addWidget(self.delete_btn)
         toolbar.addStretch()
         toolbar.addWidget(self.refresh_btn)
         root.addLayout(toolbar)
 
-        body = QHBoxLayout()
-        body.setSpacing(14)
+        # ---- 多列卡片流 (FlowLayout) ----
+        self._scroll = ScrollArea(self)
+        self._scroll.setObjectName("remoteScrollArea")
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(ScrollArea.Shape.NoFrame)
+        
+        self._list_inner = QWidget(self._scroll)
+        self._list_inner.setObjectName("listInnerWidget")
+        self._list_layout = FlowLayout(self._list_inner)
+        self._list_layout.setContentsMargins(0, 0, 4, 0)
+        self._list_layout.setSpacing(12)
+        
+        self._scroll.setWidget(self._list_inner)
+        root.addWidget(self._scroll, 1)
 
-        list_container = QFrame(self)
-        list_container.setObjectName("listContainer")
-        list_container.setMinimumWidth(340)
-        list_outer = QVBoxLayout(list_container)
-        list_outer.setContentsMargins(0, 0, 0, 0)
-
-        self._list_scroll = QScrollArea(list_container)
-        self._list_scroll.setWidgetResizable(True)
-        self._list_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-
-        self._list_inner = QWidget(self._list_scroll)
-        self._list_layout = QVBoxLayout(self._list_inner)
-        self._list_layout.setContentsMargins(0, 0, 0, 0)
-        self._list_layout.setSpacing(8)
-        self._list_layout.addStretch()
-        self._list_scroll.setWidget(self._list_inner)
-
-        list_outer.addWidget(self._list_scroll)
-        body.addWidget(list_container, 1)
-
-        self._detail_panel = ServerDetailPanel(self)
-        self._detail_panel.setMinimumWidth(360)
-        body.addWidget(self._detail_panel, 1)
-
-        root.addLayout(body, 1)
-
+        # 空态文案
         self._empty_label = BodyLabel(
-            "尚未添加任何服务器, 点击左上角 “添加服务器” 开始配置。",
-            self,
+            "尚未添加任何服务器, 点击 “添加服务器” 开始。", self
         )
+        self._empty_label.setObjectName("listEmptyLabel")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet("color: #8a8a8a; padding: 24px;")
-        self._list_layout.insertWidget(0, self._empty_label)
+        self._list_layout.addWidget(self._empty_label)
 
+        # ---- 信号 ----
         self.add_btn.clicked.connect(self._on_add)
-        self.deploy_btn.clicked.connect(self._on_deploy)
-        self.edit_btn.clicked.connect(self._on_edit)
-        self.test_btn.clicked.connect(self._on_test)
-        self.delete_btn.clicked.connect(self._on_delete)
         self.refresh_btn.clicked.connect(self._on_refresh)
 
-        self._update_button_state()
+        self._refresh_card_states()
 
     def _connect_manager_signals(self) -> None:
         manager = it(ServerManager)
@@ -391,6 +397,7 @@ class RemotePage(QWidget):
         manager = it(ServerManager)
         servers = manager.list_servers()
 
+        # 简单粗暴: 全删全建 (服务器一般 1-3 台, 重建成本可忽略)
         for card in self._cards.values():
             self._list_layout.removeWidget(card)
             card.deleteLater()
@@ -398,59 +405,58 @@ class RemotePage(QWidget):
 
         if not servers:
             self._empty_label.show()
-            self._selected_id = None
-            self._detail_panel.show_empty()
-            self._update_button_state()
+            self._refresh_card_states()
             return
 
         self._empty_label.hide()
         for index, profile in enumerate(servers):
-            card = ServerCard(profile, selected=(profile.id == self._selected_id), parent=self._list_inner)
+            card = self._create_card(profile)
             self._cards[profile.id] = card
             self._list_layout.insertWidget(index, card)
 
-        if self._selected_id not in self._cards:
-            self._selected_id = next(iter(self._cards.keys()))
-            self._cards[self._selected_id].set_selected(True)
+        self._refresh_card_states()
 
-        selected_profile = manager.get_server(self._selected_id) if self._selected_id else None
-        if selected_profile is not None:
-            self._detail_panel.show_profile(selected_profile)
-        else:
-            self._detail_panel.show_empty()
-        self._update_button_state()
+    def _create_card(self, profile: ServerProfile) -> ServerCard:
+        """创建单张卡片并把卡片信号路由到 RemotePage 的 _on_xxx 槽。"""
+        card = ServerCard(profile, parent=self._list_inner)
+        card.deploy_requested.connect(self._on_deploy)
+        card.test_requested.connect(self._on_test)
+        card.edit_requested.connect(self._on_edit)
+        card.delete_requested.connect(self._on_delete)
+        card.maintenance_requested.connect(self._on_open_maintenance)
+        return card
 
-    def select_server(self, server_id: str) -> None:
-        """由 [`ServerCard`](src/ui/page/remote_page/__init__.py) 点击时调用。"""
-        if server_id not in self._cards:
-            return
-        if self._selected_id and self._selected_id in self._cards:
-            self._cards[self._selected_id].set_selected(False)
-        self._selected_id = server_id
-        self._cards[server_id].set_selected(True)
-
+    def _refresh_card_states(self) -> None:
+        """根据当前 ServerManager 状态刷新所有卡片的按钮 enabled 标志。"""
         manager = it(ServerManager)
-        profile = manager.get_server(server_id)
-        if profile is not None:
-            self._detail_panel.show_profile(profile)
-        self._update_button_state()
-
-    def _update_button_state(self) -> None:
-        has_selection = self._selected_id is not None and self._selected_id in self._cards
-        manager = it(ServerManager)
-        is_deploying_selected = (
-            has_selection and self._selected_id is not None and manager.is_deploying(self._selected_id)
-        )
         any_deploying = bool(getattr(manager, "_deploying", set()))
-
-        self.edit_btn.setEnabled(has_selection and not is_deploying_selected)
-        self.test_btn.setEnabled(has_selection and not is_deploying_selected)
-        self.delete_btn.setEnabled(has_selection and not is_deploying_selected)
-        self.deploy_btn.setEnabled(has_selection and not is_deploying_selected)
-        # 部署进行时禁用添加, 防止干扰
+        # 部署进行时禁用 “添加”, 防止字典迭代受扰
         self.add_btn.setEnabled(not any_deploying)
+        for sid, card in self._cards.items():
+            card.update_button_state(is_deploying_self=manager.is_deploying(sid))
 
-    # ---------- 操作回调 ----------
+    # ---------- 兼容旧 API: 测试用 ----------
+    def select_server(self, server_id: str) -> None:
+        """[兼容旧测试] 把 server_id 设为 “活跃” 卡片。
+
+        新交互模型下用户直接点击各卡片的按钮; 本方法仅供测试 / 程序内部驱动。
+        """
+        if server_id in self._cards:
+            self._active_server_id = server_id
+        self._refresh_card_states()
+
+    # ---------- 内部: 解析 server_id ----------
+    def _resolve_sid(self, server_id: str | None) -> str | None:
+        """优先使用显式参数, 否则回退到 ``_active_server_id``; 同时记忆为 active."""
+        sid = server_id or self._active_server_id
+        if sid and sid in self._cards:
+            self._active_server_id = sid
+            return sid
+        return None
+
+    # ============================================================
+    # 操作回调 - 由卡片信号触发或测试代码直接调用
+    # ============================================================
     def _on_add(self) -> None:
         dialog = ServerEditDialog(self.window())
         if dialog.exec():
@@ -462,17 +468,18 @@ class RemotePage(QWidget):
                 return
             manager = it(ServerManager)
             manager.add_server(profile, password=password)
-            self._selected_id = profile.id
+            self._active_server_id = profile.id
             success_bar(f"已添加服务器: {profile.name}", parent=self)
 
-    def _on_edit(self) -> None:
-        if not self._selected_id:
+    def _on_edit(self, server_id: str | None = None) -> None:
+        sid = self._resolve_sid(server_id)
+        if not sid:
             return
         manager = it(ServerManager)
-        profile = manager.get_server(self._selected_id)
+        profile = manager.get_server(sid)
         if profile is None:
             return
-        existing_password = manager._password_cache.get(profile.id)  # noqa: SLF001 - 复用同包私有状态
+        existing_password = manager._password_cache.get(profile.id)  # noqa: SLF001
         dialog = ServerEditDialog(self.window(), profile=profile, existing_password=existing_password)
         if dialog.exec():
             try:
@@ -484,11 +491,12 @@ class RemotePage(QWidget):
             manager.update_server(updated, password=password)
             success_bar(f"已更新服务器: {updated.name}", parent=self)
 
-    def _on_test(self) -> None:
-        if not self._selected_id:
+    def _on_test(self, server_id: str | None = None) -> None:
+        sid = self._resolve_sid(server_id)
+        if not sid:
             return
         manager = it(ServerManager)
-        profile = manager.get_server(self._selected_id)
+        profile = manager.get_server(sid)
         if profile is None:
             return
         password = manager._password_cache.get(profile.id) if profile.credentials.auth_method == "password" else None  # noqa: SLF001
@@ -497,14 +505,16 @@ class RemotePage(QWidget):
             return
 
         info_bar(f"正在测试连接: {profile.credentials.host}", parent=self)
-        self.test_btn.setEnabled(False)
+        # 仅禁用本卡片的测试按钮, 防止重复点击
+        if sid in self._cards:
+            self._cards[sid].test_btn.setEnabled(False)
 
         tester = ConnectionTester(profile, password=password)
         tester.signals.finished.connect(self._on_test_finished)
         QThreadPool.globalInstance().start(tester)
 
     def _on_test_finished(self, server_id: str, ok: bool, message: str) -> None:
-        self._update_button_state()
+        self._refresh_card_states()
         manager = it(ServerManager)
         profile = manager.get_server(server_id)
         name = profile.name if profile is not None else server_id
@@ -518,12 +528,34 @@ class RemotePage(QWidget):
         else:
             error_bar(f"[{name}] {message}", parent=self)
 
-    # ---------- P1: 部署 ----------
-    def _on_deploy(self) -> None:
-        if not self._selected_id:
+    def _on_delete(self, server_id: str | None = None) -> None:
+        sid = self._resolve_sid(server_id)
+        if not sid:
             return
         manager = it(ServerManager)
-        profile = manager.get_server(self._selected_id)
+        profile = manager.get_server(sid)
+        if profile is None:
+            return
+
+        ask = AskBox(
+            "确认删除",
+            f"确定要删除服务器 “{profile.name}” 吗？\n该操作不会影响远端已部署的 NapCat。",
+            self.window(),
+        )
+        if ask.exec():
+            removed = manager.remove_server(profile.id)
+            if removed:
+                if self._active_server_id == profile.id:
+                    self._active_server_id = None
+                info_bar(f"已删除服务器: {profile.name}", parent=self)
+
+    # ---------- P1: 部署 ----------
+    def _on_deploy(self, server_id: str | None = None) -> None:
+        sid = self._resolve_sid(server_id)
+        if not sid:
+            return
+        manager = it(ServerManager)
+        profile = manager.get_server(sid)
         if profile is None:
             return
 
@@ -551,8 +583,9 @@ class RemotePage(QWidget):
                 return
 
         info_bar(f"[{profile.name}] 开始部署...", parent=self)
-        self._detail_panel.show_progress("准备部署", 0)
-        self._update_button_state()
+        if sid in self._cards:
+            self._cards[sid].show_progress("准备部署", 0)
+        self._refresh_card_states()
 
         # P1.5: 弹出独立的部署控制台
         self._open_or_focus_console(profile.id, profile.name)
@@ -565,13 +598,11 @@ class RemotePage(QWidget):
         """打开或前置 DeploymentConsoleDialog。"""
         existing = self._consoles.get(server_id)
         if existing is not None and existing.isVisible():
-            # 已有控制台窗口, 直接前置并返回
             existing.raise_()
             existing.activateWindow()
             return
 
         console = DeploymentConsoleDialog(server_id, server_name, parent=self.window())
-        # 用户手动关闭后从字典中移除, 释放引用
         console.destroyed.connect(lambda *_args, sid=server_id: self._consoles.pop(sid, None))
         self._consoles[server_id] = console
         console.show()
@@ -579,10 +610,9 @@ class RemotePage(QWidget):
         console.activateWindow()
 
     def _on_deployment_progress(self, server_id: str, message: str, percent: int) -> None:
-        # 仅在当前选中卡片对应的服务器上展示
-        if server_id != self._selected_id:
-            return
-        self._detail_panel.show_progress(message, percent)
+        # 直接定位到对应卡片展示进度 (不再受 “选中” 限制)
+        if server_id in self._cards:
+            self._cards[server_id].show_progress(message, percent)
 
     def _on_deployment_finished(self, server_id: str, ok: bool, message: str) -> None:
         manager = it(ServerManager)
@@ -593,21 +623,174 @@ class RemotePage(QWidget):
         else:
             error_bar(f"[{name}] {message}", parent=self)
 
-        if server_id == self._selected_id:
-            self._detail_panel.hide_progress()
-        self._update_button_state()
+        if server_id in self._cards:
+            self._cards[server_id].hide_progress()
+        self._refresh_card_states()
 
-    def _on_deployment_runner_finished(self, server_id: str) -> None:
+    def _on_deployment_runner_finished(self, server_id: str) -> None:  # noqa: ARG002
         # runner 收尾(已经由 deployment_finished 处理 UI), 这里仅做按钮状态保险刷新
-        if server_id == self._selected_id:
-            self._update_button_state()
+        self._refresh_card_states()
 
-    # ---------- 刷新: 重载列表 + 后台重新探测远端版本 ----------
-    def _on_refresh(self) -> None:
-        """刷新按钮: 重载 UI + 对所有已部署的服务器后台触发版本探测。
+    # ---------- P3.W2 (A): 单台刷新版本 / 强制更新 / 强制重装 ----------
+    def _on_redetect_versions_selected(self, server_id: str | None = None) -> None:
+        """对指定 (或当前活跃) 服务器后台探测版本, 不重跑安装脚本。"""
+        sid = self._resolve_sid(server_id)
+        if not sid:
+            return
+        manager = it(ServerManager)
+        profile = manager.get_server(sid)
+        if profile is None:
+            return
+        if manager.is_deploying(profile.id):
+            info_bar(f"[{profile.name}] 正在部署中, 请稍后重试", parent=self)
+            return
+        info_bar(f"[{profile.name}] 后台探测远端版本中...", parent=self)
+        runner = RedetectRunner(profile.id)
+        runner.signals.finished.connect(self._on_redetect_finished)
+        QThreadPool.globalInstance().start(runner)
 
-        目的: 部署完成时若版本未探测到 (历史 bug 或新装), 用户点刷新即可补全。
+    def _on_force_update_napcat(self, server_id: str | None = None) -> None:
+        """强制重跑 install_napcat 并传 force_update=True (DEPLOYED 状态可用)."""
+        self._start_force_deploy(
+            server_id=server_id,
+            label="强制更新 NapCat",
+            ask_message=(
+                "即将强制重新下载并解压远端 NapCat 安装包。\n\n"
+                "期间该服务器上运行中的 Bot 会被中断, 完成后需手动重启。\n是否继续？"
+            ),
+            force_napcat_update=True,
+            force_linuxqq_reinstall=False,
+        )
+
+    def _on_force_reinstall_linuxqq(self, server_id: str | None = None) -> None:
+        """强制重跑 install_linuxqq 并传 force_reinstall=True (比强制更新 NapCat 更重)."""
+        self._start_force_deploy(
+            server_id=server_id,
+            label="强制重装 LinuxQQ",
+            ask_message=(
+                "即将强制重新下载并重装远端 LinuxQQ。\n\n"
+                "该操作会项目中 NapCat 配置备份 → 删除旧 LinuxQQ → 重新安装,\n"
+                "耗时较长（依赖远端带宽）, 期间运行中的 Bot 会被中断。\n是否继续？"
+            ),
+            force_napcat_update=False,
+            force_linuxqq_reinstall=True,
+        )
+
+    def _start_force_deploy(
+        self,
+        *,
+        server_id: str | None,
+        label: str,
+        ask_message: str,
+        force_napcat_update: bool,
+        force_linuxqq_reinstall: bool,
+    ) -> None:
+        """`强制更新/重装` 的公用路径: 二次确认 + 弹控制台 + 丢给 [`DeploymentRunner`]."""
+        sid = self._resolve_sid(server_id)
+        if not sid:
+            return
+        manager = it(ServerManager)
+        profile = manager.get_server(sid)
+        if profile is None:
+            return
+        if manager.is_deploying(profile.id):
+            info_bar(f"[{profile.name}] 正在部署中, 请稍后重试", parent=self)
+            return
+        if profile.credentials.auth_method == "password":
+            password = manager._password_cache.get(profile.id)  # noqa: SLF001
+            if not password:
+                error_bar("密码认证模式下未保存密码, 请先编辑并填写密码", parent=self)
+                return
+
+        ask = AskBox(f"确认{label}", ask_message, self.window())
+        if not ask.exec():
+            return
+
+        info_bar(f"[{profile.name}] {label}中...", parent=self)
+        if sid in self._cards:
+            self._cards[sid].show_progress(f"准备{label}", 0)
+        self._refresh_card_states()
+        self._open_or_focus_console(profile.id, profile.name)
+
+        runner = DeploymentRunner(
+            profile.id,
+            force_napcat_update=force_napcat_update,
+            force_linuxqq_reinstall=force_linuxqq_reinstall,
+        )
+        runner.signals.finished.connect(self._on_deployment_runner_finished)
+        QThreadPool.globalInstance().start(runner)
+
+    # ---------- P3.W2: 维护对话框入口 ----------
+    def _on_open_maintenance(self, server_id: str | None = None) -> None:
+        """打开 [`MaintenanceDialog`] 让用户选择维护操作.
+
+        所有维护操作 (刷新版本 / 强制更新 / 强制重装 / 回滚) 现在均通过此对话框访问,
+        不再在卡片上散落多个按钮.
         """
+        sid = self._resolve_sid(server_id)
+        if not sid:
+            return
+        manager = it(ServerManager)
+        profile = manager.get_server(sid)
+        if profile is None:
+            return
+        # 部署进行中拦截
+        if manager.is_deploying(sid):
+            error_bar(self.tr("该服务器正在部署中, 请稍后再试"), parent=self)
+            return
+
+        dialog = MaintenanceDialog(profile, parent=self.window())
+        # 路由对话框选择 -> 既有 _on_xxx 方法 (内部仍走二次确认 + Runner)
+        dialog.redetect_clicked.connect(lambda: self._on_redetect_versions_selected(sid))
+        dialog.force_update_napcat_clicked.connect(lambda: self._on_force_update_napcat(sid))
+        dialog.force_reinstall_linuxqq_clicked.connect(
+            lambda: self._on_force_reinstall_linuxqq(sid)
+        )
+        dialog.rollback_clicked.connect(lambda: self._on_rollback(sid))
+        dialog.exec()
+
+    # ---------- P3.W2 (F): 回滚部署 ----------
+    def _on_rollback(self, server_id: str | None = None) -> None:
+        """手动触发远端部署回滚; 必须二次确认 + 选择 ``include_qq``."""
+        sid = self._resolve_sid(server_id)
+        if not sid:
+            return
+        manager = it(ServerManager)
+        profile = manager.get_server(sid)
+        if profile is None:
+            return
+        if manager.is_deploying(profile.id):
+            info_bar(f"[{profile.name}] 正在部署/回滚中, 请等待完成", parent=self)
+            return
+        if profile.credentials.auth_method == "password":
+            password = manager._password_cache.get(profile.id)  # noqa: SLF001
+            if not password:
+                error_bar("密码认证模式下未保存密码, 请先编辑并填写密码", parent=self)
+                return
+
+        dialog = RollbackConfirmBox(profile.name, self.window())
+        if not dialog.exec():
+            return
+        include_qq = dialog.get_include_qq()
+
+        info_bar(f"[{profile.name}] 开始回滚...", parent=self)
+        if sid in self._cards:
+            self._cards[sid].show_progress("准备回滚", 0)
+        self._refresh_card_states()
+        self._open_or_focus_console(profile.id, profile.name)
+
+        runner = RollbackRunner(profile.id, include_qq=include_qq)
+        runner.signals.finished.connect(self._on_rollback_finished)
+        QThreadPool.globalInstance().start(runner)
+
+    def _on_rollback_finished(self, server_id: str, ok: bool, message: str) -> None:  # noqa: ARG002
+        """[`RollbackRunner`] 完结回调; 业务消息已由 deployment_finished 走 info/error bar."""
+        self._refresh_card_states()
+        _ = ok, message  # noqa: F841
+
+    # ---------- 刷新: 重载列表 + 后台批量探测版本 ----------
+    def _on_refresh(self) -> None:
+        """刷新按钮: 重载 UI + 对所有已部署的服务器后台触发版本探测。"""
         self._reload()
         manager = it(ServerManager)
         triggered: list[str] = []
@@ -646,25 +829,6 @@ class RemotePage(QWidget):
             f"QQ={qq_version or '未探测到'}",
             parent=self,
         )
-
-    def _on_delete(self) -> None:
-        if not self._selected_id:
-            return
-        manager = it(ServerManager)
-        profile = manager.get_server(self._selected_id)
-        if profile is None:
-            return
-
-        ask = AskBox(
-            "确认删除",
-            f"确定要删除服务器 “{profile.name}” 吗？\n该操作不会影响远端已部署的 NapCat。",
-            self.window(),
-        )
-        if ask.exec():
-            removed = manager.remove_server(profile.id)
-            if removed:
-                self._selected_id = None
-                info_bar(f"已删除服务器: {profile.name}", parent=self)
 
 
 class RemotePageCreator(AbstractCreator, ABC):
