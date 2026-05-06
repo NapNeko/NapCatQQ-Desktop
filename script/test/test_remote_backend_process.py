@@ -272,6 +272,88 @@ class TestGetProcessStatus:
         assert status.pid is None
 
 
+# ==================== 内存监控 (P3 perf 修复) ====================
+class TestFetchRssBytes:
+    """回归: 远端内存监控必须走整个进程子树, 与本地 psutil 路径对齐.
+
+    之前实现仅 ``ps -o rss= -p <pid>``, 在 ``xvfb-run`` shell wrapper 上只会拿到
+    ~1 MB, BotCard 上显示 "1 MB / 16112 MB" — 这正是该测试要防回归的现象.
+    """
+
+    @staticmethod
+    def _ps_tree_stdout() -> str:
+        """模拟 ``ps -e -o pid=,ppid=,rss=`` 输出.
+
+        进程树:
+          1   0      4096        # init
+          100 1      1024        # /bin/sh xvfb-run wrapper (历史 bug 报告的"1MB"来源)
+          200 100    524288      # qq Electron main (~512 MB)
+          201 200    131072      # gpu-process (~128 MB)
+          202 200    262144      # renderer (~256 MB)
+          300 1      8192        # 不相关进程, 不应被计入
+        """
+        return (
+            "    1     0     4096\n"
+            "  100     1     1024\n"
+            "  200   100   524288\n"
+            "  201   200   131072\n"
+            "  202   200   262144\n"
+            "  300     1     8192\n"
+        )
+
+    def test_walks_entire_descendant_tree_from_shell_wrapper(self, backend: RemoteBackend) -> None:
+        """pgrep 命中 shell wrapper(pid=100) 时, 必须累加 100/200/201/202 全部 RSS."""
+        backend._exec_backend.canned.append(  # type: ignore[attr-defined]
+            RemoteCommandResult(command="ps", exit_status=0, stdout=self._ps_tree_stdout())
+        )
+
+        rss = backend._fetch_rss_bytes(100)  # type: ignore[attr-defined]
+        # 1024 + 524288 + 131072 + 262144 = 918528 KiB
+        assert rss == 918528 * 1024
+
+    def test_walks_entire_descendant_tree_from_electron_main(self, backend: RemoteBackend) -> None:
+        """pgrep 命中 Electron main(pid=200) 时, 仍要把 helper(201/202) 一起算上,
+        否则现代 NapCat (Electron) 的 GPU/renderer 内存会被漏报.
+        """
+        backend._exec_backend.canned.append(  # type: ignore[attr-defined]
+            RemoteCommandResult(command="ps", exit_status=0, stdout=self._ps_tree_stdout())
+        )
+
+        rss = backend._fetch_rss_bytes(200)  # type: ignore[attr-defined]
+        # 524288 + 131072 + 262144 = 917504 KiB (不含 wrapper 的 1024)
+        assert rss == 917504 * 1024
+
+    def test_uses_single_ps_call(self, backend: RemoteBackend) -> None:
+        """实现必须只发一条 SSH 命令, 而不是对每个 pid 单独 ps; 否则 N 进程就有 N+1 次 RTT."""
+        backend._exec_backend.canned.append(  # type: ignore[attr-defined]
+            RemoteCommandResult(command="ps", exit_status=0, stdout=self._ps_tree_stdout())
+        )
+
+        backend._fetch_rss_bytes(100)  # type: ignore[attr-defined]
+
+        history = backend._exec_backend.history  # type: ignore[attr-defined]
+        assert len(history) == 1
+        cmd, _ = history[0]
+        # 必须按 PPID 拉到, 不允许退化为 -p <pid> 单进程查询
+        assert "-o pid=" in cmd and "ppid=" in cmd and "rss=" in cmd
+        assert " -p " not in cmd
+
+    def test_returns_none_when_pid_not_in_ps_output(self, backend: RemoteBackend) -> None:
+        """进程已退出 -> ps 输出里找不到 -> 返回 None (上层视为未知, 不当 0)."""
+        backend._exec_backend.canned.append(  # type: ignore[attr-defined]
+            RemoteCommandResult(command="ps", exit_status=0, stdout=self._ps_tree_stdout())
+        )
+
+        assert backend._fetch_rss_bytes(99999) is None  # type: ignore[attr-defined]
+
+    def test_returns_none_when_ps_fails(self, backend: RemoteBackend) -> None:
+        backend._exec_backend.canned.append(  # type: ignore[attr-defined]
+            RemoteCommandResult(command="ps", exit_status=1, stdout="", stderr="ps: not found")
+        )
+
+        assert backend._fetch_rss_bytes(100) is None  # type: ignore[attr-defined]
+
+
 # ==================== 配置同步 (P2.4) ====================
 class TestRuntimeConfigSync:
     def test_write_bot_runtime_config_uploads_two_json_files(
