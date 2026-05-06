@@ -25,6 +25,7 @@ from PySide6.QtCore import QObject, Signal
 
 from src.core.logging import LogSource, LogType, logger
 
+from .credential_store import CredentialStore
 from .errors import RemoteDeploymentError, RemoteDeploymentInProgressError, RemoteError
 from .models import SSHCredentials
 from .servers import DeploymentState, ServerProfile, ServerRegistry
@@ -85,7 +86,13 @@ class ServerManager(QObject):
     # P1.5: 部署期间每行远端 stdout(含合并的 stderr) 实时回显
     deployment_log = Signal(str, str)  # (server_id, line)
 
-    def __init__(self, storage_path: str | Path | None = None, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        storage_path: str | Path | None = None,
+        parent: QObject | None = None,
+        *,
+        credential_store: CredentialStore | None = None,
+    ) -> None:
         super().__init__(parent)
         path = Path(storage_path) if storage_path is not None else _default_storage_path()
         had_storage_file = path.exists()
@@ -96,10 +103,17 @@ class ServerManager(QObject):
         self._backend_cache: dict[str, "RemoteBackend"] = {}
         # P1: 服务器 ID -> 是否正在部署(防并发)
         self._deploying: set[str] = set()
+        # P4 F5.2: keyring 包装; 缺省构造一个; 测试可注入自己的实例
+        self._credential_store: CredentialStore = credential_store if credential_store is not None else CredentialStore()
 
         # 仅在首次启动(磁盘上无 servers.json)时尝试迁移旧版单服务器配置
         if not had_storage_file:
             self._migrate_legacy_single_server_config()
+
+        # P4 F5.2: 启动时把 keyring 已记的密码预加载到内存缓存,
+        # 让 ``test_connection`` / ``get_backend`` 不必每次都问 keyring (减少 IO).
+        # keyring 不可用时 (非 Windows / 用户禁用 Credential Manager) 静默跳过.
+        self._preload_passwords_from_keyring()
 
     # ==================== 仓库直通 ====================
     @property
@@ -117,11 +131,27 @@ class ServerManager(QObject):
         return self._registry.get(server_id)
 
     # ==================== CRUD ====================
-    def add_server(self, profile: ServerProfile, *, password: str | None = None) -> None:
-        """添加新服务器档案; 若是密码认证, 调用方应同时传入 password 暂存到内存。"""
+    def add_server(
+        self,
+        profile: ServerProfile,
+        *,
+        password: str | None = None,
+        remember_password: bool = False,
+    ) -> None:
+        """添加新服务器档案; 若是密码认证, 调用方应同时传入 password 暂存到内存。
+
+        Args:
+            profile: 新档案 (id 由调用方生成).
+            password: 密码认证模式下的密码; 缺省 None.
+            remember_password: P4 F5.2: 设为 True 时把密码写入 Windows Credential
+                Manager (keyring), 重启 Desktop 后仍可用. 仅当 ``auth_method=="password"``
+                + keyring 可用时实际生效, 其他情况静默忽略.
+        """
         self._registry.add(profile)
         if password and profile.credentials.auth_method == "password":
             self._password_cache[profile.id] = password
+            if remember_password:
+                self._persist_password_to_keyring(profile.id, password)
         logger.info(
             f"已新增服务器档案: id={profile.id}, name={profile.name}, host={profile.credentials.host}",
             LogType.NETWORK,
@@ -129,8 +159,22 @@ class ServerManager(QObject):
         )
         self.server_added.emit(profile.id)
 
-    def update_server(self, profile: ServerProfile, *, password: str | None = None) -> None:
-        """覆盖现有档案, 同时失效 backend 缓存; 密码可选更新。"""
+    def update_server(
+        self,
+        profile: ServerProfile,
+        *,
+        password: str | None = None,
+        remember_password: bool | None = None,
+    ) -> None:
+        """覆盖现有档案, 同时失效 backend 缓存; 密码可选更新.
+
+        Args:
+            password: 新密码; 传 None 表示不修改, 传 ``""`` 视为清除.
+            remember_password: P4 F5.2: 三态:
+                - ``True``: 写入 keyring (要求 password 非空 + 密码模式)
+                - ``False``: 显式从 keyring 删除
+                - ``None``: 不动 keyring, 与 P3 行为一致
+        """
         self._registry.update(profile)
         self._backend_cache.pop(profile.id, None)
         if password is not None:
@@ -138,6 +182,11 @@ class ServerManager(QObject):
                 self._password_cache[profile.id] = password
             else:
                 self._password_cache.pop(profile.id, None)
+
+        if remember_password is True and password and profile.credentials.auth_method == "password":
+            self._persist_password_to_keyring(profile.id, password)
+        elif remember_password is False:
+            self._delete_password_from_keyring(profile.id)
         logger.info(
             f"已更新服务器档案: id={profile.id}, name={profile.name}, host={profile.credentials.host}",
             LogType.NETWORK,
@@ -146,7 +195,7 @@ class ServerManager(QObject):
         self.server_updated.emit(profile.id)
 
     def remove_server(self, server_id: str) -> bool:
-        """删除档案与所有关联缓存。"""
+        """删除档案与所有关联缓存 (含 keyring 中的密码)."""
         ok = self._registry.remove(server_id)
         if ok:
             self._password_cache.pop(server_id, None)
@@ -156,9 +205,63 @@ class ServerManager(QObject):
                     backend.close()
                 except Exception:  # noqa: BLE001
                     pass
+            # P4 F5.2: 同步清理 keyring, 避免遗留条目
+            self._delete_password_from_keyring(server_id)
             logger.info(f"已删除服务器档案: id={server_id}", LogType.NETWORK, LogSource.CORE)
             self.server_removed.emit(server_id)
         return ok
+
+    # ==================== keyring 集成 (P4 F5.2) ====================
+    def credential_store(self) -> CredentialStore:
+        """返回内部 ``CredentialStore`` (主要供 ServerEditDialog 探测可用性)."""
+        return self._credential_store
+
+    def has_remembered_password(self, server_id: str) -> bool:
+        """server_id 在 keyring 中是否有持久化的密码."""
+        if not self._credential_store.is_available():
+            return False
+        return self._credential_store.load_password(server_id) is not None
+
+    def _preload_passwords_from_keyring(self) -> None:
+        """启动时把 keyring 中所有已知服务器的密码预加载到内存缓存."""
+        if not self._credential_store.is_available():
+            return
+        for profile in self._registry.list():
+            if profile.credentials.auth_method != "password":
+                continue
+            stored = self._credential_store.load_password(profile.id)
+            if stored:
+                self._password_cache[profile.id] = stored
+                logger.trace(
+                    f"已从 keyring 预加载密码: id={profile.id}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+
+    def _persist_password_to_keyring(self, server_id: str, password: str) -> bool:
+        """把密码写入 keyring; 失败时记录但不抛."""
+        if not self._credential_store.is_available():
+            return False
+        ok = self._credential_store.store_password(server_id, password)
+        if ok:
+            logger.info(
+                f"已把密码持久化到 keyring: id={server_id}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+        else:
+            logger.warning(
+                f"keyring 写入失败 (降级为仅内存缓存): id={server_id}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+        return ok
+
+    def _delete_password_from_keyring(self, server_id: str) -> None:
+        """从 keyring 删除密码; 不存在条目走 idempotent 成功路径."""
+        if not self._credential_store.is_available():
+            return
+        self._credential_store.delete_password(server_id)
 
     def set_deployment_state(self, server_id: str, state: DeploymentState) -> None:
         """更新指定服务器的部署状态并持久化。"""
@@ -229,6 +332,10 @@ class ServerManager(QObject):
                 return False, "密码认证模式下必须提供密码"
             cred = replace(cred, password=effective_password)
 
+        # P4 F5.4: 失败路径走 ``to_friendly`` 把 paramiko / SSH 异常转中文文案,
+        # 避免 ``AuthenticationException`` 这类原始字眼直接出现在用户 InfoBar.
+        from .friendly_errors import to_friendly
+
         client = SSHClient(cred)
         try:
             client.connect()
@@ -237,9 +344,9 @@ class ServerManager(QObject):
             finally:
                 client.close()
         except RemoteError as exc:
-            return False, str(exc)
-        except Exception as exc:  # noqa: BLE001 - 测试场景需要给用户清晰反馈
-            return False, f"连接失败: {exc}"
+            return False, to_friendly(exc)
+        except Exception as exc:  # noqa: BLE001 - 任何意外异常都要给用户友好反馈
+            return False, to_friendly(exc)
 
         if not result.ok:
             return False, f"远端命令返回非零状态: {result.stderr or result.stdout}"
