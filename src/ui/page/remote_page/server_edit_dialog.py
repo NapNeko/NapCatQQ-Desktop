@@ -3,6 +3,12 @@
 
 基于 [`MessageBoxBase`](https://qfluentwidgets.com/) 实现, 校验 SSH 字段,
 返回新的 [`ServerProfile`](src/core/remote/servers.py) 与可选密码。
+
+UI 组织 (v2 统一表单布局):
+- 顶部: 标题 + 描述
+- 3 个分组 (基本信息 / 认证方式 / 高级选项), 每组内部使用 [`QFormLayout`] 统一标签列宽与右对齐
+- 认证方式行根据下拉选择动态显示 "私钥文件+浏览+扫描快捷" 或 "登录密码"
+- 错误提示在对话框底部作为 CaptionLabel 出现
 """
 
 from __future__ import annotations
@@ -10,8 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QDir
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtCore import QDir, Qt
+from PySide6.QtWidgets import QFileDialog, QFormLayout, QHBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -21,6 +27,7 @@ from qfluentwidgets import (
     StrongBodyLabel,
     SubtitleLabel,
     ToolButton,
+    ToolTipFilter,
     FluentIcon as FI,
 )
 
@@ -43,6 +50,9 @@ class ServerEditDialog(MessageBoxBase):
     与 [`get_password`](src/ui/page/remote_page/server_edit_dialog.py) 取回结果。
     """
 
+    # 表单标签列的统一宽度: 让三个分组的标签列纵向对齐
+    _LABEL_COLUMN_WIDTH = 92
+
     def __init__(
         self,
         parent: QWidget,
@@ -52,181 +62,204 @@ class ServerEditDialog(MessageBoxBase):
     ) -> None:
         super().__init__(parent=parent)
         self._original_profile = profile
+        # 认证分组的 form 引用, 用于 setRowVisible 切换认证方式
+        self._auth_form: QFormLayout | None = None
+        self._auth_row_key: int = -1
+        self._auth_row_pwd: int = -1
+        # 私钥输入模式: False = 下拉扫描候选 combo; True = 手动路径 LineEdit
+        self._key_manual_mode: bool = False
+
         self._setup_ui()
         self._connect_signals()
         self._load_from_profile(profile, existing_password)
-        self.widget.setMinimumSize(520, 540)
+        self.widget.setMinimumSize(560, 560)
 
     # ==================== UI 构建 ====================
     def _setup_ui(self) -> None:
         title_text = "编辑服务器" if self._original_profile is not None else "添加服务器"
         self.title_label = SubtitleLabel(title_text, self)
         self.caption_label = CaptionLabel("配置远程 Linux 服务器的 SSH 接入信息", self)
+        self.caption_label.setObjectName("serverEditCaption")
         self.viewLayout.addWidget(self.title_label)
         self.viewLayout.addWidget(self.caption_label)
+        self.viewLayout.addSpacing(2)
 
-        # ---------- 基本信息 ----------
-        basic_block = self._create_section("基本信息")
-        basic_layout: QVBoxLayout = basic_block.layout()  # type: ignore[assignment]
+        # ---------------- 基本信息 ----------------
+        basic_form = self._add_section("基本信息")
 
-        self.name_edit = LineEdit(basic_block)
-        self.name_edit.setPlaceholderText("服务器显示名（如：腾讯云-香港）")
-        basic_layout.addLayout(self._row("名称:", self.name_edit, label_width=50))
+        self.name_edit = LineEdit(self)
+        self.name_edit.setPlaceholderText("服务器显示名 (如: 腾讯云-香港)")
 
-        self.host_edit = LineEdit(basic_block)
-        self.host_edit.setPlaceholderText("192.168.1.100")
-        self.port_edit = LineEdit(basic_block)
+        # 主机 + 端口 合成为单行 (host 占主, port 固定窄)
+        host_port_widget = QWidget(self)
+        host_port_row = QHBoxLayout(host_port_widget)
+        host_port_row.setContentsMargins(0, 0, 0, 0)
+        host_port_row.setSpacing(8)
+        self.host_edit = LineEdit(host_port_widget)
+        self.host_edit.setPlaceholderText("192.168.1.100 或 domain.example.com")
+        self.port_edit = LineEdit(host_port_widget)
         self.port_edit.setText("22")
-        self.port_edit.setFixedWidth(80)
-        host_row = QHBoxLayout()
-        host_row.setSpacing(10)
-        host_row.addLayout(self._row("主机:", self.host_edit, label_width=50), 3)
-        host_row.addLayout(self._row("端口:", self.port_edit, label_width=40), 1)
-        basic_layout.addLayout(host_row)
+        self.port_edit.setFixedWidth(72)
+        self.port_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        port_label = BodyLabel(":", host_port_widget)
+        host_port_row.addWidget(self.host_edit, 1)
+        host_port_row.addWidget(port_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        host_port_row.addWidget(self.port_edit, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self.username_edit = LineEdit(basic_block)
+        self.username_edit = LineEdit(self)
         self.username_edit.setPlaceholderText("root / ubuntu")
-        basic_layout.addLayout(self._row("用户名:", self.username_edit, label_width=50))
 
-        self.viewLayout.addWidget(basic_block)
+        basic_form.addRow(self._make_label("名称"), self.name_edit)
+        basic_form.addRow(self._make_label("主机 / 端口"), host_port_widget)
+        basic_form.addRow(self._make_label("用户名"), self.username_edit)
 
-        # ---------- 认证 ----------
-        auth_block = self._create_section("认证方式")
-        auth_layout: QVBoxLayout = auth_block.layout()  # type: ignore[assignment]
+        # ---------------- 认证方式 ----------------
+        auth_form = self._add_section("认证方式")
+        self._auth_form = auth_form
 
-        self.method_combo = ComboBox(auth_block)
+        self.method_combo = ComboBox(self)
         self.method_combo.addItem("私钥", userData="key")
         self.method_combo.addItem("密码", userData="password")
-        self.method_combo.setFixedWidth(120)
-        method_container = QHBoxLayout()
-        method_container.addWidget(BodyLabel("方式:", auth_block))
-        method_container.addWidget(self.method_combo)
-        method_container.addStretch()
-        auth_layout.addLayout(method_container)
+        self.method_combo.setFixedWidth(140)
 
-        # 私钥: LineEdit (主要输入) + 扫描候选下拉 (快捷选择) + 浏览按钮
-        # 不使用 EditableComboBox: 其多重继承 (LineEdit + ComboBoxBase) 行为太难推断。
-        self.key_widget = QWidget(auth_block)
-        key_row = QHBoxLayout(self.key_widget)
-        key_row.setContentsMargins(0, 0, 0, 0)
-        key_row.setSpacing(6)
-
-        self.key_edit = LineEdit(self.key_widget)
-        self.key_edit.setClearButtonEnabled(True)
-
+        # 私钥行: 自适应 (有扫描结果 → 下拉; 手动浏览后 → 输入框) + 浏览/返回按钮
         scanned_keys = scan_local_ssh_keys()
         self._scanned_keys: tuple[str, ...] = tuple(scanned_keys)
 
-        if scanned_keys:
-            self.key_edit.setText(scanned_keys[0])
-            self.key_edit.setPlaceholderText("已默认填入优先密钥, 可手动修改")
-        else:
-            self.key_edit.setPlaceholderText("~/.ssh/id_rsa（未扫描到本地密钥, 请手输或浏览）")
+        key_widget = QWidget(self)
+        key_row = QHBoxLayout(key_widget)
+        key_row.setContentsMargins(0, 0, 0, 0)
+        key_row.setSpacing(6)
 
-        self.key_scan_combo = ComboBox(self.key_widget)
-        self.key_scan_combo.setFixedWidth(120)
-        self.key_scan_combo.setToolTip("从本地扫描到的 SSH 私钥快捷选择")
-        if scanned_keys:
-            for path in scanned_keys:
-                self.key_scan_combo.addItem(Path(path).name, userData=path)
-            self.key_scan_combo.currentIndexChanged.connect(self._on_scan_combo_changed)
-        else:
-            self.key_scan_combo.addItem("(无扫描结果)")
-            self.key_scan_combo.setEnabled(False)
+        # 扫描候选下拉 (combo 模式)
+        self.key_combo = ComboBox(key_widget)
+        self.key_combo.setToolTip("本地扫描到的 SSH 私钥, 点选即用")
+        for path in scanned_keys:
+            self.key_combo.addItem(Path(path).name, userData=path)
 
-        self.key_browse_btn = ToolButton(FI.FOLDER, self.key_widget)
+        # 手动路径 (manual 模式)
+        self.key_edit = LineEdit(key_widget)
+        self.key_edit.setClearButtonEnabled(True)
+        self.key_edit.setPlaceholderText("~/.ssh/id_rsa")
+
+        # 浏览按钮 (任何模式都可点, 用于切到 manual 模式或重新选择)
+        self.key_browse_btn = ToolButton(FI.FOLDER, key_widget)
         self.key_browse_btn.setFixedSize(32, 32)
-        self.key_browse_btn.setToolTip("浏览选择其他位置的私钥文件")
+        self.key_browse_btn.setToolTip("手动选择私钥文件")
+        self.key_browse_btn.setToolTipDuration(1500)
+        self.key_browse_btn.installEventFilter(ToolTipFilter(self.key_browse_btn, showDelay=300))
 
-        key_row.addWidget(BodyLabel("私钥:", self.key_widget))
+        # 返回扫描候选按钮 (仅 manual 模式且存在扫描结果时可见)
+        self.key_scan_btn = ToolButton(FI.HISTORY, key_widget)
+        self.key_scan_btn.setFixedSize(32, 32)
+        self.key_scan_btn.setToolTip("返回扫描候选")
+        self.key_scan_btn.setToolTipDuration(1500)
+        self.key_scan_btn.installEventFilter(ToolTipFilter(self.key_scan_btn, showDelay=300))
+
+        key_row.addWidget(self.key_combo, 1)
         key_row.addWidget(self.key_edit, 1)
-        key_row.addWidget(self.key_scan_combo)
-        key_row.addWidget(self.key_browse_btn)
-        auth_layout.addWidget(self.key_widget)
+        key_row.addWidget(self.key_browse_btn, 0)
+        key_row.addWidget(self.key_scan_btn, 0)
 
+        # 初始模式: 有扫描结果 → combo 模式; 否则 → manual 模式
         if scanned_keys:
-            scan_hint = CaptionLabel(
-                f"已默认填入本地扫描到的 {len(scanned_keys)} 个密钥中优先级最高的一个, 可点击中间按钮切换",
-                auth_block,
-            )
-            scan_hint.setStyleSheet("color: #8a8a8a;")
-            auth_layout.addWidget(scan_hint)
+            self._set_key_mode(manual=False)
+        else:
+            self._set_key_mode(manual=True)
 
-        # 密码
-        self.pwd_widget = QWidget(auth_block)
-        pwd_row = QHBoxLayout(self.pwd_widget)
-        pwd_row.setContentsMargins(0, 0, 0, 0)
-        pwd_row.setSpacing(6)
-        self.pwd_edit = LineEdit(self.pwd_widget)
+        # 密码行
+        self.pwd_edit = LineEdit(self)
         self.pwd_edit.setEchoMode(LineEdit.EchoMode.Password)
-        self.pwd_edit.setPlaceholderText("登录密码（仅保存到内存, 不写入磁盘）")
-        pwd_row.addWidget(BodyLabel("密码:", self.pwd_widget))
-        pwd_row.addWidget(self.pwd_edit, 1)
-        auth_layout.addWidget(self.pwd_widget)
-        self.pwd_widget.hide()
+        self.pwd_edit.setPlaceholderText("登录密码 (仅保存到内存, 不写入磁盘)")
 
-        self.viewLayout.addWidget(auth_block)
+        # 添加认证行并记录索引
+        auth_form.addRow(self._make_label("认证方式"), self.method_combo)
+        self._auth_row_key = auth_form.rowCount()
+        auth_form.addRow(self._make_label("私钥"), key_widget)
+        self._auth_row_pwd = auth_form.rowCount()
+        auth_form.addRow(self._make_label("登录密码"), self.pwd_edit)
 
-        # ---------- 高级 ----------
-        adv_block = self._create_section("高级选项")
-        adv_layout: QVBoxLayout = adv_block.layout()  # type: ignore[assignment]
+        # 初始可见性: 默认 "私钥" 模式
+        auth_form.setRowVisible(self._auth_row_pwd, False)
 
-        self.timeout_edit = LineEdit(adv_block)
+        # ---------------- 高级选项 ----------------
+        adv_form = self._add_section("高级选项")
+
+        # 两个超时合并一行 (label 固定标识 / 两个小输入框共享)
+        timeout_widget = QWidget(self)
+        timeout_row = QHBoxLayout(timeout_widget)
+        timeout_row.setContentsMargins(0, 0, 0, 0)
+        timeout_row.setSpacing(12)
+        self.timeout_edit = LineEdit(timeout_widget)
         self.timeout_edit.setText("10")
-        self.timeout_edit.setFixedWidth(80)
-        self.cmd_timeout_edit = LineEdit(adv_block)
+        self.timeout_edit.setFixedWidth(64)
+        self.timeout_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cmd_timeout_edit = LineEdit(timeout_widget)
         self.cmd_timeout_edit.setText("20")
-        self.cmd_timeout_edit.setFixedWidth(80)
-        timeout_row = QHBoxLayout()
-        timeout_row.setSpacing(10)
-        timeout_row.addLayout(self._row("连接超时(秒):", self.timeout_edit, label_width=90), 1)
-        timeout_row.addLayout(self._row("命令超时(秒):", self.cmd_timeout_edit, label_width=90), 1)
-        adv_layout.addLayout(timeout_row)
+        self.cmd_timeout_edit.setFixedWidth(64)
+        self.cmd_timeout_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        timeout_row.addWidget(BodyLabel("连接", timeout_widget))
+        timeout_row.addWidget(self.timeout_edit)
+        timeout_row.addWidget(BodyLabel("秒   命令", timeout_widget))
+        timeout_row.addWidget(self.cmd_timeout_edit)
+        timeout_row.addWidget(BodyLabel("秒", timeout_widget))
+        timeout_row.addStretch(1)
 
-        self.policy_combo = ComboBox(adv_block)
-        self.policy_combo.addItem("严格检查（推荐）", userData="reject")
-        self.policy_combo.addItem("警告（不推荐）", userData="warning")
-        self.policy_combo.addItem("自动添加（仅测试环境）", userData="auto_add")
-        self.policy_combo.setFixedWidth(220)
-        policy_container = QHBoxLayout()
-        policy_container.addWidget(BodyLabel("主机指纹策略:", adv_block))
-        policy_container.addWidget(self.policy_combo)
-        policy_container.addStretch()
-        adv_layout.addLayout(policy_container)
+        self.policy_combo = ComboBox(self)
+        self.policy_combo.addItem("严格检查 (推荐)", userData="reject")
+        self.policy_combo.addItem("警告 (不推荐)", userData="warning")
+        self.policy_combo.addItem("自动添加 (仅测试环境)", userData="auto_add")
 
-        self.notes_edit = LineEdit(adv_block)
-        self.notes_edit.setPlaceholderText("备注（可选）")
-        adv_layout.addLayout(self._row("备注:", self.notes_edit, label_width=50))
+        self.notes_edit = LineEdit(self)
+        self.notes_edit.setPlaceholderText("备注 (可选)")
 
-        self.viewLayout.addWidget(adv_block)
+        adv_form.addRow(self._make_label("超时设置"), timeout_widget)
+        adv_form.addRow(self._make_label("主机指纹策略"), self.policy_combo)
+        adv_form.addRow(self._make_label("备注"), self.notes_edit)
 
-        # 错误提示
+        # ---------------- 错误提示 ----------------
         self.error_label = CaptionLabel("", self)
-        self.error_label.setStyleSheet("color: #d83b01;")
+        self.error_label.setObjectName("serverEditError")
+        # 对话框为独立顶层窗口, 不吃 RemotePage 的 QSS, 故保留一条 inline 样式
+        self.error_label.setStyleSheet("color: #C42B1C;")
         self.error_label.hide()
+        self.viewLayout.addSpacing(4)
         self.viewLayout.addWidget(self.error_label)
 
     def _connect_signals(self) -> None:
         self.method_combo.currentIndexChanged.connect(self._on_method_changed)
         self.key_browse_btn.clicked.connect(self._on_browse_key)
+        self.key_scan_btn.clicked.connect(self._on_scan_back)
 
-    @staticmethod
-    def _row(label_text: str, widget: QWidget, *, label_width: int) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setSpacing(6)
-        label = BodyLabel(label_text, widget.parentWidget() or widget)
-        label.setFixedWidth(label_width)
-        row.addWidget(label)
-        row.addWidget(widget, 1)
-        return row
+    # ---------- 工具方法 ----------
+    def _make_label(self, text: str) -> BodyLabel:
+        """表单左侧字段名 (固定宽度 + 右对齐)."""
+        label = BodyLabel(f"{text}:")
+        label.setFixedWidth(self._LABEL_COLUMN_WIDTH)
+        label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        return label
 
-    def _create_section(self, title: str) -> QWidget:
-        wrapper = QWidget(self)
-        layout = QVBoxLayout(wrapper)
-        layout.setContentsMargins(0, 6, 0, 0)
-        layout.setSpacing(8)
-        layout.addWidget(StrongBodyLabel(title, wrapper))
-        return wrapper
+    def _add_section(self, title: str) -> QFormLayout:
+        """在 viewLayout 末尾追加一个小标题 + QFormLayout 分组, 返回 form 供外部填充.
+
+        Margin 约束:
+        - 标题与上一组 form 之间只留 2px (标题本身自带 font ascent 足够作视觉间隔)
+        - form 顶部 margin 为 0, 让首行与标题紧贴 (QFormLayout 行自带 verticalSpacing 做内部间隔)
+        - 不再在 Python 中控制 LineEdit 高度, 交给 qfluentwidgets 自身 33px 默认
+        """
+        section_title = StrongBodyLabel(title, self)
+        section_title.setObjectName("serverEditSectionTitle")
+        self.viewLayout.addSpacing(2)
+        self.viewLayout.addWidget(section_title)
+
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.viewLayout.addLayout(form)
+        return form
 
     # ==================== 数据加载 ====================
     def _load_from_profile(self, profile: ServerProfile | None, existing_password: str | None) -> None:
@@ -244,7 +277,18 @@ class ServerEditDialog(MessageBoxBase):
         self._apply_method_visibility(cred.auth_method)
 
         if cred.private_key_path:
-            self.key_edit.setText(cred.private_key_path)
+            # 已有路径: 若命中扫描候选则进入 combo 模式选中该项; 否则进入 manual 模式
+            matched = -1
+            for i in range(self.key_combo.count()):
+                if self.key_combo.itemData(i) == cred.private_key_path:
+                    matched = i
+                    break
+            if matched >= 0:
+                self.key_combo.setCurrentIndex(matched)
+                self._set_key_mode(manual=False)
+            else:
+                self.key_edit.setText(cred.private_key_path)
+                self._set_key_mode(manual=True)
         if existing_password:
             self.pwd_edit.setText(existing_password)
 
@@ -262,18 +306,29 @@ class ServerEditDialog(MessageBoxBase):
         self._apply_method_visibility(self.method_combo.itemData(index))
 
     def _apply_method_visibility(self, method: str) -> None:
-        self.key_widget.setVisible(method == "key")
-        self.pwd_widget.setVisible(method == "password")
-
-    def _on_scan_combo_changed(self, index: int) -> None:
-        """扫描候选选中 → 同步到主 LineEdit。"""
-        if index < 0:
+        """认证方式切换时显示对应行, 隐藏另一组."""
+        if self._auth_form is None:
             return
-        path = self.key_scan_combo.itemData(index)
-        if isinstance(path, str) and path:
-            self.key_edit.setText(path)
+        is_key = method == "key"
+        self._auth_form.setRowVisible(self._auth_row_key, is_key)
+        self._auth_form.setRowVisible(self._auth_row_pwd, not is_key)
+
+    def _set_key_mode(self, *, manual: bool) -> None:
+        """切换私钥行的展示模式.
+
+        - manual=False (combo): 显示扫描候选下拉 + 浏览按钮
+        - manual=True  (manual): 显示路径输入框 + 浏览按钮 + 返回按钮 (仅有扫描候选时)
+
+        无扫描结果时只能进入 manual 模式, 返回按钮永不显示.
+        """
+        self._key_manual_mode = manual
+        self.key_combo.setVisible(not manual)
+        self.key_edit.setVisible(manual)
+        # 浏览按钮在两种模式下都可见; 返回按钮仅 manual 模式 + 有扫描候选时可见
+        self.key_scan_btn.setVisible(manual and bool(self._scanned_keys))
 
     def _on_browse_key(self) -> None:
+        """打开文件选择, 选定后切到 manual 模式并展示路径."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "选择 SSH 私钥",
@@ -282,6 +337,11 @@ class ServerEditDialog(MessageBoxBase):
         )
         if file_path:
             self.key_edit.setText(file_path)
+            self._set_key_mode(manual=True)
+
+    def _on_scan_back(self) -> None:
+        """从 manual 模式返回 combo 模式 (仅有扫描候选时该按钮才可见)."""
+        self._set_key_mode(manual=False)
 
     # ==================== 表单校验与结果 ====================
     def validate(self) -> bool:  # noqa: D401 - 重写 MessageBoxBase 钩子
@@ -348,7 +408,15 @@ class ServerEditDialog(MessageBoxBase):
 
         auth_method = self.method_combo.currentData()
         password = self.pwd_edit.text() if auth_method == "password" else None
-        private_key_path = self.key_edit.text().strip() if auth_method == "key" else None
+        if auth_method == "key":
+            if self._key_manual_mode:
+                private_key_path = self.key_edit.text().strip() or None
+            else:
+                # combo 模式: 直接读取选中项 userData
+                data = self.key_combo.currentData()
+                private_key_path = data if isinstance(data, str) and data else None
+        else:
+            private_key_path = None
 
         if auth_method == "password" and not password:
             raise ValueError("密码认证模式下必须填写密码")
@@ -375,9 +443,5 @@ class ServerEditDialog(MessageBoxBase):
             host_key_policy=self.policy_combo.currentData(),
         )
         # 复用现有 SSHCredentials.validate 进行二次校验
-        try:
-            credentials.validate()
-        except ValueError:
-            # validate() 自带中文提示, 但密钥文件不存在的提示对用户更友好, 这里直接抛出
-            raise
+        credentials.validate()
         return credentials
