@@ -48,7 +48,9 @@ if TYPE_CHECKING:
 
 
 _QQ_VERSION_PACKAGE_PATTERN = re.compile(r'"version"\s*:\s*"([^"]+)"')
-_PS_RSS_PATTERN = re.compile(r"^\s*(\d+)\s*$")
+# ``ps -e -o pid=,ppid=,rss=`` 单行格式: 任意空白分隔的三列整数
+# (pid, ppid, rss_kib). 列宽随发行版浮动, 故按任意空白分隔.
+_PS_TREE_LINE_PATTERN = re.compile(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s*$")
 
 # WebUI 日志中 NapCat 打印的入口 URL 形如:
 #   [info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token=abc
@@ -679,15 +681,58 @@ class RemoteBackend(OperationBackend):
             )
 
     def _fetch_rss_bytes(self, pid: int) -> int | None:
-        """读取远端 ``ps -o rss=`` 获取 RSS, 返回字节数。"""
-        result = self._exec_backend.run(f"ps -o rss= -p {pid} 2>/dev/null || true")
+        """读取远端 ``pid`` 及其所有后代进程的 RSS 之和, 返回字节数.
+
+        与本地路径 [`ManagerNapCatQQProcess.get_memory_usage`](src/core/runtime/napcat.py)
+        通过 ``psutil`` 累加进程树 RSS 的行为对齐. 远端 NapCat 由 ``xvfb-run``
+        shell wrapper 拉起 ``qq`` (Electron), 进程结构为:
+
+        - ``/bin/sh xvfb-run -a /usr/local/bin/qq --no-sandbox -q <qq_id>``  (~1 MB)
+          - ``/usr/local/bin/qq --no-sandbox -q <qq_id>``                    (Electron main)
+            - 多个 GPU / renderer / utility 子进程                            (各占数十-数百 MB)
+
+        若仅取 ``ps -o rss= -p <pid>`` 的单进程 RSS:
+        - 当 pgrep 命中 shell wrapper 时显示 1 MB (用户报告的现象)
+        - 即便命中 Electron main, 也漏掉所有 helper 进程
+
+        实现: 单次 SSH 拉全量 ``ps -e -o pid=,ppid=,rss=``, 客户端 BFS 走
+        ``pid`` 的子树并累加 RSS. 输出单位 KiB.
+        """
+        result = self._exec_backend.run("ps -e -o pid=,ppid=,rss= 2>/dev/null || true")
         if not result.ok:
             return None
-        match = _PS_RSS_PATTERN.match(result.stdout.strip())
-        if match is None:
+
+        # pid -> rss_kib; ppid -> [child_pid, ...]
+        rss_by_pid: dict[int, int] = {}
+        children: dict[int, list[int]] = {}
+        for raw in result.stdout.splitlines():
+            match = _PS_TREE_LINE_PATTERN.match(raw)
+            if match is None:
+                continue
+            cpid = int(match.group(1))
+            cppid = int(match.group(2))
+            crss = int(match.group(3))
+            rss_by_pid[cpid] = crss
+            children.setdefault(cppid, []).append(cpid)
+
+        if pid not in rss_by_pid:
+            # 进程已退出, 或 ps 输出无法解析 -> 报告 None 而不是 0,
+            # 让上层走 "未知" 而不是 "已停"
             return None
+
+        total_kib = 0
+        visited: set[int] = set()
+        stack: list[int] = [pid]
+        while stack:
+            current = stack.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            total_kib += rss_by_pid.get(current, 0)
+            stack.extend(children.get(current, ()))
+
         # ``ps`` 输出单位为 KiB
-        return int(match.group(1)) * 1024
+        return total_kib * 1024
 
     def _detect_qq_version(self) -> str | None:
         """读取远端 QQ ``package.json`` 的 version 字段。"""
