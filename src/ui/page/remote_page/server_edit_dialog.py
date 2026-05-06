@@ -17,10 +17,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QDir, Qt
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QFileDialog, QFormLayout, QHBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
+    CheckBox,
     ComboBox,
     LineEdit,
     MessageBoxBase,
@@ -32,10 +34,111 @@ from qfluentwidgets import (
 )
 
 from src.core.remote import ServerProfile, SSHCredentials
+from src.core.remote.credential_store import CredentialStore
 from src.core.remote.ssh_keys import scan_local_ssh_keys
 
 if TYPE_CHECKING:
     pass
+
+
+class _PrivateKeyDropLineEdit(LineEdit):
+    """支持文件拖拽的私钥路径输入框 (P4 F5.3).
+
+    接受规则:
+
+    - 单个文件 (非目录)
+    - 文件名命中 ``id_rsa`` / ``id_ed25519`` / ``id_dsa`` / ``id_ecdsa`` /
+      ``*.pem`` / ``*.ppk`` 之一, **或** 文件首行以 ``-----BEGIN`` 开头 (PEM 头部)
+    - 多文件 / 目录 / 不命中规则: 弹用户提示, 不修改输入框
+
+    drop 完成后通过 ``setText`` 写入路径; 调用方应监听 ``textChanged`` 触发
+    后续校验.
+    """
+
+    _ACCEPT_NAMES: tuple[str, ...] = ("id_rsa", "id_ed25519", "id_dsa", "id_ecdsa")
+    _ACCEPT_SUFFIXES: tuple[str, ...] = (".pem", ".ppk", ".key")
+    _PEM_HEADERS: tuple[bytes, ...] = (
+        b"-----BEGIN RSA PRIVATE KEY-----",
+        b"-----BEGIN OPENSSH PRIVATE KEY-----",
+        b"-----BEGIN PRIVATE KEY-----",
+        b"-----BEGIN EC PRIVATE KEY-----",
+        b"-----BEGIN DSA PRIVATE KEY-----",
+        b"-----BEGIN ENCRYPTED PRIVATE KEY-----",
+    )
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    # ==================== 拖拽事件 ====================
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        urls = event.mimeData().urls()
+        local_paths = [url.toLocalFile() for url in urls]
+        accepted_path, hint = self.evaluate_drop_paths(local_paths)
+        if accepted_path is None:
+            if hint:
+                self._show_hint(hint)
+            event.ignore()
+            return
+
+        self.setText(accepted_path)
+        event.acceptProposedAction()
+
+    @classmethod
+    def evaluate_drop_paths(cls, local_paths: list[str]) -> tuple[str | None, str]:
+        """纯逻辑层判定: 接受单个私钥文件路径, 返回 ``(accepted_path, hint)``.
+
+        ``accepted_path`` 为 ``None`` 时表示拒绝, 同时 ``hint`` 是给用户的提示文案;
+        接受时 ``hint`` 为空串. 把这块逻辑独立出来主要是为了避免在测试里构造易崩
+        的 ``QDropEvent``.
+        """
+        if not local_paths or len(local_paths) != 1:
+            return None, "请拖入单个私钥文件"
+        local_path = local_paths[0]
+        if not local_path:
+            return None, "不支持的拖拽来源, 请选择本地文件"
+        path_obj = Path(local_path)
+        if not path_obj.is_file():
+            return None, "请拖入单个私钥文件 (而非目录)"
+        if not cls._looks_like_private_key(path_obj):
+            return None, "无法识别为 SSH 私钥, 请确认文件内容"
+        return str(path_obj), ""
+
+    # ==================== 辅助 ====================
+    @classmethod
+    def _looks_like_private_key(cls, path: Path) -> bool:
+        """启发式判断: 文件名 / 后缀 / PEM 头部 三选一命中即可."""
+        name = path.name.lower()
+        if name in cls._ACCEPT_NAMES:
+            return True
+        if any(name.endswith(suffix) for suffix in cls._ACCEPT_SUFFIXES):
+            return True
+        try:
+            with path.open("rb") as fp:
+                head = fp.read(64)
+        except OSError:
+            return False
+        return any(head.startswith(header) for header in cls._PEM_HEADERS)
+
+    def _show_hint(self, message: str) -> None:
+        """非侵入式提示: 走 InfoBar; 失败时容忍 (无 QApplication 上下文等)."""
+        try:
+            from src.ui.components.info_bar import warning_bar
+
+            warning_bar(message, parent=self)
+        except Exception:  # noqa: BLE001
+            # 测试环境无 InfoBar 上下文时静默
+            pass
 
 
 class ServerEditDialog(MessageBoxBase):
@@ -59,6 +162,8 @@ class ServerEditDialog(MessageBoxBase):
         *,
         profile: ServerProfile | None = None,
         existing_password: str | None = None,
+        credential_store: CredentialStore | None = None,
+        existing_remember_password: bool = False,
     ) -> None:
         super().__init__(parent=parent)
         self._original_profile = profile
@@ -66,13 +171,17 @@ class ServerEditDialog(MessageBoxBase):
         self._auth_form: QFormLayout | None = None
         self._auth_row_key: int = -1
         self._auth_row_pwd: int = -1
+        self._auth_row_remember: int = -1
         # 私钥输入模式: False = 下拉扫描候选 combo; True = 手动路径 LineEdit
         self._key_manual_mode: bool = False
+        # P4 F5.2: keyring 探测; 不可用时 "记住密码" 勾选项隐藏
+        self._credential_store: CredentialStore = credential_store if credential_store is not None else CredentialStore()
+        self._existing_remember_password: bool = existing_remember_password
 
         self._setup_ui()
         self._connect_signals()
         self._load_from_profile(profile, existing_password)
-        self.widget.setMinimumSize(560, 560)
+        self.widget.setMinimumSize(560, 600)
 
     # ==================== UI 构建 ====================
     def _setup_ui(self) -> None:
@@ -137,10 +246,10 @@ class ServerEditDialog(MessageBoxBase):
         for path in scanned_keys:
             self.key_combo.addItem(Path(path).name, userData=path)
 
-        # 手动路径 (manual 模式)
-        self.key_edit = LineEdit(key_widget)
+        # 手动路径 (manual 模式) — P4 F5.3: 支持文件拖拽
+        self.key_edit = _PrivateKeyDropLineEdit(key_widget)
         self.key_edit.setClearButtonEnabled(True)
-        self.key_edit.setPlaceholderText("~/.ssh/id_rsa")
+        self.key_edit.setPlaceholderText("~/.ssh/id_rsa  (可拖入文件)")
 
         # 浏览按钮 (任何模式都可点, 用于切到 manual 模式或重新选择)
         self.key_browse_btn = ToolButton(FI.FOLDER, key_widget)
@@ -172,15 +281,28 @@ class ServerEditDialog(MessageBoxBase):
         self.pwd_edit.setEchoMode(LineEdit.EchoMode.Password)
         self.pwd_edit.setPlaceholderText("登录密码 (仅保存到内存, 不写入磁盘)")
 
+        # P4 F5.2: "记住密码" 勾选行; keyring 不可用时整行隐藏
+        self.remember_check = CheckBox("记住密码 (保存到 Windows Credential Manager)", self)
+        self.remember_check.setChecked(False)
+        keyring_available = self._credential_store.is_available()
+        if not keyring_available:
+            self.remember_check.setEnabled(False)
+            self.remember_check.setToolTip(
+                "当前环境不支持 Credential Manager (keyring), 仅当本次会话内可用"
+            )
+
         # 添加认证行并记录索引
         auth_form.addRow(self._make_label("认证方式"), self.method_combo)
         self._auth_row_key = auth_form.rowCount()
         auth_form.addRow(self._make_label("私钥"), key_widget)
         self._auth_row_pwd = auth_form.rowCount()
         auth_form.addRow(self._make_label("登录密码"), self.pwd_edit)
+        self._auth_row_remember = auth_form.rowCount()
+        auth_form.addRow(self._make_label(""), self.remember_check)
 
         # 初始可见性: 默认 "私钥" 模式
         auth_form.setRowVisible(self._auth_row_pwd, False)
+        auth_form.setRowVisible(self._auth_row_remember, False)
 
         # ---------------- 高级选项 ----------------
         adv_form = self._add_section("高级选项")
@@ -291,6 +413,9 @@ class ServerEditDialog(MessageBoxBase):
                 self._set_key_mode(manual=True)
         if existing_password:
             self.pwd_edit.setText(existing_password)
+        # P4 F5.2: 编辑模式下若 ServerManager 提示已记住密码, 默认勾选
+        if self._existing_remember_password and self._credential_store.is_available():
+            self.remember_check.setChecked(True)
 
         self.timeout_edit.setText(str(int(cred.connect_timeout)))
         self.cmd_timeout_edit.setText(str(int(cred.command_timeout)))
@@ -312,6 +437,9 @@ class ServerEditDialog(MessageBoxBase):
         is_key = method == "key"
         self._auth_form.setRowVisible(self._auth_row_key, is_key)
         self._auth_form.setRowVisible(self._auth_row_pwd, not is_key)
+        # P4 F5.2: "记住密码" 仅在密码模式且 keyring 可用时可见
+        keyring_available = self._credential_store.is_available()
+        self._auth_form.setRowVisible(self._auth_row_remember, (not is_key) and keyring_available)
 
     def _set_key_mode(self, *, manual: bool) -> None:
         """切换私钥行的展示模式.
@@ -388,6 +516,21 @@ class ServerEditDialog(MessageBoxBase):
             return None
         password = self.pwd_edit.text()
         return password or None
+
+    def wants_remember_password(self) -> bool:
+        """P4 F5.2: 用户是否勾选了"记住密码".
+
+        Returns:
+            ``True`` 当且仅当: 当前是密码认证模式 + keyring 可用 + 勾选项已勾.
+            非密码模式或 keyring 不可用时永远返回 ``False``, 调用方可放心
+            把该值传给 [`ServerManager.add_server`](src/core/remote/server_manager.py)
+            的 ``remember_password`` 参数.
+        """
+        if self.method_combo.currentData() != "password":
+            return False
+        if not self._credential_store.is_available():
+            return False
+        return bool(self.remember_check.isChecked())
 
     # ==================== 内部 ====================
     def _build_credentials_or_raise(self) -> SSHCredentials:
