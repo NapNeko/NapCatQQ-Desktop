@@ -118,6 +118,19 @@ class TestQQIdGuard:
 
 
 # ==================== 启动 ====================
+def _find_launcher_command(history: list[tuple[str, dict]], action: str) -> tuple[str, dict] | None:
+    """从 ``_FakeExecBackend.history`` 中找到 launcher 主命令 (start/stop/restart).
+
+    P3 引入了客户端层 ``_cleanup_orphan_qq_processes`` / ``_truncate_napcat_log``,
+    会在主命令前后插入若干 ``pkill`` / ``mv`` / ``rm`` 命令; 测试断言主命令时
+    用本函数过滤即可, 不必再依赖 history 长度.
+    """
+    for cmd, kwargs in history:
+        if cmd.startswith("bash ") and f" {action} " in cmd:
+            return cmd, kwargs
+    return None
+
+
 class TestStartNapcat:
     def test_start_runs_launcher_with_qq_id(self, backend: RemoteBackend, config_factory) -> None:
         backend._runtime.status_responses["114514"] = RemoteNapCatStatus(  # type: ignore[attr-defined]
@@ -126,10 +139,10 @@ class TestStartNapcat:
         result = backend.start_napcat("114514", config_factory(qqid=114514))
 
         history = backend._exec_backend.history  # type: ignore[attr-defined]
-        # 第一条命令必须是 launcher start; 后续可能含 _fetch_rss_bytes 的 ps 命令
-        assert len(history) >= 1
-        command, kwargs = history[0]
-        assert command.startswith("bash ")
+        # P3: launcher start 命令必须存在 (客户端层会先发若干 pkill / 截断 log 的命令)
+        match = _find_launcher_command(history, "start")
+        assert match is not None, history
+        command, kwargs = match
         assert command.endswith(" start 114514")
         # launcher 默认 60s 超时
         assert kwargs == {"timeout": 60.0, "check": True}
@@ -140,6 +153,34 @@ class TestStartNapcat:
         assert result.extra["version"] == "4.18.1"
         assert result.extra["log_file"] == "/x.log"
 
+    def test_start_cleans_orphans_and_truncates_log_before_launcher(
+        self, backend: RemoteBackend, config_factory
+    ) -> None:
+        """P3 回归: ``start_napcat`` 必须在 launcher 之前发出 pkill + log truncate 命令,
+        否则 launcher v1 部署的远端会卡在 "已登录,无法重复登录" / 启动日志包含历史多次启动.
+        """
+        backend._runtime.status_responses["114514"] = RemoteNapCatStatus(  # type: ignore[attr-defined]
+            running=True, pid=4321, qq="114514", version="4.18.1", log_file="/x.log"
+        )
+        backend.start_napcat("114514", config_factory(qqid=114514))
+
+        history = backend._exec_backend.history  # type: ignore[attr-defined]
+        commands = [cmd for cmd, _ in history]
+
+        launcher_idx = next(
+            (i for i, cmd in enumerate(commands) if cmd.startswith("bash ") and " start " in cmd),
+            None,
+        )
+        assert launcher_idx is not None, "launcher start 命令缺失"
+
+        pre_launcher = commands[:launcher_idx]
+        # 必须有 SIGTERM 与 SIGKILL 两道 pkill
+        assert any("pkill -TERM -f 'qq --no-sandbox -q 114514$'" in c for c in pre_launcher), pre_launcher
+        assert any("pkill -KILL -f 'qq --no-sandbox -q 114514$'" in c for c in pre_launcher), pre_launcher
+        # 必须有日志归档 + 截断
+        assert any("napcat_114514.log.prev" in c and "mv -f" in c for c in pre_launcher), pre_launcher
+        assert any(': > "$HOME/Napcat/log/napcat_114514.log"' in c for c in pre_launcher), pre_launcher
+
     def test_start_verifies_launcher_present(self, backend: RemoteBackend, config_factory) -> None:
         backend.ssh_client.remote_exists_result = False  # type: ignore[attr-defined]
         with pytest.raises(FileNotFoundError, match="远端 launcher 脚本缺失"):
@@ -148,9 +189,16 @@ class TestStartNapcat:
 
     def test_start_raises_when_launcher_returns_nonzero(self, backend: RemoteBackend, config_factory) -> None:
         # 让 launcher 返回非零退出码 -> RemoteCommandError
-        backend._exec_backend.canned.append(  # type: ignore[attr-defined]
-            RemoteCommandResult(command="bash launcher", exit_status=4, stderr="failed")
-        )
+        # P3: 客户端在 launcher 之前会发 4 条兜底命令 (pkill * 2 + sleep + mv/truncate),
+        # canned 必须前 4 条占位 + 第 5 条才是真正的 launcher 失败结果.
+        backend._exec_backend.canned.extend([  # type: ignore[attr-defined]
+            RemoteCommandResult(command="pkill TERM", exit_status=0),
+            RemoteCommandResult(command="sleep", exit_status=0),
+            RemoteCommandResult(command="pkill KILL", exit_status=0),
+            RemoteCommandResult(command="rm -f pid", exit_status=0),
+            RemoteCommandResult(command="mv + truncate", exit_status=0),
+            RemoteCommandResult(command="bash launcher", exit_status=4, stderr="failed"),
+        ])
         with pytest.raises(RemoteCommandError) as exc_info:
             backend.start_napcat("114514", config_factory())
         assert exc_info.value.exit_status == 4
@@ -169,10 +217,31 @@ class TestStopNapcat:
         backend.stop_napcat("114514")
 
         history = backend._exec_backend.history  # type: ignore[attr-defined]
-        assert len(history) == 1
-        command, kwargs = history[0]
+        # P3: stop 之后会再做一次客户端层 pkill 兜底, history 不再是单条
+        match = _find_launcher_command(history, "stop")
+        assert match is not None, history
+        command, kwargs = match
         assert command.endswith(" stop 114514")
         assert kwargs == {"timeout": 30.0, "check": True}
+
+    def test_stop_does_orphan_cleanup_after_launcher(self, backend: RemoteBackend) -> None:
+        """P3 回归: ``stop_napcat`` launcher 调用之后必须再做客户端层 pkill 兜底,
+        防止 launcher v1 杀的是 xvfb-run wrapper 而 qq 子进程残留为孤儿.
+        """
+        backend.stop_napcat("114514")
+
+        history = backend._exec_backend.history  # type: ignore[attr-defined]
+        commands = [cmd for cmd, _ in history]
+
+        launcher_idx = next(
+            (i for i, cmd in enumerate(commands) if cmd.startswith("bash ") and " stop " in cmd),
+            None,
+        )
+        assert launcher_idx is not None, "launcher stop 命令缺失"
+
+        post_launcher = commands[launcher_idx + 1:]
+        assert any("pkill -TERM -f 'qq --no-sandbox -q 114514$'" in c for c in post_launcher), post_launcher
+        assert any("pkill -KILL -f 'qq --no-sandbox -q 114514$'" in c for c in post_launcher), post_launcher
 
     def test_stop_verifies_launcher_present(self, backend: RemoteBackend) -> None:
         backend.ssh_client.remote_exists_result = False  # type: ignore[attr-defined]

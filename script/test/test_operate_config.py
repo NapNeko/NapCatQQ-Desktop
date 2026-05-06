@@ -650,6 +650,58 @@ def test_update_config_remote_sync_failure_does_not_block_local_save(
     assert read_json(fake_path_func.bot_config_path)["bots"][0]["bot"]["QQID"] == 114514
 
 
+def test_update_config_remote_resolver_unexpected_exception_does_not_block_local_save(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P3 实测 bug 回归: ``resolve_backend_for_bot`` 抛非 ``BackendResolutionError`` 的异常
+    (如 paramiko/keyring 异常) 时, ``update_config`` 仍应返回 True 且本地 bot.json 已写盘.
+
+    旧实现 ``_sync_bot_runtime_config_to_remote`` 只捕获了 ``BackendResolutionError`` /
+    ``ImportError``, 其它异常会向上 propagate 到 ``update_config`` 的外层 ``except Exception``,
+    导致 update_config 返回 False —— 用户感知"切了 runtime_target 完全没生效",
+    但其实本地 bot.json 此时已写盘. 修复: 顶层 ``try/except Exception`` 兜底.
+    """
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+
+    from src.core.operation import resolver as resolver_module
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("simulated keyring/SSH unexpected error")
+
+    monkeypatch.setattr(resolver_module, "resolve_backend_for_bot", boom)
+
+    config = make_config(114514, "RemoteBot")
+    config.bot.runtime_target = "srv-uuid-1"
+
+    assert operate_config.update_config(config) is True
+    # 关键: 本地 bot.json 必须已写盘且 runtime_target 被持久化
+    saved = read_json(fake_path_func.bot_config_path)
+    assert saved["bots"][0]["bot"]["QQID"] == 114514
+    assert saved["bots"][0]["bot"]["runtime_target"] == "srv-uuid-1"
+
+
+def test_delete_config_remote_resolver_unexpected_exception_does_not_block_local_delete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """对称: 远端清理路径 resolver 抛非预期异常时, ``delete_config`` 仍应返回 True."""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+
+    from src.core.operation import resolver as resolver_module
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("simulated keyring/SSH unexpected error")
+
+    monkeypatch.setattr(resolver_module, "resolve_backend_for_bot", boom)
+
+    config = make_config(114514, "RemoteBot")
+    config.bot.runtime_target = "srv-uuid-1"
+    write_json(fake_path_func.bot_config_path, expected_bot_root([config]))
+
+    assert operate_config.delete_config(config) is True
+    # bot.json 中目标 Bot 应被删除
+    assert read_json(fake_path_func.bot_config_path) == expected_bot_root([])
+
+
 def test_delete_config_triggers_remote_delete_for_remote_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -125,3 +125,114 @@ class TestEmitContract:
         remote_log._on_tail_arrived(remote_log._qq_id, "x\ny\nz\n")
         # 清空后这段又是 "新的", 整段发射
         assert emitted == ["x\ny\nz\n"]
+
+
+class TestErrorBackoff:
+    """P3.W3.E: 连续失败退避语义."""
+
+    def test_single_error_does_not_stop_polling(
+        self, remote_log: RemoteNapCatQQLog
+    ) -> None:
+        """单次失败不应停止轮询; 也不应在日志缓冲注入错误行."""
+        # 重新启动 fixture 的 timer (fixture 默认 stop 了)
+        remote_log._poll_timer.start()
+        emitted: list[str] = []
+        remote_log.output_log_signal.connect(emitted.append)
+
+        remote_log._on_tail_error(remote_log._qq_id, "transient")
+
+        assert remote_log._poll_timer.isActive() is True
+        assert emitted == []
+        assert remote_log._consecutive_errors == 1
+
+    def test_consecutive_errors_stop_polling_and_inject_log_line(
+        self, remote_log: RemoteNapCatQQLog
+    ) -> None:
+        """连续达到阈值时应停掉 timer, 同时往缓冲注入一行错误."""
+        remote_log._poll_timer.start()
+        emitted: list[str] = []
+        remote_log.output_log_signal.connect(emitted.append)
+
+        for _ in range(remote_log._MAX_CONSECUTIVE_ERRORS):
+            remote_log._on_tail_error(remote_log._qq_id, "boom")
+
+        assert remote_log._poll_timer.isActive() is False, "达阈值后 timer 应停止"
+        assert len(emitted) == 1, "应注入恰好 1 行错误提示"
+        assert "[ERROR]" in emitted[0]
+        assert "已停止轮询" in emitted[0]
+        # 最后一条错误的内容应当出现在提示里
+        assert "boom" in emitted[0]
+        # 历史也包含该错误
+        assert "[ERROR]" in remote_log.get_log_content()
+
+    def test_success_resets_consecutive_counter(
+        self, remote_log: RemoteNapCatQQLog
+    ) -> None:
+        """任意一次成功 (含空字符串) 都应让连续失败计数归零."""
+        remote_log._poll_timer.start()
+        # 喂 2 次失败 (未达阈值)
+        remote_log._on_tail_error(remote_log._qq_id, "e1")
+        remote_log._on_tail_error(remote_log._qq_id, "e2")
+        assert remote_log._consecutive_errors == 2
+
+        # 一次成功 (空内容也算成功)
+        remote_log._on_tail_arrived(remote_log._qq_id, "")
+        assert remote_log._consecutive_errors == 0
+
+        # 再来 2 次失败仍未触发停掉
+        remote_log._on_tail_error(remote_log._qq_id, "e3")
+        remote_log._on_tail_error(remote_log._qq_id, "e4")
+        assert remote_log._poll_timer.isActive() is True
+
+    def test_error_only_for_matching_qq_id(
+        self, remote_log: RemoteNapCatQQLog
+    ) -> None:
+        """qq_id 不匹配的错误不应累加计数."""
+        remote_log._poll_timer.start()
+        remote_log._on_tail_error("wrong-qq-id", "x")
+        remote_log._on_tail_error("wrong-qq-id", "x")
+        remote_log._on_tail_error("wrong-qq-id", "x")
+        assert remote_log._consecutive_errors == 0
+        assert remote_log._poll_timer.isActive() is True
+
+
+class TestAnsiSanitization:
+    """远端 ``tail`` 拿回的 Linux NapCat 日志带 ANSI 颜色转义,
+    必须在拼入 ``_seen_tail`` / 发射给 UI 之前清洗, 否则:
+        - ESC 字节会以 tofu 形式残留到 ``QPlainTextEdit``;
+        - ``LogHighlighter`` 的 ``[info]`` / ``[debug]`` 正则会失配.
+    """
+
+    def test_ansi_escape_stripped_from_emitted_chunk(
+        self, remote_log: RemoteNapCatQQLog
+    ) -> None:
+        emitted: list[str] = []
+        remote_log.output_log_signal.connect(emitted.append)
+
+        # NapCat Linux 端实际输出形态: `[\x1b[32minfo\x1b[39m] [NapCat] ...`
+        raw = "05-01 02:01:02 [\x1b[32minfo\x1b[39m] [NapCat] hello\n"
+        remote_log._on_tail_arrived(remote_log._qq_id, raw)
+
+        assert emitted, "首次拉取必定发射"
+        assert "\x1b" not in emitted[0]
+        # 清洗后 `[info]` 应当原样保留, 这样 LogHighlighter 才能上色
+        assert "[info]" in emitted[0]
+
+    def test_seen_tail_uses_sanitized_text_for_dedup(
+        self, remote_log: RemoteNapCatQQLog
+    ) -> None:
+        """两次拉取若仅在 ANSI 转义这一字节维度不同, 应被识别为重复内容.
+
+        否则用户每 5s 轮询一次, 同一行 ``[info]`` 日志会被反复 emit.
+        """
+        emitted: list[str] = []
+        remote_log.output_log_signal.connect(emitted.append)
+
+        first = "[\x1b[32minfo\x1b[39m] same-line\n"
+        second = "[\x1b[32minfo\x1b[39m] same-line\n"
+        remote_log._on_tail_arrived(remote_log._qq_id, first)
+        remote_log._on_tail_arrived(remote_log._qq_id, second)
+
+        # 第二次必须被识别为完全重复, 不再发射
+        assert len(emitted) == 1
+        assert remote_log.get_log_content() == "[info] same-line\n"
