@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import shlex
 import socket
+import threading
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.core.logging import LogSource, LogType, logger
 
@@ -21,6 +22,8 @@ try:
     import paramiko
 except ImportError:  # pragma: no cover - 依赖缺失时在运行期给出清晰错误
     paramiko = None
+
+_T = TypeVar("_T")
 
 
 class _LineSplitter:
@@ -84,12 +87,27 @@ class SSHClient:
     - 拒绝未知主机指纹
     - 关闭 agent 与自动搜索本地密钥
     - 默认不使用 PTY，避免引入额外 shell 行为差异
+
+    P3.W1: 持久连接 + 自动重连 (参考 [`docs/general/remote_ssh_p3_plan.md`](../../../../docs/general/remote_ssh_p3_plan.md) §3.1):
+    - ``connect()`` 后自动启用 ``transport.set_keepalive(DEFAULT_KEEPALIVE_INTERVAL)``
+      让 paramiko 周期性发心跳, 防止 NAT / 中间设备静默切断 idle 连接
+    - 所有 SSH/SFTP 入口走 [`_call_with_retry`](src/core/remote/ssh_client.py) 包装,
+      检测到 transport 在调用过程中死亡后自动重连一次, 并重试该次操作
+    - 重连过程使用 [`_reconnect_lock`](src/core/remote/ssh_client.py) 互斥, 多个 worker
+      并发触发时只会有一次实际 SSH 握手
     """
+
+    #: 默认 keepalive 间隔 (秒). paramiko 会按此周期发空闲消息保活,
+    #: 同时也是 transport 检测对端断开的最坏粒度.
+    DEFAULT_KEEPALIVE_INTERVAL: int = 30
 
     def __init__(self, credentials: SSHCredentials) -> None:
         self.credentials = credentials
         self._client: "paramiko.SSHClient | None" = None
         self._remote_home_dir: str | None = None
+        # P3.W1: 序列化 ensure_alive / connect / close, 防止多个 QThreadPool worker
+        # 在断线瞬间同时触发重连导致 race.
+        self._reconnect_lock = threading.RLock()
 
     def connect(self) -> None:
         """建立 SSH 连接。"""
@@ -137,6 +155,19 @@ class SSHClient:
             raise SSHConnectionError(f"SSH 连接失败: {exc}") from exc
 
         self._client = client
+        # P3.W1: 启用 keepalive, 让 paramiko 周期性发空闲消息保活;
+        # 服务端默认 ``ClientAliveInterval=0`` 时也能撑住 NAT idle timeout.
+        # 失败被 paramiko 静默吞, 不会影响主连接, 此处只在 trace 级别记录.
+        try:
+            transport = client.get_transport()
+            if transport is not None:
+                transport.set_keepalive(self.DEFAULT_KEEPALIVE_INTERVAL)
+        except Exception as exc:  # noqa: BLE001 - 任何异常都不应阻断已建立的连接
+            logger.trace(
+                f"SSH set_keepalive 调用失败 (忽略): host={self.credentials.host}, exc={exc!r}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
         logger.info(
             f"SSH 连接已建立: host={self.credentials.host}, username={self.credentials.username}",
             LogType.NETWORK,
@@ -145,20 +176,133 @@ class SSHClient:
 
     def close(self) -> None:
         """关闭 SSH 连接。"""
-        if self._client is None:
-            return
+        with self._reconnect_lock:
+            if self._client is None:
+                return
 
-        self._client.close()
-        self._client = None
-        self._remote_home_dir = None
-        logger.info(
-            f"SSH 连接已关闭: host={self.credentials.host}, username={self.credentials.username}",
-            LogType.NETWORK,
-            LogSource.CORE,
-        )
+            self._client.close()
+            self._client = None
+            self._remote_home_dir = None
+            logger.info(
+                f"SSH 连接已关闭: host={self.credentials.host}, username={self.credentials.username}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+
+    def ensure_alive(self, *, reconnect: bool = True) -> bool:
+        """探测当前 SSH 会话是否仍可用; 必要时自动重连 **一次**.
+
+        P3.W1 自愈语义:
+        - ``is_connected`` 为真直接返回 True
+        - ``reconnect=False`` 时, 仅做探测不发起新连接, 返回当前状态
+        - ``reconnect=True`` 时, 丢弃死会话并调用一次 [`connect`](src/core/remote/ssh_client.py),
+          失败时返回 False, 调用方决定是抛错还是降级
+
+        Args:
+            reconnect: 是否在会话死亡时自动重连; 默认 True
+
+        Returns:
+            布尔值, 表示返回时刻 SSH 会话是否可用
+        """
+        with self._reconnect_lock:
+            if self.is_connected:
+                return True
+            if not reconnect:
+                return False
+
+            host = self.credentials.host
+            logger.warning(
+                f"SSH 会话已断开, 尝试自动重连一次: host={host}, username={self.credentials.username}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+
+            # 释放半死的旧 client (paramiko 会在 close 时尽力清理 transport)
+            if self._client is not None:
+                try:
+                    self._client.close()
+                except Exception:  # noqa: BLE001 - 死会话 close 失败不影响重连
+                    pass
+            self._client = None
+            self._remote_home_dir = None
+
+            try:
+                self.connect()
+            except (SSHConnectionError, SSHAuthenticationError, SSHHostKeyError) as exc:
+                logger.warning(
+                    f"SSH 自动重连失败: host={host}, exc={exc!r}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                return False
+
+            logger.info(
+                f"SSH 自动重连成功: host={host}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return self.is_connected
+
+    def _call_with_retry(self, op: Callable[[], _T], *, label: str) -> _T:
+        """在 SSH/SFTP 操作外层做"前置探活 + 失败后重连一次"包装.
+
+        语义:
+        1. 调用前若 ``is_connected==False`` 则尝试自动重连 (一次)
+        2. 调用 ``op``; 抛 [`SSHConnectionError`](src/core/remote/errors.py) 时:
+           - 若此刻 ``is_connected`` 仍为真 (例如命令超时, transport 还活着) -> 原样抛出
+           - 若 transport 死亡 -> 重连一次后重试 ``op`` **一次**, 仍失败则抛出
+        3. 其他异常 (``RemoteCommandError`` 等) 一律不重试
+
+        Args:
+            op: 包装好的操作闭包, 应是幂等或安全可重试的 SSH/SFTP 调用
+            label: 仅用于日志的简短标签
+
+        Returns:
+            ``op`` 的返回值
+        """
+        # 前置探活: 调用方可能是断线很久后第一次发包, 此处便宜地恢复一次
+        if not self.is_connected:
+            self.ensure_alive(reconnect=True)
+
+        try:
+            return op()
+        except SSHConnectionError as exc:
+            # transport 活着但命令超时 / 远端卡住, 不应重试
+            if self.is_connected:
+                raise
+            logger.warning(
+                f"SSH 操作 {label} 失败且会话已断开: {exc!r}; 准备自动重连后重试一次",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            if not self.ensure_alive(reconnect=True):
+                raise
+            try:
+                return op()
+            except SSHConnectionError as retry_exc:
+                logger.warning(
+                    f"SSH 操作 {label} 自动重连后仍失败: {retry_exc!r}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                raise
 
     def run(self, command: str, *, timeout: float | None = None, get_pty: bool = False, check: bool = False) -> RemoteCommandResult:
         """执行远程命令。"""
+        return self._call_with_retry(
+            lambda: self._run_once(command, timeout=timeout, get_pty=get_pty, check=check),
+            label="run",
+        )
+
+    def _run_once(
+        self,
+        command: str,
+        *,
+        timeout: float | None,
+        get_pty: bool,
+        check: bool,
+    ) -> RemoteCommandResult:
+        """``run`` 的实际执行体, 不含 [`_call_with_retry`](src/core/remote/ssh_client.py) 包装."""
         client = self._require_client()
         effective_timeout = timeout or self.credentials.command_timeout
 
@@ -193,6 +337,31 @@ class SSHClient:
         return result
 
     def exec_stream(
+        self,
+        command: str,
+        *,
+        on_stdout_line: Callable[[str], None] | None = None,
+        on_stderr_line: Callable[[str], None] | None = None,
+        timeout: float | None = None,
+        check: bool = False,
+        merge_stderr: bool = False,
+    ) -> RemoteCommandResult:
+        # P3.W1: 流式命令重试需谨慎 — 一旦开始有输出回流给上层 (例如部署脚本进度),
+        # 整段重跑可能触发"双倍下载 / 二次写盘"等副作用. 因此只做"前置探活"(如果
+        # 入口前就发现连接已死, 自愈一次), 命令开始执行后任何错误都原样上抛,
+        # 由调用方决定是否重试.
+        if not self.is_connected:
+            self.ensure_alive(reconnect=True)
+        return self._exec_stream_once(
+            command,
+            on_stdout_line=on_stdout_line,
+            on_stderr_line=on_stderr_line,
+            timeout=timeout,
+            check=check,
+            merge_stderr=merge_stderr,
+        )
+
+    def _exec_stream_once(
         self,
         command: str,
         *,
@@ -314,6 +483,12 @@ class SSHClient:
 
     def upload_file(self, local_path: str | Path, remote_path: str) -> None:
         """上传单个文件。"""
+        return self._call_with_retry(
+            lambda: self._upload_file_once(local_path, remote_path),
+            label="upload_file",
+        )
+
+    def _upload_file_once(self, local_path: str | Path, remote_path: str) -> None:
         client = self._require_client()
         local_file = Path(local_path)
         if not local_file.exists():
@@ -344,6 +519,12 @@ class SSHClient:
 
     def download_file(self, remote_path: str, local_path: str | Path) -> None:
         """下载单个文件。"""
+        return self._call_with_retry(
+            lambda: self._download_file_once(remote_path, local_path),
+            label="download_file",
+        )
+
+    def _download_file_once(self, remote_path: str, local_path: str | Path) -> None:
         client = self._require_client()
         local_file = Path(local_path)
         local_file.parent.mkdir(parents=True, exist_ok=True)
@@ -357,6 +538,12 @@ class SSHClient:
 
     def read_text(self, remote_path: str, *, encoding: str = "utf-8") -> str:
         """读取远端文本文件全部内容。"""
+        return self._call_with_retry(
+            lambda: self._read_text_once(remote_path, encoding=encoding),
+            label="read_text",
+        )
+
+    def _read_text_once(self, remote_path: str, *, encoding: str) -> str:
         client = self._require_client()
         resolved = self._resolve_sftp_path(remote_path)
         try:
@@ -368,6 +555,12 @@ class SSHClient:
 
     def write_text(self, remote_path: str, content: str, *, encoding: str = "utf-8") -> None:
         """写入远端文本文件, 父目录不存在时自动创建。"""
+        return self._call_with_retry(
+            lambda: self._write_text_once(remote_path, content, encoding=encoding),
+            label="write_text",
+        )
+
+    def _write_text_once(self, remote_path: str, content: str, *, encoding: str) -> None:
         client = self._require_client()
         resolved = self._resolve_sftp_path(remote_path)
         parent = PurePosixPath(remote_path).parent.as_posix()
@@ -381,6 +574,12 @@ class SSHClient:
 
     def remote_exists(self, remote_path: str) -> bool:
         """判断远端路径是否存在(文件或目录)。"""
+        return self._call_with_retry(
+            lambda: self._remote_exists_once(remote_path),
+            label="remote_exists",
+        )
+
+    def _remote_exists_once(self, remote_path: str) -> bool:
         client = self._require_client()
         resolved = self._resolve_sftp_path(remote_path)
         try:
@@ -395,6 +594,12 @@ class SSHClient:
 
     def remote_listdir(self, remote_path: str) -> list[tuple[str, bool, int]]:
         """列出远端目录条目, 返回 ``(name, is_dir, size)`` 三元组列表。"""
+        return self._call_with_retry(
+            lambda: self._remote_listdir_once(remote_path),
+            label="remote_listdir",
+        )
+
+    def _remote_listdir_once(self, remote_path: str) -> list[tuple[str, bool, int]]:
         import stat as _stat
 
         client = self._require_client()
@@ -411,6 +616,7 @@ class SSHClient:
 
     def remote_remove(self, remote_path: str, *, recursive: bool = False) -> None:
         """删除远端文件或目录(目录需 ``recursive=True``)。"""
+        # 内部已经走 ``run``, 自带重试; 此处不再额外包一层避免重复重试.
         quoted = self._quote_remote_argument(remote_path)
         if recursive:
             self.run(f"rm -rf -- {quoted}", check=True)
@@ -418,6 +624,25 @@ class SSHClient:
             self.run(f"rm -f -- {quoted}", check=True)
 
     def open_local_tunnel(
+        self,
+        remote_port: int,
+        *,
+        remote_host: str = "127.0.0.1",
+        label: str | None = None,
+    ) -> "LocalPortForwarder":
+        # P3.W1: 隧道一旦建立就持有一个 paramiko Transport 子 channel,
+        # transport 死亡时上层会主动 stop 旧隧道再调用本方法新建. 这里只做
+        # "前置探活", 确保 transport 仍可开 channel; 不引入 retry, 避免在用户
+        # 已经 stop 旧隧道的边界条件下产生孤儿 channel.
+        if not self.is_connected:
+            self.ensure_alive(reconnect=True)
+        return self._open_local_tunnel_once(
+            remote_port,
+            remote_host=remote_host,
+            label=label,
+        )
+
+    def _open_local_tunnel_once(
         self,
         remote_port: int,
         *,

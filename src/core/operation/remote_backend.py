@@ -204,6 +204,13 @@ class RemoteBackend(OperationBackend):
                 LogSource.CORE,
             )
 
+        # P3 防御: 启动前在客户端层做两件事, 让 v1 launcher 用户也能立即受益,
+        # 不必走 "强制更新 NapCat" 重新部署 launcher v2.
+        #   ① 清除 qq_id 对应的孤儿进程 (旧 stop 杀的是 xvfb-run wrapper, qq 子进程会成孤儿)
+        #   ② 截断 napcat_<qq_id>.log, 避免 BotLogPage 第一次拉取就显示历史多次启动累积的日志
+        self._cleanup_orphan_qq_processes(qq_id)
+        self._truncate_napcat_log(qq_id)
+
         # launcher 内部 sleep 8s + 启动 xvfb-run, 单次调用最长不超过 ~30s,
         # 但 SSH command_timeout 默认 20s 不够用; 显式给 60s 保险.
         command = (
@@ -249,6 +256,10 @@ class RemoteBackend(OperationBackend):
         )
         # launcher 内部 sleep 3 + kill, 一般 < 10s; 给 30s 余量.
         self._exec_backend.run(command, timeout=30.0, check=True)
+
+        # P3 防御: launcher v1 杀的是 xvfb-run wrapper, qq 子进程会成孤儿继续登录;
+        # 这里再做一次客户端层 pgrep + kill -9 兜底, 避免下次启动撞 "已登录,无法重复登录".
+        self._cleanup_orphan_qq_processes(qq_id)
 
     def get_process_status(self, qq_id: str) -> ProcessStatus:
         """读取指定 Bot 的远端运行状态(P2 多 Bot 版).
@@ -588,6 +599,84 @@ class RemoteBackend(OperationBackend):
         if not normalized.isdigit() or not (4 <= len(normalized) <= 12):
             raise ValueError(f"非法 qq_id (必须为 4-12 位数字): {qq_id!r}")
         return normalized
+
+    # ==================== P3 防御: launcher v1 兜底 ====================
+    def _cleanup_orphan_qq_processes(self, qq_id: str) -> None:
+        """杀掉所有 ``qq --no-sandbox -q <qq_id>`` 命令行匹配的进程.
+
+        背景: launcher v1 ``stop`` 杀的是 ``nohup xvfb-run`` 拿到的 ``$!`` PID,
+        即 xvfb-run wrapper, 不是 qq 二进制本身; wrapper 死后 qq 子进程往往
+        游离成孤儿继续登录, 下次 ``start`` 撞上 "已登录,无法重复登录".
+
+        本方法在客户端层做一次 SSH ``pgrep`` + ``kill`` 兜底, 让旧 launcher
+        部署的服务器也能立即修复, 不必走"强制更新 NapCat"重新部署.
+
+        失败 (SSH 异常 / pgrep 找不到) 不抛错, 仅 trace 一行; 调用方应在
+        ``start_napcat`` / ``stop_napcat`` 里调用此函数.
+        """
+        try:
+            safe_qq = self._shell_quote_qq(qq_id)
+            # SIGTERM 阶段
+            self._exec_backend.run(
+                f"pkill -TERM -f 'qq --no-sandbox -q {safe_qq}$' 2>/dev/null || true",
+                timeout=10.0,
+                check=False,
+            )
+            # 给 3s 平滑退出窗口
+            self._exec_backend.run("sleep 3", timeout=10.0, check=False)
+            # SIGKILL 阶段 (仍存活的) + 删除可能遗留的 PID 文件
+            self._exec_backend.run(
+                f"pkill -KILL -f 'qq --no-sandbox -q {safe_qq}$' 2>/dev/null || true",
+                timeout=10.0,
+                check=False,
+            )
+            self._exec_backend.run(
+                f'rm -f "{self.paths.runtime_dir}/napcat_{safe_qq}.pid" 2>/dev/null || true',
+                timeout=5.0,
+                check=False,
+            )
+        except Exception as exc:  # noqa: BLE001 - 兜底失败不应阻断启动/停止主流程
+            from src.core.logging import LogSource, LogType
+            from src.core.logging import logger as _logger
+
+            _logger.trace(
+                f"远端孤儿进程清理失败(QQID={qq_id}, 忽略): {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+
+    def _truncate_napcat_log(self, qq_id: str) -> None:
+        """启动前把 ``napcat_<qq_id>.log`` 归档为 ``.prev`` 并新建空文件.
+
+        修复"启动日志包含历史多次启动"的 bug (P3): launcher v1 用 ``>>``
+        追加写入, 永不清空; tail 1000 行会把多次启动堆叠的旧日志一股脑
+        emit 到 BotLogPage. 客户端层主动 mv + truncate 即可解决.
+
+        与 launcher v2 的 ``rotate_log_file`` 等价; 即使 launcher 是 v2
+        也无副作用 (v2 自己也会再 rotate 一次, 多一次 mv 不影响).
+        """
+        try:
+            safe_qq = self._shell_quote_qq(qq_id)
+            log_path = f"{self.paths.log_dir}/napcat_{safe_qq}.log"
+            # 一行 sh 完成: 存在则 mv 到 .prev, 然后 ``: > log`` 建空文件
+            self._exec_backend.run(
+                (
+                    f'mkdir -p "{self.paths.log_dir}" && '
+                    f'( [ -f "{log_path}" ] && mv -f "{log_path}" "{log_path}.prev" '
+                    f'|| true ) && : > "{log_path}"'
+                ),
+                timeout=10.0,
+                check=False,
+            )
+        except Exception as exc:  # noqa: BLE001 - 截断失败不应阻断启动
+            from src.core.logging import LogSource, LogType
+            from src.core.logging import logger as _logger
+
+            _logger.trace(
+                f"远端日志截断失败(QQID={qq_id}, 忽略): {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
 
     def _fetch_rss_bytes(self, pid: int) -> int | None:
         """读取远端 ``ps -o rss=`` 获取 RSS, 返回字节数。"""

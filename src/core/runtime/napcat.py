@@ -32,6 +32,33 @@ from src.core.runtime.paths import PathFunc
 NotificationTask = Email | WebHook
 
 
+# ==================== 工具函数 ====================
+_ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+
+def _sanitize_log_text(data: str) -> str:
+    """清洗日志文本中的 ANSI 转义、异常换行和多余空行.
+
+    Linux 端 NapCat 通过 ``logger`` 输出的日志会带有 ``\\x1b[32m`` 之类的颜色
+    转义序列, 直接写进 ``QPlainTextEdit`` 后 ESC 字节会以 tofu 形式残留,
+    并破坏 [`LogHighlighter`](src/ui/components/code_editor/highlight.py)
+    对 ``[info]`` 等级别标签的正则匹配, 从而让远端日志既漏字符又上不了色.
+    本地 ``QProcess`` 与远端 ``tail`` 两条数据通路都需要走一次清洗.
+    """
+    if not data:
+        return ""
+
+    data = _ANSI_ESCAPE_RE.sub("", data)
+
+    # 将 `\r\n`、`\r\r\n`、孤立的 `\r` 统一折叠成单个 `\n`
+    data = re.sub(r"\r+\n", "\n", data)
+    data = re.sub(r"\r+", "\n", data)
+
+    # 压缩由异常换行导致的多余空白行
+    data = re.sub(r"\n{2,}", "\n", data)
+    return data
+
+
 @dataclass
 class NapCatProcessModel:
     """NapCat 进程数据模型"""
@@ -105,26 +132,15 @@ class NapCatQQProcessLog(QObject):
 
     @staticmethod
     def _sanitize_log_text(data: str) -> str:
-        """清洗日志文本中的 ANSI 转义、异常换行和多余空行。"""
-        if not data:
-            return ""
-
-        data = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", data)
-
-        # 将 `\r\n`、`\r\r\n`、孤立的 `\r` 统一折叠成单个 `\n`
-        data = re.sub(r"\r+\n", "\n", data)
-        data = re.sub(r"\r+", "\n", data)
-
-        # 压缩由异常换行导致的多余空白行
-        data = re.sub(r"\n{2,}", "\n", data)
-        return data
+        """清洗日志文本; 委托给模块级 [`_sanitize_log_text`](src/core/runtime/napcat.py)."""
+        return _sanitize_log_text(data)
 
     # ==================== 响应函数===================
     def handle_output(self):
         """处理日志数据"""
         # 拿到解码后的数据
         data = bytes(self._process.readAllStandardOutput().data()).decode()
-        data = self._sanitize_log_text(data)
+        data = _sanitize_log_text(data)
         if not data:
             return
         self._log_storage.append(data)
@@ -224,6 +240,10 @@ class RemoteNapCatQQLog(QObject):
     # 已展示历史的最大字节数 (UI 端 ``deque(maxlen=10000)`` 是按 chunk 计数,
     # 这里按 bytes 限制内存占用上限 ~ 200KB).
     _HISTORY_BYTES = 200 * 1024
+    # P3.W3.E: 连续失败阈值. 超过后停止轮询 + 在日志缓冲区注入一行错误,
+    # 避免在 SSH 不可达 / 远端日志丢失场景下被仓赌的重试迫到靠谱.
+    # 3 次 × 5s = 15s 才会放弃; 用户手动重启 Bot 会重新 create_remote_log 从而恢复.
+    _MAX_CONSECUTIVE_ERRORS = 3
 
     def __init__(self, config: Config) -> None:
         super().__init__()
@@ -234,6 +254,8 @@ class RemoteNapCatQQLog(QObject):
         # 维护 "已展示给 UI 的累积文本" 的尾部, 用于增量去重.
         # 不与 ``_log_storage`` 复用 (那是 chunk 列表, 拼接代价高).
         self._seen_tail: str = ""
+        # P3.W3.E: 连续失败计数; 成功拉取一次即重置
+        self._consecutive_errors: int = 0
 
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(self._POLL_INTERVAL_MS)
@@ -267,7 +289,19 @@ class RemoteNapCatQQLog(QObject):
         QThreadPool.globalInstance().start(cast(QRunnable, runnable))
 
     def _on_tail_arrived(self, qq_id: str, full_tail: str) -> None:
-        if qq_id != self._qq_id or not full_tail:
+        if qq_id != self._qq_id:
+            return
+        # P3.W3.E: 任何一次成功拉取 (哪怕是空字符串) 都重置连续失败计数
+        self._consecutive_errors = 0
+        if not full_tail:
+            return
+        # Linux 端 NapCat 输出含 ANSI 颜色转义, SSH ``tail`` 会把这些转义原封不动
+        # 带回来. 必须在拼入 ``_seen_tail`` / ``_log_storage`` 之前清洗一次, 否则:
+        #   - 转义字节会以 tofu 形式渲染到 ``QPlainTextEdit``;
+        #   - ``LogHighlighter`` 的 ``[info]`` / ``[debug]`` 正则会失配, 整页失色;
+        #   - 去重比对的 ``_seen_tail`` 与新一轮 sanitize 后的内容也会偏移.
+        full_tail = _sanitize_log_text(full_tail)
+        if not full_tail:
             return
         new_chunk = self._compute_new_chunk(full_tail)
         if not new_chunk:
@@ -279,12 +313,31 @@ class RemoteNapCatQQLog(QObject):
     def _on_tail_error(self, qq_id: str, message: str) -> None:
         if qq_id != self._qq_id:
             return
+        self._consecutive_errors += 1
         logger.trace(
-            f"远端 Bot 日志拉取失败(QQID: {qq_id}): {message}",
+            f"远端 Bot 日志拉取失败(QQID: {qq_id}, consecutive={self._consecutive_errors}): {message}",
             LogType.NETWORK,
             LogSource.CORE,
         )
-        # 不 emit output_log_signal, 避免 UI 噪音; error_signal 留给将来 P3.x 接入提示.
+        # P3.W3.E: 连续超阈值 → 停掉轮询 + 在日志缓冲区注入一行错误提示,
+        # 让用户在 BotLogPage 看到为什么日志停了 (而不是静默看起来在跑).
+        if (
+            self._consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS
+            and self._poll_timer.isActive()
+        ):
+            self._poll_timer.stop()
+            err_line = (
+                f"\n[ERROR] 远端日志拉取连续失败 {self._consecutive_errors} 次, 已停止轮询; "
+                f"请检查 SSH 连接 / 重启 Bot. 最后错误: {message}\n"
+            )
+            self._log_storage.append(err_line)
+            self._seen_tail = (self._seen_tail + err_line)[-self._HISTORY_BYTES:]
+            self.output_log_signal.emit(err_line)
+            logger.warning(
+                f"远端 Bot 日志轮询被退避停掉(QQID: {qq_id}): {message}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
         self.error_signal.emit(message)
 
     def _compute_new_chunk(self, full_tail: str) -> str:

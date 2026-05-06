@@ -490,38 +490,42 @@ def _sync_bot_runtime_config_to_remote(config: Config) -> None:
       用户应当看到本地保存成功, 然后由 UI 后续展示远端同步状态.
     - 调用方应在本地 ``_apply_json_transaction`` 提交成功**之后**才触发同步,
       以避免本地写盘失败时把陈旧配置推到远端.
+    - **顶层 try/except Exception 兜底**: 任何未预期异常 (paramiko/keyring/...)
+      都被吞下转 warning, 绝不让远端同步副作用使本地的 ``bot.json`` 写盘看起来失败.
+      这是 P3 阶段修复的实测 bug —— 远端 SSH 抖动会让 update_config 返回 False,
+      用户感知"切了 runtime_target 完全没生效", 但其实本地早就写盘了.
     """
     if config.bot.runtime_target == RUNTIME_TARGET_LOCAL:
         return
 
     try:
-        # 延迟导入避免循环依赖 (operation -> remote -> ssh, 在测试环境下
-        # 不一定都装齐了).
-        from src.core.operation.resolver import (
-            BackendResolutionError,
-            resolve_backend_for_bot,
-        )
+        try:
+            # 延迟导入避免循环依赖 (operation -> remote -> ssh, 在测试环境下
+            # 不一定都装齐了).
+            from src.core.operation.resolver import (
+                BackendResolutionError,
+                resolve_backend_for_bot,
+            )
 
-        backend = resolve_backend_for_bot(config)
-    except BackendResolutionError as exc:
-        logger.warning(
-            f"远端配置同步跳过: 解析 backend 失败 (QQID={config.bot.QQID}, "
-            f"target={config.bot.runtime_target}, stage={exc.stage}): {exc}"
-        )
-        return
-    except ImportError as exc:
-        logger.warning(f"远端配置同步跳过: backend 模块不可用: {exc}")
-        return
+            backend = resolve_backend_for_bot(config)
+        except BackendResolutionError as exc:
+            logger.warning(
+                f"远端配置同步跳过: 解析 backend 失败 (QQID={config.bot.QQID}, "
+                f"target={config.bot.runtime_target}, stage={exc.stage}): {exc}"
+            )
+            return
+        except ImportError as exc:
+            logger.warning(f"远端配置同步跳过: backend 模块不可用: {exc}")
+            return
 
-    # 仅 RemoteBackend 才有 ``write_bot_runtime_config`` 方法; LocalBackend 不应被绑定到非 local target.
-    write_remote = getattr(backend, "write_bot_runtime_config", None)
-    if write_remote is None:
-        logger.warning(
-            f"远端配置同步跳过: 解析得到的 backend ({type(backend).__name__}) 不支持远端配置写入"
-        )
-        return
+        # 仅 RemoteBackend 才有 ``write_bot_runtime_config`` 方法; LocalBackend 不应被绑定到非 local target.
+        write_remote = getattr(backend, "write_bot_runtime_config", None)
+        if write_remote is None:
+            logger.warning(
+                f"远端配置同步跳过: 解析得到的 backend ({type(backend).__name__}) 不支持远端配置写入"
+            )
+            return
 
-    try:
         onebot_path, napcat_path = write_remote(config)
         logger.info(
             (
@@ -530,7 +534,7 @@ def _sync_bot_runtime_config_to_remote(config: Config) -> None:
                 f"onebot={onebot_path}, napcat={napcat_path}"
             )
         )
-    except Exception as exc:  # noqa: BLE001 - 远端同步失败不应影响本地保存
+    except Exception as exc:  # noqa: BLE001 - 远端同步失败绝不应让本地保存失败
         logger.warning(
             f"远端配置同步失败 (QQID={config.bot.QQID}, "
             f"target={config.bot.runtime_target}): {type(exc).__name__}: {exc}"
@@ -538,37 +542,41 @@ def _sync_bot_runtime_config_to_remote(config: Config) -> None:
 
 
 def _delete_bot_runtime_config_from_remote(config: Config) -> None:
-    """删除远端的 onebot11/napcat 配置文件; 仅在 Bot 绑定到远端时触发."""
+    """删除远端的 onebot11/napcat 配置文件; 仅在 Bot 绑定到远端时触发.
+
+    与 [`_sync_bot_runtime_config_to_remote`](src/core/config/operate_config.py)
+    采用相同的"顶层 except Exception 兜底"策略, 远端清理失败不影响本地删除语义.
+    """
     if config.bot.runtime_target == RUNTIME_TARGET_LOCAL:
         return
 
     try:
-        from src.core.operation.resolver import (
-            BackendResolutionError,
-            resolve_backend_for_bot,
-        )
+        try:
+            from src.core.operation.resolver import (
+                BackendResolutionError,
+                resolve_backend_for_bot,
+            )
 
-        backend = resolve_backend_for_bot(config)
-    except BackendResolutionError as exc:
-        logger.warning(
-            f"远端配置删除跳过: 解析 backend 失败 (QQID={config.bot.QQID}, "
-            f"target={config.bot.runtime_target}, stage={exc.stage}): {exc}"
-        )
-        return
-    except ImportError as exc:
-        logger.warning(f"远端配置删除跳过: backend 模块不可用: {exc}")
-        return
+            backend = resolve_backend_for_bot(config)
+        except BackendResolutionError as exc:
+            logger.warning(
+                f"远端配置删除跳过: 解析 backend 失败 (QQID={config.bot.QQID}, "
+                f"target={config.bot.runtime_target}, stage={exc.stage}): {exc}"
+            )
+            return
+        except ImportError as exc:
+            logger.warning(f"远端配置删除跳过: backend 模块不可用: {exc}")
+            return
 
-    delete_remote = getattr(backend, "delete_bot_runtime_config", None)
-    if delete_remote is None:
-        return
+        delete_remote = getattr(backend, "delete_bot_runtime_config", None)
+        if delete_remote is None:
+            return
 
-    try:
         delete_remote(str(config.bot.QQID))
         logger.info(
             f"远端 Bot 配置已删除: QQID={config.bot.QQID}, target={config.bot.runtime_target}"
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 远端清理失败不应让本地删除失败
         logger.warning(
             f"远端配置删除失败 (QQID={config.bot.QQID}, "
             f"target={config.bot.runtime_target}): {type(exc).__name__}: {exc}"
