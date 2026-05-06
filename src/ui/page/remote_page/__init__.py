@@ -504,7 +504,9 @@ class RemotePage(QWidget):
             error_bar("密码认证模式下未保存密码, 请先编辑并填写密码", parent=self)
             return
 
-        info_bar(f"正在测试连接: {profile.credentials.host}", parent=self)
+        # P3 perf: 进行中 / 完成状态由
+        # [`ProgressInfoBarBridge`](src/ui/components/progress_info_bar_bridge.py)
+        # 统一在右上 ProgressInfoBar 展示, 这里不再额外 info_bar.
         # 仅禁用本卡片的测试按钮, 防止重复点击
         if sid in self._cards:
             self._cards[sid].test_btn.setEnabled(False)
@@ -513,20 +515,20 @@ class RemotePage(QWidget):
         tester.signals.finished.connect(self._on_test_finished)
         QThreadPool.globalInstance().start(tester)
 
-    def _on_test_finished(self, server_id: str, ok: bool, message: str) -> None:
+    def _on_test_finished(self, server_id: str, ok: bool, message: str) -> None:  # noqa: ARG002
+        # P3 perf: 成败提示已走 ProgressInfoBar 桥, 这里仅负责
+        # 更新 last_connected_at 与恢复按钮可用性.
         self._refresh_card_states()
         manager = it(ServerManager)
         profile = manager.get_server(server_id)
-        name = profile.name if profile is not None else server_id
-        if ok:
-            success_bar(f"[{name}] {message}", parent=self)
-            if profile is not None:
-                from time import time
+        if ok and profile is not None:
+            from time import time
 
-                profile.last_connected_at = time()
-                manager.update_server(profile)
-        else:
-            error_bar(f"[{name}] {message}", parent=self)
+            profile.last_connected_at = time()
+            manager.update_server(profile)
+        # 恢复本卡片测试按钮
+        if server_id in self._cards:
+            self._cards[server_id].test_btn.setEnabled(True)
 
     def _on_delete(self, server_id: str | None = None) -> None:
         sid = self._resolve_sid(server_id)
@@ -560,6 +562,7 @@ class RemotePage(QWidget):
             return
 
         if manager.is_deploying(profile.id):
+            # 保留: 并非任务进行中反馈, 而是"已有任务占用"的拦截提示, 不走桥
             info_bar(f"[{profile.name}] 正在部署中, 请耐心等待", parent=self)
             return
 
@@ -582,7 +585,7 @@ class RemotePage(QWidget):
             if not ask.exec():
                 return
 
-        info_bar(f"[{profile.name}] 开始部署...", parent=self)
+        # P3 perf: "开始部署" 进度交由 ProgressInfoBar 桥; 卡片内部进度条依旧保留
         if sid in self._cards:
             self._cards[sid].show_progress("准备部署", 0)
         self._refresh_card_states()
@@ -614,15 +617,9 @@ class RemotePage(QWidget):
         if server_id in self._cards:
             self._cards[server_id].show_progress(message, percent)
 
-    def _on_deployment_finished(self, server_id: str, ok: bool, message: str) -> None:
-        manager = it(ServerManager)
-        profile = manager.get_server(server_id)
-        name = profile.name if profile is not None else server_id
-        if ok:
-            success_bar(f"[{name}] {message}", parent=self)
-        else:
-            error_bar(f"[{name}] {message}", parent=self)
-
+    def _on_deployment_finished(self, server_id: str, ok: bool, message: str) -> None:  # noqa: ARG002
+        # P3 perf: 成败 / 失败提示由 ProgressInfoBar 桥统一展示;
+        # 这里仅隐藏卡片内部进度条 + 刷新按钮状态.
         if server_id in self._cards:
             self._cards[server_id].hide_progress()
         self._refresh_card_states()
@@ -644,7 +641,7 @@ class RemotePage(QWidget):
         if manager.is_deploying(profile.id):
             info_bar(f"[{profile.name}] 正在部署中, 请稍后重试", parent=self)
             return
-        info_bar(f"[{profile.name}] 后台探测远端版本中...", parent=self)
+        # P3 perf: 进行中 / 完成反馈已交给 ProgressInfoBar 桥
         runner = RedetectRunner(profile.id)
         runner.signals.finished.connect(self._on_redetect_finished)
         QThreadPool.globalInstance().start(runner)
@@ -706,7 +703,7 @@ class RemotePage(QWidget):
         if not ask.exec():
             return
 
-        info_bar(f"[{profile.name}] {label}中...", parent=self)
+        # P3 perf: {label}中... 进度交给 ProgressInfoBar 桥; 卡片内进度条依旧保留
         if sid in self._cards:
             self._cards[sid].show_progress(f"准备{label}", 0)
         self._refresh_card_states()
@@ -773,7 +770,7 @@ class RemotePage(QWidget):
             return
         include_qq = dialog.get_include_qq()
 
-        info_bar(f"[{profile.name}] 开始回滚...", parent=self)
+        # P3 perf: 回滚进度交给 ProgressInfoBar 桥
         if sid in self._cards:
             self._cards[sid].show_progress("准备回滚", 0)
         self._refresh_card_states()
@@ -803,32 +800,21 @@ class RemotePage(QWidget):
             runner.signals.finished.connect(self._on_redetect_finished)
             QThreadPool.globalInstance().start(runner)
             triggered.append(profile.name)
-        if triggered:
-            info_bar(
-                f"正在后台探测 {len(triggered)} 台已部署服务器的版本号: "
-                f"{', '.join(triggered)}",
-                parent=self,
-            )
+        # P3 perf: 多台同时探测会 spawn 多个 ProgressInfoBar (堆叠于右上),
+        # 不再额外的 info_bar 提示总计; 仅保留 ``triggered`` 变量供调试
+        _ = triggered  # noqa: F841
 
     def _on_redetect_finished(
         self,
-        server_id: str,
+        server_id: str,  # noqa: ARG002 - 成败 / 失败提示走 ProgressInfoBar 桥
         ok: bool,
         napcat_version: object,
         qq_version: object,
         error_msg: str,
     ) -> None:
-        manager = it(ServerManager)
-        profile = manager.get_server(server_id)
-        name = profile.name if profile is not None else server_id
-        if not ok:
-            error_bar(f"[{name}] 版本探测失败: {error_msg}", parent=self)
-            return
-        success_bar(
-            f"[{name}] 探测完成: NapCat={napcat_version or '未探测到'}, "
-            f"QQ={qq_version or '未探测到'}",
-            parent=self,
-        )
+        # P3 perf: 成败 / 失败反馈由 RedetectRunner 进桥 → ProgressInfoBar 统一处理.
+        # UI 处仅需记录变量以供调试 / 保留原有接口参数.
+        _ = ok, napcat_version, qq_version, error_msg  # noqa: F841
 
 
 class RemotePageCreator(AbstractCreator, ABC):

@@ -43,7 +43,17 @@ class ConnectionTester(QRunnable):
         from creart import it
 
         from src.core.remote import ServerManager
+        from src.ui.page.remote_page.deployment_runner import _tracked
 
         manager = it(ServerManager)
-        ok, message = manager.test_connection(self._profile, password=self._password)
-        self.signals.finished.emit(self._profile.id, ok, message)
+        with _tracked(
+            f"ssh-test-{self._profile.id}",
+            f"测试 SSH 连接 ({self._profile.name or self._profile.id})",
+            content="正在尝试建立 SSH 会话…",
+        ) as tracker:
+            ok, message = manager.test_connection(self._profile, password=self._password)
+            self.signals.finished.emit(self._profile.id, ok, message)
+            if ok:
+                tracker.success(message or "SSH 连接成功")
+            else:
+                tracker.fail(message or "SSH 连接失败")
