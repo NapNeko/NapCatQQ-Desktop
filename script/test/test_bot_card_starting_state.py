@@ -32,21 +32,30 @@ def load_card_module():
 
     与 [`test_bot_card.py`](script/test/test_bot_card.py) 同款的旁路加载, 这样
     本测试不会被 `BotPage.__init__` 的 creart 链路影响.
+
+    P4 W1 修复: 如果 ``src.ui.page`` 已被其他测试/代码以真实模块身份加载
+    (``__file__`` 存在), 不要覆盖为空命名空间 — 否则后续跳转到
+    [`MainWindow`](src/ui/window/main_window/window.py) 的 ``from src.ui.page import
+    ApiDebugPage`` 将报 ``cannot import name 'ApiDebugPage'``.
     """
     project_root = Path(__file__).resolve().parents[2]
     module_name = "src.ui.page.bot_page.widget.card"
 
-    page_package = ModuleType("src.ui.page")
-    page_package.__path__ = [str(project_root / "src" / "ui" / "page")]
-    sys.modules["src.ui.page"] = page_package
+    def _ensure_namespace(name: str, path: Path) -> None:
+        existing = sys.modules.get(name)
+        # 已是真实加载的 package (有 ``__file__``) -> 保留, 不要被空命名空间覆盖
+        if existing is not None and getattr(existing, "__file__", None):
+            return
+        package = ModuleType(name)
+        package.__path__ = [str(path)]
+        sys.modules[name] = package
 
-    bot_page_package = ModuleType("src.ui.page.bot_page")
-    bot_page_package.__path__ = [str(project_root / "src" / "ui" / "page" / "bot_page")]
-    sys.modules["src.ui.page.bot_page"] = bot_page_package
-
-    widget_package = ModuleType("src.ui.page.bot_page.widget")
-    widget_package.__path__ = [str(project_root / "src" / "ui" / "page" / "bot_page" / "widget")]
-    sys.modules["src.ui.page.bot_page.widget"] = widget_package
+    _ensure_namespace("src.ui.page", project_root / "src" / "ui" / "page")
+    _ensure_namespace("src.ui.page.bot_page", project_root / "src" / "ui" / "page" / "bot_page")
+    _ensure_namespace(
+        "src.ui.page.bot_page.widget",
+        project_root / "src" / "ui" / "page" / "bot_page" / "widget",
+    )
 
     sys.modules.pop(module_name, None)
     spec = importlib.util.spec_from_file_location(
@@ -60,7 +69,17 @@ def load_card_module():
     return module
 
 
-card_module = load_card_module()
+# P4 W1 修复: 不在模块加载期 (collection 阶段) 就调用 load_card_module(),
+# 避免混入 ``src.ui.page.bot_page.widget`` 空命名空间污染其他测试文件的 collection.
+_card_module_cache = None
+
+
+def _get_card_module():
+    """懒加载 card 模块; 首次调用才手动拼装 namespace package。"""
+    global _card_module_cache
+    if _card_module_cache is None:
+        _card_module_cache = load_card_module()
+    return _card_module_cache
 
 
 def ensure_qapp() -> QApplication:
@@ -90,6 +109,7 @@ class DummyInfoWidget(QWidget):
 def _make_card(monkeypatch: pytest.MonkeyPatch, config) -> object:
     """构造一个 BotCard 实例, 旁路掉 manager / 头像下载副作用。"""
     ensure_qapp()
+    card_module = _get_card_module()
     fake_process_manager = SimpleNamespace(process_changed_signal=DummySignal())
     fake_login_state_manager = SimpleNamespace(
         qr_code_available_signal=DummySignal(),
@@ -188,6 +208,7 @@ def test_update_info_card_reflects_starting_state(
 ) -> None:
     """update_info_card: record.state==Starting 时也应渲染指示, 不只 Running。"""
     ensure_qapp()
+    card_module = _get_card_module()
     fake_record = SimpleNamespace(state=QProcess.ProcessState.Starting)
     fake_process_manager = SimpleNamespace(
         process_changed_signal=DummySignal(),
