@@ -157,6 +157,9 @@ class ServerManager(QObject):
             LogType.NETWORK,
             LogSource.CORE,
         )
+        # P4 W2 F3: 新增服务器仅发信号; 资源监控 attach 由
+        # ResourceMonitorService 订阅 server_added 后自行决定, 避免从 ServerManager
+        # 依赖 creart 单例造成 W1 期间还不需要采样的场景也被迫启动 worker.
         self.server_added.emit(profile.id)
 
     def update_server(
@@ -207,6 +210,7 @@ class ServerManager(QObject):
                     pass
             # P4 F5.2: 同步清理 keyring, 避免遗留条目
             self._delete_password_from_keyring(server_id)
+            # P4 W2 F3: detach 同样交由 ResourceMonitorService 订阅 server_removed 处理
             logger.info(f"已删除服务器档案: id={server_id}", LogType.NETWORK, LogSource.CORE)
             self.server_removed.emit(server_id)
         return ok
@@ -262,6 +266,13 @@ class ServerManager(QObject):
         if not self._credential_store.is_available():
             return
         self._credential_store.delete_password(server_id)
+
+    # ==================== 资源监控钩子 (P4 W2 F3) ====================
+    # 设计沉淀: ServerManager 不主动 attach/detach
+    # [`ResourceMonitorService`](src/core/remote/resource_monitor.py); 该服务订阅
+    # ``server_added`` / ``server_removed`` 后自行决定是否启动采样 worker,
+    # 这样 W1 / 单元测试环境下只要不出现 ``it(ResourceMonitorService)``
+    # 调用, 就不会启动背后轮询.
 
     def set_deployment_state(self, server_id: str, state: DeploymentState) -> None:
         """更新指定服务器的部署状态并持久化。"""
