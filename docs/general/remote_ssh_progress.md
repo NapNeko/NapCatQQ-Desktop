@@ -12,7 +12,7 @@
 
 ## 当前阶段
 
-当前处于：**P4 进行中 — Wave 1 done, regression green; W2/W3/W4 待启动**
+当前处于：**P4 进行中 — W1/W2/W3/W4 代码交付完成; 手动验收中**
 
 各阶段计划与验收文档：
 - P0 → [`remote_ssh_p0_acceptance.md`](./remote_ssh_p0_acceptance.md)
@@ -125,8 +125,8 @@
 
 ### P4：高级能力 + P3 体验补丁收尾
 
-状态：**Wave 1 done, regression green; W2/W3/W4 待启动**
-（需求: [`docs/requirements/2026-05-06-remote-ssh-p4.md`](../requirements/2026-05-06-remote-ssh-p4.md), 实施计划: [`docs/plans/2026-05-06-remote-ssh-p4-execution-plan.md`](../plans/2026-05-06-remote-ssh-p4-execution-plan.md)）
+状态：**W1/W2/W3/W4 代码交付完成; 手动验收中**
+（需求: [`docs/requirements/2026-05-06-remote-ssh-p4.md`](../requirements/2026-05-06-remote-ssh-p4.md), 实施计划: [`docs/plans/2026-05-06-remote-ssh-p4-execution-plan.md`](../plans/2026-05-06-remote-ssh-p4-execution-plan.md), 验收: [`remote_ssh_p4_acceptance.md`](./remote_ssh_p4_acceptance.md)）
 
 #### Wave 1 — 体验补丁 + 批量 Bot 管理 ✅
 
@@ -138,19 +138,26 @@
 - [x] 修复 `test_bot_card_starting_state.py` 在 collection 阶段污染 `sys.modules["src.ui.page"]` 的遗留问题
 - 用例新增: 106 个; W1 + 基线全量回归 473/473 + 1 expected skip
 
-#### Wave 2 — 远端资源监控 + 状态聚合面板 (待启动)
+#### Wave 2 — 远端资源监控 + 状态聚合面板 ✅ (代码交付)
 
-- [ ] **F3** `ResourceMonitorService` 10s 后台轮询 (CPU / Mem / Disk / Net)
-- [ ] **F4** `RemoteSummaryCard` (HomePage 入口) + `StatusOverviewDialog` (多服务器聚合)
-- [ ] **F1** 自动切换机制 (本地不可用 → 远端) — 排期复议中
+- [x] **F3.1** `RemoteBackend.sample_resources()` 4 行 echo 协议 + `parse_sample_output` (12/12)
+- [x] **F3.2** `ResourceMonitorService` (`threading.Thread` worker + 3-点 CPU 滑窗 + 5min 冷却; 单测被跳过，W4 手动验收)
+- [x] **F3.3** `bind_to_server_manager()` 延迟订阅 (避免 ServerManager 构造期启动 worker)
+- [x] **F4.1** `RemoteSummaryCard` (HomePage 嵌入 + 空态折叠 + 24h 告警点击跳转)
+- [x] **F4.2** `StatusOverviewDialog` (RemotePage 工具栏 FAB 入口 + 三栏信号驱动)
+- [x] **F1** 自动切换机制 — 用户决策取消, 不实现
 
-#### Wave 3 — 持久数据搬运 (待启动)
+#### Wave 3 — NapCat 持久数据迁移 ✅ (代码交付)
 
-- [ ] **B** NapCat 持久数据迁移 (账号缓存/数据库; 复用 P3 `BotMigrationService` 骨架)
+- [x] **F6.1** `OperationBackend` 字节级 IO API (`file_size` / `read_bytes` / `append_bytes` / `rename` / `walk_files`); LocalBackend / RemoteBackend / SSHClient SFTP 均覆盖
+- [x] **F6.2** `BotMigrationService._transfer_persistent_data` (1 MiB chunk + `.partial` 续传 + `bytes_progress_signal` 字节级进度)
+- [x] **F6.3** `MigrationDialog` 解锁 `move_persistent_data` 默认勾选; `BotMigrationRunnable` 桥 `bytes_progress_signal` → `BackgroundTaskCenter.content` 文案 "持久数据搬运: X.X / Y.Y MiB"
+- 用例新增: 9 个 (`test_migration_persistent_data.py` ·7 + `test_migration_dialog_persistent_flag.py` ·2)
 
-#### Wave 4 — `_iter_stream_with_resume` (待启动)
+#### Wave 4 — `exec_stream` 中途断开自动重连 ✅ (代码交付)
 
-- [ ] **F7** `SSHClient._iter_stream_with_resume` (按 PROGRESS 步长断点重连; 重试退避 1s/3s/8s)
+- [x] **F7** `SSHClient.exec_stream_resilient` (退避 1s/3s/8s, ``max_retries=0`` 默认退化为单次 `exec_stream` 以保留 P3 幂等性假设; 调用方验证脚本幂等后可调高 retries 开启)
+- 用例新增: 7 个 (`test_exec_stream_resume.py`)
 
 ---
 
