@@ -12,7 +12,7 @@
 
 ## 当前阶段
 
-当前处于：**P3 已完成 ✅ (核心范围 A/B/C/E/F + perf 子阶段 A/B/C/D), D/G 推迟**
+当前处于：**P4 进行中 — Wave 1 done, regression green; W2/W3/W4 待启动**
 
 各阶段计划与验收文档：
 - P0 → [`remote_ssh_p0_acceptance.md`](./remote_ssh_p0_acceptance.md)
@@ -20,6 +20,7 @@
 - P2 → [`remote_ssh_p2_acceptance.md`](./remote_ssh_p2_acceptance.md)
 - P3 → [`remote_ssh_p3_plan.md`](./remote_ssh_p3_plan.md) / [`remote_ssh_p3_acceptance.md`](./remote_ssh_p3_acceptance.md)
 - P3 perf → [需求](../requirements/2026-05-06-remote-ssh-p3-perf.md) / [`remote_ssh_p3_perf_acceptance.md`](./remote_ssh_p3_perf_acceptance.md)
+- P4 → [需求](../requirements/2026-05-06-remote-ssh-p4.md) / [实施计划](../plans/2026-05-06-remote-ssh-p4-execution-plan.md)
 
 ### 总体判断
 
@@ -31,6 +32,7 @@
 - v2 P2（远端 Bot 运行闭环）**已完成 244/244**
 - v2 P3（体验优化与稳态收尾）**已完成 317/317**, 含 P3 新增 73 个 (W1·14 + W2·16 + W3·B 14 + W3·E 7 + 邻接 22)
 - v2 P3 perf（启动流程异步化与状态可见性, 进度反馈走组件库 ProgressInfoBar）**已完成**, 新增 41 测试 (background_task_center·13 + bot_card_starting·5 + runnable_wiring·5 + run_napcat·4 适配 + operate_config_async·5 + progress_info_bar_bridge·9)
+- v2 P4 W1（体验补丁: 指纹确认 / keyring / 私钥拖拽 / 错误文案统一 + 批量 Bot 管理）**Wave 1 done, regression green** — 新增 106 用例 (host_key_policy·13 + host_key_confirm_dialog·12 + credential_keyring·15 + server_edit_dialog_drag_drop·13 + server_edit_dialog_remember·14 + friendly_errors·23 + batch_bot_dispatcher·10 + bot_page_batch_mode·6), 同步修复 P3 perf 遗留 collection 阶段 sys.modules 污染.
 
 ---
 
@@ -121,13 +123,34 @@
 - [ ] **D** 多服务器/Bot 状态聚合面板 (推迟到 P3.5/P4)
 - [ ] **G** 体验细节: 指纹确认对话框 / keyring / 私钥拖拽 / 错误文案统一 (推迟到 P3.5/P4)
 
-### P4：高级能力
+### P4：高级能力 + P3 体验补丁收尾
 
-状态：**未规划**, 预期范围:
-- 自动切换 (本地不可用 → 远端)
-- 批量 Bot 管理
-- 远端资源监控 (CPU / 内存 / 磁盘)
-- B 的 NapCat 持久数据搬运 (账号缓存/数据库)
+状态：**Wave 1 done, regression green; W2/W3/W4 待启动**
+（需求: [`docs/requirements/2026-05-06-remote-ssh-p4.md`](../requirements/2026-05-06-remote-ssh-p4.md), 实施计划: [`docs/plans/2026-05-06-remote-ssh-p4-execution-plan.md`](../plans/2026-05-06-remote-ssh-p4-execution-plan.md)）
+
+#### Wave 1 — 体验补丁 + 批量 Bot 管理 ✅
+
+- [x] **F5.1** SSH 指纹首次连接确认 (`InteractiveHostKeyPolicy` + `HostKeyConfirmDialog` 跨线程桥, 复用 v1 `KnownHostsStore`)
+- [x] **F5.2** Windows Credential Manager 凭据库 (`CredentialStore`, ServerManager `remember_password` 参数 + 启动期 `_preload_passwords_from_keyring`)
+- [x] **F5.3** ServerEditDialog 私钥路径拖拽 (`_PrivateKeyDropLineEdit`)
+- [x] **F5.4** 错误文案统一 (`friendly_errors.to_friendly`, `ServerManager.test_connection` 接入)
+- [x] **F2** 批量 Bot 管理 (`BatchDispatcher` + BotCard 复选框 + BotListPage 工具条; 支持批量启停/删除)
+- [x] 修复 `test_bot_card_starting_state.py` 在 collection 阶段污染 `sys.modules["src.ui.page"]` 的遗留问题
+- 用例新增: 106 个; W1 + 基线全量回归 473/473 + 1 expected skip
+
+#### Wave 2 — 远端资源监控 + 状态聚合面板 (待启动)
+
+- [ ] **F3** `ResourceMonitorService` 10s 后台轮询 (CPU / Mem / Disk / Net)
+- [ ] **F4** `RemoteSummaryCard` (HomePage 入口) + `StatusOverviewDialog` (多服务器聚合)
+- [ ] **F1** 自动切换机制 (本地不可用 → 远端) — 排期复议中
+
+#### Wave 3 — 持久数据搬运 (待启动)
+
+- [ ] **B** NapCat 持久数据迁移 (账号缓存/数据库; 复用 P3 `BotMigrationService` 骨架)
+
+#### Wave 4 — `_iter_stream_with_resume` (待启动)
+
+- [ ] **F7** `SSHClient._iter_stream_with_resume` (按 PROGRESS 步长断点重连; 重试退避 1s/3s/8s)
 
 ---
 
