@@ -189,13 +189,11 @@ class TestStartNapcat:
 
     def test_start_raises_when_launcher_returns_nonzero(self, backend: RemoteBackend, config_factory) -> None:
         # 让 launcher 返回非零退出码 -> RemoteCommandError
-        # P3: 客户端在 launcher 之前会发 4 条兜底命令 (pkill * 2 + sleep + mv/truncate),
-        # canned 必须前 4 条占位 + 第 5 条才是真正的 launcher 失败结果.
+        # P4 perf: 客户端层 cleanup 已合并为单条 shell, 因此 launcher 之前只有
+        # 2 条兜底命令 (合并后的 cleanup + log truncate); canned 前 2 条占位 +
+        # 第 3 条才是真正的 launcher 失败结果.
         backend._exec_backend.canned.extend([  # type: ignore[attr-defined]
-            RemoteCommandResult(command="pkill TERM", exit_status=0),
-            RemoteCommandResult(command="sleep", exit_status=0),
-            RemoteCommandResult(command="pkill KILL", exit_status=0),
-            RemoteCommandResult(command="rm -f pid", exit_status=0),
+            RemoteCommandResult(command="cleanup combined", exit_status=0),
             RemoteCommandResult(command="mv + truncate", exit_status=0),
             RemoteCommandResult(command="bash launcher", exit_status=4, stderr="failed"),
         ])
