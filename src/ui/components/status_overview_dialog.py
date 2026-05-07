@@ -217,6 +217,11 @@ class StatusOverviewDialog(MessageBoxBase):
 
         必须把旧 stretch 也清掉, 否则每次 refresh 后 ``addStretch`` 会累积,
         导致 ``_append_item`` 插入的 widget 被前序 stretch 挤到列中央.
+
+        注意: 旧 widget 在 layout 中是可见的, 直接 ``setParent(None)`` 会让
+        它们以 ``isVisible()=true`` 的状态脱离父级, 在 ``deleteLater`` 处理前
+        会被 Qt 提升为顶层窗口 (标题 "python"), 表现为 "刷新时弹窗" 的 bug;
+        因此先 ``hide()`` 再断开父级.
         """
         while layout.count() > 0:
             item = layout.takeAt(0)
@@ -224,6 +229,7 @@ class StatusOverviewDialog(MessageBoxBase):
                 continue
             widget = item.widget()
             if widget is not None:
+                widget.hide()
                 widget.setParent(None)
                 widget.deleteLater()
         layout.addStretch(1)
