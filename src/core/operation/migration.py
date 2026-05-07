@@ -18,8 +18,10 @@
 - **同步语义**: 暴露同步 ``execute(plan)``, Qt 信号桥接由
   [`BotMigrationRunnable`](src/core/operation/migration.py) 完成,
   避免 service 与 GUI 框架耦合
-- **MVP 范围**: 仅迁移 NapCat 配置文件; NapCat 持久数据 (cache/database)
-  路径未标准化, 留到 P4 阶段评估
+- **P4 W3 F6 兑现**: 当 ``MigrationPlan.move_persistent_data=True`` 时, 在搬完
+  NapCat 配置后顺序搬运 NapCat 数据目录 + QQ 账号缓存 (路径白名单见
+  :meth:`BotMigrationService._persistent_data_roots`); 单文件走
+  ``OperationBackend.read_bytes`` / ``append_bytes`` 1 MiB chunk + ``.partial`` 续传.
 """
 
 from __future__ import annotations
@@ -39,6 +41,13 @@ if TYPE_CHECKING:
     from src.core.config.config_model import BotConfig
 
     from .backend import OperationBackend
+
+
+# ==================== F6 持久数据迁移常量 ====================
+#: 单次 sftp / 文件 IO chunk 大小; 与需求 §F6 "1 MiB" 对齐.
+PERSISTENT_DATA_CHUNK_SIZE = 1 * 1024 * 1024
+#: 单文件未完成传输的临时后缀; 与目标真名共存, 完成后 rename 覆盖.
+PERSISTENT_PARTIAL_SUFFIX = ".partial"
 
 
 # 进度回调签名: (message, percent_0_to_100)
@@ -116,6 +125,8 @@ class BotMigrationService(QObject):
 
     progress_signal = Signal(str, int)
     finished_signal = Signal(bool, str)
+    # P4 W3 F6: 字节级搬运进度 (transferred_bytes, total_bytes)
+    bytes_progress_signal = Signal(int, int)
 
     def execute(self, plan: MigrationPlan) -> None:
         """**同步**执行迁移 (应在 [`QRunnable`](https://doc.qt.io/qt-6/qrunnable.html) 中调用).
@@ -165,13 +176,26 @@ class BotMigrationService(QObject):
                 self._emit_progress(f"复制 {filename}", pct_base)
                 self._copy_config_file(source_backend, dest_backend, filename)
 
-            self._emit_progress("清理源端旧配置", 85)
+            self._emit_progress("清理源端旧配置", 80)
             for filename in files_to_migrate:
                 self._delete_config_file(source_backend, filename)
 
+            transferred_bytes = 0
+            persistent_file_count = 0
+            if plan.move_persistent_data:
+                self._emit_progress("搬运 NapCat 持久数据", 82)
+                transferred_bytes, persistent_file_count = self._transfer_persistent_data(
+                    source_backend, dest_backend, plan
+                )
+
             self._emit_progress("迁移完成", 100)
+            extra = (
+                f", 持久数据 {persistent_file_count} 个文件 / {transferred_bytes} 字节"
+                if plan.move_persistent_data
+                else ""
+            )
             ok_msg = (
-                f"已迁移 {len(files_to_migrate)} 个配置文件: "
+                f"已迁移 {len(files_to_migrate)} 个配置文件{extra}: "
                 f"{plan.source_target} → {plan.dest_target}"
             )
             self._emit_finished(True, ok_msg)
@@ -319,6 +343,213 @@ class BotMigrationService(QObject):
     def _emit_finished(self, ok: bool, message: str) -> None:
         self.finished_signal.emit(ok, message)
 
+    # ==================== P4 W3 F6: 持久数据搬运 ====================
+    def _transfer_persistent_data(
+        self,
+        source_backend: "OperationBackend",
+        dest_backend: "OperationBackend",
+        plan: MigrationPlan,
+    ) -> tuple[int, int]:
+        """搬运白名单下的 NapCat 持久数据; 返回 ``(transferred_bytes, file_count)``.
+
+        失败时抛 ``BotMigrationError(stage="persistent_data")``; 已写入的目标文件
+        保留 ``.partial`` 后缀, 不删除 (与 P3 既有"不回滚配置 JSON"语义一致).
+        """
+        plan_pairs = self._collect_persistent_files(source_backend, dest_backend, plan)
+        total_bytes = sum(size for _, _, size in plan_pairs)
+        if not plan_pairs:
+            logger.info(
+                f"持久数据白名单下无文件需要搬运: qq_id={plan.qq_id}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            self.bytes_progress_signal.emit(0, 0)
+            return 0, 0
+
+        logger.info(
+            (
+                f"开始搬运持久数据: qq_id={plan.qq_id}, "
+                f"files={len(plan_pairs)}, total_bytes={total_bytes}"
+            ),
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
+
+        transferred = 0
+        self.bytes_progress_signal.emit(transferred, total_bytes)
+        for src_abs, dst_abs, size in plan_pairs:
+            try:
+                file_done = self._copy_with_resume(
+                    source_backend,
+                    dest_backend,
+                    src_abs,
+                    dst_abs,
+                    expected_size=size,
+                    on_chunk=lambda done, total=total_bytes, base=transferred: (
+                        self.bytes_progress_signal.emit(base + done, total)
+                    ),
+                )
+            except BotMigrationError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - 包装为 BotMigrationError, 保留 partial
+                raise BotMigrationError(
+                    f"搬运持久数据失败: {src_abs} -> {dst_abs}: {type(exc).__name__}: {exc}",
+                    stage="persistent_data",
+                ) from exc
+            transferred += file_done
+            self.bytes_progress_signal.emit(transferred, total_bytes)
+
+        return transferred, len(plan_pairs)
+
+    def _collect_persistent_files(
+        self,
+        source_backend: "OperationBackend",
+        dest_backend: "OperationBackend",
+        plan: MigrationPlan,
+    ) -> list[tuple[str, str, int]]:
+        """枚举白名单根目录下的所有文件, 返回 ``(src_abs, dst_abs, size)`` 三元组列表.
+
+        - 同名同 size 已存在于目标端时跳过 (粗粒度续传, 满足需求 §F6 "size 一致 + mtime >= 源 mtime 时跳过";
+          为减小 backend API 表面, 这里只比较 size; mtime 一致性在 P5 优化期补强).
+        """
+        src_roots = self._persistent_data_roots(source_backend)
+        dst_roots = self._persistent_data_roots(dest_backend)
+        if len(src_roots) != len(dst_roots):
+            raise BotMigrationError(
+                f"持久数据根目录数量不匹配: src={len(src_roots)}, dst={len(dst_roots)}",
+                stage="persistent_data_roots",
+            )
+
+        results: list[tuple[str, str, int]] = []
+        for src_root, dst_root in zip(src_roots, dst_roots):
+            try:
+                files = source_backend.walk_files(src_root)
+            except Exception as exc:  # noqa: BLE001
+                raise BotMigrationError(
+                    f"枚举源端持久数据失败 [{src_root}]: {type(exc).__name__}: {exc}",
+                    stage="persistent_data_walk",
+                ) from exc
+            for rel, size in files:
+                src_abs = self._join_persistent_path(src_root, rel)
+                dst_abs = self._join_persistent_path(dst_root, rel)
+                # 已存在且 size 一致 -> 跳过, 避免重复传输
+                try:
+                    if dest_backend.file_exists(dst_abs) and dest_backend.file_size(dst_abs) == size:
+                        continue
+                except Exception:  # noqa: BLE001 - file_size 失败不阻断, 当作未传输
+                    pass
+                results.append((src_abs, dst_abs, size))
+        return results
+
+    def _copy_with_resume(
+        self,
+        source_backend: "OperationBackend",
+        dest_backend: "OperationBackend",
+        src_path: str,
+        dst_path: str,
+        *,
+        expected_size: int,
+        on_chunk: Callable[[int], None],
+    ) -> int:
+        """单文件流式拷贝, 1 MiB chunk + ``.partial`` 续传, 完成后 rename 到 ``dst_path``.
+
+        Args:
+            source_backend / dest_backend: 字节级 IO 实现端.
+            src_path / dst_path: 源端 / 目标端**绝对路径**.
+            expected_size: 源端预估字节数, 用于 progress 计算 (允许偏差, 不做 hash 校验).
+            on_chunk: 每个 chunk 完成回调; 入参为"本文件已完成字节数".
+
+        Returns:
+            实际成功写入的字节数.
+        """
+        partial_path = f"{dst_path}{PERSISTENT_PARTIAL_SUFFIX}"
+        # 续传: 目标 ``.partial`` 已存在时, 从其当前长度作为 resume offset
+        resume_offset = 0
+        try:
+            if dest_backend.file_exists(partial_path):
+                resume_offset = dest_backend.file_size(partial_path)
+                if resume_offset > expected_size:
+                    # 之前的 partial 比源端文件还大 (源端被裁剪), 安全起见整体重传
+                    dest_backend.remove(partial_path)
+                    resume_offset = 0
+        except Exception:  # noqa: BLE001 - 续传探测失败不阻断, 退化为全量重传
+            resume_offset = 0
+
+        offset = resume_offset
+        on_chunk(offset)
+        # 流式 1 MiB 分片
+        while offset < expected_size:
+            length = min(PERSISTENT_DATA_CHUNK_SIZE, expected_size - offset)
+            chunk = source_backend.read_bytes(src_path, offset=offset, length=length)
+            if not chunk:
+                # 源端文件意外缩短: 提前结束, 已写入部分仍保留 .partial 待重试
+                break
+            dest_backend.append_bytes(partial_path, chunk)
+            offset += len(chunk)
+            on_chunk(offset)
+
+        # 完成: 把 .partial rename 为目标真名 (覆盖语义由 backend.rename 保证)
+        if offset >= expected_size:
+            dest_backend.rename(partial_path, dst_path)
+        else:
+            # 部分完成: 保留 .partial 让下次续传, 抛错通知上层中止后续文件
+            raise BotMigrationError(
+                f"源端文件意外缩短 [{src_path}]: 期望 {expected_size}B, 实读 {offset}B; "
+                f"已保留 {partial_path}",
+                stage="persistent_data_chunk",
+            )
+        return offset
+
+    @staticmethod
+    def _persistent_data_roots(backend: "OperationBackend") -> list[str]:
+        """返回 ``backend`` 上的持久数据根目录列表 (与需求 §F6 白名单对齐).
+
+        - RemoteBackend (Linux): ``$HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/data``,
+          ``$HOME/.config/QQ``
+        - LocalBackend (Windows): NapCat 安装目录下的 ``app_launcher/napcat/data``,
+          以及 ``%APPDATA%/Tencent/QQ`` (若存在); 缺失时返回空列表.
+        - 顺序与目标端**严格对齐**, 让 ``zip`` 后一一对应.
+        """
+        # 延迟 import 避免循环
+        from .local_backend import LocalBackend
+        from .remote_backend import RemoteBackend
+
+        if isinstance(backend, RemoteBackend):
+            workspace = backend.paths.workspace_dir.rstrip("/")
+            return [
+                f"{workspace}/opt/QQ/resources/app/app_launcher/napcat/data",
+                "$HOME/.config/QQ",
+            ]
+        if isinstance(backend, LocalBackend):
+            from os import environ
+            from pathlib import Path as _Path
+
+            from creart import it
+
+            from src.core.runtime.paths import PathFunc
+
+            napcat_root = it(PathFunc).napcat_path
+            local_data = napcat_root / "opt" / "QQ" / "resources" / "app" / "app_launcher" / "napcat" / "data"
+            appdata = environ.get("APPDATA", "")
+            local_qq = _Path(appdata) / "Tencent" / "QQ" if appdata else None
+            roots: list[str] = [str(local_data)]
+            roots.append(str(local_qq) if local_qq is not None else "")
+            return roots
+        raise BotMigrationError(
+            f"不支持的 backend 类型: {type(backend).__name__}",
+            stage="persistent_data_roots",
+        )
+
+    @staticmethod
+    def _join_persistent_path(root: str, rel: str) -> str:
+        """跨平台拼接 ``root + rel``; rel 走 POSIX 风格."""
+        if not rel:
+            return root
+        if root.endswith("/") or root.endswith("\\"):
+            return f"{root}{rel}"
+        # 远端 root (POSIX) 用 ``/``, 本地 root (Windows) 也接受 ``/`` (Path 容忍)
+        return f"{root}/{rel}"
+
 
 def derive_plan_from_bot_config(
     *,
@@ -391,6 +622,29 @@ class BotMigrationRunnable(QRunnable):
             )
         except Exception:  # noqa: BLE001 - center 不可用时不阻断主流程
             center = None
+
+        # P4 W3 F6: 把字节级进度桥到 ProgressInfoBar content 文案
+        # ("已传输 X.X / Y.Y MB"), 让用户在搬运大文件时看到推进
+        if center is not None and self._plan.move_persistent_data:
+            label = (
+                f"迁移 Bot {self._plan.qq_id} "
+                f"({self._plan.source_target} → {self._plan.dest_target})"
+            )
+
+            def _on_bytes_progress(transferred: int, total: int) -> None:
+                if total <= 0:
+                    return
+                content = (
+                    f"持久数据搬运: "
+                    f"{transferred / (1024 * 1024):.1f} / "
+                    f"{total / (1024 * 1024):.1f} MiB"
+                )
+                try:
+                    center.begin(task_id, label, content=content)  # type: ignore[union-attr]
+                except Exception:  # noqa: BLE001 - 进度文案失败不阻断搬运
+                    pass
+
+            service.bytes_progress_signal.connect(_on_bytes_progress)
 
         try:
             service.execute(self._plan)
