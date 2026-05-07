@@ -4,22 +4,24 @@
 # 第三方库导入
 from creart import it
 from qfluentwidgets import (
+    Action,
+    BodyLabel,
+    CommandBar,
     FlowLayout,
     FluentIcon,
     PrimaryToolButton,
     ScrollArea,
     ToolButton,
-    TransparentToolButton,
 )
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import Config
 from src.core.config.operate_config import delete_config, read_config
 from src.core.logging.crash_bundle import mask_qqid
 from src.core.logging import LogSource, logger
-from src.core.operation.batch_dispatcher import BatchDispatcher, BatchOutcome
+from src.core.operation.batch_dispatcher import BatchDispatcher, BatchOutcome, inline_executor
 from src.core.runtime.napcat import ManagerAutoRestartProcess, ManagerNapCatQQProcess
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 
@@ -73,51 +75,93 @@ class BotListPage(ScrollArea):
 
     # ==================== P4 F2: 批量模式工具条 ====================
     def _build_batch_toolbar(self) -> QWidget:
-        """构造顶部批量操作工具条 (默认隐藏)."""
-        bar = QWidget(self)
+        """构造顶部批量操作工具条 (默认隐藏).
+
+        采用 [`CommandBar`](qfluentwidgets) 风格统一展示批量动作:
+        左侧 "已选 N / M" 计数 Label, 中间 stretch, 右侧 CommandBar
+        分组展示 [全选 | 取消全选] / [启动 | 停止 | 删除] / [退出].
+        Action 比 ``ToolButton`` + 散乱 lambda 更易维护且响应窄宽时自动 overflow.
+        """
+        # 外层容器: 参考 CommandBarView 风格 - 白底 + 1px 边框 + 圆角, 视觉上像浮动 chip.
+        # 不用 QGraphicsDropShadowEffect: 把 effect 套在 ScrollArea 内的子 widget 上会
+        # 与 viewport 卡片的 painter 冲突 (Qt 报 "QPainter::begin: A paint device can
+        # only be painted by one painter at a time" + "QWidgetEffectSourcePrivate::
+        # pixmap: Painter not active"); 改用稍深的 border 模拟"浮起感".
+        bar = QFrame(self)
+        bar.setObjectName("batchToolbar")
+        bar.setStyleSheet(
+            "#batchToolbar {"
+            "  background-color: white;"
+            "  border: 1px solid rgba(0, 0, 0, 0.12);"
+            "  border-radius: 10px;"
+            "}"
+        )
+
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setContentsMargins(14, 4, 6, 4)
         layout.setSpacing(8)
 
-        self.batch_count_label = ToolButton(FluentIcon.PEOPLE, bar)
-        self.batch_count_label.setEnabled(False)
-        self.batch_count_label.setToolTip("已选数量")
+        # 已选计数 Label (CommandBar 不擅长展示纯文本, 用独立 BodyLabel)
+        self.batch_count_label = BodyLabel(self.tr("已选 0 / 0"), bar)
+        self.batch_count_label.setStyleSheet("color: rgba(0, 0, 0, 0.65);")
 
-        self.batch_select_all_btn = TransparentToolButton(FluentIcon.ACCEPT, bar)
-        self.batch_select_all_btn.setToolTip(self.tr("全选"))
-        self.batch_select_none_btn = TransparentToolButton(FluentIcon.CLOSE, bar)
-        self.batch_select_none_btn.setToolTip(self.tr("取消全选"))
-        self.batch_start_btn = TransparentToolButton(FluentIcon.PLAY, bar)
-        self.batch_start_btn.setToolTip(self.tr("批量启动"))
-        self.batch_stop_btn = TransparentToolButton(FluentIcon.PAUSE, bar)
-        self.batch_stop_btn.setToolTip(self.tr("批量停止"))
-        self.batch_delete_btn = TransparentToolButton(FluentIcon.DELETE, bar)
-        self.batch_delete_btn.setToolTip(self.tr("批量删除"))
-        self.batch_exit_btn = TransparentToolButton(FluentIcon.RETURN, bar)
-        self.batch_exit_btn.setToolTip(self.tr("退出批量模式"))
+        # CommandBar: 分组承载所有批量动作
+        self.batch_command_bar = CommandBar(bar)
 
-        layout.addWidget(self.batch_count_label)
+        self.batch_select_all_action = Action(
+            FluentIcon.ACCEPT, self.tr("全选"), self.batch_command_bar
+        )
+        self.batch_select_none_action = Action(
+            FluentIcon.CLOSE, self.tr("取消全选"), self.batch_command_bar
+        )
+        self.batch_start_action = Action(
+            FluentIcon.PLAY, self.tr("批量启动"), self.batch_command_bar
+        )
+        self.batch_stop_action = Action(
+            FluentIcon.PAUSE, self.tr("批量停止"), self.batch_command_bar
+        )
+        self.batch_delete_action = Action(
+            FluentIcon.DELETE, self.tr("批量删除"), self.batch_command_bar
+        )
+        self.batch_exit_action = Action(
+            FluentIcon.RETURN, self.tr("退出批量模式"), self.batch_command_bar
+        )
+
+        # 选择 / 启停删 / 退出, 三组用 separator 分隔
+        self.batch_command_bar.addAction(self.batch_select_all_action)
+        self.batch_command_bar.addAction(self.batch_select_none_action)
+        self.batch_command_bar.addSeparator()
+        self.batch_command_bar.addAction(self.batch_start_action)
+        self.batch_command_bar.addAction(self.batch_stop_action)
+        self.batch_command_bar.addAction(self.batch_delete_action)
+        self.batch_command_bar.addSeparator()
+        self.batch_command_bar.addAction(self.batch_exit_action)
+
+        # 信号接线: 用 Action.triggered 而非 ToolButton.clicked
+        self.batch_select_all_action.triggered.connect(lambda: self._set_all_batch_checked(True))
+        self.batch_select_none_action.triggered.connect(lambda: self._set_all_batch_checked(False))
+        self.batch_start_action.triggered.connect(self.slot_batch_start)
+        self.batch_stop_action.triggered.connect(self.slot_batch_stop)
+        self.batch_delete_action.triggered.connect(self.slot_batch_delete)
+        self.batch_exit_action.triggered.connect(lambda: self.set_batch_mode(False))
+
+        layout.addWidget(self.batch_count_label, 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addStretch(1)
-        layout.addWidget(self.batch_select_all_btn)
-        layout.addWidget(self.batch_select_none_btn)
-        layout.addWidget(self.batch_start_btn)
-        layout.addWidget(self.batch_stop_btn)
-        layout.addWidget(self.batch_delete_btn)
-        layout.addWidget(self.batch_exit_btn)
+        layout.addWidget(self.batch_command_bar, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # 接线
-        self.batch_select_all_btn.clicked.connect(lambda: self._set_all_batch_checked(True))
-        self.batch_select_none_btn.clicked.connect(lambda: self._set_all_batch_checked(False))
-        self.batch_start_btn.clicked.connect(self.slot_batch_start)
-        self.batch_stop_btn.clicked.connect(self.slot_batch_stop)
-        self.batch_delete_btn.clicked.connect(self.slot_batch_delete)
-        self.batch_exit_btn.clicked.connect(lambda: self.set_batch_mode(False))
+        # CommandBar 初始 width=0 时会把全部 action 收进 overflow ⋯; 显式 resize 一次,
+        # 让它按 action 总宽度展开 (后续随 toolbar resize 在 set_batch_mode 中再触发).
+        self.batch_command_bar.resizeToSuitableWidth()
 
         bar.setParent(self)
         bar.hide()
         return bar
 
     # ==================== 重写方法 ===================
+    # 批量工具栏几何参数; toolbar 浮动 overlay 在 BotListPage 中底部, 水平居中,
+    # 距底部 ``_BATCH_TOOLBAR_BOTTOM`` 像 Material Design BottomBar; 尺寸跟随内容自适应.
+    _BATCH_TOOLBAR_BOTTOM = 24
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         width = self.width() - self.add_button.width()
@@ -125,9 +169,26 @@ class BotListPage(ScrollArea):
         self.add_button.move(width - 16, height - 32)
         self.update_button.move(width - 16, height - 82)
         self.batch_toggle_button.move(width - 16, height - 132)
-        # P4 F2: 批量工具条贴顶
-        if self.batch_toolbar is not None:
-            self.batch_toolbar.setGeometry(0, 0, self.width(), 40)
+        # P4 F2: 批量工具条 - 自适应宽度, 中底部水平居中, 视觉上像悬浮 chip
+        self._reposition_batch_toolbar()
+
+    def _reposition_batch_toolbar(self) -> None:
+        """根据内容 sizeHint 把 batch_toolbar 居中悬浮到底部 ``_BATCH_TOOLBAR_BOTTOM``.
+
+        水平: 居中 (减去 bar 自身宽度的一半).
+        垂直: 贴底, 距 BotListPage 底边 ``_BATCH_TOOLBAR_BOTTOM`` 像 BottomActionBar.
+        """
+        if self.batch_toolbar is None:
+            return
+        # adjustSize 让 layout 按内容自然撑开; 之后用 sizeHint 拿到目标尺寸
+        self.batch_toolbar.adjustSize()
+        bar_w = self.batch_toolbar.sizeHint().width()
+        bar_h = self.batch_toolbar.sizeHint().height()
+        # 容器极窄时退化为左对齐, 避免负数 x
+        x = max(8, (self.width() - bar_w) // 2)
+        # 容器极矮时退化为顶部, 避免负数 y
+        y = max(8, self.height() - bar_h - self._BATCH_TOOLBAR_BOTTOM)
+        self.batch_toolbar.setGeometry(x, y, bar_w, bar_h)
 
     # ==================== 公共方法 ====================
     def update_bot_list(self) -> None:
@@ -153,9 +214,9 @@ class BotListPage(ScrollArea):
         for config in self._bot_config_list:
             card = BotCard(config)
             card.remove_signal.connect(self.remove_bot_by_qqid)
-            # P4 F2: 监听批量复选框变化, 同步刷新工具条已选数量
-            card.batch_check_changed_signal.connect(self._on_card_batch_check_changed)
-            # P4 F2: 列表刷新时若处于批量模式, 立即让新卡片显示复选框
+            # P4 F2 / P4 W4: 监听卡片选中态变化, 同步刷新工具条 "已选 N/M" + 启停删按钮可用性
+            card.selected_changed_signal.connect(self._on_card_selected_changed)
+            # P4 F2: 列表刷新时若处于批量模式, 立即让新卡片显示选中态光标
             if self._batch_mode:
                 card.set_batch_mode(True)
             card.update_info_card()
@@ -240,13 +301,22 @@ class BotListPage(ScrollArea):
 
     # =================== P4 F2: 批量模式公共接口 =======================
     def set_batch_mode(self, enabled: bool) -> None:
-        """切换批量模式; 显示/隐藏所有卡片复选框 + 顶部工具条."""
+        """切换批量模式; 显示/隐藏所有卡片复选框 + 顶部工具条.
+
+        ``batch_toolbar`` 通过绝对定位 ``setGeometry`` 浮动在 BotListPage 顶部
+        (``setParent(self)`` + ``raise_()``), **不**修改 view_layout 的 margin,
+        因此卡片不会被挤下去; toolbar 直接 overlay 在最上层.
+        """
         self._batch_mode = enabled
         for card in self._bot_card_list:
             if not self._is_card_alive(card):
                 continue
             card.set_batch_mode(enabled)
         if enabled:
+            # 先 resize CommandBar 让所有 actions 撑开 (避免 ⋯ 全 collapse),
+            # 再 reposition toolbar 拿到正确的 sizeHint 居中悬浮.
+            self.batch_command_bar.resizeToSuitableWidth()
+            self._reposition_batch_toolbar()
             self.batch_toolbar.show()
             self.batch_toolbar.raise_()
             self._refresh_batch_count_label()
@@ -265,27 +335,30 @@ class BotListPage(ScrollArea):
         """点击右下批量按钮: 切换批量模式."""
         self.set_batch_mode(not self._batch_mode)
 
-    def _on_card_batch_check_changed(self, qq_id: str, checked: bool) -> None:
-        """单张卡片复选框变化时刷新工具条已选数量."""
-        del qq_id, checked
+    def _on_card_selected_changed(self, qq_id: str, selected: bool) -> None:
+        """单张卡片选中态变化时刷新工具条已选数量."""
+        del qq_id, selected
         self._refresh_batch_count_label()
 
     def _refresh_batch_count_label(self) -> None:
         selected = sum(1 for c in self._bot_card_list if c.is_batch_selected())
-        self.batch_count_label.setToolTip(self.tr(f"已选 {selected} / {len(self._bot_card_list)}"))
-        # 让按钮也表达数量, 不破坏既有 icon API: 利用 isEnabled 间接示意有无选中
-        self.batch_count_label.setEnabled(False)
-        # 启停 / 删除按钮无勾选时灰掉
+        total = len(self._bot_card_list)
+        # BodyLabel 直接显示 "已选 N / M", 比 ToolButton+tooltip 更直观
+        self.batch_count_label.setText(self.tr(f"已选 {selected} / {total}"))
+        # 启停 / 删除按钮无勾选时灰掉; CommandBar 通过 Action.setEnabled 控制
         any_selected = selected > 0
-        self.batch_start_btn.setEnabled(any_selected)
-        self.batch_stop_btn.setEnabled(any_selected)
-        self.batch_delete_btn.setEnabled(any_selected)
+        self.batch_start_action.setEnabled(any_selected)
+        self.batch_stop_action.setEnabled(any_selected)
+        self.batch_delete_action.setEnabled(any_selected)
 
     def _set_all_batch_checked(self, checked: bool) -> None:
+        """全选 / 取消全选: 对所有卡片调用 ``set_selected``; 信号会被去重 (相同值不发)."""
         for card in self._bot_card_list:
             if not self._is_card_alive(card):
                 continue
-            card.set_batch_mode(True, checked=checked)
+            card.set_selected(checked)
+        # set_selected 已经触发 selected_changed_signal -> _refresh_batch_count_label;
+        # 但有些卡片可能已经处于目标状态被去重, 这里再补一次显式刷新更稳妥.
         self._refresh_batch_count_label()
 
     # =================== P4 F2: 批量动作 ==============================
@@ -319,7 +392,13 @@ class BotListPage(ScrollArea):
         except (TypeError, RuntimeError):
             pass
         dispatcher.finished_signal.connect(self._on_batch_finished)
-        dispatcher.dispatch(self.tr("批量启动"), items, sequential=False)
+        # P4 修复: ``create_napcat_process`` 已是非阻塞操作 (本地 QProcess.start()
+        # 不再 waitForStarted, 远端走自己的内部 QThreadPool runner). 强制走 inline
+        # executor 让闭包在主线程执行, 否则本地 QProcess 会被构造在无事件循环的
+        # 工作线程上, 导致 ``readyReadStandardOutput`` 永远不触发, BotLog 一片空白.
+        dispatcher.dispatch(
+            self.tr("批量启动"), items, sequential=False, executor=inline_executor
+        )
 
     def slot_batch_stop(self) -> None:
         """批量停止选中的 Bot."""
@@ -351,7 +430,11 @@ class BotListPage(ScrollArea):
         except (TypeError, RuntimeError):
             pass
         dispatcher.finished_signal.connect(self._on_batch_finished)
-        dispatcher.dispatch(self.tr("批量停止"), items, sequential=False)
+        # P4 修复: 与 ``slot_batch_start`` 对称, 让 ``stop_process`` 在主线程执行,
+        # 避免对 QProcess 的方法调用穿越线程边界.
+        dispatcher.dispatch(
+            self.tr("批量停止"), items, sequential=False, executor=inline_executor
+        )
 
     def slot_batch_delete(self) -> None:
         """批量删除选中的 Bot 配置."""
