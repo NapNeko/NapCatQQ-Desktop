@@ -1014,7 +1014,19 @@ class SSHClient:
 
     @staticmethod
     def _quote_remote_argument(value: str) -> str:
-        """为远端 shell 渲染参数。"""
-        if value.startswith("$HOME"):
-            return f'"{value}"'
+        """为远端 shell 渲染参数 (P5 F2.2 安全修复).
+
+        历史实现把 ``$HOME`` 起头的路径整段套双引号 (``"$HOME/..."``), 让 bash
+        展开 ``$HOME`` 的同时, ``$()`` / 反引号 / ``$VAR`` 也都会被一并展开 —
+        这就是 ``LinuxCorePaths.workspace_dir`` 命令注入路径的最后一公里.
+
+        新行为: ``$HOME`` (单独) -> ``"$HOME"``; ``$HOME/...`` -> ``"$HOME"`` 加
+        ``shlex.quote(suffix)``; 其他全部走 ``shlex.quote``. 只有 ``$HOME`` 这一个
+        变量被 bash 展开, 任何后缀里的元字符都被严格转义.
+        """
+        if value == "$HOME":
+            return '"$HOME"'
+        if value.startswith("$HOME/"):
+            suffix = value[len("$HOME"):]
+            return '"$HOME"' + shlex.quote(suffix)
         return shlex.quote(value)

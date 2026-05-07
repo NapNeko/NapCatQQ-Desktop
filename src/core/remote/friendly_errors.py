@@ -37,6 +37,8 @@ from collections.abc import Callable
 from typing import Any
 
 # 项目内模块导入
+from src.core.installation.errors import NapCatHashMismatchError
+
 from .errors import (
     RemoteCommandError,
     RemoteDeploymentError,
@@ -137,10 +139,19 @@ def _format_remote_deployment_in_progress(exc: Exception) -> str:
     return "已有部署任务正在进行, 请等待当前任务结束后再试"
 
 
+def _format_napcat_hash_mismatch(exc: Exception) -> str:
+    version = getattr(exc, "version", "") or "未知版本"
+    return (
+        f"NapCat 安装包完整性校验失败 (期望版本 {version}); "
+        "下载文件可能被篡改或损坏, 已拒绝安装. 请重试或检查网络是否经过劫持."
+    )
+
+
 # 注册表: 异常类型 -> 文案生成器
 # 顺序敏感: 子类异常应优先于父类被匹配, 故走"isinstance + 第一个命中"
 _RAW_REGISTRY: list[tuple[type[BaseException], _FriendlyHandler]] = [
     # ---- NapCatQQ Desktop 自定义远端异常 ----
+    (NapCatHashMismatchError, _format_napcat_hash_mismatch),
     (RemoteDeploymentInProgressError, _format_remote_deployment_in_progress),
     (RemoteDeploymentError, _format_remote_deployment),
     (RemoteCommandError, _format_remote_command_error),

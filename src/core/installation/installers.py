@@ -3,10 +3,12 @@
 ## 安装逻辑
 """
 # 标准库导入
+import hashlib
 import shutil
 import subprocess
 import zipfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # 第三方库导入
 from creart import it
@@ -14,8 +16,102 @@ from PySide6.QtCore import QObject, QRunnable, Signal
 
 # 项目内模块导入
 from src.core.common.status import ButtonStatus, ProgressRingStatus
+from src.core.installation.errors import NapCatHashMismatchError
 from src.core.logging import LogSource, LogType, logger
 from src.core.runtime.paths import PathFunc
+
+if TYPE_CHECKING:
+    from src.core.versioning.release_hash_service import ReleaseHashService
+
+
+# 流式读取 chunk 大小; 4MB 在内存与系统调用次数之间取折中
+_HASH_CHUNK_SIZE = 4 * 1024 * 1024
+
+
+def verify_napcat_archive(
+    *,
+    version: str,
+    archive_path: Path,
+    hash_service: "ReleaseHashService",
+) -> bool:
+    """对 NapCat 安装包做 SHA512 完整性校验 (P5 安全收尾 F1.3).
+
+    Args:
+        version: 期望版本号, 接受 ``"v4.18.1"`` / ``"4.18.1"`` 两种形式
+        archive_path: 待校验的本地 zip 路径
+        hash_service: 已经 ``fetch()`` 过的 :class:`ReleaseHashService`
+
+    Returns:
+        - ``True``: 校验通过, archive 内容与上游 hash 一致, 调用方可继续解压
+        - ``False``: 上游 release.json 中没有该版本的 hash 数据 (网络异常无缓存 /
+          版本太新尚未发布 hash). 调用方应弹"二次确认"对话框让用户决定是否继续.
+          archive 不会被删除.
+
+    Raises:
+        NapCatHashMismatchError: archive 的实际 SHA512 与上游期望不一致;
+            archive 文件**已被删除**, 防止后续误用.
+        FileNotFoundError: archive 路径不存在.
+    """
+    if not archive_path.exists():
+        raise FileNotFoundError(f"待校验的 archive 不存在: {archive_path}")
+
+    entry = hash_service.lookup(version)
+    if entry is None:
+        logger.warning(
+            (
+                f"verify_napcat_archive: 上游未提供 {version} 的 SHA512, 跳过校验; "
+                "调用方应在 UI 层弹二次确认对话框"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+        return False
+
+    expected = entry.shell_sha512
+    actual = _compute_sha512(archive_path)
+    if actual.lower() != expected.lower():
+        logger.error(
+            (
+                "verify_napcat_archive: SHA512 不匹配, 已拒绝安装并删除 archive: "
+                f"version={entry.version}, expected={expected}, actual={actual}, "
+                f"archive={archive_path}"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+        try:
+            archive_path.unlink()
+        except OSError as exc:
+            logger.warning(
+                f"verify_napcat_archive: 删除非法 archive 失败 (忽略): {exc!r}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+        raise NapCatHashMismatchError(
+            version=entry.version,
+            expected=expected,
+            actual=actual,
+            archive_path=str(archive_path),
+        )
+
+    logger.info(
+        f"verify_napcat_archive: SHA512 校验通过 (version={entry.version}, archive={archive_path})",
+        LogType.FILE_FUNC,
+        LogSource.CORE,
+    )
+    return True
+
+
+def _compute_sha512(path: Path) -> str:
+    """流式计算 ``path`` 的 SHA512 hex digest."""
+    hasher = hashlib.sha512()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(_HASH_CHUNK_SIZE)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 class InstallBase(QObject, QRunnable):

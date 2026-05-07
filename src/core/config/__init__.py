@@ -50,6 +50,7 @@ from qfluentwidgets.common import (
     ColorConfigItem,
     ConfigItem,
     ConfigSerializer,
+    ConfigValidator,
     EnumSerializer,
     OptionsConfigItem,
     OptionsValidator,
@@ -439,6 +440,25 @@ class LanguageSerializer(ConfigSerializer):
         return Language(QLocale(value)) if value != "Auto" else Language.AUTO
 
 
+class _LinuxPathValidator(ConfigValidator):
+    """``remote_workspace_dir`` 的白名单校验 (P5 安全收尾 F2.4).
+
+    复用 [`is_valid_linux_path`](src/core/remote/models.py) 的同源正则,
+    与 ``LinuxCorePaths.__post_init__`` 保持一致, 防止 UI 输入命令注入 payload.
+    ``correct`` 在用户输入非法时回退到默认 ``$HOME/Napcat``.
+    """
+
+    def validate(self, value: Any) -> bool:
+        from src.core.remote.models import is_valid_linux_path
+
+        return is_valid_linux_path(str(value or ""))
+
+    def correct(self, value: Any) -> Any:
+        from src.core.remote.models import is_valid_linux_path
+
+        return value if is_valid_linux_path(str(value or "")) else "$HOME/Napcat"
+
+
 class Config(QConfig):
     """程序配置"""
 
@@ -569,7 +589,12 @@ class Config(QConfig):
         default=20,
         validator=RangeValidator(1, 600),
     )
-    remote_workspace_dir = ConfigItem(group="Remote", name="WorkspaceDir", default="$HOME/Napcat")
+    remote_workspace_dir = ConfigItem(
+        group="Remote",
+        name="WorkspaceDir",
+        default="$HOME/Napcat",
+        validator=_LinuxPathValidator(),
+    )
 
     # 性能监控设置
     performance_monitor_enabled = ConfigItem(

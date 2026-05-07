@@ -38,12 +38,48 @@ def inject_script_variables(script_content: str, variables: Mapping[str, str | i
     """在脚本头部注入变量定义。
 
     始终在第一行 ``#!`` shebang 之后插入变量赋值, 保持 ``set -euo pipefail`` 等设置完好。
+
+    P5 安全收尾 F2.1 — 单引号注入语法
+    ------------------------------------
+    历史实现把值塞在双引号里, 仅转义 ``"``: 这导致 ``$()`` / 反引号 / ``$VAR``
+    仍被远端 bash 二次展开, 用户可写入的 [`LinuxCorePaths.workspace_dir`]
+    (src/core/remote/models.py) 字段成了命令注入入口.
+
+    新语法采用 **POSIX 单引号字面量**, 单引号内一切字面;
+    单引号自身用 ``'\\''`` 模式插入(关闭->转义->重开). 同时保留远端 ``$HOME``
+    展开能力: 当值以 ``$HOME`` 起头时, 拆成 ``"$HOME"`` (双引号让 bash 展开)
+    + 余下后缀 (单引号字面量), 用 bash 字符串拼接组装.
+
+    结果对比:
+
+    - 旧: ``workspace_dir="$HOME/Napcat$(rm)"`` -> 远端会执行 ``rm`` (漏洞)
+    - 新: ``workspace_dir="$HOME"'/Napcat$(rm)'`` -> 仅 $HOME 展开, ``$(rm)`` 字面保留
     """
-    injected_lines = [f'{key}="{str(value).replace(chr(34), r"\"")}"' for key, value in variables.items()]
+    injected_lines = [f"{key}={_safe_shell_value(str(value))}" for key, value in variables.items()]
     lines = script_content.splitlines()
     if lines and lines[0].startswith("#!"):
         return "\n".join([lines[0], *injected_lines, *lines[1:]]) + "\n"
     return "\n".join([*injected_lines, *lines]) + "\n"
+
+
+def _safe_shell_value(value: str) -> str:
+    """渲染单个变量值为 bash 安全的右值表达式 (P5 F2.1).
+
+    - ``$HOME`` / ``$HOME/...`` 起头: 拆成 ``"$HOME"`` + 单引号包后缀
+    - 其他: 整体单引号包裹
+    - 单引号字符通过 ``'\\''`` 闭合-转义-重开模式嵌入
+    """
+    if value == "$HOME":
+        return '"$HOME"'
+    if value.startswith("$HOME/"):
+        suffix = value[len("$HOME") :]
+        return '"$HOME"' + _single_quote(suffix)
+    return _single_quote(value)
+
+
+def _single_quote(value: str) -> str:
+    """POSIX 单引号字面量, 单引号自身用 ``'\\''`` 关闭-转义-重开."""
+    return "'" + value.replace("'", "'\\''") + "'"
 
 
 # ==================== 构建器 ====================

@@ -37,6 +37,12 @@ if TYPE_CHECKING:
     from .servers import DeploymentState, ServerProfile, ServerRegistry
     from .ssh_client import SSHClient
     from .status import RemoteLogTail, RemoteNapCatStatus, RemoteRuntimeService
+    from .thread_pool import (
+        dispatch_remote_ssh,
+        remote_ssh_pool,
+        reset_remote_ssh_pool,
+        shutdown_remote_ssh_pool,
+    )
     from .tunnel import LocalPortForwarder
     from .templates import (
         build_install_linuxqq_script,
@@ -77,6 +83,10 @@ _EXPORT_MAP = {
     "SSHCredentials": ".models",
     "SSHConnectionError": ".errors",
     "SSHHostKeyError": ".errors",
+    "dispatch_remote_ssh": ".thread_pool",
+    "remote_ssh_pool": ".thread_pool",
+    "reset_remote_ssh_pool": ".thread_pool",
+    "shutdown_remote_ssh_pool": ".thread_pool",
     "build_install_linuxqq_script": ".templates",
     "build_install_napcat_script": ".templates",
     "build_linux_deploy_script": ".templates",

@@ -140,14 +140,29 @@ class ServerProfile:
             look_for_keys=bool(cred_payload.get("look_for_keys", False)),
         )
         paths_payload = payload.get("paths") or {}
-        paths = LinuxCorePaths(
-            workspace_dir=str(paths_payload.get("workspace_dir", defaults_paths.workspace_dir)),
-            runtime_dir=str(paths_payload.get("runtime_dir", defaults_paths.runtime_dir)),
-            config_dir=str(paths_payload.get("config_dir", defaults_paths.config_dir)),
-            log_dir=str(paths_payload.get("log_dir", defaults_paths.log_dir)),
-            tmp_dir=str(paths_payload.get("tmp_dir", defaults_paths.tmp_dir)),
-            package_dir=str(paths_payload.get("package_dir", defaults_paths.package_dir)),
-        )
+        try:
+            paths = LinuxCorePaths(
+                workspace_dir=str(paths_payload.get("workspace_dir", defaults_paths.workspace_dir)),
+                runtime_dir=str(paths_payload.get("runtime_dir", defaults_paths.runtime_dir)),
+                config_dir=str(paths_payload.get("config_dir", defaults_paths.config_dir)),
+                log_dir=str(paths_payload.get("log_dir", defaults_paths.log_dir)),
+                tmp_dir=str(paths_payload.get("tmp_dir", defaults_paths.tmp_dir)),
+                package_dir=str(paths_payload.get("package_dir", defaults_paths.package_dir)),
+            )
+        except ValueError as exc:
+            # P5 F2.3: ``servers.json`` 内非法路径退化到默认值, 不阻断 Desktop 启动.
+            # 下次 ``servers.json`` save 会用默认值覆盖原非法值, 起到自愈效果.
+            try:
+                from src.core.logging import LogSource, LogType, logger
+
+                logger.warning(
+                    f"servers.json 中存在非法 LinuxCorePaths, 已退化到默认: {exc}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+            except Exception:  # noqa: BLE001 - 日志失败不应再抛
+                pass
+            paths = LinuxCorePaths()
         try:
             deployment_state = DeploymentState(payload.get("deployment_state", "undeployed"))
         except ValueError:

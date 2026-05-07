@@ -26,6 +26,7 @@ from src.core.config.config_model import Config
 from src.core.network.email import Email, create_offline_email_task
 from src.core.network.webhook import WebHook, create_offline_webhook_task
 from src.core.logging import LogSource, LogType, logger
+from src.core.remote.thread_pool import remote_ssh_pool
 from src.core.runtime.paths import PathFunc
 
 # ==================== 数据模型 ====================
@@ -57,6 +58,36 @@ def _sanitize_log_text(data: str) -> str:
     # 压缩由异常换行导致的多余空白行
     data = re.sub(r"\n{2,}", "\n", data)
     return data
+
+
+def _compute_tail_new_chunk(
+    prev_seen_tail: str,
+    sanitized_tail: str,
+    *,
+    overlap_window: int,
+) -> str:
+    """P3 perf W4: 将日志增量去重算法抽为纯函数, 供 worker 线程调用.
+
+    逻辑与 [`RemoteNapCatQQLog._compute_new_chunk`](src/core/runtime/napcat.py) 一致:
+    寻找 ``prev_seen_tail`` 的末尾在 ``sanitized_tail`` 开头重叠的最长长度 ``k``,
+    返回 ``sanitized_tail[k:]`` 作为新增段; 无任何重叠 (首次 / 日志被截断) 时
+    整段视为新增.
+
+    移到 worker 的动机: 最坏情况下对 16KB overlap window 有 O(window²) 扫描,
+    过去在主线程每 5s 一次跳比较直观, 几个 BotLogPage 同时打开时会感知到
+    UI 卡顿. 搬到 worker 后主线程仅需 append + emit.
+    """
+    if not sanitized_tail:
+        return ""
+    if not prev_seen_tail:
+        return sanitized_tail
+
+    seen_window = prev_seen_tail[-overlap_window:]
+    max_k = min(len(seen_window), len(sanitized_tail))
+    for k in range(max_k, 0, -1):
+        if seen_window.endswith(sanitized_tail[:k]):
+            return sanitized_tail[k:]
+    return sanitized_tail
 
 
 @dataclass
@@ -97,6 +128,8 @@ class RemoteProcessRecord:
     polling_timer: QTimer | None = None
     login_state_published: bool = False
     login_state_port: int | None = None
+    # P3 perf W4: 单飞标记, 防止上一次 poll 还没回就排队下一次
+    poll_in_flight: bool = False
 
 
 # ==================== 工具类 ====================
@@ -172,24 +205,45 @@ class NapCatQQProcessLog(QObject):
 class _RemoteLogTailRunnable(QObject, QRunnable):
     """单次 SSH ``tail`` 拉取的 [`QRunnable`](https://doc.qt.io/qt-6/qrunnable.html).
 
-    在 [`QThreadPool`](https://doc.qt.io/qt-6/qthreadpool.html) 后台线程上调用
+    在 [`remote_ssh_pool`](src/core/remote/thread_pool.py) 后台线程上调用
     [`RemoteBackend.tail_log`](src/core/operation/remote_backend.py),
-    完成后通过 ``tail_signal`` 把整段尾部文本带回主线程,
-    交由 [`RemoteNapCatQQLog`](src/core/runtime/napcat.py) 做去重 + 增量发射.
+    **在 worker 内部**完成 sanitize + overlap 去重, 仅把"真正新增段 + 更新后的
+    _seen_tail 快照"通过 ``tail_chunk_signal`` 带回主线程, 主线程只负责 append + emit.
+
+    P3 perf W4 改动背景: 过去 worker 返回整段 full_tail, 主线程做 sanitize
+    (O(n) regex) + overlap dedup (O(window²) 扫描) + QPlainTextEdit append,
+    在多 BotLogPage 同时 5s 轮询时, 主线程这一圈处理会感知到 UI 卡顿. 现在 worker
+    独吞重计算, 主线程只读写简单字段 + 发信号.
 
     SSH 异常 / 资源错误一律走 ``error_signal`` 让上层 trace 一行了事,
     单次失败不影响下一次轮询.
     """
 
-    tail_signal = Signal(str, str)  # (qq_id, full_tail_text)
+    # (qq_id, new_chunk, new_seen_tail)
+    # new_chunk 已 sanitize + overlap 去重; new_seen_tail 已按 history_bytes 截尾,
+    # 主线程直接 ``self._seen_tail = new_seen_tail`` 即可, 不再需要任何计算.
+    tail_chunk_signal = Signal(str, str, str)
     error_signal = Signal(str, str)  # (qq_id, error_message)
 
-    def __init__(self, qq_id: str, config: Config, *, lines: int) -> None:
+    def __init__(
+        self,
+        qq_id: str,
+        config: Config,
+        *,
+        lines: int,
+        prev_seen_tail: str,
+        overlap_window: int,
+        history_bytes: int,
+    ) -> None:
         QObject.__init__(self)
         QRunnable.__init__(self)
         self._qq_id = qq_id
         self._config = config
         self._lines = lines
+        # 快照: 单飞保护后这条 worker 是唯一消费者, 不存在对 _seen_tail 的竞态读.
+        self._prev_seen_tail = prev_seen_tail
+        self._overlap_window = overlap_window
+        self._history_bytes = history_bytes
 
     def run(self) -> None:  # noqa: D401 - QRunnable 协议
         try:
@@ -197,8 +251,21 @@ class _RemoteLogTailRunnable(QObject, QRunnable):
 
             backend = resolve_backend_for_bot(self._config)
             backend.connect()
-            content = backend.tail_log(self._qq_id, lines=self._lines)
-            self.tail_signal.emit(self._qq_id, content or "")
+            content = backend.tail_log(self._qq_id, lines=self._lines) or ""
+
+            # worker 侧 sanitize: ANSI 清洗 + 换行归一, 输出即 _seen_tail 储存形态
+            sanitized = _sanitize_log_text(content)
+            new_chunk = _compute_tail_new_chunk(
+                self._prev_seen_tail,
+                sanitized,
+                overlap_window=self._overlap_window,
+            )
+            if not new_chunk:
+                # 空增量也算一次成功 (重置 _consecutive_errors); seen_tail 保持不变
+                self.tail_chunk_signal.emit(self._qq_id, "", self._prev_seen_tail)
+                return
+            new_seen_tail = (self._prev_seen_tail + new_chunk)[-self._history_bytes:]
+            self.tail_chunk_signal.emit(self._qq_id, new_chunk, new_seen_tail)
         except Exception as exc:  # noqa: BLE001 - 单次拉取失败不应影响后续轮询
             self.error_signal.emit(self._qq_id, f"{type(exc).__name__}: {exc}")
 
@@ -212,17 +279,25 @@ class RemoteNapCatQQLog(QObject):
 
     数据来源不再是本地 ``QProcess`` 的 stdout, 而是周期性 SSH ``tail``:
     - 每 ``_POLL_INTERVAL_MS`` 毫秒派发一个 [`_RemoteLogTailRunnable`](src/core/runtime/napcat.py)
-      到 [`QThreadPool`](https://doc.qt.io/qt-6/qthreadpool.html)
+      到 [`remote_ssh_pool`](src/core/remote/thread_pool.py) 专用池 (P3 perf W4)
     - runnable 在后台线程调用
-      [`RemoteBackend.tail_log`](src/core/operation/remote_backend.py) 拉取最近 N 行
-    - 主线程拿到完整尾部后, 通过最长后缀-前缀重叠算法计算"上次没见过的新增段",
-      只把新增段写入 ``_log_storage`` 并 emit ``output_log_signal``,
-      这样 UI 不会重复显示已经画过的内容.
+      [`RemoteBackend.tail_log`](src/core/operation/remote_backend.py) 拉取最近 N 行,
+      **worker 内部直接做 ANSI sanitize + 最长后缀-前缀重叠去重**,
+      只把"真正新增段 + 更新后的 _seen_tail"通过 ``tail_chunk_signal`` 带回主线程
+    - 主线程拿到增量后仅执行: 更新 ``_seen_tail`` 快照 + append 到 ``_log_storage`` +
+      emit ``output_log_signal``, 不再做任何重活
 
     设计要点:
     - 第一次拉取直接全量插入, 让用户开页时立刻有上下文 (而不是等 5 秒).
     - 后续每次拉取都做去重, 避免日志页上出现 N 倍的重复行.
+    - P3 perf W4: 单飞保护 ``_tail_in_flight`` 防止 SSH 抖动时 runner 在池里堆积.
     - SSH 异常只 trace 一行, 不打断轮询; 用户停止 Bot 时调用 ``stop()`` 释放计时器.
+
+    向后兼容说明:
+    - 单元测试 ([`test_remote_log_buffer.py`](script/test/test_remote_log_buffer.py))
+      直接调用 ``_on_tail_arrived(qq_id, full_tail)`` 来构造 "整段来自 SSH 的尾部"
+      场景; 该槽保留, 继续在**主线程同步**做 sanitize + 去重, 仅用于测试路径.
+      生产的 worker 不再连接此槽, 改走 ``_on_tail_chunk_arrived``.
     """
 
     output_log_signal = Signal(str)
@@ -256,6 +331,10 @@ class RemoteNapCatQQLog(QObject):
         self._seen_tail: str = ""
         # P3.W3.E: 连续失败计数; 成功拉取一次即重置
         self._consecutive_errors: int = 0
+        # P3 perf W4: 单飞标记. _enqueue_tail 检查此旗后置位, 由
+        # _on_tail_chunk_arrived / _on_tail_error 复位; SSH 抖动 / 大包
+        # 拉取时上一次 runner 还没回来, 下一个 5s tick 会直接跳过, 防止池堆积.
+        self._tail_in_flight: bool = False
 
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(self._POLL_INTERVAL_MS)
@@ -283,12 +362,49 @@ class RemoteNapCatQQLog(QObject):
 
     # ==================== 内部 ====================
     def _enqueue_tail(self) -> None:
-        runnable = _RemoteLogTailRunnable(self._qq_id, self._config, lines=self._TAIL_LINES)
-        runnable.tail_signal.connect(self._on_tail_arrived)
+        # P3 perf W4: 单飞保护. SSH 网络抖动时 5s tick 可能早于 runner 返回,
+        # 直接跳过, 避免在 remote_ssh_pool 里堆积若干条陈旧 tail 请求.
+        if self._tail_in_flight:
+            return
+        self._tail_in_flight = True
+        runnable = _RemoteLogTailRunnable(
+            self._qq_id,
+            self._config,
+            lines=self._TAIL_LINES,
+            # 主线程快照: 在 worker 运行期间 _seen_tail 不会被其他 worker 改写
+            # (因为单飞保护), 所以 worker 返回时主线程直接覆盖即可.
+            prev_seen_tail=self._seen_tail,
+            overlap_window=self._OVERLAP_WINDOW,
+            history_bytes=self._HISTORY_BYTES,
+        )
+        runnable.tail_chunk_signal.connect(self._on_tail_chunk_arrived)
         runnable.error_signal.connect(self._on_tail_error)
-        QThreadPool.globalInstance().start(cast(QRunnable, runnable))
+        remote_ssh_pool().start(cast(QRunnable, runnable))
+
+    def _on_tail_chunk_arrived(self, qq_id: str, new_chunk: str, new_seen_tail: str) -> None:
+        """P3 perf W4: 接收 worker 侧已完成 sanitize + 去重的增量, 主线程仅 append + emit."""
+        if qq_id != self._qq_id:
+            self._tail_in_flight = False
+            return
+        self._tail_in_flight = False
+        # 任何一次成功拉取 (包含空增量) 都重置连续失败计数
+        self._consecutive_errors = 0
+        # worker 已经按 _HISTORY_BYTES 截过尾, 主线程直接覆盖即可
+        self._seen_tail = new_seen_tail
+        if not new_chunk:
+            return
+        self._log_storage.append(new_chunk)
+        self.output_log_signal.emit(new_chunk)
 
     def _on_tail_arrived(self, qq_id: str, full_tail: str) -> None:
+        """**兼容入口** — 仅保留给单元测试
+        ([`test_remote_log_buffer.py`](script/test/test_remote_log_buffer.py)) 使用.
+
+        生产路径走 ``_on_tail_chunk_arrived`` (worker 侧已 sanitize + 去重).
+        该槽继续在**主线程**同步做 sanitize + 去重 + append, 行为与历史版本一致,
+        让覆盖 ``_compute_new_chunk`` / ANSI sanitize / error backoff 语义的测试
+        不需要改 fixture.
+        """
         if qq_id != self._qq_id:
             return
         # P3.W3.E: 任何一次成功拉取 (哪怕是空字符串) 都重置连续失败计数
@@ -311,6 +427,11 @@ class RemoteNapCatQQLog(QObject):
         self.output_log_signal.emit(new_chunk)
 
     def _on_tail_error(self, qq_id: str, message: str) -> None:
+        # P3 perf W4: 先放掉 in-flight 旗 (worker 失败不会再发 tail_chunk_signal),
+        # 然后再做 qq_id 路由 — 避免因 qq_id mismatch 早返导致旗忘记复位.
+        # error_signal 来自本实例 own 的 runnable, 实际上 qq_id 永远匹配, 但保留
+        # 防御性 mismatch 路径并保证旗的清理.
+        self._tail_in_flight = False
         if qq_id != self._qq_id:
             return
         self._consecutive_errors += 1
@@ -741,6 +862,19 @@ class NapCatQQLoginState(QObject):
         self._login_invalidated_while_online = False
         self._suppress_qrcode_until_online = False
         self._last_auth_refresh_attempt_at = 0.0
+        # P3 perf W4: 单飞保护. slot_get_login_state 每 1s / 每 N s 由 QTimer 触发,
+        # 当 NapCat WebUI 因远端抖动 / 隧道重建卡住 5s 时, 新的 tick 不应该再
+        # 排队一个 HTTP 请求 — 未登录时 1s tick 的堆积会让 QThreadPool 排满.
+        self._login_in_flight = False
+        self._auth_in_flight = False
+        # P3 perf W4 (crash fix): 标记本对象是否已被 ``remove()`` 弃置.
+        # remove() 会 ``deleteLater`` 掉两个 QTimer, 但用户停止 Bot 的瞬间往往还有
+        # in-flight 的 GetLoginStatusRunnable / GetAuthStatusRunnable 在 QThreadPool
+        # 里跑; 它们结束后会跨线程 emit signal -> 主线程 dispatcher 进入 slot_update_*,
+        # 此时再访问 ``self._login_state_timer.interval()`` 就会触发
+        # ``RuntimeError: Internal C++ object (PySide6.QtCore.QTimer) already deleted``.
+        # 所有 slot 入口先看一眼这个旗即可静默丢弃过期信号.
+        self._disposed = False
 
         # 启动定时器以定期获取授权状态
         self._auth_timer = QTimer(self)
@@ -781,12 +915,17 @@ class NapCatQQLoginState(QObject):
 
     def remove(self) -> None:
         """清理 Timer 和释放资源"""
+        # P3 perf W4 (crash fix): 先置 _disposed 旗, 让任何后到的 slot 调用静默早返;
+        # 否则 in-flight runner 结束后 emit 的信号在 deleteLater 之后命中 slot
+        # 会触发 RuntimeError.
+        self._disposed = True
+
         # 断开配置监听
         try:
             cfg.bot_login_check_interval.valueChanged.disconnect(self._on_login_check_interval_changed)
         except (RuntimeError, TypeError):
             pass
-        
+
         self._auth_timer.stop()
         self._auth_timer.deleteLater()
         self._login_state_timer.stop()
@@ -795,6 +934,8 @@ class NapCatQQLoginState(QObject):
 
     def _on_login_check_interval_changed(self, interval_ms: int) -> None:
         """登录检查间隔配置变化时更新定时器（仅在已登录时生效）"""
+        if self._disposed:
+            return
         # 只有在已登录状态下才应用新的配置间隔
         if self._is_logged_in:
             self._login_state_timer.setInterval(interval_ms)
@@ -823,26 +964,61 @@ class NapCatQQLoginState(QObject):
     # ==================== 槽函数 ====================
     def slot_get_login_state(self) -> None:
         """获取登录状态"""
+        if self._disposed:
+            return
         if not self.auth:
             self.slot_request_auth_refresh()
             return
+
+        # P3 perf W4: 单飞保护. 未登录 bot 的 QTimer 间隔固定 1s
+        # (见 [`slot_update_login_state`](src/core/runtime/napcat.py)); 远端 Bot
+        # 的 HTTP 请求会通过 SSH 隧道 channel, 偶发 >1s 的抖动会让 runner 在
+        # QThreadPool 里堆积. 未完成前直接跳过本次 tick, 等下一轮.
+        if self._login_in_flight:
+            return
+        self._login_in_flight = True
 
         runner = GetLoginStatusRunnable(port=self.port, token=self.token, auth=self.auth)
         runner.login_status_signal.connect(self.slot_update_login_state)
         runner.online_status_signal.connect(self.slot_update_online_status)
         runner.login_qrcode_signal.connect(self.slot_update_login_qrcode)
         runner.auth_refresh_requested_signal.connect(self.slot_request_auth_refresh)
+        # Qt 没有提供"runnable 结束"的原生信号, 这里借用现有几个业务信号
+        # (任意一条到达都说明 run() 已完成) 来复位 in-flight 旗.
+        #
+        # ``auth_refresh_requested_signal`` 由鉴权失效分支触发, 不会保证 run 跑完,
+        # 但既然进入了该分支说明 HTTP 栈已经走过一遍, 视为 runner 有效结束即可.
+        runner.login_status_signal.connect(lambda _ok: self._clear_login_in_flight())
+        runner.auth_refresh_requested_signal.connect(self._clear_login_in_flight)
         QThreadPool.globalInstance().start(runner)
+
+    def _clear_login_in_flight(self, *_args: object) -> None:
+        """P3 perf W4: 统一复位 ``_login_in_flight``. 支持无参 / 单 bool 两种信号签名."""
+        self._login_in_flight = False
 
     def slot_get_auth_status(self) -> None:
         """获取认证状态"""
+        if self._disposed:
+            return
         self._last_auth_refresh_attempt_at = monotonic()
+        # P3 perf W4: 与 slot_get_login_state 对称的单飞保护; auth 刷新在 slot_update_auth
+        # 被触发后才复位, 失败路径 (response != 200) 虽不会 emit login_auth_signal,
+        # 但 30min 节拍足够宽松, 偶发未复位不会带来堆积.
+        if self._auth_in_flight:
+            return
+        self._auth_in_flight = True
         runner = GetAuthStatusRunnable(port=self.port, token=self.token)
         runner.login_auth_signal.connect(self.slot_update_auth)
+        runner.login_auth_signal.connect(lambda _auth: self._clear_auth_in_flight())
         QThreadPool.globalInstance().start(runner)
+
+    def _clear_auth_in_flight(self, *_args: object) -> None:
+        self._auth_in_flight = False
 
     def slot_request_auth_refresh(self) -> None:
         """在登录状态轮询鉴权失效时，立即刷新 auth。"""
+        if self._disposed:
+            return
         if monotonic() - self._last_auth_refresh_attempt_at < 5:
             return
 
@@ -860,6 +1036,8 @@ class NapCatQQLoginState(QObject):
         Args:
             auth (str): 认证信息
         """
+        if self._disposed:
+            return
         self.auth = auth
         logger.trace(
             f"NapCat 登录认证信息已更新(QQID: {self.config.bot.QQID}, has_auth={bool(auth)})",
@@ -873,6 +1051,11 @@ class NapCatQQLoginState(QObject):
         Args:
             is_login (bool): 是否已登录
         """
+        # P3 perf W4 (crash fix): in-flight runner 可能在 ``remove()`` 后才 emit
+        # signal, 此时 ``_login_state_timer`` 的 C++ 对象已被 deleteLater 销毁,
+        # 再访问会招 RuntimeError. 静默丢弃即可.
+        if self._disposed:
+            return
         prev_login = self._is_logged_in
         self._is_logged_in = is_login
         logger.trace(
@@ -922,6 +1105,8 @@ class NapCatQQLoginState(QObject):
         Args:
             online_status (bool): 是否在线
         """
+        if self._disposed:
+            return
         # 记录之前的在线状态以判断是否发生了 状态从在线->离线 的转变
         prev_online = self._online_status
         login_invalidated_while_online = self._login_invalidated_while_online
@@ -1011,6 +1196,8 @@ class NapCatQQLoginState(QObject):
         Args:
             qr_code (str): 登录二维码
         """
+        if self._disposed:
+            return
         if self._login_invalidated_while_online or self._suppress_qrcode_until_online:
             logger.trace(
                 f"NapCat 跳过展示已失效的登录二维码(QQID: {self.config.bot.QQID})",
@@ -1636,7 +1823,7 @@ class ManagerNapCatQQProcess(QObject):
         runner = RemoteBotOperationRunnable(qq_id, config, "start")
         runner.operation_finished_signal.connect(self._on_remote_op_finished)
         runner.operation_failed_signal.connect(self._on_remote_op_failed)
-        QThreadPool.globalInstance().start(cast(QRunnable, runner))
+        remote_ssh_pool().start(cast(QRunnable, runner))
 
     def _stop_remote_process(self, qq_id: str) -> None:
         """停止远端 Bot 进程; 不存在时静默返回."""
@@ -1667,7 +1854,7 @@ class ManagerNapCatQQProcess(QObject):
         runner = RemoteBotOperationRunnable(qq_id, record.config, "stop")
         runner.operation_finished_signal.connect(self._on_remote_op_finished)
         runner.operation_failed_signal.connect(self._on_remote_op_failed)
-        QThreadPool.globalInstance().start(cast(QRunnable, runner))
+        remote_ssh_pool().start(cast(QRunnable, runner))
 
     def _on_remote_op_finished(self, qq_id: str, action: str, payload: object) -> None:
         """远端 SSH 操作成功的统一回调 (主线程)."""
@@ -1727,6 +1914,10 @@ class ManagerNapCatQQProcess(QObject):
                 LogType.NETWORK,
                 LogSource.CORE,
             )
+            # P3 perf W4: 释放单飞旗, 让下一轮 tick 能发起新 poll
+            record = self.remote_process_dict.get(qq_id)
+            if record is not None:
+                record.poll_in_flight = False
 
     def _handle_remote_start_succeeded(self, qq_id: str, status: object) -> None:
         """远端启动成功后切到 Running + 启动轮询."""
@@ -1774,6 +1965,9 @@ class ManagerNapCatQQProcess(QObject):
         record = self.remote_process_dict.get(qq_id)
         if record is None:
             return
+
+        # P3 perf W4: 放掉 poll 单飞旗, 下一次 5s tick 可以照常发起
+        record.poll_in_flight = False
 
         # 用户已点 "停止" 但 SSH stop 还在路上时, record 仍然存在但 state=NotRunning,
         # 此时丢弃任何 in-flight 的 poll 结果, 避免重新发布登录状态 / 重建隧道.
@@ -1861,13 +2055,27 @@ class ManagerNapCatQQProcess(QObject):
         record.polling_timer = None
 
     def _enqueue_remote_poll(self, record: RemoteProcessRecord) -> None:
-        """提交一次远端 Bot 轮询任务."""
+        """提交一次远端 Bot 轮询任务.
+
+        P3 perf W4: 单飞保护 — 如果上一轮 poll 还没回 (``record.poll_in_flight``),
+        直接跳过本次 tick. SSH 会话抖动 / 远端 ``pgrep`` 卡住时, 避免在
+        [`remote_ssh_pool`](src/core/remote/thread_pool.py) 里持续堆积陈旧 poll,
+        否则新下发的 start / stop / log tail 都会被其排在后面而感知到延迟.
+        """
         if record.qq_id not in self.remote_process_dict:
             return
+        if record.poll_in_flight:
+            logger.trace(
+                f"远端 Bot 轮询跳过 (上一轮未返回, QQID: {record.qq_id})",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return
+        record.poll_in_flight = True
         runner = RemoteBotOperationRunnable(record.qq_id, record.config, "poll")
         runner.operation_finished_signal.connect(self._on_remote_op_finished)
         runner.operation_failed_signal.connect(self._on_remote_op_failed)
-        QThreadPool.globalInstance().start(cast(QRunnable, runner))
+        remote_ssh_pool().start(cast(QRunnable, runner))
 
 
 # ==================== 创建器 ====================

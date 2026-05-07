@@ -610,7 +610,6 @@ def _try_dispatch_remote_op_async(action: str, config: Config) -> bool:
         return False
 
     try:
-        from PySide6.QtCore import QThreadPool
         from PySide6.QtWidgets import QApplication
     except Exception:  # noqa: BLE001
         return False
@@ -619,8 +618,12 @@ def _try_dispatch_remote_op_async(action: str, config: Config) -> bool:
         return False
 
     try:
+        # P3 perf W4: 远端配置 SFTP 写 / SSH rm 也走 remote_ssh_pool, 与 QThreadPool
+        # 全局池隔离, 避免与本地头像下载 / 版本探测等短任务互抢线程.
+        from src.core.remote.thread_pool import remote_ssh_pool
+
         runnable = _RemoteConfigOpRunnable(action=action, config=config)
-        QThreadPool.globalInstance().start(runnable)
+        remote_ssh_pool().start(runnable)
         return True
     except Exception as exc:  # noqa: BLE001 - 派发失败回退同步, 不破坏保存语义
         logger.warning(

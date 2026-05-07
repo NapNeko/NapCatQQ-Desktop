@@ -267,6 +267,75 @@ class ServerManager(QObject):
             return
         self._credential_store.delete_password(server_id)
 
+    # ==================== NapCat 完整性校验 (P5 F1.4) ====================
+    def _lookup_napcat_expected_sha512(self) -> str | None:
+        """同步获取远端 latest NapCat 的期望 SHA512.
+
+        流程: 拉取上游 ``release.json`` (带缓存) -> 拉取 NapCat 远端 latest 版本号 ->
+        在 hash 服务里 lookup. 任一步失败均返回 ``None``, 调用方会以"跳过校验"
+        模式调用远端脚本 (脚本端会 ``log_warn``).
+
+        在 worker 线程同步执行, 总耗时上限 ≈ 5s + 5s + 解析时间.
+        """
+        try:
+            from src.core.versioning.release_hash_service import ReleaseHashService
+
+            service = ReleaseHashService()
+            service.fetch()
+            version = self._fetch_napcat_remote_version()
+            if not version:
+                logger.warning(
+                    "NapCat 完整性校验跳过: 拉取远端 latest 版本号失败",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                return None
+            entry = service.lookup(version)
+            if entry is None:
+                logger.warning(
+                    f"NapCat 完整性校验跳过: 上游 release.json 中没有版本 {version}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                return None
+            logger.info(
+                f"NapCat 完整性校验已启用: version={entry.version}, sha512_prefix={entry.shell_sha512[:16]}...",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return entry.shell_sha512
+        except Exception as exc:  # noqa: BLE001 - 任何异常都退化为"跳过校验", 不阻塞部署
+            logger.warning(
+                f"NapCat 完整性校验跳过 (异常): {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return None
+
+    @staticmethod
+    def _fetch_napcat_remote_version() -> str | None:
+        """同步获取 NapCat 远端 latest 版本号 (形如 ``v4.18.1``); 失败返回 None."""
+        import httpx
+
+        from src.core.network.urls import Urls
+
+        candidates = (
+            Urls.NAPCATQQ_REPO_API.value.toString(),
+            Urls.NAPCATQQ_REPO_API_FALLBACK.value.toString(),
+        )
+        for url in candidates:
+            try:
+                with httpx.Client(timeout=5.0, follow_redirects=True) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    payload = response.json()
+            except Exception:  # noqa: BLE001 - 任意网络错误都视为该源失败
+                continue
+            tag = payload.get("tag_name") if isinstance(payload, dict) else None
+            if isinstance(tag, str) and tag.strip():
+                return tag.strip()
+        return None
+
     # ==================== 资源监控钩子 (P4 W2 F3) ====================
     # 设计沉淀: ServerManager 不主动 attach/detach
     # [`ResourceMonitorService`](src/core/remote/resource_monitor.py); 该服务订阅
@@ -439,6 +508,11 @@ class ServerManager(QObject):
                 ) from exc
 
             # ----- Stage 2: install_napcat, 50-100 -----
+            # P5 F1.4: 在调用 install_napcat 之前先查询上游 SHA512;
+            # 取不到时静默跳过 (远端脚本端 fallback 为 warn skip), 不阻断部署
+            # — 远端 worker 线程不便弹用户对话框, 这里走"网络不稳时允许继续"策略.
+            expected_sha512 = self._lookup_napcat_expected_sha512()
+
             def _napcat_progress(message: str, percent: int) -> None:
                 _emit_progress(f"[NapCat] {message}", 50 + int(percent / 2))
 
@@ -447,10 +521,18 @@ class ServerManager(QObject):
                     progress=_napcat_progress,
                     log_callback=_emit_log_line,
                     force_update=force_napcat_update,
+                    expected_sha512=expected_sha512,
                 )
             except Exception as exc:  # noqa: BLE001
+                # P5 F1.4: 远端脚本退出码 36 -> SHA512 不匹配, 单独 stage 标签便于
+                # friendly_errors 与 UI 提示走"完整性校验"专属文案
+                stage_label = "install_napcat"
+                stderr_text = getattr(exc, "stderr", "") or ""
+                exit_status = getattr(exc, "exit_status", None)
+                if exit_status == 36 or "sha512 mismatch" in stderr_text.lower():
+                    stage_label = "install_napcat_verify"
                 raise RemoteDeploymentError(
-                    "install_napcat",
+                    stage_label,
                     f"NapCat 安装失败: {exc}",
                     cause=exc,
                 ) from exc

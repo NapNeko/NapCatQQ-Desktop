@@ -411,6 +411,7 @@ class RemoteBackend(OperationBackend):
         progress: ProgressCallback | None = None,
         log_callback=None,
         force_update: bool = False,
+        expected_sha512: str | None = None,
     ) -> None:
         """P1: 远端安装/更新 NapCat。
 
@@ -421,6 +422,10 @@ class RemoteBackend(OperationBackend):
         默认情况下脚本会复用远端已有 NapCat 安装。
 
         ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显。
+
+        ``expected_sha512`` (P5 F1.4): 期望的 ``NapCat.Shell.zip`` SHA512 (128 位 hex);
+        提供时远端脚本会做 SHA512 完整性校验, 不一致以退出码 36 中断.
+        ``None`` 跳过校验, 兼容上游 hash 数据不可用的离线场景.
         """
         if archive_path is not None:
             # P1 不实现自定义包路径, 但仍允许调用方传参（直接忽略并 logger.warning 比抛错更友好）
@@ -436,6 +441,7 @@ class RemoteBackend(OperationBackend):
             progress=progress,
             log_callback=log_callback,
             force_update=force_update,
+            expected_sha512=expected_sha512,
         )
 
     def install_qq(

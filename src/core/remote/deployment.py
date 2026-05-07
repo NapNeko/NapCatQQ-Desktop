@@ -348,6 +348,9 @@ class LinuxCoreDeployment:
         )
         return step_result
 
+    #: ``remote_install_napcat.sh`` 在 SHA512 校验失败时使用的 dedicated 退出码 (P5 F1.4).
+    INSTALL_NAPCAT_VERIFY_EXIT_CODE: int = 36
+
     def install_napcat(
         self,
         *,
@@ -355,6 +358,7 @@ class LinuxCoreDeployment:
         log_callback: LogLineCallback | None = None,
         force_update: bool = False,
         download_url: str | None = None,
+        expected_sha512: str | None = None,
     ) -> InstallStepResult:
         """在远端安装/更新 NapCat。
 
@@ -366,9 +370,23 @@ class LinuxCoreDeployment:
             log_callback: 原始日志行回调, 用于把脚本 stdout 实时透传给"部署控制台"
             force_update: 强制重新下载并解压 NapCat
             download_url: 自定义下载地址(覆盖 ``NAPCAT_DOWNLOAD_URL``)
+            expected_sha512: P5 F1.4: NapCat.Shell.zip 的期望 SHA512 (128 位 hex);
+                提供时通过 ``NAPCAT_EXPECTED_SHA512`` 环境变量传给远端脚本, 校验失败
+                远端会以退出码 36 中断, 本方法把该退出码转为
+                ``RemoteCommandError`` (调用方按 stage="install_napcat_verify" 区分).
+                ``None`` 时跳过校验, 远端仅记 warning 不阻断 (兼容老客户端).
+
+        Raises:
+            RemoteCommandError: 远端脚本退出码非 0; 当 ``exit_status==36`` 时表示
+                SHA512 校验失败, ``stderr`` 已包含期望与实际值, 上层应转为
+                ``RemoteDeploymentError(stage="install_napcat_verify")`` 以保留语义.
         """
         logger.info(
-            f"开始远端 NapCat 安装: napcat_dir={self.paths.napcat_dir}, force_update={force_update}",
+            (
+                f"开始远端 NapCat 安装: napcat_dir={self.paths.napcat_dir}, "
+                f"force_update={force_update}, "
+                f"sha512_verify={'enabled' if expected_sha512 else 'skipped'}"
+            ),
             LogType.NETWORK,
             LogSource.CORE,
         )
@@ -382,6 +400,9 @@ class LinuxCoreDeployment:
             env_parts.append("FORCE_NAPCAT_UPDATE=1")
         if download_url:
             env_parts.append(f'NAPCAT_DOWNLOAD_URL={self._shell_quote(download_url)}')
+        if expected_sha512:
+            normalized_hash = expected_sha512.strip().lower()
+            env_parts.append(f"NAPCAT_EXPECTED_SHA512={self._shell_quote(normalized_hash)}")
         env_prefix = (" ".join(env_parts) + " ") if env_parts else ""
         command = f'{env_prefix}bash "{remote_script_path}"'
 

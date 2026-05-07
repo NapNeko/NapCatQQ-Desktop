@@ -3,12 +3,47 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 
 SSHAuthMethod = Literal["password", "key"]
+
+# P5 F2.3: ``LinuxCorePaths`` 字段白名单正则.
+#
+# 允许:
+# - 可选 ``$HOME`` 前缀 (后必须跟 ``/`` 或字符串结束)
+# - 字母数字 / 下划线 / ``.`` / ``-`` / ``/``
+#
+# 显式拒绝: ``$()`` / 反引号 / ``;`` / ``&`` / ``|`` / ``>`` / ``<`` / 换行 / ``"`` /
+# ``'`` / ``\`` / ``$<其他变量>``. 防 ``servers.json`` 被改后绕过 UI 校验,
+# 让恶意 workspace_dir 流到 inject_script_variables / _quote_remote_argument.
+_LINUX_PATH_PATTERN: re.Pattern[str] = re.compile(
+    r"^(?:\$HOME(?:/[A-Za-z0-9._\-/]+)?|/[A-Za-z0-9._\-/]+)$"
+)
+
+
+def _validate_linux_path(field_name: str, value: str) -> None:
+    """校验单个路径字段; 不合法时抛 ``ValueError``.
+
+    供 [`LinuxCorePaths.__post_init__`] 与 UI 同源校验复用 (后者通过
+    [`is_valid_linux_path`] 包装为布尔判断).
+    """
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"LinuxCorePaths.{field_name} 不能为空")
+    if not _LINUX_PATH_PATTERN.match(value):
+        raise ValueError(
+            f"LinuxCorePaths.{field_name} 含非法字符或格式 (允许 $HOME 前缀 + 字母数字 _./-/): {value!r}"
+        )
+
+
+def is_valid_linux_path(value: str) -> bool:
+    """UI 同源校验入口; 不抛异常, 仅返回布尔."""
+    if not isinstance(value, str) or not value:
+        return False
+    return _LINUX_PATH_PATTERN.match(value) is not None
 # P4 F5.1: 新增 ``"interactive"`` 政策, 让首次连接通过
 # [`HostKeyConfirmDialog`](src/ui/components/host_key_confirm_dialog.py)
 # 弹窗确认; 旧值保留, 已存盘配置 (``reject`` / ``auto_add`` / ``warning``) 完全兼容.
@@ -92,6 +127,18 @@ class LinuxCorePaths:
     log_dir: str = "$HOME/Napcat/log"
     tmp_dir: str = "$HOME/Napcat/tmp"
     package_dir: str = "$HOME/Napcat/packages"
+
+    def __post_init__(self) -> None:
+        """P5 F2.3: 严格校验所有路径字段, 拒绝 shell 元字符注入."""
+        for field_name in (
+            "workspace_dir",
+            "runtime_dir",
+            "config_dir",
+            "log_dir",
+            "tmp_dir",
+            "package_dir",
+        ):
+            _validate_linux_path(field_name, getattr(self, field_name))
 
     @property
     def install_base_dir(self) -> str:
