@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""[`MigrationDialog`](src/ui/page/bot_page/widget/migration_dialog.py): Bot 运行位置迁移确认对话框 (P3.W3.B).
+"""[`MigrationDialog`](src/ui/page/bot_page/widget/migration_dialog.py): Bot 运行位置迁移确认对话框 (P3.W3.B + P4 W3 F6).
 
 在 [`BotConfigPage.slot_save_config_button`](src/ui/page/bot_page/sub_page/bot_config.py)
 检测到 ``runtime_target`` 变化时弹出, 让用户:
 
 - 确认搬迁的源端与目标端
-- 选择是否搬运 NapCat 持久数据 (P3 仅迁配置, future flag)
+- 选择是否搬运 NapCat 持久数据 (P4 W3 F6 已兑现, 默认勾选)
 - 看到风险提示 (Bot 会被停止 / 不会自动启动 / 失败会保留源端)
 """
 
@@ -51,8 +51,9 @@ class MigrationDialog(MessageBoxBase):
                 "  1. 停止源端正在运行的 Bot\n"
                 "  2. 把 NapCat 配置文件 (onebot11/napcat JSON) 复制到目标端\n"
                 "  3. 清理源端原有配置\n"
-                "  4. 完成后**不会自动启动**目标端 Bot, 由你决定何时启动\n\n"
-                "如果迁移失败, 源端配置保留, 目标端会留下半成品 (可重试)."
+                "  4. 若勾选'同时搬运 NapCat 持久数据', 1 MiB 分片流式搬运账号缓存 / 数据库\n"
+                "  5. 完成后**不会自动启动**目标端 Bot, 由你决定何时启动\n\n"
+                "如果迁移失败, 源端配置保留, 目标端已写入的持久数据保留 .partial 后缀以便重试."
             ),
             self,
         )
@@ -61,12 +62,13 @@ class MigrationDialog(MessageBoxBase):
         self.move_persistent_data_checkbox = CheckBox(
             self.tr("同时搬运 NapCat 持久数据 (账号缓存 / 数据库)"), self
         )
-        self.move_persistent_data_checkbox.setChecked(False)
+        # P4 W3 F6: future flag 已兑现, 默认勾选
+        self.move_persistent_data_checkbox.setChecked(True)
 
         self.hint_label = CaptionLabel(
             self.tr(
-                "提示: 持久数据迁移在 P4 阶段评估; "
-                "当前版本只迁移 NapCat 配置, 持久数据如有需要请手动备份."
+                "提示: 持久数据走 1 MiB 分片续传, 失败保留 .partial 让下次重试; "
+                "搬运过程中右上角后台任务面板会显示已传输字节数."
             ),
             self,
         )
@@ -87,5 +89,5 @@ class MigrationDialog(MessageBoxBase):
         self.yesButton.setDefault(False)
 
     def get_move_persistent_data(self) -> bool:
-        """返回用户对持久数据迁移的选择 (P3 当前不实际生效, 留作 future flag)."""
+        """返回用户对持久数据迁移的选择 (P4 W3 F6 起真实生效)."""
         return self.move_persistent_data_checkbox.isChecked()
