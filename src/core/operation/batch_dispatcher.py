@@ -78,8 +78,24 @@ def _qthreadpool_executor(runnable: QRunnable) -> None:
 
 
 def _inline_executor(runnable: QRunnable) -> None:
-    """测试用: 同步执行 ``runnable.run()``, 不依赖 QApplication."""
+    """同步执行 ``runnable.run()``, 不依赖 QApplication / QThreadPool.
+
+    用途:
+
+    - **测试**: 不进线程池, 单线程驱动 dispatcher 的状态机.
+    - **生产**: 调用方明确知道 ``op`` 是非阻塞 (例如 P3 perf 之后的
+      ``ManagerNapCatQQProcess.create_napcat_process`` / ``stop_process``,
+      它们内部已经把耗时分支异步化), 强制留在主线程执行, 避免
+      ``QProcess`` / ``QObject`` 在无事件循环的 worker 线程上被构造.
+      公开别名见 :data:`inline_executor`.
+    """
     runnable.run()
+
+
+#: 公开别名: 与 :func:`_inline_executor` 等价, 供调用方在
+#: ``BatchDispatcher.dispatch(..., executor=inline_executor)`` 显式选择
+#: "同步 / 主线程执行" 模式. 见函数 docstring 的 "生产" 用途.
+inline_executor = _inline_executor
 
 
 # ==================== 内部 worker ====================

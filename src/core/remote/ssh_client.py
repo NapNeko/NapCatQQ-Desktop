@@ -6,7 +6,8 @@ from __future__ import annotations
 import shlex
 import socket
 import threading
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Iterator
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -480,6 +481,112 @@ class SSHClient:
     def ensure_remote_directory(self, remote_path: str) -> RemoteCommandResult:
         """确保远端目录存在。"""
         return self.run(f"mkdir -p -- {self._quote_remote_argument(remote_path)}", check=True)
+
+    # ==================== exec_stream + 自动重连 (P4 W4 F7) ====================
+    #: F7 默认开关. 部署 / 日志 tail 路径在调用 :meth:`exec_stream_resilient` 时
+    #: 显式传 ``max_retries=0`` 退化为 :meth:`exec_stream` 单次行为, 保持 P3 既有
+    #: 幂等性假设. 真机验证脚本幂等性后, 调用方可改传 >0 的值开启重连.
+    _RESUME_DELAYS: tuple[float, ...] = (1.0, 3.0, 8.0)
+
+    def exec_stream_resilient(
+        self,
+        open_command: Callable[[int], str],
+        *,
+        progress_marker: Callable[[str], int | None] = lambda _line: None,
+        on_stdout_line: Callable[[str], None] | None = None,
+        on_stderr_line: Callable[[str], None] | None = None,
+        max_retries: int = 0,
+        delays: tuple[float, ...] | None = None,
+        timeout: float | None = None,
+        check: bool = False,
+        merge_stderr: bool = False,
+        sleeper: Callable[[float], None] | None = None,
+    ) -> RemoteCommandResult:
+        """[`exec_stream`](src/core/remote/ssh_client.py) 的 "断线自愈" 包装 (F7).
+
+        关键约定:
+        - ``open_command(resume_offset)`` 每次重连时被调用, 返回该 attempt 用的 shell 命令.
+          调用方决定 ``resume_offset`` 的语义 (字节 / PROGRESS step / 行号), helper 不做解析.
+        - ``progress_marker(line)`` 每行 stdout 触发一次, 返回更新后的 ``resume_offset`` 或 ``None``.
+          ``None`` 表示该行不影响 resume 进度; 返回值会作为下次 ``open_command`` 的入参.
+        - ``max_retries`` 控制重连尝试次数; ``0`` (默认) 等价 ``exec_stream`` 单次, 保持 P3 行为.
+        - ``delays`` 各次重试前的等待秒数; 不足 ``max_retries`` 长度时取最后一档.
+        - ``sleeper`` 仅供测试注入, 替代 ``time.sleep`` 跳过真实等待.
+
+        Returns:
+            最后一次成功的 :class:`RemoteCommandResult`. 全部 attempt 失败时抛出最后一次异常.
+        """
+        delays_eff = delays if delays is not None else self._RESUME_DELAYS
+        sleep = sleeper if sleeper is not None else time.sleep
+
+        last_resume = 0
+        last_exc: Exception | None = None
+
+        def _wrap_stdout_line(line: str) -> None:
+            nonlocal last_resume
+            try:
+                updated = progress_marker(line)
+                if updated is not None:
+                    last_resume = int(updated)
+            except Exception as exc:  # noqa: BLE001 - 解析失败不阻断流
+                logger.trace(
+                    f"progress_marker 解析失败, 忽略: {type(exc).__name__}: {exc}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+            if on_stdout_line is not None:
+                try:
+                    on_stdout_line(line)
+                except Exception as exc:  # noqa: BLE001 - 上层回调异常不应中断流
+                    logger.trace(
+                        f"on_stdout_line 回调异常: {type(exc).__name__}: {exc}",
+                        LogType.NETWORK,
+                        LogSource.CORE,
+                    )
+
+        for attempt in range(max_retries + 1):
+            cmd = open_command(last_resume)
+            try:
+                return self.exec_stream(
+                    cmd,
+                    on_stdout_line=_wrap_stdout_line,
+                    on_stderr_line=on_stderr_line,
+                    timeout=timeout,
+                    check=check,
+                    merge_stderr=merge_stderr,
+                )
+            except (SSHConnectionError, OSError) as exc:
+                last_exc = exc
+                if attempt >= max_retries:
+                    raise
+                delay = delays_eff[min(attempt, len(delays_eff) - 1)]
+                logger.warning(
+                    (
+                        "exec_stream 中途断开, 准备重连重试: "
+                        f"attempt={attempt + 1}/{max_retries + 1}, "
+                        f"last_resume={last_resume}, delay={delay}s, "
+                        f"err={type(exc).__name__}: {exc}"
+                    ),
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                sleep(delay)
+                try:
+                    self.ensure_alive(reconnect=True)
+                except Exception as reconnect_exc:  # noqa: BLE001 - 重连失败下轮 attempt 再试
+                    logger.warning(
+                        f"重连失败, 进入下一轮 attempt: {type(reconnect_exc).__name__}: {reconnect_exc}",
+                        LogType.NETWORK,
+                        LogSource.CORE,
+                    )
+            except (RemoteCommandError, SSHAuthenticationError, SSHHostKeyError):
+                # 命令业务错误 / 认证 / 指纹问题不属于"中途断开", 直接上抛
+                raise
+
+        # 不应到达: 上面的循环要么 return 要么 raise, 但保留兜底防御逻辑
+        if last_exc is not None:
+            raise last_exc
+        raise SSHConnectionError("exec_stream_resilient 未运行任何 attempt")
 
     def upload_file(self, local_path: str | Path, remote_path: str) -> None:
         """上传单个文件。"""

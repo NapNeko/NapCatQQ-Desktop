@@ -654,30 +654,32 @@ class RemoteBackend(OperationBackend):
         本方法在客户端层做一次 SSH ``pgrep`` + ``kill`` 兜底, 让旧 launcher
         部署的服务器也能立即修复, 不必走"强制更新 NapCat"重新部署.
 
+        P4 perf: 把原本 4 次独立 SSH (``pkill -TERM`` / ``sleep 3`` /
+        ``pkill -KILL`` / ``rm pid``) 合并成单条 shell, 并用 ``pgrep`` polling
+        取代死等 ``sleep 3`` —— 进程已干净退出 (绝大多数场景) 时 ~0.5s 即返回,
+        顽固进程仍按 3s 上限走 SIGKILL. 行为与旧版**完全等价**, 仅消除
+        ``sleep`` 浪费的时间和多次 RTT 累积; 不依赖 launcher 版本探测,
+        不存在 v1 用户回归 "已登录,无法重复登录" 的风险.
+
         失败 (SSH 异常 / pgrep 找不到) 不抛错, 仅 trace 一行; 调用方应在
         ``start_napcat`` / ``stop_napcat`` 里调用此函数.
         """
         try:
             safe_qq = self._shell_quote_qq(qq_id)
-            # SIGTERM 阶段
-            self._exec_backend.run(
-                f"pkill -TERM -f 'qq --no-sandbox -q {safe_qq}$' 2>/dev/null || true",
-                timeout=10.0,
-                check=False,
+            pid_file = f"{self.paths.runtime_dir}/napcat_{safe_qq}.pid"
+            # 单条 shell 串起 TERM -> polling -> KILL -> rm pidfile.
+            # ``pgrep`` 找不到匹配时 exit 1, ``|| break`` 让循环立即结束.
+            # ``sleep 0.5`` * 6 = 3s 是原 ``sleep 3`` 的等价上限.
+            cmd = (
+                f"pkill -TERM -f 'qq --no-sandbox -q {safe_qq}$' 2>/dev/null || true; "
+                f"for _ in 1 2 3 4 5 6; do "
+                f"pgrep -f 'qq --no-sandbox -q {safe_qq}$' >/dev/null 2>&1 || break; "
+                f"sleep 0.5; "
+                f"done; "
+                f"pkill -KILL -f 'qq --no-sandbox -q {safe_qq}$' 2>/dev/null || true; "
+                f'rm -f "{pid_file}" 2>/dev/null || true'
             )
-            # 给 3s 平滑退出窗口
-            self._exec_backend.run("sleep 3", timeout=10.0, check=False)
-            # SIGKILL 阶段 (仍存活的) + 删除可能遗留的 PID 文件
-            self._exec_backend.run(
-                f"pkill -KILL -f 'qq --no-sandbox -q {safe_qq}$' 2>/dev/null || true",
-                timeout=10.0,
-                check=False,
-            )
-            self._exec_backend.run(
-                f'rm -f "{self.paths.runtime_dir}/napcat_{safe_qq}.pid" 2>/dev/null || true',
-                timeout=5.0,
-                check=False,
-            )
+            self._exec_backend.run(cmd, timeout=15.0, check=False)
         except Exception as exc:  # noqa: BLE001 - 兜底失败不应阻断启动/停止主流程
             from src.core.logging import LogSource, LogType
             from src.core.logging import logger as _logger
