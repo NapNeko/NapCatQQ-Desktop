@@ -37,6 +37,7 @@ from qfluentwidgets import (
 )
 
 from src.core.remote import DeploymentState, ServerManager, ServerProfile
+from src.core.remote.thread_pool import remote_ssh_pool
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox
@@ -570,7 +571,7 @@ class RemotePage(QWidget):
 
         tester = ConnectionTester(profile, password=password)
         tester.signals.finished.connect(self._on_test_finished)
-        QThreadPool.globalInstance().start(tester)
+        remote_ssh_pool().start(tester)
 
     def _on_test_finished(self, server_id: str, ok: bool, message: str) -> None:  # noqa: ARG002
         # P3 perf: 成败提示已走 ProgressInfoBar 桥, 这里仅负责
@@ -652,7 +653,7 @@ class RemotePage(QWidget):
 
         runner = DeploymentRunner(profile.id)
         runner.signals.finished.connect(self._on_deployment_runner_finished)
-        QThreadPool.globalInstance().start(runner)
+        remote_ssh_pool().start(runner)
 
     def _open_or_focus_console(self, server_id: str, server_name: str) -> None:
         """打开或前置 DeploymentConsoleDialog。"""
@@ -701,7 +702,7 @@ class RemotePage(QWidget):
         # P3 perf: 进行中 / 完成反馈已交给 ProgressInfoBar 桥
         runner = RedetectRunner(profile.id)
         runner.signals.finished.connect(self._on_redetect_finished)
-        QThreadPool.globalInstance().start(runner)
+        remote_ssh_pool().start(runner)
 
     def _on_force_update_napcat(self, server_id: str | None = None) -> None:
         """强制重跑 install_napcat 并传 force_update=True (DEPLOYED 状态可用)."""
@@ -772,7 +773,7 @@ class RemotePage(QWidget):
             force_linuxqq_reinstall=force_linuxqq_reinstall,
         )
         runner.signals.finished.connect(self._on_deployment_runner_finished)
-        QThreadPool.globalInstance().start(runner)
+        remote_ssh_pool().start(runner)
 
     # ---------- P3.W2: 维护对话框入口 ----------
     def _on_open_maintenance(self, server_id: str | None = None) -> None:
@@ -835,7 +836,7 @@ class RemotePage(QWidget):
 
         runner = RollbackRunner(profile.id, include_qq=include_qq)
         runner.signals.finished.connect(self._on_rollback_finished)
-        QThreadPool.globalInstance().start(runner)
+        remote_ssh_pool().start(runner)
 
     def _on_rollback_finished(self, server_id: str, ok: bool, message: str) -> None:  # noqa: ARG002
         """[`RollbackRunner`] 完结回调; 业务消息已由 deployment_finished 走 info/error bar."""
@@ -855,7 +856,7 @@ class RemotePage(QWidget):
                 continue
             runner = RedetectRunner(profile.id)
             runner.signals.finished.connect(self._on_redetect_finished)
-            QThreadPool.globalInstance().start(runner)
+            remote_ssh_pool().start(runner)
             triggered.append(profile.name)
         # P3 perf: 多台同时探测会 spawn 多个 ProgressInfoBar (堆叠于右上),
         # 不再额外的 info_bar 提示总计; 仅保留 ``triggered`` 变量供调试

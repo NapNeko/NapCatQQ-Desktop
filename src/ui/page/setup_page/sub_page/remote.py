@@ -60,6 +60,7 @@ from qfluentwidgets import (
 from src.core.config import cfg
 from src.core.logging import LogSource, LogType, logger
 from src.core.remote import RemoteManager, SSHCredentials
+from src.core.remote.thread_pool import remote_ssh_pool
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard
 
@@ -422,7 +423,8 @@ class Remote(QWidget):
         task = RemoteActionTask(action_name, handler)
         task.success_signal.connect(self._on_task_success)
         task.error_signal.connect(self._on_task_error)
-        QThreadPool.globalInstance().start(task)
+        # P3 perf W4: 远端操作走专用池, 与全局池隔离
+        remote_ssh_pool().start(task)
 
     @Slot(str, str)
     def _on_task_success(self, action_name: str, message: str) -> None:
@@ -465,12 +467,25 @@ class Remote(QWidget):
     def _on_save(self) -> None:
         """保存配置。"""
         try:
+            # P5 F2.4: workspace_dir 严格白名单校验, 拒绝命令注入 payload
+            from src.core.remote.models import is_valid_linux_path
+
+            workspace_dir = self.workspace_dir_card.get_value().strip()
+            if not is_valid_linux_path(workspace_dir):
+                error_bar(
+                    self.tr(
+                        "远端工作目录格式不合法 (允许 $HOME 前缀 + 字母数字 _./-/), 请重新填写"
+                    ),
+                    parent=self,
+                )
+                return
+
             cfg.set(cfg.remote_host, self.host_card.get_value().strip())
             cfg.set(cfg.remote_port, int(self.port_card.get_value() or 22))
             cfg.set(cfg.remote_username, self.username_card.get_value().strip())
             cfg.set(cfg.remote_auth_method, self.auth_method_card.get_value())
             cfg.set(cfg.remote_private_key_path, self.private_key_path_card.get_value())
-            cfg.set(cfg.remote_workspace_dir, self.workspace_dir_card.get_value().strip())
+            cfg.set(cfg.remote_workspace_dir, workspace_dir)
             cfg.set(cfg.remote_connect_timeout, int(self.timeout_card.get_value() or 10))
             cfg.set(cfg.remote_command_timeout, int(self.command_timeout_card.get_value() or 20))
             cfg.set(cfg.remote_host_key_policy, self.host_key_policy_card.get_value())

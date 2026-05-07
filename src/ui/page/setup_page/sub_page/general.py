@@ -16,6 +16,7 @@ from src.core.logging import LogSource, logger
 from src.core.network.email import EncryptionType, create_test_email_task
 from src.core.network.webhook import create_test_webhook_task
 from src.core.remote import RemoteManager, SSHCredentials
+from src.core.remote.thread_pool import remote_ssh_pool
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
@@ -552,4 +553,5 @@ class RemoteConnectionDialog(MessageBoxBase):
         task = RemoteConnectionTestTask(credentials)
         task.success_signal.connect(lambda msg: success_bar(self.tr(msg), parent=self))
         task.error_signal.connect(lambda msg: error_bar(msg, parent=self))
-        QThreadPool.globalInstance().start(task)
+        # P3 perf W4: SSH 连接探测走专用池
+        remote_ssh_pool().start(task)

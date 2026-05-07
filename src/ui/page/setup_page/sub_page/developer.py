@@ -19,6 +19,7 @@ from src.core.desktop_update import MsiUpdateStrategy, inject_target_pid
 from src.core.installation.install_type import detect_install_type
 from src.core.logging import LogSource, logger
 from src.core.remote import DeploymentState, ServerManager
+from src.core.remote.thread_pool import remote_ssh_pool
 from src.core.runtime.paths import PathFunc
 from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.core.desktop_update.templates import load_msi_update_script
@@ -178,7 +179,8 @@ class RemoteRollbackCard(SettingCard):
 
         runner = RollbackRunner(profile.id)
         runner.signals.finished.connect(self._on_rollback_finished)
-        QThreadPool.globalInstance().start(runner)
+        # P3 perf W4: 走专用远端 SSH 池, 与全局池隔离
+        remote_ssh_pool().start(runner)
         logger.info(
             f"开发者模式触发远端回滚: server_id={profile.id}, name={profile.name}",
             log_source=LogSource.UI,
