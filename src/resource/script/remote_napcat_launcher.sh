@@ -177,7 +177,22 @@ start_napcat() {
       [ -z "$op" ] && continue
       kill "$op" >/dev/null 2>&1 || true
     done <<< "$orphan_pids"
-    sleep 2
+    # P4 perf: polling 等候孤儿退出, 上限 2s (4 * 0.5s), 等价旧版 ``sleep 2``.
+    # 进程已 TERM 退出时 ~0.3s 即返回, 顽固进程仍按 2s 上限走 KILL.
+    local _orphan_iter=0
+    while [ "$_orphan_iter" -lt 4 ]; do
+      local _orphan_alive=""
+      while IFS= read -r op; do
+        [ -z "$op" ] && continue
+        if kill -0 "$op" >/dev/null 2>&1; then
+          _orphan_alive="1"
+          break
+        fi
+      done <<< "$orphan_pids"
+      [ -z "$_orphan_alive" ] && break
+      sleep 0.5
+      _orphan_iter=$((_orphan_iter + 1))
+    done
     while IFS= read -r op; do
       [ -z "$op" ] && continue
       if kill -0 "$op" >/dev/null 2>&1; then
@@ -206,8 +221,27 @@ start_napcat() {
   nohup xvfb-run -a "$qq_executable" --no-sandbox -q "$qq_id" >> "$log_path" 2>&1 &
   local pid="$!"
   echo "$pid" > "$pid_path"
-  # 给 QQ + xvfb-run 启动时间; 8s 是经验值, NapCat 进入 ready 一般在 6-7s.
-  sleep 8
+
+  # P4 perf: 取代原本的 ``sleep 8`` 死等. 主动 polling NapCat 的 ready marker —
+  # 日志里出现 ``/webui?token=`` 行 (NapCat 把 WebUi URL 写到 stdout) 即视为
+  # 启动完成. 一般 4-6s 命中, 慢机器走 10s 上限. 进程提前崩溃也立即 break,
+  # 走与原版一致的失败路径 (kill -0 检查).
+  #
+  # 等价性: 最终成功判断仍然是 ``kill -0 $pid``, 与 ready marker 解耦; 这里
+  # 仅把"等够 8s"提前到"看到 ready 就走", 慢启动时上限 10s 比原 8s 多 2s
+  # 容错, 不会比旧版更激进地判失败.
+  local ready_max_iters=20  # 20 * 0.5s = 10s 上限
+  local _i=0
+  while [ "$_i" -lt "$ready_max_iters" ]; do
+    if ! kill -0 "$pid" >/dev/null 2>&1; then
+      break
+    fi
+    if [ -f "$log_path" ] && grep -q "/webui?token=" "$log_path" 2>/dev/null; then
+      break
+    fi
+    sleep 0.5
+    _i=$((_i + 1))
+  done
 
   if kill -0 "$pid" >/dev/null 2>&1; then
     write_status "$qq_id" true "start" "$pid" null
@@ -250,8 +284,25 @@ _kill_all_qq_processes() {
     [ -z "$tp" ] && continue
     kill "$tp" >/dev/null 2>&1 || true
   done <<< "$candidates"
-  # 给 QQ 客户端 3s 平滑退出窗口
-  sleep 3
+
+  # P4 perf: polling 等候平滑退出, 取代死等 ``sleep 3``.
+  # 每 0.5s 检查一次 candidates 是否还有存活, 全死则提前 break.
+  # 上限 6 * 0.5s = 3s, 与旧版完全等价, 仅消除"全部已退出仍硬等 3s"的浪费.
+  local _kill_iter=0
+  while [ "$_kill_iter" -lt 6 ]; do
+    local _any_alive=""
+    while IFS= read -r tp; do
+      [ -z "$tp" ] && continue
+      if kill -0 "$tp" >/dev/null 2>&1; then
+        _any_alive="1"
+        break
+      fi
+    done <<< "$candidates"
+    [ -z "$_any_alive" ] && break
+    sleep 0.5
+    _kill_iter=$((_kill_iter + 1))
+  done
+
   # SIGKILL 阶段
   while IFS= read -r tp; do
     [ -z "$tp" ] && continue
@@ -260,8 +311,17 @@ _kill_all_qq_processes() {
     fi
   done <<< "$candidates"
 
-  # 二次兜底: 仍有同 qq_id 的 qq 进程 → 再 pgrep 一遍 KILL
-  sleep 1
+  # 二次兜底: 仍有同 qq_id 的 qq 进程 → 再 pgrep 一遍 KILL.
+  # P4 perf: SIGKILL 是同步信号, 内核回收 task struct 通常 < 100ms;
+  # 用一次短 polling (上限 1s) 取代固定 sleep 1.
+  local _post_iter=0
+  while [ "$_post_iter" -lt 4 ]; do
+    if [ -z "$(pgrep_pids_for "$qq_id")" ]; then
+      break
+    fi
+    sleep 0.25
+    _post_iter=$((_post_iter + 1))
+  done
   local lingering
   lingering="$(pgrep_pids_for "$qq_id")"
   if [ -n "$lingering" ]; then
