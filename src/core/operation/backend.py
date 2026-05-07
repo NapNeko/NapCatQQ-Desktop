@@ -149,6 +149,68 @@ class OperationBackend(ABC):
     def download(self, remote_path: str, local_path: str | Path) -> None:
         """从 backend 工作区下载文件到 Desktop 本地。"""
 
+    # ---------- 字节级流式 IO (P4 W3 F6 持久数据迁移) ----------
+    # 这些方法以 default 实现给出便于第三方 backend 渐进适配; 真实 backend
+    # (Local / Remote) 必须覆盖, 否则会触发 NotImplementedError. 不标 abstractmethod
+    # 是为了避免破坏现有派生 / mock 类的实例化路径.
+    def file_size(self, path: str) -> int:
+        """返回文件字节数; 不存在时抛 ``FileNotFoundError``."""
+        raise NotImplementedError
+
+    def read_bytes(self, path: str, *, offset: int = 0, length: int | None = None) -> bytes:
+        """从指定 ``offset`` 读取 ``length`` 字节; ``length=None`` 时读到末尾.
+
+        - ``offset`` 必须 >= 0
+        - 文件长度小于 ``offset + length`` 时返回实际可读数据, 不抛错
+        """
+        raise NotImplementedError
+
+    def append_bytes(self, path: str, data: bytes) -> None:
+        """以 append 模式向 ``path`` 追加 ``data``; 文件不存在时创建, 父目录自动创建.
+
+        本期 P4 F6 持久数据迁移仅靠 append + rename 实现 ``.partial`` 续传,
+        因此不暴露通用 seek-write API 以减小后端实现成本.
+        """
+        raise NotImplementedError
+
+    def rename(self, src: str, dst: str) -> None:
+        """原子重命名; ``dst`` 已存在时由 backend 决定是覆盖还是抛错."""
+        raise NotImplementedError
+
+    def walk_files(self, root: str) -> list[tuple[str, int]]:
+        """递归列出 ``root`` 下所有文件 (相对路径 + 字节数), 不含目录条目.
+
+        Default 实现走 :meth:`list_dir` 递归; backend 可覆盖以走更高效的本地化遍历.
+        """
+        if not self.file_exists(root):
+            return []
+        results: list[tuple[str, int]] = []
+        # BFS 避免深递归
+        stack: list[tuple[str, str]] = [("", root)]
+        while stack:
+            rel_prefix, abs_dir = stack.pop()
+            try:
+                entries = self.list_dir(abs_dir)
+            except (FileNotFoundError, OSError):
+                continue
+            for entry in entries:
+                rel_name = f"{rel_prefix}{entry.name}" if not rel_prefix else f"{rel_prefix}/{entry.name}"
+                abs_name = self._join_posix(abs_dir, entry.name)
+                if entry.is_dir:
+                    stack.append((rel_name + "/", abs_name))
+                else:
+                    results.append((rel_name, entry.size))
+        return results
+
+    @staticmethod
+    def _join_posix(parent: str, name: str) -> str:
+        """跨 backend 拼接路径; backend 已经统一使用 POSIX 风格字符串."""
+        if not parent:
+            return name
+        if parent.endswith("/") or parent.endswith("\\"):
+            return f"{parent}{name}"
+        return f"{parent}/{name}"
+
     # ---------- 进程 ----------
     @abstractmethod
     def start_napcat(self, qq_id: str, config: "Config") -> ProcessStatus:
