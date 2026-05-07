@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.background import DottedBackground
+from src.ui.components.remote_summary_card import RemoteSummaryCard
 from .widget import HelloCard, NoticeCard, OccupancyPanel, VersionCardsPanel
 
 if TYPE_CHECKING:
@@ -19,6 +20,8 @@ class _HomeMainColumn(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.hello_card = HelloCard()
+        # P4 W2 F4: 首页远端概览卡片; 无远端服务器时自动折叠为单行引导
+        self.remote_summary_card = RemoteSummaryCard()
         self.notice_card = NoticeCard()
         self._set_layout()
 
@@ -27,6 +30,7 @@ class _HomeMainColumn(QWidget):
         self.v_box_layout.setContentsMargins(0, 0, 0, 0)
         self.v_box_layout.setSpacing(12)
         self.v_box_layout.addWidget(self.hello_card)
+        self.v_box_layout.addWidget(self.remote_summary_card)
         self.v_box_layout.addWidget(self.notice_card)
 
 
@@ -56,7 +60,35 @@ class HomeWidget(DottedBackground):
 
         PageStyleSheet.HOME.apply(self)
         self.main_column.hello_card.attach_floating_icon(self)
+        # P4 W2 F4: 把远端概览卡片的点击事件路由到 RemotePage
+        self._wire_remote_navigation(parent)
         return self
+
+    def _wire_remote_navigation(self, parent: "MainWindow") -> None:
+        """把 [`RemoteSummaryCard.navigate_to_remote_signal`](src/ui/components/remote_summary_card.py)
+        路由到主窗口的 RemotePage; ``server_id`` 非空时调用 ``select_server``.
+        """
+        try:
+            from creart import it
+
+            from src.ui.page.remote_page import RemotePage
+
+            remote_page = it(RemotePage)
+        except Exception:  # noqa: BLE001
+            return
+
+        def _navigate(server_id: str) -> None:
+            try:
+                parent.switchTo(remote_page)
+            except Exception:  # noqa: BLE001 - FluentWindow.switchTo 缺失时降级
+                pass
+            if server_id:
+                try:
+                    remote_page.select_server(server_id)
+                except Exception:  # noqa: BLE001
+                    pass
+
+        self.main_column.remote_summary_card.navigate_to_remote_signal.connect(_navigate)
 
     def _create_widgets(self) -> None:
         self.main_column = _HomeMainColumn(self)
