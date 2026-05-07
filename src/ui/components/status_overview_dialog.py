@@ -26,9 +26,8 @@ from typing import Any
 # 第三方库导入
 from PySide6.QtCore import QProcess, Qt
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
-    QListWidget,
-    QListWidgetItem,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -37,9 +36,8 @@ from creart import it
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
-    FluentIcon,
     MessageBoxBase,
-    PrimaryPushButton,
+    ScrollArea,
     StrongBodyLabel,
     SubtitleLabel,
 )
@@ -71,6 +69,63 @@ def _format_resource_line(sample: Any) -> str:
     )
 
 
+# ==================== 子组件: 列表行 / 空态 ====================
+class _OverviewItem(QFrame):
+    """单条数据卡, 两行显示: primary 主名称 + secondary 副信息.
+
+    Args:
+        primary: 主文案 (BodyLabel, 如服务器名 / Bot 名 / 任务标签).
+        secondary: 副文案 (CaptionLabel, 灰色; 如状态 / runtime_target / 资源水位).
+            None 或空字符串时不显示该行.
+    """
+
+    def __init__(self, primary: str, secondary: str | None = None, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("overviewItem")
+        # 风格参考 PyQt-Fluent-Widgets-Pro 的 RoundTableWidget: 每行独立圆角矩形 "pill",
+        # 无分隔线, 行间留空隙靠 container_layout 的 spacing 控制; hover 时色块加深.
+        self.setStyleSheet(
+            "#overviewItem {"
+            "  background-color: rgba(0, 0, 0, 0.035);"
+            "  border: none;"
+            "  border-radius: 6px;"
+            "}"
+            "#overviewItem:hover {"
+            "  background-color: rgba(0, 0, 0, 0.06);"
+            "}"
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(3)
+
+        primary_label = BodyLabel(primary, self)
+        primary_label.setWordWrap(True)
+        layout.addWidget(primary_label)
+
+        if secondary:
+            secondary_label = CaptionLabel(secondary, self)
+            secondary_label.setWordWrap(True)
+            secondary_label.setStyleSheet("color: rgba(0, 0, 0, 0.55);")
+            layout.addWidget(secondary_label)
+
+
+class _EmptyItem(QFrame):
+    """空态占位, 居中显示弱化文案."""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 24, 4, 24)
+        layout.setSpacing(0)
+
+        label = CaptionLabel(text, self)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setWordWrap(True)
+        label.setStyleSheet("color: rgba(0, 0, 0, 0.45);")
+        layout.addWidget(label)
+
+
 # ==================== 主对话框 ====================
 class StatusOverviewDialog(MessageBoxBase):
     """三栏状态聚合面板, 在 RemotePage 工具栏入口打开."""
@@ -82,67 +137,102 @@ class StatusOverviewDialog(MessageBoxBase):
         self._wire_buttons()
         self._wire_signals()
         self.refresh_full()
-        # 适当扩大默认尺寸; MessageBoxBase 内部 widget 是 ``self.widget``.
-        self.widget.setMinimumSize(820, 460)
+        # 默认尺寸: 略放宽宽度以容纳 Bot 栏的 "名称 (QQID)" + "服务器 · 状态" 两行;
+        # 高度收紧到 380, 数据多时由 ScrollArea 自动滚动.
+        self.widget.setMinimumSize(780, 380)
 
     # ==================== UI ====================
     def _setup_ui(self) -> None:
         self._title_label = SubtitleLabel(self.tr("远端状态总览"), self)
         self._caption_label = CaptionLabel(
-            self.tr("聚合服务器在线状态、远端 Bot 进程状态与后台任务进度."),
+            self.tr("聚合服务器在线状态、远端 Bot 进程状态与后台任务进度"),
             self,
         )
         self._caption_label.setWordWrap(True)
+        self._caption_label.setStyleSheet("color: rgba(0, 0, 0, 0.55);")
 
         columns = QWidget(self)
         columns_layout = QHBoxLayout(columns)
         columns_layout.setContentsMargins(0, 0, 0, 0)
-        columns_layout.setSpacing(12)
+        columns_layout.setSpacing(16)
 
-        self._server_list, server_panel = self._build_column(
-            self.tr("服务器"),
-            self.tr("名称 · 状态 · 资源水位"),
-        )
-        self._bot_list, bot_panel = self._build_column(
-            self.tr("远端 Bot"),
-            self.tr("名称 · 运行位置 · 进程状态"),
-        )
-        self._task_list, task_panel = self._build_column(
-            self.tr("后台任务"),
-            self.tr("正在进行中的批量 / 部署 / 迁移操作"),
-        )
+        # P4 W4 重构: 移除每栏副标题占位灰字, 标题单独成行;
+        # 列表区改用 QScrollArea + QVBoxLayout 容器, 单条数据用 _OverviewItem 两行展示.
+        self._server_layout, server_panel = self._build_column(self.tr("服务器"))
+        self._bot_layout, bot_panel = self._build_column(self.tr("远端 Bot"))
+        self._task_layout, task_panel = self._build_column(self.tr("后台任务"))
 
-        columns_layout.addWidget(server_panel, 1)
-        columns_layout.addWidget(bot_panel, 1)
-        columns_layout.addWidget(task_panel, 1)
+        # 中间 Bot 栏需要更多宽度容纳 "名字 (QQID)" + "服务器名 · 进程状态" 两行
+        columns_layout.addWidget(server_panel, 3)
+        columns_layout.addWidget(bot_panel, 5)
+        columns_layout.addWidget(task_panel, 3)
 
         self.viewLayout.addWidget(self._title_label)
         self.viewLayout.addWidget(self._caption_label)
-        self.viewLayout.addSpacing(6)
+        self.viewLayout.addSpacing(10)
         self.viewLayout.addWidget(columns, 1)
 
-    def _build_column(self, title: str, subtitle: str) -> tuple[QListWidget, QWidget]:
+    def _build_column(self, title: str) -> tuple[QVBoxLayout, QWidget]:
+        """构造单栏 (标题 + 滚动列表区).
+
+        Returns:
+            (container_layout, panel): container_layout 是滚动区内 inner widget 的
+            QVBoxLayout, ``_refresh_*`` 直接 ``addWidget`` / 清空它来更新数据.
+        """
         panel = QWidget(self)
         panel_layout = QVBoxLayout(panel)
         panel_layout.setContentsMargins(0, 0, 0, 0)
-        panel_layout.setSpacing(4)
+        panel_layout.setSpacing(10)
 
+        # 标题左 padding 4px 与下方 pill 内文字左对齐 (pill 自身 contentsMargin-left 12,
+        # 这里 panel 不缩进 4 看着错位较少; 较小值避免标题过度内缩).
         title_label = StrongBodyLabel(title, panel)
-        subtitle_label = CaptionLabel(subtitle, panel)
-        subtitle_label.setStyleSheet("color: #6b7280;")
+        title_label.setContentsMargins(4, 0, 0, 0)
 
-        list_widget = QListWidget(panel)
-        list_widget.setSelectionMode(QListWidget.SelectionMode.NoSelection)
-        list_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        list_widget.setStyleSheet(
-            "QListWidget { background-color: transparent; border: none; }"
-            "QListWidget::item { padding: 6px 4px; }"
+        # 滚动区: 透明背景, 无边框; 通过 ScrollArea + inner widget 实现垂直列表
+        scroll = ScrollArea(panel)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(
+            "QScrollArea { background-color: transparent; border: none; }"
+            "QScrollArea > QWidget > QWidget { background-color: transparent; }"
         )
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        inner = QWidget(scroll)
+        container_layout = QVBoxLayout(inner)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        # 行间 6px 空隙: 让每个 _OverviewItem 作为独立 "pill" 呈现 (RoundTableWidget 风格)
+        container_layout.setSpacing(6)
+        container_layout.addStretch(1)
+        scroll.setWidget(inner)
 
         panel_layout.addWidget(title_label)
-        panel_layout.addWidget(subtitle_label)
-        panel_layout.addWidget(list_widget, 1)
-        return list_widget, panel
+        panel_layout.addWidget(scroll, 1)
+        return container_layout, panel
+
+    @staticmethod
+    def _clear_layout(layout: QVBoxLayout) -> None:
+        """清空 layout 全部 item (widget + stretch), 重新追加单个 stretch.
+
+        必须把旧 stretch 也清掉, 否则每次 refresh 后 ``addStretch`` 会累积,
+        导致 ``_append_item`` 插入的 widget 被前序 stretch 挤到列中央.
+        """
+        while layout.count() > 0:
+            item = layout.takeAt(0)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        layout.addStretch(1)
+
+    @staticmethod
+    def _append_item(layout: QVBoxLayout, widget: QWidget) -> None:
+        """把单条 item 插到 layout 末尾 stretch 之前."""
+        # stretch 永远在最后; 在它前一个位置插入
+        layout.insertWidget(layout.count() - 1, widget)
 
     def _wire_buttons(self) -> None:
         # MessageBoxBase 默认 yes/cancel 按钮; 这里只保留 "刷新" + "关闭"
@@ -215,7 +305,7 @@ class StatusOverviewDialog(MessageBoxBase):
 
     # ServerManager / ResourceMonitorService 信号都路由到这里; 兼容 0~2 个位置参
     def _refresh_servers(self, *_args: Any, **_kwargs: Any) -> None:
-        self._server_list.clear()
+        self._clear_layout(self._server_layout)
         try:
             from src.core.remote.resource_monitor import ResourceMonitorService
             from src.core.remote.server_manager import ServerManager
@@ -226,7 +316,7 @@ class StatusOverviewDialog(MessageBoxBase):
             servers, monitor = [], None
 
         if not servers:
-            self._server_list.addItem(QListWidgetItem(self.tr("尚无服务器档案")))
+            self._append_item(self._server_layout, _EmptyItem(self.tr("尚无服务器档案"), self))
             return
 
         for profile in servers:
@@ -235,11 +325,11 @@ class StatusOverviewDialog(MessageBoxBase):
             )
             sample = monitor.latest(profile.id) if monitor is not None else None
             res_text = _format_resource_line(sample)
-            line = f"{profile.name} · {state_text} · {res_text}"
-            self._server_list.addItem(QListWidgetItem(line))
+            secondary = f"{state_text} · {res_text}"
+            self._append_item(self._server_layout, _OverviewItem(profile.name, secondary, self))
 
     def _refresh_bots(self, *_args: Any, **_kwargs: Any) -> None:
-        self._bot_list.clear()
+        self._clear_layout(self._bot_layout)
         try:
             from src.core.config.operate_config import read_config
             from src.core.runtime.napcat import ManagerNapCatQQProcess
@@ -252,8 +342,14 @@ class StatusOverviewDialog(MessageBoxBase):
         # 仅显示远端 Bot (本地 Bot 由 BotPage 主面板覆盖)
         remote_bots = [c for c in configs if c.bot.is_remote]
         if not remote_bots:
-            self._bot_list.addItem(QListWidgetItem(self.tr("当前没有远端运行的 Bot")))
+            self._append_item(
+                self._bot_layout, _EmptyItem(self.tr("当前没有远端运行的 Bot"), self)
+            )
             return
+
+        # 一次性拉服务器名映射, 把 runtime_target (server_id UUID) 解析为可读名;
+        # 失败时回退到 UUID 截短.
+        server_name_map = self._collect_server_name_map()
 
         for cfg in remote_bots:
             qq_id = str(cfg.bot.QQID)
@@ -263,12 +359,16 @@ class StatusOverviewDialog(MessageBoxBase):
                 if record is not None:
                     state = record.state
             state_text = _PROCESS_STATE_LABEL.get(state, str(state))
-            target = cfg.bot.runtime_target
-            line = f"{cfg.bot.name} ({qq_id}) · {target} · {state_text}"
-            self._bot_list.addItem(QListWidgetItem(line))
+
+            target_id = cfg.bot.runtime_target or ""
+            target_label = server_name_map.get(target_id) or self._truncate_uuid(target_id)
+
+            primary = f"{cfg.bot.name} ({qq_id})"
+            secondary = f"{target_label} · {state_text}" if target_label else state_text
+            self._append_item(self._bot_layout, _OverviewItem(primary, secondary, self))
 
     def _refresh_tasks(self, *_args: Any, **_kwargs: Any) -> None:
-        self._task_list.clear()
+        self._clear_layout(self._task_layout)
         try:
             from src.core.runtime.background_tasks import BackgroundTaskCenter
 
@@ -277,12 +377,35 @@ class StatusOverviewDialog(MessageBoxBase):
             tasks = []
 
         if not tasks:
-            self._task_list.addItem(QListWidgetItem(self.tr("没有进行中的后台任务")))
+            self._append_item(
+                self._task_layout, _EmptyItem(self.tr("没有进行中的后台任务"), self)
+            )
             return
         for task in tasks:
             content = task.content or ""
-            line = f"{task.label} · {content}" if content else task.label
-            self._task_list.addItem(QListWidgetItem(line))
+            self._append_item(
+                self._task_layout, _OverviewItem(task.label, content or None, self)
+            )
+
+    # ---------- 名称解析辅助 ----------
+    @staticmethod
+    def _collect_server_name_map() -> dict[str, str]:
+        """返回 ``{server_id: server_name}`` 映射; 失败时返回空字典."""
+        try:
+            from src.core.remote.server_manager import ServerManager
+
+            return {s.id: s.name for s in it(ServerManager).list_servers()}
+        except Exception:  # noqa: BLE001
+            return {}
+
+    @staticmethod
+    def _truncate_uuid(value: str) -> str:
+        """UUID 太长时截短为前 8 位, 避免压垮列宽."""
+        if not value:
+            return ""
+        if len(value) <= 12:
+            return value
+        return value[:8] + "…"
 
     @staticmethod
     def _safe_get(klass: Any) -> Any | None:

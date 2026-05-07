@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`RemoteSummaryCard`](src/ui/components/remote_summary_card.py): 首页远端概览卡片 (P4 W2·F4).
+"""[`RemoteSummaryCard`](src/ui/components/remote_summary_card.py): 首页远端概览卡片 (P4 W2·F4 / P4 W4 视觉重构).
 
 设计要点
 ========
@@ -10,8 +10,14 @@
   - [`ManagerNapCatQQProcess`](src/core/runtime/napcat.py): 在线远端 Bot 数
     (``remote_process_dict`` 中 ``state == Running``)
   - [`ResourceMonitorService`](src/core/remote/resource_monitor.py): 最近一条阈值告警 (24h 内)
+- 视觉布局 (P4 W4 重构, 修字体重叠 + 提升信息密度):
+    1. **标题行**: 图标 + "远端概览" 标题 + 右侧 `›` 指示卡片可点击.
+    2. **KPI 行**: 3 列等宽 ``_MetricBlock`` (大数字 + 小标签); 大数字用
+       ``SubtitleLabel`` 区分主次, 小标签用 ``CaptionLabel`` 弱化.
+    3. **告警行 (条件显示)**: 仅在 24h 内有 ``threshold_breached`` 时出现单行 ⓘ 文案;
+       无告警时整行收起, 避免与右上 chevron 重复的"点击查看"引导文案.
 - 空态 (``ServerManager.list_servers() == []``) 折叠为单行
-  "尚未添加远端服务器, 点此添加".
+  "尚未添加远端服务器, 点此添加"; KPI / 告警行整体隐藏.
 - 整卡可点击; 点击发射 ``navigate_to_remote_signal(server_id_or_empty: str)``,
   由 HomeWidget / MainWindow 接管路由 (本卡片不直接持有 RemotePage 引用,
   保持 UI 解耦).
@@ -27,9 +33,18 @@ from typing import Any
 # 第三方库导入
 from PySide6.QtCore import QProcess, Qt, Signal
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from creart import it
-from qfluentwidgets import BodyLabel, FluentIcon, IconWidget, SimpleCardWidget, StrongBodyLabel
+from qfluentwidgets import (
+    BodyLabel,
+    CaptionLabel,
+    FluentIcon,
+    IconWidget,
+    ImageLabel,
+    SimpleCardWidget,
+    StrongBodyLabel,
+    SubtitleLabel,
+)
 
 
 # ==================== 工具: 友好 metric 文案 ====================
@@ -42,6 +57,33 @@ def _format_breach(server_name: str, metric: str, value: float, ts: float) -> st
     elapsed_min = max(0, int((time.time() - ts) // 60))
     suffix = f"{elapsed_min} 分钟前" if elapsed_min > 0 else "刚刚"
     return f"{server_name} · {label} {value:.0f}% · {suffix}"
+
+
+# ==================== 子组件: KPI 块 ====================
+class _MetricBlock(QWidget):
+    """单个 KPI 块: 一个大数字 (SubtitleLabel) + 一个小标签 (CaptionLabel).
+
+    视觉层级:
+        - value: SubtitleLabel, 默认字号 ~20px, 强调读数
+        - label: CaptionLabel, 默认字号 ~12px, 弱化为辅助文案
+    """
+
+    def __init__(self, value: str, label: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.value_label = SubtitleLabel(value, self)
+        self.value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.caption_label = CaptionLabel(label, self)
+        self.caption_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        # 大数字与小标签之间小间距, 避免视觉粘连
+        layout.setSpacing(2)
+        layout.addWidget(self.value_label)
+        layout.addWidget(self.caption_label)
+
+    def set_value(self, value: str) -> None:
+        self.value_label.setText(value)
 
 
 # ==================== 主组件 ====================
@@ -60,6 +102,8 @@ class RemoteSummaryCard(SimpleCardWidget):
     def __init__(self, parent: Any = None) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        # 鼠标悬停时显示手型, 提示卡片整体可点击
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         # (server_id, metric, value, ts) — 最近一条; None 表示无告警
         self._latest_breach: tuple[str, str, float, float] | None = None
 
@@ -70,31 +114,63 @@ class RemoteSummaryCard(SimpleCardWidget):
 
     # ---------- UI ----------
     def _create_widgets(self) -> None:
-        self._title_icon = IconWidget(FluentIcon.GLOBE, self)
-        self._title_icon.setFixedSize(18, 18)
+        # 标题行
+        self._title_icon = ImageLabel(FluentIcon.GLOBE.path(), self)
+        self._title_icon.scaledToWidth(16)
         self._title_label = StrongBodyLabel(self.tr("远端概览"), self)
-        # 数字行: 服务器 N · 在线 X · 远端 Bot Y
-        self._summary_label = BodyLabel("", self)
-        self._summary_label.setWordWrap(True)
-        # 告警行 / 空态行
+
+        # KPI 三栏
+        self._metric_servers = _MetricBlock("0", self.tr("服务器"), self)
+        self._metric_online = _MetricBlock("0", self.tr("在线"), self)
+        self._metric_bots = _MetricBlock("0", self.tr("远端 Bot"), self)
+
+        # 告警 / 引导行
+        self._secondary_icon = IconWidget(FluentIcon.INFO, self)
+        self._secondary_icon.setFixedSize(14, 14)
         self._secondary_label = BodyLabel("", self)
         self._secondary_label.setWordWrap(True)
+        # 默认隐藏图标; refresh 中根据告警态显示
+        self._secondary_icon.hide()
+
+        # 空态行 (KPI / 告警行被隐藏时显示)
+        self._empty_label = BodyLabel(self.tr("尚未添加远端服务器, 点此添加"), self)
+        self._empty_label.setWordWrap(True)
+        self._empty_label.hide()
 
     def _set_layout(self) -> None:
+        # 外层 22/16 边距 + 14 spacing 防止文字粘连
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(20, 14, 20, 14)
-        outer.setSpacing(6)
+        outer.setContentsMargins(22, 16, 22, 16)
+        outer.setSpacing(14)
 
+        # 标题行
         title_row = QHBoxLayout()
-        title_row.setSpacing(8)
+        title_row.setSpacing(10)
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.addWidget(self._title_icon, 0, Qt.AlignmentFlag.AlignVCenter)
         title_row.addWidget(self._title_label, 0, Qt.AlignmentFlag.AlignVCenter)
         title_row.addStretch(1)
-
         outer.addLayout(title_row)
-        outer.addWidget(self._summary_label)
-        outer.addWidget(self._secondary_label)
+
+        # 空态行 (默认隐藏, refresh 中显隐)
+        outer.addWidget(self._empty_label)
+
+        # KPI 行: 三个等宽 metric block
+        self._kpi_row = QHBoxLayout()
+        self._kpi_row.setSpacing(20)
+        self._kpi_row.setContentsMargins(0, 0, 0, 0)
+        self._kpi_row.addWidget(self._metric_servers, 1)
+        self._kpi_row.addWidget(self._metric_online, 1)
+        self._kpi_row.addWidget(self._metric_bots, 1)
+        outer.addLayout(self._kpi_row)
+
+        # 告警 / 引导行
+        self._secondary_row = QHBoxLayout()
+        self._secondary_row.setSpacing(6)
+        self._secondary_row.setContentsMargins(0, 0, 0, 0)
+        self._secondary_row.addWidget(self._secondary_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._secondary_row.addWidget(self._secondary_label, 1)
+        outer.addLayout(self._secondary_row)
 
     def _wire_signals(self) -> None:
         # ServerManager: 服务器增删改 / 部署状态 -> 计数刷新
@@ -136,24 +212,39 @@ class RemoteSummaryCard(SimpleCardWidget):
             self._render_empty_state()
             return
 
-        self._summary_label.setText(
-            self.tr("服务器 {total} · 在线 {online} · 远端 Bot {bots}").format(
-                total=total, online=online, bots=online_remote_bots
-            )
-        )
+        # 离开空态: 隐藏 empty_label, 显示 KPI + secondary
+        self._empty_label.hide()
+        self._set_kpi_visible(True)
 
+        self._metric_servers.set_value(str(total))
+        self._metric_online.set_value(str(online))
+        self._metric_bots.set_value(str(online_remote_bots))
+
+        # 告警行: 仅在 24h 内有 ``threshold_breached`` 时出现; 无告警则整行收起,
+        # 避免渲染 "点击查看远端服务器详情" 这种与右上 chevron 重复的引导文案.
         breach_text = self._format_recent_breach()
         if breach_text:
+            self._secondary_icon.setIcon(FluentIcon.INFO)
+            self._secondary_icon.show()
             self._secondary_label.setText(breach_text)
+            self._secondary_label.setVisible(True)
         else:
-            self._secondary_label.setText(self.tr("点击查看远端服务器详情"))
-        self._secondary_label.setVisible(True)
+            self._secondary_icon.hide()
+            self._secondary_label.setText("")
+            self._secondary_label.setVisible(False)
 
     def _render_empty_state(self) -> None:
         """无远端服务器时折叠为引导式单行."""
-        self._summary_label.setText(self.tr("尚未添加远端服务器, 点此添加"))
+        self._set_kpi_visible(False)
+        self._secondary_icon.hide()
         self._secondary_label.setText("")
         self._secondary_label.setVisible(False)
+        self._empty_label.show()
+
+    def _set_kpi_visible(self, visible: bool) -> None:
+        """统一控制 KPI 三块的可见性, 避免重复代码."""
+        for block in (self._metric_servers, self._metric_online, self._metric_bots):
+            block.setVisible(visible)
 
     def _collect_counts(self) -> tuple[int, int, int]:
         """返回 (服务器总数, 在线服务器数, 在线远端 Bot 数)."""

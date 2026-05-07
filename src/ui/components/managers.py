@@ -17,8 +17,44 @@ from typing import cast
 
 # 第三方库导入
 from qfluentwidgets import InfoBar, InfoBarManager
-from PySide6.QtCore import QPoint, QSize
+from PySide6.QtCore import QObject, QPoint, QSize
 from PySide6.QtWidgets import QWidget
+
+
+# ==================== Monkey-patch InfoBarManager 单例 bug ====================
+# qfluentwidgets.InfoBarManager 把 ``_instance`` 写成 class-level 单例:
+#
+#     class InfoBarManager(QObject):
+#         _instance = None
+#         def __new__(cls, *args, **kwargs):
+#             if cls._instance is None:
+#                 cls._instance = super().__new__(cls, *args, **kwargs)
+#             return cls._instance
+#
+# 由于 ``cls._instance`` 是 **class attribute**, 第一个被实例化的子类会"锁定"
+# 后续所有 ``InfoBarManager.make(position)`` 的返回值: 即使传入 BOTTOM_RIGHT,
+# 拿到的还是首次实例化时的 (例如 TopRight) 实例 — 于是 chip 全部按 TOP_RIGHT 算法
+# 摆放, BOTTOM_RIGHT / BOTTOM 等设定形同虚设.
+#
+# 修复: 改为**按子类分别缓存**单例; 每个子类首次 ``make`` 时创建独立实例.
+def _per_subclass_new(cls, *args, **kwargs):
+    holder = InfoBarManager.__dict__.get("_subcls_instances")
+    if holder is None:
+        holder = {}
+        InfoBarManager._subcls_instances = holder
+    inst = holder.get(cls)
+    if inst is None:
+        inst = QObject.__new__(cls)
+        holder[cls] = inst
+        # 让原 ``__init__`` 的 ``_InfoBarManager__initialized`` 守卫失效
+        # (该属性是 name-mangled 的 ``self.__initialized``).
+        inst._InfoBarManager__initialized = False
+    return inst
+
+
+# 仅在尚未 patch 时替换, 避免热重载时重复 patch
+if getattr(InfoBarManager.__new__, "__name__", "") != "_per_subclass_new":
+    InfoBarManager.__new__ = _per_subclass_new
 
 
 class NCDInfoBarPosition(Enum):
