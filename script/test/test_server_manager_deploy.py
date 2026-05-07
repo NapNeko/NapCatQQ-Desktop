@@ -27,6 +27,16 @@ from src.core.remote.server_manager import DeploymentResult, ServerManager
 from src.core.remote.servers import DeploymentState, ServerProfile
 
 
+# P5 F1.4: 默认跳过远端 SHA512 查询的网络调用; 单测验证编排不需要真 hash.
+@pytest.fixture(autouse=True)
+def _stub_release_hash_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        ServerManager,
+        "_lookup_napcat_expected_sha512",
+        lambda self: None,
+    )
+
+
 # ==================== fixtures & helpers ====================
 def _make_profile(name: str = "测试服务器") -> ServerProfile:
     cred = SSHCredentials(
@@ -82,12 +92,14 @@ class FakeRemoteBackend:
         progress=None,
         log_callback=None,
         force_update: bool = False,
+        expected_sha512: str | None = None,
     ) -> None:
         self.install_napcat_calls.append(
             {
                 "archive_path": archive_path,
                 "force_update": force_update,
                 "has_log_callback": log_callback is not None,
+                "expected_sha512": expected_sha512,
             }
         )
         if log_callback is not None:

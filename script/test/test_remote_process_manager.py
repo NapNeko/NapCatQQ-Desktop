@@ -72,8 +72,11 @@ def remote_backend() -> _FakeBackend:
 @pytest.fixture
 def manager(monkeypatch: pytest.MonkeyPatch, remote_backend: _FakeBackend) -> run_napcat.ManagerNapCatQQProcess:
     """构造一个干净的 ManagerNapCatQQProcess + 全套 monkeypatch."""
-    # 同步执行 worker
+    # 同步执行 worker. P3 perf W4: 远端 SSH runnable 通过 ``run_napcat.remote_ssh_pool``
+    # 派发, 而 ``GetAuthStatusRunnable`` / ``GetLoginStatusRunnable`` 仍走 ``QThreadPool``;
+    # 两条路径都需要 patch 成同步执行, 否则 ``RemoteBotOperationRunnable`` 不会真正跑.
     monkeypatch.setattr(run_napcat, "QThreadPool", _SyncThreadPool)
+    monkeypatch.setattr(run_napcat, "remote_ssh_pool", lambda: _SyncThreadPool())
 
     # 让 resolve_backend_for_bot 始终返回 fake
     from src.core.operation import resolver as resolver_module

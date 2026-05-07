@@ -124,6 +124,9 @@ def captured_runners(monkeypatch: pytest.MonkeyPatch) -> _CapturedRunners:
             return fake_pool
 
     monkeypatch.setattr(remote_page_mod, "QThreadPool", _FakeQThreadPool)
+    # P3 perf W4: RemotePage 的所有 SSH 派发改走 ``remote_ssh_pool()``;
+    # 把它也指向同一个 fake_pool, 让捕获器能拿到 deploy / redetect / rollback runner.
+    monkeypatch.setattr(remote_page_mod, "remote_ssh_pool", lambda: fake_pool)
     return captured
 
 

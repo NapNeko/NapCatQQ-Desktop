@@ -156,6 +156,9 @@ def test_remote_sync_dispatches_to_qthreadpool_in_ui_context(
 
     # 等 worker 完成 (3s 超时, 在 spy 不真实 SSH 的情况下应远小于此).
     assert spy.write_event.wait(timeout=3.0), "QThreadPool runnable 未在 3s 内完成"
+    # P3 perf W4: 远端配置写已迁到 ``remote_ssh_pool``, 等待该池而非全局池
+    from src.core.remote.thread_pool import remote_ssh_pool
+    remote_ssh_pool().waitForDone(3000)
     QThreadPool.globalInstance().waitForDone(3000)
 
     assert len(spy.write_calls) == 1
@@ -193,6 +196,9 @@ def test_remote_delete_dispatches_to_qthreadpool_in_ui_context(
 
     assert operate_config.delete_config(config) is True
     assert spy.delete_event.wait(timeout=3.0), "QThreadPool delete runnable 未在 3s 内完成"
+    # P3 perf W4: 远端配置删除同样走 ``remote_ssh_pool``
+    from src.core.remote.thread_pool import remote_ssh_pool
+    remote_ssh_pool().waitForDone(3000)
     QThreadPool.globalInstance().waitForDone(3000)
 
     assert spy.delete_calls == ["30003"]
