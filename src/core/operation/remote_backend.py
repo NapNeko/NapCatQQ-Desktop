@@ -166,6 +166,25 @@ class RemoteBackend(OperationBackend):
         self._ensure_connected()
         self.ssh_client.download_file(remote_path, local_path)
 
+    # ==================== 字节级 IO (P4 W3 F6) ====================
+    def file_size(self, path: str) -> int:
+        self._ensure_connected()
+        return self.ssh_client.remote_file_size(path)
+
+    def read_bytes(self, path: str, *, offset: int = 0, length: int | None = None) -> bytes:
+        self._ensure_connected()
+        if offset < 0:
+            raise ValueError(f"offset 不能为负数: {offset}")
+        return self.ssh_client.read_bytes(path, offset=offset, length=length)
+
+    def append_bytes(self, path: str, data: bytes) -> None:
+        self._ensure_connected()
+        self.ssh_client.append_bytes(path, data)
+
+    def rename(self, src: str, dst: str) -> None:
+        self._ensure_connected()
+        self.ssh_client.remote_rename(src, dst)
+
     # ==================== 进程 ====================
     def start_napcat(self, qq_id: str, config: "Config") -> ProcessStatus:
         """通过远端 launcher 脚本启动指定 Bot.
@@ -288,6 +307,28 @@ class RemoteBackend(OperationBackend):
     def get_memory_usage(self, qq_id: str) -> int | None:
         status = self.get_process_status(qq_id)
         return status.memory_rss_bytes
+
+    # ==================== 资源采样 (P4 W2·F3) ====================
+    def sample_resources(self):
+        """单次远端资源采样, 供
+        [`ResourceMonitorService`](src/core/remote/resource_monitor.py) 周期调用.
+
+        使用与脚本一致的 4 行 ``echo`` 协议 (CPU / MEM / DISK / LOAD), 解析失败
+        或命令非零返回时返回 ``None``, 由 worker 走退避策略, 不向 UI 抛异常.
+
+        返回 [`ResourceSample`](src/core/remote/resource_monitor.py) 或 ``None``.
+        """
+        # 项目内模块导入: 延迟 import 避免 W2 监控模块在 W1 已生效路径上拖累导入图
+        from src.core.remote.resource_monitor import SAMPLE_COMMAND, parse_sample_output
+
+        self._ensure_connected()
+        try:
+            result = self._exec_backend.run(SAMPLE_COMMAND, timeout=15)
+        except Exception:  # noqa: BLE001 - 让上层 worker 决定退避; 此处不打日志避免 10s/次刷屏
+            return None
+        if not result.ok:
+            return None
+        return parse_sample_output(result.stdout)
 
     # ==================== 配置同步 (P2.4) ====================
     def write_bot_runtime_config(self, config: "Config") -> tuple[str, str]:
