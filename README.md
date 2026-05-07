@@ -18,7 +18,21 @@
 <img width="1722" height="1080" alt="6d3def2669ba6e01bc278c4df8c50761" src="https://github.com/user-attachments/assets/cd5dd4de-1e02-4970-bb19-9ac79b2aa142" />
 
 
-## � v2.1 来啦：远程 SSH，跨平台管理
+## 关于项目
+
+这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat。
+
+## 项目特点
+
+- [x] **远程管理**：通过 SSH 部署、运行、监控 Linux 服务器上的 NapCat（v2.1 新增）
+- [x] **本地管理**：创建/管理配置文件，一键启动/停止/重启，定时重启，日志查看
+- [x] **MSI 安装包**：一键安装、自动更新、配置与程序分离（配置独立存于 `%ProgramData%\NapCatQQ-Desktop\`）
+- [x] **界面美观**：基于 Fluent Design System，深浅主题与多语言支持
+- [x] **资源监控**：实时查看本地与远端的 CPU、内存、Bot 进程状态
+- [x] **安全可靠**：主机密钥校验、keyring 凭据存储、友好错误提示
+- [x] **自动更新**：应用内一键更新 NapCat Desktop，自动检测 NapCatQQ 更新
+
+## v2.1 新功能亮点：远程 SSH，跨平台管理
 
 **NapCatQQ-Desktop v2.1** 把管理边界从单机扩展到了远程 Linux 服务器——你可以在 Windows 桌面端直接部署、运行、监控运行在 Linux 上的 NapCat。
 
@@ -48,51 +62,29 @@
 
 > 远程功能相关代码集中在 `src/core/remote/`、`src/core/operation/`、`src/ui/page/remote_page/`，欢迎社区反馈与共建。
 
-## 🎉 v2.0 - MSI 安装包
-
-**NapCatQQ-Desktop v2.0** 把分发方式从单文件 EXE 升级为 MSI 安装包：
-
-- **自动更新**：应用内一键更新，自动下载并安装新版本
-- **规范安装**：安装到 `C:\Program Files\NapCatQQ Desktop\`，权限边界更清晰
-- **配置隔离**：配置文件独立存储在 `%ProgramData%\NapCatQQ-Desktop\`，重装系统不丢配置
-- **完整卸载**：通过系统"应用和功能"即可卸载程序文件；用户配置默认保留，方便重装恢复，也可手动删除彻底清理
-- **UAC 处理**：更新时自动申请管理员权限，无需右键"以管理员身份运行"
-
-### 从旧版本迁移
-
-1. 点击设置 → 常规 → **"导入旧版配置"** 按钮，一键迁移之前的所有设置和 Bot 列表
-2. 验证配置无误后即可正常使用
-
-> 建议在迁移完成后备份一次配置
-
-**遇到任何问题请到 [GitHub Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues) 反馈**，我们会尽快处理。
-
-## 关于项目
-
-这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat
-
-## 项目特点
-- [x] **安装简单**：MSI 安装包，一键安装，配置与程序分离
-- [x] **界面美观**：基于 Fluent Design System，深浅主题与多语言支持
-- [x] **本地管理**：创建/管理配置文件，一键启动/停止/重启，定时重启，日志查看
-- [x] **远程管理**：通过 SSH 部署、运行、监控 Linux 服务器上的 NapCat（v2.1 新增）
-- [x] **资源监控**：实时查看本地与远端的 CPU、内存、Bot 进程状态
-- [x] **安全可靠**：主机密钥校验、keyring 凭据存储、友好错误提示
-- [x] **自动更新**：应用内一键更新 NapCat Desktop，自动检测 NapCatQQ 更新
-
 ## 使用项目
-可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的 **MSI 安装包**
+
+可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的 **MSI 安装包**。
 
 > 系统要求：Windows 10 / Windows Server 2016 及以上版本
 
+## 从旧版本升级
+
+v1 老用户迁移到 v2 后：
+
+1. 安装 v2 MSI，打开设置 → 常规 → **"导入旧版配置"**，一键迁移之前的设置和 Bot 列表
+2. 验证配置无误后备份一次，即可正常使用
+
+遇到问题请到 [GitHub Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues) 反馈，我们会尽快处理。
 
 ## 许可证
 
-项目遵循 GPLv3 许可证，详情见[LICENSE](LICENSE)文件
+项目遵循 GPLv3 许可证，详情见 [LICENSE](LICENSE) 文件。
 
 ## 如何卸载
 
 **步骤一：卸载程序（推荐）**
+
 - Windows 10/11：开始菜单 → 设置 → 应用 → 应用和功能 → 找到 "NapCatQQ Desktop" → 卸载
 - 或运行 `appwiz.cpl` 打开程序和功能进行卸载
 
@@ -100,7 +92,7 @@
 
 卸载只会移除程序本体，**用户配置默认保留在 `%ProgramData%\NapCatQQ-Desktop\`**，方便重装时恢复。如果你不再需要这些数据，可手动删除该目录彻底清理。
 
-> 💡 **小提示**：彻底清理前建议先在设置中导出一次配置备份，方便日后恢复。
+> 彻底清理前建议先在设置中导出一次配置备份，方便日后恢复。
 
 ## 声明
 
@@ -117,7 +109,7 @@
 - [PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
 
 ## 贡献者 
-> 🌟 星光闪烁，你们的智慧如同璀璨的夜空。感谢所有为 **NapCat Desktop** 做出贡献的人！
+> 感谢所有为 **NapCat Desktop** 做出贡献的人。
 
 <a href="https://github.com/NapNeko/NapCatQQ-Desktop/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=NapNeko/NapCatQQ-Desktop" alt=""/>
