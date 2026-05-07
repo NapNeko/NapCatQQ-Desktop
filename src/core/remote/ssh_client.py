@@ -623,6 +623,116 @@ class SSHClient:
         else:
             self.run(f"rm -f -- {quoted}", check=True)
 
+    # ==================== 字节级 IO (P4 W3 F6 持久数据迁移) ====================
+    def remote_file_size(self, remote_path: str) -> int:
+        """``sftp.stat(path).st_size``; 远端不存在时抛 ``FileNotFoundError``."""
+        return self._call_with_retry(
+            lambda: self._remote_file_size_once(remote_path),
+            label="remote_file_size",
+        )
+
+    def _remote_file_size_once(self, remote_path: str) -> int:
+        client = self._require_client()
+        resolved = self._resolve_sftp_path(remote_path)
+        try:
+            with client.open_sftp() as sftp:
+                attr = sftp.stat(resolved)
+        except FileNotFoundError:
+            raise
+        except (OSError, paramiko.SSHException) as exc:
+            raise SSHConnectionError(f"获取远端文件大小失败: {exc}") from exc
+        size = getattr(attr, "st_size", None)
+        return int(size) if size is not None else 0
+
+    def read_bytes(
+        self,
+        remote_path: str,
+        *,
+        offset: int = 0,
+        length: int | None = None,
+    ) -> bytes:
+        """从远端文件 ``remote_path`` 的 ``offset`` 起读 ``length`` 字节; ``length=None`` 读到结尾."""
+        if offset < 0:
+            raise ValueError(f"offset 不能为负数: {offset}")
+        return self._call_with_retry(
+            lambda: self._read_bytes_once(remote_path, offset=offset, length=length),
+            label="read_bytes",
+        )
+
+    def _read_bytes_once(
+        self,
+        remote_path: str,
+        *,
+        offset: int,
+        length: int | None,
+    ) -> bytes:
+        client = self._require_client()
+        resolved = self._resolve_sftp_path(remote_path)
+        try:
+            with client.open_sftp() as sftp, sftp.open(resolved, "rb") as handle:
+                if offset:
+                    handle.seek(offset)
+                if length is None:
+                    return bytes(handle.read())
+                return bytes(handle.read(length))
+        except FileNotFoundError:
+            raise
+        except (OSError, paramiko.SSHException) as exc:
+            raise SSHConnectionError(f"读取远端文件字节失败: {exc}") from exc
+
+    def append_bytes(self, remote_path: str, data: bytes) -> None:
+        """以 append 模式向 ``remote_path`` 追加 ``data``; 父目录不存在时自动创建."""
+        return self._call_with_retry(
+            lambda: self._append_bytes_once(remote_path, data),
+            label="append_bytes",
+        )
+
+    def _append_bytes_once(self, remote_path: str, data: bytes) -> None:
+        client = self._require_client()
+        resolved = self._resolve_sftp_path(remote_path)
+        parent = PurePosixPath(remote_path).parent.as_posix()
+        if parent and parent != ".":
+            self.ensure_remote_directory(parent)
+        try:
+            with client.open_sftp() as sftp, sftp.open(resolved, "ab") as handle:
+                handle.write(data)
+        except (OSError, paramiko.SSHException) as exc:
+            raise SSHConnectionError(f"追加远端文件失败: {exc}") from exc
+
+    def remote_rename(self, src: str, dst: str) -> None:
+        """通过 ``sftp.posix_rename`` (若可用) 原子重命名 / 覆盖; 退化为 ``sftp.rename``.
+
+        SFTP 标准的 ``rename`` 在 dst 已存在时行为依赖服务端实现; 大多数 OpenSSH
+        后端实现 ``posix-rename@openssh.com`` 扩展, 提供 ``posix_rename`` 覆盖语义.
+        """
+        return self._call_with_retry(
+            lambda: self._remote_rename_once(src, dst),
+            label="remote_rename",
+        )
+
+    def _remote_rename_once(self, src: str, dst: str) -> None:
+        client = self._require_client()
+        src_resolved = self._resolve_sftp_path(src)
+        dst_resolved = self._resolve_sftp_path(dst)
+        parent = PurePosixPath(dst).parent.as_posix()
+        if parent and parent != ".":
+            self.ensure_remote_directory(parent)
+        try:
+            with client.open_sftp() as sftp:
+                # 优先 posix_rename: dst 已存在时原子覆盖
+                posix_rename = getattr(sftp, "posix_rename", None)
+                if callable(posix_rename):
+                    posix_rename(src_resolved, dst_resolved)
+                else:
+                    # 回退路径: 先删 dst (如果存在) 再 rename, 非原子, 但兼容老 SFTP
+                    try:
+                        sftp.remove(dst_resolved)
+                    except FileNotFoundError:
+                        pass
+                    sftp.rename(src_resolved, dst_resolved)
+        except (OSError, paramiko.SSHException) as exc:
+            raise SSHConnectionError(f"重命名远端文件失败: {exc}") from exc
+
     def open_local_tunnel(
         self,
         remote_port: int,
