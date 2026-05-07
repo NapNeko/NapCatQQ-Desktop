@@ -371,9 +371,12 @@ class RemotePage(QWidget):
         # 不进入任何 layout, 始终覆盖在 ScrollArea 之上.
         self.add_btn = PrimaryToolButton(FI.ADD, self)
         self.refresh_btn = ToolButton(FI.UPDATE, self)
+        # P4 W2 F4: 状态总览入口 - 第三个浮动按钮, 位置在 refresh 之上
+        self.overview_btn = ToolButton(FI.PIE_SINGLE, self)
         for btn, tip in (
             (self.add_btn, "添加服务器"),
             (self.refresh_btn, "刷新"),
+            (self.overview_btn, "状态总览"),
         ):
             btn.setFixedSize(40, 40)
             btn.setIconSize(QSize(20, 20))
@@ -383,10 +386,12 @@ class RemotePage(QWidget):
         # 保证浮在卡片之上 (Qt 同父子级按添加顺序绘制, 后插入者更高)
         self.add_btn.raise_()
         self.refresh_btn.raise_()
+        self.overview_btn.raise_()
 
         # ---- 信号 ----
         self.add_btn.clicked.connect(self._on_add)
         self.refresh_btn.clicked.connect(self._on_refresh)
+        self.overview_btn.clicked.connect(self._on_open_overview)
 
         self._refresh_card_states()
 
@@ -410,6 +415,8 @@ class RemotePage(QWidget):
         y_base = scroll_geom.y() + scroll_geom.height() - self.add_btn.height()
         self.add_btn.move(x, y_base - 32)
         self.refresh_btn.move(x, y_base - 82)
+        if hasattr(self, "overview_btn"):
+            self.overview_btn.move(x, y_base - 132)
 
     def _connect_manager_signals(self) -> None:
         manager = it(ServerManager)
@@ -865,6 +872,28 @@ class RemotePage(QWidget):
         # P3 perf: 成败 / 失败反馈由 RedetectRunner 进桥 → ProgressInfoBar 统一处理.
         # UI 处仅需记录变量以供调试 / 保留原有接口参数.
         _ = ok, napcat_version, qq_version, error_msg  # noqa: F841
+
+    # ---------- P4 W2 F4: 状态总览入口 ----------
+    def _on_open_overview(self) -> None:
+        """打开 [`StatusOverviewDialog`](src/ui/components/status_overview_dialog.py).
+
+        首次打开前确保
+        [`ResourceMonitorService.bind_to_server_manager`](src/core/remote/resource_monitor.py)
+        已绑定到 ``ServerManager``, 这样资源采样 worker 才会在用户真正需要总览时启动,
+        与 W1/W2 既有路径解耦.
+        """
+        # 项目内模块导入: 延迟 import 避免页面初始化阶段引入 W2 资源监控依赖
+        from src.ui.components.status_overview_dialog import StatusOverviewDialog
+
+        try:
+            from src.core.remote.resource_monitor import ResourceMonitorService
+
+            it(ResourceMonitorService).bind_to_server_manager()
+        except Exception:  # noqa: BLE001 - bind 失败不应阻断对话框打开
+            pass
+
+        dialog = StatusOverviewDialog(parent=self.window())
+        dialog.exec()
 
 
 class RemotePageCreator(AbstractCreator, ABC):
