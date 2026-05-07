@@ -105,6 +105,54 @@ class LocalBackend(OperationBackend):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
 
+    # ==================== 字节级 IO (P4 W3 F6) ====================
+    def file_size(self, path: str) -> int:
+        target = Path(path)
+        if not target.exists():
+            raise FileNotFoundError(f"文件不存在: {target}")
+        return target.stat().st_size
+
+    def read_bytes(self, path: str, *, offset: int = 0, length: int | None = None) -> bytes:
+        if offset < 0:
+            raise ValueError(f"offset 不能为负数: {offset}")
+        target = Path(path)
+        with target.open("rb") as handle:
+            if offset:
+                handle.seek(offset)
+            if length is None:
+                return handle.read()
+            return handle.read(length)
+
+    def append_bytes(self, path: str, data: bytes) -> None:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("ab") as handle:
+            handle.write(data)
+
+    def rename(self, src: str, dst: str) -> None:
+        src_path = Path(src)
+        dst_path = Path(dst)
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        # ``Path.replace`` 是 POSIX rename 语义, dst 已存在时覆盖, 跨设备时回退到 copy+unlink
+        src_path.replace(dst_path)
+
+    def walk_files(self, root: str) -> list[tuple[str, int]]:
+        """覆盖默认实现, 用 :meth:`Path.rglob` 走系统底层遍历更快."""
+        base = Path(root)
+        if not base.exists():
+            return []
+        results: list[tuple[str, int]] = []
+        for item in base.rglob("*"):
+            if not item.is_file():
+                continue
+            try:
+                size = item.stat().st_size
+            except OSError:
+                continue
+            rel = item.relative_to(base).as_posix()
+            results.append((rel, size))
+        return results
+
     # ==================== 进程 ====================
     def start_napcat(self, qq_id: str, config: "Config") -> ProcessStatus:
         raise NotImplementedError(_P2_DEFER_MESSAGE)
