@@ -1,0 +1,57 @@
+/* RemotePage 样式
+ * 设计原则:
+ *   - 不在 Python 中写内联 setStyleSheet, 所有视觉规则集中此处。
+ *   - 颜色优先使用 rgba 透明度而非主题硬编码 hex, 让深/浅主题都能复用。
+ *   - 语义色 (危险红 / 部署绿 / 进行中蓝) 取自 Fluent Design System 规范,
+ *     与 InfoBadge 等 qfluentwidgets 内置组件保持视觉一致。
+ */
+
+#RemotePage {
+    background: transparent;
+    border-color: transparent;
+}
+
+#remoteScrollArea,
+#remoteScrollArea > QWidget > QWidget,
+#listInnerWidget {
+    background: transparent;
+    border: none;
+}
+
+/* ===== 列表区: 空态文案 ===== */
+#listEmptyLabel {
+    color: rgba(128, 128, 128, 0.75);
+    padding: 24px;
+}
+
+/* ===== ServerCard: 表单字段名 (左列) ===== */
+#serverCardFieldLabel {
+    color: rgba(128, 128, 128, 0.85);
+    min-width: 56px;
+}
+
+/* ===== ServerCard: 进度提示 ===== */
+#serverCardProgressMessage {
+    color: rgba(128, 128, 128, 0.75);
+    font-size: 12px;
+}
+
+/* ===== MaintenanceDialog: 危险按钮 (回滚 PushSettingCard) ===== */
+#maintenanceRollbackBtn {
+    color: #C42B1C;
+}
+
+#maintenanceRollbackBtn:hover {
+    color: #C42B1C;
+    background: rgba(196, 43, 28, 0.08);
+}
+
+#maintenanceRollbackBtn:pressed {
+    color: #C42B1C;
+    background: rgba(196, 43, 28, 0.16);
+}
+
+#maintenanceRollbackBtn:disabled {
+    color: rgba(196, 43, 28, 0.4);
+    background: transparent;
+}

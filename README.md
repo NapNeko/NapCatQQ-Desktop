@@ -18,79 +18,80 @@
 <img width="1722" height="1080" alt="6d3def2669ba6e01bc278c4df8c50761" src="https://github.com/user-attachments/assets/cd5dd4de-1e02-4970-bb19-9ac79b2aa142" />
 
 
-## 🔜 预告：Linux 版本即将到来
-
-**v2.1 开发中** —— Desktop 即将跨平台！
-
-QT好牢啊（；´д｀）ゞ（学校事还多，洛克王国真好玩，咕咕咕ing~）
-
-
-## 🎉 v2.0 正式发布 - MSI 安装包来了！
-
-**NapCatQQ-Desktop v2.0** 现已正式发布！这是一次重大更新，我们从单文件 EXE 全面升级为 MSI 安装包。
-
-### MSI 安装包的好处
-
-- **自动更新**：支持应用内一键更新，自动下载并安装新版本，无需手动下载
-- **权限管理**：安装到 `C:\Program Files\NapCatQQ Desktop\`，运行更规范，安全性更高
-- **配置隔离**：配置文件独立存储在 `%ProgramData%\NapCatQQ-Desktop\`，重装系统也不怕丢配置
-- **干净卸载**：通过系统"应用和功能"即可完整卸载，不留残留
-- **UAC 处理**：更新时自动申请管理员权限，无需右键"以管理员身份运行"
-
-### 从旧版本迁移
-
-**老用户升级指南**：
-
-1. 点击设置 - 常规 - **"导入旧版配置"** 按钮，一键迁移之前的所有设置和 Bot 列表
-2. 验证配置无误后即可正常使用
-
-> 建议在迁移完成后备份一次配置
-
-### 重要提示
-
-v2.0 是重大版本更新，虽然经过了多轮测试，但仍可能存在一些我们未预料到的问题：
-
-- 部分系统环境可能存在兼容性问题
-- 极少数情况下自动更新可能需要手动干预
-- 某些旧配置可能需要重新调整
-
-**如果遇到任何问题，请不要犹豫，立即到 [GitHub Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues) 反馈**，我们会尽快修复！
-
-感谢大家的理解与包容 🙏
-
 ## 关于项目
 
-这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat
+这个项目是为 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 提供管理界面（GUI），目的是让用户能够更快速、更直观的使用 NapCat。
 
 ## 项目特点
-- [x] **安装简单**: MSI 安装包，一键安装，干净卸载
-- [x] **界面美观**: 使用 Fluent Design System 设计
-- [x] **功能丰富**: 支持创建配置文件, 管理配置文件, 一键启动/停止/重启, 定时重启
-- [x] **自动更新**: 支持应用内一键更新 NapCat Desktop，自动检测 NapCatQQ 更新
+
+- [x] **远程管理**：通过 SSH 部署、运行、监控 Linux 服务器上的 NapCat（v2.1 新增）
+- [x] **本地管理**：创建/管理配置文件，一键启动/停止/重启，定时重启，日志查看
+- [x] **MSI 安装包**：一键安装、自动更新、配置与程序分离（配置独立存于 `%ProgramData%\NapCatQQ-Desktop\`）
+- [x] **界面美观**：基于 Fluent Design System，深浅主题与多语言支持
+- [x] **资源监控**：实时查看本地与远端的 CPU、内存、Bot 进程状态
+- [x] **安全可靠**：主机密钥校验、keyring 凭据存储、友好错误提示
+- [x] **自动更新**：应用内一键更新 NapCat Desktop，自动检测 NapCatQQ 更新
+
+## v2.1 新功能亮点：远程 SSH，跨平台管理
+
+**NapCatQQ-Desktop v2.1** 把管理边界从单机扩展到了远程 Linux 服务器——你可以在 Windows 桌面端直接部署、运行、监控运行在 Linux 上的 NapCat。
+
+### 远程能力
+
+- **一键远程部署**：通过 SSH 把 NapCat 安装到任意 Linux 服务器，自动处理依赖、目录、服务脚本
+- **多服务器管理**：添加/编辑/连通性测试/批量操作，统一面板管理多台服务器
+- **远程 Bot 运行**：在远端跑 Bot，本地端口自动转发，使用体验和本地 Bot 一致
+- **资源监控**：实时查看每台服务器的 CPU、内存、磁盘、Bot 进程占用
+- **首页概览**：HomePage 新增 `RemoteSummaryCard`，所有服务器状态一目了然
+- **状态总览对话框**：`StatusOverviewDialog` 聚合远程服务、Bot、通道状态，问题定位更快
+- **持久数据迁移**：`MigrationDialog` 支持将本地 Bot 配置/数据迁移到远端服务器
+
+### 安全加固
+
+- **主机密钥校验**：首次连接弹出 `HostKeyConfirmDialog` 显示指纹，支持 reject / warning / auto_add 三种策略
+- **凭据持久化**：基于系统 keyring 保管密码，不再以明文落盘
+- **友好错误提示**：网络/认证/权限错误自动映射成可理解的中文说明，附带修复建议
+- **使用风险提示**：远程页首次进入时弹出确认，避免误用
+
+### 性能与体验
+
+- **后台任务跟踪**：长耗时操作通过 `ProgressInfoBarBridge` 在主窗口顶部展示进度
+- **异步配置加载**：远端配置异步拉取，不再卡 UI
+- **持久 SSH 通道**：命令复用同一连接，减少认证开销
+
+> 远程功能相关代码集中在 `src/core/remote/`、`src/core/operation/`、`src/ui/page/remote_page/`，欢迎社区反馈与共建。
 
 ## 使用项目
-可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的 **MSI 安装包**
+
+可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的 **MSI 安装包**。
 
 > 系统要求：Windows 10 / Windows Server 2016 及以上版本
 
+## 从旧版本升级
+
+v1 老用户迁移到 v2 后：
+
+1. 安装 v2 MSI，打开设置 → 常规 → **"导入旧版配置"**，一键迁移之前的设置和 Bot 列表
+2. 验证配置无误后备份一次，即可正常使用
+
+遇到问题请到 [GitHub Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues) 反馈，我们会尽快处理。
 
 ## 许可证
 
-项目遵循 GPLv3 许可证，详情见[LICENSE](LICENSE)文件
+项目遵循 GPLv3 许可证，详情见 [LICENSE](LICENSE) 文件。
 
 ## 如何卸载
 
-如果你需要卸载本软件，可以通过以下方式：
+**步骤一：卸载程序（推荐）**
 
-**步骤一：系统设置卸载（推荐）**
 - Windows 10/11：开始菜单 → 设置 → 应用 → 应用和功能 → 找到 "NapCatQQ Desktop" → 卸载
 - 或运行 `appwiz.cpl` 打开程序和功能进行卸载
 
-**步骤二：手动删除数据（可选）**
-- 配置文件路径：`%ProgramData%\NapCatQQ-Desktop\`
-- 卸载时数据文件默认保留，如需彻底清理请手动删除上述文件夹
+**步骤二：清理用户数据（可选）**
 
-> 💡 **小提示**：卸载前建议先导出配置备份，方便日后重新安装时恢复
+卸载只会移除程序本体，**用户配置默认保留在 `%ProgramData%\NapCatQQ-Desktop\`**，方便重装时恢复。如果你不再需要这些数据，可手动删除该目录彻底清理。
+
+> 彻底清理前建议先在设置中导出一次配置备份，方便日后恢复。
 
 ## 声明
 
@@ -107,7 +108,7 @@ v2.0 是重大版本更新，虽然经过了多轮测试，但仍可能存在一
 - [PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
 
 ## 贡献者 
-> 🌟 星光闪烁，你们的智慧如同璀璨的夜空。感谢所有为 **NapCat Desktop** 做出贡献的人！
+> 感谢所有为 **NapCat Desktop** 做出贡献的人。
 
 <a href="https://github.com/NapNeko/NapCatQQ-Desktop/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=NapNeko/NapCatQQ-Desktop" alt=""/>

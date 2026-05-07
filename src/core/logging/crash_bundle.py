@@ -28,10 +28,44 @@ _SENSITIVE_KEY_PATTERN = re.compile(
 )
 _QQID_KEY_PATTERN = re.compile(r"(?i)([\"']?(?:QQID|bot_qq_id|qq_id)[\"']?\s*[:=]\s*)([\"']?)(\d{5,20})([\"']?)")
 _QQID_LABEL_PATTERN = re.compile(r"(?i)(\bQQID\s*[:=]\s*)(\d{5,20})")
+
+# P5 F3.1: QQID 路径 / 命令行 / 中括号形式的窄正则补全.
+# 远程链路实际打到 app.log 的形态历史脱敏正则全部漏网, 这里逐个对应:
+#   - ``napcat_<qqid>.log`` / ``.json`` / ``.pid`` / ``.log.prev``
+#   - ``onebot11_<qqid>.json``
+#   - ``qq --no-sandbox -q <qqid>``
+#   - ``ManagerNapCatQQProcess[<qqid>]``
+# 替换函数仅触碰捕获组里的数字段, 前后字面量原样保留.
+_QQID_FILENAME_PATTERN = re.compile(
+    r"((?:napcat|onebot11)_)(\d{5,12})(\.(?:log|json|pid)(?:\.prev)?)\b"
+)
+_QQID_CMDLINE_Q_PATTERN = re.compile(r"(\B-q\s+|\b-q\s+)(\d{5,12})\b")
+_QQID_BRACKET_PATTERN = re.compile(
+    r"(ManagerNapCatQQProcess\[)(\d{5,12})(\])"
+)
+
 _AUTHORIZATION_BEARER_PATTERN = re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)(\S+)")
 _URL_TOKEN_PATTERN = re.compile(r"(?i)([?&]token=)([^&\s]+)")
 _EMAIL_PATTERN = re.compile(r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b")
 _URL_PATTERN = re.compile(r"(?i)\b(?:https?|wss?)://[^\s\"'<>]+")
+
+# P5 F3.2: SSH 主机 / 用户名 / 隧道 label 的导出脱敏.
+# TRCE 实时落盘保留原始字符串便于排错; 仅在导出诊断包时统一脱敏.
+# - ``host=ac.rainplay.cn`` / ``hostname=10.0.0.5``: 仅保留首字符 + 顶级域(或 IP 末段)
+# - ``username=root``: 仅保留首字符
+# - ``label=<host>->127.0.0.1:6099``: SSH 隧道 label 把箭头左边的 host 段脱敏
+#
+# 设计要点: ``\b`` 边界 + 显式 ``host`` / ``hostname`` / ``username`` 词项,
+# 防止 ``hosting=`` / ``my_host_var`` 这类带子串的字段被误伤.
+_HOST_KEY_PATTERN = re.compile(
+    r"(?i)([\"']?(?:host|hostname)[\"']?\s*[:=]\s*)([\"']?)([A-Za-z0-9._\-]+)([\"']?)"
+)
+_USERNAME_KEY_PATTERN = re.compile(
+    r"(?i)([\"']?username[\"']?\s*[:=]\s*)([\"']?)([A-Za-z0-9._\-]+)([\"']?)"
+)
+_TUNNEL_LABEL_PATTERN = re.compile(
+    r"(?i)(\blabel\s*=\s*)([A-Za-z0-9._\-]+)(->)"
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +87,41 @@ def mask_qqid(value: Any) -> str:
     if not digits:
         return "***"
     return f"***{digits[-4:]}"
+
+
+def mask_host(value: Any) -> str:
+    """对主机名 / IP 进行掩码处理 (P5 F3.2).
+
+    - 含 ``.`` (域名 / IPv4): 保留首字符 + 最后一段, 例如:
+      - ``ac.rainplay.cn`` -> ``a***.cn``
+      - ``server.example.com`` -> ``s***.com``
+      - ``10.0.0.5`` -> ``1***.5``
+    - 不含 ``.`` (短主机名): 仅保留首字符 ``myserver`` -> ``m***``
+    - 空值: ``<empty-host>``
+
+    输出仍可让用户自己识别"哪台服务器", 但第三方拿到诊断包无法
+    定向 SSH 暴力破解 / 端口扫描.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return "<empty-host>"
+    if "." in text:
+        prefix = text[:1]
+        suffix = text.rsplit(".", 1)[1]
+        return f"{prefix}***.{suffix}"
+    return f"{text[:1]}***"
+
+
+def mask_username(value: Any) -> str:
+    """对 SSH 用户名进行掩码处理 (P5 F3.2).
+
+    保留首字符让用户自己识别 (``root`` -> ``r***``, ``alice_dev`` -> ``a***``);
+    空值返回 ``<empty-user>``.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return "<empty-user>"
+    return f"{text[:1]}***"
 
 
 def mask_email(value: Any) -> str:
@@ -113,6 +182,30 @@ def sanitize_text_for_export(text: str) -> str:
     sanitized = _SENSITIVE_KEY_PATTERN.sub(replace_sensitive_key, sanitized)
     sanitized = _QQID_KEY_PATTERN.sub(replace_qqid_key, sanitized)
     sanitized = _QQID_LABEL_PATTERN.sub(lambda m: f"{m.group(1)}{mask_qqid(m.group(2))}", sanitized)
+
+    # P5 F3.1: 路径 / 命令行 / 中括号形式的窄正则补全, 仅替换数字段
+    sanitized = _QQID_FILENAME_PATTERN.sub(
+        lambda m: f"{m.group(1)}{mask_qqid(m.group(2))}{m.group(3)}", sanitized
+    )
+    sanitized = _QQID_CMDLINE_Q_PATTERN.sub(
+        lambda m: f"{m.group(1)}{mask_qqid(m.group(2))}", sanitized
+    )
+    sanitized = _QQID_BRACKET_PATTERN.sub(
+        lambda m: f"{m.group(1)}{mask_qqid(m.group(2))}{m.group(3)}", sanitized
+    )
+
+    # P5 F3.2: SSH host / username / tunnel label 脱敏
+    # 顺序: tunnel_label 最先 (label= 优先于一般 host=), URL 模式留到最后兜底
+    sanitized = _TUNNEL_LABEL_PATTERN.sub(
+        lambda m: f"{m.group(1)}{mask_host(m.group(2))}{m.group(3)}", sanitized
+    )
+    sanitized = _HOST_KEY_PATTERN.sub(
+        lambda m: f"{m.group(1)}{m.group(2)}{mask_host(m.group(3))}{m.group(4)}", sanitized
+    )
+    sanitized = _USERNAME_KEY_PATTERN.sub(
+        lambda m: f"{m.group(1)}{m.group(2)}{mask_username(m.group(3))}{m.group(4)}", sanitized
+    )
+
     sanitized = _EMAIL_PATTERN.sub(REDACTED_EMAIL, sanitized)
     sanitized = _URL_PATTERN.sub(REDACTED_URL, sanitized)
     return sanitized

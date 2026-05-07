@@ -191,8 +191,24 @@ class NapCatPage(PageBase):
     def handle_install_requested(self) -> None:
         """下载完成后开始安装 NapCat。"""
         logger.info("NapCat 下载完成，开始安装", log_source=LogSource.UI)
-        success_bar(self.tr("下载成功, 正在安装..."))
         self.downloader = None
+
+        # P5 F1.3: 解压前先做 SHA512 完整性校验
+        from src.ui.components.install_hash_check import run_napcat_archive_hash_check
+
+        archive_path = it(PathFunc).tmp_path / Urls.NAPCATQQ_DOWNLOAD.value.fileName()
+        if not run_napcat_archive_hash_check(
+            version=self.remote_version,
+            archive_path=archive_path,
+            parent=self,
+        ):
+            logger.warning(
+                "NapCat 安装中止: SHA512 完整性校验失败或用户取消", log_source=LogSource.UI
+            )
+            self.handle_operation_failed()
+            return
+
+        success_bar(self.tr("下载成功, 正在安装..."))
         self.begin_install_operation(self.tr("正在安装 NapCat"))
         installer = NapCatInstall()
         self.installer = installer

@@ -1027,7 +1027,13 @@ class QRCodeDialogFactory(QObject):
 class QRCodeDialogFactoryCreator(AbstractCreator, ABC):
     """QRCodeDialogFactory 的创建器"""
 
-    targets = (CreateTargetInfo("src.ui.page.bot_page.widget.msg_box", "QRCodeDialogFactory"),)
+    # 历史包路径为 ``src.ui.page.*``, 仓库迁移到 ``src/`` 后这里曾未同步,
+    # 导致 [`creart.it(QRCodeDialogFactory)`](https://github.com/MeetWq/creart) 找不到注册项,
+    # 在保存 Bot 配置 / 创建 [`BotCard`](src/ui/page/bot_page/widget/card.py)
+    # 时崩溃: ``current environment does not contain support for ...:QRCodeDialogFactory``.
+    targets = (
+        CreateTargetInfo("src.ui.page.bot_page.widget.msg_box", "QRCodeDialogFactory"),
+    )
 
     @staticmethod
     def available() -> bool:

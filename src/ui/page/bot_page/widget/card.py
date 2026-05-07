@@ -29,6 +29,7 @@ from qfluentwidgets import (
     TransparentPushButton,
     TransparentToolButton,
     setFont,
+    themeColor,
 )
 from qfluentwidgets.components.widgets.icon_widget import IconWidget
 from PySide6.QtCore import (
@@ -47,7 +48,7 @@ from PySide6.QtCore import (
     QSize,
     Signal,
 )
-from PySide6.QtGui import QColor, QEnterEvent, QFont, QPixmap
+from PySide6.QtGui import QColor, QEnterEvent, QFont, QMouseEvent, QPainter, QPaintEvent, QPen, QPixmap
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 from creart import it
 from qfluentwidgets.common.overload import singledispatchmethod
@@ -86,6 +87,8 @@ class BotCard(HeaderCardWidget):
 
     # 当自身被移除时发出信号 值为QQID
     remove_signal = Signal(str)
+    # P4 F2: 批量模式下选中状态变化, 参数为 (qq_id, selected)
+    selected_changed_signal = Signal(str, bool)
 
     @singledispatchmethod
     def __init__(self, config: Config, parent: QWidget | None = None) -> None:
@@ -98,6 +101,9 @@ class BotCard(HeaderCardWidget):
 
         # 设置属性
         self._config = config
+        # P4 F2 / P4 W4: 批量模式 - 整卡可点击切换"选中态", 不再使用复选框
+        self._batch_mode: bool = False
+        self._selected: bool = False
 
         # 创建控件
         self.avatar_widget = BotAvatarWidget(str(self._config.bot.QQID), self)
@@ -122,6 +128,8 @@ class BotCard(HeaderCardWidget):
         self.viewLayout.addWidget(self.avatar_widget, 1)
         self.viewLayout.addWidget(self.info_widget, 2)
 
+        # P4 W4: 不再使用复选框, 转为整卡点击切换 "选中态". 按钮组照常摆在右侧操作区,
+        # 批量模式下整体 hide; 普通模式下按 process_state 显隐. title 始终贴左 24px.
         self.headerLayout.addStretch(1)
         self.headerLayout.setSpacing(8)
         self.headerLayout.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -150,15 +158,99 @@ class BotCard(HeaderCardWidget):
             self.qr_code_button.show()
 
     # ==================== 公共方法 ==================
+    # ---------- P4 F2 / P4 W4: 批量模式 ----------
+    def set_batch_mode(self, enabled: bool, *, checked: bool = False) -> None:
+        """切换批量模式; 启用时整卡可点击切换"选中态" + 隐藏 header 操作按钮.
+
+        Args:
+            enabled: True 进入批量模式, False 退出.
+            checked: 进入批量模式时初始选中状态; 退出模式忽略.
+        """
+        self._batch_mode = enabled
+        if enabled:
+            # 整卡可点 -> 鼠标悬停手型, 提示用户卡片可点击选中
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+            # 批量模式下统一隐藏单卡操作按钮, 让底部 batch CommandBar 接管
+            for btn in (
+                self.run_button,
+                self.stop_button,
+                self.log_button,
+                self.web_ui_button,
+                self.qr_code_button,
+                self.setting_button,
+                self.remove_button,
+            ):
+                btn.hide()
+            # 进入批量模式时按 ``checked`` 设定初始选中态; 不发信号 (避免回声)
+            self._set_selected_silently(checked)
+        else:
+            self.unsetCursor()
+            # 退出批量模式时无条件清除选中态; 不发信号
+            self._set_selected_silently(False)
+            # 退出批量模式: 按当前进程状态 + 二维码可见性还原 header 按钮
+            self._restore_action_buttons()
+
+    def _restore_action_buttons(self) -> None:
+        """退出批量模式时还原 header 按钮显隐态.
+
+        - run / stop / log / web_ui 由 ``slot_process_changed_button`` 统一处理.
+        - setting / remove 在普通模式下应始终可见.
+        - qr_code 取决于 ``QRCodeDialogFactory.has_qr_code``.
+        """
+        qq_id = str(self._config.bot.QQID)
+        record = it(ManagerNapCatQQProcess).get_process(qq_id)
+        state = record.state if record is not None else QProcess.ProcessState.NotRunning
+        self.slot_process_changed_button(qq_id, state)
+        self.setting_button.show()
+        self.remove_button.show()
+        if it(QRCodeDialogFactory).has_qr_code(qq_id):
+            self.qr_code_button.show()
+
+    def is_batch_mode(self) -> bool:
+        """当前是否处于批量模式."""
+        return self._batch_mode
+
+    def is_batch_selected(self) -> bool:
+        """批量模式下是否被选中; 非批量模式返回 False."""
+        return self._batch_mode and self._selected
+
+    def set_selected(self, value: bool) -> None:
+        """外部 (BotListPage 全选/取消全选) 调用; 触发选中态变化信号."""
+        if self._selected == bool(value):
+            return
+        self._selected = bool(value)
+        self.update()  # 触发 paintEvent 重绘选中态边框
+        self.selected_changed_signal.emit(str(self._config.bot.QQID), self._selected)
+
+    def _set_selected_silently(self, value: bool) -> None:
+        """内部使用; 设置选中态但**不发信号** (用于 set_batch_mode 进入/退出场景)."""
+        self._selected = bool(value)
+        self.update()
+
     def update_info_card(self) -> None:
-        """更新信息卡片显示内容， 用于外部调用，刷新后调用"""
-        if (process := it(ManagerNapCatQQProcess).get_process(str(self._config.bot.QQID))) is None:
+        """更新信息卡片显示内容， 用于外部调用，刷新后调用.
+
+        P2.6 起 ``ManagerNapCatQQProcess.get_process`` 既可能返回本地
+        [`NapCatProcessModel`](src/core/runtime/napcat.py) (带 ``process`` 字段),
+        也可能返回远端 [`RemoteProcessRecord`](src/core/runtime/napcat.py) (没有 ``process``).
+        两类 record 都暴露 ``state`` 字段, 这里统一以 ``state`` 判断, 避免硬依赖 QProcess.
+
+        P3 perf: 同步反映 ``Starting`` 状态, 让 BotList 重建后仍保留启动中指示.
+        """
+        record = it(ManagerNapCatQQProcess).get_process(str(self._config.bot.QQID))
+        if record is None:
             return
 
-        if (process := process.process) and process.state() == QProcess.ProcessState.Running:
-            self.slot_process_changed_button(str(self._config.bot.QQID), QProcess.ProcessState.Running)
-            self.info_widget.slot_run_time_start(str(self._config.bot.QQID), QProcess.ProcessState.Running)
-            self.info_widget.slot_memory_usage_start(str(self._config.bot.QQID), QProcess.ProcessState.Running)
+        qq_id = str(self._config.bot.QQID)
+        if record.state == QProcess.ProcessState.Starting:
+            self.slot_process_changed_button(qq_id, QProcess.ProcessState.Starting)
+            return
+        if record.state != QProcess.ProcessState.Running:
+            return
+
+        self.slot_process_changed_button(qq_id, QProcess.ProcessState.Running)
+        self.info_widget.slot_run_time_start(qq_id, QProcess.ProcessState.Running)
+        self.info_widget.slot_memory_usage_start(qq_id, QProcess.ProcessState.Running)
 
     # ==================== UI方法 ====================
     def set_tooltip(self) -> None:
@@ -196,7 +288,12 @@ class BotCard(HeaderCardWidget):
         it(ManagerAutoRestartProcess).remove_auto_restart_timer(str(self._config.bot.QQID))
 
     def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
-        """处理 NapCatQQ 进程变化时, 切换按钮显示
+        """处理 NapCatQQ 进程变化时, 切换按钮显示.
+
+        P3 perf: 区分 ``Starting`` / ``Running`` / ``NotRunning``. ``Starting`` 时
+        卡片本身仅把 "启动" 按钮 disable + 文案改 "启动中…", 卡片视觉保持稳定;
+        进度反馈与最终成败统一在主窗口右上角的
+        [`ProgressInfoBar`](src/ui/components/progress_info_bar_bridge.py) 上展示.
 
         Args:
             qq_id (str): QQ 号
@@ -204,6 +301,34 @@ class BotCard(HeaderCardWidget):
         """
         if qq_id != str(self._config.bot.QQID):
             return
+
+        # P4 W4 修复: 批量模式下不响应 process state 变化, 否则远端 Bot 停止/启动
+        # 完成时这里会把 run/stop/log/web_ui 按钮重新 show 出来, 与批量模式预期
+        # (按钮全部 hide, 只显示底部 CommandBar) 冲突. 仍然更新 run_button 的
+        # enabled/text 状态, 这样退出批量模式后按钮恢复时能反映正确的文案.
+        if self._batch_mode:
+            # 仅同步内部状态 (enabled / text), 不动 visibility
+            if state == QProcess.ProcessState.Starting:
+                self.run_button.setEnabled(False)
+                self.run_button.setText(self.tr("启动中…"))
+            else:
+                self.run_button.setEnabled(True)
+                self.run_button.setText(self.tr("启动"))
+            return
+
+        if state == QProcess.ProcessState.Starting:
+            # 启动中: run_button 灰掉 + 文案改, 其他按钮维持现状
+            self.run_button.show()
+            self.run_button.setEnabled(False)
+            self.run_button.setText(self.tr("启动中…"))
+            self.stop_button.hide()
+            self.log_button.hide()
+            self.web_ui_button.hide()
+            return
+
+        # 离开 Starting: 还原按钮可用性与文案
+        self.run_button.setEnabled(True)
+        self.run_button.setText(self.tr("启动"))
 
         if state == QProcess.ProcessState.Running:
             self.run_button.hide()
@@ -297,6 +422,32 @@ class BotCard(HeaderCardWidget):
 
             it(ManagerAutoRestartProcess).remove_auto_restart_timer(qq_id)
             self.remove_signal.emit(str(self._config.bot.QQID))
+
+    # ==================== 事件 (P4 W4 选中态) ====================
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt 命名固定
+        """批量模式下整卡可点; 左键单击切换选中态."""
+        if self._batch_mode and event.button() == Qt.MouseButton.LeftButton:
+            new_value = not self._selected
+            # 走 set_selected 路径, 触发 selected_changed_signal 让 BotListPage
+            # 同步刷新 "已选 N / M" 计数与启停删按钮的可用性.
+            self.set_selected(new_value)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 - Qt 命名固定
+        """先让 SimpleCardWidget 画原 card, 选中时再叠 2px themeColor 边框."""
+        super().paintEvent(event)
+        if not (self._batch_mode and self._selected):
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # themeColor 是 qfluentwidgets 当前主题主色; 与全局 hover/选中观感一致
+        pen = QPen(themeColor(), 2)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        # 内缩 1px 避免边框被父 widget 裁掉; 圆角与 SimpleCardWidget 默认 ~6px 对齐
+        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
 
 
 class BotAvatarWidget(QWidget):

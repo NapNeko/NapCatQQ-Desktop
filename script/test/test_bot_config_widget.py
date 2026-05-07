@@ -149,3 +149,118 @@ def test_advanced_config_widget_clear_enables_offline_notice_when_global_notice_
     restored = widget.get_config()
 
     assert restored.offlineNotice is True
+
+
+# ==================== P2.7: runtime_target 选择器 ====================
+class _FakeServer:
+    """ServerProfile 替身, 仅暴露 runtime_target 卡片读取的字段."""
+
+    def __init__(self, server_id: str, name: str, host: str) -> None:
+        self.id = server_id
+        self.name = name
+
+        class _Cred:
+            def __init__(self, h: str) -> None:
+                self.host = h
+
+        self.credentials = _Cred(host)
+
+
+class _FakeServerManager:
+    def __init__(self, servers: list[_FakeServer]) -> None:
+        self._servers = servers
+
+    def list_servers(self) -> list[_FakeServer]:
+        return list(self._servers)
+
+
+def _patch_server_manager(monkeypatch, servers: list[_FakeServer]) -> None:
+    fake = _FakeServerManager(servers)
+    monkeypatch.setattr(
+        config_widget_module,
+        "it",
+        lambda cls: fake,
+    )
+
+
+def test_runtime_target_card_defaults_to_local(monkeypatch) -> None:
+    ensure_qapp()
+    _patch_server_manager(monkeypatch, [])
+    widget = config_widget_module.RuntimeTargetConfigCard(title="运行位置")
+    assert widget.get_value() == "local"
+
+
+def test_runtime_target_card_lists_servers(monkeypatch) -> None:
+    ensure_qapp()
+    servers = [
+        _FakeServer("uuid-a", "线上A", "10.0.0.1"),
+        _FakeServer("uuid-b", "测试B", "10.0.0.2"),
+    ]
+    _patch_server_manager(monkeypatch, servers)
+    widget = config_widget_module.RuntimeTargetConfigCard(title="运行位置")
+    assert widget.combo_box.count() == 3  # 本地 + 2 远端
+    assert "uuid-a" in widget._target_ids
+    assert "uuid-b" in widget._target_ids
+
+
+def test_runtime_target_card_round_trip_remote(monkeypatch) -> None:
+    ensure_qapp()
+    servers = [_FakeServer("uuid-a", "线上A", "10.0.0.1")]
+    _patch_server_manager(monkeypatch, servers)
+    widget = config_widget_module.RuntimeTargetConfigCard(title="运行位置")
+
+    widget.fill_value("uuid-a")
+    assert widget.get_value() == "uuid-a"
+
+
+def test_runtime_target_card_handles_deleted_server(monkeypatch) -> None:
+    """配置引用的 server_id 已被删除时, 应在下拉中显示占位项, 而不是静默回退."""
+    ensure_qapp()
+    _patch_server_manager(monkeypatch, [])
+    widget = config_widget_module.RuntimeTargetConfigCard(title="运行位置")
+
+    widget.fill_value("ghost-id")
+    # 仍能正确返回原值, 让保存时不丢失绑定
+    assert widget.get_value() == "ghost-id"
+    # 下拉项数量从 1(local) 增加到 2(local + 占位)
+    assert widget.combo_box.count() == 2
+
+
+def test_bot_config_widget_round_trips_runtime_target(monkeypatch) -> None:
+    """``BotConfigWidget`` 应在 fill / get 之间保留 runtime_target."""
+    ensure_qapp()
+    servers = [_FakeServer("uuid-a", "线上A", "10.0.0.1")]
+    _patch_server_manager(monkeypatch, servers)
+
+    widget = BotConfigWidget()
+    bot = BotConfig(
+        name="RemoteBot",
+        QQID=1145141919,
+        musicSignUrl="",
+        autoRestartSchedule=AutoRestartScheduleConfig(enable=False, time_unit="h", duration=1),
+        offlineAutoRestart=False,
+        runtime_target="uuid-a",
+    )
+    widget.fill_config(bot)
+    restored = widget.get_config()
+    assert restored.runtime_target == "uuid-a"
+
+
+def test_bot_config_widget_clear_resets_runtime_target_to_local(monkeypatch) -> None:
+    ensure_qapp()
+    servers = [_FakeServer("uuid-a", "线上A", "10.0.0.1")]
+    _patch_server_manager(monkeypatch, servers)
+
+    widget = BotConfigWidget()
+    widget.fill_config(
+        BotConfig(
+            name="x",
+            QQID=1145141919,
+            musicSignUrl="",
+            autoRestartSchedule=AutoRestartScheduleConfig(enable=False, time_unit="h", duration=1),
+            offlineAutoRestart=False,
+            runtime_target="uuid-a",
+        )
+    )
+    widget.clear_config()
+    assert widget.runtime_target_card.get_value() == "local"

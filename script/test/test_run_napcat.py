@@ -61,21 +61,22 @@ class FakeTimer:
 
 
 class FakeProcess:
-    """用于测试 ManagerNapCatQQProcess 的假进程。"""
+    """用于测试 ManagerNapCatQQProcess 的假进程。
+
+    P3 perf: 本地 QProcess 启动去除了 ``waitForStarted`` 阻塞, 状态变迁靠
+    ``stateChanged`` / ``errorOccurred`` / ``finished`` 信号驱动.
+    """
 
     def __init__(self, *, started: bool = True) -> None:
         self.started = started
         self.start_called = False
         self.deleted = False
         self.stateChanged = FakeSignal()
+        self.errorOccurred = FakeSignal()
         self.finished = FakeSignal()
 
     def start(self) -> None:
         self.start_called = True
-
-    def waitForStarted(self, timeout: int) -> bool:
-        self.timeout = timeout
-        return self.started
 
     def errorString(self) -> str:
         return "process failed"
@@ -414,13 +415,22 @@ def test_create_napcat_process_rejects_more_than_four_instances(
     assert emitted == [("error", "NapCatQQ 进程数量已达上限，无法创建新进程!")]
 
 
-def test_create_napcat_process_emits_error_when_start_fails(
+def test_create_napcat_process_emits_error_when_failed_to_start(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """启动失败时应删除进程对象并发出错误提示。"""
+    """P3 perf: 启动失败走 ``errorOccurred(FailedToStart)`` 异步路径,
+    不再依赖 ``waitForStarted`` 同步返回值。应清理字典 + emit NotRunning + 提示。"""
     manager = run_napcat.ManagerNapCatQQProcess()
-    emitted: list[tuple[str, str]] = []
-    manager.notification_signal.connect(lambda level, message: emitted.append((level, message)))
+    emitted_notifications: list[tuple[str, str]] = []
+    manager.notification_signal.connect(
+        lambda level, message: emitted_notifications.append((level, message))
+    )
+    state_changes: list[tuple[str, QProcess.ProcessState]] = []
+    manager.process_changed_signal.connect(
+        lambda qq_id, state: state_changes.append((qq_id, state))
+    )
+    removed_login_states: list[str] = []
+    removed_timers: list[str] = []
 
     process = FakeProcess(started=False)
     monkeypatch.setattr(manager, "_create_napcat_process", lambda config, qq_path: process)
@@ -430,20 +440,39 @@ def test_create_napcat_process_emits_error_when_start_fails(
         lambda cls: {
             "PathFunc": SimpleNamespace(get_qq_path=lambda: Path("C:/Program Files/Tencent/QQ")),
             "ManagerNapCatQQLog": SimpleNamespace(create_log=lambda config, proc: None),
+            "ManagerAutoRestartProcess": SimpleNamespace(
+                create_auto_restart_timer=lambda config: None,
+                remove_auto_restart_timer=lambda qq_id: removed_timers.append(qq_id),
+            ),
+            "ManagerNapCatQQLoginState": SimpleNamespace(
+                remove_login_state=lambda qq_id: removed_login_states.append(qq_id)
+            ),
         }[cls.__name__],
     )
 
     manager.create_napcat_process(config_factory(654321))
+    # 启动后立刻可视 Starting; 进程字典已登记
+    assert state_changes == [("654321", QProcess.ProcessState.Starting)]
+    assert manager.napcat_process_dict["654321"].state == QProcess.ProcessState.Starting
 
-    assert emitted == [("error", "NapCatQQ 进程启动失败!")]
+    # 模拟 Qt 发出 errorOccurred(FailedToStart)
+    process.errorOccurred.emit(QProcess.ProcessError.FailedToStart)
+
+    assert emitted_notifications == [("error", "NapCatQQ 进程启动失败: process failed")]
+    assert removed_login_states == ["654321"]
+    assert removed_timers == ["654321"]
     assert process.deleted is True
     assert manager.napcat_process_dict == {}
+    assert state_changes[-1] == ("654321", QProcess.ProcessState.NotRunning)
 
 
 def test_create_napcat_process_starts_process_and_registers_state(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """启动成功后应登记进程、创建日志，并启动自动重启计时器。"""
+    """P3 perf: 启动后字典以 ``Starting`` 登记, ``stateChanged`` -> Running 后同步状态。
+
+    不再依赖同步 ``waitForStarted``, 主线程不会被套住。自动重启计时器仍会创建。
+    """
     manager = run_napcat.ManagerNapCatQQProcess()
     created_logs: list[int] = []
     auto_restart: list[int] = []
@@ -473,9 +502,18 @@ def test_create_napcat_process_starts_process_and_registers_state(
     assert auto_restart == [445566]
     assert stored.qq_id == "445566"
     assert stored.process is process
-    assert stored.state == QProcess.ProcessState.Running
+    # P3 perf: 初始表状态 = Starting; ``stateChanged`` -> Running 后才会同步为 Running
+    assert stored.state == QProcess.ProcessState.Starting
     assert stored.started_at > 0
-    assert state_changes == [("445566", QProcess.ProcessState.Running)]
+    assert state_changes == [("445566", QProcess.ProcessState.Starting)]
+
+    # 模拟 Qt 推送的 stateChanged Starting -> Running, 验证会被同步到 model + emit
+    process.stateChanged.emit(QProcess.ProcessState.Running)
+    assert stored.state == QProcess.ProcessState.Running
+    assert state_changes == [
+        ("445566", QProcess.ProcessState.Starting),
+        ("445566", QProcess.ProcessState.Running),
+    ]
 
 
 def test_create_napcat_process_cleans_up_state_when_process_finishes_unexpectedly(
@@ -506,7 +544,11 @@ def test_create_napcat_process_cleans_up_state_when_process_finishes_unexpectedl
     assert removed_login_states == ["554433"]
     assert process.deleted is True
     assert manager.napcat_process_dict == {}
-    assert state_changes == [("554433", QProcess.ProcessState.Running), ("554433", QProcess.ProcessState.NotRunning)]
+    # P3 perf: 启动后立刻 emit Starting; finished 后 emit NotRunning
+    assert state_changes == [
+        ("554433", QProcess.ProcessState.Starting),
+        ("554433", QProcess.ProcessState.NotRunning),
+    ]
 
 
 def test_auto_restart_timer_uses_schedule_duration(

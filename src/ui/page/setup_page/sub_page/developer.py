@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 # 第三方库导入
 from creart import it
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QThreadPool, QTimer, Qt
 from PySide6.QtWidgets import QMessageBox, QWidget
-from qfluentwidgets import ExpandLayout, PushButton, ScrollArea, SettingCard, SettingCardGroup
+from qfluentwidgets import ComboBox, ExpandLayout, PushButton, ScrollArea, SettingCard, SettingCardGroup
 from qfluentwidgets import FluentIcon as FI
 
 # 项目内模块导入
@@ -18,6 +18,8 @@ from src.core.home import home_notice_debug_center
 from src.core.desktop_update import MsiUpdateStrategy, inject_target_pid
 from src.core.installation.install_type import detect_install_type
 from src.core.logging import LogSource, logger
+from src.core.remote import DeploymentState, ServerManager
+from src.core.remote.thread_pool import remote_ssh_pool
 from src.core.runtime.paths import PathFunc
 from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
 from src.core.desktop_update.templates import load_msi_update_script
@@ -25,6 +27,8 @@ from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning
 from src.ui.components.input_card.generic_card import SwitchConfigCard
 from src.ui.components.message_box import AskBox
 from src.ui.page.component_page.utils import build_install_type_details, build_update_confirmation_message
+from src.ui.page.remote_page.deployment_console import DeploymentConsoleDialog
+from src.ui.page.remote_page.deployment_runner import RollbackRunner
 
 if TYPE_CHECKING:
     # 避免循环导入
@@ -49,6 +53,148 @@ class ActionButtonCard(SettingCard):
         self.button.clicked.connect(self._callback)
         self.hBoxLayout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
+
+
+class RemoteRollbackCard(SettingCard):
+    """选择远端服务器并触发回滚的开发者卡片。
+
+    内嵌 [`ComboBox`](https://qfluentwidgets.com/) 列出所有已添加的服务器,
+    点 "执行回滚" 按钮先二次确认, 再弹独立的
+    [`DeploymentConsoleDialog`](src/ui/page/remote_page/deployment_console.py)
+    实时展示清理日志, 后台用 [`RollbackRunner`](src/ui/page/remote_page/deployment_runner.py)
+    跑 [`ServerManager.rollback_server`](src/core/remote/server_manager.py)。
+
+    每次按钮点击或 popup 展开都会**重新查询** ``ServerManager`` 列表,
+    无需订阅 ``server_added`` / ``server_removed`` 信号。
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(
+            FI.REMOVE_FROM,
+            "回滚远端 NapCat 安装",
+            "清空选定服务器的 NapCat / LinuxQQ 安装、配置备份与下载缓存; 状态重置为未部署",
+            parent,
+        )
+        self._console: DeploymentConsoleDialog | None = None
+
+        self.combo = ComboBox(self)
+        self.combo.setMinimumWidth(200)
+        self.combo.setPlaceholderText("(无远端服务器)")
+        # 每次展开都重新拉一次列表, 避免与 RemotePage 的添加/删除不同步
+        self.combo.installEventFilter(self)
+
+        self.button = PushButton("执行回滚", self)
+        self.button.clicked.connect(self._on_rollback_clicked)
+
+        self.hBoxLayout.addWidget(self.combo, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(8)
+        self.hBoxLayout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
+
+        self._refresh_servers()
+
+    # ----- 服务器列表同步 -----
+    def _refresh_servers(self) -> None:
+        """从 ``ServerManager`` 重新拉取列表填充 ComboBox。"""
+        manager = it(ServerManager)
+        servers = manager.list_servers()
+        # 保存当前选中 id 以便恢复
+        current_id = self.combo.currentData()
+
+        self.combo.blockSignals(True)
+        self.combo.clear()
+        for profile in servers:
+            label = profile.name
+            if profile.deployment_state is DeploymentState.DEPLOYED:
+                version = profile.napcat_version or "未探测"
+                label = f"{profile.name}  ·  已部署 {version}"
+            elif profile.deployment_state is DeploymentState.DEPLOYING:
+                label = f"{profile.name}  ·  部署中"
+            elif profile.deployment_state is DeploymentState.FAILED:
+                label = f"{profile.name}  ·  失败"
+            else:
+                label = f"{profile.name}  ·  未部署"
+            self.combo.addItem(label, userData=profile.id)
+
+        if current_id is not None:
+            for i in range(self.combo.count()):
+                if self.combo.itemData(i) == current_id:
+                    self.combo.setCurrentIndex(i)
+                    break
+        self.combo.blockSignals(False)
+
+        self.button.setEnabled(self.combo.count() > 0)
+
+    def eventFilter(self, watched, event):  # noqa: D401 - Qt 事件过滤
+        # ComboBox 弹出前刷新列表
+        from PySide6.QtCore import QEvent
+
+        if watched is self.combo and event.type() == QEvent.Type.MouseButtonPress:
+            self._refresh_servers()
+        return super().eventFilter(watched, event)
+
+    # ----- 触发逻辑 -----
+    def _on_rollback_clicked(self) -> None:
+        server_id = self.combo.currentData()
+        if not server_id:
+            error_bar("请先添加并选择一台远端服务器", parent=self)
+            return
+
+        manager = it(ServerManager)
+        profile = manager.get_server(server_id)
+        if profile is None:
+            error_bar("服务器档案不存在, 请刷新列表", parent=self)
+            self._refresh_servers()
+            return
+
+        if manager.is_deploying(profile.id):
+            warning_bar(f"[{profile.name}] 正在部署/回滚中, 请耐心等待", parent=self)
+            return
+
+        # 运行时动态导入避免循环导入
+        from src.ui.window.main_window import MainWindow
+
+        ask = AskBox(
+            "⚠️ 确认回滚远端安装",
+            f"将清空服务器 “{profile.name}” 上的:\n\n"
+            "  • NapCat 安装目录\n"
+            "  • LinuxQQ 安装目录及下载的安装包\n"
+            "  • 运行时与日志目录\n"
+            "  • loadNapCat.js 注入与 package.json 备份\n\n"
+            "此操作**不可撤销**, 仅建议在开发测试场景使用。\n\n是否继续？",
+            it(MainWindow),
+        )
+        if not ask.exec():
+            return
+
+        info_bar(f"[{profile.name}] 开始回滚...", parent=self)
+        # 弹出独立的部署控制台展示清理日志 (复用 DeploymentRunner 那套信号通道)
+        console = DeploymentConsoleDialog(profile.id, profile.name, parent=it(MainWindow))
+        # 关闭后释放引用; 自身保留以便用户阅读完整日志
+        console.destroyed.connect(lambda *_: setattr(self, "_console", None))
+        self._console = console
+        console.show()
+        console.raise_()
+        console.activateWindow()
+
+        runner = RollbackRunner(profile.id)
+        runner.signals.finished.connect(self._on_rollback_finished)
+        # P3 perf W4: 走专用远端 SSH 池, 与全局池隔离
+        remote_ssh_pool().start(runner)
+        logger.info(
+            f"开发者模式触发远端回滚: server_id={profile.id}, name={profile.name}",
+            log_source=LogSource.UI,
+        )
+
+    def _on_rollback_finished(self, server_id: str, ok: bool, message: str) -> None:
+        manager = it(ServerManager)
+        profile = manager.get_server(server_id)
+        name = profile.name if profile is not None else server_id
+        if ok:
+            success_bar(f"[{name}] 回滚完成", parent=self)
+        else:
+            error_bar(f"[{name}] 回滚失败: {message}", parent=self)
+        self._refresh_servers()
 
 
 class Developer(ScrollArea):
@@ -83,6 +229,8 @@ class Developer(ScrollArea):
         self.crash_group = SettingCardGroup(title=self.tr("崩溃诊断"), parent=self.view)
         self.notice_group = SettingCardGroup(title=self.tr("首页通知"), parent=self.view)
         self.update_test_group = SettingCardGroup(title=self.tr("更新测试"), parent=self.view)
+        self.remote_group = SettingCardGroup(title=self.tr("远程部署调试"), parent=self.view)
+        self.remote_rollback_card = RemoteRollbackCard(parent=self.remote_group)
 
         self.export_bundle_card = ActionButtonCard(
             icon=FI.DEVELOPER_TOOLS,
@@ -162,11 +310,13 @@ class Developer(ScrollArea):
         self.update_test_group.addSettingCard(self.test_update_confirm_card)
         self.update_test_group.addSettingCard(self.test_install_type_card)
         self.update_test_group.addSettingCard(self.test_msi_script_card)
+        self.remote_group.addSettingCard(self.remote_rollback_card)
 
         self.expand_layout.addWidget(self.log_group)
         self.expand_layout.addWidget(self.crash_group)
         self.expand_layout.addWidget(self.notice_group)
         self.expand_layout.addWidget(self.update_test_group)
+        self.expand_layout.addWidget(self.remote_group)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
 

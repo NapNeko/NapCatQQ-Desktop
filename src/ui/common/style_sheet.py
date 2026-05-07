@@ -35,6 +35,7 @@ class PageStyleSheet(_ResourceStyleSheet, Enum):
     API_DEBUG = "api_debug"
     HOME = "home"
     # BOT = "bot"
+    REMOTE = "remote"
     SETUP = "setup"
     UNIT = "unit"
 

@@ -50,6 +50,7 @@ from qfluentwidgets.common import (
     ColorConfigItem,
     ConfigItem,
     ConfigSerializer,
+    ConfigValidator,
     EnumSerializer,
     OptionsConfigItem,
     OptionsValidator,
@@ -65,9 +66,10 @@ from PySide6.QtCore import QLocale, Signal
 # 项目内模块导入
 from src.core.config.config_enum import CloseActionEnum, Language
 from src.core.logging import LogSource, logger
+from src.core.remote.models import LinuxCorePaths, SSHCredentials
 from src.core.runtime.paths import PathFunc
 
-__version__ = "v2.0.21"
+__version__ = "v2.0.20"
 _CONFIG_MIGRATION_BACKUP_SUFFIX = ".bak"
 _CONFIG_MIGRATION_TMP_MARKER = "tmp"
 _LEGACY_CONFIG_VERSION = "v1.7.28"
@@ -380,14 +382,26 @@ def _migrate_config_payload(payload: object) -> tuple[dict[str, object], str, li
 
         step_rules = step.apply(migrated)
         if step_rules:
-            rules_applied.extend(
-                f"{step.from_version}->{step.to_version}: {rule}" for rule in step_rules
-            )
+            rules_applied.extend(f"{step.from_version}->{step.to_version}: {rule}" for rule in step_rules)
         else:
             rules_applied.append(f"{step.from_version}->{step.to_version}: no-op")
         current_version = step.to_version
 
+    transient_rules = _remove_transient_config_fields(migrated)
+    if transient_rules:
+        rules_applied.extend(transient_rules)
+
     return migrated, current_version, rules_applied
+
+
+def _remove_transient_config_fields(payload: dict[str, object]) -> list[str]:
+    """清理不应持久化到磁盘的临时配置字段。"""
+    rules_applied: list[str] = []
+    if _remove_nested_key(payload, ("Remote", "Password")):
+        rules_applied.append("transient: Remote.Password removed")
+
+    _cleanup_empty_sections(payload)
+    return rules_applied
 
 
 def _persist_migrated_config(path: Path, payload: dict[str, object]) -> Path | None:
@@ -424,6 +438,25 @@ class LanguageSerializer(ConfigSerializer):
 
     def deserialize(self, value: str):
         return Language(QLocale(value)) if value != "Auto" else Language.AUTO
+
+
+class _LinuxPathValidator(ConfigValidator):
+    """``remote_workspace_dir`` 的白名单校验 (P5 安全收尾 F2.4).
+
+    复用 [`is_valid_linux_path`](src/core/remote/models.py) 的同源正则,
+    与 ``LinuxCorePaths.__post_init__`` 保持一致, 防止 UI 输入命令注入 payload.
+    ``correct`` 在用户输入非法时回退到默认 ``$HOME/Napcat``.
+    """
+
+    def validate(self, value: Any) -> bool:
+        from src.core.remote.models import is_valid_linux_path
+
+        return is_valid_linux_path(str(value or ""))
+
+    def correct(self, value: Any) -> Any:
+        from src.core.remote.models import is_valid_linux_path
+
+        return value if is_valid_linux_path(str(value or "")) else "$HOME/Napcat"
 
 
 class Config(QConfig):
@@ -523,6 +556,48 @@ class Config(QConfig):
     # 首页通知
     home_notice_ignored_keys = ConfigItem(group="Home", name="IgnoredNoticeKeys", default="[]")
     home_notice_snoozed_items = ConfigItem(group="Home", name="SnoozedNoticeItems", default="{}")
+
+    # 远程模式项
+    remote_enabled = ConfigItem(group="Remote", name="Enabled", default=False, validator=BoolValidator())
+    remote_usage_notice_accepted = ConfigItem(
+        group="Remote", name="UsageNoticeAccepted", default=False, validator=BoolValidator()
+    )
+    remote_host = ConfigItem(group="Remote", name="Host", default="")
+    remote_port = RangeConfigItem(group="Remote", name="Port", default=22, validator=RangeValidator(1, 65535))
+    remote_username = ConfigItem(group="Remote", name="Username", default="")
+    remote_auth_method = OptionsConfigItem(
+        group="Remote",
+        name="AuthMethod",
+        default="key",
+        validator=OptionsValidator(["key", "password"]),
+    )
+    remote_private_key_path = ConfigItem(group="Remote", name="PrivateKeyPath", default="")
+    remote_allow_agent = ConfigItem(group="Remote", name="AllowAgent", default=False, validator=BoolValidator())
+    remote_look_for_keys = ConfigItem(group="Remote", name="LookForKeys", default=False, validator=BoolValidator())
+    remote_host_key_policy = OptionsConfigItem(
+        group="Remote",
+        name="HostKeyPolicy",
+        default="reject",
+        validator=OptionsValidator(["reject", "warning", "auto_add"]),
+    )
+    remote_connect_timeout = RangeConfigItem(
+        group="Remote",
+        name="ConnectTimeout",
+        default=10,
+        validator=RangeValidator(1, 120),
+    )
+    remote_command_timeout = RangeConfigItem(
+        group="Remote",
+        name="CommandTimeout",
+        default=20,
+        validator=RangeValidator(1, 600),
+    )
+    remote_workspace_dir = ConfigItem(
+        group="Remote",
+        name="WorkspaceDir",
+        default="$HOME/Napcat",
+        validator=_LinuxPathValidator(),
+    )
 
     # 性能监控设置
     performance_monitor_enabled = ConfigItem(
@@ -668,6 +743,49 @@ class Config(QConfig):
         else:
             self.theme_mode.value = self.get(self.themeMode)
 
+    def build_ssh_credentials(self) -> SSHCredentials:
+        """从当前配置构建 SSH 凭据对象。
+
+        安全策略：
+        - 不从配置文件读取或持久化密码
+        - 默认拒绝未知主机指纹
+        - 默认关闭 agent 与自动扫描本地密钥
+        """
+        return SSHCredentials(
+            host=str(self.get(self.remote_host) or ""),
+            port=int(self.get(self.remote_port) or 22),
+            username=str(self.get(self.remote_username) or ""),
+            auth_method=str(self.get(self.remote_auth_method) or "key"),
+            private_key_path=str(self.get(self.remote_private_key_path) or "") or None,
+            connect_timeout=float(self.get(self.remote_connect_timeout) or 10),
+            command_timeout=float(self.get(self.remote_command_timeout) or 20),
+            host_key_policy=str(self.get(self.remote_host_key_policy) or "reject"),
+            allow_agent=bool(self.get(self.remote_allow_agent)),
+            look_for_keys=bool(self.get(self.remote_look_for_keys)),
+        )
+
+    def build_linux_core_paths(self) -> LinuxCorePaths:
+        """从当前配置构建 Linux Core 路径布局。
+
+        使用标准 NapCat 安装器路径:
+        - workspace: $HOME/Napcat
+        - runtime: $HOME/Napcat/run
+        - config: $HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/config
+        - log: $HOME/Napcat/log
+        - tmp: $HOME/Napcat/tmp
+        - packages: $HOME/Napcat/packages
+        """
+        workspace_dir = str(self.get(self.remote_workspace_dir) or "$HOME/Napcat")
+        workspace_dir = workspace_dir.rstrip("/")
+        return LinuxCorePaths(
+            workspace_dir=workspace_dir,
+            runtime_dir=f"{workspace_dir}/run",
+            config_dir=f"{workspace_dir}/opt/QQ/resources/app/app_launcher/napcat/config",
+            log_dir=f"{workspace_dir}/log",
+            tmp_dir=f"{workspace_dir}/tmp",
+            package_dir=f"{workspace_dir}/packages",
+        )
+
         if has_legacy_theme_color and not has_fluent_theme_color:
             self.themeColor.value = self.get(self.theme_color)
         else:
@@ -717,4 +835,3 @@ cfg.set(cfg.napcat_desktop_version, __version__, True)
 cfg.set(cfg.system_type, platform.system(), True)
 cfg.set(cfg.platform_type, platform.machine(), True)
 bind_qfluent_qconfig(cfg)
-

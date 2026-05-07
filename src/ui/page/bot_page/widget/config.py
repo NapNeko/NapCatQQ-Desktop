@@ -4,13 +4,14 @@ Bot 配置页面
 """
 # 第三方库导入
 from creart import it
-from qfluentwidgets import ExpandLayout, FlowLayout, FluentIcon, PushButton, ScrollArea, SettingCard, SettingCardGroup
+from qfluentwidgets import ComboBox, ExpandLayout, FlowLayout, FluentIcon, PushButton, ScrollArea, SettingCard, SettingCardGroup
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
 from src.core.config import cfg
 from src.core.config.config_model import (
+    RUNTIME_TARGET_LOCAL,
     AdvancedConfig,
     BotConfig,
     ConnectConfig,
@@ -34,6 +35,88 @@ from src.ui.page.bot_page.widget import (
 )
 
 
+class RuntimeTargetConfigCard(SettingCard):
+    """运行位置选择卡片(P2.7).
+
+    在 [`BotConfigWidget`](src/ui/page/bot_page/widget/config.py) 中
+    展示一个下拉框, 包含 "本地" + 每台已添加的远端服务器, 让用户选择 Bot
+    在哪台机器上运行. 持久化的值是 [`BotConfig.runtime_target`](src/core/config/config_model.py),
+    形如 ``"local"`` 或 [`ServerProfile.id`](src/core/remote/servers.py).
+
+    设计要点:
+    - 下拉项构造时刻向 [`ServerManager`](src/core/remote/server_manager.py)
+      取一次服务器列表; 调用方在显示前可调用 ``refresh_targets()`` 主动刷新.
+    - 服务器档案被外部删除后, ``fill_value(server_id)`` 会临时插入一条
+      "(已删除) <id>" 的占位项让用户感知, 避免静默回退到本地造成行为漂移.
+    """
+
+    _LOCAL_LABEL = "本地"
+
+    def __init__(
+        self,
+        icon=FluentIcon.GLOBE,
+        title: str = "",
+        content: str | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(icon, title, content, parent)
+        self.combo_box = ComboBox(self)
+        self.combo_box.setFixedWidth(200)
+        self.hBoxLayout.addWidget(self.combo_box, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
+
+        # index -> server_id ("local" 或 UUID), 与 combo_box 表项一一对应
+        self._target_ids: list[str] = []
+        self.refresh_targets()
+
+    def refresh_targets(self) -> None:
+        """重新拉取服务器列表; 保留当前选择 (若仍存在)."""
+        previous = self.get_value() if self._target_ids else RUNTIME_TARGET_LOCAL
+
+        self.combo_box.clear()
+        self._target_ids = [RUNTIME_TARGET_LOCAL]
+        self.combo_box.addItem(self.tr(self._LOCAL_LABEL))
+
+        try:
+            from src.core.remote.server_manager import ServerManager
+
+            servers = it(ServerManager).list_servers()
+        except Exception:
+            servers = []
+
+        for profile in servers:
+            label = f"{profile.name} ({profile.credentials.host})"
+            self._target_ids.append(profile.id)
+            self.combo_box.addItem(label)
+
+        # 还原之前的选择
+        self.fill_value(previous)
+
+    def fill_value(self, target: str | None) -> None:
+        """选中匹配 target 的下拉项; 找不到则插入"(已删除) <id>"占位."""
+        normalized = target or RUNTIME_TARGET_LOCAL
+        if normalized in self._target_ids:
+            self.combo_box.setCurrentIndex(self._target_ids.index(normalized))
+            return
+        # 服务器档案不在: 插入占位标识让用户感知
+        placeholder = f"(已删除) {normalized}"
+        self._target_ids.append(normalized)
+        self.combo_box.addItem(placeholder)
+        self.combo_box.setCurrentIndex(len(self._target_ids) - 1)
+
+    def get_value(self) -> str:
+        """返回当前选中的 target 字符串."""
+        idx = self.combo_box.currentIndex()
+        if idx < 0 or idx >= len(self._target_ids):
+            return RUNTIME_TARGET_LOCAL
+        return self._target_ids[idx]
+
+    def clear(self) -> None:
+        """重置为默认本地."""
+        self.refresh_targets()
+        self.fill_value(RUNTIME_TARGET_LOCAL)
+
+
 class BotConfigWidget(ScrollArea):
     """Bot 设置页面"""
 
@@ -54,6 +137,12 @@ class BotConfigWidget(ScrollArea):
             title=self.tr("Bot QQ"),
             content=self.tr("设置机器人 QQ 号, 不能为空"),
             placeholder_text=self.tr("114514"),
+            parent=self.view,
+        )
+        self.runtime_target_card = RuntimeTargetConfigCard(
+            icon=FluentIcon.GLOBE,
+            title=self.tr("运行位置"),
+            content=self.tr("选择 Bot 运行在本机或某台已添加的远端服务器"),
             parent=self.view,
         )
         self.music_sign_url_card = LineEditConfigCard(
@@ -82,6 +171,7 @@ class BotConfigWidget(ScrollArea):
         self.cards = [
             self.bot_name_card,
             self.bot_qq_id_card,
+            self.runtime_target_card,
             self.music_sign_url_card,
             self.auto_restart_dialog_card,
             self.offline_auto_restart_card,
@@ -110,6 +200,7 @@ class BotConfigWidget(ScrollArea):
                 "musicSignUrl": self.music_sign_url_card.get_value(),
                 "autoRestartSchedule": self.auto_restart_dialog_card.get_value(),
                 "offlineAutoRestart": self.offline_auto_restart_card.get_value(),
+                "runtime_target": self.runtime_target_card.get_value(),
             }
         )
 
@@ -125,6 +216,9 @@ class BotConfigWidget(ScrollArea):
         self.music_sign_url_card.fill_value(self._config.musicSignUrl)
         self.auto_restart_dialog_card.fill_value(self._config.autoRestartSchedule)
         self.offline_auto_restart_card.fill_value(self._config.offlineAutoRestart)
+        # 服务器列表可能在编辑期间变化, 每次填充前都刷新
+        self.runtime_target_card.refresh_targets()
+        self.runtime_target_card.fill_value(self._config.runtime_target)
 
     def clear_config(self) -> None:
         """清空配置"""

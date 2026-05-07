@@ -338,6 +338,11 @@ class InstallNapCatQQPage(InstallPageBase):
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         self.downloader: GithubDownloader | None = None
         self.installer: NapCatInstall | None = None
+        # P5 F1.3: 记录远端 NapCat 版本以便下载完成后查询 SHA512.
+        # 由于 ``Urls.NAPCATQQ_DOWNLOAD`` 走 ``releases/latest`` 重定向, 版本未知,
+        # 通过并行的 RemoteVersionTask 获得.
+        self.remote_napcat_version: str | None = None
+        self.remote_version_task: RemoteVersionTask | None = None
 
         # 设置属性
         self.set_icon(StaticIcon.LOGO.path())
@@ -363,10 +368,46 @@ class InstallNapCatQQPage(InstallPageBase):
 
         QThreadPool.globalInstance().start(self.downloader)
 
+        # P5 F1.3: 并行拉取远端版本号; 失败时 ``remote_napcat_version`` 保持 None,
+        # 走"无 hash 数据"的二次确认分支, 不阻塞下载.
+        if self.remote_version_task is None:
+            task = RemoteVersionTask()
+            task.version_signal.connect(self._apply_remote_napcat_version)
+            self.remote_version_task = task
+            QThreadPool.globalInstance().start(task)
+
+    @Slot(object)
+    def _apply_remote_napcat_version(self, version_data: VersionSnapshot) -> None:
+        """记录最新的 NapCat 版本号供下载完成后做 SHA512 查询."""
+        self.remote_version_task = None
+        if version_data.napcat_version:
+            self.remote_napcat_version = version_data.napcat_version
+            logger.info(
+                f"引导安装 NapCat: 已获取远端版本 {self.remote_napcat_version}",
+                log_source=LogSource.UI,
+            )
+
     @Slot()
     def handle_install_requested(self) -> None:
         """安装。"""
         logger.info("引导安装 NapCat: 下载完成，开始安装", log_source=LogSource.UI)
+
+        # P5 F1.3: 解压前 SHA512 完整性校验
+        from src.ui.components.install_hash_check import run_napcat_archive_hash_check
+        from src.ui.window.guide_window.guide_window import GuideWindow
+
+        if not run_napcat_archive_hash_check(
+            version=self.remote_napcat_version,
+            archive_path=self.file_path,
+            parent=it(GuideWindow),
+        ):
+            logger.warning(
+                "引导安装 NapCat 中止: SHA512 完整性校验失败或用户取消",
+                log_source=LogSource.UI,
+            )
+            self.on_error_finish()
+            return
+
         self.installer = NapCatInstall()
         self.installer.status_label_signal.connect(self.set_status_text)
         self.installer.error_finish_signal.connect(self.on_error_finish)

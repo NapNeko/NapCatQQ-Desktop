@@ -16,9 +16,11 @@ from src.core.config.config_model import (
     ConnectConfig,
     HttpClientsConfig,
     HttpServersConfig,
+    RUNTIME_TARGET_LOCAL,
     WebsocketClientsConfig,
     WebsocketServersConfig,
     _coerce_interval_default,
+    migrate_bot_config_payload,
 )
 
 
@@ -121,3 +123,48 @@ def test_config_accepts_pydantic_submodels_without_json_serialization_error() ->
 
     assert config.bot.name == "TestBot"
     assert config.bot.QQID == 123456
+
+
+# ==================== P2: runtime_target ====================
+class TestRuntimeTargetField:
+    """[`BotConfig.runtime_target`](src/core/config/config_model.py) 字段契约。"""
+
+    def test_default_runtime_target_is_local(self) -> None:
+        bot = BotConfig(name="x", QQID=1)
+        assert bot.runtime_target == RUNTIME_TARGET_LOCAL
+        assert bot.is_remote is False
+
+    def test_runtime_target_accepts_server_uuid(self) -> None:
+        server_id = "0d4b3a8f-2c2d-4f1c-9a52-9f1c0fdfb4ad"
+        bot = BotConfig(name="x", QQID=1, runtime_target=server_id)
+        assert bot.runtime_target == server_id
+        assert bot.is_remote is True
+
+    def test_runtime_target_normalizes_blank_to_local(self) -> None:
+        bot = BotConfig(name="x", QQID=1, runtime_target="   ")
+        assert bot.runtime_target == RUNTIME_TARGET_LOCAL
+
+    def test_runtime_target_normalizes_none_to_local(self) -> None:
+        bot = BotConfig(name="x", QQID=1, runtime_target=None)
+        assert bot.runtime_target == RUNTIME_TARGET_LOCAL
+
+    def test_runtime_target_normalizes_non_string_to_local(self) -> None:
+        # 兼容历史损坏配置: 数字 / bool 等异常输入应静默回退而非抛错
+        bot = BotConfig(name="x", QQID=1, runtime_target=0)  # type: ignore[arg-type]
+        assert bot.runtime_target == RUNTIME_TARGET_LOCAL
+
+    def test_runtime_target_strips_whitespace(self) -> None:
+        bot = BotConfig(name="x", QQID=1, runtime_target="  abc  ")
+        assert bot.runtime_target == "abc"
+
+    def test_legacy_payload_without_runtime_target_migrates_to_local(self) -> None:
+        legacy_payload = {
+            "bot": {"name": "Legacy", "QQID": 114514},
+            "connect": {},
+            "advanced": {},
+        }
+        migrated, _, rules_applied = migrate_bot_config_payload(legacy_payload)
+        bots = migrated["bots"]
+        assert isinstance(bots, list) and len(bots) == 1
+        assert bots[0]["bot"]["runtime_target"] == RUNTIME_TARGET_LOCAL
+        assert any("bot.runtime_target default" in rule for rule in rules_applied)

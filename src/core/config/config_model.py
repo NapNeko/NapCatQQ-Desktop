@@ -28,6 +28,10 @@ from .config_enum import TimeUnitEnum
 
 BOT_CONFIG_LEGACY_VERSION = "v1.7.28"
 BOT_CONFIG_COMPAT_VERSION = "v2.0"
+# `runtime_target` 字段的本地常量值, 表示 Bot 在 Desktop 所在 Windows 主机上运行
+# (历史行为). 任何非该值的字符串都被视为 [`ServerProfile.id`](src/core/remote/servers.py)
+# 形式的远端服务器 ID. 详见 [`docs/general/remote_ssh_plan.md`](../../../../docs/general/remote_ssh_plan.md) §4.1.
+RUNTIME_TARGET_LOCAL = "local"
 DEFAULT_AUTO_RESTART_SCHEDULE_PAYLOAD = {
     "enable": False,
     "time_unit": TimeUnitEnum.HOUR.value,
@@ -380,6 +384,12 @@ def _migrate_legacy_bot_fields(bot_payload: dict[str, object]) -> tuple[dict[str
         normalized["offlineAutoRestart"] = False
         rules_applied.append("bot.offlineAutoRestart default")
 
+    # P2: runtime_target 字段; 旧配置文件中不存在该字段时默认走本地运行,
+    # 与历史行为完全等价(参考 docs/general/remote_ssh_plan.md §4.1).
+    if "runtime_target" not in normalized:
+        normalized["runtime_target"] = RUNTIME_TARGET_LOCAL
+        rules_applied.append("bot.runtime_target default")
+
     return normalized, rules_applied
 
 
@@ -486,6 +496,9 @@ class BotConfig(BaseModel):
     musicSignUrl: str = ""
     autoRestartSchedule: AutoRestartScheduleConfig = Field(default_factory=AutoRestartScheduleConfig)
     offlineAutoRestart: bool = False
+    # P2: 运行位置. ``"local"`` 表示在 Desktop 所在 Windows 主机运行(历史行为);
+    # 其他字符串视为 [`ServerProfile.id`](src/core/remote/servers.py) 形式的远端服务器 ID.
+    runtime_target: str = Field(default=RUNTIME_TARGET_LOCAL, description="运行位置: 'local' 或服务器 UUID")
 
     @field_validator("name")
     @staticmethod
@@ -507,6 +520,29 @@ class BotConfig(BaseModel):
             except ValueError as error:
                 raise ValueError(f"QQ号 '{value}' 无法转换为整数") from error
         raise TypeError("QQ号必须是字符串或整数")
+
+    @field_validator("runtime_target", mode="before")
+    @staticmethod
+    def validate_runtime_target(value: object) -> str:
+        """规范化 runtime_target: None / 空白 / 非字符串均回退为本地。
+
+        不在此处校验远端服务器是否真实存在 —— 服务器档案是运行期数据,
+        而 [`BotConfig`](src/core/config/config_model.py) 是纯数据模型,
+        不应当与 [`ServerRegistry`](src/core/remote/servers.py) 耦合.
+        归属校验由调用方在 backend 解析层(P2.2) 完成.
+        """
+        if value is None:
+            return RUNTIME_TARGET_LOCAL
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or RUNTIME_TARGET_LOCAL
+        # 兼容非常规配置文件: 数字 / bool 等异常输入静默回退
+        return RUNTIME_TARGET_LOCAL
+
+    @property
+    def is_remote(self) -> bool:
+        """是否在远端服务器运行。"""
+        return self.runtime_target != RUNTIME_TARGET_LOCAL
 
 
 class NetworkBaseConfig(BaseModel):

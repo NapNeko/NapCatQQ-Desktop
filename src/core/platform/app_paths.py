@@ -13,7 +13,12 @@ def resolve_app_base_path() -> Path:
     """解析应用基准目录。
 
     冻结运行时使用可执行文件所在目录。
-    源码运行时使用项目根目录，而不是当前工作目录。
+    源码运行时使用**仓库根目录**, 让 ``runtime/`` / ``log/`` / ``config/``
+    等运行时数据落在 Python 包之外, 便于 git 忽略与备份.
+
+    深度计算 (从 v2 flatten 后):
+    - 当前文件位于 ``src/core/platform/app_paths.py``
+    - parents[0]=platform, parents[1]=core, parents[2]=src, parents[3]=仓库根
     """
 
     if getattr(sys, "frozen", False):
