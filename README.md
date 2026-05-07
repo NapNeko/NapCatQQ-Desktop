@@ -57,7 +57,6 @@
 
 - **后台任务跟踪**：长耗时操作通过 `ProgressInfoBarBridge` 在主窗口顶部展示进度
 - **异步配置加载**：远端配置异步拉取，不再卡 UI
-- **性能监控配置**：`设置 → 性能` 中可调整监控间隔、Bot 登录检查间隔与内存采样频率
 - **持久 SSH 通道**：命令复用同一连接，减少认证开销
 
 > 远程功能相关代码集中在 `src/core/remote/`、`src/core/operation/`、`src/ui/page/remote_page/`，欢迎社区反馈与共建。
