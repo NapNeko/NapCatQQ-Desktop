@@ -15,11 +15,14 @@
 
 ---
 
+<img width="1722" height="1080" alt="6d3def2669ba6e01bc278c4df8c50761" src="https://github.com/user-attachments/assets/cd5dd4de-1e02-4970-bb19-9ac79b2aa142" />
+
+
 ## 🔜 预告：Linux 版本即将到来
 
 **v2.1 开发中** —— Desktop 即将跨平台！
 
-一直以来，Linux 用户只能通过终端管理 NapCatQQ，这在 v2.1 中将成为历史。
+QT好牢啊（；´д｀）ゞ（学校事还多，洛克王国真好玩，咕咕咕ing~）
 
 
 ## 🎉 v2.0 正式发布 - MSI 安装包来了！
