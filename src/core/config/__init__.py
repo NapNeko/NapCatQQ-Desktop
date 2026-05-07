@@ -559,6 +559,9 @@ class Config(QConfig):
 
     # 远程模式项
     remote_enabled = ConfigItem(group="Remote", name="Enabled", default=False, validator=BoolValidator())
+    remote_usage_notice_accepted = ConfigItem(
+        group="Remote", name="UsageNoticeAccepted", default=False, validator=BoolValidator()
+    )
     remote_host = ConfigItem(group="Remote", name="Host", default="")
     remote_port = RangeConfigItem(group="Remote", name="Port", default=22, validator=RangeValidator(1, 65535))
     remote_username = ConfigItem(group="Remote", name="Username", default="")

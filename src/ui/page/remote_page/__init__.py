@@ -12,8 +12,8 @@ from abc import ABC
 from typing import TYPE_CHECKING
 
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
-from PySide6.QtCore import QSize, Qt, QThreadPool, Signal
-from PySide6.QtGui import QResizeEvent
+from PySide6.QtCore import QSize, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFormLayout,
     QVBoxLayout,
@@ -22,9 +22,11 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
+    CheckBox,
     FlowLayout,
     HeaderCardWidget,
     InfoBadge,
+    MessageBoxBase,
     PrimaryToolButton,
     ProgressBar,
     ScrollArea,
@@ -36,6 +38,7 @@ from qfluentwidgets import (
     FluentIcon as FI,
 )
 
+from src.core.config import cfg
 from src.core.remote import DeploymentState, ServerManager, ServerProfile
 from src.core.remote.thread_pool import remote_ssh_pool
 from src.ui.common.style_sheet import PageStyleSheet
@@ -75,6 +78,48 @@ def _make_state_badge(state: DeploymentState, parent: QWidget | None = None) -> 
     if level == "attention":
         return InfoBadge.attension(text, parent=parent)  # qfluentwidgets API 拼写
     return InfoBadge.info(text, parent=parent)
+
+
+class RemoteUsageNoticeBox(MessageBoxBase):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent=parent)
+
+        self.title_label = TitleLabel(self.tr("远程功能使用前提示"), self)
+        self.content_label = BodyLabel(
+            self.tr(
+                "远程服务器功能刚刚完成主要完善工作，目前仅支持 Ubuntu，且当前只测试过 Ubuntu 24。\n\n"
+                "其他 Linux 发行版或其他版本的支持，需要等待后续版本更新。\n\n"
+                "此功能会连接你的服务器并执行安装、更新、回滚等远端操作，存在一定危险性。"
+                "项目已经尽可能完善校验与保护，但仍请你根据自身情况谨慎使用。"
+            ),
+            self,
+        )
+        self.content_label.setWordWrap(True)
+        self.issue_label = CaptionLabel(
+            self.tr("如果使用过程中遇到问题，请提交 Issue 并提供必要信息，方便定位和修复。"),
+            self,
+        )
+        self.issue_label.setWordWrap(True)
+        self.accept_checkbox = CheckBox(
+            self.tr("我已阅读并愿意使用；遇到问题会通过 Issue 理性反馈并协助定位。"),
+            self,
+        )
+
+        self.widget.setMinimumSize(560, 340)
+        self.viewLayout.addWidget(self.title_label)
+        self.viewLayout.addWidget(self.content_label)
+        self.viewLayout.addWidget(self.issue_label)
+        self.viewLayout.addWidget(self.accept_checkbox)
+
+        self.yesButton.setText(self.tr("确认并启用"))
+        self.cancelButton.setText(self.tr("暂不使用"))
+        self.yesButton.setEnabled(False)
+        self.cancelButton.setDefault(True)
+        self.yesButton.setDefault(False)
+        self.accept_checkbox.toggled.connect(self.yesButton.setEnabled)
+
+    def is_accepted(self) -> bool:
+        return self.accept_checkbox.isChecked()
 
 
 # ============================================================
@@ -317,6 +362,7 @@ class RemotePage(QWidget):
         self._consoles: dict[str, DeploymentConsoleDialog] = {}
         # 兼容旧测试: 卡片信号触发 / select_server 时设置, 无参 _on_xxx 回退至此
         self._active_server_id: str | None = None
+        self._usage_notice_prompting = False
 
     def initialize(self, parent: "MainWindow") -> "RemotePage":
         """页面初始化, 由主窗口在创建时调用。"""
@@ -329,6 +375,35 @@ class RemotePage(QWidget):
 
         PageStyleSheet.REMOTE.apply(self)
         return self
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt 重写
+        super().showEvent(event)
+        if not cfg.get(cfg.remote_usage_notice_accepted) and not self._usage_notice_prompting:
+            QTimer.singleShot(0, self._prompt_usage_notice_if_needed)
+
+    def _prompt_usage_notice_if_needed(self) -> None:
+        if self.isVisible() and not cfg.get(cfg.remote_usage_notice_accepted):
+            self._ensure_usage_notice_accepted(notify_cancel=False)
+
+    def _ensure_usage_notice_accepted(self, *, notify_cancel: bool = True) -> bool:
+        if cfg.get(cfg.remote_usage_notice_accepted):
+            return True
+        if self._usage_notice_prompting:
+            return False
+
+        self._usage_notice_prompting = True
+        try:
+            dialog = RemoteUsageNoticeBox(self.window())
+            if dialog.exec() and dialog.is_accepted():
+                cfg.set(cfg.remote_usage_notice_accepted, True)
+                success_bar(self.tr("已启用远程功能"), parent=self)
+                return True
+        finally:
+            self._usage_notice_prompting = False
+
+        if notify_cancel:
+            info_bar(self.tr("未确认远程功能使用提示，本次操作已取消"), parent=self)
+        return False
 
     # ---------- UI 构建 ----------
     def _build_ui(self) -> None:
@@ -495,6 +570,8 @@ class RemotePage(QWidget):
     # 操作回调 - 由卡片信号触发或测试代码直接调用
     # ============================================================
     def _on_add(self) -> None:
+        if not self._ensure_usage_notice_accepted():
+            return
         manager = it(ServerManager)
         # P4 F5.2: 让对话框使用与 ServerManager 同款的 CredentialStore, 复用其
         # ``is_available`` 探测结果, 避免实例间结论不一致.
@@ -518,6 +595,8 @@ class RemotePage(QWidget):
             success_bar(f"已添加服务器: {profile.name}", parent=self)
 
     def _on_edit(self, server_id: str | None = None) -> None:
+        if not self._ensure_usage_notice_accepted():
+            return
         sid = self._resolve_sid(server_id)
         if not sid:
             return
@@ -550,6 +629,8 @@ class RemotePage(QWidget):
             success_bar(f"已更新服务器: {updated.name}", parent=self)
 
     def _on_test(self, server_id: str | None = None) -> None:
+        if not self._ensure_usage_notice_accepted():
+            return
         sid = self._resolve_sid(server_id)
         if not sid:
             return
@@ -611,6 +692,8 @@ class RemotePage(QWidget):
 
     # ---------- P1: 部署 ----------
     def _on_deploy(self, server_id: str | None = None) -> None:
+        if not self._ensure_usage_notice_accepted():
+            return
         sid = self._resolve_sid(server_id)
         if not sid:
             return
@@ -689,6 +772,8 @@ class RemotePage(QWidget):
     # ---------- P3.W2 (A): 单台刷新版本 / 强制更新 / 强制重装 ----------
     def _on_redetect_versions_selected(self, server_id: str | None = None) -> None:
         """对指定 (或当前活跃) 服务器后台探测版本, 不重跑安装脚本。"""
+        if not self._ensure_usage_notice_accepted():
+            return
         sid = self._resolve_sid(server_id)
         if not sid:
             return
@@ -741,6 +826,8 @@ class RemotePage(QWidget):
         force_linuxqq_reinstall: bool,
     ) -> None:
         """`强制更新/重装` 的公用路径: 二次确认 + 弹控制台 + 丢给 [`DeploymentRunner`]."""
+        if not self._ensure_usage_notice_accepted():
+            return
         sid = self._resolve_sid(server_id)
         if not sid:
             return
@@ -782,6 +869,8 @@ class RemotePage(QWidget):
         所有维护操作 (刷新版本 / 强制更新 / 强制重装 / 回滚) 现在均通过此对话框访问,
         不再在卡片上散落多个按钮.
         """
+        if not self._ensure_usage_notice_accepted():
+            return
         sid = self._resolve_sid(server_id)
         if not sid:
             return
@@ -807,6 +896,8 @@ class RemotePage(QWidget):
     # ---------- P3.W2 (F): 回滚部署 ----------
     def _on_rollback(self, server_id: str | None = None) -> None:
         """手动触发远端部署回滚; 必须二次确认 + 选择 ``include_qq``."""
+        if not self._ensure_usage_notice_accepted():
+            return
         sid = self._resolve_sid(server_id)
         if not sid:
             return
@@ -846,6 +937,8 @@ class RemotePage(QWidget):
     # ---------- 刷新: 重载列表 + 后台批量探测版本 ----------
     def _on_refresh(self) -> None:
         """刷新按钮: 重载 UI + 对所有已部署的服务器后台触发版本探测。"""
+        if not self._ensure_usage_notice_accepted():
+            return
         self._reload()
         manager = it(ServerManager)
         triggered: list[str] = []
@@ -883,6 +976,8 @@ class RemotePage(QWidget):
         已绑定到 ``ServerManager``, 这样资源采样 worker 才会在用户真正需要总览时启动,
         与 W1/W2 既有路径解耦.
         """
+        if not self._ensure_usage_notice_accepted():
+            return
         # 项目内模块导入: 延迟 import 避免页面初始化阶段引入 W2 资源监控依赖
         from src.ui.components.status_overview_dialog import StatusOverviewDialog
 

@@ -161,6 +161,7 @@ def remote_page(
     page._reload()
     # 屏蔽部署控制台弹窗 (单元测试不需要真实窗口)
     monkeypatch.setattr(page, "_open_or_focus_console", lambda *_a, **_k: None)
+    monkeypatch.setattr(page, "_ensure_usage_notice_accepted", lambda *_a, **_k: True)
     return page
 
 
