@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # 标准库导入
 import shutil
+import tempfile
 import winreg
 from pathlib import Path
 from abc import ABC
@@ -9,6 +10,14 @@ from abc import ABC
 from src.core.platform.app_paths import resolve_app_base_path, resolve_app_data_path
 from src.core.logging import LogSource, LogType, logger
 from creart import exists_module, AbstractCreator, CreateTargetInfo, add_creator
+
+
+# 更新流程运行结束后可能遗留的文件名模式, 由 path_validator 清理
+_UPDATE_LEFTOVER_PATTERNS: tuple[str, ...] = (
+    "NapCatQQ-Desktop*.msi",
+    "msi_update.log",
+    "update_msi.bat",
+)
 
 
 class OldVersionPath:
@@ -84,6 +93,58 @@ class PathFunc:
                 logger.info(f"创建路径 {name.center(8)} 成功", LogType.FILE_FUNC, LogSource.CORE)
             else:
                 logger.info(f"路径 {name.center(8)} 已存在", LogType.FILE_FUNC, LogSource.CORE)
+
+        self.cleanup_stale_update_artifacts()
+
+    def cleanup_stale_update_artifacts(self) -> None:
+        """清理 Desktop 更新流程遗留的安装包等临时文件.
+
+        msiexec 在新版应用启动前已经退出, 此时残留在 ``runtime/tmp`` 与系统临时目录
+        ``%TEMP%/NapCatQQ-Desktop/update`` 下的 MSI 安装包不再被使用, 应当主动清理,
+        否则会持续占用 ``C:\\ProgramData\\NapCatQQ Desktop\\runtime\\tmp`` 空间.
+
+        本方法只清理已知的更新产物 (MSI 文件、更新日志、旧版批处理脚本),
+        不会触碰 ``.msi.part`` 等仍在下载的中间文件, 以保留断点续传能力.
+        """
+        candidate_dirs: list[Path] = [self.tmp_path]
+        try:
+            candidate_dirs.append(Path(tempfile.gettempdir()) / "NapCatQQ-Desktop" / "update")
+        except OSError as exc:
+            logger.warning(
+                f"获取系统临时目录失败, 跳过备用更新目录清理: {exc}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+
+        for directory in candidate_dirs:
+            try:
+                if not directory.is_dir():
+                    continue
+            except OSError as exc:
+                logger.warning(
+                    f"检查更新临时目录失败 {directory}: {exc}",
+                    LogType.FILE_FUNC,
+                    LogSource.CORE,
+                )
+                continue
+
+            for pattern in _UPDATE_LEFTOVER_PATTERNS:
+                for leftover in directory.glob(pattern):
+                    if not leftover.is_file():
+                        continue
+                    try:
+                        leftover.unlink()
+                        logger.info(
+                            f"已清理更新残留文件: {leftover}",
+                            LogType.FILE_FUNC,
+                            LogSource.CORE,
+                        )
+                    except OSError as exc:
+                        logger.warning(
+                            f"清理更新残留文件失败 {leftover}: {exc}",
+                            LogType.FILE_FUNC,
+                            LogSource.CORE,
+                        )
 
     @staticmethod
     def get_qq_path() -> Path | None:

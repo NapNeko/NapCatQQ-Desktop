@@ -410,8 +410,11 @@ class RemoteBackend(OperationBackend):
         *,
         progress: ProgressCallback | None = None,
         log_callback=None,
+        progress_log_callback=None,
         force_update: bool = False,
         expected_sha512: str | None = None,
+        local_archive_cache: Path | None = None,
+        should_cancel=None,
     ) -> None:
         """P1: 远端安装/更新 NapCat. 
 
@@ -422,10 +425,17 @@ class RemoteBackend(OperationBackend):
         默认情况下脚本会复用远端已有 NapCat 安装. 
 
         ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显. 
+        ``progress_log_callback``: ``\\r`` 终止的瞬时刷新行 (dnf/apt/curl 进度条) 单独
+        回调, 设置后这类行 *不* 再走 ``log_callback``, 由调用方做"原地覆盖"渲染. 
 
         ``expected_sha512`` (P5 F1.4): 期望的 ``NapCat.Shell.zip`` SHA512 (128 位 hex);
         提供时远端脚本会做 SHA512 完整性校验, 不一致以退出码 36 中断.
         ``None`` 跳过校验, 兼容上游 hash 数据不可用的离线场景.
+
+        ``local_archive_cache``: 本机预下载缓存路径. 远端无法直连 ``github.com`` 时
+        改在 Desktop 本机下载 ``NapCat.Shell.zip`` 并通过 SFTP 上传, 让远端脚本
+        复用归档跳过 GitHub. ``None`` 关闭兜底; 见
+        [`local_napcat_fallback`](src/core/remote/local_napcat_fallback.py).
         """
         if archive_path is not None:
             # P1 不实现自定义包路径, 但仍允许调用方传参 (直接忽略并 logger.warning 比抛错更友好) 
@@ -440,8 +450,11 @@ class RemoteBackend(OperationBackend):
         self._deployment.install_napcat(
             progress=progress,
             log_callback=log_callback,
+            progress_log_callback=progress_log_callback,
             force_update=force_update,
             expected_sha512=expected_sha512,
+            local_archive_cache=local_archive_cache,
+            should_cancel=should_cancel,
         )
 
     def install_qq(
@@ -449,17 +462,21 @@ class RemoteBackend(OperationBackend):
         *,
         progress: ProgressCallback | None = None,
         log_callback=None,
+        progress_log_callback=None,
         force_reinstall: bool = False,
     ) -> None:
         """P1: 远端安装 LinuxQQ rootless. 
 
         ``force_reinstall=True`` 强制重装(会先备份 NapCat 配置再 ``rm -rf $install_base_dir/opt`` 后重新解压). 
         ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显. 
+        ``progress_log_callback``: ``\\r`` 终止的瞬时刷新行 (dnf/apt/curl 进度条) 单独
+        回调, 设置后这类行 *不* 再走 ``log_callback``, 由调用方做"原地覆盖"渲染. 
         """
         self._ensure_connected()
         self._deployment.install_linuxqq(
             progress=progress,
             log_callback=log_callback,
+            progress_log_callback=progress_log_callback,
             force_reinstall=force_reinstall,
         )
 
