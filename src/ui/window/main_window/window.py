@@ -51,6 +51,7 @@ class MainWindow(MSFluentWindow):
         self._set_item()
         self._set_tray_icon()
         self._install_progress_info_bar_bridge()
+        self._install_host_key_dialog_bridge()
 
         # 组件加载完成结束 SplashScreen
         self.splash_screen.finish()
@@ -68,6 +69,25 @@ class MainWindow(MSFluentWindow):
         from src.ui.components.progress_info_bar_bridge import ProgressInfoBarBridge
 
         self._progress_info_bar_bridge = ProgressInfoBarBridge(self)
+
+    def _install_host_key_dialog_bridge(self) -> None:
+        """启动期注册 [`HostKeyDialogBridge`](src/ui/components/host_key_confirm_dialog.py).
+
+        P4 F5.1 缺失补齐: 把交互式主机指纹确认弹窗的回调挂上, 让
+        ``host_key_policy="interactive"`` 的 SSH 连接能在首次未知指纹时弹窗,
+        而不是无声兜底为 ``reject_all_callback`` 一律拒绝. 调用幂等, 多次无副作用.
+        """
+        # 局部 import: 避免主窗口顶层依赖 host_key_confirm_dialog (该模块本身在
+        # 启动早期被引用时会触发 paramiko import, 而某些容器环境无 paramiko).
+        from src.ui.components.host_key_confirm_dialog import bootstrap_host_key_dialog
+
+        try:
+            bootstrap_host_key_dialog()
+        except Exception as exc:  # noqa: BLE001 - 任何注册失败都不应阻断主窗口启动
+            logger.warning(
+                f"HostKeyDialogBridge 注册失败 (远端 SSH 首次连接将兜底为拒绝): {exc!r}",
+                log_source=LogSource.UI,
+            )
 
     def _set_window(self) -> None:
         """
