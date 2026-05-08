@@ -191,12 +191,36 @@ install_missing_dependencies() {
     return
   fi
 
-  sudo dnf install --allowerasing -y \
-    curl unzip xorg-x11-server-Xvfb xauth procps-ng jq python3 rpm2cpio cpio \
+  # RHEL 系扩展支持: CentOS / Rocky / Alma 等最小化镜像缺 ``xorg-x11-server-Xvfb``
+  # 等图形依赖, 需要先启用 EPEL. 失败时不阻断, 后续 dnf install 仍会以 ``|| true``
+  # 兜底, 避免 sudo 不可用时让整个安装直接退出.
+  sudo dnf install -y epel-release || true
+  # CRB / PowerTools 在 EL 9 上是部分依赖的来源 (例如 libXScrnSaver), 启用一下;
+  # 在 Fedora 上没有这个 repo, ``config-manager --set-enabled`` 会直接失败, 走 || true.
+  sudo dnf config-manager --set-enabled crb >/dev/null 2>&1 || \
+    sudo dnf config-manager --set-enabled powertools >/dev/null 2>&1 || true
+
+  # RHEL 9 / CentOS Stream 9 的两个坑:
+  # 1. ``rpm2cpio`` **不是**独立包, 它由 ``rpm`` 包自带 (rpm 默认已预装),
+  #    在包列表里写 rpm2cpio 会报 "No match for argument: rpm2cpio".
+  # 2. dnf4 (RHEL 9) 默认是**原子事务**: 任何一个包名匹配不上, 整个 transaction
+  #    直接 abort, ``|| true`` 兜不住整个进程的失败 (因为根本没装任何东西).
+  #    ``--setopt=strict=0`` 等价于 dnf5 的 ``--skip-unavailable``, dnf4/dnf5 通用,
+  #    会让 dnf 跳过无法解析的包名/依赖, 把能装的装上.
+  # xauth 在 RHEL 系上由 ``xorg-x11-xauth`` 提供; 旧名 ``xauth`` 在 RHEL 9 不存在.
+  sudo dnf install --allowerasing --setopt=strict=0 -y \
+    curl unzip xorg-x11-server-Xvfb xorg-x11-xauth procps-ng jq python3 cpio \
     nss mesa-libgbm atk at-spi2-atk gtk3 alsa-lib pango cairo libdrm \
     libXcursor libXrandr libXdamage libXcomposite libXfixes libXrender libXi \
     libXtst libXScrnSaver cups-libs libxkbcommon xcb-util xcb-util-image \
     xcb-util-wm xcb-util-keysyms xcb-util-renderutil fontconfig dejavu-sans-fonts || true
+
+  # 冗余兜底: 即便上一步整体异常或 strict=0 行为漂移, 单独再试一次 xvfb-run 提供方.
+  # ``xorg-x11-server-Xvfb`` 在 RHEL 9 / Fedora 上同时提供 ``Xvfb`` 与 ``xvfb-run``,
+  # 是 LinuxQQ 无头启动唯一硬依赖, 不能容忍它没装上.
+  if ! command -v xvfb-run >/dev/null 2>&1; then
+    sudo dnf install -y xorg-x11-server-Xvfb || true
+  fi
 }
 
 download_file() {
