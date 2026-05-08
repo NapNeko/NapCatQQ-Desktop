@@ -24,6 +24,7 @@ dist/
 *.egg
 __pycache__/
 *$py.class
+.ruff_cache/
 
 ### 日志和临时文件 ###
 log/
