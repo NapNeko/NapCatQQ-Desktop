@@ -23,6 +23,7 @@ from typing import Literal
 from src.core.config.config_export import ExportExecutionPlan, apply_config_export, scan_current_config_export
 from src.core.logging import LogSource, LogType, logger
 
+from .distro_matrix import DistroEntry, DistroFamily, lookup_by_id_like, lookup_distro
 from .errors import RemoteCommandError, SSHConnectionError
 from .execution_backend import ExecutionBackend, RemoteExecutionBackend
 from .models import LinuxCorePaths, RemoteCommandResult
@@ -60,6 +61,27 @@ _NAPCAT_VERSION_PATTERN = re.compile(
 _QQ_VERSION_PATTERN = re.compile(r'"version"\s*:\s*"([^"]+)"')
 
 
+CompatStatus = Literal["supported", "unknown_but_runnable", "unsupported"]
+
+
+@dataclass(slots=True)
+class CompatibilityReport:
+    """远端环境兼容性评估结果 (扩展 SSH 支持边界后引入).
+
+    - ``compat_status``: 兜底分级, ``unsupported`` 时 [`ServerManager.deploy_server`]
+      (src/core/remote/server_manager.py) 会以 ``stage="preflight"`` 提前失败
+    - ``distro_entry``: 命中 [`KNOWN_DISTROS`](src/core/remote/distro_matrix.py)
+      时为对应 entry; 通过 ID_LIKE 兜底命中也会写这里
+    - ``family``: 推断到的发行版家族 (``debian`` / ``rhel``); 未命中时为 ``None``
+    - ``reasons``: 给用户看的人话原因列表 (中文短句), 已脱敏
+    """
+
+    compat_status: CompatStatus
+    distro_entry: DistroEntry | None
+    family: DistroFamily | None
+    reasons: tuple[str, ...] = ()
+
+
 @dataclass(slots=True)
 class LinuxCoreDeploymentProbe:
     """Linux Core 环境探测结果 (P1 增强版) . """
@@ -80,6 +102,7 @@ class LinuxCoreDeploymentProbe:
     has_napcat: bool
     installed_qq_version: str | None
     installed_napcat_version: str | None
+    id_like: str | None = None
 
     @property
     def is_supported_arch(self) -> bool:
@@ -89,6 +112,57 @@ class LinuxCoreDeploymentProbe:
     @property
     def has_package_installer(self) -> bool:
         return self.has_dpkg or self.has_rpm2cpio
+
+    def evaluate_compatibility(self) -> CompatibilityReport:
+        """基于探测结果与 [`distro_matrix`](src/core/remote/distro_matrix.py)
+        给出 deploy preflight 用的兼容性评估.
+
+        判定优先级:
+
+        1. 架构白名单 (amd64 / arm64) 不通过 -> ``unsupported``
+        2. 没有任何 LinuxQQ 解包能力 (``has_dpkg`` 与 ``has_rpm2cpio`` 均 False)
+           -> ``unsupported``
+        3. ``distro_id`` / ``id_like`` 命中 [`KNOWN_DISTROS`]
+           且 ``qq_installer`` 与探测到的解包工具一致 -> ``supported``
+        4. 命中但 ``qq_installer`` 与探测工具不匹配 (例如声称 rhel 但远端没有
+           rpm2cpio) -> ``unsupported`` 并解释原因
+        5. 未命中 (``distro_id=None`` 或 distro 不在白名单) 但探测到 dpkg / rpm2cpio
+           -> ``unknown_but_runnable``
+        """
+        reasons: list[str] = []
+
+        if not self.is_supported_arch:
+            reasons.append(f"不支持的 CPU 架构: {self.architecture or 'unknown'} (仅支持 amd64 / arm64)")
+            return CompatibilityReport("unsupported", None, None, tuple(reasons))
+
+        if not (self.has_dpkg or self.has_rpm2cpio):
+            reasons.append(
+                "远端缺少 LinuxQQ 解包工具: 既没有 dpkg, 也没有 rpm2cpio + cpio"
+            )
+            return CompatibilityReport("unsupported", None, None, tuple(reasons))
+
+        entry = lookup_distro(self.distro_id) or lookup_by_id_like(self.id_like)
+
+        if entry is not None:
+            installer_ok = (
+                (entry.qq_installer == "dpkg" and self.has_dpkg)
+                or (entry.qq_installer == "rpm" and self.has_rpm2cpio)
+            )
+            if installer_ok:
+                return CompatibilityReport("supported", entry, entry.family, ())
+            reasons.append(
+                f"已识别为 {entry.display_name}, 但远端缺少 "
+                f"{'dpkg' if entry.qq_installer == 'dpkg' else 'rpm2cpio + cpio'}, "
+                "无法解包对应 LinuxQQ 安装包"
+            )
+            return CompatibilityReport("unsupported", entry, entry.family, tuple(reasons))
+
+        # 未识别但有 installer: 让 deploy 走 best-effort
+        reasons.append(
+            f"未识别的发行版 (distro_id={self.distro_id or 'unknown'}), "
+            "但探测到可用的包管理器, 将以通用流程尝试部署"
+        )
+        return CompatibilityReport("unknown_but_runnable", None, None, tuple(reasons))
 
 
 @dataclass(slots=True)
@@ -157,7 +231,7 @@ class LinuxCoreDeployment:
         os_release_result = self.backend.run(
             "test -f /etc/os-release && cat /etc/os-release || true"
         )
-        distro_id, distro_version = self._parse_os_release(os_release_result.stdout)
+        distro_id, distro_version, id_like = self._parse_os_release(os_release_result.stdout)
 
         has_bash = self.backend.run("command -v bash >/dev/null 2>&1").ok
         has_tar = self.backend.run("command -v tar >/dev/null 2>&1").ok
@@ -216,6 +290,7 @@ class LinuxCoreDeployment:
             has_napcat=has_napcat,
             installed_qq_version=installed_qq_version,
             installed_napcat_version=installed_napcat_version,
+            id_like=id_like,
         )
 
     def _detect_napcat_version(self) -> str | None:
@@ -255,12 +330,19 @@ class LinuxCoreDeployment:
         return match.group(1).strip() or None
 
     @staticmethod
-    def _parse_os_release(text: str) -> tuple[str | None, str | None]:
-        """解析 ``/etc/os-release`` 内容, 提取 ID 与 VERSION_ID. """
+    def _parse_os_release(text: str) -> tuple[str | None, str | None, str | None]:
+        """解析 ``/etc/os-release`` 内容, 提取 ID / VERSION_ID / ID_LIKE.
+
+        ID_LIKE 字段在派生发行版上至关重要: Rocky / Alma / Mint 这类发行版
+        ``ID`` 各异但 ``ID_LIKE`` 会列出父发行版 (rhel / centos / debian / ubuntu),
+        [`distro_matrix.lookup_by_id_like`](src/core/remote/distro_matrix.py)
+        据此把它们落到正确的家族上.
+        """
         if not text or not text.strip():
-            return None, None
+            return None, None, None
         distro_id: str | None = None
         distro_version: str | None = None
+        id_like: str | None = None
         for raw_line in text.splitlines():
             line = raw_line.strip()
             if not line or "=" not in line or line.startswith("#"):
@@ -272,7 +354,9 @@ class LinuxCoreDeployment:
                 distro_id = value or None
             elif key == "VERSION_ID" and not distro_version:
                 distro_version = value or None
-        return distro_id, distro_version
+            elif key == "ID_LIKE" and not id_like:
+                id_like = value or None
+        return distro_id, distro_version, id_like
 
     @staticmethod
     def _normalize_arch(raw: str) -> NormalizedArch | None:
@@ -303,6 +387,7 @@ class LinuxCoreDeployment:
         *,
         progress: ProgressCallback | None = None,
         log_callback: LogLineCallback | None = None,
+        progress_log_callback: LogLineCallback | None = None,
         force_reinstall: bool = False,
     ) -> InstallStepResult:
         """在远端安装 LinuxQQ rootless. 
@@ -310,6 +395,9 @@ class LinuxCoreDeployment:
         Args:
             progress: 进度协议回调, 由 ``[PROGRESS] N message`` 行触发
             log_callback: 原始日志行回调, 用于把脚本 stdout 实时透传给"部署控制台"
+            progress_log_callback: ``\\r`` 终止的瞬时刷新行 (dnf/apt/curl 进度条) 回调,
+                设置后这类行 *不* 再走 ``log_callback``, 由调用方自行决定如何渲染
+                (典型: UI 原地覆盖上一行) 
             force_reinstall: 强制重装(会先备份 NapCat 配置再 ``rm -rf $install_base_dir/opt`` 重新解压)
         """
         logger.info(
@@ -324,7 +412,12 @@ class LinuxCoreDeployment:
 
         env_prefix = "FORCE_LINUXQQ_REINSTALL=1 " if force_reinstall else ""
         command = f'{env_prefix}bash "{remote_script_path}"'
-        result, progress_events = self._run_script_with_progress(command, progress, log_callback)
+        result, progress_events = self._run_script_with_progress(
+            command,
+            progress,
+            log_callback,
+            progress_log_callback=progress_log_callback,
+        )
 
         step_result = InstallStepResult(
             step="install_linuxqq",
@@ -356,25 +449,42 @@ class LinuxCoreDeployment:
         *,
         progress: ProgressCallback | None = None,
         log_callback: LogLineCallback | None = None,
+        progress_log_callback: LogLineCallback | None = None,
         force_update: bool = False,
         download_url: str | None = None,
         expected_sha512: str | None = None,
+        local_archive_cache: Path | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> InstallStepResult:
         """在远端安装/更新 NapCat. 
 
         默认仅在远端不存在 NapCat 时下载; 设置 ``force_update=True`` 强制重新下载并解压. 
         部署完成后会自动把 launcher 脚本上传到 ``$workspace_dir/napcat.sh``. 
 
+        **本机下载兜底**: 当远端无法直连 ``github.com`` 时 (典型: 国内云服务商 + 出方向受限),
+        若 ``local_archive_cache`` 非空则改为在 Desktop 本机下载 NapCat.Shell.zip
+        (走 [`Urls.MIRROR_SITE`](src/core/network/urls.py) 镜像列表), 再通过 SFTP
+        上传到 ``${package_dir}/NapCat.Shell.zip``; 远端脚本里 ``[ -f archive ]`` 分支
+        会自动跳过下载并复用本地包. 远端能直连 GitHub 时该路径不会触发, 行为完全不变.
+        见 [`local_napcat_fallback`](src/core/remote/local_napcat_fallback.py).
+
         Args:
             progress: 进度协议回调, 由 ``[PROGRESS] N message`` 行触发
             log_callback: 原始日志行回调, 用于把脚本 stdout 实时透传给"部署控制台"
+            progress_log_callback: ``\\r`` 终止的瞬时刷新行 (dnf/apt/curl 进度条) 回调,
+                设置后这类行 *不* 再走 ``log_callback``, 由调用方自行决定如何渲染
+                (典型: UI 原地覆盖上一行) 
             force_update: 强制重新下载并解压 NapCat
-            download_url: 自定义下载地址(覆盖 ``NAPCAT_DOWNLOAD_URL``)
+            download_url: 自定义下载地址(覆盖 ``NAPCAT_DOWNLOAD_URL``); **设置后本机兜底
+                自动禁用**, 因为自定义 URL 可能就是为了绕过 GitHub, 应当尊重调用方意图
             expected_sha512: P5 F1.4: NapCat.Shell.zip 的期望 SHA512 (128 位 hex);
                 提供时通过 ``NAPCAT_EXPECTED_SHA512`` 环境变量传给远端脚本, 校验失败
                 远端会以退出码 36 中断, 本方法把该退出码转为
                 ``RemoteCommandError`` (调用方按 stage="install_napcat_verify" 区分).
                 ``None`` 时跳过校验, 远端仅记 warning 不阻断 (兼容老客户端).
+            local_archive_cache: 本机预下载缓存路径 (一般为
+                ``it(PathFunc).tmp_path / 'NapCat.Shell.zip'``). ``None`` 时**关闭**本机兜底,
+                直接交给远端脚本下载; 测试环境想强制兜底则注入 tmp 路径.
 
         Raises:
             RemoteCommandError: 远端脚本退出码非 0; 当 ``exit_status==36`` 时表示
@@ -385,12 +495,24 @@ class LinuxCoreDeployment:
             (
                 f"开始远端 NapCat 安装: napcat_dir={self.paths.napcat_dir}, "
                 f"force_update={force_update}, "
-                f"sha512_verify={'enabled' if expected_sha512 else 'skipped'}"
+                f"sha512_verify={'enabled' if expected_sha512 else 'skipped'}, "
+                f"local_fallback={'enabled' if local_archive_cache else 'disabled'}"
             ),
             LogType.NETWORK,
             LogSource.CORE,
         )
         self.initialize_layout()
+
+        # 远端 GitHub 连通性预检 + 必要时本机预下载并上传 archive (在脚本上传/执行之前).
+        # download_url 非空时跳过本机兜底, 尊重调用方"我有自己的镜像 URL"的意图.
+        if local_archive_cache is not None and not download_url:
+            self._maybe_prefetch_napcat_archive_via_local(
+                local_archive_cache=local_archive_cache,
+                expected_sha512=expected_sha512,
+                force_update=force_update,
+                should_cancel=should_cancel,
+                log_callback=log_callback,
+            )
 
         script_content = build_install_napcat_script(self._build_script_variables())
         remote_script_path = self._upload_script(script_content, "remote_install_napcat.sh")
@@ -406,7 +528,12 @@ class LinuxCoreDeployment:
         env_prefix = (" ".join(env_parts) + " ") if env_parts else ""
         command = f'{env_prefix}bash "{remote_script_path}"'
 
-        result, progress_events = self._run_script_with_progress(command, progress, log_callback)
+        result, progress_events = self._run_script_with_progress(
+            command,
+            progress,
+            log_callback,
+            progress_log_callback=progress_log_callback,
+        )
 
         step_result = InstallStepResult(
             step="install_napcat",
@@ -432,6 +559,130 @@ class LinuxCoreDeployment:
             LogSource.CORE,
         )
         return step_result
+
+    # ==================== 本机下载兜底 (P? F?.?) ====================
+    REMOTE_NAPCAT_ARCHIVE_NAME: str = "NapCat.Shell.zip"
+    """远端 ``${package_dir}`` 下 NapCat 归档的固定文件名;
+    必须与 [`remote_install_napcat.sh`](src/resource/script/remote_install_napcat.sh)
+    里 ``napcat_archive_path`` 的默认值同名, 否则脚本不会复用预上传归档."""
+
+    def _maybe_prefetch_napcat_archive_via_local(
+        self,
+        *,
+        local_archive_cache: Path,
+        expected_sha512: str | None,
+        force_update: bool,
+        log_callback: LogLineCallback | None,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> None:
+        """远端连不上 GitHub 时, 在本机下载 NapCat.Shell.zip 并 SFTP 上传到远端.
+
+        三层短路 (按代价从低到高依次判定):
+
+        1. **远端已有归档 + 非强制更新**: 直接复用, 不动本机也不上传
+        2. **远端能直连 GitHub**: 让脚本走自己的下载路径 (镜像/CDN 由 curl 处理)
+        3. **以上都不命中**: 本机下载 (走 [`Urls.MIRROR_SITE`](src/core/network/urls.py))
+           -> SFTP 上传到 ``${package_dir}/${REMOTE_NAPCAT_ARCHIVE_NAME}``
+
+        任何一步失败都**不抛**, 仅在 log_callback 里 emit ``[WARN]``: 让远端脚本
+        按原路径继续尝试, 给用户最后兜底的报错文案 (而不是在预检阶段就把流程挂掉).
+
+        Args:
+            local_archive_cache: 本机缓存路径, 由调用方决定 (生产 = ``PathFunc.tmp_path``,
+                测试 = tmp_path)
+            expected_sha512: 与 ``install_napcat`` 同字段; 用于本机下载产物校验
+            force_update: ``True`` 时跳过"远端已有归档"短路, 强制重下并覆盖上传
+            log_callback: 部署控制台行回调
+        """
+        # 延迟 import, 把 httpx / Urls 等 UI 链路依赖隔离到真正需要兜底的代码路径
+        from .local_napcat_fallback import (
+            backend_can_reach_github,
+            prefetch_napcat_archive_locally,
+        )
+
+        remote_archive_path = PurePosixPath(
+            self.paths.package_dir, self.REMOTE_NAPCAT_ARCHIVE_NAME
+        ).as_posix()
+
+        # 短路 1: 远端已有归档 + zip 完整性 OK + 非强制更新 -> 让脚本直接复用即可.
+        # 关键: 必须先用 ``unzip -t`` 验证完整性, 否则上一次失败 (例如 curl 中断) 留下的
+        # **损坏残件** 会被复用, 让 ``remote_install_napcat.sh`` 在解压阶段炸退出码 9
+        # ("End-of-central-directory signature not found"). 损坏时自动 ``rm -f`` 并落入
+        # 后续短路, 让 GitHub 直连 / 本机兜底重新拉一个干净的归档.
+        if not force_update:
+            check = self.backend.run(
+                f'test -f "{remote_archive_path}"', check=False
+            )
+            if check.exit_status == 0:
+                verify = self.backend.run(
+                    f'unzip -t "{remote_archive_path}" >/dev/null 2>&1',
+                    check=False,
+                )
+                if verify.exit_status == 0:
+                    if log_callback is not None:
+                        log_callback(
+                            f"[INFO] 远端已存在 NapCat 归档缓存 (zip 完整), 跳过本机预下载: {remote_archive_path}"
+                        )
+                    return
+                # 文件存在但损坏 (典型: 上一次下载中断的残件) -> 删除并继续兜底流程
+                self.backend.run(f'rm -f "{remote_archive_path}"', check=False)
+                if log_callback is not None:
+                    log_callback(
+                        f"[WARN] 远端 NapCat 归档损坏 (zip 校验失败), 已删除并重新下载: {remote_archive_path}"
+                    )
+
+        # 短路 2: 远端能直连 GitHub -> 让脚本自己处理, 行为完全不变
+        try:
+            reachable = backend_can_reach_github(self.backend, log_callback=log_callback)
+        except Exception as exc:  # noqa: BLE001 - 探测失败一律视为"该走兜底"
+            logger.warning(
+                f"GitHub 连通性探测失败, 走本机兜底: {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            reachable = False
+        if reachable:
+            return
+
+        # 短路 3: 走本机下载 + SFTP 上传; 任何异常都退回让远端脚本自处理
+        # (例外: RemoteDeploymentCancelledError 是用户取消语义, 必须透出给上层 server_manager)
+        if log_callback is not None:
+            log_callback(
+                "[WARN] 远端无法直连 GitHub, 切换到本机下载 + SFTP 上传兜底"
+            )
+        try:
+            prefetch_napcat_archive_locally(
+                target_path=local_archive_cache,
+                expected_sha512=expected_sha512,
+                log_callback=log_callback,
+                should_cancel=should_cancel,
+            )
+            # 上传前再检查一次取消, 避免下载完了用户已经点了取消还要白白做 SFTP
+            if should_cancel is not None and should_cancel():
+                from .errors import RemoteDeploymentCancelledError
+
+                raise RemoteDeploymentCancelledError()
+            self.backend.ensure_directory(self.paths.package_dir)
+            self.backend.upload_file(local_archive_cache, remote_archive_path)
+            if log_callback is not None:
+                log_callback(
+                    f"[INFO] 本机 NapCat 归档已上传到远端: {remote_archive_path}"
+                )
+        except Exception as exc:  # noqa: BLE001 - 任何失败都不让 install_napcat 直接挂
+            from .errors import RemoteDeploymentCancelledError
+
+            if isinstance(exc, RemoteDeploymentCancelledError):
+                # 用户主动取消: 不要降级为 "退回远端脚本", 直接透出让 server_manager 走 cancelled 分支
+                raise
+            logger.warning(
+                f"本机预下载/上传 NapCat 归档失败, 退回远端脚本下载: {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            if log_callback is not None:
+                log_callback(
+                    f"[WARN] 本机兜底失败, 退回远端脚本自下载 (仍可能因 GitHub 不通而失败): {exc}"
+                )
 
     def upload_launcher_script(self, remote_path: str | None = None) -> str:
         """上传 launcher 脚本并赋予可执行权限. """
@@ -723,11 +974,16 @@ class LinuxCoreDeployment:
         command: str,
         progress: ProgressCallback | None,
         log_callback: LogLineCallback | None = None,
+        progress_log_callback: LogLineCallback | None = None,
     ) -> tuple[RemoteCommandResult, list[tuple[int, str]]]:
         """执行脚本并解析 ``[PROGRESS] N message`` 行. 
 
         - ``progress``: 仅在匹配到 PROGRESS 协议行时触发
-        - ``log_callback``: 每行 stdout(含合并的 stderr) 都会触发一次, 用于"部署控制台"实时回显
+        - ``log_callback``: 每行 ``\\n`` 终止的最终 stdout(含合并的 stderr) 都会触发一次,
+          用于"部署控制台"实时回显
+        - ``progress_log_callback``: 每行 ``\\r`` 终止的瞬时刷新行 (dnf/apt/curl 进度条等)
+          触发一次. **不为 None 时**, 这类瞬时行 *不会* 再发往 ``log_callback``,
+          适合 UI 用 "原地覆盖上一行" 的方式渲染, 避免上千行刷屏污染部署控制台. 
 
         非 [`SSHClient`](src/core/remote/ssh_client.py) 的执行后端不支持流式读取,
         会退化为同步执行后再一次性解析进度行(仍能正确触发回调, 只是失去"实时性"). 
@@ -766,15 +1022,33 @@ class LinuxCoreDeployment:
                         LogSource.CORE,
                     )
 
+        def _on_progress_line(line: str) -> None:
+            # ``\r`` 终止的瞬时刷新行: dnf/apt/curl 进度条更新, 不参与 PROGRESS 协议
+            # 解析 (脚本侧的 [PROGRESS] 始终 \n 终止), 仅作 UI 实时回显. 
+            if progress_log_callback is None:
+                return
+            try:
+                progress_log_callback(line)
+            except Exception as exc:  # noqa: BLE001 - 回调失败不阻断部署
+                logger.warning(
+                    f"ProgressLogCallback 抛出异常: {exc}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+
         # 优先使用 SSHClient.exec_stream 实现实时进度
         if isinstance(self.backend, RemoteExecutionBackend):
             ssh_client: SSHClient = self.backend._ssh_client  # noqa: SLF001 - 同包私有访问
             # 部署脚本耗时常远超普通命令(apt-get / curl 大文件等), 使用专用的 script_timeout
             script_timeout = ssh_client.credentials.script_timeout
+            # 仅当上层提供了 progress_log_callback 时才把 \r 行单独路由,
+            # 否则保持旧行为 (\r 行仍走 on_stdout_line, 进入 captured_stdout) 
+            on_progress = _on_progress_line if progress_log_callback is not None else None
             try:
                 result = ssh_client.exec_stream(
                     command,
                     on_stdout_line=_on_line,
+                    on_stdout_progress=on_progress,
                     check=False,
                     merge_stderr=True,
                     timeout=script_timeout,

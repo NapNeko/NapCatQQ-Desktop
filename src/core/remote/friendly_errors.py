@@ -131,6 +131,11 @@ def _format_remote_command_error(exc: Exception) -> str:
 def _format_remote_deployment(exc: Exception) -> str:
     stage = getattr(exc, "stage", "") or "部署"
     text = str(exc).strip()
+    # ``stage="preflight"``: 远端兼容性体检未通过 (扩展 SSH 支持边界后引入).
+    # 文案已经在抛出处拼好(含 distro / 原因), 这里只要原样回显即可;
+    # text 为空时退化为通用提示, 避免出现 "远端 preflight 失败" 这种英文 stage 漏出来.
+    if stage == "preflight":
+        return text or "远端环境兼容性体检未通过, 请检查目标系统是否在支持列表内"
     # RemoteDeploymentError.__init__ 把 stage 也拼进 text 了, 直接用即可
     return text or f"远端 {stage} 失败"
 
