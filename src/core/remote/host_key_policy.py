@@ -207,6 +207,22 @@ def _format_host_entry(hostname: str, port: int) -> str:
     return f"[{hostname}]:{port}"
 
 
+def _strip_host_entry(host_entry: str) -> str:
+    """从 paramiko 传入的 ``[host]:port`` 中提取 bare host; 已是 bare 时原样返回.
+
+    paramiko ``SSHClient.connect`` 在 ``port != 22`` 时, 会把
+    ``server_hostkey_name`` 预先格式化为 ``[host]:port`` 再传给
+    ``MissingHostKeyPolicy.missing_host_key``. 我们内部 store 与 UI prompt
+    的契约都是 bare host + 独立 port, 必须先剥离, 否则 ``_format_host_entry``
+    会二次包装出 ``[[host]:port]:port`` 之类的废条目, 下次 lookup 永远命中不了.
+    """
+    if host_entry.startswith("[") and "]:" in host_entry:
+        end = host_entry.index("]:")
+        # 只取 ``[`` 与第一个 ``]:`` 之间的内容, 端口段直接丢
+        return host_entry[1:end]
+    return host_entry
+
+
 # ==================== paramiko policy ====================
 class _BasePolicy:
     """``paramiko.MissingHostKeyPolicy`` 兼容父类.
@@ -262,8 +278,13 @@ class InteractiveHostKeyPolicy(_BasePolicy):  # type: ignore[misc]
 
     # paramiko 接口
     def missing_host_key(self, client, hostname: str, key) -> None:  # noqa: D401
+        # paramiko 在 port != 22 时把 hostname 预先包装成 ``[host]:port``,
+        # 我们 store / prompt 的契约是 bare host + 独立 port, 这里先剥离一次,
+        # 之后所有写入都基于 bare host, 由 ``_format_host_entry`` 统一格式化.
+        bare_hostname = _strip_host_entry(hostname)
+
         prompt = HostKeyPrompt(
-            hostname=hostname,
+            hostname=bare_hostname,
             port=self._port,
             key_type=key.get_name(),
             fingerprint_sha256=compute_sha256_fingerprint(key),
@@ -279,13 +300,14 @@ class InteractiveHostKeyPolicy(_BasePolicy):  # type: ignore[misc]
 
         if decision is HostKeyDecision.REJECT:
             raise paramiko.SSHException(
-                f"用户拒绝信任主机指纹: {hostname} ({prompt.fingerprint_sha256})"
+                f"用户拒绝信任主机指纹: {bare_hostname} ({prompt.fingerprint_sha256})"
             )
 
         if decision is HostKeyDecision.TRUST_SAVE:
             # 注入 client 内存集合 + 持久化
-            client.get_host_keys().add(_format_host_entry(hostname, self._port), key.get_name(), key)
-            self._store.add(hostname, self._port, key)
+            entry = _format_host_entry(bare_hostname, self._port)
+            client.get_host_keys().add(entry, key.get_name(), key)
+            self._store.add(bare_hostname, self._port, key)
             try:
                 self._store.save()
             except OSError:

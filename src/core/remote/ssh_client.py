@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import shlex
 import socket
 import threading
@@ -24,6 +25,15 @@ try:
 except ImportError:  # pragma: no cover - 依赖缺失时在运行期给出清晰错误
     paramiko = None
 
+
+# paramiko 的 transport 线程会把"Error reading SSH protocol banner"等内部异常通过
+# ``self._log(ERROR, ...)`` 直接打到 root logger, 即便上层把 SSHException 捕获并
+# 走 ``friendly_errors`` 转成中文 InfoBar, 用户的 console 里仍会看到 paramiko 抛
+# 出来的 raw traceback, 体验很差. 我们自己已经在 ``connect`` / ``run`` 等入口把
+# 所有异常包好返回, paramiko 的 ERROR/WARNING 都是冗余信号, 静默掉即可.
+# 不全静默 (CRITICAL+1), 留 CRITICAL 给真正不可恢复的状况.
+logging.getLogger("paramiko").setLevel(logging.CRITICAL)
+
 _T = TypeVar("_T")
 
 
@@ -37,6 +47,11 @@ class _LineSplitter:
     - 单独的 ``\\n`` 作为换行
     - ``\\r`` 落在缓冲最末尾时延迟到下一次 ``feed`` 再决断, 防止跨读取边界的 CRLF 退化为两次切分
 
+    通过 [`feed_with_terminator`](src/core/remote/ssh_client.py) 还可以拿到行尾终止符
+    (``"\\n"`` / ``"\\r\\n"`` / ``"\\r"``), 调用方据此区分"已提交的最终行"与"原地刷新的
+    瞬时行", 后者是 ``dnf`` / ``apt`` / ``curl`` 等工具的进度条更新, 在终端 UI 中应当
+    覆盖上一行而非追加. 
+
     线程不安全, 每个 SSH 通道独占一个实例. 
     """
 
@@ -45,10 +60,14 @@ class _LineSplitter:
     def __init__(self) -> None:
         self._buffer = ""
 
-    def feed(self, chunk: str) -> list[str]:
-        """喂入新读到的字符串, 返回本次新切出的行(不含行尾). """
+    def feed_with_terminator(self, chunk: str) -> list[tuple[str, str]]:
+        """喂入新读到的字符串, 返回 ``(line, terminator)`` 元组列表. 
+
+        ``terminator`` 为消费掉的换行符: ``"\\n"`` / ``"\\r\\n"`` / ``"\\r"``. 
+        ``"\\r"`` 表示原地刷新的瞬时行 (典型场景: ``dnf`` 进度条). 
+        """
         self._buffer += chunk
-        lines: list[str] = []
+        out: list[tuple[str, str]] = []
         while True:
             cr_pos = self._buffer.find("\r")
             lf_pos = self._buffer.find("\n")
@@ -60,25 +79,39 @@ class _LineSplitter:
             if self._buffer[cut] == "\r" and cut == len(self._buffer) - 1:
                 break
             line = self._buffer[:cut]
+            ch = self._buffer[cut]
             # \r\n 紧挨着, 一次性消费两个字符
             if (
-                self._buffer[cut] == "\r"
+                ch == "\r"
                 and cut + 1 < len(self._buffer)
                 and self._buffer[cut + 1] == "\n"
             ):
+                terminator = "\r\n"
                 self._buffer = self._buffer[cut + 2 :]
-            else:
+            elif ch == "\r":
+                terminator = "\r"
                 self._buffer = self._buffer[cut + 1 :]
-            lines.append(line)
-        return lines
+            else:
+                terminator = "\n"
+                self._buffer = self._buffer[cut + 1 :]
+            out.append((line, terminator))
+        return out
 
-    def flush(self) -> list[str]:
-        """流读取结束时调用, 把残留缓冲作为最后一行返回. """
+    def feed(self, chunk: str) -> list[str]:
+        """喂入新读到的字符串, 返回本次新切出的行(不含行尾). """
+        return [line for line, _ in self.feed_with_terminator(chunk)]
+
+    def flush_with_terminator(self) -> list[tuple[str, str]]:
+        """流读取结束时调用, 把残留缓冲作为最后一行返回 (terminator 为空字符串). """
         if not self._buffer:
             return []
         last = self._buffer
         self._buffer = ""
-        return [last]
+        return [(last, "")]
+
+    def flush(self) -> list[str]:
+        """流读取结束时调用, 把残留缓冲作为最后一行返回. """
+        return [line for line, _ in self.flush_with_terminator()]
 
 
 class SSHClient:
@@ -118,13 +151,20 @@ class SSHClient:
         client = paramiko.SSHClient()
         self._apply_host_key_policy(client)
 
+        # banner_timeout 与 connect_timeout 解耦: TCP 握手 10s 已经够用, 但 SSH banner
+        # 协商有时受远端高负载 / fail2ban 速率限制 / 反代握手影响, 10s 太紧很容易抛
+        # ``Error reading SSH protocol banner``. 给 banner / auth 一个更宽松的下限,
+        # 与 OpenSSH 客户端默认 ``ConnectTimeout`` 但 ``AddKeysToAgent / Ciphers`` 协商
+        # 容忍度对齐. 这样普通用户用密码弹窗确认指纹时, 不会因为指纹对话框停留几十秒
+        # 把 banner 阶段拖超时.
+        _negotiation_timeout = max(self.credentials.connect_timeout * 3, 30.0)
         connect_kwargs: dict[str, Any] = {
             "hostname": self.credentials.host,
             "port": self.credentials.port,
             "username": self.credentials.username,
             "timeout": self.credentials.connect_timeout,
-            "auth_timeout": self.credentials.connect_timeout,
-            "banner_timeout": self.credentials.connect_timeout,
+            "auth_timeout": _negotiation_timeout,
+            "banner_timeout": _negotiation_timeout,
             "allow_agent": self.credentials.allow_agent,
             "look_for_keys": self.credentials.look_for_keys,
         }
@@ -288,6 +328,74 @@ class SSHClient:
                 )
                 raise
 
+    # OpenSSH 公钥首段允许的算法白名单, 防止把不可信文本误当公钥下发到 authorized_keys.
+    _ALLOWED_PUBKEY_TYPES: frozenset[str] = frozenset({
+        "ssh-ed25519",
+        "ssh-rsa",
+        "ssh-dss",
+        "ecdsa-sha2-nistp256",
+        "ecdsa-sha2-nistp384",
+        "ecdsa-sha2-nistp521",
+        "sk-ssh-ed25519@openssh.com",
+        "sk-ecdsa-sha2-nistp256@openssh.com",
+    })
+
+    def install_authorized_key(self, public_key_line: str) -> RemoteCommandResult:
+        """把单行 OpenSSH 公钥幂等写入远端 ``~/.ssh/authorized_keys``.
+
+        语义对齐 ``ssh-copy-id`` 但不调用本地 OpenSSH 客户端: 只通过当前 SSH 会话
+        执行一段 POSIX shell, 创建/规整 ``~/.ssh`` 与 ``authorized_keys`` 权限,
+        通过 ``grep -qxF`` 做整行精确匹配后再 ``printf >> append``, 已存在则不重复.
+
+        安全考量:
+        - 算法前缀必须命中 [`_ALLOWED_PUBKEY_TYPES`]; 拒绝形如 ``$(rm -rf ~)`` 之流.
+        - 公钥本身不允许包含换行/回车, 防止伪造多行注入.
+        - 公钥以 POSIX 单引号字面量插入命令, 单引号自身按 ``'\\''`` 关闭-转义-重开;
+          shell 不会对其做任何展开, ``$()`` / 反引号 / ``$VAR`` 全部按字面量保留.
+        - 远端命令以 ``set -e`` + ``umask 077`` 起头, 任何中间步骤失败都会以非零状态退出.
+
+        Args:
+            public_key_line: ``ssh-ed25519 AAAA... comment`` 之类的单行 OpenSSH 公钥.
+
+        Returns:
+            [`RemoteCommandResult`](src/core/remote/models.py): 成功时 ``exit_status==0``;
+            ``check=True`` 已在内部启用, 远端非零状态会抛 [`RemoteCommandError`].
+
+        Raises:
+            ValueError: 公钥格式非法(空 / 含换行 / 算法前缀不在白名单).
+            RemoteCommandError: 远端命令返回非零状态.
+            SSHConnectionError / RemoteError: SSH 会话异常.
+        """
+        line = (public_key_line or "").strip()
+        if not line:
+            raise ValueError("public_key_line 不能为空")
+        if "\n" in line or "\r" in line:
+            raise ValueError("public_key_line 不能含有换行, 必须是单行 OpenSSH 公钥")
+        head = line.split(" ", 1)[0]
+        if head not in self._ALLOWED_PUBKEY_TYPES:
+            raise ValueError(f"未识别的公钥算法前缀: {head!r}")
+
+        # POSIX 单引号字面量: 关闭 -> 转义 -> 重开
+        quoted_key = "'" + line.replace("'", "'\\''") + "'"
+
+        # 注意:
+        # - 整段命令首行 ``set -e`` 让任何 mkdir / chmod / touch 失败都中止;
+        # - ``umask 077`` 保证新建的 authorized_keys 默认 600;
+        # - ``grep -qxF -- <key>`` 做整行 (-x) 字面 (-F) 精确匹配, 已存在则跳过 append;
+        # - ``printf %s\\n`` 不解释转义, 不会被公钥中的 ``\n`` 字面骗到.
+        command = (
+            "set -e; "
+            "umask 077; "
+            'mkdir -p "$HOME/.ssh"; '
+            'chmod 700 "$HOME/.ssh"; '
+            'touch "$HOME/.ssh/authorized_keys"; '
+            'chmod 600 "$HOME/.ssh/authorized_keys"; '
+            f'if ! grep -qxF -- {quoted_key} "$HOME/.ssh/authorized_keys"; then '
+            f'printf "%s\\n" {quoted_key} >> "$HOME/.ssh/authorized_keys"; '
+            "fi"
+        )
+        return self.run(command, check=True)
+
     def run(self, command: str, *, timeout: float | None = None, get_pty: bool = False, check: bool = False) -> RemoteCommandResult:
         """执行远程命令. """
         return self._call_with_retry(
@@ -343,6 +451,7 @@ class SSHClient:
         *,
         on_stdout_line: Callable[[str], None] | None = None,
         on_stderr_line: Callable[[str], None] | None = None,
+        on_stdout_progress: Callable[[str], None] | None = None,
         timeout: float | None = None,
         check: bool = False,
         merge_stderr: bool = False,
@@ -357,10 +466,51 @@ class SSHClient:
             command,
             on_stdout_line=on_stdout_line,
             on_stderr_line=on_stderr_line,
+            on_stdout_progress=on_stdout_progress,
             timeout=timeout,
             check=check,
             merge_stderr=merge_stderr,
         )
+
+    @staticmethod
+    def _dispatch_stream_line(
+        line: str,
+        *,
+        terminator: str,
+        captured_stdout: list[str],
+        on_stdout_line: Callable[[str], None] | None,
+        on_stdout_progress: Callable[[str], None] | None,
+    ) -> None:
+        """根据终止符把流式行分派到 ``on_stdout_line`` 或 ``on_stdout_progress``. 
+
+        - 瞬时行 (``\\r`` 终止) + 调用方提供 ``on_stdout_progress``:
+          只走 progress 回调, 不写入 ``captured_stdout``, 不再触发 ``on_stdout_line``,
+          避免 dnf 进度条在 ``RemoteCommandResult.stdout`` 与上层日志里产生上千行刷屏. 
+        - 其他情况 (含 flush 的 terminator="" 残留行): 进 ``captured_stdout`` +
+          ``on_stdout_line``, 与旧行为完全一致. 
+        """
+        is_transient = terminator == "\r"
+        if is_transient and on_stdout_progress is not None:
+            try:
+                on_stdout_progress(line)
+            except Exception as exc:  # noqa: BLE001 - 回调失败不应中断命令
+                logger.warning(
+                    f"on_stdout_progress 回调异常: {exc}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+            return
+
+        captured_stdout.append(line)
+        if on_stdout_line is not None:
+            try:
+                on_stdout_line(line)
+            except Exception as exc:  # noqa: BLE001 - 回调失败不应中断命令
+                logger.warning(
+                    f"on_stdout_line 回调异常: {exc}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
 
     def _exec_stream_once(
         self,
@@ -368,6 +518,7 @@ class SSHClient:
         *,
         on_stdout_line: Callable[[str], None] | None = None,
         on_stderr_line: Callable[[str], None] | None = None,
+        on_stdout_progress: Callable[[str], None] | None = None,
         timeout: float | None = None,
         check: bool = False,
         merge_stderr: bool = False,
@@ -382,6 +533,12 @@ class SSHClient:
             command: 远端 shell 命令
             on_stdout_line: 每收到一行 stdout 触发的回调; 异常会被捕获并记录但不会中断命令
             on_stderr_line: 每收到一行 stderr 触发的回调
+            on_stdout_progress: 仅 ``\\r`` 终止 (无 ``\\n``) 的 "原地刷新瞬时行" 触发的回调,
+                典型场景是 ``dnf`` / ``apt`` / ``curl`` 的进度条更新. 设置后:
+                - 这类瞬时行 **只** 路由到本回调, 不会再投给 ``on_stdout_line``,
+                  也 **不会** 被收进 ``RemoteCommandResult.stdout``, 避免上千次刷新
+                  污染日志正文 (``server_manager`` 之类的转发链路).
+                - 不设置时维持旧行为: 瞬时行也会发给 ``on_stdout_line`` 并进入 stdout. 
             timeout: 单次命令的最大耗时(秒); 默认使用凭据的 ``command_timeout``
             check: 退出码非 0 时抛 [`RemoteCommandError`](src/core/remote/errors.py)
             merge_stderr: 当为 True 时启用 PTY, 远端 bash 进入行缓冲, 且 stderr 会合并到 stdout
@@ -416,31 +573,30 @@ class SSHClient:
             # PTY 模式下行尾可能是 ``\r\n``; 同时 ``readline`` 在分块读取时
             # 部分行可能只到 ``\r``. 统一按 ``\r`` 与 ``\n`` 切分以避免 curl 等
             # 工具的 carriage-return 进度条吃掉多行内容. 
+            #
+            # 终止符语义:
+            # - ``\n`` / ``\r\n`` -> 已提交的最终行, 按 ``on_stdout_line`` 路径处理
+            # - ``\r`` -> 原地刷新的瞬时行 (dnf/apt/curl 进度条);
+            #   若调用方提供了 ``on_stdout_progress`` 则只发往该回调, 不污染 stdout
             splitter = _LineSplitter()
             for raw_line in iter(stdout.readline, ""):
-                for line in splitter.feed(raw_line):
-                    captured_stdout.append(line)
-                    if on_stdout_line is not None:
-                        try:
-                            on_stdout_line(line)
-                        except Exception as exc:  # noqa: BLE001 - 回调失败不应中断命令
-                            logger.warning(
-                                f"on_stdout_line 回调异常: {exc}",
-                                LogType.NETWORK,
-                                LogSource.CORE,
-                            )
-            # 缓冲尾部的最后一行 (没有终结换行) 也要发出
-            for line in splitter.flush():
-                captured_stdout.append(line)
-                if on_stdout_line is not None:
-                    try:
-                        on_stdout_line(line)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            f"on_stdout_line 回调异常: {exc}",
-                            LogType.NETWORK,
-                            LogSource.CORE,
-                        )
+                for line, terminator in splitter.feed_with_terminator(raw_line):
+                    self._dispatch_stream_line(
+                        line,
+                        terminator=terminator,
+                        captured_stdout=captured_stdout,
+                        on_stdout_line=on_stdout_line,
+                        on_stdout_progress=on_stdout_progress,
+                    )
+            # 缓冲尾部的最后一行 (没有终结换行) 也要发出; 视作已提交的最终行
+            for line, terminator in splitter.flush_with_terminator():
+                self._dispatch_stream_line(
+                    line,
+                    terminator=terminator,
+                    captured_stdout=captured_stdout,
+                    on_stdout_line=on_stdout_line,
+                    on_stdout_progress=on_stdout_progress,
+                )
 
             exit_status = stdout.channel.recv_exit_status()
 
@@ -931,12 +1087,23 @@ class SSHClient:
           回调缺失时安全兜底为 ``reject_all_callback`` (拒绝所有未知主机), 比无声
           ``AutoAddPolicy`` 更符合 §6.2 安全基线.
 
-        所有政策都会先 ``load_system_host_keys()`` + 再尝试加载用户级
-        [`KnownHostsStore`](src/core/remote/host_key_policy.py); 已存在的指纹
-        校验由 paramiko 自身完成 (变更指纹会抛 ``BadHostKeyException``,
-        本 policy 不参与).
+        系统 known_hosts 加载策略:
+
+        - ``reject`` / ``warning`` / ``auto_add``: 仍然 ``load_system_host_keys()``,
+          兼容历史行为 (用户在 SSH CLI 里已经信任过的主机不必再确认).
+        - ``interactive``: **不**加载系统 known_hosts. 应用自身的 KnownHostsStore
+          成为唯一信任源, 避免系统 ``~/.ssh/known_hosts`` 中的陈旧条目 (例如服务器
+          重装后的旧指纹) 直接抛 ``BadHostKeyException`` 而绕过弹窗确认.
+          已在应用 KnownHostsStore 中保存的指纹仍由 paramiko 自身校验,
+          真正变更才会抛 ``BadHostKeyException``.
         """
-        client.load_system_host_keys()
+        policy = self.credentials.host_key_policy
+
+        # interactive 模式: 跳过系统 known_hosts, 仅信任应用自管的 KnownHostsStore.
+        # 其他模式: 维持历史行为, 与 ssh CLI 共享主机信任.
+        if policy != "interactive":
+            client.load_system_host_keys()
+
         # 加载应用级 known_hosts (与系统 ~/.ssh/known_hosts 互不污染)
         try:
             from .host_key_policy import KnownHostsStore, default_known_hosts_path
@@ -954,7 +1121,6 @@ class SSHClient:
                 LogSource.CORE,
             )
 
-        policy = self.credentials.host_key_policy
         if policy == "reject":
             client.set_missing_host_key_policy(paramiko.RejectPolicy())
             return
