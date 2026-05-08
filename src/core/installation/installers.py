@@ -167,7 +167,7 @@ class NapCatInstall(InstallBase):
             logger.exception("安装 NapCat 失败", e, LogType.FILE_FUNC, LogSource.CORE)
 
     def ensure_install_path(self) -> None:
-        """确保安装目录存在。"""
+        """确保安装目录存在. """
         if self.install_path.exists():
             return
 

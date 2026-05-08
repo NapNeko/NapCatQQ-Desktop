@@ -26,14 +26,14 @@ class HeaderWidget(QWidget):
         """构造函数
 
         Args:
-            parent (QWidget | None): 父控件，可为 None。
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(parent)
 
         # 设置属性
         # 在我们以编程方式更新 breadcrumb_bar 时会阻塞其信号
         self._suppress_breadcrumb_signals = False
-        # 当我们正在通过面包屑触发页面切换时，防止重复或重入
+        # 当我们正在通过面包屑触发页面切换时, 防止重复或重入
         self._changing_view = False
 
         # 创建控件
@@ -55,26 +55,26 @@ class HeaderWidget(QWidget):
 
     def setup_breadcrumb_bar(self, index: int):
         """通过index设置对应的breadcrumb_bar"""
-        # 阻塞面包屑信号，避免在程序化更新时触发槽函数
+        # 阻塞面包屑信号, 避免在程序化更新时触发槽函数
         self._suppress_breadcrumb_signals = True
         self.breadcrumb_bar.blockSignals(True)
         try:
             self.breadcrumb_bar.clear()
 
-            # 兼容传入 int 或已构造的 PageEnum；对无效值回退到 BOT_LIST
+            # 兼容传入 int 或已构造的 PageEnum; 对无效值回退到 BOT_LIST
             try:
                 page = index if isinstance(index, self.PageEnum) else self.PageEnum(index)
             except Exception:
                 page = self.PageEnum.BOT_LIST
 
-            # 基础项（大多数页面都会包含）
+            # 基础项 (大多数页面都会包含) 
             items: list[tuple[str, str]] = [("bot_list", self.tr("List"))]
 
             # 根据页面追加特定项
             if page is self.PageEnum.BOT_CONFIG:
                 items.append(("bot_config", self.tr("Config")))
             elif page is self.PageEnum.ADD_CONFIG:
-                # 与 BOT_CONFIG 共用 key，但文本不同以表示添加操作
+                # 与 BOT_CONFIG 共用 key, 但文本不同以表示添加操作
                 items.append(("bot_config", self.tr("Add")))
             elif page is self.PageEnum.LOG_PAGE:
                 items.append(("bot_log", self.tr("Log")))
@@ -93,7 +93,7 @@ class HeaderWidget(QWidget):
             key (str): 当前项的key
         """
 
-        # 如果当前正在程序化更新 breadcrumb 或正在切换 view，忽略该信号以防止循环
+        # 如果当前正在程序化更新 breadcrumb 或正在切换 view, 忽略该信号以防止循环
         if self._suppress_breadcrumb_signals or self._changing_view:
             return
 
@@ -111,7 +111,7 @@ class HeaderWidget(QWidget):
         else:
             return
 
-        # 如果目标页面已经是当前页面，则无需再次切换
+        # 如果目标页面已经是当前页面, 则无需再次切换
         try:
             current = page.view.currentIndex()
         except Exception:

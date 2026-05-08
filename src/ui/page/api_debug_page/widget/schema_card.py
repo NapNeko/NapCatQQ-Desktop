@@ -16,7 +16,7 @@ from ..common import pretty_json
 
 
 class _CardDivider(QWidget):
-    """轻量分割线。"""
+    """轻量分割线. """
 
     def __init__(self, parent: QWidget | None = None, *, inset: int = 0) -> None:
         super().__init__(parent)
@@ -36,7 +36,7 @@ class _CardDivider(QWidget):
 
 
 class _ExampleFooterBar(QWidget):
-    """卡片底部一体化示例控制栏。"""
+    """卡片底部一体化示例控制栏. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -51,7 +51,7 @@ class _ExampleFooterBar(QWidget):
 
 
 class _ExampleToggleBar(QWidget):
-    """透明示例展开栏。"""
+    """透明示例展开栏. """
 
     clicked = Signal()
 
@@ -99,7 +99,7 @@ class _SchemaFieldNode:
 
 
 class _PaintedChip(QWidget):
-    """自绘文本卡片。"""
+    """自绘文本卡片. """
 
     def __init__(
         self,
@@ -146,7 +146,7 @@ class _PaintedChip(QWidget):
 
 
 class _ParamNameChip(_PaintedChip):
-    """字段名称自绘卡片。"""
+    """字段名称自绘卡片. """
 
     def __init__(self, text: str, parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
@@ -168,7 +168,7 @@ class _ParamNameChip(_PaintedChip):
 
 
 class _EnumChip(_PaintedChip):
-    """枚举值自绘卡片。"""
+    """枚举值自绘卡片. """
 
     def __init__(self, text: str, parent: QWidget | None = None) -> None:
         super().__init__(
@@ -181,7 +181,7 @@ class _EnumChip(_PaintedChip):
 
 
 class ApiDebugParamRow(QWidget):
-    """参数行。"""
+    """参数行. """
 
     def __init__(
         self,
@@ -231,7 +231,7 @@ class ApiDebugParamRow(QWidget):
 
 
 class _TreeToggleIcon(QWidget):
-    """统一尺寸的树节点箭头。"""
+    """统一尺寸的树节点箭头. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -278,7 +278,7 @@ class _TreeToggleIcon(QWidget):
 
 
 class _SchemaNodeWidget(QWidget):
-    """树形 schema 节点。"""
+    """树形 schema 节点. """
 
     _TREE_LINE_COLOR = QColor(148, 163, 184, 72)
     _TREE_LINE_ACTIVE_COLOR = QColor(99, 102, 241, 82)
@@ -381,7 +381,7 @@ class _SchemaNodeWidget(QWidget):
 
 
 class ApiDebugSchemaCard(CardWidget):
-    """Schema 字段展示卡片。"""
+    """Schema 字段展示卡片. """
 
     def __init__(
         self,

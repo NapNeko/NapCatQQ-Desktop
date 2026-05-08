@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""远程管理模块。
+"""远程管理模块. 
 
-注意：
-此处使用延迟导入，避免 [`src.core.config`](src/core/config/__init__.py)
+注意: 
+此处使用延迟导入, 避免 [`src.core.config`](src/core/config/__init__.py)
 在仅引用 [`LinuxCorePaths`](src/core/remote/models.py) 或 [`SSHCredentials`](src/core/remote/models.py)
-时触发整个远程子系统加载，进而与 [`src.core.config.config_export`](src/core/config/config_export.py)
-形成循环依赖。
+时触发整个远程子系统加载, 进而与 [`src.core.config.config_export`](src/core/config/config_export.py)
+形成循环依赖. 
 """
 
 from __future__ import annotations

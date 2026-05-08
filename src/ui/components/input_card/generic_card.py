@@ -194,7 +194,7 @@ class JsonTemplateEditConfigCard(QFrame):
         table.setHorizontalHeaderLabels(["模板名称", "模板字符串", "介绍"])
         table.verticalHeader().hide()
 
-        # 修改列宽设置 - 前两列根据内容调整，第三列拉伸填充
+        # 修改列宽设置 - 前两列根据内容调整, 第三列拉伸填充
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -251,9 +251,9 @@ class LineEditConfigCard(SettingCard):
         Args:
             icon (FluentIconBase): 图标
             title (str): 标题
-            placeholder_text (str): 占位展示文本，默认值为 `""`。
-            content (str | None): 内容，可为 None。
-            parent (QWidget | None): 父控件，可为 None。
+            placeholder_text (str): 占位展示文本, 默认值为 `""`. 
+            content (str | None): 内容, 可为 None. 
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(icon, title, content, parent)
         self.lineEdit = LineEdit(self)
@@ -290,9 +290,9 @@ class ComboBoxConfigCard(SettingCard):
         Args:
             icon (FluentIconBase): 图标
             title (str): 标题
-            texts (list[str] | None): 下拉选项列表，可为 None。
-            content (str | None): 内容，可为 None。
-            parent (QWidget | None): 父控件，可为 None。
+            texts (list[str] | None): 下拉选项列表, 可为 None. 
+            content (str | None): 内容, 可为 None. 
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(icon, title, content, parent)
         self.texts = texts or []
@@ -328,9 +328,9 @@ class SwitchConfigCard(SettingCard):
         Args:
             icon (FluentIconBase): 图标
             title (str): 标题
-            content (str | None): 内容，可为 None。
-            value (bool): 配置值，默认值为 `False`。
-            parent (QWidget | None): 父控件，可为 None。
+            content (str | None): 内容, 可为 None. 
+            value (bool): 配置值, 默认值为 `False`. 
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(icon, title, content, parent)
         self.switchButton = SwitchButton(self, IndicatorPosition.RIGHT)
@@ -364,8 +364,8 @@ class FolderConfigCard(SettingCard):
         Args:
             icon (FluentIconBase): 图标
             title (str): 标题
-            content (str | None): 内容，可为 None。
-            parent (QWidget | None): 父控件，可为 None。
+            content (str | None): 内容, 可为 None. 
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(icon, title, content, parent)
         self.default = content or ""
@@ -417,8 +417,8 @@ class ShowDialogCardBase(SettingCard):
             dialog (MessageBoxBase): 要显示的对话框
             icon (FluentIconBase): 图标
             title (str): 标题
-            content (str | None): 内容，可为 None。
-            parent (QWidget | None): 父控件，可为 None。
+            content (str | None): 内容, 可为 None. 
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(icon, title, content, parent)
         self._dialog = dialog
@@ -503,8 +503,8 @@ class VersionInfoCard(SettingCard):
         Args:
             icon (FluentIconBase): 图标
             title (str): 标题
-            content (str | None): 内容，可为 None。
-            parent (QWidget | None): 父控件，可为 None。
+            content (str | None): 内容, 可为 None. 
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(icon, title, content, parent)
 
@@ -533,8 +533,8 @@ class FontFamilyConfigCatd(SettingCard):
             configItem (ConfigItem): 配置项
             icon (FluentIconBase): 图标
             title (str): 标题
-            content (str | None): 内容，可为 None。
-            parent (QWidget | None): 父控件，可为 None。
+            content (str | None): 内容, 可为 None. 
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(icon, title, content, parent)
         # 设置属性

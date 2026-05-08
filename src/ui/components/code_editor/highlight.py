@@ -7,12 +7,12 @@ from PySide6.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat, QTextDocu
 
 class LogHighlighter(QSyntaxHighlighter):
     """
-    日志高亮器，兼容 NapCat / NCD 常见日志格式。
+    日志高亮器, 兼容 NapCat / NCD 常见日志格式. 
 
-    支持：
+    支持: 
         - `2026-03-20 22:02:45` / `03-20 22:02:45` 时间戳
         - `[info]` / `[ERROR]` 等大小写混合日志级别
-        - URL、Windows 路径、引号中的启动命令
+        - URL, Windows 路径, 引号中的启动命令
     """
 
     def __init__(self, parent: QTextDocument) -> None:
@@ -88,7 +88,7 @@ class LogHighlighter(QSyntaxHighlighter):
 
     def highlightBlock(self, text: str) -> None:
         """
-        高亮当前文本块。
+        高亮当前文本块. 
         """
         for pattern in self.timestamp_patterns:
             match = pattern.match(text)
@@ -106,14 +106,14 @@ class LogHighlighter(QSyntaxHighlighter):
         self._apply_pattern(text, self.command_pattern, self.command_format)
 
     def _apply_pattern(self, text: str, pattern: QRegularExpression, text_format: QTextCharFormat) -> None:
-        """按正则将格式应用到整行的所有匹配。"""
+        """按正则将格式应用到整行的所有匹配. """
         match_iter = pattern.globalMatch(text)
         while match_iter.hasNext():
             match = match_iter.next()
             self.setFormat(match.capturedStart(), match.capturedLength(), text_format)
 
     def _highlight_levels(self, text: str) -> None:
-        """高亮方括号中的日志级别。"""
+        """高亮方括号中的日志级别. """
         match_iter = self.level_pattern.globalMatch(text)
         while match_iter.hasNext():
             match = match_iter.next()
@@ -122,7 +122,7 @@ class LogHighlighter(QSyntaxHighlighter):
                 self.setFormat(match.capturedStart(), match.capturedLength(), self.level_formats[level])
 
     def _highlight_paths(self, text: str) -> None:
-        """高亮 Windows 路径，兼容带空格路径并裁剪掉尾随日志文本。"""
+        """高亮 Windows 路径, 兼容带空格路径并裁剪掉尾随日志文本. """
         match_iter = self.path_pattern.globalMatch(text)
         while match_iter.hasNext():
             match = match_iter.next()
@@ -131,7 +131,7 @@ class LogHighlighter(QSyntaxHighlighter):
                 self.setFormat(match.capturedStart(), len(path_text), self.path_format)
 
     def _highlight_json_strings(self, text: str) -> None:
-        """高亮日志行中的 JSON 键名和值。"""
+        """高亮日志行中的 JSON 键名和值. """
         match_iter = self.json_string_pattern.globalMatch(text)
         while match_iter.hasNext():
             match = match_iter.next()
@@ -148,15 +148,15 @@ class LogHighlighter(QSyntaxHighlighter):
 
     @staticmethod
     def _trim_path_match(path_text: str) -> str:
-        """裁剪宽匹配结果，避免把路径后的普通文本一并高亮。"""
+        """裁剪宽匹配结果, 避免把路径后的普通文本一并高亮. """
         trimmed = path_text.rstrip()
 
         for delimiter in (r"\s+\{", r"\s+\[", r"\s+\(", r"\s+--"):
             if split_match := re.search(delimiter, trimmed):
                 trimmed = trimmed[: split_match.start()].rstrip()
 
-        # 若路径包含明确文件扩展名，则截断到最后一个扩展名结尾。
-        # 这里要求扩展名中至少包含一个字母，避免把 `9.9.28-46494` 里的 `.28` 误判成扩展名。
+        # 若路径包含明确文件扩展名, 则截断到最后一个扩展名结尾. 
+        # 这里要求扩展名中至少包含一个字母, 避免把 `9.9.28-46494` 里的 `.28` 误判成扩展名. 
         ext_matches = list(re.finditer(r"\.([A-Za-z0-9_]{1,8})(?=$|[^A-Za-z0-9_])", trimmed))
         for ext_match in reversed(ext_matches):
             if any(ch.isalpha() for ch in ext_match.group(1)):
@@ -168,9 +168,9 @@ class LogHighlighter(QSyntaxHighlighter):
 
 class NCDLogHighlighter(QSyntaxHighlighter):
     """
-    NCD 日志高亮器，支持 SUCCESS、DEBUG、INFO、WARN、ERROR 等日志级别。
+    NCD 日志高亮器, 支持 SUCCESS, DEBUG, INFO, WARN, ERROR 等日志级别. 
 
-    时间戳显示深绿色，日志级别显示对应颜色。
+    时间戳显示深绿色, 日志级别显示对应颜色. 
     """
 
     def __init__(self, parent: QTextDocument) -> None:
@@ -193,16 +193,16 @@ class NCDLogHighlighter(QSyntaxHighlighter):
 
         self.log_levels = ["SUCCESS", "DEBUG", "INFO", "WARN", "ERROR"]
 
-        # 匹配时间戳、日志级别的正则
+        # 匹配时间戳, 日志级别的正则
         self.pattern = QRegularExpression(
             r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \| (SUCCESS|DEBUG|INFO|WARN|ERROR) \|"
         )
 
     def highlightBlock(self, text: str) -> None:
         """
-        高亮当前文本块。
+        高亮当前文本块. 
 
-        时间戳显示深绿色，日志级别显示对应颜色。
+        时间戳显示深绿色, 日志级别显示对应颜色. 
         """
         text_format = QTextCharFormat()
         match = self.pattern.match(text)
@@ -228,7 +228,7 @@ class JsonHighlighter(QSyntaxHighlighter):
     """
     JSON 高亮器
 
-    支持：
+    支持: 
         - 键名
         - 冒号
         - 字符串值
@@ -281,7 +281,7 @@ class JsonHighlighter(QSyntaxHighlighter):
             start = match.capturedStart()
             length = match.capturedLength()
             string_ranges.append((start, start + length))
-            # 判断是否是键名：后面跟冒号
+            # 判断是否是键名: 后面跟冒号
             after_string = text[start + length :].lstrip()
             if after_string.startswith(":"):
                 self.setFormat(start, length, self.format_key)  # 键名

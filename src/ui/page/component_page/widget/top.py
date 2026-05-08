@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 
 class TopWidget(QWidget):
-    """下载页面顶部控件，包含标题、副标题、标签切换和刷新按钮"""
+    """下载页面顶部控件, 包含标题, 副标题, 标签切换和刷新按钮"""
 
     def __init__(self, parent: QWidget) -> None:
         """初始化顶部控件

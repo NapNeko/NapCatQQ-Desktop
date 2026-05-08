@@ -95,7 +95,7 @@ class BotCard(HeaderCardWidget):
         """构造函数
 
         Args:
-            parent (QWidget | None): 父控件，可为 None。
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(parent)
 
@@ -228,7 +228,7 @@ class BotCard(HeaderCardWidget):
         self.update()
 
     def update_info_card(self) -> None:
-        """更新信息卡片显示内容， 用于外部调用，刷新后调用.
+        """更新信息卡片显示内容,  用于外部调用, 刷新后调用.
 
         P2.6 起 ``ManagerNapCatQQProcess.get_process`` 既可能返回本地
         [`NapCatProcessModel`](src/core/runtime/napcat.py) (带 ``process`` 字段),
@@ -291,7 +291,7 @@ class BotCard(HeaderCardWidget):
         """处理 NapCatQQ 进程变化时, 切换按钮显示.
 
         P3 perf: 区分 ``Starting`` / ``Running`` / ``NotRunning``. ``Starting`` 时
-        卡片本身仅把 "启动" 按钮 disable + 文案改 "启动中…", 卡片视觉保持稳定;
+        卡片本身仅把 "启动" 按钮 disable + 文案改 "启动中...", 卡片视觉保持稳定;
         进度反馈与最终成败统一在主窗口右上角的
         [`ProgressInfoBar`](src/ui/components/progress_info_bar_bridge.py) 上展示.
 
@@ -352,7 +352,7 @@ class BotCard(HeaderCardWidget):
         page.log_page.set_current_log_manager(self._config)
 
     def slot_web_ui_button(self) -> None:
-        """处理 WebUI 按钮槽函数，打开 Bot 的 WebUI"""
+        """处理 WebUI 按钮槽函数, 打开 Bot 的 WebUI"""
         qq_id = str(self._config.bot.QQID)
         login_state = it(ManagerNapCatQQLoginState).get_login_state(qq_id)
 
@@ -372,18 +372,18 @@ class BotCard(HeaderCardWidget):
         logger.info(f"已打开 WebUI(QQID: {mask_qqid(qq_id)}, url={web_ui_url})", log_source=LogSource.UI)
 
     def slot_qr_code_button(self) -> None:
-        """处理二维码按钮槽函数。"""
+        """处理二维码按钮槽函数. """
         it(QRCodeDialogFactory).show(str(self._config.bot.QQID))
 
     def slot_qr_code_available(self, qq_id: str, qr_code: str) -> None:
-        """当前 Bot 有待扫码二维码时显示入口按钮。"""
+        """当前 Bot 有待扫码二维码时显示入口按钮. """
         del qr_code
         if qq_id != str(self._config.bot.QQID):
             return
         self.qr_code_button.show()
 
     def slot_qr_code_removed(self, qq_id: str) -> None:
-        """当前 Bot 的二维码失效后隐藏入口按钮。"""
+        """当前 Bot 的二维码失效后隐藏入口按钮. """
         if qq_id != str(self._config.bot.QQID):
             return
         self.qr_code_button.hide()
@@ -459,8 +459,8 @@ class BotAvatarWidget(QWidget):
     class GetAvatarWorker(QObject, QRunnable):
         """使用 QRunnable 异步获取头像
 
-        注意: 不在工作线程中创建/使用任何 GUI 对象(QPixmap/QWidget 等)。
-        仅下载原始字节并通过信号传回主线程处理。
+        注意: 不在工作线程中创建/使用任何 GUI 对象(QPixmap/QWidget 等). 
+        仅下载原始字节并通过信号传回主线程处理. 
         """
 
         avatar_bytes_signal = Signal(str, bytes)
@@ -557,12 +557,12 @@ class BotAvatarWidget(QWidget):
 
     @qq_id.setter
     def qq_id(self, value: str) -> None:
-        # 保存请求的 qq_id，并把它作为当前活动请求的标识，用于忽略过时的 worker 结果
+        # 保存请求的 qq_id, 并把它作为当前活动请求的标识, 用于忽略过时的 worker 结果
         self._qq_id = value
         self._active_avatar_qq_id = value
 
         worker = self.GetAvatarWorker(value)
-        # 在主线程中将字节转换为 QPixmap 并更新 UI，避免跨线程创建 GUI 对象
+        # 在主线程中将字节转换为 QPixmap 并更新 UI, 避免跨线程创建 GUI 对象
         worker.avatar_bytes_signal.connect(self._on_avatar_bytes)
         worker.avatar_error_signal.connect(self._on_avatar_error)
 
@@ -570,7 +570,7 @@ class BotAvatarWidget(QWidget):
 
     @Slot(str, str)
     def _on_avatar_error(self, qq_id: str, message: str) -> None:
-        """在主线程中处理头像下载失败提示。"""
+        """在主线程中处理头像下载失败提示. """
         if qq_id != getattr(self, "_active_avatar_qq_id", None):
             return
 
@@ -587,7 +587,7 @@ class BotAvatarWidget(QWidget):
     def _on_avatar_bytes(self, qq_id: str, data: bytes) -> None:
         """将下载的头像字节转换为 QPixmap 并更新到 UI (主线程执行)
 
-        仅在收到的 qq_id 与当前活动请求一致时才更新，避免竞态条件导致显示过时头像。
+        仅在收到的 qq_id 与当前活动请求一致时才更新, 避免竞态条件导致显示过时头像. 
         """
         # Only update UI if the avatar is for the latest requested qq_id
         if qq_id != getattr(self, "_active_avatar_qq_id", None):
@@ -599,13 +599,13 @@ class BotAvatarWidget(QWidget):
             self.image_label.scaledToWidth(128)
             self.image_label.setBorderRadius(8, 8, 8, 8)
         else:
-            # 加载失败时显示默认占位图，避免空白或保持旧头像
+            # 加载失败时显示默认占位图, 避免空白或保持旧头像
             try:
                 self.image_label.setImage(StaticIcon.LOGO.path())
                 self.image_label.scaledToWidth(128)
                 self.image_label.setBorderRadius(8, 8, 8, 8)
             except Exception:
-                # 最后兜底：记录错误到 info bar
+                # 最后兜底: 记录错误到 info bar
                 error_bar(self.tr("头像数据无法解析，已使用占位图"))
 
 
@@ -637,7 +637,7 @@ class BotInfoWidget(QWidget):
             self.h_box_layout.addWidget(self.text_label, 0)
 
         def set_icon(self, icon: FluentIconBase, light: str = "#454655", dark: str = "#fff3fa") -> None:
-            """更新左侧图标。"""
+            """更新左侧图标. """
             self._icon = icon.colored(QColor(light), QColor(dark))
             self.icon_widget.setIcon(self._icon)
 
@@ -799,8 +799,8 @@ class BotInfoWidget(QWidget):
             self._memory_info.text_label.setText("-M / -M")
 
     def _on_monitor_interval_changed(self, interval_ms: int) -> None:
-        """监控间隔配置变化时更新定时器（仅更新内存监控）"""
-        # 只更新内存监控定时器，运行时长固定1秒
+        """监控间隔配置变化时更新定时器 (仅更新内存监控) """
+        # 只更新内存监控定时器, 运行时长固定1秒
         timer = getattr(self, "_memory_timer", None)
         if timer is None:
             return
@@ -808,7 +808,7 @@ class BotInfoWidget(QWidget):
             if timer.isActive():
                 timer.setInterval(interval_ms)
         except RuntimeError:
-            # 底层 C++ 对象已被 deleteLater 释放，忽略本次更新
+            # 底层 C++ 对象已被 deleteLater 释放, 忽略本次更新
             pass
 
 
@@ -820,7 +820,7 @@ class EnableTag(PillPushButton):
         """初始化启用标签
 
         Args:
-            status: 初始状态，True 为启用，False 为禁用
+            status: 初始状态, True 为启用, False 为禁用
             parent: 父控件
         """
         super().__init__(parent)
@@ -835,7 +835,7 @@ class EnableTag(PillPushButton):
         """更新标签显示状态
 
         Args:
-            status: 新的状态值，True 为启用，False 为禁用
+            status: 新的状态值, True 为启用, False 为禁用
         """
         if status:
             self.setText(self.tr("启用"))
@@ -872,7 +872,7 @@ class FormateTag(PillPushButton):
 
 
 class ConfigCardBase(HeaderCardWidget):
-    """配置卡片基类，提供通用的配置显示和操作功能"""
+    """配置卡片基类, 提供通用的配置显示和操作功能"""
 
     remove_signal = Signal(NetworkBaseConfig)
 

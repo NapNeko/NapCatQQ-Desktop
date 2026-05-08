@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""NapCatQQ Desktop 更新执行器。"""
+"""NapCatQQ Desktop 更新执行器. """
 
 import ctypes
 import logging
@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True, frozen=True)
 class UpdateLaunchResult:
-    """更新启动结果。"""
+    """更新启动结果. """
 
     pid: int | None = None
 
 
 class MsiUpdateStrategy:
-    """MSI 安装版更新策略。"""
+    """MSI 安装版更新策略. """
 
     PID_NONE_MARKER = "0"
 
@@ -70,7 +70,7 @@ class MsiUpdateStrategy:
         return staging_path.parent / MSI_UPDATE_SCRIPT_FILENAME
 
     def load_update_script(self) -> str:
-        """读取 MSI 更新脚本模板。"""
+        """读取 MSI 更新脚本模板. """
 
         return load_msi_update_script()
 
@@ -156,9 +156,9 @@ class MsiUpdateStrategy:
 
 
 class UpdateManager:
-    """统一更新管理器。
+    """统一更新管理器. 
 
-    应用内 Desktop 更新已统一收敛为 MSI 安装包：
+    应用内 Desktop 更新已统一收敛为 MSI 安装包: 
     - MSI 安装版执行原地升级
     - 便携版/未知安装类型通过 MSI 安装包迁移到 MSI 安装版
     """

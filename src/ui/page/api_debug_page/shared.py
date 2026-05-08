@@ -9,7 +9,7 @@ from qfluentwidgets import PillPushButton
 
 
 class ApiDebugChip(PillPushButton):
-    """顶部摘要胶囊。"""
+    """顶部摘要胶囊. """
 
     def __init__(self, text: str, parent: QWidget | None = None) -> None:
         super().__init__(parent=parent)

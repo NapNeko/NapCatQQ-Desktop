@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""远端状态与日志读取骨架。"""
+"""远端状态与日志读取骨架. """
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from .models import LinuxCorePaths
 
 @dataclass(slots=True)
 class RemoteNapCatStatus:
-    """远端 NapCat 运行状态。"""
+    """远端 NapCat 运行状态. """
 
     running: bool
     pid: int | None = None
@@ -28,7 +28,7 @@ class RemoteNapCatStatus:
 
 @dataclass(slots=True)
 class RemoteLogTail:
-    """远端日志尾部内容。"""
+    """远端日志尾部内容. """
 
     path: str
     content: str
@@ -36,9 +36,9 @@ class RemoteLogTail:
 
 
 class RemoteRuntimeService:
-    """远端运行时服务。
+    """远端运行时服务. 
 
-    当前阶段提供最小能力：
+    当前阶段提供最小能力: 
     - 读取 PID 文件判断运行态
     - 读取状态文件补充展示信息
     - tail 远端日志
@@ -116,9 +116,9 @@ class RemoteRuntimeService:
         )
 
     def get_status(self) -> RemoteNapCatStatus:
-        """读取远端状态。
+        """读取远端状态. 
 
-        适配标准 NapCat 安装器的进程检测方式：
+        适配标准 NapCat 安装器的进程检测方式: 
         - 通过 pgrep 查找 qq --no-sandbox -q 进程
         - 从命令行提取 QQ 号
         - 优先使用 napcat.mjs 中的版本信息
@@ -136,7 +136,7 @@ class RemoteRuntimeService:
         qq_account = None
 
         if pgrep_result.ok and pgrep_result.stdout.strip():
-            # 找到进程，提取 PID 和 QQ 号
+            # 找到进程, 提取 PID 和 QQ 号
             pids = pgrep_result.stdout.strip().split('\n')
             if pids:
                 # 使用第一个 PID
@@ -154,7 +154,7 @@ class RemoteRuntimeService:
                         if match:
                             qq_account = match.group(1)
 
-        # 回退到 PID 文件方式（用于兼容我们的 launcher 脚本）
+        # 回退到 PID 文件方式 (用于兼容我们的 launcher 脚本) 
         if not running:
             pid_result = self.backend.run(f'test -f "{self.paths.pid_file}" && cat "{self.paths.pid_file}" || true')
             pid_text = pid_result.stdout.strip()
@@ -184,7 +184,7 @@ class RemoteRuntimeService:
         )
 
     def tail_log(self, log_path: str | None = None, *, lines: int = 200) -> RemoteLogTail:
-        """读取远端日志尾部。
+        """读取远端日志尾部. 
 
         适配标准 NapCat 日志路径:
         - 默认查找 $HOME/Napcat/log/napcat_*.log
@@ -202,7 +202,7 @@ class RemoteRuntimeService:
         return RemoteLogTail(path=target_path, content=result.stdout, lines=safe_lines)
 
     def _infer_running_log_path(self) -> str | None:
-        """尝试从运行中的进程推断日志路径。"""
+        """尝试从运行中的进程推断日志路径. """
         # 获取当前运行的 QQ 号
         result = self.backend.run(r"pgrep -f '.*/qq --no-sandbox -q [0-9]{4,}' || true")
         if not result.ok or not result.stdout.strip():
@@ -227,9 +227,9 @@ class RemoteRuntimeService:
         return None
 
     def start(self, command: str) -> None:
-        """启动远端进程。
+        """启动远端进程. 
 
-        这里保留命令注入位，后续会由部署层/配置层生成标准启动命令。
+        这里保留命令注入位, 后续会由部署层/配置层生成标准启动命令. 
         """
         self.backend.run(command, check=True)
         status = self.get_status()
@@ -237,7 +237,7 @@ class RemoteRuntimeService:
             raise RuntimeError("远端启动命令已执行，但未检测到运行中的 NapCat 进程")
 
     def stop(self, command: str | None = None) -> None:
-        """停止远端进程。"""
+        """停止远端进程. """
         if command:
             self.backend.run(command, check=True)
         else:
@@ -250,15 +250,15 @@ class RemoteRuntimeService:
             raise RuntimeError("远端停止命令已执行，但 NapCat 进程仍在运行")
 
     def restart(self, command: str, stop_command: str | None = None) -> None:
-        """重启远端进程。"""
+        """重启远端进程. """
         self.stop(stop_command)
         self.start(command)
 
     def write_status_payload(self, payload: dict[str, Any]) -> None:
-        """写入远端状态文件。
+        """写入远端状态文件. 
 
-        这是 P1 阶段的最小状态协议落点，后续可以继续扩展字段，
-        但必须保持 JSON 对象结构稳定。
+        这是 P1 阶段的最小状态协议落点, 后续可以继续扩展字段, 
+        但必须保持 JSON 对象结构稳定. 
         """
         serialized = json.dumps(payload, ensure_ascii=False, indent=2)
         escaped = serialized.replace("'", "'\"'\"'")
@@ -275,7 +275,7 @@ class RemoteRuntimeService:
         last_action: str | None = None,
         last_error: str | None = None,
     ) -> dict[str, Any]:
-        """构建标准 `status.json` 结构。"""
+        """构建标准 `status.json` 结构. """
         return {
             "running": running,
             "pid": pid,

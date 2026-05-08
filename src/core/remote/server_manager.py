@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`ServerManager`](src/core/remote/server_manager.py): 多服务器管理服务。
+"""[`ServerManager`](src/core/remote/server_manager.py): 多服务器管理服务. 
 
 职责:
 - 包装 [`ServerRegistry`](src/core/remote/servers.py) 的增删改查
@@ -9,7 +9,7 @@
 - 同步 ``test_connection`` 接口供后台线程调用; UI 应通过 [`QRunnable`](https://doc.qt.io/qt-6/qrunnable.html) 调度
 - 启动时一次性迁移旧版单服务器配置 (``cfg.remote_*``) 到新版 ``servers.json``
 
-存储路径默认: ``{PathFunc.config_dir_path}/servers.json``。
+存储路径默认: ``{PathFunc.config_dir_path}/servers.json``. 
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ DeploymentProgressCallback = Callable[[str, int], None]
 
 @dataclass(slots=True)
 class DeploymentResult:
-    """[`ServerManager.deploy_server`](src/core/remote/server_manager.py) 的返回值。"""
+    """[`ServerManager.deploy_server`](src/core/remote/server_manager.py) 的返回值. """
 
     server_id: str
     ok: bool
@@ -51,10 +51,10 @@ class DeploymentResult:
 
 
 def _default_storage_path() -> Path:
-    """返回默认 ``servers.json`` 持久化路径。
+    """返回默认 ``servers.json`` 持久化路径. 
 
     取自 [`PathFunc.config_dir_path`](src/core/runtime/paths.py),
-    若 creart 单例不可用(例如纯单元测试场景), 回退到当前工作目录。
+    若 creart 单例不可用(例如纯单元测试场景), 回退到当前工作目录. 
     """
     try:
         from creart import it
@@ -67,7 +67,7 @@ def _default_storage_path() -> Path:
 
 
 class ServerManager(QObject):
-    """多服务器管理服务。
+    """多服务器管理服务. 
 
     Signals:
         server_added (str): 新增服务器, 参数为 ``server_id``
@@ -138,7 +138,7 @@ class ServerManager(QObject):
         password: str | None = None,
         remember_password: bool = False,
     ) -> None:
-        """添加新服务器档案; 若是密码认证, 调用方应同时传入 password 暂存到内存。
+        """添加新服务器档案; 若是密码认证, 调用方应同时传入 password 暂存到内存. 
 
         Args:
             profile: 新档案 (id 由调用方生成).
@@ -344,7 +344,7 @@ class ServerManager(QObject):
     # 调用, 就不会启动背后轮询.
 
     def set_deployment_state(self, server_id: str, state: DeploymentState) -> None:
-        """更新指定服务器的部署状态并持久化。"""
+        """更新指定服务器的部署状态并持久化. """
         profile = self._registry.get(server_id)
         if profile is None:
             return
@@ -354,7 +354,7 @@ class ServerManager(QObject):
 
     # ==================== 凭据辅助 ====================
     def set_password(self, server_id: str, password: str | None) -> None:
-        """设置或清除内存中的密码。"""
+        """设置或清除内存中的密码. """
         if password:
             self._password_cache[server_id] = password
         else:
@@ -364,7 +364,7 @@ class ServerManager(QObject):
         return server_id in self._password_cache
 
     def get_runtime_credentials(self, server_id: str) -> SSHCredentials | None:
-        """返回注入了内存密码的运行期凭据副本; 服务器不存在时返回 None。"""
+        """返回注入了内存密码的运行期凭据副本; 服务器不存在时返回 None. """
         profile = self._registry.get(server_id)
         if profile is None:
             return None
@@ -372,7 +372,7 @@ class ServerManager(QObject):
 
     # ==================== Backend 工厂 ====================
     def get_backend(self, server_id: str) -> "RemoteBackend":
-        """获取或惰性创建 ``RemoteBackend`` 实例; 服务器不存在时抛 KeyError。"""
+        """获取或惰性创建 ``RemoteBackend`` 实例; 服务器不存在时抛 KeyError. """
         cached = self._backend_cache.get(server_id)
         if cached is not None:
             return cached
@@ -396,7 +396,7 @@ class ServerManager(QObject):
         *,
         password: str | None = None,
     ) -> tuple[bool, str]:
-        """**同步**测试 SSH 连接(应在后台线程调用)。
+        """**同步**测试 SSH 连接(应在后台线程调用). 
 
         Args:
             profile: 服务器档案; 不会修改其内部凭据
@@ -432,9 +432,9 @@ class ServerManager(QObject):
             return False, f"远端命令返回非零状态: {result.stderr or result.stdout}"
         return True, "SSH 连接测试成功"
 
-    # ==================== 部署编排（P1） ====================
+    # ==================== 部署编排 (P1)  ====================
     def is_deploying(self, server_id: str) -> bool:
-        """是否有正在进行中的部署任务。"""
+        """是否有正在进行中的部署任务. """
         return server_id in self._deploying
 
     def deploy_server(
@@ -445,9 +445,9 @@ class ServerManager(QObject):
         force_napcat_update: bool = False,
         force_linuxqq_reinstall: bool = False,
     ) -> DeploymentResult:
-        """**同步**执行远端部署(应在后台线程调用)。
+        """**同步**执行远端部署(应在后台线程调用). 
 
-        编排 install_qq + install_napcat 两步, 把进度区间映射到统一的 0–100。
+        编排 install_qq + install_napcat 两步, 把进度区间映射到统一的 0-100. 
 
         Raises:
             KeyError: 服务器档案不存在
@@ -510,7 +510,7 @@ class ServerManager(QObject):
             # ----- Stage 2: install_napcat, 50-100 -----
             # P5 F1.4: 在调用 install_napcat 之前先查询上游 SHA512;
             # 取不到时静默跳过 (远端脚本端 fallback 为 warn skip), 不阻断部署
-            # — 远端 worker 线程不便弹用户对话框, 这里走"网络不稳时允许继续"策略.
+            # - 远端 worker 线程不便弹用户对话框, 这里走"网络不稳时允许继续"策略.
             expected_sha512 = self._lookup_napcat_expected_sha512()
 
             def _napcat_progress(message: str, percent: int) -> None:
@@ -590,7 +590,7 @@ class ServerManager(QObject):
 
     # ==================== 仅版本探测 (轻量, 不部署) ====================
     def redetect_versions(self, server_id: str) -> tuple[str | None, str | None]:
-        """**同步** 重新探测远端 NapCat / QQ 版本号并写回档案。
+        """**同步** 重新探测远端 NapCat / QQ 版本号并写回档案. 
 
         相比 [`deploy_server`](src/core/remote/server_manager.py) 不会重新执行
         安装脚本, 仅跑 ``detect_installation`` 即可, 用于:
@@ -598,7 +598,7 @@ class ServerManager(QObject):
         - 启动时对已部署服务器自动同步版本
 
         Returns:
-            ``(napcat_version, qq_version)`` 元组, 任一字段可能为 None。
+            ``(napcat_version, qq_version)`` 元组, 任一字段可能为 None. 
 
         Raises:
             KeyError: 服务器档案不存在
@@ -634,9 +634,9 @@ class ServerManager(QObject):
         include_qq: bool = True,
         log_callback: Callable[[str], None] | None = None,
     ) -> None:
-        """**同步**清空远端 NapCat (可选含 QQ) 安装, 重置部署状态为 UNDEPLOYED。
+        """**同步**清空远端 NapCat (可选含 QQ) 安装, 重置部署状态为 UNDEPLOYED. 
 
-        主要面向开发者反复测试部署场景。**会破坏远端文件**, 调用前需用户确认。
+        主要面向开发者反复测试部署场景. **会破坏远端文件**, 调用前需用户确认. 
 
         Args:
             server_id: 服务器档案 ID
@@ -709,7 +709,7 @@ class ServerManager(QObject):
 
     # ==================== 资源清理 ====================
     def shutdown(self) -> None:
-        """关闭所有缓存的 backend 连接, 应用退出前调用。"""
+        """关闭所有缓存的 backend 连接, 应用退出前调用. """
         for server_id, backend in list(self._backend_cache.items()):
             try:
                 backend.close()
@@ -719,7 +719,7 @@ class ServerManager(QObject):
 
     # ==================== 内部 ====================
     def _inject_runtime_password(self, profile: ServerProfile) -> SSHCredentials:
-        """对密码认证模式, 从内存缓存注入密码生成凭据副本; 否则原样返回。"""
+        """对密码认证模式, 从内存缓存注入密码生成凭据副本; 否则原样返回. """
         cred = profile.credentials
         if cred.auth_method != "password":
             return cred
@@ -729,10 +729,10 @@ class ServerManager(QObject):
         return replace(cred, password=password)
 
     def _migrate_legacy_single_server_config(self) -> None:
-        """从 ``cfg.remote_*`` 单服务器配置迁移到 ``servers.json``。
+        """从 ``cfg.remote_*`` 单服务器配置迁移到 ``servers.json``. 
 
-        触发条件: 磁盘上原本不存在 ``servers.json``。
-        若 ``cfg.remote_host`` 为空, 视为干净安装, 直接跳过。
+        触发条件: 磁盘上原本不存在 ``servers.json``. 
+        若 ``cfg.remote_host`` 为空, 视为干净安装, 直接跳过. 
         """
         try:
             from src.core.config import cfg
@@ -780,7 +780,7 @@ class ServerManager(QObject):
 
 
 class ServerManagerCreator(AbstractCreator, ABC):
-    """``ServerManager`` 单例创建器, 与现有 creart 风格保持一致。"""
+    """``ServerManager`` 单例创建器, 与现有 creart 风格保持一致. """
 
     targets = (
         CreateTargetInfo(

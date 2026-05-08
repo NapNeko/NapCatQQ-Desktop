@@ -28,9 +28,9 @@
 
 设计原则:
 1. 左右分栏: 左栏配置(45%), 右栏状态与操作(55%)
-2. 垂直紧凑: 所有控件在一页内展示，无需滚动
-3. 认知分块: 每个区域5-7个控件，符合Miller定律
-4. 渐进披露: 高级选项折叠，密码/密钥条件显示
+2. 垂直紧凑: 所有控件在一页内展示, 无需滚动
+3. 认知分块: 每个区域5-7个控件, 符合Miller定律
+4. 渐进披露: 高级选项折叠, 密码/密钥条件显示
 """
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEd
 
 
 class ActionButtonCard(SettingCard):
-    """带操作按钮的设置卡片。"""
+    """带操作按钮的设置卡片. """
 
     def __init__(
         self,
@@ -86,7 +86,7 @@ class ActionButtonCard(SettingCard):
 
 
 class RemoteActionTask(QObject, QRunnable):
-    """远程操作任务。"""
+    """远程操作任务. """
 
     success_signal = Signal(str, str)
     error_signal = Signal(str, str)
@@ -112,9 +112,9 @@ class RemoteActionTask(QObject, QRunnable):
 
 
 class Remote(QWidget):
-    """远程管理设置页 - 一页式无滚动布局。
+    """远程管理设置页 - 一页式无滚动布局. 
 
-    基于 1100x560 可用区域设计，左右分栏布局：
+    基于 1100x560 可用区域设计, 左右分栏布局: 
     - 左栏 (45%): 连接配置 + 工作区设置
     - 右栏 (55%): 状态显示 + 快捷操作 + 部署流程
     """
@@ -135,7 +135,7 @@ class Remote(QWidget):
         self.fill_config()
 
     def _create_widgets(self) -> None:
-        """创建所有控件。"""
+        """创建所有控件. """
         # ========== 标题栏 ==========
         self.title_label = TitleLabel(self.tr("🌐 远程管理"), self)
         self.status_indicator = CaptionLabel(self.tr("● 未连接"), self)
@@ -221,7 +221,7 @@ class Remote(QWidget):
         self.deploy_btn = PrimaryPushButton(FI.DOWNLOAD, self.tr("部署"), self.deploy_card)
 
     def _setup_layout(self) -> None:
-        """设置布局 - 左右分栏，一页内展示。"""
+        """设置布局 - 左右分栏, 一页内展示. """
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 16, 20, 16)
         main_layout.setSpacing(16)
@@ -357,7 +357,7 @@ class Remote(QWidget):
         self.setMinimumSize(self.AVAILABLE_WIDTH, self.AVAILABLE_HEIGHT)
 
     def _connect_signals(self) -> None:
-        """连接信号槽。"""
+        """连接信号槽. """
         # 认证方式切换
         self.auth_method_card.comboBox.currentTextChanged.connect(self._on_auth_method_changed)
 
@@ -377,19 +377,19 @@ class Remote(QWidget):
         self.deploy_btn.clicked.connect(self._on_deploy)
 
     def _toggle_advanced(self) -> None:
-        """切换高级选项显示。"""
+        """切换高级选项显示. """
         visible = not self.advanced_widget.isVisible()
         self.advanced_widget.setVisible(visible)
         self.advanced_toggle.setIcon(FI.CHEVRON_DOWN if visible else FI.CHEVRON_RIGHT)
 
     def _on_auth_method_changed(self, method: str) -> None:
-        """认证方式切换时更新UI。"""
+        """认证方式切换时更新UI. """
         is_key = method == "key"
         self.private_key_path_card.setVisible(is_key)
         self.password_card.setVisible(not is_key)
 
     def fill_config(self) -> None:
-        """填充配置值。"""
+        """填充配置值. """
         self.host_card.fill_value(cfg.get(cfg.remote_host) or "")
         self.port_card.fill_value(str(cfg.get(cfg.remote_port)))
         self.username_card.fill_value(cfg.get(cfg.remote_username) or "")
@@ -405,7 +405,7 @@ class Remote(QWidget):
         self._on_auth_method_changed(self.auth_method_card.get_value())
 
     def _collect_credentials(self) -> SSHCredentials:
-        """收集凭据配置。"""
+        """收集凭据配置. """
         return SSHCredentials(
             host=self.host_card.get_value().strip(),
             port=int(self.port_card.get_value() or 22),
@@ -419,7 +419,7 @@ class Remote(QWidget):
         )
 
     def _run_async_task(self, action_name: str, handler) -> None:
-        """运行异步任务。"""
+        """运行异步任务. """
         task = RemoteActionTask(action_name, handler)
         task.success_signal.connect(self._on_task_success)
         task.error_signal.connect(self._on_task_error)
@@ -428,18 +428,18 @@ class Remote(QWidget):
 
     @Slot(str, str)
     def _on_task_success(self, action_name: str, message: str) -> None:
-        """任务成功回调。"""
+        """任务成功回调. """
         success_bar(message, title=action_name, parent=self)
         logger.info(f"远程操作成功: {action_name}", log_source=LogSource.UI)
 
     @Slot(str, str)
     def _on_task_error(self, action_name: str, message: str) -> None:
-        """任务失败回调。"""
+        """任务失败回调. """
         error_bar(message, title=f"{action_name}失败", parent=self)
         logger.error(f"远程操作失败: {action_name}", log_source=LogSource.UI)
 
     def _update_status_display(self, connected: bool, details: dict = None) -> None:
-        """更新状态显示。"""
+        """更新状态显示. """
         if connected:
             self.status_indicator.setText(self.tr("● 已连接"))
             self.status_indicator.setStyleSheet("color: #52c41a;")
@@ -465,7 +465,7 @@ class Remote(QWidget):
 
     # ========== 事件处理 ==========
     def _on_save(self) -> None:
-        """保存配置。"""
+        """保存配置. """
         try:
             # P5 F2.4: workspace_dir 严格白名单校验, 拒绝命令注入 payload
             from src.core.remote.models import is_valid_linux_path
@@ -496,7 +496,7 @@ class Remote(QWidget):
             error_bar(str(e), parent=self)
 
     def _on_test_connection(self) -> None:
-        """测试连接。"""
+        """测试连接. """
         def handler():
             credentials = self._collect_credentials()
             credentials.validate()
@@ -513,7 +513,7 @@ class Remote(QWidget):
         self._run_async_task(self.tr("测试连接"), handler)
 
     def _on_start(self) -> None:
-        """启动服务。"""
+        """启动服务. """
         def handler():
             credentials = self._collect_credentials()
             with RemoteManager(credentials) as manager:
@@ -522,7 +522,7 @@ class Remote(QWidget):
         self._run_async_task(self.tr("启动服务"), handler)
 
     def _on_stop(self) -> None:
-        """停止服务。"""
+        """停止服务. """
         def handler():
             credentials = self._collect_credentials()
             with RemoteManager(credentials) as manager:
@@ -531,7 +531,7 @@ class Remote(QWidget):
         self._run_async_task(self.tr("停止服务"), handler)
 
     def _on_restart(self) -> None:
-        """重启服务。"""
+        """重启服务. """
         def handler():
             credentials = self._collect_credentials()
             with RemoteManager(credentials) as manager:
@@ -540,7 +540,7 @@ class Remote(QWidget):
         self._run_async_task(self.tr("重启服务"), handler)
 
     def _on_view_log(self) -> None:
-        """查看日志。"""
+        """查看日志. """
         def handler():
             credentials = self._collect_credentials()
             with RemoteManager(credentials) as manager:
@@ -550,7 +550,7 @@ class Remote(QWidget):
         self._run_async_task(self.tr("查看日志"), handler)
 
     def _on_probe(self) -> None:
-        """环境探测。"""
+        """环境探测. """
         def handler():
             credentials = self._collect_credentials()
             with RemoteManager(credentials) as manager:
@@ -559,7 +559,7 @@ class Remote(QWidget):
         self._run_async_task(self.tr("环境探测"), handler)
 
     def _on_init(self) -> None:
-        """初始化工作区。"""
+        """初始化工作区. """
         def handler():
             credentials = self._collect_credentials()
             with RemoteManager(credentials) as manager:
@@ -568,7 +568,7 @@ class Remote(QWidget):
         self._run_async_task(self.tr("初始化"), handler)
 
     def _on_sync(self) -> None:
-        """同步配置。"""
+        """同步配置. """
         def handler():
             credentials = self._collect_credentials()
             with RemoteManager(credentials) as manager:
@@ -577,7 +577,7 @@ class Remote(QWidget):
         self._run_async_task(self.tr("同步配置"), handler)
 
     def _on_deploy(self) -> None:
-        """部署 NapCat。"""
+        """部署 NapCat. """
         def handler():
             credentials = self._collect_credentials()
             with RemoteManager(credentials) as manager:

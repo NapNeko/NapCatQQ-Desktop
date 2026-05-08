@@ -11,21 +11,21 @@ from PySide6.QtWidgets import QWidget
 
 
 class Separator(QWidget):
-    """垂直分隔线组件，用于视觉上的内容区分"""
+    """垂直分隔线组件, 用于视觉上的内容区分"""
 
     def __init__(self, parent: QWidget | None = None):
         """
         初始化分隔线组件
 
         Args:
-            parent: 父组件，可为 None
+            parent: 父组件, 可为 None
         """
         super().__init__(parent)
         self.setFixedSize(6, 16)
 
     def paintEvent(self, event):
         """
-        重绘事件处理函数，绘制分隔线
+        重绘事件处理函数, 绘制分隔线
 
         Args:
             event: 绘制事件对象
@@ -39,7 +39,7 @@ class Separator(QWidget):
         绘制分隔线的内部实现方法
 
         Args:
-            painter: 画家对象，用于执行绘制操作
+            painter: 画家对象, 用于执行绘制操作
         """
         # 配置抗锯齿和画笔
         pen = QPen()

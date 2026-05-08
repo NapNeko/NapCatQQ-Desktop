@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试核心数据模型。"""
+"""接口调试核心数据模型. """
 
 # 标准库导入
 from dataclasses import dataclass, field
@@ -17,7 +17,7 @@ def _utc_now_iso() -> str:
 
 
 class ApiDebugBodyType(str, Enum):
-    """请求体类型。"""
+    """请求体类型. """
 
     NONE = "none"
     JSON = "json"
@@ -27,7 +27,7 @@ class ApiDebugBodyType(str, Enum):
 
 
 class ApiDebugAuthType(str, Enum):
-    """认证模式。"""
+    """认证模式. """
 
     NONE = "none"
     BEARER_TOKEN = "bearer_token"
@@ -35,7 +35,7 @@ class ApiDebugAuthType(str, Enum):
 
 
 class ApiDebugResponseBodyType(str, Enum):
-    """响应体类型。"""
+    """响应体类型. """
 
     EMPTY = "empty"
     JSON = "json"
@@ -44,7 +44,7 @@ class ApiDebugResponseBodyType(str, Enum):
 
 
 class ApiDebugErrorKind(str, Enum):
-    """统一错误分类。"""
+    """统一错误分类. """
 
     REQUEST_BUILD = "request_build"
     AUTH = "auth"
@@ -56,7 +56,7 @@ class ApiDebugErrorKind(str, Enum):
 
 
 class ApiDebugMode(str, Enum):
-    """工作台模式。"""
+    """工作台模式. """
 
     HTTP = "http"
     ACTION = "action"
@@ -64,7 +64,7 @@ class ApiDebugMode(str, Enum):
 
 
 class ApiDebugTargetType(str, Enum):
-    """目标端点类型。"""
+    """目标端点类型. """
 
     MANUAL_HTTP = "manual_http"
     ONEBOT_HTTP = "onebot_http"
@@ -74,7 +74,7 @@ class ApiDebugTargetType(str, Enum):
 
 
 class ApiDebugWebSocketState(str, Enum):
-    """WebSocket 连接状态。"""
+    """WebSocket 连接状态. """
 
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
@@ -83,7 +83,7 @@ class ApiDebugWebSocketState(str, Enum):
 
 
 class ApiDebugWebSocketDirection(str, Enum):
-    """WebSocket 消息方向。"""
+    """WebSocket 消息方向. """
 
     OUTGOING = "outgoing"
     INCOMING = "incoming"
@@ -93,7 +93,7 @@ class ApiDebugWebSocketDirection(str, Enum):
 
 @dataclass(slots=True)
 class ApiDebugRequestConfig:
-    """接口调试请求输入配置。"""
+    """接口调试请求输入配置. """
 
     url: str
     method: str = "GET"
@@ -107,7 +107,7 @@ class ApiDebugRequestConfig:
 
 @dataclass(slots=True)
 class ApiDebugBuiltRequest:
-    """归一化后的请求对象。"""
+    """归一化后的请求对象. """
 
     method: str
     url: str
@@ -119,7 +119,7 @@ class ApiDebugBuiltRequest:
     follow_redirects: bool = True
 
     def to_httpx_kwargs(self) -> dict[str, Any]:
-        """转换为 httpx.request 所需参数。"""
+        """转换为 httpx.request 所需参数. """
         kwargs: dict[str, Any] = {
             "method": self.method,
             "url": self.url,
@@ -139,7 +139,7 @@ class ApiDebugBuiltRequest:
 
 @dataclass(slots=True)
 class ApiDebugAuthConfig:
-    """接口调试认证配置。"""
+    """接口调试认证配置. """
 
     auth_type: ApiDebugAuthType = ApiDebugAuthType.NONE
     token: str = ""
@@ -148,7 +148,7 @@ class ApiDebugAuthConfig:
 
     @classmethod
     def bearer(cls, token: str, *, use_query_token: bool = False) -> "ApiDebugAuthConfig":
-        """构造 Bearer Token 认证配置。"""
+        """构造 Bearer Token 认证配置. """
         return cls(auth_type=ApiDebugAuthType.BEARER_TOKEN, token=token, use_query_token=use_query_token)
 
     @classmethod
@@ -159,7 +159,7 @@ class ApiDebugAuthConfig:
         session_credential: str = "",
         use_query_token: bool = False,
     ) -> "ApiDebugAuthConfig":
-        """构造 WebUI Session 认证配置。"""
+        """构造 WebUI Session 认证配置. """
         return cls(
             auth_type=ApiDebugAuthType.WEBUI_SESSION,
             token=token,
@@ -168,7 +168,7 @@ class ApiDebugAuthConfig:
         )
 
     def describe(self) -> str:
-        """生成适合 UI 展示的认证摘要。"""
+        """生成适合 UI 展示的认证摘要. """
         if self.auth_type == ApiDebugAuthType.NONE:
             return "无认证"
         if self.auth_type == ApiDebugAuthType.BEARER_TOKEN:
@@ -180,7 +180,7 @@ class ApiDebugAuthConfig:
 
 @dataclass(slots=True)
 class ApiDebugResponse:
-    """响应解析结果。"""
+    """响应解析结果. """
 
     status_code: int
     reason_phrase: str
@@ -194,7 +194,7 @@ class ApiDebugResponse:
 
 @dataclass(slots=True)
 class ApiDebugError:
-    """统一错误模型。"""
+    """统一错误模型. """
 
     kind: ApiDebugErrorKind
     message: str
@@ -204,7 +204,7 @@ class ApiDebugError:
 
 @dataclass(slots=True)
 class ApiDebugExecutionResult:
-    """单次调试请求执行结果。"""
+    """单次调试请求执行结果. """
 
     request: ApiDebugBuiltRequest
     response: ApiDebugResponse | None = None
@@ -215,13 +215,13 @@ class ApiDebugExecutionResult:
 
     @property
     def is_success(self) -> bool:
-        """是否成功。"""
+        """是否成功. """
         return self.error is None
 
 
 @dataclass(slots=True)
 class ApiDebugHistoryRequestSnapshot:
-    """持久化的请求快照。"""
+    """持久化的请求快照. """
 
     method: str
     url: str
@@ -233,7 +233,7 @@ class ApiDebugHistoryRequestSnapshot:
 
 @dataclass(slots=True)
 class ApiDebugHistoryResponseSnapshot:
-    """持久化的响应快照。"""
+    """持久化的响应快照. """
 
     status_code: int
     reason_phrase: str
@@ -246,7 +246,7 @@ class ApiDebugHistoryResponseSnapshot:
 
 @dataclass(slots=True)
 class ApiDebugHistoryEntry:
-    """持久化的历史记录条目。"""
+    """持久化的历史记录条目. """
 
     history_id: str
     created_at: str
@@ -257,7 +257,7 @@ class ApiDebugHistoryEntry:
 
 @dataclass(slots=True)
 class ApiDebugEndpointSummary:
-    """Bot 下可直接使用的端点摘要。"""
+    """Bot 下可直接使用的端点摘要. """
 
     endpoint_id: str
     name: str
@@ -268,7 +268,7 @@ class ApiDebugEndpointSummary:
     available: bool = True
 
     def describe(self) -> str:
-        """生成适合 UI 展示的端点摘要。"""
+        """生成适合 UI 展示的端点摘要. """
         target_label = {
             ApiDebugTargetType.MANUAL_HTTP: "手动",
             ApiDebugTargetType.ONEBOT_HTTP: "OneBot HTTP",
@@ -281,7 +281,7 @@ class ApiDebugEndpointSummary:
 
 @dataclass(slots=True)
 class ApiDebugBotContext:
-    """调试页面使用的 Bot 运行上下文。"""
+    """调试页面使用的 Bot 运行上下文. """
 
     bot_id: str
     bot_name: str
@@ -293,7 +293,7 @@ class ApiDebugBotContext:
     notes: list[str] = field(default_factory=list)
 
     def preferred_http_target(self) -> ApiDebugEndpointSummary | None:
-        """优先返回 OneBot HTTP，其次 WebUI。"""
+        """优先返回 OneBot HTTP, 其次 WebUI. """
         for target in self.http_targets:
             if target.available and target.target_type == ApiDebugTargetType.ONEBOT_HTTP:
                 return target
@@ -306,7 +306,7 @@ class ApiDebugBotContext:
         return None
 
     def preferred_action_base_url(self) -> str:
-        """返回 Action 调试默认使用的 WebUI 根地址。"""
+        """返回 Action 调试默认使用的 WebUI 根地址. """
         if self.webui_base_url:
             return self.webui_base_url.rstrip("/")
         for target in self.http_targets:
@@ -315,7 +315,7 @@ class ApiDebugBotContext:
         return ""
 
     def preferred_websocket_target(self) -> ApiDebugEndpointSummary | None:
-        """优先返回 OneBot WS 端点。"""
+        """优先返回 OneBot WS 端点. """
         for target in self.websocket_targets:
             if target.available and target.target_type == ApiDebugTargetType.ONEBOT_WEBSOCKET:
                 return target
@@ -327,7 +327,7 @@ class ApiDebugBotContext:
 
 @dataclass(slots=True)
 class ApiDebugActionSchema:
-    """Action 元数据。"""
+    """Action 元数据. """
 
     action: str
     summary: str = ""
@@ -339,13 +339,13 @@ class ApiDebugActionSchema:
 
     @property
     def title(self) -> str:
-        """优先显示摘要，否则回退到 action 名称。"""
+        """优先显示摘要, 否则回退到 action 名称. """
         return self.summary.strip() or self.action
 
 
 @dataclass(slots=True)
 class ApiDebugActionSession:
-    """DebugAdapter 会话。"""
+    """DebugAdapter 会话. """
 
     adapter_name: str
     token: str
@@ -354,7 +354,7 @@ class ApiDebugActionSession:
 
     @property
     def websocket_url(self) -> str:
-        """返回 Debug WS 地址。"""
+        """返回 Debug WS 地址. """
         base = self.base_url.rstrip("/")
         if base.startswith("https://"):
             return f"wss://{base[len('https://'):]}/api/Debug/ws"
@@ -365,7 +365,7 @@ class ApiDebugActionSession:
 
 @dataclass(slots=True)
 class ApiDebugHttpDraft:
-    """HTTP 模式草稿。"""
+    """HTTP 模式草稿. """
 
     url: str = ""
     method: str = "GET"
@@ -380,7 +380,7 @@ class ApiDebugHttpDraft:
 
 @dataclass(slots=True)
 class ApiDebugActionDraft:
-    """Action 模式草稿。"""
+    """Action 模式草稿. """
 
     action: str = ""
     search_query: str = ""
@@ -390,7 +390,7 @@ class ApiDebugActionDraft:
 
 @dataclass(slots=True)
 class ApiDebugWebSocketDraft:
-    """WebSocket 模式草稿。"""
+    """WebSocket 模式草稿. """
 
     url: str = ""
     message_text: str = "{}"
@@ -402,7 +402,7 @@ class ApiDebugWebSocketDraft:
 
 @dataclass(slots=True)
 class ApiDebugPreset:
-    """用户保存的预设。"""
+    """用户保存的预设. """
 
     preset_id: str
     name: str
@@ -414,7 +414,7 @@ class ApiDebugPreset:
 
 @dataclass(slots=True)
 class ApiDebugWorkspaceState:
-    """工作台持久化状态。"""
+    """工作台持久化状态. """
 
     selected_bot_id: str = ""
     selected_mode: ApiDebugMode = ApiDebugMode.HTTP
@@ -428,7 +428,7 @@ class ApiDebugWorkspaceState:
 
 @dataclass(slots=True)
 class ApiDebugWebSocketMessage:
-    """WebSocket 消息条目。"""
+    """WebSocket 消息条目. """
 
     message_id: str
     direction: ApiDebugWebSocketDirection
@@ -440,7 +440,7 @@ class ApiDebugWebSocketMessage:
 
 @dataclass(slots=True)
 class ApiDebugSearchItem:
-    """全局搜索结果项。"""
+    """全局搜索结果项. """
 
     item_id: str
     title: str

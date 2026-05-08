@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""远程/本地统一执行后端抽象。"""
+"""远程/本地统一执行后端抽象. """
 
 from __future__ import annotations
 
@@ -12,30 +12,30 @@ from .ssh_client import SSHClient
 
 
 class ExecutionBackend(ABC):
-    """统一执行后端接口。"""
+    """统一执行后端接口. """
 
     @abstractmethod
     def run(self, command: str, *, timeout: float | None = None, check: bool = False) -> RemoteCommandResult:
-        """执行命令。"""
+        """执行命令. """
 
     @abstractmethod
     def ensure_directory(self, path: str) -> RemoteCommandResult:
-        """确保目录存在。"""
+        """确保目录存在. """
 
     @abstractmethod
     def upload_file(self, local_path: str | Path, target_path: str) -> None:
-        """上传文件。"""
+        """上传文件. """
 
     @abstractmethod
     def download_file(self, source_path: str, local_path: str | Path) -> None:
-        """下载文件。"""
+        """下载文件. """
 
 
 class LocalExecutionBackend(ExecutionBackend):
-    """本地执行后端。
+    """本地执行后端. 
 
-    该后端用于为未来的双模式统一接口做兼容层，
-    目前主要服务于接口抽象与测试隔离。
+    该后端用于为未来的双模式统一接口做兼容层, 
+    目前主要服务于接口抽象与测试隔离. 
     """
 
     def run(self, command: str, *, timeout: float | None = None, check: bool = False) -> RemoteCommandResult:
@@ -80,7 +80,7 @@ class LocalExecutionBackend(ExecutionBackend):
 
 
 class RemoteExecutionBackend(ExecutionBackend):
-    """基于 SSH 的远程执行后端。"""
+    """基于 SSH 的远程执行后端. """
 
     def __init__(self, ssh_client: SSHClient) -> None:
         self._ssh_client = ssh_client

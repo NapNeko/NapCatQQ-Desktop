@@ -11,7 +11,7 @@ from src.core.logging.log_data import LogPosition
 def capture_call_location(func: Callable[..., Any]) -> Callable[..., Any]:
     """日志位置装饰器
 
-    用于捕获调用者的位置信息，并将其添加到关键字参数中
+    用于捕获调用者的位置信息, 并将其添加到关键字参数中
 
     Args:
         func (Callable[..., Any]): 被装饰的函数

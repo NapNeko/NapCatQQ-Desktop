@@ -14,7 +14,7 @@ class OccupancySnapshot:
 
 
 class SystemOccupancySampler(QObject):
-    """系统占用采样服务。"""
+    """系统占用采样服务. """
 
     sampleChanged = Signal(float, float)
 

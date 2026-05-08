@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试请求构造器。"""
+"""接口调试请求构造器. """
 
 # 标准库导入
 import json
@@ -14,10 +14,10 @@ from src.core.api_debug.models import ApiDebugBodyType, ApiDebugBuiltRequest, Ap
 
 
 class ApiDebugRequestBuilder:
-    """请求构造器。"""
+    """请求构造器. """
 
     def build(self, config: ApiDebugRequestConfig) -> ApiDebugBuiltRequest:
-        """构造归一化请求对象。"""
+        """构造归一化请求对象. """
         method = str(config.method or "").strip().upper()
         if not method:
             raise ApiDebugRequestBuildError("请求 Method 不能为空")
@@ -50,7 +50,7 @@ class ApiDebugRequestBuilder:
 
     @staticmethod
     def build_fallback(config: ApiDebugRequestConfig) -> ApiDebugBuiltRequest:
-        """为失败场景构造最小请求快照。"""
+        """为失败场景构造最小请求快照. """
         method = str(config.method or "GET").strip().upper() or "GET"
         return ApiDebugBuiltRequest(
             method=method,
@@ -65,7 +65,7 @@ class ApiDebugRequestBuilder:
 
     @staticmethod
     def _normalize_mapping(payload: dict[str, Any] | None) -> dict[str, str]:
-        """归一化 Header / Query 字典。"""
+        """归一化 Header / Query 字典. """
         if not payload:
             return {}
 
@@ -77,7 +77,7 @@ class ApiDebugRequestBuilder:
         return normalized
 
     def _normalize_body(self, body_type: ApiDebugBodyType, body: Any) -> Any:
-        """根据请求体类型归一化 Body。"""
+        """根据请求体类型归一化 Body. """
         if body_type == ApiDebugBodyType.NONE:
             return None
 
@@ -129,7 +129,7 @@ class ApiDebugRequestBuilder:
 
     @staticmethod
     def _apply_default_content_type(headers: dict[str, str], body_type: ApiDebugBodyType) -> dict[str, str]:
-        """在缺省时补齐合理的 Content-Type。"""
+        """在缺省时补齐合理的 Content-Type. """
         normalized_headers = dict(headers)
         if any(key.lower() == "content-type" for key in normalized_headers):
             return normalized_headers

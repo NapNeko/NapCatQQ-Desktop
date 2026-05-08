@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""[`StatusOverviewDialog`](src/ui/components/status_overview_dialog.py): 状态聚合面板 (P4 W2·F4).
+"""[`StatusOverviewDialog`](src/ui/components/status_overview_dialog.py): 状态聚合面板 (P4 W2.F4).
 
 设计要点
 ========
 
 三栏只读对话框, 在 RemotePage 工具栏新增按钮入口打开.
 
-- **栏 1: 服务器列表** — 名称 / 部署状态 / 资源水位 (CPU / Mem / Disk).
+- **栏 1: 服务器列表** - 名称 / 部署状态 / 资源水位 (CPU / Mem / Disk).
   数据由 [`ServerManager.list_servers()`](src/core/remote/server_manager.py) 提供,
   水位实时来自 [`ResourceMonitorService.latest`](src/core/remote/resource_monitor.py).
-- **栏 2: 远端 Bot 列表** — 名称 / runtime_target / 进程状态.
+- **栏 2: 远端 Bot 列表** - 名称 / runtime_target / 进程状态.
   数据通过 [`read_config()`](src/core/config/operate_config.py) 拉本地 + 远端 Bot 配置,
   进程状态消费 [`ManagerNapCatQQProcess.process_changed_signal`](src/core/runtime/napcat.py).
-- **栏 3: 后台任务** — 直接渲染
+- **栏 3: 后台任务** - 直接渲染
   [`BackgroundTaskCenter.active_tasks()`](src/core/runtime/background_tasks.py).
 
 不引入新单例 / 不写持久化; 所有信号订阅都在 ``showEvent`` 时挂上, 关闭后断开,
@@ -59,7 +59,7 @@ _PROCESS_STATE_LABEL = {
 
 
 def _format_resource_line(sample: Any) -> str:
-    """格式化 ``ResourceSample`` 为单行 ``CPU x% · MEM y% · DISK z%``."""
+    """格式化 ``ResourceSample`` 为单行 ``CPU x% . MEM y% . DISK z%``."""
     if sample is None:
         return "—"
     return (
@@ -137,7 +137,7 @@ class StatusOverviewDialog(MessageBoxBase):
         self._wire_buttons()
         self._wire_signals()
         self.refresh_full()
-        # 默认尺寸: 略放宽宽度以容纳 Bot 栏的 "名称 (QQID)" + "服务器 · 状态" 两行;
+        # 默认尺寸: 略放宽宽度以容纳 Bot 栏的 "名称 (QQID)" + "服务器 . 状态" 两行;
         # 高度收紧到 380, 数据多时由 ScrollArea 自动滚动.
         self.widget.setMinimumSize(780, 380)
 
@@ -162,7 +162,7 @@ class StatusOverviewDialog(MessageBoxBase):
         self._bot_layout, bot_panel = self._build_column(self.tr("远端 Bot"))
         self._task_layout, task_panel = self._build_column(self.tr("后台任务"))
 
-        # 中间 Bot 栏需要更多宽度容纳 "名字 (QQID)" + "服务器名 · 进程状态" 两行
+        # 中间 Bot 栏需要更多宽度容纳 "名字 (QQID)" + "服务器名 . 进程状态" 两行
         columns_layout.addWidget(server_panel, 3)
         columns_layout.addWidget(bot_panel, 5)
         columns_layout.addWidget(task_panel, 3)

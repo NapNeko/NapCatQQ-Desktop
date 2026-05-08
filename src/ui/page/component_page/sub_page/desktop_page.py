@@ -59,7 +59,7 @@ class DesktopPage(PageBase):
 
     # ==================== 公共方法 ====================
     def refresh_page_view(self) -> None:
-        """根据本地和远程版本信息刷新页面状态。"""
+        """根据本地和远程版本信息刷新页面状态. """
         if self.restore_operation_view():
             self.log_card.set_log_markdown(self._get_display_log())
             return
@@ -83,7 +83,7 @@ class DesktopPage(PageBase):
         self.log_card.set_log_markdown(self._get_display_log())
 
     def apply_remote_version_data(self, version_data: VersionSnapshot) -> None:
-        """应用远程版本信息和更新日志。"""
+        """应用远程版本信息和更新日志. """
         if version_data.ncd_version is None or version_data.ncd_update_log is None:
             self.remote_version = None
             self.remote_log = self.tr("无法获取 NapCat Desktop 版本信息, 请检查网络连接")
@@ -95,7 +95,7 @@ class DesktopPage(PageBase):
         self.refresh_page_if_ready()
 
     def apply_local_version_data(self, version_data: VersionSnapshot) -> None:
-        """应用本地版本信息。"""
+        """应用本地版本信息. """
         if version_data.ncd_version is None:
             self.local_version = None
         else:
@@ -107,7 +107,7 @@ class DesktopPage(PageBase):
     # ==================== 槽函数 ====================
     @Slot()
     def handle_download_requested(self) -> None:
-        """处理下载按钮点击事件，开始下载应用程序。"""
+        """处理下载按钮点击事件, 开始下载应用程序. """
         if self.is_operation_in_progress():
             logger.warning("Desktop 更新请求已忽略: 当前已有任务正在执行", log_source=LogSource.UI)
             info_bar(self.tr("Desktop 正在下载或准备更新，请稍候"))
@@ -148,7 +148,7 @@ class DesktopPage(PageBase):
                 logger.info("Desktop 更新流程取消: 用户拒绝关闭运行中的 Bot", log_source=LogSource.UI)
                 return
 
-        # 显示更新确认弹窗（根据安装类型显示不同提示）
+        # 显示更新确认弹窗 (根据安装类型显示不同提示) 
         if not self._show_update_confirmation(has_bot):
             logger.info("Desktop 更新流程取消: 用户在确认弹窗中选择取消", log_source=LogSource.UI)
             return
@@ -159,7 +159,7 @@ class DesktopPage(PageBase):
         self._start_download()
 
     def _start_download(self) -> None:
-        """启动或继续 Desktop 更新包下载。"""
+        """启动或继续 Desktop 更新包下载. """
 
         # 项目内模块导入
         from src.core.network.downloader import GithubDownloader
@@ -180,7 +180,7 @@ class DesktopPage(PageBase):
 
     @Slot()
     def handle_pause_requested(self) -> None:
-        """暂停或继续 Desktop 更新包下载。"""
+        """暂停或继续 Desktop 更新包下载. """
         if self.is_operation_paused():
             logger.info("Desktop 更新包下载继续", log_source=LogSource.UI)
             self.resume_operation(self.tr("正在继续下载更新包..."))
@@ -196,7 +196,7 @@ class DesktopPage(PageBase):
 
     @Slot()
     def handle_cancel_requested(self) -> None:
-        """取消 Desktop 更新包下载。"""
+        """取消 Desktop 更新包下载. """
         package_filename = self._update_manager.get_update_filename(
             self.remote_version.lstrip("v") if self.remote_version else ""
         )
@@ -220,7 +220,7 @@ class DesktopPage(PageBase):
         self.downloader.request_cancel()
 
     def _show_update_confirmation(self, has_running_bot: bool) -> bool:
-        """显示更新确认弹窗，告知用户更新流程和注意事项。
+        """显示更新确认弹窗, 告知用户更新流程和注意事项. 
 
         Args:
             has_running_bot: 是否有正在运行的 Bot
@@ -247,7 +247,7 @@ class DesktopPage(PageBase):
         return box.exec() == QDialog.DialogCode.Accepted
 
     def _get_download_url(self) -> QUrl:
-        """根据安装类型和版本获取下载 URL。
+        """根据安装类型和版本获取下载 URL. 
 
         Returns:
             QUrl: 下载链接
@@ -265,7 +265,7 @@ class DesktopPage(PageBase):
 
     @Slot()
     def handle_install_requested(self) -> None:
-        """下载完成后执行安装逻辑。"""
+        """下载完成后执行安装逻辑. """
         logger.info(
             f"Desktop 下载完成，开始准备更新: install_type={self._update_manager.install_type.value}",
             log_source=LogSource.UI,
@@ -322,7 +322,7 @@ class DesktopPage(PageBase):
             self.refresh_page_view()
             return
 
-        # 退出程序，安装脚本/MSI 会等待并替换可执行文件
+        # 退出程序, 安装脚本/MSI 会等待并替换可执行文件
         logger.warning("Desktop 更新已启动，当前进程准备退出", log_source=LogSource.UI)
         if not QThreadPool.globalInstance().waitForDone(5000):
             logger.warning("等待后台线程退出超时，继续执行应用退出", log_source=LogSource.UI)
@@ -333,13 +333,13 @@ class DesktopPage(PageBase):
 
     @Slot()
     def handle_download_paused(self) -> None:
-        """处理 Desktop 更新包下载暂停。"""
+        """处理 Desktop 更新包下载暂停. """
         self.downloader = None
         self.pause_operation(self.tr("更新包下载已暂停"))
 
     @Slot()
     def handle_download_canceled(self) -> None:
-        """处理 Desktop 更新包下载取消。"""
+        """处理 Desktop 更新包下载取消. """
         self.downloader = None
         self.end_operation()
         self.refresh_page_view()
@@ -347,7 +347,7 @@ class DesktopPage(PageBase):
 
     @Slot()
     def handle_operation_failed(self) -> None:
-        """下载错误处理逻辑。"""
+        """下载错误处理逻辑. """
         self.end_operation()
         self.downloader = None
         logger.error("Desktop 下载或更新流程失败", log_source=LogSource.UI)
@@ -355,7 +355,7 @@ class DesktopPage(PageBase):
         self.refresh_page_view()
 
     def _get_display_log(self) -> str:
-        """为更新日志追加安装类型提示。"""
+        """为更新日志追加安装类型提示. """
 
         install_type_hint = get_install_type_log_prefix(self._update_manager.install_type)
         return install_type_hint + self.remote_log

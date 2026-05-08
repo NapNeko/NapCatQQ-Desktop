@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""版本信息读取与拉取服务。"""
+"""版本信息读取与拉取服务. """
 
 import json
 import re
@@ -17,7 +17,7 @@ from src.core.runtime.paths import PathFunc
 
 
 class VersionSnapshot(BaseModel):
-    """NapCat、QQ、Desktop 的版本快照。"""
+    """NapCat, QQ, Desktop 的版本快照. """
 
     napcat_version: str | None
     qq_version: str | None
@@ -28,7 +28,7 @@ class VersionSnapshot(BaseModel):
 
 
 class VersionTaskBase(QObject, QRunnable):
-    """版本任务基类。"""
+    """版本任务基类. """
 
     version_signal = Signal(VersionSnapshot)
     finish_signal = Signal()
@@ -39,16 +39,16 @@ class VersionTaskBase(QObject, QRunnable):
         QRunnable.__init__(self)
 
     def run(self) -> None:
-        """执行任务并发出结果。"""
+        """执行任务并发出结果. """
         self.version_signal.emit(self.execute())
 
     def execute(self) -> VersionSnapshot:
-        """由子类实现具体版本任务。"""
+        """由子类实现具体版本任务. """
         raise NotImplementedError("Subclasses must implement this method")
 
 
 class RemoteVersionTask(VersionTaskBase):
-    """远端版本信息拉取任务。"""
+    """远端版本信息拉取任务. """
 
     def execute(self) -> VersionSnapshot:
         napcat_info = self._get_version_with_fallback(
@@ -96,11 +96,11 @@ class RemoteVersionTask(VersionTaskBase):
         name: str,
         parser: Callable[[dict], dict[str, str | None]],
     ) -> dict[str, str | None]:
-        """获取版本信息，主 URL 失败时使用兜底 URL。"""
-        # 先尝试主 URL（镜像站）
+        """获取版本信息, 主 URL 失败时使用兜底 URL. """
+        # 先尝试主 URL (镜像站) 
         response = self.request(QUrl(primary_url), name, emit_error=False)
 
-        # 如果镜像站失败，尝试 GitHub 官方 API
+        # 如果镜像站失败, 尝试 GitHub 官方 API
         if response is None:
             logger.warning(f"{name} 镜像站请求失败，尝试 GitHub 官方 API...")
             response = self.request(QUrl(fallback_url), name, emit_error=True)
@@ -169,7 +169,7 @@ class RemoteVersionTask(VersionTaskBase):
 
 
 class LocalVersionTask(VersionTaskBase):
-    """本地版本信息读取任务。"""
+    """本地版本信息读取任务. """
 
     def execute(self) -> VersionSnapshot:
         return VersionSnapshot(
@@ -224,7 +224,7 @@ class LocalVersionTask(VersionTaskBase):
 
 
 class VersionService(QObject):
-    """统一协调本地和远端版本任务。"""
+    """统一协调本地和远端版本任务. """
 
     remote_versions_loaded = Signal(VersionSnapshot)
     local_versions_loaded = Signal(VersionSnapshot)

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""服务器档案添加 / 编辑对话框。
+"""服务器档案添加 / 编辑对话框. 
 
 基于 [`MessageBoxBase`](https://qfluentwidgets.com/) 实现, 校验 SSH 字段,
-返回新的 [`ServerProfile`](src/core/remote/servers.py) 与可选密码。
+返回新的 [`ServerProfile`](src/core/remote/servers.py) 与可选密码. 
 
 UI 组织 (v2 统一表单布局):
 - 顶部: 标题 + 描述
@@ -142,7 +142,7 @@ class _PrivateKeyDropLineEdit(LineEdit):
 
 
 class ServerEditDialog(MessageBoxBase):
-    """添加 / 编辑服务器档案。
+    """添加 / 编辑服务器档案. 
 
     Args:
         parent: 父级窗口
@@ -150,7 +150,7 @@ class ServerEditDialog(MessageBoxBase):
         existing_password: 编辑模式下从 [`ServerManager._password_cache`](src/core/remote/server_manager.py) 注入
 
     成功 ``exec()`` 后通过 [`get_profile`](src/ui/page/remote_page/server_edit_dialog.py)
-    与 [`get_password`](src/ui/page/remote_page/server_edit_dialog.py) 取回结果。
+    与 [`get_password`](src/ui/page/remote_page/server_edit_dialog.py) 取回结果. 
     """
 
     # 表单标签列的统一宽度: 让三个分组的标签列纵向对齐
@@ -246,7 +246,7 @@ class ServerEditDialog(MessageBoxBase):
         for path in scanned_keys:
             self.key_combo.addItem(Path(path).name, userData=path)
 
-        # 手动路径 (manual 模式) — P4 F5.3: 支持文件拖拽
+        # 手动路径 (manual 模式) - P4 F5.3: 支持文件拖拽
         self.key_edit = _PrivateKeyDropLineEdit(key_widget)
         self.key_edit.setClearButtonEnabled(True)
         self.key_edit.setPlaceholderText("~/.ssh/id_rsa  (可拖入文件)")
@@ -473,7 +473,7 @@ class ServerEditDialog(MessageBoxBase):
 
     # ==================== 表单校验与结果 ====================
     def validate(self) -> bool:  # noqa: D401 - 重写 MessageBoxBase 钩子
-        """点击 yes 时被 MessageBoxBase 调用; 返回 False 则阻止关闭。"""
+        """点击 yes 时被 MessageBoxBase 调用; 返回 False 则阻止关闭. """
         try:
             self._build_credentials_or_raise()
         except ValueError as exc:
@@ -484,10 +484,10 @@ class ServerEditDialog(MessageBoxBase):
         return True
 
     def get_profile(self) -> ServerProfile:
-        """构造并返回新的 [`ServerProfile`](src/core/remote/servers.py)。
+        """构造并返回新的 [`ServerProfile`](src/core/remote/servers.py). 
 
         编辑模式下复用原 ``id`` / ``created_at`` / ``deployment_state`` / 探测缓存,
-        新建模式下生成全新的 ``id``。
+        新建模式下生成全新的 ``id``. 
         """
         credentials = self._build_credentials_or_raise()
         name = self.name_edit.text().strip() or credentials.host
@@ -511,7 +511,7 @@ class ServerEditDialog(MessageBoxBase):
         )
 
     def get_password(self) -> str | None:
-        """获取本次输入的密码; 仅密码认证模式下有效。"""
+        """获取本次输入的密码; 仅密码认证模式下有效. """
         if self.method_combo.currentData() != "password":
             return None
         password = self.pwd_edit.text()

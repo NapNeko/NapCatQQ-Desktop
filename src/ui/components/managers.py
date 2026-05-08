@@ -2,13 +2,13 @@
 """
 UI 组件位置调整模块
 
-提供自定义的 InfoBar 位置管理器，用于控制消息条在界面中的显示位置。
-包含六种不同的位置枚举和对应的管理器实现。
+提供自定义的 InfoBar 位置管理器, 用于控制消息条在界面中的显示位置. 
+包含六种不同的位置枚举和对应的管理器实现. 
 
 ## 注意
-- 方法 `_slideStartPos` 保持驼峰命名，因为它是重写父类的方法，需要保持方法签名一致。
-- 属性 `infoBars` 保持驼峰命名，因为它是继承自父类的属性，需要保持一致。
-- 其他命名遵循项目的 snake_case 规范。
+- 方法 `_slideStartPos` 保持驼峰命名, 因为它是重写父类的方法, 需要保持方法签名一致. 
+- 属性 `infoBars` 保持驼峰命名, 因为它是继承自父类的属性, 需要保持一致. 
+- 其他命名遵循项目的 snake_case 规范. 
 """
 
 # 标准库导入
@@ -33,7 +33,7 @@ from PySide6.QtWidgets import QWidget
 #
 # 由于 ``cls._instance`` 是 **class attribute**, 第一个被实例化的子类会"锁定"
 # 后续所有 ``InfoBarManager.make(position)`` 的返回值: 即使传入 BOTTOM_RIGHT,
-# 拿到的还是首次实例化时的 (例如 TopRight) 实例 — 于是 chip 全部按 TOP_RIGHT 算法
+# 拿到的还是首次实例化时的 (例如 TopRight) 实例 - 于是 chip 全部按 TOP_RIGHT 算法
 # 摆放, BOTTOM_RIGHT / BOTTOM 等设定形同虚设.
 #
 # 修复: 改为**按子类分别缓存**单例; 每个子类首次 ``make`` 时创建独立实例.
@@ -70,7 +70,7 @@ class NCDInfoBarPosition(Enum):
 
 
 def _parent_widget(infoBar: InfoBar) -> QWidget:
-    """将 InfoBar 的父对象收窄为 QWidget。"""
+    """将 InfoBar 的父对象收窄为 QWidget. """
     return cast(QWidget, infoBar.parent())
 
 
@@ -84,7 +84,7 @@ class TopLeftInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，可为 None
+            parentSize: 消息条父组件大小, 可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -109,7 +109,7 @@ class TopLeftInfoBarManager(InfoBarManager):
             infoBar: 要动画显示的信息栏对象
 
         Returns:
-            QPoint: 信息栏的起始位置（父组件左侧之外）
+            QPoint: 信息栏的起始位置 (父组件左侧之外) 
         """
         return QPoint(-infoBar.width(), self._pos(infoBar).y())
 
@@ -124,7 +124,7 @@ class TopInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，可为 None
+            parentSize: 消息条父组件大小, 可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -149,7 +149,7 @@ class TopInfoBarManager(InfoBarManager):
             infoBar: 要动画显示的信息栏对象
 
         Returns:
-            QPoint: 信息栏的起始位置（略微向上偏移）
+            QPoint: 信息栏的起始位置 (略微向上偏移) 
         """
         pos = self._pos(infoBar)
         return QPoint(pos.x(), pos.y() - 16)
@@ -165,7 +165,7 @@ class TopRightInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，可为 None
+            parentSize: 消息条父组件大小, 可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -190,7 +190,7 @@ class TopRightInfoBarManager(InfoBarManager):
             infoBar: 要动画显示的信息栏对象
 
         Returns:
-            QPoint: 信息栏的起始位置（父组件右侧之外）
+            QPoint: 信息栏的起始位置 (父组件右侧之外) 
         """
         return QPoint(_parent_widget(infoBar).width(), self._pos(infoBar).y())
 
@@ -205,7 +205,7 @@ class BottomLeftInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，可为 None
+            parentSize: 消息条父组件大小, 可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -216,7 +216,7 @@ class BottomLeftInfoBarManager(InfoBarManager):
         x = self.margin + 64
         y = parentSize.height() - infoBar.height() - self.margin
 
-        # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
+        # 累减之前所有信息栏的高度和间距 (从底部向上堆叠) 
         for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y -= bar.height() + self.spacing
 
@@ -245,7 +245,7 @@ class BottomInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，可为 None
+            parentSize: 消息条父组件大小, 可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -256,7 +256,7 @@ class BottomInfoBarManager(InfoBarManager):
         x = (parentSize.width() - infoBar.width() + 40) // 2
         y = parentSize.height() - infoBar.height() - self.margin
 
-        # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
+        # 累减之前所有信息栏的高度和间距 (从底部向上堆叠) 
         for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y -= bar.height() + self.spacing
 
@@ -270,7 +270,7 @@ class BottomInfoBarManager(InfoBarManager):
             infoBar: 要动画显示的信息栏对象
 
         Returns:
-            QPoint: 信息栏的起始位置（略微向下偏移）
+            QPoint: 信息栏的起始位置 (略微向下偏移) 
         """
         pos = self._pos(infoBar)
         return QPoint(pos.x(), pos.y() + 16)
@@ -286,7 +286,7 @@ class BottomRightInfoBarManager(InfoBarManager):
 
         Args:
             infoBar: 消息条实例
-            parentSize: 消息条父组件大小，可为 None
+            parentSize: 消息条父组件大小, 可为 None
 
         Returns:
             QPoint: 消息条的位置坐标
@@ -297,7 +297,7 @@ class BottomRightInfoBarManager(InfoBarManager):
         x = parentSize.width() - infoBar.width() - self.margin
         y = parentSize.height() - infoBar.height() - self.margin
 
-        # 累减之前所有信息栏的高度和间距（从底部向上堆叠）
+        # 累减之前所有信息栏的高度和间距 (从底部向上堆叠) 
         for bar in self.infoBars[parent][: self.infoBars[parent].index(infoBar)]:
             y -= bar.height() + self.spacing
 
@@ -311,6 +311,6 @@ class BottomRightInfoBarManager(InfoBarManager):
             infoBar: 要动画显示的信息栏对象
 
         Returns:
-            QPoint: 信息栏的起始位置（父组件右侧之外）
+            QPoint: 信息栏的起始位置 (父组件右侧之外) 
         """
         return QPoint(_parent_widget(infoBar).width(), self._pos(infoBar).y())

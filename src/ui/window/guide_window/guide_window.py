@@ -50,7 +50,7 @@ class GuideWindow(FramelessWindow):
     def initialize(self) -> None:
         """初始化方法
 
-        调整窗体大小、位置、布局等
+        调整窗体大小, 位置, 布局等
         """
         logger.trace("引导窗口初始化开始", log_source=LogSource.UI)
         self.show()
@@ -82,7 +82,7 @@ class GuideWindow(FramelessWindow):
     def create_page(self) -> None:
         """创建页面
 
-        页面顺序：欢迎页面 -> 询问页面 -> 安装 QQ 页面 -> 安装 NapCatQQ 页面 -> 完成页面
+        页面顺序: 欢迎页面 -> 询问页面 -> 安装 QQ 页面 -> 安装 NapCatQQ 页面 -> 完成页面
         通过 FadeEffectAniStackedWidget 实现页面切换时的淡入淡出效果
         通过 on_next_page 方法实现页面的切换
         """
@@ -117,7 +117,7 @@ class GuideWindow(FramelessWindow):
         logger.trace("引导窗口布局创建完成", log_source=LogSource.UI)
 
     def bind_crash_bundle_events(self) -> None:
-        """绑定崩溃诊断包生成事件。"""
+        """绑定崩溃诊断包生成事件. """
         if getattr(self, "_crash_bundle_events_bound", False):
             return
 
@@ -130,7 +130,7 @@ class GuideWindow(FramelessWindow):
         logger.trace("引导窗口已完成崩溃诊断包通知绑定", log_source=LogSource.UI)
 
     def show_crash_bundle_notification(self, notification: CrashBundleNotification) -> None:
-        """提示用户崩溃诊断包已生成。"""
+        """提示用户崩溃诊断包已生成. """
         if not self.isVisible():
             return
 
@@ -153,7 +153,7 @@ class GuideWindow(FramelessWindow):
     def close(self) -> bool:
         """关闭窗体
 
-        关闭窗体时将窗体设置为不可见，并打开主窗体
+        关闭窗体时将窗体设置为不可见, 并打开主窗体
         """
         logger.info("引导窗口关闭，准备切换到主窗口", log_source=LogSource.UI)
 
@@ -190,7 +190,7 @@ class GuideWindow(FramelessWindow):
     def on_next_page(self) -> None:
         """切换到下一个页面
 
-        页面顺序：欢迎页面 -> 询问页面 -> 安装 QQ 页面 -> 安装 NapCatQQ 页面 -> 完成页面
+        页面顺序: 欢迎页面 -> 询问页面 -> 安装 QQ 页面 -> 安装 NapCatQQ 页面 -> 完成页面
         """
         current_name = type(self.view.currentWidget()).__name__
         target_name = current_name

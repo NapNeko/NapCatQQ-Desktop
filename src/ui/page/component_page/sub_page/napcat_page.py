@@ -20,7 +20,7 @@ from ..widget import PageBase
 
 
 class NapCatPage(PageBase):
-    """NapCatQQ 核心库的安装、更新和管理页面"""
+    """NapCatQQ 核心库的安装, 更新和管理页面"""
 
     def __init__(self, parent) -> None:
         """初始化 NapCat 页面
@@ -49,7 +49,7 @@ class NapCatPage(PageBase):
 
     # ==================== 公共方法 ====================
     def refresh_page_view(self) -> None:
-        """根据本地和远程版本信息刷新页面状态。"""
+        """根据本地和远程版本信息刷新页面状态. """
         if self.restore_operation_view():
             self.log_card.set_log_markdown(self.remote_log)
             return
@@ -75,7 +75,7 @@ class NapCatPage(PageBase):
     # ==================== 槽函数 ====================
     @Slot()
     def apply_remote_version_data(self, version_data: VersionSnapshot) -> None:
-        """应用远程版本信息和更新日志。"""
+        """应用远程版本信息和更新日志. """
         if version_data.napcat_version is None or version_data.napcat_update_log is None:
             self.remote_version = None
             self.remote_log = self.tr("获取 NapCatQQ 更新日志失败")
@@ -88,7 +88,7 @@ class NapCatPage(PageBase):
 
     @Slot()
     def apply_local_version_data(self, version_data: VersionSnapshot) -> None:
-        """应用本地版本信息。"""
+        """应用本地版本信息. """
         if version_data.napcat_version is None:
             self.local_version = None
         else:
@@ -99,7 +99,7 @@ class NapCatPage(PageBase):
 
     @Slot()
     def handle_download_requested(self) -> None:
-        """处理下载按钮点击事件，开始下载 NapCat。"""
+        """处理下载按钮点击事件, 开始下载 NapCat. """
         if self.is_operation_in_progress():
             logger.warning("NapCat 下载请求已忽略: 当前已有任务正在执行", log_source=LogSource.UI)
             info_bar(self.tr("NapCat 正在下载或安装，请稍候"))
@@ -132,7 +132,7 @@ class NapCatPage(PageBase):
         self._start_download()
 
     def _start_download(self) -> None:
-        """启动或继续 NapCat 下载。"""
+        """启动或继续 NapCat 下载. """
 
         # 项目内模块导入
         from src.core.network.downloader import GithubDownloader
@@ -151,7 +151,7 @@ class NapCatPage(PageBase):
 
     @Slot()
     def handle_pause_requested(self) -> None:
-        """暂停或继续当前 NapCat 下载。"""
+        """暂停或继续当前 NapCat 下载. """
         if self.is_operation_paused():
             logger.info("NapCat 下载继续", log_source=LogSource.UI)
             self.resume_operation(self.tr("正在继续下载 NapCat..."))
@@ -167,7 +167,7 @@ class NapCatPage(PageBase):
 
     @Slot()
     def handle_cancel_requested(self) -> None:
-        """取消当前 NapCat 下载。"""
+        """取消当前 NapCat 下载. """
         package_path = it(PathFunc).tmp_path / Urls.NAPCATQQ_DOWNLOAD.value.fileName()
 
         if self.is_operation_paused():
@@ -189,7 +189,7 @@ class NapCatPage(PageBase):
 
     @Slot()
     def handle_install_requested(self) -> None:
-        """下载完成后开始安装 NapCat。"""
+        """下载完成后开始安装 NapCat. """
         logger.info("NapCat 下载完成，开始安装", log_source=LogSource.UI)
         self.downloader = None
 
@@ -221,13 +221,13 @@ class NapCatPage(PageBase):
 
     @Slot()
     def handle_download_paused(self) -> None:
-        """处理 NapCat 下载暂停。"""
+        """处理 NapCat 下载暂停. """
         self.downloader = None
         self.pause_operation(self.tr("NapCat 下载已暂停"))
 
     @Slot()
     def handle_download_canceled(self) -> None:
-        """处理 NapCat 下载取消。"""
+        """处理 NapCat 下载取消. """
         self.downloader = None
         self.end_operation()
         self.refresh_page_view()
@@ -235,7 +235,7 @@ class NapCatPage(PageBase):
 
     @Slot()
     def handle_install_finished(self) -> None:
-        """安装完成后的处理逻辑。"""
+        """安装完成后的处理逻辑. """
         self.end_operation()
         self.downloader = None
         self.installer = None
@@ -243,14 +243,14 @@ class NapCatPage(PageBase):
         success_bar(self.tr("安装成功 !"))
         self.local_version = LocalVersionTask().get_napcat_version()
         if self.local_version is None and self.remote_version is not None:
-            # 安装线程刚结束时，package.json 在个别机器上可能仍是旧视图；
-            # 先按已安装的远程版本更新 UI，再补一次完整刷新做最终校准。
+            # 安装线程刚结束时, package.json 在个别机器上可能仍是旧视图; 
+            # 先按已安装的远程版本更新 UI, 再补一次完整刷新做最终校准. 
             self.local_version = self.remote_version
         self.refresh_page_view()
         QTimer.singleShot(300, self._refresh_version_state_after_install)
 
     def _refresh_version_state_after_install(self) -> None:
-        """安装完成后补一次完整版本刷新，确保按钮状态与本地版本一致。"""
+        """安装完成后补一次完整版本刷新, 确保按钮状态与本地版本一致. """
         parent = self.parent()
         if parent is not None and hasattr(parent, "refresh_versions"):
             logger.info("NapCat 安装完成后触发一次版本校准刷新", log_source=LogSource.UI)
@@ -259,7 +259,7 @@ class NapCatPage(PageBase):
 
     @Slot()
     def handle_operation_failed(self) -> None:
-        """下载或安装过程中发生错误时的处理逻辑。"""
+        """下载或安装过程中发生错误时的处理逻辑. """
         self.end_operation()
         self.downloader = None
         self.installer = None

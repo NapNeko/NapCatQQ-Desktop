@@ -64,7 +64,7 @@ class BotLogPage(QWidget):
             self.log_view.setPlainText(self.tr("未找到对应的日志信息"))
             return
 
-        # P3.W3.E: 远端 Bot 在标题后缀显示 "· 远端 [服务器名]", 便于一眼区分
+        # P3.W3.E: 远端 Bot 在标题后缀显示 ". 远端 [服务器名]", 便于一眼区分
         title_suffix = self._compose_title_suffix(config)
         self.view.setTitle(self.tr(f"Bot 日志({str(config.bot.QQID)}){title_suffix}"))
         self.slot_set_log_view(log.get_log_content())
@@ -123,7 +123,7 @@ class BotLogPage(QWidget):
         self.log_view.setPlainText(data)
 
     def _is_log_view_pinned_to_bottom(self) -> bool:
-        """判断日志视图当前是否贴底。"""
+        """判断日志视图当前是否贴底. """
         scroll_bar = self.log_view.verticalScrollBar()
         return scroll_bar.maximum() - scroll_bar.value() <= 2
 

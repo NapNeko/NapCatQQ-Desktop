@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试认证注入器。"""
+"""接口调试认证注入器. """
 
 # 标准库导入
 import hashlib
@@ -13,13 +13,13 @@ from src.core.api_debug.models import ApiDebugAuthConfig, ApiDebugAuthType, ApiD
 
 
 class ApiDebugAuthInjector:
-    """认证注入器。"""
+    """认证注入器. """
 
     def __init__(self) -> None:
         self._credential_cache: dict[tuple[str, str], str] = {}
 
     def inject(self, request: ApiDebugBuiltRequest, auth_config: ApiDebugAuthConfig | None) -> ApiDebugBuiltRequest:
-        """将认证信息注入请求。"""
+        """将认证信息注入请求. """
         if auth_config is None or auth_config.auth_type == ApiDebugAuthType.NONE:
             return request
 
@@ -32,7 +32,7 @@ class ApiDebugAuthInjector:
         raise ApiDebugAuthError(f"不支持的认证模式: {auth_config.auth_type}")
 
     def clear_cache(self) -> None:
-        """清理内存中的 Session Credential 缓存。"""
+        """清理内存中的 Session Credential 缓存. """
         self._credential_cache.clear()
 
     def _inject_bearer_token(self, request: ApiDebugBuiltRequest, auth_config: ApiDebugAuthConfig) -> ApiDebugBuiltRequest:
@@ -123,7 +123,7 @@ class ApiDebugAuthInjector:
 
 
 def create_bearer_auth_from_token(token: str | None, *, use_query_token: bool = False) -> ApiDebugAuthConfig:
-    """根据 OneBot Token 创建 Bearer 认证配置。"""
+    """根据 OneBot Token 创建 Bearer 认证配置. """
     normalized_token = str(token or "").strip()
     if not normalized_token:
         return ApiDebugAuthConfig()
@@ -135,13 +135,13 @@ def create_bearer_auth_from_network_config(
     *,
     use_query_token: bool = False,
 ) -> ApiDebugAuthConfig:
-    """根据现有网络配置对象中的 token 构造 Bearer 认证配置。"""
+    """根据现有网络配置对象中的 token 构造 Bearer 认证配置. """
     token = getattr(network_config, "token", "") if network_config is not None else ""
     return create_bearer_auth_from_token(token, use_query_token=use_query_token)
 
 
 def create_webui_auth_from_login_state(login_state: object | None) -> ApiDebugAuthConfig:
-    """根据运行态登录状态对象构造 WebUI 认证配置。"""
+    """根据运行态登录状态对象构造 WebUI 认证配置. """
     if login_state is None:
         return ApiDebugAuthConfig()
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""设置页当前配置导出对话框。"""
+"""设置页当前配置导出对话框. """
 
 # 标准库导入
 from pathlib import Path
@@ -25,7 +25,7 @@ from src.ui.components.stacked_widget import TransparentStackedWidget
 
 
 class _DialogSectionCard(SimpleCardWidget):
-    """统一的 Fluent 分区卡片。"""
+    """统一的 Fluent 分区卡片. """
 
     def __init__(self, title: str, description: str | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -55,7 +55,7 @@ class _DialogSectionCard(SimpleCardWidget):
 
 
 class _ConfigExportFolderPage(QWidget):
-    """导出文件夹选择页。"""
+    """导出文件夹选择页. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -113,7 +113,7 @@ class _ConfigExportFolderPage(QWidget):
 
 
 class _ConfigExportOptionsPage(QWidget):
-    """导出选项页。"""
+    """导出选项页. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -181,7 +181,7 @@ class _ConfigExportOptionsPage(QWidget):
 
 
 class _ConfigExportConfirmPage(QWidget):
-    """导出确认与结果页。"""
+    """导出确认与结果页. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -265,7 +265,7 @@ class _ConfigExportConfirmPage(QWidget):
 
 
 class ConfigExportDialog(MessageBoxBase):
-    """当前配置导出对话框。"""
+    """当前配置导出对话框. """
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)

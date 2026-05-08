@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class ComponentPage(QWidget):
-    """组件页面控件，负责协调安装与更新相关子页面的版本刷新。"""
+    """组件页面控件, 负责协调安装与更新相关子页面的版本刷新. """
 
     def __init__(self) -> None:
         super().__init__()
@@ -33,7 +33,7 @@ class ComponentPage(QWidget):
         self.desktop_page = DesktopPage(self)
 
     def initialize(self, parent: "MainWindow") -> Self:
-        """初始化界面控件和布局。"""
+        """初始化界面控件和布局. """
         self.setParent(parent)
         self.setObjectName("ComponentPage")
 

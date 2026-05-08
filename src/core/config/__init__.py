@@ -109,20 +109,20 @@ _LEGACY_TITLE_TAB_BAR_KEYS = (
 
 @dataclass(frozen=True)
 class ConfigMigrationStep:
-    """单步配置迁移规则。
+    """单步配置迁移规则. 
 
     扩展约定:
-    1. 这里的版本是“配置兼容版本”，不是应用发布版本。
-    2. 只有配置结构发生不兼容调整时，才提升 `_CURRENT_CONFIG_COMPAT_VERSION`。
-    3. 如果程序升级了，但配置结构完全兼容，就不要改配置版本号。
-    4. 只定义 `from_version -> to_version` 的单步迁移，不要跨多版本跳跃。
-    5. 新规则只做“补齐/搬运/规范化”，不要覆盖用户已经存在的新结构值。
-    6. 新增结构变更时，先追加一个迁移函数，再把它注册到 `_CONFIG_MIGRATION_STEPS`。
+    1. 这里的版本是"配置兼容版本", 不是应用发布版本. 
+    2. 只有配置结构发生不兼容调整时, 才提升 `_CURRENT_CONFIG_COMPAT_VERSION`. 
+    3. 如果程序升级了, 但配置结构完全兼容, 就不要改配置版本号. 
+    4. 只定义 `from_version -> to_version` 的单步迁移, 不要跨多版本跳跃. 
+    5. 新规则只做"补齐/搬运/规范化", 不要覆盖用户已经存在的新结构值. 
+    6. 新增结构变更时, 先追加一个迁移函数, 再把它注册到 `_CONFIG_MIGRATION_STEPS`. 
 
     例子:
-    - 程序从 v2.3 升到 v3.0，但配置结构没变:
+    - 程序从 v2.3 升到 v3.0, 但配置结构没变:
       `_CURRENT_CONFIG_COMPAT_VERSION` 仍然可以保持为 `v2.0`
-    - 只有配置结构真的从 v2 系切到 v3 系时，才新增 `v2.0 -> v3.0` 迁移
+    - 只有配置结构真的从 v2 系切到 v3 系时, 才新增 `v2.0 -> v3.0` 迁移
     """
 
     from_version: str
@@ -132,24 +132,24 @@ class ConfigMigrationStep:
 
 
 def _deep_copy_json(data: Any) -> Any:
-    """复制 JSON 兼容结构，避免迁移时原地修改读取结果。"""
+    """复制 JSON 兼容结构, 避免迁移时原地修改读取结果. """
     return json.loads(json.dumps(data, ensure_ascii=False))
 
 
 def _next_transaction_path(path: Path, marker: str) -> Path:
-    """生成配置迁移阶段使用的临时路径。"""
+    """生成配置迁移阶段使用的临时路径. """
     return path.with_name(f"{path.name}.{marker}.{uuid.uuid4().hex}")
 
 
 def _ensure_object(value: object) -> dict[str, object]:
-    """确保配置节点为对象，异常结构时安全重建为空对象。"""
+    """确保配置节点为对象, 异常结构时安全重建为空对象. """
     if isinstance(value, dict):
         return value
     return {}
 
 
 def _set_nested_value(payload: dict[str, object], path: tuple[str, ...], value: object) -> bool:
-    """仅在目标键缺失时设置值，返回是否实际写入。"""
+    """仅在目标键缺失时设置值, 返回是否实际写入. """
     current = payload
     for segment in path[:-1]:
         child = current.get(segment)
@@ -167,7 +167,7 @@ def _set_nested_value(payload: dict[str, object], path: tuple[str, ...], value: 
 
 
 def _pop_nested_value(payload: dict[str, object], path: tuple[str, ...]) -> object | None:
-    """弹出嵌套键。"""
+    """弹出嵌套键. """
     current: dict[str, object] = payload
     for segment in path[:-1]:
         child = current.get(segment)
@@ -178,7 +178,7 @@ def _pop_nested_value(payload: dict[str, object], path: tuple[str, ...]) -> obje
 
 
 def _remove_nested_key(payload: dict[str, object], path: tuple[str, ...]) -> bool:
-    """删除嵌套键并清理空对象。"""
+    """删除嵌套键并清理空对象. """
     parents: list[tuple[dict[str, object], str]] = []
     current: dict[str, object] = payload
     for segment in path[:-1]:
@@ -200,7 +200,7 @@ def _remove_nested_key(payload: dict[str, object], path: tuple[str, ...]) -> boo
 
 
 def _move_nested_value(payload: dict[str, object], source: tuple[str, ...], target: tuple[str, ...]) -> bool:
-    """在目标键缺失时搬运旧值。"""
+    """在目标键缺失时搬运旧值. """
     value = _pop_nested_value(payload, source)
     if value is None:
         return False
@@ -211,14 +211,14 @@ def _move_nested_value(payload: dict[str, object], source: tuple[str, ...], targ
 
 
 def _cleanup_empty_sections(payload: dict[str, object]) -> None:
-    """清理迁移后残留的空分组。"""
+    """清理迁移后残留的空分组. """
     empty_keys = [key for key, value in payload.items() if isinstance(value, dict) and not value]
     for key in empty_keys:
         del payload[key]
 
 
 def _migrate_app_v154_to_v160(payload: dict[str, object]) -> list[str]:
-    """v1.5.4 -> v1.6.0: 清理旧背景项并规范 CloseBtnAction 分组。"""
+    """v1.5.4 -> v1.6.0: 清理旧背景项并规范 CloseBtnAction 分组. """
     rules_applied: list[str] = []
     if _move_nested_value(payload, ("Personalized", "CloseBtnAction"), ("General", "CloseBtnAction")):
         rules_applied.append("Personalized.CloseBtnAction -> General.CloseBtnAction")
@@ -235,7 +235,7 @@ def _migrate_app_v154_to_v160(payload: dict[str, object]) -> list[str]:
 
 
 def _migrate_app_v160_to_v170(payload: dict[str, object]) -> list[str]:
-    """v1.6.0 -> v1.7.0: 处理 MainWindow 键名调整。"""
+    """v1.6.0 -> v1.7.0: 处理 MainWindow 键名调整. """
     rules_applied: list[str] = []
     if _move_nested_value(payload, ("Info", "main_window"), ("Info", "MainWindow")):
         rules_applied.append("Info.main_window -> Info.MainWindow")
@@ -243,7 +243,7 @@ def _migrate_app_v160_to_v170(payload: dict[str, object]) -> list[str]:
 
 
 def _migrate_app_v170_to_v1728(payload: dict[str, object]) -> list[str]:
-    """v1.7.0 -> v1.7.28: 补齐 EULA 并清理 TitleTabBar 历史键。"""
+    """v1.7.0 -> v1.7.28: 补齐 EULA 并清理 TitleTabBar 历史键. """
     rules_applied: list[str] = []
     if _set_nested_value(payload, ("Info", "EulaAccepted"), False):
         rules_applied.append("Info.EulaAccepted default")
@@ -257,7 +257,7 @@ def _migrate_app_v170_to_v1728(payload: dict[str, object]) -> list[str]:
 
 
 def _migrate_app_v1728_to_v20(payload: dict[str, object]) -> list[str]:
-    """v1.7.28 -> v2.0: 同步 QFluentWidgets 和 Home 字段。"""
+    """v1.7.28 -> v2.0: 同步 QFluentWidgets 和 Home 字段. """
     rules_applied: list[str] = []
     personalize = _ensure_object(payload.get("Personalize"))
     if "Personalize" in payload:
@@ -308,13 +308,13 @@ _CONFIG_MIGRATION_STEPS: tuple[ConfigMigrationStep, ...] = (
 
 
 def _read_config_version(payload: dict[str, object]) -> str:
-    """读取配置兼容版本。
+    """读取配置兼容版本. 
 
     规则:
-    - 若 `Info.ConfigVersion` 存在且非空，优先使用。
-    - 若缺失该字段，则统一视为 `v1.7.28` 及以下的旧配置。
-    - `ConfigSchemaVersion` 是历史实验字段，如果用户本地残留了它，
-      当前阶段统一按“已迁移到当前兼容版本”处理，后续可在正式迁移规则中清理。
+    - 若 `Info.ConfigVersion` 存在且非空, 优先使用. 
+    - 若缺失该字段, 则统一视为 `v1.7.28` 及以下的旧配置. 
+    - `ConfigSchemaVersion` 是历史实验字段, 如果用户本地残留了它, 
+      当前阶段统一按"已迁移到当前兼容版本"处理, 后续可在正式迁移规则中清理. 
     """
     info = _ensure_object(payload.get("Info"))
     config_version = info.get("ConfigVersion")
@@ -340,14 +340,14 @@ def _read_config_version(payload: dict[str, object]) -> str:
 
 
 def _has_explicit_config_version(payload: dict[str, object]) -> bool:
-    """判断配置文件是否已显式写入 ConfigVersion。"""
+    """判断配置文件是否已显式写入 ConfigVersion. """
     info = _ensure_object(payload.get("Info"))
     value = info.get("ConfigVersion")
     return isinstance(value, str) and bool(value.strip())
 
 
 def _write_config_version(payload: dict[str, object], version: str) -> bool:
-    """写入配置兼容版本，返回是否发生变化。"""
+    """写入配置兼容版本, 返回是否发生变化. """
     info = _ensure_object(payload.get("Info"))
     payload["Info"] = info
     if info.get("ConfigVersion") == version:
@@ -357,14 +357,14 @@ def _write_config_version(payload: dict[str, object], version: str) -> bool:
 
 
 def _migrate_config_payload(payload: object) -> tuple[dict[str, object], str, list[str]]:
-    """将旧版应用配置按兼容版本逐步迁移到当前结构。
+    """将旧版应用配置按兼容版本逐步迁移到当前结构. 
 
     注意:
-    - 这里的“版本”是配置兼容版本，不是应用发布版本。
-    - 若程序版本提升但配置结构不变，可继续保持同一个配置兼容版本。
-    - 迁移按 `vN -> vN+1` 顺序执行，避免直接从很老的结构跳到最新结构。
-    - 每一步都应保持幂等，重复执行不会覆盖用户的最新配置。
-    - 当前只保留迁移扩展口；具体规则等后续配置结构再次调整时再补。
+    - 这里的"版本"是配置兼容版本, 不是应用发布版本. 
+    - 若程序版本提升但配置结构不变, 可继续保持同一个配置兼容版本. 
+    - 迁移按 `vN -> vN+1` 顺序执行, 避免直接从很老的结构跳到最新结构. 
+    - 每一步都应保持幂等, 重复执行不会覆盖用户的最新配置. 
+    - 当前只保留迁移扩展口; 具体规则等后续配置结构再次调整时再补. 
     """
     if not isinstance(payload, dict):
         return {}, _LEGACY_CONFIG_VERSION, []
@@ -395,7 +395,7 @@ def _migrate_config_payload(payload: object) -> tuple[dict[str, object], str, li
 
 
 def _remove_transient_config_fields(payload: dict[str, object]) -> list[str]:
-    """清理不应持久化到磁盘的临时配置字段。"""
+    """清理不应持久化到磁盘的临时配置字段. """
     rules_applied: list[str] = []
     if _remove_nested_key(payload, ("Remote", "Password")):
         rules_applied.append("transient: Remote.Password removed")
@@ -405,7 +405,7 @@ def _remove_transient_config_fields(payload: dict[str, object]) -> list[str]:
 
 
 def _persist_migrated_config(path: Path, payload: dict[str, object]) -> Path | None:
-    """以原子替换方式写回迁移后的配置，并保留一份备份。"""
+    """以原子替换方式写回迁移后的配置, 并保留一份备份. """
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = _next_transaction_path(path, _CONFIG_MIGRATION_TMP_MARKER)
     backup_path = path.with_name(f"{path.name}{_CONFIG_MIGRATION_BACKUP_SUFFIX}")
@@ -628,7 +628,7 @@ class Config(QConfig):
         # 修改 Config 初始化
         self.fontFamilies.restart = True
 
-        # 将 QFluentWidgets 的重启信号转发给 UI 层，由 UI 决定如何提示用户
+        # 将 QFluentWidgets 的重启信号转发给 UI 层, 由 UI 决定如何提示用户
         self.appRestartSig.connect(self.app_restart_signal.emit)
 
     @exceptionHandler()
@@ -641,8 +641,8 @@ class Config(QConfig):
         但优先级为 config > file > self._cfg
 
         Args:
-            file (str | Path | None): 配置文件路径，可为 None。
-            config (Self | None): 需要加载的配置类，可为 None。
+            file (str | Path | None): 配置文件路径, 可为 None. 
+            config (Self | None): 需要加载的配置类, 可为 None. 
         """
 
         # 处理 config 和 file 参数
@@ -732,7 +732,7 @@ class Config(QConfig):
         )
 
     def _sync_theme_config_items(self, flat_cfg: dict[str, object]) -> None:
-        """兼容旧版 Personalize 主题字段，并保持与 QFluentWidgets 字段一致。"""
+        """兼容旧版 Personalize 主题字段, 并保持与 QFluentWidgets 字段一致. """
         has_legacy_theme_mode = self.theme_mode.key in flat_cfg
         has_fluent_theme_mode = self.themeMode.key in flat_cfg
         has_legacy_theme_color = self.theme_color.key in flat_cfg
@@ -744,9 +744,9 @@ class Config(QConfig):
             self.theme_mode.value = self.get(self.themeMode)
 
     def build_ssh_credentials(self) -> SSHCredentials:
-        """从当前配置构建 SSH 凭据对象。
+        """从当前配置构建 SSH 凭据对象. 
 
-        安全策略：
+        安全策略: 
         - 不从配置文件读取或持久化密码
         - 默认拒绝未知主机指纹
         - 默认关闭 agent 与自动扫描本地密钥
@@ -765,7 +765,7 @@ class Config(QConfig):
         )
 
     def build_linux_core_paths(self) -> LinuxCorePaths:
-        """从当前配置构建 Linux Core 路径布局。
+        """从当前配置构建 Linux Core 路径布局. 
 
         使用标准 NapCat 安装器路径:
         - workspace: $HOME/Napcat
@@ -793,7 +793,7 @@ class Config(QConfig):
 
 
 def bind_qfluent_qconfig(config: Config) -> None:
-    """将 QFluentWidgets 全局 qconfig 绑定到项目配置，避免写到仓库根目录。"""
+    """将 QFluentWidgets 全局 qconfig 绑定到项目配置, 避免写到仓库根目录. """
     qconfig._cfg = config
     qconfig.file = Path(config.file)
     qconfig.theme = config.get(config.themeMode)

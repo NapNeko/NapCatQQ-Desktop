@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""操作抽象层（OperationBackend）。
+"""操作抽象层 (OperationBackend) . 
 
-对应 [`docs/general/remote_ssh_plan.md`](../../../../docs/general/remote_ssh_plan.md) §2 设计的"操作抽象层"，
-统一覆盖文件 / 进程 / 安装 / 日志 / WebUI 五大类操作。
+对应 [`docs/general/remote_ssh_plan.md`](../../../../docs/general/remote_ssh_plan.md) §2 设计的"操作抽象层", 
+统一覆盖文件 / 进程 / 安装 / 日志 / WebUI 五大类操作. 
 
-- [`LocalBackend`](src/core/operation/local_backend.py) 在 Windows 桌面环境实现这些操作。
-- [`RemoteBackend`](src/core/operation/remote_backend.py) 通过 SSH/SFTP 在 Linux 远端实现。
+- [`LocalBackend`](src/core/operation/local_backend.py) 在 Windows 桌面环境实现这些操作. 
+- [`RemoteBackend`](src/core/operation/remote_backend.py) 通过 SSH/SFTP 在 Linux 远端实现. 
 
 上层 UI 与 Bot 管理代码通过 [`OperationBackend`](src/core/operation/backend.py)
-与具体环境解耦，从而做到 "本地 / 远程透明切换"。
+与具体环境解耦, 从而做到 "本地 / 远程透明切换". 
 """
 
 from __future__ import annotations

@@ -139,22 +139,22 @@ class ChooseConfigTypeDialog(MessageBoxBase):
             ConnectType: 连接类型枚举
         """
         if (checked_id := self.button_group.checkedId()) != -1:
-            # 将选中的 id 映射为 ConnectType。使用 ConnectType(checked_id) 比
-            # list(ConnectType)[checked_id] 更稳健（避免枚举顺序/索引不一致的问题）。
+            # 将选中的 id 映射为 ConnectType. 使用 ConnectType(checked_id) 比
+            # list(ConnectType)[checked_id] 更稳健 (避免枚举顺序/索引不一致的问题) . 
             return ConnectType(checked_id)
 
         return ConnectType.NO_TYPE
 
 
 class ConfigDialogBase(MessageBoxBase):
-    """配置对话框基类，提供通用的配置界面和验证功能"""
+    """配置对话框基类, 提供通用的配置界面和验证功能"""
 
     def __init__(self, parent: QObject, config: NetworkBaseConfig | None) -> None:
         """初始化配置对话框基类
 
         Args:
             parent: 父级对象
-            config: 网络基础配置对象，可为 None
+            config: 网络基础配置对象, 可为 None
         """
         super().__init__(parent)
         # 属性
@@ -183,7 +183,7 @@ class ConfigDialogBase(MessageBoxBase):
     def fill_config(self) -> None:
         """填充配置数据到界面控件
 
-        如果传入了配置对象，则将配置值填充到对应的控件中
+        如果传入了配置对象, 则将配置值填充到对应的控件中
         """
         if self.config is None:
             return
@@ -194,15 +194,15 @@ class ConfigDialogBase(MessageBoxBase):
         self.msg_format_card.fill_value(self.config.messagePostFormat)
         self.token_card.fill_value(self.config.token)
 
-        # 禁用名字卡片（编辑模式下名称不可修改）
+        # 禁用名字卡片 (编辑模式下名称不可修改) 
         self.name_card.setEnabled(False)
 
     def set_name_conflict_validator(self, validator: Callable[[str], str | None] | None) -> None:
-        """设置名称冲突校验器，返回错误文本时阻止关闭对话框。"""
+        """设置名称冲突校验器, 返回错误文本时阻止关闭对话框. """
         self._name_conflict_validator = validator
 
     def _validate_before_accept(self, config: NetworkBaseConfig) -> None:
-        """执行对话框关闭前的业务校验。"""
+        """执行对话框关闭前的业务校验. """
         if self._name_conflict_validator is None:
             return
 
@@ -210,7 +210,7 @@ class ConfigDialogBase(MessageBoxBase):
             raise ValueError(error_message)
 
     def _parse_required_int(self, raw_value: str, field_name: str, *, minimum: int = 1) -> int:
-        """解析必填正整数输入。"""
+        """解析必填正整数输入. """
         value = raw_value.strip()
         if not value:
             raise ValueError(f"{field_name} 不能为空")
@@ -226,7 +226,7 @@ class ConfigDialogBase(MessageBoxBase):
         return parsed
 
     def _parse_optional_int(self, raw_value: str, field_name: str, *, default: int, minimum: int = 1) -> int:
-        """解析可留空的整数输入；留空时回落到默认值。"""
+        """解析可留空的整数输入; 留空时回落到默认值. """
         value = raw_value.strip()
         if not value:
             return default
@@ -234,9 +234,9 @@ class ConfigDialogBase(MessageBoxBase):
 
     @Slot()
     def accept(self) -> None:
-        """重写接受方法，验证配置有效性
+        """重写接受方法, 验证配置有效性
 
-        在点击确定按钮时验证配置，如果验证失败显示错误信息
+        在点击确定按钮时验证配置, 如果验证失败显示错误信息
         """
         try:
             config = self.get_config()
@@ -273,7 +273,7 @@ class HttpServerConfigDialog(ConfigDialogBase):
 
         Args:
             parent: 父级对象
-            config: HTTP 服务器配置对象，可选
+            config: HTTP 服务器配置对象, 可选
         """
         super().__init__(parent, config)
 
@@ -340,7 +340,7 @@ class HttpSSEServerConfigDialog(ConfigDialogBase):
 
         Args:
             parent: 父级对象
-            config: HTTP SSE 服务器配置对象，可选
+            config: HTTP SSE 服务器配置对象, 可选
         """
         super().__init__(parent, config)
 
@@ -411,7 +411,7 @@ class HttpClientConfigDialog(ConfigDialogBase):
 
         Args:
             parent: 父级对象
-            config: HTTP 客户端配置对象，可选
+            config: HTTP 客户端配置对象, 可选
         """
         super().__init__(parent, config)
 
@@ -469,7 +469,7 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
 
         Args:
             parent: 父级对象
-            config: WebSocket 服务器配置对象，可选
+            config: WebSocket 服务器配置对象, 可选
         """
         super().__init__(parent, config)
 
@@ -543,7 +543,7 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
 
         Args:
             parent: 父级对象
-            config: WebSocket 客户端配置对象，可选
+            config: WebSocket 客户端配置对象, 可选
         """
         super().__init__(parent, config)
 
@@ -663,7 +663,7 @@ class AutoRestartDialog(MessageBoxBase):
 
 
 class AdvancedBackendDialog(MessageBoxBase):
-    """底层与反检测配置对话框。"""
+    """底层与反检测配置对话框. """
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)
@@ -721,7 +721,7 @@ class AdvancedBackendDialog(MessageBoxBase):
         self.widget.setMinimumSize(760, 520)
 
     def get_config(self) -> AdvancedConfig:
-        """获取底层配置。"""
+        """获取底层配置. """
         return AdvancedConfig(
             packetBackend=self.packet_backend_card.get_value().strip() or "auto",
             packetServer=self.packet_server_card.get_value().strip(),
@@ -737,7 +737,7 @@ class AdvancedBackendDialog(MessageBoxBase):
         )
 
     def fill_config(self, config: AdvancedConfig | None = None) -> None:
-        """填充底层配置。"""
+        """填充底层配置. """
         if config is None:
             return
 
@@ -752,7 +752,7 @@ class AdvancedBackendDialog(MessageBoxBase):
         self.bypass_js_card.fill_value(config.bypass.js)
 
     def clear_config(self) -> None:
-        """清空底层配置。"""
+        """清空底层配置. """
         self.packet_backend_card.fill_value("auto")
         self.packet_server_card.clear()
         self.o3_hook_mode_card.fill_value("1")
@@ -809,22 +809,22 @@ class QRCodeDialog(MessageBoxBase):
     # ==================== 公共方法 ====================
     @staticmethod
     def _clone_qr_code_list(qr_code_list: list[dict[str, str]]) -> list[dict[str, str]]:
-        """复制二维码列表，避免外部原地更新导致视图失效。"""
+        """复制二维码列表, 避免外部原地更新导致视图失效. """
         return [info.copy() for info in qr_code_list]
 
     def get_current_qq_id(self) -> str | None:
-        """获取当前展示页对应的 QQ 号。"""
+        """获取当前展示页对应的 QQ 号. """
         index = self.view.currentIndex()
         if index == -1 or index >= len(self._qr_code_list):
             return None
         return self._qr_code_list[index]["qq_id"]
 
     def get_visible_qq_ids(self) -> list[str]:
-        """获取当前对话框中可见的全部 QQ 号。"""
+        """获取当前对话框中可见的全部 QQ 号. """
         return [info["qq_id"] for info in self._qr_code_list]
 
     def set_current_qq_id(self, qq_id: str | None) -> None:
-        """将视图定位到指定 QQ 号对应的二维码。"""
+        """将视图定位到指定 QQ 号对应的二维码. """
         if not self._qr_code_list:
             self.title_label.setText(self.tr("QQ 登录二维码"))
             return
@@ -905,7 +905,7 @@ class QRCodeDialog(MessageBoxBase):
         self.view.addWidget(image_label)
 
     def accept(self) -> None:
-        """刷新当前页二维码，不关闭对话框。"""
+        """刷新当前页二维码, 不关闭对话框. """
         qq_id = self.get_current_qq_id()
         if qq_id is None:
             return
@@ -920,7 +920,7 @@ class QRCodeDialog(MessageBoxBase):
         success_bar(self.tr("已请求刷新二维码，如二维码仍无效请尝试重启 NapCat"), parent=self)
 
     def reject(self) -> None:
-        """记录用户主动取消，供工厂抑制后续自动弹窗。"""
+        """记录用户主动取消, 供工厂抑制后续自动弹窗. """
         self.dismissed_by_user = True
         super().reject()
 
@@ -995,7 +995,7 @@ class QRCodeDialogFactory(QObject):
             self.dialog.update_qr_codes(self.qr_code_list)
 
     def has_qr_code(self, qq_id: str) -> bool:
-        """判断指定 QQ 是否存在待扫码二维码。"""
+        """判断指定 QQ 是否存在待扫码二维码. """
         return any(info["qq_id"] == qq_id for info in self.qr_code_list)
 
     def show(self, preferred_qq_id: str | None = None) -> None:

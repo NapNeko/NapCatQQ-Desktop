@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""当前配置导出服务。"""
+"""当前配置导出服务. """
 
 # 标准库导入
 import json
@@ -19,7 +19,7 @@ _EXPORT_FORMAT_VERSION = "v1"
 
 @dataclass(frozen=True)
 class ExportScanResult:
-    """扫描当前运行时后得到的可导出结果。"""
+    """扫描当前运行时后得到的可导出结果. """
 
     output_dir: Path
     archive_path: Path
@@ -31,7 +31,7 @@ class ExportScanResult:
 
 @dataclass(frozen=True)
 class ExportExecutionPlan:
-    """配置导出执行计划。"""
+    """配置导出执行计划. """
 
     scan_result: ExportScanResult
     export_app_config: bool = False
@@ -40,7 +40,7 @@ class ExportExecutionPlan:
 
 @dataclass(frozen=True)
 class ExportExecutionResult:
-    """配置导出执行结果。"""
+    """配置导出执行结果. """
 
     output_dir: Path
     archive_path: Path
@@ -103,7 +103,7 @@ def _resolve_archive_path(output_dir: Path) -> Path:
 
 
 def scan_current_config_export(target_dir: Path) -> ExportScanResult:
-    """扫描当前运行时，确认可导出内容与 ZIP 输出位置。"""
+    """扫描当前运行时, 确认可导出内容与 ZIP 输出位置. """
 
     path_func = _get_path_func()
     resolved_output_dir = Path(target_dir).expanduser().resolve()
@@ -140,7 +140,7 @@ def scan_current_config_export(target_dir: Path) -> ExportScanResult:
 
 
 def apply_config_export(plan: ExportExecutionPlan) -> ExportExecutionResult:
-    """将当前配置打包导出为 ZIP 文件。"""
+    """将当前配置打包导出为 ZIP 文件. """
 
     output_dir = plan.scan_result.output_dir
     archive_path = plan.scan_result.archive_path

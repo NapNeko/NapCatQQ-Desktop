@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""版本信息领域导出。"""
+"""版本信息领域导出. """
 
 from src.core.versioning.release_hash_service import (
     DEFAULT_FALLBACK_SOURCE,

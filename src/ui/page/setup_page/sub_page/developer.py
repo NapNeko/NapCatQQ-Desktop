@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 class ActionButtonCard(SettingCard):
-    """带单个操作按钮的设置卡片。"""
+    """带单个操作按钮的设置卡片. """
 
     def __init__(
         self,
@@ -56,16 +56,16 @@ class ActionButtonCard(SettingCard):
 
 
 class RemoteRollbackCard(SettingCard):
-    """选择远端服务器并触发回滚的开发者卡片。
+    """选择远端服务器并触发回滚的开发者卡片. 
 
     内嵌 [`ComboBox`](https://qfluentwidgets.com/) 列出所有已添加的服务器,
     点 "执行回滚" 按钮先二次确认, 再弹独立的
     [`DeploymentConsoleDialog`](src/ui/page/remote_page/deployment_console.py)
     实时展示清理日志, 后台用 [`RollbackRunner`](src/ui/page/remote_page/deployment_runner.py)
-    跑 [`ServerManager.rollback_server`](src/core/remote/server_manager.py)。
+    跑 [`ServerManager.rollback_server`](src/core/remote/server_manager.py). 
 
     每次按钮点击或 popup 展开都会**重新查询** ``ServerManager`` 列表,
-    无需订阅 ``server_added`` / ``server_removed`` 信号。
+    无需订阅 ``server_added`` / ``server_removed`` 信号. 
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -95,7 +95,7 @@ class RemoteRollbackCard(SettingCard):
 
     # ----- 服务器列表同步 -----
     def _refresh_servers(self) -> None:
-        """从 ``ServerManager`` 重新拉取列表填充 ComboBox。"""
+        """从 ``ServerManager`` 重新拉取列表填充 ComboBox. """
         manager = it(ServerManager)
         servers = manager.list_servers()
         # 保存当前选中 id 以便恢复
@@ -198,7 +198,7 @@ class RemoteRollbackCard(SettingCard):
 
 
 class Developer(ScrollArea):
-    """开发者工具页面。"""
+    """开发者工具页面. """
 
     _TEST_QQ_ID = "114514"
 
@@ -217,7 +217,7 @@ class Developer(ScrollArea):
         self._set_layout()
 
     def _create_config_cards(self) -> None:
-        """创建开发者配置卡片。"""
+        """创建开发者配置卡片. """
         self.log_group = SettingCardGroup(title=self.tr("日志"), parent=self.view)
         self.trace_logging_card = SwitchConfigCard(
             FI.DEVELOPER_TOOLS,
@@ -300,7 +300,7 @@ class Developer(ScrollArea):
         )
 
     def _set_layout(self) -> None:
-        """控件布局。"""
+        """控件布局. """
         self.log_group.addSettingCard(self.trace_logging_card)
         self.crash_group.addSettingCard(self.export_bundle_card)
         self.crash_group.addSettingCard(self.thread_exception_card)
@@ -323,7 +323,7 @@ class Developer(ScrollArea):
         self.trace_logging_card.switchButton.checkedChanged.connect(self._on_trace_logging_changed)
 
     def _on_trace_logging_changed(self, enabled: bool) -> None:
-        """切换开发者 TRACE 日志开关。"""
+        """切换开发者 TRACE 日志开关. """
         logger.set_trace_logging_enabled(enabled)
         logger.info(f"开发者模式切换 TRACE 日志: enabled={enabled}", log_source=LogSource.UI)
         if enabled:
@@ -333,7 +333,7 @@ class Developer(ScrollArea):
             info_bar(self.tr("TRACE 日志已关闭"), parent=self)
 
     def _export_test_crash_bundle(self) -> None:
-        """手动生成一份测试用诊断包。"""
+        """手动生成一份测试用诊断包. """
         logger.info("开发者模式触发手动崩溃包导出", log_source=LogSource.UI)
         bundle_path = logger.emit_test_crash_bundle()
         if bundle_path is None:
@@ -344,7 +344,7 @@ class Developer(ScrollArea):
         info_bar(self.tr(f"输出位置: {bundle_path.parent}"), parent=self)
 
     def _trigger_thread_exception(self) -> None:
-        """触发线程未处理异常测试。"""
+        """触发线程未处理异常测试. """
         logger.warning("开发者模式触发线程未处理异常测试", log_source=LogSource.UI)
         warning_bar(self.tr("已触发线程异常测试，请检查日志和桌面诊断包"), parent=self)
 
@@ -354,19 +354,19 @@ class Developer(ScrollArea):
         threading.Thread(target=raise_unhandled_exception, name="developer-thread-crash-test", daemon=True).start()
 
     def _trigger_main_thread_exception(self) -> None:
-        """触发主线程未处理异常测试。"""
+        """触发主线程未处理异常测试. """
         logger.warning("开发者模式触发主线程未处理异常测试", log_source=LogSource.UI)
         warning_bar(self.tr("即将触发主线程未处理异常，当前进程会退出"), parent=self)
         QTimer.singleShot(150, self._raise_main_thread_exception)
 
     def _trigger_home_notice_test(self) -> None:
-        """触发首页通知测试。"""
+        """触发首页通知测试. """
         logger.info("开发者模式触发首页通知测试", log_source=LogSource.UI)
 
         process_manager = it(ManagerNapCatQQProcess)
         login_state_manager = it(ManagerNapCatQQLoginState)
 
-        # 先切入 debug 上下文，再注入运行时测试信号，避免清理时混入真实提醒集合。
+        # 先切入 debug 上下文, 再注入运行时测试信号, 避免清理时混入真实提醒集合. 
         home_notice_debug_center.sampleRequested.emit()
         process_manager.notification_signal.emit("info", "开发者模式: 检测到 NapCat 可更新到 v9.9.99。")
         process_manager.notification_signal.emit("warning", "开发者模式: 测试 Bot 当前处于离线状态。")
@@ -378,7 +378,7 @@ class Developer(ScrollArea):
         info_bar(self.tr("可切换到主页检查提醒、更新和扫码通知展示"), parent=self)
 
     def _clear_home_notice_test(self) -> None:
-        """清除首页通知测试。"""
+        """清除首页通知测试. """
         logger.info("开发者模式清除首页通知测试", log_source=LogSource.UI)
         it(ManagerNapCatQQLoginState).qr_code_removed_signal.emit(self._TEST_QQ_ID)
         home_notice_debug_center.clearRequested.emit()
@@ -386,14 +386,14 @@ class Developer(ScrollArea):
 
     @staticmethod
     def _raise_main_thread_exception() -> None:
-        """在 Qt 主线程中抛出未处理异常。"""
+        """在 Qt 主线程中抛出未处理异常. """
         raise RuntimeError("Developer mode main thread exception test")
 
     def _test_update_confirmation(self) -> None:
-        """测试更新确认弹窗。
+        """测试更新确认弹窗. 
 
-        模拟显示更新前的确认弹窗，展示 MSI 升级与便携版迁移到 MSI 的不同提示文本，
-        以及 Bot 状态检测结果的集成效果。
+        模拟显示更新前的确认弹窗, 展示 MSI 升级与便携版迁移到 MSI 的不同提示文本, 
+        以及 Bot 状态检测结果的集成效果. 
         """
         logger.info("开发者模式测试更新确认弹窗", log_source=LogSource.UI)
 
@@ -426,10 +426,10 @@ class Developer(ScrollArea):
             logger.info("用户取消更新（测试）", log_source=LogSource.UI)
 
     def _test_detect_install_type(self) -> None:
-        """检测安装类型并显示详细信息。
+        """检测安装类型并显示详细信息. 
 
-        检测当前运行实例的安装类型（MSI/便携版/未知），
-        并显示当前实例在统一 MSI 更新链路下的诊断信息。
+        检测当前运行实例的安装类型 (MSI/便携版/未知) , 
+        并显示当前实例在统一 MSI 更新链路下的诊断信息. 
         """
         logger.info("开发者模式检测安装类型", log_source=LogSource.UI)
 
@@ -453,10 +453,10 @@ class Developer(ScrollArea):
         msg.exec()
 
     def _test_generate_msi_script(self) -> None:
-        """生成并显示 MSI 更新脚本（仅用于检查，不会执行）。
+        """生成并显示 MSI 更新脚本 (仅用于检查, 不会执行) . 
 
-        从资源加载 update_msi.bat 模板，注入当前进程 PID，
-        保存到临时目录并打开文件位置供检查。
+        从资源加载 update_msi.bat 模板, 注入当前进程 PID, 
+        保存到临时目录并打开文件位置供检查. 
         """
         logger.info("开发者模式生成 MSI 更新脚本", log_source=LogSource.UI)
 

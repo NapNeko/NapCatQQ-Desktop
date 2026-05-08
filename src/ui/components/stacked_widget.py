@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QStackedWidget, QWidget
 
 
 class _SnapshotOverlay(QWidget):
-    """用于播放截图淡出动画的轻量遮罩层。"""
+    """用于播放截图淡出动画的轻量遮罩层. """
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
@@ -69,7 +69,7 @@ class _SnapshotOverlay(QWidget):
 
 
 class TransparentStackedWidget(QStackedWidget):
-    """带轻量截图淡出动画的透明堆叠控件。"""
+    """带轻量截图淡出动画的透明堆叠控件. """
 
     aniStart = Signal()
     aniFinished = Signal()
@@ -89,7 +89,7 @@ class TransparentStackedWidget(QStackedWidget):
         self._is_animation_enabled = True
         self._animation_active = False
 
-        # 保留参数兼容，避免现有调用点因签名变化而中断。
+        # 保留参数兼容, 避免现有调用点因签名变化而中断. 
         self._default_delta_x = delta_x
         self._default_delta_y = delta_y
 
@@ -108,18 +108,18 @@ class TransparentStackedWidget(QStackedWidget):
         self.setStyleSheet("background:transparent;border: none;")
 
     def addWidget(self, widget: QWidget) -> int:
-        """添加页面，重复添加时保持与旧实现兼容。"""
+        """添加页面, 重复添加时保持与旧实现兼容. """
         if (current_index := self.indexOf(widget)) != -1:
             return current_index
 
         return super().addWidget(widget)
 
     def isAnimationEnabled(self) -> bool:
-        """返回当前是否启用切页动画。"""
+        """返回当前是否启用切页动画. """
         return self._is_animation_enabled
 
     def setAnimationEnabled(self, is_enabled: bool) -> None:
-        """设置是否启用切页动画。"""
+        """设置是否启用切页动画. """
         self._is_animation_enabled = bool(is_enabled)
         if not self._is_animation_enabled:
             self._stop_snapshot_animation()
@@ -132,7 +132,7 @@ class TransparentStackedWidget(QStackedWidget):
         duration: int | None = None,
         easingCurve: QEasingCurve.Type | None = None,
     ) -> None:
-        """切换页面，用上一页截图淡出避免干扰真实控件绘制。"""
+        """切换页面, 用上一页截图淡出避免干扰真实控件绘制. """
         _ = (needPopOut, showNextWidgetDirectly)
 
         if index < 0 or index >= self.count():
@@ -200,7 +200,7 @@ class TransparentStackedWidget(QStackedWidget):
         duration: int | None = None,
         easingCurve: QEasingCurve.Type | None = None,
     ) -> None:
-        """切换到目标页面。"""
+        """切换到目标页面. """
         self.setCurrentIndex(
             self.indexOf(widget),
             needPopOut=needPopOut,
@@ -210,7 +210,7 @@ class TransparentStackedWidget(QStackedWidget):
         )
 
     def resizeEvent(self, event: QResizeEvent) -> None:
-        """保持截图遮罩尺寸与容器同步。"""
+        """保持截图遮罩尺寸与容器同步. """
         super().resizeEvent(event)
         if self._snapshot_overlay.isVisible():
             self._snapshot_overlay.setGeometry(self.rect())

@@ -22,7 +22,7 @@ class WebHookData:
     url: str
     secret: str
     json: str
-    method: str = "POST"  # 新增字段，默认 POST
+    method: str = "POST"  # 新增字段, 默认 POST
 
     def __init__(
         self, url: str | None = None, secret: str | None = None, json: str | None = None, method: str | None = None
@@ -30,10 +30,10 @@ class WebHookData:
         """初始化 WebHookData, 动态从配置中获取值
 
         Args:
-            url (str | None): WebHook 地址，可为 None。
-            secret (str | None): WebHook 密钥，可为 None。
-            json (str | None): WebHook JSON 内容，可为 None。
-            method (str | None): HTTP 方法，可为 None，默认为 POST。
+            url (str | None): WebHook 地址, 可为 None. 
+            secret (str | None): WebHook 密钥, 可为 None. 
+            json (str | None): WebHook JSON 内容, 可为 None. 
+            method (str | None): HTTP 方法, 可为 None, 默认为 POST. 
         """
         self.url = url or cfg.get(cfg.web_hook_url)
         self.secret = secret or cfg.get(cfg.web_hook_secret)
@@ -66,7 +66,7 @@ class WebHook(QObject, QRunnable):
 
     @staticmethod
     def _summarize_payload(payload: Mapping[str, Any] | Sequence[Any] | str | int | float | bool | None) -> str:
-        """生成便于调试的请求体摘要，避免直接输出完整内容。"""
+        """生成便于调试的请求体摘要, 避免直接输出完整内容. """
         if isinstance(payload, Mapping):
             keys = list(payload.keys())
             preview = ", ".join(str(key) for key in keys[:6])
@@ -149,7 +149,7 @@ class WebHook(QObject, QRunnable):
     def validate_and_format_json(
         self,
     ) -> tuple[bool, Mapping[str, Any] | Sequence[Any] | str | int | float | bool | None]:
-        """验证并规范化 JSON 内容，返回可直接发送的 Python 对象。"""
+        """验证并规范化 JSON 内容, 返回可直接发送的 Python 对象. """
         try:
             payload = json.loads(self.data.json)
             self.data.json = json.dumps(payload, indent=4, ensure_ascii=False)

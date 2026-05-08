@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""通用骨架屏组件。"""
+"""通用骨架屏组件. """
 
 # 标准库导入
 import math
@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QWidget
 
 @dataclass(frozen=True)
 class SkeletonShape:
-    """骨架元素描述。"""
+    """骨架元素描述. """
 
     x: int
     y: int
@@ -26,7 +26,7 @@ class SkeletonShape:
 
 
 class SkeletonWidget(QWidget):
-    """带有低对比呼吸动画的通用骨架屏。"""
+    """带有低对比呼吸动画的通用骨架屏. """
 
     def __init__(
         self,

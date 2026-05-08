@@ -401,7 +401,7 @@ class _OccupancyCanvas(QWidget):
 
 
 class OccupancyChartWidget(SimpleCardWidget):
-    """占用图表控件，适合展示 CPU、RAM 等 0-100 的占用值。"""
+    """占用图表控件, 适合展示 CPU, RAM 等 0-100 的占用值. """
 
     def __init__(
         self,
@@ -498,7 +498,7 @@ class OccupancyChartWidget(SimpleCardWidget):
 
 
 class OccupancyPanel(QWidget):
-    """首页右侧占用概览面板。"""
+    """首页右侧占用概览面板. """
 
     HISTORY_SIZE = 24
 

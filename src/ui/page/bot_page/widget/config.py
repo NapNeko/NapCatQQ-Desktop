@@ -292,7 +292,7 @@ class ConnectConfigWidget(ScrollArea):
             self.updateGeometry()
 
     def has_config_name(self, name: str) -> bool:
-        """检查是否已存在同名网络配置。"""
+        """检查是否已存在同名网络配置. """
         normalized_name = name.strip().casefold()
         if not normalized_name:
             return False
@@ -343,7 +343,7 @@ class AdvancedConfigWidget(ScrollArea):
     """Bot 高级设置页面"""
 
     class BackendConfigCard(SettingCard):
-        """底层配置入口卡片。"""
+        """底层配置入口卡片. """
 
         def __init__(self, parent: QWidget | None = None) -> None:
             super().__init__(
@@ -361,7 +361,7 @@ class AdvancedConfigWidget(ScrollArea):
             self._refresh_summary()
 
         def _ensure_dialog(self) -> AdvancedBackendDialog:
-            """惰性创建对话框，避免把对话框控件挂进当前页面。"""
+            """惰性创建对话框, 避免把对话框控件挂进当前页面. """
             if self._dialog is None:
                 from src.ui.window.main_window import MainWindow
 
@@ -560,7 +560,7 @@ class AdvancedConfigWidget(ScrollArea):
         self._sync_log_level_card_state()
 
     def _sync_log_level_card_state(self, *_args) -> None:
-        """根据日志开关同步日志等级输入的可编辑状态。"""
+        """根据日志开关同步日志等级输入的可编辑状态. """
         self.file_log_level_card.setEnabled(self.file_log_card.get_value())
         self.console_level_card.setEnabled(self.console_log_card.get_value())
 

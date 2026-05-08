@@ -25,5 +25,5 @@ class LineNumberArea(QWidget):
         return QSize(self.code_editor.line_number_area_width(), 0)
 
     def paintEvent(self, event: QPaintEvent) -> None:
-        # 绘制事件处理，委托给 CodeEditorBase 中的 line_number_area_paint_event 方法
+        # 绘制事件处理, 委托给 CodeEditorBase 中的 line_number_area_paint_event 方法
         self.code_editor.line_number_area_paint_event(event)

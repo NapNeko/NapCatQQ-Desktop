@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`RemoteSummaryCard`](src/ui/components/remote_summary_card.py): 首页远端概览卡片 (P4 W2·F4 / P4 W4 视觉重构).
+"""[`RemoteSummaryCard`](src/ui/components/remote_summary_card.py): 首页远端概览卡片 (P4 W2.F4 / P4 W4 视觉重构).
 
 设计要点
 ========
@@ -104,7 +104,7 @@ class RemoteSummaryCard(SimpleCardWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         # 鼠标悬停时显示手型, 提示卡片整体可点击
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        # (server_id, metric, value, ts) — 最近一条; None 表示无告警
+        # (server_id, metric, value, ts) - 最近一条; None 表示无告警
         self._latest_breach: tuple[str, str, float, float] | None = None
 
         self._create_widgets()

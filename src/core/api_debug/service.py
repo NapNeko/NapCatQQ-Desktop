@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试服务编排层。"""
+"""接口调试服务编排层. """
 
 # 标准库导入
 from datetime import datetime, timezone
@@ -22,7 +22,7 @@ ClientFactory = Callable[..., httpx.Client]
 
 
 class ApiDebugService:
-    """统一协调请求构造、认证注入、发送、解析和历史记录。"""
+    """统一协调请求构造, 认证注入, 发送, 解析和历史记录. """
 
     def __init__(
         self,
@@ -48,7 +48,7 @@ class ApiDebugService:
         *,
         persist_history: bool = True,
     ) -> ApiDebugExecutionResult:
-        """执行一次接口调试请求。"""
+        """执行一次接口调试请求. """
         started_at = datetime.now(timezone.utc)
         request = self.request_builder.build_fallback(request_config)
 

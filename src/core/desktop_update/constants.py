@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Desktop 更新领域常量。"""
+"""Desktop 更新领域常量. """
 
 MSI_LOG_FILE = "msi_update.log"
 MSI_UPDATE_FILENAME = "NapCatQQ-Desktop.msi"

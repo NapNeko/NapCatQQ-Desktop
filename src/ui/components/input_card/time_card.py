@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-UI 组件：时间选择卡片
+UI 组件: 时间选择卡片
 """
 
 
@@ -25,8 +25,8 @@ class IntervalTimeConfigCard(SettingCard):
         Args:
             icon (FluentIconBase): 图标
             title (str): 标题
-            content (str | None): 内容，可为 None。
-            parent (QWidget | None): 父控件，可为 None。
+            content (str | None): 内容, 可为 None. 
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(icon, title, content, parent)
         # 创建组件

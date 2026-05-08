@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试工作台状态持久化。"""
+"""接口调试工作台状态持久化. """
 
 # 标准库导入
 import json
@@ -43,14 +43,14 @@ _SENSITIVE_FIELDS = {
 
 
 class ApiDebugWorkspaceStore:
-    """读写接口调试工作台状态。"""
+    """读写接口调试工作台状态. """
 
     def __init__(self, storage_path: Path | None = None) -> None:
         self.storage_path = storage_path or (it(PathFunc).config_dir_path / "api_debug_workspace.json")
         self._write_lock = threading.Lock()
 
     def load(self) -> ApiDebugWorkspaceState:
-        """读取状态，不存在时返回默认值。"""
+        """读取状态, 不存在时返回默认值. """
         payload = self._read_payload()
         return ApiDebugWorkspaceState(
             selected_bot_id=str(payload.get("selected_bot_id", "")),
@@ -64,7 +64,7 @@ class ApiDebugWorkspaceStore:
         )
 
     def save(self, state: ApiDebugWorkspaceState) -> None:
-        """写入状态。"""
+        """写入状态. """
         payload = {
             "version": 1,
             "selected_bot_id": state.selected_bot_id,
@@ -88,7 +88,7 @@ class ApiDebugWorkspaceStore:
         summary: str = "",
         preset_id: str | None = None,
     ) -> ApiDebugPreset:
-        """创建或更新预设，并立即写回状态。"""
+        """创建或更新预设, 并立即写回状态. """
         normalized_id = preset_id or uuid.uuid4().hex
         preset = ApiDebugPreset(
             preset_id=normalized_id,
@@ -104,7 +104,7 @@ class ApiDebugWorkspaceStore:
         return preset
 
     def remove_preset(self, state: ApiDebugWorkspaceState, preset_id: str) -> bool:
-        """删除预设并写回。"""
+        """删除预设并写回. """
         remaining = [item for item in state.presets if item.preset_id != preset_id]
         if len(remaining) == len(state.presets):
             return False

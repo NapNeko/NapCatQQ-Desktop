@@ -57,7 +57,7 @@ class HelloCard(SimpleCardWidget):
         cfg.themeColorChanged.connect(lambda *_: self.cat_girl_icon_label.update())
 
     def attach_floating_icon(self, host: QWidget) -> None:
-        """将猫娘图标挂到外层宿主上，实现超出卡片边界的悬浮效果。"""
+        """将猫娘图标挂到外层宿主上, 实现超出卡片边界的悬浮效果. """
         self._floating_icon_host = host
         self.cat_girl_icon_label.setParent(host)
         self.cat_girl_icon_label.show()

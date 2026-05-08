@@ -76,7 +76,7 @@ class VersionShowcaseCard(SimpleCardWidget):
 
 
 class VersionCardsPanel(QWidget):
-    """首页版本信息卡片组。"""
+    """首页版本信息卡片组. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

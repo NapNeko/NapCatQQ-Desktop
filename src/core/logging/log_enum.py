@@ -33,7 +33,7 @@ class LogType(Enum):
     NONE_TYPE = 2  # 无类型
 
     def __str__(self):
-        # 格式化输出，固定宽度为 11
+        # 格式化输出, 固定宽度为 11
         return f"[{self.name.center(11)}]"
 
 
@@ -45,5 +45,5 @@ class LogSource(Enum):
     NONE = 2  # 无来源
 
     def __str__(self):
-        # 格式化输出，固定宽度为 6
+        # 格式化输出, 固定宽度为 6
         return f"[{self.name.center(6)}]"

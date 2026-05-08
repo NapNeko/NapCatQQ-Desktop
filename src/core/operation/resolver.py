@@ -44,7 +44,7 @@ class BackendResolutionError(RuntimeError):
     - ``runtime_target`` 引用的 server_id 在 [`ServerRegistry`](src/core/remote/servers.py)
       中不存在 (服务器被删除 / 配置文件被外部篡改).
     - ``runtime_target`` 引用的服务器尚未完成部署 (deployment_state != DEPLOYED)
-      —— 该子类型可由调用方根据 ``stage`` 字段区分.
+      -- 该子类型可由调用方根据 ``stage`` 字段区分.
     """
 
     def __init__(self, message: str, *, stage: str = "unknown", target: str | None = None) -> None:

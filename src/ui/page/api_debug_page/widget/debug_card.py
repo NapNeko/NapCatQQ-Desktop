@@ -22,7 +22,7 @@ from .method_badge import MethodBadge, apply_method_badge
 
 
 class ActionResultCard(QWidget):
-    """执行结果区域。"""
+    """执行结果区域. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -108,7 +108,7 @@ class ActionResultCard(QWidget):
 
 
 class RuntimeEndpointCard(CardWidget):
-    """右侧在线运行面板复用的接口摘要卡片。"""
+    """右侧在线运行面板复用的接口摘要卡片. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -136,7 +136,7 @@ class RuntimeEndpointCard(CardWidget):
 
 
 class ActionDebugCard(CardWidget):
-    """接口示例与调用结果面板。"""
+    """接口示例与调用结果面板. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

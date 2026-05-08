@@ -24,7 +24,7 @@ from src.ui.components.info_bar import error_bar, warning_bar
 
 
 class LogLevelFilterComboBox(ComboBox):
-    """避免在菜单项关闭后继续访问已销毁 item 的安全组合框。"""
+    """避免在菜单项关闭后继续访问已销毁 item 的安全组合框. """
 
     def _showComboMenu(self):
         if not self.items:
@@ -65,7 +65,7 @@ class LogLevelFilterComboBox(ComboBox):
 
 
 class DesktopLog(QWidget):
-    """Desktop 日志页面。"""
+    """Desktop 日志页面. """
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent=parent)
@@ -92,7 +92,7 @@ class DesktopLog(QWidget):
         self.reload_log_view()
 
     def _setup_ui(self) -> None:
-        """初始化界面。"""
+        """初始化界面. """
         self.view.setTitle(self.tr("Desktop 日志"))
         self.log_view.set_font_size(12)
         self.log_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
@@ -123,7 +123,7 @@ class DesktopLog(QWidget):
         self._show_log_placeholder(self.tr("正在加载 Desktop 日志..."))
 
     def _connect_signal(self) -> None:
-        """连接信号。"""
+        """连接信号. """
         self.level_filter_combo.currentIndexChanged.connect(lambda _index: self._on_level_filter_changed())
         self.open_location_button.clicked.connect(self.open_current_log_location)
         self.font_enlarge_button.clicked.connect(self.slot_font_enlarge_button)
@@ -134,7 +134,7 @@ class DesktopLog(QWidget):
         )
 
     def reload_log_view(self) -> None:
-        """完整重载当前 Desktop 日志文件。"""
+        """完整重载当前 Desktop 日志文件. """
         if (log_path := self._resolve_log_path()) is None:
             self._log_path = None
             self._log_offset = 0
@@ -158,7 +158,7 @@ class DesktopLog(QWidget):
         self._request_view_refresh(self.tr("当前日志文件为空"))
 
     def open_current_log_location(self) -> None:
-        """打开当前日志文件位置。"""
+        """打开当前日志文件位置. """
         if (log_path := self._resolve_log_path()) is None:
             warning_bar(self.tr("当前会话尚未创建 Desktop 日志文件"), parent=self)
             return
@@ -166,7 +166,7 @@ class DesktopLog(QWidget):
         subprocess.Popen(f'explorer /select,"{log_path}"', shell=True)
 
     def slot_set_log_view(self, data: str) -> None:
-        """设置当前日志内容。"""
+        """设置当前日志内容. """
         follow_tail = self._is_log_view_pinned_to_bottom()
         current_cursor = self.log_view.textCursor()
         scroll_bar = self.log_view.verticalScrollBar()
@@ -182,7 +182,7 @@ class DesktopLog(QWidget):
             scroll_bar.setValue(min(previous_scroll_value, scroll_bar.maximum()))
 
     def slot_insert_log_view(self, data: str) -> None:
-        """向日志视图追加内容。"""
+        """向日志视图追加内容. """
         follow_tail = self._is_log_view_pinned_to_bottom()
         current_cursor = self.log_view.textCursor()
         scroll_bar = self.log_view.verticalScrollBar()
@@ -203,15 +203,15 @@ class DesktopLog(QWidget):
             scroll_bar.setValue(previous_scroll_value)
 
     def slot_font_enlarge_button(self) -> None:
-        """放大字体。"""
+        """放大字体. """
         self.log_view.set_font_size(self.log_view.font_size + 1)
 
     def slot_font_shrink_button(self) -> None:
-        """缩小字体。"""
+        """缩小字体. """
         self.log_view.set_font_size(self.log_view.font_size - 1)
 
     def _on_log_output_created(self, notification: LogOutputNotification) -> None:
-        """接收日志域追加事件。"""
+        """接收日志域追加事件. """
         if self._log_path is None:
             self.reload_log_view()
             return
@@ -227,7 +227,7 @@ class DesktopLog(QWidget):
         self._request_view_refresh()
 
     def _resolve_log_path(self) -> Path | None:
-        """解析当前会话日志文件路径。"""
+        """解析当前会话日志文件路径. """
         log_path = getattr(logger, "log_path", None)
         if log_path is None:
             return None
@@ -236,20 +236,20 @@ class DesktopLog(QWidget):
         return path if path.exists() else None
 
     def _show_log_placeholder(self, text: str) -> None:
-        """展示日志占位文本。"""
+        """展示日志占位文本. """
         self.slot_set_log_view(text)
 
     def _is_log_view_pinned_to_bottom(self) -> bool:
-        """判断日志视图当前是否贴底。"""
+        """判断日志视图当前是否贴底. """
         scroll_bar = self.log_view.verticalScrollBar()
         return scroll_bar.maximum() - scroll_bar.value() <= 2
 
     def _on_level_filter_changed(self) -> None:
-        """切换日志等级筛选。"""
+        """切换日志等级筛选. """
         self._request_view_refresh()
 
     def _request_view_refresh(self, fallback_text: str | None = None) -> None:
-        """请求一次串行的日志视图刷新。"""
+        """请求一次串行的日志视图刷新. """
         if fallback_text is not None:
             self._pending_fallback_text = fallback_text
 
@@ -268,7 +268,7 @@ class DesktopLog(QWidget):
             self._is_refreshing_view = False
 
     def _flush_pending_view_refresh(self) -> None:
-        """按当前筛选条件刷新日志预览。"""
+        """按当前筛选条件刷新日志预览. """
         filtered_text = "".join(text for level, text in self._preview_entries if self._matches_selected_level(level))
         if filtered_text:
             self.slot_set_log_view(filtered_text)
@@ -283,14 +283,14 @@ class DesktopLog(QWidget):
         self._show_log_placeholder(self.tr("当前筛选条件下没有日志"))
 
     def _selected_level_name(self) -> str | None:
-        """返回当前筛选的日志等级。"""
+        """返回当前筛选的日志等级. """
         current_level = self.level_filter_combo.currentData()
         if current_level == LogLevel.ALL_.name:
             return None
         return current_level
 
     def _matches_selected_level(self, level_name: str | None) -> bool:
-        """判断日志是否符合当前筛选条件。"""
+        """判断日志是否符合当前筛选条件. """
         selected_level = self._selected_level_name()
         if selected_level is None:
             return True
@@ -298,7 +298,7 @@ class DesktopLog(QWidget):
 
     @staticmethod
     def _build_preview_entries(text: str, previous_level: str | None = None) -> list[tuple[str | None, str]]:
-        """将完整日志文本拆为可筛选的终端风格预览行。"""
+        """将完整日志文本拆为可筛选的终端风格预览行. """
         if not text:
             return []
 
@@ -313,7 +313,7 @@ class DesktopLog(QWidget):
 
     @staticmethod
     def _format_log_preview_line(line: str, inherited_level: str | None = None) -> tuple[str | None, str]:
-        """将单行完整日志压缩为 `时间 | 等级 | 消息`。"""
+        """将单行完整日志压缩为 `时间 | 等级 | 消息`. """
         newline = "\n" if line.endswith("\n") else ""
         raw_line = line.rstrip("\n")
         parts = raw_line.split(" | ", 5)

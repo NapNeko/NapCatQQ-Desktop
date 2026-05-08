@@ -15,7 +15,7 @@ from src.core.config import cfg
 
 
 def _mix_color(source: QColor, target: QColor | str, ratio: float) -> QColor:
-    """按比例混合两种颜色。"""
+    """按比例混合两种颜色. """
     source = QColor(source)
     target = QColor(target)
     ratio = max(0.0, min(1.0, ratio))
@@ -28,7 +28,7 @@ def _mix_color(source: QColor, target: QColor | str, ratio: float) -> QColor:
 
 
 class PlaceholderThemeSvgIcon(FluentIconBase):
-    """支持占位色替换的 SVG 图标。"""
+    """支持占位色替换的 SVG 图标. """
 
     def __init__(
         self,

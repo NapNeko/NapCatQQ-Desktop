@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """[`BatchDispatcher`](src/core/operation/batch_dispatcher.py): 批量 Bot 操作派发器
-(P4 W1·F2).
+(P4 W1.F2).
 
 设计目标
 --------
@@ -20,7 +20,7 @@ P4 之前, BotPage 的启动 / 停止 / 迁移 / 删除都是单 Bot 触发. 多
 - 不**新增**任何 ``OperationBackend`` 公共 API; 调用方自行准备闭包.
 - 不**新增**线程池实例; 共用 ``QThreadPool.globalInstance()``.
 - 单个 batch 在 ``BackgroundTaskCenter`` 上**只**注册一个 task (用 batch_id),
-  内部 N 个 worker 不重复登记 — 否则 N 大于 ProgressInfoBar 容量时 UI 会刷屏.
+  内部 N 个 worker 不重复登记 - 否则 N 大于 ProgressInfoBar 容量时 UI 会刷屏.
 - 测试态走 ``executor=_inline_executor`` 走同步执行, 不依赖 QApplication / QThreadPool.
 
 派发模型

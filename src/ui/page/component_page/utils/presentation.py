@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Desktop 更新 UI 文案与提示拼装。"""
+"""Desktop 更新 UI 文案与提示拼装. """
 
 from collections.abc import Callable
 from pathlib import Path
@@ -15,7 +15,7 @@ def build_update_confirmation_message(
     has_running_bot: bool,
     test_mode: bool = False,
 ) -> str:
-    """构建 Desktop 更新确认弹窗文案。"""
+    """构建 Desktop 更新确认弹窗文案. """
 
     install_type_text, process_text = _get_install_type_copy(translate, install_type)
     warning_text = translate("⚠️ 所有运行中的 Bot 将被强制关闭\n\n") if has_running_bot else ""
@@ -41,7 +41,7 @@ def build_update_confirmation_message(
 
 
 def get_download_message(translate: Callable[[str], str], install_type: InstallType) -> str:
-    """返回当前安装类型的下载提示。"""
+    """返回当前安装类型的下载提示. """
 
     if install_type == InstallType.MSI:
         return translate("正在下载 NapCat Desktop MSI 安装包...")
@@ -51,7 +51,7 @@ def get_download_message(translate: Callable[[str], str], install_type: InstallT
 
 
 def get_install_type_log_prefix(install_type: InstallType) -> str:
-    """返回更新日志前缀。"""
+    """返回更新日志前缀. """
 
     if install_type == InstallType.MSI:
         return "[MSI 安装版]\n"
@@ -65,7 +65,7 @@ def build_install_type_details(
     install_type: InstallType,
     base_path: Path,
 ) -> list[str]:
-    """构建安装类型诊断详情。"""
+    """构建安装类型诊断详情. """
 
     details = [
         f"检测到的安装类型: {install_type.value}",

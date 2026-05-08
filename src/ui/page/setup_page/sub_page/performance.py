@@ -20,11 +20,11 @@ from src.core.config import cfg
 
 
 class SpinBoxSettingCard(SettingCard):
-    """使用 CompactSpinBox 编辑 RangeConfigItem 的设置卡片。
+    """使用 CompactSpinBox 编辑 RangeConfigItem 的设置卡片. 
 
-    相比 RangeSettingCard：
-    - 用上下调整的数字输入框替换滑块，便于精确输入数值
-    - 支持单步与后缀（如“ ms”）展示
+    相比 RangeSettingCard: 
+    - 用上下调整的数字输入框替换滑块, 便于精确输入数值
+    - 支持单步与后缀 (如" ms") 展示
     """
 
     valueChanged = Signal(int)
@@ -55,7 +55,7 @@ class SpinBoxSettingCard(SettingCard):
         self.hBoxLayout.addWidget(self.spinBox, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
-        # 双向同步：配置变化 -> UI，UI 变化 -> 配置
+        # 双向同步: 配置变化 -> UI, UI 变化 -> 配置
         configItem.valueChanged.connect(self._on_config_changed)
         self.spinBox.valueChanged.connect(self._on_spin_box_changed)
 

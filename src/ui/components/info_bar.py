@@ -2,9 +2,9 @@
 """
 消息条工具模块
 
-提供统一的消息条创建函数, 确保程序内消息提示风格一致且代码简洁。
+提供统一的消息条创建函数, 确保程序内消息提示风格一致且代码简洁. 
 
-消息条位置规则：
+消息条位置规则: 
 - 右下角: 信息提示 (`info_bar`), 成功提示 (`success_bar`)
 - 右上角: 警告提示 (`warning_bar`), 错误提示 (`error_bar`)
 """
@@ -20,12 +20,12 @@ from src.ui.components.managers import NCDInfoBarPosition
 
 
 def _position(position: NCDInfoBarPosition) -> Any:
-    """将自定义 InfoBar 位置枚举转换为 qfluentwidgets 可接受的类型。"""
+    """将自定义 InfoBar 位置枚举转换为 qfluentwidgets 可接受的类型. """
     return cast(object, position)
 
 
 def _resolve_parent(parent: QObject | None) -> QWidget:
-    """统一将消息条父级收敛到顶层窗口，避免子页面和主窗口各自堆叠。"""
+    """统一将消息条父级收敛到顶层窗口, 避免子页面和主窗口各自堆叠. """
     if isinstance(parent, QWidget):
         window = parent.window()
         if isinstance(window, QWidget):
@@ -42,7 +42,7 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent:
     """
     创建信息提示消息条
 
-    用于展示一般性提示信息, 显示时间较短。
+    用于展示一般性提示信息, 显示时间较短. 
 
     Args:
         title: 消息条标题, 建议简洁明了
@@ -66,7 +66,7 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5000, p
     """
     创建成功提示消息条
 
-    用于展示操作成功提示, 显示时间较短。
+    用于展示操作成功提示, 显示时间较短. 
 
     Args:
         title: 消息条标题, 建议简洁明了
@@ -89,7 +89,7 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 1000
     """
     创建警告提示消息条
 
-    用于展示警告信息, 显示时间较长以便用户注意。
+    用于展示警告信息, 显示时间较长以便用户注意. 
 
     Args:
         title: 消息条标题, 建议简洁明了
@@ -112,7 +112,7 @@ def error_bar(content: str, title: str = "Failed❌", duration: int = -1, parent
     """
     创建错误提示消息条
 
-    用于展示错误信息, 默认持续显示直到用户手动关闭。
+    用于展示错误信息, 默认持续显示直到用户手动关闭. 
 
     Args:
         title: 消息条标题, 建议简洁明了

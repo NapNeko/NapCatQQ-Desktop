@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`LocalBackend`](src/core/operation/local_backend.py): 本地 Windows 桌面环境的 [`OperationBackend`](src/core/operation/backend.py) 实现。
+"""[`LocalBackend`](src/core/operation/local_backend.py): 本地 Windows 桌面环境的 [`OperationBackend`](src/core/operation/backend.py) 实现. 
 
 P0 阶段实现范围:
 - 文件类 8 个方法: 完整 [`pathlib.Path`](https://docs.python.org/3/library/pathlib.html) 实现
@@ -12,7 +12,7 @@ P2 阶段补全(目前抛 NotImplementedError):
 - WebUI: 与 [`ManagerNapCatQQLoginState`](src/core/runtime/napcat.py) 桥接
 
 之所以延后, 是因为本地这几类逻辑都重度耦合 Qt 信号 / [`QRunnable`](https://doc.qt.io/qt-6/qrunnable.html) / [`QProcess`](https://doc.qt.io/qt-6/qprocess.html),
-与 OperationBackend 的同步语义存在阻抗失配, 需要在 P2 阶段统一设计 Qt 信号桥接层。
+与 OperationBackend 的同步语义存在阻抗失配, 需要在 P2 阶段统一设计 Qt 信号桥接层. 
 """
 
 from __future__ import annotations
@@ -44,9 +44,9 @@ _P2_DEFER_MESSAGE = (
 
 
 class LocalBackend(OperationBackend):
-    """本地操作后端。
+    """本地操作后端. 
 
-    所有路径参数均按 Windows 风格的 [`Path`](https://docs.python.org/3/library/pathlib.html) 解析。
+    所有路径参数均按 Windows 风格的 [`Path`](https://docs.python.org/3/library/pathlib.html) 解析. 
     """
 
     # ==================== 文件 ====================
@@ -92,14 +92,14 @@ class LocalBackend(OperationBackend):
         target.unlink()
 
     def upload(self, local_path: str | Path, remote_path: str) -> None:
-        """本地后端的"上传"等价于本地拷贝。"""
+        """本地后端的"上传"等价于本地拷贝. """
         source = Path(local_path)
         target = Path(remote_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
 
     def download(self, remote_path: str, local_path: str | Path) -> None:
-        """本地后端的"下载"等价于本地拷贝。"""
+        """本地后端的"下载"等价于本地拷贝. """
         source = Path(remote_path)
         target = Path(local_path)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -179,7 +179,7 @@ class LocalBackend(OperationBackend):
         raise NotImplementedError(_P2_DEFER_MESSAGE)
 
     def detect_napcat_version(self) -> str | None:
-        """通过 [`PathFunc.napcat_path`](src/core/runtime/paths.py) 下的 ``napcat.mjs`` 探测版本。"""
+        """通过 [`PathFunc.napcat_path`](src/core/runtime/paths.py) 下的 ``napcat.mjs`` 探测版本. """
         napcat_dir = self._resolve_napcat_path()
         if napcat_dir is None:
             return None
@@ -199,7 +199,7 @@ class LocalBackend(OperationBackend):
         return match.group(1).strip() or None
 
     def detect_qq_path(self) -> str | None:
-        """通过 [`PathFunc.get_qq_path`](src/core/runtime/paths.py) (Windows 注册表)探测 QQ 安装路径。"""
+        """通过 [`PathFunc.get_qq_path`](src/core/runtime/paths.py) (Windows 注册表)探测 QQ 安装路径. """
         from src.core.runtime.paths import PathFunc
 
         qq_path = PathFunc.get_qq_path()
@@ -228,9 +228,9 @@ class LocalBackend(OperationBackend):
     # ==================== 内部辅助 ====================
     @staticmethod
     def _resolve_napcat_path() -> Path | None:
-        """通过 [`creart`](https://github.com/MeetWq/creart) 单例获取 NapCat 安装目录。
+        """通过 [`creart`](https://github.com/MeetWq/creart) 单例获取 NapCat 安装目录. 
 
-        若 [`PathFunc`](src/core/runtime/paths.py) 单例不可用(测试环境等), 静默返回 None。
+        若 [`PathFunc`](src/core/runtime/paths.py) 单例不可用(测试环境等), 静默返回 None. 
         """
         try:
             from creart import it
@@ -245,7 +245,7 @@ class LocalBackend(OperationBackend):
             return None
 
     def _detect_qq_version(self) -> str | None:
-        """读取 ``QQ/resources/app/package.json`` 中的 version 字段。"""
+        """读取 ``QQ/resources/app/package.json`` 中的 version 字段. """
         qq_path_str = self.detect_qq_path()
         if not qq_path_str:
             return None

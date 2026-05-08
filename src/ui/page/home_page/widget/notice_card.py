@@ -11,7 +11,7 @@ from src.ui.components.notice_timeline import (
 
 
 class NoticeCard(SimpleCardWidget):
-    """首页通知卡片。"""
+    """首页通知卡片. """
 
     def __init__(self) -> None:
         super().__init__()

@@ -183,7 +183,7 @@ class BotOfflineEmailDialog(MessageBoxBase):
         self.encryption_card.fill_value(cfg.get(cfg.email_encryption))
 
     def _collect_config_values(self) -> list[tuple[object, object]]:
-        """收集并预校验待保存的邮件配置。"""
+        """收集并预校验待保存的邮件配置. """
         try:
             smtp_port = int(self.stmp_server_port_card.get_value())
         except ValueError as error:
@@ -206,7 +206,7 @@ class BotOfflineEmailDialog(MessageBoxBase):
         return values
 
     def save_config(self) -> bool:
-        """保存配置。"""
+        """保存配置. """
         try:
             was_enabled = bool(cfg.get(cfg.bot_offline_email_notice))
             values = self._collect_config_values()
@@ -297,7 +297,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         self.json_card.fill_value(cfg.get(cfg.web_hook_json))
 
     def _collect_config_values(self) -> list[tuple[object, object]]:
-        """收集并预校验待保存的 WebHook 配置。"""
+        """收集并预校验待保存的 WebHook 配置. """
         json_payload = self.json_card.get_value()
         json.loads(json_payload)
 
@@ -316,7 +316,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
         return values
 
     def save_config(self) -> bool:
-        """保存配置。"""
+        """保存配置. """
         try:
             was_enabled = bool(cfg.get(cfg.bot_offline_web_hook_notice))
             values = self._collect_config_values()
@@ -362,7 +362,7 @@ class BotOfflineWebHookDialog(MessageBoxBase):
 
 
 class RemoteConnectionTestTask(QObject, QRunnable):
-    """远程连接测试任务。"""
+    """远程连接测试任务. """
 
     success_signal = Signal(str)
     error_signal = Signal(str)
@@ -386,7 +386,7 @@ class RemoteConnectionTestTask(QObject, QRunnable):
 
 
 class RemoteConnectionDialog(MessageBoxBase):
-    """远程 Linux Core 连接配置对话框。"""
+    """远程 Linux Core 连接配置对话框. """
 
     def __init__(self, parent: QObject) -> None:
         super().__init__(parent=parent)
@@ -441,7 +441,7 @@ class RemoteConnectionDialog(MessageBoxBase):
         self.test_button.clicked.connect(self._test_connection)
 
     def fill_config(self) -> None:
-        """填充配置。"""
+        """填充配置. """
         self.enable_card.fill_value(cfg.get(cfg.remote_enabled))
         self.host_card.fill_value(cfg.get(cfg.remote_host))
         self.port_card.fill_value(str(cfg.get(cfg.remote_port)))
@@ -457,13 +457,13 @@ class RemoteConnectionDialog(MessageBoxBase):
         self.workspace_dir_card.fill_value(cfg.get(cfg.remote_workspace_dir))
 
     def _sync_auth_mode_ui(self) -> None:
-        """根据认证方式切换表单可用状态。"""
+        """根据认证方式切换表单可用状态. """
         is_key_mode = self.auth_method_card.get_value() == "key"
         self.private_key_path_card.lineEdit.setEnabled(is_key_mode)
         self.password_card.lineEdit.setEnabled(not is_key_mode)
 
     def _collect_config_values(self) -> list[tuple[object, object]]:
-        """收集待保存配置。"""
+        """收集待保存配置. """
         port = int(self.port_card.get_value())
         connect_timeout = int(self.connect_timeout_card.get_value())
         command_timeout = int(self.command_timeout_card.get_value())
@@ -487,7 +487,7 @@ class RemoteConnectionDialog(MessageBoxBase):
         return values
 
     def _build_runtime_credentials(self) -> SSHCredentials:
-        """构建本次对话框使用的运行时凭据。"""
+        """构建本次对话框使用的运行时凭据. """
         password = self.password_card.get_value()
         credentials = SSHCredentials(
             host=self.host_card.get_value().strip(),
@@ -506,7 +506,7 @@ class RemoteConnectionDialog(MessageBoxBase):
         return credentials
 
     def save_config(self) -> bool:
-        """保存配置。"""
+        """保存配置. """
         try:
             values = self._collect_config_values()
             for item, value in values:
@@ -530,13 +530,13 @@ class RemoteConnectionDialog(MessageBoxBase):
             return False
 
     def accept(self) -> None:
-        """接受按钮。"""
+        """接受按钮. """
         if not self.save_config():
             return
         super().accept()
 
     def _test_connection(self) -> None:
-        """测试 SSH 连接。"""
+        """测试 SSH 连接. """
         if not self.save_config():
             return
 

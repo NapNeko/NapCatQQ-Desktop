@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试响应解析器。"""
+"""接口调试响应解析器. """
 
 # 标准库导入
 import base64
@@ -13,13 +13,13 @@ from src.core.api_debug.models import ApiDebugResponse, ApiDebugResponseBodyType
 
 
 class ApiDebugResponseParser:
-    """响应解析器。"""
+    """响应解析器. """
 
     def __init__(self, max_body_chars: int = 20000) -> None:
         self.max_body_chars = max_body_chars
 
     def parse(self, response: httpx.Response) -> ApiDebugResponse:
-        """解析 httpx.Response。"""
+        """解析 httpx.Response. """
         content = response.content
         body_type, formatted_body, json_body = self._parse_body(response)
         elapsed_ms = self._get_elapsed_ms(response)

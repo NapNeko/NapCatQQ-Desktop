@@ -7,7 +7,7 @@
 远端 NapCat 的日志 ``tail`` / 状态轮询 / 部署 / 连接测试 / 配置同步都是阻塞式 SSH
 I/O, 过去全部派发到 [`QThreadPool.globalInstance()`](https://doc.qt.io/qt-6/qthreadpool.html),
 与 UI 本身的轻量后台任务 (头像下载, 本地文件保存, 版本探测 ...) 共用一个有限容量池
-(默认 = ``QThread.idealThreadCount()`` ≈ 4–16). 多个远端 Bot × 多条 5s 轮询在 SSH
+(默认 = ``QThread.idealThreadCount()`` ≈ 4-16). 多个远端 Bot × 多条 5s 轮询在 SSH
 抖动时会把池占满, 导致 UI 感知到的 "头像半天不出" / "保存卡顿" 这些**间接**表现.
 
 本模块提供一个**专用线程池**, 把所有会触发 SSH I/O 的 runnable 都派发到这里, 与全局池
@@ -28,7 +28,7 @@ I/O, 过去全部派发到 [`QThreadPool.globalInstance()`](https://doc.qt.io/qt
 为了让迁移对测试的破坏面最小, 本模块给每个入口额外暴露 [`remote_ssh_pool`](src/core/remote/thread_pool.py)
 这个**独立 callable**, 调用站点通过 ``from src.core.remote.thread_pool import remote_ssh_pool``
 在本地 namespace 拿到它, 测试可直接
-``monkeypatch.setattr(<module>, "remote_ssh_pool", lambda: FakePool())`` 即可。
+``monkeypatch.setattr(<module>, "remote_ssh_pool", lambda: FakePool())`` 即可. 
 """
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def remote_ssh_pool() -> "QThreadPool":
 def dispatch_remote_ssh(runnable: "QRunnable") -> None:
     """把 runnable 派发到远端 SSH 专用池的便捷函数.
 
-    等价于 ``remote_ssh_pool().start(runnable)``; 提供独立 callable 便于测试监控。
+    等价于 ``remote_ssh_pool().start(runnable)``; 提供独立 callable 便于测试监控. 
     """
     remote_ssh_pool().start(runnable)
 

@@ -9,12 +9,12 @@ from src.resource import resource as _resource  # noqa: F401
 
 
 def _resolve_theme(theme: Theme) -> Theme:
-    """解析样式表实际使用的主题。"""
+    """解析样式表实际使用的主题. """
     return qconfig.theme if theme == Theme.AUTO else theme
 
 
 class _ResourceStyleSheet(StyleSheetBase):
-    """Qt 资源样式表基类。"""
+    """Qt 资源样式表基类. """
 
     def _build_path(self, resource_group: str, style_name: str, theme: Theme = Theme.AUTO) -> str:
         resolved_theme = _resolve_theme(theme)

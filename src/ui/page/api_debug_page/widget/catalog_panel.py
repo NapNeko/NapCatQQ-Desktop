@@ -22,7 +22,7 @@ from ..common import find_index_by_data
 
 
 class _DialogSearchLineEdit(SearchLineEdit):
-    """只负责拉起搜索对话框的只读搜索框。"""
+    """只负责拉起搜索对话框的只读搜索框. """
 
     activated = Signal()
 
@@ -47,7 +47,7 @@ class _DialogSearchLineEdit(SearchLineEdit):
 
 
 class ActionCatalogPanel(SimpleCardWidget):
-    """左侧 Action 接口目录。"""
+    """左侧 Action 接口目录. """
 
     action_selected = Signal(object)
     search_requested = Signal()

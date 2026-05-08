@@ -70,7 +70,7 @@ _TUNNEL_LABEL_PATTERN = re.compile(
 
 @dataclass(frozen=True)
 class CrashBundlePayload:
-    """崩溃诊断包载荷。"""
+    """崩溃诊断包载荷. """
 
     trigger: str
     created_at: datetime
@@ -82,7 +82,7 @@ class CrashBundlePayload:
 
 
 def mask_qqid(value: Any) -> str:
-    """对 QQID 进行掩码处理。"""
+    """对 QQID 进行掩码处理. """
     digits = "".join(ch for ch in str(value) if ch.isdigit())
     if not digits:
         return "***"
@@ -125,7 +125,7 @@ def mask_username(value: Any) -> str:
 
 
 def mask_email(value: Any) -> str:
-    """对邮箱进行掩码处理。"""
+    """对邮箱进行掩码处理. """
     text = str(value or "").strip()
     if "@" not in text:
         return REDACTED_EMAIL
@@ -139,7 +139,7 @@ def mask_email(value: Any) -> str:
 
 
 def summarize_url(value: Any) -> str:
-    """输出适合日志记录的 URL 摘要，不包含 query 和 token。"""
+    """输出适合日志记录的 URL 摘要, 不包含 query 和 token. """
     text = str(value or "").strip()
     if not text:
         return "<empty-url>"
@@ -155,7 +155,7 @@ def summarize_url(value: Any) -> str:
 
 
 def summarize_path(value: Any) -> str:
-    """输出适合日志记录的路径摘要，仅保留末尾两级。"""
+    """输出适合日志记录的路径摘要, 仅保留末尾两级. """
     text = str(value or "").strip()
     if not text:
         return "<empty-path>"
@@ -167,7 +167,7 @@ def summarize_path(value: Any) -> str:
 
 
 def sanitize_text_for_export(text: str) -> str:
-    """对导出文本进行严格脱敏。"""
+    """对导出文本进行严格脱敏. """
     sanitized = text or ""
 
     sanitized = _AUTHORIZATION_BEARER_PATTERN.sub(r"\1" + REDACTED_SECRET, sanitized)
@@ -212,7 +212,7 @@ def sanitize_text_for_export(text: str) -> str:
 
 
 def resolve_desktop_output_dir(base_path: Path | None = None) -> tuple[Path, str]:
-    """解析桌面输出目录，失败时回退到应用目录。"""
+    """解析桌面输出目录, 失败时回退到应用目录. """
     app_base_path = base_path or resolve_app_base_path()
 
     try:
@@ -236,7 +236,7 @@ def build_safe_config_summary(
     config_path: Path | None = None,
     bot_config_path: Path | None = None,
 ) -> dict[str, Any]:
-    """根据 allowlist 构建安全配置摘要。"""
+    """根据 allowlist 构建安全配置摘要. """
     runtime_root = resolve_app_data_path() / "runtime"
     runtime_config_path = config_path or runtime_root / "config" / "config.json"
     runtime_bot_config_path = bot_config_path or runtime_root / "config" / "bot.json"
@@ -322,7 +322,7 @@ def build_safe_config_summary(
 
 
 def build_crash_bundle(output_dir: Path, payload: CrashBundlePayload) -> Path:
-    """生成脱敏后的崩溃诊断包。"""
+    """生成脱敏后的崩溃诊断包. """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     base_name = f"NapCatQQ-Desktop-crash-{payload.created_at.strftime('%Y%m%d-%H%M%S-%f')}"
@@ -356,7 +356,7 @@ def build_crash_bundle(output_dir: Path, payload: CrashBundlePayload) -> Path:
 
 
 def _build_crash_report(payload: CrashBundlePayload) -> str:
-    """构建崩溃摘要文本。"""
+    """构建崩溃摘要文本. """
     sanitized_message = sanitize_text_for_export(payload.exception_message)
     sanitized_traceback = sanitize_text_for_export(payload.traceback_text)
     issue_url = Urls.NCD_ISSUES.value.toString()
@@ -377,7 +377,7 @@ def _build_crash_report(payload: CrashBundlePayload) -> str:
 
 
 def _build_app_meta(base_path: Path, log_path: Path) -> dict[str, Any]:
-    """构建应用元信息。"""
+    """构建应用元信息. """
     data_path = resolve_app_data_path()
     config_data = _load_json_file(data_path / "runtime" / "config" / "config.json")
     info_section = _as_dict(config_data.get("Info"))
@@ -400,7 +400,7 @@ def _build_app_meta(base_path: Path, log_path: Path) -> dict[str, Any]:
 
 
 def _build_paths_snapshot(base_path: Path, log_path: Path, output_dir: Path) -> dict[str, Any]:
-    """构建关键路径快照。"""
+    """构建关键路径快照. """
     data_path = resolve_app_data_path()
     paths = {
         "base_path": base_path,
@@ -426,7 +426,7 @@ def _build_paths_snapshot(base_path: Path, log_path: Path, output_dir: Path) -> 
 
 
 def _load_json_file(path: Path) -> Any:
-    """读取 JSON 文件，失败时返回空字典。"""
+    """读取 JSON 文件, 失败时返回空字典. """
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
@@ -434,10 +434,10 @@ def _load_json_file(path: Path) -> Any:
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
-    """确保值为 dict。"""
+    """确保值为 dict. """
     return value if isinstance(value, dict) else {}
 
 
 def _as_list(value: Any) -> list[Any]:
-    """确保值为 list。"""
+    """确保值为 list. """
     return value if isinstance(value, list) else []

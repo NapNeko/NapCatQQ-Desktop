@@ -41,7 +41,7 @@ class UpdateLogExhibit(SmoothTextScrollMixin, QTextBrowser):
         cfg.themeChanged.connect(self._queue_theme_palette_update)
 
     def setHtml(self, text: str) -> None:
-        """为更新日志富文本注入主题相关的默认前景色。"""
+        """为更新日志富文本注入主题相关的默认前景色. """
         self._raw_html = text
         self._render_html()
 

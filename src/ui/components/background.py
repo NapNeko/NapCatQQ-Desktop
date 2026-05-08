@@ -2,7 +2,7 @@
 """
 一个可复用的点阵背景控件 (DottedBackground)
 
-放在 `src.ui.components` 下以便作为 UI 组件复用。
+放在 `src.ui.components` 下以便作为 UI 组件复用. 
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ from src.core.config import cfg
 class DottedBackground(QWidget):
     """在 widget 背景绘制点阵的 QWidget
 
-    设计目标: 点要细小、带透明度、不抢眼, 能增加页面层次感
-    默认参数已经做了较为保守的调优: 点小、间距较大、alpha 低
+    设计目标: 点要细小, 带透明度, 不抢眼, 能增加页面层次感
+    默认参数已经做了较为保守的调优: 点小, 间距较大, alpha 低
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -43,7 +43,7 @@ class DottedBackground(QWidget):
         self.update()
 
     def set_padding(self, padding: int) -> None:
-        """设置点阵与控件边缘的内边距（像素）。最小为 0。"""
+        """设置点阵与控件边缘的内边距 (像素) . 最小为 0. """
         self._padding = max(0, int(padding))
         self.update()
 
@@ -54,8 +54,8 @@ class DottedBackground(QWidget):
     def _default_color_for_theme(self, theme: Theme) -> QColor:
         """根据主题返回默认点色
 
-        - 暗色主题：使用接近白色的点、较低 alpha, 让点不会太突兀
-        - 亮色主题：使用中灰色的点、低 alpha, 便于在浅背景上可见但不抢眼
+        - 暗色主题: 使用接近白色的点, 较低 alpha, 让点不会太突兀
+        - 亮色主题: 使用中灰色的点, 低 alpha, 便于在浅背景上可见但不抢眼
         """
         try:
             theme_resolved = cfg.theme if theme == Theme.AUTO else theme
@@ -89,14 +89,14 @@ class DottedBackground(QWidget):
         step = max(1, self._spacing)
         dot = max(1, self._dot_size)
 
-        # 将绘制区域限制在控件内边距内，避免靠边绘制
+        # 将绘制区域限制在控件内边距内, 避免靠边绘制
         pad = max(0, int(self._padding))
         # 确保范围有效
         if w - pad * 2 <= 0 or h - pad * 2 <= 0:
             painter.end()
             return
 
-        # 从 pad 开始到 h - pad，x 也类似；为了保留交错效果，x 的循环可以从 pad-step 开始
+        # 从 pad 开始到 h - pad, x 也类似; 为了保留交错效果, x 的循环可以从 pad-step 开始
         for row, y in enumerate(range(pad, h - pad + step, step)):
             row_offset = (step // 2) + 1 if (row % 2) else 0
             for x in range(pad - step, w - pad + step * 2, step):

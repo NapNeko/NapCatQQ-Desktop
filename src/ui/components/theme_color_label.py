@@ -19,7 +19,7 @@ from src.core.config import cfg
 
 
 def _mix_color(source: QColor, target: QColor | str, ratio: float) -> QColor:
-    """按比例混合两种颜色。"""
+    """按比例混合两种颜色. """
     source = QColor(source)
     target = QColor(target)
     ratio = max(0.0, min(1.0, ratio))
@@ -32,7 +32,7 @@ def _mix_color(source: QColor, target: QColor | str, ratio: float) -> QColor:
 
 
 class ThemeColorTone(str, Enum):
-    """文本色调强度。"""
+    """文本色调强度. """
 
     STRONG = "strong"
     PRIMARY = "primary"
@@ -44,7 +44,7 @@ class _ThemeColorLabelProtocol(Protocol):
 
 
 class _ThemeColorLabelMixin:
-    """让标签文本颜色跟随主题色变化。"""
+    """让标签文本颜色跟随主题色变化. """
 
     _tone_light_mix = {
         ThemeColorTone.STRONG: 0.30,
@@ -80,7 +80,7 @@ class _ThemeColorLabelMixin:
 
 
 class ThemeColorTitleLabel(TitleLabel, _ThemeColorLabelMixin):
-    """跟随主题色变化的 TitleLabel。"""
+    """跟随主题色变化的 TitleLabel. """
 
     @singledispatchmethod
     def __init__(self, parent: QWidget | None = None, tone: ThemeColorTone = ThemeColorTone.STRONG):
@@ -94,7 +94,7 @@ class ThemeColorTitleLabel(TitleLabel, _ThemeColorLabelMixin):
 
 
 class ThemeColorSubtitleLabel(SubtitleLabel, _ThemeColorLabelMixin):
-    """跟随主题色变化的 SubtitleLabel。"""
+    """跟随主题色变化的 SubtitleLabel. """
 
     @singledispatchmethod
     def __init__(self, parent: QWidget | None = None, tone: ThemeColorTone = ThemeColorTone.PRIMARY):
@@ -108,7 +108,7 @@ class ThemeColorSubtitleLabel(SubtitleLabel, _ThemeColorLabelMixin):
 
 
 class ThemeColorBodyLabel(BodyLabel, _ThemeColorLabelMixin):
-    """跟随主题色变化的 BodyLabel。"""
+    """跟随主题色变化的 BodyLabel. """
 
     @singledispatchmethod
     def __init__(self, parent: QWidget | None = None, tone: ThemeColorTone = ThemeColorTone.PRIMARY):
@@ -122,7 +122,7 @@ class ThemeColorBodyLabel(BodyLabel, _ThemeColorLabelMixin):
 
 
 class ThemeColorStrongBodyLabel(StrongBodyLabel, _ThemeColorLabelMixin):
-    """跟随主题色变化的 StrongBodyLabel。"""
+    """跟随主题色变化的 StrongBodyLabel. """
 
     @singledispatchmethod
     def __init__(self, parent: QWidget | None = None, tone: ThemeColorTone = ThemeColorTone.STRONG):
@@ -136,7 +136,7 @@ class ThemeColorStrongBodyLabel(StrongBodyLabel, _ThemeColorLabelMixin):
 
 
 class ThemeColorCaptionLabel(CaptionLabel, _ThemeColorLabelMixin):
-    """跟随主题色变化的 CaptionLabel。"""
+    """跟随主题色变化的 CaptionLabel. """
 
     @singledispatchmethod
     def __init__(self, parent: QWidget | None = None, tone: ThemeColorTone = ThemeColorTone.SOFT):

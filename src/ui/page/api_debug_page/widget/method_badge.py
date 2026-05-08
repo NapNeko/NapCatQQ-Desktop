@@ -19,7 +19,7 @@ _METHOD_BACKGROUND_MAP = {
 
 
 class MethodBadge(QWidget):
-    """基于 paintEvent 的请求方法徽标。"""
+    """基于 paintEvent 的请求方法徽标. """
 
     def __init__(self, method_text: str = "POST", parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -63,5 +63,5 @@ class MethodBadge(QWidget):
 
 
 def apply_method_badge(label: MethodBadge, method_text: str) -> None:
-    """更新请求方法徽标文本。"""
+    """更新请求方法徽标文本. """
     label.set_method(method_text)

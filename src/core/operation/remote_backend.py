@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`RemoteBackend`](src/core/operation/remote_backend.py): 通过 SSH/SFTP 远程实现 [`OperationBackend`](src/core/operation/backend.py)。
+"""[`RemoteBackend`](src/core/operation/remote_backend.py): 通过 SSH/SFTP 远程实现 [`OperationBackend`](src/core/operation/backend.py). 
 
 依赖现有 [`core/remote/`](src/core/remote/__init__.py) 子系统:
 - [`SSHClient`](src/core/remote/ssh_client.py): 底层 SSH/SFTP 通道
@@ -57,7 +57,7 @@ _PS_TREE_LINE_PATTERN = re.compile(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s*$")
 #   [info] [NapCat] [WebUi] WebUi Local Panel Url: http://127.0.0.1:6099/webui?token=abc
 #   [info] [NapCat] [WebUi] WebUi User Panel Url: http://[::]:6102/webui?token=abc   (IPv6 dual-stack)
 #   或 host 为 0.0.0.0 / 公网 IPv4 / 带方括号的 IPv6.
-# 我们只关心 ``port`` 与 ``token`` —— SSH 隧道始终走 ``127.0.0.1:port``,
+# 我们只关心 ``port`` 与 ``token`` -- SSH 隧道始终走 ``127.0.0.1:port``,
 # NapCat 监听 ``[::]`` 时 (Linux 默认 ``bindv6only=0``) 同样能从 ``127.0.0.1`` 命中.
 # host 段需同时支持:
 #   - 普通域名 / IPv4: ``127.0.0.1`` / ``0.0.0.0`` / ``host.example.com``
@@ -69,11 +69,11 @@ _WEBUI_LOG_PATTERN = re.compile(
 
 
 class RemoteBackend(OperationBackend):
-    """远端操作后端。
+    """远端操作后端. 
 
     通过 SSH/SFTP 在 Linux 远端执行 NapCat 操作,
     路径全部按 POSIX 风格解析(支持 ``$HOME`` 前缀, 由
-    [`SSHClient._resolve_sftp_path`](src/core/remote/ssh_client.py) 内部展开)。
+    [`SSHClient._resolve_sftp_path`](src/core/remote/ssh_client.py) 内部展开). 
     """
 
     def __init__(self, credentials: SSHCredentials, paths: LinuxCorePaths | None = None) -> None:
@@ -89,7 +89,7 @@ class RemoteBackend(OperationBackend):
 
     @property
     def deployment(self) -> LinuxCoreDeployment:
-        """暴露底层部署器供 ServerManager / 测试直接使用。"""
+        """暴露底层部署器供 ServerManager / 测试直接使用. """
         return self._deployment
 
     # ==================== 生命周期 ====================
@@ -135,7 +135,7 @@ class RemoteBackend(OperationBackend):
     def mkdir(self, path: str, *, parents: bool = True, exist_ok: bool = True) -> None:
         # ``mkdir -p`` 同时满足 parents=True / exist_ok=True 语义,
         # 远端环境对 parents=False / exist_ok=False 的细分场景需求很弱,
-        # 当用户明确要求严格语义时才走非 -p 模式。
+        # 当用户明确要求严格语义时才走非 -p 模式. 
         self._ensure_connected()
         if parents and exist_ok:
             self.ssh_client.ensure_remote_directory(path)
@@ -308,7 +308,7 @@ class RemoteBackend(OperationBackend):
         status = self.get_process_status(qq_id)
         return status.memory_rss_bytes
 
-    # ==================== 资源采样 (P4 W2·F3) ====================
+    # ==================== 资源采样 (P4 W2.F3) ====================
     def sample_resources(self):
         """单次远端资源采样, 供
         [`ResourceMonitorService`](src/core/remote/resource_monitor.py) 周期调用.
@@ -413,22 +413,22 @@ class RemoteBackend(OperationBackend):
         force_update: bool = False,
         expected_sha512: str | None = None,
     ) -> None:
-        """P1: 远端安装/更新 NapCat。
+        """P1: 远端安装/更新 NapCat. 
 
         ``archive_path`` 当前未使用 (远端脚本自行 ``curl`` 下载官方 release),
-        预留接口以便 P3 支持 Desktop 本地上传安装包到内网无外网场景。
+        预留接口以便 P3 支持 Desktop 本地上传安装包到内网无外网场景. 
 
         ``force_update=True`` 强制重新下载并解压 NapCat;
-        默认情况下脚本会复用远端已有 NapCat 安装。
+        默认情况下脚本会复用远端已有 NapCat 安装. 
 
-        ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显。
+        ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显. 
 
         ``expected_sha512`` (P5 F1.4): 期望的 ``NapCat.Shell.zip`` SHA512 (128 位 hex);
         提供时远端脚本会做 SHA512 完整性校验, 不一致以退出码 36 中断.
         ``None`` 跳过校验, 兼容上游 hash 数据不可用的离线场景.
         """
         if archive_path is not None:
-            # P1 不实现自定义包路径, 但仍允许调用方传参（直接忽略并 logger.warning 比抛错更友好）
+            # P1 不实现自定义包路径, 但仍允许调用方传参 (直接忽略并 logger.warning 比抛错更友好) 
             from src.core.logging import LogSource, LogType, logger as _logger
 
             _logger.warning(
@@ -451,10 +451,10 @@ class RemoteBackend(OperationBackend):
         log_callback=None,
         force_reinstall: bool = False,
     ) -> None:
-        """P1: 远端安装 LinuxQQ rootless。
+        """P1: 远端安装 LinuxQQ rootless. 
 
-        ``force_reinstall=True`` 强制重装(会先备份 NapCat 配置再 ``rm -rf $install_base_dir/opt`` 后重新解压)。
-        ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显。
+        ``force_reinstall=True`` 强制重装(会先备份 NapCat 配置再 ``rm -rf $install_base_dir/opt`` 后重新解压). 
+        ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显. 
         """
         self._ensure_connected()
         self._deployment.install_linuxqq(
@@ -464,16 +464,16 @@ class RemoteBackend(OperationBackend):
         )
 
     def detect_napcat_version(self) -> str | None:
-        """探测远端 NapCat 版本号。
+        """探测远端 NapCat 版本号. 
 
         委托到 [`LinuxCoreDeployment._detect_napcat_version`](src/core/remote/deployment.py),
-        支持现代 ``napCatVersion = "..."`` / 历史 ``const version = "..."`` 与 ``package.json`` 兜底。
+        支持现代 ``napCatVersion = "..."`` / 历史 ``const version = "..."`` 与 ``package.json`` 兜底. 
         """
         self._ensure_connected()
         return self._deployment._detect_napcat_version()  # noqa: SLF001 - 同包私有方法
 
     def detect_qq_path(self) -> str | None:
-        """探测远端 QQ 安装路径 ``{paths.qq_base_path}``; 若不存在返回 None。"""
+        """探测远端 QQ 安装路径 ``{paths.qq_base_path}``; 若不存在返回 None. """
         self._ensure_connected()
         if not self.ssh_client.remote_exists(self.paths.qq_base_path):
             return None
@@ -488,14 +488,14 @@ class RemoteBackend(OperationBackend):
 
     # ==================== 日志 ====================
     def read_log(self, qq_id: str) -> str:
-        """读取远端 ``napcat_{qq_id}.log`` 全部内容。"""
+        """读取远端 ``napcat_{qq_id}.log`` 全部内容. """
         self._ensure_connected()
         log_path = f"{self.paths.log_dir}/napcat_{qq_id}.log"
         result = self._exec_backend.run(f'test -f "{log_path}" && cat "{log_path}" || true')
         return result.stdout if result.ok else ""
 
     def tail_log(self, qq_id: str, *, lines: int = 200) -> str:
-        """读取远端 ``napcat_{qq_id}.log`` 尾部 ``lines`` 行。"""
+        """读取远端 ``napcat_{qq_id}.log`` 尾部 ``lines`` 行. """
         self._ensure_connected()
         log_path = f"{self.paths.log_dir}/napcat_{qq_id}.log"
         tail = self._runtime.tail_log(log_path, lines=lines)
@@ -662,7 +662,7 @@ class RemoteBackend(OperationBackend):
 
         P4 perf: 把原本 4 次独立 SSH (``pkill -TERM`` / ``sleep 3`` /
         ``pkill -KILL`` / ``rm pid``) 合并成单条 shell, 并用 ``pgrep`` polling
-        取代死等 ``sleep 3`` —— 进程已干净退出 (绝大多数场景) 时 ~0.5s 即返回,
+        取代死等 ``sleep 3`` -- 进程已干净退出 (绝大多数场景) 时 ~0.5s 即返回,
         顽固进程仍按 3s 上限走 SIGKILL. 行为与旧版**完全等价**, 仅消除
         ``sleep`` 浪费的时间和多次 RTT 累积; 不依赖 launcher 版本探测,
         不存在 v1 用户回归 "已登录,无法重复登录" 的风险.
@@ -784,7 +784,7 @@ class RemoteBackend(OperationBackend):
         return total_kib * 1024
 
     def _detect_qq_version(self) -> str | None:
-        """读取远端 QQ ``package.json`` 的 version 字段。"""
+        """读取远端 QQ ``package.json`` 的 version 字段. """
         result = self._exec_backend.run(
             f'test -f "{self.paths.qq_package_json_path}" && cat "{self.paths.qq_package_json_path}" || true'
         )

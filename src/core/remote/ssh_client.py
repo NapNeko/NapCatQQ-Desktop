@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SSH 客户端封装。"""
+"""SSH 客户端封装. """
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ _T = TypeVar("_T")
 
 
 class _LineSplitter:
-    """累积式行切分器, 用于 [`SSHClient.exec_stream`](src/core/remote/ssh_client.py)。
+    """累积式行切分器, 用于 [`SSHClient.exec_stream`](src/core/remote/ssh_client.py). 
 
     切分规则:
 
@@ -37,7 +37,7 @@ class _LineSplitter:
     - 单独的 ``\\n`` 作为换行
     - ``\\r`` 落在缓冲最末尾时延迟到下一次 ``feed`` 再决断, 防止跨读取边界的 CRLF 退化为两次切分
 
-    线程不安全, 每个 SSH 通道独占一个实例。
+    线程不安全, 每个 SSH 通道独占一个实例. 
     """
 
     __slots__ = ("_buffer",)
@@ -46,7 +46,7 @@ class _LineSplitter:
         self._buffer = ""
 
     def feed(self, chunk: str) -> list[str]:
-        """喂入新读到的字符串, 返回本次新切出的行(不含行尾)。"""
+        """喂入新读到的字符串, 返回本次新切出的行(不含行尾). """
         self._buffer += chunk
         lines: list[str] = []
         while True:
@@ -73,7 +73,7 @@ class _LineSplitter:
         return lines
 
     def flush(self) -> list[str]:
-        """流读取结束时调用, 把残留缓冲作为最后一行返回。"""
+        """流读取结束时调用, 把残留缓冲作为最后一行返回. """
         if not self._buffer:
             return []
         last = self._buffer
@@ -82,12 +82,12 @@ class _LineSplitter:
 
 
 class SSHClient:
-    """受限默认配置的 SSH 客户端。
+    """受限默认配置的 SSH 客户端. 
 
-    默认策略：
+    默认策略: 
     - 拒绝未知主机指纹
     - 关闭 agent 与自动搜索本地密钥
-    - 默认不使用 PTY，避免引入额外 shell 行为差异
+    - 默认不使用 PTY, 避免引入额外 shell 行为差异
 
     P3.W1: 持久连接 + 自动重连 (参考 [`docs/general/remote_ssh_p3_plan.md`](../../../../docs/general/remote_ssh_p3_plan.md) §3.1):
     - ``connect()`` 后自动启用 ``transport.set_keepalive(DEFAULT_KEEPALIVE_INTERVAL)``
@@ -111,7 +111,7 @@ class SSHClient:
         self._reconnect_lock = threading.RLock()
 
     def connect(self) -> None:
-        """建立 SSH 连接。"""
+        """建立 SSH 连接. """
         self.credentials.validate()
         self._ensure_paramiko_available()
 
@@ -176,7 +176,7 @@ class SSHClient:
         )
 
     def close(self) -> None:
-        """关闭 SSH 连接。"""
+        """关闭 SSH 连接. """
         with self._reconnect_lock:
             if self._client is None:
                 return
@@ -289,7 +289,7 @@ class SSHClient:
                 raise
 
     def run(self, command: str, *, timeout: float | None = None, get_pty: bool = False, check: bool = False) -> RemoteCommandResult:
-        """执行远程命令。"""
+        """执行远程命令. """
         return self._call_with_retry(
             lambda: self._run_once(command, timeout=timeout, get_pty=get_pty, check=check),
             label="run",
@@ -347,7 +347,7 @@ class SSHClient:
         check: bool = False,
         merge_stderr: bool = False,
     ) -> RemoteCommandResult:
-        # P3.W1: 流式命令重试需谨慎 — 一旦开始有输出回流给上层 (例如部署脚本进度),
+        # P3.W1: 流式命令重试需谨慎 - 一旦开始有输出回流给上层 (例如部署脚本进度),
         # 整段重跑可能触发"双倍下载 / 二次写盘"等副作用. 因此只做"前置探活"(如果
         # 入口前就发现连接已死, 自愈一次), 命令开始执行后任何错误都原样上抛,
         # 由调用方决定是否重试.
@@ -372,11 +372,11 @@ class SSHClient:
         check: bool = False,
         merge_stderr: bool = False,
     ) -> RemoteCommandResult:
-        """执行远程命令并流式读取 stdout / stderr。
+        """执行远程命令并流式读取 stdout / stderr. 
 
         与 [`run`](src/core/remote/ssh_client.py) 不同, 该方法在命令仍在运行时即可
         通过回调把每一行 stdout / stderr 投递给上层, 用于解析 P1 部署脚本的
-        ``[PROGRESS] N message`` 进度协议。
+        ``[PROGRESS] N message`` 进度协议. 
 
         Args:
             command: 远端 shell 命令
@@ -385,11 +385,11 @@ class SSHClient:
             timeout: 单次命令的最大耗时(秒); 默认使用凭据的 ``command_timeout``
             check: 退出码非 0 时抛 [`RemoteCommandError`](src/core/remote/errors.py)
             merge_stderr: 当为 True 时启用 PTY, 远端 bash 进入行缓冲, 且 stderr 会合并到 stdout
-                并实时发往 ``on_stdout_line``。适合"展示部署终端"场景, 牺牲 stream 区分度换取实时性。
+                并实时发往 ``on_stdout_line``. 适合"展示部署终端"场景, 牺牲 stream 区分度换取实时性. 
 
         Returns:
-            完整的命令结果, ``stdout`` / ``stderr`` 为流式累积后的合并文本(以 ``\n`` 分隔)。
-            当 ``merge_stderr=True`` 时, ``stderr`` 字段为空, 所有输出都进入 ``stdout``。
+            完整的命令结果, ``stdout`` / ``stderr`` 为流式累积后的合并文本(以 ``\n`` 分隔). 
+            当 ``merge_stderr=True`` 时, ``stderr`` 字段为空, 所有输出都进入 ``stdout``. 
         """
         client = self._require_client()
         effective_timeout = timeout or self.credentials.command_timeout
@@ -414,8 +414,8 @@ class SSHClient:
             captured_stderr: list[str] = []
 
             # PTY 模式下行尾可能是 ``\r\n``; 同时 ``readline`` 在分块读取时
-            # 部分行可能只到 ``\r``。统一按 ``\r`` 与 ``\n`` 切分以避免 curl 等
-            # 工具的 carriage-return 进度条吃掉多行内容。
+            # 部分行可能只到 ``\r``. 统一按 ``\r`` 与 ``\n`` 切分以避免 curl 等
+            # 工具的 carriage-return 进度条吃掉多行内容. 
             splitter = _LineSplitter()
             for raw_line in iter(stdout.readline, ""):
                 for line in splitter.feed(raw_line):
@@ -479,7 +479,7 @@ class SSHClient:
         return result
 
     def ensure_remote_directory(self, remote_path: str) -> RemoteCommandResult:
-        """确保远端目录存在。"""
+        """确保远端目录存在. """
         return self.run(f"mkdir -p -- {self._quote_remote_argument(remote_path)}", check=True)
 
     # ==================== exec_stream + 自动重连 (P4 W4 F7) ====================
@@ -589,7 +589,7 @@ class SSHClient:
         raise SSHConnectionError("exec_stream_resilient 未运行任何 attempt")
 
     def upload_file(self, local_path: str | Path, remote_path: str) -> None:
-        """上传单个文件。"""
+        """上传单个文件. """
         return self._call_with_retry(
             lambda: self._upload_file_once(local_path, remote_path),
             label="upload_file",
@@ -625,7 +625,7 @@ class SSHClient:
         )
 
     def download_file(self, remote_path: str, local_path: str | Path) -> None:
-        """下载单个文件。"""
+        """下载单个文件. """
         return self._call_with_retry(
             lambda: self._download_file_once(remote_path, local_path),
             label="download_file",
@@ -644,7 +644,7 @@ class SSHClient:
             raise SSHConnectionError(f"下载文件失败: {exc}") from exc
 
     def read_text(self, remote_path: str, *, encoding: str = "utf-8") -> str:
-        """读取远端文本文件全部内容。"""
+        """读取远端文本文件全部内容. """
         return self._call_with_retry(
             lambda: self._read_text_once(remote_path, encoding=encoding),
             label="read_text",
@@ -661,7 +661,7 @@ class SSHClient:
         return data.decode(encoding, errors="replace")
 
     def write_text(self, remote_path: str, content: str, *, encoding: str = "utf-8") -> None:
-        """写入远端文本文件, 父目录不存在时自动创建。"""
+        """写入远端文本文件, 父目录不存在时自动创建. """
         return self._call_with_retry(
             lambda: self._write_text_once(remote_path, content, encoding=encoding),
             label="write_text",
@@ -680,7 +680,7 @@ class SSHClient:
             raise SSHConnectionError(f"写入远端文件失败: {exc}") from exc
 
     def remote_exists(self, remote_path: str) -> bool:
-        """判断远端路径是否存在(文件或目录)。"""
+        """判断远端路径是否存在(文件或目录). """
         return self._call_with_retry(
             lambda: self._remote_exists_once(remote_path),
             label="remote_exists",
@@ -700,7 +700,7 @@ class SSHClient:
             raise SSHConnectionError(f"探测远端路径失败: {exc}") from exc
 
     def remote_listdir(self, remote_path: str) -> list[tuple[str, bool, int]]:
-        """列出远端目录条目, 返回 ``(name, is_dir, size)`` 三元组列表。"""
+        """列出远端目录条目, 返回 ``(name, is_dir, size)`` 三元组列表. """
         return self._call_with_retry(
             lambda: self._remote_listdir_once(remote_path),
             label="remote_listdir",
@@ -722,7 +722,7 @@ class SSHClient:
         ]
 
     def remote_remove(self, remote_path: str, *, recursive: bool = False) -> None:
-        """删除远端文件或目录(目录需 ``recursive=True``)。"""
+        """删除远端文件或目录(目录需 ``recursive=True``). """
         # 内部已经走 ``run``, 自带重试; 此处不再额外包一层避免重复重试.
         quoted = self._quote_remote_argument(remote_path)
         if recursive:
@@ -901,7 +901,7 @@ class SSHClient:
 
     @property
     def is_connected(self) -> bool:
-        """当前是否持有可用 SSH 会话。"""
+        """当前是否持有可用 SSH 会话. """
         if self._client is None:
             return False
         transport = self._client.get_transport()
@@ -988,7 +988,7 @@ class SSHClient:
         return self._client
 
     def _resolve_sftp_path(self, remote_path: str) -> str:
-        """将 shell 风格路径转换为 SFTP 可识别的绝对路径。"""
+        """将 shell 风格路径转换为 SFTP 可识别的绝对路径. """
         if remote_path.startswith("$HOME"):
             home_dir = self._get_remote_home_directory()
             suffix = remote_path[len("$HOME") :]
@@ -996,7 +996,7 @@ class SSHClient:
         return remote_path
 
     def _get_remote_home_directory(self) -> str:
-        """查询远端用户家目录，并在当前连接内缓存。"""
+        """查询远端用户家目录, 并在当前连接内缓存. """
         if self._remote_home_dir:
             return self._remote_home_dir
 
@@ -1017,7 +1017,7 @@ class SSHClient:
         """为远端 shell 渲染参数 (P5 F2.2 安全修复).
 
         历史实现把 ``$HOME`` 起头的路径整段套双引号 (``"$HOME/..."``), 让 bash
-        展开 ``$HOME`` 的同时, ``$()`` / 反引号 / ``$VAR`` 也都会被一并展开 —
+        展开 ``$HOME`` 的同时, ``$()`` / 反引号 / ``$VAR`` 也都会被一并展开 -
         这就是 ``LinuxCorePaths.workspace_dir`` 命令注入路径的最后一公里.
 
         新行为: ``$HOME`` (单独) -> ``"$HOME"``; ``$HOME/...`` -> ``"$HOME"`` 加

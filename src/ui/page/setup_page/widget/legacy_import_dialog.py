@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""设置页旧版配置导入对话框。"""
+"""设置页旧版配置导入对话框. """
 
 # 标准库导入
 import platform
@@ -51,7 +51,7 @@ class _LegacyImportScanPayload:
 
 
 class _DialogSectionCard(SimpleCardWidget):
-    """统一的 Fluent 分区卡片。"""
+    """统一的 Fluent 分区卡片. """
 
     def __init__(self, title: str, description: str | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -79,7 +79,7 @@ class _DialogSectionCard(SimpleCardWidget):
 
 
 class _LegacyImportScanTask(QObject, QRunnable):
-    """旧版配置扫描后台任务。"""
+    """旧版配置扫描后台任务. """
 
     finished = Signal(int, object)
     failed = Signal(int, str, str)
@@ -108,7 +108,7 @@ class _LegacyImportScanTask(QObject, QRunnable):
 
 
 class _LegacyImportDropPage(QWidget):
-    """拖拽目录或 ZIP 选择页。"""
+    """拖拽目录或 ZIP 选择页. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -145,7 +145,7 @@ class _LegacyImportDropPage(QWidget):
 
 
 class _LegacyImportResultPage(QWidget):
-    """识别结果页。"""
+    """识别结果页. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -288,7 +288,7 @@ class _LegacyImportResultPage(QWidget):
 
 
 class _LegacyImportScanSkeletonPage(QWidget):
-    """旧版配置扫描骨架屏。"""
+    """旧版配置扫描骨架屏. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -367,7 +367,7 @@ class _LegacyImportScanSkeletonPage(QWidget):
 
 
 class _LegacyImportOptionsPage(QWidget):
-    """导入选项页。"""
+    """导入选项页. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -414,7 +414,7 @@ class _LegacyImportOptionsPage(QWidget):
 
 
 class _LegacyImportConflictPage(QWidget):
-    """冲突 Bot 选择页。"""
+    """冲突 Bot 选择页. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -468,7 +468,7 @@ class _LegacyImportConflictPage(QWidget):
 
 
 class LegacyImportDialog(MessageBoxBase):
-    """旧版配置目录拖拽导入对话框。"""
+    """旧版配置目录拖拽导入对话框. """
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)

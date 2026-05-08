@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""通用拖拽文件夹组件。"""
+"""通用拖拽文件夹组件. """
 
 # 标准库导入
 from pathlib import Path
@@ -15,7 +15,7 @@ from src.core.config import cfg
 
 
 class DropFolderWidget(QWidget):
-    """支持拖拽或浏览文件夹的通用控件。"""
+    """支持拖拽或浏览文件夹的通用控件. """
 
     folder_selected = Signal(object)
     path_selected = Signal(object)
@@ -80,7 +80,7 @@ class DropFolderWidget(QWidget):
         return self._folder_path
 
     def browse_folder(self) -> Path | None:
-        """打开目录选择器，并在成功选择后发出信号。"""
+        """打开目录选择器, 并在成功选择后发出信号. """
 
         folder = QFileDialog.getExistingDirectory(
             self,
@@ -247,7 +247,7 @@ class DropFolderWidget(QWidget):
         painter.setBrush(fill_color)
         painter.drawRoundedRect(rect, 18, 18)
 
-        # 命中区域的亮起感主要通过矩形面高亮表达，而不是中心特效。
+        # 命中区域的亮起感主要通过矩形面高亮表达, 而不是中心特效. 
         top_highlight = QColor("#ffffff" if isDarkTheme() else "#f8fafc")
         top_highlight.setAlpha(round(8 + 10 * self._hover_progress + 18 * self._drag_progress))
         painter.setBrush(top_highlight)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Desktop 更新领域导出。"""
+"""Desktop 更新领域导出. """
 
 from src.core.desktop_update.constants import (
     MINIMUM_MSI_SIZE_BYTES,

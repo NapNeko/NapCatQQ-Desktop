@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""[`DeploymentConsoleDialog`](src/ui/page/remote_page/deployment_console.py): 部署控制台对话框。
+"""[`DeploymentConsoleDialog`](src/ui/page/remote_page/deployment_console.py): 部署控制台对话框. 
 
 基于 [`MessageBoxBase`](https://qfluentwidgets.com/) 实现, 与项目内其他对话框风格一致;
 订阅 [`ServerManager`](src/core/remote/server_manager.py) 的:
 
-- ``deployment_log(server_id, line)`` — 实时回显每行远端 stdout(含合并的 stderr)
-- ``deployment_progress(server_id, message, percent)`` — 顶部进度条 + 阶段标题
-- ``deployment_finished(server_id, ok, message)`` — 终结提示 + 关闭按钮启用
+- ``deployment_log(server_id, line)`` - 实时回显每行远端 stdout(含合并的 stderr)
+- ``deployment_progress(server_id, message, percent)`` - 顶部进度条 + 阶段标题
+- ``deployment_finished(server_id, ok, message)`` - 终结提示 + 关闭按钮启用
 
 设计要点:
 - 模态: 使用 [`MaskDialogBase`](https://qfluentwidgets.com/) 提供的遮罩层, 与项目风格一致
@@ -47,7 +47,7 @@ _MAX_LOG_LINES = 5000
 
 
 class DeploymentConsoleDialog(MessageBoxBase):
-    """部署控制台对话框。
+    """部署控制台对话框. 
 
     用法::
 
@@ -158,7 +158,7 @@ class DeploymentConsoleDialog(MessageBoxBase):
 
     # ---------- 终端渲染 ----------
     def _append_line(self, line: str) -> None:
-        """向终端追加一行 (纯文本, 由 LogHighlighter 自动着色), 滚动到底部。"""
+        """向终端追加一行 (纯文本, 由 LogHighlighter 自动着色), 滚动到底部. """
         # 用 appendPlainText 而非 appendHtml, 避免 HTML 渲染时空字符串变成段落分隔产生空行
         self.terminal.appendPlainText(line)
         self.terminal.moveCursor(QTextCursor.MoveOperation.End)

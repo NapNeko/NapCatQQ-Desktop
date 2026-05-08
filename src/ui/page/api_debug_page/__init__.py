@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 
 class ApiDebugPage(QWidget):
-    """独立接口文档页面。"""
+    """独立接口文档页面. """
 
     STABLE_MINIMUM_SIZE_HINT = QSize(1120, 720)
     STABLE_SIZE_HINT = QSize(1120, 720)
@@ -440,7 +440,7 @@ class ApiDebugPage(QWidget):
 
 
 class ApiDebugPageCreator(AbstractCreator, ABC):
-    """接口文档页面创建器。"""
+    """接口文档页面创建器. """
 
     targets = (
         CreateTargetInfo(

@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""旧版配置目录导入服务。
+"""旧版配置目录导入服务. 
 
-文件名识别规则以历史兼容性为主：
+文件名识别规则以历史兼容性为主: 
 - ``config.json``
 - ``bot.json``
 - ``onebot11_{qqid}.json``
 - ``napcat_{qqid}.json``
 
-根据当前仓库抽查到的 git 历史，这些文件名长期保持稳定，变化主要发生在目录布局，
-因此扫描策略采用“固定文件名 + 已知布局 + 内容校验”。
+根据当前仓库抽查到的 git 历史, 这些文件名长期保持稳定, 变化主要发生在目录布局, 
+因此扫描策略采用"固定文件名 + 已知布局 + 内容校验". 
 """
 
 # 标准库导入
@@ -63,7 +63,7 @@ _MAX_IMPORT_ARCHIVE_SIZE_BYTES = 50 * 1024 * 1024
 
 @dataclass(frozen=True)
 class ImportConflictItem:
-    """Bot 导入冲突项。"""
+    """Bot 导入冲突项. """
 
     qqid: int
     current_name: str
@@ -72,7 +72,7 @@ class ImportConflictItem:
 
 @dataclass(frozen=True)
 class ImportScanResult:
-    """扫描旧版配置目录后的结果。"""
+    """扫描旧版配置目录后的结果. """
 
     source_path: Path
     scan_root_path: Path
@@ -87,14 +87,14 @@ class ImportScanResult:
 
     @property
     def root_path(self) -> Path:
-        """兼容旧字段名，返回实际扫描根目录。"""
+        """兼容旧字段名, 返回实际扫描根目录. """
 
         return self.scan_root_path
 
 
 @dataclass(frozen=True)
 class ImportExecutionPlan:
-    """导入执行计划。"""
+    """导入执行计划. """
 
     scan_result: ImportScanResult
     import_app_config: bool = False
@@ -104,7 +104,7 @@ class ImportExecutionPlan:
 
 @dataclass(frozen=True)
 class ImportExecutionResult:
-    """导入执行结果。"""
+    """导入执行结果. """
 
     app_imported: bool
     bot_imported: bool
@@ -252,7 +252,7 @@ def _scan_legacy_config_root(
     cleanup_path: Path | None = None,
     initial_warnings: list[str] | None = None,
 ) -> ImportScanResult:
-    """扫描已准备好的导入根目录。"""
+    """扫描已准备好的导入根目录. """
 
     if not scan_root_path.exists():
         raise FileNotFoundError(f"旧版配置目录不存在: {scan_root_path}")
@@ -294,7 +294,7 @@ def _scan_legacy_config_root(
 
 
 def scan_legacy_import_source(path: Path) -> ImportScanResult:
-    """扫描旧版配置导入源，支持目录和 ZIP 包。"""
+    """扫描旧版配置导入源, 支持目录和 ZIP 包. """
 
     source_path = path.expanduser().resolve()
     if not source_path.exists():
@@ -329,7 +329,7 @@ def scan_legacy_import_source(path: Path) -> ImportScanResult:
 
 
 def scan_legacy_config_folder(folder: Path) -> ImportScanResult:
-    """扫描旧版配置目录。"""
+    """扫描旧版配置目录. """
     return scan_legacy_import_source(folder)
 
 
@@ -397,7 +397,7 @@ def _snapshot_paths(paths: list[Path], backup_dir: Path) -> None:
 
 
 def apply_legacy_config_import(plan: ImportExecutionPlan) -> ImportExecutionResult:
-    """执行旧版配置导入。"""
+    """执行旧版配置导入. """
     path_func = _get_path_func()
     payloads: dict[Path, object] = {}
     deletions: list[Path] = []

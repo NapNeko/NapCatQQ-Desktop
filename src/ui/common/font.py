@@ -35,7 +35,7 @@ class FontManager:
 
     @classmethod
     def code_font_families(cls) -> list[str]:
-        """返回代码编辑器优先使用的等宽字体栈。"""
+        """返回代码编辑器优先使用的等宽字体栈. """
         preferred = [family for family in cls._loaded_families if "maple" in family.lower() or "mono" in family.lower()]
         fallback = [
             "Cascadia Mono",

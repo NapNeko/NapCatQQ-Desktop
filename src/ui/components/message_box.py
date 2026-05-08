@@ -30,15 +30,15 @@ if TYPE_CHECKING:
 
 
 class TextInputBox(MessageBoxBase):
-    """文本输入框弹窗，用于获取用户输入的文本信息."""
+    """文本输入框弹窗, 用于获取用户输入的文本信息."""
 
     def __init__(self, parent: "MainWindow", placeholder_text: str = "Enter...") -> None:
         """
         初始化文本输入框弹窗.
 
         Args:
-            parent: 父级窗口，通常为 main_window.
-            placeholder_text: 输入框的占位提示文本，默认为 "Enter...".
+            parent: 父级窗口, 通常为 main_window.
+            placeholder_text: 输入框的占位提示文本, 默认为 "Enter...".
         """
         super().__init__(parent=parent)
         # 创建控件
@@ -56,7 +56,7 @@ class TextInputBox(MessageBoxBase):
 
 
 class AskBox(MessageBoxBase):
-    """询问用户是否确认的提示框，通常用于危险操作前的二次确认."""
+    """询问用户是否确认的提示框, 通常用于危险操作前的二次确认."""
 
     def __init__(self, title: str, content: str, parent: "MainWindow") -> None:
         """
@@ -81,16 +81,16 @@ class AskBox(MessageBoxBase):
 
 
 class ImageBox(MessageBoxBase):
-    """图片展示弹窗，用于在弹窗中展示一张图片."""
+    """图片展示弹窗, 用于在弹窗中展示一张图片."""
 
     def __init__(self, title: str, image: str | QImage | QPixmap, parent: "MainWindow") -> None:
         """
-        初始化图片展示弹窗。
+        初始化图片展示弹窗. 
 
         Args:
-            title: 弹窗标题。
-            image: 图片数据，可以是路径 str、QImage 或 QPixmap。
-            parent: 父级窗口。
+            title: 弹窗标题. 
+            image: 图片数据, 可以是路径 str, QImage 或 QPixmap. 
+            parent: 父级窗口. 
         """
         super().__init__(parent=parent)
 
@@ -110,7 +110,7 @@ class ImageBox(MessageBoxBase):
         """设置图片
 
         Args:
-            image (str | QImage | QPixmap): 图片数据，可以是路径 str、QImage 或 QPixmap
+            image (str | QImage | QPixmap): 图片数据, 可以是路径 str, QImage 或 QPixmap
         """
         self.image_label.setImage(image)
         self.set_image_scaled_to_width(int(self.width() * 0.3))

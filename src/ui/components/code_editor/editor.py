@@ -38,10 +38,10 @@ from src.ui.components.code_editor.smooth_scroll import SmoothTextScrollMixin
 class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
     """代码编辑器基类
 
-    功能：
+    功能: 
         - 显示行号
         - 当前行与多行选中高亮
-    仅作为代码编辑器的基础类，不包含任何智能编辑功能
+    仅作为代码编辑器的基础类, 不包含任何智能编辑功能
     """
 
     INDENT_WIDTH: int = 4  # 缩进宽度
@@ -50,7 +50,7 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
         """初始化代码编辑器
 
         Args:
-            parent (QWidget | None): 父控件，可为 None。
+            parent (QWidget | None): 父控件, 可为 None. 
         """
         super().__init__(parent)
         self._disable_builtin_smooth_scroll_delegate()
@@ -79,7 +79,7 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
         self._connect_signals()
 
     def _disable_builtin_smooth_scroll_delegate(self) -> None:
-        """卸载 qfluentwidgets 自带的滚动代理，避免事件过滤异常。"""
+        """卸载 qfluentwidgets 自带的滚动代理, 避免事件过滤异常. """
         if (delegate := getattr(self, "scrollDelegate", None)) is None:
             return
 
@@ -104,7 +104,7 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
         cfg.themeChanged.connect(self._queue_theme_palette_update)
 
     def _apply_theme_palette(self, *args) -> None:
-        """显式同步编辑器前景色，避免主题切换后沿用错误的默认文本色。"""
+        """显式同步编辑器前景色, 避免主题切换后沿用错误的默认文本色. """
         theme = args[0] if args else None
         dark = self._is_dark_theme(theme)
         palette = self.palette()
@@ -159,7 +159,7 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
         return QColor("#e6eaf2") if dark else QColor("#1f2937")
 
     def _apply_document_text_color(self, text_color: QColor) -> None:
-        """同步文档默认字符格式，避免已有文本保留旧主题下的黑字。"""
+        """同步文档默认字符格式, 避免已有文本保留旧主题下的黑字. """
         fmt = QTextCharFormat()
         fmt.setForeground(text_color)
 
@@ -242,7 +242,7 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
             block_number += 1
 
     def resizeEvent(self, event: QResizeEvent) -> None:
-        """重写 resize 事件，更新行号区域位置
+        """重写 resize 事件, 更新行号区域位置
 
         Args:
             event (QResizeEvent): 调整大小事件
@@ -263,15 +263,15 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
         self.setViewportMargins(self.line_number_area_width() + 10, 0, 0, 0)
 
     def _on_update_line_number_area_width(self, _: int) -> None:
-        """槽函数：更新行号区域宽度
+        """槽函数: 更新行号区域宽度
 
         Args:
-            _ (int): 块数量变化（未使用）
+            _ (int): 块数量变化 (未使用) 
         """
         self._update_line_number_area_width()
 
     def _on_update_line_number_area(self, rect: QRect, dy: int) -> None:
-        """槽函数：滚动或更新行号区域
+        """槽函数: 滚动或更新行号区域
 
         Args:
             rect (QRect): 需要更新的矩形区域
@@ -328,7 +328,7 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
         self.line_number_area.update()
 
     def _on_handle_cursor_position_changed(self) -> None:
-        """槽函数：光标移动处理多行选择与高亮"""
+        """槽函数: 光标移动处理多行选择与高亮"""
         cursor = self.textCursor()
         line_number = cursor.block().blockNumber()
         self.current_line = line_number
@@ -366,9 +366,9 @@ class CodeEditorBase(SmoothTextScrollMixin, PlainTextEdit):
 
 class CodeEditor(CodeEditorBase):
     """
-    代码编辑器类，提供智能编辑功能
+    代码编辑器类, 提供智能编辑功能
 
-    功能：
+    功能: 
         - 自动补全括号/引号
         - 智能缩进与回车
         - Ctrl+Enter 继承缩进
@@ -503,13 +503,13 @@ class CodeEditor(CodeEditorBase):
         self.setTextCursor(cursor)
 
     def _should_skip_closing_character(self, cursor: QTextCursor, input_char: str, text: str) -> bool:
-        """检查光标后是否已有闭合字符，需要跳过"""
+        """检查光标后是否已有闭合字符, 需要跳过"""
         pos = cursor.position()
         return pos < len(text) and input_char in self.AUTO_COMPLETE_CHARS.values() and text[pos] == input_char
 
 
 class JsonEditor(CodeEditor):
-    """JSON 专用编辑器，带语法高亮和层级辅助线"""
+    """JSON 专用编辑器, 带语法高亮和层级辅助线"""
 
     # 信号定义
     json_validated_signal = Signal(bool)
@@ -519,7 +519,7 @@ class JsonEditor(CodeEditor):
         """初始化 JSON 编辑器
 
         Args:
-            parent: 父组件，可选
+            parent: 父组件, 可选
         """
         super().__init__(parent)
 
@@ -563,7 +563,7 @@ class JsonEditor(CodeEditor):
         """获取当前 JSON 数据
 
         Args:
-            compressed: 是否压缩为一行字符串，默认为 True
+            compressed: 是否压缩为一行字符串, 默认为 True
 
         Returns:
             JSON 字符串
@@ -582,7 +582,7 @@ class JsonEditor(CodeEditor):
         """检查当前文本是否为有效 JSON 并标记错误行
 
         Args:
-            show_tips: 是否显示提示信息，默认为 True
+            show_tips: 是否显示提示信息, 默认为 True
 
         Returns:
             JSON 是否有效
@@ -715,7 +715,7 @@ class JsonEditor(CodeEditor):
         """分析 JSON 结构并返回层级范围信息
 
         Returns:
-            层级范围字典，键为层级，值为范围列表
+            层级范围字典, 键为层级, 值为范围列表
         """
         level_ranges: dict[int, list[tuple[int, int]]] = {}
         stack: list[tuple[int, int]] = []
@@ -747,7 +747,7 @@ class JsonEditor(CodeEditor):
             viewport_bottom: 视口底部位置
 
         Returns:
-            可见块列表，每个元素为 (行号, 顶部位置, 底部位置)
+            可见块列表, 每个元素为 (行号, 顶部位置, 底部位置)
         """
         visible_blocks: list[tuple[int, float, float]] = []
         block = self.firstVisibleBlock()
@@ -795,7 +795,7 @@ class JsonEditor(CodeEditor):
         char_width: int,
         pen: QPen,
     ) -> None:
-        """绘制高亮显示的缩进辅助线（光标所在层级）
+        """绘制高亮显示的缩进辅助线 (光标所在层级) 
 
         Args:
             painter: 绘制器

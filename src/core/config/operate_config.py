@@ -33,17 +33,17 @@ _MISSING = object()
 
 
 def _get_path_func() -> PathFunc:
-    """获取路径处理实例。"""
+    """获取路径处理实例. """
     return it(PathFunc)
 
 
 def _model_to_payload(model: Config | OneBotConfig | NapCatConfig | ConfigCollection) -> Any:
-    """将 Pydantic 模型转换为可序列化 JSON 结构。"""
+    """将 Pydantic 模型转换为可序列化 JSON 结构. """
     return json_payload(model)
 
 
 def _deep_merge_patch(target: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    """将补丁字典递归合并到目标字典。"""
+    """将补丁字典递归合并到目标字典. """
     for key, value in patch.items():
         if isinstance(value, dict) and isinstance(target.get(key), dict):
             _deep_merge_patch(target[key], value)
@@ -53,7 +53,7 @@ def _deep_merge_patch(target: dict[str, Any], patch: dict[str, Any]) -> dict[str
 
 
 def _three_way_merge_full(base: Any, local: Any, remote: Any) -> Any:
-    """对完整配置做三方合并，local 冲突优先。"""
+    """对完整配置做三方合并, local 冲突优先. """
     if isinstance(base, dict) and isinstance(local, dict) and isinstance(remote, dict):
         merged: dict[str, Any] = {}
         for key in set(base) | set(local) | set(remote):
@@ -82,7 +82,7 @@ def _three_way_merge_full(base: Any, local: Any, remote: Any) -> Any:
 
 
 def _merge_external_patch(base: Any, local: Any, external_patch: Any) -> Any:
-    """按外部补丁范围做三方合并，返回仅包含补丁键的结果。"""
+    """按外部补丁范围做三方合并, 返回仅包含补丁键的结果. """
     if isinstance(external_patch, dict):
         merged: dict[str, Any] = {}
         base_dict = base if isinstance(base, dict) else {}
@@ -104,7 +104,7 @@ def _read_json_payload(path: Path) -> object:
 
 
 def _load_external_model(path: Path, model_type: type[OneBotConfig] | type[NapCatConfig]) -> OneBotConfig | NapCatConfig | None:
-    """读取外部派生配置；格式非法时跳过合并。"""
+    """读取外部派生配置; 格式非法时跳过合并. """
     try:
         payload = _read_json_payload(path)
         return model_type(**payload)
@@ -116,7 +116,7 @@ def _load_external_model(path: Path, model_type: type[OneBotConfig] | type[NapCa
 
 
 def _build_external_config_patch(path_func: PathFunc, qqid: int) -> dict[str, Any]:
-    """从 onebot/napcat 派生配置构造外部补丁。"""
+    """从 onebot/napcat 派生配置构造外部补丁. """
     patch: dict[str, Any] = {}
     onebot_path = path_func.napcat_config_path / f"onebot11_{qqid}.json"
     napcat_path = path_func.napcat_config_path / f"napcat_{qqid}.json"
@@ -155,17 +155,17 @@ def _build_external_config_patch(path_func: PathFunc, qqid: int) -> dict[str, An
 
 
 def _next_transaction_path(path: Path, marker: str) -> Path:
-    """生成同目录下的事务临时路径。"""
+    """生成同目录下的事务临时路径. """
     return path.with_name(f"{path.name}.{marker}.{uuid.uuid4().hex}")
 
 
 def _replace_path(src: Path, dst: Path) -> None:
-    """替换目标路径，单独抽出便于测试故障注入。"""
+    """替换目标路径, 单独抽出便于测试故障注入. """
     os.replace(src, dst)
 
 
 def _cleanup_path(path: Path) -> None:
-    """清理事务临时文件。"""
+    """清理事务临时文件. """
     try:
         if path.exists():
             path.unlink()
@@ -174,7 +174,7 @@ def _cleanup_path(path: Path) -> None:
 
 
 def _persist_migrated_json(path: Path, payload: Any) -> Path | None:
-    """将迁移后的配置原子写回，并保留一份备份。"""
+    """将迁移后的配置原子写回, 并保留一份备份. """
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = _next_transaction_path(path, "tmp")
     backup_path = path.with_name(f"{path.name}{_BOT_CONFIG_MIGRATION_BACKUP_SUFFIX}")
@@ -201,7 +201,7 @@ def _persist_migrated_json(path: Path, payload: Any) -> Path | None:
 
 
 def _build_onebot_config(config: Config) -> OneBotConfig:
-    """构造 NapCat OneBot 配置。"""
+    """构造 NapCat OneBot 配置. """
     return OneBotConfig(
         **{
             "network": config.connect,
@@ -213,7 +213,7 @@ def _build_onebot_config(config: Config) -> OneBotConfig:
 
 
 def _build_napcat_config(config: Config) -> NapCatConfig:
-    """构造 NapCat 主配置。"""
+    """构造 NapCat 主配置. """
     return NapCatConfig(
         **{
             "fileLog": config.advanced.fileLog,
@@ -229,7 +229,7 @@ def _build_napcat_config(config: Config) -> NapCatConfig:
 
 
 def _stage_json_write(path: Path, payload: Any) -> Path:
-    """将 JSON 数据先写入同目录临时文件。"""
+    """将 JSON 数据先写入同目录临时文件. """
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = _next_transaction_path(path, "tmp")
 
@@ -240,7 +240,7 @@ def _stage_json_write(path: Path, payload: Any) -> Path:
 
 
 def _commit_transaction(replacements: dict[Path, Path], deletions: list[Path]) -> None:
-    """提交文件事务，失败时尽量回滚到原始状态。"""
+    """提交文件事务, 失败时尽量回滚到原始状态. """
     backups: dict[Path, Path] = {}
     targets = list(replacements.keys()) + [path for path in deletions if path not in replacements]
 
@@ -277,7 +277,7 @@ def _commit_transaction(replacements: dict[Path, Path], deletions: list[Path]) -
 
 
 def _apply_json_transaction(payloads: dict[Path, Any], deletions: list[Path] | None = None) -> None:
-    """执行 JSON 文件事务。"""
+    """执行 JSON 文件事务. """
     staged_files: dict[Path, Path] = {}
 
     try:
@@ -291,10 +291,10 @@ def _apply_json_transaction(payloads: dict[Path, Any], deletions: list[Path] | N
 
 
 def _read_config_file(strict: bool) -> List[Config]:
-    """读取 Bot 配置文件。
+    """读取 Bot 配置文件. 
 
-    strict=True 时，遇到格式错误或单条配置非法会直接抛错；
-    strict=False 时，仅记录错误并返回空列表。
+    strict=True 时, 遇到格式错误或单条配置非法会直接抛错; 
+    strict=False 时, 仅记录错误并返回空列表. 
     """
     bot_config_path = _get_path_func().bot_config_path
 
@@ -380,7 +380,7 @@ def check_duplicate_bot(config: Config) -> bool:
 
 
 def merge_config_for_update(config: Config, base_config: Config | None = None) -> Config:
-    """将当前编辑结果与磁盘配置、WebUI 派生配置做无感合并。"""
+    """将当前编辑结果与磁盘配置, WebUI 派生配置做无感合并. """
     path_func = _get_path_func()
     current_configs = _read_config_file(strict=True)
     current_saved_config = next((item for item in current_configs if item.bot.QQID == config.bot.QQID), None)
@@ -492,7 +492,7 @@ def _do_remote_sync_blocking(config: Config) -> None:
       用户应当看到本地保存成功, 然后由 UI 后续展示远端同步状态.
     - **顶层 try/except Exception 兜底**: 任何未预期异常 (paramiko/keyring/...)
       都被吞下转 warning, 绝不让远端同步副作用使本地的 ``bot.json`` 写盘看起来失败.
-      这是 P3 阶段修复的实测 bug —— 远端 SSH 抖动会让 update_config 返回 False,
+      这是 P3 阶段修复的实测 bug -- 远端 SSH 抖动会让 update_config 返回 False,
       用户感知"切了 runtime_target 完全没生效", 但其实本地早就写盘了.
     """
     try:
@@ -636,7 +636,7 @@ def _try_dispatch_remote_op_async(action: str, config: Config) -> bool:
 def _sync_bot_runtime_config_to_remote(config: Config) -> None:
     """如果 Bot 绑定到远端, 把 onebot11/napcat JSON 推到远端工作区.
 
-    P3 perf W3: 调用方不再阻塞在 SSH 写文件上 — 在 UI 进程内会派发到 QThreadPool;
+    P3 perf W3: 调用方不再阻塞在 SSH 写文件上 - 在 UI 进程内会派发到 QThreadPool;
     在无 Qt 上下文的环境 (单测 / CLI) 仍走同步, 维持兼容. 失败时仅记录 warning, 不抛出.
 
     要求:
@@ -697,8 +697,8 @@ def _make_runnable_class():
             "delete": "删除远端 Bot {qq_id} 的配置",
         }
         _ACTION_CONTENTS = {
-            "sync": "正在通过 SFTP 推送 onebot11 / napcat JSON…",
-            "delete": "正在通过 SSH 删除远端配置…",
+            "sync": "正在通过 SFTP 推送 onebot11 / napcat JSON...",
+            "delete": "正在通过 SSH 删除远端配置...",
         }
         _ACTION_SUCCESS = {
             "sync": "Bot {qq_id} 配置已同步",

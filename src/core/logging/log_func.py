@@ -89,7 +89,7 @@ class Logger:
         exc_type: type[BaseException] | None = None,
         exc_traceback=None,
     ) -> str:
-        """构造包含异常栈的日志消息。"""
+        """构造包含异常栈的日志消息. """
         resolved_type = exc_type or type(exc)
         details = f"{message}: {resolved_type.__name__}: {exc}"
         trace_text = "".join(traceback.format_exception(resolved_type, exc, exc_traceback or exc.__traceback__)).strip()
@@ -100,17 +100,17 @@ class Logger:
         return details
 
     def is_trace_logging_enabled(self) -> bool:
-        """判断当前会话是否启用了 TRACE 日志。"""
+        """判断当前会话是否启用了 TRACE 日志. """
         if self._trace_logging_enabled_override is not None:
             return self._trace_logging_enabled_override
         return is_developer_mode_enabled()
 
     def set_trace_logging_enabled(self, enabled: bool | None) -> None:
-        """设置 TRACE 日志运行时开关。None 表示恢复默认策略。"""
+        """设置 TRACE 日志运行时开关. None 表示恢复默认策略. """
         self._trace_logging_enabled_override = enabled
 
     def _should_emit(self, level: LogLevel) -> bool:
-        """判断指定等级的日志当前是否需要输出。"""
+        """判断指定等级的日志当前是否需要输出. """
         if level == LogLevel.TRCE and not self.is_trace_logging_enabled():
             return False
         return True
@@ -134,7 +134,7 @@ class Logger:
             log_type (LogType): 日志类型
             log_source (LogSource): 日志来源
             log_position (LogPosition | None): 日志位置
-            log_group (LogGroup | None): 日志组，可为 None。
+            log_group (LogGroup | None): 日志组, 可为 None. 
         """
         if not self._should_emit(level):
             return
@@ -144,7 +144,7 @@ class Logger:
         serialized_log = log.to_string()
 
         if log_group:
-            # 如果提供了 log_group，将日志添加到它的内部
+            # 如果提供了 log_group, 将日志添加到它的内部
             log_group.add(log)
         else:
             # 否则直接添加到 log_buffer
@@ -251,7 +251,7 @@ class Logger:
         )
 
     def _handle_sys_exception(self, exc_type: type[BaseException], exc: BaseException, exc_traceback) -> None:
-        """处理主线程未捕获异常。"""
+        """处理主线程未捕获异常. """
         if issubclass(exc_type, KeyboardInterrupt):
             return
 
@@ -265,7 +265,7 @@ class Logger:
         )
 
     def _handle_thread_exception(self, args: threading.ExceptHookArgs) -> None:
-        """处理线程未捕获异常。"""
+        """处理线程未捕获异常. """
         if args.exc_type is None or args.exc_value is None:
             return
 
@@ -280,7 +280,7 @@ class Logger:
         )
 
     def _handle_unraisable_exception(self, args) -> None:
-        """处理无法传播到调用方的异常。"""
+        """处理无法传播到调用方的异常. """
         if args.exc_value is None:
             return
 
@@ -307,7 +307,7 @@ class Logger:
         exc_traceback=None,
         log_source: LogSource = LogSource.CORE,
     ) -> None:
-        """统一记录未处理异常并生成诊断包。"""
+        """统一记录未处理异常并生成诊断包. """
         self._log(
             LogLevel.CRIT,
             self._format_exception_message(message, exc, exc_type, exc_traceback),
@@ -319,7 +319,7 @@ class Logger:
         self.emit_crash_bundle(trigger, exc, exc_type, exc_traceback)
 
     def _handle_qt_message(self, msg_type, context, message: str) -> None:
-        """接管 Qt 的 warning/critical/fatal 日志。"""
+        """接管 Qt 的 warning/critical/fatal 日志. """
         level_mapping = {
             QtMsgType.QtDebugMsg: LogLevel.TRCE,
             QtMsgType.QtInfoMsg: LogLevel.INFO,
@@ -354,11 +354,11 @@ class Logger:
         exc_type: type[BaseException] | None = None,
         exc_traceback=None,
     ) -> Path | None:
-        """生成一次性的桌面崩溃诊断包。"""
+        """生成一次性的桌面崩溃诊断包. """
         return self._emit_crash_bundle(trigger, exc, exc_type, exc_traceback, remember_bundle=True)
 
     def emit_test_crash_bundle(self) -> Path | None:
-        """生成一个不影响正式崩溃去重状态的测试诊断包。"""
+        """生成一个不影响正式崩溃去重状态的测试诊断包. """
         try:
             raise RuntimeError("Developer mode manual crash bundle export")
         except RuntimeError as exc:
@@ -380,7 +380,7 @@ class Logger:
         remember_bundle: bool = True,
         notify_user: bool = True,
     ) -> Path | None:
-        """生成崩溃诊断包，并按需记录首次崩溃产物。"""
+        """生成崩溃诊断包, 并按需记录首次崩溃产物. """
         with self._crash_bundle_lock:
             if remember_bundle and self._crash_bundle_path is not None:
                 return self._crash_bundle_path
@@ -441,7 +441,7 @@ class Logger:
                 self._crash_bundle_active = False
 
     def install_exception_hooks(self) -> None:
-        """安装 Python 和 Qt 的全局异常日志钩子。"""
+        """安装 Python 和 Qt 的全局异常日志钩子. """
         if self._hooks_installed:
             return
 

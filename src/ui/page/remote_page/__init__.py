@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""远程服务器管理页面（v2 架构）。
+"""远程服务器管理页面 (v2 架构) . 
 
-对应 [`docs/general/remote_ssh_plan.md`](../../../../../../docs/general/remote_ssh_plan.md) §3 与 §10。
+对应 [`docs/general/remote_ssh_plan.md`](../../../../../../docs/general/remote_ssh_plan.md) §3 与 §10. 
 v2 = VS Code Remote 模型: 本地 UI 透明代理远端 NapCat Core,
-本页负责服务器档案的 CRUD 与连接测试; 部署 / Bot 绑定将在 P1 / P2 阶段加入。
+本页负责服务器档案的 CRUD 与连接测试; 部署 / Bot 绑定将在 P1 / P2 阶段加入. 
 """
 
 from __future__ import annotations
@@ -66,9 +66,9 @@ _DEPLOYMENT_META: dict[DeploymentState, tuple[str, str]] = {
 
 
 def _make_state_badge(state: DeploymentState, parent: QWidget | None = None) -> InfoBadge:
-    """根据部署状态创建 Fluent 语义化徽章。
+    """根据部署状态创建 Fluent 语义化徽章. 
 
-    颜色由 qfluentwidgets 主题色板决定, 自动适配深/浅色主题。
+    颜色由 qfluentwidgets 主题色板决定, 自动适配深/浅色主题. 
     """
     text, level = _DEPLOYMENT_META[state]
     if level == "success":
@@ -137,7 +137,7 @@ class ServerCard(HeaderCardWidget):
 
     Header 布局: [title] [stretch] [InfoBadge] [test] [edit] [delete] [deploy] [maintenance]
 
-    所有动作通过 Qt 信号上抛给 [`RemotePage`], 卡片本身不做业务决策。
+    所有动作通过 Qt 信号上抛给 [`RemotePage`], 卡片本身不做业务决策. 
     """
 
     deploy_requested = Signal(str)        # server_id
@@ -279,7 +279,7 @@ class ServerCard(HeaderCardWidget):
 
     # ---------- 公共 API: 由 RemotePage 调用 ----------
     def update_profile(self, profile: ServerProfile) -> None:
-        """根据新 profile 刷新所有表单字段 (server_id 必须保持一致)。"""
+        """根据新 profile 刷新所有表单字段 (server_id 必须保持一致). """
         self._profile = profile
         self.setTitle(profile.name)
         cred = profile.credentials
@@ -298,7 +298,7 @@ class ServerCard(HeaderCardWidget):
         # headerLayout 结构: [title] [stretch] [badge] [spacer] [tools...]
         # removeWidget 不会重排 layout 中其他 item 的索引, 直接 insertWidget 在 stretch 之后即可
         # 简化处理: 取 stretch 后第一个非 button 位置, 直接 addWidget 到末尾会破坏顺序
-        # 故采用 insertWidget(1) — index 0 是 title (由 HeaderCardWidget 管理),
+        # 故采用 insertWidget(1) - index 0 是 title (由 HeaderCardWidget 管理),
         # index 1 是 stretch, 我们插在 stretch 之后 (index 2 即 stretch 后)
         self.headerLayout.insertWidget(2, self._state_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -344,15 +344,15 @@ class ServerCard(HeaderCardWidget):
 # 主页面 - 单列卡片流
 # ============================================================
 class RemotePage(QWidget):
-    """远程服务器管理页面。
+    """远程服务器管理页面. 
 
-    架构: 单列垂直滚动的 [`ServerCard`] 卡片流, 每张卡片自包含全部信息和操作。
-    去掉了 master-detail 双栏布局, 也无 “选中” 视觉概念。
+    架构: 单列垂直滚动的 [`ServerCard`] 卡片流, 每张卡片自包含全部信息和操作. 
+    去掉了 master-detail 双栏布局, 也无 "选中" 视觉概念. 
 
     历史兼容: 为保持 [`script.test.test_remote_page_actions`] 测试稳定,
-    本页保留 ``self._active_server_id`` 与 [`select_server`] 方法。卡片信号触发
+    本页保留 ``self._active_server_id`` 与 [`select_server`] 方法. 卡片信号触发
     `_on_xxx` 时会自动设置 ``_active_server_id``; 测试 / 程序内部以无参方式调用
-    `_on_xxx` 时会回退到该字段。
+    `_on_xxx` 时会回退到该字段. 
     """
 
     def __init__(self) -> None:
@@ -365,7 +365,7 @@ class RemotePage(QWidget):
         self._usage_notice_prompting = False
 
     def initialize(self, parent: "MainWindow") -> "RemotePage":
-        """页面初始化, 由主窗口在创建时调用。"""
+        """页面初始化, 由主窗口在创建时调用. """
         self.setParent(parent)
         self.setObjectName("RemotePage")
 
@@ -529,7 +529,7 @@ class RemotePage(QWidget):
         self._refresh_card_states()
 
     def _create_card(self, profile: ServerProfile) -> ServerCard:
-        """创建单张卡片并把卡片信号路由到 RemotePage 的 _on_xxx 槽。"""
+        """创建单张卡片并把卡片信号路由到 RemotePage 的 _on_xxx 槽. """
         card = ServerCard(profile, parent=self._list_inner)
         card.deploy_requested.connect(self._on_deploy)
         card.test_requested.connect(self._on_test)
@@ -539,19 +539,19 @@ class RemotePage(QWidget):
         return card
 
     def _refresh_card_states(self) -> None:
-        """根据当前 ServerManager 状态刷新所有卡片的按钮 enabled 标志。"""
+        """根据当前 ServerManager 状态刷新所有卡片的按钮 enabled 标志. """
         manager = it(ServerManager)
         any_deploying = bool(getattr(manager, "_deploying", set()))
-        # 部署进行时禁用 “添加”, 防止字典迭代受扰
+        # 部署进行时禁用 "添加", 防止字典迭代受扰
         self.add_btn.setEnabled(not any_deploying)
         for sid, card in self._cards.items():
             card.update_button_state(is_deploying_self=manager.is_deploying(sid))
 
     # ---------- 兼容旧 API: 测试用 ----------
     def select_server(self, server_id: str) -> None:
-        """[兼容旧测试] 把 server_id 设为 “活跃” 卡片。
+        """[兼容旧测试] 把 server_id 设为 "活跃" 卡片. 
 
-        新交互模型下用户直接点击各卡片的按钮; 本方法仅供测试 / 程序内部驱动。
+        新交互模型下用户直接点击各卡片的按钮; 本方法仅供测试 / 程序内部驱动. 
         """
         if server_id in self._cards:
             self._active_server_id = server_id
@@ -739,7 +739,7 @@ class RemotePage(QWidget):
         remote_ssh_pool().start(runner)
 
     def _open_or_focus_console(self, server_id: str, server_name: str) -> None:
-        """打开或前置 DeploymentConsoleDialog。"""
+        """打开或前置 DeploymentConsoleDialog. """
         existing = self._consoles.get(server_id)
         if existing is not None and existing.isVisible():
             existing.raise_()
@@ -754,7 +754,7 @@ class RemotePage(QWidget):
         console.activateWindow()
 
     def _on_deployment_progress(self, server_id: str, message: str, percent: int) -> None:
-        # 直接定位到对应卡片展示进度 (不再受 “选中” 限制)
+        # 直接定位到对应卡片展示进度 (不再受 "选中" 限制)
         if server_id in self._cards:
             self._cards[server_id].show_progress(message, percent)
 
@@ -771,7 +771,7 @@ class RemotePage(QWidget):
 
     # ---------- P3.W2 (A): 单台刷新版本 / 强制更新 / 强制重装 ----------
     def _on_redetect_versions_selected(self, server_id: str | None = None) -> None:
-        """对指定 (或当前活跃) 服务器后台探测版本, 不重跑安装脚本。"""
+        """对指定 (或当前活跃) 服务器后台探测版本, 不重跑安装脚本. """
         if not self._ensure_usage_notice_accepted():
             return
         sid = self._resolve_sid(server_id)
@@ -936,7 +936,7 @@ class RemotePage(QWidget):
 
     # ---------- 刷新: 重载列表 + 后台批量探测版本 ----------
     def _on_refresh(self) -> None:
-        """刷新按钮: 重载 UI + 对所有已部署的服务器后台触发版本探测。"""
+        """刷新按钮: 重载 UI + 对所有已部署的服务器后台触发版本探测. """
         if not self._ensure_usage_notice_accepted():
             return
         self._reload()
@@ -993,7 +993,7 @@ class RemotePage(QWidget):
 
 
 class RemotePageCreator(AbstractCreator, ABC):
-    """远程页面创建器。"""
+    """远程页面创建器. """
 
     targets = (CreateTargetInfo("src.ui.page.remote_page", "RemotePage"),)
 

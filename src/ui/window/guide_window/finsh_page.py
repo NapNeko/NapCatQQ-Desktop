@@ -68,7 +68,7 @@ class FinshPage(QWidget):
 
 
 class Card(QWidget):
-    """卡片基类，带有悬停动画效果"""
+    """卡片基类, 带有悬停动画效果"""
 
     def __init__(self, title: str, subtitle: str, parent=None) -> None:
         super().__init__(parent)
@@ -115,7 +115,7 @@ class Card(QWidget):
     def enterEvent(self, event: QEnterEvent):
         """重写鼠标进入事件
 
-        当鼠标进入卡片时，启动悬停动画
+        当鼠标进入卡片时, 启动悬停动画
 
         Args:
             event (QEnterEvent): _QEnterEvent_
@@ -139,7 +139,7 @@ class Card(QWidget):
     def leaveEvent(self, event: QEvent):
         """重写鼠标离开事件
 
-        当鼠标离开卡片时，恢复初始状态
+        当鼠标离开卡片时, 恢复初始状态
 
         Args:
             event (QEvent): _QEvent_
@@ -163,7 +163,7 @@ class Card(QWidget):
     def paintEvent(self, event: QPaintEvent):
         """重写绘制事件
 
-        通过 QPainter 绘制圆角矩形背景，并应用当前的动画属性
+        通过 QPainter 绘制圆角矩形背景, 并应用当前的动画属性
 
         Args:
             event (QPaintEvent): _QPaintEvent_
@@ -188,7 +188,7 @@ class Card(QWidget):
     def init_animations(self):
         """初始化动画
 
-        初始化用于圆角、缩放和颜色变化的动画
+        初始化用于圆角, 缩放和颜色变化的动画
         """
         # 圆角动画
         self.radius_anim = QPropertyAnimation(self, b"radius")
@@ -205,7 +205,7 @@ class Card(QWidget):
         self.color_anim.setDuration(300)
         self.color_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
-    # 自定义属性，用于动画
+    # 自定义属性, 用于动画
     def get_radius(self) -> int:
         return self._radius
 

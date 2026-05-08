@@ -17,13 +17,13 @@ class Urls(Enum):
 
     @staticmethod
     def get_ncd_download_url(version: str, install_type: str = "msi") -> QUrl:
-        """获取桌面端下载链接。
+        """获取桌面端下载链接. 
 
-        Desktop 应用内更新统一使用 MSI 安装包。
+        Desktop 应用内更新统一使用 MSI 安装包. 
 
         Args:
-            version: 版本号（如 "1.7.28"，不含 v 前缀）
-            install_type: 保留参数，仅兼容旧调用；当前始终返回 MSI 包地址
+            version: 版本号 (如 "1.7.28", 不含 v 前缀) 
+            install_type: 保留参数, 仅兼容旧调用; 当前始终返回 MSI 包地址
 
         Returns:
             QUrl: 下载链接
@@ -37,17 +37,17 @@ class Urls(Enum):
 
     @staticmethod
     def get_ncd_latest_url(install_type: str = "msi") -> QUrl:
-        """获取最新版下载链接。
+        """获取最新版下载链接. 
 
         Note:
-            由于文件名包含版本号，无法使用固定的 latest 下载链接。
-            需要通过 API 获取实际版本号后再构造完整 URL。
+            由于文件名包含版本号, 无法使用固定的 latest 下载链接. 
+            需要通过 API 获取实际版本号后再构造完整 URL. 
 
         Args:
-            install_type: 保留参数，仅兼容旧调用
+            install_type: 保留参数, 仅兼容旧调用
 
         Returns:
-            QUrl: 指向 releases 页面的链接（需要配合 API 使用）
+            QUrl: 指向 releases 页面的链接 (需要配合 API 使用) 
         """
         return QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest")
 

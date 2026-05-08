@@ -53,7 +53,7 @@ class CustomTitleBar(MSFluentTitleBar):
     def setup_buttons(self) -> None:
         """设置标题栏按钮
 
-        该方法会替换默认的最小化、最大化和关闭按钮, 并连接相应的槽函数
+        该方法会替换默认的最小化, 最大化和关闭按钮, 并连接相应的槽函数
         """
         button_info = {
             "minBtn": (MinBtn, self.window().showMinimized),

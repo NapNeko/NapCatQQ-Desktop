@@ -12,7 +12,7 @@ from qfluentwidgets import ComboBox
 
 
 def pretty_json(payload: Any) -> str:
-    """安全格式化 JSON。"""
+    """安全格式化 JSON. """
     try:
         return json.dumps(payload, ensure_ascii=False, indent=2)
     except TypeError:
@@ -20,7 +20,7 @@ def pretty_json(payload: Any) -> str:
 
 
 def find_index_by_data(combo: ComboBox, key: str) -> int:
-    """根据 userData 查找下标。"""
+    """根据 userData 查找下标. """
     for index in range(combo.count()):
         if str(combo.itemData(index) or "") == key:
             return index
@@ -28,7 +28,7 @@ def find_index_by_data(combo: ComboBox, key: str) -> int:
 
 
 def refresh_widget_style(widget: QWidget) -> None:
-    """在动态属性变化后刷新控件样式。"""
+    """在动态属性变化后刷新控件样式. """
     style = widget.style()
     if style is None:
         return
@@ -38,7 +38,7 @@ def refresh_widget_style(widget: QWidget) -> None:
 
 
 class CallableTask(QObject, QRunnable):
-    """在 `QThreadPool` 中执行同步任务。"""
+    """在 `QThreadPool` 中执行同步任务. """
 
     result_ready = Signal(object)
     error_raised = Signal(str)

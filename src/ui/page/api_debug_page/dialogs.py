@@ -11,7 +11,7 @@ from src.core.api_debug.models import ApiDebugSearchItem
 
 
 class ApiDebugSearchDialog(MessageBoxBase):
-    """Action 搜索对话框。"""
+    """Action 搜索对话框. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

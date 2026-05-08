@@ -50,7 +50,7 @@ _LOG_LEVEL_CHOICES = {"debug", "info", "error"}
 
 
 def _clone_payload(data: Any) -> Any:
-    """复制任意 JSON 兼容结构。"""
+    """复制任意 JSON 兼容结构. """
     import json
 
     def _default(value: object) -> Any:
@@ -62,21 +62,21 @@ def _clone_payload(data: Any) -> Any:
 
 
 def _ensure_dict(value: object) -> dict[str, object]:
-    """确保配置节点为对象，异常结构时安全重建为空对象。"""
+    """确保配置节点为对象, 异常结构时安全重建为空对象. """
     if isinstance(value, dict):
         return value
     return {}
 
 
 def _ensure_list(value: object) -> list[object]:
-    """确保配置节点为列表，异常结构时安全重建为空列表。"""
+    """确保配置节点为列表, 异常结构时安全重建为空列表. """
     if isinstance(value, list):
         return value
     return []
 
 
 def _normalize_bool(value: object, default: bool = False) -> bool:
-    """将旧配置中的布尔值规范化。"""
+    """将旧配置中的布尔值规范化. """
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
@@ -91,7 +91,7 @@ def _normalize_bool(value: object, default: bool = False) -> bool:
 
 
 def _normalize_port(value: object, default: int) -> int:
-    """规范化旧版端口配置。"""
+    """规范化旧版端口配置. """
     try:
         port = int(value)
     except (TypeError, ValueError):
@@ -100,7 +100,7 @@ def _normalize_port(value: object, default: int) -> int:
 
 
 def _normalize_log_level(*values: object, default: str) -> str:
-    """从多个候选值中提取合法日志级别。"""
+    """从多个候选值中提取合法日志级别. """
     for value in values:
         if isinstance(value, str):
             normalized = value.strip().lower()
@@ -110,7 +110,7 @@ def _normalize_log_level(*values: object, default: str) -> str:
 
 
 def _extract_legacy_network_defaults(bot_payload: dict[str, object], advanced_payload: dict[str, object]) -> dict[str, object]:
-    """提取旧版网络公共字段。"""
+    """提取旧版网络公共字段. """
     return {
         "message_post_format": str(bot_payload.pop("messagePostFormat", "array") or "array"),
         "token": str(bot_payload.pop("token", "") or ""),
@@ -121,7 +121,7 @@ def _extract_legacy_network_defaults(bot_payload: dict[str, object], advanced_pa
 
 
 def _has_meaningful_value(*values: object) -> bool:
-    """判断旧结构中是否存在值得迁移的有效值。"""
+    """判断旧结构中是否存在值得迁移的有效值. """
     for value in values:
         if isinstance(value, bool) and value:
             return True
@@ -139,7 +139,7 @@ def _has_meaningful_value(*values: object) -> bool:
 def _build_legacy_http_server(
     http_payload: dict[str, object], network_defaults: dict[str, object]
 ) -> dict[str, object] | None:
-    """将 v1.4/v1.5 的 http 节点迁移为当前 http server 结构。"""
+    """将 v1.4/v1.5 的 http 节点迁移为当前 http server 结构. """
     if not _has_meaningful_value(http_payload.get("enable"), http_payload.get("host"), http_payload.get("port")):
         return None
 
@@ -159,7 +159,7 @@ def _build_legacy_http_server(
 def _build_legacy_http_clients(
     http_payload: dict[str, object], network_defaults: dict[str, object]
 ) -> list[dict[str, object]]:
-    """将旧版 postUrls 迁移为 http client 列表。"""
+    """将旧版 postUrls 迁移为 http client 列表. """
     clients: list[dict[str, object]] = []
     for index, raw_url in enumerate(_ensure_list(http_payload.get("postUrls"))):
         if not isinstance(raw_url, str) or not raw_url.strip():
@@ -181,7 +181,7 @@ def _build_legacy_http_clients(
 def _build_legacy_websocket_server(
     ws_payload: dict[str, object], network_defaults: dict[str, object]
 ) -> dict[str, object] | None:
-    """将旧版 ws 节点迁移为当前 websocket server 结构。"""
+    """将旧版 ws 节点迁移为当前 websocket server 结构. """
     if not _has_meaningful_value(ws_payload.get("enable"), ws_payload.get("host"), ws_payload.get("port")):
         return None
 
@@ -202,7 +202,7 @@ def _build_legacy_websocket_server(
 def _build_legacy_websocket_clients(
     reverse_ws_payload: dict[str, object], network_defaults: dict[str, object]
 ) -> list[dict[str, object]]:
-    """将旧版 reverseWs 节点迁移为当前 websocket client 列表。"""
+    """将旧版 reverseWs 节点迁移为当前 websocket client 列表. """
     clients: list[dict[str, object]] = []
     enabled = _normalize_bool(reverse_ws_payload.get("enable", False), False)
     for index, raw_url in enumerate(_ensure_list(reverse_ws_payload.get("urls"))):
@@ -227,7 +227,7 @@ def _build_legacy_websocket_clients(
 def _migrate_legacy_connect_shape(
     connect_payload: dict[str, object], bot_payload: dict[str, object], advanced_payload: dict[str, object]
 ) -> tuple[dict[str, object], list[str]]:
-    """迁移 v1.4/v1.5 的 connect 旧结构。"""
+    """迁移 v1.4/v1.5 的 connect 旧结构. """
     rules_applied: list[str] = []
     if not any(key in connect_payload for key in ("http", "ws", "reverseWs")):
         return connect_payload, rules_applied
@@ -270,7 +270,7 @@ def _migrate_legacy_connect_shape(
 
 
 def _ensure_current_connect_shape(connect_payload: dict[str, object]) -> tuple[dict[str, object], list[str]]:
-    """补齐当前 connect 结构缺失的列表字段。"""
+    """补齐当前 connect 结构缺失的列表字段. """
     rules_applied: list[str] = []
     normalized = _ensure_dict(connect_payload)
     for key in (
@@ -290,7 +290,7 @@ def _ensure_current_connect_shape(connect_payload: dict[str, object]) -> tuple[d
 def _migrate_legacy_advanced_fields(
     advanced_payload: dict[str, object], bot_payload: dict[str, object]
 ) -> tuple[dict[str, object], list[str]]:
-    """迁移旧版 advanced 字段命名和默认值。"""
+    """迁移旧版 advanced 字段命名和默认值. """
     rules_applied: list[str] = []
     normalized = _ensure_dict(advanced_payload)
     legacy_enable_local_file_to_url = normalized.pop("enableLocalFile2Url", None)
@@ -370,7 +370,7 @@ def _migrate_legacy_advanced_fields(
 
 
 def _migrate_legacy_bot_fields(bot_payload: dict[str, object]) -> tuple[dict[str, object], list[str]]:
-    """补齐 bot 域的新增字段。"""
+    """补齐 bot 域的新增字段. """
     rules_applied: list[str] = []
     normalized = _ensure_dict(bot_payload)
 
@@ -394,7 +394,7 @@ def _migrate_legacy_bot_fields(bot_payload: dict[str, object]) -> tuple[dict[str
 
 
 def _migrate_bot_entry_payload(payload: object) -> tuple[dict[str, object], list[str]]:
-    """将旧版单个 Bot 配置迁移为当前结构。"""
+    """将旧版单个 Bot 配置迁移为当前结构. """
     if not isinstance(payload, dict):
         raise TypeError("单个 Bot 配置必须为对象")
 
@@ -424,7 +424,7 @@ def _migrate_bot_entry_payload(payload: object) -> tuple[dict[str, object], list
 
 
 def _normalize_bypass_payload(payload: object) -> tuple[dict[str, bool], list[str]]:
-    """规范化新版 bypass 配置并补齐缺失键。"""
+    """规范化新版 bypass 配置并补齐缺失键. """
     rules_applied: list[str] = []
     source = _ensure_dict(payload)
     normalized: dict[str, bool] = {}
@@ -439,7 +439,7 @@ def _normalize_bypass_payload(payload: object) -> tuple[dict[str, bool], list[st
 
 
 def _normalize_connect_name_key(name: object) -> str:
-    """规范化连接配置名称，用于重复检测。"""
+    """规范化连接配置名称, 用于重复检测. """
     if not isinstance(name, str):
         return ""
     return name.strip().casefold()
@@ -458,7 +458,7 @@ class AutoRestartScheduleConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_legacy_schedule(cls, data: Any) -> Any:
-        """兼容旧版 interval/taskType 结构。"""
+        """兼容旧版 interval/taskType 结构. """
         if not isinstance(data, dict):
             return data
 
@@ -503,7 +503,7 @@ class BotConfig(BaseModel):
     @field_validator("name")
     @staticmethod
     def validate_name(value: str) -> str:
-        """验证机器人名称。"""
+        """验证机器人名称. """
         if not value:
             return "".join(random.choices(string.ascii_letters, k=8))
         return value
@@ -511,7 +511,7 @@ class BotConfig(BaseModel):
     @field_validator("QQID")
     @staticmethod
     def validate_qqid(value: str | int) -> int:
-        """验证 QQID 并统一为 int。"""
+        """验证 QQID 并统一为 int. """
         if isinstance(value, int):
             return value
         if isinstance(value, str):
@@ -524,9 +524,9 @@ class BotConfig(BaseModel):
     @field_validator("runtime_target", mode="before")
     @staticmethod
     def validate_runtime_target(value: object) -> str:
-        """规范化 runtime_target: None / 空白 / 非字符串均回退为本地。
+        """规范化 runtime_target: None / 空白 / 非字符串均回退为本地. 
 
-        不在此处校验远端服务器是否真实存在 —— 服务器档案是运行期数据,
+        不在此处校验远端服务器是否真实存在 -- 服务器档案是运行期数据,
         而 [`BotConfig`](src/core/config/config_model.py) 是纯数据模型,
         不应当与 [`ServerRegistry`](src/core/remote/servers.py) 耦合.
         归属校验由调用方在 backend 解析层(P2.2) 完成.
@@ -541,7 +541,7 @@ class BotConfig(BaseModel):
 
     @property
     def is_remote(self) -> bool:
-        """是否在远端服务器运行。"""
+        """是否在远端服务器运行. """
         return self.runtime_target != RUNTIME_TARGET_LOCAL
 
 
@@ -608,7 +608,7 @@ class ConnectConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_unique_names(self) -> "ConnectConfig":
-        """要求单个 Bot 内所有网络配置名称唯一。"""
+        """要求单个 Bot 内所有网络配置名称唯一. """
         seen_names: dict[str, str] = {}
         duplicate_names: list[str] = []
 
@@ -648,7 +648,7 @@ class BypassConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_bypass_payload(cls, data: Any) -> Any:
-        """兼容缺省、异常结构和布尔字符串。"""
+        """兼容缺省, 异常结构和布尔字符串. """
         normalized, _ = _normalize_bypass_payload(data)
         return normalized
 
@@ -676,7 +676,7 @@ class Config(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_legacy_payload(cls, data: Any) -> Any:
-        """兼容旧版单个 Bot 配置结构。"""
+        """兼容旧版单个 Bot 配置结构. """
         if not isinstance(data, dict):
             return data
         migrated, _ = _migrate_bot_entry_payload(data)
@@ -684,13 +684,13 @@ class Config(BaseModel):
 
 
 class ConfigInfo(BaseModel):
-    """Bot 配置文件元信息。"""
+    """Bot 配置文件元信息. """
 
     configVersion: str = BOT_CONFIG_COMPAT_VERSION
 
 
 class ConfigCollection(BaseModel):
-    """Bot 配置文件根结构。"""
+    """Bot 配置文件根结构. """
 
     info: ConfigInfo = Field(default_factory=ConfigInfo)
     bots: list[Config] = Field(default_factory=list)
@@ -715,7 +715,7 @@ class NapCatConfig(BaseModel):
 
 
 def _coerce_interval_default(value, default: int = 30000) -> int:
-    """将可能来自配置的间隔值规范化为整数，无法解析时返回默认值。"""
+    """将可能来自配置的间隔值规范化为整数, 无法解析时返回默认值. """
     if value is None:
         return default
     if isinstance(value, str):
@@ -733,7 +733,7 @@ def _coerce_interval_default(value, default: int = 30000) -> int:
 
 
 def _parse_legacy_auto_restart_interval(value: Any) -> tuple[TimeUnitEnum, int] | None:
-    """解析旧版自动重启间隔字符串。"""
+    """解析旧版自动重启间隔字符串. """
     if isinstance(value, int) and value > 0:
         return TimeUnitEnum.HOUR, value
     if not isinstance(value, str):
@@ -751,7 +751,7 @@ def _parse_legacy_auto_restart_interval(value: Any) -> tuple[TimeUnitEnum, int] 
 
 
 def read_bot_config_version(payload: object) -> str:
-    """读取 bot.json 的配置兼容版本。"""
+    """读取 bot.json 的配置兼容版本. """
     if isinstance(payload, dict):
         info = _ensure_dict(payload.get("info"))
         version = info.get("configVersion")
@@ -761,7 +761,7 @@ def read_bot_config_version(payload: object) -> str:
 
 
 def migrate_bot_config_payload(payload: object) -> tuple[dict[str, object], str, list[str]]:
-    """将 bot.json 迁移到当前根结构。"""
+    """将 bot.json 迁移到当前根结构. """
     current_version = read_bot_config_version(payload)
     rules_applied: list[str] = []
 
@@ -799,7 +799,7 @@ def migrate_bot_config_payload(payload: object) -> tuple[dict[str, object], str,
 
 
 def serialize_bot_config_collection(configs: list[Config], version: str = BOT_CONFIG_COMPAT_VERSION) -> dict[str, object]:
-    """将 Bot 配置列表序列化为当前根结构。"""
+    """将 Bot 配置列表序列化为当前根结构. """
     return {
         "info": {
             "configVersion": version,
@@ -809,7 +809,7 @@ def serialize_bot_config_collection(configs: list[Config], version: str = BOT_CO
 
 
 def json_payload(model: BaseModel) -> Any:
-    """将模型序列化为 JSON 兼容结构。"""
+    """将模型序列化为 JSON 兼容结构. """
     import json
 
     return json.loads(model.model_dump_json())

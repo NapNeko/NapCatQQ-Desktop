@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""根据 WebUI Schema 生成默认请求示例。"""
+"""根据 WebUI Schema 生成默认请求示例. """
 
 # 标准库导入
 from typing import Any
 
 
 class SchemaDefaultGenerator:
-    """严格按 WebUI 既有顺序生成默认值。"""
+    """严格按 WebUI 既有顺序生成默认值. """
 
     SIMPLE_SCHEMA_KEYS = ("const", "default", "enum", "anyOf", "oneOf", "type", "properties")
 
     def build_default(self, payload_schema: Any, payload_example: Any = None) -> Any:
-        """优先使用 payloadExample，否则按 schema 递归生成默认值。"""
+        """优先使用 payloadExample, 否则按 schema 递归生成默认值. """
         if payload_example is not None:
             return payload_example
         return self._from_schema(payload_schema)

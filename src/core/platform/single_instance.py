@@ -15,7 +15,7 @@ from src.core.runtime.paths import PathFunc
 class SingleInstanceApplication:
     """确保应用程序的单实例运行
 
-    使用 QLockFile 基于文件的进程互斥, 更适合 Windows 环境, 支持陈旧锁自动清理。
+    使用 QLockFile 基于文件的进程互斥, 更适合 Windows 环境, 支持陈旧锁自动清理. 
     """
 
     # 使用类级别引用, 确保锁对象在进程生命周期内不被 GC 回收
@@ -39,7 +39,7 @@ class SingleInstanceApplication:
     def is_running(self) -> bool:
         """检查是否已经有实例正在运行
 
-        返回 True 表示已有实例在运行; 返回 False 表示成功获得锁, 当前为首个实例。
+        返回 True 表示已有实例在运行; 返回 False 表示成功获得锁, 当前为首个实例. 
         """
 
         # 保障锁已创建

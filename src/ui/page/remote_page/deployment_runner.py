@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""[`DeploymentRunner`](src/ui/page/remote_page/deployment_runner.py): 后台执行远端部署。
+"""[`DeploymentRunner`](src/ui/page/remote_page/deployment_runner.py): 后台执行远端部署. 
 
 仿 [`ConnectionTester`](src/ui/page/remote_page/connection_tester.py) 的模式,
 通过 [`QRunnable`](https://doc.qt.io/qt-6/qrunnable.html) 把 [`ServerManager.deploy_server`](src/core/remote/server_manager.py)
-推到 [`QThreadPool`](https://doc.qt.io/qt-6/qthreadpool.html) 里执行。
+推到 [`QThreadPool`](https://doc.qt.io/qt-6/qthreadpool.html) 里执行. 
 
 注意: 本 runner 仅负责调度, **不**重复 emit `progress` / `finished` 信号:
 - 进度实时性: 由 [`ServerManager.deployment_progress`](src/core/remote/server_manager.py) 直接 emit, UI 端订阅该信号即可
@@ -68,7 +68,7 @@ class _TaskTracker:
 def _tracked(task_id: str, label: str, *, content: str = "") -> Iterator[_TaskTracker]:
     """BackgroundTaskCenter 透明上报包装; center 不可用时静默直通.
 
-    P3 perf: 许多远端运维 runnable 共享「包裹 try/finally 报到 Center」的需求,
+    P3 perf: 许多远端运维 runnable 共享 [包裹 try/finally 报到 Center] 的需求,
     集中在这里实现; runnable 内部 ``with _tracked(...) as tracker:``, 完成时调
     ``tracker.success("...")`` / ``tracker.fail("...")`` 即可获得 ProgressInfoBar 反馈.
     """
@@ -93,13 +93,13 @@ def _tracked(task_id: str, label: str, *, content: str = "") -> Iterator[_TaskTr
 
 
 class DeploymentRunnerSignals(QObject):
-    """[`DeploymentRunner`](src/ui/page/remote_page/deployment_runner.py) 信号载体。"""
+    """[`DeploymentRunner`](src/ui/page/remote_page/deployment_runner.py) 信号载体. """
 
     finished = Signal(str)  # (server_id)
 
 
 class DeploymentRunner(QRunnable):
-    """后台执行 [`ServerManager.deploy_server`](src/core/remote/server_manager.py)。
+    """后台执行 [`ServerManager.deploy_server`](src/core/remote/server_manager.py). 
 
     用法::
 
@@ -164,17 +164,17 @@ class DeploymentRunner(QRunnable):
 
 
 class RedetectRunnerSignals(QObject):
-    """[`RedetectRunner`](src/ui/page/remote_page/deployment_runner.py) 信号载体。"""
+    """[`RedetectRunner`](src/ui/page/remote_page/deployment_runner.py) 信号载体. """
 
     # (server_id, ok, napcat_version, qq_version, error_msg)
     finished = Signal(str, bool, object, object, str)
 
 
 class RedetectRunner(QRunnable):
-    """后台执行 [`ServerManager.redetect_versions`](src/core/remote/server_manager.py)。
+    """后台执行 [`ServerManager.redetect_versions`](src/core/remote/server_manager.py). 
 
     相比 [`DeploymentRunner`](src/ui/page/remote_page/deployment_runner.py) 仅探测版本,
-    不重新执行安装脚本; 用于"刷新"按钮等轻量场景。
+    不重新执行安装脚本; 用于"刷新"按钮等轻量场景. 
     """
 
     def __init__(self, server_id: str) -> None:
@@ -212,16 +212,16 @@ class RedetectRunner(QRunnable):
 
 
 class RollbackRunnerSignals(QObject):
-    """[`RollbackRunner`](src/ui/page/remote_page/deployment_runner.py) 信号载体。"""
+    """[`RollbackRunner`](src/ui/page/remote_page/deployment_runner.py) 信号载体. """
 
     # (server_id, ok, message)
     finished = Signal(str, bool, str)
 
 
 class RollbackRunner(QRunnable):
-    """后台执行 [`ServerManager.rollback_server`](src/core/remote/server_manager.py)。
+    """后台执行 [`ServerManager.rollback_server`](src/core/remote/server_manager.py). 
 
-    仅供开发者模式 (设置→开发者→远程部署调试) 使用。
+    仅供开发者模式 (设置→开发者→远程部署调试) 使用. 
     """
 
     def __init__(self, server_id: str, *, include_qq: bool = True) -> None:

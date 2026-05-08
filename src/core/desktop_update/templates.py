@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""加载打包进 Qt 资源系统的更新脚本。"""
+"""加载打包进 Qt 资源系统的更新脚本. """
 
 from pathlib import Path
 
@@ -12,7 +12,7 @@ SCRIPT_DIR = Path(__file__).resolve().parents[2] / "resource" / "script"
 
 
 def load_msi_update_script() -> str:
-    """读取 MSI 更新脚本模板。"""
+    """读取 MSI 更新脚本模板. """
 
     return _load_script(
         resource_path=":/script/script/update_msi.bat",

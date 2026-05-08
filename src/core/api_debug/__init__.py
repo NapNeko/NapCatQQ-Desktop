@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试核心能力导出。"""
+"""接口调试核心能力导出. """
 
 from src.core.api_debug.auth import (
     ApiDebugAuthInjector,

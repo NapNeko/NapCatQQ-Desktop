@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""应用路径解析工具。"""
+"""应用路径解析工具. """
 
 # 标准库导入
 import os
@@ -10,9 +10,9 @@ APP_DATA_DIR_NAME = "NapCatQQ Desktop"
 
 
 def resolve_app_base_path() -> Path:
-    """解析应用基准目录。
+    """解析应用基准目录. 
 
-    冻结运行时使用可执行文件所在目录。
+    冻结运行时使用可执行文件所在目录. 
     源码运行时使用**仓库根目录**, 让 ``runtime/`` / ``log/`` / ``config/``
     等运行时数据落在 Python 包之外, 便于 git 忽略与备份.
 
@@ -28,10 +28,10 @@ def resolve_app_base_path() -> Path:
 
 
 def resolve_app_data_path() -> Path:
-    """解析应用可写数据目录。
+    """解析应用可写数据目录. 
 
-    冻结运行时默认使用 ProgramData，便于 MSI 安装到 Program Files 后仍能写入运行时数据。
-    源码运行时继续使用项目根目录，避免影响本地开发和测试体验。
+    冻结运行时默认使用 ProgramData, 便于 MSI 安装到 Program Files 后仍能写入运行时数据. 
+    源码运行时继续使用项目根目录, 避免影响本地开发和测试体验. 
     """
 
     if getattr(sys, "frozen", False):

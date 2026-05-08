@@ -97,7 +97,7 @@ class EulaPage(QWidget):
 
         cfg.set(cfg.elua_accepted, True)
 
-        # 如果主窗口打开过，则关闭向导窗口, 否则进入下一个页面
+        # 如果主窗口打开过, 则关闭向导窗口, 否则进入下一个页面
         if cfg.get(cfg.main_window):
             it(GuideWindow).close()
         else:

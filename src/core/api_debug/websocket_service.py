@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试 WebSocket 服务。"""
+"""接口调试 WebSocket 服务. """
 
 # 标准库导入
 import json
@@ -26,7 +26,7 @@ SocketFactory = Callable[[], object]
 
 
 class ApiDebugWebSocketService(QObject):
-    """统一封装 OneBot 直连与 DebugAdapter WebSocket。"""
+    """统一封装 OneBot 直连与 DebugAdapter WebSocket. """
 
     state_changed = Signal(str)
     message_logged = Signal(object)
@@ -40,11 +40,11 @@ class ApiDebugWebSocketService(QObject):
         self.current_url = ""
 
     def connect_onebot(self, url: str, auth_config: ApiDebugAuthConfig | None = None) -> None:
-        """连接 OneBot WebSocket。"""
+        """连接 OneBot WebSocket. """
         self._open(url, auth_config=auth_config)
 
     def connect_debug_adapter(self, session: ApiDebugActionSession) -> None:
-        """连接 DebugAdapter WebSocket。"""
+        """连接 DebugAdapter WebSocket. """
         self._open(
             session.websocket_url,
             auth_config=None,
@@ -52,7 +52,7 @@ class ApiDebugWebSocketService(QObject):
         )
 
     def disconnect(self) -> None:
-        """断开连接。"""
+        """断开连接. """
         if self.socket is None:
             self._set_state(ApiDebugWebSocketState.DISCONNECTED)
             return
@@ -69,7 +69,7 @@ class ApiDebugWebSocketService(QObject):
         self._set_state(ApiDebugWebSocketState.DISCONNECTED)
 
     def send_text(self, text: str) -> None:
-        """发送文本消息。"""
+        """发送文本消息. """
         if self.socket is None:
             raise RuntimeError("WebSocket 尚未连接")
 
@@ -78,7 +78,7 @@ class ApiDebugWebSocketService(QObject):
         self.message_logged.emit(self._build_message(ApiDebugWebSocketDirection.OUTGOING, payload))
 
     def send_json(self, payload: Any) -> None:
-        """发送 JSON 消息。"""
+        """发送 JSON 消息. """
         self.send_text(json.dumps(payload, ensure_ascii=False))
 
     def _open(

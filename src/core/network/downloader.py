@@ -55,11 +55,11 @@ class DownloaderBase(QObject, QRunnable):
 
     @staticmethod
     def _target_key(target_path: Path) -> str:
-        """将目标路径规范化为可用于并发保护的键。"""
+        """将目标路径规范化为可用于并发保护的键. """
         return str(target_path.resolve(strict=False))
 
     def try_acquire_target(self, target_path: Path) -> bool:
-        """尝试为当前下载目标获取独占锁，避免重复写入同一文件。"""
+        """尝试为当前下载目标获取独占锁, 避免重复写入同一文件. """
         target_key = self._target_key(target_path)
         with self._active_target_lock:
             if target_key in self._active_target_paths:
@@ -77,14 +77,14 @@ class DownloaderBase(QObject, QRunnable):
 
     @classmethod
     def release_target(cls, target_path: Path) -> None:
-        """释放下载目标锁。"""
+        """释放下载目标锁. """
         target_key = cls._target_key(target_path)
         with cls._active_target_lock:
             cls._active_target_paths.discard(target_key)
 
     @staticmethod
     def safe_unlink(path: Path) -> bool:
-        """安全删除文件，避免清理失败导致线程崩溃。"""
+        """安全删除文件, 避免清理失败导致线程崩溃. """
         if not path.exists():
             return True
 
@@ -107,15 +107,15 @@ class DownloaderBase(QObject, QRunnable):
         return False
 
     def request_pause(self) -> None:
-        """请求暂停当前下载。"""
+        """请求暂停当前下载. """
         self._pause_requested.set()
 
     def request_cancel(self) -> None:
-        """请求取消当前下载。"""
+        """请求取消当前下载. """
         self._cancel_requested.set()
 
     def _ensure_not_interrupted(self, partial_path: Path) -> None:
-        """在下载循环中检查暂停/取消请求。"""
+        """在下载循环中检查暂停/取消请求. """
         if self._cancel_requested.is_set():
             raise DownloadCanceledError
 
@@ -124,7 +124,7 @@ class DownloaderBase(QObject, QRunnable):
 
     @staticmethod
     def _resolve_total_size(response, existing_size: int) -> int:
-        """解析下载总大小，兼容 Range 续传。"""
+        """解析下载总大小, 兼容 Range 续传. """
         content_length = int(response.headers.get("content-length", 0) or 0)
         if getattr(response, "status_code", 200) == 206:
             content_range = response.headers.get("content-range", "")
@@ -137,7 +137,7 @@ class DownloaderBase(QObject, QRunnable):
         return content_length
 
     def _build_download_request(self, partial_path: Path) -> tuple[dict[str, str], bool, int]:
-        """根据已有分片文件生成下载请求参数。"""
+        """根据已有分片文件生成下载请求参数. """
         existing_size = partial_path.stat().st_size if partial_path.exists() else 0
         headers: dict[str, str] = {}
         is_resume = existing_size > 0
@@ -147,11 +147,11 @@ class DownloaderBase(QObject, QRunnable):
 
 
 class DownloadPausedError(Exception):
-    """下载被主动暂停。"""
+    """下载被主动暂停. """
 
 
 class DownloadCanceledError(Exception):
-    """下载被主动取消。"""
+    """下载被主动取消. """
 
 
 class GithubDownloader(DownloaderBase):

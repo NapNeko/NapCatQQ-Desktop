@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Linux Core 部署器（P1 拆分版）。
+"""Linux Core 部署器 (P1 拆分版) . 
 
-P1 阶段重写要点：
-- `probe_environment` 大幅增强：识别 OS / 发行版 / 架构 / 已有 LinuxQQ / 已有 NapCat / 版本号
-- 拆出 `install_linuxqq` / `install_napcat` 独立方法，分别负责对应阶段
+P1 阶段重写要点: 
+- `probe_environment` 大幅增强: 识别 OS / 发行版 / 架构 / 已有 LinuxQQ / 已有 NapCat / 版本号
+- 拆出 `install_linuxqq` / `install_napcat` 独立方法, 分别负责对应阶段
 - 通过 `[PROGRESS] N message` 进度协议把脚本运行进度回传到 ProgressCallback
-- 部署 launcher 脚本到 ``$workspace_dir/napcat.sh``（P2 用，但 P1 部署期一并落地）
+- 部署 launcher 脚本到 ``$workspace_dir/napcat.sh`` (P2 用, 但 P1 部署期一并落地) 
 
-历史 API（一站式 `upload_deploy_script` / `run_deploy_script` / `export_and_upload_current_config`）
-保留以兼容已有调用方，标记为 deprecated。
+历史 API (一站式 `upload_deploy_script` / `run_deploy_script` / `export_and_upload_current_config`) 
+保留以兼容已有调用方, 标记为 deprecated. 
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ _QQ_VERSION_PATTERN = re.compile(r'"version"\s*:\s*"([^"]+)"')
 
 @dataclass(slots=True)
 class LinuxCoreDeploymentProbe:
-    """Linux Core 环境探测结果（P1 增强版）。"""
+    """Linux Core 环境探测结果 (P1 增强版) . """
 
     os_name: str
     architecture: str
@@ -83,7 +83,7 @@ class LinuxCoreDeploymentProbe:
 
     @property
     def is_supported_arch(self) -> bool:
-        """是否落在 P1 支持的架构白名单内。"""
+        """是否落在 P1 支持的架构白名单内. """
         return self.normalized_arch in ("amd64", "arm64")
 
     @property
@@ -93,7 +93,7 @@ class LinuxCoreDeploymentProbe:
 
 @dataclass(slots=True)
 class RemoteConfigSyncResult:
-    """远端配置同步结果。"""
+    """远端配置同步结果. """
 
     remote_archive_path: str
     archive_name: str
@@ -106,7 +106,7 @@ class RemoteConfigSyncResult:
 
 @dataclass(slots=True)
 class RemoteDeployScriptResult:
-    """远端部署脚本执行结果。"""
+    """远端部署脚本执行结果. """
 
     remote_script_path: str
     script_result: RemoteCommandResult
@@ -114,7 +114,7 @@ class RemoteDeployScriptResult:
 
 @dataclass(slots=True)
 class InstallStepResult:
-    """单个安装阶段（install_linuxqq / install_napcat）的执行结果。"""
+    """单个安装阶段 (install_linuxqq / install_napcat) 的执行结果. """
 
     step: Literal["install_linuxqq", "install_napcat"]
     remote_script_path: str
@@ -130,11 +130,11 @@ class InstallStepResult:
 
 # ==================== 部署器 ====================
 class LinuxCoreDeployment:
-    """Linux Core 部署器。
+    """Linux Core 部署器. 
 
     P1 之后建议使用 [`install_linuxqq`](src/core/remote/deployment.py)
-    与 [`install_napcat`](src/core/remote/deployment.py) 分两步部署，
-    历史一站式 API（`upload_deploy_script` / `run_deploy_script`）仅保留兼容入口。
+    与 [`install_napcat`](src/core/remote/deployment.py) 分两步部署, 
+    历史一站式 API (`upload_deploy_script` / `run_deploy_script`) 仅保留兼容入口. 
     """
 
     def __init__(self, backend: ExecutionBackend, paths: LinuxCorePaths | None = None) -> None:
@@ -143,7 +143,7 @@ class LinuxCoreDeployment:
 
     # ==================== 探测 ====================
     def probe_environment(self) -> LinuxCoreDeploymentProbe:
-        """探测远端 Linux 环境。
+        """探测远端 Linux 环境. 
 
         与 P0 阶段相比, 新增:
         - ``/etc/os-release`` 解析得到发行版 ID / VERSION_ID
@@ -219,7 +219,7 @@ class LinuxCoreDeployment:
         )
 
     def _detect_napcat_version(self) -> str | None:
-        """探测远端 NapCat 安装版本号。
+        """探测远端 NapCat 安装版本号. 
 
         与本地 [`VersioningService._get_napcat_version_from_mjs`]
         (src/core/versioning/service.py) **保持完全一致** 的解析逻辑:
@@ -230,18 +230,18 @@ class LinuxCoreDeployment:
 
         实现差异: 远端不能把 4.4MB 的 ``napcat.mjs`` 通过 SSH 整文件回传, 改用
         ``grep -oE 'napCatVersion[^;]*'`` 在 shell 端**先抓出该字段所在的小窗口**
-        (从 ``napCatVersion`` 到下一个分号), Python 端再用 ``.*?`` 正则提取版本号。
+        (从 ``napCatVersion`` 到下一个分号), Python 端再用 ``.*?`` 正则提取版本号. 
 
         **注意**: 故意**不**回退到 ``napcat/package.json``, 因为 NapCat.Shell.zip
         中的 ``package.json`` 的 ``version`` 字段恒为 ``"0.0.1"`` (monorepo 占位),
-        会得到误导性结果。返回 None 比返回 ``0.0.1`` 更安全。
+        会得到误导性结果. 返回 None 比返回 ``0.0.1`` 更安全. 
 
-        返回不带 ``v`` 前缀的纯版本号字符串(如 ``4.18.1``); 探测失败时返回 None。
+        返回不带 ``v`` 前缀的纯版本号字符串(如 ``4.18.1``); 探测失败时返回 None. 
         """
         # 抓 ``napCatVersion`` 到下一个分号的局部窗口 (典型形如:
         # napCatVersion = typeof (...) !== "undefined" && "4.18.1" || "1.0.0-dev")
         # 路径用**双引号**让 bash 展开 ``$HOME`` (LinuxCorePaths 默认值含 $HOME);
-        # grep 的正则模式继续用单引号防止 shell 解释 ``$``。
+        # grep 的正则模式继续用单引号防止 shell 解释 ``$``. 
         mjs_grep = self.backend.run(
             f'grep -oE \'napCatVersion[^;]*\' "{self.paths.napcat_dir}/napcat.mjs" '
             "2>/dev/null | head -n1 || true"
@@ -256,7 +256,7 @@ class LinuxCoreDeployment:
 
     @staticmethod
     def _parse_os_release(text: str) -> tuple[str | None, str | None]:
-        """解析 ``/etc/os-release`` 内容, 提取 ID 与 VERSION_ID。"""
+        """解析 ``/etc/os-release`` 内容, 提取 ID 与 VERSION_ID. """
         if not text or not text.strip():
             return None, None
         distro_id: str | None = None
@@ -284,7 +284,7 @@ class LinuxCoreDeployment:
 
     # ==================== 目录初始化 ====================
     def initialize_layout(self) -> list[RemoteCommandResult]:
-        """初始化远端目录布局。"""
+        """初始化远端目录布局. """
         results: list[RemoteCommandResult] = []
         for path in (
             self.paths.workspace_dir,
@@ -297,7 +297,7 @@ class LinuxCoreDeployment:
             results.append(self.backend.ensure_directory(path))
         return results
 
-    # ==================== P1 安装：分两步 ====================
+    # ==================== P1 安装: 分两步 ====================
     def install_linuxqq(
         self,
         *,
@@ -305,7 +305,7 @@ class LinuxCoreDeployment:
         log_callback: LogLineCallback | None = None,
         force_reinstall: bool = False,
     ) -> InstallStepResult:
-        """在远端安装 LinuxQQ rootless。
+        """在远端安装 LinuxQQ rootless. 
 
         Args:
             progress: 进度协议回调, 由 ``[PROGRESS] N message`` 行触发
@@ -360,10 +360,10 @@ class LinuxCoreDeployment:
         download_url: str | None = None,
         expected_sha512: str | None = None,
     ) -> InstallStepResult:
-        """在远端安装/更新 NapCat。
+        """在远端安装/更新 NapCat. 
 
-        默认仅在远端不存在 NapCat 时下载; 设置 ``force_update=True`` 强制重新下载并解压。
-        部署完成后会自动把 launcher 脚本上传到 ``$workspace_dir/napcat.sh``。
+        默认仅在远端不存在 NapCat 时下载; 设置 ``force_update=True`` 强制重新下载并解压. 
+        部署完成后会自动把 launcher 脚本上传到 ``$workspace_dir/napcat.sh``. 
 
         Args:
             progress: 进度协议回调, 由 ``[PROGRESS] N message`` 行触发
@@ -434,7 +434,7 @@ class LinuxCoreDeployment:
         return step_result
 
     def upload_launcher_script(self, remote_path: str | None = None) -> str:
-        """上传 launcher 脚本并赋予可执行权限。"""
+        """上传 launcher 脚本并赋予可执行权限. """
         target_path = remote_path or self.paths.launcher_script
         script_content = build_napcat_launcher_script(self._build_script_variables())
 
@@ -452,9 +452,9 @@ class LinuxCoreDeployment:
         )
         return target_path
 
-    # ==================== 历史一站式 API（保留兼容入口） ====================
+    # ==================== 历史一站式 API (保留兼容入口)  ====================
     def upload_package(self, local_archive: str | Path, remote_filename: str | None = None) -> str:
-        """上传安装包到远端包目录。"""
+        """上传安装包到远端包目录. """
         local_file = Path(local_archive)
         filename = remote_filename or local_file.name
         remote_path = PurePosixPath(self.paths.package_dir, filename).as_posix()
@@ -476,7 +476,7 @@ class LinuxCoreDeployment:
         return remote_path
 
     def upload_config_archive(self, local_archive: str | Path, remote_filename: str = "config-export.zip") -> str:
-        """上传配置包到远端临时目录。"""
+        """上传配置包到远端临时目录. """
         local_file = Path(local_archive)
         remote_path = PurePosixPath(self.paths.tmp_dir, remote_filename).as_posix()
         logger.info(
@@ -503,7 +503,7 @@ class LinuxCoreDeployment:
         export_bot_config: bool = True,
         remote_filename: str = "config-export.zip",
     ) -> RemoteConfigSyncResult:
-        """导出当前本地配置并上传到远端（v1 历史 API, 用于配置同步场景）。"""
+        """导出当前本地配置并上传到远端 (v1 历史 API, 用于配置同步场景) . """
         logger.info(
             "开始导出并上传当前本地配置到远端",
             log_type=LogType.FILE_FUNC,
@@ -549,7 +549,7 @@ class LinuxCoreDeployment:
         )
 
     def upload_deploy_script(self, remote_filename: str = "deploy_napcat.sh") -> str:
-        """上传一站式部署脚本（v1 历史 API, P1 起请使用 install_linuxqq / install_napcat）。"""
+        """上传一站式部署脚本 (v1 历史 API, P1 起请使用 install_linuxqq / install_napcat) . """
         script_content = build_linux_deploy_script(
             {
                 **self._build_script_variables(),
@@ -581,7 +581,7 @@ class LinuxCoreDeployment:
         return remote_script_path
 
     def run_deploy_script(self, remote_script_path: str | None = None) -> RemoteDeployScriptResult:
-        """执行远端一站式部署脚本（v1 历史 API）。"""
+        """执行远端一站式部署脚本 (v1 历史 API) . """
         script_path = remote_script_path or PurePosixPath(self.paths.tmp_dir, "deploy_napcat.sh").as_posix()
         logger.info(
             f"准备执行远端部署脚本: remote={script_path}",
@@ -614,7 +614,7 @@ class LinuxCoreDeployment:
 
     # ==================== 清理 ====================
     def clean_environment(self, include_qq: bool = True) -> RemoteCommandResult:
-        """清理 NapCat 环境。
+        """清理 NapCat 环境. 
 
         Args:
             include_qq: 是否同时清理 QQ 安装
@@ -652,7 +652,7 @@ class LinuxCoreDeployment:
             check=False,
         )
 
-        # 6. 恢复 QQ 原始配置（从备份）
+        # 6. 恢复 QQ 原始配置 (从备份) 
         backup_path = f"{self.paths.qq_package_json_path}.backup"
         result = self.backend.run(
             f'test -f "{backup_path}" && mv "{backup_path}" "{self.paths.qq_package_json_path}" 2>/dev/null || true',
@@ -664,7 +664,7 @@ class LinuxCoreDeployment:
         # 7. 清理启动脚本
         self.backend.run(f'rm -f "{self.paths.launcher_script}" 2>/dev/null || true', check=False)
 
-        # 8. 可选：清理 QQ 安装
+        # 8. 可选: 清理 QQ 安装
         if include_qq:
             logger.info("清理 QQ 安装", log_source=LogSource.CORE)
             self.backend.run(f'rm -rf "{self.paths.qq_base_path}" 2>/dev/null || true', check=False)
@@ -688,7 +688,7 @@ class LinuxCoreDeployment:
 
     # ==================== 内部辅助 ====================
     def _build_script_variables(self) -> dict[str, str]:
-        """构建脚本注入用的标准变量字典。"""
+        """构建脚本注入用的标准变量字典. """
         return {
             "workspace_dir": self.paths.workspace_dir,
             "runtime_dir": self.paths.runtime_dir,
@@ -708,7 +708,7 @@ class LinuxCoreDeployment:
         }
 
     def _upload_script(self, content: str, filename: str) -> str:
-        """上传脚本到远端 tmp 目录, 赋予执行权限, 返回远端路径。"""
+        """上传脚本到远端 tmp 目录, 赋予执行权限, 返回远端路径. """
         with tempfile.TemporaryDirectory(prefix="napcat-script-") as temp_dir:
             local_path = Path(temp_dir) / filename
             local_path.write_text(content, encoding="utf-8", newline="\n")
@@ -724,13 +724,13 @@ class LinuxCoreDeployment:
         progress: ProgressCallback | None,
         log_callback: LogLineCallback | None = None,
     ) -> tuple[RemoteCommandResult, list[tuple[int, str]]]:
-        """执行脚本并解析 ``[PROGRESS] N message`` 行。
+        """执行脚本并解析 ``[PROGRESS] N message`` 行. 
 
         - ``progress``: 仅在匹配到 PROGRESS 协议行时触发
         - ``log_callback``: 每行 stdout(含合并的 stderr) 都会触发一次, 用于"部署控制台"实时回显
 
         非 [`SSHClient`](src/core/remote/ssh_client.py) 的执行后端不支持流式读取,
-        会退化为同步执行后再一次性解析进度行(仍能正确触发回调, 只是失去"实时性")。
+        会退化为同步执行后再一次性解析进度行(仍能正确触发回调, 只是失去"实时性"). 
         """
         progress_events: list[tuple[int, str]] = []
 
@@ -791,7 +791,7 @@ class LinuxCoreDeployment:
 
     @staticmethod
     def _summarize_failure(result: RemoteCommandResult) -> str:
-        """从命令结果中归纳一段适合呈现给用户的失败摘要。"""
+        """从命令结果中归纳一段适合呈现给用户的失败摘要. """
         stderr_text = result.stderr.strip()
         if stderr_text:
             return stderr_text.splitlines()[-1].strip()

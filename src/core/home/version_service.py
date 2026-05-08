@@ -16,7 +16,7 @@ class VersionSummary:
 
 
 class HomeVersionService:
-    """首页版本信息服务。"""
+    """首页版本信息服务. """
 
     def __init__(self) -> None:
         self._local_version = LocalVersionTask()
@@ -30,12 +30,12 @@ class HomeVersionService:
 
 
 class HomeVersionRefreshBus(QObject):
-    """主页版本卡片刷新事件总线。"""
+    """主页版本卡片刷新事件总线. """
 
     refresh_requested = Signal()
 
     def request_refresh(self) -> None:
-        """通知主页版本卡片重新读取本地版本。"""
+        """通知主页版本卡片重新读取本地版本. """
         self.refresh_requested.emit()
 
 

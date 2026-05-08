@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试页面的 Bot 上下文解析。"""
+"""接口调试页面的 Bot 上下文解析. """
 
 # 标准库导入
 from typing import Callable
@@ -18,7 +18,7 @@ ConfigReader = Callable[[], list[object]]
 
 
 class ApiDebugContextService:
-    """从现有 Bot 配置和运行态信息推导调试上下文。"""
+    """从现有 Bot 配置和运行态信息推导调试上下文. """
 
     def __init__(
         self,
@@ -30,7 +30,7 @@ class ApiDebugContextService:
         self.login_state_provider = login_state_provider
 
     def list_bot_contexts(self) -> list[ApiDebugBotContext]:
-        """枚举所有可调试的 Bot 上下文。"""
+        """枚举所有可调试的 Bot 上下文. """
         contexts: list[ApiDebugBotContext] = []
         login_manager = self._get_login_manager()
 
@@ -53,7 +53,7 @@ class ApiDebugContextService:
         return contexts
 
     def get_context(self, bot_id: str) -> ApiDebugBotContext | None:
-        """按 Bot ID 获取上下文。"""
+        """按 Bot ID 获取上下文. """
         normalized = str(bot_id).strip()
         for context in self.list_bot_contexts():
             if context.bot_id == normalized:

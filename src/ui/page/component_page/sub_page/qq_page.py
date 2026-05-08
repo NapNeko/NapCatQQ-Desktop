@@ -59,7 +59,7 @@ NapCatQQ并非QQ本身, 而是通过魔法将QQ的接口**"驯化"**成更柔软
 
 
 class QQPage(PageBase):
-    """QQ 安装与更新页面, 负责QQ的下载、安装和版本管理"""
+    """QQ 安装与更新页面, 负责QQ的下载, 安装和版本管理"""
 
     def __init__(self, parent) -> None:
         """初始化QQ页面
@@ -103,7 +103,7 @@ class QQPage(PageBase):
         )
 
     def refresh_page_view(self) -> None:
-        """根据本地和远程版本信息刷新页面状态。"""
+        """根据本地和远程版本信息刷新页面状态. """
         if self.restore_operation_view():
             return
 
@@ -125,7 +125,7 @@ class QQPage(PageBase):
     # ==================== 槽函数 ====================
     @Slot()
     def apply_remote_version_data(self, version_data: VersionSnapshot) -> None:
-        """应用远程版本信息。"""
+        """应用远程版本信息. """
         if version_data.qq_version is None or version_data.qq_download_url is None:
             self.remote_version = None
             self.url = None
@@ -138,7 +138,7 @@ class QQPage(PageBase):
 
     @Slot()
     def apply_local_version_data(self, version_data: VersionSnapshot) -> None:
-        """应用本地版本信息。"""
+        """应用本地版本信息. """
         if version_data.qq_version is None:
             self.local_version = None
         else:
@@ -149,7 +149,7 @@ class QQPage(PageBase):
 
     @Slot()
     def handle_download_requested(self) -> None:
-        """处理下载按钮点击事件，开始下载 QQ 安装包。"""
+        """处理下载按钮点击事件, 开始下载 QQ 安装包. """
         if self.is_operation_in_progress():
             logger.warning("QQ 下载请求已忽略: 当前已有任务正在执行", log_source=LogSource.UI)
             info_bar(self.tr("QQ 正在下载或安装，请稍候"))
@@ -178,7 +178,7 @@ class QQPage(PageBase):
         self._start_download()
 
     def _start_download(self) -> None:
-        """启动或继续 QQ 下载。"""
+        """启动或继续 QQ 下载. """
         # 项目内模块导入
         from src.core.network.downloader import QQDownloader
 
@@ -195,7 +195,7 @@ class QQPage(PageBase):
 
     @Slot()
     def handle_pause_requested(self) -> None:
-        """暂停或继续当前 QQ 下载。"""
+        """暂停或继续当前 QQ 下载. """
         if self.is_operation_paused():
             logger.info("QQ 下载继续", log_source=LogSource.UI)
             self.resume_operation(self.tr("正在继续下载 QQ..."))
@@ -211,7 +211,7 @@ class QQPage(PageBase):
 
     @Slot()
     def handle_cancel_requested(self) -> None:
-        """取消当前 QQ 下载。"""
+        """取消当前 QQ 下载. """
         if self.file_path is None:
             return
 
@@ -234,7 +234,7 @@ class QQPage(PageBase):
 
     @Slot()
     def handle_install_requested(self) -> None:
-        """处理下载完成后的安装逻辑。"""
+        """处理下载完成后的安装逻辑. """
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow
 
@@ -300,13 +300,13 @@ class QQPage(PageBase):
 
     @Slot()
     def handle_download_paused(self) -> None:
-        """处理 QQ 下载暂停。"""
+        """处理 QQ 下载暂停. """
         self.downloader = None
         self.pause_operation(self.tr("QQ 下载已暂停"))
 
     @Slot()
     def handle_download_canceled(self) -> None:
-        """处理 QQ 下载取消。"""
+        """处理 QQ 下载取消. """
         self.downloader = None
         self.end_operation()
         self.refresh_page_view()
@@ -314,7 +314,7 @@ class QQPage(PageBase):
 
     @Slot()
     def handle_install_finished(self) -> None:
-        """处理安装完成逻辑。"""
+        """处理安装完成逻辑. """
         self.end_operation()
         self.downloader = None
         self.installer = None
@@ -329,7 +329,7 @@ class QQPage(PageBase):
 
     @Slot()
     def handle_operation_failed(self) -> None:
-        """处理错误结束逻辑。"""
+        """处理错误结束逻辑. """
         self.end_operation()
         self.downloader = None
         self.installer = None

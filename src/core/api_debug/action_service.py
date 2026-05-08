@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""WebUI Action 调试服务。"""
+"""WebUI Action 调试服务. """
 
 # 标准库导入
 from typing import Any
@@ -12,7 +12,7 @@ from src.core.api_debug.models import ApiDebugBodyType, ApiDebugRequestConfig
 
 
 class ActionDebugService:
-    """封装 WebUI Debug API 的 schema、session 和 call。"""
+    """封装 WebUI Debug API 的 schema, session 和 call. """
 
     def __init__(self, api_service: ApiDebugService | None = None) -> None:
         self.api_service = api_service or ApiDebugService()
@@ -24,7 +24,7 @@ class ActionDebugService:
         *,
         timeout: float = 10.0,
     ) -> list[ApiDebugActionSchema]:
-        """获取 Action Schema。"""
+        """获取 Action Schema. """
         payload = self._request_json(
             ApiDebugRequestConfig(
                 url=f"{base_url.rstrip('/')}/api/Debug/schemas",
@@ -63,7 +63,7 @@ class ActionDebugService:
         *,
         timeout: float = 10.0,
     ) -> ApiDebugActionSession:
-        """创建或获取 DebugAdapter 会话。"""
+        """创建或获取 DebugAdapter 会话. """
         payload = self._request_json(
             ApiDebugRequestConfig(
                 url=f"{base_url.rstrip('/')}/api/Debug/create",
@@ -94,7 +94,7 @@ class ActionDebugService:
         timeout: float = 10.0,
         persist_history: bool = True,
     ):
-        """通过 DebugAdapter 调用 Action。"""
+        """通过 DebugAdapter 调用 Action. """
         request = ApiDebugRequestConfig(
             url=f"{session.base_url.rstrip('/')}/api/Debug/call/{session.adapter_name}",
             method="POST",

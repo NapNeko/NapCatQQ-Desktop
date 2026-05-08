@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""服务器档案模型与多服务器持久化注册表。
+"""服务器档案模型与多服务器持久化注册表. 
 
-对应 [`docs/general/remote_ssh_plan.md`](../../../../docs/general/remote_ssh_plan.md) §3.2 设计。
+对应 [`docs/general/remote_ssh_plan.md`](../../../../docs/general/remote_ssh_plan.md) §3.2 设计. 
 
 安全基线(参考 §6.2):
 - SSH 密码不写入磁盘, 仅在内存中保留
 - 私钥 passphrase 不写入磁盘
 - 私钥**路径**(非内容)可写入磁盘
 
-存储路径: ``{data_path}/runtime/config/servers.json``。
-JSON 文件损坏或缺失时静默初始化为空, 不阻断 Desktop 启动。
+存储路径: ``{data_path}/runtime/config/servers.json``. 
+JSON 文件损坏或缺失时静默初始化为空, 不阻断 Desktop 启动. 
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from .models import LinuxCorePaths, SSHCredentials
 
 
 class DeploymentState(str, Enum):
-    """远端 NapCat 部署状态。"""
+    """远端 NapCat 部署状态. """
 
     UNDEPLOYED = "undeployed"
     DEPLOYING = "deploying"
@@ -36,7 +36,7 @@ class DeploymentState(str, Enum):
 
 @dataclass
 class ServerProfile:
-    """单台远程服务器的配置档案。
+    """单台远程服务器的配置档案. 
 
     Attributes:
         id: 服务器唯一标识(UUID4 字符串)
@@ -71,7 +71,7 @@ class ServerProfile:
         notes: str = "",
         paths: LinuxCorePaths | None = None,
     ) -> "ServerProfile":
-        """构造新档案, 自动生成 UUID。"""
+        """构造新档案, 自动生成 UUID. """
         display_name = name.strip() or credentials.host or "未命名服务器"
         return cls(
             id=str(uuid4()),
@@ -82,7 +82,7 @@ class ServerProfile:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """序列化为 JSON 兼容结构, 跳过敏感字段。"""
+        """序列化为 JSON 兼容结构, 跳过敏感字段. """
         cred = self.credentials
         cred_payload: dict[str, Any] = {
             "host": cred.host,
@@ -121,7 +121,7 @@ class ServerProfile:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "ServerProfile":
-        """从 JSON 结构反序列化, 字段缺失时使用安全默认值。"""
+        """从 JSON 结构反序列化, 字段缺失时使用安全默认值. """
         cred_payload = payload.get("credentials") or {}
         defaults_paths = LinuxCorePaths()
         credentials = SSHCredentials(
@@ -184,11 +184,11 @@ class ServerProfile:
 
 
 class ServerRegistry:
-    """多服务器档案的内存索引 + JSON 持久化。
+    """多服务器档案的内存索引 + JSON 持久化. 
 
-    采用 "临时文件 + replace" 原子写入, 避免崩溃损坏 servers.json。
+    采用 "临时文件 + replace" 原子写入, 避免崩溃损坏 servers.json. 
     线程安全性: 当前实现非线程安全, 调用方应在 Qt 主线程使用,
-    或通过 [`ServerManager`](src/core/remote/server_manager.py) 提供的 Qt 信号桥接。
+    或通过 [`ServerManager`](src/core/remote/server_manager.py) 提供的 Qt 信号桥接. 
     """
 
     SCHEMA_VERSION = 1
@@ -204,7 +204,7 @@ class ServerRegistry:
 
     # ---------- 持久化 ----------
     def load(self) -> None:
-        """从磁盘加载档案; 文件缺失或损坏时静默初始化为空。"""
+        """从磁盘加载档案; 文件缺失或损坏时静默初始化为空. """
         self._profiles.clear()
         if not self._storage_path.exists():
             return
@@ -232,7 +232,7 @@ class ServerRegistry:
             self._profiles[profile.id] = profile
 
     def save(self) -> None:
-        """原子写入磁盘, 父目录不存在时自动创建。"""
+        """原子写入磁盘, 父目录不存在时自动创建. """
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "schema_version": self.SCHEMA_VERSION,
@@ -244,28 +244,28 @@ class ServerRegistry:
 
     # ---------- CRUD ----------
     def list(self) -> list[ServerProfile]:
-        """返回当前所有档案的快照(按创建时间排序)。"""
+        """返回当前所有档案的快照(按创建时间排序). """
         return sorted(self._profiles.values(), key=lambda p: p.created_at)
 
     def get(self, server_id: str) -> ServerProfile | None:
         return self._profiles.get(server_id)
 
     def add(self, profile: ServerProfile) -> None:
-        """添加新档案; ID 已存在时抛 ValueError。"""
+        """添加新档案; ID 已存在时抛 ValueError. """
         if profile.id in self._profiles:
             raise ValueError(f"服务器档案已存在: {profile.id}")
         self._profiles[profile.id] = profile
         self.save()
 
     def update(self, profile: ServerProfile) -> None:
-        """覆盖现有档案; ID 不存在时抛 KeyError。"""
+        """覆盖现有档案; ID 不存在时抛 KeyError. """
         if profile.id not in self._profiles:
             raise KeyError(f"服务器档案不存在: {profile.id}")
         self._profiles[profile.id] = profile
         self.save()
 
     def remove(self, server_id: str) -> bool:
-        """删除档案, 返回是否存在并删除成功。"""
+        """删除档案, 返回是否存在并删除成功. """
         if server_id not in self._profiles:
             return False
         del self._profiles[server_id]

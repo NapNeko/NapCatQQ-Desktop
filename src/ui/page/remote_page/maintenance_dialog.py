@@ -42,7 +42,7 @@ class MaintenanceDialog(MessageBoxBase):
     """远端服务器维护操作选择对话框 (P3.W2.A 升级版).
 
     UX 要点:
-    - 顶部以表单 (QFormLayout) 列出当前服务器状态、NapCat / LinuxQQ 版本
+    - 顶部以表单 (QFormLayout) 列出当前服务器状态, NapCat / LinuxQQ 版本
     - 中部使用 [`PushSettingCard`] 列出 4 个维护动作, 每项带说明文案
     - 危险操作 (回滚) 通过文案 + 红色按钮文字暗示, 实际确认仍由
       [`RollbackConfirmBox`] 二次拦截

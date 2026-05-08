@@ -60,7 +60,7 @@ class ProgressInfoBarBridge(QObject):
             ``InfoBarManager`` 会基于该 parent 的 size 计算条目位置, 因此应当是
             一个稳定可见的全屏级 / 页面级 widget.
         position: 默认 [`NCDInfoBarPosition.BOTTOM_RIGHT`](src/ui/components/managers.py),
-            与 ``success_bar`` / ``info_bar`` 同款 — chip 从右下角往上堆叠,
+            与 ``success_bar`` / ``info_bar`` 同款 - chip 从右下角往上堆叠,
             **远离 BotCard header 区域**, 避免多任务并发时 chip 覆盖到第二行卡片标题
             (P4 W4 修复: 之前 TOP_RIGHT 第二/三条 chip y≈126/184 与 BotPage 卡片重叠).
         auto_close_after: 任务完成后 ProgressInfoBar 淡出的延迟 (毫秒);
@@ -138,7 +138,7 @@ class ProgressInfoBarBridge(QObject):
 
         P4 W4 设计决策:
         ----------------
-        ``ProgressInfoBar.setComplete`` 是 "原地复用" 模式 — 切换 IconWidget 但保留
+        ``ProgressInfoBar.setComplete`` 是 "原地复用" 模式 - 切换 IconWidget 但保留
         widget 实例; 这导致 indeterminate 状态的 sizeHint / layout / 内嵌 label 的
         尺寸约束会**继续生效**, 即使我们调 ``setMinimumWidth`` / ``adjustSize`` /
         ``layout.invalidate`` 都救不回来 (实测 chip 本体撑到 320px 后内部
@@ -209,7 +209,7 @@ class ProgressInfoBarBridge(QObject):
             bar._adjustText()
         except Exception:  # noqa: BLE001 - 私有 API, 不存在就跳过, 继续走 adjustSize
             pass
-        # 让所有嵌套 layout 失效, 强制重算 sizeHint (光 adjustSize 不够 — qfluentwidgets
+        # 让所有嵌套 layout 失效, 强制重算 sizeHint (光 adjustSize 不够 - qfluentwidgets
         # 的 InfoBar 在 setComplete 后 sizeHint 仍然是 indeterminate 状态时的值).
         layout = bar.layout()
         if layout is not None:

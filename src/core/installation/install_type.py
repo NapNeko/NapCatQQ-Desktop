@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""安装类型检测工具。
+"""安装类型检测工具. 
 
-用于区分 MSI 安装版和便携版（ZIP 解压）
+用于区分 MSI 安装版和便携版 (ZIP 解压) 
 """
 
 # 标准库导入
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class InstallType(enum.Enum):
-    """安装类型枚举。"""
+    """安装类型枚举. """
 
     PORTABLE = "portable"
     """便携版（ZIP 解压，无注册表项）"""
@@ -40,19 +40,19 @@ MSI_REGISTRY_VALUE = "InstallDir"
 
 
 def detect_install_type(app_path: Path | None = None) -> InstallType:
-    r"""检测当前安装类型。
+    r"""检测当前安装类型. 
 
-    检测逻辑：
+    检测逻辑: 
     1. 检查注册表 HKLM\Software\NapCatQQ-Desktop\InstallDir
-    2. 如果注册表存在且路径匹配，判定为 MSI
-    3. 否则判定为便携版（存在 _internal 目录）
+    2. 如果注册表存在且路径匹配, 判定为 MSI
+    3. 否则判定为便携版 (存在 _internal 目录) 
 
     Note:
-        MSI 安装不会生成 Uninstall.exe，仅通过注册表区分。
-        便携版解压后也没有 Uninstall.exe。
+        MSI 安装不会生成 Uninstall.exe, 仅通过注册表区分. 
+        便携版解压后也没有 Uninstall.exe. 
 
     Args:
-        app_path: 应用根目录，默认使用当前运行目录
+        app_path: 应用根目录, 默认使用当前运行目录
 
     Returns:
         InstallType: 检测到的安装类型
@@ -77,7 +77,7 @@ def detect_install_type(app_path: Path | None = None) -> InstallType:
             else:
                 logger.debug(f"注册表路径与当前路径不匹配: " f"registry={msi_install_dir}, current={app_path}")
 
-    # 检查是否为便携版：存在 _internal 目录（PyInstaller 特征）
+    # 检查是否为便携版: 存在 _internal 目录 (PyInstaller 特征) 
     if (app_path / "_internal").is_dir():
         logger.debug(f"检测到便携版: {app_path}")
         return InstallType.PORTABLE
@@ -87,10 +87,10 @@ def detect_install_type(app_path: Path | None = None) -> InstallType:
 
 
 def _get_msi_install_dir_from_registry() -> str | None:
-    """从注册表获取 MSI 安装目录。
+    """从注册表获取 MSI 安装目录. 
 
     Returns:
-        str | None: 安装目录路径，未找到时返回 None
+        str | None: 安装目录路径, 未找到时返回 None
     """
     if not HAS_WINREG:
         return None
@@ -112,7 +112,7 @@ def _get_msi_install_dir_from_registry() -> str | None:
     except OSError as e:
         logger.debug(f"读取 64 位注册表失败: {e}")
 
-    # 尝试 32 位注册表（兼容旧系统）
+    # 尝试 32 位注册表 (兼容旧系统) 
     try:
         with _winreg.OpenKey(
             _winreg.HKEY_LOCAL_MACHINE, MSI_REGISTRY_KEY, 0, _winreg.KEY_READ | _winreg.KEY_WOW64_32KEY
@@ -130,14 +130,14 @@ def _get_msi_install_dir_from_registry() -> str | None:
 
 
 def _is_portable_installation(app_path: Path) -> bool:
-    """检查是否为便携版安装。
+    """检查是否为便携版安装. 
 
-    便携版特征：
-    - 存在 _internal 目录（PyInstaller 打包特征）
+    便携版特征: 
+    - 存在 _internal 目录 (PyInstaller 打包特征) 
 
     Note:
-        MSI 安装和便携版都没有 Uninstall.exe，
-        所以仅通过注册表（MSI）和 _internal 目录（便携版）区分。
+        MSI 安装和便携版都没有 Uninstall.exe, 
+        所以仅通过注册表 (MSI) 和 _internal 目录 (便携版) 区分. 
 
     Args:
         app_path: 应用根目录
@@ -149,21 +149,21 @@ def _is_portable_installation(app_path: Path) -> bool:
 
 
 def _normalize_path_for_compare(path: str | Path) -> str:
-    """按 Windows 规则规范路径，避免 `resolve()` 带来的副作用。"""
+    """按 Windows 规则规范路径, 避免 `resolve()` 带来的副作用. """
 
     return os.path.normcase(os.path.normpath(str(Path(path).absolute())))
 
 
 def get_update_file_pattern(install_type: InstallType, version: str) -> str:
-    """获取更新文件名模式。
+    """获取更新文件名模式. 
 
-    统一命名格式：
+    统一命名格式: 
     - 便携版: NapCatQQ-Desktop-{version}-portable-x64.zip
     - MSI: NapCatQQ-Desktop-{version}-x64.msi
 
     Args:
         install_type: 安装类型
-        version: 版本号（不含 v 前缀）
+        version: 版本号 (不含 v 前缀) 
 
     Returns:
         str: 更新文件名
@@ -175,9 +175,9 @@ def get_update_file_pattern(install_type: InstallType, version: str) -> str:
 
 
 def is_msi_installed_version(version: str) -> bool:
-    """检查指定版本是否为 MSI 安装。
+    """检查指定版本是否为 MSI 安装. 
 
-    用于版本回滚检测。
+    用于版本回滚检测. 
 
     Args:
         version: 版本号
@@ -185,6 +185,6 @@ def is_msi_installed_version(version: str) -> bool:
     Returns:
         bool: 是否为 MSI 安装版本
     """
-    # 简化实现：当前仅检查安装类型
+    # 简化实现: 当前仅检查安装类型
     # 未来可扩展为检查注册表中记录的版本号
     return detect_install_type() == InstallType.MSI

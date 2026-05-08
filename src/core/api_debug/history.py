@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""接口调试历史记录管理。"""
+"""接口调试历史记录管理. """
 
 # 标准库导入
 import json
@@ -38,14 +38,14 @@ _SENSITIVE_FIELD_NAMES = {
 
 
 class ApiDebugHistoryManager:
-    """接口调试历史记录管理器。"""
+    """接口调试历史记录管理器. """
 
     def __init__(self, storage_path: Path | None = None, max_entries: int = 100) -> None:
         self.storage_path = storage_path or (it(PathFunc).config_dir_path / "api_debug_history.json")
         self.max_entries = max_entries
 
     def append_result(self, result: ApiDebugExecutionResult) -> ApiDebugHistoryEntry:
-        """追加一条执行结果到历史记录。"""
+        """追加一条执行结果到历史记录. """
         entry = self._build_entry(result)
         entries = self.list_entries()
         entries.insert(0, entry)
@@ -53,20 +53,20 @@ class ApiDebugHistoryManager:
         return entry
 
     def list_entries(self, limit: int | None = None) -> list[ApiDebugHistoryEntry]:
-        """读取历史记录列表。"""
+        """读取历史记录列表. """
         payload = self._read_payload()
         entries = [self._entry_from_dict(item) for item in payload.get("entries", [])]
         return entries[:limit] if limit is not None else entries
 
     def get_entry(self, history_id: str) -> ApiDebugHistoryEntry | None:
-        """按 ID 获取历史记录。"""
+        """按 ID 获取历史记录. """
         for entry in self.list_entries():
             if entry.history_id == history_id:
                 return entry
         return None
 
     def delete_entry(self, history_id: str) -> bool:
-        """删除指定历史记录。"""
+        """删除指定历史记录. """
         entries = self.list_entries()
         remaining = [entry for entry in entries if entry.history_id != history_id]
         if len(remaining) == len(entries):
@@ -75,7 +75,7 @@ class ApiDebugHistoryManager:
         return True
 
     def clear(self) -> None:
-        """清空历史记录。"""
+        """清空历史记录. """
         self._write_entries([])
 
     def _build_entry(self, result: ApiDebugExecutionResult) -> ApiDebugHistoryEntry:

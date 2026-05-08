@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""文本类控件使用的轻量平滑滚动支持。"""
+"""文本类控件使用的轻量平滑滚动支持. """
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation
 from PySide6.QtGui import QWheelEvent
 
 
 class SmoothTextScrollMixin:
-    """为文本滚动区域提供兼容的滚轮平滑滚动。"""
+    """为文本滚动区域提供兼容的滚轮平滑滚动. """
 
     def _init_smooth_scroll(self, duration: int = 150) -> None:
         self._pending_scroll_value = self.verticalScrollBar().value()

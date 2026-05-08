@@ -226,7 +226,7 @@ class BotListPage(ScrollArea):
             self._refresh_batch_count_label()
 
     def _is_card_alive(self, card: BotCard) -> bool:
-        """判断 Bot Card 是否仍然有效。"""
+        """判断 Bot Card 是否仍然有效. """
         try:
             card.parent()
         except RuntimeError:
@@ -236,7 +236,7 @@ class BotListPage(ScrollArea):
         return True
 
     def _dispose_card(self, card: BotCard) -> None:
-        """安全移除单个 Bot Card。"""
+        """安全移除单个 Bot Card. """
         if not self._is_card_alive(card):
             return
 

@@ -61,7 +61,7 @@ class MainWindow(MSFluentWindow):
 
         P3 perf: 让 [`BackgroundTaskCenter`](src/core/runtime/background_tasks.py) 的
         ``begin/end`` 自动在 MainWindow 右上角弹出 / 收尾 ``ProgressInfoBar``,
-        BotPage Header 不再自维护状态条, BotCard 也不再嵌入进度环 — 全部走该桥.
+        BotPage Header 不再自维护状态条, BotCard 也不再嵌入进度环 - 全部走该桥.
         """
         # 项目内模块导入: 局部 import 避免主窗口顶层依赖 qfluentwidgets.ProgressInfoBar
         # (老版本 qfluentwidgets-qiao 没有该 symbol, 启动期保护性容错).
@@ -161,7 +161,7 @@ class MainWindow(MSFluentWindow):
         logger.trace("主窗口已完成 core 信号绑定", log_source=LogSource.UI)
 
     def _bind_crash_bundle_events(self) -> None:
-        """绑定崩溃诊断包生成事件。"""
+        """绑定崩溃诊断包生成事件. """
         if getattr(self, "_crash_bundle_events_bound", False):
             return
 
@@ -192,7 +192,7 @@ class MainWindow(MSFluentWindow):
         it(QRCodeDialogFactory).remove_qr_code(qq_id)
 
     def _show_crash_bundle_notification(self, notification: CrashBundleNotification) -> None:
-        """提示用户崩溃诊断包已生成。"""
+        """提示用户崩溃诊断包已生成. """
         if not self.isVisible():
             return
 

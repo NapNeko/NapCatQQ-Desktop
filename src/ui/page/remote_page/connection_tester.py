@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SSH 连接测试后台运行器, 避免在 UI 线程内同步阻塞。"""
+"""SSH 连接测试后台运行器, 避免在 UI 线程内同步阻塞. """
 
 from __future__ import annotations
 
@@ -9,17 +9,17 @@ from src.core.remote import ServerProfile
 
 
 class ConnectionTesterSignals(QObject):
-    """[`ConnectionTester`](src/ui/page/remote_page/connection_tester.py) 信号载体。
+    """[`ConnectionTester`](src/ui/page/remote_page/connection_tester.py) 信号载体. 
 
     Qt 不允许 [`QRunnable`](https://doc.qt.io/qt-6/qrunnable.html) 直接定义信号,
-    需通过独立 [`QObject`](https://doc.qt.io/qt-6/qobject.html) 中转。
+    需通过独立 [`QObject`](https://doc.qt.io/qt-6/qobject.html) 中转. 
     """
 
     finished = Signal(str, bool, str)  # (server_id, ok, message)
 
 
 class ConnectionTester(QRunnable):
-    """后台执行 SSH 连接测试。
+    """后台执行 SSH 连接测试. 
 
     用法::
 

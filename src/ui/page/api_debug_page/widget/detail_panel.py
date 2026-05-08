@@ -25,7 +25,7 @@ from .schema_card import ApiDebugSchemaCard
 
 
 class _ActionMetaCard(CardWidget):
-    """请求方法与路由摘要卡片。"""
+    """请求方法与路由摘要卡片. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -52,7 +52,7 @@ class _ActionMetaCard(CardWidget):
 
 
 class ActionDetailPanel(QWidget):
-    """右侧接口详情区。"""
+    """右侧接口详情区. """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

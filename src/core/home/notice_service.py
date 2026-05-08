@@ -30,7 +30,7 @@ class _RuntimeNotice:
 
 
 class HomeNoticeService(QObject):
-    """首页通知聚合服务。"""
+    """首页通知聚合服务. """
 
     sectionsChanged = Signal(object)
 
@@ -412,12 +412,12 @@ class HomeNoticeService(QObject):
         if remote is None:
             return []
 
-        # 只在当前整体处于“无版本动作可做”时展示当前版本公告，避免被其它组件的更新掩盖后误导用户。
+        # 只在当前整体处于"无版本动作可做"时展示当前版本公告, 避免被其它组件的更新掩盖后误导用户. 
         if self._has_pending_version_actions(remote) or self._has_suppressed_version_actions():
             return []
 
         items: list[NoticeTimelineItemData] = []
-        # 版本变更本身已经会在“更新”分组里提示，不再重复生成一条“公告”。
+        # 版本变更本身已经会在"更新"分组里提示, 不再重复生成一条"公告". 
         if (
             remote.napcat_version
             and remote.napcat_update_log
@@ -521,7 +521,7 @@ class HomeNoticeService(QObject):
         return []
 
     def _build_desktop_update_items(self, remote: VersionSnapshot) -> list[NoticeTimelineItemData]:
-        """构建 Desktop 专属更新提示。"""
+        """构建 Desktop 专属更新提示. """
 
         local_version = self._local_versions.ncd_version
         remote_version = remote.ncd_version
@@ -658,7 +658,7 @@ class HomeNoticeService(QObject):
 
 
 class HomeNoticeDebugCenter(QObject):
-    """开发者模式下的首页通知注入通道。"""
+    """开发者模式下的首页通知注入通道. """
 
     sampleRequested = Signal()
     clearRequested = Signal()
