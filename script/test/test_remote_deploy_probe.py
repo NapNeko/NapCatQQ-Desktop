@@ -232,6 +232,7 @@ class TestProbeEnvironment:
             "ID=alpine\n"
             "VERSION_ID='3.18'\n"
         )
-        distro_id, version = LinuxCoreDeployment._parse_os_release(sample)
+        distro_id, version, id_like = LinuxCoreDeployment._parse_os_release(sample)
         assert distro_id == "alpine"
         assert version == "3.18"
+        assert id_like is None

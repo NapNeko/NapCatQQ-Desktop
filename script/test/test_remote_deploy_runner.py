@@ -309,7 +309,16 @@ class TestScriptTimeout:
         class _FakeSSHClient:
             credentials = _FakeCredentials()
 
-            def exec_stream(self, command, *, on_stdout_line=None, check=False, merge_stderr=False, timeout=None):
+            def exec_stream(
+                self,
+                command,
+                *,
+                on_stdout_line=None,
+                on_stdout_progress=None,
+                check=False,
+                merge_stderr=False,
+                timeout=None,
+            ):
                 # 关键断言: timeout 必须是 script_timeout, 不能是 command_timeout
                 captured["timeout"] = timeout
                 captured["merge_stderr"] = merge_stderr

@@ -132,6 +132,40 @@ def test_trust_save_with_non_default_port_uses_bracket_notation(
     assert fresh.contains("example.com", port=2222)
 
 
+def test_trust_save_handles_paramiko_pre_formatted_hostname(
+    fake_key: paramiko.PKey, known_hosts_store: KnownHostsStore
+) -> None:
+    """回归: paramiko 在 ``port != 22`` 时把 hostname 预先包装成 ``[host]:port``,
+    传进 ``missing_host_key`` 时**不能**再走一遍 ``_format_host_entry``,
+    否则会写出 ``[[host]:port]:port`` 这种永远 lookup 不到的废条目, 表现为
+    "每次连接都弹指纹确认对话框".
+    """
+    captured: list[HostKeyPrompt] = []
+    policy = InteractiveHostKeyPolicy(
+        callback=lambda p: (captured.append(p), HostKeyDecision.TRUST_SAVE)[1],
+        store=known_hosts_store,
+        port=2222,
+    )
+    client = paramiko.SSHClient()
+
+    # 模拟 paramiko 4.x 的真实行为: 直接把 ``[host]:port`` 传进来
+    policy.missing_host_key(client, "[example.com]:2222", fake_key)
+
+    # prompt 中暴露的 hostname 应该是 bare host, 不带 [] / port 重复
+    assert len(captured) == 1
+    assert captured[0].hostname == "example.com"
+    assert captured[0].port == 2222
+
+    # 落盘 known_hosts 必须是单层 ``[example.com]:2222``, 不能是 ``[[example.com]:2222]:2222``
+    text = known_hosts_store.path.read_text(encoding="ascii")
+    assert "[example.com]:2222" in text
+    assert "[[example.com]" not in text
+
+    # 重新 load 之后, 用 bare host + port 应当命中, 下次连接不会再弹窗
+    fresh = KnownHostsStore(path=known_hosts_store.path)
+    assert fresh.contains("example.com", port=2222)
+
+
 def test_trust_save_save_failure_does_not_propagate(
     fake_key: paramiko.PKey, known_hosts_store: KnownHostsStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:

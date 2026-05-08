@@ -72,7 +72,14 @@ class FakeRemoteBackend:
     def close(self) -> None:
         pass
 
-    def install_qq(self, *, progress=None, log_callback=None, force_reinstall: bool = False) -> None:
+    def install_qq(
+        self,
+        *,
+        progress=None,
+        log_callback=None,
+        progress_log_callback=None,
+        force_reinstall: bool = False,
+    ) -> None:
         self.install_qq_calls.append(
             {"force_reinstall": force_reinstall, "has_log_callback": log_callback is not None}
         )
@@ -91,8 +98,11 @@ class FakeRemoteBackend:
         *,
         progress=None,
         log_callback=None,
+        progress_log_callback=None,
         force_update: bool = False,
         expected_sha512: str | None = None,
+        local_archive_cache=None,
+        should_cancel=None,
     ) -> None:
         self.install_napcat_calls.append(
             {
@@ -100,6 +110,8 @@ class FakeRemoteBackend:
                 "force_update": force_update,
                 "has_log_callback": log_callback is not None,
                 "expected_sha512": expected_sha512,
+                "local_archive_cache": local_archive_cache,
+                "has_should_cancel": should_cancel is not None,
             }
         )
         if log_callback is not None:
@@ -127,15 +139,49 @@ class FakeRemoteBackend:
 
 @dataclass
 class _FakeDeployment:
-    """伪造 LinuxCoreDeployment, 仅用于回滚测试。"""
+    """伪造 LinuxCoreDeployment, 用于回滚测试与 deploy preflight 体检.
+
+    ``probe_environment`` 默认返回一个 supported 的探测结果, 让原有 deploy 编排测试
+    不需要关心 preflight; 需要触发 preflight 失败的子测试通过覆盖 ``probe_override``
+    注入自己想要的 probe 实例.
+    """
 
     clean_calls: list[bool] = field(default_factory=list)
     fail_on_clean: bool = False
+    probe_override: object | None = None
+    probe_calls: int = 0
 
     def clean_environment(self, include_qq: bool = True):
         self.clean_calls.append(include_qq)
         if self.fail_on_clean:
             raise RuntimeError("simulated clean_environment failure")
+
+    def probe_environment(self):
+        self.probe_calls += 1
+        if self.probe_override is not None:
+            return self.probe_override
+        # 默认: Ubuntu 24 amd64, dpkg 可用 -> supported
+        from src.core.remote.deployment import LinuxCoreDeploymentProbe
+
+        return LinuxCoreDeploymentProbe(
+            os_name="Linux",
+            architecture="x86_64",
+            normalized_arch="amd64",
+            distro_id="ubuntu",
+            distro_version="24.04",
+            has_bash=True,
+            has_tar=True,
+            has_unzip=True,
+            has_curl=True,
+            has_dpkg=True,
+            has_rpm2cpio=False,
+            has_xvfb=True,
+            has_linuxqq=False,
+            has_napcat=False,
+            installed_qq_version=None,
+            installed_napcat_version=None,
+            id_like="debian",
+        )
 
 
 @pytest.fixture
@@ -452,3 +498,123 @@ class TestRollback:
         manager, _, _ = manager_factory()
         with pytest.raises(KeyError):
             manager.rollback_server("non-existent-id")
+
+
+# ==================== cancellation ====================
+class TestCancellation:
+    """覆盖 [`ServerManager.request_cancel`](src/core/remote/server_manager.py)
+    协作式取消机制: API 行为, 埋点抛 RemoteDeploymentCancelledError,
+    状态机走 UNDEPLOYED 而非 FAILED, should_cancel 协议透传到 install_napcat.
+    """
+
+    def test_request_cancel_returns_false_when_not_deploying(self, manager_factory) -> None:
+        manager, _, server_id = manager_factory()
+        # 没有 deploy_server 在跑 -> Event 不存在
+        assert manager.request_cancel(server_id) is False
+        assert manager.is_cancel_requested(server_id) is False
+
+    def test_request_cancel_during_install_qq_aborts_with_undeployed_state(
+        self, manager_factory
+    ) -> None:
+        """install_qq 内部调 manager.request_cancel -> 抛 RemoteDeploymentCancelledError;
+        状态机走 UNDEPLOYED (非 FAILED), 部署终结信号 ok=False.
+        """
+        from src.core.remote.errors import RemoteDeploymentCancelledError
+
+        backend = FakeRemoteBackend()
+
+        # 让 install_qq 在跑到一半时模拟"用户点了取消按钮", 然后抛出底层异常
+        captured_manager: dict = {}
+
+        def _qq_simulating_cancel(*, progress=None, log_callback=None, progress_log_callback=None, **kwargs):
+            mgr = captured_manager["mgr"]
+            sid = captured_manager["sid"]
+            # 模拟用户点了取消按钮
+            mgr.request_cancel(sid)
+            # SSH 命令依然抛出 (典型: connect 中断 / 命令执行被打断)
+            raise RuntimeError("simulated install_qq interrupted by cancel")
+
+        backend.install_qq = _qq_simulating_cancel  # type: ignore[assignment]
+
+        manager, _, server_id = manager_factory(fake=backend)
+        captured_manager["mgr"] = manager
+        captured_manager["sid"] = server_id
+
+        finished_payloads: list[tuple[bool, str]] = []
+        manager.deployment_finished.connect(lambda sid, ok, msg: finished_payloads.append((ok, msg)))
+
+        with pytest.raises(RemoteDeploymentCancelledError):
+            manager.deploy_server(server_id)
+
+        # 状态机: 取消 != 失败 -> UNDEPLOYED
+        profile = manager.get_server(server_id)
+        assert profile is not None
+        assert profile.deployment_state == DeploymentState.UNDEPLOYED
+        # finished 信号 ok=False (但消息不带 [install_qq] 而是 [cancelled])
+        assert finished_payloads
+        ok, msg = finished_payloads[-1]
+        assert ok is False
+        assert "[cancelled]" in msg
+
+    def test_request_cancel_between_stages_skips_install_napcat(
+        self, manager_factory
+    ) -> None:
+        """preflight 完成后用户点取消 -> install_qq 之前的 _check_cancelled 命中 -> install_napcat 不会被调."""
+        from src.core.remote.errors import RemoteDeploymentCancelledError
+
+        backend = FakeRemoteBackend()
+        manager, _, server_id = manager_factory(fake=backend)
+
+        # 在 install_qq 调用前预先 set Event (模拟"刚 connect 上用户立刻点了取消")
+        # 直接走 deploy_server 内部流程: 入口注册 Event -> 我们用 monkeypatch 在 connect() 期间 set
+        original_install_qq = backend.install_qq
+
+        def _qq_proxy(*, progress=None, log_callback=None, progress_log_callback=None, force_reinstall: bool = False) -> None:
+            return original_install_qq(
+                progress=progress,
+                log_callback=log_callback,
+                progress_log_callback=progress_log_callback,
+                force_reinstall=force_reinstall,
+            )
+
+        # 用 connect() 钩子: connect 完成时立刻 set 取消 Event
+        original_connect = backend.connect
+
+        def _connect_then_cancel() -> None:
+            original_connect()
+            manager.request_cancel(server_id)
+
+        backend.connect = _connect_then_cancel  # type: ignore[assignment]
+        backend.install_qq = _qq_proxy  # type: ignore[assignment]
+
+        with pytest.raises(RemoteDeploymentCancelledError):
+            manager.deploy_server(server_id)
+
+        # install_qq / install_napcat 都不应该被调到 (preflight 后埋点立刻命中)
+        assert backend.install_qq_calls == []
+        assert backend.install_napcat_calls == []
+
+        # 档案状态: UNDEPLOYED
+        profile = manager.get_server(server_id)
+        assert profile is not None
+        assert profile.deployment_state == DeploymentState.UNDEPLOYED
+
+    def test_should_cancel_callback_passed_to_install_napcat(self, manager_factory) -> None:
+        """deploy_server 应该把 cancel_event.is_set 作为 should_cancel 协议传给 install_napcat."""
+        manager, backend, server_id = manager_factory()
+        manager.deploy_server(server_id)
+
+        assert backend.install_napcat_calls
+        last_call = backend.install_napcat_calls[-1]
+        assert last_call["has_should_cancel"] is True
+
+    def test_cancel_event_is_cleaned_up_after_deploy(self, manager_factory) -> None:
+        """部署结束 (成功 or 失败) 后 _cancel_events 应该被清理, 防止内存泄漏."""
+        manager, _, server_id = manager_factory()
+        manager.deploy_server(server_id)
+
+        # finally 清理
+        assert server_id not in manager._cancel_events
+        assert manager.is_cancel_requested(server_id) is False
+        # 部署结束后 request_cancel 应返回 False (已无任务)
+        assert manager.request_cancel(server_id) is False
