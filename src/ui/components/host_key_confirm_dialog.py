@@ -44,17 +44,19 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QGuiApplication
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     FluentIcon,
-    IconWidget,
     MessageBoxBase,
     PrimaryPushButton,
     PushButton,
+    StrongBodyLabel,
     SubtitleLabel,
+    ToolButton,
+    ToolTipFilter,
 )
 
 # 项目内模块导入
@@ -147,14 +149,35 @@ class HostKeyConfirmDialog(MessageBoxBase):
         if self._prompt.fingerprint_md5:
             info_layout.addWidget(self._build_kv_row("MD5", self._prompt.fingerprint_md5, mono=True))
 
-        # 安全提示
-        hint = CaptionLabel(
-            "提示: 你可以在服务器上运行 ``ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub`` "
+        # 安全提示 + 一键复制测试指令
+        # 提示行结构: [说明文字...][复制按钮]; 文字与按钮挤在同一行,
+        # 按钮 32x32, 走 ToolTipFilter 提示 "复制测试指令".
+        hint_widget = QWidget(self)
+        hint_layout = QHBoxLayout(hint_widget)
+        hint_layout.setContentsMargins(0, 0, 0, 0)
+        hint_layout.setSpacing(8)
+
+        hint_label = CaptionLabel(
+            "提示: 你可以在服务器上运行 "
+            "ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub "
             "获取真实主机指纹后比对.",
-            self,
+            hint_widget,
         )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: #6b7280;")
+        hint_label.setWordWrap(True)
+        hint_label.setStyleSheet("color: #6b7280;")
+        hint_layout.addWidget(hint_label, 1, Qt.AlignmentFlag.AlignTop)
+
+        self._copy_command_btn = ToolButton(FluentIcon.COPY, hint_widget)
+        self._copy_command_btn.setFixedSize(30, 30)
+        self._copy_command_btn.setToolTip("复制测试指令到剪贴板")
+        self._copy_command_btn.setToolTipDuration(1500)
+        self._copy_command_btn.installEventFilter(
+            ToolTipFilter(self._copy_command_btn, showDelay=300)
+        )
+        self._copy_command_btn.clicked.connect(self._on_copy_command)
+        hint_layout.addWidget(
+            self._copy_command_btn, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
+        )
 
         # 装入对话框 layout
         self.viewLayout.addWidget(self.title_label)
@@ -162,7 +185,7 @@ class HostKeyConfirmDialog(MessageBoxBase):
         self.viewLayout.addSpacing(6)
         self.viewLayout.addWidget(info_widget)
         self.viewLayout.addSpacing(6)
-        self.viewLayout.addWidget(hint)
+        self.viewLayout.addWidget(hint_widget)
 
     def _build_kv_row(self, label_text: str, value_text: str, *, mono: bool = False) -> QWidget:
         """构造一行 ``label: value`` 等宽对齐的展示."""
@@ -171,12 +194,9 @@ class HostKeyConfirmDialog(MessageBoxBase):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        icon = IconWidget(FluentIcon.INFO, row)
-        icon.setFixedSize(14, 14)
-        layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignVCenter)
-
-        label = BodyLabel(f"{label_text}:", row)
+        label = StrongBodyLabel(f"{label_text}:", row)
         label.setFixedWidth(78)
+        label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(label, 0, Qt.AlignmentFlag.AlignVCenter)
 
         value = BodyLabel(value_text, row)
@@ -189,6 +209,19 @@ class HostKeyConfirmDialog(MessageBoxBase):
         layout.addWidget(value, 1, Qt.AlignmentFlag.AlignVCenter)
 
         return row
+
+    def _on_copy_command(self) -> None:
+        """把"提示"行里的 ssh-keygen 测试指令复制到剪贴板.
+
+        指令本身是个静态字符串, 与提示文案中保持一致; 复制后用户在远端 shell
+        粘贴执行就能拿到真实指纹做比对.
+        """
+        command = "ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub"
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(command)
+        # 给用户一个即时反馈: 改 tooltip 文案 + 不阻断当前对话框
+        self._copy_command_btn.setToolTip("已复制到剪贴板")
 
     def _wire_buttons(self) -> None:
         """重写 MessageBoxBase 的 yes/cancel 按钮以承载三选语义.
