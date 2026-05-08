@@ -48,6 +48,7 @@ from src.ui.components.message_box import AskBox
 from .connection_tester import ConnectionTester
 from .deployment_console import DeploymentConsoleDialog
 from .deployment_runner import DeploymentRunner, RedetectRunner, RollbackRunner
+from .key_deploy_runner import KeyDeployRunner
 from .maintenance_dialog import MaintenanceDialog, RollbackConfirmBox
 from .server_edit_dialog import ServerEditDialog
 
@@ -87,8 +88,13 @@ class RemoteUsageNoticeBox(MessageBoxBase):
         self.title_label = TitleLabel(self.tr("远程功能使用前提示"), self)
         self.content_label = BodyLabel(
             self.tr(
-                "远程服务器功能刚刚完成主要完善工作，目前仅支持 Ubuntu，且当前只测试过 Ubuntu 24。\n\n"
-                "其他 Linux 发行版或其他版本的支持，需要等待后续版本更新。\n\n"
+                "远程服务器功能现已支持 Debian 系（Debian / Ubuntu）与 RHEL 系"
+                "（CentOS / Rocky Linux / AlmaLinux / Fedora），CPU 架构覆盖 amd64 与 arm64。\n\n"
+                "项目主要在 Ubuntu 24 上完成了完整实测，其他发行版以分发逻辑覆盖为主；"
+                "首次部署时将自动跑一次远端兼容性体检，体检结果会在部署日志里以 [PREFLIGHT] 行展示，"
+                "若提示「未识别的发行版但探测到可用包管理器」属正常情况，会以通用流程尝试部署。\n\n"
+                "若你的发行版不在上面列表内（例如 Arch Linux / openSUSE / Alpine），"
+                "暂不在本期支持边界内，建议提交 Issue 反馈实际诉求。\n\n"
                 "此功能会连接你的服务器并执行安装、更新、回滚等远端操作，存在一定危险性。"
                 "项目已经尽可能完善校验与保护，但仍请你根据自身情况谨慎使用。"
             ),
@@ -593,6 +599,10 @@ class RemotePage(QWidget):
             )
             self._active_server_id = profile.id
             success_bar(f"已添加服务器: {profile.name}", parent=self)
+            # 勾选了"自动配置 SSH 密钥": 走后台 runner 推送公钥并切到密钥认证.
+            # 失败仅 InfoBar 提示, 档案保持密码认证不变, 用户可重试.
+            if dialog.wants_auto_setup_key() and password:
+                self._dispatch_key_deploy(profile.id, password)
 
     def _on_edit(self, server_id: str | None = None) -> None:
         if not self._ensure_usage_notice_accepted():
@@ -627,6 +637,27 @@ class RemotePage(QWidget):
                 remember_password=dialog.wants_remember_password(),
             )
             success_bar(f"已更新服务器: {updated.name}", parent=self)
+            # 编辑模式同样支持"自动配置 SSH 密钥"勾选.
+            if dialog.wants_auto_setup_key() and password:
+                self._dispatch_key_deploy(updated.id, password)
+
+    # ---------- 自动配置 SSH 密钥 (ssh-copy-id 等价物) ----------
+    def _dispatch_key_deploy(self, server_id: str, password: str) -> None:
+        """提交 [`KeyDeployRunner`] 到 ssh 池, 完成回调走 InfoBar.
+
+        密码仅作为运行器参数透传给后台线程, 不会写盘也不会进入任何全局状态.
+        """
+        runner = KeyDeployRunner(server_id, password=password)
+        runner.signals.finished.connect(self._on_key_deploy_finished)
+        remote_ssh_pool().start(runner)
+
+    def _on_key_deploy_finished(self, server_id: str, ok: bool, message: str) -> None:  # noqa: ARG002
+        # 成败提示统一走 InfoBar; 进度悬浮提示由 ProgressInfoBar 桥负责.
+        # 卡片刷新通过 ServerManager.server_updated 信号自动触发, 这里无需手动 reload.
+        if ok:
+            success_bar(message or "已配置免密登录", parent=self)
+        else:
+            error_bar(message or "SSH 密钥配置失败", parent=self)
 
     def _on_test(self, server_id: str | None = None) -> None:
         if not self._ensure_usage_notice_accepted():

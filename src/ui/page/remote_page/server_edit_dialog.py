@@ -172,6 +172,7 @@ class ServerEditDialog(MessageBoxBase):
         self._auth_row_key: int = -1
         self._auth_row_pwd: int = -1
         self._auth_row_remember: int = -1
+        self._auth_row_auto_key: int = -1
         # 私钥输入模式: False = 下拉扫描候选 combo; True = 手动路径 LineEdit
         self._key_manual_mode: bool = False
         # P4 F5.2: keyring 探测; 不可用时 "记住密码" 勾选项隐藏
@@ -216,7 +217,7 @@ class ServerEditDialog(MessageBoxBase):
         host_port_row.addWidget(self.port_edit, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self.username_edit = LineEdit(self)
-        self.username_edit.setPlaceholderText("root / ubuntu")
+        self.username_edit.setPlaceholderText("root / 用户名")
 
         basic_form.addRow(self._make_label("名称"), self.name_edit)
         basic_form.addRow(self._make_label("主机 / 端口"), host_port_widget)
@@ -291,6 +292,16 @@ class ServerEditDialog(MessageBoxBase):
                 "当前环境不支持 Credential Manager (keyring), 仅当本次会话内可用"
             )
 
+        # "自动配置 SSH 密钥" 勾选行: 仅在密码模式下出现, 含义对齐 ssh-copy-id;
+        # 勾选后, 用户保存档案时由 RemotePage 触发一次密码登录 + 公钥下发的后台任务,
+        # 成功后档案会自动切到密钥认证. 失败保持密码认证, 用户可重试.
+        self.auto_key_check = CheckBox("登录后自动配置 SSH 密钥, 实现免密登录", self)
+        self.auto_key_check.setChecked(False)
+        self.auto_key_check.setToolTip(
+            "勾选后保存档案时会用本次密码登录一次远端, 把本地 ~/.ssh/id_ed25519 的公钥\n"
+            "幂等追加到远端 ~/.ssh/authorized_keys (类似 ssh-copy-id), 然后档案切到密钥认证."
+        )
+
         # 添加认证行并记录索引
         auth_form.addRow(self._make_label("认证方式"), self.method_combo)
         self._auth_row_key = auth_form.rowCount()
@@ -299,10 +310,13 @@ class ServerEditDialog(MessageBoxBase):
         auth_form.addRow(self._make_label("登录密码"), self.pwd_edit)
         self._auth_row_remember = auth_form.rowCount()
         auth_form.addRow(self._make_label(""), self.remember_check)
+        self._auth_row_auto_key = auth_form.rowCount()
+        auth_form.addRow(self._make_label(""), self.auto_key_check)
 
         # 初始可见性: 默认 "私钥" 模式
         auth_form.setRowVisible(self._auth_row_pwd, False)
         auth_form.setRowVisible(self._auth_row_remember, False)
+        auth_form.setRowVisible(self._auth_row_auto_key, False)
 
         # ---------------- 高级选项 ----------------
         adv_form = self._add_section("高级选项")
@@ -327,8 +341,15 @@ class ServerEditDialog(MessageBoxBase):
         timeout_row.addWidget(BodyLabel("秒", timeout_widget))
         timeout_row.addStretch(1)
 
+        # 主机指纹策略下拉.
+        # "interactive" 是新服务器的默认: 首次连接弹 HostKeyConfirmDialog 让用户看
+        # SHA256 指纹后选 记忆/仅本次/拒绝, 之后已记忆指纹由 paramiko 自身校验,
+        # 真正变更才会以 BadHostKeyException 报"指纹不匹配". 这条选项对应
+        # P4 F5.1 引入的 ``HostKeyPolicy="interactive"``, 需要 MainWindow 启动期
+        # 调用 ``bootstrap_host_key_dialog`` 把 UI 回调注册进去, 否则会兜底为拒绝.
         self.policy_combo = ComboBox(self)
-        self.policy_combo.addItem("严格检查 (推荐)", userData="reject")
+        self.policy_combo.addItem("首次连接确认 (推荐)", userData="interactive")
+        self.policy_combo.addItem("严格检查 (仅信任已记忆指纹)", userData="reject")
         self.policy_combo.addItem("警告 (不推荐)", userData="warning")
         self.policy_combo.addItem("自动添加 (仅测试环境)", userData="auto_add")
 
@@ -440,6 +461,8 @@ class ServerEditDialog(MessageBoxBase):
         # P4 F5.2: "记住密码" 仅在密码模式且 keyring 可用时可见
         keyring_available = self._credential_store.is_available()
         self._auth_form.setRowVisible(self._auth_row_remember, (not is_key) and keyring_available)
+        # "自动配置 SSH 密钥" 仅在密码模式可见(无 keyring 也可用, 仅依赖本地文件系统)
+        self._auth_form.setRowVisible(self._auth_row_auto_key, not is_key)
 
     def _set_key_mode(self, *, manual: bool) -> None:
         """切换私钥行的展示模式.
@@ -516,6 +539,19 @@ class ServerEditDialog(MessageBoxBase):
             return None
         password = self.pwd_edit.text()
         return password or None
+
+    def wants_auto_setup_key(self) -> bool:
+        """用户是否勾选了"登录后自动配置 SSH 密钥".
+
+        Returns:
+            ``True`` 当且仅当: 当前是密码认证模式 + 勾选项已勾 + 密码非空.
+            其他情况一律 ``False``, 调用方可放心地直接据此决定是否触发后台密钥下发任务.
+        """
+        if self.method_combo.currentData() != "password":
+            return False
+        if not self.pwd_edit.text():
+            return False
+        return bool(self.auto_key_check.isChecked())
 
     def wants_remember_password(self) -> bool:
         """P4 F5.2: 用户是否勾选了"记住密码".
