@@ -25,8 +25,10 @@ dist/
 __pycache__/
 *$py.class
 .ruff_cache/
+outputs/
 
 ### 日志和临时文件 ###
+# 日志和临时文件
 log/
 logs/
 *.log
@@ -37,6 +39,10 @@ tmp/
 ### 配置文件 ###
 # 本地配置和敏感文件
 /config/
+# Tier G: SnowLuma WebUI 密码记录 (含明文密码), 不得入 git.
+# 锚定 Desktop 侧 runtime/config/, 与 W4b snowluma_session.session_path() 返回值一致.
+# 即使 /runtime/* 整目录已忽略, 也显式列出以防止 /runtime/* 规则被改动后的回归泄漏.
+/runtime/config/snowluma-session.json
 *.local
 *.env
 .env
