@@ -622,6 +622,17 @@ class Config(QConfig):
         validator=RangeValidator(500, 10000),
     )
 
+    # ==================== SnowLuma (W4: App 级共享配置) ====================
+    # daemon 启动时一次性读, 渲染到 webui.json 的 scrypt hash; daemon 已在跑时改这个
+    # 字段需要用户停掉所有 SnowLuma Bot 再启才能生效 (与 D2 单向覆盖语义一致).
+    # 留空 → 走 ``snowluma-session.json`` 的自动生成密码 (Desktop 自治);
+    # 非空 → 用户显式指定的密码作为 daemon WebUI 的唯一权威源.
+    snowluma_webui_password_override = ConfigItem(
+        group="SnowLuma",
+        name="WebUIPasswordOverride",
+        default="",
+    )
+
     def __init__(self):
         super().__init__()
 

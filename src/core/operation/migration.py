@@ -10,7 +10,7 @@
 
 设计要点:
 - **不直接管 Bot 进程**: 停止源端 Bot 的责任在 UI 层 (主线程通过
-  [`ManagerNapCatQQProcess.stop_process`](src/core/runtime/napcat.py) 完成),
+  [`BotProcessManager.stop_bot`](src/core/runtime/napcat.py) 完成),
   service 只关心 backend 之间的文件搬运
 - **不依赖 update_config**: 调用方应在 service 之前/之后调用
   [`update_config`](src/core/config/operate_config.py) 完成 ``bot.json`` 的字段更新,

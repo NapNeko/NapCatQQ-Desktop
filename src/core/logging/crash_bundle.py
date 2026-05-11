@@ -34,14 +34,17 @@ _QQID_LABEL_PATTERN = re.compile(r"(?i)(\bQQID\s*[:=]\s*)(\d{5,20})")
 #   - ``napcat_<qqid>.log`` / ``.json`` / ``.pid`` / ``.log.prev``
 #   - ``onebot11_<qqid>.json``
 #   - ``qq --no-sandbox -q <qqid>``
-#   - ``ManagerNapCatQQProcess[<qqid>]``
+#   - ``BotProcessManager[<qqid>]`` (新, P2 Tier I 重命名后)
+#   - ``ManagerNapCatQQProcess[<qqid>]`` (老, 保留兼容 6+ 月)
 # 替换函数仅触碰捕获组里的数字段, 前后字面量原样保留.
 _QQID_FILENAME_PATTERN = re.compile(
     r"((?:napcat|onebot11)_)(\d{5,12})(\.(?:log|json|pid)(?:\.prev)?)\b"
 )
 _QQID_CMDLINE_Q_PATTERN = re.compile(r"(\B-q\s+|\b-q\s+)(\d{5,12})\b")
+# P2 Tier I (D-I-8): 同时匹配新老两个类名以兼容旧日志.
+# 等 P3 (>=6 月后) 迁移期结束才能删 ManagerNapCatQQProcess 兼容分支.
 _QQID_BRACKET_PATTERN = re.compile(
-    r"(ManagerNapCatQQProcess\[)(\d{5,12})(\])"
+    r"((?:ManagerNapCatQQProcess|BotProcessManager)\[)(\d{5,12})(\])"
 )
 
 _AUTHORIZATION_BEARER_PATTERN = re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)(\S+)")

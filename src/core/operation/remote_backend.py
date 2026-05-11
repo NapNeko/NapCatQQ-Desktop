@@ -749,7 +749,7 @@ class RemoteBackend(OperationBackend):
     def _fetch_rss_bytes(self, pid: int) -> int | None:
         """读取远端 ``pid`` 及其所有后代进程的 RSS 之和, 返回字节数.
 
-        与本地路径 [`ManagerNapCatQQProcess.get_memory_usage`](src/core/runtime/napcat.py)
+        与本地路径 [`BotProcessManager.get_memory_usage`](src/core/runtime/napcat.py)
         通过 ``psutil`` 累加进程树 RSS 的行为对齐. 远端 NapCat 由 ``xvfb-run``
         shell wrapper 拉起 ``qq`` (Electron), 进程结构为:
 

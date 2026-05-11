@@ -11,7 +11,7 @@ from creart import it
 from src.core.api_debug.auth import create_bearer_auth_from_network_config, create_webui_auth_from_login_state
 from src.core.api_debug.models import ApiDebugBotContext, ApiDebugEndpointSummary, ApiDebugTargetType
 from src.core.config.operate_config import read_config
-from src.core.runtime.napcat import ManagerNapCatQQLoginState
+from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState
 
 
 ConfigReader = Callable[[], list[object]]

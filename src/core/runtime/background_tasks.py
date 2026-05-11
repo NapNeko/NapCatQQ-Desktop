@@ -18,7 +18,7 @@
 - :meth:`active_count` / :meth:`active_tasks` 是只读快照, 也可以在任意线程调用.
 - 该类**不要**持有 QObject 子节点引用 (例如 widget); 它只对外发信号.
 - 使用 [`creart`](https://github.com/GreyElaina/creart) 单例, 与
-  [`ManagerNapCatQQProcess`](src/core/runtime/napcat.py) 等 P2/P3 既有 manager 一致.
+  [`BotProcessManager`](src/core/runtime/napcat.py) 等 P2/P3 既有 manager 一致.
 """
 from __future__ import annotations
 

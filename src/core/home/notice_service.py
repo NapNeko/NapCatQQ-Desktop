@@ -18,7 +18,7 @@ from src.core.home.notice_model import (
     NoticeTimelineStatus,
 )
 from src.core.versioning import LocalVersionTask, RemoteVersionTask, VersionSnapshot
-from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState, BotProcessManager
 
 
 @dataclass(slots=True)
@@ -48,7 +48,7 @@ class HomeNoticeService(QObject):
         self._remote_versions: VersionSnapshot | None = None
         self._remote_version_task: RemoteVersionTask | None = None
 
-        self._process_manager = it(ManagerNapCatQQProcess)
+        self._process_manager = it(BotProcessManager)
         self._login_state_manager = it(ManagerNapCatQQLoginState)
 
         self._bind_signals()

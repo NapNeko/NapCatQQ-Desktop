@@ -120,6 +120,27 @@ def run_application() -> int:
     FontManager.initialize_fonts()
     logger.info("字体初始化完成", log_source=LogSource.UI)
 
+    # W7 (2026-05-11): 持久 daemon 模型 — daemon 拉起后一直活到 App 退出,
+    # ``release()`` 只扣 ref 不 terminate. 这里挂 ``aboutToQuit`` 信号显式
+    # ``daemon.shutdown()`` 做最后清理: graceful logout + terminate_async(node.exe).
+    # 延迟 import 避免 main 顶部加载 creart 注册链; 真正 ``it(SnowLumaDaemon)`` 只在
+    # 首个 SL Bot 启动时才触发实例化, 这里调用即使 daemon 从未启过也安全 (no-op).
+    def _shutdown_snowluma_daemon() -> None:
+        try:
+            from src.core.runtime.snowluma_daemon import SnowLumaDaemon
+
+            daemon = it(SnowLumaDaemon)
+            daemon.shutdown()
+            logger.info("SnowLuma daemon 已在 App 退出钩子中触发 shutdown", log_source=LogSource.CORE)
+        except Exception as exc:  # noqa: BLE001 - 退出路径吞所有异常
+            logger.warning(
+                f"SnowLuma daemon shutdown (aboutToQuit) 静默忽略: "
+                f"{type(exc).__name__}: {exc}",
+                log_source=LogSource.CORE,
+            )
+
+    app.aboutToQuit.connect(_shutdown_snowluma_daemon)
+
     if cfg.get(cfg.main_window) and cfg.get(cfg.elua_accepted):
         # 项目内模块导入
         from src.ui.window.main_window import MainWindow

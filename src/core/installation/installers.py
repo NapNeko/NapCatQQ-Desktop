@@ -208,6 +208,206 @@ class NapCatInstall(InstallBase):
         logger.info("NapCat 安装完成", LogType.FILE_FUNC, LogSource.CORE)
 
 
+class SnowLumaInstall(InstallBase):
+    """SnowLuma 发布包解压安装器 (P1 SnowLuma 适配).
+
+    与 :class:`NapCatInstall` 同文件、同信号名, 让上层可以走 NapCatPage 同款
+    连接模式. 关键区别:
+
+    - zip 文件名含版本号 (`SnowLuma-<tag>-win-x64.zip`), 与 NapCat 固定 `NapCat.Shell.zip` 不同
+    - 解压时**保留** ``config/`` 与 ``data/`` 子目录中的现有文件 (避免覆盖用户运行期修改)
+    - zip 内顶层目录 ``SnowLuma-<tag>-win-x64/`` 需被剥离, 实际文件应落在 install_path 根下
+    - 安装成功后写 ``.installed_tag``, 供 :class:`LocalVersionTask.get_snowluma_version` 读取
+    """
+
+    def __init__(self, tag: str) -> None:
+        super().__init__()
+        if not isinstance(tag, str) or not tag.strip():
+            raise ValueError("tag 不可为空; 需传入 release tag (含 v 前缀, 如 'v1.7.5')")
+        self._tag = tag.strip()
+        self.zip_file_path = it(PathFunc).tmp_path / f"SnowLuma-{self._tag}-win-x64.zip"
+        self.install_path = it(PathFunc).snowluma_path
+
+    def execute(self) -> None:
+        """安装逻辑"""
+        try:
+            logger.info(
+                f"开始安装 SnowLuma: tag={self._tag}, target={self.install_path}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+            self.status_label_signal.emit("正在安装 SnowLuma")
+            self.progress_ring_toggle_signal.emit(ProgressRingStatus.INDETERMINATE)
+            self.ensure_install_path()
+            self.unzip_file()
+            self.verify_install()
+            self.write_installed_tag()
+            # P2 (Tier G): 安装完成后立即生成 / 同步 Desktop 主导的 SnowLuma WebUI 密码;
+            # 让用户感知不到 WebUI 密码即可一键启动 Bot.
+            self._init_or_update_password()
+            self.install_finish_signal.emit()
+            logger.info(
+                f"SnowLuma 安装完成: tag={self._tag}", LogType.FILE_FUNC, LogSource.CORE
+            )
+        except Exception as e:
+            self.status_label_signal.emit(self.tr("安装失败"))
+            self.error_finish_signal.emit()
+            logger.exception("安装 SnowLuma 失败", e, LogType.FILE_FUNC, LogSource.CORE)
+            # 异常路径上清理临时 zip
+            try:
+                self.zip_file_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def ensure_install_path(self) -> None:
+        """确保安装目录存在. """
+        if not self.install_path.exists():
+            logger.warning(
+                f"SnowLuma 安装目录不存在，准备创建: target={self.install_path}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+        self.install_path.mkdir(parents=True, exist_ok=True)
+
+    def unzip_file(self) -> None:
+        """解压 SnowLuma 发布包 (保留 config/ 与 data/ 已有文件).
+
+        上游 GitHub release 的 ``SnowLuma-<tag>-win-x64.zip`` 实际是**扁平结构**
+        (顶层直接是 ``client/``、``native/``、``index.mjs`` 等), 没有
+        ``SnowLuma-<tag>-win-x64/`` 包装目录. 但若用户手工/三方工具重打包后
+        zip 含有单一包装目录, 我们也应正确处理.
+
+        因此本方法在解压前先自动探测 zip 是否带单一包装目录:
+        - 当所有条目共享同一顶层目录 (且不存在顶层文件) 时, 认为存在包装,
+          解压时剥离该前缀
+        - 否则视为扁平 zip, 按原路径解压
+        """
+        logger.info(
+            f"开始解压 SnowLuma 发布包: source={self.zip_file_path}, target={self.install_path}",
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+        self.status_label_signal.emit("正在解压文件")
+        self.ensure_install_path()
+
+        with zipfile.ZipFile(self.zip_file_path, "r") as zf:
+            members = zf.namelist()
+            strip_prefix = self._detect_wrapper_prefix(members)
+            if strip_prefix is not None:
+                logger.info(
+                    f"探测到 SnowLuma zip 带包装目录, 解压时剥离: {strip_prefix!r}",
+                    LogType.FILE_FUNC,
+                    LogSource.CORE,
+                )
+            else:
+                logger.info(
+                    "SnowLuma zip 为扁平结构 (无包装目录), 按原路径解压",
+                    LogType.FILE_FUNC,
+                    LogSource.CORE,
+                )
+
+            for member in members:
+                if strip_prefix is not None and member.startswith(strip_prefix):
+                    stripped = member[len(strip_prefix):]
+                else:
+                    stripped = member
+                if not stripped:
+                    # 包装目录自身条目 (如 "SnowLuma-v1.7.5-win-x64/"), 跳过
+                    continue
+                out = self.install_path / stripped
+                if member.endswith("/"):
+                    out.mkdir(parents=True, exist_ok=True)
+                    continue
+                if stripped.startswith(("config/", "data/")) and out.exists():
+                    # 保留用户运行时修改
+                    continue
+                out.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(member) as src, out.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+
+        self.zip_file_path.unlink()  # 移除安装包
+        logger.info("SnowLuma 解压完成", LogType.FILE_FUNC, LogSource.CORE)
+
+    @staticmethod
+    def _detect_wrapper_prefix(members: list[str]) -> str | None:
+        """探测 zip 是否带单一顶层包装目录, 是则返回需剥离的前缀 (含尾 ``/``).
+
+        判定规则: 所有非空条目的首段相同, 且不存在仅有首段而无内层文件的退化情况.
+        例如:
+
+        - ``["SnowLuma-v1.7.5-win-x64/", "SnowLuma-v1.7.5-win-x64/index.mjs", ...]``
+          → 返回 ``"SnowLuma-v1.7.5-win-x64/"``
+        - ``["client/", "client/index.html", "native/", "index.mjs", ...]`` (扁平)
+          → 返回 ``None``
+        """
+        first_segments: set[str] = set()
+        has_inner_entry = False
+        for raw in members:
+            cleaned = raw.rstrip("/")
+            if not cleaned:
+                continue
+            if "/" in cleaned:
+                first_segments.add(cleaned.split("/", 1)[0])
+                has_inner_entry = True
+            else:
+                first_segments.add(cleaned)
+        if len(first_segments) != 1 or not has_inner_entry:
+            return None
+        return next(iter(first_segments)) + "/"
+
+    def verify_install(self) -> None:
+        """验证关键产物存在. """
+        for required in ("node.exe", "index.mjs", "package.json"):
+            if not (self.install_path / required).exists():
+                raise RuntimeError(f"SnowLuma 安装产物缺失: {required}")
+
+    def write_installed_tag(self) -> None:
+        """记录已安装的 release tag (供 LocalVersionTask 读)."""
+        target = self.install_path / ".installed_tag"
+        target.write_text(self._tag, encoding="utf-8")
+
+    def _init_or_update_password(self) -> None:
+        """安装成功后初始化 / 维持 Desktop 主导的 SnowLuma WebUI 密码 (P2 Tier G).
+
+        幂等行为:
+
+        - 如果 ``snowluma-session.json`` 已存在 + 字段完整: sticky 不改密码值,
+          仅同步 ``render_webui_json`` 让 SnowLuma 侧 ``webui.json`` 与 Desktop session.json
+          一致 (覆盖用户在 WebUI 改过的密码; D2 决策);
+        - 如果不存在 / 损坏: 生成新强密码, 写 session.json, 同步 webui.json.
+
+        本方法**不抛**任何异常: 安装本身不应被密码生成失败阻塞 (用户仍可手动用 SnowLuma
+        WebUI 自治流程登录). 失败时 logger.warning 让用户感知.
+        """
+        # 延迟导入避免在 installer 类加载阶段拖入 QObject 依赖;
+        # 也避免在不需要 SnowLuma 的环境下污染创建期路径.
+        from src.core.runtime.snowluma_config_renderer import render_webui_json
+        from src.core.runtime.snowluma_session import (
+            create_session,
+            load_session,
+            update_last_rendered,
+        )
+
+        try:
+            session = load_session()
+            if session is None:
+                session = create_session()
+                logger.info(
+                    "已生成新的 SnowLuma WebUI 密码 (sticky)",
+                    LogType.FILE_FUNC,
+                    LogSource.CORE,
+                )
+            # 强制把 Desktop 侧密码同步到 SnowLuma webui.json (单向覆盖, D2).
+            render_webui_json(self.install_path, password=session.password, must_change=False)
+            update_last_rendered(session)
+        except Exception as exc:  # noqa: BLE001 - 不让密码失败阻塞安装主流程
+            logger.warning(
+                f"SnowLuma WebUI 密码初始化失败 (非致命): {type(exc).__name__}: {exc}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+
+
 class QQInstall(InstallBase):
     """QQ 安装逻辑"""
 

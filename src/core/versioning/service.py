@@ -17,14 +17,16 @@ from src.core.runtime.paths import PathFunc
 
 
 class VersionSnapshot(BaseModel):
-    """NapCat, QQ, Desktop 的版本快照. """
+    """NapCat, QQ, Desktop, SnowLuma 的版本快照. """
 
     napcat_version: str | None
     qq_version: str | None
     ncd_version: str | None
+    snowluma_version: str | None = None
     qq_download_url: str | None = None
     napcat_update_log: str | None = None
     ncd_update_log: str | None = None
+    snowluma_update_log: str | None = None
 
 
 class VersionTaskBase(QObject, QRunnable):
@@ -64,14 +66,24 @@ class RemoteVersionTask(VersionTaskBase):
             "NapCatQQ Desktop",
             self._parse_github_response,
         )
+        # P1 (SnowLuma 适配): 多拉一份 SnowLuma。与 NapCat / NCD 完全对称，
+        # 走同款 _get_version_with_fallback + _parse_github_response 链路。
+        snowluma_info = self._get_version_with_fallback(
+            Urls.SNOWLUMA_REPO_API.value,
+            Urls.SNOWLUMA_REPO_API_FALLBACK.value,
+            "SnowLuma",
+            self._parse_github_response,
+        )
 
         return VersionSnapshot(
             napcat_version=napcat_info["version"],
             qq_version=qq_version["version"],
             ncd_version=ncd_version["version"],
+            snowluma_version=snowluma_info["version"],
             qq_download_url=qq_version["download_url"],
             napcat_update_log=napcat_info["update_log"],
             ncd_update_log=ncd_version["update_log"],
+            snowluma_update_log=snowluma_info["update_log"],
         )
 
     def _get_version(
@@ -120,6 +132,7 @@ class RemoteVersionTask(VersionTaskBase):
             "QQ": {"version": None, "download_url": None},
             "NapCat": {"version": None, "update_log": None},
             "NapCatQQ Desktop": {"version": None, "update_log": None},
+            "SnowLuma": {"version": None, "update_log": None},
         }
         return error_values.get(name, {"version": None})
 
@@ -176,6 +189,7 @@ class LocalVersionTask(VersionTaskBase):
             napcat_version=self.get_napcat_version(),
             qq_version=self.get_qq_version(),
             ncd_version=self.get_ncd_version(),
+            snowluma_version=self.get_snowluma_version(),
         )
 
     def get_napcat_version(self) -> str | None:
@@ -221,6 +235,31 @@ class LocalVersionTask(VersionTaskBase):
     @staticmethod
     def get_ncd_version() -> str | None:
         return cfg.get(cfg.napcat_desktop_version)
+
+    def get_snowluma_version(self) -> str | None:
+        """读 ``<snowluma_path>/.installed_tag`` 返回已安装的 SnowLuma release tag.
+
+        不读 ``package.json.version`` 的原因:
+        上游 ``package.json.version`` 是内部版本号 (如 ``"0.1.0"``), 与 release tag
+        (如 ``"v1.7.5"``) 不同步; 直接读会让 "本地 vs 远端" 永远不相等,
+        BotCard 会错误地一直提示 "需要更新".
+
+        ``.installed_tag`` 文件由 :class:`SnowLumaInstall` 在解压成功后写入,
+        内容为纯文本 tag (含 ``v`` 前缀, 与远端 ``tag_name`` 符号对齐).
+
+        Returns:
+            tag 字符串 (如 ``"v1.7.5"``); 未安装 / 文件损坏时返回 ``None``.
+        """
+        try:
+            installed_tag = it(PathFunc).snowluma_path / ".installed_tag"
+            if not installed_tag.exists():
+                return None
+            content = installed_tag.read_text(encoding="utf-8").strip()
+            return content or None
+        except (OSError, UnicodeDecodeError, AttributeError):
+            # AttributeError 兜底: PathFunc 单例在测试 monkeypatch 场景可能被替换为
+            # 不含 snowluma_path 的 SimpleNamespace; 视为 "未安装", 不破坏调用方.
+            return None
 
 
 class VersionService(QObject):

@@ -8,6 +8,8 @@ from typing import Any, Literal
 # 第三方库导入
 from pydantic import BaseModel, Field, HttpUrl, WebsocketUrl, field_validator, model_validator
 
+from src.core.runtime.backend_type import BackendType
+
 from .config_enum import TimeUnitEnum
 
 """
@@ -27,7 +29,12 @@ from .config_enum import TimeUnitEnum
 """
 
 BOT_CONFIG_LEGACY_VERSION = "v1.7.28"
-BOT_CONFIG_COMPAT_VERSION = "v2.0"
+# W4 (2026-05-11): SnowLuma daemon 解耦重构, BotConfig.snowluma_webui_password_override
+# 被删除并迁到 App 级 QConfig (见 src/core/config/__init__.py).
+# 迁移走 _migrate_legacy_bot_fields 中的 deferred 队列, 由 operate_config._read_config_file
+# 在加载 bot.json 后写回 cfg. 升版 v2.0 -> v2.1 其实是 breaking (删字段),
+# 但项目未上线, 本地迁移一次即可.
+BOT_CONFIG_COMPAT_VERSION = "v2.1"
 # `runtime_target` 字段的本地常量值, 表示 Bot 在 Desktop 所在 Windows 主机上运行
 # (历史行为). 任何非该值的字符串都被视为 [`ServerProfile.id`](src/core/remote/servers.py)
 # 形式的远端服务器 ID. 详见 [`docs/general/remote_ssh_plan.md`](../../../../docs/general/remote_ssh_plan.md) §4.1.
@@ -47,6 +54,15 @@ DEFAULT_BYPASS_PAYLOAD = {
 }
 _LEGACY_AUTO_RESTART_INTERVAL_PATTERN = re.compile(r"^\s*(\d+)\s*(m|h|d|mon|year)\s*$", re.IGNORECASE)
 _LOG_LEVEL_CHOICES = {"debug", "info", "error"}
+
+# W4 (2026-05-11): 迁移 deferred 队列 — _migrate_legacy_bot_fields 检测到旧
+# ``bot.snowluma_webui_password_override`` 非空时 push 到这里;
+# operate_config._read_config_file 加载完 bot.json 后 调
+# :func:`consume_deferred_snowluma_overrides` 吃掉并写入 ``cfg.snowluma_webui_password_override``.
+# 多 Bot 同字段冲突: 留第一个, 其余用户需手动决决策 (详见 consume 函数文档).
+# 模块级可变状态: 测试并发时可能泄漏; 提供 :func:`reset_deferred_snowluma_overrides`
+# 在 pytest fixture 中清零, 避免 cross-test 污染.
+_DEFERRED_APP_SNOWLUMA_OVERRIDES: list[str] = []
 
 
 def _clone_payload(data: Any) -> Any:
@@ -390,7 +406,50 @@ def _migrate_legacy_bot_fields(bot_payload: dict[str, object]) -> tuple[dict[str
         normalized["runtime_target"] = RUNTIME_TARGET_LOCAL
         rules_applied.append("bot.runtime_target default")
 
+    # P1 (SnowLuma 适配): backend_type 字段; 旧 bot.json 不包含该字段时,
+    # 默认走 NAPCAT, 与历史行为一致 (参考 docs/requirements/2026-05-10-snowluma-backend-adapter.md §2.1).
+    if "backend_type" not in normalized:
+        normalized["backend_type"] = BackendType.NAPCAT.value
+        rules_applied.append("bot.backend_type default")
+
+    # W4 (2026-05-11): SnowLuma WebUI 密码 override 从 per-Bot 迁移到 App 级 QConfig.
+    # 旧字段只要出现就从这里删除 (不再是 BotConfig 的一部分); 非空值 push 到迁移 deferred
+    # 队列, 供 operate_config 在读完 bot.json 后同步到 ``cfg.snowluma_webui_password_override``.
+    if "snowluma_webui_password_override" in normalized:
+        legacy_override_value = normalized.pop("snowluma_webui_password_override")
+        if isinstance(legacy_override_value, str) and legacy_override_value.strip():
+            _DEFERRED_APP_SNOWLUMA_OVERRIDES.append(legacy_override_value.strip())
+            rules_applied.append(
+                "bot.snowluma_webui_password_override migrated to app.snowluma.webui_password_override"
+            )
+        else:
+            # 空字符串 / 非法值: 静默丢弃 (与默认值等价), 但记在 rules 里以便设贯诊断.
+            rules_applied.append(
+                "bot.snowluma_webui_password_override removed (empty legacy default)"
+            )
+
     return normalized, rules_applied
+
+
+def consume_deferred_snowluma_overrides() -> list[str]:
+    """返回并清空迁移 deferred 队列 (W4).
+
+    调用者 (一般是 :func:`operate_config._read_config_file`) 在读完迁移后的 bot.json 后调本
+    函数: 如果返回非空, 将首项写入 ``cfg.snowluma_webui_password_override``; 如果 >= 2 项,
+    则 logger.warning "多个 Bot 曾设置不同 SnowLuma 密码 override, 选 ‘...’ 作为全局值;
+    其余将丢弃".
+
+    Returns:
+        本次迁移中收集到的迁移值列表 (按 push 顺序); 调用后队列被清空.
+    """
+    drained = list(_DEFERRED_APP_SNOWLUMA_OVERRIDES)
+    _DEFERRED_APP_SNOWLUMA_OVERRIDES.clear()
+    return drained
+
+
+def reset_deferred_snowluma_overrides() -> None:
+    """测试辅助: 清空迁移 deferred 队列 (防止 pytest 用例间 cross-test 污染)."""
+    _DEFERRED_APP_SNOWLUMA_OVERRIDES.clear()
 
 
 def _migrate_bot_entry_payload(payload: object) -> tuple[dict[str, object], list[str]]:
@@ -499,6 +558,17 @@ class BotConfig(BaseModel):
     # P2: 运行位置. ``"local"`` 表示在 Desktop 所在 Windows 主机运行(历史行为);
     # 其他字符串视为 [`ServerProfile.id`](src/core/remote/servers.py) 形式的远端服务器 ID.
     runtime_target: str = Field(default=RUNTIME_TARGET_LOCAL, description="运行位置: 'local' 或服务器 UUID")
+    # P1 (SnowLuma 适配): Bot 后端类型. 默认 NAPCAT 以完整保留历史行为;
+    # 旧 bot.json (不含 backend_type 字段) 反序列化后等价于 NAPCAT.
+    # 详见: docs/requirements/2026-05-10-snowluma-backend-adapter.md §2.1
+    backend_type: BackendType = Field(
+        default=BackendType.NAPCAT,
+        description="后端类型: 'napcat' (NTQQ 注入) 或 'snowluma' (独立 Node 进程)",
+    )
+    # W4 (2026-05-11): ``snowluma_webui_password_override`` 已从本模型删除,
+    # 迁到 App 级 ``cfg.snowluma_webui_password_override`` (QConfig ConfigItem,
+    # group="SnowLuma", name="WebUIPasswordOverride"). 一次性迁移逻辑在
+    # :func:`_migrate_legacy_bot_fields` 的 ``_DEFERRED_APP_SNOWLUMA_OVERRIDES`` 队列.
 
     @field_validator("name")
     @staticmethod
@@ -520,6 +590,21 @@ class BotConfig(BaseModel):
             except ValueError as error:
                 raise ValueError(f"QQ号 '{value}' 无法转换为整数") from error
         raise TypeError("QQ号必须是字符串或整数")
+
+    @field_validator("backend_type", mode="before")
+    @staticmethod
+    def validate_backend_type(value: object) -> BackendType:
+        """规范化 backend_type: ``None`` / 未知字符串 / 非字符串均退化为 NAPCAT.
+
+        与 :meth:`validate_runtime_target` 同样实践: 不让旧配置文件因为新字段而报错.
+        调用 :meth:`BackendType.from_str` 复用其 fallback 逻辑.
+        """
+        if isinstance(value, BackendType):
+            return value
+        if isinstance(value, str):
+            return BackendType.from_str(value.strip() or None)
+        # None / int / bool 等异常输入均静默退化
+        return BackendType.NAPCAT
 
     @field_validator("runtime_target", mode="before")
     @staticmethod
@@ -558,6 +643,11 @@ class HttpServersConfig(NetworkBaseConfig):
     port: int
     enableCors: bool = False
     enableWebsocket: bool = False
+    # P2 (SnowLuma 表单后端感知): SnowLuma 独有, NapCat 不读.
+    # SnowLuma HTTP server 的 path 是前缀挂载点 (path=/api + 请求 /api/send_msg → action send_msg);
+    # NapCat HTTP server 不支持 server-level path (固定 /); 默认 "/" 与 SnowLuma 上游一致.
+    # 详见 docs/requirements/2026-05-10-snowluma-bot-form-backend-aware.md §2.1
+    path: str = "/"
 
 
 class HttpSseServersConfig(NetworkBaseConfig):
@@ -571,6 +661,9 @@ class HttpSseServersConfig(NetworkBaseConfig):
 class HttpClientsConfig(NetworkBaseConfig):
     url: HttpUrl
     reportSelfMessage: bool = False
+    # P2 (SnowLuma 表单后端感知): SnowLuma 独有, NapCat 不读.
+    # None 表示不传给上游 → 走 SnowLuma 默认 5000ms; 非 None 则在 renderer 写入 SnowLuma JSON.
+    timeoutMs: int | None = None
 
 
 class WebsocketServersConfig(NetworkBaseConfig):
@@ -579,6 +672,13 @@ class WebsocketServersConfig(NetworkBaseConfig):
     reportSelfMessage: bool = False
     enableForcePushEvent: bool = False
     heartInterval: int = 30000
+    # P2 (SnowLuma 表单后端感知): SnowLuma 独有, NapCat 不读.
+    # SnowLuma WS server 的 path 是 exact match (由 ws 库 WebSocketServer({ path }) 实现);
+    # NapCat WS server 固定挂在 /; 默认 "/" 与 SnowLuma 上游一致.
+    path: str = "/"
+    # P2 (SnowLuma 表单后端感知): SnowLuma 独有 — Api / Event / Universal 三选一.
+    # 未显式配置时上游按 URL 尾部 /api / /event 自动分类; Desktop 默认 Universal 不依赖自动分类.
+    role: Literal["Api", "Event", "Universal"] = "Universal"
 
     @field_validator("heartInterval", mode="before")
     @classmethod
@@ -591,6 +691,9 @@ class WebsocketClientsConfig(NetworkBaseConfig):
     reportSelfMessage: bool = False
     heartInterval: int = 30000
     reconnectInterval: int = 30000
+    # P2 (SnowLuma 表单后端感知): SnowLuma 独有 — Api / Event / Universal.
+    # NapCat WsClient 无 role 概念; SnowLuma 上游用此区分 API/Event 连接, 默认 Universal.
+    role: Literal["Api", "Event", "Universal"] = "Universal"
 
     @field_validator("heartInterval", "reconnectInterval", mode="before")
     @classmethod

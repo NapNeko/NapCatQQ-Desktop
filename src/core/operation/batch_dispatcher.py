@@ -33,7 +33,7 @@ P4 之前, BotPage 的启动 / 停止 / 迁移 / 删除都是单 Bot 触发. 多
     dispatcher.finished_signal.connect(...)   # list[BatchOutcome]
     batch_id = dispatcher.dispatch(
         "批量启动",
-        [(qq_id, lambda qq=qq_id: process_manager.create_napcat_process(...)) for ...],
+        [(qq_id, lambda qq=qq_id: process_manager.start_bot(...)) for ...],
         sequential=False,    # 启动 / 停止可并行; 迁移 / 删除应 sequential=True
     )
 """
@@ -84,7 +84,7 @@ def _inline_executor(runnable: QRunnable) -> None:
 
     - **测试**: 不进线程池, 单线程驱动 dispatcher 的状态机.
     - **生产**: 调用方明确知道 ``op`` 是非阻塞 (例如 P3 perf 之后的
-      ``ManagerNapCatQQProcess.create_napcat_process`` / ``stop_process``,
+      ``BotProcessManager.start_bot`` / ``stop_process``,
       它们内部已经把耗时分支异步化), 强制留在主线程执行, 避免
       ``QProcess`` / ``QObject`` 在无事件循环的 worker 线程上被构造.
       公开别名见 :data:`inline_executor`.

@@ -56,6 +56,28 @@ def _filter_pillow_avif_modules(entries) -> tuple[object, int]:
     return _rebuild(entries, kept), removed
 
 
+def _filter_snowluma_session(entries) -> tuple[object, int]:
+    """Tier G: 排除 ``snowluma-session.json`` (含明文密码) 进入打包产物.
+
+    防止 Desktop 在用户机上构建发布包时把 dev 机自己的 ``runtime/config/snowluma-session.json``
+    带进 dist; 与 ``.gitignore`` 的同名规则形成两道防线.
+    """
+    kept: list[tuple[str, str, str]] = []
+    removed = 0
+    for entry in entries:
+        dest, src, typecode = entry
+        normalized_dest = _normalize_dest(dest)
+        normalized_src = _normalize_dest(src)
+        if (
+            normalized_dest.endswith("snowluma-session.json")
+            or normalized_src.endswith("snowluma-session.json")
+        ):
+            removed += 1
+            continue
+        kept.append((dest, src, typecode))
+    return _rebuild(entries, kept), removed
+
+
 def _filter_unused_qt_binaries(entries) -> tuple[object, int]:
     kept: list[tuple[str, str, str]] = []
     removed = 0
@@ -91,6 +113,10 @@ def filter_analysis_collections(analysis, locales: tuple[str, ...] = ("zh_CN",))
     analysis.pure, removed_avif_modules = _filter_pillow_avif_modules(analysis.pure)
     analysis.binaries, removed_avif_binaries = _filter_pillow_avif_modules(analysis.binaries)
     analysis.binaries, removed_qt_binaries = _filter_unused_qt_binaries(analysis.binaries)
+    # Tier G (P2 SnowLuma WebUI 客户端化): 防止 dev 机的 snowluma-session.json
+    # (明文密码) 被 PyInstaller 误打包.
+    analysis.datas, removed_snow_session_data = _filter_snowluma_session(analysis.datas)
+    analysis.binaries, removed_snow_session_bin = _filter_snowluma_session(analysis.binaries)
 
     print(
         "[build_filters] kept Qt translations for",
@@ -99,4 +125,6 @@ def filter_analysis_collections(analysis, locales: tuple[str, ...] = ("zh_CN",))
         f"| removed pillow avif modules={removed_avif_modules}",
         f"| removed pillow avif binaries={removed_avif_binaries}",
         f"| removed qt binaries={removed_qt_binaries}",
+        f"| removed snowluma session data={removed_snow_session_data}",
+        f"| removed snowluma session bin={removed_snow_session_bin}",
     )

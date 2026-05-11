@@ -75,3 +75,27 @@ class Urls(Enum):
         QUrl("https://ghproxy.cc"),
         QUrl("https://github.moeyy.xyz"),
     ]
+
+    # SnowLuma 相关地址 (P1 SnowLuma 适配)
+    SNOWLUMA_REPO = QUrl("https://github.com/SnowLuma/SnowLuma")
+    SNOWLUMA_ISSUES = QUrl("https://github.com/SnowLuma/SnowLuma/issues")
+    # 镜像站占位为空时主/备同 URL; 后续如有镜像只改 SNOWLUMA_REPO_API.
+    SNOWLUMA_REPO_API = QUrl("https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest")
+    SNOWLUMA_REPO_API_FALLBACK = QUrl("https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest")
+
+    @staticmethod
+    def get_snowluma_download_url(tag: str) -> QUrl:
+        """获取 SnowLuma 发布包下载链接.
+
+        上游 release 资产名含版本号 (如 ``SnowLuma-v1.7.5-win-x64.zip``),
+        无法使用 ``releases/latest/download`` 固定路径; 需先从 API 拿 tag 后动态构造.
+
+        Args:
+            tag: 完整 release tag, 含 ``v`` 前缀 (例: ``"v1.7.5"``)
+
+        Returns:
+            QUrl: 下载链接
+        """
+        base = "https://github.com/SnowLuma/SnowLuma/releases/download"
+        filename = f"SnowLuma-{tag}-win-x64.zip"
+        return QUrl(f"{base}/{tag}/{filename}")

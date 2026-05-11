@@ -71,6 +71,7 @@ class PathFunc:
         # 运行时路径字段
         self.qq_path = None
         self.napcat_path = self.runtime_path / "NapCatQQ"
+        self.snowluma_path = self.runtime_path / "SnowLuma"
         self.config_dir_path = self.runtime_path / "config"
         self.tmp_path = self.runtime_path / "tmp"
 
@@ -85,7 +86,12 @@ class PathFunc:
     def path_validator(self) -> None:
         """验证一系列路径"""
 
-        paths_to_validate = [(self.tmp_path, "Tmp"), (self.config_dir_path, "config"), (self.napcat_path, "NapCat")]
+        paths_to_validate = [
+            (self.tmp_path, "Tmp"),
+            (self.config_dir_path, "config"),
+            (self.napcat_path, "NapCat"),
+            (self.snowluma_path, "SnowLuma"),
+        ]
 
         for path, name in paths_to_validate:
             if not path.exists():
@@ -157,6 +163,43 @@ class PathFunc:
             return Path(winreg.QueryValueEx(key, "Install")[0])
         except FileNotFoundError:
             return None
+
+    # ==================== SnowLuma 路径 ====================
+    def get_snowluma_node_executable(self) -> Path | None:
+        """返回 SnowLuma 发布包自带的 ``node.exe``路径.
+
+        不存在时返回 ``None``, 调用方据此判断是否需要提示用户先安装
+        SnowLuma (走组件页 SnowLuma tab).
+
+        上游发布包例: ``SnowLuma-v1.7.5-win-x64/node.exe`` (Node.js v22.22.2 portable).
+        """
+        node_exe = self.snowluma_path / "node.exe"
+        return node_exe if node_exe.exists() else None
+
+    def get_snowluma_entry(self) -> Path:
+        """返回 SnowLuma 主入口 ``index.mjs`` 路径.
+
+        该路径不会检查是否存在; 仅提供给 QProcess.setArguments 使用.
+        是否可启动请配合 :meth:`get_snowluma_node_executable` 使用.
+        """
+        return self.snowluma_path / "index.mjs"
+
+    def get_snowluma_config_dir(self) -> Path:
+        """返回 SnowLuma 配置目录, 该目录包含 ``runtime.json``、``webui.json``、
+        ``onebot_<uin>.json`` 等 SnowLuma 本地配置文件.
+
+        Desktop 在启动 SnowLuma 进程前会向该目录渲染 ``onebot_<QQID>.json`` (参见
+        :mod:`src.core.runtime.snowluma_config_renderer`).
+        """
+        return self.snowluma_path / "config"
+
+    def get_snowluma_data_dir(self) -> Path:
+        """返回 SnowLuma 运行时数据目录, 其下以登录 ``uin`` 为子目录,
+        包含 SnowLuma sqlite (``messages.db``、``media.db``) 等.
+
+        Desktop 不直接写入该目录, 仅在覆盖安装 SnowLuma 时保留该子树.
+        """
+        return self.snowluma_path / "data"
 
     def path_migration(self) -> None:
         """路径迁移

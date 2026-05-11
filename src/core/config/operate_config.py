@@ -21,6 +21,7 @@ from src.core.config.config_model import (
     ConfigCollection,
     NapCatConfig,
     OneBotConfig,
+    consume_deferred_snowluma_overrides,
     json_payload,
     migrate_bot_config_payload,
     serialize_bot_config_collection,
@@ -340,17 +341,147 @@ def _read_config_file(strict: bool) -> List[Config]:
                 )
             )
 
+    # W4 (2026-05-11): 消费 SnowLuma WebUI 密码 override 迁移 deferred 队列.
+    # _migrate_legacy_bot_fields 检测到旧 bot.snowluma_webui_password_override 非空时
+    # push 到队列; 这里读完 bot.json 后写入 ``cfg.snowluma_webui_password_override``.
+    _apply_deferred_snowluma_overrides()
+
     return collection.bots
+
+
+def _apply_deferred_snowluma_overrides() -> None:
+    """消费 W4 迁移 deferred 队列, 把首个非空值写入 ``cfg.snowluma_webui_password_override``.
+
+    - 队列空: no-op.
+    - 队列 = 1 项: 写入并 INFO log.
+    - 队列 >= 2 项: 写入首项, WARNING log 提示用户多 Bot 冲突, 其余值被丢弃.
+    - cfg 当前已有非空 override: 不覆盖 (优先尊重用户在新版 UI 上设的值).
+
+    Note:
+        延迟 import ``cfg``: 测试场景下 ``operate_config`` 可能在没有 ``cfg`` 单例的情况下被
+        ``read_config()`` / ``_read_config_file()`` 触达 (例如 model 层 pytest), 此时静默
+        跳过写盘. 生产环境主入口 ``main.py`` 已显式构造 ``cfg`` + ``cfg.load()``, 不会落到
+        这个分支.
+    """
+    pending = consume_deferred_snowluma_overrides()
+    if not pending:
+        return
+
+    try:
+        from src.core.config import cfg
+    except Exception as exc:  # noqa: BLE001 - 测试 / 极端 import 顺序异常时静默
+        logger.warning(
+            f"无法 import cfg (W4 迁移失败, 将丢弃 deferred 值 {pending!r}): "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return
+
+    existing = (cfg.get(cfg.snowluma_webui_password_override) or "").strip()
+    chosen = pending[0]
+    extras = pending[1:]
+
+    if existing:
+        logger.info(
+            (
+                f"W4: cfg.snowluma_webui_password_override 已有非空值, "
+                f"丢弃迁移 deferred 值 {pending!r}"
+            )
+        )
+        return
+
+    cfg.set(cfg.snowluma_webui_password_override, chosen, True)
+    if extras:
+        logger.warning(
+            (
+                f"W4: 多个 Bot 曾设置不同 SnowLuma 密码 override, 选 '{chosen}' 作为全局值; "
+                f"其余将丢弃: {extras!r}"
+            )
+        )
+    else:
+        logger.info(
+            f"W4: 已迁移 bot.snowluma_webui_password_override 到 "
+            f"app.snowluma_webui_password_override (single source value)"
+        )
+
+
+# 2026-05-11 (问题 3 修复, 层 3): 读取 Bot 配置时的合计上限. 与 BotProcessManager.LOCAL_BOT_LIMIT
+# 同步, 都是 4 (NTQQ 多开真实限制). 超过时 :func:`read_config` 截断并把被隐藏的 QQID 推入
+# deferred queue, UI 层在合适时机 (例如 BotListPage.update_bot_list) 消费.
+_LOCAL_BOT_READ_LIMIT: int = 4
+
+# Deferred queue: 收集被 read_config 截断的 QQID 字符串, 让 UI 层消费一次后清空.
+# UI 通过 :func:`consume_truncated_bots_warning` 拿到并展示 warning_bar, 避免重复弹.
+_truncated_bots_pending: list[str] = []
+
+
+def consume_truncated_bots_warning() -> list[str]:
+    """消费 deferred 队列: 取出上一次 :func:`read_config` 截断的 QQID 列表, 清空队列.
+
+    UI 调用方 (一般是 :class:`BotListPage.update_bot_list`) 拿到后用 warning_bar 提示用户.
+    若多次调 :func:`read_config` 但 UI 没消费, 队列会累积; 但 UI 每次消费后清零,
+    所以"展示一次后不再骚扰"的语义自然成立.
+
+    Returns:
+        被隐藏的 QQID 字符串列表; 队列空时返回 ``[]``.
+    """
+    global _truncated_bots_pending
+    result = _truncated_bots_pending
+    _truncated_bots_pending = []
+    return result
+
+
+def read_config_raw() -> List[Config]:
+    """读取 NCD 保存的机器人配置文件, **不应用 4 个上限截断**.
+
+    专供下列场景:
+
+    - 写盘前的合并 (``update_config`` 走 ``_read_config_file(strict=True)``);
+    - 添加 Bot 时的总数检查 (``slot_save_config_button``) — 真实总数才能让用户
+      看到 "5 个 Bot 中已达上限" 提示, 而不是截断后的 "4 个 / 4 个" 没意义计数;
+    - 测试 / 诊断脚本.
+
+    UI 列表展示请用 :func:`read_config` (会截断 + push deferred queue).
+
+    Returns:
+        完整 Bot 配置列表 (可能 > 4 个).
+    """
+    return _read_config_file(strict=False)
 
 
 def read_config() -> List[Config]:
     """
-    ## 读取 NCD 保存的机器人配置文件
+    ## 读取 NCD 保存的机器人配置文件 (UI 用; 截断到 4 个)
+
+    2026-05-11 (问题 3 修复, 层 3): NTQQ 多开真实上限 4 个, 与后端类型无关.
+    本函数读取 ``bot.json`` 后**仅返回前 4 个**, 超出部分:
+
+    - 记录 ``logger.warning`` 含被隐藏的 QQID 列表 (脱敏前完整 QQID, 留诊断用);
+    - 推入 :func:`consume_truncated_bots_warning` 的 deferred queue, UI 层下一次消费;
+    - **不写回**, 避免破坏用户原始数据. 用户主动删除多余 Bot 后才会真正落盘.
+
+    用途区分:
+
+    - 本函数: UI 列表展示 / 启动按钮枚举 / 卡片渲染 (用户视角).
+    - :func:`read_config_raw`: 写盘合并 / 总数检查 / 测试 (内部视角, 拿完整列表).
 
     ## 返回
-        - List[config] 一个列表, 成员为 config
+        - List[config] 一个列表, 成员为 config (最多 4 个)
     """
-    return _read_config_file(strict=False)
+    configs = _read_config_file(strict=False)
+    if len(configs) <= _LOCAL_BOT_READ_LIMIT:
+        return configs
+
+    extras = configs[_LOCAL_BOT_READ_LIMIT:]
+    extras_qqids = [str(c.bot.QQID) for c in extras]
+    logger.warning(
+        (
+            f"读取 Bot 配置截断 (NTQQ 多开 {_LOCAL_BOT_READ_LIMIT} 个上限): "
+            f"共 {len(configs)} 个, 隐藏后 {len(extras)} 个 QQID={extras_qqids}; "
+            "如需调整, 请删除现有 Bot 后再添加"
+        )
+    )
+    _truncated_bots_pending.extend(extras_qqids)
+    return configs[:_LOCAL_BOT_READ_LIMIT]
 
 
 def write_config(configs: List[Config]) -> None:

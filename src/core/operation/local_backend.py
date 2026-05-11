@@ -6,7 +6,7 @@ P0 阶段实现范围:
 - 检测类: ``detect_qq_path`` / ``detect_napcat_version`` / ``detect_installation``
 
 P2 阶段补全(目前抛 NotImplementedError):
-- 进程类: 与 [`ManagerNapCatQQProcess`](src/core/runtime/napcat.py) 桥接
+- 进程类: 与 [`BotProcessManager`](src/core/runtime/napcat.py) 桥接
 - 安装类(写入): 与 [`NapCatInstall`](src/core/installation/installers.py) 桥接
 - 日志类: 与 [`ManagerNapCatQQLog`](src/core/runtime/napcat.py) 桥接
 - WebUI: 与 [`ManagerNapCatQQLoginState`](src/core/runtime/napcat.py) 桥接
@@ -39,7 +39,7 @@ _NAPCAT_VERSION_PATTERN = re.compile(r'const\s+version\s*=\s*"([^"]+)"')
 
 _P2_DEFER_MESSAGE = (
     "LocalBackend 当前方法已在 OperationBackend 接口中定义, "
-    "实现排期: P2 阶段(远端 Bot 运行闭环), 届时与 ManagerNapCatQQProcess 桥接落地"
+    "实现排期: P2 阶段(远端 Bot 运行闭环), 届时与 BotProcessManager 桥接落地"
 )
 
 
