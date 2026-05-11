@@ -13,7 +13,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QSystemTrayIcon, QWidget
 
 # 项目内模块导入
-from src.core.runtime.napcat import ManagerNapCatQQProcess
+from src.core.runtime.bot_process_manager import BotProcessManager
 from src.ui.common.icon import StaticIcon
 
 if TYPE_CHECKING:
@@ -57,7 +57,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             Action(
                 icon=FIF.CLOSE,
                 text=self.tr("关闭程序"),
-                triggered=lambda: (it(ManagerNapCatQQProcess).stop_all_processes(), sys.exit()),
+                triggered=lambda: (it(BotProcessManager).stop_all_bots(), sys.exit()),
             )
         )
 

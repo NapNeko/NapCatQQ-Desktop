@@ -2,3 +2,4 @@
 from .desktop_page import DesktopPage
 from .napcat_page import NapCatPage
 from .qq_page import QQPage
+from .snowluma_page import SnowLumaPage

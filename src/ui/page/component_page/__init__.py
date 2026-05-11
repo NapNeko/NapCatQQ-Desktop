@@ -12,7 +12,7 @@ from src.core.logging import LogSource, logger
 from src.core.versioning import VersionService
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from .sub_page import DesktopPage, NapCatPage, QQPage
+from .sub_page import DesktopPage, NapCatPage, QQPage, SnowLumaPage
 from .widget import TopWidget
 
 if TYPE_CHECKING:
@@ -31,6 +31,7 @@ class ComponentPage(QWidget):
         self.napcat_page = NapCatPage(self)
         self.qq_page = QQPage(self)
         self.desktop_page = DesktopPage(self)
+        self.snowluma_page = SnowLumaPage(self)
 
     def initialize(self, parent: "MainWindow") -> Self:
         """初始化界面控件和布局. """
@@ -54,6 +55,7 @@ class ComponentPage(QWidget):
         self.view.addWidget(self.napcat_page)
         self.view.addWidget(self.qq_page)
         self.view.addWidget(self.desktop_page)
+        self.view.addWidget(self.snowluma_page)
 
         self.top_card.pivot.addItem(
             routeKey=self.napcat_page.objectName(),
@@ -69,6 +71,11 @@ class ComponentPage(QWidget):
             routeKey=self.desktop_page.objectName(),
             text=self.tr("Desktop"),
             onClick=lambda: self.view.setCurrentWidget(self.desktop_page),
+        )
+        self.top_card.pivot.addItem(
+            routeKey=self.snowluma_page.objectName(),
+            text=self.tr("SnowLuma"),
+            onClick=lambda: self.view.setCurrentWidget(self.snowluma_page),
         )
 
         self.view.setCurrentWidget(self.napcat_page)
@@ -87,11 +94,13 @@ class ComponentPage(QWidget):
         self.version_service.remote_versions_loaded.connect(self.napcat_page.apply_remote_version_data)
         self.version_service.remote_versions_loaded.connect(self.qq_page.apply_remote_version_data)
         self.version_service.remote_versions_loaded.connect(self.desktop_page.apply_remote_version_data)
+        self.version_service.remote_versions_loaded.connect(self.snowluma_page.apply_remote_version_data)
         self.version_service.remote_versions_loaded.connect(lambda: self.top_card.update_button.setEnabled(True))
 
         self.version_service.local_versions_loaded.connect(self.napcat_page.apply_local_version_data)
         self.version_service.local_versions_loaded.connect(self.qq_page.apply_local_version_data)
         self.version_service.local_versions_loaded.connect(self.desktop_page.apply_local_version_data)
+        self.version_service.local_versions_loaded.connect(self.snowluma_page.apply_local_version_data)
 
     def _apply_styles(self) -> None:
         PageStyleSheet.UNIT.apply(self)
@@ -107,8 +116,10 @@ class ComponentPage(QWidget):
         self.napcat_page.begin_version_refresh()
         self.qq_page.begin_version_refresh()
         self.desktop_page.begin_version_refresh()
+        self.snowluma_page.begin_version_refresh()
         self.napcat_page.log_card.set_loading(True)
         self.desktop_page.log_card.set_loading(True)
+        self.snowluma_page.log_card.set_loading(True)
         self.version_service.refresh()
         self.top_card.update_button.setEnabled(False)
 

@@ -11,7 +11,7 @@
   水位实时来自 [`ResourceMonitorService.latest`](src/core/remote/resource_monitor.py).
 - **栏 2: 远端 Bot 列表** - 名称 / runtime_target / 进程状态.
   数据通过 [`read_config()`](src/core/config/operate_config.py) 拉本地 + 远端 Bot 配置,
-  进程状态消费 [`ManagerNapCatQQProcess.process_changed_signal`](src/core/runtime/napcat.py).
+  进程状态消费 [`BotProcessManager.process_changed_signal`](src/core/runtime/napcat.py).
 - **栏 3: 后台任务** - 直接渲染
   [`BackgroundTaskCenter.active_tasks()`](src/core/runtime/background_tasks.py).
 
@@ -271,9 +271,9 @@ class StatusOverviewDialog(MessageBoxBase):
             pass
 
         try:
-            from src.core.runtime.napcat import ManagerNapCatQQProcess
+            from src.core.runtime.bot_process_manager import BotProcessManager
 
-            mgr = it(ManagerNapCatQQProcess)
+            mgr = it(BotProcessManager)
             self._safe_connect(mgr.process_changed_signal, self._refresh_bots)
         except Exception:  # noqa: BLE001
             pass
@@ -338,10 +338,10 @@ class StatusOverviewDialog(MessageBoxBase):
         self._clear_layout(self._bot_layout)
         try:
             from src.core.config.operate_config import read_config
-            from src.core.runtime.napcat import ManagerNapCatQQProcess
+            from src.core.runtime.bot_process_manager import BotProcessManager
 
             configs = read_config()
-            mgr = it(ManagerNapCatQQProcess)
+            mgr = it(BotProcessManager)
         except Exception:  # noqa: BLE001
             configs, mgr = [], None
 

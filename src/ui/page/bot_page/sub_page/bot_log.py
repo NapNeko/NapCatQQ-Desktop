@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget, QPlainTextEdit
 
 # 项目内模块导入
 from src.core.config.config_model import Config
-from src.core.runtime.napcat import ManagerNapCatQQLog, NapCatQQProcessLog
+from src.core.runtime.bot_process_manager import ManagerNapCatQQLog, NapCatQQProcessLog
 from src.ui.components.code_editor.exhibit import CodeExibit
 from src.ui.components.code_editor.highlight import LogHighlighter
 

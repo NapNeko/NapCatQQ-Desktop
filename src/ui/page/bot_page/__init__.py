@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from src.core.config.operate_config import read_config
 from src.core.logging import LogSource, logger
 from src.core.logging.crash_bundle import mask_qqid
-from src.core.runtime.napcat import ManagerNapCatQQProcess
+from src.core.runtime.bot_process_manager import BotProcessManager
 from src.ui.components.stacked_widget import TransparentStackedWidget
 from .sub_page import BotListPage, BotLogPage, ConfigPage
 from .widget import HeaderWidget
@@ -66,7 +66,7 @@ class BotPage(QWidget):
     def _auto_start_bots(self) -> None:
         """自动启动配置了 autoStart 的 Bot"""
         configs = read_config()
-        process_manager = it(ManagerNapCatQQProcess)
+        process_manager = it(BotProcessManager)
 
         for config in configs:
             if config.advanced.autoStart:
@@ -77,7 +77,7 @@ class BotPage(QWidget):
                     continue
 
                 logger.info(f"自动启动 Bot(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
-                process_manager.create_napcat_process(config)
+                process_manager.start_bot(config)
 
     def setup_view(self) -> None:
         """设置 view 界面"""

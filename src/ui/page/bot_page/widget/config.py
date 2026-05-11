@@ -5,7 +5,7 @@ Bot 配置页面
 # 第三方库导入
 from creart import it
 from qfluentwidgets import ComboBox, ExpandLayout, FlowLayout, FluentIcon, PushButton, ScrollArea, SettingCard, SettingCardGroup
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget
 
 # 项目内模块导入
@@ -22,6 +22,7 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
+from src.core.runtime.backend_type import BackendType
 from src.ui.common.icon import NapCatDesktopIcon
 from src.ui.components.input_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard, ShowDialogCard
 from src.ui.page.bot_page.widget import (
@@ -120,6 +121,12 @@ class RuntimeTargetConfigCard(SettingCard):
 class BotConfigWidget(ScrollArea):
     """Bot 设置页面"""
 
+    # P2 (Tier A): backend_type 切换信号. 由 ``backend_type_card`` 内部
+    # ``ComboBox.currentIndexChanged`` 触发后转发, 携带 :class:`BackendType` 枚举值.
+    # 上层 :class:`ConfigPage` 把它接到 :meth:`ConnectConfigWidget.apply_backend_type`
+    # 与 :meth:`AdvancedConfigWidget.apply_backend_type`, 让两个 widget 实时显隐.
+    backend_type_changed = Signal(BackendType)
+
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         # 创建控件
@@ -139,6 +146,23 @@ class BotConfigWidget(ScrollArea):
             placeholder_text=self.tr("114514"),
             parent=self.view,
         )
+        # P1 (SnowLuma 适配): 后端类型单选. 下拉项文本与 BackendType.display_name 严格对齐,
+        # 这样 get_value() 返回的文本可直接反查为 BackendType。
+        # SnowLuma 未安装时不在此限制选择 (实际启动时 _create_snowluma_process 会报错提示),
+        # 避免表单依赖 PathFunc.get_snowluma_node_executable() 的极端状态判断。
+        self.backend_type_card = ComboBoxConfigCard(
+            icon=FluentIcon.APPLICATION,
+            title=self.tr("后端类型"),
+            content=self.tr("选择 Bot 的协议端实现; SnowLuma 需先在组件页 SnowLuma tab 安装"),
+            texts=[BackendType.NAPCAT.display_name, BackendType.SNOWLUMA.display_name],
+            parent=self.view,
+        )
+        # W6 (2026-05-11): per-Bot SnowLuma WebUI 密码卡被删除; daemon 架构下密码是
+        # App 级全局设置不是 per-Bot 字段, 该入口迁到组件页 SnowLuma tab 的
+        # "全局 WebUI 密码 override" 卡 (可读/写 ``cfg.snowluma_webui_password_override``).
+        # 历史 ``snowluma_webui_password_override`` 字段由 W4 迁移逻辑从 bot.json pop 后
+        # 写入 cfg, 用户无需人工介入.
+
         self.runtime_target_card = RuntimeTargetConfigCard(
             icon=FluentIcon.GLOBE,
             title=self.tr("运行位置"),
@@ -159,6 +183,13 @@ class BotConfigWidget(ScrollArea):
             content=self.tr("设置自动重启 Bot 的相关选项"),
             parent=self.view,
         )
+        # SL-Q (Tier A): 掉线重启仅在 NapCat 模式下有效.
+        # ``offlineAutoRestart`` 的消费者只在 :class:`NapCatQQLoginState.slot_update_online_status`
+        # (``bot_process_manager.py``), 依赖 OneBot ``get_status`` 轮询驱动的在线状态翻转;
+        # SnowLuma 路径用 :class:`SnowLumaStatusPoller` 监控 WebUI ``/api/processes`` 的
+        # 4 档登录态, 没有 ``slot_update_online_status`` 的调用链, 即没有"掉线->重启"的
+        # 触发器. 因此在 SnowLuma 模式下整卡隐藏 (与高级配置页 ``offline_notice_card``
+        # 同理), 避免用户开关后以为生效. 持久化值仍保留, 切回 NapCat 后用户原选择不丢.
         self.offline_auto_restart_card = SwitchConfigCard(
             icon=FluentIcon.HISTORY,
             title=self.tr("掉线重启"),
@@ -168,9 +199,12 @@ class BotConfigWidget(ScrollArea):
 
         # 设置属性
         self._config = None
+        # 卡片显示顺序: 基础身份 → 后端及其专属参数 → 运行位置/扩展 → 重启策略.
+        # W6 (2026-05-11): 移除 snowluma_webui_password_card; 迁到组件页.
         self.cards = [
             self.bot_name_card,
             self.bot_qq_id_card,
+            self.backend_type_card,
             self.runtime_target_card,
             self.music_sign_url_card,
             self.auto_restart_dialog_card,
@@ -190,9 +224,53 @@ class BotConfigWidget(ScrollArea):
             self.card_layout.addWidget(card)
         self.adjustSize()
 
+        # P2 (Tier A): 把 ComboBox 切换转发为 BackendType 枚举.
+        # 用 currentIndexChanged 而非 currentTextChanged 是为了避免 fill_value 反填时
+        # 触发 spurious 重发 (虽然 fill_value 也会改 index, 但 ConfigPage 在 fill_config
+        # 之后会显式调一次 apply_backend_type, 中间任何 noop 触发都不影响最终态).
+        self.backend_type_card.comboBox.currentIndexChanged.connect(self._on_backend_index_changed)
+
+        # Q1 / SL-Q: 初始按当前 backend 同步隐显 backend 相关卡 (默认 NapCat).
+        self._apply_backend_card_visibility(BackendType.NAPCAT)
+
     # ==================== 公共方法 ====================
+    def _on_backend_index_changed(self, _idx: int) -> None:
+        """ComboBox 切换 → emit ``backend_type_changed`` (BackendType 枚举).
+
+        ``ComboBox.currentText()`` 返回的是 display_name (``"NapCat"`` / ``"SnowLuma"``);
+        :meth:`BackendType.from_str` 已对未知文本退化为 ``NAPCAT``.
+        """
+        backend_label = (self.backend_type_card.get_value() or "").strip().lower()
+        backend = BackendType.from_str(backend_label)
+        # Q1 / SL-Q: 本地同步隐显 backend 相关卡; 不依赖外部 apply_backend_type 调用,
+        # 避免切换 ComboBox 瞬间出现卡片闪烁.
+        self._apply_backend_card_visibility(backend)
+        self.backend_type_changed.emit(backend)
+
+    def _apply_backend_card_visibility(self, backend: BackendType) -> None:
+        """按 backend 同步隐显基础配置页中与 backend 相关的卡片 (幂等).
+
+        W6 (2026-05-11): per-Bot SnowLuma 密码卡被移除; 仅剩 ``offline_auto_restart_card``
+        要按 backend 隐显.
+
+        - ``offline_auto_restart_card``: 仅 NapCat 可见 (SL-Q).
+          SnowLuma 没有 ``offlineAutoRestart`` 的消费链路
+          (见 ``NapCatQQLoginState.slot_update_online_status`` 仅 NapCat 调用),
+          整卡隐藏避免误导.
+
+        持久化值零丢失: 隐藏期间 ``get_config`` 仍会序列化对应字段; 切换 backend 后
+        用户此前的选择保留.
+        """
+        is_snowluma = backend == BackendType.SNOWLUMA
+        self.offline_auto_restart_card.setVisible(not is_snowluma)
+
     def get_config(self) -> BotConfig:
         """获取配置"""
+        # P1 (SnowLuma 适配): backend_type_card 返回的是 display_name ("NapCat" / "SnowLuma"),
+        # 转为 BackendType 枚举; 未知文本走 from_str 退化逻辑 (NAPCAT 默认).
+        backend_label = (self.backend_type_card.get_value() or "").strip().lower()
+        backend_type = BackendType.from_str(backend_label)
+        # W6 (2026-05-11): ``snowluma_webui_password_override`` 已删除; per-Bot 字段不再存在.
         return BotConfig(
             **{
                 "name": self.bot_name_card.get_value(),
@@ -201,6 +279,7 @@ class BotConfigWidget(ScrollArea):
                 "autoRestartSchedule": self.auto_restart_dialog_card.get_value(),
                 "offlineAutoRestart": self.offline_auto_restart_card.get_value(),
                 "runtime_target": self.runtime_target_card.get_value(),
+                "backend_type": backend_type,
             }
         )
 
@@ -216,9 +295,13 @@ class BotConfigWidget(ScrollArea):
         self.music_sign_url_card.fill_value(self._config.musicSignUrl)
         self.auto_restart_dialog_card.fill_value(self._config.autoRestartSchedule)
         self.offline_auto_restart_card.fill_value(self._config.offlineAutoRestart)
+        # P1 (SnowLuma 适配): 反填 backend_type_card; ComboBoxConfigCard.fill_value 接受文本.
+        self.backend_type_card.fill_value(self._config.backend_type.display_name)
         # 服务器列表可能在编辑期间变化, 每次填充前都刷新
         self.runtime_target_card.refresh_targets()
         self.runtime_target_card.fill_value(self._config.runtime_target)
+        # W6 (2026-05-11): ``snowluma_webui_password_override`` 迁移到组件页, 本处不再反填.
+        self._apply_backend_card_visibility(self._config.backend_type)
 
     def clear_config(self) -> None:
         """清空配置"""
@@ -269,6 +352,9 @@ class ConnectConfigWidget(ScrollArea):
 
         # 设置属性
         self._config = None
+        # P2 (Tier A): 当前 backend_type, 默认 NapCat (与 P1 行为一致); 由 ConfigPage
+        # 在 fill_config 与 BotConfigWidget.backend_type_changed 信号触发时同步.
+        self._current_backend: BackendType = BackendType.NAPCAT
 
         # 设置控件
         self.setWidget(self.view)
@@ -281,6 +367,28 @@ class ConnectConfigWidget(ScrollArea):
         self.card_layout.setSpacing(8)
 
     # ==================== 公共方法 ====================
+    def apply_backend_type(self, backend: BackendType) -> None:
+        """按 backend 显隐 ConnectConfigWidget 内的卡片 (Tier A, 幂等).
+
+        SnowLuma 模式下:
+        - HTTP SSE 卡片整卡 ``setVisible(False)`` (SnowLuma 不识别 SSE);
+        - 其他卡片仍可见, 但点开 Dialog 时由 :meth:`ConfigDialogBase.apply_backend_type`
+          决定字段可见性.
+
+        切回 NapCat 后 SSE 卡片自动重现 (持久化保留, 仅 ``setVisible``).
+        """
+        self._current_backend = backend
+        is_snowluma = backend == BackendType.SNOWLUMA
+        for card in self.cards:
+            # SSE 整类在 SnowLuma 模式隐藏 (持久化保留)
+            if isinstance(card, HttpSSEConfigCard):
+                card.setVisible(not is_snowluma)
+            else:
+                card.setVisible(True)
+        # 触发 FlowLayout 重排
+        self.card_layout.update()
+        self.updateGeometry()
+
     def add_card(self, config: NetworkBaseConfig) -> None:
         """添加卡片到列表"""
         if card_class := self.CINFIG_AND_CARD_DICT.get(type(config)):
@@ -288,6 +396,10 @@ class ConnectConfigWidget(ScrollArea):
             card.remove_signal.connect(self.remove_card)
             self.cards.append(card)
             self.card_layout.addWidget(card)
+            # P2 (Tier A): 新加的 SSE 卡片在 SnowLuma 模式下立即隐藏 (避免 add_card
+            # 时机晚于 apply_backend_type 导致一闪而过)
+            if isinstance(card, HttpSSEConfigCard) and self._current_backend == BackendType.SNOWLUMA:
+                card.setVisible(False)
             self.card_layout.update()
             self.updateGeometry()
 
@@ -512,7 +624,50 @@ class AdvancedConfigWidget(ScrollArea):
         self._sync_log_level_card_state()
         self.adjustSize()
 
+        # P2 (Tier A): 当前 backend_type, 默认 NapCat (与 P1 行为一致)
+        self._current_backend: BackendType = BackendType.NAPCAT
+
     # ==================== 公共方法 ====================
+    def apply_backend_type(self, backend: BackendType) -> None:
+        """按 backend 显隐 AdvancedConfigWidget 内的卡片 (Tier A, 幂等).
+
+        SnowLuma 模式下仅保留 ``auto_start_card`` (Desktop 通用), 其余 8 张卡全部
+        ``setVisible(False)``:
+
+        - ``offline_notice_card``: SnowLuma 路径没有 ``NapCatQQLoginState`` 轮询 OneBot
+          ``get_status``, 离线检测整链路缺失 → 掉线通知开关无意义, 隐藏避免误导用户.
+        - ``parseMultMsg`` / ``enableLocalFile2Url`` / ``fileLog`` / ``consoleLog`` /
+          ``fileLogLevel`` / ``consoleLogLevel`` / ``backend_config_card``:
+          NapCat 注入式专有, SnowLuma 完全不读.
+
+        持久化值零丢失: 隐藏的卡片仍在 ``self.cards`` 里, ``get_config()`` 仍会序列化;
+        切回 NapCat 后自动重现.
+        """
+        self._current_backend = backend
+        is_napcat = backend == BackendType.NAPCAT
+        # NapCat-only: 都不在 SnowLuma 模式可见
+        # offline_notice: SnowLuma 路径无离线检测, 整卡隐藏避免误导用户
+        self.offline_notice_card.setVisible(is_napcat)
+        self.parse_mult_message_card.setVisible(is_napcat)
+        self.local_file_to_url_card.setVisible(is_napcat)
+        self.file_log_card.setVisible(is_napcat)
+        self.file_log_level_card.setVisible(is_napcat)
+        self.console_log_card.setVisible(is_napcat)
+        self.console_level_card.setVisible(is_napcat)
+        self.backend_config_card.setVisible(is_napcat)
+        # SnowLuma 模式下隐藏整个 log_group 与 engine_group 头部 (避免空 group 标题悬浮)
+        # 通过隐藏 group 实现 — 仅当 group 中所有 card 都不可见时才隐藏 group.
+        # 这里 SnowLuma 模式下: log_group 全空, engine_group 全空, 一并隐藏.
+        self.log_group.setVisible(is_napcat)
+        self.engine_group.setVisible(is_napcat)
+        # auto_start 双 backend 都可见 (runtime_group 仅它一张卡 + offline_notice;
+        # SnowLuma 模式下 offline_notice 隐藏, runtime_group 仍保留 auto_start)
+
+        # 同步 log level 卡的 enable 状态 (避免在 SnowLuma 模式下 log 卡隐藏后仍保持
+        # enable=False 之类的 stale 状态; setVisible 不改 isEnabled)
+        if is_napcat:
+            self._sync_log_level_card_state()
+
     def get_config(self) -> AdvancedConfig:
         """获取配置"""
         backend_config = self.backend_config_card.get_value()

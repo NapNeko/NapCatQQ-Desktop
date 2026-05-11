@@ -32,7 +32,8 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
 )
-from src.core.runtime.napcat import ManagerNapCatQQLoginState
+from src.core.runtime.backend_type import BackendType
+from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState
 from src.ui.components.input_card.generic_card import ComboBoxConfigCard, LineEditConfigCard, SwitchConfigCard
 from src.ui.components.input_card.time_card import IntervalTimeConfigCard
 from src.ui.components.info_bar import error_bar, success_bar
@@ -123,11 +124,8 @@ class ChooseConfigTypeDialog(MessageBoxBase):
         self.card_layout = QGridLayout()
         self.card_layout.setSpacing(10)
         self.card_layout.setContentsMargins(0, 0, 0, 0)
-        self.card_layout.addWidget(self.http_server_card, 0, 0)
-        self.card_layout.addWidget(self.http_sse_server_card, 0, 1)
-        self.card_layout.addWidget(self.http_client_card, 0, 2)
-        self.card_layout.addWidget(self.web_socket_server_card, 1, 0)
-        self.card_layout.addWidget(self.web_socket_client_card, 1, 1)
+        # 默认 NapCat 模式: 5 张卡 3x2 布局 (第二行最后一格留空)
+        self._apply_napcat_layout()
 
         self.viewLayout.addWidget(self.title_label)
         self.viewLayout.addLayout(self.card_layout, stretch=1)
@@ -144,6 +142,47 @@ class ChooseConfigTypeDialog(MessageBoxBase):
             return ConnectType(checked_id)
 
         return ConnectType.NO_TYPE
+
+    def apply_backend_type(self, backend: BackendType) -> None:
+        """按 backend 显隐"HTTP SSE 服务器"选项 (Tier A, P2).
+
+        SnowLuma 模式下 HTTP SSE 整类隐藏 (SnowLuma 不识别 SSE); NapCat 模式下
+        所有 5 类选项均可见. 调用方应在 ``exec()`` 之前调用本方法, 让用户看到正确选项.
+
+        P2 (Tier A 修复): 隐藏 SSE 卡片时同步重排 grid 为 2x2, 避免出现空 cell
+        造成卡片错位 + 大量空白.
+        """
+        is_snowluma = backend == BackendType.SNOWLUMA
+        # 隐藏整张卡片 + 同步隐藏 RadioButton (避免 button_group 仍能 checked)
+        self.http_sse_server_card.setVisible(not is_snowluma)
+        self.http_sse_server_config_button.setVisible(not is_snowluma)
+        # 重排 grid 让可见的 4 张卡 (SL 模式) 或 5 张卡 (NC 模式) 填满网格
+        if is_snowluma:
+            self._apply_snowluma_layout()
+        else:
+            self._apply_napcat_layout()
+
+    def _apply_napcat_layout(self) -> None:
+        """NapCat 模式: 5 张卡 3 列 2 行布局 (与 P1 一致)."""
+        self._clear_card_layout()
+        self.card_layout.addWidget(self.http_server_card, 0, 0)
+        self.card_layout.addWidget(self.http_sse_server_card, 0, 1)
+        self.card_layout.addWidget(self.http_client_card, 0, 2)
+        self.card_layout.addWidget(self.web_socket_server_card, 1, 0)
+        self.card_layout.addWidget(self.web_socket_client_card, 1, 1)
+
+    def _apply_snowluma_layout(self) -> None:
+        """SnowLuma 模式: 4 张可见卡 2 列 2 行布局 (HTTP SSE 隐藏不占格)."""
+        self._clear_card_layout()
+        self.card_layout.addWidget(self.http_server_card, 0, 0)
+        self.card_layout.addWidget(self.http_client_card, 0, 1)
+        self.card_layout.addWidget(self.web_socket_server_card, 1, 0)
+        self.card_layout.addWidget(self.web_socket_client_card, 1, 1)
+
+    def _clear_card_layout(self) -> None:
+        """从 grid 取下所有 widget (不删除, 它们仍是 self 的子控件)."""
+        while self.card_layout.count():
+            self.card_layout.takeAt(0)
 
 
 class ConfigDialogBase(MessageBoxBase):
@@ -196,6 +235,15 @@ class ConfigDialogBase(MessageBoxBase):
 
         # 禁用名字卡片 (编辑模式下名称不可修改) 
         self.name_card.setEnabled(False)
+
+    def apply_backend_type(self, backend: BackendType) -> None:
+        """按 backend 显隐 ConfigDialogBase 内的字段 (Tier A, P2).
+
+        基类负责: SnowLuma 模式下隐藏 ``debug_card`` (SnowLuma 不读 debug). 子类应当
+        ``super().apply_backend_type(backend)`` 后再处理自己的特有字段.
+        """
+        self._current_backend: BackendType = backend
+        self.debug_card.setVisible(backend == BackendType.NAPCAT)
 
     def set_name_conflict_validator(self, validator: Callable[[str], str | None] | None) -> None:
         """设置名称冲突校验器, 返回错误文本时阻止关闭对话框. """
@@ -282,6 +330,11 @@ class HttpServerConfigDialog(ConfigDialogBase):
         self.port_card = LineEditConfigCard(FI.LINK, self.tr("Port*"), "3000", self.tr("设置端口号"))
         self.cors_card = SwitchConfigCard(FI.GLOBE, self.tr("CORS"))
         self.websocket_card = SwitchConfigCard(FI.SCROLL, self.tr("WebSocket"))
+        # P2 (Tier A): SnowLuma 独有字段 — HTTP server path (前缀挂载点).
+        # 默认 "/" 与 SnowLuma 上游 makeDefaultOneBotConfig 一致.
+        self.path_card = LineEditConfigCard(
+            FI.FOLDER, self.tr("Path"), "/", self.tr("HTTP 前缀挂载路径 (SnowLuma 独有, 默认 /)")
+        )
 
         # 设置属性
         self.title_label.setText("HTTP Server")
@@ -295,8 +348,12 @@ class HttpServerConfigDialog(ConfigDialogBase):
         self.grid_layout.addWidget(self.port_card, 4, 0, 1, 2)
         self.grid_layout.addWidget(self.cors_card, 5, 0, 1, 1)
         self.grid_layout.addWidget(self.websocket_card, 5, 1, 1, 1)
-        self.grid_layout.addWidget(self.msg_format_card, 6, 0, 1, 2)
-        self.grid_layout.addWidget(self.token_card, 7, 0, 1, 2)
+        self.grid_layout.addWidget(self.path_card, 6, 0, 1, 2)  # SnowLuma 独有, 默认隐藏
+        self.grid_layout.addWidget(self.msg_format_card, 7, 0, 1, 2)
+        self.grid_layout.addWidget(self.token_card, 8, 0, 1, 2)
+
+        # 默认 NapCat 模式下 path_card 隐藏; 由 apply_backend_type 切换
+        self.path_card.setVisible(False)
 
         # 填充配置数据
         self.fill_config()
@@ -311,6 +368,52 @@ class HttpServerConfigDialog(ConfigDialogBase):
         self.port_card.fill_value(self.config.port)
         self.cors_card.fill_value(self.config.enableCors)
         self.websocket_card.fill_value(self.config.enableWebsocket)
+        self.path_card.fill_value(self.config.path)
+
+    def apply_backend_type(self, backend: BackendType) -> None:
+        """SnowLuma 模式下隐藏 ``cors_card`` / ``websocket_card``, 显示 ``path_card``."""
+        super().apply_backend_type(backend)
+        is_snowluma = backend == BackendType.SNOWLUMA
+        # NapCat-only
+        self.cors_card.setVisible(not is_snowluma)
+        self.websocket_card.setVisible(not is_snowluma)
+        # SnowLuma-only
+        self.path_card.setVisible(is_snowluma)
+        # P2 (Tier A 修复): 重排 grid layout 避免隐藏卡片留空白
+        self._rebuild_grid_layout(is_snowluma)
+
+    def _rebuild_grid_layout(self, is_snowluma: bool) -> None:
+        """按 backend 重排 ``grid_layout`` 中的可见卡片, 避免空 cell 留出可见间隙.
+
+        实现思路: ``QGridLayout`` 即使 widget ``setVisible(False)``, 行/列 slot 仍占据空间 (取该列其他行
+        最大宽度); 在多行混合布局下, 单行只有半边可见 widget 时 visual 上会出现
+        大段留白. 显式 ``takeAt`` 清空再重新 ``addWidget`` 是最稳的解决方案.
+        """
+        # 1. 清空 grid layout (不删除 widgets, 它们仍是 self 的子控件)
+        while self.grid_layout.count():
+            self.grid_layout.takeAt(0)
+
+        # 2. 按 backend 重新布局 (HTTP Server: 2-col grid)
+        if is_snowluma:
+            # SnowLuma 模式: 没有 debug / cors / websocket
+            self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 2)
+            self.grid_layout.addWidget(self.name_card, 1, 0, 1, 2)
+            self.grid_layout.addWidget(self.host_card, 2, 0, 1, 2)
+            self.grid_layout.addWidget(self.port_card, 3, 0, 1, 2)
+            self.grid_layout.addWidget(self.path_card, 4, 0, 1, 2)
+            self.grid_layout.addWidget(self.msg_format_card, 5, 0, 1, 2)
+            self.grid_layout.addWidget(self.token_card, 6, 0, 1, 2)
+        else:
+            # NapCat 模式: 沿用 P1 原始 2-col 布局
+            self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 1)
+            self.grid_layout.addWidget(self.debug_card, 0, 1, 1, 1)
+            self.grid_layout.addWidget(self.name_card, 1, 0, 1, 2)
+            self.grid_layout.addWidget(self.host_card, 2, 0, 1, 2)
+            self.grid_layout.addWidget(self.port_card, 3, 0, 1, 2)
+            self.grid_layout.addWidget(self.cors_card, 4, 0, 1, 1)
+            self.grid_layout.addWidget(self.websocket_card, 4, 1, 1, 1)
+            self.grid_layout.addWidget(self.msg_format_card, 5, 0, 1, 2)
+            self.grid_layout.addWidget(self.token_card, 6, 0, 1, 2)
 
     def get_config(self) -> HttpServersConfig:
         """获取 HTTP 服务器配置
@@ -319,12 +422,16 @@ class HttpServerConfigDialog(ConfigDialogBase):
             HttpServersConfig: HTTP 服务器配置对象
         """
         port = self._parse_required_int(self.port_card.get_value(), self.tr("Port"))
+        path_raw = (self.path_card.get_value() or "/").strip()
+        if not path_raw:
+            path_raw = "/"
         return HttpServersConfig(
             **{
                 "host": self.host_card.get_value(),
                 "port": port,
                 "enableCors": self.cors_card.get_value(),
                 "enableWebsocket": self.websocket_card.get_value(),
+                "path": path_raw,
                 **super().get_config().model_dump(),
             }
         )
@@ -418,6 +525,14 @@ class HttpClientConfigDialog(ConfigDialogBase):
         # 创建控件
         self.report_self_msg_card = SwitchConfigCard(FI.MESSAGE, self.tr("上报自身消息"))
         self.url_card = LineEditConfigCard(FI.LINK, "URL*", "http://localhost:8080", self.tr("设置请求地址"))
+        # P2 (Tier A): SnowLuma 独有字段 — 客户端 POST 超时 (ms).
+        # 留空 / 0 表示不传给 SnowLuma → 走默认 5000ms.
+        self.timeout_ms_card = LineEditConfigCard(
+            FI.STOP_WATCH,
+            self.tr("超时 (ms)"),
+            "",
+            self.tr("HTTP 客户端 POST 超时 (SnowLuma 独有, 留空走默认 5000ms)"),
+        )
 
         # 设置属性
         self.title_label.setText("HTTP Client")
@@ -429,8 +544,12 @@ class HttpClientConfigDialog(ConfigDialogBase):
         self.grid_layout.addWidget(self.report_self_msg_card, 0, 4, 1, 2)
         self.grid_layout.addWidget(self.name_card, 1, 0, 1, 6)
         self.grid_layout.addWidget(self.url_card, 2, 0, 1, 6)
-        self.grid_layout.addWidget(self.msg_format_card, 3, 0, 1, 6)
-        self.grid_layout.addWidget(self.token_card, 4, 0, 1, 6)
+        self.grid_layout.addWidget(self.timeout_ms_card, 3, 0, 1, 6)  # SnowLuma 独有, 默认隐藏
+        self.grid_layout.addWidget(self.msg_format_card, 4, 0, 1, 6)
+        self.grid_layout.addWidget(self.token_card, 5, 0, 1, 6)
+
+        # 默认 NapCat 模式下 timeout_ms_card 隐藏
+        self.timeout_ms_card.setVisible(False)
 
         # 填充配置数据
         self.fill_config()
@@ -443,6 +562,42 @@ class HttpClientConfigDialog(ConfigDialogBase):
         super().fill_config()
         self.report_self_msg_card.fill_value(self.config.reportSelfMessage)
         self.url_card.fill_value(str(self.config.url))
+        # timeoutMs: None / 0 都展示为空字符串 (与 LineEdit 习惯对齐)
+        if self.config.timeoutMs is not None and self.config.timeoutMs > 0:
+            self.timeout_ms_card.fill_value(str(self.config.timeoutMs))
+        else:
+            self.timeout_ms_card.fill_value("")
+
+    def apply_backend_type(self, backend: BackendType) -> None:
+        """SnowLuma 模式下显示 ``timeout_ms_card``."""
+        super().apply_backend_type(backend)
+        is_snowluma = backend == BackendType.SNOWLUMA
+        self.timeout_ms_card.setVisible(is_snowluma)
+        self._rebuild_grid_layout(is_snowluma)
+
+    def _rebuild_grid_layout(self, is_snowluma: bool) -> None:
+        """按 backend 重排 ``grid_layout`` 中的可见卡片 (HTTP Client 6-col 网格)."""
+        while self.grid_layout.count():
+            self.grid_layout.takeAt(0)
+
+        if is_snowluma:
+            # SnowLuma: enable + report_self 各占半行 (2x3 cols), 没有 debug
+            self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 3)
+            self.grid_layout.addWidget(self.report_self_msg_card, 0, 3, 1, 3)
+            self.grid_layout.addWidget(self.name_card, 1, 0, 1, 6)
+            self.grid_layout.addWidget(self.url_card, 2, 0, 1, 6)
+            self.grid_layout.addWidget(self.timeout_ms_card, 3, 0, 1, 6)
+            self.grid_layout.addWidget(self.msg_format_card, 4, 0, 1, 6)
+            self.grid_layout.addWidget(self.token_card, 5, 0, 1, 6)
+        else:
+            # NapCat: 沿用原 6-col 布局
+            self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 2)
+            self.grid_layout.addWidget(self.debug_card, 0, 2, 1, 2)
+            self.grid_layout.addWidget(self.report_self_msg_card, 0, 4, 1, 2)
+            self.grid_layout.addWidget(self.name_card, 1, 0, 1, 6)
+            self.grid_layout.addWidget(self.url_card, 2, 0, 1, 6)
+            self.grid_layout.addWidget(self.msg_format_card, 3, 0, 1, 6)
+            self.grid_layout.addWidget(self.token_card, 4, 0, 1, 6)
 
     def get_config(self) -> HttpClientsConfig:
         """获取 HTTP 客户端配置
@@ -450,10 +605,22 @@ class HttpClientConfigDialog(ConfigDialogBase):
         Returns:
             HttpClientsConfig: HTTP 客户端配置对象
         """
+        # timeout_ms_card 留空时 timeoutMs 写 None (renderer 不会 emit 字段)
+        timeout_raw = (self.timeout_ms_card.get_value() or "").strip()
+        timeout_ms: int | None
+        if timeout_raw:
+            try:
+                parsed = int(timeout_raw)
+                timeout_ms = parsed if parsed > 0 else None
+            except ValueError as exc:
+                raise ValueError(self.tr("超时 必须是整数")) from exc
+        else:
+            timeout_ms = None
         return HttpClientsConfig(
             **{
                 "url": self.url_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
+                "timeoutMs": timeout_ms,
                 **super().get_config().model_dump(),
             }
         )
@@ -479,6 +646,18 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
         self.host_card = LineEditConfigCard(FI.HOME, self.tr("Host*"), "0.0.0.0", self.tr("设置主机地址"))
         self.port_card = LineEditConfigCard(FI.LINK, self.tr("Port*"), "3000", self.tr("设置端口号"))
         self.heart_interval_card = LineEditConfigCard(FI.HEART, self.tr("心跳间隔"), "30000", self.tr("设置心跳间隔"))
+        # P2 (Tier A): SnowLuma 独有字段
+        # path: WS server 是 exact match (ws 库 WebSocketServer({ path }) 实现)
+        # role: SnowLuma 用 Api / Event / Universal 区分连接, 默认 Universal
+        self.path_card = LineEditConfigCard(
+            FI.FOLDER, self.tr("Path"), "/", self.tr("WS 路径 (SnowLuma 独有, 客户端连接路径必须 exact match)")
+        )
+        self.role_card = ComboBoxConfigCard(
+            FI.PEOPLE,
+            self.tr("Role"),
+            ["Api", "Event", "Universal"],
+            self.tr("WS server 角色 (SnowLuma 独有, 默认 Universal)"),
+        )
 
         # 设置属性
         self.title_label.setText("Websocket Server")
@@ -492,9 +671,15 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
         self.grid_layout.addWidget(self.name_card, 2, 0, 1, 4)
         self.grid_layout.addWidget(self.host_card, 3, 0, 1, 2)
         self.grid_layout.addWidget(self.port_card, 3, 2, 1, 2)
-        self.grid_layout.addWidget(self.msg_format_card, 4, 0, 1, 4)
-        self.grid_layout.addWidget(self.token_card, 5, 0, 1, 2)
-        self.grid_layout.addWidget(self.heart_interval_card, 5, 2, 1, 2)
+        self.grid_layout.addWidget(self.path_card, 4, 0, 1, 2)  # SnowLuma 独有, 默认隐藏
+        self.grid_layout.addWidget(self.role_card, 4, 2, 1, 2)  # SnowLuma 独有, 默认隐藏
+        self.grid_layout.addWidget(self.msg_format_card, 5, 0, 1, 4)
+        self.grid_layout.addWidget(self.token_card, 6, 0, 1, 2)
+        self.grid_layout.addWidget(self.heart_interval_card, 6, 2, 1, 2)
+
+        # 默认 NapCat 模式下 SnowLuma 独有字段隐藏
+        self.path_card.setVisible(False)
+        self.role_card.setVisible(False)
 
         # 填充配置数据
         self.fill_config()
@@ -510,6 +695,50 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
         self.host_card.fill_value(self.config.host)
         self.port_card.fill_value(self.config.port)
         self.heart_interval_card.fill_value(self.config.heartInterval)
+        self.path_card.fill_value(self.config.path)
+        self.role_card.fill_value(self.config.role)
+
+    def apply_backend_type(self, backend: BackendType) -> None:
+        """SnowLuma 模式下隐藏 ``force_push_event_card`` / ``heart_interval_card``,
+        显示 ``path_card`` / ``role_card``."""
+        super().apply_backend_type(backend)
+        is_snowluma = backend == BackendType.SNOWLUMA
+        # NapCat-only
+        self.force_push_event_card.setVisible(not is_snowluma)
+        self.heart_interval_card.setVisible(not is_snowluma)
+        # SnowLuma-only
+        self.path_card.setVisible(is_snowluma)
+        self.role_card.setVisible(is_snowluma)
+        self._rebuild_grid_layout(is_snowluma)
+
+    def _rebuild_grid_layout(self, is_snowluma: bool) -> None:
+        """按 backend 重排 ``grid_layout`` 中的可见卡片 (WS Server 4-col 网格)."""
+        while self.grid_layout.count():
+            self.grid_layout.takeAt(0)
+
+        if is_snowluma:
+            # SnowLuma: enable + report_self 各占半行; 没有 debug / force_push / heart
+            self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 2)
+            self.grid_layout.addWidget(self.report_self_msg_card, 0, 2, 1, 2)
+            self.grid_layout.addWidget(self.name_card, 1, 0, 1, 4)
+            self.grid_layout.addWidget(self.host_card, 2, 0, 1, 2)
+            self.grid_layout.addWidget(self.port_card, 2, 2, 1, 2)
+            self.grid_layout.addWidget(self.path_card, 3, 0, 1, 2)
+            self.grid_layout.addWidget(self.role_card, 3, 2, 1, 2)
+            self.grid_layout.addWidget(self.msg_format_card, 4, 0, 1, 4)
+            self.grid_layout.addWidget(self.token_card, 5, 0, 1, 4)
+        else:
+            # NapCat: 沿用原 4-col 布局
+            self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 1)
+            self.grid_layout.addWidget(self.debug_card, 0, 1, 1, 1)
+            self.grid_layout.addWidget(self.force_push_event_card, 0, 2, 1, 1)
+            self.grid_layout.addWidget(self.report_self_msg_card, 0, 3, 1, 1)
+            self.grid_layout.addWidget(self.name_card, 1, 0, 1, 4)
+            self.grid_layout.addWidget(self.host_card, 2, 0, 1, 2)
+            self.grid_layout.addWidget(self.port_card, 2, 2, 1, 2)
+            self.grid_layout.addWidget(self.msg_format_card, 3, 0, 1, 4)
+            self.grid_layout.addWidget(self.token_card, 4, 0, 1, 2)
+            self.grid_layout.addWidget(self.heart_interval_card, 4, 2, 1, 2)
 
     def get_config(self) -> WebsocketServersConfig:
         """获取 WebSocket 服务器配置
@@ -521,6 +750,12 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
         heart_interval = self._parse_optional_int(
             self.heart_interval_card.get_value(), self.tr("心跳间隔"), default=30000
         )
+        path_raw = (self.path_card.get_value() or "/").strip()
+        if not path_raw:
+            path_raw = "/"
+        role_raw = self.role_card.get_value() or "Universal"
+        if role_raw not in ("Api", "Event", "Universal"):
+            role_raw = "Universal"
         return WebsocketServersConfig(
             **{
                 "host": self.host_card.get_value(),
@@ -528,6 +763,8 @@ class WebsocketServerConfigDialog(ConfigDialogBase):
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
                 "enableForcePushEvent": self.force_push_event_card.get_value(),
                 "heartInterval": heart_interval,
+                "path": path_raw,
+                "role": role_raw,
                 **super().get_config().model_dump(),
             }
         )
@@ -554,6 +791,15 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
         self.reconnect_interval_card = LineEditConfigCard(
             FI.UPDATE, self.tr("重连间隔"), "30000", self.tr("设置重连间隔")
         )
+        # P2 (Tier A): SnowLuma 独有字段 — Role.
+        # NapCat WsClient 无 role 概念; SnowLuma 默认 Universal.
+        # 注: reconnectInterval 双 backend 同义, 仍可见 (SnowLuma 渲染时会 clamp ≥ 1000ms).
+        self.role_card = ComboBoxConfigCard(
+            FI.PEOPLE,
+            self.tr("Role"),
+            ["Api", "Event", "Universal"],
+            self.tr("WS client 角色 (SnowLuma 独有, 默认 Universal)"),
+        )
 
         # 设置属性
         self.title_label.setText("Websocket Client")
@@ -569,6 +815,10 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
         self.grid_layout.addWidget(self.token_card, 3, 3, 1, 3)
         self.grid_layout.addWidget(self.heart_interval_card, 4, 0, 1, 3)
         self.grid_layout.addWidget(self.reconnect_interval_card, 4, 3, 1, 3)
+        self.grid_layout.addWidget(self.role_card, 5, 0, 1, 6)  # SnowLuma 独有, 默认隐藏
+
+        # 默认 NapCat 模式下 role_card 隐藏
+        self.role_card.setVisible(False)
 
         # 填充配置数据
         self.fill_config()
@@ -583,6 +833,47 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
         self.url_card.fill_value(str(self.config.url))
         self.heart_interval_card.fill_value(self.config.heartInterval)
         self.reconnect_interval_card.fill_value(self.config.reconnectInterval)
+        self.role_card.fill_value(self.config.role)
+
+    def apply_backend_type(self, backend: BackendType) -> None:
+        """SnowLuma 模式下隐藏 ``heart_interval_card``, 显示 ``role_card``;
+        ``reconnect_interval_card`` 双 backend 都可见 (NapCat reconnectInterval ↔
+        SnowLuma reconnectIntervalMs 同义)."""
+        super().apply_backend_type(backend)
+        is_snowluma = backend == BackendType.SNOWLUMA
+        # NapCat-only
+        self.heart_interval_card.setVisible(not is_snowluma)
+        # SnowLuma-only
+        self.role_card.setVisible(is_snowluma)
+        self._rebuild_grid_layout(is_snowluma)
+
+    def _rebuild_grid_layout(self, is_snowluma: bool) -> None:
+        """按 backend 重排 ``grid_layout`` 中的可见卡片 (WS Client 6-col 网格)."""
+        while self.grid_layout.count():
+            self.grid_layout.takeAt(0)
+
+        if is_snowluma:
+            # SnowLuma: enable + report_self 各占半行; 没有 debug / heart_interval;
+            # reconnect_interval 单独占行 (heart 隐藏后避免半行留白); role 单独占行.
+            self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 3)
+            self.grid_layout.addWidget(self.report_self_msg_card, 0, 3, 1, 3)
+            self.grid_layout.addWidget(self.name_card, 1, 0, 1, 6)
+            self.grid_layout.addWidget(self.url_card, 2, 0, 1, 6)
+            self.grid_layout.addWidget(self.msg_format_card, 3, 0, 1, 3)
+            self.grid_layout.addWidget(self.token_card, 3, 3, 1, 3)
+            self.grid_layout.addWidget(self.reconnect_interval_card, 4, 0, 1, 6)
+            self.grid_layout.addWidget(self.role_card, 5, 0, 1, 6)
+        else:
+            # NapCat: 沿用原 6-col 布局
+            self.grid_layout.addWidget(self.enable_card, 0, 0, 1, 2)
+            self.grid_layout.addWidget(self.debug_card, 0, 2, 1, 2)
+            self.grid_layout.addWidget(self.report_self_msg_card, 0, 4, 1, 2)
+            self.grid_layout.addWidget(self.name_card, 1, 0, 1, 6)
+            self.grid_layout.addWidget(self.url_card, 2, 0, 1, 6)
+            self.grid_layout.addWidget(self.msg_format_card, 3, 0, 1, 3)
+            self.grid_layout.addWidget(self.token_card, 3, 3, 1, 3)
+            self.grid_layout.addWidget(self.heart_interval_card, 4, 0, 1, 3)
+            self.grid_layout.addWidget(self.reconnect_interval_card, 4, 3, 1, 3)
 
     def get_config(self) -> WebsocketClientsConfig:
         """获取 WebSocket 客户端配置
@@ -596,12 +887,16 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
         reconnect_interval = self._parse_optional_int(
             self.reconnect_interval_card.get_value(), self.tr("重连间隔"), default=30000
         )
+        role_raw = self.role_card.get_value() or "Universal"
+        if role_raw not in ("Api", "Event", "Universal"):
+            role_raw = "Universal"
         return WebsocketClientsConfig(
             **{
                 "url": self.url_card.get_value(),
                 "reportSelfMessage": self.report_self_msg_card.get_value(),
                 "heartInterval": heart_interval,
                 "reconnectInterval": reconnect_interval,
+                "role": role_raw,
                 **super().get_config().model_dump(),
             }
         )

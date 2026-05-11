@@ -68,9 +68,11 @@ from src.core.config.config_model import (
 from src.core.network.urls import Urls
 from src.core.logging import LogSource, logger
 from src.core.logging.crash_bundle import mask_qqid
-from src.core.runtime.napcat import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.core.runtime.backend_type import BackendType
+from src.core.runtime.bot_process_manager import ManagerAutoRestartProcess, ManagerNapCatQQLoginState, BotProcessManager
+from src.core.runtime.paths import PathFunc
 from src.ui.common.icon import StaticIcon, NapCatDesktopIcon
-from src.ui.components.info_bar import error_bar, warning_bar
+from src.ui.components.info_bar import error_bar, info_bar, warning_bar
 from src.ui.components.message_box import AskBox
 from src.ui.page.bot_page.widget.msg_box import (
     HttpClientConfigDialog,
@@ -80,6 +82,58 @@ from src.ui.page.bot_page.widget.msg_box import (
     WebsocketClientConfigDialog,
     WebsocketServerConfigDialog,
 )
+
+
+# ==================== 2026-05-11: 内存监控异步化 (避免主线程 psutil 卡顿) ====================
+# 系统总内存 (RAM) 在单次 App session 内不变, 模块加载时算一次, 后续 BotCard.text 直接读.
+# 旧版每个 BotCard 定时器每秒调 ``psutil.virtual_memory().total`` (跨进程 syscall),
+# N 个 Bot × 每秒 1 次 = 显著 UI 卡顿. 现在缓存一次:
+_CACHED_TOTAL_MEMORY_MB: int | None = None
+
+
+def _total_memory_mb() -> int:
+    """返回系统总物理内存 (MB), 模块级懒加载缓存.
+
+    单 App session 内系统 RAM 不变, 缓存安全. 失败时返回 0 (UI 显示 ``... / 0 MB``,
+    不影响 Bot 启动).
+    """
+    global _CACHED_TOTAL_MEMORY_MB
+    if _CACHED_TOTAL_MEMORY_MB is None:
+        try:
+            _CACHED_TOTAL_MEMORY_MB = int(psutil.virtual_memory().total / (1024 * 1024))
+        except Exception:  # noqa: BLE001 - psutil 任何异常 fallback 到 0
+            _CACHED_TOTAL_MEMORY_MB = 0
+    return _CACHED_TOTAL_MEMORY_MB
+
+
+class _MemoryUsageWorker(QObject, QRunnable):
+    """后台 worker: 在 ``QThreadPool`` 工作线程跑 ``BotProcessManager.get_memory_usage``.
+
+    背景: ``BotProcessManager.get_memory_usage(qq_id)`` 内部委托给
+    :meth:`NapCatDriver.get_memory_usage_for_pid`, 后者用 ``psutil`` walk QQ.exe
+    进程树 (Electron 多子进程 5-15 个), 每个子进程一次跨进程 syscall, 累计 50-200ms.
+    在主线程 ``QTimer.timeout`` 直调会卡 UI (用户实测热启动 + 内存监控定时器开启后明显卡顿).
+
+    本 worker 把 walk 工作甩到线程池, 完成后通过 ``finished`` 信号回主线程更新 UI.
+
+    SnowLuma 热启动 + NapCat 启动两条路径都受益.
+    """
+
+    finished = Signal(str, int)  # (qq_id, mem_mb)
+
+    def __init__(self, qq_id: str) -> None:
+        QObject.__init__(self)
+        QRunnable.__init__(self)
+        self._qq_id = qq_id
+        # 由 QThreadPool 跑完自动 delete (worker 短寿, 不被 BotCard 持引用)
+        self.setAutoDelete(True)
+
+    def run(self) -> None:  # noqa: D401 - QRunnable 协议
+        try:
+            mem_mb = it(BotProcessManager).get_memory_usage(self._qq_id)
+        except Exception:  # noqa: BLE001 - worker 边界吞所有异常避免 QThreadPool 上抛
+            mem_mb = 0
+        self.finished.emit(self._qq_id, mem_mb)
 
 
 class BotCard(HeaderCardWidget):
@@ -141,7 +195,7 @@ class BotCard(HeaderCardWidget):
         self.headerLayout.addWidget(self.remove_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # 链接信号
-        it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_process_changed_button)
+        it(BotProcessManager).process_changed_signal.connect(self.slot_process_changed_button)
         it(ManagerNapCatQQLoginState).qr_code_available_signal.connect(self.slot_qr_code_available)
         it(ManagerNapCatQQLoginState).qr_code_removed_signal.connect(self.slot_qr_code_removed)
         self.run_button.clicked.connect(self.slot_run_button)
@@ -198,7 +252,7 @@ class BotCard(HeaderCardWidget):
         - qr_code 取决于 ``QRCodeDialogFactory.has_qr_code``.
         """
         qq_id = str(self._config.bot.QQID)
-        record = it(ManagerNapCatQQProcess).get_process(qq_id)
+        record = it(BotProcessManager).get_process(qq_id)
         state = record.state if record is not None else QProcess.ProcessState.NotRunning
         self.slot_process_changed_button(qq_id, state)
         self.setting_button.show()
@@ -230,14 +284,14 @@ class BotCard(HeaderCardWidget):
     def update_info_card(self) -> None:
         """更新信息卡片显示内容,  用于外部调用, 刷新后调用.
 
-        P2.6 起 ``ManagerNapCatQQProcess.get_process`` 既可能返回本地
+        P2.6 起 ``BotProcessManager.get_process`` 既可能返回本地
         [`NapCatProcessModel`](src/core/runtime/napcat.py) (带 ``process`` 字段),
         也可能返回远端 [`RemoteProcessRecord`](src/core/runtime/napcat.py) (没有 ``process``).
         两类 record 都暴露 ``state`` 字段, 这里统一以 ``state`` 判断, 避免硬依赖 QProcess.
 
         P3 perf: 同步反映 ``Starting`` 状态, 让 BotList 重建后仍保留启动中指示.
         """
-        record = it(ManagerNapCatQQProcess).get_process(str(self._config.bot.QQID))
+        record = it(BotProcessManager).get_process(str(self._config.bot.QQID))
         if record is None:
             return
 
@@ -277,14 +331,214 @@ class BotCard(HeaderCardWidget):
 
     # ==================== 槽函数 ====================
     def slot_run_button(self) -> None:
-        """处理运行按钮点击"""
-        logger.info(f"请求启动 Bot(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
-        it(ManagerNapCatQQProcess).create_napcat_process(self._config)
+        """处理运行按钮点击.
+
+        Q2 (SnowLuma 启动模式): SnowLuma 后端 + 本地运行 时弹冷/热启动选择对话框;
+        热启动且系统有多个 QQ.exe 时再弹 PID picker. NapCat / 远端走原始路径 (无对话框).
+        """
+        qq_id_masked = mask_qqid(self._config.bot.QQID)
+        logger.info(f"请求启动 Bot(QQID: {qq_id_masked})", log_source=LogSource.UI)
+
+        # Q2: 只有本地 SnowLuma 才需要选启动模式 (NapCat / 远端无热启动概念)
+        is_local_snowluma = (
+            not self._config.bot.is_remote
+            and self._config.bot.backend_type == BackendType.SNOWLUMA
+        )
+        if not is_local_snowluma:
+            it(BotProcessManager).start_bot(self._config)
+            return
+
+        # SnowLuma 本地路径: 走 Q2 启动模式选择流程
+        self._snowluma_run_with_mode_dialog()
+
+    def _snowluma_run_with_mode_dialog(self) -> None:
+        """Q2: SnowLuma 启动模式对话框流程 (冷/热) + 热启动 PID 选择.
+
+        流程:
+        1. 弹 :class:`SnowLumaStartModeDialog` 让用户选模式; 用户取消 → abort.
+        2. 冷启动 → 直接调 ``start_bot(mode=COLD_START)`` (与历史一致).
+        3. 热启动 → 弹 info_bar "正在扫描 QQ.exe 进程…" + 异步 worker 跑 psutil 枚举
+           (实测 cold call ~2.6s, 主线程同步会卡 UI); worker 完成后调 :meth:`_on_qq_enum_done`.
+        4. :meth:`_on_qq_enum_done` 根据候选数量:
+           - 0 个 QQ.exe: error_bar 提示用户先启动 QQ 或改冷启动, abort.
+           - 1 个 QQ.exe: 直接用其 PID, 跳过 picker.
+           - N>1 个 QQ.exe: 弹 :class:`SnowLumaPidPickerDialog`; 用户取消 → abort.
+        5. 调 ``start_bot(mode=HOT_START, attach_pid=...)``.
+
+        所有用户取消 / abort 路径都**不**触发 start_bot, UI 状态保持原样.
+        """
+        # 延迟导入避免循环 (snowluma_start_dialog 依赖 SnowLumaStartMode 但 card 模块加载早)
+        from src.core.runtime.snowluma_driver import SnowLumaStartMode
+        from src.ui.page.bot_page.widget.snowluma_start_dialog import (
+            EnumerateQQProcessesWorker,
+            SnowLumaStartModeDialog,
+        )
+
+        qq_id_masked = mask_qqid(self._config.bot.QQID)
+
+        # Step 1: 模式选择
+        mode_dialog = SnowLumaStartModeDialog(self.window())
+        if not mode_dialog.exec():
+            logger.info(
+                f"用户取消 SnowLuma 启动模式选择, abort 启动(QQID: {qq_id_masked})",
+                log_source=LogSource.UI,
+            )
+            return
+
+        mode = mode_dialog.get_value()
+
+        # Step 2: 冷启动 → 直接 start (无需枚举)
+        if mode == SnowLumaStartMode.COLD_START:
+            logger.info(
+                f"SnowLuma 冷启动模式 (spawn 新 QQ.exe)(QQID: {qq_id_masked})",
+                log_source=LogSource.UI,
+            )
+            it(BotProcessManager).start_bot(
+                self._config, snowluma_start_mode=SnowLumaStartMode.COLD_START
+            )
+            return
+
+        # Step 3: 热启动 → 异步枚举 QQ.exe (避免 2.6s UI freeze)
+        # 2026-05-11 诊断: 加细粒度 trace 排查"提交 worker 后 UI 完全锁死" 问题.
+        # 用户实测主线程被卡住, 不是 worker 慢. 每步打时间戳定位真正同步阻塞点.
+        import time as _time
+
+        _t_step3 = _time.monotonic()
+
+        info_bar(
+            self.tr("正在扫描系统中的 QQ.exe 进程..."),
+            title=self.tr("热启动"),
+            parent=self,
+        )
+        _t_after_info_bar = _time.monotonic()
+        logger.trace(
+            f"SnowLuma 热启动 step3 info_bar 耗时 {(_t_after_info_bar - _t_step3)*1000:.1f}ms",
+            log_source=LogSource.UI,
+        )
+
+        logger.info(
+            f"SnowLuma 热启动: 启动后台 QQ.exe 枚举 worker(QQID: {qq_id_masked})",
+            log_source=LogSource.UI,
+        )
+        _t_after_log = _time.monotonic()
+
+        worker = EnumerateQQProcessesWorker()
+        _t_after_worker_init = _time.monotonic()
+        logger.trace(
+            f"SnowLuma 热启动 EnumerateQQProcessesWorker.__init__ 耗时 "
+            f"{(_t_after_worker_init - _t_after_log)*1000:.1f}ms",
+            log_source=LogSource.UI,
+        )
+
+        # 持 worker 强引用防 GC; worker 完成后 _on_qq_enum_done 会释放
+        self._snowluma_enum_worker = worker
+        worker.finished.connect(self._on_qq_enum_done)
+        _t_after_connect = _time.monotonic()
+
+        # 诊断池状态: maxThreadCount / activeThreadCount 帮判断 worker 是否会立即开跑
+        pool = QThreadPool.globalInstance()
+        logger.trace(
+            f"SnowLuma 热启动 worker.connect 耗时 "
+            f"{(_t_after_connect - _t_after_worker_init)*1000:.1f}ms; "
+            f"QThreadPool max={pool.maxThreadCount()} active={pool.activeThreadCount()}",
+            log_source=LogSource.UI,
+        )
+
+        pool.start(worker)
+        _t_after_start = _time.monotonic()
+        logger.trace(
+            f"SnowLuma 热启动 QThreadPool.start 耗时 "
+            f"{(_t_after_start - _t_after_connect)*1000:.1f}ms; "
+            f"step3 总耗时 {(_t_after_start - _t_step3)*1000:.1f}ms",
+            log_source=LogSource.UI,
+        )
+
+    def _on_qq_enum_done(self, candidates: object) -> None:
+        """Q2 热启动 QQ 枚举完成回调 (在主线程跑).
+
+        根据候选数量: 0 → abort, 1 → 自动用, N → 弹 picker.
+        完成后释放 worker 强引用, 供 Python GC.
+        """
+        from src.core.runtime.snowluma_driver import SnowLumaStartMode
+        from src.ui.page.bot_page.widget.snowluma_start_dialog import (
+            QQProcessInfo,
+            SnowLumaPidPickerDialog,
+        )
+
+        qq_id_masked = mask_qqid(self._config.bot.QQID)
+
+        # 释放 worker 引用 + deleteLater
+        worker = getattr(self, "_snowluma_enum_worker", None)
+        if worker is not None:
+            try:
+                worker.deleteLater()
+            except Exception:  # noqa: BLE001
+                pass
+            self._snowluma_enum_worker = None
+
+        if not isinstance(candidates, list):
+            candidates = []
+        # Type-narrow: 过滤非 QQProcessInfo (防御异常 payload)
+        candidates = [c for c in candidates if isinstance(c, QQProcessInfo)]
+
+        if not candidates:
+            error_bar(
+                self.tr("热启动失败"),
+                self.tr(
+                    "系统中没有检测到正在运行的 QQ.exe 进程. "
+                    "请先手动启动并登录 QQ, 或改用冷启动模式 (Desktop 自动启动 QQ)."
+                ),
+                parent=self,
+            )
+            logger.warning(
+                f"SnowLuma 热启动 abort: 未检测到 QQ.exe 进程(QQID: {qq_id_masked})",
+                log_source=LogSource.UI,
+            )
+            return
+
+        attach_pid: int
+        if len(candidates) == 1:
+            attach_pid = candidates[0].pid
+            logger.info(
+                (
+                    f"SnowLuma 热启动: 唯一候选自动选中 (QQID: {qq_id_masked}, "
+                    f"attach_pid={attach_pid}, started_at={candidates[0].create_time_iso})"
+                ),
+                log_source=LogSource.UI,
+            )
+        else:
+            # 多个候选 → 弹 PID picker
+            picker = SnowLumaPidPickerDialog(self.window(), candidates)
+            if not picker.exec():
+                logger.info(
+                    f"用户取消 SnowLuma PID 选择, abort 热启动(QQID: {qq_id_masked})",
+                    log_source=LogSource.UI,
+                )
+                return
+            attach_pid = picker.get_value()
+            if attach_pid <= 0:
+                error_bar(
+                    self.tr("热启动失败"),
+                    self.tr("未选中任何 QQ.exe 进程"),
+                    parent=self,
+                )
+                return
+            logger.info(
+                f"SnowLuma 热启动: 用户选中 PID={attach_pid}(QQID: {qq_id_masked})",
+                log_source=LogSource.UI,
+            )
+
+        # 真正 start
+        it(BotProcessManager).start_bot(
+            self._config,
+            snowluma_start_mode=SnowLumaStartMode.HOT_START,
+            snowluma_attach_pid=attach_pid,
+        )
 
     def slot_stop_button(self) -> None:
         """处理停止按钮点击"""
         logger.info(f"请求停止 Bot(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
-        it(ManagerNapCatQQProcess).stop_process(str(self._config.bot.QQID))
+        it(BotProcessManager).stop_bot(str(self._config.bot.QQID))
         it(ManagerAutoRestartProcess).remove_auto_restart_timer(str(self._config.bot.QQID))
 
     def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
@@ -352,8 +606,89 @@ class BotCard(HeaderCardWidget):
         page.log_page.set_current_log_manager(self._config)
 
     def slot_web_ui_button(self) -> None:
-        """处理 WebUI 按钮槽函数, 打开 Bot 的 WebUI"""
+        """处理 WebUI 按钮槽函数, 打开 Bot 的 WebUI.
+
+        P1 (SnowLuma 适配): 按 ``bot.backend_type`` 分流:
+
+        - ``NAPCAT``: 读 :class:`ManagerNapCatQQLoginState` 拿 port + token 拼接
+          ``http://127.0.0.1:{port}/webui?token={token}`` (历史行为零变更)
+        - ``SNOWLUMA``: 读 ``<snowluma_path>/config/runtime.json`` 拿 ``webuiPort``
+          (默认 5099), 打开 ``http://127.0.0.1:{webuiPort}/``, 同时把
+          :func:`load_session` 拿到的明文密码**自动复制到剪贴板** + 弹 InfoBar
+          告知用户 (SnowLuma WebUI 内手动粘贴即可登录)
+        """
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        from PySide6.QtWidgets import QApplication
+
         qq_id = str(self._config.bot.QQID)
+
+        # SnowLuma 分支: 不依赖 ManagerNapCatQQLoginState (该 manager 仅服务 NapCat)
+        if self._config.bot.backend_type == BackendType.SNOWLUMA:
+            import json
+
+            from src.core.runtime.snowluma_session import load_session
+
+            webui_port = 5099
+            runtime_json = it(PathFunc).get_snowluma_config_dir() / "runtime.json"
+            if runtime_json.exists():
+                try:
+                    payload = json.loads(runtime_json.read_text(encoding="utf-8"))
+                    if isinstance(payload, dict):
+                        candidate = payload.get("webuiPort", 5099)
+                        if isinstance(candidate, int) and candidate > 0:
+                            webui_port = candidate
+                except (OSError, json.JSONDecodeError, ValueError, TypeError):
+                    pass
+            web_ui_url = f"http://127.0.0.1:{webui_port}/"
+
+            # W6 (2026-05-11): 密码源从 per-Bot 改为 App 级 QConfig
+            # ``cfg.snowluma_webui_password_override`` (与 daemon 读取一致).
+            # 本按钮仍是**只读**视图: 不调 ``resolve_effective_password`` 避免 session
+            # 不存在时副作用地 ``create_session`` 写盘 (启动 Bot 时再生成).
+            from src.core.config import cfg
+            override = (cfg.get(cfg.snowluma_webui_password_override) or "").strip()
+            effective_password: str | None = None
+            password_source = ""
+            if override:
+                effective_password = override
+                password_source = self.tr("组件页 SnowLuma 全局密码 override")
+            else:
+                session = load_session()
+                if session is not None:
+                    effective_password = session.password
+                    password_source = self.tr("Desktop 自动生成密码")
+
+            if effective_password is not None:
+                QApplication.clipboard().setText(effective_password)
+                info_bar(
+                    self.tr("已将 SnowLuma WebUI 密码复制到剪贴板 ({source}), 直接粘贴登录即可").format(
+                        source=password_source
+                    ),
+                    title=self.tr("密码已就绪"),
+                    parent=self,
+                )
+                logger.info(
+                    f"SnowLuma WebUI 密码已写入剪贴板(QQID: {mask_qqid(qq_id)}, source={password_source})",
+                    log_source=LogSource.UI,
+                )
+            else:
+                warning_bar(
+                    self.tr(
+                        "未找到 snowluma-session.json 且未设置自定义密码 override. "
+                        "请先启动一次 Bot 让 Desktop 生成密码, 或在 Bot 配置中填入自定义 WebUI 密码."
+                    ),
+                    parent=self,
+                )
+
+            QDesktopServices.openUrl(QUrl(web_ui_url))
+            logger.info(
+                f"已打开 SnowLuma WebUI(QQID: {mask_qqid(qq_id)}, url={web_ui_url})",
+                log_source=LogSource.UI,
+            )
+            return
+
+        # NapCat 分支 (历史行为)
         login_state = it(ManagerNapCatQQLoginState).get_login_state(qq_id)
 
         if login_state is None:
@@ -364,15 +699,19 @@ class BotCard(HeaderCardWidget):
         # 构建 WebUI URL
         web_ui_url = f"http://127.0.0.1:{login_state.port}/webui?token={login_state.token}"
 
-        # 打开浏览器
-        from PySide6.QtGui import QDesktopServices
-        from PySide6.QtCore import QUrl
-
         QDesktopServices.openUrl(QUrl(web_ui_url))
         logger.info(f"已打开 WebUI(QQID: {mask_qqid(qq_id)}, url={web_ui_url})", log_source=LogSource.UI)
 
     def slot_qr_code_button(self) -> None:
-        """处理二维码按钮槽函数. """
+        """处理二维码按钮槽函数.
+
+        P1 (SnowLuma 适配): SnowLuma 分支不走 :class:`QRCodeDialogFactory`,
+        改为提示用户到 SnowLuma WebUI 内扫码 (二维码不在 Desktop 内渲染).
+        """
+        if self._config.bot.backend_type == BackendType.SNOWLUMA:
+            info_bar(self.tr("请在 SnowLuma WebUI 内完成扫码登录"), parent=self)
+            return
+
         it(QRCodeDialogFactory).show(str(self._config.bot.QQID))
 
     def slot_qr_code_available(self, qq_id: str, qr_code: str) -> None:
@@ -404,7 +743,7 @@ class BotCard(HeaderCardWidget):
         from src.ui.window.main_window.window import MainWindow
 
         qq_id = str(self._config.bot.QQID)
-        process_manager = it(ManagerNapCatQQProcess)
+        process_manager = it(BotProcessManager)
 
         if process_manager.get_process(qq_id) is not None:
             logger.warning(f"拒绝移除运行中的 Bot(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
@@ -703,8 +1042,8 @@ class BotInfoWidget(QWidget):
         self.setup_tooltip()
 
         # 链接信号
-        it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_run_time_start)
-        it(ManagerNapCatQQProcess).process_changed_signal.connect(self.slot_memory_usage_start)
+        it(BotProcessManager).process_changed_signal.connect(self.slot_run_time_start)
+        it(BotProcessManager).process_changed_signal.connect(self.slot_memory_usage_start)
         cfg.bot_memory_monitor_interval.valueChanged.connect(self._on_monitor_interval_changed)
 
     def setup_tooltip(self) -> None:
@@ -730,7 +1069,7 @@ class BotInfoWidget(QWidget):
             self._run_time_info.set_icon(FluentIcon.DATE_TIME, light="#176c3a", dark="#7ee2a8")
             # 判断 start_time 是否为 None, 为 None 代表第一次启动, 从 monotonic() 获取启动时间, 否则查找进程启动时间
             if self.start_time is None:
-                process_model = it(ManagerNapCatQQProcess).get_process(qq_id)
+                process_model = it(BotProcessManager).get_process(qq_id)
                 self.start_time = process_model.started_at if process_model is not None else monotonic()
             else:
                 self.start_time = monotonic()
@@ -767,7 +1106,20 @@ class BotInfoWidget(QWidget):
             self._run_time_info.text_label.setText("未运行")
 
     def slot_memory_usage_start(self, qq_id: str, state: QProcess.ProcessState) -> None:
-        """处理内存占用开始更新槽函数"""
+        """处理内存占用开始更新槽函数 (2026-05-11 改异步 worker, 避免阻塞主线程).
+
+        历史 (主线程同步): 旧版定时器直接 ``lambda: setText(get_memory_usage(qq_id))``,
+        在 SnowLuma 热启动场景下 ``get_memory_usage`` → ``NapCatDriver.get_memory_usage_for_pid``
+        → 用 ``psutil`` walk QQ.exe Electron 多子进程树 (5-15 个子进程, 每个一次 syscall),
+        累计 50-200ms 阻塞 UI 线程; 加上 ``psutil.virtual_memory().total`` 又是一次 syscall.
+        用户实测**热启动后 UI 明显卡顿**.
+
+        现在 (异步 worker): 每次 tick 派发 :class:`_MemoryUsageWorker` 到 ``QThreadPool``,
+        worker 跑 psutil walk 在后台线程, 完成后 emit 信号回主线程更新 ``text_label``.
+        ``virtual_memory().total`` (系统 RAM, session 内不变) 在模块初始化时缓存一次,
+        不再每 tick 调.
+        ``_memory_in_flight`` 守护防止 worker 堆积 (psutil 偶发慢响应时跳过本 tick).
+        """
         if qq_id != str(self._config.bot.QQID):
             return
 
@@ -781,12 +1133,9 @@ class BotInfoWidget(QWidget):
             timer = QTimer(self)
             # 使用配置的更新间隔
             update_interval = cfg.get(cfg.bot_memory_monitor_interval)
-            # 每隔指定时间更新一次内存占用显示
-            timer.timeout.connect(
-                lambda: self._memory_info.text_label.setText(
-                    f"{it(ManagerNapCatQQProcess).get_memory_usage(qq_id)} MB / {int(psutil.virtual_memory().total / (1024 * 1024))} MB"
-                )
-            )
+            self._memory_in_flight = False  # in-flight 守护
+            # 每隔指定时间触发异步 worker 算 memory; 不再在主线程同步 walk psutil.
+            timer.timeout.connect(self._schedule_memory_update)
             timer.start(update_interval)
             # 保存计时器引用
             self._memory_timer = timer
@@ -797,6 +1146,39 @@ class BotInfoWidget(QWidget):
                 del self._memory_timer
 
             self._memory_info.text_label.setText("-M / -M")
+
+    def _schedule_memory_update(self) -> None:
+        """定时器回调: 派发 :class:`_MemoryUsageWorker` 到 ``QThreadPool``.
+
+        in-flight 守护: 若上次 worker 未完成 (psutil 调用偶发慢响应或 QQ 进程树极大),
+        跳过本次 tick 避免 worker 堆积. UI 文本保持上次值不动, 用户感知 = 这秒数据
+        晚一秒更新, 不影响整体监控可用性.
+        """
+        if self._memory_in_flight:
+            return
+        self._memory_in_flight = True
+        qq_id = str(self._config.bot.QQID)
+        worker = _MemoryUsageWorker(qq_id)
+        worker.finished.connect(self._update_memory_text)
+        QThreadPool.globalInstance().start(worker)
+
+    @Slot(str, int)
+    def _update_memory_text(self, qq_id: str, mem_mb: int) -> None:
+        """``_MemoryUsageWorker.finished`` 信号槽 (主线程): 更新内存显示文本.
+
+        worker 在工作线程算完 psutil 进程树 RSS 后 emit ``(qq_id, mem_mb)``;
+        本 slot 仅做字符串拼接 + ``setText``, 不再调 psutil.
+        """
+        if qq_id != str(self._config.bot.QQID):
+            return
+        # shutdown race: 计时器停了但 worker 仍在跑完后 emit, _memory_info 可能已 deleteLater
+        try:
+            self._memory_info.text_label.setText(f"{mem_mb} MB / {_total_memory_mb()} MB")
+        except RuntimeError:
+            # 底层 C++ 对象已销毁 (用户关窗 / Bot card 被移除), 静默忽略
+            pass
+        finally:
+            self._memory_in_flight = False
 
     def _on_monitor_interval_changed(self, interval_ms: int) -> None:
         """监控间隔配置变化时更新定时器 (仅更新内存监控) """
@@ -964,6 +1346,21 @@ class ConfigCardBase(HeaderCardWidget):
         """处理编辑按钮点击事件 - 由子类实现"""
         raise NotImplementedError("子类必须实现 _on_edit_button_clicked 方法")
 
+    def _get_current_backend(self) -> BackendType:
+        """P2 (Tier A): 走父控件链找 ConnectConfigWidget._current_backend.
+
+        ConnectConfigWidget 是 cards 的祖先 (cards 加进 view 里, view 是
+        ConnectConfigWidget 的子控件). 走 parent() 链直到找到带
+        ``_current_backend`` 属性的对象, 没有则降级为 NAPCAT 与 P1 行为一致.
+        """
+        node = self.parent()
+        while node is not None:
+            backend = getattr(node, "_current_backend", None)
+            if isinstance(backend, BackendType):
+                return backend
+            node = node.parent() if hasattr(node, "parent") else None
+        return BackendType.NAPCAT
+
 
 class HttpServerConfigCard(ConfigCardBase):
     """HTTP 服务器配置卡片"""
@@ -1032,6 +1429,8 @@ class HttpServerConfigCard(ConfigCardBase):
         from src.ui.window.main_window.window import MainWindow
 
         dialog = HttpServerConfigDialog(it(MainWindow), cast(HttpServersConfig, self.config))
+        # P2 (Tier A): 按当前 backend 显隐 dialog 字段
+        dialog.apply_backend_type(self._get_current_backend())
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -1169,6 +1568,8 @@ class HttpClientConfigCard(ConfigCardBase):
         from src.ui.window.main_window.window import MainWindow
 
         dialog = HttpClientConfigDialog(it(MainWindow), cast(HttpClientsConfig, self.config))
+        # P2 (Tier A): 按当前 backend 显隐 dialog 字段
+        dialog.apply_backend_type(self._get_current_backend())
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -1248,6 +1649,8 @@ class WebsocketServersConfigCard(ConfigCardBase):
         from src.ui.window.main_window.window import MainWindow
 
         dialog = WebsocketServerConfigDialog(it(MainWindow), cast(WebsocketServersConfig, self.config))
+        # P2 (Tier A): 按当前 backend 显隐 dialog 字段
+        dialog.apply_backend_type(self._get_current_backend())
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()
@@ -1320,6 +1723,8 @@ class WebsocketClientConfigCard(ConfigCardBase):
         from src.ui.window.main_window.window import MainWindow
 
         dialog = WebsocketClientConfigDialog(it(MainWindow), cast(WebsocketClientsConfig, self.config))
+        # P2 (Tier A): 按当前 backend 显隐 dialog 字段
+        dialog.apply_backend_type(self._get_current_backend())
         if dialog.exec():
             self.config = dialog.get_config()
             self.fill_config()

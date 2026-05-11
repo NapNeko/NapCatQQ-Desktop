@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication
 from src.core.config import cfg
 from src.core.config.config_enum import CloseActionEnum
 from src.core.logging import CrashBundleNotification, LogSource, crash_bundle_notification_center, logger
-from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState, BotProcessManager
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.page import ApiDebugPage, BotPage, ComponentPage, HomeWidget, RemotePage, SetupWidget
@@ -169,7 +169,7 @@ class MainWindow(MSFluentWindow):
         if getattr(self, "_core_events_bound", False):
             return
 
-        process_manager = it(ManagerNapCatQQProcess)
+        process_manager = it(BotProcessManager)
         login_state_manager = it(ManagerNapCatQQLoginState)
 
         process_manager.notification_signal.connect(self._show_core_notification)
@@ -239,7 +239,7 @@ class MainWindow(MSFluentWindow):
         if close_action == CloseActionEnum.CLOSE:
 
             # 如果有机器人在线, 则提示用户关闭实例
-            if it(ManagerNapCatQQProcess).has_running_bot():
+            if it(BotProcessManager).has_running_bot():
                 # 项目内模块导入
                 from src.ui.components.message_box import AskBox
 

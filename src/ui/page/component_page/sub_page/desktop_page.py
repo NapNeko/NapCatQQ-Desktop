@@ -16,7 +16,7 @@ from src.core.versioning import VersionSnapshot
 from src.core.logging import LogSource, logger
 from src.core.logging.crash_bundle import summarize_path
 from src.core.runtime.paths import PathFunc
-from src.core.runtime.napcat import ManagerNapCatQQProcess
+from src.core.runtime.bot_process_manager import BotProcessManager
 from src.resource import resource as _resource  # noqa: F401
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
 from src.ui.components.message_box import AskBox
@@ -123,7 +123,7 @@ class DesktopPage(PageBase):
         from src.ui.window.main_window import MainWindow
 
         # 检查是否有运行的 Bot
-        has_bot = it(ManagerNapCatQQProcess).has_running_bot()
+        has_bot = it(BotProcessManager).has_running_bot()
         if has_bot:
             box = AskBox(
                 self.tr("警告"),
@@ -134,8 +134,8 @@ class DesktopPage(PageBase):
 
             if box.exec():
                 logger.warning("Desktop 更新前关闭全部 Bot 以继续执行", log_source=LogSource.UI)
-                process_manager = it(ManagerNapCatQQProcess)
-                process_manager.stop_all_processes()
+                process_manager = it(BotProcessManager)
+                process_manager.stop_all_bots()
                 deadline = monotonic() + 5
                 while process_manager.has_running_bot() and monotonic() < deadline:
                     sleep(0.1)

@@ -7,7 +7,7 @@
 - 数据源全部消费现有单例信号, **不**新增持久存储:
   - [`ServerManager`](src/core/remote/server_manager.py): 服务器总数 / 在线服务器数
     (deployment_state == DEPLOYED 视为"在线")
-  - [`ManagerNapCatQQProcess`](src/core/runtime/napcat.py): 在线远端 Bot 数
+  - [`BotProcessManager`](src/core/runtime/napcat.py): 在线远端 Bot 数
     (``remote_process_dict`` 中 ``state == Running``)
   - [`ResourceMonitorService`](src/core/remote/resource_monitor.py): 最近一条阈值告警 (24h 内)
 - 视觉布局 (P4 W4 重构, 修字体重叠 + 提升信息密度):
@@ -185,11 +185,11 @@ class RemoteSummaryCard(SimpleCardWidget):
         except Exception:  # noqa: BLE001 - UI 容错: 单例不可用时降级到只读静态文案
             pass
 
-        # ManagerNapCatQQProcess: 远端 Bot 状态变化 -> 计数刷新
+        # BotProcessManager: 远端 Bot 状态变化 -> 计数刷新
         try:
-            from src.core.runtime.napcat import ManagerNapCatQQProcess
+            from src.core.runtime.bot_process_manager import BotProcessManager
 
-            it(ManagerNapCatQQProcess).process_changed_signal.connect(
+            it(BotProcessManager).process_changed_signal.connect(
                 lambda _qq, _state: self.refresh()
             )
         except Exception:  # noqa: BLE001
@@ -263,9 +263,9 @@ class RemoteSummaryCard(SimpleCardWidget):
 
         bots = 0
         try:
-            from src.core.runtime.napcat import ManagerNapCatQQProcess
+            from src.core.runtime.bot_process_manager import BotProcessManager
 
-            mgr = it(ManagerNapCatQQProcess)
+            mgr = it(BotProcessManager)
             bots = sum(
                 1
                 for record in mgr.remote_process_dict.values()

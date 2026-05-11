@@ -18,11 +18,11 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
 
 # 项目内模块导入
 from src.core.config.config_model import Config
-from src.core.config.operate_config import delete_config, read_config
+from src.core.config.operate_config import consume_truncated_bots_warning, delete_config, read_config
 from src.core.logging.crash_bundle import mask_qqid
 from src.core.logging import LogSource, logger
 from src.core.operation.batch_dispatcher import BatchDispatcher, BatchOutcome, inline_executor
-from src.core.runtime.napcat import ManagerAutoRestartProcess, ManagerNapCatQQProcess
+from src.core.runtime.bot_process_manager import ManagerAutoRestartProcess, BotProcessManager
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 
 from ..widget.card import BotCard
@@ -201,7 +201,12 @@ class BotListPage(ScrollArea):
             self.remove_all_bot()
 
         # 读取配置文件
-        if (configs := read_config()) == self._bot_config_list:
+        configs = read_config()
+        # 问题 3 修复 (层 3): 截断警告**必须先消费**, 避免下面 early-return 让 deferred
+        # queue 在多次 update_bot_list 调用下累积. 即使列表无变化也要消费 (队列在 read_config
+        # 中已 push, 不消费就泄漏).
+        self._consume_and_emit_truncated_warning()
+        if configs == self._bot_config_list:
             # 如果读取的配置文件与现有配置文件一致, 则跳过
             logger.trace("Bot 列表刷新跳过: 配置未发生变化", log_source=LogSource.UI)
             return
@@ -224,6 +229,28 @@ class BotListPage(ScrollArea):
             self.view_layout.addWidget(card)
         if self._batch_mode:
             self._refresh_batch_count_label()
+
+    def _consume_and_emit_truncated_warning(self) -> None:
+        """问题 3 修复 (层 3): 消费 :func:`read_config` 的截断警告, 弹一次 ``warning_bar``.
+
+        ``read_config`` 截断时把被隐藏的 QQID push 到 deferred queue, 这里消费后清空;
+        用户后续刷新列表不再重复弹 (除非 read_config 又截断了新的 QQID).
+
+        多次调用 :func:`update_bot_list` (例如自动刷新 + 手动刷新) 都会进这里, 但只要
+        队列空就无声 return, 不会骚扰用户.
+        """
+        truncated = consume_truncated_bots_warning()
+        if not truncated:
+            return
+        # 去重: 同一次 update_bot_list 内 read_config 只调一次, 不会有重复; 但防御一下
+        # 万一未来有别处 push 多次的逻辑.
+        unique_qqids = list(dict.fromkeys(truncated))
+        masked = ", ".join(mask_qqid(q) for q in unique_qqids)
+        warning_bar(
+            self.tr(f"检测到 {len(unique_qqids)} 个 Bot 超过 NTQQ 多开 4 个上限"),
+            self.tr(f"已隐藏 QQID: {masked}; 如需调整, 请删除现有 Bot 后再添加"),
+            parent=self,
+        )
 
     def _is_card_alive(self, card: BotCard) -> bool:
         """判断 Bot Card 是否仍然有效. """
@@ -363,28 +390,94 @@ class BotListPage(ScrollArea):
 
     # =================== P4 F2: 批量动作 ==============================
     def slot_batch_start(self) -> None:
-        """批量启动选中的 Bot."""
+        """批量启动选中的 Bot.
+
+        2026-05-11 (问题 4 修复): 含本地 SnowLuma Bot 时, 单次弹
+        :class:`SnowLumaStartModeDialog` 让用户选启动模式, **一次性应用到所有勾选的
+        SnowLuma Bot**. 热启动需为每个 Bot 单独选 PID, 批量模式下不支持; 用户选热启动
+        时弹错误提示并 abort.
+
+        - NapCat / 远端 Bot 不受影响, 永远走原始路径.
+        - 用户取消模式选择 → abort 整个批量启动.
+        """
+        # 延迟导入避免循环 (snowluma_start_dialog 依赖 SnowLumaStartMode)
+        from src.core.runtime.backend_type import BackendType
+        from src.core.runtime.snowluma_driver import SnowLumaStartMode
+        from src.ui.page.bot_page.widget.snowluma_start_dialog import SnowLumaStartModeDialog
+
         configs = self.get_selected_configs()
         if not configs:
             warning_bar(self.tr("请先勾选要启动的 Bot"), parent=self)
             return
 
-        process_manager = it(ManagerNapCatQQProcess)
-        items: list[tuple[str, callable]] = []
+        process_manager = it(BotProcessManager)
+
+        # 过滤已运行 Bot
+        pending_configs: list[Config] = []
         for config in configs:
             qq_id = str(config.bot.QQID)
             if process_manager.get_process(qq_id) is not None:
                 logger.trace(f"批量启动跳过 (已运行): {mask_qqid(qq_id)}", log_source=LogSource.UI)
                 continue
+            pending_configs.append(config)
 
-            def _op(cfg=config) -> None:
-                process_manager.create_napcat_process(cfg)
-
-            items.append((qq_id, _op))
-
-        if not items:
+        if not pending_configs:
             info_bar(self.tr("已选 Bot 全部在运行, 无需重复启动"), parent=self)
             return
+
+        # 问题 4 修复: 检测勾选中的本地 SnowLuma Bot, 弹一次启动模式选择
+        local_snowluma_configs = [
+            c for c in pending_configs
+            if not c.bot.is_remote and c.bot.backend_type == BackendType.SNOWLUMA
+        ]
+        snowluma_start_mode = SnowLumaStartMode.COLD_START
+        if local_snowluma_configs:
+            mode_dialog = SnowLumaStartModeDialog(self.window())
+            if not mode_dialog.exec():
+                logger.info(
+                    f"用户取消批量启动 SnowLuma 模式选择, abort "
+                    f"(sl_bots={len(local_snowluma_configs)})",
+                    log_source=LogSource.UI,
+                )
+                return
+            snowluma_start_mode = mode_dialog.get_value()
+            if snowluma_start_mode == SnowLumaStartMode.HOT_START:
+                error_bar(
+                    self.tr("批量启动不支持热启动"),
+                    self.tr(
+                        "热启动需为每个 SnowLuma Bot 单独选择目标 QQ.exe 进程, "
+                        "请单个启动 SnowLuma Bot 或改用冷启动."
+                    ),
+                    parent=self,
+                )
+                logger.info(
+                    "批量启动 SnowLuma 热启动被拒绝, abort",
+                    log_source=LogSource.UI,
+                )
+                return
+            logger.info(
+                f"批量启动 SnowLuma Bot 模式确认: "
+                f"mode={snowluma_start_mode.value}, sl_bots={len(local_snowluma_configs)}",
+                log_source=LogSource.UI,
+            )
+
+        # 构造 items: 本地 SnowLuma Bot 传 mode, NapCat / 远端走默认参数
+        items: list[tuple[str, callable]] = []
+        for config in pending_configs:
+            qq_id = str(config.bot.QQID)
+            is_local_sl = (
+                not config.bot.is_remote
+                and config.bot.backend_type == BackendType.SNOWLUMA
+            )
+
+            if is_local_sl:
+                def _op(cfg=config, mode=snowluma_start_mode) -> None:
+                    process_manager.start_bot(cfg, snowluma_start_mode=mode)
+            else:
+                def _op(cfg=config) -> None:
+                    process_manager.start_bot(cfg)
+
+            items.append((qq_id, _op))
 
         dispatcher = it(BatchDispatcher)
         try:
@@ -407,7 +500,7 @@ class BotListPage(ScrollArea):
             warning_bar(self.tr("请先勾选要停止的 Bot"), parent=self)
             return
 
-        process_manager = it(ManagerNapCatQQProcess)
+        process_manager = it(BotProcessManager)
         items: list[tuple[str, callable]] = []
         for config in configs:
             qq_id = str(config.bot.QQID)
@@ -415,7 +508,7 @@ class BotListPage(ScrollArea):
                 continue
 
             def _op(qid=qq_id) -> None:
-                process_manager.stop_process(qid)
+                process_manager.stop_bot(qid)
                 it(ManagerAutoRestartProcess).remove_auto_restart_timer(qid)
 
             items.append((qq_id, _op))
@@ -447,7 +540,7 @@ class BotListPage(ScrollArea):
             warning_bar(self.tr("请先勾选要删除的 Bot"), parent=self)
             return
 
-        process_manager = it(ManagerNapCatQQProcess)
+        process_manager = it(BotProcessManager)
         running_names = [
             f"{c.bot.name} ({c.bot.QQID})"
             for c in configs

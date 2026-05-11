@@ -21,7 +21,7 @@ from src.core.logging import LogSource, logger
 from src.core.remote import DeploymentState, ServerManager
 from src.core.remote.thread_pool import remote_ssh_pool
 from src.core.runtime.paths import PathFunc
-from src.core.runtime.napcat import ManagerNapCatQQLoginState, ManagerNapCatQQProcess
+from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState, BotProcessManager
 from src.core.desktop_update.templates import load_msi_update_script
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import SwitchConfigCard
@@ -363,7 +363,7 @@ class Developer(ScrollArea):
         """触发首页通知测试. """
         logger.info("开发者模式触发首页通知测试", log_source=LogSource.UI)
 
-        process_manager = it(ManagerNapCatQQProcess)
+        process_manager = it(BotProcessManager)
         login_state_manager = it(ManagerNapCatQQLoginState)
 
         # 先切入 debug 上下文, 再注入运行时测试信号, 避免清理时混入真实提醒集合. 
@@ -399,7 +399,7 @@ class Developer(ScrollArea):
 
         # 检测当前安装类型
         install_type = detect_install_type()
-        has_bot = it(ManagerNapCatQQProcess).has_running_bot()
+        has_bot = it(BotProcessManager).has_running_bot()
 
         full_message = build_update_confirmation_message(
             translate=self.tr,

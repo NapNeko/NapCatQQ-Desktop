@@ -11,12 +11,15 @@ from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtWidgets import QGridLayout, QLineEdit, QWidget
 
 # 项目内模块导入
+from creart import it
+
 from src.core.config import cfg
 from src.core.logging import LogSource, logger
 from src.core.network.email import EncryptionType, create_test_email_task
 from src.core.network.webhook import create_test_webhook_task
 from src.core.remote import RemoteManager, SSHCredentials
 from src.core.remote.thread_pool import remote_ssh_pool
+from src.core.runtime.paths import PathFunc
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
 from src.ui.components.input_card.generic_card import (
     ComboBoxConfigCard,
@@ -112,6 +115,32 @@ class General(ScrollArea):
             parent=self.import_group,
         )
 
+        # W6 (2026-05-11): SnowLuma 全局设置 group.
+        # 仅在 SnowLuma 已安装 (``PathFunc.get_snowluma_node_executable()`` 返回非 None,
+        # 即 ``<snowluma_path>/node.exe`` 存在) 时构造并显示, 避免没装的用户看到无意义的卡片.
+        # 该卡只绑定 :data:`cfg.snowluma_webui_password_override` (App 级 QConfig); 旧版本
+        # ``BotConfig.snowluma_webui_password_override`` 由 W4 迁移逻辑自动搬运到这里.
+        self.snowluma_group: SettingCardGroup | None = None
+        self.snowluma_password_override_card: LineEditConfigCard | None = None
+        if it(PathFunc).get_snowluma_node_executable() is not None:
+            self.snowluma_group = SettingCardGroup(title=self.tr("SnowLuma"), parent=self.view)
+            self.snowluma_password_override_card = LineEditConfigCard(
+                icon=FI.VPN,
+                title=self.tr("WebUI 全局密码 override"),
+                content=self.tr(
+                    "daemon 启动时读一次; 已在跑的 daemon 需要停掉所有 SnowLuma Bot 再启才生效. "
+                    "留空则由 Desktop 自动生成强密码 (snowluma-session.json)."
+                ),
+                placeholder_text=self.tr("(留空 = 自动生成)"),
+                parent=self.snowluma_group,
+            )
+            self.snowluma_password_override_card.fill_value(
+                cfg.get(cfg.snowluma_webui_password_override) or ""
+            )
+            self.snowluma_password_override_card.lineEdit.textChanged.connect(
+                self._on_snowluma_password_override_changed
+            )
+
 
     def _set_layout(self) -> None:
         """控件布局"""
@@ -122,14 +151,35 @@ class General(ScrollArea):
         self.version_group.addSettingCard(self.ncd_version_card)
         self.import_group.addSettingCard(self.legacy_import_card)
         self.import_group.addSettingCard(self.config_export_card)
+        if self.snowluma_group is not None and self.snowluma_password_override_card is not None:
+            self.snowluma_group.addSettingCard(self.snowluma_password_override_card)
 
         # 添加到布局
         self.expand_layout.addWidget(self.action_group)
         self.expand_layout.addWidget(self.event_group)
         self.expand_layout.addWidget(self.version_group)
         self.expand_layout.addWidget(self.import_group)
+        if self.snowluma_group is not None:
+            self.expand_layout.addWidget(self.snowluma_group)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
+
+    # ==================== W6: SnowLuma WebUI 密码 override 槽 ====================
+    def _on_snowluma_password_override_changed(self, value: str) -> None:
+        """实时同步用户输入到 ``cfg.snowluma_webui_password_override`` (W6).
+
+        ``cfg.set(item, value, save=True)`` 触发 QFluentWidgets 的 QConfig 写盘机制,
+        下次启动 daemon 时 :func:`render_daemon_globals` 会读到最新值.
+        """
+        cleaned = (value or "").strip()
+        cfg.set(cfg.snowluma_webui_password_override, cleaned, True)
+        logger.trace(
+            (
+                f"SnowLuma WebUI 全局密码 override 已更新 "
+                f"(cfg.snowluma_webui_password_override={'<set>' if cleaned else '<empty>'})"
+            ),
+            log_source=LogSource.UI,
+        )
 
 
 class BotOfflineEmailDialog(MessageBoxBase):
