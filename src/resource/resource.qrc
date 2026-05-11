@@ -55,6 +55,10 @@
 
     <qresource prefix="script">
         <file>script/update_msi.bat</file>
+        <file>script/remote_install_linuxqq.sh</file>
+        <file>script/remote_install_napcat.sh</file>
+        <file>script/remote_napcat_launcher.sh</file>
+        <file>script/remote_deploy_napcat.sh</file>
     </qresource>
 
 </RCC>

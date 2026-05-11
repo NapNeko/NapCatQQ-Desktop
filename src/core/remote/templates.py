@@ -19,6 +19,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
+from PySide6.QtCore import QFile, QIODevice
+
 
 SCRIPT_DIR = Path(__file__).resolve().parents[2] / "resource" / "script"
 
@@ -31,6 +33,23 @@ LINUX_DEPLOY_SCRIPT_FILENAME = "remote_deploy_napcat.sh"
 
 
 def _read_template(filename: str) -> str:
+    """读取脚本模板.
+
+    打包后(PyInstaller)源 ``.sh`` 文件不会随 ``.py`` 一起被自动拷贝, 因此优先走
+    Qt 资源系统(已在 [`resource.qrc`](src/resource/resource.qrc) 注册);
+    开发态资源未编译进 ``resource.py`` 时, 自动回落到源仓库中的文件路径.
+
+    与 [`load_msi_update_script`](src/core/desktop_update/templates.py)
+    使用相同的双通道策略, 保证开发/打包两种形态都能拿到完整脚本文本.
+    """
+    resource_path = f":/script/script/{filename}"
+    resource_file = QFile(resource_path)
+    if resource_file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+        try:
+            return bytes(resource_file.readAll()).decode("utf-8")  # type: ignore[arg-type]
+        finally:
+            resource_file.close()
+
     return (SCRIPT_DIR / filename).read_text(encoding="utf-8")
 
 
