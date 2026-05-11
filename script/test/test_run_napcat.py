@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtCore import QProcess
 
 # 项目内模块导入
-import src.core.runtime.napcat as run_napcat
+import src.core.runtime.bot_process_manager as run_napcat
 
 
 class FakeSignal:
@@ -61,7 +61,7 @@ class FakeTimer:
 
 
 class FakeProcess:
-    """用于测试 ManagerNapCatQQProcess 的假进程。
+    """用于测试 BotProcessManager 的假进程。
 
     P3 perf: 本地 QProcess 启动去除了 ``waitForStarted`` 阻塞, 状态变迁靠
     ``stateChanged`` / ``errorOccurred`` / ``finished`` 信号驱动.
@@ -169,7 +169,7 @@ def test_login_state_offline_autorestart_sends_notifications_and_restarts_once(
     monkeypatch.setattr(
         run_napcat,
         "it",
-        lambda cls: SimpleNamespace(restart_process=lambda config: restart_requests.append(config.bot.QQID)),
+        lambda cls: SimpleNamespace(restart_bot=lambda config: restart_requests.append(config.bot.QQID)),
     )
 
     config = config_factory(667788)
@@ -385,17 +385,17 @@ def test_create_napcat_process_emits_error_when_qq_path_missing(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
     """缺少 QQ 安装路径时应拒绝启动并提示错误。"""
-    manager = run_napcat.ManagerNapCatQQProcess()
+    manager = run_napcat.BotProcessManager()
     emitted: list[tuple[str, str]] = []
     manager.notification_signal.connect(lambda level, message: emitted.append((level, message)))
 
-    monkeypatch.setattr(
-        run_napcat,
-        "it",
-        lambda cls: SimpleNamespace(get_qq_path=lambda: None),
-    )
+    # P2 Tier I (W2): driver 层直接抛 FileNotFoundError, manager 捕获后 emit error.
+    def _driver_raises(_config):
+        raise FileNotFoundError("未检测到 QQ 安装路径，无法启动 NapCatQQ 进程!")
 
-    manager.create_napcat_process(config_factory(112233))
+    monkeypatch.setattr(manager._napcat_driver, "start", _driver_raises)
+
+    manager.start_bot(config_factory(112233))
 
     assert emitted == [("error", "未检测到 QQ 安装路径，无法启动 NapCatQQ 进程!")]
     assert manager.napcat_process_dict == {}
@@ -404,15 +404,22 @@ def test_create_napcat_process_emits_error_when_qq_path_missing(
 def test_create_napcat_process_rejects_more_than_four_instances(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """已有 4 个进程时应拒绝继续创建。"""
-    manager = run_napcat.ManagerNapCatQQProcess()
+    """已有 4 个进程时应拒绝继续创建。
+
+    2026-05-11 (问题 3 修复): 上限改为 ``LOCAL_BOT_LIMIT`` (NapCat + SnowLuma 合计 4 个),
+    消息文本从 "NapCatQQ 进程数量已达上限" 改为 "本地 Bot 数量已达上限 (4 个, NTQQ 多开限制)".
+    本测试只验证 NapCat 路径独占 4 个名额的情况, SnowLuma 合计场景见 manager 单元测试.
+    """
+    manager = run_napcat.BotProcessManager()
     manager.napcat_process_dict = {str(i): object() for i in range(4)}
     emitted: list[tuple[str, str]] = []
     manager.notification_signal.connect(lambda level, message: emitted.append((level, message)))
 
-    manager.create_napcat_process(config_factory(123456))
+    manager.start_bot(config_factory(123456))
 
-    assert emitted == [("error", "NapCatQQ 进程数量已达上限，无法创建新进程!")]
+    assert emitted == [
+        ("error", "本地 Bot 数量已达上限 (4 个, NTQQ 多开限制), 无法创建新进程!")
+    ]
 
 
 def test_create_napcat_process_emits_error_when_failed_to_start(
@@ -420,7 +427,7 @@ def test_create_napcat_process_emits_error_when_failed_to_start(
 ) -> None:
     """P3 perf: 启动失败走 ``errorOccurred(FailedToStart)`` 异步路径,
     不再依赖 ``waitForStarted`` 同步返回值。应清理字典 + emit NotRunning + 提示。"""
-    manager = run_napcat.ManagerNapCatQQProcess()
+    manager = run_napcat.BotProcessManager()
     emitted_notifications: list[tuple[str, str]] = []
     manager.notification_signal.connect(
         lambda level, message: emitted_notifications.append((level, message))
@@ -433,12 +440,19 @@ def test_create_napcat_process_emits_error_when_failed_to_start(
     removed_timers: list[str] = []
 
     process = FakeProcess(started=False)
-    monkeypatch.setattr(manager, "_create_napcat_process", lambda config, qq_path: process)
+    # P2 Tier I (W2): driver.start 返回 ProcessHandle (primary_process=fake_process)
+    from src.core.runtime.bot_backend_driver import ProcessHandle
+
+    def _fake_driver_start(config):
+        return ProcessHandle(
+            qq_id=str(config.bot.QQID), primary_process=process, secondary_process=None
+        )
+
+    monkeypatch.setattr(manager._napcat_driver, "start", _fake_driver_start)
     monkeypatch.setattr(
         run_napcat,
         "it",
         lambda cls: {
-            "PathFunc": SimpleNamespace(get_qq_path=lambda: Path("C:/Program Files/Tencent/QQ")),
             "ManagerNapCatQQLog": SimpleNamespace(create_log=lambda config, proc: None),
             "ManagerAutoRestartProcess": SimpleNamespace(
                 create_auto_restart_timer=lambda config: None,
@@ -450,7 +464,7 @@ def test_create_napcat_process_emits_error_when_failed_to_start(
         }[cls.__name__],
     )
 
-    manager.create_napcat_process(config_factory(654321))
+    manager.start_bot(config_factory(654321))
     # 启动后立刻可视 Starting; 进程字典已登记
     assert state_changes == [("654321", QProcess.ProcessState.Starting)]
     assert manager.napcat_process_dict["654321"].state == QProcess.ProcessState.Starting
@@ -473,7 +487,7 @@ def test_create_napcat_process_starts_process_and_registers_state(
 
     不再依赖同步 ``waitForStarted``, 主线程不会被套住。自动重启计时器仍会创建。
     """
-    manager = run_napcat.ManagerNapCatQQProcess()
+    manager = run_napcat.BotProcessManager()
     created_logs: list[int] = []
     auto_restart: list[int] = []
     state_changes: list[tuple[str, QProcess.ProcessState]] = []
@@ -481,12 +495,19 @@ def test_create_napcat_process_starts_process_and_registers_state(
 
     process = FakeProcess(started=True)
 
-    monkeypatch.setattr(manager, "_create_napcat_process", lambda config, qq_path: process)
+    # P2 Tier I (W2): driver.start 返回 ProcessHandle, manager 拿 primary_process 注册 model.
+    from src.core.runtime.bot_backend_driver import ProcessHandle
+
+    def _fake_driver_start(config):
+        return ProcessHandle(
+            qq_id=str(config.bot.QQID), primary_process=process, secondary_process=None
+        )
+
+    monkeypatch.setattr(manager._napcat_driver, "start", _fake_driver_start)
     monkeypatch.setattr(
         run_napcat,
         "it",
         lambda cls: {
-            "PathFunc": SimpleNamespace(get_qq_path=lambda: Path("C:/Program Files/Tencent/QQ")),
             "ManagerNapCatQQLog": SimpleNamespace(create_log=lambda config, proc: created_logs.append(config.bot.QQID)),
             "ManagerAutoRestartProcess": SimpleNamespace(
                 create_auto_restart_timer=lambda config: auto_restart.append(config.bot.QQID)
@@ -494,7 +515,7 @@ def test_create_napcat_process_starts_process_and_registers_state(
         }[cls.__name__],
     )
 
-    manager.create_napcat_process(config_factory(445566))
+    manager.start_bot(config_factory(445566))
 
     stored = manager.napcat_process_dict["445566"]
     assert process.start_called is True
@@ -520,25 +541,32 @@ def test_create_napcat_process_cleans_up_state_when_process_finishes_unexpectedl
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
     """进程异常退出时应立刻清理状态，避免 UI 假在线。"""
-    manager = run_napcat.ManagerNapCatQQProcess()
+    manager = run_napcat.BotProcessManager()
     removed_login_states: list[str] = []
     state_changes: list[tuple[str, QProcess.ProcessState]] = []
     manager.process_changed_signal.connect(lambda qq_id, state: state_changes.append((qq_id, state)))
 
     process = FakeProcess(started=True)
-    monkeypatch.setattr(manager, "_create_napcat_process", lambda config, qq_path: process)
+    # P2 Tier I (W2): driver.start 返回 ProcessHandle.
+    from src.core.runtime.bot_backend_driver import ProcessHandle
+
+    def _fake_driver_start(config):
+        return ProcessHandle(
+            qq_id=str(config.bot.QQID), primary_process=process, secondary_process=None
+        )
+
+    monkeypatch.setattr(manager._napcat_driver, "start", _fake_driver_start)
     monkeypatch.setattr(
         run_napcat,
         "it",
         lambda cls: {
-            "PathFunc": SimpleNamespace(get_qq_path=lambda: Path("C:/Program Files/Tencent/QQ")),
             "ManagerNapCatQQLog": SimpleNamespace(create_log=lambda config, proc: None),
             "ManagerAutoRestartProcess": SimpleNamespace(create_auto_restart_timer=lambda config: None),
             "ManagerNapCatQQLoginState": SimpleNamespace(remove_login_state=lambda qq_id: removed_login_states.append(qq_id)),
         }[cls.__name__],
     )
 
-    manager.create_napcat_process(config_factory(554433))
+    manager.start_bot(config_factory(554433))
     process.finished.emit(1, QProcess.ExitStatus.CrashExit)
 
     assert removed_login_states == ["554433"]
@@ -560,7 +588,7 @@ def test_auto_restart_timer_uses_schedule_duration(
     monkeypatch.setattr(
         run_napcat,
         "it",
-        lambda cls: SimpleNamespace(restart_process=lambda config: restart_requests.append(config.bot.QQID)),
+        lambda cls: SimpleNamespace(restart_bot=lambda config: restart_requests.append(config.bot.QQID)),
     )
     manager = run_napcat.ManagerAutoRestartProcess()
     config = config_factory(121212)
@@ -578,7 +606,7 @@ def test_stop_process_removes_process_and_login_state(
     monkeypatch: pytest.MonkeyPatch, mute_run_napcat_logger
 ) -> None:
     """停止进程时应终止子进程树、移除字典并通知登录状态管理器。"""
-    manager = run_napcat.ManagerNapCatQQProcess()
+    manager = run_napcat.BotProcessManager()
     state_changes: list[tuple[str, QProcess.ProcessState]] = []
     manager.process_changed_signal.connect(lambda qq_id, state: state_changes.append((qq_id, state)))
     process = FakeManagedProcess(pid=99)
@@ -617,7 +645,7 @@ def test_stop_process_removes_process_and_login_state(
         lambda cls: SimpleNamespace(remove_login_state=lambda qq_id: removed_login_states.append(qq_id)),
     )
 
-    manager.stop_process("334455")
+    manager.stop_bot("334455")
 
     assert removed_login_states == ["334455"]
     assert process.killed is True
@@ -629,7 +657,7 @@ def test_stop_process_removes_process_and_login_state(
 
 def test_get_memory_usage_sums_process_tree(monkeypatch: pytest.MonkeyPatch, mute_run_napcat_logger) -> None:
     """内存统计应汇总主进程和子进程 RSS。"""
-    manager = run_napcat.ManagerNapCatQQProcess()
+    manager = run_napcat.BotProcessManager()
     process = FakeManagedProcess(pid=1)
     manager.napcat_process_dict["556677"] = run_napcat.NapCatProcessModel(
         qq_id="556677",

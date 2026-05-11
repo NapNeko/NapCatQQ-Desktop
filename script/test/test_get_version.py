@@ -17,26 +17,39 @@ def mute_version_logger(monkeypatch) -> None:
     monkeypatch.setattr(versioning.logger, "error", lambda *args, **kwargs: None)
 
 
-def test_remote_version_execute_assembles_three_sources(monkeypatch) -> None:
-    """远程版本任务应汇总 NapCat、QQ 和 NCD 三路数据。"""
+def test_remote_version_execute_assembles_four_sources(monkeypatch) -> None:
+    """远程版本任务应汇总 NapCat、QQ、NCD 与 SnowLuma 四路数据 (P1 SnowLuma 适配)."""
     runner = versioning.RemoteVersionTask()
-    sequence = iter(
+
+    # NapCat / NCD / SnowLuma 走 _get_version_with_fallback; QQ 走 _get_version
+    fallback_sequence = iter(
         [
             {"version": "v1.0.0", "update_log": "napcat log"},
-            {"version": "9.9.9", "download_url": "https://qq.example.com"},
             {"version": "v2.0.0", "update_log": "ncd log"},
+            {"version": "v1.7.5", "update_log": "snowluma log"},
         ]
     )
-    monkeypatch.setattr(runner, "_get_version", lambda *args, **kwargs: next(sequence))
+    monkeypatch.setattr(
+        runner,
+        "_get_version_with_fallback",
+        lambda *args, **kwargs: next(fallback_sequence),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_get_version",
+        lambda *args, **kwargs: {"version": "9.9.9", "download_url": "https://qq.example.com"},
+    )
 
     result = runner.execute()
 
     assert result.napcat_version == "v1.0.0"
     assert result.qq_version == "9.9.9"
     assert result.ncd_version == "v2.0.0"
+    assert result.snowluma_version == "v1.7.5"
     assert result.qq_download_url == "https://qq.example.com"
     assert result.napcat_update_log == "napcat log"
     assert result.ncd_update_log == "ncd log"
+    assert result.snowluma_update_log == "snowluma log"
 
 
 def test_remote_version_request_handles_network_error(monkeypatch) -> None:
@@ -112,7 +125,14 @@ def test_local_version_reads_package_and_qq_files(monkeypatch, tmp_path: Path) -
     (napcat_path / "package.json").write_text(json.dumps({"version": "9.8.7"}), encoding="utf-8")
     (qq_path / "versions" / "config.json").write_text(json.dumps({"curVersion": "9.9.23-41857"}), encoding="utf-8")
 
-    fake_path_func = SimpleNamespace(napcat_path=napcat_path, get_qq_path=lambda: qq_path)
+    # P1 (SnowLuma 适配): fake_path_func 补 snowluma_path 字段, 与 LocalVersionTask.get_snowluma_version 兑齐.
+    snowluma_path = tmp_path / "SnowLuma"
+    snowluma_path.mkdir(parents=True, exist_ok=True)
+    fake_path_func = SimpleNamespace(
+        napcat_path=napcat_path,
+        snowluma_path=snowluma_path,
+        get_qq_path=lambda: qq_path,
+    )
     fake_cfg = SimpleNamespace(napcat_desktop_version="ncd_version", get=lambda item: "v1.7.28")
     monkeypatch.setattr(versioning, "it", lambda cls: fake_path_func)
     monkeypatch.setattr(versioning, "cfg", fake_cfg)
@@ -122,6 +142,8 @@ def test_local_version_reads_package_and_qq_files(monkeypatch, tmp_path: Path) -
     assert result.napcat_version == "v9.8.7"
     assert result.qq_version == "9.9.23"
     assert result.ncd_version == "v1.7.28"
+    # SnowLuma 未安装 (无 .installed_tag) 时返回 None
+    assert result.snowluma_version is None
 
 
 def test_local_version_prefers_napcat_mjs_embedded_version(monkeypatch, tmp_path: Path) -> None:

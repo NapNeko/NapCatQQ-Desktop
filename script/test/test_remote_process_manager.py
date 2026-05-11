@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`ManagerNapCatQQProcess`](src/core/runtime/napcat.py) 远端 Bot 管理路径测试 (P2.6).
+"""[`BotProcessManager`](src/core/runtime/napcat.py) 远端 Bot 管理路径测试 (P2.6).
 
 通过 monkeypatch 把 [`QThreadPool`](https://doc.qt.io/qt-6/qthreadpool.html) 的 ``start``
 改为同步执行, 把 [`resolve_backend_for_bot`](src/core/operation/resolver.py) 替换
@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from PySide6.QtCore import QProcess, QRunnable
 
-import src.core.runtime.napcat as run_napcat
+import src.core.runtime.bot_process_manager as run_napcat
 from src.core.operation.backend import ProcessStatus, WebUIEndpoint
 
 
@@ -70,8 +70,8 @@ def remote_backend() -> _FakeBackend:
 
 
 @pytest.fixture
-def manager(monkeypatch: pytest.MonkeyPatch, remote_backend: _FakeBackend) -> run_napcat.ManagerNapCatQQProcess:
-    """构造一个干净的 ManagerNapCatQQProcess + 全套 monkeypatch."""
+def manager(monkeypatch: pytest.MonkeyPatch, remote_backend: _FakeBackend) -> run_napcat.BotProcessManager:
+    """构造一个干净的 BotProcessManager + 全套 monkeypatch."""
     # 同步执行 worker. P3 perf W4: 远端 SSH runnable 通过 ``run_napcat.remote_ssh_pool``
     # 派发, 而 ``GetAuthStatusRunnable`` / ``GetLoginStatusRunnable`` 仍走 ``QThreadPool``;
     # 两条路径都需要 patch 成同步执行, 否则 ``RemoteBotOperationRunnable`` 不会真正跑.
@@ -124,7 +124,7 @@ def manager(monkeypatch: pytest.MonkeyPatch, remote_backend: _FakeBackend) -> ru
 
     monkeypatch.setattr(run_napcat, "it", fake_it)
 
-    mgr = run_napcat.ManagerNapCatQQProcess()
+    mgr = run_napcat.BotProcessManager()
     mgr._fake_login = fake_login  # type: ignore[attr-defined]
     mgr._fake_log_mgr = fake_log_mgr  # type: ignore[attr-defined]
     return mgr
@@ -138,7 +138,7 @@ def _make_remote_config(config_factory, server_id: str = "srv-1", qqid: int = 11
 
 # ==================== 启动流程 ====================
 def test_create_remote_process_emits_running_state(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     config = _make_remote_config(config_factory)
     qq_id = str(config.bot.QQID)
@@ -153,7 +153,7 @@ def test_create_remote_process_emits_running_state(
     states: list[QProcess.ProcessState] = []
     manager.process_changed_signal.connect(lambda _qq, st: states.append(st))
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
 
     # Starting -> Running 两步; (poll 不会改变 state)
     assert QProcess.ProcessState.Starting in states
@@ -165,7 +165,7 @@ def test_create_remote_process_emits_running_state(
 
 
 def test_create_remote_process_handles_failure(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, monkeypatch: pytest.MonkeyPatch
+    manager: run_napcat.BotProcessManager, config_factory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _make_remote_config(config_factory)
 
@@ -181,7 +181,7 @@ def test_create_remote_process_handles_failure(
     states: list[QProcess.ProcessState] = []
     manager.process_changed_signal.connect(lambda _qq, st: states.append(st))
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
 
     assert QProcess.ProcessState.NotRunning in states
     assert str(config.bot.QQID) not in manager.remote_process_dict
@@ -189,7 +189,7 @@ def test_create_remote_process_handles_failure(
 
 # ==================== 停止流程 ====================
 def test_stop_remote_process_clears_record(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     config = _make_remote_config(config_factory)
     qq_id = str(config.bot.QQID)
@@ -200,10 +200,10 @@ def test_stop_remote_process_clears_record(
         (ProcessStatus(qq_id=qq_id, running=True, pid=4321), None)
     )
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
     assert qq_id in manager.remote_process_dict
 
-    manager.stop_process(qq_id)
+    manager.stop_bot(qq_id)
 
     assert qq_id not in manager.remote_process_dict
     assert remote_backend.stop_calls == [qq_id]
@@ -211,7 +211,7 @@ def test_stop_remote_process_clears_record(
 
 
 def test_stop_remote_process_removes_login_state_before_ssh_stop(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     """回归: 用户点 "停止" 的瞬间必须立即 ``remove_login_state`` 关掉 3s HTTP 轮询定时器,
     不能等到 ``backend.stop_napcat`` 返回 (那是 ~4s 之后, 期间会持续打出
@@ -224,7 +224,7 @@ def test_stop_remote_process_removes_login_state_before_ssh_stop(
         (ProcessStatus(qq_id=qq_id, running=True, pid=4321), None)
     )
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
     fake_login = manager._fake_login  # type: ignore[attr-defined]
 
     # 启动期间不会触发 remove_login_state(create 流程内只有 create / publish)
@@ -240,7 +240,7 @@ def test_stop_remote_process_removes_login_state_before_ssh_stop(
 
     remote_backend.stop_napcat = _spy_stop_napcat  # type: ignore[assignment]
 
-    manager.stop_process(qq_id)
+    manager.stop_bot(qq_id)
 
     # 在 backend.stop_napcat 调用之前, remove_login_state 已经被触发过至少一次.
     assert pre_ssh_stop_remove_count, "stop_napcat 应该被调用过 (sync thread pool)"
@@ -252,7 +252,7 @@ def test_stop_remote_process_removes_login_state_before_ssh_stop(
 
 
 def test_late_poll_after_stop_does_not_republish_login_state(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     """回归: 用户点 "停止" 后, 若一个 in-flight 的 poll worker 才返回结果,
     且 record 因 ``stop_all_processes`` 等原因仍存在但 ``state=NotRunning``,
@@ -262,7 +262,7 @@ def test_late_poll_after_stop_does_not_republish_login_state(
     qq_id = str(config.bot.QQID)
 
     # 手工构造一个停止中的 record (跳过完整 create 流程, 直接模拟边界态)
-    from src.core.runtime.napcat import RemoteProcessRecord
+    from src.core.runtime.bot_process_manager import RemoteProcessRecord
 
     record = RemoteProcessRecord(
         qq_id=qq_id,
@@ -287,7 +287,7 @@ def test_late_poll_after_stop_does_not_republish_login_state(
 
 # ==================== P3 远端日志 ====================
 def test_create_remote_process_creates_log_buffer(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     """启动远端 Bot 时必须立刻创建日志缓冲, 否则用户开 ``BotLogPage`` 会显示
     "未找到对应的日志信息".
@@ -300,13 +300,13 @@ def test_create_remote_process_creates_log_buffer(
     fake_log_mgr = manager._fake_log_mgr  # type: ignore[attr-defined]
     pre_create_count = len(fake_log_mgr.create_calls)
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
 
     assert len(fake_log_mgr.create_calls) == pre_create_count + 1
 
 
 def test_stop_remote_process_removes_log_buffer(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     """停止远端 Bot 时必须释放日志缓冲, 关闭 SSH ``tail`` 轮询计时器,
     否则会持续在后台拉日志/打 trace.
@@ -316,26 +316,26 @@ def test_stop_remote_process_removes_log_buffer(
     remote_backend.start_responses.append(ProcessStatus(qq_id=qq_id, running=True, pid=1))
     remote_backend.poll_responses.append((ProcessStatus(qq_id=qq_id, running=True, pid=1), None))
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
 
     fake_log_mgr = manager._fake_log_mgr  # type: ignore[attr-defined]
     pre_remove_count = len(fake_log_mgr.remove_calls)
 
-    manager.stop_process(qq_id)
+    manager.stop_bot(qq_id)
 
     assert len(fake_log_mgr.remove_calls) >= pre_remove_count + 1
 
 
 # ==================== 状态聚合 ====================
 def test_get_process_returns_remote_record(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     config = _make_remote_config(config_factory)
     qq_id = str(config.bot.QQID)
     remote_backend.start_responses.append(ProcessStatus(qq_id=qq_id, running=True, pid=1))
     remote_backend.poll_responses.append((ProcessStatus(qq_id=qq_id, running=True, pid=1), None))
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
     record = manager.get_process(qq_id)
     assert record is not None
     assert isinstance(record, run_napcat.RemoteProcessRecord)
@@ -343,7 +343,7 @@ def test_get_process_returns_remote_record(
 
 
 def test_has_running_bot_includes_remote(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     config = _make_remote_config(config_factory)
     remote_backend.start_responses.append(ProcessStatus(qq_id=str(config.bot.QQID), running=True, pid=1))
@@ -352,12 +352,12 @@ def test_has_running_bot_includes_remote(
     )
 
     assert manager.has_running_bot() is False
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
     assert manager.has_running_bot() is True
 
 
 def test_get_memory_usage_for_remote_uses_cached_rss(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     config = _make_remote_config(config_factory)
     qq_id = str(config.bot.QQID)
@@ -368,13 +368,13 @@ def test_get_memory_usage_for_remote_uses_cached_rss(
         (ProcessStatus(qq_id=qq_id, running=True, pid=1, memory_rss_bytes=42 * 1024 * 1024), None)
     )
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
     assert manager.get_memory_usage(qq_id) == 42
 
 
 # ==================== 轮询 / 离线检测 ====================
 def test_poll_detects_offline_and_clears_record(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     config = _make_remote_config(config_factory)
     qq_id = str(config.bot.QQID)
@@ -384,14 +384,14 @@ def test_poll_detects_offline_and_clears_record(
         (ProcessStatus(qq_id=qq_id, running=False, pid=None), None)
     )
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
 
     # 启动成功后立刻发起一次 poll, fake 返回 not running -> 应清理 record
     assert qq_id not in manager.remote_process_dict
 
 
 def test_poll_publishes_login_state_on_endpoint(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     config = _make_remote_config(config_factory)
     qq_id = str(config.bot.QQID)
@@ -402,7 +402,7 @@ def test_poll_publishes_login_state_on_endpoint(
     )
     remote_backend.webui_endpoints[qq_id] = endpoint
 
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
 
     fake_login = manager._fake_login  # type: ignore[attr-defined]
     assert fake_login.create_calls, "endpoint 拿到后应当触发 create_login_state"
@@ -417,7 +417,7 @@ def test_poll_publishes_login_state_on_endpoint(
 
 # ==================== 上限 ====================
 def test_remote_process_capacity_limit(
-    manager: run_napcat.ManagerNapCatQQProcess, config_factory, remote_backend: _FakeBackend
+    manager: run_napcat.BotProcessManager, config_factory, remote_backend: _FakeBackend
 ) -> None:
     # 直接塞 4 个 record 模拟已达上限
     for i in range(4):
@@ -431,7 +431,7 @@ def test_remote_process_capacity_limit(
     manager.notification_signal.connect(lambda level, msg: notifications.append((level, msg)))
 
     config = _make_remote_config(config_factory, qqid=2222222222)
-    manager.create_napcat_process(config)
+    manager.start_bot(config)
 
     assert str(config.bot.QQID) not in manager.remote_process_dict
     assert any(level == "error" for level, _ in notifications)

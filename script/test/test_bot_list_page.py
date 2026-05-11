@@ -78,19 +78,43 @@ def ensure_qapp() -> QApplication:
 
 
 class DummyBotCard(QWidget):
-    """用于替代真实 BotCard 的轻量测试控件。"""
+    """用于替代真实 BotCard 的轻量测试控件。
+
+    与真实 ``BotCard`` 的接口对齐 (信号 + ``set_batch_mode`` / ``is_batch_selected``
+    / ``set_selected`` 方法), 让 :meth:`BotListPage.update_bot_list` 内的
+    ``card.selected_changed_signal.connect`` 等连线不会 AttributeError.
+    """
 
     remove_signal = Signal(str)
+    # P4 F2: 批量模式选中态信号 (qq_id, selected) — 与 BotCard 真实信号同形
+    selected_changed_signal = Signal(str, bool)
 
     def __init__(self, config, parent: QWidget | None = None, invalid: bool = False) -> None:
         super().__init__(parent)
         self._config = config
         self._invalid = invalid
+        self._batch_mode = False
+        self._selected = False
         self.info_updated = False
         self.delete_later_called = False
 
     def update_info_card(self) -> None:
         self.info_updated = True
+
+    def set_batch_mode(self, enabled: bool) -> None:
+        """匹配 BotCard.set_batch_mode 接口."""
+        self._batch_mode = enabled
+
+    def is_batch_selected(self) -> bool:
+        """匹配 BotCard.is_batch_selected 接口."""
+        return self._selected
+
+    def set_selected(self, value: bool) -> None:
+        """匹配 BotCard.set_selected 接口."""
+        if self._selected == bool(value):
+            return
+        self._selected = bool(value)
+        self.selected_changed_signal.emit(str(self._config.bot.QQID), self._selected)
 
     def parent(self):  # type: ignore[override]
         if self._invalid:

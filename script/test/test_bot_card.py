@@ -122,7 +122,7 @@ def test_remove_button_skips_stop_when_process_missing(monkeypatch: pytest.Monke
         card_module,
         "it",
         lambda cls: {
-            "ManagerNapCatQQProcess": fake_process_manager,
+            "BotProcessManager": fake_process_manager,
             "ManagerNapCatQQLoginState": fake_login_state_manager,
             "ManagerAutoRestartProcess": fake_auto_restart_manager,
             "QRCodeDialogFactory": fake_qr_code_factory,
@@ -183,7 +183,7 @@ def test_qr_code_button_shows_for_pending_qr_and_opens_target_dialog(
         card_module,
         "it",
         lambda cls: {
-            "ManagerNapCatQQProcess": fake_process_manager,
+            "BotProcessManager": fake_process_manager,
             "ManagerNapCatQQLoginState": fake_login_state_manager,
             "QRCodeDialogFactory": fake_qr_code_factory,
         }[cls.__name__],

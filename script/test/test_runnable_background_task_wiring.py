@@ -3,7 +3,7 @@
 
 覆盖:
 
-- :class:`src.core.runtime.napcat.RemoteBotOperationRunnable`:
+- :class:`src.core.runtime.bot_process_manager.RemoteBotOperationRunnable`:
     - ``start`` / ``stop`` 调用前后产生 begin/end 事件
     - ``poll`` 不上报 (避免 5s 一次的 poll 让状态条频闪)
     - 异常路径仍 emit ``end`` (保证状态条不会卡死)
@@ -20,7 +20,7 @@ import pytest
 from creart import it
 
 # 项目内模块导入
-import src.core.runtime.napcat as run_napcat
+import src.core.runtime.bot_process_manager as run_napcat
 from src.core.operation.backend import ProcessStatus
 from src.core.runtime.background_tasks import BackgroundTaskCenter
 

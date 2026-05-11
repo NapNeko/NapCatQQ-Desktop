@@ -123,7 +123,7 @@ def _make_card(monkeypatch: pytest.MonkeyPatch, config) -> object:
         card_module,
         "it",
         lambda cls: {
-            "ManagerNapCatQQProcess": fake_process_manager,
+            "BotProcessManager": fake_process_manager,
             "ManagerNapCatQQLoginState": fake_login_state_manager,
             "QRCodeDialogFactory": fake_qr_code_factory,
         }[cls.__name__],
@@ -226,7 +226,7 @@ def test_update_info_card_reflects_starting_state(
         card_module,
         "it",
         lambda cls: {
-            "ManagerNapCatQQProcess": fake_process_manager,
+            "BotProcessManager": fake_process_manager,
             "ManagerNapCatQQLoginState": fake_login_state_manager,
             "QRCodeDialogFactory": fake_qr_code_factory,
         }[cls.__name__],

@@ -49,9 +49,23 @@ def setup_runtime_dependencies(
 
     monkeypatch.setattr(main, "QApplication", FakeQApplication)
 
+    class FakeAboutToQuitSignal:
+        """`QCoreApplication.aboutToQuit` 信号替身.
+
+        W7 (2026-05-11) SnowLuma daemon refactor 后, ``main.run_application`` 会
+        ``app.aboutToQuit.connect(_shutdown_snowluma_daemon)`` 挂回收钩子. 测试只验证
+        ``connect`` 被调过 (不实际触发), 用本类记录订阅以满足 monkey-patched signal 协议.
+        """
+        def __init__(self) -> None:
+            self.connected: list = []
+
+        def connect(self, slot) -> None:
+            self.connected.append(slot)
+
     class FakeExceptionLoggingApplication:
         def __init__(self, argv) -> None:
             calls["app_argv"] = list(argv)
+            self.aboutToQuit = FakeAboutToQuitSignal()
 
         def exec(self) -> int:
             calls["app_exec"] = True

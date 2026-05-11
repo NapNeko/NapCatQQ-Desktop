@@ -7,7 +7,7 @@
 
 - ``napcat_<qqid>.(log|json|pid|log.prev)``
 - ``qq --no-sandbox -q <qqid>``
-- ``ManagerNapCatQQProcess[<qqid>]``
+- ``BotProcessManager[<qqid>]``
 
 替换语义: 仅替换数字段, 保留前后字面量, 走 ``mask_qqid`` 输出 ``***1217`` 风格.
 """
@@ -73,10 +73,10 @@ def test_cmdline_q_with_pgrep_is_masked() -> None:
 
 # ==================== 中括号形式 ====================
 def test_manager_bracket_qqid_is_masked() -> None:
-    text = "ManagerNapCatQQProcess[3217681217] 退出"
+    text = "BotProcessManager[3217681217] 退出"
     out = sanitize_text_for_export(text)
     assert "3217681217" not in out
-    assert "ManagerNapCatQQProcess[***1217]" in out
+    assert "BotProcessManager[***1217]" in out
 
 
 # ==================== 不应误伤的场景 ====================
@@ -107,7 +107,7 @@ def test_napcat_without_underscore_qqid_is_not_touched() -> None:
 def test_combined_log_line_redacts_all_qqid_forms() -> None:
     """单行日志同时含多种 QQID 形式时, 所有数字段都应被脱敏."""
     text = (
-        "ManagerNapCatQQProcess[3217681217] 启动 napcat_3217681217.log; "
+        "BotProcessManager[3217681217] 启动 napcat_3217681217.log; "
         "命令: qq --no-sandbox -q 3217681217"
     )
     out = sanitize_text_for_export(text)

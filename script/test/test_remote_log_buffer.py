@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
-from src.core.runtime.napcat import RemoteNapCatQQLog
+from src.core.runtime.bot_process_manager import RemoteNapCatQQLog
 
 
 @pytest.fixture(scope="module")

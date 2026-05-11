@@ -120,7 +120,7 @@ def _make_card(monkeypatch: pytest.MonkeyPatch, config) -> object:
 
     def fake_it(target):
         name = getattr(target, "__name__", "")
-        if name == "ManagerNapCatQQProcess":
+        if name == "BotProcessManager":
             return fake_process_manager
         if name == "ManagerNapCatQQLoginState":
             return fake_login_state_manager

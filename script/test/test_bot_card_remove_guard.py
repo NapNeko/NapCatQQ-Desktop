@@ -122,7 +122,7 @@ def test_remove_button_blocks_running_bot(monkeypatch: pytest.MonkeyPatch, confi
         card_module,
         "it",
         lambda cls: {
-            "ManagerNapCatQQProcess": fake_process_manager,
+            "BotProcessManager": fake_process_manager,
             "ManagerNapCatQQLoginState": fake_login_state_manager,
             "ManagerAutoRestartProcess": fake_auto_restart_manager,
             "QRCodeDialogFactory": fake_qr_code_factory,

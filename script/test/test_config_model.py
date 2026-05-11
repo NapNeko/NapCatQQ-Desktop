@@ -11,6 +11,7 @@ from src.core.config.config_enum import TimeUnitEnum
 from src.core.config.config_model import (
     AdvancedConfig,
     AutoRestartScheduleConfig,
+    BOT_CONFIG_COMPAT_VERSION,
     BotConfig,
     Config,
     ConnectConfig,
@@ -20,8 +21,18 @@ from src.core.config.config_model import (
     WebsocketClientsConfig,
     WebsocketServersConfig,
     _coerce_interval_default,
+    consume_deferred_snowluma_overrides,
     migrate_bot_config_payload,
+    reset_deferred_snowluma_overrides,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_deferred_overrides():
+    """W4: 每个测试前后清空迁移 deferred 队列, 防止 cross-test 污染."""
+    reset_deferred_snowluma_overrides()
+    yield
+    reset_deferred_snowluma_overrides()
 
 
 def test_coerce_interval_default_handles_none_blank_and_invalid_values() -> None:
@@ -168,3 +179,148 @@ class TestRuntimeTargetField:
         assert isinstance(bots, list) and len(bots) == 1
         assert bots[0]["bot"]["runtime_target"] == RUNTIME_TARGET_LOCAL
         assert any("bot.runtime_target default" in rule for rule in rules_applied)
+
+
+# ==================== W4: SnowLuma WebUI 密码 override 迁移 ====================
+class TestSnowLumaPasswordOverrideMigration:
+    """W4 (2026-05-11): ``bot.snowluma_webui_password_override`` 迁移到 App 级 cfg.
+
+    迁移路径: 旧 bot.json 字段被 ``_migrate_legacy_bot_fields`` pop 掉, 非空值 push 到
+    ``_DEFERRED_APP_SNOWLUMA_OVERRIDES`` 模块队列. ``operate_config._read_config_file``
+    在迁移完成后调 :func:`consume_deferred_snowluma_overrides` 取出值, 写到
+    ``cfg.snowluma_webui_password_override``.
+    """
+
+    def test_botconfig_no_longer_has_password_override_field(self) -> None:
+        """W4: ``BotConfig.snowluma_webui_password_override`` 字段应被删除."""
+        bot = BotConfig(name="x", QQID=1)
+        assert not hasattr(bot, "snowluma_webui_password_override"), (
+            "W4 应删除 BotConfig.snowluma_webui_password_override 字段"
+        )
+
+    def test_legacy_payload_with_nonempty_override_pushed_to_deferred(self) -> None:
+        """旧 bot.json 含非空 override → 字段被 pop + push 到 deferred 队列."""
+        legacy_payload = {
+            "bot": {
+                "name": "Legacy",
+                "QQID": 12345,
+                "snowluma_webui_password_override": "MyP@ssw0rd!",
+            },
+            "connect": {},
+            "advanced": {},
+        }
+        migrated, _src_v, rules_applied = migrate_bot_config_payload(legacy_payload)
+
+        # bot.json 中字段消失
+        migrated_bot = migrated["bots"][0]["bot"]
+        assert "snowluma_webui_password_override" not in migrated_bot
+
+        # 迁移 rule 含 "migrated to app.snowluma.webui_password_override"
+        assert any(
+            "snowluma_webui_password_override migrated" in rule for rule in rules_applied
+        )
+
+        # deferred 队列已收到值
+        drained = consume_deferred_snowluma_overrides()
+        assert drained == ["MyP@ssw0rd!"]
+
+    def test_legacy_payload_with_empty_override_silently_dropped(self) -> None:
+        """旧 bot.json 含**空**字符串 override → 字段被 pop 但**不** push 到 deferred."""
+        legacy_payload = {
+            "bot": {
+                "name": "Legacy",
+                "QQID": 22222,
+                "snowluma_webui_password_override": "",
+            },
+            "connect": {},
+            "advanced": {},
+        }
+        migrated, _src_v, rules_applied = migrate_bot_config_payload(legacy_payload)
+
+        # 字段被 pop
+        assert "snowluma_webui_password_override" not in migrated["bots"][0]["bot"]
+        # 迁移 rule 应含 "removed (empty legacy default)"
+        assert any(
+            "removed (empty legacy default)" in rule for rule in rules_applied
+        )
+        # deferred 队列保持空
+        assert consume_deferred_snowluma_overrides() == []
+
+    def test_legacy_payload_without_override_field_no_op(self) -> None:
+        """旧 bot.json **不**含 override 字段 (新 bot.json 或干净 legacy) → 无迁移."""
+        legacy_payload = {
+            "bot": {"name": "Clean", "QQID": 33333},
+            "connect": {},
+            "advanced": {},
+        }
+        migrated, _src_v, rules_applied = migrate_bot_config_payload(legacy_payload)
+
+        assert "snowluma_webui_password_override" not in migrated["bots"][0]["bot"]
+        # 没有迁移 rule 涉及 password override
+        assert not any("snowluma_webui_password_override" in rule for rule in rules_applied)
+        assert consume_deferred_snowluma_overrides() == []
+
+    def test_multiple_bots_with_different_overrides_all_queued(self) -> None:
+        """多 Bot 各自有 override → deferred 队列按 push 顺序收集, 由消费者决策保留哪个."""
+        legacy_payload_a = {
+            "bot": {
+                "name": "BotA",
+                "QQID": 40001,
+                "snowluma_webui_password_override": "FirstPass",
+            },
+            "connect": {},
+            "advanced": {},
+        }
+        legacy_payload_b = {
+            "bot": {
+                "name": "BotB",
+                "QQID": 40002,
+                "snowluma_webui_password_override": "SecondPass",
+            },
+            "connect": {},
+            "advanced": {},
+        }
+        # 模拟一次性迁移两个 Bot (实际场景下 read_config 会循环)
+        migrate_bot_config_payload(legacy_payload_a)
+        migrate_bot_config_payload(legacy_payload_b)
+
+        drained = consume_deferred_snowluma_overrides()
+        # 顺序保留, 消费者负责取首项
+        assert drained == ["FirstPass", "SecondPass"]
+
+    def test_compat_version_bumped_to_v21(self) -> None:
+        """W4: ``BOT_CONFIG_COMPAT_VERSION`` 应从 v2.0 升到 v2.1 (删字段是 breaking)."""
+        assert BOT_CONFIG_COMPAT_VERSION == "v2.1"
+
+    def test_consume_drains_and_clears_queue(self) -> None:
+        """``consume_deferred_snowluma_overrides`` 调一次后队列应清空, 第二次返回空 list."""
+        legacy_payload = {
+            "bot": {
+                "name": "x",
+                "QQID": 50001,
+                "snowluma_webui_password_override": "Drained!",
+            },
+            "connect": {},
+            "advanced": {},
+        }
+        migrate_bot_config_payload(legacy_payload)
+
+        first = consume_deferred_snowluma_overrides()
+        second = consume_deferred_snowluma_overrides()
+        assert first == ["Drained!"]
+        assert second == []
+
+    def test_reset_helper_clears_queue(self) -> None:
+        """``reset_deferred_snowluma_overrides`` 用于 pytest fixture, 强制清空."""
+        legacy_payload = {
+            "bot": {
+                "name": "x",
+                "QQID": 50002,
+                "snowluma_webui_password_override": "WillBeReset!",
+            },
+            "connect": {},
+            "advanced": {},
+        }
+        migrate_bot_config_payload(legacy_payload)
+        reset_deferred_snowluma_overrides()
+        assert consume_deferred_snowluma_overrides() == []

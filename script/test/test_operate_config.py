@@ -746,3 +746,115 @@ def test_delete_config_skips_remote_delete_for_local_target(
 
     assert operate_config.delete_config(config) is True
     assert spy.delete_calls == []
+
+
+# ==================== 问题 3 修复 (层 3): read_config 截断 + deferred queue ====================
+@pytest.fixture(autouse=True)
+def _clear_truncated_queue() -> None:
+    """每个 case 前清空 deferred queue, 避免 case 之间互相污染."""
+    operate_config.consume_truncated_bots_warning()
+    yield
+    operate_config.consume_truncated_bots_warning()
+
+
+def test_read_config_truncates_when_over_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """超过 4 个 Bot 时, read_config 应仅返回前 4 个."""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    configs = [make_config(qqid, f"Bot{qqid}") for qqid in (100, 200, 300, 400, 500, 600)]
+    write_json(fake_path_func.bot_config_path, expected_bot_root(configs))
+
+    result = operate_config.read_config()
+
+    assert len(result) == 4
+    # 截断保留前 4 个
+    assert [c.bot.QQID for c in result] == [100, 200, 300, 400]
+
+
+def test_read_config_pushes_truncated_qqids_to_deferred_queue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """截断时被隐藏的 QQID 应 push 到 deferred queue, 顺序与原列表一致."""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    configs = [make_config(qqid, f"Bot{qqid}") for qqid in (100, 200, 300, 400, 500, 600)]
+    write_json(fake_path_func.bot_config_path, expected_bot_root(configs))
+
+    operate_config.read_config()
+
+    truncated = operate_config.consume_truncated_bots_warning()
+    # 被隐藏的 QQID 是 500 和 600 (字符串形式, 顺序保留)
+    assert truncated == ["500", "600"]
+
+
+def test_read_config_does_not_push_when_within_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """≤ 4 个 Bot 时, read_config 不应 push 任何 QQID 到 queue."""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    configs = [make_config(qqid, f"Bot{qqid}") for qqid in (100, 200, 300)]
+    write_json(fake_path_func.bot_config_path, expected_bot_root(configs))
+
+    result = operate_config.read_config()
+
+    assert len(result) == 3
+    assert operate_config.consume_truncated_bots_warning() == []
+
+
+def test_consume_truncated_bots_warning_clears_queue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """consume_truncated_bots_warning 应在返回后清空 deferred queue, 二次调用返回空."""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    configs = [make_config(qqid, f"Bot{qqid}") for qqid in (100, 200, 300, 400, 500)]
+    write_json(fake_path_func.bot_config_path, expected_bot_root(configs))
+
+    operate_config.read_config()
+
+    first_consume = operate_config.consume_truncated_bots_warning()
+    assert first_consume == ["500"]
+    # 第二次 consume 应为空 (queue 已清)
+    assert operate_config.consume_truncated_bots_warning() == []
+
+
+def test_read_config_raw_returns_all_bots_without_truncation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """read_config_raw 应返回完整 Bot 列表, 不截断, 也不 push deferred queue."""
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    configs = [make_config(qqid, f"Bot{qqid}") for qqid in (100, 200, 300, 400, 500, 600)]
+    write_json(fake_path_func.bot_config_path, expected_bot_root(configs))
+
+    result = operate_config.read_config_raw()
+
+    assert len(result) == 6
+    assert [c.bot.QQID for c in result] == [100, 200, 300, 400, 500, 600]
+    # read_config_raw 不该 push deferred queue (那是 read_config 的职责)
+    assert operate_config.consume_truncated_bots_warning() == []
+
+
+def test_update_config_uses_full_list_not_truncated_for_write_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """问题 3 层 3 关键边界: update_config 修改第 5 个 Bot 时, 应**保留前 4 个原始 Bot**.
+
+    若 update_config 内部错用了 read_config (截断版) 而非 read_config_raw, 会把后 N-4
+    个 Bot 丢掉, 用户的多余 Bot 配置永久丢失. 本测试用于回归保证 update_config 走
+    _read_config_file(strict=True) 拿完整列表.
+    """
+    fake_path_func = patch_path_func(monkeypatch, tmp_path)
+    existing = [make_config(qqid, f"Bot{qqid}") for qqid in (100, 200, 300, 400, 500)]
+    write_json(fake_path_func.bot_config_path, expected_bot_root(existing))
+
+    # 修改第 5 个 Bot (QQID=500) 的 name; 写回后期望所有 5 个都在
+    target = existing[4].model_copy(deep=True)
+    target.bot.name = "Renamed500"
+
+    assert operate_config.update_config(target, base_config=target, skip_merge=True) is True
+
+    saved = read_json(fake_path_func.bot_config_path)
+    saved_qqids = [b["bot"]["QQID"] for b in saved["bots"]]
+    # 关键: 5 个全都在
+    assert saved_qqids == [100, 200, 300, 400, 500]
+    # 第 5 个 name 已更新
+    assert saved["bots"][4]["bot"]["name"] == "Renamed500"
