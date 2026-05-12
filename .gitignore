@@ -58,6 +58,11 @@ NapCat/*
 /src/pysidedeploy.spec
 /runtime/*
 
+# W3: SnowLuma.Framework lite tarball 由 build_snowluma_framework_lite.py 在 CI/本地构建期生成
+# 大文件 (5-100MB), 不入 git; .gitkeep 保留目录占位
+/src/resource/runtime/*.tar.gz
+/src/resource/runtime/*.version.txt
+
 ### 测试相关 ###
 /test/
 /tests/
