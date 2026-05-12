@@ -8,6 +8,10 @@ venv/
 .vscode/
 .codex/
 .nexus-map/
+.kiro/
+docs/plans/
+docs/requirements/
+
 
 ### 依赖管理 ###
 # Python 依赖和锁定文件
@@ -51,6 +55,10 @@ PatchConfig.json
 
 # AI 更新日志生成脚本的本地配置
 script/utils/.env
+
+### SSH ###
+# SSH 主机指纹等配置
+/ssh/
 
 ### 特定项目忽略 ###
 # 项目特定目录和文件
