@@ -1,0 +1,348 @@
+#!/usr/bin/env bash
+# SnowLuma daemon 启停管理 (W2 契约).
+#
+# 由 src/core/remote/snowluma/templates.py:build_snowluma_daemon_launcher 渲染.
+# 子命令: start / stop / status / restart / wait-ready
+#
+# 进程拓扑 (start 后远端最终状态):
+#   dbus-launch (--exit-with-session) -> source 到当前 shell
+#   Xvfb :{{display_num}} -screen 0 1280x720x24
+#     -> fluxbox (子进程, 提供 WM)
+#     -> x11vnc -rfbport {{vnc_port}} -passwdfile $VNC_SECRET_PATH
+#     -> websockify --web /usr/share/novnc {{novnc_port}} localhost:{{vnc_port}}
+#   node $SNOWLUMA_DIR/index.mjs (daemon 主进程, 监听 {{webui_port}}; W3 修正: release lite 扫平结构)
+#
+# pid 协议: 每个辅助进程的 pid 单独写到 $RUNTIME_DIR/pid_<role>;
+# daemon 总 pid 写 $PID_DAEMON_PATH; 状态汇总写 $STATUS_DAEMON_PATH.
+set -euo pipefail
+umask 077
+
+# ==================== 公共工具 ====================
+proc_alive() {
+    # $1 = pid file path; pid 文件存在且对应进程可 kill -0 时返 0
+    local pidfile="$1"
+    [ -f "$pidfile" ] || return 1
+    local pid
+    pid=$(cat "$pidfile" 2>/dev/null || echo "")
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null
+}
+
+write_status() {
+    # 写 status_daemon.json; 字段: running / started_at / pids{} / ports{} / ready 标志
+    local running="$1" ready="$2"
+    local started_at
+    started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    local pid_xvfb pid_fluxbox pid_x11vnc pid_websockify pid_node
+    pid_xvfb=$(cat "$RUNTIME_DIR/pid_xvfb" 2>/dev/null || echo null)
+    pid_fluxbox=$(cat "$RUNTIME_DIR/pid_fluxbox" 2>/dev/null || echo null)
+    pid_x11vnc=$(cat "$RUNTIME_DIR/pid_x11vnc" 2>/dev/null || echo null)
+    pid_websockify=$(cat "$RUNTIME_DIR/pid_websockify" 2>/dev/null || echo null)
+    pid_node=$(cat "$RUNTIME_DIR/pid_node" 2>/dev/null || echo null)
+
+    cat > "$STATUS_DAEMON_PATH" <<EOF
+{
+  "running": $running,
+  "ready": $ready,
+  "started_at": "$started_at",
+  "pids": {
+    "xvfb": $pid_xvfb,
+    "fluxbox": $pid_fluxbox,
+    "x11vnc": $pid_x11vnc,
+    "websockify": $pid_websockify,
+    "node": $pid_node
+  },
+  "ports": {
+    "vnc": {{vnc_port}},
+    "novnc": {{novnc_port}},
+    "webui": {{webui_port}}
+  },
+  "display": ":{{display_num}}"
+}
+EOF
+}
+
+# ==================== start ====================
+# P8 (review): start 期间通过 flock 互斥, 避免多个 SSH 会话并发调起导致双 spawn.
+# 锁文件放在 RUNTIME_DIR; flock -n 非阻塞, 失败立即报错 (调用方应 sleep+retry).
+cmd_start() {
+    mkdir -p "$RUNTIME_DIR" "$LOG_DIR"
+
+    # P8: 进入临界区前先加锁; FD 200 在 subshell/函数内独立.
+    #
+    # W10b-Driver fix: 原始实现下面 spawn 的子进程 (Xvfb / fluxbox / x11vnc / websockify /
+    # nohup node) 会默认继承 fd 200, 导致即使 launcher shell 退出, 只要任一 daemon
+    # 子进程还活着, fd 200 就仍被持有, 锁永不释放 → 下一次 cmd_start 立刻 exit 75.
+    # 修复: 下面所有 spawn 函数均采用 ``200>&-`` 显式关闭 fd 200,
+    # 同时加 stale 锁检测: 拿不到锁时试读床子进程 PID, 全部死了则强制重拿.
+    exec 200> "$RUNTIME_DIR/.daemon_start.lock"
+    if ! flock -n 200; then
+        # 检查是否 stale: 看 5 个辅助进程 pid 是否还活着
+        local stale=true
+        for role in xvfb fluxbox x11vnc websockify node; do
+            local pf="$RUNTIME_DIR/pid_$role"
+            if [ -f "$pf" ]; then
+                local pid_check
+                pid_check=$(cat "$pf" 2>/dev/null || echo "")
+                if [ -n "$pid_check" ] && kill -0 "$pid_check" 2>/dev/null; then
+                    stale=false
+                    break
+                fi
+            fi
+        done
+        if [ "$stale" = "true" ]; then
+            echo "daemon start: 检测到 stale 锁 (上次 spawn 的子进程都已退出但 fd 仍被持有), 强制重拿锁" >&2
+            # 释放当前 fd 200, 重新 open + 柠锁; 这会释放损坏的 fd 并拿到新锁
+            exec 200>&-
+            exec 200> "$RUNTIME_DIR/.daemon_start.lock"
+            if ! flock -n 200; then
+                echo "daemon start: stale 锁重拿仍失败, 请手动 rm 锁文件: $RUNTIME_DIR/.daemon_start.lock" >&2
+                return 75
+            fi
+        else
+            echo "daemon start: 已有另一个 start 在跑, 请等待" >&2
+            return 75  # EX_TEMPFAIL
+        fi
+    fi
+
+    # 幂等: 已 running 直接返回
+    # P2 (review): pid_daemon 现在指 node 主进程 PID, kill -0 才有意义.
+    if proc_alive "$PID_DAEMON_PATH"; then
+        write_status true true
+        echo "daemon already running"
+        return 0
+    fi
+
+    # 1. dbus 会话总线 (qq.exe 依赖 D-Bus)
+    if [ ! -f "$DBUS_ENV_PATH" ] || ! pgrep -f 'dbus-daemon.*--config-file' >/dev/null 2>&1; then
+        dbus-launch --sh-syntax --exit-with-session > "$DBUS_ENV_PATH"
+    fi
+    # shellcheck disable=SC1090
+    . "$DBUS_ENV_PATH"
+
+    # 2. Xvfb
+    # ``200>&-`` 关闭锁 fd 避免被子进程继承 (W10b-Driver fix)
+    Xvfb ":{{display_num}}" -screen 0 1280x720x24 -nolisten tcp \
+        > "$LOG_DIR/xvfb.log" 2>&1 200>&- &
+    echo $! > "$RUNTIME_DIR/pid_xvfb"
+    sleep 0.5
+    if ! xdpyinfo -display ":{{display_num}}" >/dev/null 2>&1; then
+        # xdpyinfo 不一定装, 兼容缺失情况只看 Xvfb 进程
+        if ! kill -0 "$(cat "$RUNTIME_DIR/pid_xvfb")" 2>/dev/null; then
+            echo "Xvfb 启动失败" >&2
+            return 2
+        fi
+    fi
+
+    # 3. fluxbox (window manager)
+    DISPLAY=":{{display_num}}" fluxbox > "$LOG_DIR/fluxbox.log" 2>&1 200>&- &
+    echo $! > "$RUNTIME_DIR/pid_fluxbox"
+
+    # 4. x11vnc (RFB server); ``-bg`` 自身 daemonize, 仍需关 fd 200 避免被后台进程永久继承
+    DISPLAY=":{{display_num}}" x11vnc \
+        -display ":{{display_num}}" \
+        -rfbport {{vnc_port}} \
+        -passwdfile "$VNC_SECRET_PATH" \
+        -forever -shared -bg \
+        -o "$LOG_DIR/x11vnc.log" >/dev/null 2>&1 200>&- || {
+            echo "x11vnc 启动失败" >&2
+            return 3
+        }
+    # x11vnc -bg 会自己 daemonize; 抓 pid.
+    # P7 (review): pgrep 失败时不能 silent (会让 cmd_stop 漏 kill 这个孤儿 x11vnc);
+    # 显式检查空 PID 并 die. ``set -o pipefail`` 保证 pgrep 退出码透传.
+    sleep 0.3
+    if ! pgrep -nf "x11vnc.*-rfbport {{vnc_port}}" > "$RUNTIME_DIR/pid_x11vnc"; then
+        echo "x11vnc pid 抓取失败 (pgrep 无命中)" >&2
+        return 31
+    fi
+    if [ ! -s "$RUNTIME_DIR/pid_x11vnc" ]; then
+        echo "x11vnc pid 文件为空 (启动可能瞬间退出)" >&2
+        return 31
+    fi
+
+    # 5. websockify (noVNC HTTP 包装); ``--daemon`` 自身 daemonize, 仍需关 fd 200
+    websockify --daemon \
+        --web /usr/share/novnc \
+        --log-file "$LOG_DIR/websockify.log" \
+        "{{novnc_port}}" "localhost:{{vnc_port}}" 200>&- \
+        || {
+            echo "websockify 启动失败" >&2
+            return 4
+        }
+    # P7 (review): 同 x11vnc, pgrep 失败立刻报错而不是 silent
+    sleep 0.3
+    if ! pgrep -nf "websockify.*{{novnc_port}}" > "$RUNTIME_DIR/pid_websockify"; then
+        echo "websockify pid 抓取失败 (pgrep 无命中)" >&2
+        return 32
+    fi
+    if [ ! -s "$RUNTIME_DIR/pid_websockify" ]; then
+        echo "websockify pid 文件为空" >&2
+        return 32
+    fi
+
+    # 6. node daemon (SnowLuma core)
+    # W3 修正: SnowLuma release lite tarball 为扫平结构, 入口位于 $SNOWLUMA_DIR/index.mjs
+    # (非旧假设的 dist/index.mjs); 与 install_snowluma.sh.j2 verify 逻辑保持一致.
+    #
+    # node 可执行选择 (与 install_snowluma.sh.j2 EFFECTIVE_NODE_BIN 对齐):
+    # 优先使用 install 阶段下载到 ``$WORKSPACE_DIR/node/bin/node`` 的便携式 v22
+    # (国内 VPS deb.nodesource.com 不通的常见兜底); 回退到系统 PATH.
+    NODE_BIN=""
+    if [ -x "$WORKSPACE_DIR/node/bin/node" ]; then
+        NODE_BIN="$WORKSPACE_DIR/node/bin/node"
+    elif command -v node >/dev/null 2>&1; then
+        NODE_BIN="$(command -v node)"
+    else
+        echo "node 可执行未找到 (既无 \$WORKSPACE_DIR/node/bin/node 也不在 PATH)" >&2
+        return 33
+    fi
+    cd "$SNOWLUMA_DIR"
+    # ``200>&-`` 是关键: nohup 子进程会运行极长时间 (整个 daemon 会话),
+    # 不关闭 fd 200 会让 .daemon_start.lock 锁文件永不释放 (W10b-Driver fix).
+    DISPLAY=":{{display_num}}" nohup "$NODE_BIN" index.mjs \
+        >> "$LOG_DAEMON_PATH" 2>&1 200>&- &
+    node_pid=$!
+    echo "$node_pid" > "$RUNTIME_DIR/pid_node"
+
+    # 7. P2 (review): pid_daemon 指向 node 主进程 PID, 而不是当前 launcher shell
+    # 的 ``$$``. 旧实现写 ``$$`` 在 SSH 命令结束后立刻 stale, 导致 ``proc_alive``
+    # 误判 (PID 已 reaped 或被复用), 进而双 spawn 或假阳性. node 进程是长存的真主进程,
+    # 用它做 daemon sentinel 才能让 ``proc_alive``/``status`` 准确反映 daemon 存活.
+    echo "$node_pid" > "$PID_DAEMON_PATH"
+
+    # 8. wait-ready 同步: 轮询 webui 端口是否 listen 最多 30s.
+    #
+    # W10b-Driver fix: 原始实现用 ``curl -fs /api/status`` 探测, 但 SnowLuma WebUI
+    # 强制 "password change required after first login", ``/api/status`` 被认证
+    # 拦截返 401/403, ``curl --fail`` 拿到 4xx 即失败 -> 30s 内永远探不到 ready
+    # -> launcher exit 5. 改用纯 TCP 端口监听检测 (bash 内置 /dev/tcp), 不依赖
+    # WebUI HTTP 响应内容/认证状态 -- daemon 一旦在 webui_port 上 listen 就算 ready.
+    local ready=false
+    for _ in $(seq 1 60); do
+        # ``/dev/tcp/host/port`` 是 bash 内置 TCP 探测; 端口未 listen 时 redirect 失败
+        # ``2>/dev/null`` 静默 connection refused 等错误
+        if (: > "/dev/tcp/127.0.0.1/{{webui_port}}") 2>/dev/null; then
+            ready=true
+            break
+        fi
+        sleep 0.5
+    done
+
+    if [ "$ready" = "true" ]; then
+        write_status true true
+        return 0
+    else
+        # 启动了但 webui 30s 未 ready, 让 UI 看到部分启动 + 引导查看日志.
+        #
+        # W10b-Driver: 在 return 5 之前主动 dump 诊断信息到 stderr, 让 Desktop UI
+        # 端的 RemoteSnowLumaBackend 能直接展示根因 (避免用户需 SSH 进远端 tail 日志).
+        # 收集项:
+        # - node 进程是否还活着 (常见: spawn 后立刻崩溃, pid_node 指向已 reaped PID)
+        # - node 日志末尾 (含 SnowLuma framework 启动期错误堆栈)
+        # - listen 端口占用 (确认 webui 真没监听 / 监听了但 curl 探不到)
+        # - status_daemon.json (含各辅助进程 pid + ready 标志)
+        echo "===== SL daemon ready 探测超时 30s, 诊断信息 =====" >&2
+        if [ -f "$RUNTIME_DIR/pid_node" ]; then
+            local node_pid_check
+            node_pid_check=$(cat "$RUNTIME_DIR/pid_node" 2>/dev/null || echo "")
+            if [ -n "$node_pid_check" ] && kill -0 "$node_pid_check" 2>/dev/null; then
+                echo "[diag] node 进程仍存活 pid=$node_pid_check" >&2
+            else
+                echo "[diag] node 进程已死 pid=${node_pid_check:-<empty>} (已被 reaped 或崩溃)" >&2
+            fi
+        fi
+        # ss / netstat 检查 webui 端口
+        if command -v ss >/dev/null 2>&1; then
+            echo "[diag] webui 端口 {{webui_port}} 监听检查:" >&2
+            ss -tlnp 2>/dev/null | grep -E ":{{webui_port}}\\b" >&2 || \
+                echo "  (无进程在 {{webui_port}} 上监听)" >&2
+        fi
+        echo "[diag] daemon node 日志最后 50 行 ($LOG_DAEMON_PATH):" >&2
+        tail -n 50 "$LOG_DAEMON_PATH" 2>/dev/null >&2 || \
+            echo "  (无法读取 $LOG_DAEMON_PATH)" >&2
+        echo "===== 诊断信息 END =====" >&2
+        write_status true false
+        return 5
+    fi
+}
+
+# ==================== stop ====================
+cmd_stop() {
+    # P5 (review): 真正的逆序应是
+    #   node → websockify → x11vnc → fluxbox → xvfb
+    # (启动顺序: dbus → Xvfb → fluxbox → x11vnc → websockify → node).
+    # 旧的顺序把 node 放最后, Xvfb 死后 node 会向已死的 X 屏写数据触发 SIGPIPE/异常.
+    for role in node websockify x11vnc fluxbox xvfb; do
+        local pidfile="$RUNTIME_DIR/pid_$role"
+        if [ -f "$pidfile" ]; then
+            local pid
+            pid=$(cat "$pidfile" 2>/dev/null || echo "")
+            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" 2>/dev/null || true
+                # 给 5s 优雅退出, 再 -9
+                local i=0
+                while [ "$i" -lt 10 ] && kill -0 "$pid" 2>/dev/null; do
+                    sleep 0.5
+                    i=$((i + 1))
+                done
+                kill -9 "$pid" 2>/dev/null || true
+            fi
+            rm -f "$pidfile"
+        fi
+    done
+
+    rm -f "$PID_DAEMON_PATH"
+    # 写最终 stopped 状态
+    write_status false false
+}
+
+# ==================== status ====================
+cmd_status() {
+    if [ -f "$STATUS_DAEMON_PATH" ]; then
+        cat "$STATUS_DAEMON_PATH"
+    else
+        # 从未启动过, 输出 minimal stopped 状态
+        cat <<EOF
+{"running": false, "ready": false, "started_at": null, "pids": {}, "ports": {"vnc": {{vnc_port}}, "novnc": {{novnc_port}}, "webui": {{webui_port}}}, "display": ":{{display_num}}"}
+EOF
+    fi
+}
+
+# ==================== restart ====================
+cmd_restart() {
+    cmd_stop
+    sleep 1
+    cmd_start
+}
+
+# ==================== wait-ready ====================
+cmd_wait_ready() {
+    # 阻塞轮询 status_daemon.json.ready; 默认超时 60s, 可通过 $1 覆盖
+    local timeout="${1:-60}"
+    local elapsed=0
+    while [ "$elapsed" -lt "$timeout" ]; do
+        if [ -f "$STATUS_DAEMON_PATH" ] && grep -q '"ready": true' "$STATUS_DAEMON_PATH"; then
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    return 1
+}
+
+# ==================== 主入口 ====================
+case "${1:-}" in
+    start)       cmd_start ;;
+    stop)        cmd_stop ;;
+    status)      cmd_status ;;
+    restart)     cmd_restart ;;
+    wait-ready)  cmd_wait_ready "${2:-60}" ;;
+    *)
+        cat >&2 <<USAGE
+Usage: $0 {start|stop|status|restart|wait-ready [timeout]}
+USAGE
+        exit 64
+        ;;
+esac

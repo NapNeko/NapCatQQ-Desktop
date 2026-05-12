@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+# SnowLuma 远端一次性部署脚本 (W2 契约).
+#
+# 由 src/core/remote/snowluma/templates.py:build_install_snowluma_script 渲染.
+# 占位变量 ({{NAME}}) 在 Desktop 侧编译期替换;
+# 路径变量 ($WORKSPACE_DIR 等) 在 inject_script_variables 注入到 shebang 之后.
+#
+# 执行流程: 13 阶段, 每阶段输出 [PROGRESS] N message, Desktop UI 解析 stdout 行
+# 映射成进度条; 失败时 [PROGRESS] 100 ERROR_<code> + exit 1, UI 弹错误提示.
+#
+# 端口约定 (本机回环):
+#   {{webui_port}} = SnowLuma WebUI HTTP
+#   {{vnc_port}}   = x11vnc RFB (含密码)
+#   {{novnc_port}} = websockify + noVNC HTTP
+#   :{{display_num}} = Xvfb 显示号
+set -euo pipefail
+umask 077
+
+progress() {
+    # 输出: [PROGRESS] <percent> <message>
+    printf '[PROGRESS] %s %s\n' "$1" "$2"
+}
+
+die() {
+    # 输出 ERROR_<code> 后退出 1; Desktop UI 按 ERROR_ 前缀 catch.
+    progress 100 "ERROR_$1"
+    if [ -n "${2:-}" ]; then
+        printf '%s\n' "$2" >&2
+    fi
+    exit 1
+}
+
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || die "MISSING_CMD_$1" "缺少必备命令: $1"
+}
+
+# ==================== 1. 检查 OS / 包管理器 ====================
+progress 0 "检查 OS / 包管理器"
+if ! command -v apt-get >/dev/null 2>&1; then
+    die "UNSUPPORTED_OS" "暂仅支持 Debian/Ubuntu (apt-get); 检测到非 apt 包管理器"
+fi
+require_cmd dpkg
+require_cmd curl
+
+# ==================== 2. 检查工作目录权限 ====================
+progress 2 "准备工作目录"
+mkdir -p "$WORKSPACE_DIR" "$SNOWLUMA_DIR" "$CONFIG_DIR" "$RUNTIME_DIR" "$LOG_DIR"
+if [ ! -w "$WORKSPACE_DIR" ]; then
+    die "WORKSPACE_NOT_WRITABLE" "工作目录不可写: $WORKSPACE_DIR"
+fi
+
+# ==================== 3. 更新包索引 ====================
+progress 5 "更新 apt 包索引"
+sudo -n apt-get update -qq >/dev/null 2>&1 || apt-get update -qq >/dev/null 2>&1 || \
+    die "APT_UPDATE_FAILED" "apt-get update 失败 (检查网络与 sudo 权限)"
+
+# ==================== 4. 安装图形栈 ====================
+progress 10 "安装图形栈 (Xvfb / fluxbox / x11vnc / noVNC / websockify)"
+GRAPHIC_PKGS=(
+    dbus-x11 fluxbox xvfb x11vnc novnc websockify
+    fonts-wqy-zenhei fonts-noto-cjk
+    libnss3 libatk-bridge2.0-0 libgtk-3-0 libxkbfile1 libsecret-1-0 libasound2
+    ca-certificates
+)
+DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y --no-install-recommends "${GRAPHIC_PKGS[@]}" \
+        >/dev/null 2>&1 \
+    || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${GRAPHIC_PKGS[@]}" \
+        >/dev/null 2>&1 \
+    || die "APT_INSTALL_GRAPHIC_FAILED" "图形栈包安装失败"
+
+# ==================== 5. 安装 node (3 级 fallback, OQ2 决策) ====================
+progress 40 "安装 node (>= 22)"
+NODE_OK=0
+
+# L1: 已装 node ≥ 22 直接跳过
+if command -v node >/dev/null 2>&1; then
+    NODE_VER=$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
+    if [ -n "$NODE_VER" ] && [ "$NODE_VER" -ge 22 ] 2>/dev/null; then
+        NODE_OK=1
+    fi
+fi
+
+# L2: apt 直装 nodejs, 检测版本
+if [ "$NODE_OK" -eq 0 ]; then
+    DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y nodejs >/dev/null 2>&1 \
+        || DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs >/dev/null 2>&1 \
+        || true
+    if command -v node >/dev/null 2>&1; then
+        NODE_VER=$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
+        if [ -n "$NODE_VER" ] && [ "$NODE_VER" -ge 22 ] 2>/dev/null; then
+            NODE_OK=1
+        fi
+    fi
+fi
+
+# L3: nodesource setup_22.x (受 enable_nodesource 开关控制)
+if [ "$NODE_OK" -eq 0 ] && [ "{{enable_nodesource}}" = "1" ]; then
+    if curl --max-time 10 -fsSL https://deb.nodesource.com/setup_22.x \
+            | sudo -n bash - >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y nodejs >/dev/null 2>&1 \
+            || DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs >/dev/null 2>&1 \
+            || true
+        if command -v node >/dev/null 2>&1; then
+            NODE_VER=$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
+            if [ -n "$NODE_VER" ] && [ "$NODE_VER" -ge 22 ] 2>/dev/null; then
+                NODE_OK=1
+            fi
+        fi
+    fi
+fi
+
+# L4: 便携式 node tarball (国内镜像 fallback, OQ4 决策)
+# 触发场景: L3 nodesource 在中国大陆 VPS 普遍超时 (deb.nodesource.com 可达性差),
+# 改从 npmmirror (淘宝) / nodejs.org 拉 prebuilt linux tarball, 解压到
+# ``$WORKSPACE_DIR/node/`` 不需 sudo, daemon launcher 会优先调用它.
+if [ "$NODE_OK" -eq 0 ]; then
+    progress 45 "下载便携式 node v22 (镜像 fallback)"
+    # W10b-Driver fix: 22.11.0 不支持默认开启 ``node:sqlite`` (会抛 ERR_UNKNOWN_BUILTIN_MODULE),
+    # SnowLuma v1.7.6+ 使用了 node:sqlite. 22.12.0 (2024-12-03) 起 node:sqlite
+    # 不再需要 ``--experimental-sqlite`` flag, 22.18.0 LTS 稳定且镜像齐全.
+    NODE_VERSION_TAG="v22.18.0"
+    NODE_ARCH=""
+    case "$(uname -m)" in
+        x86_64) NODE_ARCH="x64" ;;
+        aarch64) NODE_ARCH="arm64" ;;
+        *) NODE_ARCH="" ;;
+    esac
+    if [ -n "$NODE_ARCH" ]; then
+        NODE_TARBALL="node-${NODE_VERSION_TAG}-linux-${NODE_ARCH}.tar.xz"
+        NODE_DIR="$WORKSPACE_DIR/node"
+        NODE_TMP="$WORKSPACE_DIR/node.tar.xz"
+        rm -rf "$NODE_DIR" "$NODE_TMP"
+        mkdir -p "$NODE_DIR"
+        # 多镜像 fallback: npmmirror 国内镜像 -> nodejs.org 官方
+        # ``--max-time 90`` 给单个镜像 1.5 分钟, 足够在 ~30MB 包 + 慢网络下完成
+        NODE_DOWNLOADED=0
+        for url in \
+            "https://npmmirror.com/mirrors/node/${NODE_VERSION_TAG}/${NODE_TARBALL}" \
+            "https://registry.npmmirror.com/-/binary/node/${NODE_VERSION_TAG}/${NODE_TARBALL}" \
+            "https://nodejs.org/dist/${NODE_VERSION_TAG}/${NODE_TARBALL}"
+        do
+            if curl --max-time 90 -fsSL "$url" -o "$NODE_TMP" 2>/dev/null; then
+                NODE_DOWNLOADED=1
+                break
+            fi
+        done
+        if [ "$NODE_DOWNLOADED" -eq 1 ]; then
+            # ``--strip-components=1`` 剥掉顶层 ``node-vX.Y.Z-linux-arch/`` 前缀,
+            # 让 ``$NODE_DIR/bin/node`` 直接可执行
+            if tar -xJf "$NODE_TMP" -C "$NODE_DIR" --strip-components=1 2>/dev/null; then
+                rm -f "$NODE_TMP"
+                if [ -x "$NODE_DIR/bin/node" ]; then
+                    PORTABLE_NODE_VER=$("$NODE_DIR/bin/node" -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
+                    if [ -n "$PORTABLE_NODE_VER" ] && [ "$PORTABLE_NODE_VER" -ge 22 ] 2>/dev/null; then
+                        NODE_OK=1
+                    fi
+                fi
+            else
+                rm -f "$NODE_TMP"
+            fi
+        fi
+    fi
+fi
+
+if [ "$NODE_OK" -eq 0 ]; then
+    die "NODE_VERSION_TOO_LOW" \
+        "未能安装到 node >= 22; 已尝试: 系统已装/apt nodejs/nodesource setup_22.x/便携式 tarball (镜像 fallback). 请检查远端出方向网络或手动安装 node >= 22."
+fi
+
+# ==================== 6. 解压 SnowLuma.Framework lite tarball ====================
+progress 60 "解压 SnowLuma.Framework"
+ARCHIVE_PATH="$WORKSPACE_DIR/{{framework_archive_name}}"
+if [ ! -f "$ARCHIVE_PATH" ]; then
+    die "FRAMEWORK_ARCHIVE_MISSING" "未找到 lite tarball: $ARCHIVE_PATH (请先 SFTP 上传)"
+fi
+tar -xzf "$ARCHIVE_PATH" -C "$SNOWLUMA_DIR" --strip-components=1 \
+    || die "FRAMEWORK_EXTRACT_FAILED" "解压失败: $ARCHIVE_PATH"
+
+# W3 修订: SnowLuma 主仓库 release lite tarball 内部为扁平结构
+# (顶层 ``./`` -> ``./index.mjs`` / ``./launcher.sh`` / ``./native/`` / ``./client/``),
+# ``--strip-components=1`` 剥掉 ``./`` 后入口位于 ``$SNOWLUMA_DIR/index.mjs``;
+# 见 https://github.com/SnowLuma/SnowLuma/releases (例 ``SnowLuma-vX.Y.Z-linux-x64-lite.tar.gz``).
+if [ ! -f "$SNOWLUMA_DIR/index.mjs" ]; then
+    die "FRAMEWORK_ENTRY_MISSING" "解压后缺 index.mjs (lite tarball 不完整或结构变更)"
+fi
+
+# 确保 native .node/.so 文件可读 (process.dlopen 需要)
+find "$SNOWLUMA_DIR" -name '*.node' -exec chmod 644 {} \; 2>/dev/null || true
+find "$SNOWLUMA_DIR" -name '*.so' -exec chmod 644 {} \; 2>/dev/null || true
+
+# ==================== 7. 生成密钥 + 配置目录 ====================
+progress 80 "生成 VNC / WebUI 密钥"
+require_cmd openssl
+
+# vnc.secret: x11vnc -passwdfile 格式.
+# P6 (review): RFB 协议 (VNC 标准) 用 DES 8 字节密钥, 客户端/服务端只取密码前 8 字符.
+# 旧实现 ``openssl rand -hex 12`` 产 24 hex 字符 (96 bit 名义熵), 但 RFB 截断后实际
+# 只有 32 bit 熵, 注释也写错了 (12 字节 hex → 实为 12 字节 = 24 hex 字符).
+# 现修正为 ``openssl rand -hex 4`` (8 hex 字符 = 4 字节 = 32 bit), 与 RFB 协议有效
+# 熵对齐. 32 bit 是 RFB 标准认证的上限, 不是当前实现的弱点; 更强保护靠 SSH 隧道与
+# x11vnc -ssl (后续 backlog).
+: > "$VNC_SECRET_PATH"
+chmod 600 "$VNC_SECRET_PATH"
+openssl rand -hex 4 > "$VNC_SECRET_PATH"
+
+# webui.secret: SnowLuma WebUI 登录密码; 16 字节 hex
+: > "$WEBUI_SECRET_PATH"
+chmod 600 "$WEBUI_SECRET_PATH"
+openssl rand -hex 16 > "$WEBUI_SECRET_PATH"
+
+# ==================== 8. 写部署元数据 ====================
+progress 90 "写入部署元数据"
+# W3 修正: 便携式 node 装在 ``$WORKSPACE_DIR/node/bin``, 系统 PATH 找不到, 元数据
+# 与冒烟验证都需要显式优先该路径
+EFFECTIVE_NODE_BIN=""
+if [ -x "$WORKSPACE_DIR/node/bin/node" ]; then
+    EFFECTIVE_NODE_BIN="$WORKSPACE_DIR/node/bin/node"
+elif command -v node >/dev/null 2>&1; then
+    EFFECTIVE_NODE_BIN="$(command -v node)"
+fi
+
+cat > "$WORKSPACE_DIR/.deployed" <<EOF
+deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+display_num={{display_num}}
+vnc_port={{vnc_port}}
+novnc_port={{novnc_port}}
+webui_port={{webui_port}}
+node_version=$([ -n "$EFFECTIVE_NODE_BIN" ] && "$EFFECTIVE_NODE_BIN" -v 2>/dev/null || echo unknown)
+node_bin=${EFFECTIVE_NODE_BIN:-unknown}
+EOF
+chmod 600 "$WORKSPACE_DIR/.deployed"
+
+# ==================== 9. 冒烟验证 ====================
+progress 95 "冒烟验证"
+for cmd in Xvfb fluxbox x11vnc websockify; do
+    require_cmd "$cmd"
+done
+# W3 修正: node 不再走 require_cmd (PATH lookup) — 便携式 node 装在 $WORKSPACE_DIR/node/bin
+# 不进 PATH; 改为校验 EFFECTIVE_NODE_BIN 存在 + 可执行
+if [ -z "$EFFECTIVE_NODE_BIN" ] || [ ! -x "$EFFECTIVE_NODE_BIN" ]; then
+    die "MISSING_CMD_node" "node 未找到 (既不在系统 PATH 也无便携式 \$WORKSPACE_DIR/node/bin/node)"
+fi
+# novnc_proxy 是 novnc 包的入口 (有些发行版叫 noVNC, 这里检查文件存在即可)
+if [ ! -d /usr/share/novnc ] && ! command -v novnc_proxy >/dev/null 2>&1; then
+    die "NOVNC_MISSING" "未检测到 noVNC (期望 /usr/share/novnc 或 novnc_proxy)"
+fi
+
+progress 100 "完成"

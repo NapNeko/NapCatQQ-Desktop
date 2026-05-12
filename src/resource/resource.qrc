@@ -59,6 +59,9 @@
         <file>script/remote_install_napcat.sh</file>
         <file>script/remote_napcat_launcher.sh</file>
         <file>script/remote_deploy_napcat.sh</file>
+        <file>script/remote/snowluma/install_snowluma.sh.j2</file>
+        <file>script/remote/snowluma/snowluma_daemon_launcher.sh.j2</file>
+        <file>script/remote/snowluma/snowluma_bot_launcher.sh.j2</file>
     </qresource>
 
 </RCC>

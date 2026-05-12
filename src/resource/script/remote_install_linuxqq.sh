@@ -18,6 +18,7 @@
 #   31  不支持的架构 (非 amd64 / arm64)
 #   33  下载失败
 #   36  解压后未找到 qq 可执行文件
+#   37  LinuxQQ 安装包多次下载后仍未通过完整性校验 (涵盖网络中断 / 代理截断 / 镜像源残留损坏缓存等场景)
 
 if [ -z "${BASH_VERSION:-}" ]; then
   echo "[ERROR] this install script must run with bash" >&2
@@ -251,6 +252,83 @@ download_file() {
   exit 33
 }
 
+# 校验已下载的 LinuxQQ 包是否完整可解析.
+#
+# 背景: ``curl --fail --retry 2`` 只能拦住 HTTP 状态码异常, 无法 100% 捕获
+# TCP 中途被 RST / 代理截断 / 镜像源为了性能扱 200 后提前关连接等场景,
+# curl 可能成功 exit 0 但实际落地文件不完整 (typical: 只有头部几 MB).
+# 下一次脚本重跑时 ``[ -f ... ]`` 为 true -> 复用缓存 -> dpkg-deb 解压崩。
+#
+# 对齐 NapCat archive 侧的 ``unzip -t`` 策略 (见 ``local_napcat_fallback.py``),
+# 此处用 ``dpkg-deb -I`` / ``rpm -qpi`` 试读包元信息 —— 不解压 data, 费时极小,
+# 但损坏包会立刻报错. 另补一条 1MB 最小阈值逻辑抓 "4xx HTML 错误页被当成包
+# 保存" 的脱身场景.
+verify_qq_package() {
+  local pkg_path="$1"
+  if [ ! -f "$pkg_path" ]; then
+    return 1
+  fi
+  local pkg_size
+  pkg_size=$(stat -c '%s' "$pkg_path" 2>/dev/null || wc -c < "$pkg_path" | tr -d ' ')
+  # LinuxQQ 包 ≈20MB+, 1MB 作为保守阈值 —— 小于这个一定损坏
+  if [ "${pkg_size:-0}" -lt 1048576 ]; then
+    log_warn "package file too small (${pkg_size} bytes), treat as corrupted: $pkg_path"
+    return 1
+  fi
+  if [ "$qq_package_installer" = "dpkg" ]; then
+    # 必须完整解码 data.tar 才能发现 LZMA 末尾截断 (实测场景: deb 文件大小看似正确,
+    # control.tar 完好, ``dpkg-deb -I`` 通过, 但 data.tar 末尾被 TCP RST 截掉,
+    # 实际 ``dpkg -x`` 解压时 lzma "unexpected end of file or stream"). 
+    # ``--fsys-tarfile`` 把 data.tar 完整解码到 stdout, 重定向 /dev/null 不落盘,
+    # 损坏立刻报错; 耗时 < 1s (只是 ~24MB CPU 解压), 远比下错包再失败划算.
+    if ! dpkg-deb --fsys-tarfile "$pkg_path" >/dev/null 2>&1; then
+      log_warn "dpkg-deb data.tar decode failed (corrupted package): $pkg_path"
+      return 1
+    fi
+  else
+    # rpm payload 完整性: ``rpm2cpio | cpio -t`` 会完整解 CPIO 流并列出条目,
+    # 不写入磁盘; 任何 stream 截断 / 校验失败都会让 cpio 退出码非 0.
+    # 比 ``rpm -qpi`` (仅读 header) 严格得多, 与 dpkg 侧 ``--fsys-tarfile`` 对齐.
+    if ! (rpm2cpio "$pkg_path" 2>/dev/null | cpio -t >/dev/null 2>&1); then
+      log_warn "rpm payload decode failed (corrupted package): $pkg_path"
+      return 1
+    fi
+  fi
+  return 0
+}
+
+# 下载 + 校验 + 重试的统一入口.
+# - 缓存合法 -> 直接复用, 不走网络
+# - 缓存损坏 / 不存在 -> 删除损坏文件 + 重下, 最多试 3 次
+# - 全部失败 -> exit 37, RemoteBackend 会将该错误码映射为 stage 错误展示给用户
+download_and_verify_qq_package() {
+  local max_attempts=3
+  local attempt=1
+  while [ $attempt -le $max_attempts ]; do
+    if verify_qq_package "$qq_package_path"; then
+      if [ $attempt -eq 1 ]; then
+        log_info "reuse cached QQ package: ${qq_package_path}"
+      else
+        log_info "QQ package integrity check passed after attempt ${attempt}: ${qq_package_path}"
+      fi
+      return 0
+    fi
+    if [ -f "$qq_package_path" ]; then
+      log_warn "removing corrupted package and retry: ${qq_package_path}"
+      rm -f "$qq_package_path"
+    fi
+    log_info "downloading QQ package (attempt ${attempt}/${max_attempts}): ${qq_download_url}"
+    # download_file 遇到锁定错误会 exit 33; 这里用子 shell 包住避免中断重试循环
+    if ! ( download_file "$qq_download_url" "$qq_package_path" ); then
+      log_warn "download attempt ${attempt}/${max_attempts} failed (network error)"
+      rm -f "$qq_package_path"
+    fi
+    attempt=$((attempt + 1))
+  done
+  log_error "QQ package download/verify failed after ${max_attempts} attempts: ${qq_download_url}"
+  exit 37
+}
+
 select_qq_package() {
   local system_arch="$1"
   detect_package_installer
@@ -323,12 +401,7 @@ ensure_linuxqq_rootless() {
   select_qq_package "$system_arch"
 
   log_progress 45 "downloading linuxqq package"
-  if [ ! -f "$qq_package_path" ]; then
-    log_info "downloading QQ package to: ${qq_package_path}"
-    download_file "$qq_download_url" "$qq_package_path"
-  else
-    log_info "reuse cached QQ package: ${qq_package_path}"
-  fi
+  download_and_verify_qq_package
 
   local backup_needed=false
   local napcat_config_path="${qq_base_path}/resources/app/app_launcher/napcat/config"

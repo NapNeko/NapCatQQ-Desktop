@@ -10,11 +10,13 @@ if str(spec_dir) not in sys.path:
 from collection_filters import filter_analysis_collections
 from build_icon import prepare_build_icon
 from runtime_assets import prepare_runtime_assets
+from snowluma_framework_assets import prepare_snowluma_framework_assets
 
 block_cipher = None
 project_root = Path.cwd()
 runtime_hooks = [str(spec_dir / "runtime_hook_qfluent_image_utils.py")]
 datas = prepare_runtime_assets(project_root, project_root / "build")
+datas.extend(prepare_snowluma_framework_assets(project_root))
 icon_path = prepare_build_icon(project_root, project_root / "build")
 
 a = Analysis(

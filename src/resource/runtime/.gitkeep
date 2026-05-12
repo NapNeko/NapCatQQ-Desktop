@@ -1,0 +1,7 @@
+# SnowLuma.Framework lite tarball 落点 (W3).
+#
+# 实际产物 ``snowluma_framework_lite.tar.gz`` 与 sibling ``snowluma_framework_lite.version.txt``
+# 由 ``script/build_scripts/build_snowluma_framework_lite.py`` 在 CI / 本地构建期生成.
+#
+# 此目录被 .gitignore 中 ``src/resource/runtime/*.tar.gz`` 忽略, 但目录本身需要存在
+# (PyInstaller datas 路径校验 + 源码态 fallback).
