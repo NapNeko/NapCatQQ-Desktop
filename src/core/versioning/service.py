@@ -23,6 +23,11 @@ class VersionSnapshot(BaseModel):
     qq_version: str | None
     ncd_version: str | None
     snowluma_version: str | None = None
+    # W3: Desktop 内置的 SnowLuma.Framework lite tarball 版本号 (远端部署用,
+    # 与本地 SnowLuma 安装版本 ``snowluma_version`` 是两个独立维度).
+    # 由 ``script/build_scripts/build_snowluma_framework_lite.py`` 生成;
+    # 通过 ``src.core.remote.snowluma.bundled.read_bundled_version`` 读取.
+    snowluma_framework_bundled_version: str | None = None
     qq_download_url: str | None = None
     napcat_update_log: str | None = None
     ncd_update_log: str | None = None
@@ -190,6 +195,7 @@ class LocalVersionTask(VersionTaskBase):
             qq_version=self.get_qq_version(),
             ncd_version=self.get_ncd_version(),
             snowluma_version=self.get_snowluma_version(),
+            snowluma_framework_bundled_version=self.get_snowluma_framework_bundled_version(),
         )
 
     def get_napcat_version(self) -> str | None:
@@ -235,6 +241,30 @@ class LocalVersionTask(VersionTaskBase):
     @staticmethod
     def get_ncd_version() -> str | None:
         return cfg.get(cfg.napcat_desktop_version)
+
+    @staticmethod
+    def get_snowluma_framework_bundled_version() -> str | None:
+        """读 Desktop 内置的 SnowLuma.Framework lite tarball 版本号 (W3).
+
+        与 :meth:`get_snowluma_version` 是两个独立维度:
+
+        - ``snowluma_version`` (本地 ``<snowluma_path>/.installed_tag``):
+          用户**本机**装的 SnowLuma release tag (例 ``"v1.7.5"``)
+        - ``snowluma_framework_bundled_version``: Desktop **打包内置**的
+          ``snowluma_framework_lite.tar.gz`` 版本 (取自 ``package.json:version``,
+          例 ``"0.1.0"``), 仅供远端部署使用
+
+        Returns:
+            版本字符串 (例 ``"0.1.0"``); Desktop 未捆绑 lite tarball 时返 ``None``.
+        """
+        # 延迟 import 避免顶部 import 链路 (Qt 资源 / paths) 在测试桩里失败
+        from src.core.remote.snowluma import read_bundled_version
+
+        try:
+            return read_bundled_version()
+        except Exception as exc:  # noqa: BLE001 - 任何异常都视为 "未捆绑"
+            logger.warning(f"读取 SnowLuma.Framework 内置版本号失败: {exc}")
+            return None
 
     def get_snowluma_version(self) -> str | None:
         """读 ``<snowluma_path>/.installed_tag`` 返回已安装的 SnowLuma release tag.
