@@ -195,12 +195,13 @@ class NapCatPage(PageBase):
 
         # P5 F1.3: 解压前先做 SHA512 完整性校验
         from src.ui.components.install_hash_check import run_napcat_archive_hash_check
+        from src.ui.window.main_window import MainWindow
 
         archive_path = it(PathFunc).tmp_path / Urls.NAPCATQQ_DOWNLOAD.value.fileName()
         if not run_napcat_archive_hash_check(
             version=self.remote_version,
             archive_path=archive_path,
-            parent=self,
+            parent=it(MainWindow),
         ):
             logger.warning(
                 "NapCat 安装中止: SHA512 完整性校验失败或用户取消", log_source=LogSource.UI
