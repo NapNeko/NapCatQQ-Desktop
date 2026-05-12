@@ -116,6 +116,43 @@ class TestBackendReachGithub:
         backend_can_reach_github(backend, timeout=12)
         assert any("--max-time 12" in cmd for cmd in backend.history)
 
+    def test_command_includes_connect_timeout(self) -> None:
+        """``--connect-timeout`` 必须显式出现, 否则 TLS 握手抖动会被 ``--max-time`` 兜底吃掉,
+        探测看起来通了但实际下载会挂."""
+        backend = _Backend(health_http_code="200")
+        backend_can_reach_github(backend, connect_timeout=7)
+        assert any("--connect-timeout 7" in cmd for cmd in backend.history)
+
+    def test_probe_targets_release_artifact_not_homepage(self) -> None:
+        """回归测试: 探测的必须是 release artifact URL, 不是 ``https://github.com`` 首页.
+
+        首页常被边缘节点缓存, 即使到 release 资产链路完全不通也能拿到 200, 让 Desktop
+        误判"远端能连"跳过本机兜底, 最终远端脚本下载阶段挂掉. 详见 docstring."""
+        from src.core.network.urls import Urls
+
+        backend = _Backend(health_http_code="200")
+        backend_can_reach_github(backend)
+        probe_url = Urls.NAPCATQQ_DOWNLOAD.value.toString()
+        assert any(probe_url in cmd for cmd in backend.history)
+        # 不应只是首页 (URL 必须包含 release 路径)
+        assert "releases/latest/download" in probe_url
+
+    def test_command_follows_redirects_with_head(self) -> None:
+        """``-I -L`` 组合: HEAD + 跟随 302, 这样会真正经过
+        ``github.com -> objects.githubusercontent.com`` 的二次 TLS 握手."""
+        backend = _Backend(health_http_code="200")
+        backend_can_reach_github(backend)
+        # curl 短选项可能合并 (-sIL / -sI -L 都 OK), 所以分别检查 I 和 L 出现
+        cmd = backend.history[0]
+        assert "-sIL" in cmd or ("-sI" in cmd and "-L" in cmd) or ("-I" in cmd and "-L" in cmd)
+
+    def test_command_uses_insecure_flag(self) -> None:
+        """``-k`` 与远端 ``remote_install_napcat.sh`` 的 ``_try_download`` 对齐;
+        否则探测被证书问题挂掉但脚本能下成功也算假阴性."""
+        backend = _Backend(health_http_code="200")
+        backend_can_reach_github(backend)
+        assert any(" -k " in cmd or cmd.startswith("curl -k") for cmd in backend.history)
+
 
 # ==================== _build_candidate_urls ====================
 def test_candidate_urls_official_first_then_mirrors() -> None:

@@ -277,3 +277,106 @@ def test_bootstrap_is_idempotent() -> None:
     second = bootstrap_host_key_dialog()
     assert first is second
     reset_host_key_dialog_for_test()
+
+
+# ==================== Warning 路径 (主机指纹变更) ====================
+@pytest.fixture
+def change_prompt() -> HostKeyPrompt:
+    """变更场景: 带 ``previous_*`` 字段的 prompt."""
+    return HostKeyPrompt(
+        hostname="example.com",
+        port=22,
+        key_type="ssh-ed25519",
+        fingerprint_sha256="SHA256:NEW_aaabbbcccdddeeefff",
+        fingerprint_md5="11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff:00",
+        previous_key_type="ssh-ed25519",
+        previous_fingerprint_sha256="SHA256:OLD_111222333444555666",
+    )
+
+
+def test_dialog_warning_yes_button_returns_trust_replace(
+    change_prompt: HostKeyPrompt, parent_widget: QWidget
+) -> None:
+    """``is_warning=True`` 时 yes 按钮决策应为 TRUST_REPLACE (而非 TRUST_SAVE)."""
+    from src.ui.components.host_key_confirm_dialog import HostKeyConfirmDialog
+
+    dialog = HostKeyConfirmDialog(
+        change_prompt, parent=parent_widget, is_warning=True
+    )
+    dialog.yesButton.click()
+    assert dialog.decision() is HostKeyDecision.TRUST_REPLACE
+
+
+def test_dialog_warning_yes_button_text_is_replace(
+    change_prompt: HostKeyPrompt, parent_widget: QWidget
+) -> None:
+    """``is_warning=True`` 时 yes 按钮文案应为 "信任并替换"."""
+    from src.ui.components.host_key_confirm_dialog import HostKeyConfirmDialog
+
+    dialog = HostKeyConfirmDialog(
+        change_prompt, parent=parent_widget, is_warning=True
+    )
+    assert dialog.yesButton.text() == "信任并替换"
+
+
+def test_dialog_warning_hides_trust_once_button(
+    change_prompt: HostKeyPrompt, parent_widget: QWidget
+) -> None:
+    """``is_warning=True`` 路径不应显示 "仅本次" 按钮 (变更场景下无意义)."""
+    from src.ui.components.host_key_confirm_dialog import HostKeyConfirmDialog
+
+    dialog = HostKeyConfirmDialog(
+        change_prompt, parent=parent_widget, is_warning=True
+    )
+    # warning 路径下 _once_button 应为 None
+    assert dialog._once_button is None
+
+
+def test_dialog_warning_renders_old_and_new_fingerprints(
+    change_prompt: HostKeyPrompt, parent_widget: QWidget
+) -> None:
+    """变更场景 dialog 应同时展示原指纹与新指纹."""
+    from src.ui.components.host_key_confirm_dialog import HostKeyConfirmDialog
+
+    dialog = HostKeyConfirmDialog(
+        change_prompt, parent=parent_widget, is_warning=True
+    )
+    # 把对话框内所有可读文本聚合后做断言
+    visible_text = ""
+    for child in dialog.findChildren(object):
+        text_attr = getattr(child, "text", None)
+        if callable(text_attr):
+            try:
+                visible_text += str(text_attr()) + "\n"
+            except Exception:  # noqa: BLE001
+                pass
+    assert "OLD_111222333444555666" in visible_text
+    assert "NEW_aaabbbcccdddeeefff" in visible_text
+
+
+def test_dialog_warning_reject_button_default(
+    change_prompt: HostKeyPrompt, parent_widget: QWidget
+) -> None:
+    """变更场景下用户点 reject 按钮应返 REJECT."""
+    from src.ui.components.host_key_confirm_dialog import HostKeyConfirmDialog
+
+    dialog = HostKeyConfirmDialog(
+        change_prompt, parent=parent_widget, is_warning=True
+    )
+    dialog.cancelButton.click()
+    assert dialog.decision() is HostKeyDecision.REJECT
+
+
+def test_dialog_first_time_still_returns_trust_save(
+    sample_prompt: HostKeyPrompt, parent_widget: QWidget
+) -> None:
+    """``is_warning=False`` (首次连接) 时 yes 按钮仍返 TRUST_SAVE (没改坏)."""
+    from src.ui.components.host_key_confirm_dialog import HostKeyConfirmDialog
+
+    dialog = HostKeyConfirmDialog(
+        sample_prompt, parent=parent_widget, is_warning=False
+    )
+    dialog.yesButton.click()
+    assert dialog.decision() is HostKeyDecision.TRUST_SAVE
+    # 首次连接路径仍应显示 "仅本次" 按钮
+    assert dialog._once_button is not None
