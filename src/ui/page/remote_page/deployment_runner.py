@@ -235,12 +235,25 @@ class RollbackRunner(QRunnable):
         from creart import it
 
         from src.core.remote import ServerManager
+        from src.core.remote.servers import BackendFlavor
 
         manager = it(ServerManager)
+        # W10b-Maintenance: tracker 文案按 backend_flavor 切换 (NC: NapCat 产物 /
+        # SL: SnowLuma 产物); 找不到 profile 时退回 NC 表述, 不破坏既有行为.
+        profile = manager.get_server(self._server_id)
+        is_sl = (
+            profile is not None
+            and profile.backend_flavor == BackendFlavor.SNOWLUMA
+        )
+        tracker_content = (
+            "正在清理远端 SnowLuma.Framework / launcher / runtime 产物…"
+            if is_sl
+            else "正在清理远端 NapCat / LinuxQQ 产物…"
+        )
         with _tracked(
             f"rollback-{self._server_id}",
             f"回滚远端部署 ({self._server_id})",
-            content="正在清理远端 NapCat / LinuxQQ 产物…",
+            content=tracker_content,
         ) as tracker:
             try:
                 manager.rollback_server(self._server_id, include_qq=self._include_qq)

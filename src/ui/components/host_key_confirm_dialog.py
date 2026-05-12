@@ -144,10 +144,42 @@ class HostKeyConfirmDialog(MessageBoxBase):
         info_layout.setSpacing(6)
 
         info_layout.addWidget(self._build_kv_row("主机", f"{self._prompt.hostname}:{self._prompt.port}"))
-        info_layout.addWidget(self._build_kv_row("密钥类型", self._prompt.key_type))
-        info_layout.addWidget(self._build_kv_row("SHA256", self._prompt.fingerprint_sha256, mono=True))
-        if self._prompt.fingerprint_md5:
-            info_layout.addWidget(self._build_kv_row("MD5", self._prompt.fingerprint_md5, mono=True))
+
+        has_previous = bool(self._prompt.previous_fingerprint_sha256)
+        if self._is_warning and has_previous:
+            # 主机指纹变化路径: 显示新旧对比, 让用户感知变化幅度
+            info_layout.addWidget(
+                self._build_kv_row(
+                    "原密钥类型",
+                    self._prompt.previous_key_type or "-",
+                )
+            )
+            info_layout.addWidget(
+                self._build_kv_row(
+                    "原 SHA256",
+                    self._prompt.previous_fingerprint_sha256,
+                    mono=True,
+                )
+            )
+            info_layout.addWidget(
+                self._build_kv_row(
+                    "新密钥类型",
+                    self._prompt.key_type,
+                )
+            )
+            info_layout.addWidget(
+                self._build_kv_row(
+                    "新 SHA256",
+                    self._prompt.fingerprint_sha256,
+                    mono=True,
+                )
+            )
+        else:
+            # 首次连接路径: 只显示新指纹
+            info_layout.addWidget(self._build_kv_row("密钥类型", self._prompt.key_type))
+            info_layout.addWidget(self._build_kv_row("SHA256", self._prompt.fingerprint_sha256, mono=True))
+            if self._prompt.fingerprint_md5:
+                info_layout.addWidget(self._build_kv_row("MD5", self._prompt.fingerprint_md5, mono=True))
 
         # 安全提示 + 一键复制测试指令
         # 提示行结构: [说明文字...][复制按钮]; 文字与按钮挤在同一行,
@@ -224,34 +256,41 @@ class HostKeyConfirmDialog(MessageBoxBase):
         self._copy_command_btn.setToolTip("已复制到剪贴板")
 
     def _wire_buttons(self) -> None:
-        """重写 MessageBoxBase 的 yes/cancel 按钮以承载三选语义.
+        """重写 MessageBoxBase 的 yes/cancel 按钮以承载多选语义.
 
         ``MessageBoxBase`` 默认有 ``yesButton`` (yes) + ``cancelButton`` (no).
-        我们把 cancelButton 重用为 "拒绝", yesButton 重用为 "信任并保存",
-        再插入第三个 "仅本次" 按钮.
+        - **首次连接** (``is_warning=False``): 三选 — TRUST_SAVE / TRUST_ONCE / REJECT
+        - **变更警告** (``is_warning=True``): 二选 — TRUST_REPLACE / REJECT;
+          "仅本次" 在变更场景语义无意义 (paramiko 已 fail, 无法绕开), 故隐藏.
         """
-        self.yesButton.setText("信任并保存")
         self.cancelButton.setText("拒绝")
 
-        # 在 yes / cancel 之间插一个 "仅本次"
-        once_btn = PushButton("仅本次", self.buttonGroup)
-        # MessageBoxBase 的 buttonLayout 是 QHBoxLayout, 在 yesButton 前插一个
-        self.buttonLayout.insertWidget(self.buttonLayout.count() - 1, once_btn)
-        self._once_button = once_btn
-
-        # 警告路径: 默认聚焦在 "拒绝", 让用户必须显式点 "信任并保存"
         if self._is_warning:
+            # 变更警告路径: 按钮文案改为 "信任并替换" + 红色, 不显示 "仅本次"
+            self.yesButton.setText("信任并替换")
             self.yesButton.setStyleSheet(
-                "QPushButton {{ background-color: #C42B1C; color: white; }}".format()
+                "QPushButton { background-color: #C42B1C; color: white; }"
             )
+            self._once_button = None
+        else:
+            # 首次连接路径: 维持原"信任并保存" + 插入 "仅本次"
+            self.yesButton.setText("信任并保存")
+            once_btn = PushButton("仅本次", self.buttonGroup)
+            # MessageBoxBase 的 buttonLayout 是 QHBoxLayout, 在 yesButton 前插一个
+            self.buttonLayout.insertWidget(self.buttonLayout.count() - 1, once_btn)
+            self._once_button = once_btn
+            once_btn.clicked.connect(self._on_trust_once)
 
-        # 行为接线
-        self.yesButton.clicked.connect(self._on_trust_save)
-        once_btn.clicked.connect(self._on_trust_once)
+        # yes/reject 共通接线
+        self.yesButton.clicked.connect(self._on_trust_yes)
         self.cancelButton.clicked.connect(self._on_reject)
 
-    def _on_trust_save(self) -> None:
-        self._decision = HostKeyDecision.TRUST_SAVE
+    def _on_trust_yes(self) -> None:
+        """yes 按钮: 首次连接返 TRUST_SAVE, 变更警告返 TRUST_REPLACE."""
+        if self._is_warning:
+            self._decision = HostKeyDecision.TRUST_REPLACE
+        else:
+            self._decision = HostKeyDecision.TRUST_SAVE
         # MessageBoxBase 的 yesButton 默认 accept(); 不重复 accept
 
     def _on_trust_once(self) -> None:

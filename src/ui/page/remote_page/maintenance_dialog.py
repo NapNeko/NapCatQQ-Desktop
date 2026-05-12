@@ -25,6 +25,7 @@ from qfluentwidgets import (
 )
 
 from src.core.remote import DeploymentState, ServerProfile
+from src.core.remote.servers import BackendFlavor
 
 if TYPE_CHECKING:
     pass
@@ -57,6 +58,12 @@ class MaintenanceDialog(MessageBoxBase):
     def __init__(self, profile: ServerProfile, parent: QWidget) -> None:
         super().__init__(parent=parent)
         self._profile = profile
+        # W10b-Maintenance: 按 backend_flavor 切换文案.
+        # - NC: "NapCat 版本" / "强制更新 NapCat" / "清空远端 NapCat"
+        # - SL: "SnowLuma 版本" / "重新部署 SnowLuma.Framework" / "清空远端 SnowLuma"
+        # 两者 LinuxQQ 重装 / 回滚 中的文案不变 (与 LinuxQQ 路径同名).
+        is_sl = profile.backend_flavor == BackendFlavor.SNOWLUMA
+        self._is_sl = is_sl
 
         # ---------------- 标题 ----------------
         self.title_label = TitleLabel(self.tr(f"维护服务器: {profile.name}"), self)
@@ -71,10 +78,20 @@ class MaintenanceDialog(MessageBoxBase):
 
         state_text = _DEPLOYMENT_STATE_TEXT.get(profile.deployment_state, "未知")
         info_form.addRow(BodyLabel(self.tr("部署状态:"), self), BodyLabel(state_text, self))
-        info_form.addRow(
-            BodyLabel(self.tr("NapCat 版本:"), self),
-            BodyLabel(profile.napcat_version or self.tr("未探测"), self),
-        )
+        if is_sl:
+            # SL: 主要版本字段是 SnowLuma.Framework, NapCat 不装
+            info_form.addRow(
+                BodyLabel(self.tr("SnowLuma 版本:"), self),
+                BodyLabel(
+                    profile.snowluma_framework_version or self.tr("未探测"),
+                    self,
+                ),
+            )
+        else:
+            info_form.addRow(
+                BodyLabel(self.tr("NapCat 版本:"), self),
+                BodyLabel(profile.napcat_version or self.tr("未探测"), self),
+            )
         info_form.addRow(
             BodyLabel(self.tr("LinuxQQ 版本:"), self),
             BodyLabel(profile.qq_version or self.tr("未探测"), self),
@@ -90,28 +107,53 @@ class MaintenanceDialog(MessageBoxBase):
             self.tr("刷新"),
             FI.SEARCH,
             self.tr("刷新版本信息"),
-            self.tr("重新探测远端的 NapCat / LinuxQQ 版本号, 不会重跑安装脚本"),
+            (
+                self.tr("重新探测远端的 SnowLuma.Framework / LinuxQQ 版本号, 不会重跑安装脚本")
+                if is_sl
+                else self.tr("重新探测远端的 NapCat / LinuxQQ 版本号, 不会重跑安装脚本")
+            ),
             self,
         )
-        self.force_update_card = PushSettingCard(
-            self.tr("执行"),
-            FI.UPDATE,
-            self.tr("强制更新 NapCat"),
-            self.tr("重新拉取最新版本并重跑 install_napcat 脚本"),
-            self,
-        )
+        if is_sl:
+            self.force_update_card = PushSettingCard(
+                self.tr("执行"),
+                FI.UPDATE,
+                self.tr("重新部署 SnowLuma.Framework"),
+                self.tr(
+                    "重新上传 Desktop 内置的 SnowLuma.Framework lite tarball 并重跑"
+                    " install_snowluma 脚本 (同时重传 launcher 脚本, 修复本地脚本迭代后"
+                    "远端没同步的问题)"
+                ),
+                self,
+            )
+        else:
+            self.force_update_card = PushSettingCard(
+                self.tr("执行"),
+                FI.UPDATE,
+                self.tr("强制更新 NapCat"),
+                self.tr("重新拉取最新版本并重跑 install_napcat 脚本"),
+                self,
+            )
         self.force_reinstall_card = PushSettingCard(
             self.tr("执行"),
             FI.SYNC,
             self.tr("强制重装 LinuxQQ"),
-            self.tr("重新下载并安装 LinuxQQ; 比单独更新 NapCat 影响更大"),
+            (
+                self.tr("重新下载并安装 LinuxQQ; 比单独重新部署 Framework 影响更大")
+                if is_sl
+                else self.tr("重新下载并安装 LinuxQQ; 比单独更新 NapCat 影响更大")
+            ),
             self,
         )
         self.rollback_card = PushSettingCard(
             self.tr("回滚"),
             FI.DELETE,
             self.tr("回滚部署 (危险)"),
-            self.tr("清空远端 NapCat 安装, 用于失败重置或彻底卸载"),
+            (
+                self.tr("清空远端 SnowLuma 安装 (framework / launcher / runtime), 用于失败重置或彻底卸载")
+                if is_sl
+                else self.tr("清空远端 NapCat 安装, 用于失败重置或彻底卸载")
+            ),
             self,
         )
         self.rollback_card.button.setObjectName("maintenanceRollbackBtn")
@@ -181,29 +223,42 @@ class RollbackConfirmBox(MessageBoxBase):
     - 默认按钮不是"确认", 用户需要主动点击; 同时把"取消"作为视觉默认
     """
 
-    def __init__(self, server_name: str, parent: QWidget) -> None:
+    def __init__(self, server_name: str, parent: QWidget, *, is_snowluma: bool = False) -> None:
         super().__init__(parent=parent)
+        self._is_sl = is_snowluma
 
         self.title_label = TitleLabel(self.tr("确认回滚远端部署"), self)
         self.title_label.setStyleSheet("color: #d83b01; font-weight: 700;")
 
-        self.content_label = BodyLabel(
-            self.tr(
+        # W10b-Maintenance: 按 flavor 切换文案
+        if is_snowluma:
+            content_text = (
+                f"即将清空服务器 “{server_name}” 上的 SnowLuma 安装。\n\n"
+                f"此操作不可逆, 远端工作区下的 SnowLuma.Framework / launcher / runtime "
+                f"将被删除, 已运行的 SnowLuma Bot 也会被强制停止。\n"
+                f"用于“重置环境后重新部署”或“清理失败的部署残留”."
+            )
+            hint_text = (
+                "勾选后会一并删除 LinuxQQ + 便携式 node 缓存; 不勾选则仅清理"
+                " SnowLuma.Framework, 保留 LinuxQQ 以便后续仅重新部署 Framework."
+            )
+        else:
+            content_text = (
                 f"即将清空服务器 “{server_name}” 上的 NapCat 安装。\n\n"
                 f"此操作不可逆, 远端工作区下的 NapCat 将被删除, 已运行的 Bot 也会被强制停止。\n"
                 f"用于“重置环境后重新部署”或“清理失败的部署残留”."
-            ),
-            self,
-        )
+            )
+            hint_text = (
+                "勾选后会一并删除 LinuxQQ; 不勾选则仅清理 NapCat, 保留 LinuxQQ 以便后续仅重装 NapCat."
+            )
+
+        self.content_label = BodyLabel(self.tr(content_text), self)
         self.content_label.setWordWrap(True)
 
         self.include_qq_checkbox = CheckBox(self.tr("同时清理 LinuxQQ 安装与下载缓存"), self)
         self.include_qq_checkbox.setChecked(True)
 
-        self.hint_label = CaptionLabel(
-            self.tr("勾选后会一并删除 LinuxQQ; 不勾选则仅清理 NapCat, 保留 LinuxQQ 以便后续仅重装 NapCat."),
-            self,
-        )
+        self.hint_label = CaptionLabel(self.tr(hint_text), self)
         self.hint_label.setStyleSheet("color: #8a8a8a;")
         self.hint_label.setWordWrap(True)
 

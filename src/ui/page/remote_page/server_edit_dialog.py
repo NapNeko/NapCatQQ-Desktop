@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QDir, Qt
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
-from PySide6.QtWidgets import QFileDialog, QFormLayout, QHBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QFormLayout, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -33,8 +33,9 @@ from qfluentwidgets import (
     FluentIcon as FI,
 )
 
-from src.core.remote import ServerProfile, SSHCredentials
+from src.core.remote import BackendFlavor, ServerProfile, SSHCredentials
 from src.core.remote.credential_store import CredentialStore
+from src.core.remote.snowluma import SnowLumaRemotePaths
 from src.core.remote.ssh_keys import scan_local_ssh_keys
 
 if TYPE_CHECKING:
@@ -153,8 +154,9 @@ class ServerEditDialog(MessageBoxBase):
     与 [`get_password`](src/ui/page/remote_page/server_edit_dialog.py) 取回结果. 
     """
 
-    # 表单标签列的统一宽度: 让三个分组的标签列纵向对齐
-    _LABEL_COLUMN_WIDTH = 92
+    # 表单标签列的统一宽度: 让各分组的标签列纵向对齐
+    # (W10b: 从 92 缩到 80, 为 SnowLuma 选项分组的 "工作目录" / "WebUI 密码" 腾出字段列宽度)
+    _LABEL_COLUMN_WIDTH = 80
 
     def __init__(
         self,
@@ -173,6 +175,9 @@ class ServerEditDialog(MessageBoxBase):
         self._auth_row_pwd: int = -1
         self._auth_row_remember: int = -1
         self._auth_row_auto_key: int = -1
+        # W10b: SnowLuma 分组 (独立 section_title + form); 用 widget 引用整体 show/hide
+        self._sl_section_title: StrongBodyLabel | None = None
+        self._sl_form_widget: QWidget | None = None
         # 私钥输入模式: False = 下拉扫描候选 combo; True = 手动路径 LineEdit
         self._key_manual_mode: bool = False
         # P4 F5.2: keyring 探测; 不可用时 "记住密码" 勾选项隐藏
@@ -182,7 +187,8 @@ class ServerEditDialog(MessageBoxBase):
         self._setup_ui()
         self._connect_signals()
         self._load_from_profile(profile, existing_password)
-        self.widget.setMinimumSize(560, 600)
+        # W10b v2: 两栏布局 -> 总宽 900 (左右每栏 ~410), 高度 540 (两栏并排后变矮)
+        self.widget.setMinimumSize(900, 540)
 
     # ==================== UI 构建 ====================
     def _setup_ui(self) -> None:
@@ -194,8 +200,48 @@ class ServerEditDialog(MessageBoxBase):
         self.viewLayout.addWidget(self.caption_label)
         self.viewLayout.addSpacing(2)
 
-        # ---------------- 基本信息 ----------------
-        basic_form = self._add_section("基本信息")
+        # ---------------- 两栏容器 (W10b v2) ----------------
+        # 左栏: 部署类型 + 基本信息 + 认证方式 (必填项)
+        # 右栏: 高级选项 + SnowLuma 选项 (可选项 / flavor 依赖项)
+        columns_widget = QWidget(self)
+        columns_widget.setObjectName("serverEditColumns")
+        columns_layout = QHBoxLayout(columns_widget)
+        columns_layout.setContentsMargins(0, 0, 0, 0)
+        columns_layout.setSpacing(24)
+
+        left_col = QWidget(columns_widget)
+        left_col.setObjectName("serverEditLeftCol")
+        self._left_col_layout = QVBoxLayout(left_col)
+        self._left_col_layout.setContentsMargins(0, 0, 0, 0)
+        self._left_col_layout.setSpacing(0)
+
+        right_col = QWidget(columns_widget)
+        right_col.setObjectName("serverEditRightCol")
+        self._right_col_layout = QVBoxLayout(right_col)
+        self._right_col_layout.setContentsMargins(0, 0, 0, 0)
+        self._right_col_layout.setSpacing(0)
+
+        columns_layout.addWidget(left_col, 1)
+        columns_layout.addWidget(right_col, 1)
+        self.viewLayout.addWidget(columns_widget, 1)
+
+        # ---------------- 部署类型 (左栏) ----------------
+        # 必须放在左栏最上面: flavor 决定右栏 SnowLuma 分组是否可见
+        flavor_form = self._add_section("部署类型", target=self._left_col_layout)
+        self.flavor_combo = ComboBox(self)
+        self.flavor_combo.addItem("NapCat (原生二进制)", userData=BackendFlavor.NAPCAT.value)
+        self.flavor_combo.addItem("SnowLuma (远端框架)", userData=BackendFlavor.SNOWLUMA.value)
+        # 留最小宽度 240, 不锁死上限, 让 form 的 AllNonFixedFieldsGrow 带着填满可用宽度
+        self.flavor_combo.setMinimumWidth(240)
+        self.flavor_combo.setToolTip(
+            "NapCat: 在远端 Linux 直接装 LinuxQQ + NapCat, 无需图形栈\n"
+            "SnowLuma: 远端跑完整 SnowLuma.Framework (Xvfb + noVNC 扫码登录),\n"
+            "适合需要稳定登录态与远端图形化扫码的场景"
+        )
+        flavor_form.addRow(self._make_label("后端类型"), self.flavor_combo)
+
+        # ---------------- 基本信息 (左栏) ----------------
+        basic_form = self._add_section("基本信息", target=self._left_col_layout)
 
         self.name_edit = LineEdit(self)
         self.name_edit.setPlaceholderText("服务器显示名 (如: 腾讯云-香港)")
@@ -223,14 +269,15 @@ class ServerEditDialog(MessageBoxBase):
         basic_form.addRow(self._make_label("主机 / 端口"), host_port_widget)
         basic_form.addRow(self._make_label("用户名"), self.username_edit)
 
-        # ---------------- 认证方式 ----------------
-        auth_form = self._add_section("认证方式")
+        # ---------------- 认证方式 (左栏) ----------------
+        auth_form = self._add_section("认证方式", target=self._left_col_layout)
         self._auth_form = auth_form
 
         self.method_combo = ComboBox(self)
         self.method_combo.addItem("私钥", userData="key")
         self.method_combo.addItem("密码", userData="password")
-        self.method_combo.setFixedWidth(140)
+        # 留最小宽度 160, 不锁死上限, 跟随 form 填充
+        self.method_combo.setMinimumWidth(160)
 
         # 私钥行: 自适应 (有扫描结果 → 下拉; 手动浏览后 → 输入框) + 浏览/返回按钮
         scanned_keys = scan_local_ssh_keys()
@@ -318,8 +365,8 @@ class ServerEditDialog(MessageBoxBase):
         auth_form.setRowVisible(self._auth_row_remember, False)
         auth_form.setRowVisible(self._auth_row_auto_key, False)
 
-        # ---------------- 高级选项 ----------------
-        adv_form = self._add_section("高级选项")
+        # ---------------- 高级选项 (右栏) ----------------
+        adv_form = self._add_section("高级选项", target=self._right_col_layout)
 
         # 两个超时合并一行 (label 固定标识 / 两个小输入框共享)
         timeout_widget = QWidget(self)
@@ -334,9 +381,12 @@ class ServerEditDialog(MessageBoxBase):
         self.cmd_timeout_edit.setText("20")
         self.cmd_timeout_edit.setFixedWidth(64)
         self.cmd_timeout_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # W10b: 将 "连接" / "命令" 上下文与单位 "秒" 拆开留多点空间, 避免被挤出
         timeout_row.addWidget(BodyLabel("连接", timeout_widget))
         timeout_row.addWidget(self.timeout_edit)
-        timeout_row.addWidget(BodyLabel("秒   命令", timeout_widget))
+        timeout_row.addWidget(BodyLabel("秒", timeout_widget))
+        timeout_row.addSpacing(12)
+        timeout_row.addWidget(BodyLabel("命令", timeout_widget))
         timeout_row.addWidget(self.cmd_timeout_edit)
         timeout_row.addWidget(BodyLabel("秒", timeout_widget))
         timeout_row.addStretch(1)
@@ -360,6 +410,53 @@ class ServerEditDialog(MessageBoxBase):
         adv_form.addRow(self._make_label("主机指纹策略"), self.policy_combo)
         adv_form.addRow(self._make_label("备注"), self.notes_edit)
 
+        # ---------------- SnowLuma 选项 (右栏, W10b, 仅 SL flavor 可见) ----------------
+        sl_section_title = StrongBodyLabel("SnowLuma 选项", self)
+        sl_section_title.setObjectName("serverEditSectionTitle")
+        self._right_col_layout.addSpacing(2)
+        self._right_col_layout.addWidget(sl_section_title)
+        self._sl_section_title = sl_section_title
+
+        sl_form_widget = QWidget(self)
+        sl_form_widget.setObjectName("serverEditSlFormWidget")
+        sl_form = QFormLayout(sl_form_widget)
+        sl_form.setContentsMargins(0, 0, 0, 0)
+        sl_form.setHorizontalSpacing(10)
+        sl_form.setVerticalSpacing(10)
+        sl_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        sl_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
+        self.sl_base_dir_edit = LineEdit(sl_form_widget)
+        self.sl_base_dir_edit.setText("$HOME/snowluma-remote")
+        self.sl_base_dir_edit.setPlaceholderText("SnowLuma 远端工作目录 (默认 $HOME/snowluma-remote)")
+        self.sl_base_dir_edit.setToolTip(
+            "SnowLuma 在远端机器上的根目录. 下方会自动派生 workspace / runtime / log 等子目录.\n"
+            "禁止 shell 元字符 (空格除外); 支持 $HOME 前缀."
+        )
+
+        self.sl_webui_pwd_edit = LineEdit(sl_form_widget)
+        self.sl_webui_pwd_edit.setEchoMode(LineEdit.EchoMode.Password)
+        self.sl_webui_pwd_edit.setClearButtonEnabled(True)
+        self.sl_webui_pwd_edit.setPlaceholderText("WebUI 密码 override (留空走 SHA256 fallback)")
+        self.sl_webui_pwd_edit.setToolTip(
+            "SnowLuma WebUI 登录密码; 留空则由 App 根据 webui.secret 生成 fallback.\n"
+            "明文保存到 servers.json (与 NC 档案一致策略), 如需更强保护请使用 keyring."
+        )
+
+        sl_form.addRow(self._make_label("工作目录"), self.sl_base_dir_edit)
+        sl_form.addRow(self._make_label("WebUI 密码"), self.sl_webui_pwd_edit)
+
+        self._right_col_layout.addWidget(sl_form_widget)
+        # 右栏底部填充 stretch, 避免 NC flavor 下右栏 "高级选项" 完之后出现一大片空白
+        self._right_col_layout.addStretch(1)
+        self._sl_form_widget = sl_form_widget
+        # 默认隐藏 (flavor=NAPCAT); _apply_flavor_visibility 会根据当前选中项切换
+        sl_section_title.hide()
+        sl_form_widget.hide()
+
+        # 左栏底部也填充 stretch, 让左右高度不依赖各自内容累计高度
+        self._left_col_layout.addStretch(1)
+
         # ---------------- 错误提示 ----------------
         self.error_label = CaptionLabel("", self)
         self.error_label.setObjectName("serverEditError")
@@ -373,6 +470,8 @@ class ServerEditDialog(MessageBoxBase):
         self.method_combo.currentIndexChanged.connect(self._on_method_changed)
         self.key_browse_btn.clicked.connect(self._on_browse_key)
         self.key_scan_btn.clicked.connect(self._on_scan_back)
+        # W10b: flavor 切换 -> SL 分组显隐
+        self.flavor_combo.currentIndexChanged.connect(self._on_flavor_changed)
 
     # ---------- 工具方法 ----------
     def _make_label(self, text: str) -> BodyLabel:
@@ -382,18 +481,23 @@ class ServerEditDialog(MessageBoxBase):
         label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         return label
 
-    def _add_section(self, title: str) -> QFormLayout:
-        """在 viewLayout 末尾追加一个小标题 + QFormLayout 分组, 返回 form 供外部填充.
+    def _add_section(self, title: str, *, target: QVBoxLayout | None = None) -> QFormLayout:
+        """在指定列 layout 末尾追加一个小标题 + QFormLayout 分组, 返回 form 供外部填充.
+
+        Args:
+            title: 分组标题
+            target: 目标列 layout (W10b v2 两栏布局); 默认 None 时添加到 viewLayout
 
         Margin 约束:
         - 标题与上一组 form 之间只留 2px (标题本身自带 font ascent 足够作视觉间隔)
         - form 顶部 margin 为 0, 让首行与标题紧贴 (QFormLayout 行自带 verticalSpacing 做内部间隔)
         - 不再在 Python 中控制 LineEdit 高度, 交给 qfluentwidgets 自身 33px 默认
         """
+        target_layout = target if target is not None else self.viewLayout
         section_title = StrongBodyLabel(title, self)
         section_title.setObjectName("serverEditSectionTitle")
-        self.viewLayout.addSpacing(2)
-        self.viewLayout.addWidget(section_title)
+        target_layout.addSpacing(2)
+        target_layout.addWidget(section_title)
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -401,18 +505,37 @@ class ServerEditDialog(MessageBoxBase):
         form.setVerticalSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        self.viewLayout.addLayout(form)
+        target_layout.addLayout(form)
         return form
 
     # ==================== 数据加载 ====================
     def _load_from_profile(self, profile: ServerProfile | None, existing_password: str | None) -> None:
         if profile is None:
+            # 新建模式: 默认 NAPCAT, 应用 flavor 可见性
+            self._apply_flavor_visibility(BackendFlavor.NAPCAT.value)
             return
         cred = profile.credentials
         self.name_edit.setText(profile.name)
         self.host_edit.setText(cred.host)
         self.port_edit.setText(str(cred.port))
         self.username_edit.setText(cred.username)
+
+        # W10b: flavor + SL 字段回填; D8 决策: 编辑模式下 flavor 禁用
+        flavor_value = profile.backend_flavor.value
+        flavor_index = self.flavor_combo.findData(flavor_value)
+        if flavor_index >= 0:
+            self.flavor_combo.setCurrentIndex(flavor_index)
+        self.flavor_combo.setEnabled(False)
+        self.flavor_combo.setToolTip(
+            "已保存档案的后端类型不可修改 (避免 NapCat/SnowLuma 字段语义错位).\n"
+            "如需切换请删除档案后重新添加."
+        )
+        self._apply_flavor_visibility(flavor_value)
+
+        if profile.snowluma_paths is not None:
+            self.sl_base_dir_edit.setText(profile.snowluma_paths.base_dir)
+        if profile.snowluma_webui_password_override:
+            self.sl_webui_pwd_edit.setText(profile.snowluma_webui_password_override)
 
         method_index = self.method_combo.findData(cred.auth_method)
         if method_index >= 0:
@@ -450,6 +573,18 @@ class ServerEditDialog(MessageBoxBase):
     # ==================== 信号回调 ====================
     def _on_method_changed(self, index: int) -> None:
         self._apply_method_visibility(self.method_combo.itemData(index))
+
+    def _on_flavor_changed(self, index: int) -> None:
+        """W10b: backend_flavor 切换, 刷新 SL 分组可见性."""
+        self._apply_flavor_visibility(self.flavor_combo.itemData(index))
+
+    def _apply_flavor_visibility(self, flavor_value: str | None) -> None:
+        """W10b: flavor=SNOWLUMA 时显示 SL 分组, 否则隐藏."""
+        if self._sl_section_title is None or self._sl_form_widget is None:
+            return
+        is_sl = flavor_value == BackendFlavor.SNOWLUMA.value
+        self._sl_section_title.setVisible(is_sl)
+        self._sl_form_widget.setVisible(is_sl)
 
     def _apply_method_visibility(self, method: str) -> None:
         """认证方式切换时显示对应行, 隐藏另一组."""
@@ -511,15 +646,49 @@ class ServerEditDialog(MessageBoxBase):
 
         编辑模式下复用原 ``id`` / ``created_at`` / ``deployment_state`` / 探测缓存,
         新建模式下生成全新的 ``id``. 
+
+        W10b: 根据 ``flavor_combo`` 选择构造对应 ``BackendFlavor`` + ``snowluma_paths``;
+        D8 决策下编辑模式 flavor 不可变, 直接沿用 original.
         """
         credentials = self._build_credentials_or_raise()
         name = self.name_edit.text().strip() or credentials.host
         notes = self.notes_edit.text().strip()
 
+        # W10b: 确定 flavor 与 SL 字段
+        if self._original_profile is not None:
+            # 编辑模式: flavor 禁用, 直接沿用原值
+            flavor = self._original_profile.backend_flavor
+        else:
+            flavor_value = self.flavor_combo.currentData() or BackendFlavor.NAPCAT.value
+            try:
+                flavor = BackendFlavor(flavor_value)
+            except ValueError:
+                flavor = BackendFlavor.NAPCAT
+
+        snowluma_paths: SnowLumaRemotePaths | None = None
+        webui_pwd_override = ""
+        if flavor == BackendFlavor.SNOWLUMA:
+            base_dir = self.sl_base_dir_edit.text().strip() or "$HOME/snowluma-remote"
+            try:
+                snowluma_paths = SnowLumaRemotePaths.from_base(base_dir)
+            except ValueError as exc:
+                raise ValueError(f"SnowLuma 工作目录无效: {exc}") from exc
+            webui_pwd_override = self.sl_webui_pwd_edit.text().strip()
+
         if self._original_profile is None:
-            return ServerProfile.create(name=name, credentials=credentials, notes=notes)
+            return ServerProfile.create(
+                name=name,
+                credentials=credentials,
+                notes=notes,
+                backend_flavor=flavor,
+                snowluma_paths=snowluma_paths,
+                snowluma_webui_password_override=webui_pwd_override,
+            )
 
         original = self._original_profile
+        # 编辑模式: 用户可能改了 SL 字段, 采用新值; 但 flavor 不变
+        effective_sl_paths = snowluma_paths if flavor == BackendFlavor.SNOWLUMA else None
+        effective_sl_pwd = webui_pwd_override if flavor == BackendFlavor.SNOWLUMA else ""
         return ServerProfile(
             id=original.id,
             name=name,
@@ -531,6 +700,10 @@ class ServerEditDialog(MessageBoxBase):
             notes=notes,
             created_at=original.created_at,
             last_connected_at=original.last_connected_at,
+            backend_flavor=flavor,
+            snowluma_paths=effective_sl_paths,
+            snowluma_webui_password_override=effective_sl_pwd,
+            snowluma_framework_version=original.snowluma_framework_version,
         )
 
     def get_password(self) -> str | None:

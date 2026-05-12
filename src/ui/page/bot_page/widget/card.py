@@ -119,7 +119,8 @@ class _MemoryUsageWorker(QObject, QRunnable):
     SnowLuma 热启动 + NapCat 启动两条路径都受益.
     """
 
-    finished = Signal(str, int)  # (qq_id, mem_mb)
+    # (qq_id, mem_mb, total_mb): total_mb 远端走服务器 RAM, 本地走 psutil
+    finished = Signal(str, int, int)
 
     def __init__(self, qq_id: str) -> None:
         QObject.__init__(self)
@@ -130,10 +131,16 @@ class _MemoryUsageWorker(QObject, QRunnable):
 
     def run(self) -> None:  # noqa: D401 - QRunnable 协议
         try:
-            mem_mb = it(BotProcessManager).get_memory_usage(self._qq_id)
+            manager = it(BotProcessManager)
+            mem_mb = manager.get_memory_usage(self._qq_id)
+            # 修复 (2026-05-12): total 不再走 ``psutil.virtual_memory()``;
+            # 远端 Bot 应显示**服务器 RAM**, 由 ``BotProcessManager.get_total_memory_mb``
+            # 按 record.server_total_memory_bytes / 本地 psutil 自动分发.
+            total_mb = manager.get_total_memory_mb(self._qq_id)
         except Exception:  # noqa: BLE001 - worker 边界吞所有异常避免 QThreadPool 上抛
             mem_mb = 0
-        self.finished.emit(self._qq_id, mem_mb)
+            total_mb = 0
+        self.finished.emit(self._qq_id, mem_mb, total_mb)
 
 
 class BotCard(HeaderCardWidget):
@@ -608,23 +615,111 @@ class BotCard(HeaderCardWidget):
     def slot_web_ui_button(self) -> None:
         """处理 WebUI 按钮槽函数, 打开 Bot 的 WebUI.
 
-        P1 (SnowLuma 适配): 按 ``bot.backend_type`` 分流:
+        分流策略:
 
-        - ``NAPCAT``: 读 :class:`ManagerNapCatQQLoginState` 拿 port + token 拼接
-          ``http://127.0.0.1:{port}/webui?token={token}`` (历史行为零变更)
-        - ``SNOWLUMA``: 读 ``<snowluma_path>/config/runtime.json`` 拿 ``webuiPort``
+        - **本地 NapCat**: 读 :class:`ManagerNapCatQQLoginState` 拿 port + token 拼
+          ``http://127.0.0.1:{port}/webui?token={token}`` (历史行为零变更).
+        - **远端 NapCat**: 走 :class:`ManagerNapCatQQLoginState` (由 BotProcessManager
+          ``_publish_remote_login_state`` 写入隧道本地 port + token); URL 形态与本地一致.
+        - **本地 SnowLuma**: 读 ``<snowluma_path>/config/runtime.json`` 拿 ``webuiPort``
           (默认 5099), 打开 ``http://127.0.0.1:{webuiPort}/``, 同时把
           :func:`load_session` 拿到的明文密码**自动复制到剪贴板** + 弹 InfoBar
-          告知用户 (SnowLuma WebUI 内手动粘贴即可登录)
+          告知用户 (SnowLuma WebUI 内手动粘贴即可登录).
+        - **远端 SnowLuma** (2026-05-12 新增): 走 :class:`ManagerNapCatQQLoginState`
+          拿隧道本地 port + webui.secret 密码 (由
+          :meth:`RemoteSnowLumaBackend.get_webui_endpoint` 经 SSH 拉 ``webui.secret``,
+          再由 ``_publish_remote_login_state`` 注册); URL 形态 ``http://127.0.0.1:{port}/``
+          (SL WebUI 走表单登录, 不接受 ?token query 参数), 密码复制到剪贴板.
         """
         from PySide6.QtGui import QDesktopServices
         from PySide6.QtCore import QUrl
         from PySide6.QtWidgets import QApplication
 
         qq_id = str(self._config.bot.QQID)
+        is_snowluma = self._config.bot.backend_type == BackendType.SNOWLUMA
+        is_remote = self._config.bot.is_remote
 
-        # SnowLuma 分支: 不依赖 ManagerNapCatQQLoginState (该 manager 仅服务 NapCat)
-        if self._config.bot.backend_type == BackendType.SNOWLUMA:
+        # 远端 SnowLuma: 直接从 SL backend 实时拿 endpoint (隧道 port + webui.secret 密码).
+        # 不走 ``ManagerNapCatQQLoginState`` — 那套管理器设计给 NapCat 的 /api/auth/login
+        # 轮询, 对 SL 没意义; SL 的 endpoint 在 daemon READY 期间由 backend 持有,
+        # 点按钮时 backend.get_webui_endpoint() 即可返回. 不依赖 poll 链路.
+        if is_snowluma and is_remote:
+            from creart import it as _it
+
+            from src.core.remote import ServerManager
+
+            server_id = self._config.bot.runtime_target or ""
+            if not server_id:
+                error_bar(
+                    self.tr("该 Bot 未绑定远端服务器, 无法定位 SnowLuma WebUI"),
+                    title=self.tr("WebUI 打开失败"),
+                    parent=self,
+                )
+                return
+            try:
+                backend = _it(ServerManager).get_backend(server_id)
+                endpoint = backend.get_webui_endpoint(qq_id)
+            except Exception as exc:  # noqa: BLE001
+                error_bar(
+                    self.tr(
+                        "获取 SnowLuma 远端 WebUI 端点失败: {err}"
+                    ).format(err=f"{type(exc).__name__}: {exc}"),
+                    title=self.tr("WebUI 打开失败"),
+                    parent=self,
+                )
+                logger.warning(
+                    (
+                        f"打开远端 SnowLuma WebUI 失败: backend.get_webui_endpoint 异常 "
+                        f"(QQID: {mask_qqid(qq_id)}, server_id={server_id}, "
+                        f"exc={type(exc).__name__}: {exc})"
+                    ),
+                    log_source=LogSource.UI,
+                )
+                return
+            if endpoint is None:
+                error_bar(
+                    self.tr(
+                        "该 Bot 尚未启动或 SnowLuma 远端隧道未建立, 请先启动 Bot 再试"
+                    ),
+                    title=self.tr("WebUI 未就绪"),
+                    parent=self,
+                )
+                logger.warning(
+                    f"打开远端 SnowLuma WebUI 失败: endpoint 为 None "
+                    f"(QQID: {mask_qqid(qq_id)}, server_id={server_id})",
+                    log_source=LogSource.UI,
+                )
+                return
+            if not endpoint.token:
+                warning_bar(
+                    self.tr(
+                        "SnowLuma 远端 webui.secret 读取失败, 密码未复制到剪贴板; "
+                        "请手动登录或检查远端 {path} 文件"
+                    ).format(path="~/snowluma-remote/workspace/webui.secret"),
+                    parent=self,
+                )
+
+            # SL WebUI 走表单登录, 不带 ?token 查询参数; base_url 即 http://127.0.0.1:{port}
+            # (隧道本地端口); 末尾补一个 ``/`` 避免浏览器 30x 重定向冷启动.
+            web_ui_url = endpoint.base_url.rstrip("/") + "/"
+            if endpoint.token:
+                QApplication.clipboard().setText(str(endpoint.token))
+                info_bar(
+                    self.tr(
+                        "已将远端 SnowLuma WebUI 密码复制到剪贴板, 直接粘贴登录即可"
+                    ),
+                    title=self.tr("密码已就绪"),
+                    parent=self,
+                )
+            QDesktopServices.openUrl(QUrl(web_ui_url))
+            logger.info(
+                f"已打开远端 SnowLuma WebUI(QQID: {mask_qqid(qq_id)}, url={web_ui_url})",
+                log_source=LogSource.UI,
+            )
+            return
+
+        # 本地 SnowLuma: 不依赖 ManagerNapCatQQLoginState (该 manager 仅服务 NapCat 本地)
+        if is_snowluma:
             import json
 
             from src.core.runtime.snowluma_session import load_session
@@ -1162,18 +1257,24 @@ class BotInfoWidget(QWidget):
         worker.finished.connect(self._update_memory_text)
         QThreadPool.globalInstance().start(worker)
 
-    @Slot(str, int)
-    def _update_memory_text(self, qq_id: str, mem_mb: int) -> None:
+    @Slot(str, int, int)
+    def _update_memory_text(self, qq_id: str, mem_mb: int, total_mb: int) -> None:
         """``_MemoryUsageWorker.finished`` 信号槽 (主线程): 更新内存显示文本.
 
-        worker 在工作线程算完 psutil 进程树 RSS 后 emit ``(qq_id, mem_mb)``;
-        本 slot 仅做字符串拼接 + ``setText``, 不再调 psutil.
+        worker 在工作线程算完 ``mem_mb`` (Bot 进程树 RSS) + ``total_mb`` (远端服务器
+        RAM 或本地 psutil) 后 emit ``(qq_id, mem_mb, total_mb)``; 本 slot 仅做字符串
+        拼接 + ``setText``, 不再调 psutil.
+
+        修复 (2026-05-12): 远端 Bot 卡片此前总内存走的是 ``_total_memory_mb()`` (本机
+        psutil), 现在改成 worker 根据 backend 提供的 ``server_total_memory_bytes`` 给
+        出正确值; 本地 Bot 仍走 psutil, ``BotProcessManager.get_total_memory_mb`` 内部
+        分发.
         """
         if qq_id != str(self._config.bot.QQID):
             return
         # shutdown race: 计时器停了但 worker 仍在跑完后 emit, _memory_info 可能已 deleteLater
         try:
-            self._memory_info.text_label.setText(f"{mem_mb} MB / {_total_memory_mb()} MB")
+            self._memory_info.text_label.setText(f"{mem_mb} MB / {total_mb} MB")
         except RuntimeError:
             # 底层 C++ 对象已销毁 (用户关窗 / Bot card 被移除), 静默忽略
             pass

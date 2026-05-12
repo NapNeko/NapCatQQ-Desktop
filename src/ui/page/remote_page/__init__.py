@@ -39,7 +39,7 @@ from qfluentwidgets import (
 )
 
 from src.core.config import cfg
-from src.core.remote import DeploymentState, ServerManager, ServerProfile
+from src.core.remote import BackendFlavor, DeploymentState, ServerManager, ServerProfile
 from src.core.remote.thread_pool import remote_ssh_pool
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.info_bar import error_bar, info_bar, success_bar
@@ -200,10 +200,14 @@ class ServerCard(HeaderCardWidget):
         self.deploy_btn = TransparentToolButton(FI.SEND, self)
         self.maintenance_btn = TransparentToolButton(FI.SETTING, self)
 
+        # W10b: 根据 backend_flavor 动态 deploy 按钮 tooltip
+        is_sl = self._profile.backend_flavor == BackendFlavor.SNOWLUMA
+        deploy_tip = self.tr("部署 SnowLuma") if is_sl else self.tr("部署 NapCat")
+
         self.test_btn.setToolTip(self.tr("测试 SSH 连接"))
         self.edit_btn.setToolTip(self.tr("编辑服务器配置"))
         self.delete_btn.setToolTip(self.tr("删除服务器"))
-        self.deploy_btn.setToolTip(self.tr("部署 NapCat"))
+        self.deploy_btn.setToolTip(deploy_tip)
         self.maintenance_btn.setToolTip(self.tr("维护 (刷新版本 / 强制更新 / 回滚)"))
 
         for btn in (
@@ -235,14 +239,26 @@ class ServerCard(HeaderCardWidget):
         self.host_value.setObjectName("serverCardValue")
         self.login_value = BodyLabel(f"{cred.username} ({auth_text})", self)
         self.login_value.setObjectName("serverCardValue")
-        self.napcat_value = BodyLabel(self._format_version(self._profile.napcat_version), self)
+
+        # W10b: flavor 分支
+        # - NC: "NapCat {version}" + "LinuxQQ {version}"
+        # - SL: "SnowLuma {framework_version}" + "LinuxQQ {version}"
+        # 复用 napcat_value 跟 label 字段 (不再动态改 label 以简化 update_profile);
+        # SL 的整体版本语义存放到 napcat_value 传递器中
+        if is_sl:
+            primary_label_text = "SnowLuma"
+            primary_version = self._profile.snowluma_framework_version
+        else:
+            primary_label_text = "NapCat"
+            primary_version = self._profile.napcat_version
+        self.napcat_value = BodyLabel(self._format_version(primary_version), self)
         self.napcat_value.setObjectName("serverCardValue")
         self.qq_value = BodyLabel(self._format_version(self._profile.qq_version), self)
         self.qq_value.setObjectName("serverCardValue")
 
         form.addRow(self._make_label("主机"), self.host_value)
         form.addRow(self._make_label("登录"), self.login_value)
-        form.addRow(self._make_label("NapCat"), self.napcat_value)
+        form.addRow(self._make_label(primary_label_text), self.napcat_value)
         form.addRow(self._make_label("LinuxQQ"), self.qq_value)
 
         self.viewLayout.addWidget(body_widget, 1)
@@ -292,7 +308,11 @@ class ServerCard(HeaderCardWidget):
         auth_text = self.tr("私钥") if cred.auth_method == "key" else self.tr("密码")
         self.host_value.setText(f"{cred.host}:{cred.port}")
         self.login_value.setText(f"{cred.username} ({auth_text})")
-        self.napcat_value.setText(self._format_version(profile.napcat_version))
+        # W10b: flavor 分支; D8 决策下 flavor 不变, label 无需刷新, 仅更新版本值
+        if profile.backend_flavor == BackendFlavor.SNOWLUMA:
+            self.napcat_value.setText(self._format_version(profile.snowluma_framework_version))
+        else:
+            self.napcat_value.setText(self._format_version(profile.napcat_version))
         self.qq_value.setText(self._format_version(profile.qq_version))
         # 状态徽章重建 (InfoBadge level 不可热切换)
         if self._state_badge is not None:
@@ -745,12 +765,22 @@ class RemotePage(QWidget):
                 error_bar("密码认证模式下未保存密码, 请先编辑并填写密码", parent=self)
                 return
 
-        # 已部署时二次确认
+        # 已部署时二次确认 (W10b: flavor 分支文案)
         if profile.deployment_state == DeploymentState.DEPLOYED:
+            if profile.backend_flavor == BackendFlavor.SNOWLUMA:
+                redeploy_detail = (
+                    "重新部署会重新执行 LinuxQQ 与 SnowLuma.Framework 的安装脚本"
+                    "（脚本会自动跳过已存在的组件）。"
+                )
+            else:
+                redeploy_detail = (
+                    "重新部署会重新执行 LinuxQQ 与 NapCat 的安装脚本"
+                    "（脚本会自动跳过已存在的组件）。"
+                )
             ask = AskBox(
                 "确认重新部署",
                 f"服务器 “{profile.name}” 已处于已部署状态。\n\n"
-                "重新部署会重新执行 LinuxQQ 与 NapCat 的安装脚本（脚本会自动跳过已存在的组件）。\n"
+                f"{redeploy_detail}\n"
                 "是否继续？",
                 self.window(),
             )
@@ -821,28 +851,79 @@ class RemotePage(QWidget):
         remote_ssh_pool().start(runner)
 
     def _on_force_update_napcat(self, server_id: str | None = None) -> None:
-        """强制重跑 install_napcat 并传 force_update=True (DEPLOYED 状态可用)."""
-        self._start_force_deploy(
-            server_id=server_id,
-            label="强制更新 NapCat",
-            ask_message=(
+        """强制重跑 install_napcat (NC) / 重新部署 SnowLuma.Framework (SL).
+
+        W10b-Maintenance: 按 backend_flavor 切换文案 + 旗标:
+
+        - NC: ``force_napcat_update=True`` (传给 ``LinuxCoreDeployment.install_napcat``)
+        - SL: ``force_snowluma_redeploy=True`` 走 ``_deploy_snowluma_flavor``
+          的 SL framework + launcher 重新上传路径 (force_napcat_update 在 SL flavor
+          下被 ``ServerManager.deploy_server`` 忽略, 不会误触 NC 路径)
+        """
+        sid = self._resolve_sid(server_id)
+        if not sid:
+            return
+        manager = it(ServerManager)
+        profile = manager.get_server(sid)
+        if profile is None:
+            return
+
+        is_sl = profile.backend_flavor == BackendFlavor.SNOWLUMA
+        if is_sl:
+            label = "重新部署 SnowLuma.Framework"
+            ask_message = (
+                "即将重新上传 Desktop 内置的 SnowLuma.Framework lite tarball,\n"
+                "并重跑 install_snowluma 脚本 (同时重传 daemon / bot launcher 脚本)。\n\n"
+                "期间该服务器上运行中的 SnowLuma Bot 会被中断, 完成后需手动重启。\n"
+                "是否继续？"
+            )
+        else:
+            label = "强制更新 NapCat"
+            ask_message = (
                 "即将强制重新下载并解压远端 NapCat 安装包。\n\n"
                 "期间该服务器上运行中的 Bot 会被中断, 完成后需手动重启。\n是否继续？"
-            ),
+            )
+
+        self._start_force_deploy(
+            server_id=sid,
+            label=label,
+            ask_message=ask_message,
             force_napcat_update=True,
             force_linuxqq_reinstall=False,
         )
 
     def _on_force_reinstall_linuxqq(self, server_id: str | None = None) -> None:
-        """强制重跑 install_linuxqq 并传 force_reinstall=True (比强制更新 NapCat 更重)."""
-        self._start_force_deploy(
-            server_id=server_id,
-            label="强制重装 LinuxQQ",
-            ask_message=(
+        """强制重跑 install_linuxqq 并传 force_reinstall=True (比强制更新 NapCat / 重新部署 SL Framework 更重).
+
+        W10b-Maintenance: 按 backend_flavor 切换文案. 流程逻辑两侧一致 (都是清掉
+        ``${workspace}/opt/QQ/...`` 重新装 deb), 仅二次确认文案不同.
+        """
+        sid = self._resolve_sid(server_id)
+        if not sid:
+            return
+        manager = it(ServerManager)
+        profile = manager.get_server(sid)
+        if profile is None:
+            return
+
+        is_sl = profile.backend_flavor == BackendFlavor.SNOWLUMA
+        if is_sl:
+            ask_message = (
                 "即将强制重新下载并重装远端 LinuxQQ。\n\n"
-                "该操作会项目中 NapCat 配置备份 → 删除旧 LinuxQQ → 重新安装,\n"
+                "该操作会备份 SnowLuma 配置 → 删除旧 LinuxQQ → 重新安装,\n"
+                "耗时较长（依赖远端带宽）, 期间运行中的 SnowLuma Bot 会被中断。\n是否继续？"
+            )
+        else:
+            ask_message = (
+                "即将强制重新下载并重装远端 LinuxQQ。\n\n"
+                "该操作会先备份 NapCat 配置 → 删除旧 LinuxQQ → 重新安装,\n"
                 "耗时较长（依赖远端带宽）, 期间运行中的 Bot 会被中断。\n是否继续？"
-            ),
+            )
+
+        self._start_force_deploy(
+            server_id=sid,
+            label="强制重装 LinuxQQ",
+            ask_message=ask_message,
             force_napcat_update=False,
             force_linuxqq_reinstall=True,
         )
@@ -945,7 +1026,9 @@ class RemotePage(QWidget):
                 error_bar("密码认证模式下未保存密码, 请先编辑并填写密码", parent=self)
                 return
 
-        dialog = RollbackConfirmBox(profile.name, self.window())
+        # W10b-Maintenance: flavor 分发文案 — SL 走 SnowLuma 语境
+        is_sl = profile.backend_flavor == BackendFlavor.SNOWLUMA
+        dialog = RollbackConfirmBox(profile.name, self.window(), is_snowluma=is_sl)
         if not dialog.exec():
             return
         include_qq = dialog.get_include_qq()
