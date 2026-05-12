@@ -25,17 +25,29 @@ _LINUX_PATH_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
-def _validate_linux_path(field_name: str, value: str) -> None:
+def _validate_linux_path(
+    field_name: str,
+    value: str,
+    *,
+    cls_name: str = "LinuxCorePaths",
+) -> None:
     """校验单个路径字段; 不合法时抛 ``ValueError``.
 
     供 [`LinuxCorePaths.__post_init__`] 与 UI 同源校验复用 (后者通过
     [`is_valid_linux_path`] 包装为布尔判断).
+
+    Args:
+        field_name: 字段名 (用于错误消息)
+        value: 待校验的路径字符串
+        cls_name: 包含此字段的 dataclass 名 (默认 ``"LinuxCorePaths"``);
+            其它复用方 (如 :class:`SnowLumaRemotePaths`) 应显式传入自己的名字,
+            避免错误消息误导调试 (P11 review).
     """
     if not isinstance(value, str) or not value:
-        raise ValueError(f"LinuxCorePaths.{field_name} 不能为空")
+        raise ValueError(f"{cls_name}.{field_name} 不能为空")
     if not _LINUX_PATH_PATTERN.match(value):
         raise ValueError(
-            f"LinuxCorePaths.{field_name} 含非法字符或格式 (允许 $HOME 前缀 + 字母数字 _./-/): {value!r}"
+            f"{cls_name}.{field_name} 含非法字符或格式 (允许 $HOME 前缀 + 字母数字 _./-/): {value!r}"
         )
 
 

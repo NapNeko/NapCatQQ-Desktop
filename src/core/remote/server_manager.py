@@ -33,12 +33,15 @@ from .errors import (
     RemoteDeploymentInProgressError,
     RemoteError,
 )
+from .execution_backend import RemoteExecutionBackend
 from .models import SSHCredentials
-from .servers import DeploymentState, ServerProfile, ServerRegistry
+from .servers import BackendFlavor, DeploymentState, ServerProfile, ServerRegistry
 from .ssh_client import SSHClient
 
 if TYPE_CHECKING:
+    from src.core.operation.backend import OperationBackend
     from src.core.operation.remote_backend import RemoteBackend
+    from src.core.operation.remote_snowluma_backend import RemoteSnowLumaBackend
 
 
 # 进度回调签名: (message, percent_0_to_100)
@@ -110,8 +113,9 @@ class ServerManager(QObject):
         self._registry = ServerRegistry(path)
         # 服务器 ID -> 内存中的 SSH 密码(不落盘)
         self._password_cache: dict[str, str] = {}
-        # 服务器 ID -> RemoteBackend 实例(惰性创建并缓存)
-        self._backend_cache: dict[str, "RemoteBackend"] = {}
+        # 服务器 ID -> OperationBackend 实例(惰性创建并缓存);
+        # 实际类型按 profile.backend_flavor 决定: RemoteBackend (NC) 或 RemoteSnowLumaBackend (SL).
+        self._backend_cache: dict[str, "OperationBackend"] = {}
         # P1: 服务器 ID -> 是否正在部署(防并发)
         self._deploying: set[str] = set()
         # 部署取消标志: 服务器 ID -> threading.Event; ``set()`` 即"用户已请求取消".
@@ -387,8 +391,19 @@ class ServerManager(QObject):
         return self._inject_runtime_password(profile)
 
     # ==================== Backend 工厂 ====================
-    def get_backend(self, server_id: str) -> "RemoteBackend":
-        """获取或惰性创建 ``RemoteBackend`` 实例; 服务器不存在时抛 KeyError. """
+    def get_backend(self, server_id: str) -> "OperationBackend":
+        """获取或惰性创建远端 backend 实例; 服务器不存在时抛 KeyError.
+
+        W10b-Driver: 按 ``profile.backend_flavor`` 分发:
+
+        - :attr:`BackendFlavor.NAPCAT` → :class:`RemoteBackend` (NC launcher 路径)
+        - :attr:`BackendFlavor.SNOWLUMA` → :class:`RemoteSnowLumaBackend`
+          (SL launcher + daemon 路径)
+
+        两种 backend 都满足 :class:`OperationBackend` 协议, 上层
+        (:class:`BotProcessManager` / :func:`resolve_backend_for_bot`) 不需要按
+        flavor 做特殊处理, 协议方法语义自动对齐.
+        """
         cached = self._backend_cache.get(server_id)
         if cached is not None:
             return cached
@@ -397,11 +412,38 @@ class ServerManager(QObject):
         if profile is None:
             raise KeyError(f"服务器档案不存在: {server_id}")
 
-        # 延迟导入避免与 [`core.operation`](src/core/operation/__init__.py) 之间的循环
-        from src.core.operation.remote_backend import RemoteBackend
-
         cred = self._inject_runtime_password(profile)
-        backend = RemoteBackend(cred, profile.paths)
+
+        # W10b-Driver: SL flavor 走独立 backend 实现
+        if profile.backend_flavor == BackendFlavor.SNOWLUMA:
+            from src.core.operation.remote_snowluma_backend import RemoteSnowLumaBackend
+
+            sl_paths = profile.snowluma_paths
+            if sl_paths is None:
+                # SL flavor 但 snowluma_paths 缺失 (旧 servers.json 异常态);
+                # 走默认布局让 backend 仍可构造, 错误等部署时再暴露
+                from src.core.remote.snowluma import SnowLumaRemotePaths
+
+                sl_paths = SnowLumaRemotePaths.from_base()
+                logger.warning(
+                    f"服务器 {server_id} backend_flavor=SNOWLUMA 但 snowluma_paths 缺失, "
+                    "已退化到默认布局",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+            # W10b-WebUI: 把 per-server WebUI 密码 override 注入 backend, 让
+            # ``_ensure_remote_webui_password`` 优先级与本地 daemon 对齐.
+            backend = RemoteSnowLumaBackend(
+                cred,
+                sl_paths,
+                webui_password_override=profile.snowluma_webui_password_override,
+            )
+        else:
+            # 延迟导入避免与 [`core.operation`](src/core/operation/__init__.py) 之间的循环
+            from src.core.operation.remote_backend import RemoteBackend
+
+            backend = RemoteBackend(cred, profile.paths)
+
         self._backend_cache[server_id] = backend
         return backend
 
@@ -598,7 +640,12 @@ class ServerManager(QObject):
     ) -> DeploymentResult:
         """**同步**执行远端部署(应在后台线程调用). 
 
-        编排 install_qq + install_napcat 两步, 把进度区间映射到统一的 0-100. 
+        根据 ``profile.backend_flavor`` 分支:
+
+        - ``NAPCAT``: 编排 install_qq + install_napcat 两步, 进度 0-100 (现有路径)
+        - ``SNOWLUMA``: 编排 install_linuxqq + install_snowluma_framework + 上传
+          launcher 脚本 + verify (W8 新增路径); ``force_napcat_update`` 在 SL flavor
+          下被忽略 (SL 不装 NapCat).
 
         Raises:
             KeyError: 服务器档案不存在
@@ -612,6 +659,15 @@ class ServerManager(QObject):
         if server_id in self._deploying:
             raise RemoteDeploymentInProgressError(
                 f"服务器 {profile.name} 正在部署中, 请等待当前任务完成"
+            )
+
+        # W8: SnowLuma flavor 走独立 deploy 路径
+        if profile.backend_flavor == BackendFlavor.SNOWLUMA:
+            return self._deploy_snowluma_flavor(
+                server_id,
+                profile,
+                progress_callback=progress_callback,
+                force_linuxqq_reinstall=force_linuxqq_reinstall,
             )
 
         self._deploying.add(server_id)
@@ -708,8 +764,21 @@ class ServerManager(QObject):
                 # 用户在 install_qq 期间点了取消 -> 让取消异常透出, 不被包成 install_qq 失败
                 if self.is_cancel_requested(server_id):
                     raise RemoteDeploymentCancelledError(cause=exc) from exc
+                # 远端脚本退出码 37 -> LinuxQQ 包多次下载后仍未通过 dpkg-deb / rpm 完整性校验,
+                # 单独 stage='install_qq_verify' 让用户能看到 "完整性校验失败" 而非通用安装失败
+                stage_label = "install_qq"
+                exit_status = getattr(exc, "exit_status", None)
+                if exit_status == 37:
+                    stage_label = "install_qq_verify"
+                    raise RemoteDeploymentError(
+                        stage_label,
+                        "LinuxQQ 安装包完整性校验失败 (多次下载后仍损坏); "
+                        "可能原因: 网络中途中断 / 代理截断 / 镜像源返回不完整内容. "
+                        "建议检查远端服务器出方向网络, 或重试部署.",
+                        cause=exc,
+                    ) from exc
                 raise RemoteDeploymentError(
-                    "install_qq",
+                    stage_label,
                     f"LinuxQQ 安装失败: {exc}",
                     cause=exc,
                 ) from exc
@@ -836,6 +905,259 @@ class ServerManager(QObject):
             self._cancel_events.pop(server_id, None)
             # 失败时不主动 close, 调用方决定是否复用; 成功时也保留连接给后续操作
             _ = backend  # noqa: F841 - keep alive reference comment
+
+    # ==================== SnowLuma 部署路径 (W8) ====================
+    def _deploy_snowluma_flavor(
+        self,
+        server_id: str,
+        profile: ServerProfile,
+        *,
+        progress_callback: DeploymentProgressCallback | None,
+        force_linuxqq_reinstall: bool,
+    ) -> DeploymentResult:
+        """SnowLuma flavor 部署主流程 (W8).
+
+        阶段:
+        - Stage 0 (0-1%): preflight 兼容性体检 (复用 NC ``LinuxCoreDeploymentProbe``)
+        - Stage 1 (1-40%): install_linuxqq (复用 NC, 安装到 SL workspace)
+        - Stage 2 (40-90%): install_snowluma_framework (SFTP lite tarball + 图形栈)
+        - Stage 3 (90-95%): upload daemon/bot launcher 脚本
+        - Stage 4 (95-100%): verify_deployment + 写回档案 framework_version
+
+        Raises:
+            RemoteDeploymentError / RemoteDeploymentCancelledError: 与 NC 路径同语义
+        """
+        from src.core.remote.snowluma import (
+            SnowLumaDeployment,
+            SnowLumaFrameworkNotBundledError,
+            read_bundled_version,
+        )
+
+        assert profile.snowluma_paths is not None, "SL flavor 必须持有 snowluma_paths"
+        sl_paths = profile.snowluma_paths
+
+        self._deploying.add(server_id)
+        cancel_event = threading.Event()
+        self._cancel_events[server_id] = cancel_event
+        self.set_deployment_state(server_id, DeploymentState.DEPLOYING)
+
+        def _emit_progress(message: str, percent: int) -> None:
+            self.deployment_progress.emit(server_id, message, percent)
+            if progress_callback is not None:
+                try:
+                    progress_callback(message, percent)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        f"deploy_server[SL] 外部 progress_callback 抛错: {exc}",
+                        LogType.NETWORK,
+                        LogSource.CORE,
+                    )
+
+        def _emit_log_line(line: str) -> None:
+            self.deployment_log.emit(server_id, line)
+
+        def _emit_log_progress(line: str) -> None:
+            self.deployment_log_progress.emit(server_id, line)
+
+        ssh_client: SSHClient | None = None
+        try:
+            _emit_progress("准备 SSH 连接", 0)
+            cred = self._inject_runtime_password(profile)
+            ssh_client = SSHClient(cred)
+            ssh_client.connect()
+
+            exec_backend = RemoteExecutionBackend(ssh_client)
+            sl_deployer = SnowLumaDeployment(exec_backend, sl_paths)
+
+            # ----- Stage 0: preflight -----
+            _emit_progress("远端环境体检", 1)
+            self.deployment_log.emit(server_id, "[PREFLIGHT] 正在探测远端环境...")
+            probe = sl_deployer.probe_environment()
+            report = probe.evaluate_compatibility()
+            family_text = report.family or "-"
+            display_name = (
+                report.distro_entry.display_name
+                if report.distro_entry is not None
+                else (probe.distro_id or "unknown")
+            )
+            self.deployment_log.emit(
+                server_id,
+                (
+                    f"[PREFLIGHT] distro={display_name} "
+                    f"version={probe.distro_version or '-'} "
+                    f"arch={probe.normalized_arch or probe.architecture} "
+                    f"family={family_text} "
+                    f"installer={'dpkg' if probe.has_dpkg else ('rpm2cpio' if probe.has_rpm2cpio else 'none')} "
+                    f"status={report.compat_status}"
+                ),
+            )
+            for reason in report.reasons:
+                self.deployment_log.emit(server_id, f"[PREFLIGHT] {reason}")
+            if report.compat_status == "unsupported":
+                detail = "; ".join(report.reasons) or "远端环境不满足部署条件"
+                raise RemoteDeploymentError(
+                    "preflight",
+                    f"远端环境兼容性体检未通过: {detail}",
+                )
+            # SL 当前只支持 dpkg (install_snowluma.sh 内 apt-get); RHEL 系报错
+            if not probe.has_dpkg:
+                raise RemoteDeploymentError(
+                    "preflight",
+                    "SnowLuma 部署当前仅支持 Debian/Ubuntu (apt-get); "
+                    "远端缺少 dpkg",
+                )
+            self._check_cancelled(server_id)
+
+            # ----- Stage 1: install_linuxqq (1-40%) -----
+            def _qq_progress(message: str, percent: int) -> None:
+                # 0-100 -> 1-40
+                _emit_progress(f"[LinuxQQ] {message}", 1 + int(percent * 39 / 100))
+
+            try:
+                sl_deployer.install_linuxqq(
+                    progress=_qq_progress,
+                    log_callback=_emit_log_line,
+                    progress_log_callback=_emit_log_progress,
+                    force_reinstall=force_linuxqq_reinstall,
+                )
+            except Exception as exc:  # noqa: BLE001
+                if self.is_cancel_requested(server_id):
+                    raise RemoteDeploymentCancelledError(cause=exc) from exc
+                # 与 NC 分支对齐: 退出码 37 -> LinuxQQ 包完整性校验失败
+                stage_label = "install_qq"
+                exit_status = getattr(exc, "exit_status", None)
+                if exit_status == 37:
+                    stage_label = "install_qq_verify"
+                    raise RemoteDeploymentError(
+                        stage_label,
+                        "LinuxQQ 安装包完整性校验失败 (多次下载后仍损坏); "
+                        "可能原因: 网络中途中断 / 代理截断 / 镜像源返回不完整内容. "
+                        "建议检查远端服务器出方向网络, 或重试部署.",
+                        cause=exc,
+                    ) from exc
+                raise RemoteDeploymentError(
+                    stage_label,
+                    f"LinuxQQ 安装失败: {exc}",
+                    cause=exc,
+                ) from exc
+
+            self._check_cancelled(server_id)
+
+            # ----- Stage 2: install_snowluma_framework (40-90%) -----
+            def _sl_progress(message: str, percent: int) -> None:
+                # 0-100 -> 40-90
+                _emit_progress(f"[SnowLuma] {message}", 40 + int(percent * 50 / 100))
+
+            try:
+                sl_deployer.install_snowluma_framework(
+                    progress=_sl_progress,
+                    log_callback=_emit_log_line,
+                    progress_log_callback=_emit_log_progress,
+                )
+            except SnowLumaFrameworkNotBundledError as exc:
+                raise RemoteDeploymentError(
+                    "install_snowluma_framework",
+                    f"Desktop 未捆绑 SnowLuma.Framework: {exc}",
+                    cause=exc,
+                ) from exc
+            except Exception as exc:  # noqa: BLE001
+                if self.is_cancel_requested(server_id):
+                    raise RemoteDeploymentCancelledError(cause=exc) from exc
+                raise RemoteDeploymentError(
+                    "install_snowluma_framework",
+                    f"SnowLuma.Framework 安装失败: {exc}",
+                    cause=exc,
+                ) from exc
+
+            self._check_cancelled(server_id)
+
+            # ----- Stage 3: 上传 launcher 脚本 (90-95%) -----
+            _emit_progress("上传 launcher 脚本", 90)
+            try:
+                sl_deployer.upload_daemon_launcher_script()
+                sl_deployer.upload_bot_launcher_script()
+            except Exception as exc:  # noqa: BLE001
+                raise RemoteDeploymentError(
+                    "upload_launcher",
+                    f"launcher 脚本上传失败: {exc}",
+                    cause=exc,
+                ) from exc
+
+            self._check_cancelled(server_id)
+
+            # ----- Stage 4: verify + 写回 (95-100%) -----
+            _emit_progress("校验远端文件", 95)
+            ok, missing = sl_deployer.verify_deployment()
+            if not ok:
+                raise RemoteDeploymentError(
+                    "verify",
+                    f"远端关键文件缺失: {', '.join(missing)}",
+                )
+
+            framework_version = read_bundled_version()
+            updated_profile = self._registry.get(server_id)
+            if updated_profile is not None:
+                updated_profile.snowluma_framework_version = framework_version
+                updated_profile.deployment_state = DeploymentState.DEPLOYED
+                self._registry.update(updated_profile)
+                self.server_state_changed.emit(
+                    server_id, DeploymentState.DEPLOYED.value
+                )
+                self.server_updated.emit(server_id)
+
+            _emit_progress("部署完成", 100)
+            success_message = (
+                f"SnowLuma 部署成功 (framework={framework_version or '未知'})"
+            )
+            self.deployment_finished.emit(server_id, True, success_message)
+            return DeploymentResult(
+                server_id=server_id,
+                ok=True,
+                message=success_message,
+            )
+
+        except RemoteDeploymentCancelledError as exc:
+            self.set_deployment_state(server_id, DeploymentState.UNDEPLOYED)
+            self.deployment_log.emit(server_id, "[INFO] 部署已被用户取消")
+            self.deployment_finished.emit(server_id, False, str(exc))
+            logger.info(
+                f"SnowLuma 部署被用户取消: id={server_id}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            raise
+        except RemoteDeploymentError as exc:
+            self.set_deployment_state(server_id, DeploymentState.FAILED)
+            self.deployment_finished.emit(server_id, False, str(exc))
+            logger.warning(
+                f"SnowLuma 部署失败: id={server_id}, stage={exc.stage}, msg={exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            raise
+        except Exception as exc:  # noqa: BLE001
+            self.set_deployment_state(server_id, DeploymentState.FAILED)
+            wrapped = RemoteDeploymentError(
+                "unknown", f"SnowLuma 部署阶段异常: {exc}", cause=exc
+            )
+            self.deployment_finished.emit(server_id, False, str(wrapped))
+            logger.exception(
+                f"SnowLuma 部署阶段未捕获异常: id={server_id}",
+                exc,
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            raise wrapped from exc
+        finally:
+            self._deploying.discard(server_id)
+            self._cancel_events.pop(server_id, None)
+            # SL deploy 用独立 SSH 连接, 部署结束后立即关闭 (与 NC 路径行为不同;
+            # NC 复用 RemoteBackend 缓存的连接, SL 暂无对应缓存机制 - W9 优化项).
+            if ssh_client is not None and ssh_client.is_connected:
+                try:
+                    ssh_client.close()
+                except Exception:  # noqa: BLE001
+                    pass
 
     # ==================== 仅版本探测 (轻量, 不部署) ====================
     def redetect_versions(self, server_id: str) -> tuple[str | None, str | None]:

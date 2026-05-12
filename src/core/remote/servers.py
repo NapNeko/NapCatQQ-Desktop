@@ -23,6 +23,7 @@ from typing import Any
 from uuid import uuid4
 
 from .models import LinuxCorePaths, SSHCredentials
+from .snowluma.paths import SnowLumaRemotePaths
 
 
 class DeploymentState(str, Enum):
@@ -32,6 +33,17 @@ class DeploymentState(str, Enum):
     DEPLOYING = "deploying"
     DEPLOYED = "deployed"
     FAILED = "failed"
+
+
+class BackendFlavor(str, Enum):
+    """ServerProfile 后端类型 (W7 D8 决策, 不新建 ProfileType, 扩字段).
+
+    一旦创建即不可变 (per-server flavor 互斥); UI 在 ``AddServerDialog`` 让用户选,
+    选定后不允许编辑 (重选需删除档案重建).
+    """
+
+    NAPCAT = "napcat"
+    SNOWLUMA = "snowluma"
 
 
 @dataclass
@@ -61,6 +73,16 @@ class ServerProfile:
     notes: str = ""
     created_at: float = field(default_factory=time)
     last_connected_at: float | None = None
+    # W7 (D8 决策): 后端类型 + SL 专用字段; ``backend_flavor=NAPCAT`` 时下方 SL
+    # 字段保持默认值 (None / "") 不参与运行时逻辑
+    backend_flavor: BackendFlavor = BackendFlavor.NAPCAT
+    snowluma_paths: SnowLumaRemotePaths | None = None
+    """flavor=snowluma 时使用; flavor=napcat 时强制 None"""
+    snowluma_webui_password_override: str = ""
+    """per-server WebUI 密码 (OQ4 决策); 空串表示走 App 级 fallback"""
+    snowluma_framework_version: str | None = None
+    """远端已部署的 SnowLuma.Framework 版本; 与 Desktop 内置 bundled_version
+    不一致时 UI 提示 "可升级" (deploy 期写入)"""
 
     @classmethod
     def create(
@@ -70,15 +92,40 @@ class ServerProfile:
         credentials: SSHCredentials,
         notes: str = "",
         paths: LinuxCorePaths | None = None,
+        backend_flavor: BackendFlavor = BackendFlavor.NAPCAT,
+        snowluma_paths: SnowLumaRemotePaths | None = None,
+        snowluma_webui_password_override: str = "",
     ) -> "ServerProfile":
-        """构造新档案, 自动生成 UUID. """
+        """构造新档案, 自动生成 UUID.
+
+        Args:
+            backend_flavor: ``NAPCAT`` (默认) 或 ``SNOWLUMA``; 一经设定不可变
+            snowluma_paths: 仅 flavor=snowluma 时使用; flavor=napcat 时静默 ``None``;
+                flavor=snowluma 而 ``snowluma_paths`` 缺省时使用
+                :meth:`SnowLumaRemotePaths.from_base` 默认布局 (``$HOME/snowluma-remote``)
+            snowluma_webui_password_override: per-server WebUI 密码; 空串走 App fallback
+
+        Notes:
+            P13 (review): 早期文档曾写 "flavor=snowluma 而未提供 ``snowluma_paths`` 时
+            raise ``ValueError``"; 当前实现是回退到 :meth:`SnowLumaRemotePaths.from_base`
+            默认布局 — docstring 已与代码对齐. 若调用方希望强制提供, 应在 UI 层校验.
+        """
         display_name = name.strip() or credentials.host or "未命名服务器"
+        if backend_flavor == BackendFlavor.SNOWLUMA:
+            sl_paths = snowluma_paths or SnowLumaRemotePaths.from_base()
+            nc_paths = LinuxCorePaths()  # 占位; SL flavor 下不参与运行时逻辑
+        else:
+            sl_paths = None  # NC flavor 不持有 SL paths
+            nc_paths = paths or LinuxCorePaths()
         return cls(
             id=str(uuid4()),
             name=display_name,
             credentials=credentials,
-            paths=paths or LinuxCorePaths(),
+            paths=nc_paths,
             notes=notes.strip(),
+            backend_flavor=backend_flavor,
+            snowluma_paths=sl_paths,
+            snowluma_webui_password_override=snowluma_webui_password_override.strip(),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -106,6 +153,21 @@ class ServerProfile:
             "tmp_dir": self.paths.tmp_dir,
             "package_dir": self.paths.package_dir,
         }
+        # W7: SL paths 字段; SL flavor 时序列化全字段, NC flavor 时省略 (默认 None)
+        snowluma_paths_payload: dict[str, Any] | None = None
+        if self.snowluma_paths is not None:
+            snowluma_paths_payload = {
+                "base_dir": self.snowluma_paths.base_dir,
+                "workspace_dir": self.snowluma_paths.workspace_dir,
+                "snowluma_framework_dir": self.snowluma_paths.snowluma_framework_dir,
+                "config_dir": self.snowluma_paths.config_dir,
+                "runtime_dir": self.snowluma_paths.runtime_dir,
+                "log_dir": self.snowluma_paths.log_dir,
+                "vnc_secret": self.snowluma_paths.vnc_secret,
+                "webui_secret": self.snowluma_paths.webui_secret,
+                "daemon_launcher_script": self.snowluma_paths.daemon_launcher_script,
+                "bot_launcher_script": self.snowluma_paths.bot_launcher_script,
+            }
         return {
             "id": self.id,
             "name": self.name,
@@ -117,6 +179,11 @@ class ServerProfile:
             "notes": self.notes,
             "created_at": self.created_at,
             "last_connected_at": self.last_connected_at,
+            # W7 字段; 缺失时旧 Desktop 反序列化静默走默认 NAPCAT
+            "backend_flavor": self.backend_flavor.value,
+            "snowluma_paths": snowluma_paths_payload,
+            "snowluma_webui_password_override": self.snowluma_webui_password_override,
+            "snowluma_framework_version": self.snowluma_framework_version,
         }
 
     @classmethod
@@ -169,6 +236,50 @@ class ServerProfile:
             deployment_state = DeploymentState.UNDEPLOYED
         last_connected_raw = payload.get("last_connected_at")
         last_connected = float(last_connected_raw) if isinstance(last_connected_raw, (int, float)) else None
+
+        # W7: backend_flavor 反序列化; 未知值降级为 NAPCAT (向后兼容旧 servers.json)
+        try:
+            backend_flavor = BackendFlavor(payload.get("backend_flavor", "napcat"))
+        except ValueError:
+            backend_flavor = BackendFlavor.NAPCAT
+
+        # W7: snowluma_paths 反序列化 (仅 SL flavor 期望非空; 校验失败降级 None)
+        snowluma_paths_value: SnowLumaRemotePaths | None = None
+        sl_payload = payload.get("snowluma_paths")
+        if isinstance(sl_payload, dict):
+            try:
+                snowluma_paths_value = SnowLumaRemotePaths(
+                    base_dir=str(sl_payload.get("base_dir", "$HOME/snowluma-remote")),
+                    workspace_dir=str(sl_payload.get("workspace_dir", "")),
+                    snowluma_framework_dir=str(sl_payload.get("snowluma_framework_dir", "")),
+                    config_dir=str(sl_payload.get("config_dir", "")),
+                    runtime_dir=str(sl_payload.get("runtime_dir", "")),
+                    log_dir=str(sl_payload.get("log_dir", "")),
+                    vnc_secret=str(sl_payload.get("vnc_secret", "")),
+                    webui_secret=str(sl_payload.get("webui_secret", "")),
+                    daemon_launcher_script=str(sl_payload.get("daemon_launcher_script", "")),
+                    bot_launcher_script=str(sl_payload.get("bot_launcher_script", "")),
+                )
+            except ValueError as exc:
+                try:
+                    from src.core.logging import LogSource, LogType, logger
+
+                    logger.warning(
+                        f"servers.json 中存在非法 SnowLumaRemotePaths, 降级到默认: {exc}",
+                        LogType.NETWORK,
+                        LogSource.CORE,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                snowluma_paths_value = SnowLumaRemotePaths.from_base()
+        elif backend_flavor == BackendFlavor.SNOWLUMA:
+            # SL flavor 但 payload 缺 snowluma_paths: 用默认值
+            snowluma_paths_value = SnowLumaRemotePaths.from_base()
+
+        # NC flavor 时强制 snowluma_paths = None (避免 schema 误用)
+        if backend_flavor == BackendFlavor.NAPCAT:
+            snowluma_paths_value = None
+
         return cls(
             id=str(payload.get("id") or uuid4()),
             name=str(payload.get("name") or credentials.host or "未命名服务器"),
@@ -180,6 +291,12 @@ class ServerProfile:
             notes=str(payload.get("notes") or ""),
             created_at=float(payload.get("created_at") or time()),
             last_connected_at=last_connected,
+            backend_flavor=backend_flavor,
+            snowluma_paths=snowluma_paths_value,
+            snowluma_webui_password_override=str(
+                payload.get("snowluma_webui_password_override") or ""
+            ),
+            snowluma_framework_version=payload.get("snowluma_framework_version"),
         )
 
 

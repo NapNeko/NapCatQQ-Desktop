@@ -49,9 +49,16 @@ def _raise_if_cancelled(should_cancel: ShouldCancelCallback | None) -> None:
 
 _HASH_CHUNK_SIZE: int = 1024 * 1024  # 1 MiB
 
-_GITHUB_HEALTH_TIMEOUT_SECONDS: int = 6
-"""远端 ``curl https://github.com`` 健康检查的 ``--max-time`` 上限.
-6 秒足以覆盖正常 TCP 握手 + TLS, 同时避免在严重受阻的网络上把整个 preflight 拖到分钟级."""
+_GITHUB_HEALTH_CONNECT_TIMEOUT_SECONDS: int = 5
+"""远端 ``curl`` 健康检查的 ``--connect-timeout``.
+显式区分"连接 (TCP+TLS) 阶段"和"整体超时", 避免在 TLS 握手抖动的网络上靠
+``--max-time`` 兜底导致探测严重慢于实际下载就失败的判定."""
+
+_GITHUB_HEALTH_MAX_TIMEOUT_SECONDS: int = 8
+"""远端 ``curl`` 健康检查的 ``--max-time`` 上限.
+覆盖 ``github.com -> objects.githubusercontent.com`` 的 302 + 二次 TLS 握手 + HEAD 响应;
+配合 ``--connect-timeout`` 让网络抖动场景下探测**严于而非松于**远端脚本的真实下载
+(``remote_install_napcat.sh`` 用的是 ``--connect-timeout 8``), 杜绝"探测过, 下载挂"假阳性."""
 
 
 def _compute_sha512(path: Path) -> str:
@@ -77,17 +84,38 @@ def backend_can_reach_github(
     backend: ExecutionBackend,
     *,
     log_callback: LogLineCallback | None = None,
-    timeout: int = _GITHUB_HEALTH_TIMEOUT_SECONDS,
+    timeout: int = _GITHUB_HEALTH_MAX_TIMEOUT_SECONDS,
+    connect_timeout: int = _GITHUB_HEALTH_CONNECT_TIMEOUT_SECONDS,
 ) -> bool:
-    """在远端跑一次 ``curl -sI`` 看能否到 ``https://github.com``.
+    """在远端跑一次 ``curl -sIL`` 看能否到 NapCat 发布资产.
+
+    探测目标是 [`Urls.NAPCATQQ_DOWNLOAD`](src/core/network/urls.py)
+    (``https://github.com/.../releases/latest/download/NapCat.Shell.zip``)
+    而**不是** ``github.com`` 首页, 因为:
+
+    * ``github.com`` 首页常被边缘节点缓存, 即使到 release 资产的链路完全不通也能拿到 200,
+      让 Desktop 误判"远端能直连", 跳过本机下载 + SFTP 上传兜底, 最终远端脚本下载阶段挂掉.
+    * 真实下载会经历 ``github.com -> objects.githubusercontent.com`` 的 302 + 二次 TLS 握手,
+      只有把这条完整路径打通才算"远端能连". HEAD + ``-L`` 让探测严格执行同一链路而不下载 100MB.
+    * ``-k --connect-timeout 5 --max-time 8`` 与远端 [`remote_install_napcat.sh`]
+      (src/resource/script/remote_install_napcat.sh) 的 ``_try_download``
+      (``-k --connect-timeout 8``) 对齐, 探测略**严于**真实下载, 把"探测过/下载挂"的
+      假阳性窗口压到最小.
 
     返回 ``True``: 远端 curl 退出码 0 且 HTTP 状态码以 ``2`` / ``3`` 开头.
     其他情况 (含 curl 不存在 / DNS 失败 / 超时 / 4xx / 5xx) 一律 ``False``,
     走本机兜底, 让部署"宁可慢一点也不卡死".
+
+    Args:
+        timeout: ``--max-time`` 总超时秒数 (覆盖整个 HEAD + 重定向 + HEAD 链).
+        connect_timeout: ``--connect-timeout`` TCP+TLS 握手超时秒数; 与 ``timeout``
+            共同决定探测的严格度. 应保持 ``connect_timeout <= timeout``.
     """
+    probe_url = Urls.NAPCATQQ_DOWNLOAD.value.toString()
     cmd = (
-        f"curl -sI -o /dev/null -w '%{{http_code}}' "
-        f"--max-time {int(timeout)} -L https://github.com 2>/dev/null || echo 000"
+        f"curl -k -sIL -o /dev/null -w '%{{http_code}}' "
+        f"--connect-timeout {int(connect_timeout)} --max-time {int(timeout)} "
+        f"{probe_url} 2>/dev/null || echo 000"
     )
     result = backend.run(cmd, check=False)
     code_lines = (result.stdout or "").strip().splitlines()
@@ -97,7 +125,7 @@ def backend_can_reach_github(
     _emit(
         log_callback,
         f"[INFO] 远端 GitHub 连通性探测: http_code={code or '000'} "
-        f"reachable={'yes' if reachable else 'no'}",
+        f"reachable={'yes' if reachable else 'no'} (probe={probe_url})",
     )
     return reachable
 

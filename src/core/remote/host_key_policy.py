@@ -42,14 +42,17 @@ except ImportError:  # pragma: no cover - paramiko 缺失时纯靠类型注解
 
 # ==================== 数据模型 ====================
 class HostKeyDecision(enum.Enum):
-    """用户对未知主机指纹的决策."""
+    """用户对主机指纹的决策."""
 
-    #: 信任并保存到 ``known_hosts`` (下次连接不再弹窗)
+    #: 信任并保存到 ``known_hosts`` (下次连接不再弹窗); **首次连接** (未知主机) 路径
     TRUST_SAVE = "trust_save"
-    #: 仅本次连接信任, 不写盘 (下次仍弹窗)
+    #: 仅本次连接信任, 不写盘 (下次仍弹窗); 首次连接路径
     TRUST_ONCE = "trust_once"
     #: 拒绝, 中断 SSH 握手
     REJECT = "reject"
+    #: 信任并**替换** known_hosts 中已有条目; **变更** (BadHostKeyException) 路径专用,
+    #: 调用方需先 remove 旧 entry 再 add 新 entry, 然后重连一次
+    TRUST_REPLACE = "trust_replace"
 
 
 @dataclass(slots=True, frozen=True)
@@ -67,6 +70,16 @@ class HostKeyPrompt:
 
     fingerprint_md5: str = ""
     """OpenSSH 历史风格 MD5 指纹 (``aa:bb:cc:...``); 仅供老用户视觉对照, 不强制提供."""
+
+    previous_key_type: str = ""
+    """变更场景下原 known_hosts 中的密钥类型; 首次连接为空."""
+
+    previous_fingerprint_sha256: str = ""
+    """变更场景下原 known_hosts 中的 SHA256 指纹; 首次连接为空.
+
+    UI ``is_warning=True`` 时若该字段非空, 应在对话框中展示"原指纹 vs 新指纹"
+    对比, 让用户明确感知到主机指纹**变更**而非首次连接.
+    """
 
 
 HostKeyConfirmCallback = Callable[[HostKeyPrompt], HostKeyDecision]
@@ -169,6 +182,47 @@ class KnownHostsStore:
         host_keys = self.load()
         with self._lock:
             host_keys.add(_format_host_entry(hostname, port), key.get_name(), key)
+
+    def remove(self, hostname: str, port: int = 22) -> bool:
+        """从内存集合中移除 ``(hostname, port)`` 的所有 key (不立即落盘).
+
+        Returns:
+            ``True`` 表示移除了至少一条; ``False`` 表示没找到匹配条目.
+        """
+        host_keys = self.load()
+        entry = _format_host_entry(hostname, port)
+        with self._lock:
+            # paramiko HostKeys 内部是 list, 直接遍历删除
+            removed = False
+            i = 0
+            while i < len(host_keys._entries):
+                e = host_keys._entries[i]
+                if entry in e.hostnames:
+                    host_keys._entries.pop(i)
+                    removed = True
+                    continue
+                i += 1
+            return removed
+
+    def lookup_fingerprint(self, hostname: str, port: int = 22) -> tuple[str, str]:
+        """查询 ``(hostname, port)`` 已记录的 ``(key_type, sha256_fingerprint)``.
+
+        Returns:
+            ``(key_type, fingerprint_sha256)``; 找不到时返回 ``("", "")``.
+            多 key 类型同主机时返回 paramiko ``lookup`` 命中的第一条.
+        """
+        host_keys = self.load()
+        entry = _format_host_entry(hostname, port)
+        bag = host_keys.lookup(entry)
+        if not bag:
+            return "", ""
+        # bag 是 dict[key_type, key]; 取第一对
+        try:
+            key_type = next(iter(bag.keys()))
+            key = bag[key_type]
+        except StopIteration:
+            return "", ""
+        return key_type, compute_sha256_fingerprint(key)
 
     def save(self) -> None:
         """落盘当前内存集合; 父目录不存在自动创建."""
@@ -303,7 +357,9 @@ class InteractiveHostKeyPolicy(_BasePolicy):  # type: ignore[misc]
                 f"用户拒绝信任主机指纹: {bare_hostname} ({prompt.fingerprint_sha256})"
             )
 
-        if decision is HostKeyDecision.TRUST_SAVE:
+        # TRUST_REPLACE 仅 BadHostKeyException 路径用; 但 callback 实现误返
+        # 在 missing_host_key 时把它兼容当 TRUST_SAVE 处理, 避免崩溃.
+        if decision in (HostKeyDecision.TRUST_SAVE, HostKeyDecision.TRUST_REPLACE):
             # 注入 client 内存集合 + 持久化
             entry = _format_host_entry(bare_hostname, self._port)
             client.get_host_keys().add(entry, key.get_name(), key)

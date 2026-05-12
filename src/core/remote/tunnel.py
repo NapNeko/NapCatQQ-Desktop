@@ -162,11 +162,20 @@ class LocalPortForwarder:
         remote_port: int,
         *,
         label: str = "tunnel",
+        preferred_local_port: int = 0,
     ) -> None:
+        """
+        Args:
+            preferred_local_port: 优先绑定的本地端口; ``0`` 让 OS 选随机端口 (NC 历史默认).
+                W6 SnowLumaTunnelManager 用 47099/47609 实现 "noVNC URL 端口稳定" 体验,
+                绑定失败时 (端口已被占用) 抛 :class:`SSHConnectionError`, 调用方可捕获
+                后传 ``0`` 回退随机.
+        """
         self._transport = transport
         self._remote_host = remote_host
         self._remote_port = remote_port
         self._label = label
+        self._preferred_local_port = preferred_local_port
         self._server: _ThreadingTCPServer | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -198,10 +207,13 @@ class LocalPortForwarder:
 
             handler_class = self._build_handler_class()
             try:
-                server = _ThreadingTCPServer(("127.0.0.1", 0), handler_class)
+                server = _ThreadingTCPServer(
+                    ("127.0.0.1", self._preferred_local_port), handler_class
+                )
             except OSError as exc:
                 raise SSHConnectionError(
-                    f"SSH 隧道 {self._label} 无法绑定本地端口: {exc}"
+                    f"SSH 隧道 {self._label} 无法绑定本地端口 "
+                    f"(preferred={self._preferred_local_port}): {exc}"
                 ) from exc
 
             thread = threading.Thread(

@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from .models import LinuxCorePaths, RemoteCommandResult, SSHCredentials
     from .remote_manager import RemoteManager
     from .server_manager import DeploymentResult, ServerManager
-    from .servers import DeploymentState, ServerProfile, ServerRegistry
+    from .servers import BackendFlavor, DeploymentState, ServerProfile, ServerRegistry
     from .ssh_client import SSHClient
     from .status import RemoteLogTail, RemoteNapCatStatus, RemoteRuntimeService
     from .thread_pool import (
@@ -54,6 +54,7 @@ if TYPE_CHECKING:
 
 
 _EXPORT_MAP = {
+    "BackendFlavor": ".servers",
     "DeploymentResult": ".server_manager",
     "DeploymentState": ".servers",
     "ExecutionBackend": ".execution_backend",

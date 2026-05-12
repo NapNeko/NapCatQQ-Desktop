@@ -186,14 +186,33 @@ class SSHClient:
             LogSource.CORE,
         )
 
-        try:
-            client.connect(**connect_kwargs)
-        except paramiko.BadHostKeyException as exc:
-            raise SSHHostKeyError(f"SSH 主机指纹校验失败: {exc}") from exc
-        except paramiko.AuthenticationException as exc:
-            raise SSHAuthenticationError(f"SSH 认证失败: {exc}") from exc
-        except (paramiko.SSHException, socket.timeout, TimeoutError, OSError) as exc:
-            raise SSHConnectionError(f"SSH 连接失败: {exc}") from exc
+        # 主机指纹变化 (BadHostKeyException) 在 ``interactive`` 模式下走 UI 重确认;
+        # TRUST_REPLACE 后会重建 client 重试**一次**, 避免一次性失败让用户束手无策.
+        # 其他模式 (``reject`` / ``warning`` / ``auto_add``) 维持现行模糊错误.
+        attempts_remaining = 1  # 允许重试 1 次 (替换 known_hosts 后)
+        while True:
+            try:
+                client.connect(**connect_kwargs)
+                break
+            except paramiko.BadHostKeyException as exc:
+                if (
+                    self.credentials.host_key_policy == "interactive"
+                    and attempts_remaining > 0
+                    and self._handle_bad_host_key_interactive(exc)
+                ):
+                    attempts_remaining -= 1
+                    # 旧 entry 已替换为新 key; 重建 client 重连一次. paramiko 在抛异常
+                    # 后, client.host_keys 内部状态可能仍含旧 key, 直接重 connect 还会
+                    # 失败; 因此整个新建一个 SSHClient 让 _apply_host_key_policy 重新
+                    # 从 KnownHostsStore 加载 (此时已是新 key).
+                    client = paramiko.SSHClient()
+                    self._apply_host_key_policy(client)
+                    continue
+                raise SSHHostKeyError(self._format_bad_host_key_error(exc)) from exc
+            except paramiko.AuthenticationException as exc:
+                raise SSHAuthenticationError(f"SSH 认证失败: {exc}") from exc
+            except (paramiko.SSHException, socket.timeout, TimeoutError, OSError) as exc:
+                raise SSHConnectionError(f"SSH 连接失败: {exc}") from exc
 
         self._client = client
         # P3.W1: 启用 keepalive, 让 paramiko 周期性发空闲消息保活;
@@ -1063,6 +1082,20 @@ class SSHClient:
         transport = self._client.get_transport()
         return transport is not None and transport.is_active()
 
+    @property
+    def transport(self) -> "paramiko.Transport":
+        """暴露底层 paramiko Transport 供高阶组件 (如 :class:`SnowLumaTunnelManager`)
+        直接打开 ``direct-tcpip`` 子 channel.
+
+        Raises:
+            SSHConnectionError: 当前未连接或 transport 不活跃.
+        """
+        client = self._require_client()
+        transport = client.get_transport()
+        if transport is None or not transport.is_active():
+            raise SSHConnectionError("SSH transport 不可用, 请先 connect()")
+        return transport
+
     def __enter__(self) -> "SSHClient":
         self.connect()
         return self
@@ -1147,6 +1180,149 @@ class SSHClient:
             return
         # 默认 / "auto_add"
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    def _handle_bad_host_key_interactive(
+        self, exc: "paramiko.BadHostKeyException"
+    ) -> bool:
+        """``interactive`` 模式下处理主机指纹变化.
+
+        流程:
+        1. 从 ``BadHostKeyException`` 提取新 key 与旧 key (paramiko ``key`` / ``expected_key``)
+        2. 构造带 ``previous_*`` 字段的 :class:`HostKeyPrompt`
+        3. 通过 :func:`get_registered_callback` 拿 UI 注入的回调, 同步等用户决策
+        4. ``TRUST_REPLACE`` 时: ``KnownHostsStore.remove`` 旧 entry → ``add`` 新 → ``save``
+        5. 返回 ``True`` 表示已替换, 调用方 (``connect``) 应重连一次
+
+        其他决策 (REJECT / TRUST_ONCE / TRUST_SAVE) 与 callback 缺失时返回 ``False``,
+        调用方抛 :class:`SSHHostKeyError`.
+
+        Args:
+            exc: paramiko 抛出的 ``BadHostKeyException``
+
+        Returns:
+            ``True`` 表示已成功替换 known_hosts 中的旧 key, 可以重连;
+            ``False`` 表示用户拒绝或回调缺失, 调用方应抛错.
+        """
+        from .host_key_policy import (
+            HostKeyDecision,
+            HostKeyPrompt,
+            KnownHostsStore,
+            compute_md5_fingerprint,
+            compute_sha256_fingerprint,
+            default_known_hosts_path,
+            get_registered_callback,
+        )
+
+        callback = get_registered_callback()
+        if callback is None:
+            logger.warning(
+                "BadHostKeyException 但未注册 host key 回调, 无法走交互式重确认; "
+                "请用户手动清理 known_hosts 后重试",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return False
+
+        # paramiko ``BadHostKeyException`` 字段:
+        # - ``key``: 远端发来的新 key
+        # - ``expected_key``: 我们 known_hosts 里期望的旧 key
+        # - ``hostname``: 含端口包装的主机字符串 (``[host]:port`` 当 port != 22)
+        new_key = exc.key
+        old_key = exc.expected_key
+
+        # 剥离 ``[host]:port`` 包装, 与 store 内部契约对齐
+        from .host_key_policy import _strip_host_entry
+
+        bare_hostname = _strip_host_entry(exc.hostname)
+
+        prompt = HostKeyPrompt(
+            hostname=bare_hostname,
+            port=self.credentials.port,
+            key_type=new_key.get_name(),
+            fingerprint_sha256=compute_sha256_fingerprint(new_key),
+            fingerprint_md5=compute_md5_fingerprint(new_key),
+            previous_key_type=old_key.get_name() if old_key is not None else "",
+            previous_fingerprint_sha256=(
+                compute_sha256_fingerprint(old_key) if old_key is not None else ""
+            ),
+        )
+
+        # 调 callback (UI 端在主线程同步弹"红色警告"对话框)
+        try:
+            decision = callback(prompt)
+        except Exception as callback_exc:  # noqa: BLE001 - 回调异常视为拒绝
+            logger.warning(
+                f"host key 变更回调异常, 视为拒绝: {callback_exc!r}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return False
+
+        if decision is not HostKeyDecision.TRUST_REPLACE:
+            logger.info(
+                f"用户拒绝替换主机指纹: {bare_hostname}:{self.credentials.port} "
+                f"(decision={decision.value})",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return False
+
+        # 用户选择 TRUST_REPLACE: 替换 store 中的旧 entry
+        try:
+            store = KnownHostsStore(default_known_hosts_path())
+            removed = store.remove(bare_hostname, self.credentials.port)
+            store.add(bare_hostname, self.credentials.port, new_key)
+            store.save()
+            logger.info(
+                f"已替换 known_hosts 主机指纹: {bare_hostname}:{self.credentials.port} "
+                f"(removed_old={removed}, new_sha256={prompt.fingerprint_sha256})",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return True
+        except Exception as store_exc:  # noqa: BLE001 - 写盘失败视为整体失败
+            logger.warning(
+                f"替换 known_hosts 失败, 中断本次连接: {store_exc!r}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return False
+
+    def _format_bad_host_key_error(
+        self, exc: "paramiko.BadHostKeyException"
+    ) -> str:
+        """把 paramiko ``BadHostKeyException`` 渲染成中文友好错误.
+
+        包含具体清理路径与命令, 让用户在没注册 callback / 决策为 REJECT 时
+        也能自助修复 (例如非 interactive 模式下).
+        """
+        from .host_key_policy import (
+            compute_sha256_fingerprint,
+            default_known_hosts_path,
+        )
+
+        try:
+            new_fp = compute_sha256_fingerprint(exc.key) if exc.key is not None else "-"
+        except Exception:  # noqa: BLE001
+            new_fp = "-"
+        try:
+            old_fp = (
+                compute_sha256_fingerprint(exc.expected_key)
+                if exc.expected_key is not None
+                else "-"
+            )
+        except Exception:  # noqa: BLE001
+            old_fp = "-"
+
+        kh_path = default_known_hosts_path()
+        return (
+            f"SSH 主机指纹校验失败: {self.credentials.host}:{self.credentials.port}\n"
+            f"  原指纹 (known_hosts 中): {old_fp}\n"
+            f"  新指纹 (远端实际): {new_fp}\n"
+            "可能原因: 服务器重装 / 中间人攻击. 若确认是服务器重装, 可:\n"
+            f"  1. 编辑 {kh_path}, 删除 ``{self.credentials.host}`` 相关行后重试; 或\n"
+            "  2. 把档案 host_key_policy 切到 ``interactive`` 后重试 (会弹窗确认)."
+        )
 
     def _require_client(self) -> "paramiko.SSHClient":
         if self._client is None:
