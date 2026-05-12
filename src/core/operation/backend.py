@@ -42,6 +42,9 @@ class ProcessStatus:
         pid: 进程 ID, 不在线时为 None
         started_at: Unix 时间戳, 不在线时为 None
         memory_rss_bytes: 常驻集大小(字节), 不可用时为 None
+        server_total_memory_bytes: 远端服务器物理总内存 (字节); 本地 backend 永远 ``None``,
+            远端 backend 在第一次探测后缓存. 用于 Bot 卡片 ``X MB / Y MB`` 中的 Y,
+            让远端 Bot 显示的是服务器 RAM 而非 Desktop 本机 RAM.
         extra: 后端特定的附加信息(本地: QProcess state; 远程: pgrep 原始输出等)
     """
 
@@ -50,6 +53,7 @@ class ProcessStatus:
     pid: int | None = None
     started_at: float | None = None
     memory_rss_bytes: int | None = None
+    server_total_memory_bytes: int | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 

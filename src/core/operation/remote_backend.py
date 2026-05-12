@@ -48,9 +48,6 @@ if TYPE_CHECKING:
 
 
 _QQ_VERSION_PACKAGE_PATTERN = re.compile(r'"version"\s*:\s*"([^"]+)"')
-# ``ps -e -o pid=,ppid=,rss=`` 单行格式: 任意空白分隔的三列整数
-# (pid, ppid, rss_kib). 列宽随发行版浮动, 故按任意空白分隔.
-_PS_TREE_LINE_PATTERN = re.compile(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s*$")
 
 # WebUI 日志中 NapCat 打印的入口 URL 形如:
 #   [info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token=abc
@@ -86,6 +83,9 @@ class RemoteBackend(OperationBackend):
         self._deployment = LinuxCoreDeployment(self._exec_backend, self.paths)
         # P2.5: WebUI SSH 隧道按 qq_id 缓存; 远端端口漂移或 close() 时统一清理
         self._webui_tunnels: dict[str, LocalPortForwarder] = {}
+        # 远端服务器物理总内存 (字节); session 内不变, 首次 get_process_status / start_napcat
+        # 期间惰性探测后永久缓存. UI 卡片走 ``ProcessStatus.server_total_memory_bytes`` 读.
+        self._server_total_memory_bytes: int | None = None
 
     @property
     def deployment(self) -> LinuxCoreDeployment:
@@ -255,6 +255,7 @@ class RemoteBackend(OperationBackend):
             pid=status.pid,
             started_at=None,
             memory_rss_bytes=self._fetch_rss_bytes(status.pid) if status.pid else None,
+            server_total_memory_bytes=self._resolve_server_total_memory_bytes(),
             extra={
                 "raw_qq": status.qq,
                 "version": status.version,
@@ -297,6 +298,7 @@ class RemoteBackend(OperationBackend):
             pid=status.pid,
             started_at=None,
             memory_rss_bytes=self._fetch_rss_bytes(status.pid) if status.pid else None,
+            server_total_memory_bytes=self._resolve_server_total_memory_bytes(),
             extra={
                 "raw_qq": status.qq,
                 "version": status.version,
@@ -749,56 +751,31 @@ class RemoteBackend(OperationBackend):
     def _fetch_rss_bytes(self, pid: int) -> int | None:
         """读取远端 ``pid`` 及其所有后代进程的 RSS 之和, 返回字节数.
 
-        与本地路径 [`BotProcessManager.get_memory_usage`](src/core/runtime/napcat.py)
-        通过 ``psutil`` 累加进程树 RSS 的行为对齐. 远端 NapCat 由 ``xvfb-run``
-        shell wrapper 拉起 ``qq`` (Electron), 进程结构为:
-
-        - ``/bin/sh xvfb-run -a /usr/local/bin/qq --no-sandbox -q <qq_id>``  (~1 MB)
-          - ``/usr/local/bin/qq --no-sandbox -q <qq_id>``                    (Electron main)
-            - 多个 GPU / renderer / utility 子进程                            (各占数十-数百 MB)
-
-        若仅取 ``ps -o rss= -p <pid>`` 的单进程 RSS:
-        - 当 pgrep 命中 shell wrapper 时显示 1 MB (用户报告的现象)
-        - 即便命中 Electron main, 也漏掉所有 helper 进程
-
-        实现: 单次 SSH 拉全量 ``ps -e -o pid=,ppid=,rss=``, 客户端 BFS 走
-        ``pid`` 的子树并累加 RSS. 输出单位 KiB.
+        2026-05-12 重构: 实际逻辑抽到
+        :func:`src.core.remote.process_tree.fetch_process_tree_rss_bytes`,
+        让 SL backend 也能复用; 本方法保留作为协议入口 (``self._exec_backend`` 注入).
         """
-        result = self._exec_backend.run("ps -e -o pid=,ppid=,rss= 2>/dev/null || true")
-        if not result.ok:
+        from src.core.remote.process_tree import fetch_process_tree_rss_bytes
+
+        return fetch_process_tree_rss_bytes(self._exec_backend, pid)
+
+    def _resolve_server_total_memory_bytes(self) -> int | None:
+        """惰性探测 + 缓存远端物理总内存 (字节).
+
+        远端 ``MemTotal`` 在 session 内不变, 首次成功后永久缓存; 探测失败 (网络抖 /
+        ``/proc/meminfo`` 缺失) 时不缓存, 下次轮询再试.
+        """
+        if self._server_total_memory_bytes is not None:
+            return self._server_total_memory_bytes
+        from src.core.remote.process_tree import fetch_remote_total_memory_bytes
+
+        try:
+            total = fetch_remote_total_memory_bytes(self._exec_backend)
+        except Exception:  # noqa: BLE001 - 探测失败不应阻断状态查询
             return None
-
-        # pid -> rss_kib; ppid -> [child_pid, ...]
-        rss_by_pid: dict[int, int] = {}
-        children: dict[int, list[int]] = {}
-        for raw in result.stdout.splitlines():
-            match = _PS_TREE_LINE_PATTERN.match(raw)
-            if match is None:
-                continue
-            cpid = int(match.group(1))
-            cppid = int(match.group(2))
-            crss = int(match.group(3))
-            rss_by_pid[cpid] = crss
-            children.setdefault(cppid, []).append(cpid)
-
-        if pid not in rss_by_pid:
-            # 进程已退出, 或 ps 输出无法解析 -> 报告 None 而不是 0,
-            # 让上层走 "未知" 而不是 "已停"
-            return None
-
-        total_kib = 0
-        visited: set[int] = set()
-        stack: list[int] = [pid]
-        while stack:
-            current = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            total_kib += rss_by_pid.get(current, 0)
-            stack.extend(children.get(current, ()))
-
-        # ``ps`` 输出单位为 KiB
-        return total_kib * 1024
+        if total is not None and total > 0:
+            self._server_total_memory_bytes = total
+        return total
 
     def _detect_qq_version(self) -> str | None:
         """读取远端 QQ ``package.json`` 的 version 字段. """

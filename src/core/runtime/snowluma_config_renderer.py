@@ -105,8 +105,30 @@ def render_webui_json(
         # 不主动创建; 让 SnowLuma 自治.
         return
 
+    payload = build_webui_json_payload(password=password, must_change=must_change)
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def build_webui_json_payload(*, password: str, must_change: bool) -> dict[str, Any]:
+    """构造 ``webui.json`` 的 payload dict (scrypt hash + salt), **不写文件**.
+
+    抽出此 helper 是为了让远端路径 (``RemoteSnowLumaBackend``) 直接复用同一份
+    scrypt 参数, 然后 SFTP 上传到远端 ``webui.json``, 避免本地写文件再读再上传.
+
+    Args:
+        password: 明文密码 (UTF-8 非空).
+        must_change: 是否设置 ``mustChangePassword=True``.
+
+    Raises:
+        ValueError: ``password`` 为空字符串.
+    """
     if not isinstance(password, str) or not password:
-        raise ValueError("password 为空字符串无意义; 传 None 让 SnowLuma 自治, 或传非空字符串显式重置")
+        raise ValueError("password 不能为空字符串")
 
     salt_bytes = secrets.token_bytes(_SCRYPT_SALT_BYTES)
     hash_bytes = hashlib.scrypt(
@@ -120,19 +142,13 @@ def render_webui_json(
     )
 
     now_iso = _utc_now_iso()
-    payload: dict[str, Any] = {
+    return {
         "passwordHash": hash_bytes.hex(),
         "passwordSalt": salt_bytes.hex(),
         "mustChangePassword": bool(must_change),
         "generatedAt": now_iso,
         "updatedAt": now_iso,
     }
-
-    config_dir.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
 
 
 # ==================== onebot_<uin>.json ====================

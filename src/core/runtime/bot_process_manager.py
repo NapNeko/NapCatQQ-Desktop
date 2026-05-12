@@ -155,6 +155,10 @@ class RemoteProcessRecord:
     state: QProcess.ProcessState = QProcess.ProcessState.NotRunning
     started_at: float = 0.0
     last_memory_rss_bytes: int | None = None
+    # 远端服务器物理总内存 (字节). 由 backend 在 ``ProcessStatus`` 上每次都带回来,
+    # session 内不变. UI ``BotCard`` 走 ``BotProcessManager.get_total_memory_mb``
+    # 拿到这个值并显示在 "X MB / Y MB" 的 Y 处, 让远端 Bot 不再误显 Desktop 本机 RAM.
+    server_total_memory_bytes: int | None = None
     polling_timer: QTimer | None = None
     login_state_published: bool = False
     login_state_port: int | None = None
@@ -2432,6 +2436,31 @@ class BotProcessManager(QObject):
             return 0
         return NapCatDriver.get_memory_usage_for_pid(process.processId())
 
+    def get_total_memory_mb(self, qq_id: str) -> int:
+        """获取展示在 ``X MB / Y MB`` 中的 Y 值 (MB).
+
+        - 远端 Bot: 取 ``RemoteProcessRecord.server_total_memory_bytes`` (backend 探到的
+          服务器 RAM); 还没探到时 fallback 0, UI 显示 ``X MB / 0 MB`` 直到 backend 首轮
+          poll 成功.
+        - 本地 Bot (NC / SnowLuma): 走 ``psutil.virtual_memory().total``; UI 层模块级
+          缓存了一次, 这里走快路径.
+
+        修复 (2026-05-12): 早期版本远端 Bot 也读 ``psutil.virtual_memory().total``,
+        显示的是 Desktop 本机 RAM (16/32 GB), 与服务器实际 RAM (常 1-2 GB) 不一致.
+        """
+        record = self.remote_process_dict.get(qq_id)
+        if record is not None:
+            if record.server_total_memory_bytes is None:
+                return 0
+            return int(record.server_total_memory_bytes / (1024 * 1024))
+
+        import psutil
+
+        try:
+            return int(psutil.virtual_memory().total / (1024 * 1024))
+        except Exception:  # noqa: BLE001 - psutil 异常 fallback 0
+            return 0
+
     # ==================== P2.6: 远端 Bot 进程管理 ====================
     def _create_remote_process(self, config: Config) -> None:
         """在远端服务器上启动 NapCat Bot (异步).
@@ -2558,6 +2587,9 @@ class BotProcessManager(QObject):
 
         if isinstance(status, _ProcessStatus):
             record.last_memory_rss_bytes = status.memory_rss_bytes
+            # session 内不变, 但 backend 每次都带回来; 拿到非空就缓存到 record
+            if status.server_total_memory_bytes is not None:
+                record.server_total_memory_bytes = status.server_total_memory_bytes
 
         self.process_changed_signal.emit(qq_id, QProcess.ProcessState.Running)
         logger.info(
@@ -2609,6 +2641,10 @@ class BotProcessManager(QObject):
             return
 
         record.last_memory_rss_bytes = getattr(status, "memory_rss_bytes", None)
+        # 与 _handle_remote_start_succeeded 同模式: 拿到非空就缓存; session 内不变
+        sttm = getattr(status, "server_total_memory_bytes", None)
+        if sttm is not None:
+            record.server_total_memory_bytes = sttm
 
         if endpoint is not None:
             self._publish_remote_login_state(record, endpoint)
@@ -2618,10 +2654,26 @@ class BotProcessManager(QObject):
         base_url = getattr(endpoint, "base_url", "") or ""
         token = getattr(endpoint, "token", None)
         if not base_url or not token:
+            logger.warning(
+                (
+                    f"远端 Bot 登录状态未发布: 字段空 "
+                    f"(QQID={record.qq_id}, base_url={base_url!r}, has_token={bool(token)})"
+                ),
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
             return
 
         match = re.match(r"http://(?:127\.0\.0\.1|localhost):(\d+)", base_url)
         if match is None:
+            logger.warning(
+                (
+                    f"远端 Bot 登录状态未发布: base_url 格式不匹配 "
+                    f"(QQID={record.qq_id}, base_url={base_url!r})"
+                ),
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
             return
         local_port = int(match.group(1))
 
