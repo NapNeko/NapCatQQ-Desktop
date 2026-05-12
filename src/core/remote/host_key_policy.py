@@ -82,11 +82,19 @@ class HostKeyPrompt:
     """
 
 
-HostKeyConfirmCallback = Callable[[HostKeyPrompt], HostKeyDecision]
+HostKeyConfirmCallback = Callable[..., HostKeyDecision]
 """决策回调签名: 同步返回用户决策.
+
+标准调用形式::
+
+    callback(prompt: HostKeyPrompt) -> HostKeyDecision                # 首次连接
+    callback(prompt: HostKeyPrompt, *, is_warning=True) -> HostKeyDecision  # 指纹变更
 
 实现方应在主线程内同步取得用户选择 (Qt 端用 ``invokeMethod(BlockingQueuedConnection)``);
 回调可能在工作线程被调用, 需自行处理跨线程.
+
+``is_warning=True`` 时 UI 应展示红色警告对话框 (指纹变更路径), 提供
+``TRUST_REPLACE`` / ``REJECT`` 选项; 缺省 ``False`` 时展示首次连接对话框.
 """
 
 
@@ -405,13 +413,13 @@ def get_registered_callback() -> HostKeyConfirmCallback | None:
         return _REGISTERED_CALLBACK
 
 
-def reject_all_callback(prompt: HostKeyPrompt) -> HostKeyDecision:
+def reject_all_callback(prompt: HostKeyPrompt, **kwargs) -> HostKeyDecision:
     """安全兜底回调: 任何未知主机一律拒绝.
 
     无 UI 上下文 (如冒烟测试 / 后端脚本) 时作为默认值, 比 ``AutoAddPolicy``
     (无声信任) 更符合 §6.2 安全基线.
     """
-    del prompt
+    del prompt, kwargs
     return HostKeyDecision.REJECT
 
 

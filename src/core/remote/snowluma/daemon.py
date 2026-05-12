@@ -353,7 +353,7 @@ class RemoteSnowLumaDaemon(QObject):
         self,
         local_port: int,
         *,
-        retries: int = 20,
+        retries: int = 40,
         interval: float = 0.5,
     ) -> None:
         """通过本地隧道做 HTTP HEAD 探测 WebUI 真可响应; retry 直到成功或耗尽次数.
@@ -365,9 +365,13 @@ class RemoteSnowLumaDaemon(QObject):
         任何 HTTP 状态码 (含 401/302/404) 都视为成功 — 只要 server 回了 byte 就证明
         全链路 (浏览器 → 本地 forwarder → SSH channel → daemon HTTP) 贯通.
 
+        P10 (2026-05-12 fix): 首次冷启动时 SnowLuma framework 需要初始化 SQLite 数据库、
+        加载插件等, HTTP 响应时间可能超过 10s. 将 retry 从 20 次 (10s) 提升到 40 次 (20s),
+        覆盖首次冷启动场景.
+
         Args:
             local_port: 隧道在 Desktop 本地的 listen 端口 (典型 47099)
-            retries: 最大重试次数, 默认 20 (× 0.5s = 10s)
+            retries: 最大重试次数, 默认 40 (× 0.5s = 20s)
             interval: 每次重试间隔秒数
 
         Raises:

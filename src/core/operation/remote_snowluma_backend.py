@@ -673,21 +673,72 @@ class RemoteSnowLumaBackend(OperationBackend):
         """SL 隧道由 daemon 引用计数管, 不在 per-bot 级别关闭. 协议兼容用 (no-op)."""
         return None
 
-    # ==================== 配置同步 (SL 暂简化) ====================
-    def write_bot_runtime_config(self, config: "Config") -> tuple[str, str]:  # noqa: ARG002
-        """SL bot 配置走另一套约定 (config/onebot_<uin>.json + webui).
+    # ==================== 配置同步 ====================
+    def write_bot_runtime_config(self, config: "Config") -> tuple[str, str]:
+        """把当前 SL Bot 的 ``onebot_<uin>.json`` 同步到远端 ``$config_dir``.
 
-        当前 backlog 实现: SL daemon 启动期会基于已有配置自动初始化, Desktop 不强制
-        写入. 返回空 tuple 占位保持协议兼容.
+        与 :meth:`RemoteBackend.write_bot_runtime_config` (NC 路径) 对称, 但只产出
+        一个文件 (SL 没有独立的 napcat_<uin>.json):
 
-        TODO (W10b-Bot-Config): 让此方法把 ``config.connect`` 渲染成 SL 期望的
-        ``onebot_<uin>.json`` 并 SFTP 写入 ``self.sl_paths.config_dir``.
+        - 通过 :func:`build_onebot_payload` 复用 renderer 字段映射, 与本地
+          ``<snowluma_path>/config/onebot_<uin>.json`` 写盘内容完全一致.
+        - 通过 SFTP 写入 ``self.sl_paths.onebot_json(uin)`` (默认
+          ``$HOME/snowluma-remote/workspace/snowluma/config/onebot_<uin>.json``).
+
+        调用方约定与 NC 路径一致 (见 :meth:`RemoteBackend.write_bot_runtime_config`).
+
+        Args:
+            config: 完整 [`Config`](src/core/config/config_model.py) 对象.
+
+        Returns:
+            ``(remote_onebot_path, "")`` 元组; 第二项保持 NC 协议兼容 (NC 返
+            ``(onebot11, napcat)`` 两元素, SL 只有 onebot 一项).
         """
-        return ("", "")
+        # 延迟导入避免与 [`snowluma_config_renderer`](src/core/runtime/snowluma_config_renderer.py)
+        # / [`operate_config`](src/core/config/operate_config.py) 互相依赖.
+        import json as _json
 
-    def delete_bot_runtime_config(self, qq_id: str) -> None:  # noqa: ARG002
-        """SL backlog: 删除远端 config/onebot_<uin>.json. 当前 no-op."""
-        return None
+        from src.core.runtime.snowluma_config_renderer import build_onebot_payload
+
+        self._ensure_connected()
+
+        qq_id_str = str(config.bot.QQID).strip()
+        if not qq_id_str.isdigit():
+            raise ValueError(f"SL write_bot_runtime_config 收到非法 QQID: {config.bot.QQID!r}")
+
+        payload = build_onebot_payload(
+            int(qq_id_str),
+            connect=config.connect,
+            music_sign_url=config.bot.musicSignUrl,
+        )
+        onebot_remote = self.sl_paths.onebot_json(qq_id_str)
+        # 父目录由 ``write_text`` 内部 ensure_remote_directory 自动创建
+        self.ssh_client.write_text(
+            onebot_remote,
+            _json.dumps(payload, ensure_ascii=False, indent=2),
+        )
+        return onebot_remote, ""
+
+    def delete_bot_runtime_config(self, qq_id: str) -> None:
+        """删除指定 SL Bot 在远端的 ``onebot_<uin>.json``.
+
+        与 :meth:`RemoteBackend.delete_bot_runtime_config` 对称; 文件不存在时静默成功,
+        整个操作幂等.
+        """
+        self._ensure_connected()
+        qq_id_str = str(qq_id).strip()
+        if not qq_id_str.isdigit():
+            # 与 NC 路径一致: 非法 qq_id 静默跳过, 避免 ``rm -f`` 出现 shell 注入风险
+            logger.warning(
+                f"SL delete_bot_runtime_config 收到非法 qq_id (已跳过): {qq_id!r}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            return
+        remote_path = self.sl_paths.onebot_json(qq_id_str)
+        quoted = self.ssh_client._quote_remote_argument(remote_path)  # noqa: SLF001
+        # ``rm -f`` 已经是幂等; 不抛错即可
+        self._exec_backend.run(f"rm -f -- {quoted}", check=False)
 
     # ==================== 安装 / 部署 ====================
     def install_napcat(

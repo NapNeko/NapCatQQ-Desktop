@@ -66,6 +66,7 @@ def _build_probe_backend(
     has_curl: bool = True,
     has_dpkg: bool = True,
     has_rpm2cpio: bool = False,
+    has_dnf: bool = False,
     has_xvfb: bool = True,
     qq_present: bool = False,
     qq_pkg_json: str = "",
@@ -88,6 +89,7 @@ def _build_probe_backend(
         "command -v rpm2cpio >/dev/null 2>&1 && command -v cpio >/dev/null 2>&1": RemoteCommandResult(
             command="-", exit_status=0 if has_rpm2cpio else 1
         ),
+        "command -v dnf >/dev/null 2>&1": RemoteCommandResult(command="-", exit_status=0 if has_dnf else 1),
         "command -v xvfb-run >/dev/null 2>&1": RemoteCommandResult(command="-", exit_status=0 if has_xvfb else 1),
     }
 

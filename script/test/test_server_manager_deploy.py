@@ -79,6 +79,8 @@ class FakeRemoteBackend:
         log_callback=None,
         progress_log_callback=None,
         force_reinstall: bool = False,
+        local_package_cache_dir=None,
+        should_cancel=None,
     ) -> None:
         self.install_qq_calls.append(
             {"force_reinstall": force_reinstall, "has_log_callback": log_callback is not None}
@@ -175,6 +177,7 @@ class _FakeDeployment:
             has_curl=True,
             has_dpkg=True,
             has_rpm2cpio=False,
+            has_dnf=False,
             has_xvfb=True,
             has_linuxqq=False,
             has_napcat=False,

@@ -29,6 +29,7 @@ SnowLuma 的远端工作流是:
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -168,7 +169,7 @@ class SnowLumaDeployment:
 
             - ``has_linuxqq``: SL workspace 下是否已装 LinuxQQ
             - ``normalized_arch``: 必须是 ``amd64`` / ``arm64`` 才支持
-            - ``has_dpkg``: SL 仅支持 dpkg (``install_snowluma.sh`` 强约束)
+            - ``has_dpkg`` / ``has_dnf``: SL 支持 apt (Debian/Ubuntu) 或 dnf (RHEL/CentOS/Fedora)
         """
         return self._nc_deployment.probe_environment()
 
@@ -195,6 +196,8 @@ class SnowLumaDeployment:
         log_callback: LogLineCallback | None = None,
         progress_log_callback: LogLineCallback | None = None,
         force_reinstall: bool = False,
+        local_package_cache_dir: Path | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> SnowLumaInstallStepResult:
         """委托 NC 安装 LinuxQQ 到 ``${sl_workspace}/opt/QQ/...``.
 
@@ -214,6 +217,8 @@ class SnowLumaDeployment:
             log_callback=log_callback,
             progress_log_callback=progress_log_callback,
             force_reinstall=force_reinstall,
+            local_package_cache_dir=local_package_cache_dir,
+            should_cancel=should_cancel,
         )
         return self._convert_nc_step(nc_result, step="install_linuxqq")
 
@@ -245,6 +250,8 @@ class SnowLumaDeployment:
         webui_port: int = 5099,
         display_num: int = 0,
         lite_tarball_override: Path | None = None,
+        local_node_cache_dir: Path | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> SnowLumaInstallStepResult:
         """SFTP 上传 lite tarball + 跑 ``install_snowluma.sh`` 装图形栈/node/解压.
 
@@ -254,6 +261,12 @@ class SnowLumaDeployment:
           否则 raise :class:`SnowLumaFrameworkNotBundledError`
         - 远端已装 LinuxQQ (建议在 :meth:`install_linuxqq` 之后调本方法);
           但本方法不强制校验, 由调用方控制顺序
+
+        **本机下载兜底 (Node.js)**: 当远端无法直连 npmmirror / nodejs.org 等镜像站时,
+        若 ``local_node_cache_dir`` 非空则改为在 Desktop 本机下载 Node.js tarball,
+        再通过 SFTP 上传到 ``${workspace_dir}/packages/node-vX.Y.Z-linux-{arch}.tar.xz``;
+        脚本里 ``NODE_PRELOADED`` 分支会自动跳过网络下载并复用预上传包.
+        见 [`local_node_fallback`](src/core/remote/snowluma/local_node_fallback.py).
 
         Args:
             progress: ``[PROGRESS] N message`` 协议回调
@@ -265,6 +278,9 @@ class SnowLumaDeployment:
                 (与 launcher 脚本默认值对齐)
             lite_tarball_override: 测试用; 指定不走 :func:`find_bundled_lite_tarball`
                 的备用 tarball 路径
+            local_node_cache_dir: 本机 Node tarball 预下载缓存目录 (一般为
+                ``it(PathFunc).tmp_path``). ``None`` 时关闭本机兜底.
+            should_cancel: 取消检查协议.
 
         Returns:
             :class:`SnowLumaInstallStepResult` (``step="install_snowluma_framework"``).
@@ -307,6 +323,14 @@ class SnowLumaDeployment:
             LogType.NETWORK,
             LogSource.CORE,
         )
+
+        # 2.5. Node.js tarball 本机下载兜底: 远端镜像不可达时预上传到 packages/
+        if local_node_cache_dir is not None:
+            self._maybe_prefetch_node_tarball(
+                local_node_cache_dir=local_node_cache_dir,
+                should_cancel=should_cancel,
+                log_callback=log_callback,
+            )
 
         # 3. 渲染脚本 + 上传 + 执行
         script_content = build_install_snowluma_script(
@@ -401,6 +425,134 @@ class SnowLumaDeployment:
             self.backend.upload_file(local_path, target_path)
         self.backend.run(f'chmod +x "{target_path}"', check=True)
         return target_path
+
+    # ==================== Node.js tarball 本机下载兜底 ====================
+    def _maybe_prefetch_node_tarball(
+        self,
+        *,
+        local_node_cache_dir: Path,
+        should_cancel: Callable[[], bool] | None,
+        log_callback: Callable[[str], None] | None,
+    ) -> None:
+        """远端镜像不可达时, 在本机下载 Node.js tarball 并 SFTP 上传到远端.
+
+        三层短路:
+
+        1. **远端已有 node >= 22** (系统 PATH 或 ``$WORKSPACE_DIR/node/bin/node``):
+           脚本 L1 会直接跳过, 不需要预上传
+        2. **远端能直连 Node 镜像站**: 让脚本 L4 自己处理
+        3. **以上都不命中**: 探测远端架构 -> 本机下载 -> SFTP 上传到
+           ``${workspace_dir}/packages/node-vX.Y.Z-linux-{arch}.tar.xz``
+
+        任何一步失败都不抛, 让脚本按原路径继续尝试.
+        """
+        from .local_node_fallback import (
+            backend_can_reach_node_mirrors,
+            get_remote_node_tarball_filename,
+            prefetch_node_tarball_locally,
+        )
+        from ..errors import RemoteDeploymentCancelledError as _Cancelled
+
+        # 短路 1: 远端已有 node >= 22 (系统 PATH 或便携式)
+        node_check = self.backend.run(
+            f'{{ command -v node && node -v; }} 2>/dev/null || '
+            f'{{ [ -x "{self.paths.workspace_dir}/node/bin/node" ] && '
+            f'"{self.paths.workspace_dir}/node/bin/node" -v; }} 2>/dev/null || echo ""',
+            check=False,
+        )
+        node_output = (node_check.stdout or "").strip()
+        # 解析版本号: 输出可能是 "/usr/bin/node\nv22.18.0" 或 "v22.18.0"
+        import re
+        ver_match = re.search(r"v(\d+)\.", node_output)
+        if ver_match:
+            major = int(ver_match.group(1))
+            if major >= 22:
+                if log_callback is not None:
+                    log_callback(
+                        f"[INFO] 远端已有 node >= 22 (v{ver_match.group(0)}...), "
+                        "跳过 Node tarball 预上传"
+                    )
+                return
+
+        # 探测远端架构
+        arch = self._detect_remote_arch(log_callback)
+        if arch is None:
+            return
+
+        # 短路 2: 远端能直连 Node 镜像站
+        try:
+            reachable = backend_can_reach_node_mirrors(
+                self.backend, arch=arch, log_callback=log_callback
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"Node 镜像连通性探测失败, 走本机兜底: {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            reachable = False
+        if reachable:
+            return
+
+        # 短路 3: 本机下载 + SFTP 上传
+        if log_callback is not None:
+            log_callback(
+                "[WARN] 远端无法直连 Node 镜像站, 切换到本机下载 + SFTP 上传兜底"
+            )
+        try:
+            filename = get_remote_node_tarball_filename(arch)
+            local_target = local_node_cache_dir / filename
+            prefetch_node_tarball_locally(
+                target_path=local_target,
+                arch=arch,
+                log_callback=log_callback,
+                should_cancel=should_cancel,
+            )
+            # 上传前检查取消
+            if should_cancel is not None and should_cancel():
+                raise _Cancelled()
+            # 上传到 ${workspace_dir}/packages/ (脚本 NODE_PRELOADED 路径)
+            packages_dir = f"{self.paths.workspace_dir}/packages"
+            self.backend.ensure_directory(packages_dir)
+            remote_path = PurePosixPath(packages_dir, filename).as_posix()
+            self.backend.upload_file(local_target, remote_path)
+            if log_callback is not None:
+                log_callback(
+                    f"[INFO] 本机 Node tarball 已上传到远端: {remote_path}"
+                )
+        except Exception as exc:  # noqa: BLE001
+            if isinstance(exc, _Cancelled):
+                raise
+            logger.warning(
+                f"Node tarball 本机兜底失败, 退回远端脚本自下载: {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            if log_callback is not None:
+                log_callback(
+                    f"[WARN] Node tarball 本机下载兜底失败 ({type(exc).__name__}), "
+                    "退回远端脚本自行下载 (可能超时)"
+                )
+
+    def _detect_remote_arch(
+        self, log_callback: Callable[[str], None] | None
+    ) -> str | None:
+        """探测远端架构, 返回 ``"amd64"`` 或 ``"arm64"``; 无法确定时返回 None."""
+        from .local_node_fallback import ArchType  # noqa: F811 - type hint only
+
+        arch_result = self.backend.run("uname -m", check=False)
+        raw_arch = (arch_result.stdout or "").strip()
+        if raw_arch in ("x86_64", "amd64"):
+            return "amd64"
+        elif raw_arch in ("aarch64", "arm64"):
+            return "arm64"
+        else:
+            if log_callback is not None:
+                log_callback(
+                    f"[WARN] 无法确定远端架构 (uname -m={raw_arch!r}), "
+                    "跳过 Node tarball 预上传"
+                )
+            return None
 
     # ==================== 清理 (W10b-Maintenance) ====================
     def clean_environment(self, include_qq: bool = True) -> RemoteCommandResult:

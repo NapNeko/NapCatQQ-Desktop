@@ -2,6 +2,10 @@
 """
 Bot 配置页面
 """
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 # 第三方库导入
 from creart import it
 from qfluentwidgets import ComboBox, ExpandLayout, FlowLayout, FluentIcon, PushButton, ScrollArea, SettingCard, SettingCardGroup
@@ -35,6 +39,9 @@ from src.ui.page.bot_page.widget import (
     AutoRestartDialog,
 )
 
+if TYPE_CHECKING:
+    from src.core.remote.servers import ServerProfile
+
 
 class RuntimeTargetConfigCard(SettingCard):
     """运行位置选择卡片(P2.7).
@@ -47,11 +54,17 @@ class RuntimeTargetConfigCard(SettingCard):
     设计要点:
     - 下拉项构造时刻向 [`ServerManager`](src/core/remote/server_manager.py)
       取一次服务器列表; 调用方在显示前可调用 ``refresh_targets()`` 主动刷新.
+    - 当设置了 ``_backend_filter`` 时, 仅展示 ``backend_flavor`` 匹配的远端服务器,
+      避免用户选中不兼容的服务器后保存时才被拦截.
     - 服务器档案被外部删除后, ``fill_value(server_id)`` 会临时插入一条
       "(已删除) <id>" 的占位项让用户感知, 避免静默回退到本地造成行为漂移.
     """
 
     _LOCAL_LABEL = "本地"
+
+    # 当用户选中远端服务器时, 发射该服务器的 backend_flavor (BackendType 枚举);
+    # 选中"本地"时发射 None, 表示不锁定.
+    target_flavor_changed = Signal(object)
 
     def __init__(
         self,
@@ -68,30 +81,88 @@ class RuntimeTargetConfigCard(SettingCard):
 
         # index -> server_id ("local" 或 UUID), 与 combo_box 表项一一对应
         self._target_ids: list[str] = []
+        # index -> ServerProfile (None for local), 用于查询选中服务器的 flavor
+        self._profiles: list["ServerProfile | None"] = []
+        # 后端类型过滤: None 表示不过滤 (显示全部), 设置后仅显示匹配 flavor 的服务器
+        self._backend_filter: BackendType | None = None
+        # 是否抑制 target_flavor_changed 信号 (fill_value / refresh 期间避免 spurious emit)
+        self._suppress_signal: bool = False
+        self.refresh_targets()
+
+        self.combo_box.currentIndexChanged.connect(self._on_target_index_changed)
+
+    def _on_target_index_changed(self, idx: int) -> None:
+        """用户切换运行位置下拉时, 发射目标服务器的 flavor."""
+        if self._suppress_signal:
+            return
+        if idx < 0 or idx >= len(self._profiles):
+            return
+        profile = self._profiles[idx]
+        if profile is None:
+            # 选中"本地": 不锁定 backend_type
+            self.target_flavor_changed.emit(None)
+        else:
+            # 选中远端: 发射该服务器的 flavor
+            from src.core.remote.servers import BackendFlavor
+
+            flavor_to_backend = {
+                BackendFlavor.NAPCAT: BackendType.NAPCAT,
+                BackendFlavor.SNOWLUMA: BackendType.SNOWLUMA,
+            }
+            backend = flavor_to_backend.get(profile.backend_flavor, BackendType.NAPCAT)
+            self.target_flavor_changed.emit(backend)
+
+    def apply_backend_filter(self, backend_type: BackendType) -> None:
+        """按 Bot 的 backend_type 过滤运行位置下拉列表.
+
+        仅展示 backend_flavor 与 backend_type 匹配的远端服务器 + "本地".
+        调用后自动 refresh_targets() 重建下拉项.
+        """
+        if self._backend_filter == backend_type:
+            return
+        self._backend_filter = backend_type
         self.refresh_targets()
 
     def refresh_targets(self) -> None:
         """重新拉取服务器列表; 保留当前选择 (若仍存在)."""
-        previous = self.get_value() if self._target_ids else RUNTIME_TARGET_LOCAL
-
-        self.combo_box.clear()
-        self._target_ids = [RUNTIME_TARGET_LOCAL]
-        self.combo_box.addItem(self.tr(self._LOCAL_LABEL))
-
+        self._suppress_signal = True
         try:
-            from src.core.remote.server_manager import ServerManager
+            previous = self.get_value() if self._target_ids else RUNTIME_TARGET_LOCAL
 
-            servers = it(ServerManager).list_servers()
-        except Exception:
-            servers = []
+            self.combo_box.clear()
+            self._target_ids = [RUNTIME_TARGET_LOCAL]
+            self._profiles = [None]
+            self.combo_box.addItem(self.tr(self._LOCAL_LABEL))
 
-        for profile in servers:
-            label = f"{profile.name} ({profile.credentials.host})"
-            self._target_ids.append(profile.id)
-            self.combo_box.addItem(label)
+            try:
+                from src.core.remote.server_manager import ServerManager
 
-        # 还原之前的选择
-        self.fill_value(previous)
+                servers = it(ServerManager).list_servers()
+            except Exception:
+                servers = []
+
+            for profile in servers:
+                # 按 backend_filter 过滤: 仅展示 flavor 匹配的服务器
+                if self._backend_filter is not None:
+                    from src.core.remote.servers import BackendFlavor
+
+                    flavor_map = {
+                        BackendType.NAPCAT: BackendFlavor.NAPCAT,
+                        BackendType.SNOWLUMA: BackendFlavor.SNOWLUMA,
+                    }
+                    expected_flavor = flavor_map.get(self._backend_filter)
+                    if expected_flavor is not None and profile.backend_flavor != expected_flavor:
+                        continue
+
+                label = f"{profile.name} ({profile.credentials.host})"
+                self._target_ids.append(profile.id)
+                self._profiles.append(profile)
+                self.combo_box.addItem(label)
+
+            # 还原之前的选择
+            self.fill_value(previous)
+        finally:
+            self._suppress_signal = False
 
     def fill_value(self, target: str | None) -> None:
         """选中匹配 target 的下拉项; 找不到则插入"(已删除) <id>"占位."""
@@ -230,6 +301,11 @@ class BotConfigWidget(ScrollArea):
         # 之后会显式调一次 apply_backend_type, 中间任何 noop 触发都不影响最终态).
         self.backend_type_card.comboBox.currentIndexChanged.connect(self._on_backend_index_changed)
 
+        # 运行位置切换 → 锁定/解锁 backend_type:
+        # 选中远端服务器时, backend_type 锁定为该服务器的 flavor (不可编辑);
+        # 切回"本地"时解锁, 用户可自由切换.
+        self.runtime_target_card.target_flavor_changed.connect(self._on_target_flavor_changed)
+
         # Q1 / SL-Q: 初始按当前 backend 同步隐显 backend 相关卡 (默认 NapCat).
         self._apply_backend_card_visibility(BackendType.NAPCAT)
 
@@ -247,6 +323,23 @@ class BotConfigWidget(ScrollArea):
         self._apply_backend_card_visibility(backend)
         self.backend_type_changed.emit(backend)
 
+    def _on_target_flavor_changed(self, flavor: BackendType | None) -> None:
+        """运行位置下拉切换时, 按目标服务器 flavor 锁定/解锁 backend_type.
+
+        - ``flavor is None`` (选中"本地"): 解锁 backend_type ComboBox, 用户可自由切换.
+        - ``flavor is BackendType.XXX`` (选中远端): 强制 backend_type 为该 flavor 并锁定
+          ComboBox (setEnabled(False)), 因为远端服务器只支持一种后端.
+
+        同时更新 runtime_target_card 的过滤, 确保下拉列表只展示兼容的服务器.
+        """
+        if flavor is None:
+            # 本地: 解锁
+            self.backend_type_card.comboBox.setEnabled(True)
+        else:
+            # 远端: 强制切换 backend_type 并锁定
+            self.backend_type_card.fill_value(flavor.display_name)
+            self.backend_type_card.comboBox.setEnabled(False)
+
     def _apply_backend_card_visibility(self, backend: BackendType) -> None:
         """按 backend 同步隐显基础配置页中与 backend 相关的卡片 (幂等).
 
@@ -260,9 +353,13 @@ class BotConfigWidget(ScrollArea):
 
         持久化值零丢失: 隐藏期间 ``get_config`` 仍会序列化对应字段; 切换 backend 后
         用户此前的选择保留.
+
+        同时更新 ``runtime_target_card`` 的后端过滤, 仅展示兼容的远端服务器.
         """
         is_snowluma = backend == BackendType.SNOWLUMA
         self.offline_auto_restart_card.setVisible(not is_snowluma)
+        # 按 backend_type 过滤运行位置下拉中的远端服务器
+        self.runtime_target_card.apply_backend_filter(backend)
 
     def get_config(self) -> BotConfig:
         """获取配置"""
@@ -297,17 +394,28 @@ class BotConfigWidget(ScrollArea):
         self.offline_auto_restart_card.fill_value(self._config.offlineAutoRestart)
         # P1 (SnowLuma 适配): 反填 backend_type_card; ComboBoxConfigCard.fill_value 接受文本.
         self.backend_type_card.fill_value(self._config.backend_type.display_name)
+        # 先设置过滤再刷新, 确保下拉列表只展示兼容的服务器
+        self.runtime_target_card.apply_backend_filter(self._config.backend_type)
         # 服务器列表可能在编辑期间变化, 每次填充前都刷新
         self.runtime_target_card.refresh_targets()
         self.runtime_target_card.fill_value(self._config.runtime_target)
         # W6 (2026-05-11): ``snowluma_webui_password_override`` 迁移到组件页, 本处不再反填.
         self._apply_backend_card_visibility(self._config.backend_type)
 
+        # 如果 Bot 当前已在远端运行, 锁定 backend_type (远端服务器只支持一种后端);
+        # 本地则解锁.
+        if self._config.runtime_target and self._config.runtime_target != RUNTIME_TARGET_LOCAL:
+            self.backend_type_card.comboBox.setEnabled(False)
+        else:
+            self.backend_type_card.comboBox.setEnabled(True)
+
     def clear_config(self) -> None:
         """清空配置"""
         for card in self.cards:
             card.clear()
         self.bot_qq_id_card.setEnabled(True)
+        # 新建 Bot: 解锁 backend_type, 用户可自由选择
+        self.backend_type_card.comboBox.setEnabled(True)
 
     # ==================== 重写方法 ====================
     def adjustSize(self) -> None:

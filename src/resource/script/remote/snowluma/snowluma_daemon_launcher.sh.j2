@@ -135,8 +135,15 @@ cmd_start() {
         fi
     fi
 
-    # 3. fluxbox (window manager)
-    DISPLAY=":{{display_num}}" fluxbox > "$LOG_DIR/fluxbox.log" 2>&1 200>&- &
+    # 3. window manager (fluxbox 优先, openbox 备选; RHEL 系 EPEL 可能缺 fluxbox)
+    if command -v fluxbox >/dev/null 2>&1; then
+        DISPLAY=":{{display_num}}" fluxbox > "$LOG_DIR/wm.log" 2>&1 200>&- &
+    elif command -v openbox >/dev/null 2>&1; then
+        DISPLAY=":{{display_num}}" openbox > "$LOG_DIR/wm.log" 2>&1 200>&- &
+    else
+        echo "警告: 无窗口管理器 (fluxbox/openbox), QQ 窗口可能渲染异常" >&2
+        # 不 return, 继续启动 (QQ --no-sandbox 不强依赖 WM)
+    fi
     echo $! > "$RUNTIME_DIR/pid_fluxbox"
 
     # 4. x11vnc (RFB server); ``-bg`` 自身 daemonize, 仍需关 fd 200 避免被后台进程永久继承
@@ -163,8 +170,28 @@ cmd_start() {
     fi
 
     # 5. websockify (noVNC HTTP 包装); ``--daemon`` 自身 daemonize, 仍需关 fd 200
+    # W10c fix: noVNC 静态文件路径优先级:
+    #   1. $WORKSPACE_DIR/novnc (install 阶段下载的 noVNC 1.5.0, 无兼容性 bug)
+    #   2. /usr/share/noVNC (CentOS/RHEL 9 EPEL 包路径, 大写)
+    #   3. /usr/share/novnc (Debian/Ubuntu 包路径, 小写)
+    local novnc_web="/usr/share/novnc"
+    if [ -d "$WORKSPACE_DIR/novnc" ] && [ -f "$WORKSPACE_DIR/novnc/vnc.html" ]; then
+        novnc_web="$WORKSPACE_DIR/novnc"
+    elif [ -d /usr/share/noVNC ]; then
+        novnc_web="/usr/share/noVNC"
+    elif [ -d /usr/share/novnc ]; then
+        novnc_web="/usr/share/novnc"
+    fi
+
+    # 兜底: 如果 index.html 不存在但 vnc.html 存在, 创建 symlink (某些旧版 websockify
+    # 默认 serve index.html 而非 vnc.html)
+    if [ ! -f "$novnc_web/index.html" ] && [ -f "$novnc_web/vnc.html" ]; then
+        ln -sf vnc.html "$novnc_web/index.html" 2>/dev/null || \
+            sudo -n ln -sf vnc.html "$novnc_web/index.html" 2>/dev/null || true
+    fi
+
     websockify --daemon \
-        --web /usr/share/novnc \
+        --web "$novnc_web" \
         --log-file "$LOG_DIR/websockify.log" \
         "{{novnc_port}}" "localhost:{{vnc_port}}" 200>&- \
         || {

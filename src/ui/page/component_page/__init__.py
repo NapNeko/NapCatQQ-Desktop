@@ -53,14 +53,19 @@ class ComponentPage(QWidget):
         self.view.setObjectName("UpdateView")
 
         self.view.addWidget(self.napcat_page)
+        self.view.addWidget(self.snowluma_page)
         self.view.addWidget(self.qq_page)
         self.view.addWidget(self.desktop_page)
-        self.view.addWidget(self.snowluma_page)
 
         self.top_card.pivot.addItem(
             routeKey=self.napcat_page.objectName(),
             text=self.tr("NapCat"),
             onClick=lambda: self.view.setCurrentWidget(self.napcat_page),
+        )
+        self.top_card.pivot.addItem(
+            routeKey=self.snowluma_page.objectName(),
+            text=self.tr("SnowLuma"),
+            onClick=lambda: self.view.setCurrentWidget(self.snowluma_page),
         )
         self.top_card.pivot.addItem(
             routeKey=self.qq_page.objectName(),
@@ -71,11 +76,6 @@ class ComponentPage(QWidget):
             routeKey=self.desktop_page.objectName(),
             text=self.tr("Desktop"),
             onClick=lambda: self.view.setCurrentWidget(self.desktop_page),
-        )
-        self.top_card.pivot.addItem(
-            routeKey=self.snowluma_page.objectName(),
-            text=self.tr("SnowLuma"),
-            onClick=lambda: self.view.setCurrentWidget(self.snowluma_page),
         )
 
         self.view.setCurrentWidget(self.napcat_page)

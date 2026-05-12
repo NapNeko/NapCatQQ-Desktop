@@ -538,6 +538,64 @@ def merge_config_for_update(config: Config, base_config: Config | None = None) -
     return Config(**merged_payload)
 
 
+def _build_per_bot_payloads(path_func: PathFunc, config_to_save: Config) -> dict[Path, Any]:
+    """按 ``backend_type`` 返回当前 Bot 应写入的 per-bot 派生配置文件 payload.
+
+    - **NAPCAT** (默认, 与历史行为一致): 写入 ``onebot11_<qq>.json`` + ``napcat_<qq>.json``
+      到 :attr:`PathFunc.napcat_config_path`.
+    - **SNOWLUMA**: 写入 ``onebot_<qq>.json`` 到 :meth:`PathFunc.get_snowluma_config_dir`
+      (与 :func:`render_onebot_json` 写盘路径一致, 与 SnowLuma driver / 远端 SFTP 同源).
+      远端 SL Bot 也会同时写本地一份, 让 Bot 迁移 (``BotMigrationService``) 能像 NC
+      一样从本地 ``<snowluma>/config/onebot_<uin>.json`` 直接拷过去, 与
+      :meth:`RemoteSnowLumaBackend.write_bot_runtime_config` 对称.
+
+    Returns:
+        ``{Path -> json-serializable dict}`` 字典, 调用方再合并 ``bot.json`` 后丢给
+        :func:`_apply_json_transaction`.
+    """
+    # 延迟导入避免循环 (runtime 模块依赖 config_model)
+    from src.core.runtime.backend_type import BackendType
+
+    qq_id = config_to_save.bot.QQID
+    if config_to_save.bot.backend_type == BackendType.SNOWLUMA:
+        from src.core.runtime.snowluma_config_renderer import build_onebot_payload
+
+        sl_payload = build_onebot_payload(
+            int(qq_id),
+            connect=config_to_save.connect,
+            music_sign_url=config_to_save.bot.musicSignUrl,
+        )
+        return {
+            path_func.get_snowluma_config_dir() / f"onebot_{qq_id}.json": sl_payload,
+        }
+
+    return {
+        path_func.napcat_config_path / f"onebot11_{qq_id}.json": _model_to_payload(
+            _build_onebot_config(config_to_save)
+        ),
+        path_func.napcat_config_path / f"napcat_{qq_id}.json": _model_to_payload(
+            _build_napcat_config(config_to_save)
+        ),
+    }
+
+
+def _list_per_bot_files(path_func: PathFunc, config: Config) -> list[Path]:
+    """按 ``backend_type`` 列出待清理的 per-bot 派生配置文件路径.
+
+    与 :func:`_build_per_bot_payloads` 对称: NAPCAT 删 onebot11/napcat 两个,
+    SNOWLUMA 删 ``onebot_<uin>.json`` 一个.
+    """
+    from src.core.runtime.backend_type import BackendType
+
+    qq_id = config.bot.QQID
+    if config.bot.backend_type == BackendType.SNOWLUMA:
+        return [path_func.get_snowluma_config_dir() / f"onebot_{qq_id}.json"]
+    return [
+        path_func.napcat_config_path / f"onebot11_{qq_id}.json",
+        path_func.napcat_config_path / f"napcat_{qq_id}.json",
+    ]
+
+
 def update_config(config: Config, base_config: Config | None = None, *, skip_merge: bool = False) -> bool:
     """
     ## 更新配置到配置文件
@@ -554,19 +612,14 @@ def update_config(config: Config, base_config: Config | None = None, *, skip_mer
         else:
             configs.append(config_to_save)
 
-        payloads = {
+        payloads: dict[Path, Any] = {
             path_func.bot_config_path: serialize_bot_config_collection(configs),
-            path_func.napcat_config_path / f"onebot11_{config_to_save.bot.QQID}.json": _model_to_payload(
-                _build_onebot_config(config_to_save)
-            ),
-            path_func.napcat_config_path / f"napcat_{config_to_save.bot.QQID}.json": _model_to_payload(
-                _build_napcat_config(config_to_save)
-            ),
         }
+        payloads.update(_build_per_bot_payloads(path_func, config_to_save))
 
         _apply_json_transaction(payloads)
 
-        # P2.4: 若 Bot 绑定了远端服务器, 同步把 onebot11/napcat JSON 推到远端工作区.
+        # P2.4: 若 Bot 绑定了远端服务器, 同步把 NC / SL 派生配置 (按 backend_type) 推到远端工作区.
         # 同步失败仅记录 warning, 不影响本地保存的成功语义 (用户至少能在本地看到配置).
         _sync_bot_runtime_config_to_remote(config_to_save)
         return True
@@ -595,14 +648,11 @@ def delete_config(config: Config) -> bool:
         payloads = {
             path_func.bot_config_path: serialize_bot_config_collection(remaining_configs),
         }
-        deletions = [
-            path_func.napcat_config_path / f"onebot11_{config.bot.QQID}.json",
-            path_func.napcat_config_path / f"napcat_{config.bot.QQID}.json",
-        ]
+        deletions = _list_per_bot_files(path_func, config)
 
         _apply_json_transaction(payloads, deletions)
 
-        # P2.4: 若 Bot 此前绑定到远端服务器, 同步清理远端配置文件
+        # P2.4: 若 Bot 此前绑定到远端服务器, 同步清理远端配置文件 (按 backend_type 分发)
         _delete_bot_runtime_config_from_remote(config)
         return True
     except Exception as error:

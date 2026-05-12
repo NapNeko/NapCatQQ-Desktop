@@ -97,6 +97,7 @@ class LinuxCoreDeploymentProbe:
     has_curl: bool
     has_dpkg: bool
     has_rpm2cpio: bool
+    has_dnf: bool
     has_xvfb: bool
     has_linuxqq: bool
     has_napcat: bool
@@ -241,6 +242,7 @@ class LinuxCoreDeployment:
         has_rpm2cpio = self.backend.run(
             "command -v rpm2cpio >/dev/null 2>&1 && command -v cpio >/dev/null 2>&1"
         ).ok
+        has_dnf = self.backend.run("command -v dnf >/dev/null 2>&1").ok
         has_xvfb = self.backend.run("command -v xvfb-run >/dev/null 2>&1").ok
 
         # 已有 LinuxQQ
@@ -285,6 +287,7 @@ class LinuxCoreDeployment:
             has_curl=has_curl,
             has_dpkg=has_dpkg,
             has_rpm2cpio=has_rpm2cpio,
+            has_dnf=has_dnf,
             has_xvfb=has_xvfb,
             has_linuxqq=has_linuxqq,
             has_napcat=has_napcat,
@@ -389,8 +392,18 @@ class LinuxCoreDeployment:
         log_callback: LogLineCallback | None = None,
         progress_log_callback: LogLineCallback | None = None,
         force_reinstall: bool = False,
+        local_package_cache_dir: Path | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> InstallStepResult:
         """在远端安装 LinuxQQ rootless. 
+
+        **本机下载兜底**: 当远端无法直连 ``dldir1.qq.com`` (腾讯 CDN) 时,
+        若 ``local_package_cache_dir`` 非空则改为在 Desktop 本机下载 LinuxQQ 安装包
+        (根据远端架构和包格式选择 deb/rpm), 再通过 SFTP 上传到
+        ``${package_dir}/linuxqq_*.deb`` 或 ``*.rpm``; 远端脚本里
+        ``verify_qq_package`` + 缓存复用分支会自动跳过下载并复用本地包.
+        远端能直连 QQ CDN 时该路径不会触发, 行为完全不变.
+        见 [`local_linuxqq_fallback`](src/core/remote/local_linuxqq_fallback.py).
 
         Args:
             progress: 进度协议回调, 由 ``[PROGRESS] N message`` 行触发
@@ -399,13 +412,31 @@ class LinuxCoreDeployment:
                 设置后这类行 *不* 再走 ``log_callback``, 由调用方自行决定如何渲染
                 (典型: UI 原地覆盖上一行) 
             force_reinstall: 强制重装(会先备份 NapCat 配置再 ``rm -rf $install_base_dir/opt`` 重新解压)
+            local_package_cache_dir: 本机预下载缓存目录 (一般为
+                ``it(PathFunc).tmp_path``). ``None`` 时**关闭**本机兜底,
+                直接交给远端脚本下载.
+            should_cancel: 取消检查协议; 命中时招
+                :class:`RemoteDeploymentCancelledError`.
         """
         logger.info(
-            f"开始远端 LinuxQQ 安装: workspace={self.paths.workspace_dir}, force_reinstall={force_reinstall}",
+            (
+                f"开始远端 LinuxQQ 安装: workspace={self.paths.workspace_dir}, "
+                f"force_reinstall={force_reinstall}, "
+                f"local_fallback={'enabled' if local_package_cache_dir else 'disabled'}"
+            ),
             LogType.NETWORK,
             LogSource.CORE,
         )
         self.initialize_layout()
+
+        # 远端 QQ CDN 连通性预检 + 必要时本机预下载并上传 package (在脚本上传/执行之前).
+        if local_package_cache_dir is not None:
+            self._maybe_prefetch_linuxqq_via_local(
+                local_package_cache_dir=local_package_cache_dir,
+                force_reinstall=force_reinstall,
+                should_cancel=should_cancel,
+                log_callback=log_callback,
+            )
 
         script_content = build_install_linuxqq_script(self._build_script_variables())
         remote_script_path = self._upload_script(script_content, "remote_install_linuxqq.sh")
@@ -440,6 +471,171 @@ class LinuxCoreDeployment:
             LogSource.CORE,
         )
         return step_result
+
+    # ==================== LinuxQQ 本机下载兜底 ====================
+    def _maybe_prefetch_linuxqq_via_local(
+        self,
+        *,
+        local_package_cache_dir: Path,
+        force_reinstall: bool,
+        log_callback: LogLineCallback | None,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> None:
+        """远端连不上 QQ CDN 时, 在本机下载 LinuxQQ 包并 SFTP 上传到远端.
+
+        三层短路 (按代价从低到高依次判定):
+
+        1. **远端已有合法包缓存 + 非强制重装**: 直接复用, 不动本机也不上传
+        2. **远端能直连 QQ CDN**: 让脚本走自己的下载路径
+        3. **以上都不命中**: 探测远端架构/包格式 -> 本机下载对应包 -> SFTP 上传
+
+        任何一步失败都**不抛**, 仅在 log_callback 里 emit ``[WARN]``: 让远端脚本
+        按原路径继续尝试, 给用户最后兜底的报错文案.
+        """
+        from .local_linuxqq_fallback import (
+            backend_can_reach_qq_cdn,
+            get_remote_package_filename,
+            prefetch_linuxqq_package_locally,
+        )
+
+        # 探测远端架构和包格式, 确定要下载哪个包
+        arch, pkg_format = self._detect_remote_arch_and_format(log_callback)
+        if arch is None or pkg_format is None:
+            # 无法确定远端环境, 退回让远端脚本自处理
+            return
+
+        remote_filename = get_remote_package_filename(arch, pkg_format)
+        remote_package_path = PurePosixPath(
+            self.paths.package_dir, remote_filename
+        ).as_posix()
+
+        # 短路 1: 远端已有合法包 + 非强制重装 -> 让脚本直接复用
+        if not force_reinstall:
+            check = self.backend.run(
+                f'test -f "{remote_package_path}"', check=False
+            )
+            if check.exit_status == 0:
+                # 用脚本同款校验: 文件 > 1MB 即视为有效 (完整性由脚本 verify_qq_package 保证)
+                size_check = self.backend.run(
+                    f'stat -c "%s" "{remote_package_path}" 2>/dev/null || echo 0',
+                    check=False,
+                )
+                size_str = (size_check.stdout or "0").strip()
+                try:
+                    file_size = int(size_str)
+                except ValueError:
+                    file_size = 0
+                if file_size > 1_048_576:
+                    if log_callback is not None:
+                        log_callback(
+                            f"[INFO] 远端已存在 LinuxQQ 包缓存 ({file_size} bytes), "
+                            f"跳过本机预下载: {remote_package_path}"
+                        )
+                    return
+                # 文件存在但过小 (损坏) -> 删除并继续兜底
+                self.backend.run(f'rm -f "{remote_package_path}"', check=False)
+                if log_callback is not None:
+                    log_callback(
+                        f"[WARN] 远端 LinuxQQ 包过小 ({file_size} bytes), "
+                        f"已删除并重新下载: {remote_package_path}"
+                    )
+
+        # 短路 2: 远端能直连 QQ CDN -> 让脚本自己处理
+        try:
+            reachable = backend_can_reach_qq_cdn(self.backend, log_callback=log_callback)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"QQ CDN 连通性探测失败, 走本机兜底: {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            reachable = False
+        if reachable:
+            return
+
+        # 短路 3: 走本机下载 + SFTP 上传
+        if log_callback is not None:
+            log_callback(
+                "[WARN] 远端无法直连 QQ CDN (dldir1.qq.com), 切换到本机下载 + SFTP 上传兜底"
+            )
+        try:
+            local_target = local_package_cache_dir / remote_filename
+            prefetch_linuxqq_package_locally(
+                target_path=local_target,
+                arch=arch,
+                pkg_format=pkg_format,
+                log_callback=log_callback,
+                should_cancel=should_cancel,
+            )
+            # 上传前再检查一次取消
+            if should_cancel is not None and should_cancel():
+                from .errors import RemoteDeploymentCancelledError as _Cancelled
+
+                raise _Cancelled()
+            self.backend.ensure_directory(self.paths.package_dir)
+            self.backend.upload_file(local_target, remote_package_path)
+            if log_callback is not None:
+                log_callback(
+                    f"[INFO] 本机 LinuxQQ 包已上传到远端: {remote_package_path}"
+                )
+        except Exception as exc:  # noqa: BLE001
+            from .errors import RemoteDeploymentCancelledError as _Cancelled2
+
+            if isinstance(exc, _Cancelled2):
+                raise
+            logger.warning(
+                f"LinuxQQ 本机兜底失败, 退回远端脚本自下载: {type(exc).__name__}: {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+            if log_callback is not None:
+                log_callback(
+                    f"[WARN] 本机下载兜底失败 ({type(exc).__name__}), "
+                    "退回远端脚本自行下载 (可能超时)"
+                )
+
+    def _detect_remote_arch_and_format(
+        self, log_callback: LogLineCallback | None
+    ) -> tuple[str | None, str | None]:
+        """探测远端架构和包格式, 用于确定要下载哪个 LinuxQQ 包.
+
+        Returns:
+            (arch, pkg_format) 或 (None, None) 如果无法确定.
+            arch: ``"amd64"`` 或 ``"arm64"``
+            pkg_format: ``"dpkg"`` 或 ``"rpm"``
+        """
+        # 探测架构
+        arch_result = self.backend.run("uname -m", check=False)
+        raw_arch = (arch_result.stdout or "").strip()
+        arch: str | None = None
+        if raw_arch in ("x86_64", "amd64"):
+            arch = "amd64"
+        elif raw_arch in ("aarch64", "arm64"):
+            arch = "arm64"
+        else:
+            if log_callback is not None:
+                log_callback(
+                    f"[WARN] 无法确定远端架构 (uname -m={raw_arch!r}), "
+                    "跳过本机 LinuxQQ 预下载"
+                )
+            return None, None
+
+        # 探测包格式
+        dpkg_check = self.backend.run("command -v dpkg", check=False)
+        rpm_check = self.backend.run("command -v rpm2cpio", check=False)
+        pkg_format: str | None = None
+        if dpkg_check.exit_status == 0:
+            pkg_format = "dpkg"
+        elif rpm_check.exit_status == 0:
+            pkg_format = "rpm"
+        else:
+            if log_callback is not None:
+                log_callback(
+                    "[WARN] 远端无 dpkg 也无 rpm2cpio, 跳过本机 LinuxQQ 预下载"
+                )
+            return None, None
+
+        return arch, pkg_format
 
     #: ``remote_install_napcat.sh`` 在 SHA512 校验失败时使用的 dedicated 退出码 (P5 F1.4).
     INSTALL_NAPCAT_VERIFY_EXIT_CODE: int = 36

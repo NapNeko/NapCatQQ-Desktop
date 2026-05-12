@@ -308,6 +308,54 @@ def _build_fallback_networks() -> dict[str, Any]:
     }
 
 
+def build_onebot_payload(
+    qqid: int,
+    *,
+    connect: "ConnectConfig",
+    music_sign_url: str = "",
+) -> dict[str, Any]:
+    """构造 SnowLuma ``onebot_<uin>.json`` 的 payload 字典 (不写盘).
+
+    与 :func:`render_onebot_json` 共享映射规则, 是后者的内部数据构造步骤.
+    抽出该函数让"远端 SFTP 写" / "WebUI 热推送" / "调试视图" 等不需要文件写盘的
+    场景能复用 NapCat ConnectConfig → SnowLuma networks 的字段映射, 避免重复实现.
+
+    Args:
+        qqid: Bot 的 QQ 号 (仅用于参数校验; payload 自身不含 uin 字段, 上游约定文件名).
+        connect: Bot 的 ``ConnectConfig`` 对象 (来自 ``BotConfig.connect``).
+        music_sign_url: 音乐签名地址, 默认空串与上游一致.
+
+    Returns:
+        与 :func:`render_onebot_json` 写盘内容完全一致的 dict;
+        调用方可 ``json.dumps`` 后通过 SFTP / HTTP / 直接落盘.
+
+    Raises:
+        ValueError: ``qqid`` 不是正整数.
+    """
+    if not isinstance(qqid, int) or qqid <= 0:
+        raise ValueError(f"qqid 必须为正整数, 收到: {qqid!r}")
+
+    # 构造 networks 字段
+    if not connect.httpServers and not connect.websocketServers:
+        # 全空兜底 (与 SnowLuma makeDefaultOneBotConfig 等价)
+        networks: dict[str, Any] = _build_fallback_networks()
+        # 保留用户填的 httpClients / websocketClients (即使 server 全空, 客户端可能仍有定义)
+        networks["httpClients"] = [_render_http_client(c) for c in connect.httpClients]
+        networks["wsClients"] = [_render_ws_client(c) for c in connect.websocketClients]
+    else:
+        networks = {
+            "httpServers": [_render_http_server(s) for s in connect.httpServers],
+            "httpClients": [_render_http_client(c) for c in connect.httpClients],
+            "wsServers": [_render_ws_server(s) for s in connect.websocketServers],
+            "wsClients": [_render_ws_client(c) for c in connect.websocketClients],
+        }
+
+    return {
+        "networks": networks,
+        "musicSignUrl": music_sign_url,
+    }
+
+
 def render_onebot_json(
     snowluma_path: Path,
     qqid: int,
@@ -333,32 +381,11 @@ def render_onebot_json(
     Raises:
         ValueError: ``qqid`` 不是正整数.
     """
-    if not isinstance(qqid, int) or qqid <= 0:
-        raise ValueError(f"qqid 必须为正整数, 收到: {qqid!r}")
+    payload = build_onebot_payload(qqid, connect=connect, music_sign_url=music_sign_url)
 
     config_dir = snowluma_path / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     target = config_dir / f"onebot_{qqid}.json"
-
-    # 构造 networks 字段
-    if not connect.httpServers and not connect.websocketServers:
-        # 全空兜底 (与 SnowLuma makeDefaultOneBotConfig 等价)
-        networks: dict[str, Any] = _build_fallback_networks()
-        # 保留用户填的 httpClients / websocketClients (即使 server 全空, 客户端可能仍有定义)
-        networks["httpClients"] = [_render_http_client(c) for c in connect.httpClients]
-        networks["wsClients"] = [_render_ws_client(c) for c in connect.websocketClients]
-    else:
-        networks = {
-            "httpServers": [_render_http_server(s) for s in connect.httpServers],
-            "httpClients": [_render_http_client(c) for c in connect.httpClients],
-            "wsServers": [_render_ws_server(s) for s in connect.websocketServers],
-            "wsClients": [_render_ws_client(c) for c in connect.websocketClients],
-        }
-
-    payload: dict[str, Any] = {
-        "networks": networks,
-        "musicSignUrl": music_sign_url,
-    }
 
     target.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),

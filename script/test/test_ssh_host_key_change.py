@@ -205,7 +205,7 @@ class TestHandleBadHostKey:
         # 注册 callback 返 TRUST_REPLACE
         received: list[HostKeyPrompt] = []
 
-        def cb(p: HostKeyPrompt) -> HostKeyDecision:
+        def cb(p: HostKeyPrompt, **kwargs) -> HostKeyDecision:
             received.append(p)
             return HostKeyDecision.TRUST_REPLACE
 
@@ -245,7 +245,7 @@ class TestHandleBadHostKey:
         known_hosts_store.save()
         old_fp = compute_sha256_fingerprint(old_key)
 
-        register_host_key_callback(lambda p: HostKeyDecision.REJECT)
+        register_host_key_callback(lambda p, **kwargs: HostKeyDecision.REJECT)
         client = SSHClient(credentials)
         exc = self._make_bad_host_key_exception(
             "example.com", b"NEW" * 11, b"OLD" * 11
@@ -263,7 +263,7 @@ class TestHandleBadHostKey:
     ) -> None:
         """callback 抛异常时, 视为拒绝, 返 False (不应让 SSHClient 崩)."""
 
-        def bad_cb(p: HostKeyPrompt) -> HostKeyDecision:
+        def bad_cb(p: HostKeyPrompt, **kwargs) -> HostKeyDecision:
             raise RuntimeError("UI 崩了")
 
         register_host_key_callback(bad_cb)
@@ -290,7 +290,7 @@ class TestHandleBadHostKey:
 
         received: list[HostKeyPrompt] = []
 
-        def cb(p: HostKeyPrompt) -> HostKeyDecision:
+        def cb(p: HostKeyPrompt, **kwargs) -> HostKeyDecision:
             received.append(p)
             return HostKeyDecision.TRUST_REPLACE
 

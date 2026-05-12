@@ -1248,8 +1248,9 @@ class SSHClient:
         )
 
         # 调 callback (UI 端在主线程同步弹"红色警告"对话框)
+        # 传递 is_warning=True 让 UI 展示指纹变更警告模式 (红色标题 + "信任并替换"按钮)
         try:
-            decision = callback(prompt)
+            decision = callback(prompt, is_warning=True)
         except Exception as callback_exc:  # noqa: BLE001 - 回调异常视为拒绝
             logger.warning(
                 f"host key 变更回调异常, 视为拒绝: {callback_exc!r}",

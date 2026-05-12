@@ -59,7 +59,11 @@ class BotPage(QWidget):
         # 调用方法
         self.conncet_signal()
         self.setup_view()
-        self._auto_start_bots()
+        # 延迟自动启动: 给 SSH 连接池、SnowLuma daemon 等基础设施留出初始化时间.
+        # 使用 QTimer.singleShot 在事件循环空闲后执行, 避免阻塞 UI 初始化.
+        from PySide6.QtCore import QTimer
+
+        QTimer.singleShot(2000, self._auto_start_bots)
 
         return self
 
@@ -77,7 +81,17 @@ class BotPage(QWidget):
                     continue
 
                 logger.info(f"自动启动 Bot(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
-                process_manager.start_bot(config)
+                try:
+                    process_manager.start_bot(config)
+                except Exception as exc:  # noqa: BLE001 - 单个 Bot 启动失败不阻塞其他
+                    logger.error(
+                        f"自动启动 Bot 失败(QQID: {mask_qqid(qq_id)}): {type(exc).__name__}: {exc}",
+                        log_source=LogSource.UI,
+                    )
+                    process_manager.notification_signal.emit(
+                        "error",
+                        f"自动启动 Bot 失败 (QQID: {mask_qqid(qq_id)}): {exc}",
+                    )
 
     def setup_view(self) -> None:
         """设置 view 界面"""

@@ -155,8 +155,8 @@ class ServerEditDialog(MessageBoxBase):
     """
 
     # 表单标签列的统一宽度: 让各分组的标签列纵向对齐
-    # (W10b: 从 92 缩到 80, 为 SnowLuma 选项分组的 "工作目录" / "WebUI 密码" 腾出字段列宽度)
-    _LABEL_COLUMN_WIDTH = 80
+    # (W10b: 恢复到 92, 确保 "主机指纹策略" 等较长标签完整显示)
+    _LABEL_COLUMN_WIDTH = 92
 
     def __init__(
         self,
@@ -447,15 +447,13 @@ class ServerEditDialog(MessageBoxBase):
         sl_form.addRow(self._make_label("WebUI 密码"), self.sl_webui_pwd_edit)
 
         self._right_col_layout.addWidget(sl_form_widget)
-        # 右栏底部填充 stretch, 避免 NC flavor 下右栏 "高级选项" 完之后出现一大片空白
-        self._right_col_layout.addStretch(1)
         self._sl_form_widget = sl_form_widget
         # 默认隐藏 (flavor=NAPCAT); _apply_flavor_visibility 会根据当前选中项切换
         sl_section_title.hide()
         sl_form_widget.hide()
 
         # 左栏底部也填充 stretch, 让左右高度不依赖各自内容累计高度
-        self._left_col_layout.addStretch(1)
+        # (已移除: stretch 会挤压表单内容, 导致标签显示不完整)
 
         # ---------------- 错误提示 ----------------
         self.error_label = CaptionLabel("", self)

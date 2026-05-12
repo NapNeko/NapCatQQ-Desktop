@@ -2341,11 +2341,20 @@ class BotProcessManager(QObject):
         # P2.6: 远端 Bot 重启路径
         if config.bot.is_remote and qq_id in self.remote_process_dict:
             logger.info(
-                f"开始重启远端 NapCatQQ 进程(QQID: {qq_id}, target={config.bot.runtime_target})",
+                f"开始重启远端 Bot 进程(QQID: {qq_id}, target={config.bot.runtime_target})",
                 LogType.FILE_FUNC,
                 LogSource.CORE,
             )
+            # 先发送异步 SSH stop 命令 (不等待完成)
             self._stop_remote_process(qq_id)
+            # 关键修复: _stop_remote_process 仅设 state=NotRunning 但不从 dict 移除
+            # (移除发生在异步回调 _handle_remote_stop_succeeded 中). 若不在此处同步
+            # 移除, _create_remote_process 的 guard 检查会直接 return, 导致重启静默失败.
+            record = self.remote_process_dict.pop(qq_id, None)
+            if record is not None:
+                # 轮询已在 _stop_remote_process 中 teardown; 这里只需清日志/登录态
+                it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
+                it(ManagerNapCatQQLog).remove_log(qq_id)
             self._create_remote_process(config)
             return
 
@@ -2602,7 +2611,12 @@ class BotProcessManager(QObject):
         self._enqueue_remote_poll(record)
 
     def _handle_remote_stop_succeeded(self, qq_id: str) -> None:
-        """远端停止确认后清理记录与登录状态."""
+        """远端停止确认后清理记录与登录状态.
+
+        NOTE: 若 ``restart_bot`` 已提前 pop 了 record (重启路径), 此处 pop 返回 None,
+        后续清理仍幂等执行 (remove_auto_restart_timer / remove_login_state / remove_log
+        对不存在的 key 均为 no-op).
+        """
         record = self.remote_process_dict.pop(qq_id, None)
         if record is not None:
             self._teardown_remote_polling(record)
@@ -2610,7 +2624,7 @@ class BotProcessManager(QObject):
         it(ManagerNapCatQQLoginState).remove_login_state(qq_id)
         it(ManagerNapCatQQLog).remove_log(qq_id)
         logger.info(
-            f"远端 NapCat Bot 已停止(QQID: {qq_id})",
+            f"远端 Bot 已停止(QQID: {qq_id})",
             LogType.FILE_FUNC,
             LogSource.CORE,
         )

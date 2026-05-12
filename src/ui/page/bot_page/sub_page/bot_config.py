@@ -248,6 +248,9 @@ class ConfigPage(QWidget):
         )
         new_target = merged_config.bot.runtime_target or RUNTIME_TARGET_LOCAL
         if self._config is not None and old_target != new_target:
+            # 2026-05-12: backend_type ↔ backend_flavor 兼容性校验
+            if not self._check_backend_flavor_compatibility(merged_config.bot.backend_type, new_target):
+                return
             self._handle_target_migration(merged_config, old_target=old_target, new_target=new_target)
             return
 
@@ -278,7 +281,7 @@ class ConfigPage(QWidget):
         source_label = self._format_target_label(old_target)
         dest_label = self._format_target_label(new_target)
 
-        dialog = MigrationDialog(qq_id, source_label, dest_label, self.window())
+        dialog = MigrationDialog(qq_id, source_label, dest_label, self.window(), backend_type=merged_config.bot.backend_type)
         if not dialog.exec():
             error_bar(self.tr("已取消迁移; 本次修改未保存"))
             logger.info(
@@ -300,12 +303,13 @@ class ConfigPage(QWidget):
             )
             return
 
-        # ② 后台 runnable 搬运 NapCat 配置文件 (onebot11/napcat JSON)
+        # ② 后台 runnable 搬运配置文件 (NC: onebot11/napcat JSON; SL: onebot JSON)
         plan = derive_plan_from_bot_config(
             qq_id=qq_id,
             old_target=old_target,
             new_target=new_target,
             move_persistent_data=move_data,
+            backend_type=merged_config.bot.backend_type,
         )
         runnable = BotMigrationRunnable(plan)
         # 把 signals 挂到 self 持有的属性, 防止 lambda + runnable.setAutoDelete(True)
@@ -486,6 +490,65 @@ class ConfigPage(QWidget):
                 f"迁移前停 Bot 失败 (忽略): qq_id={mask_qqid(qq_id)}, exc={exc}",
                 log_source=LogSource.UI,
             )
+
+    def _check_backend_flavor_compatibility(self, backend_type: "BackendType", target: str) -> bool:
+        """校验 Bot 的 backend_type 与目标服务器的 backend_flavor 是否兼容.
+
+        - 目标为本地 (``RUNTIME_TARGET_LOCAL``): 始终兼容 (本地同时支持 NC 和 SL).
+        - 目标为远端: ``backend_type`` 必须与 ``ServerProfile.backend_flavor`` 匹配
+          (NAPCAT ↔ NAPCAT, SNOWLUMA ↔ SNOWLUMA); 不匹配时弹 error_bar 并返回 False.
+
+        Returns:
+            ``True`` 表示兼容, 可继续迁移; ``False`` 表示不兼容, 已弹提示, 调用方应 return.
+        """
+        if target == RUNTIME_TARGET_LOCAL:
+            return True
+
+        try:
+            from src.core.remote.server_manager import ServerManager
+            from src.core.remote.servers import BackendFlavor
+
+            manager = it(ServerManager)
+            profile = manager.get_server(target)
+            if profile is None:
+                # 服务器不存在: 让后续迁移流程自己报错, 这里不拦截
+                return True
+
+            # 兼容性映射: BackendType.NAPCAT ↔ BackendFlavor.NAPCAT,
+            #             BackendType.SNOWLUMA ↔ BackendFlavor.SNOWLUMA
+            from src.core.runtime.backend_type import BackendType
+
+            flavor_map = {
+                BackendType.NAPCAT: BackendFlavor.NAPCAT,
+                BackendType.SNOWLUMA: BackendFlavor.SNOWLUMA,
+            }
+            expected_flavor = flavor_map.get(backend_type)
+            if expected_flavor is not None and profile.backend_flavor != expected_flavor:
+                bot_label = backend_type.display_name
+                server_label = (
+                    "NapCat" if profile.backend_flavor == BackendFlavor.NAPCAT else "SnowLuma"
+                )
+                error_bar(
+                    self.tr("后端类型不匹配"),
+                    self.tr(
+                        f"Bot 后端为 {bot_label}, 但目标服务器 [{profile.name}] "
+                        f"的后端为 {server_label}, 无法迁移. "
+                        "请选择匹配的服务器或修改 Bot 后端类型."
+                    ),
+                )
+                logger.warning(
+                    f"迁移被拒: backend_type={backend_type.value} vs "
+                    f"server_flavor={profile.backend_flavor.value} "
+                    f"(server={profile.name}, id={target})",
+                    log_source=LogSource.UI,
+                )
+                return False
+        except Exception as exc:  # noqa: BLE001 - ServerManager 不可用时不阻断
+            logger.warning(
+                f"backend_flavor 兼容性校验异常 (放行): {type(exc).__name__}: {exc}",
+                log_source=LogSource.UI,
+            )
+        return True
 
     def slot_add_connect_button(self) -> None:
         """添加连接配置按钮槽函数"""

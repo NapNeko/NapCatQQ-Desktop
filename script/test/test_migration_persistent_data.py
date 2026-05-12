@@ -40,6 +40,10 @@ class _StubBackend:
         self.fail_on_append: tuple[str, int] | None = None  # (path_substring, after_n_bytes)
         self._appended_bytes: int = 0
 
+    # ---------- connect (no-op for stub) ----------
+    def connect(self) -> None:
+        """Stub connect, 供 _try_reconnect 调用."""
+
     # ---------- bytes IO ----------
     def file_exists(self, path: str) -> bool:
         if path in self.files:
@@ -132,7 +136,7 @@ def patch_roots(monkeypatch: pytest.MonkeyPatch) -> Any:
     dst_roots = ["/dst/data", "/dst/qq"]
     src_backend_holder: dict[str, Any] = {}
 
-    def _fake_roots(backend: Any) -> list[str]:
+    def _fake_roots(backend: Any, backend_type: Any = None) -> list[str]:
         if "src" not in src_backend_holder:
             src_backend_holder["src"] = backend
             return src_roots
@@ -212,7 +216,7 @@ def test_existing_same_size_target_is_skipped(plan: MigrationPlan, patch_roots: 
 
 
 # ==================== 失败保留 .partial ====================
-def test_failure_keeps_partial_for_retry(plan: MigrationPlan, patch_roots: Any) -> None:
+def test_failure_keeps_partial_for_retry(plan: MigrationPlan, patch_roots: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     src_roots, dst_roots = patch_roots
     payload = b"x" * (PERSISTENT_DATA_CHUNK_SIZE + 1024)  # 跨 2 chunk
     src = _StubBackend()
@@ -221,6 +225,9 @@ def test_failure_keeps_partial_for_retry(plan: MigrationPlan, patch_roots: Any) 
     dst = _StubBackend()
     # 第一个 chunk 写入后再写就 fail
     dst.fail_on_append = ("will-fail.bin", PERSISTENT_DATA_CHUNK_SIZE + 100)
+
+    # 跳过 time.sleep 避免测试变慢
+    monkeypatch.setattr("time.sleep", lambda _: None)
 
     service = BotMigrationService()
     with pytest.raises(BotMigrationError) as excinfo:

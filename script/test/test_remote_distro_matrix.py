@@ -129,6 +129,7 @@ def _make_probe(**overrides) -> LinuxCoreDeploymentProbe:
         has_curl=True,
         has_dpkg=False,
         has_rpm2cpio=False,
+        has_dnf=False,
         has_xvfb=True,
         has_linuxqq=False,
         has_napcat=False,

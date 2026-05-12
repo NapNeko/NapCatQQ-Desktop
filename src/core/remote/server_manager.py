@@ -725,7 +725,7 @@ class ServerManager(QObject):
                     f"version={probe.distro_version or '-'} "
                     f"arch={probe.normalized_arch or probe.architecture} "
                     f"family={family_text} "
-                    f"installer={'dpkg' if probe.has_dpkg else ('rpm2cpio' if probe.has_rpm2cpio else 'none')} "
+                    f"installer={'dpkg' if probe.has_dpkg else ('dnf' if probe.has_dnf else ('rpm2cpio' if probe.has_rpm2cpio else 'none'))} "
                     f"status={report.compat_status}"
                 ),
             )
@@ -753,12 +753,26 @@ class ServerManager(QObject):
                 # 0-100 -> 0-50
                 _emit_progress(f"[LinuxQQ] {message}", int(percent / 2))
 
+            # 本机下载兜底缓存路径: 复用 Desktop 自身管理资产的 tmp 目录.
+            # PathFunc 不可用 (极早期 / 纯单测) 时退化为 None, 走旧的"远端自下载"路径.
+            local_qq_cache_dir: Path | None = None
+            try:
+                from creart import it as _it
+
+                from src.core.runtime.paths import PathFunc as _PathFunc
+
+                local_qq_cache_dir = Path(_it(_PathFunc).tmp_path)
+            except Exception:  # noqa: BLE001 - 取不到 tmp 路径时静默关闭兜底
+                local_qq_cache_dir = None
+
             try:
                 backend.install_qq(
                     progress=_qq_progress,
                     log_callback=_emit_log_line,
                     progress_log_callback=_emit_log_progress,
                     force_reinstall=force_linuxqq_reinstall,
+                    local_package_cache_dir=local_qq_cache_dir,
+                    should_cancel=cancel_event.is_set,
                 )
             except Exception as exc:  # noqa: BLE001 - 统一封装为 RemoteDeploymentError
                 # 用户在 install_qq 期间点了取消 -> 让取消异常透出, 不被包成 install_qq 失败
@@ -987,7 +1001,7 @@ class ServerManager(QObject):
                     f"version={probe.distro_version or '-'} "
                     f"arch={probe.normalized_arch or probe.architecture} "
                     f"family={family_text} "
-                    f"installer={'dpkg' if probe.has_dpkg else ('rpm2cpio' if probe.has_rpm2cpio else 'none')} "
+                    f"installer={'dpkg' if probe.has_dpkg else ('dnf' if probe.has_dnf else ('rpm2cpio' if probe.has_rpm2cpio else 'none'))} "
                     f"status={report.compat_status}"
                 ),
             )
@@ -999,12 +1013,12 @@ class ServerManager(QObject):
                     "preflight",
                     f"远端环境兼容性体检未通过: {detail}",
                 )
-            # SL 当前只支持 dpkg (install_snowluma.sh 内 apt-get); RHEL 系报错
-            if not probe.has_dpkg:
+            # SL 需要 dpkg (Debian/Ubuntu) 或 dnf (RHEL/CentOS/Fedora)
+            if not probe.has_dpkg and not probe.has_dnf:
                 raise RemoteDeploymentError(
                     "preflight",
-                    "SnowLuma 部署当前仅支持 Debian/Ubuntu (apt-get); "
-                    "远端缺少 dpkg",
+                    "SnowLuma 部署需要 apt-get (Debian/Ubuntu) 或 dnf (RHEL/CentOS/Fedora); "
+                    "远端未检测到支持的包管理器",
                 )
             self._check_cancelled(server_id)
 
@@ -1013,12 +1027,26 @@ class ServerManager(QObject):
                 # 0-100 -> 1-40
                 _emit_progress(f"[LinuxQQ] {message}", 1 + int(percent * 39 / 100))
 
+            # 本机下载兜底缓存路径: 复用 Desktop 自身管理资产的 tmp 目录.
+            # PathFunc 不可用 (极早期 / 纯单测) 时退化为 None, 走旧的"远端自下载"路径.
+            local_qq_cache_dir: Path | None = None
+            try:
+                from creart import it as _it
+
+                from src.core.runtime.paths import PathFunc as _PathFunc
+
+                local_qq_cache_dir = Path(_it(_PathFunc).tmp_path)
+            except Exception:  # noqa: BLE001 - 取不到 tmp 路径时静默关闭兜底
+                local_qq_cache_dir = None
+
             try:
                 sl_deployer.install_linuxqq(
                     progress=_qq_progress,
                     log_callback=_emit_log_line,
                     progress_log_callback=_emit_log_progress,
                     force_reinstall=force_linuxqq_reinstall,
+                    local_package_cache_dir=local_qq_cache_dir,
+                    should_cancel=cancel_event.is_set,
                 )
             except Exception as exc:  # noqa: BLE001
                 if self.is_cancel_requested(server_id):
@@ -1048,11 +1076,17 @@ class ServerManager(QObject):
                 # 0-100 -> 40-90
                 _emit_progress(f"[SnowLuma] {message}", 40 + int(percent * 50 / 100))
 
+            # Node.js tarball 本机下载兜底缓存路径: 复用 Desktop tmp 目录.
+            # 与 LinuxQQ 兜底共享同一个 local_qq_cache_dir (都是 PathFunc.tmp_path).
+            local_node_cache_dir: Path | None = local_qq_cache_dir  # 复用上面已取到的路径
+
             try:
                 sl_deployer.install_snowluma_framework(
                     progress=_sl_progress,
                     log_callback=_emit_log_line,
                     progress_log_callback=_emit_log_progress,
+                    local_node_cache_dir=local_node_cache_dir,
+                    should_cancel=cancel_event.is_set,
                 )
             except SnowLumaFrameworkNotBundledError as exc:
                 raise RemoteDeploymentError(

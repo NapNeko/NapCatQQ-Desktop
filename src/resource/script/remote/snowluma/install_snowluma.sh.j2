@@ -16,6 +16,10 @@
 set -euo pipefail
 umask 077
 
+# 响应取消: SSH 断开时 shell 收到 SIGHUP, Desktop 主动 kill 时收到 SIGTERM;
+# trap 确保子进程 (curl 等长耗时) 被一并终止, 避免取消部署后脚本仍在后台跑.
+trap 'kill 0 2>/dev/null; exit 130' HUP TERM INT
+
 progress() {
     # 输出: [PROGRESS] <percent> <message>
     printf '[PROGRESS] %s %s\n' "$1" "$2"
@@ -36,10 +40,14 @@ require_cmd() {
 
 # ==================== 1. 检查 OS / 包管理器 ====================
 progress 0 "检查 OS / 包管理器"
-if ! command -v apt-get >/dev/null 2>&1; then
-    die "UNSUPPORTED_OS" "暂仅支持 Debian/Ubuntu (apt-get); 检测到非 apt 包管理器"
+PKG_MANAGER=""
+if command -v apt-get >/dev/null 2>&1; then
+    PKG_MANAGER="apt"
+elif command -v dnf >/dev/null 2>&1; then
+    PKG_MANAGER="dnf"
+else
+    die "UNSUPPORTED_OS" "暂仅支持 Debian/Ubuntu (apt-get) 或 RHEL/CentOS/Fedora (dnf)"
 fi
-require_cmd dpkg
 require_cmd curl
 
 # ==================== 2. 检查工作目录权限 ====================
@@ -50,23 +58,106 @@ if [ ! -w "$WORKSPACE_DIR" ]; then
 fi
 
 # ==================== 3. 更新包索引 ====================
-progress 5 "更新 apt 包索引"
-sudo -n apt-get update -qq >/dev/null 2>&1 || apt-get update -qq >/dev/null 2>&1 || \
-    die "APT_UPDATE_FAILED" "apt-get update 失败 (检查网络与 sudo 权限)"
+progress 5 "更新包索引"
+if [ "$PKG_MANAGER" = "apt" ]; then
+    sudo -n apt-get update -qq >/dev/null 2>&1 || apt-get update -qq >/dev/null 2>&1 || \
+        die "PKG_UPDATE_FAILED" "apt-get update 失败 (检查网络与 sudo 权限)"
+else
+    # RHEL 系: 启用 EPEL (CentOS/Rocky/Alma 最小化镜像缺图形依赖, 需要 EPEL)
+    sudo -n dnf install -y epel-release >/dev/null 2>&1 || true
+    # CRB / PowerTools 在 EL 9 上是部分依赖的来源; Fedora 上没有, 静默失败
+    sudo -n dnf config-manager --set-enabled crb >/dev/null 2>&1 || \
+        sudo -n dnf config-manager --set-enabled powertools >/dev/null 2>&1 || true
+fi
 
 # ==================== 4. 安装图形栈 ====================
 progress 10 "安装图形栈 (Xvfb / fluxbox / x11vnc / noVNC / websockify)"
-GRAPHIC_PKGS=(
-    dbus-x11 fluxbox xvfb x11vnc novnc websockify
-    fonts-wqy-zenhei fonts-noto-cjk
-    libnss3 libatk-bridge2.0-0 libgtk-3-0 libxkbfile1 libsecret-1-0 libasound2
-    ca-certificates
-)
-DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y --no-install-recommends "${GRAPHIC_PKGS[@]}" \
+
+if [ "$PKG_MANAGER" = "apt" ]; then
+    # --- Debian / Ubuntu ---
+    # 静态包列表 (不受 t64 transition 影响)
+    GRAPHIC_PKGS=(
+        dbus-x11 fluxbox xvfb x11vnc novnc websockify
+        fonts-wqy-zenhei fonts-noto-cjk
+        libnss3 libxkbfile1 libsecret-1-0
+        ca-certificates
+    )
+
+    # Ubuntu 24.04+ t64 兼容: 部分 lib 包名加了 t64 后缀, 需动态检测
+    T64_CANDIDATES=(
+        "libatk-bridge2.0-0"
+        "libgtk-3-0"
+        "libasound2"
+    )
+    for pkg_base in "${T64_CANDIDATES[@]}"; do
+        t64_variant="${pkg_base}t64"
+        if apt-cache show "$t64_variant" >/dev/null 2>&1; then
+            GRAPHIC_PKGS+=("$t64_variant")
+        else
+            GRAPHIC_PKGS+=("$pkg_base")
+        fi
+    done
+
+    DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y --no-install-recommends "${GRAPHIC_PKGS[@]}" \
+            >/dev/null 2>&1 \
+        || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${GRAPHIC_PKGS[@]}" \
+            >/dev/null 2>&1 \
+        || die "APT_INSTALL_GRAPHIC_FAILED" "图形栈包安装失败"
+else
+    # --- RHEL / CentOS / Rocky / Alma / Fedora (dnf) ---
+    # RHEL 系包名与 Debian 差异较大; 使用 --setopt=strict=0 跳过不存在的包名,
+    # 避免 dnf4 原子事务因单个包匹配不上而整体 abort.
+    # x11vnc 在 EPEL 中; novnc / python3-websockify 在 EPEL 或 Fedora 主仓.
+    # fluxbox 在 EPEL 中 (EL 8/9 均有).
+    sudo -n dnf install --allowerasing --setopt=strict=0 -y \
+        tar xz gzip \
+        dbus-x11 fluxbox openbox xorg-x11-server-Xvfb x11vnc novnc python3-websockify \
+        wqy-zenhei-fonts google-noto-cjk-fonts \
+        nss atk at-spi2-atk gtk3 alsa-lib libxkbfile libsecret \
+        pango cairo libdrm mesa-libgbm \
+        libXcursor libXrandr libXdamage libXcomposite libXfixes libXrender libXi \
+        libXtst libXScrnSaver cups-libs libxkbcommon \
+        xcb-util xcb-util-image xcb-util-wm xcb-util-keysyms xcb-util-renderutil \
+        fontconfig dejavu-sans-fonts ca-certificates \
         >/dev/null 2>&1 \
-    || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${GRAPHIC_PKGS[@]}" \
-        >/dev/null 2>&1 \
-    || die "APT_INSTALL_GRAPHIC_FAILED" "图形栈包安装失败"
+        || die "DNF_INSTALL_GRAPHIC_FAILED" "图形栈包安装失败 (dnf)"
+
+    # 冗余兜底: x11vnc 是硬依赖, 单独再试一次确保装上
+    if ! command -v x11vnc >/dev/null 2>&1; then
+        sudo -n dnf install -y x11vnc >/dev/null 2>&1 || true
+    fi
+    # websockify 在某些 EL 版本叫 python3-websockify, 某些叫 websockify
+    if ! command -v websockify >/dev/null 2>&1; then
+        sudo -n dnf install -y websockify >/dev/null 2>&1 || \
+            sudo -n pip3 install websockify >/dev/null 2>&1 || true
+    fi
+
+    # W10c fix: CentOS 9 EPEL 的 noVNC 包 (1.3.0) 存在 vnc.html 与 app/ui.js 不兼容
+    # 的 bug, 导致 addClipboardHandlers 报 "getElementById(...) is null".
+    # 由于国内 VPS 无法访问 GitHub 下载新版 noVNC, 改为复制系统包并 patch.
+    NOVNC_LOCAL_DIR="$WORKSPACE_DIR/novnc"
+    if [ ! -f "$NOVNC_LOCAL_DIR/vnc.html" ]; then
+        rm -rf "$NOVNC_LOCAL_DIR"
+        # 复制系统 noVNC 到 workspace 下 (避免修改系统文件)
+        sys_novnc=""
+        if [ -d /usr/share/noVNC ]; then
+            sys_novnc="/usr/share/noVNC"
+        elif [ -d /usr/share/novnc ]; then
+            sys_novnc="/usr/share/novnc"
+        fi
+        if [ -n "$sys_novnc" ] && [ -f "$sys_novnc/vnc.html" ]; then
+            cp -a "$sys_novnc" "$NOVNC_LOCAL_DIR"
+            # Patch: 在 vnc.html 的 <head> 标签后注入 safe-getElementById polyfill,
+            # 让 getElementById 返回 null 时不会导致 .addEventListener 抛异常.
+            # 原理: 用 Proxy 包裹 null 返回值, 让 .addEventListener 等调用变为 no-op.
+            if [ -f "$NOVNC_LOCAL_DIR/vnc.html" ]; then
+                patch_js='<script>!function(){var o=document.getElementById.bind(document);document.getElementById=function(id){var el=o(id);if(el)return el;return new Proxy({},{get:function(){return function(){}}})}}();<\/script>'
+                # 尝试匹配 <head> (大小写不敏感)
+                sed -i "s|<[hH][eE][aA][dD]>|<head>${patch_js}|" "$NOVNC_LOCAL_DIR/vnc.html" 2>/dev/null || true
+            fi
+        fi
+    fi
+fi
 
 # ==================== 5. 安装 node (3 级 fallback, OQ2 决策) ====================
 progress 40 "安装 node (>= 22)"
@@ -80,11 +171,19 @@ if command -v node >/dev/null 2>&1; then
     fi
 fi
 
-# L2: apt 直装 nodejs, 检测版本
+# L2: 包管理器直装 nodejs, 检测版本
 if [ "$NODE_OK" -eq 0 ]; then
-    DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y nodejs >/dev/null 2>&1 \
-        || DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs >/dev/null 2>&1 \
-        || true
+    if [ "$PKG_MANAGER" = "apt" ]; then
+        DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y nodejs >/dev/null 2>&1 \
+            || DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs >/dev/null 2>&1 \
+            || true
+    else
+        # RHEL 系: 优先尝试 dnf module 启用 nodejs:22 流 (EL 9 AppStream 自带 module)
+        # module reset 先清除可能已启用的旧版本流 (如 nodejs:18)
+        sudo -n dnf module reset nodejs -y >/dev/null 2>&1 || true
+        sudo -n dnf module enable nodejs:22 -y >/dev/null 2>&1 || true
+        sudo -n dnf install -y nodejs >/dev/null 2>&1 || true
+    fi
     if command -v node >/dev/null 2>&1; then
         NODE_VER=$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
         if [ -n "$NODE_VER" ] && [ "$NODE_VER" -ge 22 ] 2>/dev/null; then
@@ -93,18 +192,26 @@ if [ "$NODE_OK" -eq 0 ]; then
     fi
 fi
 
-# L3: nodesource setup_22.x (受 enable_nodesource 开关控制)
+# L3: nodesource setup (受 enable_nodesource 开关控制)
+# Debian/Ubuntu 用 deb.nodesource.com; RHEL 系用 rpm.nodesource.com
 if [ "$NODE_OK" -eq 0 ] && [ "{{enable_nodesource}}" = "1" ]; then
-    if curl --max-time 10 -fsSL https://deb.nodesource.com/setup_22.x \
-            | sudo -n bash - >/dev/null 2>&1; then
-        DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y nodejs >/dev/null 2>&1 \
-            || DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs >/dev/null 2>&1 \
-            || true
-        if command -v node >/dev/null 2>&1; then
-            NODE_VER=$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
-            if [ -n "$NODE_VER" ] && [ "$NODE_VER" -ge 22 ] 2>/dev/null; then
-                NODE_OK=1
-            fi
+    if [ "$PKG_MANAGER" = "apt" ]; then
+        if curl --connect-timeout 5 --max-time 15 -fsSL https://deb.nodesource.com/setup_22.x \
+                | sudo -n bash - >/dev/null 2>&1; then
+            DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y nodejs >/dev/null 2>&1 \
+                || DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs >/dev/null 2>&1 \
+                || true
+        fi
+    else
+        if curl --connect-timeout 5 --max-time 15 -fsSL https://rpm.nodesource.com/setup_22.x \
+                | sudo -n bash - >/dev/null 2>&1; then
+            sudo -n dnf install -y nodejs >/dev/null 2>&1 || true
+        fi
+    fi
+    if command -v node >/dev/null 2>&1; then
+        NODE_VER=$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
+        if [ -n "$NODE_VER" ] && [ "$NODE_VER" -ge 22 ] 2>/dev/null; then
+            NODE_OK=1
         fi
     fi
 fi
@@ -115,6 +222,14 @@ fi
 # ``$WORKSPACE_DIR/node/`` 不需 sudo, daemon launcher 会优先调用它.
 if [ "$NODE_OK" -eq 0 ]; then
     progress 45 "下载便携式 node v22 (镜像 fallback)"
+    # 确保 xz 解压工具可用 (CentOS 最小化安装可能缺 xz)
+    if ! command -v xz >/dev/null 2>&1; then
+        if [ "$PKG_MANAGER" = "apt" ]; then
+            sudo -n apt-get install -y xz-utils >/dev/null 2>&1 || true
+        else
+            sudo -n dnf install -y xz >/dev/null 2>&1 || true
+        fi
+    fi
     # W10b-Driver fix: 22.11.0 不支持默认开启 ``node:sqlite`` (会抛 ERR_UNKNOWN_BUILTIN_MODULE),
     # SnowLuma v1.7.6+ 使用了 node:sqlite. 22.12.0 (2024-12-03) 起 node:sqlite
     # 不再需要 ``--experimental-sqlite`` flag, 22.18.0 LTS 稳定且镜像齐全.
@@ -129,21 +244,40 @@ if [ "$NODE_OK" -eq 0 ]; then
         NODE_TARBALL="node-${NODE_VERSION_TAG}-linux-${NODE_ARCH}.tar.xz"
         NODE_DIR="$WORKSPACE_DIR/node"
         NODE_TMP="$WORKSPACE_DIR/node.tar.xz"
+        # 本机预上传兜底: Desktop 可能已通过 SFTP 把 tarball 上传到 packages/ 目录
+        # (当远端所有镜像都不可达时, Desktop 本机下载后上传). 优先复用预上传包.
+        NODE_PRELOADED="$WORKSPACE_DIR/packages/${NODE_TARBALL}"
         rm -rf "$NODE_DIR" "$NODE_TMP"
         mkdir -p "$NODE_DIR"
-        # 多镜像 fallback: npmmirror 国内镜像 -> nodejs.org 官方
-        # ``--max-time 90`` 给单个镜像 1.5 分钟, 足够在 ~30MB 包 + 慢网络下完成
         NODE_DOWNLOADED=0
+        if [ -f "$NODE_PRELOADED" ]; then
+            # 预上传包存在, 直接复用 (跳过网络下载)
+            cp "$NODE_PRELOADED" "$NODE_TMP"
+            NODE_DOWNLOADED=1
+            echo "[INFO] 复用本机预上传的 node tarball: $NODE_PRELOADED"
+        fi
+        if [ "$NODE_DOWNLOADED" -eq 0 ]; then
+        # 多镜像 fallback: 国内 CDN 镜像优先 -> 云厂商镜像 -> nodejs.org 官方
+        # ``--connect-timeout 8`` 快速跳过 TCP 不可达的镜像 (避免卡 90s);
+        # ``--max-time 60`` 给单个镜像 1 分钟完成下载 (~30MB);
+        # ``--speed-limit 10240 --speed-time 15`` 如果连续 15s 速度低于 10KB/s 则放弃;
+        # 6 个镜像但因 connect-timeout + speed-limit, 实际不可达的会在 8-15s 内跳过.
         for url in \
+            "https://cdn.npmmirror.com/binaries/node/${NODE_VERSION_TAG}/${NODE_TARBALL}" \
             "https://npmmirror.com/mirrors/node/${NODE_VERSION_TAG}/${NODE_TARBALL}" \
+            "https://mirrors.huaweicloud.com/nodejs/${NODE_VERSION_TAG}/${NODE_TARBALL}" \
+            "https://mirrors.cloud.tencent.com/nodejs-release/${NODE_VERSION_TAG}/${NODE_TARBALL}" \
             "https://registry.npmmirror.com/-/binary/node/${NODE_VERSION_TAG}/${NODE_TARBALL}" \
             "https://nodejs.org/dist/${NODE_VERSION_TAG}/${NODE_TARBALL}"
         do
-            if curl --max-time 90 -fsSL "$url" -o "$NODE_TMP" 2>/dev/null; then
+            if curl --connect-timeout 8 --max-time 60 --speed-limit 10240 --speed-time 15 \
+                    -fsSL "$url" -o "$NODE_TMP" 2>/dev/null; then
                 NODE_DOWNLOADED=1
                 break
             fi
+            rm -f "$NODE_TMP"
         done
+        fi
         if [ "$NODE_DOWNLOADED" -eq 1 ]; then
             # ``--strip-components=1`` 剥掉顶层 ``node-vX.Y.Z-linux-arch/`` 前缀,
             # 让 ``$NODE_DIR/bin/node`` 直接可执行
@@ -210,6 +344,36 @@ openssl rand -hex 16 > "$WEBUI_SECRET_PATH"
 
 # ==================== 8. 写部署元数据 ====================
 progress 90 "写入部署元数据"
+
+# W10c fix: SnowLuma ptrace inject 需要 kernel.yama.ptrace_scope=0 才能跨进程
+# 读取 /proc/PID/maps. CentOS 9 / RHEL 9 默认 ptrace_scope=1 (仅允许父进程 ptrace).
+# 设置为 0 并持久化到 sysctl.d, 确保重启后仍生效.
+if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
+    current_scope=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo "")
+    if [ "$current_scope" != "0" ]; then
+        sudo -n sysctl -w kernel.yama.ptrace_scope=0 >/dev/null 2>&1 || true
+        # 持久化: 写入 sysctl.d 配置, 重启后自动生效
+        echo "kernel.yama.ptrace_scope = 0" | sudo -n tee /etc/sysctl.d/99-snowluma-ptrace.conf >/dev/null 2>&1 || true
+    fi
+fi
+
+# W10c fix: CentOS 9 上 /lib64/libgcc_s.so.1 是 symlink 指向带版本号的真实文件
+# (如 libgcc_s-8-20210514.so.1). 内核在 /proc/PID/maps 中显示解析后的真实路径,
+# 导致 SnowLuma inject 代码 grep "libgcc_s.so.1" 匹配不到.
+# 解决: 把 symlink 替换为硬链接, 这样 maps 里显示的就是 "libgcc_s.so.1".
+LIBGCC_PATH=$(ldconfig -p 2>/dev/null | grep -m1 'libgcc_s.so.1' | awk '{print $NF}') || true
+if [ -n "$LIBGCC_PATH" ] && [ -L "$LIBGCC_PATH" ]; then
+    LIBGCC_REAL=$(readlink -f "$LIBGCC_PATH")
+    if [ -f "$LIBGCC_REAL" ]; then
+        # 备份原 symlink 信息, 然后替换为硬链接
+        rm -f "$LIBGCC_PATH"
+        ln "$LIBGCC_REAL" "$LIBGCC_PATH" 2>/dev/null || \
+            cp "$LIBGCC_REAL" "$LIBGCC_PATH" 2>/dev/null || \
+            ln -s "$LIBGCC_REAL" "$LIBGCC_PATH" 2>/dev/null || true
+        # 刷新 ldconfig 缓存
+        ldconfig 2>/dev/null || true
+    fi
+fi
 # W3 修正: 便携式 node 装在 ``$WORKSPACE_DIR/node/bin``, 系统 PATH 找不到, 元数据
 # 与冒烟验证都需要显式优先该路径
 EFFECTIVE_NODE_BIN=""
@@ -232,17 +396,21 @@ chmod 600 "$WORKSPACE_DIR/.deployed"
 
 # ==================== 9. 冒烟验证 ====================
 progress 95 "冒烟验证"
-for cmd in Xvfb fluxbox x11vnc websockify; do
+for cmd in Xvfb x11vnc websockify; do
     require_cmd "$cmd"
 done
+# 窗口管理器: fluxbox 或 openbox 二选一即可 (RHEL 系 EPEL 可能缺 fluxbox)
+if ! command -v fluxbox >/dev/null 2>&1 && ! command -v openbox >/dev/null 2>&1; then
+    die "MISSING_CMD_wm" "缺少窗口管理器: fluxbox 和 openbox 均未安装"
+fi
 # W3 修正: node 不再走 require_cmd (PATH lookup) — 便携式 node 装在 $WORKSPACE_DIR/node/bin
 # 不进 PATH; 改为校验 EFFECTIVE_NODE_BIN 存在 + 可执行
 if [ -z "$EFFECTIVE_NODE_BIN" ] || [ ! -x "$EFFECTIVE_NODE_BIN" ]; then
     die "MISSING_CMD_node" "node 未找到 (既不在系统 PATH 也无便携式 \$WORKSPACE_DIR/node/bin/node)"
 fi
-# novnc_proxy 是 novnc 包的入口 (有些发行版叫 noVNC, 这里检查文件存在即可)
-if [ ! -d /usr/share/novnc ] && ! command -v novnc_proxy >/dev/null 2>&1; then
-    die "NOVNC_MISSING" "未检测到 noVNC (期望 /usr/share/novnc 或 novnc_proxy)"
+# noVNC 检测: 优先 workspace 下载版, 其次系统包路径, 最后 novnc_proxy 命令
+if [ ! -d "$WORKSPACE_DIR/novnc" ] && [ ! -d /usr/share/novnc ] && [ ! -d /usr/share/noVNC ] && ! command -v novnc_proxy >/dev/null 2>&1; then
+    die "NOVNC_MISSING" "未检测到 noVNC (期望 \$WORKSPACE_DIR/novnc 或 /usr/share/novnc 或 /usr/share/noVNC 或 novnc_proxy)"
 fi
 
 progress 100 "完成"

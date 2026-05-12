@@ -58,6 +58,7 @@ def sl_profile() -> ServerProfile:
 def _make_probe(
     *,
     has_dpkg: bool = True,
+    has_dnf: bool = False,
     compat_status: str = "supported",
     distro_id: str | None = "ubuntu",
     distro_version: str | None = "22.04",
@@ -66,6 +67,7 @@ def _make_probe(
     """构造模拟 :class:`LinuxCoreDeploymentProbe`."""
     probe = MagicMock()
     probe.has_dpkg = has_dpkg
+    probe.has_dnf = has_dnf
     probe.has_rpm2cpio = False
     probe.distro_id = distro_id
     probe.distro_version = distro_version
@@ -196,20 +198,20 @@ class TestPreflightFailure:
             manager.deploy_server(sl_profile.id)
         assert exc_info.value.stage == "preflight"
 
-    def test_missing_dpkg_raises_preflight(
+    def test_missing_pkg_manager_raises_preflight(
         self,
         manager: ServerManager,
         sl_profile: ServerProfile,
         patched_ssh_and_deployment: dict[str, Any],
     ) -> None:
         deployer = patched_ssh_and_deployment["deployer"]
-        deployer.probe_environment.return_value = _make_probe(has_dpkg=False)
+        deployer.probe_environment.return_value = _make_probe(has_dpkg=False, has_dnf=False)
 
         manager._registry.add(sl_profile)
         with pytest.raises(RemoteDeploymentError) as exc_info:
             manager.deploy_server(sl_profile.id)
         assert exc_info.value.stage == "preflight"
-        assert "dpkg" in str(exc_info.value)
+        assert "apt-get" in str(exc_info.value) or "dnf" in str(exc_info.value)
 
 
 # ==================== stage 错误映射 ====================

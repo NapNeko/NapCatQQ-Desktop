@@ -94,7 +94,53 @@ cmd_start() {
         # 非致命: 仍尝试启 (xdpyinfo 可能未装), 让后续日志暴露问题
     fi
 
-    DISPLAY=":{{display_num}}" nohup "$qq_bin" --no-sandbox -q "$qq_id" \
+    # SnowLuma ptrace inject 需要通过 /proc/PID/maps 定位 libgcc_s.so.1;
+    # CentOS 9 等发行版上 QQ (Electron) 可能延迟加载 libgcc_s, 导致 inject 时
+    # 在 maps 里找不到. LD_PRELOAD 强制预加载确保 maps 可见.
+    #
+    # W10c 深层根因: CentOS 9 上 /lib64/libgcc_s.so.1 是 symlink 指向
+    # /lib64/libgcc_s-8-20210514.so.1 (带版本号的真实文件). 内核在 /proc/PID/maps
+    # 中显示的是 **解析后的真实路径** (非 symlink 名), 所以 SnowLuma inject 代码
+    # grep "libgcc_s.so.1" 在 maps 里匹配不到 (实际显示的是 libgcc_s-8-*.so.1).
+    #
+    # 解决方案: 把系统 symlink 替换为硬链接 (同 inode, 不占额外空间), 这样
+    # 动态链接器 open() 的路径就是 /lib64/libgcc_s.so.1 (非 symlink 不会被解析),
+    # maps 里显示的也是 /lib64/libgcc_s.so.1. 同时 LD_PRELOAD 确保 QQ 启动时加载它.
+    local libgcc_path=""
+    libgcc_path=$(ldconfig -p 2>/dev/null | grep -m1 'libgcc_s.so.1' | awk '{print $NF}') || true
+
+    if [ -n "$libgcc_path" ] && [ -L "$libgcc_path" ]; then
+        # symlink → 替换为硬链接 (需要 root; 当前用户就是 root)
+        local real_path
+        real_path=$(readlink -f "$libgcc_path")
+        if [ -f "$real_path" ]; then
+            rm -f "$libgcc_path" 2>/dev/null && \
+                ln "$real_path" "$libgcc_path" 2>/dev/null || true
+        fi
+    fi
+
+    # 重新获取路径 (可能已从 symlink 变为硬链接)
+    libgcc_path=$(ldconfig -p 2>/dev/null | grep -m1 'libgcc_s.so.1' | awk '{print $NF}') || true
+
+    # W10c fix: CentOS 9 / RHEL 9 默认 kernel.yama.ptrace_scope=1, 只允许父进程
+    # ptrace 子进程. SnowLuma node 进程不是 QQ 的父进程, 导致 inject 时无法读取
+    # /proc/PID/maps (即使 libgcc_s.so.1 已加载也报 "not visible"). 需要设为 0.
+    if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
+        local current_scope
+        current_scope=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo "")
+        if [ "$current_scope" != "0" ]; then
+            sudo -n sysctl -w kernel.yama.ptrace_scope=0 >/dev/null 2>&1 || \
+                echo "警告: 无法设置 ptrace_scope=0 (SnowLuma inject 可能失败)" >&2
+        fi
+    fi
+
+    # 构建环境变量: LD_PRELOAD 强制预加载 libgcc_s
+    local -a env_args=()
+    if [ -n "$libgcc_path" ]; then
+        env_args+=("LD_PRELOAD=$libgcc_path")
+    fi
+
+    DISPLAY=":{{display_num}}" nohup env "${env_args[@]}" "$qq_bin" --no-sandbox --disable-gpu-sandbox -q "$qq_id" \
         > "$LOG_DIR/bot_$qq_id.log" 2>&1 &
     echo $! > "$pidfile"
     sleep 0.5

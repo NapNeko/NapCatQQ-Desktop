@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -466,13 +467,17 @@ class RemoteBackend(OperationBackend):
         log_callback=None,
         progress_log_callback=None,
         force_reinstall: bool = False,
+        local_package_cache_dir: Path | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> None:
         """P1: 远端安装 LinuxQQ rootless. 
 
         ``force_reinstall=True`` 强制重装(会先备份 NapCat 配置再 ``rm -rf $install_base_dir/opt`` 后重新解压). 
         ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显. 
         ``progress_log_callback``: ``\\r`` 终止的瞬时刷新行 (dnf/apt/curl 进度条) 单独
-        回调, 设置后这类行 *不* 再走 ``log_callback``, 由调用方做"原地覆盖"渲染. 
+        回调, 设置后这类行 *不* 再走 ``log_callback``, 由调用方做"原地覆盖"渲染.
+        ``local_package_cache_dir``: 本机预下载缓存目录; 非空时启用"本机下载 + SFTP 上传"兜底.
+        ``should_cancel``: 取消检查协议.
         """
         self._ensure_connected()
         self._deployment.install_linuxqq(
@@ -480,6 +485,8 @@ class RemoteBackend(OperationBackend):
             log_callback=log_callback,
             progress_log_callback=progress_log_callback,
             force_reinstall=force_reinstall,
+            local_package_cache_dir=local_package_cache_dir,
+            should_cancel=should_cancel,
         )
 
     def detect_napcat_version(self) -> str | None:

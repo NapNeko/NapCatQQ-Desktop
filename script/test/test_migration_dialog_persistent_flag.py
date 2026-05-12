@@ -36,6 +36,20 @@ def _build_dialog(parent: QWidget) -> "object":
     )
 
 
+def _build_dialog_snowluma(parent: QWidget) -> "object":
+    """构造 SnowLuma 后端类型的迁移对话框, 验证文案切换."""
+    from src.core.runtime.backend_type import BackendType
+    from src.ui.page.bot_page.widget.migration_dialog import MigrationDialog
+
+    return MigrationDialog(
+        qq_id="114514",
+        source_label="本地 (Windows)",
+        dest_label="srv-B (Linux SL)",
+        parent=parent,
+        backend_type=BackendType.SNOWLUMA,
+    )
+
+
 def test_persistent_data_checkbox_default_checked(qapp: QApplication) -> None:
     parent = QWidget()
     try:

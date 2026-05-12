@@ -5,8 +5,10 @@
 检测到 ``runtime_target`` 变化时弹出, 让用户:
 
 - 确认搬迁的源端与目标端
-- 选择是否搬运 NapCat 持久数据 (P4 W3 F6 已兑现, 默认勾选)
+- 选择是否搬运持久数据 (P4 W3 F6 已兑现, 默认勾选)
 - 看到风险提示 (Bot 会被停止 / 不会自动启动 / 失败会保留源端)
+
+文案根据 ``backend_type`` 区分 NapCat / SnowLuma 语境.
 """
 
 from __future__ import annotations
@@ -15,6 +17,8 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import BodyLabel, CaptionLabel, CheckBox, MessageBoxBase, TitleLabel
+
+from src.core.runtime.backend_type import BackendType
 
 if TYPE_CHECKING:
     pass
@@ -34,6 +38,7 @@ class MigrationDialog(MessageBoxBase):
         source_label: str,
         dest_label: str,
         parent: QWidget,
+        backend_type: BackendType = BackendType.NAPCAT,
     ) -> None:
         super().__init__(parent=parent)
 
@@ -45,8 +50,20 @@ class MigrationDialog(MessageBoxBase):
         )
         self.summary_label = BodyLabel(summary, self)
 
-        self.detail_label = BodyLabel(
-            self.tr(
+        # 根据 backend_type 选择对应文案
+        if backend_type == BackendType.SNOWLUMA:
+            detail_text = self.tr(
+                "迁移将执行:\n"
+                "  1. 停止源端正在运行的 Bot\n"
+                "  2. 把 SnowLuma 配置文件 (onebot JSON) 复制到目标端\n"
+                "  3. 清理源端原有配置\n"
+                "  4. 若勾选'同时搬运 SnowLuma 持久数据', 1 MiB 分片流式搬运账号缓存 / 数据库\n"
+                "  5. 完成后**不会自动启动**目标端 Bot, 由你决定何时启动\n\n"
+                "如果迁移失败, 源端配置保留, 目标端已写入的持久数据保留 .partial 后缀以便重试."
+            )
+            persistent_label = self.tr("同时搬运 SnowLuma 持久数据 (账号缓存 / 数据库)")
+        else:
+            detail_text = self.tr(
                 "迁移将执行:\n"
                 "  1. 停止源端正在运行的 Bot\n"
                 "  2. 把 NapCat 配置文件 (onebot11/napcat JSON) 复制到目标端\n"
@@ -54,14 +71,13 @@ class MigrationDialog(MessageBoxBase):
                 "  4. 若勾选'同时搬运 NapCat 持久数据', 1 MiB 分片流式搬运账号缓存 / 数据库\n"
                 "  5. 完成后**不会自动启动**目标端 Bot, 由你决定何时启动\n\n"
                 "如果迁移失败, 源端配置保留, 目标端已写入的持久数据保留 .partial 后缀以便重试."
-            ),
-            self,
-        )
+            )
+            persistent_label = self.tr("同时搬运 NapCat 持久数据 (账号缓存 / 数据库)")
+
+        self.detail_label = BodyLabel(detail_text, self)
         self.detail_label.setWordWrap(True)
 
-        self.move_persistent_data_checkbox = CheckBox(
-            self.tr("同时搬运 NapCat 持久数据 (账号缓存 / 数据库)"), self
-        )
+        self.move_persistent_data_checkbox = CheckBox(persistent_label, self)
         # P4 W3 F6: future flag 已兑现, 默认勾选
         self.move_persistent_data_checkbox.setChecked(True)
 
