@@ -128,16 +128,30 @@ class DeploymentRunner(QRunnable):
         from creart import it
 
         from src.core.remote import ServerManager
+        from src.core.remote.servers import BackendFlavor
 
         manager = it(ServerManager)
+        # W10b: 按 backend_flavor 切换 tracker 文案
+        profile = manager.get_server(self._server_id)
+        is_sl = (
+            profile is not None
+            and profile.backend_flavor == BackendFlavor.SNOWLUMA
+        )
         if self._force_napcat_update:
-            label = f"强制更新 NapCat ({self._server_id})"
-            success_msg = "远端 NapCat 强制更新完成"
+            if is_sl:
+                label = f"重新部署 SnowLuma.Framework ({self._server_id})"
+                success_msg = "远端 SnowLuma.Framework 重新部署完成"
+            else:
+                label = f"强制更新 NapCat ({self._server_id})"
+                success_msg = "远端 NapCat 强制更新完成"
         elif self._force_linuxqq_reinstall:
             label = f"强制重装 LinuxQQ ({self._server_id})"
             success_msg = "远端 LinuxQQ 强制重装完成"
         else:
-            label = f"部署远端 NapCat ({self._server_id})"
+            if is_sl:
+                label = f"部署远端 SnowLuma ({self._server_id})"
+            else:
+                label = f"部署远端 NapCat ({self._server_id})"
             success_msg = "远端部署完成"
         with _tracked(
             f"deploy-{self._server_id}",
@@ -187,18 +201,26 @@ class RedetectRunner(QRunnable):
         from creart import it
 
         from src.core.remote import ServerManager
+        from src.core.remote.servers import BackendFlavor
 
         manager = it(ServerManager)
+        # W10b: 按 backend_flavor 切换 tracker 文案
+        profile = manager.get_server(self._server_id)
+        is_sl = (
+            profile is not None
+            and profile.backend_flavor == BackendFlavor.SNOWLUMA
+        )
+        backend_label = "SnowLuma.Framework" if is_sl else "NapCat"
         with _tracked(
             f"redetect-{self._server_id}",
             f"检测远端版本 ({self._server_id})",
-            content="正在与远端交互, 读取 NapCat / LinuxQQ 版本信息…",
+            content=f"正在与远端交互, 读取 {backend_label} / LinuxQQ 版本信息…",
         ) as tracker:
             try:
                 napcat_version, qq_version = manager.redetect_versions(self._server_id)
                 self.signals.finished.emit(self._server_id, True, napcat_version, qq_version, "")
                 tracker.success(
-                    f"NapCat={napcat_version or '未探测到'}, "
+                    f"{backend_label}={napcat_version or '未探测到'}, "
                     f"QQ={qq_version or '未探测到'}"
                 )
             except Exception as exc:  # noqa: BLE001

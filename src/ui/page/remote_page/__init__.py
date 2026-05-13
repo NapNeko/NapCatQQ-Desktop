@@ -439,7 +439,7 @@ class RemotePage(QWidget):
 
         self.title_label = TitleLabel("远程服务器管理", self)
         self.subtitle_label = CaptionLabel(
-            "为 NapCatQQ 添加 Linux 服务器, 即可在远端运行 Bot, 操作体验与本地一致",
+            "添加 Linux 服务器, 即可在远端运行 Bot, 操作体验与本地一致",
             self,
         )
         root.addWidget(self.title_label)
@@ -729,9 +729,14 @@ class RemotePage(QWidget):
         if profile is None:
             return
 
+        # W10b: 按 backend_flavor 切换删除确认文案
+        if profile.backend_flavor == BackendFlavor.SNOWLUMA:
+            delete_hint = "该操作不会影响远端已部署的 SnowLuma。"
+        else:
+            delete_hint = "该操作不会影响远端已部署的 NapCat。"
         ask = AskBox(
             "确认删除",
-            f"确定要删除服务器 “{profile.name}” 吗？\n该操作不会影响远端已部署的 NapCat。",
+            f"确定要删除服务器 “{profile.name}” 吗？\n{delete_hint}",
             self.window(),
         )
         if ask.exec():
