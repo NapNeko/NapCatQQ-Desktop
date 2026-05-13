@@ -44,7 +44,6 @@
 - 实现 SnowLuma 远程管理核心功能，包括 SSH 连接、会话管理、VNC 启动等
 - 添加 SnowLuma 远程后端与运行时支持，实现本地回退机制
 - 新增 SnowLuma 远程管理 UI 组件，提供可视化操作界面
-- 内置 SnowLuma.Framework 版本号，便于版本追踪
 - 完善 SnowLuma 后端支持，覆盖配置渲染、状态轮询、WebUI 客户端等
 
 ## 使用项目
