@@ -102,6 +102,7 @@ def _render_placeholders(template_text: str, variables: Mapping[str, str | int])
 def build_install_snowluma_script(
     paths: SnowLumaRemotePaths,
     *,
+    framework_download_url: str,
     framework_archive_name: str,
     enable_nodesource: bool = True,
     vnc_port: int = 5900,
@@ -116,15 +117,16 @@ def build_install_snowluma_script(
     1. apt 更新包索引
     2. apt 装图形栈 (xvfb / fluxbox / x11vnc / novnc / websockify / dbus-x11 + 中文字体)
     3. 装 node (3 级 fallback: 已装 ≥ 22 / apt nodejs / nodesource setup_22.x)
-    4. 解压 lite tarball 到 ``{workspace_dir}/snowluma`` (含 ``dist/index.mjs`` +
-       ``packages/runtime/native/`` 等)
+    4. 从 GitHub releases 下载 lite tarball 到 ``{workspace_dir}/`` 并解压到
+       ``{workspace_dir}/snowluma`` (含 ``index.mjs`` + ``native/`` 等)
     5. 生成 ``vnc.secret`` / ``webui.secret`` (mode 600)
     6. 冒烟验证 (``command -v Xvfb fluxbox ...`` + ``node -v ≥ 22``)
 
     Args:
         paths: 远端目录布局; 通过 :func:`inject_script_variables` 注入到脚本头部.
-        framework_archive_name: lite tarball 文件名 (会与 ``paths.workspace_dir`` 拼成
-            完整路径供 ``tar -xzf`` 使用).
+        framework_download_url: SnowLuma.Framework lite tarball 的 GitHub releases
+            下载地址 (例: ``https://github.com/SnowLuma/SnowLuma/releases/download/v1.7.7/SnowLuma-v1.7.7-linux-x64-lite.tar.gz``).
+        framework_archive_name: lite tarball 落地文件名 (远端 ``$WORKSPACE_DIR/`` 下).
         enable_nodesource: ``True`` 允许走 nodesource L3 fallback;
             ``False`` 强制只走 apt nodejs (air-gapped 部署或测试).
         vnc_port / novnc_port / webui_port: 对应远端监听端口, 注入到脚本变量.
@@ -139,6 +141,7 @@ def build_install_snowluma_script(
     template = _read_template(INSTALL_SCRIPT_TEMPLATE)
     # 编译期占位 (端口/标志/文件名等不含 shell 元字符的纯量); 路径不在此, 走 inject
     placeholder_vars: dict[str, str | int] = {
+        "framework_download_url": framework_download_url,
         "framework_archive_name": framework_archive_name,
         "enable_nodesource": "1" if enable_nodesource else "0",
         "vnc_port": vnc_port,

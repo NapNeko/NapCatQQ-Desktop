@@ -22,11 +22,6 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .bundled import (
-        find_bundled_lite_tarball,
-        find_bundled_version_sidecar,
-        read_bundled_version,
-    )
     from .daemon import (
         RemoteDaemonReadyInfo,
         RemoteDaemonStartFailed,
@@ -77,9 +72,6 @@ _EXPORT_MAP: dict[str, str] = {
     "build_install_snowluma_script": ".templates",
     "build_snowluma_daemon_launcher": ".templates",
     "build_snowluma_bot_launcher": ".templates",
-    "find_bundled_lite_tarball": ".bundled",
-    "find_bundled_version_sidecar": ".bundled",
-    "read_bundled_version": ".bundled",
     "SnowLumaDeployment": ".deployment",
     "SnowLumaInstallStep": ".deployment",
     "SnowLumaInstallStepResult": ".deployment",

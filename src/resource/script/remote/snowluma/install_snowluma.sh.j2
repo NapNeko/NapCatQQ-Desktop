@@ -301,16 +301,58 @@ if [ "$NODE_OK" -eq 0 ]; then
         "未能安装到 node >= 22; 已尝试: 系统已装/apt nodejs/nodesource setup_22.x/便携式 tarball (镜像 fallback). 请检查远端出方向网络或手动安装 node >= 22."
 fi
 
-# ==================== 6. 解压 SnowLuma.Framework lite tarball ====================
-progress 60 "解压 SnowLuma.Framework"
-ARCHIVE_PATH="$WORKSPACE_DIR/{{framework_archive_name}}"
-if [ ! -f "$ARCHIVE_PATH" ]; then
-    die "FRAMEWORK_ARCHIVE_MISSING" "未找到 lite tarball: $ARCHIVE_PATH (请先 SFTP 上传)"
+# ==================== 6. 下载并解压 SnowLuma.Framework lite tarball ====================
+progress 60 "下载 SnowLuma.Framework"
+FRAMEWORK_URL="{{framework_download_url}}"
+FRAMEWORK_FILENAME="{{framework_archive_name}}"
+ARCHIVE_PATH="$WORKSPACE_DIR/${FRAMEWORK_FILENAME}"
+
+# 下载策略 (与 Node.js 同模式):
+# 1. 复用已缓存/Desktop 预上传的 tarball (跳过网络下载)
+# 2. GitHub releases 直连
+# 3. 国内 GitHub 镜像站 fallback
+# 4. 以上全部失败 -> die (Desktop 侧会在执行前尝试本机下载 + SFTP 预上传兜底)
+FRAMEWORK_DOWNLOADED=0
+if [ -f "$ARCHIVE_PATH" ]; then
+    echo "[INFO] 复用已缓存的 lite tarball: $ARCHIVE_PATH"
+    FRAMEWORK_DOWNLOADED=1
 fi
+
+if [ "$FRAMEWORK_DOWNLOADED" -eq 0 ]; then
+    # GitHub 直连 + 镜像站 fallback
+    # 镜像站格式: ${MIRROR_BASE}/${GITHUB_RAW_URL}
+    # 例: https://ghproxy.cc/https://github.com/SnowLuma/SnowLuma/releases/download/v1.7.7/xxx.tar.gz
+    for url in \
+        "$FRAMEWORK_URL" \
+        "https://gh.ddlc.top/$FRAMEWORK_URL" \
+        "https://slink.ltd/$FRAMEWORK_URL" \
+        "https://cors.isteed.cc/$FRAMEWORK_URL" \
+        "https://hub.gitmirror.com/$FRAMEWORK_URL" \
+        "https://ghproxy.cc/$FRAMEWORK_URL" \
+        "https://github.moeyy.xyz/$FRAMEWORK_URL"
+    do
+        echo "[INFO] 尝试下载: $url"
+        if curl --connect-timeout 8 --max-time 120 --speed-limit 10240 --speed-time 30 \
+                -kfSL "$url" -o "$ARCHIVE_PATH" 2>/dev/null; then
+            FRAMEWORK_DOWNLOADED=1
+            echo "[INFO] 下载成功: $url"
+            break
+        fi
+        rm -f "$ARCHIVE_PATH"
+    done
+fi
+
+if [ "$FRAMEWORK_DOWNLOADED" -eq 0 ]; then
+    die "FRAMEWORK_DOWNLOAD_FAILED" \
+        "下载 SnowLuma.Framework 失败: 已尝试 GitHub 直连 + 6 个镜像站, 均不可达; " \
+        "请检查远端出方向网络或重试部署 (Desktop 会尝试本机下载兜底)"
+fi
+
+progress 70 "解压 SnowLuma.Framework"
 tar -xzf "$ARCHIVE_PATH" -C "$SNOWLUMA_DIR" --strip-components=1 \
     || die "FRAMEWORK_EXTRACT_FAILED" "解压失败: $ARCHIVE_PATH"
 
-# W3 修订: SnowLuma 主仓库 release lite tarball 内部为扁平结构
+# SnowLuma release lite tarball 内部为扁平结构
 # (顶层 ``./`` -> ``./index.mjs`` / ``./launcher.sh`` / ``./native/`` / ``./client/``),
 # ``--strip-components=1`` 剥掉 ``./`` 后入口位于 ``$SNOWLUMA_DIR/index.mjs``;
 # 见 https://github.com/SnowLuma/SnowLuma/releases (例 ``SnowLuma-vX.Y.Z-linux-x64-lite.tar.gz``).

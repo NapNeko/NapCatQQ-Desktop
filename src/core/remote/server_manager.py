@@ -943,8 +943,6 @@ class ServerManager(QObject):
         """
         from src.core.remote.snowluma import (
             SnowLumaDeployment,
-            SnowLumaFrameworkNotBundledError,
-            read_bundled_version,
         )
 
         assert profile.snowluma_paths is not None, "SL flavor 必须持有 snowluma_paths"
@@ -1076,24 +1074,44 @@ class ServerManager(QObject):
                 # 0-100 -> 40-90
                 _emit_progress(f"[SnowLuma] {message}", 40 + int(percent * 50 / 100))
 
+            # 获取 SnowLuma 最新 release tag
+            import json
+            import urllib.request
+
+            framework_tag: str | None = None
+            try:
+                api_url = "https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest"
+                req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "NapCatQQ-Desktop"})  # noqa: S310
+                with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+                    data = json.loads(resp.read())
+                    framework_tag = data.get("tag_name")
+            except Exception as exc:  # noqa: BLE001
+                self.deployment_log.emit(server_id, f"[WARN] 获取 SnowLuma 最新版本失败: {exc}")
+
+            if not framework_tag:
+                raise RemoteDeploymentError(
+                    "install_snowluma_framework",
+                    "无法获取 SnowLuma 最新版本号 (GitHub API 不可达); 请检查网络后重试",
+                )
+
+            # 归一化远端架构: probe.normalized_arch 返回 "amd64"/"arm64", 转为 releases 命名 "x64"/"arm64"
+            remote_arch = "arm64" if probe.normalized_arch == "arm64" else "x64"
+
             # Node.js tarball 本机下载兜底缓存路径: 复用 Desktop tmp 目录.
             # 与 LinuxQQ 兜底共享同一个 local_qq_cache_dir (都是 PathFunc.tmp_path).
             local_node_cache_dir: Path | None = local_qq_cache_dir  # 复用上面已取到的路径
 
             try:
                 sl_deployer.install_snowluma_framework(
+                    framework_tag=framework_tag,
+                    remote_arch=remote_arch,
                     progress=_sl_progress,
                     log_callback=_emit_log_line,
                     progress_log_callback=_emit_log_progress,
+                    local_cache_dir=local_qq_cache_dir,
                     local_node_cache_dir=local_node_cache_dir,
                     should_cancel=cancel_event.is_set,
                 )
-            except SnowLumaFrameworkNotBundledError as exc:
-                raise RemoteDeploymentError(
-                    "install_snowluma_framework",
-                    f"Desktop 未捆绑 SnowLuma.Framework: {exc}",
-                    cause=exc,
-                ) from exc
             except Exception as exc:  # noqa: BLE001
                 if self.is_cancel_requested(server_id):
                     raise RemoteDeploymentCancelledError(cause=exc) from exc
@@ -1128,7 +1146,7 @@ class ServerManager(QObject):
                     f"远端关键文件缺失: {', '.join(missing)}",
                 )
 
-            framework_version = read_bundled_version()
+            framework_version = framework_tag
             updated_profile = self._registry.get(server_id)
             if updated_profile is not None:
                 updated_profile.snowluma_framework_version = framework_version

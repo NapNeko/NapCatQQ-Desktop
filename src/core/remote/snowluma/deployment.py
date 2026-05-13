@@ -46,7 +46,6 @@ from ..deployment import (
 from ..errors import RemoteCommandError, RemoteError
 from ..execution_backend import ExecutionBackend
 from ..models import LinuxCorePaths, RemoteCommandResult
-from .bundled import LITE_TARBALL_FILENAME, find_bundled_lite_tarball, read_bundled_version
 from .paths import SnowLumaRemotePaths
 from .templates import (
     build_install_snowluma_script,
@@ -55,9 +54,11 @@ from .templates import (
 )
 
 
-# 远端落点文件名 (与 Desktop 内置 tarball 同名, SFTP put 后供 install_snowluma.sh
-# ``tar -xzf $WORKSPACE_DIR/<name>`` 使用)
-_LITE_TARBALL_REMOTE_FILENAME: str = LITE_TARBALL_FILENAME
+# GitHub releases 下载 URL 模板
+_SNOWLUMA_RELEASE_BASE: str = "https://github.com/SnowLuma/SnowLuma/releases/download"
+
+# 远端落地 tarball 文件名
+_LITE_TARBALL_REMOTE_FILENAME: str = "snowluma_framework_lite.tar.gz"
 
 
 # ==================== 错误 ====================
@@ -238,9 +239,83 @@ class SnowLumaDeployment:
         )
 
     # ==================== SL 独有: install_snowluma_framework ====================
+    @staticmethod
+    def get_framework_download_url(tag: str, arch: str) -> str:
+        """构造 SnowLuma.Framework lite tarball 的 GitHub releases 下载 URL.
+
+        Args:
+            tag: release tag, 含 ``v`` 前缀 (例: ``"v1.7.7"``).
+            arch: 归一化架构, ``"x64"`` 或 ``"arm64"``.
+
+        Returns:
+            完整下载 URL, 例:
+            ``https://github.com/SnowLuma/SnowLuma/releases/download/v1.7.7/SnowLuma-v1.7.7-linux-x64-lite.tar.gz``
+        """
+        filename = f"SnowLuma-{tag}-linux-{arch}-lite.tar.gz"
+        return f"{_SNOWLUMA_RELEASE_BASE}/{tag}/{filename}"
+
+    def _prefetch_framework_tarball(
+        self,
+        download_url: str,
+        local_cache_dir: Path,
+        *,
+        should_cancel: Callable[[], bool] | None = None,
+        log_callback: LogLineCallback | None = None,
+    ) -> None:
+        """Desktop 本机下载 lite tarball 并 SFTP 上传到远端作为兜底.
+
+        如果本机下载失败 (网络问题等), 静默跳过 — 远端脚本仍会尝试自行下载.
+        """
+        import urllib.request
+
+        filename = download_url.rsplit("/", 1)[-1]
+        local_path = local_cache_dir / filename
+        remote_path = PurePosixPath(
+            self.paths.workspace_dir, _LITE_TARBALL_REMOTE_FILENAME
+        ).as_posix()
+
+        # 如果本地已有缓存, 直接上传
+        if not local_path.is_file():
+            if log_callback:
+                log_callback(f"[FALLBACK] Desktop 本机下载 SnowLuma.Framework: {download_url}")
+            try:
+                local_cache_dir.mkdir(parents=True, exist_ok=True)
+                urllib.request.urlretrieve(download_url, local_path)  # noqa: S310
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    f"Desktop 本机下载 SnowLuma.Framework 失败 (兜底跳过): {exc}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                local_path.unlink(missing_ok=True)
+                return
+
+        if should_cancel and should_cancel():
+            return
+
+        # SFTP 上传到远端
+        if log_callback:
+            log_callback(f"[FALLBACK] SFTP 上传 lite tarball: {local_path.name} -> {remote_path}")
+        try:
+            self.backend.upload_file(local_path, remote_path)
+            logger.info(
+                f"SFTP 兜底上传 lite tarball 完成: {local_path} -> {remote_path} "
+                f"({local_path.stat().st_size} bytes)",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"SFTP 兜底上传 lite tarball 失败 (远端脚本将自行下载): {exc}",
+                LogType.NETWORK,
+                LogSource.CORE,
+            )
+
     def install_snowluma_framework(
         self,
         *,
+        framework_tag: str,
+        remote_arch: str = "x64",
         progress: ProgressCallback | None = None,
         log_callback: LogLineCallback | None = None,
         progress_log_callback: LogLineCallback | None = None,
@@ -249,26 +324,25 @@ class SnowLumaDeployment:
         novnc_port: int = 6081,
         webui_port: int = 5099,
         display_num: int = 0,
-        lite_tarball_override: Path | None = None,
+        local_cache_dir: Path | None = None,
         local_node_cache_dir: Path | None = None,
         should_cancel: Callable[[], bool] | None = None,
     ) -> SnowLumaInstallStepResult:
-        """SFTP 上传 lite tarball + 跑 ``install_snowluma.sh`` 装图形栈/node/解压.
+        """远端从 GitHub releases 下载 lite tarball + 跑 ``install_snowluma.sh`` 装图形栈/node/解压.
+
+        主路径: 远端脚本直接从 GitHub releases 下载 lite tarball.
+        兜底: 若 ``local_cache_dir`` 非空, Desktop 本机预先下载并 SFTP 上传到远端,
+        远端脚本检测到文件已存在时跳过下载.
 
         前置条件:
 
-        - Desktop 已捆绑 ``snowluma_framework_lite.tar.gz`` (W3 产物);
-          否则 raise :class:`SnowLumaFrameworkNotBundledError`
+        - 远端可访问 GitHub (直连或通过代理), 或 Desktop 本机可访问 (兜底)
         - 远端已装 LinuxQQ (建议在 :meth:`install_linuxqq` 之后调本方法);
           但本方法不强制校验, 由调用方控制顺序
 
-        **本机下载兜底 (Node.js)**: 当远端无法直连 npmmirror / nodejs.org 等镜像站时,
-        若 ``local_node_cache_dir`` 非空则改为在 Desktop 本机下载 Node.js tarball,
-        再通过 SFTP 上传到 ``${workspace_dir}/packages/node-vX.Y.Z-linux-{arch}.tar.xz``;
-        脚本里 ``NODE_PRELOADED`` 分支会自动跳过网络下载并复用预上传包.
-        见 [`local_node_fallback`](src/core/remote/snowluma/local_node_fallback.py).
-
         Args:
+            framework_tag: SnowLuma release tag, 含 ``v`` 前缀 (例: ``"v1.7.7"``).
+            remote_arch: 远端架构, ``"x64"`` 或 ``"arm64"`` (从 probe 获取).
             progress: ``[PROGRESS] N message`` 协议回调
             log_callback: 行级 stdout 回调 (供"部署控制台"实时回显)
             progress_log_callback: ``\\r`` 终止瞬时刷新行 (apt/curl 进度条) 回调
@@ -276,55 +350,42 @@ class SnowLumaDeployment:
                 ``False`` 强制只走 apt nodejs (air-gapped 部署或测试用)
             vnc_port / novnc_port / webui_port / display_num: 远端监听端口
                 (与 launcher 脚本默认值对齐)
-            lite_tarball_override: 测试用; 指定不走 :func:`find_bundled_lite_tarball`
-                的备用 tarball 路径
-            local_node_cache_dir: 本机 Node tarball 预下载缓存目录 (一般为
-                ``it(PathFunc).tmp_path``). ``None`` 时关闭本机兜底.
+            local_cache_dir: Desktop 本机下载缓存目录 (一般为
+                ``it(PathFunc).tmp_path``). 非空时启用本机下载 + SFTP 兜底.
+            local_node_cache_dir: 本机 Node tarball 预下载缓存目录.
+                ``None`` 时关闭 Node.js 本机兜底.
             should_cancel: 取消检查协议.
 
         Returns:
             :class:`SnowLumaInstallStepResult` (``step="install_snowluma_framework"``).
 
         Raises:
-            SnowLumaFrameworkNotBundledError: Desktop 未捆绑 lite tarball
             RemoteCommandError: 远端脚本退出码非 0
         """
-        bundled_version = read_bundled_version() or "unknown"
+        download_url = self.get_framework_download_url(framework_tag, remote_arch)
         logger.info(
             (
                 f"开始远端 SnowLuma.Framework 安装: workspace={self.paths.workspace_dir}, "
-                f"bundled_version={bundled_version}"
+                f"tag={framework_tag}, arch={remote_arch}, url={download_url}"
             ),
             LogType.NETWORK,
             LogSource.CORE,
         )
 
-        # 1. 定位本地 lite tarball
-        local_tarball = lite_tarball_override or find_bundled_lite_tarball()
-        if local_tarball is None:
-            raise SnowLumaFrameworkNotBundledError(
-                "Desktop 未捆绑 SnowLuma.Framework lite tarball, 远端部署不可用; "
-                "请运行 script/build_scripts/build_snowluma_framework_lite.py 后重启 Desktop"
-            )
-        if not local_tarball.is_file():
-            raise SnowLumaFrameworkNotBundledError(
-                f"指定的 lite tarball 不存在: {local_tarball}"
-            )
-
-        # 2. 初始化目录 + SFTP 上传 tarball 到 ${workspace_dir}/{filename}
+        # 1. 初始化目录
         self.initialize_layout()
-        remote_tarball_path = PurePosixPath(
-            self.paths.workspace_dir, _LITE_TARBALL_REMOTE_FILENAME
-        ).as_posix()
-        self.backend.upload_file(local_tarball, remote_tarball_path)
-        logger.info(
-            f"SFTP 上传 lite tarball 完成: {local_tarball} -> {remote_tarball_path} "
-            f"({local_tarball.stat().st_size} bytes)",
-            LogType.NETWORK,
-            LogSource.CORE,
-        )
 
-        # 2.5. Node.js tarball 本机下载兜底: 远端镜像不可达时预上传到 packages/
+        # 1.5. 本机下载兜底: Desktop 预先下载 lite tarball 并 SFTP 上传到远端
+        # 远端脚本检测到文件已存在时跳过网络下载, 直接解压
+        if local_cache_dir is not None:
+            self._prefetch_framework_tarball(
+                download_url,
+                local_cache_dir,
+                should_cancel=should_cancel,
+                log_callback=log_callback,
+            )
+
+        # 1.6. Node.js tarball 本机下载兜底
         if local_node_cache_dir is not None:
             self._maybe_prefetch_node_tarball(
                 local_node_cache_dir=local_node_cache_dir,
@@ -332,9 +393,10 @@ class SnowLumaDeployment:
                 log_callback=log_callback,
             )
 
-        # 3. 渲染脚本 + 上传 + 执行
+        # 2. 渲染脚本 + 上传 + 执行 (远端脚本优先从 GitHub releases 下载, 已有文件时跳过)
         script_content = build_install_snowluma_script(
             self.paths,
+            framework_download_url=download_url,
             framework_archive_name=_LITE_TARBALL_REMOTE_FILENAME,
             enable_nodesource=enable_nodesource,
             vnc_port=vnc_port,
