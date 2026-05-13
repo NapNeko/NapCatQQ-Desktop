@@ -780,16 +780,46 @@ class RemoteSnowLumaBackend(OperationBackend):
         """SL 远端 qq 二进制位于 ``$workspace_dir/opt/QQ/qq``; UI 不强依赖此值, 返 None."""
         return None
 
-    def detect_installation(self) -> InstallationInfo:
-        """聚合探测: SL backend 始终返空 (UI 维护页未对 SL 启用版本探测).
+    def _detect_snowluma_framework_version(self) -> str | None:
+        """读取远端 ``${snowluma_framework_dir}/package.json`` 的 version 字段."""
+        pkg_path = f"{self.sl_paths.snowluma_framework_dir}/package.json"
+        result = self._exec_backend.run(
+            f'test -f "{pkg_path}" && cat "{pkg_path}" || true',
+            check=False,
+        )
+        if not result.ok or not result.stdout.strip():
+            return None
+        match = re.search(r'"version"\s*:\s*"([^"]+)"', result.stdout)
+        if match is None:
+            return None
+        return match.group(1).strip() or None
 
-        TODO: SL 版本可读 ``snowluma_framework_dir/package.json:version`` + LinuxQQ 同 NC 路径.
+    def _detect_qq_version(self) -> str | None:
+        """读取远端 LinuxQQ ``package.json`` 的 version 字段 (SL workspace 下)."""
+        # SL 的 LinuxQQ 安装在 ${workspace_dir}/opt/QQ/ (与 NC 同构)
+        pkg_path = f"{self.sl_paths.workspace_dir}/opt/QQ/resources/app/package.json"
+        result = self._exec_backend.run(
+            f'test -f "{pkg_path}" && cat "{pkg_path}" || true',
+            check=False,
+        )
+        if not result.ok or not result.stdout.strip():
+            return None
+        match = re.search(r'"version"\s*:\s*"([^"]+)"', result.stdout)
+        if match is None:
+            return None
+        return match.group(1).strip() or None
+
+    def detect_installation(self) -> InstallationInfo:
+        """聚合探测: 读取远端 SnowLuma.Framework 版本 + LinuxQQ 版本.
+
+        对于 SL 后端, ``napcat_version`` 字段复用为 SnowLuma.Framework 版本
+        (上层 ``redetect_versions`` 会根据 flavor 写入正确的 profile 字段).
         """
+        self._ensure_connected()
         return InstallationInfo(
-            backend_label="snowluma-remote",
-            napcat_version=None,
-            qq_version=None,
-            qq_path=None,
+            napcat_version=self._detect_snowluma_framework_version(),
+            qq_version=self._detect_qq_version(),
+            qq_install_path=None,
         )
 
     # ==================== 日志 ====================

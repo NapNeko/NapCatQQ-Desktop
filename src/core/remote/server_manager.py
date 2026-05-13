@@ -1213,15 +1213,14 @@ class ServerManager(QObject):
 
     # ==================== 仅版本探测 (轻量, 不部署) ====================
     def redetect_versions(self, server_id: str) -> tuple[str | None, str | None]:
-        """**同步** 重新探测远端 NapCat / QQ 版本号并写回档案. 
+        """**同步** 重新探测远端版本号并写回档案.
 
-        相比 [`deploy_server`](src/core/remote/server_manager.py) 不会重新执行
-        安装脚本, 仅跑 ``detect_installation`` 即可, 用于:
-        - 部署完成后的"刷新"按钮
-        - 启动时对已部署服务器自动同步版本
+        对于 NC flavor: 探测 NapCat + LinuxQQ 版本.
+        对于 SL flavor: 探测 SnowLuma.Framework + LinuxQQ 版本.
 
         Returns:
-            ``(napcat_version, qq_version)`` 元组, 任一字段可能为 None. 
+            ``(primary_version, qq_version)`` 元组, 任一字段可能为 None.
+            primary_version 对 NC 是 napcat_version, 对 SL 是 snowluma_framework_version.
 
         Raises:
             KeyError: 服务器档案不存在
@@ -1237,13 +1236,19 @@ class ServerManager(QObject):
         # 写回档案 (即使返回 None 也写, 避免旧值误导)
         updated = self._registry.get(server_id)
         if updated is not None:
-            updated.napcat_version = installation.napcat_version
+            is_sl = updated.backend_flavor == BackendFlavor.SNOWLUMA
+            if is_sl:
+                # SL: napcat_version 字段复用为 framework 版本
+                updated.snowluma_framework_version = installation.napcat_version
+            else:
+                updated.napcat_version = installation.napcat_version
             updated.qq_version = installation.qq_version
             self._registry.update(updated)
             self.server_updated.emit(server_id)
+            primary_label = "snowluma_framework" if is_sl else "napcat"
             logger.info(
                 f"远端版本探测完成: id={server_id}, "
-                f"napcat={installation.napcat_version}, qq={installation.qq_version}",
+                f"{primary_label}={installation.napcat_version}, qq={installation.qq_version}",
                 LogType.NETWORK,
                 LogSource.CORE,
             )
