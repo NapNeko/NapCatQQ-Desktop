@@ -1,0 +1,5 @@
+#subtleSearchLineEdit {
+    background: transparent;
+    border: none;
+    padding: 0px 4px;
+}

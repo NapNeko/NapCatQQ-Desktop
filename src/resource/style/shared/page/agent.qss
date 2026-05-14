@@ -1,0 +1,28 @@
+#agent_page {
+    background: transparent;
+    border: none;
+}
+
+#sessionSidebar {
+    background-color: rgba(128, 128, 128, 0.04);
+    border-right: 1px solid rgba(128, 128, 128, 0.12);
+}
+
+#sessionListWidget {
+    border: none;
+    background: transparent;
+}
+
+#sessionListWidget::item {
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin: 2px 4px;
+}
+
+#sessionListWidget::item:selected {
+    background-color: rgba(128, 128, 128, 0.12);
+}
+
+#sessionListWidget::item:hover:!selected {
+    background-color: rgba(128, 128, 128, 0.06);
+}

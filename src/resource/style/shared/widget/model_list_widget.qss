@@ -1,0 +1,5 @@
+#modelCountBadge {
+    background: rgba(128, 128, 128, 0.1);
+    border-radius: 8px;
+    padding: 2px 6px;
+}
