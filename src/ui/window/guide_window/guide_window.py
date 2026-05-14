@@ -5,9 +5,10 @@ from abc import ABC
 # 第三方库导入
 from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 from qfluentwidgets.components.widgets.stacked_widget import PopUpAniStackedWidget
-from qfluentwidgets import FluentWidget, setTheme, Theme
+from qfluentwidgets import FluentWidget, isDarkTheme, setTheme, Theme
 from qframelesswindow import FramelessWindow
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QApplication, QVBoxLayout
 
 # 项目内模块导入
@@ -43,9 +44,14 @@ class GuideWindow(FramelessWindow):
         splashScreen (SplashScreen): 启动画面
     """
 
+    # 与 FluentWidget 保持一致的背景色
+    _LIGHT_BACKGROUND_COLOR = QColor(240, 244, 249)
+    _DARK_BACKGROUND_COLOR = QColor(32, 32, 32)
+
     def __init__(self) -> None:
         """初始化"""
         super().__init__()
+        self._backgroundColor = self._LIGHT_BACKGROUND_COLOR
 
     def initialize(self) -> None:
         """初始化方法
@@ -66,6 +72,8 @@ class GuideWindow(FramelessWindow):
 
         # 自动主题
         setTheme(Theme.AUTO)
+        self._updateBackgroundColor()
+        cfg.themeChanged.connect(self._updateBackgroundColor)
 
         # 隐藏无用的东西
         self.titleBar.hide()
@@ -186,6 +194,22 @@ class GuideWindow(FramelessWindow):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = None
             event.accept()
+
+    def paintEvent(self, event):
+        """绘制主题感知的背景色"""
+        painter = QPainter(self)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(self._backgroundColor)
+        painter.drawRect(self.rect())
+        painter.end()
+
+    def _updateBackgroundColor(self, *_args) -> None:
+        """根据当前主题更新背景色"""
+        if isDarkTheme():
+            self._backgroundColor = self._DARK_BACKGROUND_COLOR
+        else:
+            self._backgroundColor = self._LIGHT_BACKGROUND_COLOR
+        self.update()
 
     def on_next_page(self) -> None:
         """切换到下一个页面
