@@ -32,6 +32,7 @@ class _ResourceStyleSheet(StyleSheetBase):
 class PageStyleSheet(_ResourceStyleSheet, Enum):
     """页面样式表"""
 
+    AGENT = "agent"
     API_DEBUG = "api_debug"
     HOME = "home"
     # BOT = "bot"
@@ -48,6 +49,8 @@ class WidgetStyleSheet(_ResourceStyleSheet, Enum):
 
     UPDATE_LOG_CARD = "update_log_card"
     CODE_EDITOR = "code_editor"
+    MODEL_LIST_WIDGET = "model_list_widget"
+    SUBTLE_SEARCH_EDIT = "subtle_search_edit"
 
     def path(self, theme: Theme = Theme.AUTO) -> str:
         return self._resolve_path("widget", self.value, theme)

@@ -31,6 +31,7 @@
     </qresource>
 
     <qresource prefix="style">
+        <file>style/shared/page/agent.qss</file>
         <file>style/shared/page/api_debug.qss</file>
         <file>style/shared/page/home.qss</file>
         <file>style/shared/page/remote.qss</file>
@@ -42,6 +43,8 @@
         <file>style/dark/widget/code_editor.qss</file>
         <file>style/light/widget/code_editor.qss</file>
         <file>style/shared/widget/code_editor.qss</file>
+        <file>style/shared/widget/model_list_widget.qss</file>
+        <file>style/shared/widget/subtle_search_edit.qss</file>
     </qresource>
 
     <qresource prefix="template">
