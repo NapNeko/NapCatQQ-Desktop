@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from src.core.platform.runtime_args import is_developer_mode_enabled
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.stacked_widget import TransparentStackedWidget
-from .sub_page import DesktopLog, Developer, General, Performance, Personalization
+from .sub_page import DesktopLog, Developer, General, Performance, Personalization, ProviderPanel
 from .widget import SetupTopCard
 
 if TYPE_CHECKING:
@@ -54,11 +54,13 @@ class SetupWidget(QWidget):
         self.personalization = Personalization(self)
         self.performance = Performance(self)
         self.desktop_log = DesktopLog(self)
+        self.agent_provider = ProviderPanel(self)
         self.developer = Developer(self) if is_developer_mode_enabled() else None
 
         self.view.addWidget(self.personalization)
         self.view.addWidget(self.general)
         self.view.addWidget(self.performance)
+        self.view.addWidget(self.agent_provider)
         self.view.addWidget(self.desktop_log)
         if self.developer is not None:
             self.view.addWidget(self.developer)
@@ -77,6 +79,11 @@ class SetupWidget(QWidget):
             routeKey=self.performance.objectName(),
             text=self.tr("性能"),
             onClick=lambda: self.view.setCurrentWidget(self.performance),
+        )
+        self.top_card.pivot.addItem(
+            routeKey=self.agent_provider.objectName(),
+            text=self.tr("AI 供应商"),
+            onClick=lambda: self.view.setCurrentWidget(self.agent_provider),
         )
         self.top_card.pivot.addItem(
             routeKey=self.desktop_log.objectName(),
