@@ -52,6 +52,7 @@ import_heading_firstparty = "项目内模块导入"
 dev = [
     "pytest>=9.0.2",
     "pytest-cov>=6.2.1",
+    "hypothesis>=6.100.0",
 ]
 
 [tool.pytest.ini_options]
