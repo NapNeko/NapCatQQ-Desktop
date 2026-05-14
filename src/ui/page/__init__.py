@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from .agent_page import AgentChatPage
 from .api_debug_page import ApiDebugPage
 from .bot_page import BotPage
 from .component_page import ComponentPage

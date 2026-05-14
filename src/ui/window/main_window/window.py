@@ -16,7 +16,7 @@ from src.core.logging import CrashBundleNotification, LogSource, crash_bundle_no
 from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState, BotProcessManager
 from src.ui.common.icon import StaticIcon
 from src.ui.components.info_bar import error_bar, info_bar, success_bar, warning_bar
-from src.ui.page import ApiDebugPage, BotPage, ComponentPage, HomeWidget, RemotePage, SetupWidget
+from src.ui.page import AgentChatPage, ApiDebugPage, BotPage, ComponentPage, HomeWidget, RemotePage, SetupWidget
 from src.ui.page.bot_page.widget.msg_box import QRCodeDialogFactory
 from src.ui.window.main_window.system_try_icon import SystemTrayIcon
 from src.ui.window.main_window.title_bar import CustomTitleBar
@@ -134,6 +134,12 @@ class MainWindow(MSFluentWindow):
             position=NavigationItemPosition.TOP,
         )
         self.addSubInterface(
+            interface=it(AgentChatPage).initialize(self),
+            icon=FluentIcon.CHAT,
+            text=self.tr("Agent"),
+            position=NavigationItemPosition.TOP,
+        )
+        self.addSubInterface(
             interface=it(RemotePage).initialize(self),
             icon=FluentIcon.GLOBE,
             text=self.tr("远程"),
@@ -234,6 +240,10 @@ class MainWindow(MSFluentWindow):
 
     def close(self) -> bool:
         """重写关闭事件"""
+        # 防重入: _graceful_shutdown_and_close 最后调 super().close() 时不再进入本方法
+        if getattr(self, "_closing", False):
+            return super().close()
+
         close_action = cfg.get(cfg.close_button_action)
         logger.info(f"主窗口收到关闭请求, action={close_action.name}", log_source=LogSource.UI)
         if close_action == CloseActionEnum.CLOSE:
@@ -250,12 +260,120 @@ class MainWindow(MSFluentWindow):
                 return False
 
             else:
-                logger.info("主窗口执行实际关闭", log_source=LogSource.UI)
-                return super().close()
+                logger.info("主窗口执行实际关闭 (进入 graceful shutdown)", log_source=LogSource.UI)
+                self._closing = True
+                self._graceful_shutdown_and_close()
+                return True
         else:
             self.hide()
             logger.info("主窗口关闭行为切换为最小化到托盘", log_source=LogSource.UI)
             return False
+
+    def _graceful_shutdown_and_close(self) -> None:
+        """显示"正在关闭"提示框, 同步等待线程池排空, 然后退出.
+
+        使用 MessageBoxBase.show() (非模态) + processEvents 保持 UI 刷新,
+        避免嵌套事件循环带来的析构顺序问题.
+        """
+        import time
+
+        from PySide6.QtCore import QThreadPool
+        from qfluentwidgets import BodyLabel, IndeterminateProgressRing, MessageBoxBase, SubtitleLabel
+
+        # ---- 主线程: 先停所有 QThread / 定时器 ----
+        # 停 AgentWorker 的 asyncio 线程 (QThread 子类, 不停会触发 fatal)
+        try:
+            from src.ui.page.agent_page import AgentChatPage
+
+            agent_page = self.findChild(AgentChatPage)
+            if agent_page is not None and hasattr(agent_page, "_worker"):
+                agent_page._worker.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
+        try:
+            from src.core.runtime.snowluma_driver import SnowLumaDriver
+
+            driver = it(SnowLumaDriver)
+            for qq_id in list(driver._pollers.keys()):
+                poller = driver._pollers.get(qq_id)
+                if poller is not None:
+                    try:
+                        poller.stop()
+                    except Exception:  # noqa: BLE001
+                        pass
+        except Exception:  # noqa: BLE001
+            pass
+
+        try:
+            from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState
+
+            login_mgr = it(ManagerNapCatQQLoginState)
+            for login_state in list(login_mgr.napcat_login_state_dict.values()):
+                try:
+                    login_state.remove()
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception:  # noqa: BLE001
+            pass
+
+        # ---- 提示框: spinner + 文字水平排列, 非模态 ----
+        class _ShutdownDialog(MessageBoxBase):
+            def __init__(self, parent):
+                super().__init__(parent=parent)
+                from PySide6.QtWidgets import QHBoxLayout
+
+                self.title_label = SubtitleLabel(self.tr("正在关闭"), self)
+
+                self.spinner = IndeterminateProgressRing(self)
+                self.spinner.setFixedSize(24, 24)
+                self.spinner.setStrokeWidth(3)
+
+                self.content_label = BodyLabel(self.tr("正在等待后台任务结束, 请稍候..."), self)
+
+                spinner_row = QHBoxLayout()
+                spinner_row.setContentsMargins(0, 8, 0, 0)
+                spinner_row.setSpacing(12)
+                spinner_row.addWidget(self.spinner)
+                spinner_row.addWidget(self.content_label, 1)
+
+                self.viewLayout.addWidget(self.title_label)
+                self.viewLayout.addSpacing(4)
+                self.viewLayout.addLayout(spinner_row)
+                self.widget.setMinimumWidth(360)
+
+                self.yesButton.hide()
+                self.cancelButton.hide()
+                self.buttonGroup.hide()
+
+        dialog = _ShutdownDialog(self)
+        dialog.show()  # 非模态, 不开嵌套事件循环
+        QApplication.processEvents()
+
+        # ---- 同步等待线程池, 用 processEvents 保持 UI 刷新 ----
+        try:
+            from src.core.remote.thread_pool import shutdown_remote_ssh_pool
+
+            shutdown_remote_ssh_pool(wait_ms=0)
+        except Exception:  # noqa: BLE001
+            pass
+
+        pool = QThreadPool.globalInstance()
+        deadline = time.monotonic() + 6.0  # 最多等 6 秒 (覆盖 httpx 5s timeout)
+
+        # 用非阻塞的 activeThreadCount 轮询, 让 processEvents 持续驱动 spinner 动画
+        while pool.activeThreadCount() > 0:
+            QApplication.processEvents()
+            time.sleep(0.016)  # ~60fps, 让出 CPU 但不阻塞主线程过久
+            if time.monotonic() > deadline:
+                logger.warning("Graceful shutdown 超时, 强制退出", log_source=LogSource.CORE)
+                break
+
+        dialog.accept()
+        dialog.deleteLater()
+
+        logger.info("Graceful shutdown 完成, 退出应用", log_source=LogSource.CORE)
+        super().close()
 
 
 class MainWindowCreator(AbstractCreator, ABC):
