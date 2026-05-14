@@ -10,7 +10,7 @@ from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import SystemTrayMenu
 from PySide6.QtCore import Slot
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QSystemTrayIcon, QWidget
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QWidget
 
 # 项目内模块导入
 from src.core.runtime.bot_process_manager import BotProcessManager
@@ -57,7 +57,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             Action(
                 icon=FIF.CLOSE,
                 text=self.tr("关闭程序"),
-                triggered=lambda: (it(BotProcessManager).stop_all_bots(), sys.exit()),
+                triggered=lambda: (it(BotProcessManager).stop_all_bots(), QApplication.quit()),
             )
         )
 

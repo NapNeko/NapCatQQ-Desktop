@@ -126,6 +126,51 @@ def run_application() -> int:
     # 延迟 import 避免 main 顶部加载 creart 注册链; 真正 ``it(SnowLumaDaemon)`` 只在
     # 首个 SL Bot 启动时才触发实例化, 这里调用即使 daemon 从未启过也安全 (no-op).
     def _shutdown_snowluma_daemon() -> None:
+        # 停 AgentWorker 的 asyncio 线程 (QThread 子类, 不停会触发 fatal)
+        try:
+            from src.ui.page.agent_page.agent_worker import AgentWorker
+
+            # AgentWorker 是 AgentChatPage 的子对象, 通过 QApplication 遍历找到
+            for widget in app.allWidgets():
+                worker = widget.findChild(AgentWorker)
+                if worker is not None:
+                    worker.stop()
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+
+        # 先停所有 SnowLuma poller 的 QTimer, 防止 aboutToQuit 后 timer 仍在 fire
+        # 往线程池塞新 runnable (这是 "QThread: Destroyed while thread is still running"
+        # 的直接触发源之一).
+        try:
+            from src.core.runtime.snowluma_driver import SnowLumaDriver
+
+            driver = it(SnowLumaDriver)
+            for qq_id in list(driver._pollers.keys()):
+                poller = driver._pollers.get(qq_id)
+                if poller is not None:
+                    try:
+                        poller.stop()
+                    except Exception:  # noqa: BLE001
+                        pass
+            logger.info("aboutToQuit: 所有 SnowLuma poller timer 已停止", log_source=LogSource.CORE)
+        except Exception:  # noqa: BLE001 - driver 可能从未实例化
+            pass
+
+        # 再停 NapCat 登录态轮询 (NapCatQQLoginState 内部的 QTimer)
+        try:
+            from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState
+
+            login_mgr = it(ManagerNapCatQQLoginState)
+            for login_state in list(login_mgr.napcat_login_state_dict.values()):
+                try:
+                    login_state.remove()
+                except Exception:  # noqa: BLE001
+                    pass
+            logger.info("aboutToQuit: 所有 NapCat 登录态轮询已停止", log_source=LogSource.CORE)
+        except Exception:  # noqa: BLE001
+            pass
+
         try:
             from src.core.runtime.snowluma_daemon import SnowLumaDaemon
 
@@ -156,6 +201,24 @@ def run_application() -> int:
 
     exit_code = app.exec()
     logger.info(f"事件循环退出, exit_code={exit_code}", log_source=LogSource.CORE)
+
+    # ---- 兜底线程池收尾 (主窗口 graceful shutdown 路径已做过完整清理,
+    #      这里覆盖托盘直接退出等其他路径) ----
+    # httpx timeout=5s, 所以等 6s 确保 in-flight 的 HTTP 请求能结束
+    try:
+        from src.core.remote.thread_pool import shutdown_remote_ssh_pool
+
+        shutdown_remote_ssh_pool(wait_ms=5000)
+    except Exception:  # noqa: BLE001
+        pass
+
+    from PySide6.QtCore import QThreadPool
+
+    pool = QThreadPool.globalInstance()
+    if not pool.waitForDone(6000):
+        logger.warning("QThreadPool 仍有任务未完成, 使用 os._exit 跳过析构", log_source=LogSource.CORE)
+        os._exit(exit_code)
+
     return exit_code
 
 
