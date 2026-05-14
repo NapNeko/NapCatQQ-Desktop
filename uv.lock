@@ -410,7 +410,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=6.0.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "pyinstaller", specifier = ">=6.16.0" },
-    { name = "pyside6-fluent-widgets-qiao", specifier = ">=2.0.17" },
+    { name = "pyside6-fluent-widgets-qiao", specifier = ">=2.0.18" },
     { name = "pywin32-ctypes", marker = "sys_platform == 'win32'", specifier = ">=0.2.0" },
     { name = "qrcode", specifier = ">=8.2" },
 ]
@@ -2993,16 +2993,16 @@ wheels = [
 
 [[package]]
 name = "pyside6-fluent-widgets-qiao"
-version = "2.0.17"
+version = "2.0.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "darkdetect" },
     { name = "pyside6" },
     { name = "pysidesix-frameless-window" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/d8/6998450eebe56c23853a3c50a91d98ec88dabbdb0771d3fa16176bcb0036/pyside6_fluent_widgets_qiao-2.0.17.tar.gz", hash = "sha256:ee2c4fba7099c7c63ea6c72290b0060bb083e8a7d82da03e51c32fda4319802c", size = 1584785, upload-time = "2026-05-06T11:24:09.407Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/86/cd/2dde13231872275371444dfee7729809656cecd31353df9d0d4888551759/pyside6_fluent_widgets_qiao-2.0.18.tar.gz", hash = "sha256:81f5b1eb8ac2a2fcfd7328bd2fcfebcbeabef34defcd97a30dbe71ad0c36153a", size = 7126439, upload-time = "2026-05-14T05:50:36.779Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/16/4c74c3e10b88eaf87cb26822004702e6228fce5d4b1d000d78dbc4284b11/pyside6_fluent_widgets_qiao-2.0.17-py3-none-any.whl", hash = "sha256:bda71084791e43b4106ec8e9403dda3f1543f745d17001e6aa91a8a6d59c787a", size = 1702191, upload-time = "2026-05-06T11:24:07.194Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/52/5ee097733bd18d9cf8804502a167bc24fa9b6f0727bc6fb7216e40506679/pyside6_fluent_widgets_qiao-2.0.18-py3-none-any.whl", hash = "sha256:6d4585ea64ef73f25c79f03f132c273194c99a8b48d7e8ac987e7cd184b458d8", size = 7737144, upload-time = "2026-05-14T05:50:33.215Z" },
 ]
 
 [[package]]
