@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Provider 配置面板 — 管理 LLM Provider 的增删改和模型选择
+Provider 配置面板 - 管理 LLM Provider 的增删改和模型选择
 """
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from qfluentwidgets import (
     FluentIcon,
     HeaderCardWidget,
     InfoBadge,
-    InfoBar,
     LineEdit,
     MessageBoxBase,
     PasswordLineEdit,
@@ -39,8 +38,8 @@ from src.ui.components.info_bar import error_bar, success_bar
 class AddProviderDialog(MessageBoxBase):
     """添加 Provider 的表单对话框
 
-    提供 provider_id, name, api_base_url, api_key_ref, models 字段的输入，
-    并在提交前进行表单验证。
+    提供 provider_id, name, api_base_url, api_key_ref, models 字段的输入,
+    并在提交前进行表单验证.
     """
 
     def __init__(self, parent: QWidget) -> None:
@@ -80,7 +79,7 @@ class AddProviderDialog(MessageBoxBase):
         # Models (one per line)
         self.viewLayout.addSpacing(4)
         models_hint = CaptionLabel(
-            self.tr("模型列表 (每行一个，格式: model_id,max_tokens[,display_name])"),
+            self.tr("模型列表 (每行一个, 格式: model_id,max_tokens[,display_name])"),
             self,
         )
         models_hint.setTextColor("#666666", "#999999")
@@ -98,14 +97,14 @@ class AddProviderDialog(MessageBoxBase):
         self.cancelButton.setText(self.tr("取消"))
 
     def _add_form_row(self, label_text: str, widget: QWidget) -> None:
-        """添加一行表单：标签 + 输入控件"""
+        """添加一行表单: 标签 + 输入控件"""
         label = BodyLabel(label_text, self)
         self.viewLayout.addWidget(label)
         self.viewLayout.addWidget(widget)
         self.viewLayout.addSpacing(4)
 
     def validate(self) -> bool:
-        """验证表单输入，返回 False 阻止对话框关闭"""
+        """验证表单输入, 返回 False 阻止对话框关闭"""
         provider_id = self.provider_id_edit.text().strip()
         name = self.name_edit.text().strip()
         api_base_url = self.api_base_url_edit.text().strip()
@@ -114,36 +113,36 @@ class AddProviderDialog(MessageBoxBase):
 
         # 验证必填字段
         if not provider_id:
-            InfoBar.error(
-                title=self.tr("验证失败"),
+            error_bar(
                 content=self.tr("Provider ID 不能为空"),
+                title=self.tr("验证失败"),
                 duration=3000,
                 parent=self,
             )
             return False
 
         if not name:
-            InfoBar.error(
-                title=self.tr("验证失败"),
+            error_bar(
                 content=self.tr("名称不能为空"),
+                title=self.tr("验证失败"),
                 duration=3000,
                 parent=self,
             )
             return False
 
         if not api_base_url:
-            InfoBar.error(
-                title=self.tr("验证失败"),
+            error_bar(
                 content=self.tr("API Base URL 不能为空"),
+                title=self.tr("验证失败"),
                 duration=3000,
                 parent=self,
             )
             return False
 
         if not api_key_ref:
-            InfoBar.error(
-                title=self.tr("验证失败"),
+            error_bar(
                 content=self.tr("API Key 不能为空"),
+                title=self.tr("验证失败"),
                 duration=3000,
                 parent=self,
             )
@@ -151,9 +150,9 @@ class AddProviderDialog(MessageBoxBase):
 
         # 验证至少有一个模型
         if not models_text:
-            InfoBar.error(
-                title=self.tr("验证失败"),
+            error_bar(
                 content=self.tr("至少需要添加一个模型"),
+                title=self.tr("验证失败"),
                 duration=3000,
                 parent=self,
             )
@@ -162,9 +161,9 @@ class AddProviderDialog(MessageBoxBase):
         # 验证模型格式
         models = self._parse_models(models_text)
         if not models:
-            InfoBar.error(
+            error_bar(
+                content=self.tr("模型格式错误, 每行格式: model_id,max_tokens[,display_name]"),
                 title=self.tr("验证失败"),
-                content=self.tr("模型格式错误，每行格式: model_id,max_tokens[,display_name]"),
                 duration=3000,
                 parent=self,
             )
@@ -178,7 +177,7 @@ class AddProviderDialog(MessageBoxBase):
         每行格式: model_id,max_tokens[,display_name]
 
         Returns:
-            解析成功返回模型字典列表，失败返回 None
+            解析成功返回模型字典列表, 失败返回 None
         """
         models: list[dict] = []
         for line in models_text.splitlines():
@@ -204,7 +203,7 @@ class AddProviderDialog(MessageBoxBase):
         return models if models else None
 
     def get_provider_data(self) -> dict:
-        """获取表单数据，调用前应确保 validate() 通过
+        """获取表单数据, 调用前应确保 validate() 通过
 
         Returns:
             包含 provider_id, name, api_base_url, api_key_ref, models 的字典
@@ -223,9 +222,9 @@ class AddProviderDialog(MessageBoxBase):
 class ProviderConfigPanel(ScrollArea):
     """Provider 配置面板
 
-    继承 qfluentwidgets.ScrollArea，使用 SettingCardGroup 分组展示 Provider 列表，
-    每个 Provider 使用 HeaderCardWidget 展示名称和模型列表。
-    提供添加和删除 Provider 的功能。
+    继承 qfluentwidgets.ScrollArea, 使用 SettingCardGroup 分组展示 Provider 列表,
+    每个 Provider 使用 HeaderCardWidget 展示名称和模型列表.
+    提供添加和删除 Provider 的功能.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -266,12 +265,12 @@ class ProviderConfigPanel(ScrollArea):
         self.refresh_providers()
 
     def refresh_providers(self) -> None:
-        """刷新 Provider 列表，从 ProviderRegistry 获取所有已注册的 Provider 并更新显示"""
+        """刷新 Provider 列表, 从 ProviderRegistry 获取所有已注册的 Provider 并更新显示"""
         from src.core.agent.provider import ProviderRegistry
 
         registry: ProviderRegistry = it(ProviderRegistry)
 
-        # 清除现有卡片 — 从 SettingCardGroup 内部布局中移除
+        # 清除现有卡片 - 从 SettingCardGroup 内部布局中移除
         for card in self._provider_cards.values():
             card.setParent(None)
             card.deleteLater()
@@ -285,7 +284,7 @@ class ProviderConfigPanel(ScrollArea):
             active_provider_id = active_provider.provider_id
             active_model_id = active_model_config.model_id
         except Exception:
-            # NoActiveProviderError 或其他异常 — 无活跃 Provider
+            # NoActiveProviderError 或其他异常 - 无活跃 Provider
             pass
 
         # 为每个 Provider 创建卡片
@@ -307,8 +306,8 @@ class ProviderConfigPanel(ScrollArea):
 
         Args:
             provider: Provider 实例
-            active_provider_id: 当前活跃的 provider_id（可为 None）
-            active_model_id: 当前活跃的 model_id（可为 None）
+            active_provider_id: 当前活跃的 provider_id (可为 None)
+            active_model_id: 当前活跃的 model_id (可为 None)
 
         Returns:
             配置好的 HeaderCardWidget
@@ -340,7 +339,7 @@ class ProviderConfigPanel(ScrollArea):
             display = model.display_name or model.model_id
             model_combo.addItem(display)
             model_ids.append(model.model_id)
-            # 如果此 provider 是活跃的且此模型是活跃模型，记录索引
+            # 如果此 provider 是活跃的且此模型是活跃模型, 记录索引
             if (
                 provider.provider_id == active_provider_id
                 and model.model_id == active_model_id
@@ -366,7 +365,7 @@ class ProviderConfigPanel(ScrollArea):
         # Header 右侧区域: 活跃徽章 + 删除按钮
         card.headerLayout.addStretch(1)
 
-        # 如果是活跃 Provider，添加高亮徽章
+        # 如果是活跃 Provider, 添加高亮徽章
         if provider.provider_id == active_provider_id:
             badge = InfoBadge.success(self.tr("活跃"), parent=card)
             card.headerLayout.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -379,13 +378,13 @@ class ProviderConfigPanel(ScrollArea):
         delete_button.clicked.connect(lambda checked=False, p=pid: self.remove_provider(p))
         card.headerLayout.addWidget(delete_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # 存储 provider_id 到卡片属性，方便后续操作
+        # 存储 provider_id 到卡片属性, 方便后续操作
         card.setProperty("provider_id", provider.provider_id)
 
         return card
 
     def _on_add_provider_clicked(self) -> None:
-        """处理 '添加 Provider' 按钮点击事件，弹出表单对话框"""
+        """处理 '添加 Provider' 按钮点击事件, 弹出表单对话框"""
         dialog = AddProviderDialog(self.window())
         if dialog.exec():
             provider_data = dialog.get_provider_data()
@@ -394,11 +393,11 @@ class ProviderConfigPanel(ScrollArea):
     def add_provider(self, provider_data: dict) -> None:
         """添加新的 Provider
 
-        验证数据并调用 ProviderRegistry.register()。
-        成功后刷新列表，DuplicateProviderError 时显示错误通知。
+        验证数据并调用 ProviderRegistry.register().
+        成功后刷新列表, DuplicateProviderError 时显示错误通知.
 
         Args:
-            provider_data: Provider 配置数据，包含 provider_id, name, api_base_url,
+            provider_data: Provider 配置数据, 包含 provider_id, name, api_base_url,
                           api_key_ref, models 等字段
         """
         from src.core.agent.provider import ModelEntry, Provider, ProviderRegistry
@@ -443,7 +442,7 @@ class ProviderConfigPanel(ScrollArea):
             )
             return
 
-        # 注册成功，刷新列表
+        # 注册成功, 刷新列表
         success_bar(
             content=self.tr(f"Provider '{provider_data['name']}' 已添加"),
             parent=self,
@@ -453,7 +452,7 @@ class ProviderConfigPanel(ScrollArea):
     def remove_provider(self, provider_id: str) -> None:
         """移除指定的 Provider
 
-        调用 ProviderRegistry.unregister() 并刷新列表。
+        调用 ProviderRegistry.unregister() 并刷新列表.
 
         Args:
             provider_id: 要移除的 Provider 的唯一标识
@@ -481,8 +480,8 @@ class ProviderConfigPanel(ScrollArea):
     def set_active(self, provider_id: str, model_id: str) -> None:
         """设置活跃的 Provider 和模型组合
 
-        调用 ProviderRegistry.set_active() 并通过 ConfigPersistence 持久化配置。
-        成功后刷新列表以更新活跃指示器。
+        调用 ProviderRegistry.set_active() 并通过 ConfigPersistence 持久化配置.
+        成功后刷新列表以更新活跃指示器.
 
         Args:
             provider_id: Provider 的唯一标识
@@ -528,7 +527,7 @@ class ProviderConfigPanel(ScrollArea):
 
             persistence.save(config_data)
         except Exception:
-            # 持久化失败不阻塞 UI 操作，仅记录
+            # 持久化失败不阻塞 UI 操作, 仅记录
             import logging
 
             logging.getLogger(__name__).warning(

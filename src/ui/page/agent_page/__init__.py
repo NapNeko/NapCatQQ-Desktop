@@ -17,13 +17,12 @@ from qfluentwidgets import (
     AgentChatPanel,
     ChatMessage,
     ChatRole,
-    InfoBar,
-    InfoBarPosition,
     PermissionDock,
     ToolCallStatus,
 )
 
 from src.ui.common.style_sheet import PageStyleSheet
+from src.ui.components.info_bar import error_bar
 from .agent_worker import AgentWorker
 from .session_sidebar import SessionSidebar
 
@@ -211,12 +210,11 @@ class AgentChatPage(QWidget):
     def _on_stream_error(self, msg_id: str, error: object) -> None:
         """处理流错误事件, 显示错误通知并重新启用输入."""
         error_message = str(error) if error else "未知错误"
-        InfoBar.error(
-            title="生成错误",
+        error_bar(
             content=error_message,
-            parent=self,
-            position=InfoBarPosition.TOP,
+            title="生成错误",
             duration=5000,
+            parent=self,
         )
         self._panel.chatView().endGeneration(msg_id)
         self._panel.setInputEnabled(True)
