@@ -59,7 +59,7 @@ class BotPage(QWidget):
         # 调用方法
         self.conncet_signal()
         self.setup_view()
-        # 延迟自动启动: 给 SSH 连接池、SnowLuma daemon 等基础设施留出初始化时间.
+        # 延迟自动启动: 给 SSH 连接池, SnowLuma daemon 等基础设施留出初始化时间.
         # 使用 QTimer.singleShot 在事件循环空闲后执行, 避免阻塞 UI 初始化.
         from PySide6.QtCore import QTimer
 

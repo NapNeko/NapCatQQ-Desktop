@@ -115,9 +115,9 @@ class RemoteSnowLumaDaemon(QObject):
         parent: Qt parent
 
     Signals:
-        state_changed: ``(RemoteDaemonState,)`` — 状态机转移; UI 用 queued 连接
-        ready: ``()`` — 首次进入 READY 时 emit (供 BotCard 自动 unlock 启动按钮)
-        crashed: ``(str,)`` — 隧道 / daemon 进程挂掉; payload 是人类可读 error message
+        state_changed: ``(RemoteDaemonState,)`` - 状态机转移; UI 用 queued 连接
+        ready: ``()`` - 首次进入 READY 时 emit (供 BotCard 自动 unlock 启动按钮)
+        crashed: ``(str,)`` - 隧道 / daemon 进程挂掉; payload 是人类可读 error message
 
     Examples:
         >>> daemon = RemoteSnowLumaDaemon(ssh_client, paths)
@@ -188,7 +188,7 @@ class RemoteSnowLumaDaemon(QObject):
     def tunnel_manager(self) -> SnowLumaTunnelManager:
         """暴露给 W10 ``open_snowluma_vnc`` 直接拿端点构造 URL.
 
-        P9 (review): 惰性构造 — 首次访问时 SSH 必须已 connect, 否则
+        P9 (review): 惰性构造 - 首次访问时 SSH 必须已 connect, 否则
         ``ssh_client.transport`` raise. UI 调用者应该在 ``ensure_running()``
         返回后才访问本 property.
         """
@@ -362,10 +362,10 @@ class RemoteSnowLumaDaemon(QObject):
         之后, 直到 webui middleware 初始化完才能真响应 HTTP. 此处通过 SSH 隧道发请求,
         端到端验证 "浏览器能拿到响应".
 
-        任何 HTTP 状态码 (含 401/302/404) 都视为成功 — 只要 server 回了 byte 就证明
+        任何 HTTP 状态码 (含 401/302/404) 都视为成功 - 只要 server 回了 byte 就证明
         全链路 (浏览器 → 本地 forwarder → SSH channel → daemon HTTP) 贯通.
 
-        P10 (2026-05-12 fix): 首次冷启动时 SnowLuma framework 需要初始化 SQLite 数据库、
+        P10 (2026-05-12 fix): 首次冷启动时 SnowLuma framework 需要初始化 SQLite 数据库, 
         加载插件等, HTTP 响应时间可能超过 10s. 将 retry 从 20 次 (10s) 提升到 40 次 (20s),
         覆盖首次冷启动场景.
 
@@ -375,7 +375,7 @@ class RemoteSnowLumaDaemon(QObject):
             interval: 每次重试间隔秒数
 
         Raises:
-            RemoteDaemonStartFailed: 全部 retry 用完仍无响应 — daemon listen 了但不响应,
+            RemoteDaemonStartFailed: 全部 retry 用完仍无响应 - daemon listen 了但不响应,
                 此时 ensure_running 的 ref_count + tunnel 已由调用方在 except 分支回滚.
         """
         import http.client

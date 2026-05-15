@@ -211,7 +211,7 @@ class NapCatInstall(InstallBase):
 class SnowLumaInstall(InstallBase):
     """SnowLuma 发布包解压安装器 (P1 SnowLuma 适配).
 
-    与 :class:`NapCatInstall` 同文件、同信号名, 让上层可以走 NapCatPage 同款
+    与 :class:`NapCatInstall` 同文件, 同信号名, 让上层可以走 NapCatPage 同款
     连接模式. 关键区别:
 
     - zip 文件名含版本号 (`SnowLuma-<tag>-win-x64.zip`), 与 NapCat 固定 `NapCat.Shell.zip` 不同
@@ -273,7 +273,7 @@ class SnowLumaInstall(InstallBase):
         """解压 SnowLuma 发布包 (保留 config/ 与 data/ 已有文件).
 
         上游 GitHub release 的 ``SnowLuma-<tag>-win-x64.zip`` 实际是**扁平结构**
-        (顶层直接是 ``client/``、``native/``、``index.mjs`` 等), 没有
+        (顶层直接是 ``client/``, ``native/``, ``index.mjs`` 等), 没有
         ``SnowLuma-<tag>-win-x64/`` 包装目录. 但若用户手工/三方工具重打包后
         zip 含有单一包装目录, 我们也应正确处理.
 

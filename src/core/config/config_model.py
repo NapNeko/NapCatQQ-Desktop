@@ -55,7 +55,7 @@ DEFAULT_BYPASS_PAYLOAD = {
 _LEGACY_AUTO_RESTART_INTERVAL_PATTERN = re.compile(r"^\s*(\d+)\s*(m|h|d|mon|year)\s*$", re.IGNORECASE)
 _LOG_LEVEL_CHOICES = {"debug", "info", "error"}
 
-# W4 (2026-05-11): 迁移 deferred 队列 — _migrate_legacy_bot_fields 检测到旧
+# W4 (2026-05-11): 迁移 deferred 队列 - _migrate_legacy_bot_fields 检测到旧
 # ``bot.snowluma_webui_password_override`` 非空时 push 到这里;
 # operate_config._read_config_file 加载完 bot.json 后 调
 # :func:`consume_deferred_snowluma_overrides` 吃掉并写入 ``cfg.snowluma_webui_password_override``.
@@ -436,7 +436,7 @@ def consume_deferred_snowluma_overrides() -> list[str]:
 
     调用者 (一般是 :func:`operate_config._read_config_file`) 在读完迁移后的 bot.json 后调本
     函数: 如果返回非空, 将首项写入 ``cfg.snowluma_webui_password_override``; 如果 >= 2 项,
-    则 logger.warning "多个 Bot 曾设置不同 SnowLuma 密码 override, 选 ‘...’ 作为全局值;
+    则 logger.warning "多个 Bot 曾设置不同 SnowLuma 密码 override, 选 '...' 作为全局值;
     其余将丢弃".
 
     Returns:
@@ -676,7 +676,7 @@ class WebsocketServersConfig(NetworkBaseConfig):
     # SnowLuma WS server 的 path 是 exact match (由 ws 库 WebSocketServer({ path }) 实现);
     # NapCat WS server 固定挂在 /; 默认 "/" 与 SnowLuma 上游一致.
     path: str = "/"
-    # P2 (SnowLuma 表单后端感知): SnowLuma 独有 — Api / Event / Universal 三选一.
+    # P2 (SnowLuma 表单后端感知): SnowLuma 独有 - Api / Event / Universal 三选一.
     # 未显式配置时上游按 URL 尾部 /api / /event 自动分类; Desktop 默认 Universal 不依赖自动分类.
     role: Literal["Api", "Event", "Universal"] = "Universal"
 
@@ -691,7 +691,7 @@ class WebsocketClientsConfig(NetworkBaseConfig):
     reportSelfMessage: bool = False
     heartInterval: int = 30000
     reconnectInterval: int = 30000
-    # P2 (SnowLuma 表单后端感知): SnowLuma 独有 — Api / Event / Universal.
+    # P2 (SnowLuma 表单后端感知): SnowLuma 独有 - Api / Event / Universal.
     # NapCat WsClient 无 role 概念; SnowLuma 上游用此区分 API/Event 连接, 默认 Universal.
     role: Literal["Api", "Event", "Universal"] = "Universal"
 

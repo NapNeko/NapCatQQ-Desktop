@@ -138,7 +138,7 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     if joined == DS_TOKEN:
         joined = ".*"
     else:
-        # 中间 ``X/**/Y`` → ``X(?:/.*)?/Y`` (含 ``X/Y`` 直连) — 同时合并 ``**`` 前后的 ``/``
+        # 中间 ``X/**/Y`` → ``X(?:/.*)?/Y`` (含 ``X/Y`` 直连) - 同时合并 ``**`` 前后的 ``/``
         joined = joined.replace(f"/{DS_TOKEN}/", "(?:/.*)?/")
         # 头部 ``**/Y`` → ``(?:.*/)?Y`` (允许 0 段前缀)
         if joined.startswith(f"{DS_TOKEN}/"):

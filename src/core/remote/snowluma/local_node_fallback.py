@@ -35,13 +35,13 @@ from ..execution_backend import ExecutionBackend
 LogLineCallback = Callable[[str], None]
 ShouldCancelCallback = Callable[[], bool]
 
-# Node.js 版本 — 与 install_snowluma.sh.j2 L4 的 NODE_VERSION_TAG 对齐
+# Node.js 版本 - 与 install_snowluma.sh.j2 L4 的 NODE_VERSION_TAG 对齐
 _NODE_VERSION_TAG: str = "v22.18.0"
 
-# 架构映射 — 与脚本中 case "$(uname -m)" 对齐
+# 架构映射 - 与脚本中 case "$(uname -m)" 对齐
 ArchType = Literal["amd64", "arm64"]
 
-# 镜像源列表 — 与脚本中 L4 的 for url in ... 对齐 (顺序一致)
+# 镜像源列表 - 与脚本中 L4 的 for url in ... 对齐 (顺序一致)
 _NODE_MIRROR_URLS: list[str] = [
     f"https://cdn.npmmirror.com/binaries/node/{_NODE_VERSION_TAG}",
     f"https://npmmirror.com/mirrors/node/{_NODE_VERSION_TAG}",

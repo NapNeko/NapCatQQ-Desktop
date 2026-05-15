@@ -4,9 +4,9 @@
 按 ``docs/plans/2026-05-11-snowluma-remote-management-execution-plan.md`` 落地,
 为 SnowLuma 后端提供与 NapCat (`src/core/remote/`) 同构但独立的远端能力:
 
-- :class:`SnowLumaRemotePaths` (:mod:`.paths`) — 远端目录布局
+- :class:`SnowLumaRemotePaths` (:mod:`.paths`) - 远端目录布局
 - :func:`build_install_snowluma_script` / :func:`build_snowluma_daemon_launcher` /
-  :func:`build_snowluma_bot_launcher` (:mod:`.templates`) — shell 脚本渲染器
+  :func:`build_snowluma_bot_launcher` (:mod:`.templates`) - shell 脚本渲染器
 
 本子包**不**修改 NapCat 路径任何代码; 仅依赖 :mod:`src.core.remote` 中的中性设施
 (:class:`SSHClient` / :class:`ExecutionBackend` / :class:`LocalPortForwarder` /

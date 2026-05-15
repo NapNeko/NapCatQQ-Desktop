@@ -37,7 +37,7 @@ LogLineCallback = Callable[[str], None]
 ShouldCancelCallback = Callable[[], bool]
 """取消检查协议: 返回 ``True`` 表示用户已请求取消."""
 
-# LinuxQQ 版本与 hash 常量 — 与 remote_install_linuxqq.sh 中 select_qq_package 对齐
+# LinuxQQ 版本与 hash 常量 - 与 remote_install_linuxqq.sh 中 select_qq_package 对齐
 _LINUXQQ_VERSION: str = "3.2.25-45758"
 _LINUXQQ_HASH: str = "7516007c"
 

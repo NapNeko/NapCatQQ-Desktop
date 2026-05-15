@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI 驱动的更新日志生成脚本（本地使用版）
+AI 驱动的更新日志生成脚本 (本地使用版) 
 
-功能：
+功能: 
 1. 通过对比两个 git tag 获取变更
 2. 调用 AI API 生成格式化的更新日志
-3. 支持 OpenAI、OpenRouter 等兼容 API
+3. 支持 OpenAI, OpenRouter 等兼容 API
 
-使用方法：
+使用方法: 
     python generate_changelog_ai.py <current_tag> [previous_tag]
     
-示例：
+示例: 
     python generate_changelog_ai.py v1.7.28          # 自动查找上一个 tag
     python generate_changelog_ai.py v1.7.28 v1.7.27  # 指定对比版本
 
-本地配置（不提交到 Git）：
+本地配置 (不提交到 Git) : 
     1. 复制 .env.example 为 .env
     2. 在 .env 中填入你的 API Key
 
-注意：.env 文件已被 .gitignore 忽略，不会提交到仓库
+注意: .env 文件已被 .gitignore 忽略, 不会提交到仓库
 """
 
 import os
@@ -106,7 +106,7 @@ QUIT_WORDS = {"q", "quit", "exit", "退出", "取消"}
 
 
 class ReviewCancelled(Exception):
-    """用户主动结束交互改稿。"""
+    """用户主动结束交互改稿. """
 
     def __init__(self, notes: str):
         super().__init__("review cancelled")
@@ -114,7 +114,7 @@ class ReviewCancelled(Exception):
 
 
 def load_env_file():
-    """加载 .env 文件（本地使用，不提交到仓库）"""
+    """加载 .env 文件 (本地使用, 不提交到仓库) """
     script_dir = Path(__file__).parent
     env_path = script_dir / ".env"
     
@@ -133,13 +133,13 @@ def load_env_file():
 
 
 def get_config(*, exit_on_error: bool = True) -> dict:
-    """读取配置（优先 .env 文件，其次环境变量）"""
+    """读取配置 (优先 .env 文件, 其次环境变量) """
     config = DEFAULT_CONFIG.copy()
     
     # 先加载 .env 文件
     load_env_file()
     
-    # 读取 API Key（必需）
+    # 读取 API Key (必需) 
     api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         message_lines = [
@@ -175,7 +175,7 @@ def get_config(*, exit_on_error: bool = True) -> dict:
 
 
 def safe_print(text: object = "") -> None:
-    """兼容中文控制台输出。"""
+    """兼容中文控制台输出. """
     message = str(text)
     try:
         print(message)
@@ -187,7 +187,7 @@ def safe_print(text: object = "") -> None:
 
 
 def safe_input(prompt: str) -> str:
-    """兼容中文控制台输入提示。"""
+    """兼容中文控制台输入提示. """
     try:
         return input(prompt)
     except UnicodeEncodeError:
@@ -246,7 +246,7 @@ def get_file_stats(from_tag: Optional[str], to_tag: str) -> tuple:
 
 
 def normalize_version_for_docs(current_tag: str) -> Optional[str]:
-    """若当前引用是语义化版本，则返回标准 tag 形式。"""
+    """若当前引用是语义化版本, 则返回标准 tag 形式. """
     try:
         return parse_version(current_tag).tag
     except Exception:
@@ -260,7 +260,7 @@ def build_user_prompt(
     file_stats: str,
     file_list: list[str],
 ) -> str:
-    """构建初始用户提示词。"""
+    """构建初始用户提示词. """
     return f"""当前版本: {current_tag}
 上一版本: {previous_tag or "(首次发布)"}
 
@@ -279,7 +279,7 @@ def build_user_prompt(
 
 
 def sanitize_ai_output(content: str) -> str:
-    """清理 AI 输出，确保只保留正文。"""
+    """清理 AI 输出, 确保只保留正文. """
     text = content.strip().replace("\r\n", "\n")
     text = re.sub(r"^```(?:markdown|md)?\s*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s*```$", "", text)
@@ -288,7 +288,7 @@ def sanitize_ai_output(content: str) -> str:
 
 
 def call_ai_api(config: dict, messages: list[dict[str, str]]) -> str:
-    """调用 AI API 并返回正文。"""
+    """调用 AI API 并返回正文. """
     payload = {
         "model": config["model"],
         "messages": messages,
@@ -325,7 +325,7 @@ def generate_changelog_with_ai(
     file_stats: str,
     file_list: list,
 ) -> tuple[str, list[dict[str, str]]]:
-    """调用 AI API 生成更新日志，并返回会话消息。"""
+    """调用 AI API 生成更新日志, 并返回会话消息. """
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -355,7 +355,7 @@ def revise_changelog_with_ai(
     current_notes: str,
     feedback: str,
 ) -> str:
-    """基于用户反馈继续对话，直到满意。"""
+    """基于用户反馈继续对话, 直到满意. """
     revision_messages = [*messages]
     revision_messages.append({"role": "assistant", "content": current_notes})
     revision_messages.append(
@@ -384,7 +384,7 @@ def generate_fallback_changelog(
     previous_tag: Optional[str], 
     commits: list
 ) -> str:
-    """备用：使用简单规则生成更新日志"""
+    """备用: 使用简单规则生成更新日志"""
     lines: list[str] = []
     
     fixes = []
@@ -422,7 +422,7 @@ def generate_fallback_changelog(
 
 
 def render_preview_document(current_tag: str, notes: str) -> str:
-    """根据当前版本生成预览文档。"""
+    """根据当前版本生成预览文档. """
     normalized_version = normalize_version_for_docs(current_tag)
     if normalized_version:
         existing = (PROJECT_ROOT / "docs/CHANGELOG.md").read_text(encoding="utf-8")
@@ -431,7 +431,7 @@ def render_preview_document(current_tag: str, notes: str) -> str:
 
 
 def save_preview_file(current_tag: str, preview_content: str) -> Path:
-    """保存预览文件。"""
+    """保存预览文件. """
     safe_tag = re.sub(r"[^0-9A-Za-z._-]+", "_", current_tag.strip()) or "draft"
     output_file = PROJECT_ROOT / f"CHANGELOG_{safe_tag}.md"
     output_file.write_text(preview_content, encoding="utf-8")
@@ -439,7 +439,7 @@ def save_preview_file(current_tag: str, preview_content: str) -> Path:
 
 
 def apply_to_docs_changelog(current_tag: str, notes: str) -> bool:
-    """将生成结果写回 docs/CHANGELOG.md。"""
+    """将生成结果写回 docs/CHANGELOG.md. """
     normalized_version = normalize_version_for_docs(current_tag)
     if not normalized_version:
         safe_print("⚠️ 当前版本不是语义化版本号，跳过写回 docs/CHANGELOG.md。")
@@ -453,7 +453,7 @@ def apply_to_docs_changelog(current_tag: str, notes: str) -> bool:
 
 
 def interactive_review_loop(config: dict, messages: list[dict[str, str]], notes: str) -> str:
-    """在控制台中与用户持续对话，直到满意。"""
+    """在控制台中与用户持续对话, 直到满意. """
     current_notes = notes.strip()
 
     while True:

@@ -43,7 +43,7 @@ ShouldCancelCallback = Callable[[], bool]
 def _raise_if_cancelled(should_cancel: ShouldCancelCallback | None) -> None:
     """取消点检查: ``should_cancel()`` 返回 True 时招 :class:`RemoteDeploymentCancelledError`.
 
-    `None` 等价于“不检查”, 兼容不提供取消能力的调用者 (测试 / 旧版本主调)."""
+    `None` 等价于"不检查", 兼容不提供取消能力的调用者 (测试 / 旧版本主调)."""
     if should_cancel is not None and should_cancel():
         raise RemoteDeploymentCancelledError()
 

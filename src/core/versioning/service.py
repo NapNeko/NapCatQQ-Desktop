@@ -66,8 +66,8 @@ class RemoteVersionTask(VersionTaskBase):
             "NapCatQQ Desktop",
             self._parse_github_response,
         )
-        # P1 (SnowLuma 适配): 多拉一份 SnowLuma。与 NapCat / NCD 完全对称，
-        # 走同款 _get_version_with_fallback + _parse_github_response 链路。
+        # P1 (SnowLuma 适配): 多拉一份 SnowLuma. 与 NapCat / NCD 完全对称, 
+        # 走同款 _get_version_with_fallback + _parse_github_response 链路. 
         snowluma_info = self._get_version_with_fallback(
             Urls.SNOWLUMA_REPO_API.value,
             Urls.SNOWLUMA_REPO_API_FALLBACK.value,

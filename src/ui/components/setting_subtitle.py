@@ -9,7 +9,7 @@ class SettingSubtitle(QLabel):
     """加粗 14px 分区标题.
 
     用于在 SettingGroup 卡片上方标识配置区域名称,
-    例如 "API 配置"、"模型列表" 等.
+    例如 "API 配置", "模型列表" 等.
     """
 
     def __init__(self, text: str, parent: QWidget | None = None) -> None:

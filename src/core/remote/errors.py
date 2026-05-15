@@ -59,7 +59,7 @@ class RemoteDeploymentCancelledError(RemoteDeploymentError):
     与 :class:`RemoteDeploymentError` 的区别:
     - ``stage`` 固定为 ``"cancelled"``, 上层 UI / friendly_errors 据此走"已取消"专属文案
     - ServerManager 在 except 时把档案状态重置为 ``UNDEPLOYED`` 而**不是** ``FAILED``,
-      因为"取消"语义上不属于"失败"——下次用户点部署应该是干净起点
+      因为"取消"语义上不属于"失败"--下次用户点部署应该是干净起点
     """
 
     def __init__(self, message: str = "部署已被用户取消", *, cause: Exception | None = None) -> None:

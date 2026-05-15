@@ -382,7 +382,7 @@ class SnowLumaTunnelManager:
             避免 watchdog 内部状态机过于复杂 + reconnect 失败时的死循环风险.
             调用方典型实现: 立即调 ``reconnect()`` 重建隧道, 或 ``stop()`` 放弃.
 
-            P3 (review): on_crash 是"边沿触发" — 第一次检测到 crash 时 emit 一次,
+            P3 (review): on_crash 是"边沿触发" - 第一次检测到 crash 时 emit 一次,
             然后置 ``_crashed_emitted=True`` 抑制后续重复 emit, 避免每个 watchdog
             周期持续刷屏. 标志在 ``_start_tunnels_locked`` (含 reconnect 内部) 被
             重置, 让恢复后的二次 crash 也能正常 emit.

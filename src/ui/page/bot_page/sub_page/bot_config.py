@@ -210,7 +210,7 @@ class ConfigPage(QWidget):
         # 新增模式下 (self._config is None) 检查现有 Bot 总数, >= 4 时拒绝.
         # 编辑模式 (self._config is not None) 不受此限制 (用户修改现有 Bot 不增加总数).
         # 注意: 这里读 read_config_raw 拿**完整**列表 (未经截断), 确保用户即使手动改了 bot.json
-        # 也能正确反映真实总数. NTQQ 多开真实上限 4 个 — 详见 BotProcessManager.LOCAL_BOT_LIMIT.
+        # 也能正确反映真实总数. NTQQ 多开真实上限 4 个 - 详见 BotProcessManager.LOCAL_BOT_LIMIT.
         if self._config is None:
             existing_count = len(read_config_raw())
             if existing_count >= 4:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""同步版本文件和发布说明，不创建 commit 或 tag。"""
+"""同步版本文件和发布说明, 不创建 commit 或 tag. """
 
 from __future__ import annotations
 

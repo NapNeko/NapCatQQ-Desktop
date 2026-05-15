@@ -13,7 +13,7 @@ from src.core.platform.runtime_args import apply_runtime_launch_options, parse_r
 
 
 class ExceptionLoggingApplication(QApplication):
-    """为 Qt 事件分发补充异常落盘，避免 UI 点击异常直接丢失上下文。"""
+    """为 Qt 事件分发补充异常落盘, 避免 UI 点击异常直接丢失上下文. """
 
     @staticmethod
     def _describe_receiver(receiver: QObject | None) -> str:
@@ -50,7 +50,7 @@ class ExceptionLoggingApplication(QApplication):
 
 
 def run_application() -> int:
-    """启动桌面应用并返回事件循环退出码。"""
+    """启动桌面应用并返回事件循环退出码. """
     raw_argv = list(sys.argv)
     runtime_options, filtered_argv = parse_runtime_launch_options(sys.argv)
     apply_runtime_launch_options(runtime_options)
@@ -120,7 +120,7 @@ def run_application() -> int:
     FontManager.initialize_fonts()
     logger.info("字体初始化完成", log_source=LogSource.UI)
 
-    # W7 (2026-05-11): 持久 daemon 模型 — daemon 拉起后一直活到 App 退出,
+    # W7 (2026-05-11): 持久 daemon 模型 - daemon 拉起后一直活到 App 退出,
     # ``release()`` 只扣 ref 不 terminate. 这里挂 ``aboutToQuit`` 信号显式
     # ``daemon.shutdown()`` 做最后清理: graceful logout + terminate_async(node.exe).
     # 延迟 import 避免 main 顶部加载 creart 注册链; 真正 ``it(SnowLumaDaemon)`` 只在
@@ -223,7 +223,7 @@ def run_application() -> int:
 
 
 def main_entry() -> int:
-    """CLI 入口，负责安装全局异常钩子并返回进程退出码。"""
+    """CLI 入口, 负责安装全局异常钩子并返回进程退出码. """
     logger.install_exception_hooks()
 
     try:

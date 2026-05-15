@@ -1,14 +1,14 @@
-"""清理 Python 源码注释（以及可选的 docstring）中的中文标点.
+"""清理 Python 源码注释 (以及可选的 docstring) 中的中文标点.
 
-用法：
+用法: 
     python script/utils/clean_comment_punctuation.py [PATH ...]
         [--include-docstrings] [--check] [--ext .py,.pyi]
 
-默认只处理 ``# ...`` 形式的注释 token, 普通字符串字面量（包含 docstring）
-保持不动；只有传入 ``--include-docstrings`` 时, 才会同时清理模块、类、
+默认只处理 ``# ...`` 形式的注释 token, 普通字符串字面量 (包含 docstring) 
+保持不动; 只有传入 ``--include-docstrings`` 时, 才会同时清理模块, 类, 
 函数顶部的 docstring.
 
-脚本基于 :mod:`tokenize` 解析源码, 因此普通字符串、f-string、字节串等
+脚本基于 :mod:`tokenize` 解析源码, 因此普通字符串, f-string, 字节串等
 中的中文标点不会被误改.
 """
 
@@ -22,7 +22,7 @@ import tokenize
 from pathlib import Path
 from typing import Iterable
 
-# 中文（全角）标点到 ASCII 标点的映射表.
+# 中文 (全角) 标点到 ASCII 标点的映射表.
 # 对于没有完全对应 ASCII 字符的标点, 映射为最贴近的替代字符或空格.
 PUNCT_MAP: dict[str, str] = {
     "，": ", ",
@@ -78,7 +78,7 @@ def replace_punct(text: str) -> str:
 def _is_docstring(tokens: list[tokenize.TokenInfo], idx: int) -> bool:
     """判断位于 ``idx`` 的 STRING token 是否为 docstring.
 
-    判定规则：该字符串必须是模块、类或函数体内的第一条语句, 即向前回溯
+    判定规则: 该字符串必须是模块, 类或函数体内的第一条语句, 即向前回溯
     时只会遇到 NEWLINE / INDENT / NL / ENCODING / COMMENT, 或一个表示
     ``def`` / ``class`` 头部结束的 ``:``.
     """
@@ -89,7 +89,7 @@ def _is_docstring(tokens: list[tokenize.TokenInfo], idx: int) -> bool:
         if tok.type in (token.NEWLINE, token.NL, token.INDENT, tokenize.ENCODING, tokenize.COMMENT):
             i -= 1
             continue
-        # 模块级 docstring：之前没有任何实质性 token.
+        # 模块级 docstring: 之前没有任何实质性 token.
         if tok.type == token.ENCODING:
             return True
         # 紧跟在 def/class 头部的 ``:`` 之后, 视为函数/类 docstring.
@@ -109,10 +109,10 @@ def clean_source(source: str, *, include_docstrings: bool = False) -> str:
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
     except tokenize.TokenizeError:
-        # 兜底：tokenize 失败时退化为基于行的 ``#`` 注释扫描.
+        # 兜底: tokenize 失败时退化为基于行的 ``#`` 注释扫描.
         return _clean_comments_linewise(source)
 
-    # 收集所有需要替换的片段：(起点, 终点, 新字符串).
+    # 收集所有需要替换的片段: (起点, 终点, 新字符串).
     edits: list[tuple[tuple[int, int], tuple[int, int], str]] = []
     for i, tok in enumerate(tokens):
         if tok.type == tokenize.COMMENT:
@@ -140,7 +140,7 @@ def clean_source(source: str, *, include_docstrings: bool = False) -> str:
         else:
             first = lines[srow_i][:scol]
             last = lines[erow_i][ecol:]
-            # 拼回 token 前后的内容；末行 ``ecol`` 之后的部分原样保留.
+            # 拼回 token 前后的内容; 末行 ``ecol`` 之后的部分原样保留.
             replacement = first + new + last
             # 替换内容自身可能包含换行, 重新切分回多行.
             new_lines = replacement.splitlines(keepends=True)
@@ -149,7 +149,7 @@ def clean_source(source: str, *, include_docstrings: bool = False) -> str:
 
 
 def _clean_comments_linewise(source: str) -> str:
-    """tokenize 失败时使用的兜底实现：在明显的字符串引号之外查找 ``#``.
+    """tokenize 失败时使用的兜底实现: 在明显的字符串引号之外查找 ``#``.
 
     这是一个尽力而为的路径, 无法处理所有边界情况.
     """
@@ -199,7 +199,7 @@ def _is_ignored(p: Path) -> bool:
 
 
 def process_file(path: Path, *, include_docstrings: bool, check: bool) -> bool:
-    """返回文件是否被修改（在 --check 模式下表示是否会被修改）."""
+    """返回文件是否被修改 (在 --check 模式下表示是否会被修改) ."""
     try:
         original = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:

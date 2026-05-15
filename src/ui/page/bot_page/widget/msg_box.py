@@ -330,7 +330,7 @@ class HttpServerConfigDialog(ConfigDialogBase):
         self.port_card = LineEditConfigCard(FI.LINK, self.tr("Port*"), "3000", self.tr("设置端口号"))
         self.cors_card = SwitchConfigCard(FI.GLOBE, self.tr("CORS"))
         self.websocket_card = SwitchConfigCard(FI.SCROLL, self.tr("WebSocket"))
-        # P2 (Tier A): SnowLuma 独有字段 — HTTP server path (前缀挂载点).
+        # P2 (Tier A): SnowLuma 独有字段 - HTTP server path (前缀挂载点).
         # 默认 "/" 与 SnowLuma 上游 makeDefaultOneBotConfig 一致.
         self.path_card = LineEditConfigCard(
             FI.FOLDER, self.tr("Path"), "/", self.tr("HTTP 前缀挂载路径 (SnowLuma 独有, 默认 /)")
@@ -525,7 +525,7 @@ class HttpClientConfigDialog(ConfigDialogBase):
         # 创建控件
         self.report_self_msg_card = SwitchConfigCard(FI.MESSAGE, self.tr("上报自身消息"))
         self.url_card = LineEditConfigCard(FI.LINK, "URL*", "http://localhost:8080", self.tr("设置请求地址"))
-        # P2 (Tier A): SnowLuma 独有字段 — 客户端 POST 超时 (ms).
+        # P2 (Tier A): SnowLuma 独有字段 - 客户端 POST 超时 (ms).
         # 留空 / 0 表示不传给 SnowLuma → 走默认 5000ms.
         self.timeout_ms_card = LineEditConfigCard(
             FI.STOP_WATCH,
@@ -791,7 +791,7 @@ class WebsocketClientConfigDialog(ConfigDialogBase):
         self.reconnect_interval_card = LineEditConfigCard(
             FI.UPDATE, self.tr("重连间隔"), "30000", self.tr("设置重连间隔")
         )
-        # P2 (Tier A): SnowLuma 独有字段 — Role.
+        # P2 (Tier A): SnowLuma 独有字段 - Role.
         # NapCat WsClient 无 role 概念; SnowLuma 默认 Universal.
         # 注: reconnectInterval 双 backend 同义, 仍可见 (SnowLuma 渲染时会 clamp ≥ 1000ms).
         self.role_card = ComboBoxConfigCard(

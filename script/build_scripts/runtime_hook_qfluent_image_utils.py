@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""替换 qfluentwidgets 的重型 image_utils 依赖。
+"""替换 qfluentwidgets 的重型 image_utils 依赖. 
 
-原实现依赖 numpy/scipy；这里用 Pillow 提供最小兼容实现，
-避免把整套科学计算库打进发布包。
+原实现依赖 numpy/scipy; 这里用 Pillow 提供最小兼容实现, 
+避免把整套科学计算库打进发布包. 
 """
 
 # 标准库导入
@@ -58,7 +58,7 @@ def _gaussian_blur(image, blurRadius=18, brightFactor=1, blurPicSize=None):
 
 
 class _DominantColor:
-    """兼容 qfluentwidgets 的 DominantColor API。"""
+    """兼容 qfluentwidgets 的 DominantColor API. """
 
     @classmethod
     def getDominantColor(cls, imagePath):

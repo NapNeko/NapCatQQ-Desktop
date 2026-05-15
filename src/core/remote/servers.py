@@ -108,7 +108,7 @@ class ServerProfile:
         Notes:
             P13 (review): 早期文档曾写 "flavor=snowluma 而未提供 ``snowluma_paths`` 时
             raise ``ValueError``"; 当前实现是回退到 :meth:`SnowLumaRemotePaths.from_base`
-            默认布局 — docstring 已与代码对齐. 若调用方希望强制提供, 应在 UI 层校验.
+            默认布局 - docstring 已与代码对齐. 若调用方希望强制提供, 应在 UI 层校验.
         """
         display_name = name.strip() or credentials.host or "未命名服务器"
         if backend_flavor == BackendFlavor.SNOWLUMA:
