@@ -45,6 +45,8 @@
         <file>style/shared/widget/code_editor.qss</file>
         <file>style/shared/widget/model_list_widget.qss</file>
         <file>style/shared/widget/subtle_search_edit.qss</file>
+        <file>style/light/widget/provider_list_panel.qss</file>
+        <file>style/dark/widget/provider_list_panel.qss</file>
     </qresource>
 
     <qresource prefix="template">

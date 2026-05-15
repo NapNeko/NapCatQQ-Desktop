@@ -51,6 +51,7 @@ class WidgetStyleSheet(_ResourceStyleSheet, Enum):
     CODE_EDITOR = "code_editor"
     MODEL_LIST_WIDGET = "model_list_widget"
     SUBTLE_SEARCH_EDIT = "subtle_search_edit"
+    PROVIDER_LIST_PANEL = "provider_list_panel"
 
     def path(self, theme: Theme = Theme.AUTO) -> str:
         return self._resolve_path("widget", self.value, theme)

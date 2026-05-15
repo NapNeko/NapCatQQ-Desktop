@@ -1,5 +1,8 @@
 #modelCountBadge {
-    background: rgba(128, 128, 128, 0.1);
-    border-radius: 8px;
-    padding: 2px 6px;
+    background: rgba(128, 128, 128, 0.18);
+    border-radius: 7px;
+    padding: 0px 5px;
+    font-size: 10px;
+    max-height: 16px;
+    qproperty-alignment: AlignCenter;
 }
