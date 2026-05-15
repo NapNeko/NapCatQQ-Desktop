@@ -364,7 +364,7 @@ class BotCard(HeaderCardWidget):
         流程:
         1. 弹 :class:`SnowLumaStartModeDialog` 让用户选模式; 用户取消 → abort.
         2. 冷启动 → 直接调 ``start_bot(mode=COLD_START)`` (与历史一致).
-        3. 热启动 → 弹 info_bar "正在扫描 QQ.exe 进程…" + 异步 worker 跑 psutil 枚举
+        3. 热启动 → 弹 info_bar "正在扫描 QQ.exe 进程..." + 异步 worker 跑 psutil 枚举
            (实测 cold call ~2.6s, 主线程同步会卡 UI); worker 完成后调 :meth:`_on_qq_enum_done`.
         4. :meth:`_on_qq_enum_done` 根据候选数量:
            - 0 个 QQ.exe: error_bar 提示用户先启动 QQ 或改冷启动, abort.
@@ -640,7 +640,7 @@ class BotCard(HeaderCardWidget):
         is_remote = self._config.bot.is_remote
 
         # 远端 SnowLuma: 直接从 SL backend 实时拿 endpoint (隧道 port + webui.secret 密码).
-        # 不走 ``ManagerNapCatQQLoginState`` — 那套管理器设计给 NapCat 的 /api/auth/login
+        # 不走 ``ManagerNapCatQQLoginState`` - 那套管理器设计给 NapCat 的 /api/auth/login
         # 轮询, 对 SL 没意义; SL 的 endpoint 在 daemon READY 期间由 backend 持有,
         # 点按钮时 backend.get_webui_endpoint() 即可返回. 不依赖 poll 链路.
         if is_snowluma and is_remote:

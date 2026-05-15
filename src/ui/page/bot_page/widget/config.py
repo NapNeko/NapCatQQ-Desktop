@@ -218,9 +218,9 @@ class BotConfigWidget(ScrollArea):
             parent=self.view,
         )
         # P1 (SnowLuma 适配): 后端类型单选. 下拉项文本与 BackendType.display_name 严格对齐,
-        # 这样 get_value() 返回的文本可直接反查为 BackendType。
+        # 这样 get_value() 返回的文本可直接反查为 BackendType. 
         # SnowLuma 未安装时不在此限制选择 (实际启动时 _create_snowluma_process 会报错提示),
-        # 避免表单依赖 PathFunc.get_snowluma_node_executable() 的极端状态判断。
+        # 避免表单依赖 PathFunc.get_snowluma_node_executable() 的极端状态判断. 
         self.backend_type_card = ComboBoxConfigCard(
             icon=FluentIcon.APPLICATION,
             title=self.tr("后端类型"),
@@ -764,7 +764,7 @@ class AdvancedConfigWidget(ScrollArea):
         self.console_level_card.setVisible(is_napcat)
         self.backend_config_card.setVisible(is_napcat)
         # SnowLuma 模式下隐藏整个 log_group 与 engine_group 头部 (避免空 group 标题悬浮)
-        # 通过隐藏 group 实现 — 仅当 group 中所有 card 都不可见时才隐藏 group.
+        # 通过隐藏 group 实现 - 仅当 group 中所有 card 都不可见时才隐藏 group.
         # 这里 SnowLuma 模式下: log_group 全空, engine_group 全空, 一并隐藏.
         self.log_group.setVisible(is_napcat)
         self.engine_group.setVisible(is_napcat)

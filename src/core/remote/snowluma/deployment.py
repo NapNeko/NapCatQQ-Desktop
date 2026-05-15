@@ -4,14 +4,14 @@
 与 :class:`src.core.remote.deployment.LinuxCoreDeployment` 同模式但独立, 因为
 SnowLuma 的远端工作流是:
 
-1. **probe_environment** — 委托 NC ``LinuxCoreDeployment.probe_environment``,
+1. **probe_environment** - 委托 NC ``LinuxCoreDeployment.probe_environment``,
    复用 distro 识别 / arch 归一化 / LinuxQQ 检测等设施
-2. **install_linuxqq** — 委托 NC ``install_linuxqq``, 但用 SnowLuma 自己的
+2. **install_linuxqq** - 委托 NC ``install_linuxqq``, 但用 SnowLuma 自己的
    ``workspace_dir`` (``$HOME/snowluma-remote/workspace``), 让 LinuxQQ 落到
    SnowLuma 私有目录, 与 NC 安装互不干扰 (D8 ``ServerProfile`` per-flavor 互斥)
-3. **install_snowluma_framework** — SL 独有: SFTP 上传 lite tarball + 渲染
+3. **install_snowluma_framework** - SL 独有: SFTP 上传 lite tarball + 渲染
    ``install_snowluma.sh.j2`` 跑图形栈安装与解压
-4. **upload_daemon_launcher_script** / **upload_bot_launcher_script** — 上传
+4. **upload_daemon_launcher_script** / **upload_bot_launcher_script** - 上传
    :mod:`.templates` 渲染的 launcher 脚本到 ``workspace_dir``
 
 设计取舍 (与 NC 对照):
@@ -264,7 +264,7 @@ class SnowLumaDeployment:
     ) -> None:
         """Desktop 本机下载 lite tarball 并 SFTP 上传到远端作为兜底.
 
-        如果本机下载失败 (网络问题等), 静默跳过 — 远端脚本仍会尝试自行下载.
+        如果本机下载失败 (网络问题等), 静默跳过 - 远端脚本仍会尝试自行下载.
         """
         import urllib.request
 

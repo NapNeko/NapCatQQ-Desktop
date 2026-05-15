@@ -3,8 +3,8 @@
 
 用户点 "启动 Bot" 按钮 (SnowLuma 后端) → 弹两个对话框 (按需):
 
-1. :class:`SnowLumaStartModeDialog` — 让用户在 **冷启动** 与 **热启动** 之间二选一.
-2. :class:`SnowLumaPidPickerDialog` — 热启动 且 系统有多个 QQ.exe 时, 让用户选具体哪个.
+1. :class:`SnowLumaStartModeDialog` - 让用户在 **冷启动** 与 **热启动** 之间二选一.
+2. :class:`SnowLumaPidPickerDialog` - 热启动 且 系统有多个 QQ.exe 时, 让用户选具体哪个.
 
 冷启动 = Desktop 自己 spawn 新 QQ.exe (历史默认行为).
 热启动 = 注入到用户系统里已经运行的某个 QQ.exe (不动 QQ 进程生命周期).
@@ -224,7 +224,7 @@ def enumerate_qq_processes() -> list[QQProcessInfo]:
             raw_qq[pid] = {"ppid": ppid, "_proc": proc}
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
-        except Exception:  # noqa: BLE001 — 单个 process 出错不阻断整体枚举
+        except Exception:  # noqa: BLE001 - 单个 process 出错不阻断整体枚举
             continue
 
     qq_pids = set(raw_qq.keys())
@@ -307,7 +307,7 @@ class SnowLumaStartModeDialog(MessageBoxBase):
     冷启动卡默认选中 (与历史行为一致). 用户点 OK 后用 :meth:`get_value` 取选择.
 
     Note:
-        本对话框**只**做模式选择, 不做 PID 选择 — PID 选择由调用方根据 mode 决定:
+        本对话框**只**做模式选择, 不做 PID 选择 - PID 选择由调用方根据 mode 决定:
 
         - 冷启动: 不需要 PID (Phase A 自己 spawn).
         - 热启动: 用 :class:`SnowLumaPidPickerDialog` 选 PID (或 0/1 个 QQ.exe 时直接决定).
@@ -484,7 +484,7 @@ class EnumerateQQProcessesWorker(QObject, QRunnable):
     4. 主线程 slot 收到 ``list[QQProcessInfo]`` 后继续流程
 
     Note:
-        ``setAutoDelete(False)`` — 调用方须在 ``finished`` slot 里 ``deleteLater``, 或
+        ``setAutoDelete(False)`` - 调用方须在 ``finished`` slot 里 ``deleteLater``, 或
         用临时强引用防止 Python GC (Qt 不会自动清理 QObject, PySide6 也不会主动调
         ``deleteLater`` 哪怕 Python refs 归零).
     """

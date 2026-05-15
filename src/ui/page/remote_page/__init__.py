@@ -1031,7 +1031,7 @@ class RemotePage(QWidget):
                 error_bar("密码认证模式下未保存密码, 请先编辑并填写密码", parent=self)
                 return
 
-        # W10b-Maintenance: flavor 分发文案 — SL 走 SnowLuma 语境
+        # W10b-Maintenance: flavor 分发文案 - SL 走 SnowLuma 语境
         is_sl = profile.backend_flavor == BackendFlavor.SNOWLUMA
         dialog = RollbackConfirmBox(profile.name, self.window(), is_snowluma=is_sl)
         if not dialog.exec():

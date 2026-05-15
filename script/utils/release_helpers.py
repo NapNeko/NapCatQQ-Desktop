@@ -83,7 +83,7 @@ PERF_PREFIXES = ("优化", "重构", "提升", "改进", "简化")
 
 
 class ReleaseError(RuntimeError):
-    """发布流程错误。"""
+    """发布流程错误. """
 
 
 @dataclass(frozen=True)
@@ -122,7 +122,7 @@ def run_process(
     cwd: Path | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """运行子进程并返回完整结果。"""
+    """运行子进程并返回完整结果. """
     result = subprocess.run(
         args,
         cwd=cwd or REPO_ROOT,
@@ -139,13 +139,13 @@ def run_process(
 
 
 def run_command(args: list[str], *, cwd: Path | None = None, check: bool = True) -> str:
-    """运行命令并返回 stdout。"""
+    """运行命令并返回 stdout. """
     result = run_process(args, cwd=cwd, check=check)
     return (result.stdout or "").strip()
 
 
 def parse_version(value: str) -> VersionInfo:
-    """解析语义化版本号。"""
+    """解析语义化版本号. """
     match = SEMVER_PATTERN.fullmatch(value.strip())
     if not match:
         raise ReleaseError(f"无效的版本号格式: {value}")
@@ -163,7 +163,7 @@ def parse_version(value: str) -> VersionInfo:
 
 
 def get_release_file_paths(root: Path = REPO_ROOT) -> list[Path]:
-    """返回发布流程维护的文件列表。"""
+    """返回发布流程维护的文件列表. """
     return [
         root / PYPROJECT_PATH.relative_to(REPO_ROOT),
         root / INIT_PATH.relative_to(REPO_ROOT),
@@ -173,7 +173,7 @@ def get_release_file_paths(root: Path = REPO_ROOT) -> list[Path]:
 
 
 def get_release_file_relpaths() -> list[str]:
-    """返回发布文件的仓库相对路径。"""
+    """返回发布文件的仓库相对路径. """
     return [
         str(PYPROJECT_PATH.relative_to(REPO_ROOT)).replace("\\", "/"),
         str(INIT_PATH.relative_to(REPO_ROOT)).replace("\\", "/"),
@@ -183,13 +183,13 @@ def get_release_file_relpaths() -> list[str]:
 
 
 def tag_exists(tag: str, *, root: Path = REPO_ROOT) -> bool:
-    """判断 tag 是否存在。"""
+    """判断 tag 是否存在. """
     result = run_command(["git", "tag", "-l", tag], cwd=root, check=False)
     return tag in {item.strip() for item in result.splitlines() if item.strip()}
 
 
 def list_semver_tags(*, root: Path = REPO_ROOT) -> list[str]:
-    """按语义版本倒序列出版本 tag。"""
+    """按语义版本倒序列出版本 tag. """
     output = run_command(
         ["git", "tag", "--list", "v*.*.*", "--sort=-v:refname"],
         cwd=root,
@@ -213,7 +213,7 @@ def resolve_previous_tag(
     root: Path = REPO_ROOT,
     from_tag: str | None = None,
 ) -> str | None:
-    """解析上一版本 tag。"""
+    """解析上一版本 tag. """
     version_info = parse_version(version) if isinstance(version, str) else version
 
     if from_tag:
@@ -235,7 +235,7 @@ def collect_commits(
     root: Path = REPO_ROOT,
     to_ref: str = "HEAD",
 ) -> list[CommitEntry]:
-    """采集从上一版本到当前引用的提交。"""
+    """采集从上一版本到当前引用的提交. """
     revision_range = f"{previous_tag}..{to_ref}" if previous_tag else to_ref
     output = run_command(
         ["git", "log", "--reverse", "--pretty=format:%H%x1f%s", revision_range],
@@ -257,7 +257,7 @@ def collect_diff_stats(
     root: Path = REPO_ROOT,
     to_ref: str = "HEAD",
 ) -> tuple[str, list[str]]:
-    """采集两个引用之间的文件统计与文件列表。"""
+    """采集两个引用之间的文件统计与文件列表. """
     if previous_tag:
         diff_args = ["git", "diff", "--stat", f"{previous_tag}..{to_ref}"]
         name_args = ["git", "diff", "--name-only", f"{previous_tag}..{to_ref}"]
@@ -273,7 +273,7 @@ def collect_diff_stats(
 
 
 def is_release_metadata_commit(subject: str) -> bool:
-    """判断是否属于发布元数据提交。"""
+    """判断是否属于发布元数据提交. """
     stripped = subject.strip()
     return any(pattern.search(stripped) for pattern in RELEASE_METADATA_PATTERNS)
 
@@ -306,7 +306,7 @@ def _classify_subject(subject: str) -> tuple[str | None, str]:
 
 
 def categorize_commits(commits: list[CommitEntry | str]) -> dict[str, list[str]]:
-    """将提交分类为新增、修复、优化和其他。"""
+    """将提交分类为新增, 修复, 优化和其他. """
     categories: dict[str, list[str]] = {
         "feat": [],
         "fix": [],
@@ -326,7 +326,7 @@ def categorize_commits(commits: list[CommitEntry | str]) -> dict[str, list[str]]
 
 
 def render_auto_release_notes(categories: dict[str, list[str]]) -> str:
-    """渲染自动生成的发布说明。"""
+    """渲染自动生成的发布说明. """
     sections: list[str] = []
     ordered_sections = (
         ("feat", "## ✨ 新增功能"),
@@ -350,7 +350,7 @@ def render_auto_release_notes(categories: dict[str, list[str]]) -> str:
 
 
 def format_changelog_title(version: str | VersionInfo) -> str:
-    """生成 CHANGELOG 标题。"""
+    """生成 CHANGELOG 标题. """
     version_info = parse_version(version) if isinstance(version, str) else version
     return CHANGELOG_TITLE_TEMPLATE.format(version=version_info.version)
 
@@ -361,7 +361,7 @@ def render_changelog_document(
     *,
     existing_content: str | None = None,
 ) -> str:
-    """渲染 docs/CHANGELOG.md。"""
+    """渲染 docs/CHANGELOG.md. """
     title = format_changelog_title(version)
     notes = auto_notes.strip()
     existing = (existing_content or "").replace("\r\n", "\n")
@@ -395,7 +395,7 @@ def render_changelog_document(
 
 
 def update_pyproject_version(version: str | VersionInfo, *, root: Path = REPO_ROOT) -> None:
-    """更新 pyproject.toml 的版本号。"""
+    """更新 pyproject.toml 的版本号. """
     version_info = parse_version(version) if isinstance(version, str) else version
     file_path = root / PYPROJECT_PATH.relative_to(REPO_ROOT)
     content = file_path.read_text(encoding="utf-8")
@@ -412,7 +412,7 @@ def update_pyproject_version(version: str | VersionInfo, *, root: Path = REPO_RO
 
 
 def update_init_version(version: str | VersionInfo, *, root: Path = REPO_ROOT) -> None:
-    """更新 src/core/config/__init__.py 的版本号。"""
+    """更新 src/core/config/__init__.py 的版本号. """
     version_info = parse_version(version) if isinstance(version, str) else version
     file_path = root / INIT_PATH.relative_to(REPO_ROOT)
     content = file_path.read_text(encoding="utf-8")
@@ -428,7 +428,7 @@ def update_init_version(version: str | VersionInfo, *, root: Path = REPO_ROOT) -
 
 
 def update_changelog(version: str | VersionInfo, auto_notes: str, *, root: Path = REPO_ROOT) -> None:
-    """更新 docs/CHANGELOG.md。"""
+    """更新 docs/CHANGELOG.md. """
     file_path = root / CHANGELOG_PATH.relative_to(REPO_ROOT)
     existing_content = file_path.read_text(encoding="utf-8") if file_path.exists() else ""
     file_path.write_text(
@@ -438,7 +438,7 @@ def update_changelog(version: str | VersionInfo, auto_notes: str, *, root: Path 
 
 
 def execute_uv_lock(root: Path = REPO_ROOT) -> None:
-    """执行真实的 uv lock。"""
+    """执行真实的 uv lock. """
     run_process(["uv", "lock"], cwd=root, check=True)
 
 
@@ -452,7 +452,7 @@ def sync_release_metadata(
     lock_executor: Callable[[Path], None] | None = None,
     auto_notes_override: str | None = None,
 ) -> SyncResult:
-    """同步发布相关文件。"""
+    """同步发布相关文件. """
     version_info = parse_version(version) if isinstance(version, str) else version
     previous_tag = resolve_previous_tag(version_info, root=root, from_tag=from_tag)
     commits = collect_commits(previous_tag, root=root, to_ref=to_ref)
@@ -478,19 +478,19 @@ def sync_release_metadata(
 
 
 def ensure_clean_worktree(*, root: Path = REPO_ROOT) -> None:
-    """确保工作区干净，避免混入非发布改动。"""
+    """确保工作区干净, 避免混入非发布改动. """
     status = run_command(["git", "status", "--porcelain"], cwd=root, check=False)
     if status.strip():
         raise ReleaseError("工作区存在未提交改动，请先清理后再执行发布脚本。")
 
 
 def stage_release_files(*, root: Path = REPO_ROOT) -> None:
-    """暂存发布文件。"""
+    """暂存发布文件. """
     run_command(["git", "add", *get_release_file_relpaths()], cwd=root)
 
 
 def ensure_release_changes_staged(*, root: Path = REPO_ROOT) -> None:
-    """确保发布文件确实发生了变更。"""
+    """确保发布文件确实发生了变更. """
     result = run_process(
         ["git", "diff", "--cached", "--quiet", "--", *get_release_file_relpaths()],
         cwd=root,
@@ -504,7 +504,7 @@ def ensure_release_changes_staged(*, root: Path = REPO_ROOT) -> None:
 
 
 def create_release_commit(version: str | VersionInfo, *, root: Path = REPO_ROOT) -> str:
-    """创建 release commit。"""
+    """创建 release commit. """
     version_info = parse_version(version) if isinstance(version, str) else version
     stage_release_files(root=root)
     ensure_release_changes_staged(root=root)
@@ -513,7 +513,7 @@ def create_release_commit(version: str | VersionInfo, *, root: Path = REPO_ROOT)
 
 
 def create_tag(version: str | VersionInfo, *, root: Path = REPO_ROOT) -> str:
-    """创建版本 tag。"""
+    """创建版本 tag. """
     version_info = parse_version(version) if isinstance(version, str) else version
     if tag_exists(version_info.tag, root=root):
         raise ReleaseError(f"目标 tag 已存在: {version_info.tag}")
@@ -522,7 +522,7 @@ def create_tag(version: str | VersionInfo, *, root: Path = REPO_ROOT) -> str:
 
 
 def push_release(version: str | VersionInfo, *, root: Path = REPO_ROOT) -> None:
-    """推送当前分支和 tag。"""
+    """推送当前分支和 tag. """
     version_info = parse_version(version) if isinstance(version, str) else version
     branch = run_command(["git", "branch", "--show-current"], cwd=root)
     if not branch:
@@ -540,7 +540,7 @@ def perform_release(
     lock_executor: Callable[[Path], None] | None = None,
     auto_notes_override: str | None = None,
 ) -> ReleaseResult:
-    """执行完整本地发布流程。"""
+    """执行完整本地发布流程. """
     ensure_clean_worktree(root=root)
     version_info = parse_version(version)
     if tag_exists(version_info.tag, root=root):

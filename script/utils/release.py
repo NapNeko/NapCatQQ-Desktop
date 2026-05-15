@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""本地唯一发布入口：同步版本文件、执行 uv lock、提交并打 tag。"""
+"""本地唯一发布入口: 同步版本文件, 执行 uv lock, 提交并打 tag. """
 
 from __future__ import annotations
 

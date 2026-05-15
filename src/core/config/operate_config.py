@@ -436,7 +436,7 @@ def read_config_raw() -> List[Config]:
     专供下列场景:
 
     - 写盘前的合并 (``update_config`` 走 ``_read_config_file(strict=True)``);
-    - 添加 Bot 时的总数检查 (``slot_save_config_button``) — 真实总数才能让用户
+    - 添加 Bot 时的总数检查 (``slot_save_config_button``) - 真实总数才能让用户
       看到 "5 个 Bot 中已达上限" 提示, 而不是截断后的 "4 个 / 4 个" 没意义计数;
     - 测试 / 诊断脚本.
 

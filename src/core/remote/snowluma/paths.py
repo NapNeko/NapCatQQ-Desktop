@@ -4,9 +4,9 @@
 与 :class:`src.core.remote.models.LinuxCorePaths` (NapCat 远端路径) 平行而独立,
 不复用其字段, 因为 SnowLuma 的拓扑与 NapCat 完全不同:
 
-- NapCat: ``$HOME/Napcat/{opt/QQ, run, log, packages}`` — QQ 安装与 NapCat 注入物
+- NapCat: ``$HOME/Napcat/{opt/QQ, run, log, packages}`` - QQ 安装与 NapCat 注入物
   共住一个 prefix
-- SnowLuma: ``$HOME/snowluma-remote/workspace/{snowluma, runtime, log}`` — daemon
+- SnowLuma: ``$HOME/snowluma-remote/workspace/{snowluma, runtime, log}`` - daemon
   (Xvfb + fluxbox + x11vnc + websockify + node) 与 per-Bot QQ.exe 共享一个 workspace,
   daemon 的 5 进程辅助 pid 各自独立写文件 + 总 pid 汇成 ``pid_daemon``
 

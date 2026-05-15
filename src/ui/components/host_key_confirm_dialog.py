@@ -259,8 +259,8 @@ class HostKeyConfirmDialog(MessageBoxBase):
         """重写 MessageBoxBase 的 yes/cancel 按钮以承载多选语义.
 
         ``MessageBoxBase`` 默认有 ``yesButton`` (yes) + ``cancelButton`` (no).
-        - **首次连接** (``is_warning=False``): 三选 — TRUST_SAVE / TRUST_ONCE / REJECT
-        - **变更警告** (``is_warning=True``): 二选 — TRUST_REPLACE / REJECT;
+        - **首次连接** (``is_warning=False``): 三选 - TRUST_SAVE / TRUST_ONCE / REJECT
+        - **变更警告** (``is_warning=True``): 二选 - TRUST_REPLACE / REJECT;
           "仅本次" 在变更场景语义无意义 (paramiko 已 fail, 无法绕开), 故隐藏.
         """
         self.cancelButton.setText("拒绝")
