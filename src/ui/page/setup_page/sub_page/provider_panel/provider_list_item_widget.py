@@ -2,7 +2,7 @@
 """供应商列表条目组件.
 
 自定义列表条目控件, 替代纯文本 QListWidgetItem, 展示:
-[Avatar 20×20] [Name (elided)] [ProtocolBadge] [ON Label]
+[Avatar 20×20] [Name (elided)] [ON Label]
 """
 from __future__ import annotations
 
@@ -12,13 +12,11 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 from src.core.agent.provider import Provider
 
-from .provider_protocol_utils import get_protocol_badge
-
 
 class ProviderListItemWidget(QWidget):
-    """供应商列表条目 — 图标 + 名称 + 协议徽章 + ON 标签.
+    """供应商列表条目 - 图标 + 名称 + ON 标签.
 
-    布局: [Avatar 20×20] [Name (elided)] [ProtocolBadge] [ON Label]
+    布局: [Avatar 20×20] [Name (elided)] [ON Label]
     通过 QListWidget 自身的 InternalMove 拖拽能力实现排序,
     不再额外渲染拖拽手柄, 简化视觉.
     """
@@ -36,33 +34,21 @@ class ProviderListItemWidget(QWidget):
     def _setup_ui(self) -> None:
         """构建条目 UI 布局."""
         layout = QHBoxLayout(self)
-        # 左右各 8px 内边距, 右侧滚动条由 ListWidget viewportMargins 让出
-        layout.setContentsMargins(8, 4, 8, 4)
+        # 左右各 8px 内边距, 上下 0 让 widget 填满 item 高度, 由 layout 自动居中子控件
+        layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(8)
 
-        # Avatar — 20×20 像素
+        # Avatar - 20×20 像素
         self._avatar_label = QLabel(self)
         self._avatar_label.setFixedSize(20, 20)
-        layout.addWidget(self._avatar_label)
+        layout.addWidget(self._avatar_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Name — 省略号截断, 占据剩余空间
+        # Name - 省略号截断, 占据剩余空间
         self._name_label = _ElidedLabel(self)
         self._name_label.setMinimumWidth(20)
-        layout.addWidget(self._name_label, 1)
+        layout.addWidget(self._name_label, 1, Qt.AlignmentFlag.AlignVCenter)
 
-        # ProtocolBadge — 小型协议徽章文本
-        self._badge_label = QLabel(self)
-        self._badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge_font = self._badge_label.font()
-        badge_font.setPointSize(8)
-        badge_font.setBold(True)
-        self._badge_label.setFont(badge_font)
-        self._badge_label.setStyleSheet(
-            "QLabel { color: rgba(128, 128, 128, 0.8); padding: 1px 3px; }"
-        )
-        layout.addWidget(self._badge_label)
-
-        # ON Label — 绿色 "ON" 文本
+        # ON Label - 绿色 "ON" 文本
         self._on_label = QLabel("ON", self)
         self._on_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         on_font = self._on_label.font()
@@ -70,7 +56,7 @@ class ProviderListItemWidget(QWidget):
         on_font.setBold(True)
         self._on_label.setFont(on_font)
         self._on_label.setStyleSheet("QLabel { color: #4CAF50; padding: 1px 3px; }")
-        layout.addWidget(self._on_label)
+        layout.addWidget(self._on_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
     # ------------------------------------------------------------------
     # 数据填充
@@ -88,10 +74,6 @@ class ProviderListItemWidget(QWidget):
 
         # Name
         self._name_label.set_text(provider.name)
-
-        # Protocol Badge
-        badge_text = get_protocol_badge(provider.protocol_type)
-        self._badge_label.setText(badge_text)
 
         # ON Label
         self._on_label.setVisible(provider.enabled)

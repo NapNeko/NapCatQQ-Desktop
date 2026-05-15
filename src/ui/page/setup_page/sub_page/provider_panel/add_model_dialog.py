@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
-from qfluentwidgets import BodyLabel, InfoBar, LineEdit, MessageBoxBase, SubtitleLabel
+from qfluentwidgets import BodyLabel, LineEdit, MessageBoxBase, SubtitleLabel
+
+from src.ui.components.info_bar import error_bar
 
 
 class AddModelDialog(MessageBoxBase):
@@ -57,7 +59,7 @@ class AddModelDialog(MessageBoxBase):
         检查 model_id 非空且 max_tokens 为正整数.
         """
         if not self.model_id_edit.text().strip():
-            InfoBar.error("", self.tr("模型 ID 不能为空"), duration=3000, parent=self)
+            error_bar(content=self.tr("模型 ID 不能为空"), title="", duration=3000, parent=self)
             return False
 
         max_tokens_text = self.max_tokens_edit.text().strip()
@@ -68,11 +70,11 @@ class AddModelDialog(MessageBoxBase):
         try:
             max_tokens = int(max_tokens_text)
         except ValueError:
-            InfoBar.error("", self.tr("最大 Tokens 必须为整数"), duration=3000, parent=self)
+            error_bar(content=self.tr("最大 Tokens 必须为整数"), title="", duration=3000, parent=self)
             return False
 
         if max_tokens < 1:
-            InfoBar.error("", self.tr("最大 Tokens 必须为正整数"), duration=3000, parent=self)
+            error_bar(content=self.tr("最大 Tokens 必须为正整数"), title="", duration=3000, parent=self)
             return False
 
         return True

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """协议映射常量和纯函数模块.
 
-提供协议类型（OpenAI/Anthropic/Gemini/Azure）的字段映射、路径映射、
-徽章映射、标签映射以及 URL 预览生成等纯函数，供 UI 组件调用。
+提供协议类型 (OpenAI/Anthropic/Gemini/Azure) 的字段映射, 路径映射,
+徽章映射, 标签映射以及 URL 预览生成等纯函数, 供 UI 组件调用.
 """
 
 from __future__ import annotations
@@ -55,10 +55,10 @@ def build_url_preview(
     Args:
         api_base_url: API 基础地址.
         protocol_type: 协议类型.
-        azure_api_version: Azure API 版本（仅 azure 协议使用）.
+        azure_api_version: Azure API 版本 (仅 azure 协议使用).
 
     Returns:
-        完整的请求 URL 预览字符串，若 api_base_url 为空则返回空字符串.
+        完整的请求 URL 预览字符串, 若 api_base_url 为空则返回空字符串.
     """
     if not api_base_url.strip():
         return ""
@@ -75,7 +75,7 @@ def build_url_preview(
 def get_protocol_label(protocol_type: str) -> str:
     """获取协议类型的显示标签.
 
-    已知类型返回映射值（"OpenAI", "Anthropic", "Gemini", "Azure"），
+    已知类型返回映射值 ("OpenAI", "Anthropic", "Gemini", "Azure"),
     未知类型返回原始字符串的首字母大写形式.
 
     Args:
@@ -115,7 +115,7 @@ def get_protocol_fields(protocol_type: str) -> set[str]:
         protocol_type: 协议类型字符串.
 
     Returns:
-        字段名称集合，如 {"api_key", "api_base_url"} 或
+        字段名称集合, 如 {"api_key", "api_base_url"} 或
         {"api_key", "resource_endpoint", "deployment_name", "api_version"}.
     """
     return PROTOCOL_FIELD_MAP.get(protocol_type, PROTOCOL_FIELD_MAP["openai"])

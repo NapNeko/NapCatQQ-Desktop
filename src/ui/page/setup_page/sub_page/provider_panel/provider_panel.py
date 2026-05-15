@@ -50,7 +50,7 @@ class ProviderPanel(QWidget):
         self._list_panel = ProviderListPanel(self)
         layout.addWidget(self._list_panel)
 
-        # 中间: 垂直分隔线 — 用 QFrame + QSS 控制可见性,
+        # 中间: 垂直分隔线 - 用 QFrame + QSS 控制可见性,
         # QFrame.VLine + Sunken 在透明背景下几乎看不出, 改用 1px 实色描边
         separator = QFrame(self)
         separator.setObjectName("ProviderPanelSeparator")

@@ -12,12 +12,13 @@ from creart import it
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import (
     BodyLabel,
-    InfoBar,
     LineEdit,
     MessageBoxBase,
     PasswordLineEdit,
     SubtitleLabel,
 )
+
+from src.ui.components.info_bar import error_bar
 
 if TYPE_CHECKING:
     from src.core.agent.provider import ProviderRegistry
@@ -97,16 +98,16 @@ class AddProviderDialog(MessageBoxBase):
             True 表示校验通过, False 表示存在空字段.
         """
         if not self.provider_id_edit.text().strip():
-            InfoBar.error("", self.tr("供应商 ID 不能为空"), duration=3000, parent=self)
+            error_bar(content=self.tr("供应商 ID 不能为空"), title="", duration=3000, parent=self)
             return False
         if not self.name_edit.text().strip():
-            InfoBar.error("", self.tr("名称不能为空"), duration=3000, parent=self)
+            error_bar(content=self.tr("名称不能为空"), title="", duration=3000, parent=self)
             return False
         if not self.api_base_url_edit.text().strip():
-            InfoBar.error("", self.tr("API Base URL 不能为空"), duration=3000, parent=self)
+            error_bar(content=self.tr("API Base URL 不能为空"), title="", duration=3000, parent=self)
             return False
         if not self.api_key_edit.text().strip():
-            InfoBar.error("", self.tr("API Key 不能为空"), duration=3000, parent=self)
+            error_bar(content=self.tr("API Key 不能为空"), title="", duration=3000, parent=self)
             return False
         return True
 
@@ -140,7 +141,7 @@ class AddProviderDialog(MessageBoxBase):
         try:
             registry.get(provider_id)
             # 如果没有抛出 KeyError, 说明已存在
-            InfoBar.error("", self.tr("该供应商 ID 已存在"), duration=3000, parent=self)
+            error_bar(content=self.tr("该供应商 ID 已存在"), title="", duration=3000, parent=self)
             return
         except KeyError:
             pass

@@ -21,7 +21,9 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import (
     FluentIcon,
     ListWidget,
+    ScrollBarHandleDisplayMode,
     TransparentPushButton,
+    setCustomStyleSheet,
 )
 
 from src.core.agent.provider import Provider, ProviderRegistry
@@ -34,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProviderListPanel(QWidget):
-    """左侧供应商列表面板 — 搜索 + ListWidget + 添加按钮.
+    """左侧供应商列表面板 - 搜索 + ListWidget + 添加按钮.
 
     固定宽度 260px, 顶部搜索框实时过滤, 中部使用 qfluentwidgets.ListWidget
     展示供应商条目, 底部透明"添加供应商"按钮弹出 AddProviderDialog.
@@ -78,18 +80,62 @@ class ProviderListPanel(QWidget):
             QAbstractItemView.DragDropMode.InternalMove
         )
         self._list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
+
         self._list_widget.setDragEnabled(True)
         self._list_widget.setAcceptDrops(True)
-        # 拖拽占位符指示器 — 使用 QListWidget 内置的 drop indicator
+        # 拖拽占位符指示器 - 使用 QListWidget 内置的 drop indicator
         self._list_widget.setDropIndicatorShown(True)
+        # 滚动条按需显示: 仅在鼠标进入或滚动时浮出, 平时收起为细线
+        # SmoothScrollDelegate 的 vScrollBar 暴露了 ON_HOVER 模式
+        try:
+            self._list_widget.scrollDelegate.vScrollBar.setHandleDisplayMode(
+                ScrollBarHandleDisplayMode.ON_HOVER
+            )
+        except AttributeError:  # pragma: no cover - 兼容老版本组件库
+            pass
         # qfluentwidgets 的滚动条是浮层样式 (SmoothScrollDelegate),
-        # 会盖在 item 内容右侧. 用 viewportMargins 让出 8px, 滚动条
-        # 出现时不会和 item 内容挤在一起.
-        self._list_widget.setViewportMargins(0, 0, 8, 0)
+        # 会盖在 item 内容右侧. 用 viewportMargins 让出 4px, 给收起的
+        # 细线留出最小空间, 且鼠标悬停展开时不会突兀挤压 item.
+        self._list_widget.setViewportMargins(0, 0, 4, 0)
         self._layout.addWidget(self._list_widget, 1)
 
-        # 底部: 透明添加供应商按钮
+        # 底部: 添加供应商按钮 (带线框, 视觉上更明确)
         self._add_button = TransparentPushButton(FluentIcon.ADD, self.tr("添加供应商"), self)
+        self._add_button.setObjectName("addProviderButton")
+        # 通过 setCustomStyleSheet 覆盖组件库默认按钮样式, 支持主题自动切换
+        _LIGHT_QSS = (
+            "TransparentPushButton {"
+            "  border: 1px solid rgba(0, 0, 0, 0.12);"
+            "  border-radius: 6px;"
+            "  padding: 4px 12px;"
+            "  background-color: transparent;"
+            "}"
+            "TransparentPushButton:hover {"
+            "  background-color: rgba(0, 0, 0, 0.03);"
+            "  border: 1px solid rgba(0, 0, 0, 0.18);"
+            "}"
+            "TransparentPushButton:pressed {"
+            "  background-color: rgba(0, 0, 0, 0.06);"
+            "  border: 1px solid rgba(0, 0, 0, 0.18);"
+            "}"
+        )
+        _DARK_QSS = (
+            "TransparentPushButton {"
+            "  border: 1px solid rgba(255, 255, 255, 0.12);"
+            "  border-radius: 6px;"
+            "  padding: 4px 12px;"
+            "  background-color: transparent;"
+            "}"
+            "TransparentPushButton:hover {"
+            "  background-color: rgba(255, 255, 255, 0.05);"
+            "  border: 1px solid rgba(255, 255, 255, 0.18);"
+            "}"
+            "TransparentPushButton:pressed {"
+            "  background-color: rgba(255, 255, 255, 0.08);"
+            "  border: 1px solid rgba(255, 255, 255, 0.18);"
+            "}"
+        )
+        setCustomStyleSheet(self._add_button, _LIGHT_QSS, _DARK_QSS)
         self._layout.addWidget(self._add_button)
 
     def _connect_signals(self) -> None:
@@ -189,6 +235,8 @@ class ProviderListPanel(QWidget):
             self._list_widget.addItem(item)
             # 使用自定义 ProviderListItemWidget 替代纯文本
             item_widget = ProviderListItemWidget(provider, self._list_widget)
+            # 让 widget 填满 item 行高, 内部 layout 的 AlignVCenter 负责居中内容
+            item_widget.setFixedHeight(36)
             self._list_widget.setItemWidget(item, item_widget)
 
         self._list_widget.blockSignals(False)
@@ -343,7 +391,7 @@ class ProviderListPanel(QWidget):
             logger.error("持久化 Provider 排序失败: %s", exc)
 
     # ------------------------------------------------------------------
-    # 事件过滤器 — 拖拽前快照排序状态
+    # 事件过滤器 - 拖拽前快照排序状态
     # ------------------------------------------------------------------
 
     def eventFilter(self, obj, event: QEvent) -> bool:
