@@ -13,12 +13,12 @@ import src.core.versioning.service as versioning
 
 
 def mute_version_logger(monkeypatch) -> None:
-    """屏蔽版本模块的日志副作用。"""
+    """屏蔽版本模块的日志副作用. """
     monkeypatch.setattr(versioning.logger, "error", lambda *args, **kwargs: None)
 
 
 def test_remote_version_execute_assembles_four_sources(monkeypatch) -> None:
-    """远程版本任务应汇总 NapCat、QQ、NCD 与 SnowLuma 四路数据 (P1 SnowLuma 适配)."""
+    """远程版本任务应汇总 NapCat, QQ, NCD 与 SnowLuma 四路数据 (P1 SnowLuma 适配)."""
     runner = versioning.RemoteVersionTask()
 
     # NapCat / NCD / SnowLuma 走 _get_version_with_fallback; QQ 走 _get_version
@@ -53,7 +53,7 @@ def test_remote_version_execute_assembles_four_sources(monkeypatch) -> None:
 
 
 def test_remote_version_request_handles_network_error(monkeypatch) -> None:
-    """网络异常应转为 None 并发出错误信号。"""
+    """网络异常应转为 None 并发出错误信号. """
     mute_version_logger(monkeypatch)
     runner = versioning.RemoteVersionTask()
     errors: list[str] = []
@@ -81,7 +81,7 @@ def test_remote_version_request_handles_network_error(monkeypatch) -> None:
 
 
 def test_get_version_returns_error_value_when_parser_raises_key_error(monkeypatch) -> None:
-    """解析响应缺少关键字段时应回退为错误值。"""
+    """解析响应缺少关键字段时应回退为错误值. """
     mute_version_logger(monkeypatch)
     runner = versioning.RemoteVersionTask()
     errors: list[str] = []
@@ -95,14 +95,14 @@ def test_get_version_returns_error_value_when_parser_raises_key_error(monkeypatc
 
 
 def test_parse_qq_response_returns_none_when_windows_section_missing() -> None:
-    """QQ 版本接口缺少 Windows 键时应返回空结果。"""
+    """QQ 版本接口缺少 Windows 键时应返回空结果. """
     runner = versioning.RemoteVersionTask()
 
     assert runner._parse_qq_response({}) == {"version": None, "download_url": None}
 
 
 def test_parse_qq_response_emits_error_when_windows_payload_is_invalid(monkeypatch) -> None:
-    """QQ 版本响应结构异常时应发出错误信号。"""
+    """QQ 版本响应结构异常时应发出错误信号. """
     mute_version_logger(monkeypatch)
     runner = versioning.RemoteVersionTask()
     errors: list[str] = []
@@ -116,7 +116,7 @@ def test_parse_qq_response_emits_error_when_windows_payload_is_invalid(monkeypat
 
 
 def test_local_version_reads_package_and_qq_files(monkeypatch, tmp_path: Path) -> None:
-    """本地版本任务应读取 NapCat package.json 和 QQ config.json。"""
+    """本地版本任务应读取 NapCat package.json 和 QQ config.json. """
     mute_version_logger(monkeypatch)
     napcat_path = tmp_path / "NapCatQQ"
     qq_path = tmp_path / "QQ"
@@ -147,7 +147,7 @@ def test_local_version_reads_package_and_qq_files(monkeypatch, tmp_path: Path) -
 
 
 def test_local_version_prefers_napcat_mjs_embedded_version(monkeypatch, tmp_path: Path) -> None:
-    """本地 NapCat 版本应优先读取 napcat.mjs 中的真实核心版本。"""
+    """本地 NapCat 版本应优先读取 napcat.mjs 中的真实核心版本. """
     mute_version_logger(monkeypatch)
     napcat_path = tmp_path / "NapCatQQ"
     napcat_path.mkdir(parents=True, exist_ok=True)
@@ -168,7 +168,7 @@ def test_local_version_prefers_napcat_mjs_embedded_version(monkeypatch, tmp_path
 
 
 def test_local_version_handles_missing_files(monkeypatch, tmp_path: Path) -> None:
-    """本地版本文件缺失时应返回 None 并发出错误。"""
+    """本地版本文件缺失时应返回 None 并发出错误. """
     mute_version_logger(monkeypatch)
     errors: list[str] = []
     fake_path_func = SimpleNamespace(napcat_path=tmp_path / "NapCatQQ", get_qq_path=lambda: None)
@@ -185,7 +185,7 @@ def test_local_version_handles_missing_files(monkeypatch, tmp_path: Path) -> Non
 
 
 def test_version_service_refresh_submits_local_and_remote_tasks(monkeypatch) -> None:
-    """VersionService.refresh 应向线程池同时提交本地和远程任务。"""
+    """VersionService.refresh 应向线程池同时提交本地和远程任务. """
     started: list[str] = []
 
     class FakeThreadPool:
@@ -200,7 +200,7 @@ def test_version_service_refresh_submits_local_and_remote_tasks(monkeypatch) -> 
 
 
 def test_version_runnable_base_run_emits_execute_result() -> None:
-    """基类 run 应发出 execute 的返回值。"""
+    """基类 run 应发出 execute 的返回值. """
 
     class DummyRunnable(versioning.VersionTaskBase):
         def execute(self) -> versioning.VersionSnapshot:

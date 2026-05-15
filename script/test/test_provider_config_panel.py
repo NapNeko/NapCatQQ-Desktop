@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""单元测试：ProviderConfigPanel 的 add/remove 功能.
+"""单元测试: ProviderConfigPanel 的 add/remove 功能.
 
-验证 add_provider() 和 remove_provider() 方法正确调用 ProviderRegistry，
-以及 DuplicateProviderError 的处理。
+验证 add_provider() 和 remove_provider() 方法正确调用 ProviderRegistry, 
+以及 DuplicateProviderError 的处理. 
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class TestProviderConfigPanelAddRemove:
             ],
         }
 
-        # 直接测试 registry.register 逻辑（不依赖 Qt UI）
+        # 直接测试 registry.register 逻辑 (不依赖 Qt UI) 
         provider = Provider(
             provider_id=provider_data["provider_id"],
             name=provider_data["name"],
@@ -245,7 +245,7 @@ class TestProviderRegistryUpdateProvider:
         assert updated.provider_id == "test-provider"
 
     def test_update_provider_creates_new_instance(self) -> None:
-        """update_provider 应创建新实例（不修改原实例引用）"""
+        """update_provider 应创建新实例 (不修改原实例引用) """
         registry = self._make_registry_with_provider()
 
         original = registry.get("test-provider")

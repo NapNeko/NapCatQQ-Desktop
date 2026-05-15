@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/tools/file_tools.py.
 
-验证 FileReadTool、FileWriteTool、FileEditTool 的核心功能，
-包括路径遍历防护、文件读写、搜索替换逻辑。
+验证 FileReadTool, FileWriteTool, FileEditTool 的核心功能, 
+包括路径遍历防护, 文件读写, 搜索替换逻辑. 
 """
 
 from __future__ import annotations

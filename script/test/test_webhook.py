@@ -19,7 +19,7 @@ from src.core.network.webhook import WebHook, WebHookData, create_offline_webhoo
 
 
 def make_config(qqid: int = 114514, name: str = "WebhookBot") -> Config:
-    """构造 WebHook 测试用 Bot 配置。"""
+    """构造 WebHook 测试用 Bot 配置. """
     return Config(
         bot=BotConfig(
             name=name,
@@ -52,7 +52,7 @@ def make_config(qqid: int = 114514, name: str = "WebhookBot") -> Config:
 
 
 def patch_cfg_get(monkeypatch: pytest.MonkeyPatch, overrides: dict[str, str]) -> None:
-    """将 cfg.get 定向到测试数据。"""
+    """将 cfg.get 定向到测试数据. """
 
     def fake_get(item):
         return overrides.get(item.key, "")
@@ -61,7 +61,7 @@ def patch_cfg_get(monkeypatch: pytest.MonkeyPatch, overrides: dict[str, str]) ->
 
 
 def test_create_test_webhook_task_sends_parsed_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    """测试 WebHook 请求体应以解析后的 JSON 对象发送。"""
+    """测试 WebHook 请求体应以解析后的 JSON 对象发送. """
     user_config_json = '{"text": "Test from user config"}'
     patch_cfg_get(
         monkeypatch,
@@ -100,7 +100,7 @@ def test_create_test_webhook_task_sends_parsed_payload(monkeypatch: pytest.Monke
 
 
 def test_create_offline_webhook_task_renders_template_and_sends_object(monkeypatch: pytest.MonkeyPatch) -> None:
-    """离线通知应渲染模板后以 JSON 对象发送。"""
+    """离线通知应渲染模板后以 JSON 对象发送. """
     patch_cfg_get(
         monkeypatch,
         {
@@ -140,7 +140,7 @@ def test_create_offline_webhook_task_renders_template_and_sends_object(monkeypat
 
 
 def test_invalid_json_emits_error_and_skips_send(monkeypatch: pytest.MonkeyPatch) -> None:
-    """无效 JSON 时不应发起请求。"""
+    """无效 JSON 时不应发起请求. """
     monkeypatch.setattr(
         webhook_module.httpx,
         "post",
@@ -156,7 +156,7 @@ def test_invalid_json_emits_error_and_skips_send(monkeypatch: pytest.MonkeyPatch
 
 
 def test_webhook_get_request_sends_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    """测试 GET 请求应将解析后的 JSON 作为 params 发送。"""
+    """测试 GET 请求应将解析后的 JSON 作为 params 发送. """
     user_config_json = '{"device_key": "abc123", "title": "Test"}'
     patch_cfg_get(
         monkeypatch,

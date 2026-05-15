@@ -18,7 +18,7 @@ sys.modules.setdefault("qrcode", ModuleType("qrcode"))
 
 
 def load_bot_list_module():
-    """按文件路径加载目标模块，避免触发页面包的全量导入。"""
+    """按文件路径加载目标模块, 避免触发页面包的全量导入. """
     project_root = Path(__file__).resolve().parents[2]
     module_name = "src.ui.page.bot_page.sub_page.bot_list"
 
@@ -69,7 +69,7 @@ bot_list_module = load_bot_list_module()
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -78,7 +78,7 @@ def ensure_qapp() -> QApplication:
 
 
 class DummyBotCard(QWidget):
-    """用于替代真实 BotCard 的轻量测试控件。
+    """用于替代真实 BotCard 的轻量测试控件. 
 
     与真实 ``BotCard`` 的接口对齐 (信号 + ``set_batch_mode`` / ``is_batch_selected``
     / ``set_selected`` 方法), 让 :meth:`BotListPage.update_bot_list` 内的
@@ -86,7 +86,7 @@ class DummyBotCard(QWidget):
     """
 
     remove_signal = Signal(str)
-    # P4 F2: 批量模式选中态信号 (qq_id, selected) — 与 BotCard 真实信号同形
+    # P4 F2: 批量模式选中态信号 (qq_id, selected) - 与 BotCard 真实信号同形
     selected_changed_signal = Signal(str, bool)
 
     def __init__(self, config, parent: QWidget | None = None, invalid: bool = False) -> None:
@@ -134,7 +134,7 @@ class DummyBotCard(QWidget):
 
 
 class FakeFlowLayout:
-    """最小可用布局替身，仅记录移除操作。"""
+    """最小可用布局替身, 仅记录移除操作. """
 
     def __init__(self) -> None:
         self.removed_widgets: list[QWidget] = []
@@ -146,7 +146,7 @@ class FakeFlowLayout:
 def test_update_bot_list_rebuild_does_not_keep_stale_card_references(
     monkeypatch: pytest.MonkeyPatch, config_factory
 ) -> None:
-    """重复刷新列表后，内部卡片引用应保持与配置数量一致。"""
+    """重复刷新列表后, 内部卡片引用应保持与配置数量一致. """
     ensure_qapp()
     configs = [config_factory(114514, "Alpha"), config_factory(223344, "Beta")]
 
@@ -169,7 +169,7 @@ def test_update_bot_list_rebuild_does_not_keep_stale_card_references(
 def test_remove_bot_by_qqid_skips_invalid_stale_card_and_removes_live_card(
     monkeypatch: pytest.MonkeyPatch, config_factory
 ) -> None:
-    """删除 Bot 时应跳过已失效卡片引用，并移除仍存活的目标卡片。"""
+    """删除 Bot 时应跳过已失效卡片引用, 并移除仍存活的目标卡片. """
     ensure_qapp()
     config_keep = config_factory(114514, "Alpha")
     config_delete = config_factory(223344, "Beta")

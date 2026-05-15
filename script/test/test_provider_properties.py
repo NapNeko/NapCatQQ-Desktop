@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""属性测试：AI Provider Redesign — 12 个 Correctness Properties.
+"""属性测试: AI Provider Redesign - 12 个 Correctness Properties.
 
-使用 hypothesis 验证 Provider 管理系统的核心属性，覆盖搜索过滤、状态管理、
-注册表操作、序列化等关键行为。
+使用 hypothesis 验证 Provider 管理系统的核心属性, 覆盖搜索过滤, 状态管理, 
+注册表操作, 序列化等关键行为. 
 
 测试文件: script/test/test_provider_properties.py
 框架: pytest + hypothesis
@@ -522,7 +522,7 @@ class TestProperty11:
             api_base_url="https://api.example.com/v1",
             api_key_ref=provider.api_key_ref,
             models=provider.models,
-            # enabled not specified — should default to True
+            # enabled not specified - should default to True
         )
         assert default_provider.enabled is True
 

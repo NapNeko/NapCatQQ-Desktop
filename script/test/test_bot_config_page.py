@@ -29,7 +29,7 @@ from src.ui.page.bot_page.sub_page.bot_config import ConfigPage
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -38,7 +38,7 @@ def ensure_qapp() -> QApplication:
 
 
 def test_save_invalid_config_shows_error_without_calling_update(monkeypatch) -> None:
-    """顶层配置校验失败时应提示错误，而不是继续保存。"""
+    """顶层配置校验失败时应提示错误, 而不是继续保存. """
     ensure_qapp()
     page = ConfigPage()
     captured: dict[str, object] = {}
@@ -65,7 +65,7 @@ def test_save_invalid_config_shows_error_without_calling_update(monkeypatch) -> 
 
 
 def test_save_duplicate_connect_names_shows_error_without_calling_update(monkeypatch) -> None:
-    """连接配置名称重复时应阻止保存。"""
+    """连接配置名称重复时应阻止保存. """
     ensure_qapp()
     page = ConfigPage()
     captured: dict[str, object] = {}
@@ -93,7 +93,7 @@ def test_save_duplicate_connect_names_shows_error_without_calling_update(monkeyp
 
 
 def test_fill_and_save_config_preserves_websocket_entries(monkeypatch) -> None:
-    """整页填充已有配置后直接保存，不应丢失 WebSocket 连接项。"""
+    """整页填充已有配置后直接保存, 不应丢失 WebSocket 连接项. """
     ensure_qapp()
     page = ConfigPage()
     captured: dict[str, object] = {}

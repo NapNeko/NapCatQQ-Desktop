@@ -22,7 +22,7 @@ from src.core.logging.log_func import Logger
 
 
 def create_test_logger(log_path: Path) -> Logger:
-    """创建写入指定路径的测试日志器。"""
+    """创建写入指定路径的测试日志器. """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     test_logger = Logger()
     test_logger.load_config()
@@ -32,7 +32,7 @@ def create_test_logger(log_path: Path) -> Logger:
 
 
 def create_runtime_config_fixture(repo_root: Path) -> dict[str, str]:
-    """在临时仓库中写入带敏感数据的运行时配置。"""
+    """在临时仓库中写入带敏感数据的运行时配置. """
     runtime_config_dir = repo_root / "runtime" / "config"
     runtime_config_dir.mkdir(parents=True, exist_ok=True)
 
@@ -130,7 +130,7 @@ def create_runtime_config_fixture(repo_root: Path) -> dict[str, str]:
 
 
 def test_sanitize_text_for_export_redacts_sensitive_values() -> None:
-    """敏感文本导出前必须被严格脱敏。"""
+    """敏感文本导出前必须被严格脱敏. """
     raw_text = (
         "Authorization: Bearer top-secret\n"
         "token=inline-secret\n"
@@ -154,14 +154,14 @@ def test_sanitize_text_for_export_redacts_sensitive_values() -> None:
 
 
 def test_log_summary_helpers_keep_context_without_exposing_raw_values() -> None:
-    """日志摘要辅助函数应保留调试上下文且避免输出完整敏感值。"""
+    """日志摘要辅助函数应保留调试上下文且避免输出完整敏感值. """
     assert mask_email("sensitive.user@example.com") == "s***@example.com"
     assert summarize_url("https://example.com/webhook/path?token=secret") == "https://example.com/.../path"
     assert summarize_path("C:/Users/QIAO/Desktop/update.bat") == "...\\Desktop\\update.bat"
 
 
 def test_build_safe_config_summary_excludes_sensitive_values(tmp_path: Path) -> None:
-    """安全配置摘要不得包含原始敏感值。"""
+    """安全配置摘要不得包含原始敏感值. """
     repo_root = tmp_path / "repo"
     sensitive_values = create_runtime_config_fixture(repo_root)
 
@@ -185,7 +185,7 @@ def test_build_safe_config_summary_excludes_sensitive_values(tmp_path: Path) -> 
 
 
 def test_emit_crash_bundle_writes_redacted_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """崩溃诊断包必须只包含脱敏后的派生文件。"""
+    """崩溃诊断包必须只包含脱敏后的派生文件. """
     repo_root = tmp_path / "repo"
     data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
     desktop_dir = tmp_path / "desktop"
@@ -247,7 +247,7 @@ def test_emit_crash_bundle_writes_redacted_bundle(tmp_path: Path, monkeypatch: p
 
 
 def test_emit_crash_bundle_only_once_per_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """同一进程重复触发崩溃导出时只能生成一个 zip。"""
+    """同一进程重复触发崩溃导出时只能生成一个 zip. """
     repo_root = tmp_path / "repo"
     data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
     desktop_dir = tmp_path / "desktop"
@@ -275,7 +275,7 @@ def test_emit_crash_bundle_only_once_per_process(tmp_path: Path, monkeypatch: py
 
 
 def test_emit_crash_bundle_publishes_user_notification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """生成崩溃诊断包时应向 UI 广播提醒事件。"""
+    """生成崩溃诊断包时应向 UI 广播提醒事件. """
     repo_root = tmp_path / "repo"
     data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
     desktop_dir = tmp_path / "desktop"
@@ -307,7 +307,7 @@ def test_emit_crash_bundle_publishes_user_notification(tmp_path: Path, monkeypat
 
 
 def test_emit_test_crash_bundle_does_not_consume_real_crash_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """手动测试导出不应占用正式崩溃诊断包的一次性名额。"""
+    """手动测试导出不应占用正式崩溃诊断包的一次性名额. """
     repo_root = tmp_path / "repo"
     data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
     desktop_dir = tmp_path / "desktop"
@@ -335,7 +335,7 @@ def test_emit_test_crash_bundle_does_not_consume_real_crash_export(tmp_path: Pat
 def test_emit_test_crash_bundle_does_not_publish_user_notification(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """手动测试导出不应触发异常崩溃提示。"""
+    """手动测试导出不应触发异常崩溃提示. """
     repo_root = tmp_path / "repo"
     data_root = tmp_path / "ProgramData" / "NapCatQQ Desktop"
     desktop_dir = tmp_path / "desktop"

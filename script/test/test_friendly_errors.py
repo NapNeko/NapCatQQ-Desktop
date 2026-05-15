@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`to_friendly`](src/core/remote/friendly_errors.py) 单元测试 (P4 W1·F5.4).
+"""[`to_friendly`](src/core/remote/friendly_errors.py) 单元测试 (P4 W1.F5.4).
 
 覆盖:
 

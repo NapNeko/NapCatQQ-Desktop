@@ -17,7 +17,7 @@ from src.ui.page.bot_page.widget.msg_box import (
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -26,7 +26,7 @@ def ensure_qapp() -> QApplication:
 
 
 def create_dialog_parent() -> QWidget:
-    """创建供 MessageBoxBase 使用的父级窗口。"""
+    """创建供 MessageBoxBase 使用的父级窗口. """
     ensure_qapp()
     parent = QWidget()
     parent.resize(800, 600)
@@ -34,7 +34,7 @@ def create_dialog_parent() -> QWidget:
 
 
 def test_http_server_dialog_rejects_invalid_port() -> None:
-    """HTTP Server 对话框不应吞掉无效端口。"""
+    """HTTP Server 对话框不应吞掉无效端口. """
     parent = create_dialog_parent()
     dialog = HttpServerConfigDialog(parent)
     dialog.port_card.fill_value("not-a-port")
@@ -44,7 +44,7 @@ def test_http_server_dialog_rejects_invalid_port() -> None:
 
 
 def test_websocket_server_dialog_rejects_invalid_heart_interval() -> None:
-    """WebSocket Server 对话框应明确拒绝非法心跳间隔。"""
+    """WebSocket Server 对话框应明确拒绝非法心跳间隔. """
     parent = create_dialog_parent()
     dialog = WebsocketServerConfigDialog(parent)
     dialog.port_card.fill_value("3000")
@@ -55,7 +55,7 @@ def test_websocket_server_dialog_rejects_invalid_heart_interval() -> None:
 
 
 def test_websocket_client_dialog_blank_intervals_fall_back_to_defaults() -> None:
-    """WebSocket Client 的空白间隔输入应回落到默认值。"""
+    """WebSocket Client 的空白间隔输入应回落到默认值. """
     parent = create_dialog_parent()
     dialog = WebsocketClientConfigDialog(parent)
     dialog.url_card.fill_value("ws://localhost:8080")
@@ -69,7 +69,7 @@ def test_websocket_client_dialog_blank_intervals_fall_back_to_defaults() -> None
 
 
 def test_connect_dialog_accept_shows_error_bar_without_closing(monkeypatch) -> None:
-    """字段校验失败时应弹出错误提示，并保留对话框内容。"""
+    """字段校验失败时应弹出错误提示, 并保留对话框内容. """
     parent = create_dialog_parent()
     dialog = HttpServerConfigDialog(parent)
     captured: dict[str, str] = {}
@@ -87,7 +87,7 @@ def test_connect_dialog_accept_shows_error_bar_without_closing(monkeypatch) -> N
 
 
 def test_connect_dialog_duplicate_name_shows_error_bar_without_closing(monkeypatch) -> None:
-    """名称冲突应在对话框内提示，而不是关闭后才失败。"""
+    """名称冲突应在对话框内提示, 而不是关闭后才失败. """
     parent = create_dialog_parent()
     dialog = HttpServerConfigDialog(parent)
     captured: dict[str, str] = {}

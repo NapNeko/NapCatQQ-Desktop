@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """ContextLoader 单元测试.
 
-测试用户上下文文件加载、mtime 缓存、截断和文件不存在等场景。
+测试用户上下文文件加载, mtime 缓存, 截断和文件不存在等场景. 
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from src.core.agent.context_loader import MAX_CONTEXT_LENGTH, ContextLoader
 
 @pytest.fixture()
 def context_file(tmp_path: Path) -> Path:
-    """返回临时目录下的上下文文件路径（不创建文件）."""
+    """返回临时目录下的上下文文件路径 (不创建文件) ."""
     return tmp_path / "agent_context.md"
 
 
@@ -66,7 +66,7 @@ class TestContextLoaderMtimeCache:
         result1 = loader.load()
         assert result1 == "original content"
 
-        # 第二次加载（mtime 未变）应返回缓存
+        # 第二次加载 (mtime 未变) 应返回缓存
         result2 = loader.load()
         assert result2 == "original content"
 

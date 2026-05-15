@@ -8,7 +8,7 @@ import src.core.platform.single_instance as mutex_module
 
 
 class FakeLockFile:
-    """最小可控的 QLockFile 替身。"""
+    """最小可控的 QLockFile 替身. """
 
     next_try_lock_result = True
 
@@ -25,7 +25,7 @@ class FakeLockFile:
 
 
 def setup_mutex(monkeypatch, tmp_path) -> None:
-    """重置单实例状态并注入假锁。"""
+    """重置单实例状态并注入假锁. """
     mutex_module.SingleInstanceApplication._lock_file = None
     monkeypatch.setattr(mutex_module, "QLockFile", FakeLockFile)
     monkeypatch.setattr(mutex_module, "it", lambda cls: SimpleNamespace(tmp_path=tmp_path))
@@ -34,7 +34,7 @@ def setup_mutex(monkeypatch, tmp_path) -> None:
 
 
 def test_single_instance_initializes_lock_file(monkeypatch, tmp_path) -> None:
-    """初始化时应创建锁文件并设置陈旧锁超时。"""
+    """初始化时应创建锁文件并设置陈旧锁超时. """
     setup_mutex(monkeypatch, tmp_path)
 
     app = mutex_module.SingleInstanceApplication()
@@ -45,7 +45,7 @@ def test_single_instance_initializes_lock_file(monkeypatch, tmp_path) -> None:
 
 
 def test_is_running_returns_false_when_lock_is_acquired(monkeypatch, tmp_path) -> None:
-    """获取锁成功表示当前实例是首个实例。"""
+    """获取锁成功表示当前实例是首个实例. """
     setup_mutex(monkeypatch, tmp_path)
     FakeLockFile.next_try_lock_result = True
 
@@ -53,7 +53,7 @@ def test_is_running_returns_false_when_lock_is_acquired(monkeypatch, tmp_path) -
 
 
 def test_is_running_returns_true_when_lock_is_busy(monkeypatch, tmp_path) -> None:
-    """获取锁失败表示已有实例在运行。"""
+    """获取锁失败表示已有实例在运行. """
     setup_mutex(monkeypatch, tmp_path)
     FakeLockFile.next_try_lock_result = False
 

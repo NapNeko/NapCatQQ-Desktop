@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/tools/search_tools.py.
 
-验证 GrepSearchTool 和 ListDirectoryTool 的核心功能。
+验证 GrepSearchTool 和 ListDirectoryTool 的核心功能. 
 """
 
 from __future__ import annotations

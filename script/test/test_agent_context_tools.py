@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """OpenContextFileTool 单元测试.
 
-测试上下文文件打开工具：文件不存在时创建模板、文件已存在时直接打开、
-平台感知的编辑器调用等场景。
+测试上下文文件打开工具: 文件不存在时创建模板, 文件已存在时直接打开, 
+平台感知的编辑器调用等场景. 
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from src.core.agent.tools.context_tools import (
 
 @pytest.fixture()
 def context_file(tmp_path: Path) -> Path:
-    """返回临时目录下的上下文文件路径（不创建文件）."""
+    """返回临时目录下的上下文文件路径 (不创建文件) ."""
     return tmp_path / "agent_context.md"
 
 

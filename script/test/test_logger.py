@@ -22,7 +22,7 @@ from src.core.logging.log_func import Logger
 
 
 def create_test_logger(tmp_path: Path) -> Logger:
-    """创建仅写入临时目录的测试日志器。"""
+    """创建仅写入临时目录的测试日志器. """
     test_logger = Logger()
     test_logger.load_config()
     test_logger.log_path = tmp_path / "app.log"
@@ -31,7 +31,7 @@ def create_test_logger(tmp_path: Path) -> Logger:
 
 
 def ensure_exception_logging_app() -> main.ExceptionLoggingApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -43,7 +43,7 @@ def ensure_exception_logging_app() -> main.ExceptionLoggingApplication:
 
 
 def test_logger_critical_serializes_level_and_message(tmp_path: Path) -> None:
-    """critical 日志应带有 CRIT 等级并正确落盘。"""
+    """critical 日志应带有 CRIT 等级并正确落盘. """
     test_logger = create_test_logger(tmp_path)
 
     test_logger.critical("critical failure")
@@ -54,7 +54,7 @@ def test_logger_critical_serializes_level_and_message(tmp_path: Path) -> None:
 
 
 def test_logger_exception_writes_traceback(tmp_path: Path) -> None:
-    """exception 日志应包含异常摘要和 traceback。"""
+    """exception 日志应包含异常摘要和 traceback. """
     test_logger = create_test_logger(tmp_path)
 
     try:
@@ -68,7 +68,7 @@ def test_logger_exception_writes_traceback(tmp_path: Path) -> None:
 
 
 def test_logger_publishes_log_output_notification(tmp_path: Path) -> None:
-    """日志落盘后应广播实时输出事件。"""
+    """日志落盘后应广播实时输出事件. """
     test_logger = create_test_logger(tmp_path)
     notifications: list[object] = []
 
@@ -85,7 +85,7 @@ def test_logger_publishes_log_output_notification(tmp_path: Path) -> None:
 
 
 def test_logger_trace_is_suppressed_without_developer_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """未启用开发者模式时，TRACE 日志不应落盘。"""
+    """未启用开发者模式时, TRACE 日志不应落盘. """
     test_logger = create_test_logger(tmp_path)
     monkeypatch.setattr(log_func_module, "is_developer_mode_enabled", lambda: False)
 
@@ -95,7 +95,7 @@ def test_logger_trace_is_suppressed_without_developer_mode(tmp_path: Path, monke
 
 
 def test_logger_trace_is_emitted_in_developer_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """启用开发者模式时，TRACE 日志应写入日志文件。"""
+    """启用开发者模式时, TRACE 日志应写入日志文件. """
     test_logger = create_test_logger(tmp_path)
     monkeypatch.setattr(log_func_module, "is_developer_mode_enabled", lambda: True)
 
@@ -109,7 +109,7 @@ def test_logger_trace_is_emitted_in_developer_mode(tmp_path: Path, monkeypatch: 
 def test_logger_trace_override_can_enable_without_developer_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """运行时开关应允许在非开发者模式下临时启用 TRACE 日志。"""
+    """运行时开关应允许在非开发者模式下临时启用 TRACE 日志. """
     test_logger = create_test_logger(tmp_path)
     monkeypatch.setattr(log_func_module, "is_developer_mode_enabled", lambda: False)
     test_logger.set_trace_logging_enabled(True)
@@ -124,7 +124,7 @@ def test_logger_trace_override_can_enable_without_developer_mode(
 def test_logger_trace_override_can_disable_in_developer_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """运行时开关应允许在开发者模式下临时关闭 TRACE 日志。"""
+    """运行时开关应允许在开发者模式下临时关闭 TRACE 日志. """
     test_logger = create_test_logger(tmp_path)
     monkeypatch.setattr(log_func_module, "is_developer_mode_enabled", lambda: True)
     test_logger.set_trace_logging_enabled(False)
@@ -135,7 +135,7 @@ def test_logger_trace_override_can_disable_in_developer_mode(
 
 
 def test_install_exception_hooks_write_unhandled_exception(tmp_path: Path) -> None:
-    """安装全局异常钩子后，调用 sys.excepthook 应写出 critical 日志。"""
+    """安装全局异常钩子后, 调用 sys.excepthook 应写出 critical 日志. """
     test_logger = create_test_logger(tmp_path)
     previous_sys_excepthook = sys.excepthook
     previous_thread_excepthook = threading.excepthook
@@ -161,7 +161,7 @@ def test_install_exception_hooks_write_unhandled_exception(tmp_path: Path) -> No
 
 
 def test_qq_install_logs_exception_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """QQ 安装失败时应调用异常日志记录。"""
+    """QQ 安装失败时应调用异常日志记录. """
     installer = QQInstall(tmp_path / "QQ.exe")
     captured: dict[str, object] = {}
 
@@ -184,7 +184,7 @@ def test_qq_install_logs_exception_on_failure(tmp_path: Path, monkeypatch: pytes
 
 
 def test_exception_logging_application_logs_button_handler_exceptions(monkeypatch: pytest.MonkeyPatch) -> None:
-    """按钮事件处理异常应由 Qt 应用异常兜底记录。"""
+    """按钮事件处理异常应由 Qt 应用异常兜底记录. """
     app = ensure_exception_logging_app()
     captured: dict[str, object] = {}
 
@@ -225,7 +225,7 @@ def test_exception_logging_application_logs_button_handler_exceptions(monkeypatc
 
 
 def test_button_slot_exception_is_written_to_log(tmp_path: Path) -> None:
-    """按钮槽函数抛错时，应通过 sys.excepthook 落到日志。"""
+    """按钮槽函数抛错时, 应通过 sys.excepthook 落到日志. """
     app = ensure_exception_logging_app()
     test_logger = create_test_logger(tmp_path)
     previous_sys_excepthook = sys.excepthook

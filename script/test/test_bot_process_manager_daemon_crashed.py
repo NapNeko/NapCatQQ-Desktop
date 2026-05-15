@@ -215,7 +215,7 @@ class TestOnDaemonCrashed:
 
         manager.stop_bot = _flaky_stop_bot  # type: ignore[method-assign]
 
-        # 不应 raise — 内部 try/except 吞掉
+        # 不应 raise - 内部 try/except 吞掉
         manager._on_daemon_crashed("test")
 
         # 三个 Bot 都被尝试 stop

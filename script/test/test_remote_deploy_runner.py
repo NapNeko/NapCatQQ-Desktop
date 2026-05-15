@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """[`LinuxCoreDeployment.install_linuxqq`](src/core/remote/deployment.py)
-与 [`install_napcat`](src/core/remote/deployment.py) 单元测试。
+与 [`install_napcat`](src/core/remote/deployment.py) 单元测试. 
 
 测试以 [`FakeExecutionBackend`](script/test/test_remote_deploy_probe.py)
-为基础, 验证脚本上传顺序、进度协议解析、错误传播。
+为基础, 验证脚本上传顺序, 进度协议解析, 错误传播. 
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from src.core.remote.models import LinuxCorePaths, RemoteCommandResult
 
 @dataclass
 class _RecordingBackend(ExecutionBackend):
-    """记录所有调用并按命令前缀返回伪造结果的测试后端。"""
+    """记录所有调用并按命令前缀返回伪造结果的测试后端. """
 
     bash_stdout: str = ""
     bash_stderr: str = ""
@@ -197,12 +197,12 @@ class TestInstallNapCat:
 
         result = deployment.install_napcat()
 
-        # 150 -> 100 — 上界被钳制
+        # 150 -> 100 - 上界被钳制
         assert result.progress_events == [(100, "weird"), (80, "ok")]
 
 
 class TestLogCallback:
-    """P1.5: log_callback 把每行 stdout 透传给上层(用于"部署控制台")。"""
+    """P1.5: log_callback 把每行 stdout 透传给上层(用于"部署控制台"). """
 
     def test_log_callback_receives_every_stdout_line(self) -> None:
         backend = _RecordingBackend(
@@ -292,7 +292,7 @@ class TestProgressLineParsing:
 
 class TestScriptTimeout:
     """回归测试: 部署脚本必须使用 SSHCredentials.script_timeout (默认 1800s),
-    而不是 command_timeout (默认 20s), 否则 apt-get 等长耗时命令会被秒杀。
+    而不是 command_timeout (默认 20s), 否则 apt-get 等长耗时命令会被秒杀. 
     """
 
     def test_run_script_uses_ssh_script_timeout(self) -> None:

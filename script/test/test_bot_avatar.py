@@ -10,7 +10,7 @@ from src.ui.page.bot_page.widget.card import BotAvatarWidget
 
 
 def test_get_avatar_worker_emits_error_signal_instead_of_touching_ui(monkeypatch: pytest.MonkeyPatch) -> None:
-    """头像下载失败时，worker 应通过信号回主线程，而不是直接操作 UI。"""
+    """头像下载失败时, worker 应通过信号回主线程, 而不是直接操作 UI. """
     emitted: list[tuple[str, str]] = []
 
     def fake_get(*args, **kwargs):
@@ -34,7 +34,7 @@ def test_get_avatar_worker_emits_error_signal_instead_of_touching_ui(monkeypatch
 
 
 def test_get_avatar_worker_supports_large_qqid(monkeypatch: pytest.MonkeyPatch) -> None:
-    """大于 32 位有符号整型上限的 QQ 号也不应在信号发射时溢出。"""
+    """大于 32 位有符号整型上限的 QQ 号也不应在信号发射时溢出. """
     emitted: list[tuple[str, bytes]] = []
 
     class FakeResponse:

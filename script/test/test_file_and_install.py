@@ -11,7 +11,7 @@ import src.core.installation.installers as install_func
 
 
 def test_qfluent_file_supports_context_manager(tmp_path: Path) -> None:
-    """QFluentFile 应支持 with 打开并在退出后关闭。"""
+    """QFluentFile 应支持 with 打开并在退出后关闭. """
     file_path = tmp_path / "sample.txt"
     file_path.write_text("hello", encoding="utf-8")
 
@@ -23,7 +23,7 @@ def test_qfluent_file_supports_context_manager(tmp_path: Path) -> None:
 
 
 def test_qfluent_file_raises_for_missing_file(tmp_path: Path) -> None:
-    """打开不存在的文件时应抛出 IOError。"""
+    """打开不存在的文件时应抛出 IOError. """
     missing = tmp_path / "missing.txt"
 
     try:
@@ -34,14 +34,14 @@ def test_qfluent_file_raises_for_missing_file(tmp_path: Path) -> None:
 
 
 def mute_install_logger(monkeypatch) -> None:
-    """屏蔽安装模块的日志副作用。"""
+    """屏蔽安装模块的日志副作用. """
     monkeypatch.setattr(install_func.logger, "info", lambda *args, **kwargs: None)
     monkeypatch.setattr(install_func.logger, "error", lambda *args, **kwargs: None)
     monkeypatch.setattr(install_func.logger, "exception", lambda *args, **kwargs: None)
 
 
 def test_napcat_install_remove_old_file_preserves_config_and_log(monkeypatch, tmp_path: Path) -> None:
-    """删除旧文件时应保留 config/log 目录。"""
+    """删除旧文件时应保留 config/log 目录. """
     mute_install_logger(monkeypatch)
     install_root = tmp_path / "NapCatQQ"
     tmp_root = tmp_path / "tmp"
@@ -69,7 +69,7 @@ def test_napcat_install_remove_old_file_preserves_config_and_log(monkeypatch, tm
 
 
 def test_napcat_install_remove_old_file_creates_missing_install_root(monkeypatch, tmp_path: Path) -> None:
-    """安装目录缺失时，删除旧文件前应自动创建目录而不是报错。"""
+    """安装目录缺失时, 删除旧文件前应自动创建目录而不是报错. """
     mute_install_logger(monkeypatch)
     install_root = tmp_path / "NapCatQQ"
     tmp_root = tmp_path / "tmp"
@@ -89,7 +89,7 @@ def test_napcat_install_remove_old_file_creates_missing_install_root(monkeypatch
 
 
 def test_napcat_install_unzip_file_extracts_package_and_removes_zip(monkeypatch, tmp_path: Path) -> None:
-    """解压 NapCat 安装包后应写入目标目录并删除 zip 文件。"""
+    """解压 NapCat 安装包后应写入目标目录并删除 zip 文件. """
     mute_install_logger(monkeypatch)
     install_root = tmp_path / "NapCatQQ"
     tmp_root = tmp_path / "tmp"
@@ -117,7 +117,7 @@ def test_napcat_install_unzip_file_extracts_package_and_removes_zip(monkeypatch,
 
 
 def test_napcat_install_unzip_file_creates_missing_install_root(monkeypatch, tmp_path: Path) -> None:
-    """安装目录缺失时，解压逻辑应自动创建目标目录。"""
+    """安装目录缺失时, 解压逻辑应自动创建目标目录. """
     mute_install_logger(monkeypatch)
     install_root = tmp_path / "NapCatQQ"
     tmp_root = tmp_path / "tmp"
@@ -142,7 +142,7 @@ def test_napcat_install_unzip_file_creates_missing_install_root(monkeypatch, tmp
 
 
 def test_qq_install_nonzero_exit_emits_error_and_deletes_installer(monkeypatch, tmp_path: Path) -> None:
-    """QQ 安装程序返回非零退出码时应发出失败信号并删除安装包。"""
+    """QQ 安装程序返回非零退出码时应发出失败信号并删除安装包. """
     mute_install_logger(monkeypatch)
     installer = tmp_path / "QQ.exe"
     installer.write_text("binary", encoding="utf-8")

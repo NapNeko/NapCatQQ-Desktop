@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`SSHClient.exec_stream_resilient`](src/core/remote/ssh_client.py) 单测 (P4 W4·F7).
+"""[`SSHClient.exec_stream_resilient`](src/core/remote/ssh_client.py) 单测 (P4 W4.F7).
 
 设计要点
 ========

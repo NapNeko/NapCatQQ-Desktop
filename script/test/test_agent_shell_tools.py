@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/tools/shell_tools.py.
 
-验证 ShellExecTool 的核心功能，包括命令执行、超时处理、
-工作目录验证和路径遍历防护。
+验证 ShellExecTool 的核心功能, 包括命令执行, 超时处理, 
+工作目录验证和路径遍历防护. 
 """
 
 from __future__ import annotations

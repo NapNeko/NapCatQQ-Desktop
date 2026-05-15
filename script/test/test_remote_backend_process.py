@@ -275,7 +275,7 @@ class TestFetchRssBytes:
     """回归: 远端内存监控必须走整个进程子树, 与本地 psutil 路径对齐.
 
     之前实现仅 ``ps -o rss= -p <pid>``, 在 ``xvfb-run`` shell wrapper 上只会拿到
-    ~1 MB, BotCard 上显示 "1 MB / 16112 MB" — 这正是该测试要防回归的现象.
+    ~1 MB, BotCard 上显示 "1 MB / 16112 MB" - 这正是该测试要防回归的现象.
     """
 
     @staticmethod

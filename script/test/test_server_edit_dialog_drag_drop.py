@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`_PrivateKeyDropLineEdit`](src/ui/page/remote_page/server_edit_dialog.py) 拖拽测试 (P4 W1·F5.3).
+"""[`_PrivateKeyDropLineEdit`](src/ui/page/remote_page/server_edit_dialog.py) 拖拽测试 (P4 W1.F5.3).
 
 走 ``evaluate_drop_paths`` 纯 Python 逻辑入口避免构造易崩的
 ``QDropEvent``; ``dropEvent`` 本身只是一层极薄的 url 提取 + 调用.

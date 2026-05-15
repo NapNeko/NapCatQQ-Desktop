@@ -16,7 +16,7 @@ from src.core.installation.install_type import InstallType
 
 
 def test_msi_update_strategy_preserves_package_filename_when_copying_to_runtime_tmp(tmp_path: Path) -> None:
-    """MSI 更新应保留原始文件名，不再强制改成固定名。"""
+    """MSI 更新应保留原始文件名, 不再强制改成固定名. """
 
     package_path = tmp_path / "downloads" / "NapCatQQ-Desktop-2.0.13-x64.msi"
     package_path.parent.mkdir(parents=True)
@@ -29,7 +29,7 @@ def test_msi_update_strategy_preserves_package_filename_when_copying_to_runtime_
 
 
 def test_msi_update_strategy_rejects_non_msi_file(tmp_path: Path) -> None:
-    """非 MSI 文件不应进入统一更新主线。"""
+    """非 MSI 文件不应进入统一更新主线. """
 
     package_path = tmp_path / "release.zip"
     package_path.write_bytes(b"0" * MINIMUM_MSI_SIZE_BYTES)
@@ -41,7 +41,7 @@ def test_msi_update_strategy_rejects_non_msi_file(tmp_path: Path) -> None:
 def test_msi_update_strategy_falls_back_to_system_temp_when_app_dir_unwritable(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """安装目录不可写时应回退到系统临时目录。"""
+    """安装目录不可写时应回退到系统临时目录. """
 
     package_path = tmp_path / "downloads" / "NapCatQQ-Desktop-2.0.13-x64.msi"
     package_path.parent.mkdir(parents=True)
@@ -64,7 +64,7 @@ def test_msi_update_strategy_falls_back_to_system_temp_when_app_dir_unwritable(
 
 
 def test_msi_update_strategy_reuses_package_already_in_runtime_tmp(tmp_path: Path) -> None:
-    """下载文件已在 runtime/tmp 时应直接复用该版本号包。"""
+    """下载文件已在 runtime/tmp 时应直接复用该版本号包. """
 
     package_path = tmp_path / "runtime" / "tmp" / "NapCatQQ-Desktop-2.0.13-x64.msi"
     package_path.parent.mkdir(parents=True)
@@ -78,7 +78,7 @@ def test_msi_update_strategy_reuses_package_already_in_runtime_tmp(tmp_path: Pat
 def test_update_manager_always_uses_msi_strategy_for_portable_install(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """即使当前是便携版，应用内更新也必须统一切到 MSI。"""
+    """即使当前是便携版, 应用内更新也必须统一切到 MSI. """
 
     monkeypatch.setattr(desktop_update_manager, "detect_install_type", lambda _path: InstallType.PORTABLE)
 
@@ -91,7 +91,7 @@ def test_update_manager_always_uses_msi_strategy_for_portable_install(
 
 
 def test_load_msi_update_script_contains_msiexec_flow() -> None:
-    """MSI 模板必须包含提权与 msiexec 升级命令。"""
+    """MSI 模板必须包含提权与 msiexec 升级命令. """
 
     script_content = load_msi_update_script()
     normalized = script_content.replace("\r\n", "\n")
@@ -116,7 +116,7 @@ def test_inject_script_variables_inserts_multiple_lines_after_setlocal() -> None
 
 
 def test_inject_target_pid_inserts_after_setlocal() -> None:
-    """target_pid 应注入到 setlocal 后，避免污染脚本头部。"""
+    """target_pid 应注入到 setlocal 后, 避免污染脚本头部. """
 
     content = "@echo off\nsetlocal enabledelayedexpansion\necho update\n"
 
@@ -127,7 +127,7 @@ def test_inject_target_pid_inserts_after_setlocal() -> None:
 
 
 def test_msi_update_strategy_builds_msiexec_launch_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """应直接构造 msiexec 命令，而不是依赖 bat 中转。"""
+    """应直接构造 msiexec 命令, 而不是依赖 bat 中转. """
 
     monkeypatch.setenv("SystemRoot", r"C:\Windows")
     staging_path = tmp_path / "NapCatQQ-Desktop-2.0.13-x64.msi"
@@ -154,7 +154,7 @@ def test_msi_update_strategy_builds_msiexec_launch_command(monkeypatch: pytest.M
 def test_msi_update_strategy_execute_update_launches_msiexec_directly(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """更新应直接拉起 msiexec，并记录诊断日志。"""
+    """更新应直接拉起 msiexec, 并记录诊断日志. """
 
     strategy = MsiUpdateStrategy()
     staging_path = tmp_path / "NapCatQQ-Desktop-2.0.13-x64.msi"
@@ -197,7 +197,7 @@ def test_msi_update_strategy_execute_update_launches_msiexec_directly(
 def test_msi_update_strategy_execute_update_logs_failure_when_launch_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """直接启动 msiexec 失败时应返回 None 并记录原因。"""
+    """直接启动 msiexec 失败时应返回 None 并记录原因. """
 
     strategy = MsiUpdateStrategy()
     staging_path = tmp_path / "NapCatQQ-Desktop-2.0.13-x64.msi"

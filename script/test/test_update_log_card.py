@@ -6,7 +6,7 @@ from src.ui.page.component_page.base import UpdateLogCard
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -14,7 +14,7 @@ def ensure_qapp() -> QApplication:
 
 
 def test_update_log_card_switches_between_loading_and_content() -> None:
-    """骨架屏应能在加载态和内容态之间切换。"""
+    """骨架屏应能在加载态和内容态之间切换. """
     ensure_qapp()
     parent = QWidget()
     card = UpdateLogCard(parent)

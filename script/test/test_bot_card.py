@@ -17,7 +17,7 @@ from src.core.config.config_model import HttpServersConfig, WebsocketClientsConf
 
 
 def load_card_module():
-    """按文件路径加载 card 模块，避免触发页面包的全量导入。"""
+    """按文件路径加载 card 模块, 避免触发页面包的全量导入. """
     project_root = Path(__file__).resolve().parents[2]
     module_name = "src.ui.page.bot_page.widget.card"
 
@@ -49,7 +49,7 @@ card_module = load_card_module()
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -58,28 +58,28 @@ def ensure_qapp() -> QApplication:
 
 
 class DummySignal:
-    """最小可用信号替身。"""
+    """最小可用信号替身. """
 
     def connect(self, *_args, **_kwargs) -> None:
         return None
 
 
 class DummyAvatarWidget(QWidget):
-    """避免测试中触发真实头像下载。"""
+    """避免测试中触发真实头像下载. """
 
     def __init__(self, _qq_id: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
 
 class DummyInfoWidget(QWidget):
-    """避免测试中接入真实运行态更新。"""
+    """避免测试中接入真实运行态更新. """
 
     def __init__(self, _config, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
 
 class ConfirmAskBox:
-    """始终确认的弹窗替身。"""
+    """始终确认的弹窗替身. """
 
     def __init__(self, *_args, **_kwargs) -> None:
         pass
@@ -89,7 +89,7 @@ class ConfirmAskBox:
 
 
 def test_remove_button_skips_stop_when_process_missing(monkeypatch: pytest.MonkeyPatch, config_factory) -> None:
-    """删除未运行 Bot 时不应误调用 stop_process，但仍需清理其余运行态。"""
+    """删除未运行 Bot 时不应误调用 stop_process, 但仍需清理其余运行态. """
     ensure_qapp()
     stop_calls: list[str] = []
     login_state_removals: list[str] = []
@@ -142,7 +142,7 @@ def test_remove_button_skips_stop_when_process_missing(monkeypatch: pytest.Monke
 
 
 def test_tag_widget_renders_enabled_connect_types(config_factory) -> None:
-    """网络标签应仅展示已配置的连接类型。"""
+    """网络标签应仅展示已配置的连接类型. """
     ensure_qapp()
     config = config_factory(114514)
     config.connect.httpServers.append(
@@ -163,7 +163,7 @@ def test_tag_widget_renders_enabled_connect_types(config_factory) -> None:
 def test_qr_code_button_shows_for_pending_qr_and_opens_target_dialog(
     monkeypatch: pytest.MonkeyPatch, config_factory
 ) -> None:
-    """卡片应仅在当前 Bot 存在二维码时展示入口，并打开对应 QQ 的弹窗。"""
+    """卡片应仅在当前 Bot 存在二维码时展示入口, 并打开对应 QQ 的弹窗. """
     ensure_qapp()
     shown_qq_ids: list[str] = []
 

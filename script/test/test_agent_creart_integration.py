@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """creart 集成冒烟测试.
 
-验证 Agent 模块的 creart Creator 注册正确工作：
+验证 Agent 模块的 creart Creator 注册正确工作: 
 - ProviderRegistryCreator
 - ToolRegistryCreator
 - SessionManagerCreator
@@ -96,8 +96,8 @@ class TestCreartInstantiation:
     def test_creart_it_session_manager(self, tmp_path: Path):
         """creart.it(SessionManager) 应返回 SessionManager 实例.
 
-        注意：SessionManagerCreator 依赖 PathFunc 提供 storage_dir。
-        通过 mock PathFunc 来避免对真实文件系统的依赖。
+        注意: SessionManagerCreator 依赖 PathFunc 提供 storage_dir. 
+        通过 mock PathFunc 来避免对真实文件系统的依赖. 
 
         Validates: Requirements 8.3
         """
@@ -108,13 +108,13 @@ class TestCreartInstantiation:
         })()
         (tmp_path / "config").mkdir(parents=True, exist_ok=True)
 
-        # 直接测试 Creator.create() 方法，mock 内部的 creart.it 调用
+        # 直接测试 Creator.create() 方法, mock 内部的 creart.it 调用
         with patch("creart.it", return_value=mock_path_func):
             instance = SessionManagerCreator.create(SessionManager)
             assert isinstance(instance, SessionManager)
 
     def test_creart_it_agent_engine_injects_dependencies(self, tmp_path: Path):
-        """creart.it(AgentEngine) 应正确注入 ProviderRegistry、ToolRegistry、SessionManager 依赖.
+        """creart.it(AgentEngine) 应正确注入 ProviderRegistry, ToolRegistry, SessionManager 依赖.
 
         Validates: Requirements 8.4, 8.7
         """

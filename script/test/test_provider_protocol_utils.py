@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Unit tests for provider_protocol_utils module.
 
-验证协议映射常量和纯函数的正确性，包括字段映射、路径映射、
-徽章映射、标签映射以及 URL 预览生成。
+验证协议映射常量和纯函数的正确性, 包括字段映射, 路径映射, 
+徽章映射, 标签映射以及 URL 预览生成. 
 """
 
 from __future__ import annotations
@@ -145,7 +145,7 @@ class TestGetProtocolLabel:
         assert get_protocol_label("deepseek") == "Deepseek"
 
     def test_empty_string(self) -> None:
-        """空字符串返回空字符串（capitalize 行为）."""
+        """空字符串返回空字符串 (capitalize 行为) ."""
         assert get_protocol_label("") == ""
 
 

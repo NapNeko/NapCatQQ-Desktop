@@ -34,7 +34,7 @@ def test_resolve_app_data_path_uses_repo_root_in_source_mode(monkeypatch: pytest
 def test_resolve_app_data_path_uses_programdata_when_frozen(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """冻结模式下数据目录应切换到 ProgramData。"""
+    """冻结模式下数据目录应切换到 ProgramData. """
 
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "NapCatQQ-Desktop.exe"), raising=False)

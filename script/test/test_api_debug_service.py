@@ -24,7 +24,7 @@ from src.core.api_debug import (
 
 
 class FakeClient:
-    """最小可用的 httpx.Client 替身。"""
+    """最小可用的 httpx.Client 替身. """
 
     def __init__(self, *, response: httpx.Response | None = None, error: Exception | None = None, **kwargs) -> None:
         self.response = response
@@ -47,7 +47,7 @@ class FakeClient:
 
 
 def test_request_builder_supports_query_headers_and_json_body() -> None:
-    """请求构造器应规范化 Method、Header、Query 和 JSON Body。"""
+    """请求构造器应规范化 Method, Header, Query 和 JSON Body. """
     builder = ApiDebugRequestBuilder()
 
     request = builder.build(
@@ -69,7 +69,7 @@ def test_request_builder_supports_query_headers_and_json_body() -> None:
 
 
 def test_auth_injector_supports_bearer_and_webui_session(monkeypatch) -> None:
-    """认证注入器应兼容 Bearer Token 和 WebUI Session Credential。"""
+    """认证注入器应兼容 Bearer Token 和 WebUI Session Credential. """
     injector = ApiDebugAuthInjector()
     request = ApiDebugRequestBuilder().build(
         ApiDebugRequestConfig(url="http://127.0.0.1:3000/api/Debug/call", body_type=ApiDebugBodyType.JSON, body={})
@@ -96,7 +96,7 @@ def test_auth_injector_supports_bearer_and_webui_session(monkeypatch) -> None:
 
 
 def test_create_bearer_auth_from_network_config_uses_existing_token() -> None:
-    """应能直接复用现有网络配置对象里的 token。"""
+    """应能直接复用现有网络配置对象里的 token. """
 
     class FakeNetworkConfig:
         token = "existing-token"
@@ -107,7 +107,7 @@ def test_create_bearer_auth_from_network_config_uses_existing_token() -> None:
 
 
 def test_response_parser_formats_json_and_binary_body() -> None:
-    """响应解析器应区分 JSON 与二进制响应体。"""
+    """响应解析器应区分 JSON 与二进制响应体. """
     parser = ApiDebugResponseParser()
     json_response = httpx.Response(
         200,
@@ -135,7 +135,7 @@ def test_response_parser_formats_json_and_binary_body() -> None:
 
 
 def test_api_debug_service_success_persists_redacted_history(tmp_path: Path) -> None:
-    """成功请求应写入历史记录，并对敏感 Header 做脱敏。"""
+    """成功请求应写入历史记录, 并对敏感 Header 做脱敏. """
     response = httpx.Response(
         200,
         json={"code": 0, "message": "ok"},
@@ -170,7 +170,7 @@ def test_api_debug_service_success_persists_redacted_history(tmp_path: Path) -> 
 
 
 def test_api_debug_service_wraps_http_error_response(tmp_path: Path) -> None:
-    """4xx/5xx 响应应保留响应内容并转换为 HTTP_STATUS 错误。"""
+    """4xx/5xx 响应应保留响应内容并转换为 HTTP_STATUS 错误. """
     response = httpx.Response(
         401,
         json={"code": 401, "message": "Unauthorized"},
@@ -191,7 +191,7 @@ def test_api_debug_service_wraps_http_error_response(tmp_path: Path) -> None:
 
 
 def test_api_debug_service_wraps_timeout_and_persists_history(tmp_path: Path) -> None:
-    """超时应统一封装，并记录失败历史。"""
+    """超时应统一封装, 并记录失败历史. """
     request = httpx.Request("GET", "http://127.0.0.1:3000/api/slow")
     timeout_error = httpx.ConnectTimeout("timeout", request=request)
     history = ApiDebugHistoryManager(storage_path=tmp_path / "timeout_history.json")

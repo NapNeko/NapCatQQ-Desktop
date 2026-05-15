@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/tool.py.
 
-验证 ToolResult、ToolDefinition、ToolProvider 和 ToolRegistry 的核心行为。
+验证 ToolResult, ToolDefinition, ToolProvider 和 ToolRegistry 的核心行为. 
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class _EchoParams(BaseModel):
 
 
 class _EchoTool(ToolDefinition):
-    """测试用工具：回显消息."""
+    """测试用工具: 回显消息."""
 
     tool_id = "echo"
     description = "Echo the message"
@@ -48,7 +48,7 @@ class _EchoTool(ToolDefinition):
 
 
 class _FailingTool(ToolDefinition):
-    """测试用工具：总是抛出异常."""
+    """测试用工具: 总是抛出异常."""
 
     tool_id = "failing_tool"
     description = "Always fails"
@@ -59,7 +59,7 @@ class _FailingTool(ToolDefinition):
 
 
 class _DictSchemaTool(ToolDefinition):
-    """测试用工具：使用 JSON Schema dict 作为参数 schema."""
+    """测试用工具: 使用 JSON Schema dict 作为参数 schema."""
 
     tool_id = "dict_schema_tool"
     description = "Tool with dict schema"
@@ -271,7 +271,7 @@ class TestToolRegistryInvoke:
     def test_invoke_invalid_params_returns_error(self) -> None:
         registry = ToolRegistry()
         registry.register(_EchoTool())
-        # message 是必填字段，缺失应返回错误
+        # message 是必填字段, 缺失应返回错误
         result = asyncio.run(registry.invoke("echo", {}))
         assert result.is_error is True
         assert "message" in result.output

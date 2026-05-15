@@ -25,7 +25,7 @@ from src.core.config.config_model import (
 
 
 class DummyPathFunc:
-    """用于测试的路径对象。"""
+    """用于测试的路径对象. """
 
     def __init__(self, root: Path) -> None:
         self.runtime_path = root / "runtime"
@@ -35,7 +35,7 @@ class DummyPathFunc:
 
 
 def patch_path_func(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> DummyPathFunc:
-    """将 operate_config 的路径解析定向到临时目录。"""
+    """将 operate_config 的路径解析定向到临时目录. """
     fake_path_func = DummyPathFunc(tmp_path)
     monkeypatch.setattr(operate_config, "it", lambda _cls: fake_path_func)
     return fake_path_func
@@ -56,7 +56,7 @@ def _force_sync_remote_config(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def make_config(qqid: int, name: str = "TestBot") -> Config:
-    """构造一份可写入的完整 Bot 配置。"""
+    """构造一份可写入的完整 Bot 配置. """
     return Config(
         bot=BotConfig(
             name=name,
@@ -89,23 +89,23 @@ def make_config(qqid: int, name: str = "TestBot") -> Config:
 
 
 def write_json(path: Path, payload) -> None:
-    """写入 JSON 文件。"""
+    """写入 JSON 文件. """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=4), encoding="utf-8")
 
 
 def read_json(path: Path):
-    """读取 JSON 文件。"""
+    """读取 JSON 文件. """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def payload(model) -> dict | list:
-    """将模型序列化为 JSON 结构。"""
+    """将模型序列化为 JSON 结构. """
     return json.loads(model.model_dump_json())
 
 
 def expected_bot_root(configs: list[Config]) -> dict:
-    """构造当前 bot.json 根结构。"""
+    """构造当前 bot.json 根结构. """
     return {
         "info": {
             "configVersion": BOT_CONFIG_COMPAT_VERSION,
@@ -115,7 +115,7 @@ def expected_bot_root(configs: list[Config]) -> dict:
 
 
 def expected_onebot_config(config: Config) -> dict:
-    """构造预期的 onebot JSON。"""
+    """构造预期的 onebot JSON. """
     return payload(
         OneBotConfig(
             network=config.connect,
@@ -127,7 +127,7 @@ def expected_onebot_config(config: Config) -> dict:
 
 
 def expected_napcat_config(config: Config) -> dict:
-    """构造预期的 napcat JSON。"""
+    """构造预期的 napcat JSON. """
     return payload(
         NapCatConfig(
             fileLog=config.advanced.fileLog,
@@ -143,7 +143,7 @@ def expected_napcat_config(config: Config) -> dict:
 
 
 def make_v15_legacy_payload() -> list[dict]:
-    """构造 v1.4/v1.5 旧版 bot.json 结构。"""
+    """构造 v1.4/v1.5 旧版 bot.json 结构. """
     return [
         {
             "bot": {
@@ -191,7 +191,7 @@ def make_v15_legacy_payload() -> list[dict]:
 
 
 def test_read_config_returns_empty_when_file_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """缺少 bot.json 时不应创建新文件。"""
+    """缺少 bot.json 时不应创建新文件. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
 
     assert operate_config.read_config() == []
@@ -199,7 +199,7 @@ def test_read_config_returns_empty_when_file_missing(tmp_path: Path, monkeypatch
 
 
 def test_read_config_keeps_invalid_file_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """bot.json 损坏时只返回空列表，不覆盖原文件。"""
+    """bot.json 损坏时只返回空列表, 不覆盖原文件. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     fake_path_func.bot_config_path.parent.mkdir(parents=True, exist_ok=True)
     fake_path_func.bot_config_path.write_text("{invalid json", encoding="utf-8")
@@ -209,7 +209,7 @@ def test_read_config_keeps_invalid_file_untouched(tmp_path: Path, monkeypatch: p
 
 
 def test_read_config_keeps_invalid_root_object_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """非法对象根节点不应被静默迁移为空配置。"""
+    """非法对象根节点不应被静默迁移为空配置. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     invalid_payload = {
         "info": {
@@ -226,7 +226,7 @@ def test_read_config_keeps_invalid_root_object_untouched(tmp_path: Path, monkeyp
 def test_read_config_migrates_legacy_root_list_to_versioned_object(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """legacy 纯列表根节点应迁移到带版本号的对象根结构。"""
+    """legacy 纯列表根节点应迁移到带版本号的对象根结构. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     legacy_payload = [payload(make_config(114514, "LegacyRoot"))]
     write_json(fake_path_func.bot_config_path, legacy_payload)
@@ -240,7 +240,7 @@ def test_read_config_migrates_legacy_root_list_to_versioned_object(
 
 
 def test_read_config_migrates_v15_network_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """v1.4/v1.5 的旧网络结构应迁移为当前 connect 列表结构。"""
+    """v1.4/v1.5 的旧网络结构应迁移为当前 connect 列表结构. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     legacy_payload = make_v15_legacy_payload()
     write_json(fake_path_func.bot_config_path, legacy_payload)
@@ -291,7 +291,7 @@ def test_read_config_migrates_v15_network_shape(tmp_path: Path, monkeypatch: pyt
 def test_read_config_preserves_legacy_reverse_ws_enable_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """旧版 reverseWs.enable 为 false 时，迁移后不应被强制打开。"""
+    """旧版 reverseWs.enable 为 false 时, 迁移后不应被强制打开. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     legacy_payload = make_v15_legacy_payload()
     legacy_payload[0]["connect"]["reverseWs"]["enable"] = False
@@ -305,7 +305,7 @@ def test_read_config_preserves_legacy_reverse_ws_enable_flag(
 
 
 def test_read_config_normalizes_legacy_interval_schedule(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """旧版 interval/jitter 自动重启配置应兼容为当前结构。"""
+    """旧版 interval/jitter 自动重启配置应兼容为当前结构. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     legacy_payload = payload(make_config(114514, "LegacyInterval"))
     legacy_payload["bot"]["autoRestartSchedule"] = {
@@ -327,7 +327,7 @@ def test_read_config_normalizes_legacy_interval_schedule(tmp_path: Path, monkeyp
 def test_read_config_disables_unsupported_legacy_cron_schedule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """旧版 crontab 自动重启配置应安全降级为禁用状态。"""
+    """旧版 crontab 自动重启配置应安全降级为禁用状态. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     legacy_payload = payload(make_config(114514, "LegacyCron"))
     legacy_payload["bot"]["autoRestartSchedule"] = {
@@ -348,7 +348,7 @@ def test_read_config_disables_unsupported_legacy_cron_schedule(
 
 
 def test_update_config_writes_all_files_atomically(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """成功保存时应同时写入 bot.json 和 NapCat 派生配置。"""
+    """成功保存时应同时写入 bot.json 和 NapCat 派生配置. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     config = make_config(114514, "AtomicBot")
 
@@ -365,7 +365,7 @@ def test_update_config_writes_all_files_atomically(tmp_path: Path, monkeypatch: 
 def test_update_config_preserves_websocket_entries_in_bot_and_onebot_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """保存带 WebSocket 配置的 Bot 时，不应在 bot.json 或 onebot 配置里丢失。"""
+    """保存带 WebSocket 配置的 Bot 时, 不应在 bot.json 或 onebot 配置里丢失. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     config = make_config(114514, "WebsocketBot")
     config.connect.websocketServers.append(
@@ -412,7 +412,7 @@ def test_update_config_preserves_websocket_entries_in_bot_and_onebot_files(
 def test_merge_config_for_update_preserves_webui_changes_when_desktop_edits_other_fields(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """WebUI 修改派生配置、Desktop 修改其他字段时，应无感合并两边改动。"""
+    """WebUI 修改派生配置, Desktop 修改其他字段时, 应无感合并两边改动. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     base_config = make_config(114514, "BaseBot")
     write_json(fake_path_func.bot_config_path, expected_bot_root([base_config]))
@@ -447,7 +447,7 @@ def test_merge_config_for_update_preserves_webui_changes_when_desktop_edits_othe
 def test_merge_config_for_update_prefers_desktop_changes_on_conflict(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """同一字段两边都改时，应以 Desktop 当前保存值为准。"""
+    """同一字段两边都改时, 应以 Desktop 当前保存值为准. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     base_config = make_config(114514, "BaseBot")
     base_config.connect.websocketClients.append(
@@ -472,7 +472,7 @@ def test_merge_config_for_update_prefers_desktop_changes_on_conflict(
 def test_update_config_fails_when_existing_bot_file_is_invalid(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """现有 bot.json 非法时应直接失败且不写新文件。"""
+    """现有 bot.json 非法时应直接失败且不写新文件. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     fake_path_func.bot_config_path.parent.mkdir(parents=True, exist_ok=True)
     fake_path_func.bot_config_path.write_text("{broken", encoding="utf-8")
@@ -490,7 +490,7 @@ def test_update_config_fails_when_existing_bot_file_is_invalid(
 
 
 def test_update_config_rolls_back_when_replace_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """提交阶段失败时，所有目标文件都应保持原状。"""
+    """提交阶段失败时, 所有目标文件都应保持原状. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     old_config = make_config(114514, "OldBot")
     new_config = make_config(114514, "NewBot")
@@ -523,7 +523,7 @@ def test_update_config_rolls_back_when_replace_fails(tmp_path: Path, monkeypatch
 
 
 def test_delete_config_removes_saved_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """删除成功时应同步移除 bot.json 条目和派生配置。"""
+    """删除成功时应同步移除 bot.json 条目和派生配置. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     target_config = make_config(114514, "DeleteMe")
     remain_config = make_config(1919810, "KeepMe")
@@ -545,7 +545,7 @@ def test_delete_config_removes_saved_files(tmp_path: Path, monkeypatch: pytest.M
 def test_delete_config_succeeds_when_derived_files_are_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """派生配置已缺失时，删除主配置仍应成功。"""
+    """派生配置已缺失时, 删除主配置仍应成功. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     target_config = make_config(114514, "DeleteMissing")
 
@@ -556,7 +556,7 @@ def test_delete_config_succeeds_when_derived_files_are_missing(
 
 
 def test_delete_config_rolls_back_when_commit_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """删除流程提交失败时应恢复 bot.json 与派生配置。"""
+    """删除流程提交失败时应恢复 bot.json 与派生配置. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     target_config = make_config(114514, "DeleteRollback")
 
@@ -613,7 +613,7 @@ def _patch_resolver_to_spy(monkeypatch: pytest.MonkeyPatch, spy: _RemoteConfigSy
 def test_update_config_skips_remote_sync_for_local_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``runtime_target='local'`` 时不应触发任何远端 backend 调用。"""
+    """``runtime_target='local'`` 时不应触发任何远端 backend 调用. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)  # noqa: F841
     spy = _RemoteConfigSyncSpy()
     _patch_resolver_to_spy(monkeypatch, spy)
@@ -672,7 +672,7 @@ def test_update_config_remote_resolver_unexpected_exception_does_not_block_local
 
     旧实现 ``_sync_bot_runtime_config_to_remote`` 只捕获了 ``BackendResolutionError`` /
     ``ImportError``, 其它异常会向上 propagate 到 ``update_config`` 的外层 ``except Exception``,
-    导致 update_config 返回 False —— 用户感知"切了 runtime_target 完全没生效",
+    导致 update_config 返回 False -- 用户感知"切了 runtime_target 完全没生效",
     但其实本地 bot.json 此时已写盘. 修复: 顶层 ``try/except Exception`` 兜底.
     """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
@@ -719,7 +719,7 @@ def test_delete_config_remote_resolver_unexpected_exception_does_not_block_local
 def test_delete_config_triggers_remote_delete_for_remote_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """删除时, 远端 backend 应收到 ``delete_bot_runtime_config(qq_id)`` 调用。"""
+    """删除时, 远端 backend 应收到 ``delete_bot_runtime_config(qq_id)`` 调用. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     spy = _RemoteConfigSyncSpy()
     _patch_resolver_to_spy(monkeypatch, spy)
@@ -736,7 +736,7 @@ def test_delete_config_triggers_remote_delete_for_remote_target(
 def test_delete_config_skips_remote_delete_for_local_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """local Bot 删除不触发远端清理。"""
+    """local Bot 删除不触发远端清理. """
     fake_path_func = patch_path_func(monkeypatch, tmp_path)
     spy = _RemoteConfigSyncSpy()
     _patch_resolver_to_spy(monkeypatch, spy)

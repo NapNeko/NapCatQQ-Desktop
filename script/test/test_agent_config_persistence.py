@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """ConfigPersistence 单元测试.
 
-测试配置持久化模块的核心行为：
+测试配置持久化模块的核心行为: 
 - 文件不存在时返回默认配置
 - 文件损坏时重命名为 .bak 并返回默认配置
 - 正常加载和保存 round-trip
@@ -155,7 +155,7 @@ class TestConfigPersistenceLoad:
     ) -> None:
         """JSON 有效但 schema 验证失败时应重命名为 .bak 并返回默认配置."""
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        # providers 应该是列表，这里给一个无效的字符串
+        # providers 应该是列表, 这里给一个无效的字符串
         invalid_data = {"providers": "not_a_list", "agents": []}
         config_path.write_text(json.dumps(invalid_data), encoding="utf-8")
 
@@ -211,7 +211,7 @@ class TestConfigPersistenceSave:
         # 使用一个目录作为文件路径来触发 I/O 错误
         dir_as_file = tmp_path / "a_directory"
         dir_as_file.mkdir()
-        # 尝试写入一个目录路径（这会失败）
+        # 尝试写入一个目录路径 (这会失败) 
         persistence = ConfigPersistence(dir_as_file)
 
         with caplog.at_level("ERROR"):

@@ -14,7 +14,7 @@ import src.core.config.config_export as config_export
 
 
 class DummyPathFunc:
-    """用于测试导出服务的路径对象。"""
+    """用于测试导出服务的路径对象. """
 
     def __init__(self, root: Path) -> None:
         self.runtime_path = root / "runtime"

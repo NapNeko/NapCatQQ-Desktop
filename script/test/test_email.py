@@ -12,7 +12,7 @@ import src.core.network.email as email_module
 
 
 def patch_email_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
-    """为 email 模块注入稳定的测试配置。"""
+    """为 email 模块注入稳定的测试配置. """
     fake_cfg = SimpleNamespace(
         email_sender="email_sender",
         email_receiver="email_receiver",
@@ -36,7 +36,7 @@ def patch_email_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_encryption_type_helpers_cover_all_declared_values() -> None:
-    """加密枚举辅助方法应返回稳定的名称和值。"""
+    """加密枚举辅助方法应返回稳定的名称和值. """
     assert email_module.EncryptionType.get_values() == ["SSL", "TLS", "无加密"]
     assert email_module.EncryptionType.get_names() == ["SSL", "TLS", "NONE"]
     assert email_module.EncryptionType.get_enum_by_value("TLS") == email_module.EncryptionType.TLS
@@ -46,7 +46,7 @@ def test_encryption_type_helpers_cover_all_declared_values() -> None:
 
 
 def test_email_data_reads_dynamic_values_from_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
-    """EmailData 应从配置对象拉取发件参数。"""
+    """EmailData 应从配置对象拉取发件参数. """
     patch_email_cfg(monkeypatch)
 
     data = email_module.EmailData("<p>hello</p>", "subject")
@@ -61,7 +61,7 @@ def test_email_data_reads_dynamic_values_from_cfg(monkeypatch: pytest.MonkeyPatc
 
 
 def test_email_run_uses_ssl_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    """SSL 模式应通过 SMTP_SSL 登录并发送邮件。"""
+    """SSL 模式应通过 SMTP_SSL 登录并发送邮件. """
     patch_email_cfg(monkeypatch)
     calls: list[tuple[str, object]] = []
     successes: list[str] = []
@@ -97,7 +97,7 @@ def test_email_run_uses_ssl_transport(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_email_run_uses_tls_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    """TLS 模式应先 starttls 再发送邮件。"""
+    """TLS 模式应先 starttls 再发送邮件. """
     patch_email_cfg(monkeypatch)
     events: list[str] = []
 
@@ -138,7 +138,7 @@ def test_email_run_uses_tls_transport(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_email_run_emits_smtp_response_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """SMTPResponseException 应被转换为可见错误消息。"""
+    """SMTPResponseException 应被转换为可见错误消息. """
     patch_email_cfg(monkeypatch)
     errors: list[str] = []
 
@@ -166,7 +166,7 @@ def test_email_run_emits_smtp_response_error(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_create_test_email_task_renders_template(monkeypatch: pytest.MonkeyPatch) -> None:
-    """测试邮件任务应从模板生成 HTML 内容。"""
+    """测试邮件任务应从模板生成 HTML 内容. """
     patch_email_cfg(monkeypatch)
 
     class FakeBytes:
@@ -203,7 +203,7 @@ def test_create_test_email_task_renders_template(monkeypatch: pytest.MonkeyPatch
 def test_create_offline_email_task_raises_when_template_is_empty(
     monkeypatch: pytest.MonkeyPatch, config_factory
 ) -> None:
-    """空模板内容不应创建离线通知邮件任务。"""
+    """空模板内容不应创建离线通知邮件任务. """
     patch_email_cfg(monkeypatch)
 
     class FakeQFluentFile:

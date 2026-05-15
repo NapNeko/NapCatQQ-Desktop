@@ -18,7 +18,7 @@ import src.ui.common.font as font_module
 
 @pytest.fixture
 def logger_stub(monkeypatch: pytest.MonkeyPatch) -> None:
-    """屏蔽启动流程中的真实日志写入。"""
+    """屏蔽启动流程中的真实日志写入. """
     monkeypatch.setattr(main.logger, "trace", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.logger, "info", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.logger, "warning", lambda *args, **kwargs: None)
@@ -34,7 +34,7 @@ def setup_runtime_dependencies(
     developer_mode: bool = False,
     exit_code: int = 0,
 ) -> tuple[dict[str, object], SimpleNamespace]:
-    """为 run_application 注入可控依赖。"""
+    """为 run_application 注入可控依赖. """
     calls: dict[str, object] = {}
     runtime_options = SimpleNamespace(developer_mode=developer_mode)
 
@@ -113,7 +113,7 @@ def setup_runtime_dependencies(
 def test_run_application_enters_main_window_with_manual_dpi(
     monkeypatch: pytest.MonkeyPatch, logger_stub
 ) -> None:
-    """主窗口分支应设置手动 DPI 并保留过滤后的 Qt 参数。"""
+    """主窗口分支应设置手动 DPI 并保留过滤后的 Qt 参数. """
     calls, runtime_options = setup_runtime_dependencies(
         monkeypatch,
         dpi_scale=1.5,
@@ -140,7 +140,7 @@ def test_run_application_enters_main_window_with_manual_dpi(
 def test_run_application_enters_guide_window_with_auto_dpi(
     monkeypatch: pytest.MonkeyPatch, logger_stub
 ) -> None:
-    """引导窗口分支应在 Auto DPI 下设置 Qt rounding policy。"""
+    """引导窗口分支应在 Auto DPI 下设置 Qt rounding policy. """
     calls, _ = setup_runtime_dependencies(
         monkeypatch,
         dpi_scale="Auto",
@@ -162,7 +162,7 @@ def test_run_application_enters_guide_window_with_auto_dpi(
 def test_run_application_exits_when_existing_instance_detected(
     monkeypatch: pytest.MonkeyPatch, logger_stub
 ) -> None:
-    """检测到已有实例时应在创建 QApplication 前直接退出。"""
+    """检测到已有实例时应在创建 QApplication 前直接退出. """
     calls, _ = setup_runtime_dependencies(
         monkeypatch,
         dpi_scale="Auto",
@@ -180,7 +180,7 @@ def test_run_application_exits_when_existing_instance_detected(
 
 
 def test_main_entry_returns_run_application_exit_code(monkeypatch: pytest.MonkeyPatch, logger_stub) -> None:
-    """入口函数应透传 run_application 的退出码。"""
+    """入口函数应透传 run_application 的退出码. """
     installed: list[bool] = []
     monkeypatch.setattr(main.logger, "install_exception_hooks", lambda: installed.append(True))
     monkeypatch.setattr(main, "run_application", lambda: 9)
@@ -192,7 +192,7 @@ def test_main_entry_returns_run_application_exit_code(monkeypatch: pytest.Monkey
 def test_main_entry_emits_crash_bundle_on_unhandled_exception(
     monkeypatch: pytest.MonkeyPatch, logger_stub
 ) -> None:
-    """入口函数遇到未处理异常时应记录日志并返回 1。"""
+    """入口函数遇到未处理异常时应记录日志并返回 1. """
     critical_messages: list[str] = []
     exception_messages: list[tuple[str, str]] = []
     crash_bundles: list[tuple[str, str]] = []
@@ -222,7 +222,7 @@ def test_main_entry_emits_crash_bundle_on_unhandled_exception(
 
 
 def test_main_entry_reraises_system_exit(monkeypatch: pytest.MonkeyPatch, logger_stub) -> None:
-    """入口函数不应吞掉 SystemExit。"""
+    """入口函数不应吞掉 SystemExit. """
     monkeypatch.setattr(main.logger, "install_exception_hooks", lambda: None)
     monkeypatch.setattr(
         main,

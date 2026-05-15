@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`CredentialStore`](src/core/remote/credential_store.py) 单元测试 (P4 W1·F5.2).
+"""[`CredentialStore`](src/core/remote/credential_store.py) 单元测试 (P4 W1.F5.2).
 
 覆盖:
 

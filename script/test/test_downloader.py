@@ -13,7 +13,7 @@ from src.core.network.downloader import DownloaderBase, GithubDownloader, QQDown
 
 
 class DummyStreamResponse:
-    """用于下载测试的最小 HTTP 响应桩。"""
+    """用于下载测试的最小 HTTP 响应桩. """
 
     def __init__(self, payload: bytes = b"payload", status_code: int = 200, headers: dict[str, str] | None = None) -> None:
         self.payload = payload
@@ -35,7 +35,7 @@ class DummyStreamResponse:
 
 
 class ChunkedResponse(DummyStreamResponse):
-    """返回多个分片的 HTTP 响应桩。"""
+    """返回多个分片的 HTTP 响应桩. """
 
     def __init__(self, chunks: list[bytes], status_code: int = 200, headers: dict[str, str] | None = None) -> None:
         self.chunks = chunks
@@ -50,7 +50,7 @@ class ChunkedResponse(DummyStreamResponse):
 def test_github_downloader_emits_finish_signal_when_primary_download_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """主源下载成功时必须发出完成信号。"""
+    """主源下载成功时必须发出完成信号. """
 
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
     finished = []
@@ -68,7 +68,7 @@ def test_github_downloader_download_checks_http_status(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    """GitHub 下载应先校验 HTTP 状态码。"""
+    """GitHub 下载应先校验 HTTP 状态码. """
 
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
     downloader.path = tmp_path
@@ -84,7 +84,7 @@ def test_github_downloader_download_checks_http_status(
 def test_github_downloader_run_falls_back_to_mirror_when_primary_download_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """主源失败后应继续尝试镜像地址。"""
+    """主源失败后应继续尝试镜像地址. """
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
     visited_urls: list[str] = []
     finished: list[bool] = []
@@ -108,7 +108,7 @@ def test_github_downloader_run_falls_back_to_mirror_when_primary_download_fails(
 def test_github_downloader_download_returns_false_when_content_length_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """无法获取文件大小时应返回 False 而不是写空文件。"""
+    """无法获取文件大小时应返回 False 而不是写空文件. """
 
     class ZeroLengthResponse(DummyStreamResponse):
         def __init__(self) -> None:
@@ -129,7 +129,7 @@ def test_github_downloader_download_returns_false_when_content_length_missing(
 
 
 def test_github_downloader_cleans_partial_file_when_stream_breaks(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """下载中断后不应留下 `.part` 残留文件。"""
+    """下载中断后不应留下 `.part` 残留文件. """
 
     class BrokenResponse(DummyStreamResponse):
         def iter_bytes(self):
@@ -148,7 +148,7 @@ def test_github_downloader_cleans_partial_file_when_stream_breaks(monkeypatch: p
 def test_github_downloader_download_returns_false_when_partial_file_is_locked(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """已有 `.part` 文件被占用时不应因清理失败崩溃。"""
+    """已有 `.part` 文件被占用时不应因清理失败崩溃. """
 
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
     downloader.path = tmp_path
@@ -175,7 +175,7 @@ def test_github_downloader_download_returns_false_when_partial_file_is_locked(
 
 
 def test_github_downloader_rejects_duplicate_target_download(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """同一目标文件已有下载任务时应拒绝重复启动。"""
+    """同一目标文件已有下载任务时应拒绝重复启动. """
 
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
     downloader.path = tmp_path
@@ -209,7 +209,7 @@ def test_github_downloader_rejects_duplicate_target_download(monkeypatch: pytest
 def test_github_downloader_run_emits_paused_signal_and_keeps_partial_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """暂停下载时应保留 `.part` 文件以便继续。"""
+    """暂停下载时应保留 `.part` 文件以便继续. """
 
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
     downloader.path = tmp_path
@@ -240,7 +240,7 @@ def test_github_downloader_run_emits_paused_signal_and_keeps_partial_file(
 
 
 def test_github_downloader_download_resumes_from_partial_file(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """继续下载时应从已有 `.part` 文件续传。"""
+    """继续下载时应从已有 `.part` 文件续传. """
 
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
     downloader.path = tmp_path
@@ -269,7 +269,7 @@ def test_github_downloader_download_resumes_from_partial_file(monkeypatch: pytes
 def test_qq_downloader_run_emits_canceled_signal_and_removes_partial_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """取消下载时应移除 `.part` 文件。"""
+    """取消下载时应移除 `.part` 文件. """
 
     downloader = QQDownloader(QUrl("https://example.com/QQ.exe"))
     downloader.path = tmp_path
@@ -299,7 +299,7 @@ def test_qq_downloader_run_emits_canceled_signal_and_removes_partial_file(
 
 
 def test_github_downloader_reraises_unknown_exception(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """未知异常不应被静默吞掉。"""
+    """未知异常不应被静默吞掉. """
 
     class WeirdResponse(DummyStreamResponse):
         def iter_bytes(self):
@@ -314,7 +314,7 @@ def test_github_downloader_reraises_unknown_exception(monkeypatch: pytest.Monkey
 
 
 def test_github_downloader_check_network_returns_false_on_request_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """网络探测异常时应安全返回 False。"""
+    """网络探测异常时应安全返回 False. """
     downloader = GithubDownloader(QUrl("https://example.com/NapCat.Shell.zip"))
     statuses: list[str] = []
     downloader.status_label_signal.connect(statuses.append)
@@ -334,7 +334,7 @@ def test_qq_downloader_run_checks_http_status(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    """QQ 下载流程也应在写文件前校验 HTTP 状态码。"""
+    """QQ 下载流程也应在写文件前校验 HTTP 状态码. """
 
     downloader = QQDownloader(QUrl("https://example.com/QQ.exe"))
     downloader.path = tmp_path
@@ -352,7 +352,7 @@ def test_qq_downloader_run_checks_http_status(
 
 
 def test_qq_downloader_emits_error_when_request_fails(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """QQ 下载失败时应发出错误结束信号。"""
+    """QQ 下载失败时应发出错误结束信号. """
     downloader = QQDownloader(QUrl("https://example.com/QQ.exe"))
     downloader.path = tmp_path
     errors: list[bool] = []

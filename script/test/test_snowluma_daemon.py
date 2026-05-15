@@ -216,7 +216,7 @@ class TestRenderDaemonGlobals:
         payload = json.loads(isolated_session.read_text(encoding="utf-8"))
         assert payload["password"] == session.password
         # webui.json 应被 override 渲染 (scrypt hash 与 session.password 算出来的不同;
-        # 但我们只检查 hash 字段存在 — 强烈断言会要求重做 scrypt 校验, 太重)
+        # 但我们只检查 hash 字段存在 - 强烈断言会要求重做 scrypt 校验, 太重)
         webui_json = snowluma_install / "config" / "webui.json"
         assert webui_json.exists()
 

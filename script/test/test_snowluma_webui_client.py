@@ -71,7 +71,7 @@ def test_update_onebot_config_returns_true_when_reloaded(
             {
                 "success": True,
                 "reloaded": True,
-                "message": "配置保存成功，已热重载当前会话。",
+                "message": "配置保存成功, 已热重载当前会话. ",
             },
         )
 
@@ -100,7 +100,7 @@ def test_update_onebot_config_returns_false_when_not_reloaded(
             {
                 "success": True,
                 "reloaded": False,
-                "message": "配置保存成功，当前会话未在线，将在下次连接时生效。",
+                "message": "配置保存成功, 当前会话未在线, 将在下次连接时生效. ",
             },
         ),
     )

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""[`LocalBackend`](src/core/operation/local_backend.py) 单元测试。
+"""[`LocalBackend`](src/core/operation/local_backend.py) 单元测试. 
 
-覆盖 P0 阶段已实现的方法：文件 8 op + 检测类 (``detect_napcat_version`` / ``detect_qq_path`` / ``detect_installation``)。
-进程 / 安装写入 / 日志 / WebUI 这些 NotImplementedError 也单独验证。
+覆盖 P0 阶段已实现的方法: 文件 8 op + 检测类 (``detect_napcat_version`` / ``detect_qq_path`` / ``detect_installation``). 
+进程 / 安装写入 / 日志 / WebUI 这些 NotImplementedError 也单独验证. 
 """
 from __future__ import annotations
 
@@ -201,7 +201,7 @@ class TestInterfaceContract:
 
 # ==================== P2 延迟实现 ====================
 class TestDeferredMethods:
-    """文档级保障: 这些方法在 P0 阶段必须 raise NotImplementedError, 不能默默返回错误数据。"""
+    """文档级保障: 这些方法在 P0 阶段必须 raise NotImplementedError, 不能默默返回错误数据. """
 
     def test_start_napcat_deferred(self, backend: LocalBackend, config_factory) -> None:
         with pytest.raises(NotImplementedError):

@@ -36,7 +36,7 @@ def _reset_deferred_overrides():
 
 
 def test_coerce_interval_default_handles_none_blank_and_invalid_values() -> None:
-    """间隔值规范化应为 None、空白和非法输入回退默认值。"""
+    """间隔值规范化应为 None, 空白和非法输入回退默认值. """
     assert _coerce_interval_default(None, 123) == 123
     assert _coerce_interval_default("   ", 456) == 456
     assert _coerce_interval_default("abc", 789) == 789
@@ -45,7 +45,7 @@ def test_coerce_interval_default_handles_none_blank_and_invalid_values() -> None
 
 
 def test_auto_restart_schedule_normalizes_legacy_interval_payload() -> None:
-    """旧版 interval 调度配置应在模型层被转换为当前结构。"""
+    """旧版 interval 调度配置应在模型层被转换为当前结构. """
     schedule = AutoRestartScheduleConfig.model_validate({"taskType": "interval", "interval": "15m", "jitter": 0})
 
     assert schedule.enable is True
@@ -54,7 +54,7 @@ def test_auto_restart_schedule_normalizes_legacy_interval_payload() -> None:
 
 
 def test_auto_restart_schedule_disables_legacy_crontab_payload() -> None:
-    """旧版 crontab 调度配置应安全降级为禁用。"""
+    """旧版 crontab 调度配置应安全降级为禁用. """
     schedule = AutoRestartScheduleConfig.model_validate(
         {"taskType": "crontab", "interval": "6h", "crontab": "0 4 * * *", "jitter": 0}
     )
@@ -65,7 +65,7 @@ def test_auto_restart_schedule_disables_legacy_crontab_payload() -> None:
 
 
 def test_bot_config_generates_name_when_value_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    """空名称应退回为随机生成的 8 位字母串。"""
+    """空名称应退回为随机生成的 8 位字母串. """
     monkeypatch.setattr(random, "choices", lambda population, k: list("AbCdEfGh"))
 
     bot = BotConfig(name="", QQID="123456", autoRestartSchedule=AutoRestartScheduleConfig())
@@ -75,13 +75,13 @@ def test_bot_config_generates_name_when_value_is_empty(monkeypatch: pytest.Monke
 
 
 def test_bot_config_rejects_invalid_qqid() -> None:
-    """非法 QQID 应在模型层直接报错。"""
+    """非法 QQID 应在模型层直接报错. """
     with pytest.raises(ValueError, match="无法转换为整数"):
         BotConfig(name="demo", QQID="not-a-number", autoRestartSchedule=AutoRestartScheduleConfig())
 
 
 def test_websocket_configs_coerce_blank_intervals_to_defaults() -> None:
-    """WebSocket 相关配置中的空白间隔应回退为默认值。"""
+    """WebSocket 相关配置中的空白间隔应回退为默认值. """
     server = WebsocketServersConfig(name="server", host="127.0.0.1", port=8080, heartInterval=" ")
     client = WebsocketClientsConfig(
         name="client",
@@ -96,7 +96,7 @@ def test_websocket_configs_coerce_blank_intervals_to_defaults() -> None:
 
 
 def test_advanced_config_normalizes_bypass_payload_and_fills_missing_keys() -> None:
-    """新版 bypass 配置应兼容布尔字符串并补齐缺失字段。"""
+    """新版 bypass 配置应兼容布尔字符串并补齐缺失字段. """
     advanced = AdvancedConfig.model_validate(
         {
             "bypass": {
@@ -116,7 +116,7 @@ def test_advanced_config_normalizes_bypass_payload_and_fills_missing_keys() -> N
 
 
 def test_connect_config_rejects_duplicate_names_across_protocol_types() -> None:
-    """单个 Bot 内不同协议的连接名称也必须唯一。"""
+    """单个 Bot 内不同协议的连接名称也必须唯一. """
     with pytest.raises(ValueError, match="连接配置名称不能重复"):
         ConnectConfig(
             httpServers=[HttpServersConfig(name="shared", host="127.0.0.1", port=3000)],
@@ -125,7 +125,7 @@ def test_connect_config_rejects_duplicate_names_across_protocol_types() -> None:
 
 
 def test_config_accepts_pydantic_submodels_without_json_serialization_error() -> None:
-    """Config 构造时应能安全处理已实例化的子模型。"""
+    """Config 构造时应能安全处理已实例化的子模型. """
     config = Config(
         bot=BotConfig(name="TestBot", QQID=123456),
         connect=ConnectConfig(),
@@ -138,7 +138,7 @@ def test_config_accepts_pydantic_submodels_without_json_serialization_error() ->
 
 # ==================== P2: runtime_target ====================
 class TestRuntimeTargetField:
-    """[`BotConfig.runtime_target`](src/core/config/config_model.py) 字段契约。"""
+    """[`BotConfig.runtime_target`](src/core/config/config_model.py) 字段契约. """
 
     def test_default_runtime_target_is_local(self) -> None:
         bot = BotConfig(name="x", QQID=1)

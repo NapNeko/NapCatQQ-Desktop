@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/tools/webui_tools.py.
 
-验证 WebuiListPluginsTool、WebuiReloadPluginTool、WebuiPluginConfigTool、
-WebuiBotInfoTool、WebuiSendTestMessageTool 的核心功能，
-包括正常调用、连接失败和认证失败的错误处理。
+验证 WebuiListPluginsTool, WebuiReloadPluginTool, WebuiPluginConfigTool, 
+WebuiBotInfoTool, WebuiSendTestMessageTool 的核心功能, 
+包括正常调用, 连接失败和认证失败的错误处理. 
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _run(coro):
 
 
 class MockWebUIClient:
-    """Mock WebUI 客户端，用于测试."""
+    """Mock WebUI 客户端, 用于测试."""
 
     def __init__(self) -> None:
         self.plugins: list[dict[str, Any]] = []

@@ -435,7 +435,7 @@ class TestStartPhaseAAsync:
     主线程不阻塞 ``waitForStarted``.
 
     历史 (旧版同步): ``_start_phase_a_processes`` 内含 ``qq_process.waitForStarted(5000)``,
-    在主线程阻塞最多 5 秒等 OS 启动 QQ.exe; 用户实测【启动 Bot】点击瞬间 UI 明显卡顿.
+    在主线程阻塞最多 5 秒等 OS 启动 QQ.exe; 用户实测 [启动 Bot] 点击瞬间 UI 明显卡顿.
 
     现在 (新版异步): ``qq_process.start()`` 后立即返回, 连 ``started`` 信号; 信号 emit 时
     填 ``model.qq_pid`` 并调 ``on_started`` 让 manager 推进 Phase C.
@@ -499,7 +499,7 @@ class TestStartPhaseAAsync:
         ``waitForStarted`` 阻塞主线程.
 
         QQ.exe 实际不会在测试 fixture 下启动 (write_bytes b"\\x4dZ" 不是有效 PE),
-        但本测试只验证调用立即返回 — ``on_started`` 永远不被调因为没真实 ``started``
+        但本测试只验证调用立即返回 - ``on_started`` 永远不被调因为没真实 ``started``
         信号; 关键是函数本身**不阻塞**.
         """
         import time

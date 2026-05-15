@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """SnowLuma 日志按钮修复 (2026-05-11): ``SnowLumaDaemonProcessLog`` + manager 集成测试.
 
-历史背景: 用户反馈 SnowLuma Bot 卡片点【日志】按钮**没有任何输出**.
+历史背景: 用户反馈 SnowLuma Bot 卡片点 [日志] 按钮**没有任何输出**.
 - COLD 模式: ``QQ.exe`` 用 ``ForwardedChannels``, stdout 不进 pipe → 旧 ``NapCatQQProcessLog``
   ``readyReadStandardOutput`` 永远拿不到数据.
 - HOT 模式: ``primary_process is None``, 旧 manager 干脆不挂 log → 用户看到 "未找到对应的日志信息".

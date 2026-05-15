@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/tools/bot_tools.py.
 
-验证 BotStatusTool、BotStartTool、BotStopTool、BotRestartTool、BotLogsTool
-的核心行为，使用 mock BotManagerInterface 实现。
+验证 BotStatusTool, BotStartTool, BotStopTool, BotRestartTool, BotLogsTool
+的核心行为, 使用 mock BotManagerInterface 实现. 
 """
 
 from __future__ import annotations

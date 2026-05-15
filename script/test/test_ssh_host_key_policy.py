@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`InteractiveHostKeyPolicy`](src/core/remote/host_key_policy.py) 单元测试 (P4 W1·F5.1).
+"""[`InteractiveHostKeyPolicy`](src/core/remote/host_key_policy.py) 单元测试 (P4 W1.F5.1).
 
 覆盖:
 

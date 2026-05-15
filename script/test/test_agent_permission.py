@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/permission.py.
 
-验证 PermissionRule 模型、glob 匹配逻辑和权限匹配引擎的核心行为。
+验证 PermissionRule 模型, glob 匹配逻辑和权限匹配引擎的核心行为. 
 """
 
 from __future__ import annotations

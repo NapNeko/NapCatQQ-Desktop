@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """SnowLuma 适配 P7.4: SnowLumaInstall 单测.
 
-校验解压、覆盖、保留 ``config/data/`` 子目录、verify_install 失败语义、临时 zip 清理.
+校验解压, 覆盖, 保留 ``config/data/`` 子目录, verify_install 失败语义, 临时 zip 清理.
 参见: ``docs/requirements/2026-05-10-snowluma-backend-adapter.md`` §4.2
 """
 
@@ -51,7 +51,7 @@ def _make_flat_zip(tmp_path: Path, tag: str = "v1.7.5", *, include_node: bool = 
     """构造与上游 GitHub release 一致的扁平 zip (无 ``SnowLuma-<tag>-win-x64/`` 包装目录).
 
     这是 https://github.com/SnowLuma/SnowLuma/releases 实际下发的结构, 顶层直接是
-    ``client/``、``native/``、``index.mjs`` 等. P1 验收阶段发现安装器误以为存在
+    ``client/``, ``native/``, ``index.mjs`` 等. P1 验收阶段发现安装器误以为存在
     包装目录会把 ``client/index.html`` 错误剥离为 ``index.html``, 导致
     SnowLuma 启动后立即退出 (exit_code=1).
     """
@@ -119,7 +119,7 @@ class TestSnowLumaInstallFlatZip:
 
     发现于 P1 SnowLuma 适配人工验收阶段: 安装后 SnowLuma 启动立即退出
     (exit_code=1), 原因是原安装器不区分情况一律剥离首段, 误将 ``client/index.html``
-    剥为 ``index.html``, 导致 SnowLuma 运行时找不到 ``client/`` 、 ``native/``
+    剥为 ``index.html``, 导致 SnowLuma 运行时找不到 ``client/`` ,  ``native/``
     子目录.
     """
 

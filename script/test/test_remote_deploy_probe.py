@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`LinuxCoreDeployment.probe_environment`](src/core/remote/deployment.py) 单元测试。"""
+"""[`LinuxCoreDeployment.probe_environment`](src/core/remote/deployment.py) 单元测试. """
 
 from __future__ import annotations
 
@@ -16,14 +16,14 @@ from src.core.remote.models import LinuxCorePaths, RemoteCommandResult
 
 @dataclass
 class FakeExecutionBackend(ExecutionBackend):
-    """根据“命令 -> 结果”映射表伪造命令执行的测试后端。
+    """根据"命令 -> 结果"映射表伪造命令执行的测试后端. 
 
     匹配优先级:
         1. 命令完全相等
         2. 命令包含某个映射键(子串)
         3. 默认: 退出码 0, 空 stdout
 
-    通过传入 ``responder`` 可对未命中映射的命令返回自定义结果。
+    通过传入 ``responder`` 可对未命中映射的命令返回自定义结果. 
     """
 
     fixed: dict[str, RemoteCommandResult] = field(default_factory=dict)
@@ -197,11 +197,11 @@ class TestProbeEnvironment:
         assert probe.installed_napcat_version is None
 
     def test_real_napcat_shell_zip_mjs_format(self) -> None:
-        """**关键回归**: 真实 NapCat.Shell.zip 中 ``napcat.mjs`` 的版本字段形态。
+        """**关键回归**: 真实 NapCat.Shell.zip 中 ``napcat.mjs`` 的版本字段形态. 
 
-        正则必须能跨越 ``"undefined"`` 引号字符串字面量, 找到真正的版本号 ``"4.18.1"``。
+        正则必须能跨越 ``"undefined"`` 引号字符串字面量, 找到真正的版本号 ``"4.18.1"``. 
         历史上用 ``[^"]*`` 会卡在 ``"undefined"`` 上无法匹配, 这条用例就是为了
-        防止未来再退步到非贪婪正则丢失。
+        防止未来再退步到非贪婪正则丢失. 
         """
         # 这一行 byte-for-byte 来自 NapCat.Shell.zip latest 解出的 napcat.mjs:10375
         real_mjs_line = (

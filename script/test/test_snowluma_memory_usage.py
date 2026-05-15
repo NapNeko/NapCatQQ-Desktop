@@ -94,7 +94,7 @@ class TestGetMemoryUsageSnowLuma:
     """``BotProcessManager.get_memory_usage`` SnowLuma 分支行为."""
 
     def test_uses_ancillary_pids_when_available(self) -> None:
-        """优先用 ``ancillary_pids`` 累加 RSS — 与 SnowLuma WebUI 显示一致."""
+        """优先用 ``ancillary_pids`` 累加 RSS - 与 SnowLuma WebUI 显示一致."""
         from src.core.runtime.bot_process_manager import BotProcessManager
         from src.core.runtime.snowluma_driver import SnowLumaProcessModel
 

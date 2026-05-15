@@ -19,7 +19,7 @@ import src.ui.page.bot_page.widget.msg_box as msg_box_module
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -28,7 +28,7 @@ def ensure_qapp() -> QApplication:
 
 
 def test_add_qr_code_auto_shows_once() -> None:
-    """新增二维码后应自动弹出一次，并记录对应 QQ。"""
+    """新增二维码后应自动弹出一次, 并记录对应 QQ. """
     factory = msg_box_module.QRCodeDialogFactory()
     shown_calls: list[str | None] = []
     factory.show = lambda preferred_qq_id=None: shown_calls.append(preferred_qq_id)  # type: ignore[method-assign]
@@ -41,7 +41,7 @@ def test_add_qr_code_auto_shows_once() -> None:
 
 
 def test_cancelled_dialog_suppresses_future_auto_show_until_removed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """用户取消后，同一轮二维码更新不应再次自动弹出；移除后应恢复。"""
+    """用户取消后, 同一轮二维码更新不应再次自动弹出; 移除后应恢复. """
     ensure_qapp()
     exec_calls: list[str] = []
 
@@ -89,7 +89,7 @@ def test_cancelled_dialog_suppresses_future_auto_show_until_removed(monkeypatch:
 
 
 def test_qr_code_dialog_accept_refreshes_current_login_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    """确认按钮应改为刷新二维码，而不是关闭弹窗。"""
+    """确认按钮应改为刷新二维码, 而不是关闭弹窗. """
     ensure_qapp()
     refresh_calls: list[str] = []
     success_messages: list[str] = []

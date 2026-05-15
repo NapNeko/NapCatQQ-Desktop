@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Agent bootstrap 模块单元测试.
 
-测试 bootstrap_agent_engine 函数的集成逻辑：
+测试 bootstrap_agent_engine 函数的集成逻辑: 
 - 内置工具注册
 - 默认 Agent 初始化
 - 配置持久化恢复
@@ -346,7 +346,7 @@ class TestRestoreConfig:
         assert "napcat-plugin-dev" in agent_names  # 默认 Agent 仍存在
 
     def test_skips_default_agent_from_config(self, tmp_config_dir: Path):
-        """配置中的 napcat-plugin-dev Agent 应被跳过（使用内置版本）."""
+        """配置中的 napcat-plugin-dev Agent 应被跳过 (使用内置版本) ."""
         config_data = {
             "providers": [],
             "active_provider_id": None,
@@ -373,7 +373,7 @@ class TestRestoreConfig:
 
         restore_config(config_persistence, provider_registry, engine)
 
-        # 默认 Agent 应保持原始配置（不被覆盖）
+        # 默认 Agent 应保持原始配置 (不被覆盖) 
         default_agent = engine.get_agent("napcat-plugin-dev")
         assert default_agent.description == "NapCat 插件开发助手"
         assert len(default_agent.tool_ids) > 1  # 完整的 tool_ids 列表
@@ -456,7 +456,7 @@ class TestBootstrapAgentEngine:
         assert "webui_list_plugins" in tool_names
 
     def test_with_tool_provider(self, tmp_workspace: Path, tmp_config_dir: Path):
-        """应支持注册外部 ToolProvider（MCP 扩展点）."""
+        """应支持注册外部 ToolProvider (MCP 扩展点) ."""
 
         class CustomParams(BaseModel):
             query: str

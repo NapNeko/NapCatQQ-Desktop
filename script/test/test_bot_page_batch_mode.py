@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`BotCard.set_batch_mode`](src/ui/page/bot_page/widget/card.py) 批量模式 UI 测试 (P4 W1·F2).
+"""[`BotCard.set_batch_mode`](src/ui/page/bot_page/widget/card.py) 批量模式 UI 测试 (P4 W1.F2).
 
 仅测试 BotCard 单卡 + 批量复选框态; BotListPage 工具条逻辑通过
 [`BatchDispatcher`](src/core/operation/batch_dispatcher.py) 单测覆盖.

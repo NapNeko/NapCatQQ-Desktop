@@ -77,7 +77,7 @@ _user_context_strategy = st.one_of(
     ),
     # Content that looks like the safety prompt header
     st.builds(
-        lambda body: "# 内容安全规则（不可修改）\n\n" + body,
+        lambda body: "# 内容安全规则 (不可修改) \n\n" + body,
         st.text(min_size=1, max_size=200),
     ),
     # Very long content

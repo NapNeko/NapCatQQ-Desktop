@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`BatchDispatcher`](src/core/operation/batch_dispatcher.py) 单元测试 (P4 W1·F2).
+"""[`BatchDispatcher`](src/core/operation/batch_dispatcher.py) 单元测试 (P4 W1.F2).
 
 通过 ``executor=_inline_executor`` 同步执行所有 worker, 不依赖 QApplication /
 QThreadPool, 也不依赖真实 ``BackgroundTaskCenter`` (creart 上下文为空时, dispatcher

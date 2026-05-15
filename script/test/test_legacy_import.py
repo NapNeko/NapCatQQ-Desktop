@@ -15,7 +15,7 @@ from src.core.config.config_model import BOT_CONFIG_COMPAT_VERSION, serialize_bo
 
 
 class DummyPathFunc:
-    """用于测试导入服务的路径对象。"""
+    """用于测试导入服务的路径对象. """
 
     def __init__(self, root: Path) -> None:
         self.runtime_path = root / "runtime"

@@ -13,7 +13,7 @@ import src.core.runtime.bot_process_manager as run_napcat
 
 
 class FakeSignal:
-    """最小可用的 Qt Signal 替身。"""
+    """最小可用的 Qt Signal 替身. """
 
     def __init__(self) -> None:
         self._callbacks = []
@@ -27,7 +27,7 @@ class FakeSignal:
 
 
 class FakeTimer:
-    """最小可用的 QTimer 替身。"""
+    """最小可用的 QTimer 替身. """
 
     single_shots: list[tuple[int, object]] = []
 
@@ -61,7 +61,7 @@ class FakeTimer:
 
 
 class FakeProcess:
-    """用于测试 BotProcessManager 的假进程。
+    """用于测试 BotProcessManager 的假进程. 
 
     P3 perf: 本地 QProcess 启动去除了 ``waitForStarted`` 阻塞, 状态变迁靠
     ``stateChanged`` / ``errorOccurred`` / ``finished`` 信号驱动.
@@ -89,7 +89,7 @@ class FakeProcess:
 
 
 class FakeManagedProcess(FakeProcess):
-    """支持 stop/get_memory_usage 分支的进程替身。"""
+    """支持 stop/get_memory_usage 分支的进程替身. """
 
     def __init__(self, *, pid: int = 1, started: bool = True, state=QProcess.ProcessState.Running) -> None:
         super().__init__(started=started)
@@ -113,7 +113,7 @@ class FakeManagedProcess(FakeProcess):
 
 @pytest.fixture
 def mute_run_napcat_logger(monkeypatch: pytest.MonkeyPatch) -> None:
-    """屏蔽 run_napcat 模块的真实日志副作用。"""
+    """屏蔽 run_napcat 模块的真实日志副作用. """
     monkeypatch.setattr(run_napcat.logger, "trace", lambda *args, **kwargs: None)
     monkeypatch.setattr(run_napcat.logger, "info", lambda *args, **kwargs: None)
     monkeypatch.setattr(run_napcat.logger, "warning", lambda *args, **kwargs: None)
@@ -123,7 +123,7 @@ def mute_run_napcat_logger(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_process_log_extracts_webui_port_and_token(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """日志解析应把 WebUI 端口和 token 转交给登录状态管理器。"""
+    """日志解析应把 WebUI 端口和 token 转交给登录状态管理器. """
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
@@ -149,7 +149,7 @@ def test_process_log_extracts_webui_port_and_token(
 def test_login_state_offline_autorestart_sends_notifications_and_restarts_once(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """从在线转为离线且开启自动重启时，应先通知再重启，并避免重复触发。"""
+    """从在线转为离线且开启自动重启时, 应先通知再重启, 并避免重复触发. """
     notifications: list[tuple[object, str]] = []
     restart_requests: list[int] = []
 
@@ -199,7 +199,7 @@ def test_login_state_offline_autorestart_sends_notifications_and_restarts_once(
 def test_login_state_offline_after_login_loss_still_sends_notifications_and_skips_stale_qrcode(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """掉线导致登录失效时仍应发送通知，并跳过无效二维码。"""
+    """掉线导致登录失效时仍应发送通知, 并跳过无效二维码. """
     notifications: list[tuple[object, str]] = []
     qrcodes: list[tuple[str, str]] = []
     removed: list[str] = []
@@ -247,7 +247,7 @@ def test_login_state_offline_after_login_loss_still_sends_notifications_and_skip
 
 
 def test_get_auth_status_runnable_emits_credential(monkeypatch: pytest.MonkeyPatch) -> None:
-    """认证任务在接口成功时应发出 Credential。"""
+    """认证任务在接口成功时应发出 Credential. """
     monkeypatch.setattr(
         run_napcat,
         "post",
@@ -263,7 +263,7 @@ def test_get_auth_status_runnable_emits_credential(monkeypatch: pytest.MonkeyPat
 
 
 def test_get_login_status_runnable_emits_login_qrcode_and_online(monkeypatch: pytest.MonkeyPatch) -> None:
-    """登录状态任务应分别发出登录态、二维码和在线状态。"""
+    """登录状态任务应分别发出登录态, 二维码和在线状态. """
     responses = {
         "/api/QQLogin/CheckLoginStatus": SimpleNamespace(
             status_code=200,
@@ -293,7 +293,7 @@ def test_get_login_status_runnable_emits_login_qrcode_and_online(monkeypatch: py
 
 
 def test_get_login_status_runnable_requests_auth_refresh_once_when_unauthorized() -> None:
-    """鉴权失效时应立即请求刷新认证，且同一轮询仅请求一次。"""
+    """鉴权失效时应立即请求刷新认证, 且同一轮询仅请求一次. """
     responses = {
         "/api/QQLogin/CheckLoginStatus": SimpleNamespace(status_code=401),
         "/api/QQLogin/GetQQLoginInfo": SimpleNamespace(status_code=401),
@@ -313,7 +313,7 @@ def test_get_login_status_runnable_requests_auth_refresh_once_when_unauthorized(
 def test_login_state_remove_stops_timers_and_emits_removed(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """移除登录状态时应停止两个定时器并发出移除信号。"""
+    """移除登录状态时应停止两个定时器并发出移除信号. """
     monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
     removed: list[str] = []
 
@@ -330,7 +330,7 @@ def test_login_state_remove_stops_timers_and_emits_removed(
 def test_login_state_emits_qrcode_removed_when_login_succeeds(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """更新为已登录时应移除二维码提示。"""
+    """更新为已登录时应移除二维码提示. """
     monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
     removed: list[str] = []
 
@@ -346,7 +346,7 @@ def test_login_state_emits_qrcode_removed_when_login_succeeds(
 def test_login_state_emits_qrcode_when_not_logged_in_initially(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """初始未登录场景仍应正常展示二维码。"""
+    """初始未登录场景仍应正常展示二维码. """
     monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
     emitted: list[tuple[str, str]] = []
 
@@ -362,7 +362,7 @@ def test_login_state_emits_qrcode_when_not_logged_in_initially(
 def test_login_state_requests_auth_refresh_immediately_when_poll_detects_unauthorized(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """状态轮询收到鉴权失效时不应再等 30 分钟。"""
+    """状态轮询收到鉴权失效时不应再等 30 分钟. """
     monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
     auth_refreshes: list[str] = []
 
@@ -384,7 +384,7 @@ def test_login_state_requests_auth_refresh_immediately_when_poll_detects_unautho
 def test_create_napcat_process_emits_error_when_qq_path_missing(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """缺少 QQ 安装路径时应拒绝启动并提示错误。"""
+    """缺少 QQ 安装路径时应拒绝启动并提示错误. """
     manager = run_napcat.BotProcessManager()
     emitted: list[tuple[str, str]] = []
     manager.notification_signal.connect(lambda level, message: emitted.append((level, message)))
@@ -404,7 +404,7 @@ def test_create_napcat_process_emits_error_when_qq_path_missing(
 def test_create_napcat_process_rejects_more_than_four_instances(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """已有 4 个进程时应拒绝继续创建。
+    """已有 4 个进程时应拒绝继续创建. 
 
     2026-05-11 (问题 3 修复): 上限改为 ``LOCAL_BOT_LIMIT`` (NapCat + SnowLuma 合计 4 个),
     消息文本从 "NapCatQQ 进程数量已达上限" 改为 "本地 Bot 数量已达上限 (4 个, NTQQ 多开限制)".
@@ -426,7 +426,7 @@ def test_create_napcat_process_emits_error_when_failed_to_start(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
     """P3 perf: 启动失败走 ``errorOccurred(FailedToStart)`` 异步路径,
-    不再依赖 ``waitForStarted`` 同步返回值。应清理字典 + emit NotRunning + 提示。"""
+    不再依赖 ``waitForStarted`` 同步返回值. 应清理字典 + emit NotRunning + 提示. """
     manager = run_napcat.BotProcessManager()
     emitted_notifications: list[tuple[str, str]] = []
     manager.notification_signal.connect(
@@ -483,9 +483,9 @@ def test_create_napcat_process_emits_error_when_failed_to_start(
 def test_create_napcat_process_starts_process_and_registers_state(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """P3 perf: 启动后字典以 ``Starting`` 登记, ``stateChanged`` -> Running 后同步状态。
+    """P3 perf: 启动后字典以 ``Starting`` 登记, ``stateChanged`` -> Running 后同步状态. 
 
-    不再依赖同步 ``waitForStarted``, 主线程不会被套住。自动重启计时器仍会创建。
+    不再依赖同步 ``waitForStarted``, 主线程不会被套住. 自动重启计时器仍会创建. 
     """
     manager = run_napcat.BotProcessManager()
     created_logs: list[int] = []
@@ -540,7 +540,7 @@ def test_create_napcat_process_starts_process_and_registers_state(
 def test_create_napcat_process_cleans_up_state_when_process_finishes_unexpectedly(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """进程异常退出时应立刻清理状态，避免 UI 假在线。"""
+    """进程异常退出时应立刻清理状态, 避免 UI 假在线. """
     manager = run_napcat.BotProcessManager()
     removed_login_states: list[str] = []
     state_changes: list[tuple[str, QProcess.ProcessState]] = []
@@ -582,7 +582,7 @@ def test_create_napcat_process_cleans_up_state_when_process_finishes_unexpectedl
 def test_auto_restart_timer_uses_schedule_duration(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """自动重启定时器应按配置换算毫秒间隔。"""
+    """自动重启定时器应按配置换算毫秒间隔. """
     monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
     restart_requests: list[int] = []
     monkeypatch.setattr(
@@ -605,7 +605,7 @@ def test_auto_restart_timer_uses_schedule_duration(
 def test_stop_process_removes_process_and_login_state(
     monkeypatch: pytest.MonkeyPatch, mute_run_napcat_logger
 ) -> None:
-    """停止进程时应终止子进程树、移除字典并通知登录状态管理器。"""
+    """停止进程时应终止子进程树, 移除字典并通知登录状态管理器. """
     manager = run_napcat.BotProcessManager()
     state_changes: list[tuple[str, QProcess.ProcessState]] = []
     manager.process_changed_signal.connect(lambda qq_id, state: state_changes.append((qq_id, state)))
@@ -656,7 +656,7 @@ def test_stop_process_removes_process_and_login_state(
 
 
 def test_get_memory_usage_sums_process_tree(monkeypatch: pytest.MonkeyPatch, mute_run_napcat_logger) -> None:
-    """内存统计应汇总主进程和子进程 RSS。"""
+    """内存统计应汇总主进程和子进程 RSS. """
     manager = run_napcat.BotProcessManager()
     process = FakeManagedProcess(pid=1)
     manager.napcat_process_dict["556677"] = run_napcat.NapCatProcessModel(
@@ -685,10 +685,10 @@ def test_get_memory_usage_sums_process_tree(monkeypatch: pytest.MonkeyPatch, mut
 
 
 def _make_fake_cfg(login_check_interval: int) -> SimpleNamespace:
-    """构造一个仅覆盖登录间隔配置项的 cfg 替身。
+    """构造一个仅覆盖登录间隔配置项的 cfg 替身. 
 
-    使用 SimpleNamespace 包装登录间隔配置项，并提供可触发 valueChanged 的 set 方法，
-    避免写入真实 QConfig 后落盘污染开发机的 runtime 配置。
+    使用 SimpleNamespace 包装登录间隔配置项, 并提供可触发 valueChanged 的 set 方法, 
+    避免写入真实 QConfig 后落盘污染开发机的 runtime 配置. 
     """
     interval_item = SimpleNamespace(value=login_check_interval, valueChanged=FakeSignal())
 
@@ -711,7 +711,7 @@ def _make_fake_cfg(login_check_interval: int) -> SimpleNamespace:
 def test_login_state_uses_1s_interval_when_not_logged_in(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """未登录时应强制使用1秒检查间隔，忽略配置的较大值。"""
+    """未登录时应强制使用1秒检查间隔, 忽略配置的较大值. """
     monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
     monkeypatch.setattr(run_napcat, "cfg", _make_fake_cfg(30000))
 
@@ -733,7 +733,7 @@ def test_login_state_uses_1s_interval_when_not_logged_in(
 def test_login_state_config_change_only_applies_when_logged_in(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """配置间隔变化时，只在已登录状态下才应用新间隔。"""
+    """配置间隔变化时, 只在已登录状态下才应用新间隔. """
     monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
     fake_cfg = _make_fake_cfg(3000)
     monkeypatch.setattr(run_napcat, "cfg", fake_cfg)
@@ -741,7 +741,7 @@ def test_login_state_config_change_only_applies_when_logged_in(
     login_state = run_napcat.NapCatQQLoginState(config=config_factory(654321), port=8080, token="token")
     timer = login_state._login_state_timer
 
-    # 设置为未登录状态，并把当前 timer 间隔置为 1s（与运行时一致）
+    # 设置为未登录状态, 并把当前 timer 间隔置为 1s (与运行时一致) 
     login_state._is_logged_in = False
     timer.setInterval(1000)
 
@@ -758,16 +758,16 @@ def test_login_state_config_change_only_applies_when_logged_in(
 def test_login_state_first_check_uses_1s_regardless_of_config(
     monkeypatch: pytest.MonkeyPatch, config_factory, mute_run_napcat_logger
 ) -> None:
-    """首次登录状态检查应该在 1 秒后触发，不受配置间隔影响。"""
+    """首次登录状态检查应该在 1 秒后触发, 不受配置间隔影响. """
     monkeypatch.setattr(run_napcat, "QTimer", FakeTimer)
     monkeypatch.setattr(run_napcat, "cfg", _make_fake_cfg(60000))
-    # 隔离 FakeTimer 的类级 single_shots，避免跨用例残留
+    # 隔离 FakeTimer 的类级 single_shots, 避免跨用例残留
     monkeypatch.setattr(FakeTimer, "single_shots", [])
 
     run_napcat.NapCatQQLoginState(config=config_factory(789012), port=8080, token="token")
 
-    # 应该有两个 singleShot 调用：立即执行的 auth + 1 秒后的登录状态检查
+    # 应该有两个 singleShot 调用: 立即执行的 auth + 1 秒后的登录状态检查
     assert len(FakeTimer.single_shots) == 2
     assert FakeTimer.single_shots[0][0] == 0
-    # 即使配置为 60s，首次登录态检查仍应固定 1s
+    # 即使配置为 60s, 首次登录态检查仍应固定 1s
     assert FakeTimer.single_shots[1][0] == 1000

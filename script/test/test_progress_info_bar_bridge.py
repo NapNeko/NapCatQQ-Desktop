@@ -51,7 +51,7 @@ class _FakeProgressInfoBar:
     """``ProgressInfoBar`` 的 in-memory 替身, 记录构造 + setComplete 调用.
 
     桥的契约只关心: 构造时拿到 (title, content, parent), 完成时调
-    ``setComplete(success=, content=, autoCloseAfter=)`` — 这两点足够断言.
+    ``setComplete(success=, content=, autoCloseAfter=)`` - 这两点足够断言.
     """
 
     instances: list["_FakeProgressInfoBar"] = []

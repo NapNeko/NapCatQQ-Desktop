@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """SessionManager 单元测试.
 
-测试 Message、Session、SessionManager 的核心行为：
-- 会话创建、加载、删除
+测试 Message, Session, SessionManager 的核心行为: 
+- 会话创建, 加载, 删除
 - 消息追加与验证
 - 列表排序
 - 持久化 round-trip
@@ -218,7 +218,7 @@ class TestSessionManager:
 
         summaries = manager.list_sessions()
         assert len(summaries) == 2
-        # s1 应该排在前面（last_updated 更新）
+        # s1 应该排在前面 (last_updated 更新) 
         assert summaries[0].session_id == s1.session_id
 
     def test_delete_session(self, manager: SessionManager, storage_dir: Path):

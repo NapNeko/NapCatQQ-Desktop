@@ -14,7 +14,7 @@ from src.ui.page.setup_page.widget.config_export_dialog import ConfigExportDialo
 
 
 class DummySignal:
-    """最小信号替身。"""
+    """最小信号替身. """
 
     def __init__(self) -> None:
         self.callbacks = []
@@ -24,7 +24,7 @@ class DummySignal:
 
 
 class DummyTask:
-    """最小任务替身。"""
+    """最小任务替身. """
 
     def __init__(self) -> None:
         self.success_signal = DummySignal()
@@ -32,7 +32,7 @@ class DummyTask:
 
 
 class DummyThreadPool:
-    """记录 start 调用的线程池替身。"""
+    """记录 start 调用的线程池替身. """
 
     def __init__(self) -> None:
         self.started = []
@@ -42,7 +42,7 @@ class DummyThreadPool:
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -51,7 +51,7 @@ def ensure_qapp() -> QApplication:
 
 
 def create_dialog_parent() -> QWidget:
-    """创建供 MessageBoxBase 使用的父级窗口。"""
+    """创建供 MessageBoxBase 使用的父级窗口. """
     ensure_qapp()
     parent = QWidget()
     parent.resize(800, 600)
@@ -59,7 +59,7 @@ def create_dialog_parent() -> QWidget:
 
 
 def patch_cfg_storage(monkeypatch, initial_values: dict[str, object]) -> dict[str, object]:
-    """将 cfg.get/cfg.set 定向到内存存储。"""
+    """将 cfg.get/cfg.set 定向到内存存储. """
     store = initial_values.copy()
 
     def fake_get(item):
@@ -78,7 +78,7 @@ def patch_cfg_storage(monkeypatch, initial_values: dict[str, object]) -> dict[st
 
 
 def test_email_dialog_invalid_port_does_not_save_or_start_task(monkeypatch) -> None:
-    """邮件端口非法时不应保存，也不应启动测试任务。"""
+    """邮件端口非法时不应保存, 也不应启动测试任务. """
     ensure_qapp()
     store = patch_cfg_storage(
         monkeypatch,
@@ -115,7 +115,7 @@ def test_email_dialog_invalid_port_does_not_save_or_start_task(monkeypatch) -> N
 
 
 def test_email_dialog_valid_save_allows_test_task(monkeypatch) -> None:
-    """邮件配置合法时应保存并启动测试任务。"""
+    """邮件配置合法时应保存并启动测试任务. """
     ensure_qapp()
     store = patch_cfg_storage(
         monkeypatch,
@@ -153,7 +153,7 @@ def test_email_dialog_valid_save_allows_test_task(monkeypatch) -> None:
 
 
 def test_email_dialog_enabling_notice_shows_bot_level_hint(monkeypatch) -> None:
-    """首次开启邮件通知时应提示 Bot 仍可单独配置是否通知。"""
+    """首次开启邮件通知时应提示 Bot 仍可单独配置是否通知. """
     ensure_qapp()
     patch_cfg_storage(
         monkeypatch,
@@ -179,7 +179,7 @@ def test_email_dialog_enabling_notice_shows_bot_level_hint(monkeypatch) -> None:
 
 
 def test_webhook_dialog_invalid_json_does_not_save_or_start_task(monkeypatch) -> None:
-    """WebHook JSON 非法时不应保存，也不应启动测试任务。"""
+    """WebHook JSON 非法时不应保存, 也不应启动测试任务. """
     ensure_qapp()
     store = patch_cfg_storage(
         monkeypatch,
@@ -214,7 +214,7 @@ def test_webhook_dialog_invalid_json_does_not_save_or_start_task(monkeypatch) ->
 
 
 def test_webhook_dialog_valid_save_allows_test_task(monkeypatch) -> None:
-    """WebHook 配置合法时应保存并启动测试任务。"""
+    """WebHook 配置合法时应保存并启动测试任务. """
     ensure_qapp()
     store = patch_cfg_storage(
         monkeypatch,
@@ -247,7 +247,7 @@ def test_webhook_dialog_valid_save_allows_test_task(monkeypatch) -> None:
 
 
 def test_webhook_dialog_enabling_notice_shows_bot_level_hint(monkeypatch) -> None:
-    """首次开启 WebHook 通知时应提示 Bot 仍可单独配置是否通知。"""
+    """首次开启 WebHook 通知时应提示 Bot 仍可单独配置是否通知. """
     ensure_qapp()
     patch_cfg_storage(
         monkeypatch,
@@ -271,7 +271,7 @@ def test_webhook_dialog_enabling_notice_shows_bot_level_hint(monkeypatch) -> Non
 
 
 def test_webhook_dialog_open_with_empty_json_does_not_log_parse_error(monkeypatch) -> None:
-    """打开 WebHook 配置弹窗时，空 JSON 配置不应被当成非法 JSON 记录错误。"""
+    """打开 WebHook 配置弹窗时, 空 JSON 配置不应被当成非法 JSON 记录错误. """
     ensure_qapp()
     patch_cfg_storage(
         monkeypatch,
@@ -297,7 +297,7 @@ def test_webhook_dialog_open_with_empty_json_does_not_log_parse_error(monkeypatc
 
 
 def test_general_page_contains_config_export_card() -> None:
-    """设置页应提供当前配置导出入口。"""
+    """设置页应提供当前配置导出入口. """
     parent = create_dialog_parent()
     page = general_module.General(parent)
 
@@ -306,7 +306,7 @@ def test_general_page_contains_config_export_card() -> None:
 
 
 def test_config_export_dialog_yes_button_disabled_before_choose_directory(monkeypatch) -> None:
-    """未选择目录前不可执行导出。"""
+    """未选择目录前不可执行导出. """
     ensure_qapp()
     monkeypatch.setattr(general_module, "warning_bar", lambda *args, **kwargs: None)
     parent = create_dialog_parent()

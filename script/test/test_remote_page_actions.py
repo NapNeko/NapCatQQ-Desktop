@@ -214,7 +214,7 @@ class TestButtonState:
             (DeploymentState.UNDEPLOYED, False),
             (DeploymentState.DEPLOYING, False),
             (DeploymentState.DEPLOYED, True),
-            # FAILED 仍能用 maintenance_btn 进入对话框选择 “回滚”
+            # FAILED 仍能用 maintenance_btn 进入对话框选择 "回滚"
             (DeploymentState.FAILED, True),
         ],
     )
@@ -230,7 +230,7 @@ class TestButtonState:
         v3 重构后, 维护是单一入口 (打开 [`MaintenanceDialog`]):
         - UNDEPLOYED / DEPLOYING: 禁用 (无可用维护项)
         - DEPLOYED: 启用 (4 项均可用)
-        - FAILED:   启用 (用户可通过对话框选 “回滚” 清理失败残留)
+        - FAILED:   启用 (用户可通过对话框选 "回滚" 清理失败残留)
         """
         profile = _make_profile(state=state)
         if state is DeploymentState.DEPLOYING:

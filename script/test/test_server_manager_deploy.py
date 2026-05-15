@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`ServerManager.deploy_server`](src/core/remote/server_manager.py) 编排测试。
+"""[`ServerManager.deploy_server`](src/core/remote/server_manager.py) 编排测试. 
 
 通过 monkey-patch ``ServerManager.get_backend`` 返回伪造的 RemoteBackend, 验证:
 - 状态机 UNDEPLOYED -> DEPLOYING -> DEPLOYED
@@ -53,7 +53,7 @@ def _make_profile(name: str = "测试服务器") -> ServerProfile:
 
 @dataclass
 class FakeRemoteBackend:
-    """伪造的 RemoteBackend, 用于编排测试。"""
+    """伪造的 RemoteBackend, 用于编排测试. """
 
     install_qq_calls: list[dict] = field(default_factory=list)
     install_napcat_calls: list[dict] = field(default_factory=list)
@@ -189,7 +189,7 @@ class _FakeDeployment:
 
 @pytest.fixture
 def manager_factory(tmp_path: Path):
-    """创建独立持久化路径的 ServerManager, 并返回 (manager, fake_backend, profile_id)。"""
+    """创建独立持久化路径的 ServerManager, 并返回 (manager, fake_backend, profile_id). """
     def _factory(*, fake: FakeRemoteBackend | None = None, profile: ServerProfile | None = None):
         storage_path = tmp_path / "servers.json"
         manager = ServerManager(storage_path=storage_path)
@@ -411,7 +411,7 @@ class TestDeploymentLogSignal:
         assert all(sid == server_id for sid, _ in captured)
 
     def test_deployment_log_filtered_by_server_id_for_multi_subscriber(self, manager_factory) -> None:
-        """模拟两个订阅者各只关心一台服务器, 验证按 server_id 过滤。"""
+        """模拟两个订阅者各只关心一台服务器, 验证按 server_id 过滤. """
         manager, _, server_id = manager_factory()
 
         all_lines: list[str] = []
@@ -435,7 +435,7 @@ class TestDeploymentLogSignal:
 
 # ==================== rollback ====================
 class TestRollback:
-    """回滚测试: 验证 [`ServerManager.rollback_server`](src/core/remote/server_manager.py)。"""
+    """回滚测试: 验证 [`ServerManager.rollback_server`](src/core/remote/server_manager.py). """
 
     def test_rollback_calls_clean_environment_and_resets_state(self, manager_factory) -> None:
         manager, backend, server_id = manager_factory()

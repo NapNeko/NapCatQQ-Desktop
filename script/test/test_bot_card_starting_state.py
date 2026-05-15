@@ -3,7 +3,7 @@
 
 验证 ``slot_process_changed_button`` 在 ``QProcess.ProcessState`` 三态间的渲染:
 
-- ``Starting``: ``run_button`` 仍可见但 disabled, 文案改为 ``启动中…``;
+- ``Starting``: ``run_button`` 仍可见但 disabled, 文案改为 ``启动中...``;
   其他按钮隐藏. 启动进度条 / 完成反馈交由
   [`ProgressInfoBarBridge`](src/ui/components/progress_info_bar_bridge.py) 在主窗口右上展示.
 - ``Running``: 隐藏 run, 显示 stop/log/web_ui.
@@ -28,13 +28,13 @@ sys.modules.setdefault("qrcode", ModuleType("qrcode"))
 
 
 def load_card_module():
-    """按文件路径加载 card 模块, 避免触发页面包的全量导入。
+    """按文件路径加载 card 模块, 避免触发页面包的全量导入. 
 
     与 [`test_bot_card.py`](script/test/test_bot_card.py) 同款的旁路加载, 这样
     本测试不会被 `BotPage.__init__` 的 creart 链路影响.
 
     P4 W1 修复: 如果 ``src.ui.page`` 已被其他测试/代码以真实模块身份加载
-    (``__file__`` 存在), 不要覆盖为空命名空间 — 否则后续跳转到
+    (``__file__`` 存在), 不要覆盖为空命名空间 - 否则后续跳转到
     [`MainWindow`](src/ui/window/main_window/window.py) 的 ``from src.ui.page import
     ApiDebugPage`` 将报 ``cannot import name 'ApiDebugPage'``.
     """
@@ -75,7 +75,7 @@ _card_module_cache = None
 
 
 def _get_card_module():
-    """懒加载 card 模块; 首次调用才手动拼装 namespace package。"""
+    """懒加载 card 模块; 首次调用才手动拼装 namespace package. """
     global _card_module_cache
     if _card_module_cache is None:
         _card_module_cache = load_card_module()
@@ -83,7 +83,7 @@ def _get_card_module():
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -107,7 +107,7 @@ class DummyInfoWidget(QWidget):
 
 
 def _make_card(monkeypatch: pytest.MonkeyPatch, config) -> object:
-    """构造一个 BotCard 实例, 旁路掉 manager / 头像下载副作用。"""
+    """构造一个 BotCard 实例, 旁路掉 manager / 头像下载副作用. """
     ensure_qapp()
     card_module = _get_card_module()
     fake_process_manager = SimpleNamespace(process_changed_signal=DummySignal())
@@ -135,7 +135,7 @@ def _make_card(monkeypatch: pytest.MonkeyPatch, config) -> object:
 def test_starting_state_disables_run_button_and_changes_text(
     monkeypatch: pytest.MonkeyPatch, config_factory
 ) -> None:
-    """``Starting``: run_button 仍可见但 disabled, 文案改 ``启动中…``;
+    """``Starting``: run_button 仍可见但 disabled, 文案改 ``启动中...``;
     其他按钮隐藏, 不再嵌入进度条 (转给 ProgressInfoBar 桥)."""
     card = _make_card(monkeypatch, config_factory(11112222))
 
@@ -206,7 +206,7 @@ def test_other_qq_id_does_not_trigger_render(
 def test_update_info_card_reflects_starting_state(
     monkeypatch: pytest.MonkeyPatch, config_factory
 ) -> None:
-    """update_info_card: record.state==Starting 时也应渲染指示, 不只 Running。"""
+    """update_info_card: record.state==Starting 时也应渲染指示, 不只 Running. """
     ensure_qapp()
     card_module = _get_card_module()
     fake_record = SimpleNamespace(state=QProcess.ProcessState.Starting)

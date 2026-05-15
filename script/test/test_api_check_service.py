@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/api_check_service.py.
 
-验证 ApiCheckService 的 HTTP 请求逻辑和信号发射行为。
-使用 httpx mock 避免真实网络请求。
+验证 ApiCheckService 的 HTTP 请求逻辑和信号发射行为. 
+使用 httpx mock 避免真实网络请求. 
 """
 
 from unittest.mock import patch
@@ -14,7 +14,7 @@ from src.core.agent.api_check_service import ApiCheckService
 
 
 class TestApiCheckServiceLogic:
-    """ApiCheckService 核心逻辑测试（不依赖 Qt 事件循环）."""
+    """ApiCheckService 核心逻辑测试 (不依赖 Qt 事件循环) ."""
 
     def test_success_response(self) -> None:
         """2xx 响应应 emit check_finished(True, '连接成功')."""

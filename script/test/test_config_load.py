@@ -16,14 +16,14 @@ from src.core.config import bind_qfluent_qconfig
 
 
 class SampleConfig(AppConfig):
-    """用于验证自定义 load() 的测试配置。"""
+    """用于验证自定义 load() 的测试配置. """
 
     custom_flag = ConfigItem(group="Test", name="CustomFlag", default=True, validator=BoolValidator())
     custom_text = ConfigItem(group="Test", name="CustomText", default="fallback")
 
 
 def test_config_load_keeps_falsey_values_and_restores_missing_defaults(tmp_path) -> None:
-    """自定义 load() 应保留合法假值，并仅对缺失项回落默认值。"""
+    """自定义 load() 应保留合法假值, 并仅对缺失项回落默认值. """
     config_path = tmp_path / "config.json"
     config_path.write_text(
         json.dumps(
@@ -48,7 +48,7 @@ def test_config_load_keeps_falsey_values_and_restores_missing_defaults(tmp_path)
 
 
 def test_config_load_syncs_legacy_personalize_theme_values(tmp_path) -> None:
-    """旧版 Personalize 主题字段应自动同步到 QFluentWidgets 配置项。"""
+    """旧版 Personalize 主题字段应自动同步到 QFluentWidgets 配置项. """
     config_path = tmp_path / "config.json"
     legacy_payload = {
         "Personalize": {
@@ -83,7 +83,7 @@ def test_config_load_syncs_legacy_personalize_theme_values(tmp_path) -> None:
 
 
 def test_config_load_migrates_main_window_and_cleans_removed_keys(tmp_path) -> None:
-    """旧版 Info.main_window 和已废弃个性化键应迁移并清理。"""
+    """旧版 Info.main_window 和已废弃个性化键应迁移并清理. """
     config_path = tmp_path / "config.json"
     config_path.write_text(
         json.dumps(
@@ -121,7 +121,7 @@ def test_config_load_migrates_main_window_and_cleans_removed_keys(tmp_path) -> N
 
 
 def test_config_load_removes_transient_remote_password_field(tmp_path) -> None:
-    """远程密码属于临时凭据，不应继续保留在配置文件中。"""
+    """远程密码属于临时凭据, 不应继续保留在配置文件中. """
     config_path = tmp_path / "config.json"
     config_path.write_text(
         json.dumps(
@@ -151,7 +151,7 @@ def test_config_load_removes_transient_remote_password_field(tmp_path) -> None:
 
 
 def test_read_config_version_inferrs_pre_v160_shape() -> None:
-    """包含旧背景键时应识别为 v1.5.4 结构。"""
+    """包含旧背景键时应识别为 v1.5.4 结构. """
     payload = {
         "Personalize": {
             "BgHomePage": True,
@@ -162,7 +162,7 @@ def test_read_config_version_inferrs_pre_v160_shape() -> None:
 
 
 def test_read_config_version_inferrs_v160_shape() -> None:
-    """存在 Info.main_window 时应识别为 v1.6.0 结构。"""
+    """存在 Info.main_window 时应识别为 v1.6.0 结构. """
     payload = {
         "Info": {
             "main_window": True,
@@ -173,7 +173,7 @@ def test_read_config_version_inferrs_v160_shape() -> None:
 
 
 def test_read_config_version_inferrs_v170_shape() -> None:
-    """缺失 EulaAccepted 的 MainWindow 结构应识别为 v1.7.0。"""
+    """缺失 EulaAccepted 的 MainWindow 结构应识别为 v1.7.0. """
     payload = {
         "Info": {
             "MainWindow": True,
@@ -184,7 +184,7 @@ def test_read_config_version_inferrs_v170_shape() -> None:
 
 
 def test_read_config_version_prefers_explicit_config_version() -> None:
-    """存在 ConfigVersion 时应优先使用该兼容版本。"""
+    """存在 ConfigVersion 时应优先使用该兼容版本. """
     payload = {
         "Info": {
             "ConfigVersion": "v2.0",
@@ -195,7 +195,7 @@ def test_read_config_version_prefers_explicit_config_version() -> None:
 
 
 def test_read_config_version_accepts_legacy_schema_marker_as_current() -> None:
-    """若用户本地残留旧实验字段 ConfigSchemaVersion，当前按已迁移处理。"""
+    """若用户本地残留旧实验字段 ConfigSchemaVersion, 当前按已迁移处理. """
     payload = {
         "Info": {
             "ConfigSchemaVersion": 3,
@@ -206,7 +206,7 @@ def test_read_config_version_accepts_legacy_schema_marker_as_current() -> None:
 
 
 def test_config_load_reads_explicit_config_version(tmp_path) -> None:
-    """显式配置版本号应能被当前配置对象读取。"""
+    """显式配置版本号应能被当前配置对象读取. """
     config_path = tmp_path / "config.json"
     payload = {
         "Info": {
@@ -223,7 +223,7 @@ def test_config_load_reads_explicit_config_version(tmp_path) -> None:
 
 
 def test_bind_qfluent_qconfig_persists_theme_changes_to_runtime_config(tmp_path) -> None:
-    """QFluentWidgets 的 setTheme/setThemeColor 应写入程序真实配置文件。"""
+    """QFluentWidgets 的 setTheme/setThemeColor 应写入程序真实配置文件. """
     config_path = tmp_path / "config.json"
     config = SampleConfig()
     config.load(config_path)
@@ -247,7 +247,7 @@ def test_bind_qfluent_qconfig_persists_theme_changes_to_runtime_config(tmp_path)
 
 
 def test_bind_qfluent_qconfig_relays_theme_signal_to_qfluent_widgets(tmp_path) -> None:
-    """绑定后，QFluentWidgets 监听的 qconfig.themeChanged 也应收到通知。"""
+    """绑定后, QFluentWidgets 监听的 qconfig.themeChanged 也应收到通知. """
     config_path = tmp_path / "config.json"
     config = SampleConfig()
     config.load(config_path)

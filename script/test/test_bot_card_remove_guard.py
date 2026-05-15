@@ -16,7 +16,7 @@ sys.modules.setdefault("qrcode", ModuleType("qrcode"))
 
 
 def load_card_module():
-    """按文件路径加载 card 模块，避免触发页面包的全量导入。"""
+    """按文件路径加载 card 模块, 避免触发页面包的全量导入. """
     project_root = Path(__file__).resolve().parents[2]
     module_name = "src.ui.page.bot_page.widget.card"
 
@@ -48,7 +48,7 @@ card_module = load_card_module()
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -56,28 +56,28 @@ def ensure_qapp() -> QApplication:
 
 
 class DummySignal:
-    """最小可用信号替身。"""
+    """最小可用信号替身. """
 
     def connect(self, *_args, **_kwargs) -> None:
         return None
 
 
 class DummyAvatarWidget(QWidget):
-    """避免测试中触发真实头像下载。"""
+    """避免测试中触发真实头像下载. """
 
     def __init__(self, _qq_id: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
 
 class DummyInfoWidget(QWidget):
-    """避免测试中接入真实运行态更新。"""
+    """避免测试中接入真实运行态更新. """
 
     def __init__(self, _config, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
 
 class ConfirmAskBox:
-    """始终确认的弹窗替身。"""
+    """始终确认的弹窗替身. """
 
     def __init__(self, *_args, **_kwargs) -> None:
         pass
@@ -87,7 +87,7 @@ class ConfirmAskBox:
 
 
 def test_remove_button_blocks_running_bot(monkeypatch: pytest.MonkeyPatch, config_factory) -> None:
-    """运行中的 Bot 应先停止，不能直接删除。"""
+    """运行中的 Bot 应先停止, 不能直接删除. """
     ensure_qapp()
     warning_messages: list[str] = []
     stop_calls: list[str] = []

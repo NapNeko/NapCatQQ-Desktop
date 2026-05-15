@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/errors.py.
 
-验证所有 Agent 异常类的实例化、属性携带、继承关系和 str() 表示。
+验证所有 Agent 异常类的实例化, 属性携带, 继承关系和 str() 表示. 
 """
 
 # 标准库导入

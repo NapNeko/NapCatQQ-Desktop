@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""单元测试：StreamProcessor 和流式事件类型.
+"""单元测试: StreamProcessor 和流式事件类型.
 
-验证 StreamProcessor 正确解析 OpenAI-compatible SSE chunks 并发射类型化事件。
+验证 StreamProcessor 正确解析 OpenAI-compatible SSE chunks 并发射类型化事件. 
 """
 
 from __future__ import annotations
@@ -158,10 +158,10 @@ class TestStreamProcessorToolCalls:
     """测试 StreamProcessor 处理 tool_calls 增量拼接."""
 
     def test_single_tool_call_complete_flow(self) -> None:
-        """测试完整的单个 tool_call 流程：start → delta → complete."""
+        """测试完整的单个 tool_call 流程: start → delta → complete."""
         processor = StreamProcessor()
 
-        # 第一个 chunk: tool_call 开始（id + function name）
+        # 第一个 chunk: tool_call 开始 (id + function name) 
         chunk1 = {
             "choices": [{
                 "delta": {

@@ -9,7 +9,7 @@ from src.ui.page.home_page.version_card import VersionCardsPanel
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -17,7 +17,7 @@ def ensure_qapp() -> QApplication:
 
 
 def test_version_cards_panel_refreshes_when_refresh_event_emitted() -> None:
-    """主页版本卡片收到刷新通知后应重新读取本地版本。"""
+    """主页版本卡片收到刷新通知后应重新读取本地版本. """
     ensure_qapp()
     panel = VersionCardsPanel()
     panel._version_service = SimpleNamespace(

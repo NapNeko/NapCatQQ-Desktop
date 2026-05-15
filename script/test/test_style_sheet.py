@@ -12,7 +12,7 @@ from qfluentwidgets import Theme
 def test_page_style_sheet_falls_back_to_shared_when_themed_resource_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """页面样式在缺少主题资源时应回退到 shared 资源。"""
+    """页面样式在缺少主题资源时应回退到 shared 资源. """
 
     def fake_exists(path: str) -> bool:
         return path == ":style/style/shared/page/home.qss"
@@ -23,7 +23,7 @@ def test_page_style_sheet_falls_back_to_shared_when_themed_resource_missing(
 
 
 def test_widget_style_sheet_prefers_themed_resource(monkeypatch: pytest.MonkeyPatch) -> None:
-    """控件样式存在主题资源时应优先使用主题资源。"""
+    """控件样式存在主题资源时应优先使用主题资源. """
 
     def fake_exists(path: str) -> bool:
         return path == ":style/style/dark/widget/code_editor.qss"
@@ -36,7 +36,7 @@ def test_widget_style_sheet_prefers_themed_resource(monkeypatch: pytest.MonkeyPa
 def test_widget_style_sheet_falls_back_to_shared_when_themed_resource_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """控件样式在缺少主题资源时应回退到 shared 资源。"""
+    """控件样式在缺少主题资源时应回退到 shared 资源. """
 
     def fake_exists(path: str) -> bool:
         return path == ":style/style/shared/widget/code_editor.qss"

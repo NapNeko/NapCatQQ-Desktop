@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`_LineSplitter`](src/core/remote/ssh_client.py) 单元测试。
+"""[`_LineSplitter`](src/core/remote/ssh_client.py) 单元测试. 
 
 回归保护点:
 
@@ -35,7 +35,7 @@ class TestLineSplitterCRLF:
         assert lines == ["a", "b", "c"]
 
     def test_cr_at_buffer_boundary_is_deferred(self) -> None:
-        """跨读取边界的 CRLF 不能退化为两次切分。"""
+        """跨读取边界的 CRLF 不能退化为两次切分. """
         splitter = _LineSplitter()
 
         # 第一次读取以 \r 结尾(可能 \n 还在路上)
@@ -50,7 +50,7 @@ class TestLineSplitterCRLF:
         )
 
     def test_cr_at_boundary_followed_by_non_lf(self) -> None:
-        """跨边界 \\r 后面如果不是 \\n, 就视作孤立 \\r 换行。"""
+        """跨边界 \\r 后面如果不是 \\n, 就视作孤立 \\r 换行. """
         splitter = _LineSplitter()
         assert splitter.feed("a\r") == []
         assert splitter.feed("b\n") == ["a", "b"]
@@ -82,7 +82,7 @@ class TestLineSplitterCRLF:
         )
 
     def test_empty_lines_preserved_when_explicit(self) -> None:
-        """显式的双换行 \\n\\n 应当切出一个真实的空行。"""
+        """显式的双换行 \\n\\n 应当切出一个真实的空行. """
         splitter = _LineSplitter()
         # \n\n 中间确实有一个空行(用户显式发的)
         lines = splitter.feed("a\n\nb\n")
@@ -113,7 +113,7 @@ class TestLineSplitterTerminators:
         ]
 
     def test_lone_cr_marks_transient_line(self) -> None:
-        """dnf 进度条关键场景: 孤立 ``\\r`` 必须被标记为瞬时行。"""
+        """dnf 进度条关键场景: 孤立 ``\\r`` 必须被标记为瞬时行. """
         splitter = _LineSplitter()
         # 真实 dnf 输出形态: 同一行反复 \r 刷新 [bar] 进度, 最后一次以 \n 提交
         chunk = (
@@ -127,7 +127,7 @@ class TestLineSplitterTerminators:
         assert all("pkg" in line for line, _ in results)
 
     def test_cr_at_boundary_then_lf_is_crlf(self) -> None:
-        """跨读取边界的 CRLF 必须合并为 ``"\\r\\n"``, 不能降级为孤立 ``\\r``。"""
+        """跨读取边界的 CRLF 必须合并为 ``"\\r\\n"``, 不能降级为孤立 ``\\r``. """
         splitter = _LineSplitter()
         assert splitter.feed_with_terminator("hello\r") == []
         assert splitter.feed_with_terminator("\nworld\n") == [
@@ -142,7 +142,7 @@ class TestLineSplitterTerminators:
         assert splitter.feed_with_terminator("b\n") == [("a", "\r"), ("b", "\n")]
 
     def test_flush_terminator_is_empty_string(self) -> None:
-        """``flush`` 的残留行没有终止符, 应给出 ``""``, 上层会按"最终行"处理。"""
+        """``flush`` 的残留行没有终止符, 应给出 ``""``, 上层会按"最终行"处理. """
         splitter = _LineSplitter()
         assert splitter.feed_with_terminator("partial") == []
         assert splitter.flush_with_terminator() == [("partial", "")]
@@ -150,6 +150,6 @@ class TestLineSplitterTerminators:
         assert splitter.flush_with_terminator() == []
 
     def test_feed_stays_compatible_after_terminator_refactor(self) -> None:
-        """``feed`` 仍然返回不含终止符的纯字符串列表, 保证老测试与老调用方不回归。"""
+        """``feed`` 仍然返回不含终止符的纯字符串列表, 保证老测试与老调用方不回归. """
         splitter = _LineSplitter()
         assert splitter.feed("a\r\nb\rc\n") == ["a", "b", "c"]

@@ -9,7 +9,7 @@
 - 命令超时 (``transport`` 仍活着) 不应触发重试
 - 多线程并发触发断线时, 实际 reconnect 只发生一次
 
-不依赖真实 SSH; 全部通过 monkeypatch + 子类替身完成。
+不依赖真实 SSH; 全部通过 monkeypatch + 子类替身完成. 
 """
 
 from __future__ import annotations

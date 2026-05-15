@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/provider.py.
 
-验证 Provider、ModelEntry、ModelConfig 数据模型及 ProviderRegistry 的核心行为。
+验证 Provider, ModelEntry, ModelConfig 数据模型及 ProviderRegistry 的核心行为. 
 """
 
 # 第三方库导入

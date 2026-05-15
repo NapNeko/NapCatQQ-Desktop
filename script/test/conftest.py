@@ -26,7 +26,7 @@ from src.core.config.config_model import (
 
 
 def make_config(qqid: int = 114514, name: str = "TestBot") -> Config:
-    """构造测试使用的完整配置对象。"""
+    """构造测试使用的完整配置对象. """
     return Config(
         bot=BotConfig(
             name=name,
@@ -60,5 +60,5 @@ def make_config(qqid: int = 114514, name: str = "TestBot") -> Config:
 
 @pytest.fixture
 def config_factory():
-    """返回一个可按需构造 Config 的工厂函数。"""
+    """返回一个可按需构造 Config 的工厂函数. """
     return make_config

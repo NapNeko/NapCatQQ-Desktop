@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """[`RemoteBackend.sample_resources`](src/core/operation/remote_backend.py)
-+ [`parse_sample_output`](src/core/remote/resource_monitor.py) 单测 (P4 W2·F3).
++ [`parse_sample_output`](src/core/remote/resource_monitor.py) 单测 (P4 W2.F3).
 
 设计要点
 ========
@@ -39,7 +39,7 @@ def test_parse_sample_output_valid_full() -> None:
 
 
 def test_parse_sample_output_missing_load_still_valid() -> None:
-    """LOAD 缺失不应导致整次采样作废 — load_avg_1 仅用于辅助显示."""
+    """LOAD 缺失不应导致整次采样作废 - load_avg_1 仅用于辅助显示."""
     output = "CPU 5.0\nMEM 10.0\nDISK 20\n"
     sample = parse_sample_output(output)
     assert sample is not None

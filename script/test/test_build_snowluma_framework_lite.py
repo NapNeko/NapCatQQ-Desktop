@@ -90,22 +90,22 @@ def fake_source(tmp_path: Path) -> Path:
     (ffmpeg_dir / "ffmpegAddon.win32.x64.node").write_bytes(b"\x00" * 16)  # 黑名单
     (ffmpeg_dir / "ffmpegAddon.darwin.arm64.node").write_bytes(b"\x00" * 16)  # 黑名单
 
-    # packages/sdk/ — 整包黑名单
+    # packages/sdk/ - 整包黑名单
     sdk = root / "packages" / "sdk" / "dist"
     sdk.mkdir(parents=True)
     (sdk / "index.js").write_text("export {};\n", encoding="utf-8")
 
-    # packages/core/src/ — 黑名单 src
+    # packages/core/src/ - 黑名单 src
     core_src = root / "packages" / "core" / "src"
     core_src.mkdir(parents=True)
     (core_src / "index.ts").write_text("export {};\n", encoding="utf-8")
 
-    # packages/webui/dist/ — 黑名单 (已合并到根 dist/)
+    # packages/webui/dist/ - 黑名单 (已合并到根 dist/)
     webui_dist = root / "packages" / "webui" / "dist"
     webui_dist.mkdir(parents=True)
     (webui_dist / "duplicate.js").write_text("//\n", encoding="utf-8")
 
-    # node_modules — 黑名单
+    # node_modules - 黑名单
     nm = root / "node_modules" / "react"
     nm.mkdir(parents=True)
     (nm / "index.js").write_text("//\n", encoding="utf-8")

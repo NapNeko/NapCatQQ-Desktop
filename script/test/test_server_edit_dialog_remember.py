@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ServerEditDialog "记住密码" 勾选项 + ServerManager keyring 集成测试 (P4 W1·F5.2).
+"""ServerEditDialog "记住密码" 勾选项 + ServerManager keyring 集成测试 (P4 W1.F5.2).
 
 不依赖真实 Windows Credential Manager: 所有 keyring 调用走自定义 fake.
 """

@@ -29,7 +29,7 @@ def _find_bash() -> str | None:
 
     ``shutil.which("bash")`` 在 Windows 上常常先命中
     ``C:\\Users\\<u>\\AppData\\Local\\Microsoft\\WindowsApps\\bash.exe``
-    — 这是 WSL stub, 它会把 Windows 路径当作 Linux 路径解析, 导致测试中
+    - 这是 WSL stub, 它会把 Windows 路径当作 Linux 路径解析, 导致测试中
     ``sha512sum '<windows-path>'`` 拿不到文件. 优先选 Git Bash / MSYS2 /
     cygwin 这种真正在 Windows 文件系统上工作的 bash.
     """

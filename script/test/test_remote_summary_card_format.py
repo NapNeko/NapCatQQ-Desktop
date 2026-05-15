@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`RemoteSummaryCard`](src/ui/components/remote_summary_card.py) 纯函数单测 (P4 W2·F4).
+"""[`RemoteSummaryCard`](src/ui/components/remote_summary_card.py) 纯函数单测 (P4 W2.F4).
 
 仅覆盖文案格式化辅助 ``_format_breach``, 不实例化 QWidget.
 """

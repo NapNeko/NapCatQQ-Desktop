@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""[`ServerProfile`](src/core/remote/servers.py) 与 [`ServerRegistry`](src/core/remote/servers.py) 单元测试。
+"""[`ServerProfile`](src/core/remote/servers.py) 与 [`ServerRegistry`](src/core/remote/servers.py) 单元测试. 
 
 P0 验收要点:
 - 序列化往返保留所有字段(密码与 passphrase 除外)
@@ -275,7 +275,7 @@ class TestServerRegistry:
 # ==================== 本地 SSH 密钥扫描 ====================
 class TestScanLocalSSHKeys:
     """覆盖 [`scan_local_ssh_keys`](src/core/remote/ssh_keys.py)
-    的关键行为, 注意此辅助函数与计划 §6.2 安全基线兼容: 仅作 UI 候选, 不会自动建立连接。"""
+    的关键行为, 注意此辅助函数与计划 §6.2 安全基线兼容: 仅作 UI 候选, 不会自动建立连接. """
 
     def test_returns_empty_when_no_ssh_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # 模拟 home 目录下没有 .ssh

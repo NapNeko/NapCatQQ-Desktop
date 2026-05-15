@@ -13,7 +13,7 @@ from src.ui.page.bot_page.widget.config import AdvancedConfigWidget, BotConfigWi
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
@@ -22,7 +22,7 @@ def ensure_qapp() -> QApplication:
 
 
 def make_bot_config() -> BotConfig:
-    """构造测试用 Bot 配置。"""
+    """构造测试用 Bot 配置. """
     return BotConfig(
         name="ExistingBot",
         QQID=2477817352,
@@ -33,7 +33,7 @@ def make_bot_config() -> BotConfig:
 
 
 def test_bot_qqid_card_is_enabled_after_clear() -> None:
-    """新建模式下 QQID 输入框应可编辑。"""
+    """新建模式下 QQID 输入框应可编辑. """
     ensure_qapp()
     widget = BotConfigWidget()
 
@@ -44,7 +44,7 @@ def test_bot_qqid_card_is_enabled_after_clear() -> None:
 
 
 def test_bot_qqid_card_is_disabled_when_editing_existing_bot() -> None:
-    """编辑已有 Bot 时 QQID 输入框应被锁定。"""
+    """编辑已有 Bot 时 QQID 输入框应被锁定. """
     ensure_qapp()
     widget = BotConfigWidget()
 
@@ -55,7 +55,7 @@ def test_bot_qqid_card_is_disabled_when_editing_existing_bot() -> None:
 
 
 def test_bot_qqid_card_is_reenabled_after_returning_to_new_mode() -> None:
-    """从编辑模式切回新建模式后 QQID 输入框应重新可编辑。"""
+    """从编辑模式切回新建模式后 QQID 输入框应重新可编辑. """
     ensure_qapp()
     widget = BotConfigWidget()
 
@@ -67,7 +67,7 @@ def test_bot_qqid_card_is_reenabled_after_returning_to_new_mode() -> None:
 
 
 def test_advanced_config_widget_round_trips_grouped_and_dialog_fields() -> None:
-    """高级配置页应保留分组主项和底层对话框项。"""
+    """高级配置页应保留分组主项和底层对话框项. """
     ensure_qapp()
     widget = AdvancedConfigWidget()
     config = AdvancedConfig(
@@ -106,7 +106,7 @@ def test_advanced_config_widget_round_trips_grouped_and_dialog_fields() -> None:
 
 
 def test_advanced_config_widget_clear_resets_backend_and_log_state(monkeypatch) -> None:
-    """清空高级配置时应恢复默认值并关闭低频开关。"""
+    """清空高级配置时应恢复默认值并关闭低频开关. """
     ensure_qapp()
     monkeypatch.setattr(config_widget_module.cfg, "get", lambda item: False)
     widget = AdvancedConfigWidget()
@@ -133,7 +133,7 @@ def test_advanced_config_widget_clear_resets_backend_and_log_state(monkeypatch) 
 
 
 def test_advanced_config_widget_clear_enables_offline_notice_when_global_notice_enabled(monkeypatch) -> None:
-    """新增 Bot 时若全局邮件或 WebHook 通知已开启，应默认勾选单独掉线通知。"""
+    """新增 Bot 时若全局邮件或 WebHook 通知已开启, 应默认勾选单独掉线通知. """
     ensure_qapp()
     monkeypatch.setattr(
         config_widget_module.cfg,

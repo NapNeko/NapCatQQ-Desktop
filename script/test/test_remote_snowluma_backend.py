@@ -2,7 +2,7 @@
 """:class:`src.core.operation.remote_snowluma_backend.RemoteSnowLumaBackend` 单元测试 (W10b-Driver).
 
 策略: 与 [`test_remote_backend_process`](script/test/test_remote_backend_process.py)
-相同模式 — 把 ``ssh_client`` / ``_exec_backend`` / ``_runtime`` 替换为 fake,
+相同模式 - 把 ``ssh_client`` / ``_exec_backend`` / ``_runtime`` 替换为 fake,
 另外 mock ``_daemon`` 让其不实际跑 SSH; 完全绕开真实远端通讯, 仅验证:
 
 - 启动序: ``_verify_launcher_present`` → ``daemon.ensure_running`` → 首次打开 noVNC →

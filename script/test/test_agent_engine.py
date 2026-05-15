@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """Unit tests for src/core/agent/engine.py.
 
-测试 AgentEngine 核心引擎的关键行为：
+测试 AgentEngine 核心引擎的关键行为: 
 1. 工具循环达到 25 次上限时正确停止
 2. StreamError 事件保留已有消息
-3. Subagent 嵌套深度限制（最大 3 层）
+3. Subagent 嵌套深度限制 (最大 3 层) 
 
 Requirements: 5.4, 5.5, 5.6, 5.7, 6.7, 6.9
 """
@@ -53,7 +53,7 @@ class _EchoParams(BaseModel):
 
 
 class _EchoTool(ToolDefinition):
-    """测试用工具：回显消息."""
+    """测试用工具: 回显消息."""
 
     tool_id = "echo_tool"
     description = "Echo the message"
@@ -65,7 +65,7 @@ class _EchoTool(ToolDefinition):
 
 
 class _CounterTool(ToolDefinition):
-    """测试用工具：计数器，每次调用递增."""
+    """测试用工具: 计数器, 每次调用递增."""
 
     tool_id = "counter_tool"
     description = "Increment counter"
@@ -203,7 +203,7 @@ def _make_sse_response_text_and_stop(text: str = "Hello!") -> str:
 
 
 def _make_sse_response_text_partial(text: str = "Partial") -> str:
-    """构造一个只有部分文本（没有结束信号）的 SSE 响应."""
+    """构造一个只有部分文本 (没有结束信号) 的 SSE 响应."""
     chunk1 = json.dumps(
         {
             "choices": [
@@ -233,7 +233,7 @@ class TestToolLoopMaxIterations:
         assert MAX_TOOL_LOOP_ITERATIONS == 25
 
     def test_tool_loop_reaches_max_emits_stream_end(self) -> None:
-        """工具循环达到 25 次上限时，应发射 StreamEnd(reason='max_iterations')
+        """工具循环达到 25 次上限时, 应发射 StreamEnd(reason='max_iterations')
         并追加一条 assistant 消息说明达到迭代上限."""
         provider_registry = _create_provider_registry()
         tool_registry = _create_tool_registry()
@@ -269,18 +269,18 @@ class TestToolLoopMaxIterations:
             provider,
             model_config,
         ):
-            """模拟 LLM 每次都返回一个工具调用，使循环持续."""
+            """模拟 LLM 每次都返回一个工具调用, 使循环持续."""
             nonlocal call_count
             call_count += 1
 
-            # 每次都返回一个 ToolCallComplete，使循环继续
+            # 每次都返回一个 ToolCallComplete, 使循环继续
             tc = ToolCallComplete(
                 tool_call_id=f"call_{call_count:03d}",
                 function_name="echo_tool",
                 arguments='{"message": "loop"}',
             )
 
-            # 模拟追加 assistant 消息（engine 正常流程中会做这个）
+            # 模拟追加 assistant 消息 (engine 正常流程中会做这个) 
             from datetime import datetime, timezone
 
             from src.core.agent.session import Message, ToolCallInfo
@@ -342,7 +342,7 @@ class TestStreamErrorPreservesMessages:
     """
 
     def test_http_error_preserves_accumulated_messages(self) -> None:
-        """当 LLM API 返回 HTTP 错误时，已累积的消息应被保留."""
+        """当 LLM API 返回 HTTP 错误时, 已累积的消息应被保留."""
         provider_registry = _create_provider_registry()
         tool_registry = _create_tool_registry()
         session_manager = _create_session_manager()
@@ -361,7 +361,7 @@ class TestStreamErrorPreservesMessages:
         def on_event(event: StreamEvent) -> None:
             events.append(event)
 
-        # 模拟 _call_llm_streaming：先产生部分文本，然后发射错误
+        # 模拟 _call_llm_streaming: 先产生部分文本, 然后发射错误
         async def mock_call_llm_streaming_with_error(
             session_id,
             messages_payload,
@@ -373,7 +373,7 @@ class TestStreamErrorPreservesMessages:
             provider,
             model_config,
         ):
-            """模拟：先产生部分文本内容，然后遇到错误."""
+            """模拟: 先产生部分文本内容, 然后遇到错误."""
             from datetime import datetime, timezone
 
             from src.core.agent.session import Message
@@ -395,7 +395,7 @@ class TestStreamErrorPreservesMessages:
             if on_event:
                 on_event(error_event)
 
-            # 返回空列表表示流结束（有错误）
+            # 返回空列表表示流结束 (有错误) 
             return []
 
         with patch.object(
@@ -414,7 +414,7 @@ class TestStreamErrorPreservesMessages:
         assert len(error_events) == 1
         assert error_events[0].status_code == 500
 
-        # 验证会话中保留了消息（user + partial assistant）
+        # 验证会话中保留了消息 (user + partial assistant) 
         final_session = session_manager.get(session_id)
         assert len(final_session.messages) >= 2  # user msg + partial assistant msg
         # 找到 assistant 消息
@@ -423,7 +423,7 @@ class TestStreamErrorPreservesMessages:
         assert "部分响应内容" in assistant_msgs[0].content
 
     def test_timeout_error_preserves_accumulated_messages(self) -> None:
-        """当 httpx 连接超时时，已累积的消息应被保留."""
+        """当 httpx 连接超时时, 已累积的消息应被保留."""
         provider_registry = _create_provider_registry()
         tool_registry = _create_tool_registry()
         session_manager = _create_session_manager()
@@ -453,7 +453,7 @@ class TestStreamErrorPreservesMessages:
             provider,
             model_config,
         ):
-            """模拟：先产生部分内容，然后超时."""
+            """模拟: 先产生部分内容, 然后超时."""
             from datetime import datetime, timezone
 
             from src.core.agent.session import Message
@@ -488,7 +488,7 @@ class TestStreamErrorPreservesMessages:
                 )
             )
 
-        # 验证发射了 StreamErrorEvent（无 status_code）
+        # 验证发射了 StreamErrorEvent (无 status_code) 
         error_events = [e for e in events if isinstance(e, StreamErrorEvent)]
         assert len(error_events) == 1
         assert error_events[0].status_code is None
@@ -593,12 +593,12 @@ class TestStreamErrorPreservesMessages:
 
 
 # ============================================================
-# Test 3: Subagent 嵌套深度限制（最大 3 层）
+# Test 3: Subagent 嵌套深度限制 (最大 3 层) 
 # ============================================================
 
 
 class TestSubagentNestingDepthLimit:
-    """测试 subagent 嵌套深度限制（最大 3 层）.
+    """测试 subagent 嵌套深度限制 (最大 3 层) .
 
     Requirements: 6.7, 6.9
     """
@@ -608,7 +608,7 @@ class TestSubagentNestingDepthLimit:
         assert MAX_SUBAGENT_NESTING_DEPTH == 3
 
     def test_subagent_nesting_at_max_depth_returns_error(self) -> None:
-        """当嵌套深度达到最大值时，_execute_subagent 应返回 is_error=True."""
+        """当嵌套深度达到最大值时, _execute_subagent 应返回 is_error=True."""
         provider_registry = _create_provider_registry()
         tool_registry = _create_tool_registry()
         session_manager = _create_session_manager()
@@ -635,7 +635,7 @@ class TestSubagentNestingDepthLimit:
         session = session_manager.create("napcat-plugin-dev")
         session_id = session.session_id
 
-        # 调用 _execute_subagent，nesting_depth 已经达到最大值
+        # 调用 _execute_subagent, nesting_depth 已经达到最大值
         result = asyncio.run(
             engine._execute_subagent(
                 session_id=session_id,
@@ -650,7 +650,7 @@ class TestSubagentNestingDepthLimit:
         assert "嵌套深度" in result.output or str(MAX_SUBAGENT_NESTING_DEPTH) in result.output
 
     def test_subagent_nesting_below_max_depth_proceeds(self) -> None:
-        """当嵌套深度低于最大值时，_execute_subagent 应正常执行."""
+        """当嵌套深度低于最大值时, _execute_subagent 应正常执行."""
         provider_registry = _create_provider_registry()
         tool_registry = _create_tool_registry()
         session_manager = _create_session_manager()
@@ -678,11 +678,11 @@ class TestSubagentNestingDepthLimit:
         session_id = session.session_id
 
         # Mock submit 方法以避免实际 LLM 调用
-        # 当 submit 被递归调用时，模拟子 Agent 产生一条 assistant 消息
+        # 当 submit 被递归调用时, 模拟子 Agent 产生一条 assistant 消息
         original_submit = engine.submit
 
         async def mock_submit(session_id, user_message, on_event=None, _nesting_depth=0):
-            """模拟子 Agent 执行：直接追加一条 assistant 消息."""
+            """模拟子 Agent 执行: 直接追加一条 assistant 消息."""
             from datetime import datetime, timezone
 
             from src.core.agent.session import Message
@@ -711,7 +711,7 @@ class TestSubagentNestingDepthLimit:
         assert "子 Agent 响应内容" in result.output
 
     def test_subagent_nesting_at_depth_2_proceeds(self) -> None:
-        """当嵌套深度为 2（低于最大值 3）时，应正常执行."""
+        """当嵌套深度为 2 (低于最大值 3) 时, 应正常执行."""
         provider_registry = _create_provider_registry()
         tool_registry = _create_tool_registry()
         session_manager = _create_session_manager()
@@ -765,7 +765,7 @@ class TestSubagentNestingDepthLimit:
         assert "depth 2 response" in result.output
 
     def test_subagent_not_found_returns_error(self) -> None:
-        """当子 Agent 名称不存在时，应返回 is_error=True."""
+        """当子 Agent 名称不存在时, 应返回 is_error=True."""
         provider_registry = _create_provider_registry()
         tool_registry = _create_tool_registry()
         session_manager = _create_session_manager()
@@ -793,7 +793,7 @@ class TestSubagentNestingDepthLimit:
         assert "nonexistent_agent" in result.output
 
     def test_subagent_execution_failure_returns_error(self) -> None:
-        """当子 Agent 执行过程中抛出异常时，应返回 is_error=True."""
+        """当子 Agent 执行过程中抛出异常时, 应返回 is_error=True."""
         provider_registry = _create_provider_registry()
         tool_registry = _create_tool_registry()
         session_manager = _create_session_manager()

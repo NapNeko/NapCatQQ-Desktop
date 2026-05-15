@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """``enumerate_qq_processes`` 单测 (2026-05-11 主线程卡顿修复 v2).
 
-历史背景: 用户实测 SnowLuma 热启动点【启动 Bot】后弹模式对话框选 HOT_START → 提交
+历史背景: 用户实测 SnowLuma 热启动点 [启动 Bot] 后弹模式对话框选 HOT_START → 提交
 ``EnumerateQQProcessesWorker`` 后 UI **完全锁死** (鼠标拖拽 / 其它按钮全不响应).
 根因: ``psutil.process_iter`` 在工作线程跑 1-3s **持续占 GIL**, 主线程几乎拿不到
 GIL 时间, 即便事件循环在跑也响应不了 UI 事件.

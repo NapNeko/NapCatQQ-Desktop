@@ -7,7 +7,7 @@ from src.ui.components.stacked_widget import TransparentStackedWidget
 
 
 def ensure_qapp() -> QApplication:
-    """创建或复用测试用 QApplication。"""
+    """创建或复用测试用 QApplication. """
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -15,7 +15,7 @@ def ensure_qapp() -> QApplication:
 
 
 def test_transparent_stacked_widget_uses_soft_animation() -> None:
-    """切页时应触发共享动画，并在动画结束后停留到目标页面。"""
+    """切页时应触发共享动画, 并在动画结束后停留到目标页面. """
     app = ensure_qapp()
     stacked = TransparentStackedWidget()
     first = QWidget()
@@ -44,7 +44,7 @@ def test_transparent_stacked_widget_uses_soft_animation() -> None:
 
 
 def test_transparent_stacked_widget_can_disable_animation() -> None:
-    """禁用动画后应立即切换页面，且不再发出动画开始信号。"""
+    """禁用动画后应立即切换页面, 且不再发出动画开始信号. """
     app = ensure_qapp()
     stacked = TransparentStackedWidget()
     first = QWidget()
@@ -65,7 +65,7 @@ def test_transparent_stacked_widget_can_disable_animation() -> None:
 
 
 def test_transparent_stacked_widget_ignores_duplicate_widget_additions() -> None:
-    """重复添加同一页面时应保持兼容，不重复注册动画状态。"""
+    """重复添加同一页面时应保持兼容, 不重复注册动画状态. """
     ensure_qapp()
     stacked = TransparentStackedWidget()
     page = QWidget()
