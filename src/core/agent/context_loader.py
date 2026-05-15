@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """用户自定义上下文加载模块.
 
-加载用户可编辑的 agent_context.md 文件，支持基于 mtime 的变更检测和内容缓存。
-当文件超过 MAX_CONTEXT_LENGTH 字符时自动截断并记录警告。
-文件不存在时静默返回空字符串。
+加载用户可编辑的 agent_context.md 文件, 支持基于 mtime 的变更检测和内容缓存. 
+当文件超过 MAX_CONTEXT_LENGTH 字符时自动截断并记录警告. 
+文件不存在时静默返回空字符串. 
 """
 
 from __future__ import annotations
@@ -20,12 +20,12 @@ MAX_CONTEXT_LENGTH: int = 32768
 class ContextLoader:
     """用户自定义上下文文件加载器.
 
-    通过文件修改时间（mtime）检测变更，缓存文件内容以避免重复读取。
-    超过 MAX_CONTEXT_LENGTH 字符时截断并记录警告。
-    文件不存在时静默返回空字符串，不记录警告。
+    通过文件修改时间 (mtime) 检测变更, 缓存文件内容以避免重复读取. 
+    超过 MAX_CONTEXT_LENGTH 字符时截断并记录警告. 
+    文件不存在时静默返回空字符串, 不记录警告. 
 
     Args:
-        context_file_path: 用户上下文文件的路径。
+        context_file_path: 用户上下文文件的路径. 
     """
 
     def __init__(self, context_file_path: Path) -> None:
@@ -36,14 +36,14 @@ class ContextLoader:
     def load(self) -> str:
         """加载用户上下文文件内容.
 
-        使用 mtime 缓存策略：
-        - 文件不存在时返回空字符串（不记录警告）
+        使用 mtime 缓存策略: 
+        - 文件不存在时返回空字符串 (不记录警告) 
         - 文件 mtime 未变化时返回缓存内容
         - 文件 mtime 变化时重新读取并更新缓存
         - 内容超过 MAX_CONTEXT_LENGTH 字符时截断并记录警告
 
         Returns:
-            文件内容字符串，可能被截断。文件不存在时返回空字符串。
+            文件内容字符串, 可能被截断. 文件不存在时返回空字符串. 
         """
         # 文件不存在时静默返回空字符串
         if not self._path.exists():

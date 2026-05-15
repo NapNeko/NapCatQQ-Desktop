@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """Agent 能力框架模块.
 
-提供 LLM Provider 管理、Tool 注册与执行、Session 会话管理、Agent 定义与调度等核心能力，
-为 NapCat 插件开发者提供 AI 辅助功能。
+提供 LLM Provider 管理, Tool 注册与执行, Session 会话管理, Agent 定义与调度等核心能力, 
+为 NapCat 插件开发者提供 AI 辅助功能. 
 
-本模块通过 creart 依赖注入框架注册所有核心组件的 Creator，实现模块间解耦。
+本模块通过 creart 依赖注入框架注册所有核心组件的 Creator, 实现模块间解耦. 
 """
 
 from abc import ABC
@@ -83,7 +83,7 @@ class SessionManagerCreator(AbstractCreator, ABC):
 
     @staticmethod
     def create(create_type):
-        """创建 SessionManager 实例（使用 PathFunc 提供的存储路径）"""
+        """创建 SessionManager 实例 (使用 PathFunc 提供的存储路径) """
         from creart import it
 
         from src.core.runtime.paths import PathFunc
@@ -115,7 +115,7 @@ class AgentEngineCreator(AbstractCreator, ABC):
 
     @staticmethod
     def create(create_type):
-        """创建 AgentEngine 实例（通过 creart.it() 获取依赖注入）"""
+        """创建 AgentEngine 实例 (通过 creart.it() 获取依赖注入) """
         from creart import it
 
         from src.core.agent.provider import ProviderRegistry

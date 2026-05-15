@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """AgentEngine 核心调度引擎.
 
-实现 Agent 能力框架的核心引擎，负责协调 Provider、Tool、Session 等子模块
-完成 LLM 流式交互、工具循环执行和多 Agent 调度。
+实现 Agent 能力框架的核心引擎, 负责协调 Provider, Tool, Session 等子模块
+完成 LLM 流式交互, 工具循环执行和多 Agent 调度. 
 
-通过 AdapterRegistry 和 ProtocolAdapter 抽象层支持多 LLM 提供商的原生协议通信，
-包括 OpenAI、Anthropic、Google Gemini 和 Azure OpenAI。
+通过 AdapterRegistry 和 ProtocolAdapter 抽象层支持多 LLM 提供商的原生协议通信, 
+包括 OpenAI, Anthropic, Google Gemini 和 Azure OpenAI. 
 
 Requirements: 5.1, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 6.2, 6.6, 6.7, 6.8, 6.9, 6.10, 7.4, 7.5, 7.6
 Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 2.2, 2.6
@@ -56,25 +56,25 @@ MAX_TOOL_LOOP_ITERATIONS: int = 25
 #: 子 Agent 最大嵌套深度
 MAX_SUBAGENT_NESTING_DEPTH: int = 3
 
-#: httpx 不活动超时时间（秒）
+#: httpx 不活动超时时间 (秒) 
 INACTIVITY_TIMEOUT_SECONDS: float = 30.0
 
 
 class AgentEngine:
-    """Agent 核心引擎，协调 Provider、Tool、Session 完成 LLM 交互.
+    """Agent 核心引擎, 协调 Provider, Tool, Session 完成 LLM 交互.
 
-    负责：
-    - 构建请求 payload（system_prompt + message_history + tool_definitions）
+    负责: 
+    - 构建请求 payload (system_prompt + message_history + tool_definitions) 
     - 通过 httpx async streaming 调用 LLM API
-    - 工具循环：ToolCallComplete → Permission check → Tool execute → ToolResult → 重新提交
-    - 多 Agent 管理：get_agent, list_agents, select_agent
-    - System prompt 组装：content_safety + napcat_plugin_dev + user_context
+    - 工具循环: ToolCallComplete → Permission check → Tool execute → ToolResult → 重新提交
+    - 多 Agent 管理: get_agent, list_agents, select_agent
+    - System prompt 组装: content_safety + napcat_plugin_dev + user_context
 
     Args:
         provider_registry: Provider 注册表实例.
         tool_registry: Tool 注册表实例.
         session_manager: Session 管理器实例.
-        context_loader: 用户上下文加载器实例（可选）.
+        context_loader: 用户上下文加载器实例 (可选) .
     """
 
     def __init__(
@@ -90,7 +90,7 @@ class AgentEngine:
         self._context_loader = context_loader
         self._agents: dict[str, AgentDefinition] = {}
 
-        # 初始化协议适配器注册表，注册所有内置适配器
+        # 初始化协议适配器注册表, 注册所有内置适配器
         self._adapter_registry = AdapterRegistry()
         self._adapter_registry.register("openai", OpenAIAdapter())
         self._adapter_registry.register("anthropic", AnthropicAdapter())
@@ -187,8 +187,8 @@ class AgentEngine:
     def _build_system_prompt(self, agent: AgentDefinition) -> str:
         """组装完整的 system prompt.
 
-        组装顺序：content_safety + napcat_plugin_dev + user_context
-        内容安全 prompt 始终在最前面，不可被覆盖或移除。
+        组装顺序: content_safety + napcat_plugin_dev + user_context
+        内容安全 prompt 始终在最前面, 不可被覆盖或移除. 
 
         Args:
             agent: 当前使用的 Agent 定义.
@@ -198,7 +198,7 @@ class AgentEngine:
         """
         parts: list[str] = []
 
-        # 1. 不可修改的内容安全 prompt（始终在最前面）
+        # 1. 不可修改的内容安全 prompt (始终在最前面) 
         try:
             content_safety = get_content_safety_prompt()
             if content_safety:
@@ -214,22 +214,22 @@ class AgentEngine:
         except FileNotFoundError:
             logger.warning("NapCat 插件开发知识库 prompt 文件未找到，跳过。")
 
-        # 3. 用户自定义上下文（如果有）
+        # 3. 用户自定义上下文 (如果有) 
         if self._context_loader is not None:
             user_context = self._context_loader.load()
             if user_context:
                 parts.append(user_context)
 
-        # 4. Agent 自身的 system_prompt（如果有）
+        # 4. Agent 自身的 system_prompt (如果有) 
         if agent.system_prompt:
             parts.append(agent.system_prompt)
 
         return "\n\n".join(parts)
 
     def _get_tool_definitions_for_agent(self, agent: AgentDefinition) -> list[dict]:
-        """获取 Agent 允许使用的工具定义列表（OpenAI function calling 格式）.
+        """获取 Agent 允许使用的工具定义列表 (OpenAI function calling 格式) .
 
-        根据 Agent 的 permission_rules 过滤工具。
+        根据 Agent 的 permission_rules 过滤工具. 
 
         Args:
             agent: 当前使用的 Agent 定义.
@@ -311,7 +311,7 @@ class AgentEngine:
                     }
                     for tc in msg.tool_calls
                 ]
-                # 如果有 tool_calls，content 可能为空
+                # 如果有 tool_calls, content 可能为空
                 if not msg.content:
                     entry["content"] = None
 
@@ -334,14 +334,14 @@ class AgentEngine:
     ) -> None:
         """提交用户消息并启动 LLM 流式交互.
 
-        主入口方法。构建请求 payload，调用 LLM API，处理流式响应，
-        执行工具循环（最多 25 次迭代）。
+        主入口方法. 构建请求 payload, 调用 LLM API, 处理流式响应, 
+        执行工具循环 (最多 25 次迭代) . 
 
         Args:
             session_id: 目标会话 ID.
             user_message: 用户消息内容.
-            on_event: 事件回调函数，每当产生新的流式事件时调用.
-            _nesting_depth: 内部参数，子 Agent 嵌套深度计数.
+            on_event: 事件回调函数, 每当产生新的流式事件时调用.
+            _nesting_depth: 内部参数, 子 Agent 嵌套深度计数.
 
         Raises:
             SessionNotFoundError: 如果 session_id 不存在.
@@ -364,7 +364,7 @@ class AgentEngine:
         if agent is None:
             agent = self._agents.get("napcat-plugin-dev")
             if agent is None:
-                # 不应该发生，但防御性处理
+                # 不应该发生, 但防御性处理
                 raise AgentError("No agent available for session.")
 
         # 构建 system prompt
@@ -373,8 +373,8 @@ class AgentEngine:
         # 获取工具定义
         tool_definitions = self._get_tool_definitions_for_agent(agent)
 
-        # 获取活跃 Provider 和 ModelConfig，解析协议适配器
-        # 在整个工具循环中使用同一个 adapter 实例（Requirement 7.5）
+        # 获取活跃 Provider 和 ModelConfig, 解析协议适配器
+        # 在整个工具循环中使用同一个 adapter 实例 (Requirement 7.5) 
         provider, model_config = self._provider_registry.get_active()
         adapter = self._adapter_registry.resolve(provider.protocol_type)
 
@@ -399,7 +399,7 @@ class AgentEngine:
                 model_config=model_config,
             )
 
-            # 如果没有工具调用完成，流已结束
+            # 如果没有工具调用完成, 流已结束
             if not tool_calls_completed:
                 return
 
@@ -412,7 +412,7 @@ class AgentEngine:
                 nesting_depth=_nesting_depth,
             )
 
-            # 如果没有需要继续的工具调用，结束循环
+            # 如果没有需要继续的工具调用, 结束循环
             if not has_pending_tools:
                 return
 
@@ -444,7 +444,7 @@ class AgentEngine:
     ) -> list[ToolCallComplete]:
         """通过 httpx async streaming 调用 LLM API.
 
-        使用协议适配器构建请求和解析流式响应，支持多提供商原生协议。
+        使用协议适配器构建请求和解析流式响应, 支持多提供商原生协议. 
 
         Args:
             session_id: 会话 ID.
@@ -459,23 +459,23 @@ class AgentEngine:
 
         Returns:
             本次流式调用中完成的 ToolCallComplete 事件列表.
-            空列表表示流正常结束（无工具调用）或发生错误。
+            空列表表示流正常结束 (无工具调用) 或发生错误. 
         """
         from src.core.agent.session import Message as MessageType
 
-        # 使用适配器构建 HTTP 请求（Requirement 7.2）
+        # 使用适配器构建 HTTP 请求 (Requirement 7.2) 
         # 获取会话中的原始消息
         session = self._session_manager.get(session_id)
 
         # 构建包含 system prompt 的完整消息列表
-        # 提取 system prompt（messages_payload 的第一条消息）
+        # 提取 system prompt (messages_payload 的第一条消息) 
         system_content = ""
         if messages_payload and messages_payload[0].get("role") == "system":
             system_content = messages_payload[0]["content"]
 
         all_messages: list[MessageType] = []
 
-        # 创建 system message（使用 model_construct 绕过 Literal 验证）
+        # 创建 system message (使用 model_construct 绕过 Literal 验证) 
         if system_content:
             system_msg = MessageType.model_construct(
                 id=uuid4(),
@@ -499,6 +499,11 @@ class AgentEngine:
             provider=provider,
         )
 
+        # 合并供应商自定义请求头 (用户在前端 "自定义请求头" 对话框配置)
+        # 自定义头优先级高于适配器默认认证头之外的字段, 但 Authorization
+        # 仍由适配器决定; 用户通常不会去覆盖鉴权头, 这里以用户配置为准.
+        merged_headers = {**request_spec.headers, **(provider.custom_headers or {})}
+
         # 收集工具调用完成事件
         tool_calls_completed: list[ToolCallComplete] = []
         assistant_content_parts: list[str] = []
@@ -517,7 +522,7 @@ class AgentEngine:
                 async with client.stream(
                     request_spec.method,
                     request_spec.url,
-                    headers=request_spec.headers,
+                    headers=merged_headers,
                     json=request_spec.body,
                 ) as response:
                     # 检查 HTTP 状态码
@@ -534,7 +539,7 @@ class AgentEngine:
                         error_occurred = True
                         return []
 
-                    # 使用适配器解析流式响应（Requirement 7.3）
+                    # 使用适配器解析流式响应 (Requirement 7.3) 
                     async def _response_lines() -> AsyncIterator[str]:
                         """将 httpx 响应行包装为异步迭代器."""
                         async for line in response.aiter_lines():
@@ -543,7 +548,7 @@ class AgentEngine:
                     async for event in adapter.parse_stream(_response_lines()):
                         # 处理各类事件
                         if isinstance(event, StreamErrorEvent):
-                            # StreamErrorEvent: 中止当前调用，保留对话历史，传播错误（Requirement 7.7）
+                            # StreamErrorEvent: 中止当前调用, 保留对话历史, 传播错误 (Requirement 7.7) 
                             error_occurred = True
                             if on_event:
                                 on_event(event)
@@ -586,7 +591,7 @@ class AgentEngine:
             self._persist_partial_response(session_id, assistant_content_parts, tool_calls_completed)
             return []
 
-        # 如果有文本内容或工具调用，追加 assistant 消息
+        # 如果有文本内容或工具调用, 追加 assistant 消息
         if assistant_content_parts or tool_calls_completed:
             assistant_msg = Message(
                 id=uuid4(),
@@ -665,7 +670,7 @@ class AgentEngine:
             nesting_depth: 当前嵌套深度.
 
         Returns:
-            True 表示有工具被执行（需要重新提交给 LLM），False 表示无需继续.
+            True 表示有工具被执行 (需要重新提交给 LLM) , False 表示无需继续.
         """
         any_executed = False
 
@@ -680,7 +685,7 @@ class AgentEngine:
                     is_error=True,
                 )
             elif permission == "ask":
-                # 简化处理：发射 PermissionAskEvent，当前版本直接拒绝
+                # 简化处理: 发射 PermissionAskEvent, 当前版本直接拒绝
                 # 未来版本将实现用户交互确认
                 if on_event:
                     ask_event = PermissionAskEvent(
@@ -689,7 +694,7 @@ class AgentEngine:
                         description=f"工具 '{tc.function_name}' 请求执行权限确认",
                     )
                     on_event(ask_event)
-                # 简化版本：直接拒绝（未来实现用户交互）
+                # 简化版本: 直接拒绝 (未来实现用户交互) 
                 result = ToolResult(
                     output=f"权限确认超时：工具 '{tc.function_name}' 的执行请求未获得用户确认。",
                     is_error=True,

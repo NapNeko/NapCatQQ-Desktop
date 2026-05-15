@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Agent 模块统一异常类型.
 
-定义 Agent 框架中所有异常的层次结构，每个异常携带结构化的上下文信息，
-便于上层代码进行精确的错误处理和用户友好的错误提示。
+定义 Agent 框架中所有异常的层次结构, 每个异常携带结构化的上下文信息, 
+便于上层代码进行精确的错误处理和用户友好的错误提示. 
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ class ValidationError(AgentError):
 class NoActiveProviderError(AgentError):
     """未设置活跃 Provider.
 
-    当查询活跃 Provider 但尚未设置时抛出。
+    当查询活跃 Provider 但尚未设置时抛出. 
     """
 
     def __init__(self) -> None:
@@ -110,7 +110,7 @@ class StreamError(AgentError):
     """LLM 流式调用失败.
 
     Attributes:
-        status_code: HTTP 状态码，连接超时等场景可能为 None.
+        status_code: HTTP 状态码, 连接超时等场景可能为 None.
         message: 错误描述信息.
     """
 

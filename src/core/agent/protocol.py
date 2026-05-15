@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Protocol Adapter 抽象层.
 
-定义协议适配器接口（ProtocolAdapter）、HTTP 请求规格（HttpRequestSpec）、
-以及适配器注册表（AdapterRegistry），支持多 LLM 提供商的原生协议通信。
+定义协议适配器接口 (ProtocolAdapter) , HTTP 请求规格 (HttpRequestSpec) , 
+以及适配器注册表 (AdapterRegistry) , 支持多 LLM 提供商的原生协议通信. 
 
 Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.1, 2.3, 2.5
 """
@@ -27,11 +27,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class HttpRequestSpec:
-    """HTTP 请求规格，由 build_request 返回.
+    """HTTP 请求规格, 由 build_request 返回.
 
     Attributes:
-        method: HTTP 方法（LLM 调用始终为 "POST"）.
-        url: 完整请求 URL（含查询参数）.
+        method: HTTP 方法 (LLM 调用始终为 "POST") .
+        url: 完整请求 URL (含查询参数) .
         headers: HTTP 请求头字典.
         body: JSON 可序列化的请求体字典.
     """
@@ -45,8 +45,8 @@ class HttpRequestSpec:
 class ProtocolAdapter(ABC):
     """协议适配器抽象基类.
 
-    定义将内部消息/工具表示转换为提供商特定 HTTP 请求载荷，
-    以及解析提供商特定流式响应为 StreamEvent 序列的接口。
+    定义将内部消息/工具表示转换为提供商特定 HTTP 请求载荷, 
+    以及解析提供商特定流式响应为 StreamEvent 序列的接口. 
     """
 
     @abstractmethod
@@ -62,8 +62,8 @@ class ProtocolAdapter(ABC):
         Args:
             messages: 内部消息历史列表.
             tool_definitions: OpenAI 格式的工具定义列表.
-            model_config: 模型配置（model_id, temperature 等）.
-            provider: Provider 实例（用于 URL、密钥等）.
+            model_config: 模型配置 (model_id, temperature 等) .
+            provider: Provider 实例 (用于 URL, 密钥等) .
 
         Returns:
             包含 method, url, headers, body 的 HttpRequestSpec.
@@ -83,8 +83,8 @@ class ProtocolAdapter(ABC):
             response_lines: 原始响应行/块的异步迭代器.
 
         Yields:
-            StreamEvent 实例（TextDelta, ToolCallStart 等）.
-            遇到格式错误数据时，yield StreamErrorEvent 并停止.
+            StreamEvent 实例 (TextDelta, ToolCallStart 等) .
+            遇到格式错误数据时, yield StreamErrorEvent 并停止.
         """
         ...
         # 使 async generator 类型检查通过
@@ -119,7 +119,7 @@ class ProtocolAdapter(ABC):
 
 
 def _validate_messages_not_empty(messages: list[Message]) -> None:
-    """验证消息列表非空，供子类在 build_request 中调用.
+    """验证消息列表非空, 供子类在 build_request 中调用.
 
     Args:
         messages: 消息列表.
@@ -135,9 +135,9 @@ def _validate_messages_not_empty(messages: list[Message]) -> None:
 
 
 class AdapterRegistry:
-    """协议适配器注册表，将 Protocol_Type 标识符映射到 ProtocolAdapter 实例.
+    """协议适配器注册表, 将 Protocol_Type 标识符映射到 ProtocolAdapter 实例.
 
-    支持注册、解析（含 OpenAI 回退）和查询操作。
+    支持注册, 解析 (含 OpenAI 回退) 和查询操作. 
     """
 
     def __init__(self) -> None:
@@ -146,10 +146,10 @@ class AdapterRegistry:
     def register(self, protocol_type: str, adapter: ProtocolAdapter) -> None:
         """注册协议适配器.
 
-        如果 protocol_type 已存在，替换现有映射。
+        如果 protocol_type 已存在, 替换现有映射. 
 
         Args:
-            protocol_type: 协议类型标识符（如 "openai", "anthropic"）.
+            protocol_type: 协议类型标识符 (如 "openai", "anthropic") .
             adapter: ProtocolAdapter 实例.
         """
         self._adapters[protocol_type] = adapter
@@ -157,7 +157,7 @@ class AdapterRegistry:
     def resolve(self, protocol_type: str) -> ProtocolAdapter:
         """解析 protocol_type 到对应的适配器实例.
 
-        如果 protocol_type 未注册，回退到 "openai" 适配器并记录警告日志。
+        如果 protocol_type 未注册, 回退到 "openai" 适配器并记录警告日志. 
 
         Args:
             protocol_type: 协议类型标识符.
@@ -180,6 +180,6 @@ class AdapterRegistry:
             protocol_type: 协议类型标识符.
 
         Returns:
-            如果已注册返回 True，否则 False.
+            如果已注册返回 True, 否则 False.
         """
         return protocol_type in self._adapters

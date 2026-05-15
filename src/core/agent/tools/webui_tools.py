@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """NapCat WebUI API 工具集.
 
-实现 webui_list_plugins、webui_reload_plugin、webui_plugin_config、
-webui_bot_info、webui_send_test_message 五个内置工具，
-通过 WebUIClientInterface 协议与 NapCat WebUI HTTP API 交互。
+实现 webui_list_plugins, webui_reload_plugin, webui_plugin_config, 
+webui_bot_info, webui_send_test_message 五个内置工具, 
+通过 WebUIClientInterface 协议与 NapCat WebUI HTTP API 交互. 
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from src.core.agent.tool import ToolDefinition, ToolResult
 class WebUIClientInterface(Protocol):
     """NapCat WebUI 客户端协议.
 
-    定义 Agent 工具所需的 WebUI API 操作接口。
-    实现者应复用 NapCatWebUIClient 基础设施。
+    定义 Agent 工具所需的 WebUI API 操作接口. 
+    实现者应复用 NapCatWebUIClient 基础设施. 
     """
 
     async def list_plugins(self) -> list[dict[str, Any]]:
@@ -77,14 +77,14 @@ _AUTH_ERROR_MSG = (
 class AuthenticationError(Exception):
     """WebUI 认证失败异常.
 
-    用于标识 401/403 等认证相关错误。
+    用于标识 401/403 等认证相关错误. 
     """
 
     pass
 
 
 def _handle_webui_error(exc: Exception) -> ToolResult:
-    """统一处理 WebUI 调用异常，返回适当的 ToolResult.
+    """统一处理 WebUI 调用异常, 返回适当的 ToolResult.
 
     Args:
         exc: 捕获到的异常.
@@ -119,7 +119,7 @@ def _handle_webui_error(exc: Exception) -> ToolResult:
 
 
 class WebuiListPluginsParams(BaseModel):
-    """webui_list_plugins 工具参数（无参数）."""
+    """webui_list_plugins 工具参数 (无参数) ."""
 
     pass
 
@@ -141,7 +141,7 @@ class WebuiPluginConfigParams(BaseModel):
 
 
 class WebuiBotInfoParams(BaseModel):
-    """webui_bot_info 工具参数（无参数）."""
+    """webui_bot_info 工具参数 (无参数) ."""
 
     pass
 
@@ -162,7 +162,7 @@ class WebuiSendTestMessageParams(BaseModel):
 class WebuiListPluginsTool(ToolDefinition):
     """列出 NapCat 已安装的所有插件.
 
-    返回每个插件的 id、name、version、loaded 和 enabled 状态。
+    返回每个插件的 id, name, version, loaded 和 enabled 状态. 
     """
 
     tool_id = "webui_list_plugins"
@@ -207,7 +207,7 @@ class WebuiListPluginsTool(ToolDefinition):
 class WebuiReloadPluginTool(ToolDefinition):
     """热重载指定的 NapCat 插件.
 
-    触发运行中的 NapCat 实例对指定插件执行热重载。
+    触发运行中的 NapCat 实例对指定插件执行热重载. 
     """
 
     tool_id = "webui_reload_plugin"
@@ -241,7 +241,7 @@ class WebuiReloadPluginTool(ToolDefinition):
 class WebuiPluginConfigTool(ToolDefinition):
     """读取或写入 NapCat 插件配置.
 
-    当 config_data 为 None 时读取配置，否则写入配置。
+    当 config_data 为 None 时读取配置, 否则写入配置. 
     """
 
     tool_id = "webui_plugin_config"
@@ -288,7 +288,7 @@ class WebuiPluginConfigTool(ToolDefinition):
 class WebuiBotInfoTool(ToolDefinition):
     """查询 NapCat Bot 实例信息.
 
-    返回 Bot 的在线状态、QQ 号、昵称和已连接群数量。
+    返回 Bot 的在线状态, QQ 号, 昵称和已连接群数量. 
     """
 
     tool_id = "webui_bot_info"
@@ -338,7 +338,7 @@ class WebuiBotInfoTool(ToolDefinition):
 class WebuiSendTestMessageTool(ToolDefinition):
     """发送测试消息到指定目标.
 
-    通过 NapCat WebUI API 发送测试消息到群或用户，用于插件开发测试。
+    通过 NapCat WebUI API 发送测试消息到群或用户, 用于插件开发测试. 
     """
 
     tool_id = "webui_send_test_message"

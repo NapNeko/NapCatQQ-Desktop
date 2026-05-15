@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
 """默认供应商配置.
 
-定义首次启动时预置的常用 AI 供应商列表。
-用户无需手动添加即可看到这些供应商并填入自己的 API Key 使用。
-所有默认供应商的 api_key_ref 为占位符 "sk-placeholder"，enabled 默认为 False，
-需要用户填入真实 Key 后手动启用。
+定义首次启动时预置的常用 AI 供应商列表. 
+用户无需手动添加即可看到这些供应商并填入自己的 API Key 使用. 
+所有默认供应商的 api_key_ref 为占位符 "sk-placeholder", enabled 默认为 False, 
+需要用户填入真实 Key 后手动启用. 
 """
 
 from __future__ import annotations
 
 from src.core.agent.provider import ModelEntry, Provider
 
-# 占位符 API Key，用户需替换为真实值
+# 占位符 API Key, 用户需替换为真实值
 _PLACEHOLDER_KEY = "sk-placeholder"
 
 
 def get_default_providers() -> list[Provider]:
     """获取默认供应商列表.
 
-    返回常用的 AI 供应商预置配置，包含基本信息和代表性模型。
-    所有供应商默认禁用（enabled=False），用户需填入 API Key 后启用。
+    返回常用的 AI 供应商预置配置, 包含基本信息和代表性模型. 
+    所有供应商默认禁用 (enabled=False) , 用户需填入 API Key 后启用. 
 
     Returns:
         预置供应商列表.

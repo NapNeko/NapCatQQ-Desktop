@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Session 会话管理模块.
 
-定义会话消息（Message）、工具调用信息（ToolCallInfo）、Token 用量（TokenUsage）、
-会话（Session）、会话摘要（SessionSummary）数据模型，以及 SessionManager 会话管理器，
-负责会话的创建、持久化、加载、列表和删除。
+定义会话消息 (Message) , 工具调用信息 (ToolCallInfo) , Token 用量 (TokenUsage) , 
+会话 (Session) , 会话摘要 (SessionSummary) 数据模型, 以及 SessionManager 会话管理器, 
+负责会话的创建, 持久化, 加载, 列表和删除. 
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ class Session(BaseModel):
 
 
 class SessionSummary(BaseModel):
-    """会话摘要，用于列表展示."""
+    """会话摘要, 用于列表展示."""
 
     session_id: UUID
     created_at: datetime
@@ -71,7 +71,7 @@ class SessionSummary(BaseModel):
 
 
 class SessionManager:
-    """会话管理器，负责会话的创建、持久化、加载、列表和删除.
+    """会话管理器, 负责会话的创建, 持久化, 加载, 列表和删除.
 
     Args:
         storage_dir: 会话 JSON 文件的存储目录路径.
@@ -142,7 +142,7 @@ class SessionManager:
     def append_message(self, session_id: UUID, message: Message) -> None:
         """向会话追加消息.
 
-        验证 role 和 content 非空后追加消息，更新 last_updated 并持久化。
+        验证 role 和 content 非空后追加消息, 更新 last_updated 并持久化. 
 
         Args:
             session_id: 目标会话 ID.
@@ -152,7 +152,7 @@ class SessionManager:
             ValidationError: 如果 role 无效或 content 为空.
             SessionNotFoundError: 如果 session_id 不存在.
         """
-        # 验证 role（pydantic Literal 已约束，但额外检查空值场景）
+        # 验证 role (pydantic Literal 已约束, 但额外检查空值场景) 
         valid_roles = ("user", "assistant", "tool")
         if message.role not in valid_roles:
             raise ValidationError(
@@ -173,10 +173,10 @@ class SessionManager:
         self._persist(session)
 
     def list_sessions(self) -> list[SessionSummary]:
-        """列出所有会话摘要，按 last_updated 降序排列.
+        """列出所有会话摘要, 按 last_updated 降序排列.
 
         Returns:
-            SessionSummary 列表，按 last_updated 从新到旧排序.
+            SessionSummary 列表, 按 last_updated 从新到旧排序.
         """
         summaries: list[SessionSummary] = []
         for file_path in self._storage_dir.glob("*.json"):

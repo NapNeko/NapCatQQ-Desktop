@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Shell 执行工具.
 
-实现 shell_exec 内置工具，提供在工作区目录内执行 shell 命令的能力，
-支持 30 秒超时保护。
+实现 shell_exec 内置工具, 提供在工作区目录内执行 shell 命令的能力, 
+支持 30 秒超时保护. 
 """
 
 from __future__ import annotations
@@ -42,8 +42,8 @@ _TIMEOUT_SECONDS = 30
 class ShellExecTool(ToolDefinition):
     """在工作区目录内执行 shell 命令.
 
-    支持 30 秒超时保护，超时时终止进程并返回错误。
-    返回 stdout、stderr 和 exit_code。
+    支持 30 秒超时保护, 超时时终止进程并返回错误. 
+    返回 stdout, stderr 和 exit_code. 
     """
 
     tool_id = "shell_exec"
@@ -96,19 +96,19 @@ class ShellExecTool(ToolDefinition):
                 is_error=True,
             )
 
-        # 等待进程完成，带超时
+        # 等待进程完成, 带超时
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 process.communicate(),
                 timeout=_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
-            # 超时：终止进程
+            # 超时: 终止进程
             try:
                 process.kill()
             except ProcessLookupError:
                 pass  # 进程已退出
-            # 等待进程清理（避免僵尸进程）
+            # 等待进程清理 (避免僵尸进程) 
             try:
                 await asyncio.wait_for(process.wait(), timeout=5)
             except asyncio.TimeoutError:

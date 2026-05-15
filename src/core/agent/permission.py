@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """权限规则与匹配引擎.
 
-定义 PermissionRule 数据模型和权限匹配引擎，支持 glob pattern 匹配，
-按 specificity（非通配符字面字符数）降序排列规则，第一个匹配的规则生效。
-无匹配规则时默认拒绝。
+定义 PermissionRule 数据模型和权限匹配引擎, 支持 glob pattern 匹配, 
+按 specificity (非通配符字面字符数) 降序排列规则, 第一个匹配的规则生效. 
+无匹配规则时默认拒绝. 
 """
 
 from __future__ import annotations
@@ -18,9 +18,9 @@ class PermissionRule(BaseModel):
     """权限规则.
 
     Attributes:
-        pattern: glob 模式字符串，支持 * 和 ? 通配符，最大 256 字符.
+        pattern: glob 模式字符串, 支持 * 和 ? 通配符, 最大 256 字符.
         target: 工具 ID 或资源路径.
-        action: 权限动作，allow（允许）、deny（拒绝）或 ask（询问用户）.
+        action: 权限动作, allow (允许) , deny (拒绝) 或 ask (询问用户) .
     """
 
     pattern: str = Field(max_length=256)
@@ -29,10 +29,10 @@ class PermissionRule(BaseModel):
 
 
 def _compute_specificity(pattern: str) -> int:
-    """计算 pattern 的 specificity（非通配符字面字符数）.
+    """计算 pattern 的 specificity (非通配符字面字符数) .
 
-    统计 pattern 中不是 '*' 和 '?' 的字符数量。
-    specificity 越高表示规则越具体。
+    统计 pattern 中不是 '*' 和 '?' 的字符数量. 
+    specificity 越高表示规则越具体. 
 
     Args:
         pattern: glob 模式字符串.
@@ -46,11 +46,11 @@ def _compute_specificity(pattern: str) -> int:
 def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     """将 glob pattern 转换为正则表达式.
 
-    支持的通配符：
-    - *: 匹配任意数量的任意字符（包括零个）
+    支持的通配符: 
+    - *: 匹配任意数量的任意字符 (包括零个) 
     - ?: 匹配恰好一个任意字符
 
-    其他字符按字面值匹配（会被 re.escape 转义）。
+    其他字符按字面值匹配 (会被 re.escape 转义) . 
 
     Args:
         pattern: glob 模式字符串.
@@ -91,18 +91,18 @@ def evaluate_permission(
 ) -> Literal["allow", "deny", "ask"]:
     """评估工具调用的权限.
 
-    按 specificity（非通配符字面字符数）降序排列规则，
-    第一个 pattern 匹配 tool_id 的规则生效。
-    如果没有任何规则匹配，默认拒绝（deny）。
+    按 specificity (非通配符字面字符数) 降序排列规则, 
+    第一个 pattern 匹配 tool_id 的规则生效. 
+    如果没有任何规则匹配, 默认拒绝 (deny) . 
 
     Args:
         tool_id: 要评估权限的工具 ID.
         rules: 权限规则列表.
 
     Returns:
-        权限动作："allow"、"deny" 或 "ask".
+        权限动作: "allow", "deny" 或 "ask".
     """
-    # 按 specificity 降序排列（更具体的规则优先）
+    # 按 specificity 降序排列 (更具体的规则优先) 
     sorted_rules = sorted(rules, key=lambda r: _compute_specificity(r.pattern), reverse=True)
 
     for rule in sorted_rules:

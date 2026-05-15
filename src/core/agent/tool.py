@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Tool 注册表与数据模型.
 
-定义工具执行结果（ToolResult）、工具定义抽象基类（ToolDefinition）、
-工具提供者接口（ToolProvider）以及工具注册表（ToolRegistry），
-负责工具的注册、查询、参数验证与执行。
+定义工具执行结果 (ToolResult) , 工具定义抽象基类 (ToolDefinition) , 
+工具提供者接口 (ToolProvider) 以及工具注册表 (ToolRegistry) , 
+负责工具的注册, 查询, 参数验证与执行. 
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 from src.core.agent.errors import DuplicateToolError, ValidationError
 
-# tool_id 格式正则：以小写字母开头，后跟 0-63 个小写字母/数字/下划线
+# tool_id 格式正则: 以小写字母开头, 后跟 0-63 个小写字母/数字/下划线
 _TOOL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
@@ -37,12 +37,12 @@ class ToolResult(BaseModel):
 class ToolDefinition(ABC):
     """工具定义抽象基类.
 
-    所有工具必须继承此类并实现 execute 方法。
+    所有工具必须继承此类并实现 execute 方法. 
 
     Attributes:
-        tool_id: 工具唯一标识，匹配 [a-z][a-z0-9_]{0,63}.
+        tool_id: 工具唯一标识, 匹配 [a-z][a-z0-9_]{0,63}.
         description: 工具描述.
-        parameters_schema: 参数 schema，可以是 pydantic model 类或 JSON Schema dict.
+        parameters_schema: 参数 schema, 可以是 pydantic model 类或 JSON Schema dict.
     """
 
     tool_id: str
@@ -65,7 +65,7 @@ class ToolDefinition(ABC):
 class ToolProvider(ABC):
     """工具提供者接口 - MCP 扩展点.
 
-    实现此接口以批量提供工具定义，支持未来 MCP 集成。
+    实现此接口以批量提供工具定义, 支持未来 MCP 集成. 
     """
 
     @abstractmethod
@@ -79,9 +79,9 @@ class ToolProvider(ABC):
 
 
 class ToolRegistry:
-    """工具注册表，管理工具的注册、查询与执行.
+    """工具注册表, 管理工具的注册, 查询与执行.
 
-    支持单个工具注册、批量 Provider 注册、参数验证和安全执行。
+    支持单个工具注册, 批量 Provider 注册, 参数验证和安全执行. 
     """
 
     def __init__(self) -> None:
@@ -107,7 +107,7 @@ class ToolRegistry:
         self._tools[tool.tool_id] = tool
 
     def register_provider(self, provider: ToolProvider) -> None:
-        """注册一个工具提供者，将其所有工具加入注册表.
+        """注册一个工具提供者, 将其所有工具加入注册表.
 
         Args:
             provider: 工具提供者实例.
@@ -139,15 +139,15 @@ class ToolRegistry:
         """列出所有已注册工具的 ID 和描述.
 
         Returns:
-            字典，键为 tool_id，值为 description.
+            字典, 键为 tool_id, 值为 description.
         """
         return {tid: tool.description for tid, tool in self._tools.items()}
 
     async def invoke(self, tool_id: str, params: dict) -> ToolResult:
         """调用指定工具.
 
-        先验证参数，再执行工具逻辑。执行过程中的未处理异常会被包装为
-        ToolResult(is_error=True)。
+        先验证参数, 再执行工具逻辑. 执行过程中的未处理异常会被包装为
+        ToolResult(is_error=True). 
 
         Args:
             tool_id: 工具 ID.
@@ -166,7 +166,7 @@ class ToolRegistry:
         if isinstance(validated_params, ToolResult):
             return validated_params
 
-        # 执行工具，捕获未处理异常
+        # 执行工具, 捕获未处理异常
         try:
             return await tool.execute(validated_params)
         except Exception as exc:
@@ -185,7 +185,7 @@ class ToolRegistry:
             params: 原始参数字典.
 
         Returns:
-            验证通过返回 BaseModel 实例，验证失败返回 ToolResult(is_error=True).
+            验证通过返回 BaseModel 实例, 验证失败返回 ToolResult(is_error=True).
         """
         schema = tool.parameters_schema
 
@@ -211,7 +211,7 @@ class ToolRegistry:
                 )
         elif isinstance(schema, dict):
             # JSON Schema dict 验证 - 基础类型检查
-            # 对于 dict schema，将 params 包装为简单的 BaseModel 实例
+            # 对于 dict schema, 将 params 包装为简单的 BaseModel 实例
             # 这里做基本的 required 字段检查
             required_fields = schema.get("required", [])
             properties = schema.get("properties", {})
@@ -249,7 +249,7 @@ class ToolRegistry:
         """检查值是否符合 JSON Schema 中定义的类型.
 
         Returns:
-            验证失败返回 ToolResult，通过返回 None.
+            验证失败返回 ToolResult, 通过返回 None.
         """
         json_type = prop_schema.get("type")
         if json_type is None:
@@ -274,7 +274,7 @@ class ToolRegistry:
 
 
 class _DynamicParams(BaseModel):
-    """动态参数容器，用于 JSON Schema dict 验证后传递参数."""
+    """动态参数容器, 用于 JSON Schema dict 验证后传递参数."""
 
     model_config = {"extra": "allow"}
 

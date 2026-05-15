@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Azure OpenAI Protocol Adapter.
 
-将 Azure OpenAI Service 的 Chat Completions 流式逻辑封装为 ProtocolAdapter 实现。
-使用 Azure 特定的 URL 构造和 api-key 认证头，SSE 解析复用 StreamProcessor。
+将 Azure OpenAI Service 的 Chat Completions 流式逻辑封装为 ProtocolAdapter 实现. 
+使用 Azure 特定的 URL 构造和 api-key 认证头, SSE 解析复用 StreamProcessor. 
 
 Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
 """
@@ -13,6 +13,7 @@ import json
 import logging
 from typing import AsyncIterator
 
+from src.core.agent.api_key_pool import pick_api_key
 from src.core.agent.errors import ValidationError
 from src.core.agent.protocol import (
     HttpRequestSpec,
@@ -30,8 +31,8 @@ logger = logging.getLogger(__name__)
 class AzureAdapter(ProtocolAdapter):
     """Azure OpenAI Service 协议适配器.
 
-    使用 Azure 特定的 URL 模式和 api-key 认证头，请求体格式与 OpenAI 相同。
-    SSE 流式解析委托给 StreamProcessor（与 OpenAI 适配器完全一致）。
+    使用 Azure 特定的 URL 模式和 api-key 认证头, 请求体格式与 OpenAI 相同. 
+    SSE 流式解析委托给 StreamProcessor (与 OpenAI 适配器完全一致) . 
     """
 
     def build_request(
@@ -48,8 +49,8 @@ class AzureAdapter(ProtocolAdapter):
         Args:
             messages: 内部消息历史列表.
             tool_definitions: OpenAI 格式的工具定义列表.
-            model_config: 模型配置（model_id, temperature 等）.
-            provider: Provider 实例（用于 azure_config、密钥等）.
+            model_config: 模型配置 (model_id, temperature 等) .
+            provider: Provider 实例 (用于 azure_config, 密钥等) .
 
         Returns:
             包含 method, url, headers, body 的 HttpRequestSpec.
@@ -91,7 +92,7 @@ class AzureAdapter(ProtocolAdapter):
         )
 
         # Build headers with api-key authentication
-        headers = self.build_headers(provider.api_key_ref)
+        headers = self.build_headers(pick_api_key(provider.api_key_ref))
 
         # Build request body (same format as OpenAI)
         body: dict = {
@@ -123,7 +124,7 @@ class AzureAdapter(ProtocolAdapter):
     ) -> AsyncIterator[StreamEvent]:
         """解析 Azure OpenAI SSE 流式响应为 StreamEvent 序列.
 
-        复用 StreamProcessor 进行 SSE 解析（与 OpenAI 适配器完全一致）。
+        复用 StreamProcessor 进行 SSE 解析 (与 OpenAI 适配器完全一致) . 
 
         Args:
             response_lines: SSE 行的异步迭代器.
@@ -159,7 +160,7 @@ class AzureAdapter(ProtocolAdapter):
     def build_headers(self, api_key: str) -> dict[str, str]:
         """构建 Azure OpenAI API 认证请求头.
 
-        使用 api-key 头而非 Authorization: Bearer 令牌。
+        使用 api-key 头而非 Authorization: Bearer 令牌. 
 
         Args:
             api_key: API 密钥字符串.
@@ -177,7 +178,7 @@ class AzureAdapter(ProtocolAdapter):
     ) -> list[dict]:
         """构建 Azure OpenAI 格式的工具结果消息载荷.
 
-        格式与 OpenAI 适配器完全相同（tool 角色消息）。
+        格式与 OpenAI 适配器完全相同 (tool 角色消息) . 
 
         Args:
             tool_call_id: 工具调用 ID.
@@ -219,7 +220,7 @@ class AzureAdapter(ProtocolAdapter):
             msg: 内部消息.
 
         Returns:
-            OpenAI 格式的消息字典，或 None（如果无法转换）.
+            OpenAI 格式的消息字典, 或 None (如果无法转换) .
         """
         role = getattr(msg, "role", None)
 

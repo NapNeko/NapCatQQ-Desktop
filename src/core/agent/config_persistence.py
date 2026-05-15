@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """Agent 配置持久化模块.
 
-负责将 Provider 配置、Agent 定义和活跃模型选择持久化到本地 JSON 文件，
-并在应用启动时从文件恢复配置状态。
+负责将 Provider 配置, Agent 定义和活跃模型选择持久化到本地 JSON 文件, 
+并在应用启动时从文件恢复配置状态. 
 
-容错策略：
-- 文件不存在：使用默认配置，记录 warning 日志
-- 文件损坏（无法解析 JSON 或 pydantic 验证失败）：重命名为 .bak，使用默认配置，记录 warning 日志
-- 写入 I/O 失败：记录 error 日志，不抛出异常
-- 缺少 protocol_type 字段：默认为 "openai"
-- 无法识别的 protocol_type 值：默认为 "openai"，记录 warning 日志
-- 未知字段：忽略，不报错（由 Provider model_config extra="ignore" 处理）
+容错策略: 
+- 文件不存在: 使用默认配置, 记录 warning 日志
+- 文件损坏 (无法解析 JSON 或 pydantic 验证失败) : 重命名为 .bak, 使用默认配置, 记录 warning 日志
+- 写入 I/O 失败: 记录 error 日志, 不抛出异常
+- 缺少 protocol_type 字段: 默认为 "openai"
+- 无法识别的 protocol_type 值: 默认为 "openai", 记录 warning 日志
+- 未知字段: 忽略, 不报错 (由 Provider model_config extra="ignore" 处理) 
 """
 
 from __future__ import annotations
@@ -67,8 +67,8 @@ class ConfigData(BaseModel):
 
     Attributes:
         providers: 已注册的 Provider 列表.
-        active_provider_id: 当前活跃的 Provider ID，未设置时为 None.
-        active_model_id: 当前活跃的模型 ID，未设置时为 None.
+        active_provider_id: 当前活跃的 Provider ID, 未设置时为 None.
+        active_model_id: 当前活跃的模型 ID, 未设置时为 None.
         agents: Agent 定义列表.
     """
 
@@ -81,7 +81,7 @@ class ConfigData(BaseModel):
 class ConfigPersistence:
     """配置持久化管理器.
 
-    负责从指定路径加载和保存 Agent 配置文件（agent_config.json）。
+    负责从指定路径加载和保存 Agent 配置文件 (agent_config.json) . 
 
     Args:
         config_file_path: 配置文件的完整路径.
@@ -98,16 +98,16 @@ class ConfigPersistence:
     def load(self) -> ConfigData:
         """从文件加载配置.
 
-        容错逻辑：
-        1. 文件不存在 → 返回默认 ConfigData，记录 warning
-        2. 文件内容无法解析为 JSON 或 pydantic 验证失败 → 重命名为 .bak，
-           返回默认 ConfigData，记录 warning
+        容错逻辑: 
+        1. 文件不存在 → 返回默认 ConfigData, 记录 warning
+        2. 文件内容无法解析为 JSON 或 pydantic 验证失败 → 重命名为 .bak, 
+           返回默认 ConfigData, 记录 warning
         3. Provider 缺少 protocol_type → 默认为 "openai"
-        4. Provider 含有无法识别的 protocol_type → 默认为 "openai"，记录 warning
-        5. Provider 含有未知字段 → 忽略（由 Pydantic extra="ignore" 处理）
+        4. Provider 含有无法识别的 protocol_type → 默认为 "openai", 记录 warning
+        5. Provider 含有未知字段 → 忽略 (由 Pydantic extra="ignore" 处理) 
 
         Returns:
-            加载的配置数据，或在容错情况下返回默认配置.
+            加载的配置数据, 或在容错情况下返回默认配置.
         """
         if not self._config_file_path.exists():
             logger.warning(
@@ -139,7 +139,7 @@ class ConfigPersistence:
     def save(self, config: ConfigData) -> None:
         """将配置保存到文件.
 
-        如果写入过程中发生 I/O 错误，记录 error 日志但不抛出异常。
+        如果写入过程中发生 I/O 错误, 记录 error 日志但不抛出异常. 
 
         Args:
             config: 要保存的配置数据.
@@ -158,8 +158,8 @@ class ConfigPersistence:
     def _rename_to_backup(self) -> None:
         """将损坏的配置文件重命名为 .bak 后缀.
 
-        如果 .bak 文件已存在，会被覆盖。
-        如果重命名操作本身失败，记录 warning 但不抛出异常。
+        如果 .bak 文件已存在, 会被覆盖. 
+        如果重命名操作本身失败, 记录 warning 但不抛出异常. 
         """
         backup_path = self._config_file_path.with_suffix(
             self._config_file_path.suffix + ".bak"

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """用户自定义上下文工具.
 
-实现 open_context_file 工具，用于打开用户上下文文件进行编辑。
-文件不存在时自动创建包含模板内容的文件。
+实现 open_context_file 工具, 用于打开用户上下文文件进行编辑. 
+文件不存在时自动创建包含模板内容的文件. 
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ _TEMPLATE_CONTENT = """\
 class OpenContextFileParams(BaseModel):
     """open_context_file 工具参数.
 
-    该工具无需参数，使用空模型。
+    该工具无需参数, 使用空模型. 
     """
 
     pass
@@ -54,8 +54,8 @@ class OpenContextFileParams(BaseModel):
 class OpenContextFileTool(ToolDefinition):
     """打开用户自定义上下文文件.
 
-    如果文件不存在，先创建包含模板头的文件，然后使用系统默认编辑器打开。
-    支持 Windows、macOS 和 Linux 平台。
+    如果文件不存在, 先创建包含模板头的文件, 然后使用系统默认编辑器打开. 
+    支持 Windows, macOS 和 Linux 平台. 
     """
 
     tool_id = "open_context_file"
@@ -106,7 +106,7 @@ class OpenContextFileTool(ToolDefinition):
 def _open_with_default_editor(file_path: Path) -> None:
     """使用系统默认编辑器打开文件.
 
-    根据平台选择合适的打开方式：
+    根据平台选择合适的打开方式: 
     - Windows: os.startfile 或 start 命令
     - macOS: open 命令
     - Linux: xdg-open 命令

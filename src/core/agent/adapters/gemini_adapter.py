@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Google Gemini Protocol Adapter.
 
-实现 Google Gemini GenerativeAI 流式协议适配器，将内部消息/工具表示
-转换为 Gemini API 请求载荷，并解析 Gemini SSE 流式响应为 StreamEvent 序列。
+实现 Google Gemini GenerativeAI 流式协议适配器, 将内部消息/工具表示
+转换为 Gemini API 请求载荷, 并解析 Gemini SSE 流式响应为 StreamEvent 序列. 
 
 Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12
 """
@@ -13,6 +13,7 @@ import json
 import logging
 from typing import AsyncIterator
 
+from src.core.agent.api_key_pool import pick_api_key
 from src.core.agent.protocol import (
     HttpRequestSpec,
     ProtocolAdapter,
@@ -36,12 +37,12 @@ logger = logging.getLogger(__name__)
 class GeminiAdapter(ProtocolAdapter):
     """Google Gemini GenerativeAI 协议适配器.
 
-    将内部消息格式转换为 Gemini API 请求载荷（contents/parts 格式），
-    并解析 Gemini SSE 流式响应为 StreamEvent 序列。
+    将内部消息格式转换为 Gemini API 请求载荷 (contents/parts 格式) , 
+    并解析 Gemini SSE 流式响应为 StreamEvent 序列. 
 
     URL 模式: {base_url}/models/{model_id}:streamGenerateContent?alt=sse&key={api_key}
     角色映射: 内部 "assistant" → Gemini "model", "user" → "user"
-    API 密钥通过 URL 查询参数传递，而非请求头。
+    API 密钥通过 URL 查询参数传递, 而非请求头. 
     """
 
     def build_request(
@@ -56,8 +57,8 @@ class GeminiAdapter(ProtocolAdapter):
         Args:
             messages: 内部消息历史列表.
             tool_definitions: OpenAI 格式的工具定义列表.
-            model_config: 模型配置（model_id, temperature 等）.
-            provider: Provider 实例（用于 URL、密钥等）.
+            model_config: 模型配置 (model_id, temperature 等) .
+            provider: Provider 实例 (用于 URL, 密钥等) .
 
         Returns:
             包含 method, url, headers, body 的 HttpRequestSpec.
@@ -69,7 +70,8 @@ class GeminiAdapter(ProtocolAdapter):
 
         # Construct URL with API key as query parameter
         base_url = str(provider.api_base_url).rstrip("/")
-        api_key = provider.api_key_ref
+        # 多密钥时随机选择一个用于本次请求 (Gemini 把密钥放在 URL 查询参数)
+        api_key = pick_api_key(provider.api_key_ref)
         url = (
             f"{base_url}/models/{model_config.model_id}"
             f":streamGenerateContent?alt=sse&key={api_key}"
@@ -132,9 +134,9 @@ class GeminiAdapter(ProtocolAdapter):
     ) -> AsyncIterator[StreamEvent]:
         """解析 Gemini SSE 流式响应为 StreamEvent 序列.
 
-        Gemini 流式响应格式为 SSE，每个 data 行包含一个 JSON 对象。
-        解析 candidates[0].content.parts 中的 text 和 functionCall 部分，
-        以及 candidates[0].finishReason 来确定流结束原因。
+        Gemini 流式响应格式为 SSE, 每个 data 行包含一个 JSON 对象. 
+        解析 candidates[0].content.parts 中的 text 和 functionCall 部分, 
+        以及 candidates[0].finishReason 来确定流结束原因. 
 
         Args:
             response_lines: SSE 行的异步迭代器.
@@ -187,10 +189,10 @@ class GeminiAdapter(ProtocolAdapter):
     def build_headers(self, api_key: str) -> dict[str, str]:
         """构建 Gemini API 请求头.
 
-        Gemini API 密钥通过 URL 查询参数传递，请求头仅需 Content-Type。
+        Gemini API 密钥通过 URL 查询参数传递, 请求头仅需 Content-Type. 
 
         Args:
-            api_key: API 密钥字符串（未使用于请求头）.
+            api_key: API 密钥字符串 (未使用于请求头) .
 
         Returns:
             包含 Content-Type 的请求头字典.
@@ -204,10 +206,10 @@ class GeminiAdapter(ProtocolAdapter):
     ) -> list[dict]:
         """构建 Gemini 格式的工具结果消息载荷.
 
-        格式为 user 角色消息，包含 functionResponse parts。
+        格式为 user 角色消息, 包含 functionResponse parts. 
 
         Args:
-            tool_call_id: 工具调用 ID（在 Gemini 中用作函数名）.
+            tool_call_id: 工具调用 ID (在 Gemini 中用作函数名) .
             tool_result: 工具执行结果.
 
         Returns:
@@ -333,7 +335,7 @@ class GeminiAdapter(ProtocolAdapter):
             msg: 内部消息.
 
         Returns:
-            Gemini 格式的 content 字典，或 None.
+            Gemini 格式的 content 字典, 或 None.
         """
         if msg.role == "user":
             return {

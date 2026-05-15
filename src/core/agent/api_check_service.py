@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """API 连通性检测服务.
 
-使用 QThread + httpx 同步客户端实现非阻塞的 API 连通性检测，
-向供应商的 /models 端点发送 GET 请求以验证 API 密钥和地址是否可用。
+使用 QThread + httpx 同步客户端实现非阻塞的 API 连通性检测, 
+向供应商的 /models 端点发送 GET 请求以验证 API 密钥和地址是否可用. 
 """
 
 from __future__ import annotations
@@ -14,12 +14,12 @@ from PySide6.QtCore import QThread, Signal
 class ApiCheckService(QThread):
     """异步 API 连通性检测线程.
 
-    通过 QThread 在后台执行 HTTP 请求，避免阻塞 UI 线程。
-    使用 httpx.Client（同步）发送请求，因为运行在独立的 QThread 中。
+    通过 QThread 在后台执行 HTTP 请求, 避免阻塞 UI 线程. 
+    使用 httpx.Client (同步) 发送请求, 因为运行在独立的 QThread 中. 
 
     Signals:
         check_started: 检测开始时发射.
-        check_finished: 检测完成时发射，参数为 (success: bool, message: str).
+        check_finished: 检测完成时发射, 参数为 (success: bool, message: str).
     """
 
     check_started = Signal()
@@ -33,18 +33,23 @@ class ApiCheckService(QThread):
     def start_check(self, api_base_url: str, api_key: str) -> None:
         """启动 API 连通性检测.
 
-        存储参数并启动线程执行检测。
+        存储参数并启动线程执行检测. 
 
         Args:
-            api_base_url: API 基础地址（如 https://api.openai.com/v1）.
-            api_key: API 密钥.
+            api_base_url: API 基础地址 (如 https://api.openai.com/v1) .
+            api_key: API 密钥. 可以是逗号分隔的多密钥, 检测时只取第一个非空密钥.
         """
+        # 兼容多密钥配置 - 检测时使用第一个非空密钥
+        first_key = next(
+            (k.strip() for k in api_key.split(",") if k.strip()),
+            api_key.strip(),
+        )
         self._api_base_url = api_base_url
-        self._api_key = api_key
+        self._api_key = first_key
         self.start()
 
     def run(self) -> None:
-        """线程执行体：发送 HTTP GET 请求检测 API 连通性."""
+        """线程执行体: 发送 HTTP GET 请求检测 API 连通性."""
         self.check_started.emit()
 
         url = f"{self._api_base_url.rstrip('/')}/models"

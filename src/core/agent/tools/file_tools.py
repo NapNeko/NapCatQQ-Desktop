@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """文件操作工具集.
 
-实现 file_read、file_write、file_edit 三个内置工具，
-提供工作区内文件的读取、写入和编辑能力。
+实现 file_read, file_write, file_edit 三个内置工具, 
+提供工作区内文件的读取, 写入和编辑能力. 
 """
 
 from __future__ import annotations
@@ -51,11 +51,11 @@ def _resolve_and_check(workspace_dir: Path, relative_path: str) -> Path | ToolRe
     """解析相对路径并检查路径遍历.
 
     Args:
-        workspace_dir: 工作区根目录（已 resolve）.
+        workspace_dir: 工作区根目录 (已 resolve) .
         relative_path: 用户提供的相对路径.
 
     Returns:
-        解析后的绝对路径，或路径遍历时返回 ToolResult(is_error=True).
+        解析后的绝对路径, 或路径遍历时返回 ToolResult(is_error=True).
     """
     try:
         resolved = (workspace_dir / relative_path).resolve()
@@ -65,7 +65,7 @@ def _resolve_and_check(workspace_dir: Path, relative_path: str) -> Path | ToolRe
             is_error=True,
         )
 
-    # 路径遍历检查：resolved 必须在 workspace_dir 内部
+    # 路径遍历检查: resolved 必须在 workspace_dir 内部
     try:
         resolved.relative_to(workspace_dir)
     except ValueError:
@@ -85,8 +85,8 @@ def _resolve_and_check(workspace_dir: Path, relative_path: str) -> Path | ToolRe
 class FileReadTool(ToolDefinition):
     """读取工作区内文件内容.
 
-    支持最大 100000 字符，超出部分截断。
-    对路径遍历攻击进行防护。
+    支持最大 100000 字符, 超出部分截断. 
+    对路径遍历攻击进行防护. 
     """
 
     tool_id = "file_read"
@@ -146,7 +146,7 @@ class FileReadTool(ToolDefinition):
 class FileWriteTool(ToolDefinition):
     """写入文件到工作区.
 
-    自动创建父目录（如果不存在）。
+    自动创建父目录 (如果不存在) . 
     """
 
     tool_id = "file_write"
@@ -188,7 +188,7 @@ class FileWriteTool(ToolDefinition):
 class FileEditTool(ToolDefinition):
     """对工作区内文件执行搜索替换.
 
-    old_str 必须在文件中恰好出现一次，否则返回错误。
+    old_str 必须在文件中恰好出现一次, 否则返回错误. 
     """
 
     tool_id = "file_edit"
@@ -235,7 +235,7 @@ class FileEditTool(ToolDefinition):
                 is_error=True,
             )
 
-        # 恰好匹配一次，执行替换
+        # 恰好匹配一次, 执行替换
         new_content = content.replace(params.old_str, params.new_str, 1)
 
         try:

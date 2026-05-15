@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """搜索工具集.
 
-实现 grep_search 和 list_directory 两个内置工具，
-提供工作区内的正则搜索和目录列表能力。
+实现 grep_search 和 list_directory 两个内置工具, 
+提供工作区内的正则搜索和目录列表能力. 
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ _SKIP_DIRS = frozenset({
     "dist", "build", ".hypothesis",
 })
 
-# 搜索时跳过的文件扩展名（二进制文件）
+# 搜索时跳过的文件扩展名 (二进制文件) 
 _SKIP_EXTENSIONS = frozenset({
     ".pyc", ".pyo", ".so", ".dll", ".exe", ".bin",
     ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico",
@@ -68,11 +68,11 @@ def _resolve_and_check(workspace_dir: Path, relative_path: str) -> Path | ToolRe
     """解析相对路径并检查路径遍历.
 
     Args:
-        workspace_dir: 工作区根目录（已 resolve）.
+        workspace_dir: 工作区根目录 (已 resolve) .
         relative_path: 用户提供的相对路径.
 
     Returns:
-        解析后的绝对路径，或路径遍历时返回 ToolResult(is_error=True).
+        解析后的绝对路径, 或路径遍历时返回 ToolResult(is_error=True).
     """
     try:
         resolved = (workspace_dir / relative_path).resolve()
@@ -82,7 +82,7 @@ def _resolve_and_check(workspace_dir: Path, relative_path: str) -> Path | ToolRe
             is_error=True,
         )
 
-    # 路径遍历检查：resolved 必须在 workspace_dir 内部
+    # 路径遍历检查: resolved 必须在 workspace_dir 内部
     try:
         resolved.relative_to(workspace_dir)
     except ValueError:
@@ -100,7 +100,7 @@ def _should_skip_file(file_path: Path) -> bool:
 
 
 def _walk_files(root: Path, workspace_dir: Path) -> list[Path]:
-    """递归遍历目录下的所有文件，跳过不需要搜索的目录和文件."""
+    """递归遍历目录下的所有文件, 跳过不需要搜索的目录和文件."""
     files: list[Path] = []
     try:
         for entry in os.scandir(root):
@@ -131,7 +131,7 @@ def _walk_files(root: Path, workspace_dir: Path) -> list[Path]:
 class GrepSearchTool(ToolDefinition):
     """在工作区内搜索匹配正则表达式的文件内容.
 
-    返回匹配行及其文件路径和行号，最多返回 50 个结果。
+    返回匹配行及其文件路径和行号, 最多返回 50 个结果. 
     """
 
     tool_id = "grep_search"
@@ -218,7 +218,7 @@ class GrepSearchTool(ToolDefinition):
 class ListDirectoryTool(ToolDefinition):
     """列出工作区内指定目录的内容.
 
-    支持 depth 参数控制递归深度（默认 1，最大 3）。
+    支持 depth 参数控制递归深度 (默认 1, 最大 3) . 
     """
 
     tool_id = "list_directory"

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Provider 注册表与数据模型.
 
-定义 LLM 提供商配置（Provider）、模型条目（ModelEntry）、模型配置（ModelConfig）
-以及 ProviderRegistry 注册表，负责 Provider 的注册、查询、活跃状态管理。
+定义 LLM 提供商配置 (Provider) , 模型条目 (ModelEntry) , 模型配置 (ModelConfig) 
+以及 ProviderRegistry 注册表, 负责 Provider 的注册, 查询, 活跃状态管理. 
 """
 
 from __future__ import annotations
@@ -21,9 +21,18 @@ class ModelEntry(BaseModel):
 
     model_id: str = Field(min_length=1, max_length=128)
     display_name: str = ""
+    group_name: str = ""  # 分组名称 (为空时自动从 model_id 解析)
     max_tokens: int = Field(ge=1)
     supports_streaming: bool = True
     supports_tools: bool = True
+    supports_vision: bool = False
+    supports_web: bool = False
+    supports_reasoning: bool = False
+    supports_rerank: bool = False
+    supports_embedding: bool = False
+    currency: str = "USD"  # 币种: USD / CNY / EUR 等
+    input_price: float = 0.0  # 输入价格 (每百万 Token)
+    output_price: float = 0.0  # 输出价格 (每百万 Token)
 
 
 class AzureConfig(BaseModel):
@@ -47,13 +56,16 @@ class Provider(BaseModel):
     enabled: bool = True
     protocol_type: str = Field(default="openai")  # "openai" | "anthropic" | "gemini" | "azure"
     azure_config: AzureConfig | None = None
-    website_url: str | None = None  # 官方网站 URL（用于 Header 外部链接）
-    api_key_url: str | None = None  # API 密钥获取链接（用于 Help_Text 超链接）
-    sort_order: int = 0  # 排序权重（拖拽排序持久化）
+    website_url: str | None = None  # 官方网站 URL (用于 Header 外部链接) 
+    api_key_url: str | None = None  # API 密钥获取链接 (用于 Help_Text 超链接) 
+    sort_order: int = 0  # 排序权重 (拖拽排序持久化) 
+    # 自定义 HTTP 请求头, 在适配器构建请求时与默认认证头合并
+    # 用户可在前端 "自定义请求头" 对话框配置, 持久化到 agent_config.json
+    custom_headers: dict[str, str] = Field(default_factory=dict)
 
 
 class ModelConfig(BaseModel):
-    """模型配置对象，包含运行时参数."""
+    """模型配置对象, 包含运行时参数."""
 
     model_id: str = Field(min_length=1, max_length=128)
     provider_id: str = Field(min_length=1, max_length=64)
@@ -63,9 +75,9 @@ class ModelConfig(BaseModel):
 
 
 class ProviderRegistry:
-    """Provider 注册表，管理 LLM 提供商的注册与活跃状态.
+    """Provider 注册表, 管理 LLM 提供商的注册与活跃状态.
 
-    支持注册、注销、查询 Provider，以及设置/获取当前活跃的 Provider 和模型。
+    支持注册, 注销, 查询 Provider, 以及设置/获取当前活跃的 Provider 和模型. 
     """
 
     def __init__(self) -> None:
@@ -98,7 +110,7 @@ class ProviderRegistry:
         if provider_id not in self._providers:
             raise KeyError(f"Provider '{provider_id}' not found in registry.")
         del self._providers[provider_id]
-        # 如果注销的是当前活跃 Provider，清除活跃状态
+        # 如果注销的是当前活跃 Provider, 清除活跃状态
         if self._active_provider_id == provider_id:
             self._active_provider_id = None
             self._active_model_config = None
@@ -140,7 +152,7 @@ class ProviderRegistry:
 
         Args:
             provider_id: Provider ID.
-            model_id: 模型 ID，必须存在于该 Provider 的 models 列表中.
+            model_id: 模型 ID, 必须存在于该 Provider 的 models 列表中.
 
         Raises:
             KeyError: 如果 provider_id 不存在.
@@ -182,7 +194,7 @@ class ProviderRegistry:
             raise KeyError(f"Provider '{provider_id}' not found in registry.")
         provider = self._providers[provider_id]
         self._providers[provider_id] = provider.model_copy(update={"enabled": enabled})
-        # 如果禁用的是当前活跃供应商，清除活跃状态
+        # 如果禁用的是当前活跃供应商, 清除活跃状态
         if not enabled and self._active_provider_id == provider_id:
             self._active_provider_id = None
             self._active_model_config = None
@@ -190,8 +202,8 @@ class ProviderRegistry:
     def update_provider(self, provider_id: str, **kwargs) -> None:
         """更新供应商字段.
 
-        使用 pydantic 的 model_copy(update=...) 创建新实例替换旧实例。
-        支持更新 api_base_url、api_key_ref、name、models 等字段。
+        使用 pydantic 的 model_copy(update=...) 创建新实例替换旧实例. 
+        支持更新 api_base_url, api_key_ref, name, models 等字段. 
 
         Args:
             provider_id: 要更新的 Provider ID.

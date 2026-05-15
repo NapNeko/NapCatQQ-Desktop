@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """Anthropic Protocol Adapter.
 
-实现 Anthropic Messages API 的原生协议适配器，支持：
+实现 Anthropic Messages API 的原生协议适配器, 支持: 
 - 系统消息提取到顶层 `system` 参数
-- Content block 格式（text, tool_use, tool_result）
-- SSE 事件解析（message_start, content_block_start, content_block_delta,
-  content_block_stop, message_delta, message_stop）
+- Content block 格式 (text, tool_use, tool_result) 
+- SSE 事件解析 (message_start, content_block_start, content_block_delta,
+  content_block_stop, message_delta, message_stop) 
 - x-api-key + anthropic-version 认证头
 
 Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 4.12
@@ -18,6 +18,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
+from src.core.agent.api_key_pool import pick_api_key
 from src.core.agent.protocol import (
     HttpRequestSpec,
     ProtocolAdapter,
@@ -67,8 +68,8 @@ class _PendingToolUseBlock:
 class AnthropicAdapter(ProtocolAdapter):
     """Anthropic Messages API 协议适配器.
 
-    将内部消息格式转换为 Anthropic API 请求载荷，并解析 Anthropic SSE
-    流式响应为统一的 StreamEvent 序列。
+    将内部消息格式转换为 Anthropic API 请求载荷, 并解析 Anthropic SSE
+    流式响应为统一的 StreamEvent 序列. 
     """
 
     def build_request(
@@ -80,13 +81,13 @@ class AnthropicAdapter(ProtocolAdapter):
     ) -> HttpRequestSpec:
         """构建 Anthropic Messages API 请求.
 
-        系统消息从 messages 中提取到顶层 `system` 参数。
+        系统消息从 messages 中提取到顶层 `system` 参数. 
 
         Args:
             messages: 内部消息历史列表.
             tool_definitions: OpenAI 格式的工具定义列表.
-            model_config: 模型配置（model_id, temperature 等）.
-            provider: Provider 实例（用于 URL、密钥等）.
+            model_config: 模型配置 (model_id, temperature 等) .
+            provider: Provider 实例 (用于 URL, 密钥等) .
 
         Returns:
             包含 method, url, headers, body 的 HttpRequestSpec.
@@ -101,7 +102,7 @@ class AnthropicAdapter(ProtocolAdapter):
         url = f"{base_url}/messages"
 
         # Build headers
-        headers = self.build_headers(provider.api_key_ref)
+        headers = self.build_headers(pick_api_key(provider.api_key_ref))
 
         # Extract system message and convert remaining messages
         system_content, converted_messages = self._extract_system_and_convert(messages)
@@ -139,14 +140,14 @@ class AnthropicAdapter(ProtocolAdapter):
     ) -> AsyncIterator[StreamEvent]:
         """解析 Anthropic SSE 流式响应为 StreamEvent 序列.
 
-        处理的事件类型：
-        - message_start: 消息开始（忽略）
-        - content_block_start: 内容块开始（tool_use → ToolCallStart）
-        - content_block_delta: 内容块增量（text_delta → TextDelta,
-          input_json_delta → ToolCallDelta）
-        - content_block_stop: 内容块结束（tool_use → ToolCallComplete）
-        - message_delta: 消息增量（stop_reason → StreamEnd）
-        - message_stop: 消息结束（忽略）
+        处理的事件类型: 
+        - message_start: 消息开始 (忽略) 
+        - content_block_start: 内容块开始 (tool_use → ToolCallStart) 
+        - content_block_delta: 内容块增量 (text_delta → TextDelta,
+          input_json_delta → ToolCallDelta) 
+        - content_block_stop: 内容块结束 (tool_use → ToolCallComplete) 
+        - message_delta: 消息增量 (stop_reason → StreamEnd) 
+        - message_stop: 消息结束 (忽略) 
 
         Args:
             response_lines: SSE 行的异步迭代器.
@@ -296,14 +297,14 @@ class AnthropicAdapter(ProtocolAdapter):
     ) -> list[dict]:
         """构建 Anthropic 格式的工具结果消息载荷.
 
-        Anthropic 使用 user 角色消息中的 tool_result content block。
+        Anthropic 使用 user 角色消息中的 tool_result content block. 
 
         Args:
             tool_call_id: 工具调用 ID.
             tool_result: 工具执行结果.
 
         Returns:
-            包含 user 角色消息（含 tool_result block）的列表.
+            包含 user 角色消息 (含 tool_result block) 的列表.
         """
         content_block: dict = {
             "type": "tool_result",
@@ -326,19 +327,19 @@ class AnthropicAdapter(ProtocolAdapter):
     ) -> tuple[str | None, list[dict]]:
         """提取系统消息并转换剩余消息为 Anthropic 格式.
 
-        系统消息（role="system" 在内部表示中不存在于 Message Literal，
-        但可能通过 content 前缀或特殊标记传递）被提取到顶层。
-        实际上，内部 Message 的 role 只有 user/assistant/tool，
-        系统消息通常作为第一条 user 消息的特殊处理。
+        系统消息 (role="system" 在内部表示中不存在于 Message Literal, 
+        但可能通过 content 前缀或特殊标记传递) 被提取到顶层. 
+        实际上, 内部 Message 的 role 只有 user/assistant/tool, 
+        系统消息通常作为第一条 user 消息的特殊处理. 
 
-        根据设计文档，如果 messages 中包含 system-role 消息，
-        将其提取到顶层 system 参数。由于 Message.role 是 Literal["user", "assistant", "tool"]，
-        我们检查是否有消息的 content 以特殊前缀标记为系统消息，
-        或者通过外部传入的方式处理。
+        根据设计文档, 如果 messages 中包含 system-role 消息, 
+        将其提取到顶层 system 参数. 由于 Message.role 是 Literal["user", "assistant", "tool"], 
+        我们检查是否有消息的 content 以特殊前缀标记为系统消息, 
+        或者通过外部传入的方式处理. 
 
-        实际实现中，系统消息可能通过 Message 的扩展字段传递。
-        这里我们检查第一条消息是否标记为系统消息（通过检查 role 字段，
-        虽然 Literal 约束了类型，但运行时可能有 "system" 值传入）。
+        实际实现中, 系统消息可能通过 Message 的扩展字段传递. 
+        这里我们检查第一条消息是否标记为系统消息 (通过检查 role 字段, 
+        虽然 Literal 约束了类型, 但运行时可能有 "system" 值传入) . 
 
         Args:
             messages: 内部消息列表.
@@ -365,7 +366,7 @@ class AnthropicAdapter(ProtocolAdapter):
     def _convert_single_message(self, msg: Message) -> dict | None:
         """将单个 Message 转换为 Anthropic API 消息格式.
 
-        转换规则：
+        转换规则: 
         - user → {"role": "user", "content": [{"type": "text", "text": content}]}
         - assistant (无 tool_calls) → {"role": "assistant", "content": [{"type": "text", "text": content}]}
         - assistant (有 tool_calls) → {"role": "assistant", "content": [text block + tool_use blocks]}
@@ -375,7 +376,7 @@ class AnthropicAdapter(ProtocolAdapter):
             msg: 内部消息.
 
         Returns:
-            Anthropic 格式的消息字典，或 None.
+            Anthropic 格式的消息字典, 或 None.
         """
         if msg.role == "user":
             return {
@@ -475,7 +476,7 @@ class AnthropicAdapter(ProtocolAdapter):
             arguments: JSON 编码的参数字符串.
 
         Returns:
-            解析后的字典，解析失败时返回空字典.
+            解析后的字典, 解析失败时返回空字典.
         """
         if not arguments:
             return {}

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """OpenAI Protocol Adapter.
 
-将现有 OpenAI Chat Completions 流式逻辑封装为 ProtocolAdapter 实现。
-通过委托给现有 StreamProcessor 进行 SSE 解析，确保与当前行为完全一致。
+将现有 OpenAI Chat Completions 流式逻辑封装为 ProtocolAdapter 实现. 
+通过委托给现有 StreamProcessor 进行 SSE 解析, 确保与当前行为完全一致. 
 
 Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
 """
@@ -13,6 +13,7 @@ import json
 import logging
 from typing import AsyncIterator
 
+from src.core.agent.api_key_pool import pick_api_key
 from src.core.agent.protocol import (
     HttpRequestSpec,
     ProtocolAdapter,
@@ -29,8 +30,8 @@ logger = logging.getLogger(__name__)
 class OpenAIAdapter(ProtocolAdapter):
     """OpenAI Chat Completions 协议适配器.
 
-    将内部消息格式转换为 OpenAI API 请求载荷，并委托 StreamProcessor
-    解析 SSE 流式响应，确保产生与现有实现完全相同的 StreamEvent 序列。
+    将内部消息格式转换为 OpenAI API 请求载荷, 并委托 StreamProcessor
+    解析 SSE 流式响应, 确保产生与现有实现完全相同的 StreamEvent 序列. 
     """
 
     def build_request(
@@ -45,8 +46,8 @@ class OpenAIAdapter(ProtocolAdapter):
         Args:
             messages: 内部消息历史列表.
             tool_definitions: OpenAI 格式的工具定义列表.
-            model_config: 模型配置（model_id, temperature 等）.
-            provider: Provider 实例（用于 URL、密钥等）.
+            model_config: 模型配置 (model_id, temperature 等) .
+            provider: Provider 实例 (用于 URL, 密钥等) .
 
         Returns:
             包含 method, url, headers, body 的 HttpRequestSpec.
@@ -60,8 +61,8 @@ class OpenAIAdapter(ProtocolAdapter):
         base_url = str(provider.api_base_url).rstrip("/")
         url = f"{base_url}/chat/completions"
 
-        # Build headers
-        headers = self.build_headers(provider.api_key_ref)
+        # Build headers - 支持逗号分隔多密钥, 每次请求随机选择一个
+        headers = self.build_headers(pick_api_key(provider.api_key_ref))
 
         # Build request body
         body: dict = {
@@ -94,10 +95,10 @@ class OpenAIAdapter(ProtocolAdapter):
     ) -> AsyncIterator[StreamEvent]:
         """解析 OpenAI SSE 流式响应为 StreamEvent 序列.
 
-        委托给现有 StreamProcessor.feed_line 进行解析，确保产生
-        与当前实现完全相同的事件序列。
+        委托给现有 StreamProcessor.feed_line 进行解析, 确保产生
+        与当前实现完全相同的事件序列. 
 
-        遇到无法解析为 JSON 的 SSE data 行时，发射 StreamErrorEvent。
+        遇到无法解析为 JSON 的 SSE data 行时, 发射 StreamErrorEvent. 
 
         Args:
             response_lines: SSE 行的异步迭代器.
@@ -151,7 +152,7 @@ class OpenAIAdapter(ProtocolAdapter):
     ) -> list[dict]:
         """构建 OpenAI 格式的工具结果消息载荷.
 
-        格式为 assistant 消息（含 tool_calls 数组）+ tool 角色消息（含结果）。
+        格式为 assistant 消息 (含 tool_calls 数组) + tool 角色消息 (含结果) . 
 
         Args:
             tool_call_id: 工具调用 ID.
@@ -194,7 +195,7 @@ class OpenAIAdapter(ProtocolAdapter):
             msg: 内部消息.
 
         Returns:
-            OpenAI 格式的消息字典，或 None（如果无法转换）.
+            OpenAI 格式的消息字典, 或 None (如果无法转换) .
         """
         role = getattr(msg, "role", None)
 
