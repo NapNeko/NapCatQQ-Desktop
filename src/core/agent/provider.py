@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from src.core.agent.errors import (
@@ -33,6 +35,26 @@ class ModelEntry(BaseModel):
     currency: str = "USD"  # 币种: USD / CNY / EUR 等
     input_price: float = 0.0  # 输入价格 (每百万 Token)
     output_price: float = 0.0  # 输出价格 (每百万 Token)
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    top_p: float | None = Field(default=None, ge=0.0, le=1.0)
+    reasoning_effort: Literal["low", "medium", "high"] | None = None
+
+
+class ProviderApiOptions(BaseModel):
+    """供应商级别的 API 兼容性选项.
+
+    控制适配器在构建请求时是否包含特定参数。
+    当 Provider.api_options 为 None 时，适配器使用本类默认实例。
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    supports_array_content: bool = True
+    supports_stream_options: bool = True
+    supports_developer_role: bool = False
+    supports_service_tier: bool = False
+    supports_enable_thinking: bool = True
+    supports_verbosity: bool = True
 
 
 class AzureConfig(BaseModel):
@@ -62,6 +84,8 @@ class Provider(BaseModel):
     # 自定义 HTTP 请求头, 在适配器构建请求时与默认认证头合并
     # 用户可在前端 "自定义请求头" 对话框配置, 持久化到 agent_config.json
     custom_headers: dict[str, str] = Field(default_factory=dict)
+    # 供应商级别 API 兼容性选项, 为 None 时适配器使用 ProviderApiOptions() 默认值
+    api_options: ProviderApiOptions | None = None
 
 
 class ModelConfig(BaseModel):
@@ -72,6 +96,17 @@ class ModelConfig(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float = Field(default=1.0, ge=0.0, le=1.0)
     max_tokens: int = Field(ge=1)
+
+    @classmethod
+    def from_model_entry(cls, entry: ModelEntry, provider_id: str) -> "ModelConfig":
+        """从 ModelEntry 构建 ModelConfig，优先使用 entry 中的非 None 值。"""
+        return cls(
+            model_id=entry.model_id,
+            provider_id=provider_id,
+            temperature=entry.temperature if entry.temperature is not None else 0.7,
+            top_p=entry.top_p if entry.top_p is not None else 1.0,
+            max_tokens=entry.max_tokens,
+        )
 
 
 class ProviderRegistry:
@@ -174,11 +209,7 @@ class ProviderRegistry:
             raise ModelNotFoundError(model_id, provider_id)
 
         self._active_provider_id = provider_id
-        self._active_model_config = ModelConfig(
-            model_id=model_id,
-            provider_id=provider_id,
-            max_tokens=model_entry.max_tokens,
-        )
+        self._active_model_config = ModelConfig.from_model_entry(model_entry, provider_id)
 
     def set_enabled(self, provider_id: str, enabled: bool) -> None:
         """设置供应商启用状态.
@@ -232,6 +263,21 @@ class ProviderRegistry:
                 self._providers[provider_id] = provider.model_copy(
                     update={"sort_order": index}
                 )
+
+    def update_active_config(self, **kwargs) -> None:
+        """更新当前活跃 ModelConfig 的字段.
+
+        使用 pydantic 的 model_copy(update=...) 创建新实例替换旧实例。
+
+        Args:
+            **kwargs: 要更新的字段键值对 (如 temperature=0.9, top_p=0.8).
+
+        Raises:
+            NoActiveProviderError: 如果未设置活跃 Provider.
+        """
+        if self._active_provider_id is None or self._active_model_config is None:
+            raise NoActiveProviderError()
+        self._active_model_config = self._active_model_config.model_copy(update=kwargs)
 
     def get_active(self) -> tuple[Provider, ModelConfig]:
         """获取当前活跃的 Provider 和 ModelConfig.

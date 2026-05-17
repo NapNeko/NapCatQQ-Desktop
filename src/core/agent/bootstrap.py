@@ -9,9 +9,10 @@ Requirements: 6.2, 6.3, 6.4, 6.5, 10.2, 13.6
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+
+from src.core.logging import LogSource, logger
 
 from src.core.agent.config_persistence import ConfigPersistence
 from src.core.agent.context_loader import ContextLoader
@@ -40,8 +41,6 @@ from src.core.agent.tools.webui_tools import (
     WebuiReloadPluginTool,
     WebuiSendTestMessageTool,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def register_builtin_tools(
@@ -102,8 +101,7 @@ def register_builtin_tools(
     tool_registry.register(OpenContextFileTool(context_file_path))
 
     logger.info(
-        "内置工具注册完成，共 %d 个工具已注册。",
-        len(tool_registry.list_all()),
+        f"内置工具注册完成，共 {len(tool_registry.list_all())} 个工具已注册。",
     )
 
 
@@ -135,9 +133,7 @@ def restore_config(
             provider_registry.register(provider)
         except Exception as exc:
             logger.warning(
-                "恢复 Provider '%s' 失败: %s",
-                provider.provider_id,
-                exc,
+                f"恢复 Provider '{provider.provider_id}' 失败: {exc}",
             )
 
     # 首次启动时注册默认供应商 (配置文件中无任何 provider) 
@@ -148,9 +144,7 @@ def restore_config(
                 provider_registry.register(provider)
             except Exception as exc:
                 logger.warning(
-                    "注册默认 Provider '%s' 失败: %s",
-                    provider.provider_id,
-                    exc,
+                    f"注册默认 Provider '{provider.provider_id}' 失败: {exc}",
                 )
 
     # 恢复 Agent 定义 (跳过默认 Agent, 因为 engine 已自动注册) 
@@ -162,9 +156,7 @@ def restore_config(
             engine.register_agent(agent_def)
         except Exception as exc:
             logger.warning(
-                "恢复 Agent '%s' 失败: %s",
-                agent_def.name,
-                exc,
+                f"恢复 Agent '{agent_def.name}' 失败: {exc}",
             )
 
     # 恢复活跃 Provider 和模型选择
@@ -175,16 +167,11 @@ def restore_config(
                 config_data.active_model_id,
             )
             logger.info(
-                "已恢复活跃模型: provider=%s, model=%s",
-                config_data.active_provider_id,
-                config_data.active_model_id,
+                f"已恢复活跃模型: provider={config_data.active_provider_id}, model={config_data.active_model_id}",
             )
         except Exception as exc:
             logger.warning(
-                "恢复活跃模型失败 (provider=%s, model=%s): %s",
-                config_data.active_provider_id,
-                config_data.active_model_id,
-                exc,
+                f"恢复活跃模型失败 (provider={config_data.active_provider_id}, model={config_data.active_model_id}): {exc}",
             )
 
 
@@ -238,11 +225,10 @@ def bootstrap_agent_engine(
             try:
                 tool_registry.register_provider(provider)
                 logger.info(
-                    "外部 ToolProvider 注册成功，提供 %d 个工具。",
-                    len(provider.get_tools()),
+                    f"外部 ToolProvider 注册成功，提供 {len(provider.get_tools())} 个工具。",
                 )
             except Exception as exc:
-                logger.warning("外部 ToolProvider 注册失败: %s", exc)
+                logger.warning(f"外部 ToolProvider 注册失败: {exc}")
 
     # 4. 创建 ContextLoader
     context_file_path = config_dir / "agent_context.md"
@@ -262,10 +248,7 @@ def bootstrap_agent_engine(
     restore_config(config_persistence, provider_registry, engine)
 
     logger.info(
-        "AgentEngine 引导完成: %d 个工具, %d 个 Provider, %d 个 Agent",
-        len(tool_registry.list_all()),
-        len(provider_registry.list_all()),
-        len(engine.list_agents()),
+        f"AgentEngine 引导完成: {len(tool_registry.list_all())} 个工具, {len(provider_registry.list_all())} 个 Provider, {len(engine.list_agents())} 个 Agent",
     )
 
     return engine

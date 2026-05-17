@@ -8,10 +8,9 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from src.core.logging import LogSource, logger
 
 #: 用户上下文文件最大允许字符数
 MAX_CONTEXT_LENGTH: int = 32768
@@ -76,10 +75,7 @@ class ContextLoader:
         # 超过最大长度时截断并记录警告
         if len(content) > MAX_CONTEXT_LENGTH:
             logger.warning(
-                "用户上下文文件 '%s' 超过 %d 字符限制（实际 %d 字符），内容已截断。",
-                self._path,
-                MAX_CONTEXT_LENGTH,
-                len(content),
+                f"用户上下文文件 '{self._path}' 超过 {MAX_CONTEXT_LENGTH} 字符限制（实际 {len(content)} 字符），内容已截断。",
             )
             content = content[:MAX_CONTEXT_LENGTH]
 

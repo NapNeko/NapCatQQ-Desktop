@@ -10,8 +10,9 @@ Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12
 from __future__ import annotations
 
 import json
-import logging
 from typing import AsyncIterator
+
+from src.core.logging import LogSource, logger
 
 from src.core.agent.api_key_pool import pick_api_key
 from src.core.agent.protocol import (
@@ -30,8 +31,6 @@ from src.core.agent.stream import (
     ToolCallStart,
 )
 from src.core.agent.tool import ToolResult
-
-logger = logging.getLogger(__name__)
 
 
 class GeminiAdapter(ProtocolAdapter):
@@ -111,6 +110,21 @@ class GeminiAdapter(ProtocolAdapter):
 
         if generation_config:
             body["generationConfig"] = generation_config
+
+        # Include thinkingConfig from ModelEntry.reasoning_effort if set
+        model_entry = next(
+            (m for m in provider.models if m.model_id == model_config.model_id),
+            None,
+        )
+        if model_entry is not None and model_entry.reasoning_effort is not None:
+            _THINKING_BUDGET_MAP = {
+                "low": 1024,
+                "medium": 8192,
+                "high": 32768,
+            }
+            body["thinkingConfig"] = {
+                "thinkingBudget": _THINKING_BUDGET_MAP[model_entry.reasoning_effort],
+            }
 
         # Tool definitions - convert to functionDeclarations format
         if tool_definitions:

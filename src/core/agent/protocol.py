@@ -9,10 +9,11 @@ Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.1, 2.3, 2.5
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncIterator
+
+from src.core.logging import LogSource, logger
 
 from src.core.agent.errors import ValidationError
 from src.core.agent.stream import StreamEvent
@@ -21,8 +22,6 @@ from src.core.agent.tool import ToolResult
 if TYPE_CHECKING:
     from src.core.agent.provider import ModelConfig, Provider
     from src.core.agent.session import Message
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -168,8 +167,7 @@ class AdapterRegistry:
         if protocol_type in self._adapters:
             return self._adapters[protocol_type]
         logger.warning(
-            "Unrecognized protocol_type '%s', falling back to 'openai'",
-            protocol_type,
+            f"Unrecognized protocol_type '{protocol_type}', falling back to 'openai'",
         )
         return self._adapters["openai"]
 

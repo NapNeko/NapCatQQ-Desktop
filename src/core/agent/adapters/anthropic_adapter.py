@@ -14,9 +14,10 @@ Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 4.12
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass, field
 from typing import AsyncIterator
+
+from src.core.logging import LogSource, logger
 
 from src.core.agent.api_key_pool import pick_api_key
 from src.core.agent.protocol import (
@@ -24,7 +25,7 @@ from src.core.agent.protocol import (
     ProtocolAdapter,
     _validate_messages_not_empty,
 )
-from src.core.agent.provider import ModelConfig, Provider
+from src.core.agent.provider import ModelConfig, ModelEntry, Provider
 from src.core.agent.session import Message
 from src.core.agent.stream import (
     StreamEnd,
@@ -37,8 +38,6 @@ from src.core.agent.stream import (
 )
 from src.core.agent.tool import ToolResult
 
-logger = logging.getLogger(__name__)
-
 # Anthropic stop_reason → internal StreamEnd reason mapping
 _STOP_REASON_MAP: dict[str, str] = {
     "end_turn": "stop",
@@ -48,6 +47,13 @@ _STOP_REASON_MAP: dict[str, str] = {
 
 # Default Anthropic API version
 _DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
+
+# reasoning_effort → budget_tokens mapping for Anthropic thinking block
+_REASONING_EFFORT_BUDGET: dict[str, int] = {
+    "low": 1024,
+    "medium": 8192,
+    "high": 32768,
+}
 
 
 @dataclass
@@ -127,6 +133,15 @@ class AnthropicAdapter(ProtocolAdapter):
             body["temperature"] = model_config.temperature
         if model_config.top_p is not None:
             body["top_p"] = model_config.top_p
+
+        # Add thinking block if reasoning_effort is set on the ModelEntry
+        model_entry = self._find_model_entry(provider, model_config.model_id)
+        if model_entry is not None and model_entry.reasoning_effort is not None:
+            budget_tokens = _REASONING_EFFORT_BUDGET[model_entry.reasoning_effort]
+            body["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": budget_tokens,
+            }
 
         return HttpRequestSpec(
             method="POST",
@@ -487,3 +502,19 @@ class AnthropicAdapter(ProtocolAdapter):
             return {}
         except (json.JSONDecodeError, ValueError):
             return {}
+
+    @staticmethod
+    def _find_model_entry(provider: Provider, model_id: str) -> ModelEntry | None:
+        """从 Provider 的 models 列表中查找指定 model_id 的 ModelEntry.
+
+        Args:
+            provider: Provider 实例.
+            model_id: 要查找的模型 ID.
+
+        Returns:
+            匹配的 ModelEntry, 未找到时返回 None.
+        """
+        for entry in provider.models:
+            if entry.model_id == model_id:
+                return entry
+        return None

@@ -14,7 +14,6 @@ Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 2.2, 2.6
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime, timezone
 from typing import AsyncIterator, Callable
 from uuid import UUID, uuid4
@@ -48,7 +47,7 @@ from src.core.agent.stream import (
 )
 from src.core.agent.tool import ToolRegistry, ToolResult
 
-logger = logging.getLogger(__name__)
+from src.core.logging import LogSource, logger
 
 #: 工具循环最大迭代次数
 MAX_TOOL_LOOP_ITERATIONS: int = 25
@@ -650,7 +649,7 @@ class AgentEngine:
             try:
                 self._session_manager.append_message(session_id, partial_msg)
             except Exception:
-                logger.warning("保存部分响应失败，session_id=%s", session_id)
+                logger.warning(f"保存部分响应失败，session_id={session_id}")
 
     async def _execute_tool_calls(
         self,

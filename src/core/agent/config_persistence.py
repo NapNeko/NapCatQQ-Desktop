@@ -16,15 +16,14 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 
+from src.core.logging import LogSource, logger
+
 from src.core.agent.agent_def import AgentDefinition
 from src.core.agent.provider import Provider
-
-logger = logging.getLogger(__name__)
 
 # Valid protocol_type values recognized by the system
 _VALID_PROTOCOL_TYPES = frozenset({"openai", "anthropic", "gemini", "azure"})
@@ -52,10 +51,8 @@ def _normalize_provider_data(provider_data: dict) -> dict:
         protocol_type = data["protocol_type"]
         if protocol_type not in _VALID_PROTOCOL_TYPES:
             logger.warning(
-                "无法识别的 protocol_type 值 '%s'（provider_id=%s），"
+                f"无法识别的 protocol_type 值 '{protocol_type}'（provider_id={data.get('provider_id', '<unknown>')}），"
                 "将默认使用 'openai'",
-                protocol_type,
-                data.get("provider_id", "<unknown>"),
             )
             data["protocol_type"] = "openai"
 
@@ -70,12 +67,14 @@ class ConfigData(BaseModel):
         active_provider_id: 当前活跃的 Provider ID, 未设置时为 None.
         active_model_id: 当前活跃的模型 ID, 未设置时为 None.
         agents: Agent 定义列表.
+        custom_icon_bindings: provider_id → icon_filename 的自定义图标绑定映射.
     """
 
     providers: list[Provider] = []
     active_provider_id: str | None = None
     active_model_id: str | None = None
     agents: list[AgentDefinition] = []
+    custom_icon_bindings: dict[str, str] = {}
 
 
 class ConfigPersistence:
@@ -111,8 +110,7 @@ class ConfigPersistence:
         """
         if not self._config_file_path.exists():
             logger.warning(
-                "配置文件不存在: %s，使用默认配置初始化",
-                self._config_file_path,
+                f"配置文件不存在: {self._config_file_path}，使用默认配置初始化",
             )
             return ConfigData()
 
@@ -129,30 +127,29 @@ class ConfigPersistence:
             return ConfigData.model_validate(raw_data)
         except (json.JSONDecodeError, PydanticValidationError, UnicodeDecodeError) as exc:
             logger.warning(
-                "配置文件损坏或验证失败: %s，错误: %s。将重命名为 .bak 并使用默认配置",
-                self._config_file_path,
-                exc,
+                f"配置文件损坏或验证失败: {self._config_file_path}，错误: {exc}。将重命名为 .bak 并使用默认配置",
             )
             self._rename_to_backup()
             return ConfigData()
 
     def save(self, config: ConfigData) -> None:
-        """将配置保存到文件.
+        """原子写入：先写 .tmp 文件，成功后 rename 覆盖目标文件.
 
-        如果写入过程中发生 I/O 错误, 记录 error 日志但不抛出异常. 
+        使用临时文件 + Path.replace() 策略确保写入中断时不会损坏原配置文件.
+        如果写入过程中发生 I/O 错误, 记录 error 日志但不抛出异常.
 
         Args:
             config: 要保存的配置数据.
         """
         try:
             self._config_file_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self._config_file_path.with_suffix(".json.tmp")
             json_str = config.model_dump_json(indent=2)
-            self._config_file_path.write_text(json_str, encoding="utf-8")
+            tmp_path.write_text(json_str, encoding="utf-8")
+            tmp_path.replace(self._config_file_path)  # atomic on POSIX/NTFS
         except OSError as exc:
             logger.error(
-                "配置文件写入失败: %s，错误: %s",
-                self._config_file_path,
-                exc,
+                f"配置文件写入失败: {self._config_file_path}，错误: {exc}",
             )
 
     def _rename_to_backup(self) -> None:
@@ -166,10 +163,8 @@ class ConfigPersistence:
         )
         try:
             self._config_file_path.replace(backup_path)
-            logger.warning("已将损坏的配置文件重命名为: %s", backup_path)
+            logger.warning(f"已将损坏的配置文件重命名为: {backup_path}")
         except OSError as exc:
             logger.warning(
-                "无法重命名损坏的配置文件: %s，错误: %s",
-                self._config_file_path,
-                exc,
+                f"无法重命名损坏的配置文件: {self._config_file_path}，错误: {exc}",
             )

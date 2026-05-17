@@ -4,27 +4,27 @@
 将现有 OpenAI Chat Completions 流式逻辑封装为 ProtocolAdapter 实现. 
 通过委托给现有 StreamProcessor 进行 SSE 解析, 确保与当前行为完全一致. 
 
-Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
+Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 4.6, 4.7
 """
 
 from __future__ import annotations
 
 import json
-import logging
 from typing import AsyncIterator
 
+from src.core.logging import LogSource, logger
+
 from src.core.agent.api_key_pool import pick_api_key
+from src.core.agent.model_param_utils import flatten_array_content
 from src.core.agent.protocol import (
     HttpRequestSpec,
     ProtocolAdapter,
     _validate_messages_not_empty,
 )
-from src.core.agent.provider import ModelConfig, Provider
+from src.core.agent.provider import ModelConfig, Provider, ProviderApiOptions
 from src.core.agent.session import Message
 from src.core.agent.stream import StreamErrorEvent, StreamEvent, StreamProcessor
 from src.core.agent.tool import ToolResult
-
-logger = logging.getLogger(__name__)
 
 
 class OpenAIAdapter(ProtocolAdapter):
@@ -57,6 +57,9 @@ class OpenAIAdapter(ProtocolAdapter):
         """
         _validate_messages_not_empty(messages)
 
+        # Resolve api_options: use provider's or default instance
+        api_options = provider.api_options if provider.api_options is not None else ProviderApiOptions()
+
         # Construct URL
         base_url = str(provider.api_base_url).rstrip("/")
         url = f"{base_url}/chat/completions"
@@ -64,12 +67,20 @@ class OpenAIAdapter(ProtocolAdapter):
         # Build headers - 支持逗号分隔多密钥, 每次请求随机选择一个
         headers = self.build_headers(pick_api_key(provider.api_key_ref))
 
+        # Merge custom_headers (覆盖同名默认头)
+        if provider.custom_headers:
+            headers.update(provider.custom_headers)
+
         # Build request body
         body: dict = {
             "model": model_config.model_id,
-            "messages": self._convert_messages(messages),
+            "messages": self._convert_messages(messages, api_options),
             "stream": True,
         }
+
+        # Conditionally add stream_options based on api_options
+        if api_options.supports_stream_options:
+            body["stream_options"] = {"include_usage": True}
 
         # Optional fields - only include when explicitly provided
         if tool_definitions:
@@ -82,6 +93,14 @@ class OpenAIAdapter(ProtocolAdapter):
             body["top_p"] = model_config.top_p
         if model_config.max_tokens is not None:
             body["max_tokens"] = model_config.max_tokens
+
+        # Include reasoning_effort from ModelEntry if set
+        model_entry = next(
+            (m for m in provider.models if m.model_id == model_config.model_id),
+            None,
+        )
+        if model_entry is not None and model_entry.reasoning_effort is not None:
+            body["reasoning_effort"] = model_entry.reasoning_effort
 
         return HttpRequestSpec(
             method="POST",
@@ -170,11 +189,12 @@ class OpenAIAdapter(ProtocolAdapter):
 
         return [tool_message]
 
-    def _convert_messages(self, messages: list[Message]) -> list[dict]:
+    def _convert_messages(self, messages: list[Message], api_options: ProviderApiOptions) -> list[dict]:
         """将内部 Message 列表转换为 OpenAI API 消息格式.
 
         Args:
             messages: 内部消息列表.
+            api_options: 供应商 API 兼容性选项.
 
         Returns:
             OpenAI API 格式的消息字典列表.
@@ -182,31 +202,43 @@ class OpenAIAdapter(ProtocolAdapter):
         result: list[dict] = []
 
         for msg in messages:
-            converted = self._convert_single_message(msg)
+            converted = self._convert_single_message(msg, api_options)
             if converted is not None:
                 result.append(converted)
 
         return result
 
-    def _convert_single_message(self, msg: Message) -> dict | None:
+    def _convert_single_message(self, msg: Message, api_options: ProviderApiOptions) -> dict | None:
         """将单个 Message 转换为 OpenAI API 消息格式.
+
+        根据 api_options 决定:
+        - supports_developer_role=True 时将 system 角色替换为 developer
+        - supports_array_content=False 时将数组格式内容转换为纯文本字符串
 
         Args:
             msg: 内部消息.
+            api_options: 供应商 API 兼容性选项.
 
         Returns:
             OpenAI 格式的消息字典, 或 None (如果无法转换) .
         """
         role = getattr(msg, "role", None)
 
+        # Resolve content: flatten array content if API doesn't support it
+        content = msg.content
+        if not api_options.supports_array_content and isinstance(content, list):
+            content = flatten_array_content(content)
+
         if role == "system":
-            return {"role": "system", "content": msg.content}
+            # Replace system role with developer if supported
+            actual_role = "developer" if api_options.supports_developer_role else "system"
+            return {"role": actual_role, "content": content}
 
         elif role == "user":
-            return {"role": "user", "content": msg.content}
+            return {"role": "user", "content": content}
 
         elif role == "assistant":
-            message_dict: dict = {"role": "assistant", "content": msg.content}
+            message_dict: dict = {"role": "assistant", "content": content}
 
             # Include tool_calls if present
             if msg.tool_calls:
@@ -228,7 +260,7 @@ class OpenAIAdapter(ProtocolAdapter):
             return {
                 "role": "tool",
                 "tool_call_id": msg.tool_call_id or "",
-                "content": msg.content,
+                "content": content,
             }
 
         return None

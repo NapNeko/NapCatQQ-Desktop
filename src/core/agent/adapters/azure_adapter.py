@@ -10,8 +10,9 @@ Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
 from __future__ import annotations
 
 import json
-import logging
 from typing import AsyncIterator
+
+from src.core.logging import LogSource, logger
 
 from src.core.agent.api_key_pool import pick_api_key
 from src.core.agent.errors import ValidationError
@@ -24,8 +25,6 @@ from src.core.agent.provider import ModelConfig, Provider
 from src.core.agent.session import Message
 from src.core.agent.stream import StreamErrorEvent, StreamEvent, StreamProcessor
 from src.core.agent.tool import ToolResult
-
-logger = logging.getLogger(__name__)
 
 
 class AzureAdapter(ProtocolAdapter):

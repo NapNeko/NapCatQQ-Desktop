@@ -31,8 +31,54 @@ class ProviderRegistryCreator(AbstractCreator, ABC):
 
     @staticmethod
     def create(create_type):
-        """创建 ProviderRegistry 实例"""
-        return create_type()
+        """创建 ProviderRegistry 实例并从磁盘恢复已保存的配置."""
+        from creart import it
+
+        from src.core.agent.config_persistence import ConfigPersistence
+        from src.core.agent.default_providers import get_default_providers
+        from src.core.runtime.paths import PathFunc
+
+        registry = create_type()
+
+        # 从磁盘加载已保存的 Provider 配置
+        try:
+            path_func: PathFunc = it(PathFunc)
+            config_file_path = path_func.config_dir_path / "agent_config.json"
+            persistence = ConfigPersistence(config_file_path)
+            config_data = persistence.load()
+
+            if config_data.providers:
+                for provider in config_data.providers:
+                    try:
+                        registry.register(provider)
+                    except Exception:
+                        pass
+
+                # 恢复活跃 Provider 和模型选择
+                if config_data.active_provider_id and config_data.active_model_id:
+                    try:
+                        registry.set_active(
+                            config_data.active_provider_id,
+                            config_data.active_model_id,
+                        )
+                    except Exception:
+                        pass
+            else:
+                # 首次启动: 无已保存配置, 注入默认供应商
+                for provider in get_default_providers():
+                    try:
+                        registry.register(provider)
+                    except Exception:
+                        pass
+        except Exception:
+            # 加载失败时注入默认供应商, 确保 registry 不为空
+            for provider in get_default_providers():
+                try:
+                    registry.register(provider)
+                except Exception:
+                    pass
+
+        return registry
 
 
 add_creator(ProviderRegistryCreator)
