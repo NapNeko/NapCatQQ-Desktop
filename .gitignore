@@ -6,6 +6,7 @@ venv/
 .python-version
 .idea/
 .vscode/
+.claude/
 .codex/
 .nexus-map/
 .kiro/
