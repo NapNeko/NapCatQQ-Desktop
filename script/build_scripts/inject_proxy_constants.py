@@ -28,7 +28,9 @@ TARGET_REL = "src/core/network/_build_constants.py"
 
 
 def main() -> int:
-    base_url = os.environ.get("NCD_PROXY_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+    # GitHub Actions 把未配置的 vars.X 渲染成空字符串而非 unset, 所以 .get(key, default)
+    # 拿不到 default. 这里手动检查空串.
+    base_url = (os.environ.get("NCD_PROXY_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
     secret = os.environ.get("NCD_PROXY_SHARED_SECRET")
 
     if not secret:

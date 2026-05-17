@@ -173,10 +173,17 @@ class RemoteVersionTask(VersionTaskBase):
         Token 则带上 Authorization 头把限速从 60/h 拉到 5000/h.
         只有主备全失败才 emit error_signal, 中间过程的失败不打扰 UI.
         """
-        response, _ = self.request(QUrl(primary_url), name, proxy_path=proxy_path)
+        response, primary_err = self.request(QUrl(primary_url), name, proxy_path=proxy_path)
 
         if response is None:
-            logger.warning(f"{name} 中转站请求失败, 尝试 GitHub 官方 API...")
+            err_summary = (
+                f"{primary_err.kind} ({primary_err.detail})"
+                if primary_err is not None
+                else "unknown"
+            )
+            logger.warning(
+                f"{name} 中转站请求失败 [{err_summary}], 尝试 GitHub 官方 API..."
+            )
             response, fallback_err = self.request(QUrl(fallback_url), name, use_github_token=True)
             if response is None and fallback_err is not None:
                 logger.error(f"获取 {name} 版本信息失败: {fallback_err.kind} ({fallback_err.detail})")

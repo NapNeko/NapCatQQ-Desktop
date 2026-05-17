@@ -52,6 +52,14 @@ class ProxySigner:
         self._offset_seconds = 0
         self._lock = Lock()
         self._load_offset()
+        # 诊断日志: 只打长度 + 占位标志, 足够诊断 "未注入 / 占位 / 已配置" 三态;
+        # 不打任何 secret 字符 (含哈希前缀), 避免日志 / crash bundle 间接泄露.
+        is_placeholder = "PLACEHOLDER" in PROXY_SHARED_SECRET
+        logger.info(
+            f"ProxySigner 初始化: ua={self._user_agent}, "
+            f"secret_len={len(PROXY_SHARED_SECRET)}, "
+            f"placeholder={is_placeholder}, offset={self._offset_seconds}s"
+        )
 
     @classmethod
     def instance(cls, app_version: str | None = None) -> "ProxySigner":
