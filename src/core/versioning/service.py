@@ -3,10 +3,13 @@
 
 import json
 import re
+import time
+from abc import ABC
 from collections.abc import Callable
 from dataclasses import dataclass
+from threading import RLock
 
-from creart import it
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 import httpx
 from pydantic import BaseModel
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Signal
@@ -359,20 +362,114 @@ class LocalVersionTask(VersionTaskBase):
 
 
 class VersionService(QObject):
-    """统一协调本地和远端版本任务. """
+    """统一协调本地和远端版本任务 (creart 单例).
+
+    所有需要"远端版本号"的调用方都应通过 ``it(VersionService).refresh()`` 触发,
+    避免启动期同一组 endpoint 被并发重复拉取.
+
+    缓存策略
+    --------
+
+    远端 snapshot 在内存里缓存 ``REMOTE_CACHE_TTL_SECONDS`` 秒. 在此期间:
+
+    - 调 ``refresh(force=False)`` (默认): 直接 emit 缓存, 不发新请求
+    - 调 ``refresh(force=True)``: 跳过缓存, 强制发新请求 (用户主动点"检查更新")
+    - 已经有任务在跑: 后到的调用直接 "搭便车", 等同一个任务结束
+
+    **失败不写缓存**: ``RemoteVersionTask`` 若全部 endpoint 失败 (snapshot 字段
+    全 None), 视为本次拉取无效, 不更新缓存; 下次 refresh 会重新尝试网络.
+
+    本地 snapshot 不缓存: ``LocalVersionTask`` 仅读文件, 每次 refresh 重跑,
+    确保用户安装/卸载组件后立刻反映最新本地版本.
+    """
 
     remote_versions_loaded = Signal(VersionSnapshot)
     local_versions_loaded = Signal(VersionSnapshot)
 
-    def __init__(self, parent: QObject | None = None) -> None:
-        super().__init__(parent)
+    #: 远端 snapshot 缓存 TTL; 5 分钟内重复 refresh 直接走缓存
+    REMOTE_CACHE_TTL_SECONDS: float = 5 * 60
 
-    def refresh(self) -> None:
+    def __init__(self) -> None:
+        super().__init__()
+        self._remote_snapshot: VersionSnapshot | None = None
+        self._fetched_at: float | None = None
+        self._in_flight: RemoteVersionTask | None = None
+        self._lock = RLock()
+
+    def refresh(self, *, force: bool = False) -> None:
+        """触发本地 + 远端版本刷新.
+
+        Args:
+            force: ``True`` 时跳过远端缓存, 强制重新拉取 (用户主动点"检查更新").
+                ``False`` (默认) 时若缓存新鲜则直接 emit, 不发网络请求.
+        """
+        # 本地任务每次都跑 (读文件成本极低, 用户体验上要"立刻反映安装状态")
         local_task = LocalVersionTask()
         local_task.version_signal.connect(self.local_versions_loaded.emit)
         QThreadPool.globalInstance().start(local_task)
 
-        remote_task = RemoteVersionTask()
-        remote_task.version_signal.connect(self.remote_versions_loaded.emit)
-        QThreadPool.globalInstance().start(remote_task)
+        # 远端: 缓存命中 / in-flight 复用 / 启动新任务 三选一
+        cached_to_emit: VersionSnapshot | None = None
+        should_start_task = False
+        with self._lock:
+            if not force and self._is_cache_fresh() and self._remote_snapshot is not None:
+                cached_to_emit = self._remote_snapshot
+                logger.info(
+                    f"VersionService: 远端缓存命中 (age={int(time.time() - (self._fetched_at or 0))}s), 跳过网络请求"
+                )
+            elif self._in_flight is not None:
+                logger.info("VersionService: 已有 in-flight 任务, 复用结果")
+            else:
+                task = RemoteVersionTask()
+                task.version_signal.connect(self._on_remote_versions_loaded)
+                self._in_flight = task
+                should_start_task = True
+
+        # 出锁后再 emit / start, 避免 slot 阻塞其他调用方
+        if cached_to_emit is not None:
+            self.remote_versions_loaded.emit(cached_to_emit)
+        elif should_start_task:
+            QThreadPool.globalInstance().start(self._in_flight)
+
+    def _on_remote_versions_loaded(self, snapshot: VersionSnapshot) -> None:
+        """远端任务回调: 写缓存 (失败不写) + 转发信号 + 清 in-flight."""
+        # 全字段 None 视为失败, 不写缓存
+        is_failure = (
+            snapshot.napcat_version is None
+            and snapshot.qq_version is None
+            and snapshot.ncd_version is None
+            and snapshot.snowluma_version is None
+        )
+        with self._lock:
+            self._in_flight = None
+            if not is_failure:
+                self._remote_snapshot = snapshot
+                self._fetched_at = time.time()
+            else:
+                logger.warning("VersionService: 远端拉取全失败, 不写缓存 (下次 refresh 会重试)")
+
+        self.remote_versions_loaded.emit(snapshot)
+
+    def _is_cache_fresh(self) -> bool:
+        """缓存存在且未过 TTL 时返回 True; 调用方需持锁."""
+        if self._remote_snapshot is None or self._fetched_at is None:
+            return False
+        return (time.time() - self._fetched_at) < self.REMOTE_CACHE_TTL_SECONDS
+
+
+class VersionServiceCreator(AbstractCreator, ABC):
+    """[`VersionService`](src/core/versioning/service.py) 单例创建器."""
+
+    targets = (CreateTargetInfo("src.core.versioning.service", "VersionService"),)
+
+    @staticmethod
+    def available() -> bool:
+        return exists_module("src.core.versioning.service")
+
+    @staticmethod
+    def create(create_type):
+        return create_type()
+
+
+add_creator(VersionServiceCreator)
 

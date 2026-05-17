@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from time import time
 
 from creart import it
-from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtCore import QObject, Signal
 
 from src.core.config import cfg
 from src.core.config.operate_config import read_config
@@ -17,7 +17,7 @@ from src.core.home.notice_model import (
     NoticeTimelineSectionData,
     NoticeTimelineStatus,
 )
-from src.core.versioning import LocalVersionTask, RemoteVersionTask, VersionSnapshot
+from src.core.versioning import LocalVersionTask, VersionSnapshot, VersionService
 from src.core.runtime.bot_process_manager import ManagerNapCatQQLoginState, BotProcessManager
 
 
@@ -46,10 +46,10 @@ class HomeNoticeService(QObject):
         self._dismissed_session_keys: set[str] = set()
         self._local_versions = self._load_local_versions()
         self._remote_versions: VersionSnapshot | None = None
-        self._remote_version_task: RemoteVersionTask | None = None
 
         self._process_manager = it(BotProcessManager)
         self._login_state_manager = it(ManagerNapCatQQLoginState)
+        self._version_service = it(VersionService)
 
         self._bind_signals()
 
@@ -86,6 +86,8 @@ class HomeNoticeService(QObject):
         self._login_state_manager.notification_signal.connect(self._on_core_notification)
         self._login_state_manager.qr_code_available_signal.connect(self._on_qr_code_available)
         self._login_state_manager.qr_code_removed_signal.connect(self._on_qr_code_removed)
+        # 远端版本由全局单例 VersionService 统一管理, 这里只订阅结果
+        self._version_service.remote_versions_loaded.connect(self._on_remote_versions_loaded)
         home_notice_debug_center.sampleRequested.connect(self._show_debug_sections)
         home_notice_debug_center.clearRequested.connect(self._clear_debug_sections)
 
@@ -94,17 +96,11 @@ class HomeNoticeService(QObject):
         return LocalVersionTask().execute()
 
     def _request_remote_versions(self) -> None:
-        if self._remote_version_task is not None:
-            return
-
-        task = RemoteVersionTask()
-        task.version_signal.connect(self._on_remote_versions_loaded)
-        self._remote_version_task = task
-        QThreadPool.globalInstance().start(task)
+        # 委托单例; 单例内部处理缓存命中 / in-flight 复用 / 启动新任务
+        self._version_service.refresh()
 
     def _on_remote_versions_loaded(self, version_data: VersionSnapshot) -> None:
         self._remote_versions = version_data
-        self._remote_version_task = None
         self._emit_sections()
 
     def _on_core_notification(self, level: str, message: str) -> None:

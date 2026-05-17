@@ -4,7 +4,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 
-from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module
+from creart import AbstractCreator, CreateTargetInfo, add_creator, exists_module, it
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
@@ -26,7 +26,7 @@ class ComponentPage(QWidget):
         super().__init__()
         self.v_box_layout = QVBoxLayout(self)
         self.top_card = TopWidget(self)
-        self.version_service = VersionService(self)
+        self.version_service = it(VersionService)
         self.view = TransparentStackedWidget()
         self.napcat_page = NapCatPage(self)
         self.qq_page = QQPage(self)
@@ -120,7 +120,8 @@ class ComponentPage(QWidget):
         self.napcat_page.log_card.set_loading(True)
         self.desktop_page.log_card.set_loading(True)
         self.snowluma_page.log_card.set_loading(True)
-        self.version_service.refresh()
+        # 用户主动点"检查更新" -> 跳过 5 分钟缓存
+        self.version_service.refresh(force=True)
         self.top_card.update_button.setEnabled(False)
 
 

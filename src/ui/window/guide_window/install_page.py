@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from src.core.network.downloader import GithubDownloader, QQDownloader
 from src.core.network.urls import Urls
 from src.core.home import home_version_refresh_bus
-from src.core.versioning import RemoteVersionTask, VersionSnapshot
+from src.core.versioning import VersionService, VersionSnapshot
 from src.core.installation.installers import NapCatInstall, QQInstall
 from src.core.logging import LogSource, logger
 from src.core.logging.crash_bundle import summarize_path, summarize_url
@@ -207,7 +207,6 @@ class InstallQQPage(InstallPageBase):
         self.file_path = None
         self.downloader: QQDownloader | None = None
         self.installer: QQInstall | None = None
-        self.remote_version_task: RemoteVersionTask | None = None
 
         # 设置属性
         self.set_icon(NapCatDesktopIcon.QQ.path())
@@ -230,20 +229,23 @@ class InstallQQPage(InstallPageBase):
             return QUrl()
 
     def _fetch_download_url(self) -> None:
-        """异步获取 QQ 下载链接, 避免阻塞引导窗口初始化. """
-        if self.remote_version_task is not None:
-            return
+        """异步获取 QQ 下载链接, 避免阻塞引导窗口初始化.
 
+        通过全局 [`VersionService`](src/core/versioning/service.py) 单例触发,
+        若启动期组件页 / 通知服务已经拉过, 5 分钟内直接走缓存.
+        """
         self.set_status_text(self.tr("正在获取 QQ 下载链接..."))
         self.on_switch_progress_ring(ProgressRingStatus.INDETERMINATE)
-        self.remote_version_task = RemoteVersionTask()
-        self.remote_version_task.version_signal.connect(self.apply_remote_version_data)
-        QThreadPool.globalInstance().start(self.remote_version_task)
+        service = it(VersionService)
+        # UniqueConnection 避免重复进入此页时多次绑定
+        service.remote_versions_loaded.connect(
+            self.apply_remote_version_data, Qt.ConnectionType.UniqueConnection
+        )
+        service.refresh()
 
     @Slot(object)
     def apply_remote_version_data(self, version_data: VersionSnapshot) -> None:
         """接收远程版本信息, 并提取 QQ 下载链接. """
-        self.remote_version_task = None
         download_url = version_data.qq_download_url
         self.on_switch_button(ButtonStatus.UNINSTALLED)
 
@@ -338,11 +340,10 @@ class InstallNapCatQQPage(InstallPageBase):
         self.file_path = it(PathFunc).tmp_path / self.url.fileName()
         self.downloader: GithubDownloader | None = None
         self.installer: NapCatInstall | None = None
-        # P5 F1.3: 记录远端 NapCat 版本以便下载完成后查询 SHA512.
+        # P5 F1.3: 记录远端 NapCat 版本以便下载完成后查询 SHA256.
         # 由于 ``Urls.NAPCATQQ_DOWNLOAD`` 走 ``releases/latest`` 重定向, 版本未知,
-        # 通过并行的 RemoteVersionTask 获得.
+        # 通过全局 VersionService 单例的远端任务获得.
         self.remote_napcat_version: str | None = None
-        self.remote_version_task: RemoteVersionTask | None = None
 
         # 设置属性
         self.set_icon(StaticIcon.LOGO.path())
@@ -370,16 +371,16 @@ class InstallNapCatQQPage(InstallPageBase):
 
         # P5 F1.3: 并行拉取远端版本号; 失败时 ``remote_napcat_version`` 保持 None,
         # 走"无 hash 数据"的二次确认分支, 不阻塞下载.
-        if self.remote_version_task is None:
-            task = RemoteVersionTask()
-            task.version_signal.connect(self._apply_remote_napcat_version)
-            self.remote_version_task = task
-            QThreadPool.globalInstance().start(task)
+        # 通过全局 VersionService 单例; 5 分钟内的缓存可直接复用, 避免重复请求.
+        service = it(VersionService)
+        service.remote_versions_loaded.connect(
+            self._apply_remote_napcat_version, Qt.ConnectionType.UniqueConnection
+        )
+        service.refresh()
 
     @Slot(object)
     def _apply_remote_napcat_version(self, version_data: VersionSnapshot) -> None:
-        """记录最新的 NapCat 版本号供下载完成后做 SHA512 查询."""
-        self.remote_version_task = None
+        """记录最新的 NapCat 版本号供下载完成后做 SHA256 查询."""
         if version_data.napcat_version:
             self.remote_napcat_version = version_data.napcat_version
             logger.info(
@@ -392,7 +393,7 @@ class InstallNapCatQQPage(InstallPageBase):
         """安装. """
         logger.info("引导安装 NapCat: 下载完成，开始安装", log_source=LogSource.UI)
 
-        # P5 F1.3: 解压前 SHA512 完整性校验
+        # P5 F1.3: 解压前 SHA256 完整性校验
         from src.ui.components.install_hash_check import run_napcat_archive_hash_check
         from src.ui.window.guide_window.guide_window import GuideWindow
 
@@ -402,7 +403,7 @@ class InstallNapCatQQPage(InstallPageBase):
             parent=it(GuideWindow),
         ):
             logger.warning(
-                "引导安装 NapCat 中止: SHA512 完整性校验失败或用户取消",
+                "引导安装 NapCat 中止: SHA256 完整性校验失败或用户取消",
                 log_source=LogSource.UI,
             )
             self.on_error_finish()
