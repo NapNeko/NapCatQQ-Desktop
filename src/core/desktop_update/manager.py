@@ -2,7 +2,6 @@
 """NapCatQQ Desktop 更新执行器. """
 
 import ctypes
-import logging
 import os
 import shutil
 import subprocess
@@ -18,9 +17,8 @@ from src.core.desktop_update.constants import (
 )
 from src.core.installation.install_type import InstallType, detect_install_type, get_update_file_pattern
 from src.core.desktop_update.templates import load_msi_update_script
+from src.core.logging import LogSource, logger
 from src.core.platform.app_paths import resolve_app_data_path
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True, frozen=True)

@@ -6,7 +6,6 @@
 
 # 标准库导入
 import enum
-import logging
 import os
 from pathlib import Path
 
@@ -18,7 +17,7 @@ try:
 except ImportError:
     HAS_WINREG = False  # 非 Windows 环境
 
-logger = logging.getLogger(__name__)
+from src.core.logging import LogSource, logger
 
 
 class InstallType(enum.Enum):
