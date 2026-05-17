@@ -49,6 +49,50 @@
         <file>style/dark/widget/provider_list_panel.qss</file>
     </qresource>
 
+    <qresource prefix="provider_icon">
+        <file>icon/provider_icon/alibaba-color.svg</file>
+        <file>icon/provider_icon/anthropic.png</file>
+        <file>icon/provider_icon/azure-color.svg</file>
+        <file>icon/provider_icon/baichuan-color.svg</file>
+        <file>icon/provider_icon/bedrock-color.svg</file>
+        <file>icon/provider_icon/bytedance-color.svg</file>
+        <file>icon/provider_icon/cerebras-color.svg</file>
+        <file>icon/provider_icon/chatglm-color.svg</file>
+        <file>icon/provider_icon/claude-color.svg</file>
+        <file>icon/provider_icon/cloudflare-color.svg</file>
+        <file>icon/provider_icon/cohere-color.svg</file>
+        <file>icon/provider_icon/deepinfra-color.svg</file>
+        <file>icon/provider_icon/deepseek-color.svg</file>
+        <file>icon/provider_icon/doubao-color.svg</file>
+        <file>icon/provider_icon/fireworks-color.svg</file>
+        <file>icon/provider_icon/gemini-color.svg</file>
+        <file>icon/provider_icon/google-color.svg</file>
+        <file>icon/provider_icon/grok.png</file>
+        <file>icon/provider_icon/huggingface-color.svg</file>
+        <file>icon/provider_icon/hyperbolic-color.svg</file>
+        <file>icon/provider_icon/kimi-color.svg</file>
+        <file>icon/provider_icon/meta-color.svg</file>
+        <file>icon/provider_icon/minimax-color.svg</file>
+        <file>icon/provider_icon/mistral-color.svg</file>
+        <file>icon/provider_icon/modelscope-color.svg</file>
+        <file>icon/provider_icon/novita-color.svg</file>
+        <file>icon/provider_icon/nvidia-color.svg</file>
+        <file>icon/provider_icon/ollama.png</file>
+        <file>icon/provider_icon/openai.png</file>
+        <file>icon/provider_icon/openrouter.png</file>
+        <file>icon/provider_icon/perplexity-color.svg</file>
+        <file>icon/provider_icon/ppio-color.svg</file>
+        <file>icon/provider_icon/qwen-color.svg</file>
+        <file>icon/provider_icon/sambanova-color.svg</file>
+        <file>icon/provider_icon/siliconcloud-color.svg</file>
+        <file>icon/provider_icon/spark-color.svg</file>
+        <file>icon/provider_icon/stepfun-color.svg</file>
+        <file>icon/provider_icon/together-color.svg</file>
+        <file>icon/provider_icon/volcengine-color.svg</file>
+        <file>icon/provider_icon/yi-color.svg</file>
+        <file>icon/provider_icon/zhipu-color.svg</file>
+    </qresource>
+
     <qresource prefix="template">
         <file>template/email/bot_offline_notice.html</file>
         <file>template/email/test_email.html</file>
