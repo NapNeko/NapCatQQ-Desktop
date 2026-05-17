@@ -7,12 +7,13 @@ AgentEngine 的流式事件安全地回传到 UI 线程.
 from __future__ import annotations
 
 import asyncio
-import logging
 import threading
 from concurrent.futures import Future
 from uuid import UUID
 
 from PySide6.QtCore import QObject, QThread, Signal
+
+from src.core.logging import LogSource, logger
 
 from src.core.agent.stream import (
     PermissionAskEvent,
@@ -24,8 +25,6 @@ from src.core.agent.stream import (
     ToolCallDelta,
     ToolCallStart,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class _AsyncioThread(QThread):
@@ -168,10 +167,10 @@ class AgentWorker(QObject):
         try:
             await engine.submit(session_id, user_message, self._on_event)
         except asyncio.CancelledError:
-            logger.info("AgentWorker: submit cancelled for session %s", session_id)
+            logger.info(f"AgentWorker: submit cancelled for session {session_id}")
             self.stream_end.emit(self._current_msg_id, "cancelled")
         except Exception as exc:
-            logger.exception("AgentWorker: submit failed for session %s", session_id)
+            logger.exception(f"AgentWorker: submit failed for session {session_id}", exc)
             self.stream_error.emit(self._current_msg_id, exc)
 
     def cancel(self) -> None:

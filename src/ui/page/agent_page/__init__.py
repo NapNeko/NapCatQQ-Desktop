@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 # 标准库导入
-import logging
 from abc import ABC
 from typing import TYPE_CHECKING, Self
 from uuid import UUID
@@ -21,6 +20,8 @@ from qfluentwidgets import (
     ToolCallStatus,
 )
 
+from src.core.logging import LogSource, logger
+
 from src.ui.common.style_sheet import PageStyleSheet
 from src.ui.components.info_bar import error_bar
 from .agent_worker import AgentWorker
@@ -29,8 +30,6 @@ from .session_sidebar import SessionSidebar
 if TYPE_CHECKING:
     # 项目内模块导入
     from src.ui.window.main_window import MainWindow
-
-logger = logging.getLogger(__name__)
 
 
 class AgentChatPage(QWidget):
@@ -244,7 +243,7 @@ class AgentChatPage(QWidget):
             manager: SessionManager = it(SessionManager)
             session = manager.get(session_id)  # type: ignore[arg-type]
         except Exception as exc:
-            logger.warning("Failed to load session %s: %s", session_id, exc)
+            logger.warning(f"Failed to load session {session_id}: {exc}")
             return
 
         # 清空当前视图并加载会话消息

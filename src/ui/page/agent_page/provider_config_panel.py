@@ -442,6 +442,9 @@ class ProviderConfigPanel(ScrollArea):
             )
             return
 
+        # 持久化配置
+        self._persist_config()
+
         # 注册成功, 刷新列表
         success_bar(
             content=self.tr(f"Provider '{provider_data['name']}' 已添加"),
@@ -471,11 +474,40 @@ class ProviderConfigPanel(ScrollArea):
             )
             return
 
+        # 持久化配置
+        self._persist_config()
+
         success_bar(
             content=self.tr(f"Provider '{provider_id}' 已删除"),
             parent=self,
         )
         self.refresh_providers()
+
+    def _persist_config(self) -> None:
+        """触发 ConfigPersistence.save() 将当前配置写入磁盘。
+
+        使用 creart 获取 PathFunc 和 ProviderRegistry 单例，
+        将完整的 providers 列表和活跃状态持久化到 agent_config.json。
+        如果持久化失败，记录 error 日志但不阻塞 UI。
+        """
+        from src.core.agent.config_persistence import ConfigPersistence
+        from src.core.agent.provider import ProviderRegistry
+        from src.core.logging import logger as _logger
+        from src.core.runtime.paths import PathFunc
+
+        try:
+            path_func: PathFunc = it(PathFunc)
+            config_file_path = path_func.config_dir_path / "agent_config.json"
+            persistence = ConfigPersistence(config_file_path)
+
+            # 加载现有配置并同步 providers 列表
+            config_data = persistence.load()
+            registry: ProviderRegistry = it(ProviderRegistry)
+            config_data.providers = registry.list_all()
+
+            persistence.save(config_data)
+        except Exception:
+            _logger.error("ProviderConfigPanel 持久化配置失败")
 
     def set_active(self, provider_id: str, model_id: str) -> None:
         """设置活跃的 Provider 和模型组合
@@ -528,11 +560,9 @@ class ProviderConfigPanel(ScrollArea):
             persistence.save(config_data)
         except Exception:
             # 持久化失败不阻塞 UI 操作, 仅记录
-            import logging
+            from src.core.logging import logger as _logger
 
-            logging.getLogger(__name__).warning(
-                "持久化 Provider 活跃状态失败", exc_info=True
-            )
+            _logger.warning("持久化 Provider 活跃状态失败")
 
         success_bar(
             content=self.tr(f"已激活: {provider_id} / {model_id}"),
