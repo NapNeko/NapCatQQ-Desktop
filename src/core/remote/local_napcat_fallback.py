@@ -12,8 +12,8 @@
 在调用脚本前先做一次远端连通性预检 ([`backend_can_reach_github`]); 探测失败才走本机.
 对脚本本身**零改动**; 远端能直连 GitHub 时行为完全不变.
 
-SHA512 校验与 [`verify_napcat_archive`](src/core/installation/installers.py) 同语义,
-命中 ``expected_sha512`` 后才上传, 防止把损坏归档推到远端.
+SHA256 校验与 [`verify_napcat_archive`](src/core/installation/installers.py) 同语义,
+命中 ``expected_sha256`` 后才上传, 防止把损坏归档推到远端.
 """
 
 from __future__ import annotations
@@ -61,9 +61,9 @@ _GITHUB_HEALTH_MAX_TIMEOUT_SECONDS: int = 8
 (``remote_install_napcat.sh`` 用的是 ``--connect-timeout 8``), 杜绝"探测过, 下载挂"假阳性."""
 
 
-def _compute_sha512(path: Path) -> str:
-    """流式计算 ``path`` 的 SHA512 hex digest."""
-    hasher = hashlib.sha512()
+def _compute_sha256(path: Path) -> str:
+    """流式计算 ``path`` 的 SHA256 hex digest."""
+    hasher = hashlib.sha256()
     with path.open("rb") as fp:
         while True:
             chunk = fp.read(_HASH_CHUNK_SIZE)
@@ -193,46 +193,46 @@ def _download_via_httpx(
 def prefetch_napcat_archive_locally(
     *,
     target_path: Path,
-    expected_sha512: str | None = None,
+    expected_sha256: str | None = None,
     log_callback: LogLineCallback | None = None,
     should_cancel: ShouldCancelCallback | None = None,
 ) -> Path:
-    """把 NapCat.Shell.zip 下载到本机 ``target_path``, 校验 SHA512.
+    """把 NapCat.Shell.zip 下载到本机 ``target_path``, 校验 SHA256.
 
     顺序尝试 [`Urls.NAPCATQQ_DOWNLOAD`](src/core/network/urls.py) +
-    [`Urls.MIRROR_SITE`] 直至一源成功. 已存在且 SHA512 一致的本机缓存**直接复用**.
+    [`Urls.MIRROR_SITE`] 直至一源成功. 已存在且 SHA256 一致的本机缓存**直接复用**.
 
     Args:
         target_path: 本机目标路径, 一般为 ``it(PathFunc).tmp_path / 'NapCat.Shell.zip'``
-        expected_sha512: 期望 SHA512 (128 位 hex). 校验失败抛 ``ValueError`` 并删除产物;
+        expected_sha256: 期望 SHA256 (64 位 hex). 校验失败抛 ``ValueError`` 并删除产物;
             ``None`` 时跳过校验
         log_callback: 部署控制台逐行回调
         should_cancel: 取消检查协议 (参见 :data:`ShouldCancelCallback`); 命中时招
             :class:`RemoteDeploymentCancelledError`. 检查点: 每个源迭代前 + httpx chunk 之间
 
     Returns:
-        ``target_path``, 已确认存在 + (若提供 SHA512) 校验通过.
+        ``target_path``, 已确认存在 + (若提供 SHA256) 校验通过.
 
     Raises:
         RemoteDeploymentCancelledError: 用户中途取消
         RuntimeError: 全部候选源都失败
-        ValueError: SHA512 不匹配 (``target_path`` 已被删除)
+        ValueError: SHA256 不匹配 (``target_path`` 已被删除)
     """
     target_path = Path(target_path)
-    expected_norm = expected_sha512.strip().lower() if expected_sha512 else None
+    expected_norm = expected_sha256.strip().lower() if expected_sha256 else None
 
     # 1) 缓存复用
     if target_path.exists():
         if expected_norm is None:
-            _emit(log_callback, f"[INFO] 复用本机缓存 (未指定 SHA512): {target_path}")
+            _emit(log_callback, f"[INFO] 复用本机缓存 (未指定 SHA256): {target_path}")
             return target_path
-        actual = _compute_sha512(target_path).lower()
+        actual = _compute_sha256(target_path).lower()
         if actual == expected_norm:
-            _emit(log_callback, f"[INFO] 复用本机缓存 (SHA512 一致): {target_path}")
+            _emit(log_callback, f"[INFO] 复用本机缓存 (SHA256 一致): {target_path}")
             return target_path
         _emit(
             log_callback,
-            f"[WARN] 本机缓存 SHA512 不匹配, 重新下载",
+            "[WARN] 本机缓存 SHA256 不匹配, 重新下载",
         )
         try:
             target_path.unlink()
@@ -258,18 +258,18 @@ def prefetch_napcat_archive_locally(
             f"本机预下载失败: 已尝试 {len(candidates)} 个源都不可用"
         )
 
-    # 3) SHA512 校验
+    # 3) SHA256 校验
     if expected_norm is not None:
-        actual = _compute_sha512(target_path).lower()
+        actual = _compute_sha256(target_path).lower()
         if actual != expected_norm:
             try:
                 target_path.unlink()
             except OSError:
                 pass
             raise ValueError(
-                f"本机预下载产物 SHA512 校验失败: expected={expected_norm} actual={actual}"
+                f"本机预下载产物 SHA256 校验失败: expected={expected_norm} actual={actual}"
             )
-        _emit(log_callback, f"[INFO] SHA512 校验通过")
+        _emit(log_callback, "[INFO] SHA256 校验通过")
 
     return target_path
 

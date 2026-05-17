@@ -34,21 +34,21 @@ def verify_napcat_archive(
     archive_path: Path,
     hash_service: "ReleaseHashService",
 ) -> bool:
-    """对 NapCat 安装包做 SHA512 完整性校验 (P5 安全收尾 F1.3).
+    """对 NapCat 安装包做 SHA256 完整性校验 (P5 安全收尾 F1.3).
 
     Args:
-        version: 期望版本号, 接受 ``"v4.18.1"`` / ``"4.18.1"`` 两种形式
+        version: 期望版本号, 接受 ``"v4.18.2"`` / ``"4.18.2"`` 两种形式
         archive_path: 待校验的本地 zip 路径
         hash_service: 已经 ``fetch()`` 过的 :class:`ReleaseHashService`
 
     Returns:
         - ``True``: 校验通过, archive 内容与上游 hash 一致, 调用方可继续解压
-        - ``False``: 上游 release.json 中没有该版本的 hash 数据 (网络异常无缓存 /
-          版本太新尚未发布 hash). 调用方应弹"二次确认"对话框让用户决定是否继续.
-          archive 不会被删除.
+        - ``False``: 上游 release 中没有该版本的 hash 数据 (网络异常无缓存 /
+          GitHub Releases API 仅返回 latest 而本地版本与之不匹配). 调用方应弹
+          "二次确认"对话框让用户决定是否继续. archive 不会被删除.
 
     Raises:
-        NapCatHashMismatchError: archive 的实际 SHA512 与上游期望不一致;
+        NapCatHashMismatchError: archive 的实际 SHA256 与上游期望不一致;
             archive 文件**已被删除**, 防止后续误用.
         FileNotFoundError: archive 路径不存在.
     """
@@ -59,7 +59,7 @@ def verify_napcat_archive(
     if entry is None:
         logger.warning(
             (
-                f"verify_napcat_archive: 上游未提供 {version} 的 SHA512, 跳过校验; "
+                f"verify_napcat_archive: 上游未提供 {version} 的 SHA256, 跳过校验; "
                 "调用方应在 UI 层弹二次确认对话框"
             ),
             LogType.FILE_FUNC,
@@ -67,12 +67,12 @@ def verify_napcat_archive(
         )
         return False
 
-    expected = entry.shell_sha512
-    actual = _compute_sha512(archive_path)
+    expected = entry.shell_sha256
+    actual = _compute_sha256(archive_path)
     if actual.lower() != expected.lower():
         logger.error(
             (
-                "verify_napcat_archive: SHA512 不匹配, 已拒绝安装并删除 archive: "
+                "verify_napcat_archive: SHA256 不匹配, 已拒绝安装并删除 archive: "
                 f"version={entry.version}, expected={expected}, actual={actual}, "
                 f"archive={archive_path}"
             ),
@@ -95,16 +95,16 @@ def verify_napcat_archive(
         )
 
     logger.info(
-        f"verify_napcat_archive: SHA512 校验通过 (version={entry.version}, archive={archive_path})",
+        f"verify_napcat_archive: SHA256 校验通过 (version={entry.version}, archive={archive_path})",
         LogType.FILE_FUNC,
         LogSource.CORE,
     )
     return True
 
 
-def _compute_sha512(path: Path) -> str:
-    """流式计算 ``path`` 的 SHA512 hex digest."""
-    hasher = hashlib.sha512()
+def _compute_sha256(path: Path) -> str:
+    """流式计算 ``path`` 的 SHA256 hex digest."""
+    hasher = hashlib.sha256()
     with path.open("rb") as handle:
         while True:
             chunk = handle.read(_HASH_CHUNK_SIZE)

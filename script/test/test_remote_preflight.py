@@ -25,12 +25,12 @@ from src.core.remote.servers import DeploymentState
 from script.test.test_server_manager_deploy import FakeRemoteBackend, _make_profile
 
 
-# 跳过 SHA512 网络查询, 与 test_server_manager_deploy 保持一致
+# 跳过 SHA256 网络查询, 与 test_server_manager_deploy 保持一致
 @pytest.fixture(autouse=True)
 def _stub_release_hash_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         ServerManager,
-        "_lookup_napcat_expected_sha512",
+        "_lookup_napcat_expected_sha256",
         lambda self: None,
     )
 

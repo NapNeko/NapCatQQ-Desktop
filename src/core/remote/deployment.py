@@ -637,7 +637,7 @@ class LinuxCoreDeployment:
 
         return arch, pkg_format
 
-    #: ``remote_install_napcat.sh`` 在 SHA512 校验失败时使用的 dedicated 退出码 (P5 F1.4).
+    #: ``remote_install_napcat.sh`` 在 SHA256 校验失败时使用的 dedicated 退出码 (P5 F1.4).
     INSTALL_NAPCAT_VERIFY_EXIT_CODE: int = 36
 
     def install_napcat(
@@ -648,14 +648,14 @@ class LinuxCoreDeployment:
         progress_log_callback: LogLineCallback | None = None,
         force_update: bool = False,
         download_url: str | None = None,
-        expected_sha512: str | None = None,
+        expected_sha256: str | None = None,
         local_archive_cache: Path | None = None,
         should_cancel: Callable[[], bool] | None = None,
     ) -> InstallStepResult:
-        """在远端安装/更新 NapCat. 
+        """在远端安装/更新 NapCat.
 
-        默认仅在远端不存在 NapCat 时下载; 设置 ``force_update=True`` 强制重新下载并解压. 
-        部署完成后会自动把 launcher 脚本上传到 ``$workspace_dir/napcat.sh``. 
+        默认仅在远端不存在 NapCat 时下载; 设置 ``force_update=True`` 强制重新下载并解压.
+        部署完成后会自动把 launcher 脚本上传到 ``$workspace_dir/napcat.sh``.
 
         **本机下载兜底**: 当远端无法直连 ``github.com`` 时 (典型: 国内云服务商 + 出方向受限),
         若 ``local_archive_cache`` 非空则改为在 Desktop 本机下载 NapCat.Shell.zip
@@ -669,12 +669,12 @@ class LinuxCoreDeployment:
             log_callback: 原始日志行回调, 用于把脚本 stdout 实时透传给"部署控制台"
             progress_log_callback: ``\\r`` 终止的瞬时刷新行 (dnf/apt/curl 进度条) 回调,
                 设置后这类行 *不* 再走 ``log_callback``, 由调用方自行决定如何渲染
-                (典型: UI 原地覆盖上一行) 
+                (典型: UI 原地覆盖上一行)
             force_update: 强制重新下载并解压 NapCat
             download_url: 自定义下载地址(覆盖 ``NAPCAT_DOWNLOAD_URL``); **设置后本机兜底
                 自动禁用**, 因为自定义 URL 可能就是为了绕过 GitHub, 应当尊重调用方意图
-            expected_sha512: P5 F1.4: NapCat.Shell.zip 的期望 SHA512 (128 位 hex);
-                提供时通过 ``NAPCAT_EXPECTED_SHA512`` 环境变量传给远端脚本, 校验失败
+            expected_sha256: P5 F1.4: NapCat.Shell.zip 的期望 SHA256 (64 位 hex);
+                提供时通过 ``NAPCAT_EXPECTED_SHA256`` 环境变量传给远端脚本, 校验失败
                 远端会以退出码 36 中断, 本方法把该退出码转为
                 ``RemoteCommandError`` (调用方按 stage="install_napcat_verify" 区分).
                 ``None`` 时跳过校验, 远端仅记 warning 不阻断 (兼容老客户端).
@@ -684,14 +684,14 @@ class LinuxCoreDeployment:
 
         Raises:
             RemoteCommandError: 远端脚本退出码非 0; 当 ``exit_status==36`` 时表示
-                SHA512 校验失败, ``stderr`` 已包含期望与实际值, 上层应转为
+                SHA256 校验失败, ``stderr`` 已包含期望与实际值, 上层应转为
                 ``RemoteDeploymentError(stage="install_napcat_verify")`` 以保留语义.
         """
         logger.info(
             (
                 f"开始远端 NapCat 安装: napcat_dir={self.paths.napcat_dir}, "
                 f"force_update={force_update}, "
-                f"sha512_verify={'enabled' if expected_sha512 else 'skipped'}, "
+                f"sha256_verify={'enabled' if expected_sha256 else 'skipped'}, "
                 f"local_fallback={'enabled' if local_archive_cache else 'disabled'}"
             ),
             LogType.NETWORK,
@@ -704,7 +704,7 @@ class LinuxCoreDeployment:
         if local_archive_cache is not None and not download_url:
             self._maybe_prefetch_napcat_archive_via_local(
                 local_archive_cache=local_archive_cache,
-                expected_sha512=expected_sha512,
+                expected_sha256=expected_sha256,
                 force_update=force_update,
                 should_cancel=should_cancel,
                 log_callback=log_callback,
@@ -718,9 +718,9 @@ class LinuxCoreDeployment:
             env_parts.append("FORCE_NAPCAT_UPDATE=1")
         if download_url:
             env_parts.append(f'NAPCAT_DOWNLOAD_URL={self._shell_quote(download_url)}')
-        if expected_sha512:
-            normalized_hash = expected_sha512.strip().lower()
-            env_parts.append(f"NAPCAT_EXPECTED_SHA512={self._shell_quote(normalized_hash)}")
+        if expected_sha256:
+            normalized_hash = expected_sha256.strip().lower()
+            env_parts.append(f"NAPCAT_EXPECTED_SHA256={self._shell_quote(normalized_hash)}")
         env_prefix = (" ".join(env_parts) + " ") if env_parts else ""
         command = f'{env_prefix}bash "{remote_script_path}"'
 
@@ -766,7 +766,7 @@ class LinuxCoreDeployment:
         self,
         *,
         local_archive_cache: Path,
-        expected_sha512: str | None,
+        expected_sha256: str | None,
         force_update: bool,
         log_callback: LogLineCallback | None,
         should_cancel: Callable[[], bool] | None = None,
@@ -786,7 +786,7 @@ class LinuxCoreDeployment:
         Args:
             local_archive_cache: 本机缓存路径, 由调用方决定 (生产 = ``PathFunc.tmp_path``,
                 测试 = tmp_path)
-            expected_sha512: 与 ``install_napcat`` 同字段; 用于本机下载产物校验
+            expected_sha256: 与 ``install_napcat`` 同字段; 用于本机下载产物校验
             force_update: ``True`` 时跳过"远端已有归档"短路, 强制重下并覆盖上传
             log_callback: 部署控制台行回调
         """
@@ -849,7 +849,7 @@ class LinuxCoreDeployment:
         try:
             prefetch_napcat_archive_locally(
                 target_path=local_archive_cache,
-                expected_sha512=expected_sha512,
+                expected_sha256=expected_sha256,
                 log_callback=log_callback,
                 should_cancel=should_cancel,
             )

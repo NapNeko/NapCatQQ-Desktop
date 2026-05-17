@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """[`ReleaseHashService`](src/core/versioning/release_hash_service.py) 单测.
 
-覆盖目标 (P5 安全收尾 F1.1):
+覆盖目标 (P5 安全收尾 F1.1, 改造后):
 
-- 上游 release.json 解析正确 (含 `v` 前缀归一化)
-- 缓存写入 / 读取
-- 多源 fallback (主源失败时切到 jsdelivr)
-- 损坏 JSON 不阻断, 返回空集
+- GitHub Releases API 单条 release dict 解析 (含 ``v`` 前缀归一化, 从
+  ``assets[*].digest`` 中按文件名提取 SHA256)
+- 缓存写入 / 读取 (新 schema: 自定义 entries 字段)
+- 多源 fallback (中转主源失败时切到 GitHub 直连)
+- 损坏 JSON / payload 不阻断, 返回空集
 - TTL 判定
-- ``lookup`` 容忍 ``v4.18.1`` 与 ``4.18.1`` 两种形式
+- ``lookup`` 容忍 ``v4.18.2`` 与 ``4.18.2`` 两种形式
 """
 from __future__ import annotations
 
@@ -22,32 +23,34 @@ import pytest
 
 
 # ==================== Fixtures ====================
-SAMPLE_RELEASE_JSON: list[dict] = [
-    {
-        "version": "v4.17.31",
-        "shell": {
-            "sha512": "b388f2eb6944ce9df7c2f877777c01a92cfcbbd3e342dc964cfae8d6c4f1973b"
-                       "0e2e51bc863ad6cbd2acab5f462af09385eac4e3ac6f184e60a722c312f0c4c3"
+SAMPLE_SHELL_SHA256 = "1345603985a24e7a48f7125916f0fb7116af2da0d2c3e21e380235b8fd580250"
+SAMPLE_FRAMEWORK_SHA256 = "894237ae71bce1534adc16373ce1cbffe1420a02fc5650a5cd7020d35194104c"
+
+#: GitHub Releases API 返回的单条 release 样本 (与 v4.18.2 实际响应同结构, 字段裁剪)
+SAMPLE_GITHUB_RELEASE: dict = {
+    "tag_name": "v4.18.2",
+    "name": "NapCatQQ v4.18.2",
+    "published_at": "2026-05-10T13:57:07Z",
+    "created_at": "2026-05-10T13:50:00Z",
+    "assets": [
+        {
+            "name": "NapCat.Framework.zip",
+            "digest": f"sha256:{SAMPLE_FRAMEWORK_SHA256}",
         },
-        "framework": {
-            "sha512": "8d17a09803aa1ad0ab02c0618911e44f5ce6209d05ccf9c3659904cd4448551c"
-                       "c6a11303eb08a64bdd613432958ece6ee639b981298b5d654d8cb86511de4dec"
+        {
+            "name": "NapCat.Shell.Windows.Node.zip",
+            "digest": "sha256:65d2813203a4c9769c01a75fe040f6c291bbe3bd117a31e06a2ac6112bccc48c",
         },
-        "updatedAt": "2026-03-04T13:57:07.396Z",
-    },
-    {
-        "version": "v4.18.1",
-        "shell": {
-            "sha512": "51d3d40c5141440cd623d64d8034514d7a0d2ce8a3ccc49407327dde53af35c0"
-                       "d1751be384e7ff0f8e35979fe2479332bd828f72bd566730bb004a5073ee2bf6"
+        {
+            "name": "NapCat.Shell.Windows.OneKey.zip",
+            "digest": "sha256:fa365537039e9ec29730166f3f624eb147074be18be64d1981a03f35ecb2a2af",
         },
-        "framework": {
-            "sha512": "c6607afac8ba23e58bcec869c73772549c150cc701d751cdc2a7fee234ca24a5"
-                       "11337d02d6587e1a086cc5217073f32cd6cc95e9d16d16d15f933d54bdcd4df0"
+        {
+            "name": "NapCat.Shell.zip",
+            "digest": f"sha256:{SAMPLE_SHELL_SHA256}",
         },
-        "updatedAt": "2026-04-26T10:15:05.272Z",
-    },
-]
+    ],
+}
 
 
 @pytest.fixture
@@ -65,27 +68,76 @@ def cache_path(tmp_path: Path) -> Path:
 
 # ==================== 模型解析 ====================
 def test_release_hash_entry_normalizes_version_prefix(release_hash_service_module) -> None:
-    """``v4.18.1`` 与 ``4.18.1`` 应统一存为不带 ``v`` 的内部形式."""
-    entry = release_hash_service_module.ReleaseHashEntry.from_payload(SAMPLE_RELEASE_JSON[1])
+    """``v4.18.2`` 与 ``4.18.2`` 应统一存为不带 ``v`` 的内部形式."""
+    entry = release_hash_service_module.ReleaseHashEntry.from_github_release(
+        SAMPLE_GITHUB_RELEASE
+    )
 
     assert entry is not None
-    assert entry.version == "4.18.1"
-    assert len(entry.shell_sha512) == 128
-    assert entry.shell_sha512.startswith("51d3d40c")
+    assert entry.version == "4.18.2"
+    assert len(entry.shell_sha256) == 64
+    assert entry.shell_sha256 == SAMPLE_SHELL_SHA256
+    assert entry.framework_sha256 == SAMPLE_FRAMEWORK_SHA256
 
 
-def test_release_hash_entry_rejects_bad_hex(release_hash_service_module) -> None:
-    """SHA512 非 128 位 / 含非法字符 / 缺字段 -> 返回 None."""
+def test_release_hash_entry_extracts_correct_asset(release_hash_service_module) -> None:
+    """assets 数组中有 4 个 zip, 必须严格按文件名匹配 NapCat.Shell.zip."""
+    entry = release_hash_service_module.ReleaseHashEntry.from_github_release(
+        SAMPLE_GITHUB_RELEASE
+    )
+
+    assert entry is not None
+    # 不应误用 Windows.Node 或 Windows.OneKey 那两个变体
+    assert entry.shell_sha256 != "65d2813203a4c9769c01a75fe040f6c291bbe3bd117a31e06a2ac6112bccc48c"
+    assert entry.shell_sha256 != "fa365537039e9ec29730166f3f624eb147074be18be64d1981a03f35ecb2a2af"
+
+
+def test_release_hash_entry_rejects_bad_payload(release_hash_service_module) -> None:
+    """缺关键字段 / 非法 hex / sha256 前缀缺失 -> 返回 None."""
     bad_payloads = [
-        {"version": "v4.0.0", "shell": {"sha512": "deadbeef"}, "framework": {"sha512": "x" * 128}},  # 长度不足
-        {"version": "v4.0.0", "shell": {"sha512": "z" * 128}, "framework": {"sha512": "a" * 128}},  # 非 hex
-        {"version": "v4.0.0", "shell": {}, "framework": {"sha512": "a" * 128}},  # 缺 shell.sha512
-        {"version": "v4.0.0", "framework": {"sha512": "a" * 128}},  # 缺 shell
+        # 缺 tag_name
+        {"assets": [{"name": "NapCat.Shell.zip", "digest": "sha256:" + "a" * 64}]},
+        # 缺 assets
+        {"tag_name": "v4.18.2"},
+        # assets 中无 NapCat.Shell.zip
+        {
+            "tag_name": "v4.18.2",
+            "assets": [{"name": "Other.zip", "digest": "sha256:" + "a" * 64}],
+        },
+        # digest 算法前缀错
+        {
+            "tag_name": "v4.18.2",
+            "assets": [{"name": "NapCat.Shell.zip", "digest": "md5:" + "a" * 32}],
+        },
+        # digest hex 长度错
+        {
+            "tag_name": "v4.18.2",
+            "assets": [{"name": "NapCat.Shell.zip", "digest": "sha256:deadbeef"}],
+        },
+        # digest 非 hex
+        {
+            "tag_name": "v4.18.2",
+            "assets": [{"name": "NapCat.Shell.zip", "digest": "sha256:" + "z" * 64}],
+        },
         {},  # 空对象
     ]
     for payload in bad_payloads:
-        entry = release_hash_service_module.ReleaseHashEntry.from_payload(payload)
+        entry = release_hash_service_module.ReleaseHashEntry.from_github_release(payload)
         assert entry is None, f"payload 应当被拒: {payload}"
+
+
+def test_release_hash_entry_tolerates_missing_framework(release_hash_service_module) -> None:
+    """framework asset 缺失不应阻塞 (主校验目标是 shell), framework_sha256 置空."""
+    payload = {
+        "tag_name": "v4.18.2",
+        "assets": [
+            {"name": "NapCat.Shell.zip", "digest": f"sha256:{SAMPLE_SHELL_SHA256}"},
+        ],
+    }
+    entry = release_hash_service_module.ReleaseHashEntry.from_github_release(payload)
+    assert entry is not None
+    assert entry.shell_sha256 == SAMPLE_SHELL_SHA256
+    assert entry.framework_sha256 == ""
 
 
 # ==================== 缓存读写 ====================
@@ -94,7 +146,7 @@ def test_service_writes_and_loads_cache(release_hash_service_module, cache_path:
     service = release_hash_service_module.ReleaseHashService(
         cache_path=cache_path,
         sources=("inline://primary",),
-        fetcher=lambda url: json.dumps(SAMPLE_RELEASE_JSON),
+        fetcher=lambda url: json.dumps(SAMPLE_GITHUB_RELEASE),
     )
     result = service.fetch()
 
@@ -103,23 +155,33 @@ def test_service_writes_and_loads_cache(release_hash_service_module, cache_path:
     payload = json.loads(cache_path.read_text(encoding="utf-8"))
     assert "fetched_at" in payload
     assert isinstance(payload["entries"], list)
-    assert len(payload["entries"]) == len(SAMPLE_RELEASE_JSON)
+    assert len(payload["entries"]) == 1
+    cached_entry = payload["entries"][0]
+    assert cached_entry["version"] == "v4.18.2"
+    assert cached_entry["shell_sha256"] == SAMPLE_SHELL_SHA256
 
-    entry = service.lookup("v4.18.1")
+    entry = service.lookup("v4.18.2")
     assert entry is not None
-    assert entry.version == "4.18.1"
+    assert entry.version == "4.18.2"
 
 
 def test_service_falls_back_to_cache_when_all_sources_fail(
     release_hash_service_module, cache_path: Path
 ) -> None:
     """全部源拉取失败时, 应回落到磁盘缓存且 outcome=CACHED."""
-    # 预先写入一份缓存
+    # 预先写入一份缓存 (新 schema)
     cache_path.write_text(
         json.dumps(
             {
                 "fetched_at": time.time() - 100,
-                "entries": SAMPLE_RELEASE_JSON,
+                "entries": [
+                    {
+                        "version": "v4.18.2",
+                        "shell_sha256": SAMPLE_SHELL_SHA256,
+                        "framework_sha256": SAMPLE_FRAMEWORK_SHA256,
+                        "updated_at": "",
+                    }
+                ],
             },
             ensure_ascii=False,
         ),
@@ -137,7 +199,7 @@ def test_service_falls_back_to_cache_when_all_sources_fail(
     result = service.fetch()
 
     assert result.outcome == release_hash_service_module.ReleaseHashFetchOutcome.CACHED
-    assert service.lookup("v4.18.1") is not None
+    assert service.lookup("v4.18.2") is not None
 
 
 def test_service_returns_none_when_no_cache_and_network_fails(
@@ -155,7 +217,7 @@ def test_service_returns_none_when_no_cache_and_network_fails(
     result = service.fetch()
 
     assert result.outcome == release_hash_service_module.ReleaseHashFetchOutcome.NONE
-    assert service.lookup("v4.18.1") is None
+    assert service.lookup("v4.18.2") is None
 
 
 def test_service_multi_source_fallback(release_hash_service_module, cache_path: Path) -> None:
@@ -166,7 +228,7 @@ def test_service_multi_source_fallback(release_hash_service_module, cache_path: 
         calls.append(url)
         if url == "inline://primary":
             raise RuntimeError("primary down")
-        return json.dumps(SAMPLE_RELEASE_JSON)
+        return json.dumps(SAMPLE_GITHUB_RELEASE)
 
     service = release_hash_service_module.ReleaseHashService(
         cache_path=cache_path,
@@ -177,7 +239,7 @@ def test_service_multi_source_fallback(release_hash_service_module, cache_path: 
 
     assert result.outcome == release_hash_service_module.ReleaseHashFetchOutcome.FETCHED
     assert calls == ["inline://primary", "inline://secondary"]
-    assert service.lookup("4.17.31") is not None
+    assert service.lookup("4.18.2") is not None
 
 
 def test_service_handles_corrupt_cache(release_hash_service_module, cache_path: Path) -> None:
@@ -195,13 +257,13 @@ def test_service_handles_corrupt_cache(release_hash_service_module, cache_path: 
     result = service.fetch()
 
     assert result.outcome == release_hash_service_module.ReleaseHashFetchOutcome.NONE
-    assert service.lookup("v4.18.1") is None
+    assert service.lookup("v4.18.2") is None
 
 
 def test_service_handles_corrupt_remote_payload(
     release_hash_service_module, cache_path: Path
 ) -> None:
-    """远端返回非 JSON / 不是 list -> 视为本次 fetch 失败, 不污染缓存."""
+    """远端返回非 JSON / 不是 dict / 缺关键字段 -> 视为本次 fetch 失败, 不污染缓存."""
     def fetcher(url: str) -> str:
         return "<html>404</html>"
 
@@ -213,26 +275,29 @@ def test_service_handles_corrupt_remote_payload(
     result = service.fetch()
 
     assert result.outcome == release_hash_service_module.ReleaseHashFetchOutcome.NONE
-    assert not cache_path.exists() or json.loads(cache_path.read_text(encoding="utf-8")).get("entries", []) == []
+    assert (
+        not cache_path.exists()
+        or json.loads(cache_path.read_text(encoding="utf-8")).get("entries", []) == []
+    )
 
 
 # ==================== 版本归一化 ====================
 def test_lookup_accepts_both_with_and_without_v_prefix(
     release_hash_service_module, cache_path: Path
 ) -> None:
-    """``lookup("v4.18.1")`` 与 ``lookup("4.18.1")`` 应等价."""
+    """``lookup("v4.18.2")`` 与 ``lookup("4.18.2")`` 应等价."""
     service = release_hash_service_module.ReleaseHashService(
         cache_path=cache_path,
         sources=("inline://a",),
-        fetcher=lambda url: json.dumps(SAMPLE_RELEASE_JSON),
+        fetcher=lambda url: json.dumps(SAMPLE_GITHUB_RELEASE),
     )
     service.fetch()
 
-    a = service.lookup("v4.18.1")
-    b = service.lookup("4.18.1")
-    c = service.lookup("V4.18.1")  # 大写 V 也应兼容
+    a = service.lookup("v4.18.2")
+    b = service.lookup("4.18.2")
+    c = service.lookup("V4.18.2")  # 大写 V 也应兼容
     assert a is not None and b is not None and c is not None
-    assert a.version == b.version == c.version == "4.18.1"
+    assert a.version == b.version == c.version == "4.18.2"
 
 
 def test_lookup_returns_none_for_unknown_version(
@@ -241,7 +306,7 @@ def test_lookup_returns_none_for_unknown_version(
     service = release_hash_service_module.ReleaseHashService(
         cache_path=cache_path,
         sources=("inline://a",),
-        fetcher=lambda url: json.dumps(SAMPLE_RELEASE_JSON),
+        fetcher=lambda url: json.dumps(SAMPLE_GITHUB_RELEASE),
     )
     service.fetch()
     assert service.lookup("v9.99.99") is None
@@ -256,7 +321,17 @@ def test_is_cache_fresh_respects_ttl(
     """``is_cache_fresh`` 仅在 ``fetched_at`` 距今 < TTL 时返回 True."""
     cache_path.write_text(
         json.dumps(
-            {"fetched_at": time.time() - 100, "entries": SAMPLE_RELEASE_JSON},
+            {
+                "fetched_at": time.time() - 100,
+                "entries": [
+                    {
+                        "version": "v4.18.2",
+                        "shell_sha256": SAMPLE_SHELL_SHA256,
+                        "framework_sha256": SAMPLE_FRAMEWORK_SHA256,
+                        "updated_at": "",
+                    }
+                ],
+            },
             ensure_ascii=False,
         ),
         encoding="utf-8",

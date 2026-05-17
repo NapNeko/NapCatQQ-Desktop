@@ -415,24 +415,24 @@ class RemoteBackend(OperationBackend):
         log_callback=None,
         progress_log_callback=None,
         force_update: bool = False,
-        expected_sha512: str | None = None,
+        expected_sha256: str | None = None,
         local_archive_cache: Path | None = None,
         should_cancel=None,
     ) -> None:
-        """P1: 远端安装/更新 NapCat. 
+        """P1: 远端安装/更新 NapCat.
 
         ``archive_path`` 当前未使用 (远端脚本自行 ``curl`` 下载官方 release),
-        预留接口以便 P3 支持 Desktop 本地上传安装包到内网无外网场景. 
+        预留接口以便 P3 支持 Desktop 本地上传安装包到内网无外网场景.
 
         ``force_update=True`` 强制重新下载并解压 NapCat;
-        默认情况下脚本会复用远端已有 NapCat 安装. 
+        默认情况下脚本会复用远端已有 NapCat 安装.
 
-        ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显. 
+        ``log_callback`` (P1.5): 每行远端脚本输出都会触发一次, 用于"部署控制台"实时回显.
         ``progress_log_callback``: ``\\r`` 终止的瞬时刷新行 (dnf/apt/curl 进度条) 单独
-        回调, 设置后这类行 *不* 再走 ``log_callback``, 由调用方做"原地覆盖"渲染. 
+        回调, 设置后这类行 *不* 再走 ``log_callback``, 由调用方做"原地覆盖"渲染.
 
-        ``expected_sha512`` (P5 F1.4): 期望的 ``NapCat.Shell.zip`` SHA512 (128 位 hex);
-        提供时远端脚本会做 SHA512 完整性校验, 不一致以退出码 36 中断.
+        ``expected_sha256`` (P5 F1.4): 期望的 ``NapCat.Shell.zip`` SHA256 (64 位 hex);
+        提供时远端脚本会做 SHA256 完整性校验, 不一致以退出码 36 中断.
         ``None`` 跳过校验, 兼容上游 hash 数据不可用的离线场景.
 
         ``local_archive_cache``: 本机预下载缓存路径. 远端无法直连 ``github.com`` 时
@@ -441,7 +441,7 @@ class RemoteBackend(OperationBackend):
         [`local_napcat_fallback`](src/core/remote/local_napcat_fallback.py).
         """
         if archive_path is not None:
-            # P1 不实现自定义包路径, 但仍允许调用方传参 (直接忽略并 logger.warning 比抛错更友好) 
+            # P1 不实现自定义包路径, 但仍允许调用方传参 (直接忽略并 logger.warning 比抛错更友好)
             from src.core.logging import LogSource, LogType, logger as _logger
 
             _logger.warning(
@@ -455,7 +455,7 @@ class RemoteBackend(OperationBackend):
             log_callback=log_callback,
             progress_log_callback=progress_log_callback,
             force_update=force_update,
-            expected_sha512=expected_sha512,
+            expected_sha256=expected_sha256,
             local_archive_cache=local_archive_cache,
             should_cancel=should_cancel,
         )

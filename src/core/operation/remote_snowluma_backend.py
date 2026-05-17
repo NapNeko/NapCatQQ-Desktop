@@ -749,7 +749,7 @@ class RemoteSnowLumaBackend(OperationBackend):
         log_callback=None,  # noqa: ARG002
         progress_log_callback=None,  # noqa: ARG002
         force_update: bool = False,  # noqa: ARG002
-        expected_sha512: str | None = None,  # noqa: ARG002
+        expected_sha256: str | None = None,  # noqa: ARG002
         local_archive_cache: Path | None = None,  # noqa: ARG002
         should_cancel=None,  # noqa: ARG002
     ) -> None:

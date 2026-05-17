@@ -26,9 +26,9 @@ def archive_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def expected_sha512(archive_path: Path) -> str:
-    """与 ``archive_path`` 内容真实匹配的 SHA512."""
-    return hashlib.sha512(archive_path.read_bytes()).hexdigest()
+def expected_sha256(archive_path: Path) -> str:
+    """与 ``archive_path`` 内容真实匹配的 SHA256."""
+    return hashlib.sha256(archive_path.read_bytes()).hexdigest()
 
 
 @pytest.fixture
@@ -48,20 +48,20 @@ def stub_release_hash_service():
 
 
 def test_verify_archive_passes_when_hash_matches(
-    archive_path: Path, expected_sha512: str, stub_release_hash_service
+    archive_path: Path, expected_sha256: str, stub_release_hash_service
 ) -> None:
     from src.core.installation.installers import verify_napcat_archive
     from src.core.versioning.release_hash_service import ReleaseHashEntry
 
     entry = ReleaseHashEntry(
-        version="4.18.1",
-        shell_sha512=expected_sha512,
-        framework_sha512="0" * 128,
+        version="4.18.2",
+        shell_sha256=expected_sha256,
+        framework_sha256="0" * 64,
     )
     service = stub_release_hash_service(entry)
 
     verified = verify_napcat_archive(
-        version="v4.18.1",
+        version="v4.18.2",
         archive_path=archive_path,
         hash_service=service,
     )
@@ -76,31 +76,31 @@ def test_verify_archive_raises_and_deletes_on_mismatch(
     from src.core.installation.installers import verify_napcat_archive
     from src.core.versioning.release_hash_service import ReleaseHashEntry
 
-    wrong_hash = "1" * 128
+    wrong_hash = "1" * 64
     entry = ReleaseHashEntry(
-        version="4.18.1",
-        shell_sha512=wrong_hash,
-        framework_sha512="0" * 128,
+        version="4.18.2",
+        shell_sha256=wrong_hash,
+        framework_sha256="0" * 64,
     )
     service = stub_release_hash_service(entry)
 
     with pytest.raises(NapCatHashMismatchError) as exc_info:
         verify_napcat_archive(
-            version="v4.18.1",
+            version="v4.18.2",
             archive_path=archive_path,
             hash_service=service,
         )
 
-    assert exc_info.value.version == "4.18.1"
+    assert exc_info.value.version == "4.18.2"
     assert exc_info.value.expected == wrong_hash
-    assert len(exc_info.value.actual) == 128
+    assert len(exc_info.value.actual) == 64
     assert not archive_path.exists(), "校验失败时 archive 必须被删除"
 
 
 def test_verify_archive_returns_false_when_no_hash_available(
     archive_path: Path, stub_release_hash_service
 ) -> None:
-    """上游 release.json 没有该版本时, ``verify_napcat_archive`` 不抛, 仅返回 False.
+    """上游 release 没有该版本时, ``verify_napcat_archive`` 不抛, 仅返回 False.
 
     UI 层应据此弹"二次确认"对话框, 是否在缺乏校验数据的情况下继续安装.
     """
@@ -108,7 +108,7 @@ def test_verify_archive_returns_false_when_no_hash_available(
 
     service = stub_release_hash_service(None)
     verified = verify_napcat_archive(
-        version="v4.18.1",
+        version="v4.18.2",
         archive_path=archive_path,
         hash_service=service,
     )
@@ -127,17 +127,17 @@ def test_verify_archive_uses_streaming_for_large_files(
     # 8MB 数据 (> 4MB chunk), 确保流式读取走多次 read
     big_data = b"napcat-fake-archive-block" * (8 * 1024 * 1024 // 25 + 1)
     big_path.write_bytes(big_data)
-    expected = hashlib.sha512(big_data).hexdigest()
+    expected = hashlib.sha256(big_data).hexdigest()
 
     entry = ReleaseHashEntry(
-        version="4.18.1",
-        shell_sha512=expected,
-        framework_sha512="0" * 128,
+        version="4.18.2",
+        shell_sha256=expected,
+        framework_sha256="0" * 64,
     )
     service = stub_release_hash_service(entry)
 
     verified = verify_napcat_archive(
-        version="v4.18.1",
+        version="v4.18.2",
         archive_path=big_path,
         hash_service=service,
     )

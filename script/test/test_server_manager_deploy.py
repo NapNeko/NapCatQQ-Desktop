@@ -27,12 +27,12 @@ from src.core.remote.server_manager import DeploymentResult, ServerManager
 from src.core.remote.servers import DeploymentState, ServerProfile
 
 
-# P5 F1.4: 默认跳过远端 SHA512 查询的网络调用; 单测验证编排不需要真 hash.
+# P5 F1.4: 默认跳过远端 SHA256 查询的网络调用; 单测验证编排不需要真 hash.
 @pytest.fixture(autouse=True)
 def _stub_release_hash_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         ServerManager,
-        "_lookup_napcat_expected_sha512",
+        "_lookup_napcat_expected_sha256",
         lambda self: None,
     )
 
@@ -102,7 +102,7 @@ class FakeRemoteBackend:
         log_callback=None,
         progress_log_callback=None,
         force_update: bool = False,
-        expected_sha512: str | None = None,
+        expected_sha256: str | None = None,
         local_archive_cache=None,
         should_cancel=None,
     ) -> None:
@@ -111,7 +111,7 @@ class FakeRemoteBackend:
                 "archive_path": archive_path,
                 "force_update": force_update,
                 "has_log_callback": log_callback is not None,
-                "expected_sha512": expected_sha512,
+                "expected_sha256": expected_sha256,
                 "local_archive_cache": local_archive_cache,
                 "has_should_cancel": should_cancel is not None,
             }

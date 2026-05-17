@@ -14,7 +14,7 @@
 # 环境变量:
 #   FORCE_NAPCAT_UPDATE=1  强制重新下载并解压 NapCat (默认仅在缺失时下载)
 #   NAPCAT_DOWNLOAD_URL    自定义下载地址 (默认从官方 GitHub Release latest 下载)
-#   NAPCAT_EXPECTED_SHA512 期望的 NapCat.Shell.zip SHA512 (128 位 hex). 设置后强制
+#   NAPCAT_EXPECTED_SHA256 期望的 NapCat.Shell.zip SHA256 (64 位 hex). 设置后强制
 #                          校验下载产物; 不一致 / 工具缺失则中断并退出 36
 #
 # 退出码:
@@ -24,7 +24,7 @@
 #   33  下载失败
 #   34  解压工具缺失 (unzip 与 python3 都不可用)
 #   35  package.json patch 工具缺失 (python3 与 jq 都不可用)
-#   36  SHA512 完整性校验失败 (P5 F1.4)
+#   36  SHA256 完整性校验失败 (P5 F1.4)
 #   37  napcat archive 路径未设置
 #   38  LinuxQQ 未安装 (前置条件检查)
 
@@ -337,58 +337,58 @@ download_file() {
   exit 33
 }
 
-# 计算并校验 NapCat archive 的 SHA512 (P5 F1.4)
+# 计算并校验 NapCat archive 的 SHA256 (P5 F1.4)
 #
-# - 当 ``$NAPCAT_EXPECTED_SHA512`` 未设置 / 为空时, 退化为"仅警告不阻断", 兼容老
+# - 当 ``$NAPCAT_EXPECTED_SHA256`` 未设置 / 为空时, 退化为"仅警告不阻断", 兼容老
 #   Desktop 客户端调用本脚本的场景.
-# - 当 ``$NAPCAT_EXPECTED_SHA512`` 设置但 ``sha512sum`` / ``openssl`` 都不可用时,
+# - 当 ``$NAPCAT_EXPECTED_SHA256`` 设置但 ``sha256sum`` / ``openssl`` 都不可用时,
 #   按"远端环境异常时偏严"策略, 删除 archive 并退出 36 (不静默放行).
 # - 当 hash 不一致时, 删除 archive 防止被解压并退出 36.
-verify_napcat_archive_sha512() {
+verify_napcat_archive_sha256() {
   local archive_path="$1"
-  local expected="${NAPCAT_EXPECTED_SHA512:-}"
+  local expected="${NAPCAT_EXPECTED_SHA256:-}"
 
   if [ -z "$expected" ]; then
-    log_warn "NAPCAT_EXPECTED_SHA512 not provided, integrity check skipped (legacy desktop)"
+    log_warn "NAPCAT_EXPECTED_SHA256 not provided, integrity check skipped (legacy desktop)"
     return 0
   fi
 
-  log_progress 55 "verifying napcat shell sha512"
+  log_progress 55 "verifying napcat shell sha256"
   local actual=""
-  if command -v sha512sum >/dev/null 2>&1; then
-    actual=$(sha512sum "$archive_path" | awk '{print $1}')
-    # GNU sha512sum 在文件名含 ``\`` / ``\n`` 时, 会在 hash 前加 ``\`` 转义标记
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "$archive_path" | awk '{print $1}')
+    # GNU sha256sum 在文件名含 ``\`` / ``\n`` 时, 会在 hash 前加 ``\`` 转义标记
     # (BSD compat 行为). Linux 生产路径不会含 ``\``, 但跨平台测试 / 奇怪挂载点
     # (例如 ``/mnt/c/...``) 可能触发. 用 bash 参数展开剥前导反斜杠, 避开 sed
     # 在 MSYS Git Bash 下的路径转换坑. 单引号 pattern 避免双引号下反斜杠折叠.
     actual=${actual#'\'}
   elif command -v openssl >/dev/null 2>&1; then
-    # OpenSSL 输出形如 ``SHA512(file)= <hex>`` 或 ``SHA2-512(file)= <hex>``;
+    # OpenSSL 输出形如 ``SHA256(file)= <hex>`` 或 ``SHA2-256(file)= <hex>``;
     # 取最后一个空格后的 token 即为 hex 摘要.
-    actual=$(openssl dgst -sha512 "$archive_path" 2>/dev/null | awk '{print $NF}')
+    actual=$(openssl dgst -sha256 "$archive_path" 2>/dev/null | awk '{print $NF}')
   else
-    log_error "neither sha512sum nor openssl is available, cannot verify integrity"
+    log_error "neither sha256sum nor openssl is available, cannot verify integrity"
     rm -f "$archive_path" 2>/dev/null || true
     exit 36
   fi
 
   if [ -z "$actual" ]; then
-    log_error "sha512 calculation produced empty output"
+    log_error "sha256 calculation produced empty output"
     rm -f "$archive_path" 2>/dev/null || true
     exit 36
   fi
 
-  # 大小写不敏感比较: 用户传入的 hex 可能是大写, sha512sum 输出小写
+  # 大小写不敏感比较: 用户传入的 hex 可能是大写, sha256sum 输出小写
   local expected_lc actual_lc
   expected_lc=$(printf "%s" "$expected" | tr '[:upper:]' '[:lower:]')
   actual_lc=$(printf "%s" "$actual" | tr '[:upper:]' '[:lower:]')
   if [ "$actual_lc" != "$expected_lc" ]; then
-    log_error "sha512 mismatch: expected=${expected_lc} actual=${actual_lc}"
+    log_error "sha256 mismatch: expected=${expected_lc} actual=${actual_lc}"
     rm -f "$archive_path" 2>/dev/null || true
     exit 36
   fi
 
-  log_info "sha512 verified ok"
+  log_info "sha256 verified ok"
   return 0
 }
 
@@ -507,7 +507,7 @@ ensure_napcat_installed() {
     log_info "reuse cached NapCat package: ${napcat_archive_path}"
   fi
 
-  verify_napcat_archive_sha512 "$napcat_archive_path"
+  verify_napcat_archive_sha256 "$napcat_archive_path"
 
   log_progress 60 "extracting napcat"
   rm -rf "$napcat_unpack_dir"

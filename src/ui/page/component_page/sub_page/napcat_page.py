@@ -193,7 +193,7 @@ class NapCatPage(PageBase):
         logger.info("NapCat 下载完成，开始安装", log_source=LogSource.UI)
         self.downloader = None
 
-        # P5 F1.3: 解压前先做 SHA512 完整性校验
+        # P5 F1.3: 解压前先做 SHA256 完整性校验
         from src.ui.components.install_hash_check import run_napcat_archive_hash_check
         from src.ui.window.main_window import MainWindow
 
@@ -204,7 +204,7 @@ class NapCatPage(PageBase):
             parent=it(MainWindow),
         ):
             logger.warning(
-                "NapCat 安装中止: SHA512 完整性校验失败或用户取消", log_source=LogSource.UI
+                "NapCat 安装中止: SHA256 完整性校验失败或用户取消", log_source=LogSource.UI
             )
             self.handle_operation_failed()
             return

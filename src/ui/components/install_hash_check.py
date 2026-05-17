@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """[`run_napcat_archive_hash_check`](src/ui/components/install_hash_check.py):
-NapCat 下载完成 -> 解压前的 SHA512 完整性校验 + UI 二次确认 (P5 F1.3).
+NapCat 下载完成 -> 解压前的 SHA256 完整性校验 + UI 二次确认 (P5 F1.3).
 
 数据层 [`verify_napcat_archive`](src/core/installation/installers.py) 仅做纯计算与
 异常抛出, UI 层(GuideWindow / ComponentPage) 调用本助手把结果映射到
@@ -32,7 +32,7 @@ def run_napcat_archive_hash_check(
     parent: "QWidget",
     hash_service: ReleaseHashService | None = None,
 ) -> bool:
-    """同步执行 NapCat archive 的 SHA512 校验, 返回是否可继续安装.
+    """同步执行 NapCat archive 的 SHA256 校验, 返回是否可继续安装.
 
     返回值语义:
     - ``True``: 校验通过 / 用户在"无 hash 数据"提示中选择继续 -> 调用方继续解压
@@ -53,7 +53,7 @@ def run_napcat_archive_hash_check(
             log_source=LogSource.UI,
         )
         return _ask_proceed_without_hash(parent, reason_text=(
-            "未能获取 NapCat 远程版本号, 因此无法在上游校验数据中查询期望的 SHA512."
+            "未能获取 NapCat 远程版本号, 因此无法在上游校验数据中查询期望的 SHA256."
         ))
 
     service = hash_service if hash_service is not None else ReleaseHashService()
@@ -87,8 +87,9 @@ def run_napcat_archive_hash_check(
     return _ask_proceed_without_hash(
         parent,
         reason_text=(
-            "上游 NapCat 校验数据中没有该版本的 SHA512, 可能是网络异常 "
-            "(上游 release.json 拉取失败且无本地缓存) 或该版本太新尚未发布 hash."
+            "上游 NapCat 校验数据中没有该版本的 SHA256, 可能是网络异常 "
+            "(上游 release 拉取失败且无本地缓存) 或当前安装版本不是 GitHub latest "
+            "(GitHub Releases API 仅返回最新版的指纹)."
         ),
     )
 

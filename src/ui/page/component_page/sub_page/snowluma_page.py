@@ -6,7 +6,7 @@
 - ``app_card.set_name`` 显示 "SnowLuma" + 仓库链接 :data:`Urls.SNOWLUMA_REPO`
 - 下载链接由 :meth:`Urls.get_snowluma_download_url` 动态构造 (含版本号)
 - 安装器走 :class:`SnowLumaInstall` (而非 :class:`NapCatInstall`)
-- **不做** SHA512 完整性校验 (上游 SnowLuma 未提供 release.json hash 服务;
+- **不做** 完整性哈希校验 (上游 SnowLuma 未提供 release 哈希服务;
   与 NapCat 不同, NapCat 走 [`run_napcat_archive_hash_check`](src/ui/components/install_hash_check.py))
 - 本地版本由 :meth:`LocalVersionTask.get_snowluma_version` 提供, 读 ``.installed_tag``
 
@@ -220,7 +220,7 @@ class SnowLumaPage(PageBase):
         """下载完成后开始安装 SnowLuma.
 
         与 :class:`NapCatPage.handle_install_requested` 的关键区别:
-        SnowLuma 上游未提供 release.json hash 服务, 这里**不**做 SHA512 校验;
+        SnowLuma 上游未提供 release 哈希服务, 这里**不**做完整性校验;
         如果未来上游提供, 可参照 NapCat 加 ``run_napcat_archive_hash_check`` 同款流程.
         """
         logger.info("SnowLuma 下载完成，开始安装", log_source=LogSource.UI)

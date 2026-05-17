@@ -3,12 +3,12 @@
 [`LinuxCoreDeployment._maybe_prefetch_napcat_archive_via_local`]
 (src/core/remote/deployment.py) 单元测试.
 
-覆盖三层短路 + httpx 顺序回退 + SHA512 校验:
+覆盖三层短路 + httpx 顺序回退 + SHA256 校验:
 
 - ``backend_can_reach_github``: http_code 200 -> True; 000 / 4xx -> False
-- ``prefetch_napcat_archive_locally`` 缓存复用 (有/无 SHA512)
+- ``prefetch_napcat_archive_locally`` 缓存复用 (有/无 SHA256)
 - ``prefetch_napcat_archive_locally`` 镜像顺序回退 (前 N 失败, 后续成功)
-- ``prefetch_napcat_archive_locally`` SHA512 不匹配 -> 删除产物 + ValueError
+- ``prefetch_napcat_archive_locally`` SHA256 不匹配 -> 删除产物 + ValueError
 - ``_maybe_prefetch_napcat_archive_via_local`` 三个分支:
   ``远端已有归档 -> 跳过`` / ``GitHub 可达 -> 跳过`` / ``GitHub 不可达 -> 上传``
 - 上传失败时不抛, 仅 emit ``[WARN]`` 让主流程继续
@@ -170,9 +170,9 @@ def test_candidate_urls_official_first_then_mirrors() -> None:
 class TestPrefetchLocally:
     def _write_zip(self, path: Path, content: bytes = b"fake-zip-bytes") -> str:
         path.write_bytes(content)
-        return hashlib.sha512(content).hexdigest()
+        return hashlib.sha256(content).hexdigest()
 
-    def test_reuse_cache_without_sha512(self, tmp_path: Path) -> None:
+    def test_reuse_cache_without_sha256(self, tmp_path: Path) -> None:
         target = tmp_path / "NapCat.Shell.zip"
         self._write_zip(target)
         result = prefetch_napcat_archive_locally(target_path=target)
@@ -180,23 +180,23 @@ class TestPrefetchLocally:
         # 没动文件 (没有 .part 残留)
         assert not (tmp_path / "NapCat.Shell.zip.part").exists()
 
-    def test_reuse_cache_with_matching_sha512(self, tmp_path: Path) -> None:
+    def test_reuse_cache_with_matching_sha256(self, tmp_path: Path) -> None:
         target = tmp_path / "NapCat.Shell.zip"
         sha = self._write_zip(target)
         result = prefetch_napcat_archive_locally(
             target_path=target,
-            expected_sha512=sha,
+            expected_sha256=sha,
         )
         assert result == target
 
-    def test_cache_sha512_mismatch_triggers_redownload(
+    def test_cache_sha256_mismatch_triggers_redownload(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         target = tmp_path / "NapCat.Shell.zip"
         self._write_zip(target, b"old-broken-bytes")
 
         new_content = b"fresh-good-bytes"
-        new_sha = hashlib.sha512(new_content).hexdigest()
+        new_sha = hashlib.sha256(new_content).hexdigest()
 
         # 注入伪造的 _download_via_httpx: 第一个候选源直接成功
         def _fake_download(url: str, target_path: Path, *, log_callback=None, should_cancel=None) -> bool:
@@ -210,7 +210,7 @@ class TestPrefetchLocally:
 
         result = prefetch_napcat_archive_locally(
             target_path=target,
-            expected_sha512=new_sha,
+            expected_sha256=new_sha,
         )
         assert result == target
         assert target.read_bytes() == new_content
@@ -324,7 +324,7 @@ class TestPrefetchLocally:
         # 取消时 .part 被清理
         assert not target.with_name(target.name + ".part").exists()
 
-    def test_sha512_mismatch_after_download_deletes_file(
+    def test_sha256_mismatch_after_download_deletes_file(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         target = tmp_path / "NapCat.Shell.zip"
@@ -338,11 +338,11 @@ class TestPrefetchLocally:
             _fake_download,
         )
 
-        wrong_sha = "0" * 128
-        with pytest.raises(ValueError, match="SHA512 校验失败"):
+        wrong_sha = "0" * 64
+        with pytest.raises(ValueError, match="SHA256 校验失败"):
             prefetch_napcat_archive_locally(
                 target_path=target,
-                expected_sha512=wrong_sha,
+                expected_sha256=wrong_sha,
             )
         # 校验失败后产物必须被删除
         assert not target.exists()
@@ -363,7 +363,7 @@ class TestMaybePrefetchOrchestration:
         lines: list[str] = []
         deployment._maybe_prefetch_napcat_archive_via_local(
             local_archive_cache=cache,
-            expected_sha512=None,
+            expected_sha256=None,
             force_update=False,
             log_callback=lines.append,
         )
@@ -389,7 +389,7 @@ class TestMaybePrefetchOrchestration:
         lines: list[str] = []
         deployment._maybe_prefetch_napcat_archive_via_local(
             local_archive_cache=cache,
-            expected_sha512=None,
+            expected_sha256=None,
             force_update=False,
             log_callback=lines.append,
         )
@@ -425,7 +425,7 @@ class TestMaybePrefetchOrchestration:
 
         deployment._maybe_prefetch_napcat_archive_via_local(
             local_archive_cache=cache,
-            expected_sha512=None,
+            expected_sha256=None,
             force_update=False,
             log_callback=None,
         )
@@ -445,7 +445,7 @@ class TestMaybePrefetchOrchestration:
 
         deployment._maybe_prefetch_napcat_archive_via_local(
             local_archive_cache=cache,
-            expected_sha512=None,
+            expected_sha256=None,
             force_update=True,
             log_callback=None,
         )
@@ -462,7 +462,7 @@ class TestMaybePrefetchOrchestration:
 
         deployment._maybe_prefetch_napcat_archive_via_local(
             local_archive_cache=cache,
-            expected_sha512=None,
+            expected_sha256=None,
             force_update=False,
             log_callback=None,
         )
@@ -489,7 +489,7 @@ class TestMaybePrefetchOrchestration:
         lines: list[str] = []
         deployment._maybe_prefetch_napcat_archive_via_local(
             local_archive_cache=cache,
-            expected_sha512=None,
+            expected_sha256=None,
             force_update=False,
             log_callback=lines.append,
         )
@@ -528,7 +528,7 @@ class TestMaybePrefetchOrchestration:
         # 不应抛
         deployment._maybe_prefetch_napcat_archive_via_local(
             local_archive_cache=cache,
-            expected_sha512=None,
+            expected_sha256=None,
             force_update=False,
             log_callback=lines.append,
         )

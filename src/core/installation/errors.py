@@ -12,12 +12,12 @@ class InstallationError(RuntimeError):
 
 
 class NapCatHashMismatchError(InstallationError):
-    """NapCat 安装包 SHA512 校验失败.
+    """NapCat 安装包 SHA256 校验失败.
 
     Attributes:
         version: 期望版本号 (不含 ``v`` 前缀)
-        expected: 期望 SHA512 (128 位 hex 小写)
-        actual: 实际计算所得 SHA512
+        expected: 期望 SHA256 (64 位 hex 小写)
+        actual: 实际计算所得 SHA256
         archive_path: 触发校验的本地或远端 archive 路径 (用于日志/诊断)
     """
 

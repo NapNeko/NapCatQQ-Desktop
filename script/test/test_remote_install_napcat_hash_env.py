@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """[`LinuxCoreDeployment.install_napcat`](src/core/remote/deployment.py)
-expected_sha512 注入 + 退出码 36 处理 单测 (P5 安全收尾 F1.4).
+expected_sha256 注入 + 退出码 36 处理 单测 (P5 安全收尾 F1.4).
 
 不依赖真实 SSH; 用替身 ``ExecutionBackend`` 捕获命令字符串与退出码.
 """
@@ -125,37 +125,37 @@ def _select_install_commands(commands: list[str]) -> list[str]:
 
 
 # ==================== 测试 ====================
-def test_install_napcat_injects_expected_sha512_env_var(deployment_factory) -> None:
-    """``expected_sha512`` 提供时, 命令字符串必须包含 ``NAPCAT_EXPECTED_SHA512=...`` 环境变量."""
+def test_install_napcat_injects_expected_sha256_env_var(deployment_factory) -> None:
+    """``expected_sha256`` 提供时, 命令字符串必须包含 ``NAPCAT_EXPECTED_SHA256=...`` 环境变量."""
     deployment, backend = deployment_factory()
-    expected = "ab" * 64  # 128 hex chars
+    expected = "ab" * 32  # 64 hex chars
 
-    deployment.install_napcat(expected_sha512=expected)
+    deployment.install_napcat(expected_sha256=expected)
 
     main_commands = _select_install_commands(backend.commands)
     assert len(main_commands) == 1
     cmd = main_commands[0]
-    assert "NAPCAT_EXPECTED_SHA512=" in cmd
+    assert "NAPCAT_EXPECTED_SHA256=" in cmd
     # _shell_quote 会把 hex 用单引号包起来; 大小写归一为小写
     assert expected in cmd or expected.lower() in cmd
 
 
-def test_install_napcat_omits_env_when_no_sha512(deployment_factory) -> None:
-    """``expected_sha512=None`` 时, 命令字符串不应出现 ``NAPCAT_EXPECTED_SHA512`` 字眼."""
+def test_install_napcat_omits_env_when_no_sha256(deployment_factory) -> None:
+    """``expected_sha256=None`` 时, 命令字符串不应出现 ``NAPCAT_EXPECTED_SHA256`` 字眼."""
     deployment, backend = deployment_factory()
-    deployment.install_napcat(expected_sha512=None)
+    deployment.install_napcat(expected_sha256=None)
 
     main_commands = _select_install_commands(backend.commands)
     assert len(main_commands) == 1
-    assert "NAPCAT_EXPECTED_SHA512" not in main_commands[0]
+    assert "NAPCAT_EXPECTED_SHA256" not in main_commands[0]
 
 
-def test_install_napcat_normalizes_uppercase_sha512(deployment_factory) -> None:
+def test_install_napcat_normalizes_uppercase_sha256(deployment_factory) -> None:
     """大写 hex 输入应在传入前归一为小写, 避免远端比较失败."""
     deployment, backend = deployment_factory()
-    upper_hash = "AB" * 64
+    upper_hash = "AB" * 32
 
-    deployment.install_napcat(expected_sha512=upper_hash)
+    deployment.install_napcat(expected_sha256=upper_hash)
 
     main_commands = _select_install_commands(backend.commands)
     assert len(main_commands) == 1
@@ -165,7 +165,7 @@ def test_install_napcat_normalizes_uppercase_sha512(deployment_factory) -> None:
 
 
 def test_install_napcat_exit_status_36_translates_to_command_error(deployment_factory) -> None:
-    """脚本退出码 36 (SHA512 mismatch) 应抛 ``RemoteCommandError`` (上层会转为 deployment_verify stage).
+    """脚本退出码 36 (SHA256 mismatch) 应抛 ``RemoteCommandError`` (上层会转为 deployment_verify stage).
 
     ``LinuxCoreDeployment`` 自身不区分 stage; 36 -> RemoteCommandError, server_manager
     层根据 exit_status / stderr 关键字升级为 ``RemoteDeploymentError(stage="install_napcat_verify")``.
@@ -174,14 +174,14 @@ def test_install_napcat_exit_status_36_translates_to_command_error(deployment_fa
 
     deployment, _ = deployment_factory(
         install_exit_status=36,
-        install_stderr="[ERROR] sha512 mismatch: expected=aa actual=bb",
+        install_stderr="[ERROR] sha256 mismatch: expected=aa actual=bb",
     )
 
     with pytest.raises(RemoteCommandError) as exc_info:
-        deployment.install_napcat(expected_sha512="aa" * 64)
+        deployment.install_napcat(expected_sha256="aa" * 32)
 
     assert exc_info.value.exit_status == 36
-    assert "sha512 mismatch" in exc_info.value.stderr.lower()
+    assert "sha256 mismatch" in exc_info.value.stderr.lower()
 
 
 def test_install_napcat_exit_status_36_constant_is_documented(deployment_factory) -> None:
