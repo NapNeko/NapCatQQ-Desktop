@@ -1074,24 +1074,34 @@ class ServerManager(QObject):
                 # 0-100 -> 40-90
                 _emit_progress(f"[SnowLuma] {message}", 40 + int(percent * 50 / 100))
 
-            # 获取 SnowLuma 最新 release tag
-            import json
-            import urllib.request
+            # 获取 SnowLuma 最新 release tag (优先走中转, 失败兜底直连 GitHub)
+            from src.core.config import cfg as _cfg
+            from src.core.network.proxy_signer import fetch_release_via_proxy
+            from src.core.network.urls import Urls
 
             framework_tag: str | None = None
             try:
-                api_url = "https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest"
-                req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "NapCatQQ-Desktop"})  # noqa: S310
-                with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
-                    data = json.loads(resp.read())
+                data = fetch_release_via_proxy(
+                    proxy_url=Urls.SNOWLUMA_REPO_API.value.toString(),
+                    proxy_path=Urls.SNOWLUMA_REPO_API_PATH.value,
+                    fallback_url=Urls.SNOWLUMA_REPO_API_FALLBACK.value.toString(),
+                    timeout=15,
+                    github_token=(_cfg.get(_cfg.github_personal_token) or "").strip() or None,
+                )
+                if data is not None:
                     framework_tag = data.get("tag_name")
             except Exception as exc:  # noqa: BLE001
                 self.deployment_log.emit(server_id, f"[WARN] 获取 SnowLuma 最新版本失败: {exc}")
 
             if not framework_tag:
+                logger.warning(
+                    "无法获取 SnowLuma tag: 中转与 GitHub 直连均失败. "
+                    "用户可在 设置 → 网络 中配置 GitHub Personal Token 后重试.",
+                    log_source=LogSource.CORE,
+                )
                 raise RemoteDeploymentError(
                     "install_snowluma_framework",
-                    "无法获取 SnowLuma 最新版本号 (GitHub API 不可达); 请检查网络后重试",
+                    "无法获取 SnowLuma 版本号, 请检查网络后重试",
                 )
 
             # 归一化远端架构: probe.normalized_arch 返回 "amd64"/"arm64", 转为 releases 命名 "x64"/"arm64"

@@ -4,6 +4,18 @@ from enum import Enum
 
 from PySide6.QtCore import QUrl
 
+from src.core.network._build_constants import PROXY_BASE_URL
+
+
+def _proxy_path(alias: str) -> str:
+    """生成中转代理路径 (供 ProxySigner.sign_headers 使用)."""
+    return f"/v1/release/{alias}"
+
+
+def _proxy_url(alias: str) -> str:
+    """生成完整中转代理 URL."""
+    return f"{PROXY_BASE_URL.rstrip('/')}{_proxy_path(alias)}"
+
 
 class Urls(Enum):
     """存放所有需要用到的 URL 地址"""
@@ -11,7 +23,8 @@ class Urls(Enum):
     # NCD相关地址
     NCD_REPO = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop")
     NCD_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/issues")
-    NCD_REPO_API = QUrl("https://nclatest.znin.net/get_ncd_ver")
+    NCD_REPO_API = QUrl(_proxy_url("ncd"))
+    NCD_REPO_API_PATH = _proxy_path("ncd")
     NCD_REPO_API_FALLBACK = QUrl("https://api.github.com/repos/NapNeko/NapCatQQ-Desktop/releases/latest")
     NCD_DOWNLOAD = QUrl("https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest/download/NapCatQQ-Desktop-x64.msi")
 
@@ -54,7 +67,8 @@ class Urls(Enum):
     # NapCat 相关地址
     NAPCATQQ_REPO = QUrl("https://github.com/NapNeko/NapCatQQ")
     NAPCATQQ_ISSUES = QUrl("https://github.com/NapNeko/NapCatQQ/issues")
-    NAPCATQQ_REPO_API = QUrl("https://nclatest.znin.net")
+    NAPCATQQ_REPO_API = QUrl(_proxy_url("napcat"))
+    NAPCATQQ_REPO_API_PATH = _proxy_path("napcat")
     NAPCATQQ_REPO_API_FALLBACK = QUrl("https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest")
     NAPCATQQ_DOCUMENT = QUrl("https://napneko.github.io/")
 
@@ -79,8 +93,8 @@ class Urls(Enum):
     # SnowLuma 相关地址 (P1 SnowLuma 适配)
     SNOWLUMA_REPO = QUrl("https://github.com/SnowLuma/SnowLuma")
     SNOWLUMA_ISSUES = QUrl("https://github.com/SnowLuma/SnowLuma/issues")
-    # 镜像站占位为空时主/备同 URL; 后续如有镜像只改 SNOWLUMA_REPO_API.
-    SNOWLUMA_REPO_API = QUrl("https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest")
+    SNOWLUMA_REPO_API = QUrl(_proxy_url("snowluma"))
+    SNOWLUMA_REPO_API_PATH = _proxy_path("snowluma")
     SNOWLUMA_REPO_API_FALLBACK = QUrl("https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest")
 
     @staticmethod

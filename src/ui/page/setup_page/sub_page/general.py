@@ -115,6 +115,22 @@ class General(ScrollArea):
             parent=self.import_group,
         )
 
+        # 创建组 - 网络
+        self.network_group = SettingCardGroup(title=self.tr("网络"), parent=self.view)
+        self.github_token_card = LineEditConfigCard(
+            icon=FI.VPN,
+            title=self.tr("GitHub Personal Token"),
+            content=self.tr(
+                "可选. 配置后, 直连 GitHub API 时将带上 Authorization 头, "
+                "把限速从 60 次/小时拉到 5000 次/小时. 仅在中转代理失败时使用."
+            ),
+            placeholder_text=self.tr("(留空 = 匿名调用)"),
+            parent=self.network_group,
+        )
+        self.github_token_card.fill_value(cfg.get(cfg.github_personal_token) or "")
+        self.github_token_card.lineEdit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.github_token_card.lineEdit.textChanged.connect(self._on_github_token_changed)
+
         # W6 (2026-05-11): SnowLuma 全局设置 group.
         # 仅在 SnowLuma 已安装 (``PathFunc.get_snowluma_node_executable()`` 返回非 None,
         # 即 ``<snowluma_path>/node.exe`` 存在) 时构造并显示, 避免没装的用户看到无意义的卡片.
@@ -151,6 +167,7 @@ class General(ScrollArea):
         self.version_group.addSettingCard(self.ncd_version_card)
         self.import_group.addSettingCard(self.legacy_import_card)
         self.import_group.addSettingCard(self.config_export_card)
+        self.network_group.addSettingCard(self.github_token_card)
         if self.snowluma_group is not None and self.snowluma_password_override_card is not None:
             self.snowluma_group.addSettingCard(self.snowluma_password_override_card)
 
@@ -159,10 +176,20 @@ class General(ScrollArea):
         self.expand_layout.addWidget(self.event_group)
         self.expand_layout.addWidget(self.version_group)
         self.expand_layout.addWidget(self.import_group)
+        self.expand_layout.addWidget(self.network_group)
         if self.snowluma_group is not None:
             self.expand_layout.addWidget(self.snowluma_group)
         self.expand_layout.setContentsMargins(0, 0, 0, 0)
         self.view.setLayout(self.expand_layout)
+
+    def _on_github_token_changed(self, value: str) -> None:
+        """GitHub PAT 实时同步到 cfg. 留空 = 直连匿名 (60/h), 填了 = 5000/h."""
+        cleaned = (value or "").strip()
+        cfg.set(cfg.github_personal_token, cleaned, True)
+        logger.trace(
+            f"GitHub PAT 已更新 (configured={'<set>' if cleaned else '<empty>'})",
+            log_source=LogSource.UI,
+        )
 
     # ==================== W6: SnowLuma WebUI 密码 override 槽 ====================
     def _on_snowluma_password_override_changed(self, value: str) -> None:

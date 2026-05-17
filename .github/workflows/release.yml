@@ -62,6 +62,7 @@ jobs:
     with:
       version: ${{ needs.resolve.outputs.version }}
       git_ref: ${{ github.ref }}
+    secrets: inherit
 
   publish:
     needs:

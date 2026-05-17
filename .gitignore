@@ -57,6 +57,9 @@ PatchConfig.json
 # AI 更新日志生成脚本的本地配置
 script/utils/.env
 
+# 中转代理客户端密钥 (构建期注入)
+src/core/network/_build_constants.py
+
 # Cloudflare Worker 服务端实现 (独立部署, 不与桌面端代码同库)
 script/cloudflare-worker/
 

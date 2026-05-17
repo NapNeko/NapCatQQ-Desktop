@@ -553,6 +553,12 @@ class Config(QConfig):
         validator=OptionsValidator(["POST", "GET"]),
     )
 
+    # 网络 / GitHub API
+    # 用户填的 Personal Access Token, 用于直连 GitHub API 兜底分支提速.
+    # 留空 = 直连匿名调用 (限速 60/h); 填了 = 带 Authorization (限速 5000/h).
+    # 仅在中转代理失败回退到 https://api.github.com/... 时使用.
+    github_personal_token = ConfigItem(group="Network", name="GitHubPersonalToken", default="")
+
     # 首页通知
     home_notice_ignored_keys = ConfigItem(group="Home", name="IgnoredNoticeKeys", default="[]")
     home_notice_snoozed_items = ConfigItem(group="Home", name="SnoozedNoticeItems", default="{}")

@@ -121,6 +121,18 @@ jobs:
           "VERSION_PLAIN=$plain" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Resolved version: $version"
 
+      - name: "注入中转代理常量"
+        shell: pwsh
+        env:
+          NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL }}
+          NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
+        run: |
+          if (-not $env:NCD_PROXY_SHARED_SECRET) {
+            Write-Error "NCD_PROXY_SHARED_SECRET secret 未配置. 请在仓库 Settings -> Secrets and variables -> Actions 添加."
+            exit 1
+          }
+          python script/build_scripts/inject_proxy_constants.py
+
       - name: "构建应用"
         shell: pwsh
         run: |

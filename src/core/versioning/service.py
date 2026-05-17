@@ -4,6 +4,7 @@
 import json
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from creart import it
 import httpx
@@ -12,8 +13,56 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Signal
 
 from src.core.config import cfg
 from src.core.network.urls import Urls
+from src.core.network.proxy_signer import ProxySigner
 from src.core.logging import logger
 from src.core.runtime.paths import PathFunc
+
+
+@dataclass(frozen=True)
+class _FetchError:
+    """归一化的拉取失败原因, 用于生成用户友好的错误文案."""
+
+    kind: str       # "rate_limit" | "proxy_banned" | "timeout" | "network" | "parse" | "http"
+    detail: str     # 调试细节, 进日志不上 UI
+
+    def user_message(self, name: str) -> str:
+        """简短文案 (适合 InfoBar 单行展示). 详细诊断走 logger."""
+        if self.kind == "rate_limit":
+            return f"获取 {name} 版本失败: GitHub 限速, 建议设置 PAT"
+        if self.kind == "bad_token":
+            return f"获取 {name} 版本失败: GitHub Token 无效"
+        if self.kind == "proxy_banned":
+            return f"获取 {name} 版本失败: 中转与直连均不可达"
+        if self.kind == "timeout":
+            return f"获取 {name} 版本超时"
+        if self.kind == "network":
+            return f"获取 {name} 版本失败: 网络不可达"
+        if self.kind == "parse":
+            return f"获取 {name} 版本失败: 数据格式异常"
+        return f"获取 {name} 版本失败 (HTTP {self.detail})"
+
+
+def _classify_exception(exc: Exception, response: httpx.Response | None = None) -> _FetchError:
+    """把 httpx 异常 / response 状态归类成 _FetchError."""
+    if response is not None and response.status_code == 429:
+        return _FetchError("proxy_banned", "429")
+    if response is not None and response.status_code == 401:
+        return _FetchError("bad_token", "401")
+    if response is not None and response.status_code == 403:
+        # GitHub 限速 vs 代理签名失败的区分: GitHub 头里有 X-RateLimit-Remaining: 0
+        remaining = response.headers.get("X-RateLimit-Remaining")
+        if remaining == "0":
+            return _FetchError("rate_limit", "github 403 with X-RateLimit-Remaining=0")
+        return _FetchError("http", "403")
+    if response is not None and response.status_code >= 400:
+        return _FetchError("http", str(response.status_code))
+    if isinstance(exc, httpx.TimeoutException):
+        return _FetchError("timeout", str(exc))
+    if isinstance(exc, httpx.RequestError):
+        return _FetchError("network", str(exc))
+    if isinstance(exc, ValueError):
+        return _FetchError("parse", str(exc))
+    return _FetchError("network", f"{type(exc).__name__}: {exc}")
 
 
 class VersionSnapshot(BaseModel):
@@ -58,6 +107,7 @@ class RemoteVersionTask(VersionTaskBase):
             Urls.NAPCATQQ_REPO_API_FALLBACK.value,
             "NapCat",
             self._parse_github_response,
+            proxy_path=Urls.NAPCATQQ_REPO_API_PATH.value,
         )
         qq_version = self._get_version(Urls.QQ_Version.value, "QQ", self._parse_qq_response)
         ncd_version = self._get_version_with_fallback(
@@ -65,14 +115,16 @@ class RemoteVersionTask(VersionTaskBase):
             Urls.NCD_REPO_API_FALLBACK.value,
             "NapCatQQ Desktop",
             self._parse_github_response,
+            proxy_path=Urls.NCD_REPO_API_PATH.value,
         )
-        # P1 (SnowLuma 适配): 多拉一份 SnowLuma. 与 NapCat / NCD 完全对称, 
-        # 走同款 _get_version_with_fallback + _parse_github_response 链路. 
+        # P1 (SnowLuma 适配): 多拉一份 SnowLuma. 与 NapCat / NCD 完全对称,
+        # 走同款 _get_version_with_fallback + _parse_github_response 链路.
         snowluma_info = self._get_version_with_fallback(
             Urls.SNOWLUMA_REPO_API.value,
             Urls.SNOWLUMA_REPO_API_FALLBACK.value,
             "SnowLuma",
             self._parse_github_response,
+            proxy_path=Urls.SNOWLUMA_REPO_API_PATH.value,
         )
 
         return VersionSnapshot(
@@ -89,16 +141,19 @@ class RemoteVersionTask(VersionTaskBase):
     def _get_version(
         self, url: str | QUrl, name: str, parser: Callable[[dict], dict[str, str | None]]
     ) -> dict[str, str | None]:
-        response = self.request(QUrl(url), name)
+        response, err = self.request(QUrl(url), name)
 
         if response is None:
+            if err is not None:
+                logger.error(f"获取 {name} 版本信息失败: {err.kind} ({err.detail})")
+                self.error_signal.emit(err.user_message(name))
             return self._get_error_value(name)
 
         try:
             return parser(response)
         except KeyError as exc:
             logger.error(f"解析 {name} 版本信息失败: {exc}")
-            self.error_signal.emit(f"解析 {name} 版本信息失败: {exc}")
+            self.error_signal.emit(_FetchError("parse", str(exc)).user_message(name))
             return self._get_error_value(name)
 
     def _get_version_with_fallback(
@@ -107,15 +162,23 @@ class RemoteVersionTask(VersionTaskBase):
         fallback_url: str | QUrl,
         name: str,
         parser: Callable[[dict], dict[str, str | None]],
+        proxy_path: str | None = None,
     ) -> dict[str, str | None]:
-        """获取版本信息, 主 URL 失败时使用兜底 URL. """
-        # 先尝试主 URL (镜像站) 
-        response = self.request(QUrl(primary_url), name, emit_error=False)
+        """获取版本信息: 中转代理优先, 失败回退 GitHub 官方 API.
 
-        # 如果镜像站失败, 尝试 GitHub 官方 API
+        中转走 HMAC 签名 + 时钟自愈; 兜底走直连, 若用户配置了 GitHub Personal
+        Token 则带上 Authorization 头把限速从 60/h 拉到 5000/h.
+        只有主备全失败才 emit error_signal, 中间过程的失败不打扰 UI.
+        """
+        response, _ = self.request(QUrl(primary_url), name, proxy_path=proxy_path)
+
         if response is None:
-            logger.warning(f"{name} 镜像站请求失败，尝试 GitHub 官方 API...")
-            response = self.request(QUrl(fallback_url), name, emit_error=True)
+            logger.warning(f"{name} 中转站请求失败, 尝试 GitHub 官方 API...")
+            response, fallback_err = self.request(QUrl(fallback_url), name, use_github_token=True)
+            if response is None and fallback_err is not None:
+                logger.error(f"获取 {name} 版本信息失败: {fallback_err.kind} ({fallback_err.detail})")
+                self.error_signal.emit(fallback_err.user_message(name))
+                return self._get_error_value(name)
 
         if response is None:
             return self._get_error_value(name)
@@ -124,7 +187,7 @@ class RemoteVersionTask(VersionTaskBase):
             return parser(response)
         except KeyError as exc:
             logger.error(f"解析 {name} 版本信息失败: {exc}")
-            self.error_signal.emit(f"解析 {name} 版本信息失败: {exc}")
+            self.error_signal.emit(_FetchError("parse", str(exc)).user_message(name))
             return self._get_error_value(name)
 
     def _get_error_value(self, name: str) -> dict[str, str | None]:
@@ -159,26 +222,59 @@ class RemoteVersionTask(VersionTaskBase):
         url: QUrl,
         name: str,
         use_mirrors: bool = False,
-        emit_error: bool = True,
-    ) -> dict[str, str] | None:
+        proxy_path: str | None = None,
+        use_github_token: bool = False,
+    ) -> tuple[dict | None, _FetchError | None]:
+        """通用 GET 请求, 返回 (json_body, fetch_error).
+
+        ``proxy_path`` 非空时走中转代理: 注入 HMAC 签名头, 第一次签名失败 (403)
+        会读响应头 ``X-Server-Time`` 校正时钟后重试一次.
+
+        ``use_github_token=True`` 时, 若用户在设置中配置了 GitHub Personal Token,
+        带上 ``Authorization: Bearer <token>``, 把直连 GitHub API 的限速拉到 5000/h.
+        """
         request_urls = [url.url()]
         if use_mirrors:
             request_urls.extend(f"{mirror.toString().rstrip('/')}/{url.url()}" for mirror in Urls.MIRROR_SITE.value)
 
-        last_error: Exception | None = None
+        last_err: _FetchError | None = None
         for candidate_url in request_urls:
-            try:
-                with httpx.Client(timeout=5, follow_redirects=True) as client:
-                    response = client.get(candidate_url)
-                    response.raise_for_status()
-                    return response.json()
-            except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
-                last_error = exc
+            attempts = 2 if proxy_path else 1
+            for attempt in range(attempts):
+                resp_for_class: httpx.Response | None = None
+                try:
+                    headers: dict[str, str] = {}
+                    if proxy_path:
+                        headers.update(ProxySigner.instance().sign_headers(proxy_path))
+                    elif use_github_token:
+                        token = (cfg.get(cfg.github_personal_token) or "").strip()
+                        if token:
+                            headers["Authorization"] = f"Bearer {token}"
+                            headers["Accept"] = "application/vnd.github+json"
 
-        if emit_error:
-            logger.error(f"获取 {name} 版本信息失败: {last_error}")
-            self.error_signal.emit(f"获取 {name} 版本信息失败: {last_error}")
-        return None
+                    with httpx.Client(timeout=5, follow_redirects=True) as client:
+                        response = client.get(candidate_url, headers=headers)
+                        resp_for_class = response
+
+                        if (
+                            proxy_path
+                            and response.status_code == 403
+                            and attempt == 0
+                        ):
+                            updated = ProxySigner.instance().update_offset_from_response(
+                                response.headers
+                            )
+                            if updated:
+                                logger.info(f"{name} 代理 403, 已校正本地时钟, 重试")
+                                continue
+
+                        response.raise_for_status()
+                        return response.json(), None
+                except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
+                    last_err = _classify_exception(exc, resp_for_class)
+                    break  # 同一 URL 不要因网络/解析错误反复重试
+
+        return None, last_err
 
 
 class LocalVersionTask(VersionTaskBase):
