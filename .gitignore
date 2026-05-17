@@ -57,6 +57,9 @@ PatchConfig.json
 # AI 更新日志生成脚本的本地配置
 script/utils/.env
 
+# Cloudflare Worker 服务端实现 (独立部署, 不与桌面端代码同库)
+script/cloudflare-worker/
+
 ### SSH ###
 # SSH 主机指纹等配置
 /ssh/
