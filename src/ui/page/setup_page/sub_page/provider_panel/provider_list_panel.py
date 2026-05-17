@@ -8,8 +8,6 @@
 """
 from __future__ import annotations
 
-import logging
-
 from creart import it
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtWidgets import (
@@ -26,13 +24,13 @@ from qfluentwidgets import (
     setCustomStyleSheet,
 )
 
+from src.core.logging import LogSource, logger
+
 from src.core.agent.provider import Provider, ProviderRegistry
 from src.ui.components.subtle_search_edit import SubtleSearchEdit
 
 from .add_provider_dialog import AddProviderDialog
 from .provider_list_item_widget import ProviderListItemWidget
-
-logger = logging.getLogger(__name__)
 
 
 class ProviderListPanel(QWidget):
@@ -330,8 +328,8 @@ class ProviderListPanel(QWidget):
                 providers, key=lambda p: order_map.get(p.provider_id, len(order_map))
             )
             self._rebuild_list(sorted_providers)
-        except Exception:
-            logger.exception("恢复拖拽前排序状态失败")
+        except Exception as _exc:
+            logger.exception("恢复拖拽前排序状态失败", _exc)
 
     def _on_rows_moved(self, *_args) -> None:
         """QListWidget model 的 rowsMoved 信号处理.
@@ -362,8 +360,8 @@ class ProviderListPanel(QWidget):
 
             # 发射排序变更信号
             self.sort_changed.emit(new_order)
-        except Exception:
-            logger.exception("拖拽排序处理异常, 恢复到拖拽前状态")
+        except Exception as _exc:
+            logger.exception("拖拽排序处理异常, 恢复到拖拽前状态", _exc)
             self._restore_pre_drag_order()
 
     def _persist_provider_order(self, registry: ProviderRegistry) -> None:
@@ -388,7 +386,7 @@ class ProviderListPanel(QWidget):
             config_data.providers = registry.list_all()
             persistence.save(config_data)
         except Exception as exc:
-            logger.error("持久化 Provider 排序失败: %s", exc)
+            logger.error(f"持久化 Provider 排序失败: {exc}")
 
     # ------------------------------------------------------------------
     # 事件过滤器 - 拖拽前快照排序状态

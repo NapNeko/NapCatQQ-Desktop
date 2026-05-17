@@ -37,12 +37,14 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
+from src.core.agent.model_fetch_service import FetchResult
 from src.core.agent.provider import ModelEntry, Provider
 from src.core.config import cfg
 from src.ui.common.style_sheet import WidgetStyleSheet
-from src.ui.components.info_bar import info_bar, warning_bar
+from src.ui.components.info_bar import error_bar, warning_bar
 
 from .add_model_dialog import AddModelDialog
+from .manage_models_dialog import _ModelFetchThread, ManageModelsDialog
 
 
 # ----------------------------------------------------------------------
@@ -448,6 +450,7 @@ class ModelListWidget(QWidget):
 
     model_added = Signal(str)
     model_removed = Signal(str)
+    fetch_requested = Signal()  # 获取模型列表前发射, 通知父面板先持久化配置
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent=parent)
@@ -583,6 +586,14 @@ class ModelListWidget(QWidget):
         self._provider = provider
         self._rebuild_list()
 
+    def update_provider_ref(self, provider: Provider) -> None:
+        """仅更新内部 provider 引用, 不重建列表 UI.
+
+        用于在获取模型列表前同步最新的 provider 配置 (如 api_key_ref 变更),
+        避免不必要的 UI 重建.
+        """
+        self._provider = provider
+
     def refresh(self) -> None:
         if self._provider is not None:
             self._rebuild_list()
@@ -662,17 +673,84 @@ class ModelListWidget(QWidget):
         dialog.exec()
 
     def _on_fetch_models_clicked(self) -> None:
-        """获取模型列表 -- 占位实现, 暂以 InfoBar 提示用户."""
+        """获取模型列表 — 调用 ModelFetchService 拉取模型, 成功后打开 ManageModelsDialog."""
         if self._provider is None:
             return
-        info_bar(
-            content=self.tr("自动获取模型列表功能暂未接入 (Provider: {})").format(
-                self._provider.name
-            ),
-            title=self.tr("提示"),
-            duration=3000,
-            parent=self,
+
+        # 通知父面板先持久化配置, 确保 provider 数据是最新的
+        self.fetch_requested.emit()
+
+        # 进入加载状态: 禁用按钮 + 更改文本
+        self._set_fetch_loading(True)
+
+        # 启动后台获取线程
+        self._fetch_thread = _ModelFetchThread(self._provider, self)
+        self._fetch_thread.fetch_finished.connect(self._on_fetch_finished)
+        self._fetch_thread.start()
+
+    def _on_fetch_finished(self, result: FetchResult) -> None:
+        """模型获取完成回调 — 处理成功/失败结果.
+
+        Args:
+            result: ModelFetchService 返回的 FetchResult.
+        """
+        # 恢复按钮状态
+        self._set_fetch_loading(False)
+
+        if not result.success:
+            # 失败: 显示错误 InfoBar
+            error_bar(
+                content=result.error_message,
+                title=self.tr("获取模型列表失败"),
+                duration=5000,
+                parent=self,
+            )
+            return
+
+        # 成功: 打开 ManageModelsDialog
+        if self._provider is None:
+            return
+
+        dialog = ManageModelsDialog(
+            parent=self.window(),
+            fetched_models=result.models,
+            current_models=list(self._provider.models),
+            provider_id=self._provider.provider_id,
         )
+        # 当弹窗内模型列表变更时, 刷新本组件的展示
+        dialog.model_list_changed.connect(self._on_manage_dialog_changed)
+        dialog.exec()
+
+    def _on_manage_dialog_changed(self) -> None:
+        """ManageModelsDialog 的 model_list_changed 信号处理 -- 刷新模型列表展示.
+
+        ManageModelsDialog 直接通过 ProviderRegistry 增删模型,
+        需要从 registry 重新获取最新的 provider 对象再重建列表.
+        """
+        if self._provider is None:
+            return
+
+        from creart import it
+        from src.core.agent.provider import ProviderRegistry
+
+        registry = it(ProviderRegistry)
+        try:
+            self._provider = registry.get(self._provider.provider_id)
+        except KeyError:
+            pass
+        self._rebuild_list()
+
+    def _set_fetch_loading(self, loading: bool) -> None:
+        """设置/取消获取模型列表的加载状态.
+
+        Args:
+            loading: True 进入加载状态, False 退出加载状态.
+        """
+        self._split_btn.setEnabled(not loading)
+        if loading:
+            self._split_btn.button.setText(self.tr("获取中..."))
+        else:
+            self._split_btn.button.setText(self.tr("获取模型列表"))
 
     def _on_add_model_clicked(self) -> None:
         """点击 SplitPushButton 右侧 +, 弹出 AddModelDialog."""

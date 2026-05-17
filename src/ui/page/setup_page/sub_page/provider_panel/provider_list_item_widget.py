@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPixmap
+from PySide6.QtGui import QFontMetrics, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 from src.core.agent.provider import Provider
@@ -81,7 +81,8 @@ class ProviderListItemWidget(QWidget):
     def _get_provider_icon(self, provider: Provider) -> QPixmap:
         """获取供应商图标.
 
-        若有注册的图标资源则使用, 否则生成首字母圆形头像.
+        通过 ProviderIcon 从 Qt 资源系统加载图标.
+        若未命中则自动回退到首字母圆形头像.
 
         Args:
             provider: 供应商数据实例.
@@ -89,46 +90,9 @@ class ProviderListItemWidget(QWidget):
         Returns:
             20×20 的 QPixmap 图标.
         """
-        # 目前没有注册图标系统, 统一使用首字母圆形头像
-        return self._create_initial_avatar(provider.name)
+        from src.ui.common.icon import ProviderIcon
 
-    def _create_initial_avatar(self, name: str) -> QPixmap:
-        """生成首字母圆形头像.
-
-        以供应商名称首字符为内容, 绘制 20×20 圆形头像.
-
-        Args:
-            name: 供应商名称.
-
-        Returns:
-            20×20 的 QPixmap 圆形头像.
-        """
-        size = 20
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.GlobalColor.transparent)
-
-        painter = QPainter(pixmap)
-        try:
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-            # 根据名称生成稳定的背景色
-            hue = hash(name) % 360
-            bg_color = QColor.fromHsv(hue, 120, 180)
-            painter.setBrush(bg_color)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(0, 0, size, size)
-
-            # 绘制首字符
-            initial = name[0].upper() if name else "?"
-            painter.setPen(QColor(255, 255, 255))
-            font = QFont()
-            font.setPointSize(9)
-            font.setBold(True)
-            painter.setFont(font)
-            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, initial)
-        finally:
-            painter.end()
-        return pixmap
+        return ProviderIcon.get_icon(provider.provider_id, provider.name)
 
     # ------------------------------------------------------------------
     # 公共方法

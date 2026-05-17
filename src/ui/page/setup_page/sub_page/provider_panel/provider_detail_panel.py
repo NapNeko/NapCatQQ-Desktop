@@ -34,6 +34,8 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
+from src.core.logging import LogSource, logger
+
 from src.core.agent.api_check_service import ApiCheckService
 from src.core.agent.api_key_pool import parse_api_keys
 from src.core.agent.provider import ProviderRegistry
@@ -135,6 +137,11 @@ class ProviderDetailPanel(ScrollArea):
         self._external_link_button.setVisible(False)
         header_layout.addWidget(self._external_link_button)
 
+        self._api_options_button = TransparentToolButton(FluentIcon.SETTING, self._content_widget)
+        self._api_options_button.setFixedSize(32, 32)
+        self._api_options_button.setToolTip(self.tr("API 选项"))
+        header_layout.addWidget(self._api_options_button)
+
         header_layout.addStretch()
 
         self._enable_switch = SwitchButton(self._content_widget)
@@ -201,8 +208,10 @@ class ProviderDetailPanel(ScrollArea):
         self._enable_switch.checkedChanged.connect(self._on_enable_toggled)
         self._delete_button.clicked.connect(self._on_delete_clicked)
         self._external_link_button.clicked.connect(self._on_external_link_clicked)
+        self._api_options_button.clicked.connect(self._on_api_options_clicked)
         self._model_list_widget.model_added.connect(self._on_model_changed)
         self._model_list_widget.model_removed.connect(self._on_model_changed)
+        self._model_list_widget.fetch_requested.connect(self._on_fetch_requested)
 
         self._protocol_field_stack.connect_field_text_changed(self._on_field_text_changed)
         self._protocol_field_stack.check_clicked.connect(self._on_check_api_clicked)
@@ -277,9 +286,33 @@ class ProviderDetailPanel(ScrollArea):
         if self._current_website_url:
             QDesktopServices.openUrl(QUrl(self._current_website_url))
 
+    def _on_api_options_clicked(self) -> None:
+        """点击 API 选项按钮时的处理 - 弹出 ApiOptionsDialog."""
+        if self._current_provider_id is None:
+            return
+        from .api_options_dialog import ApiOptionsDialog
+
+        dialog = ApiOptionsDialog(self.window(), self._current_provider_id)
+        dialog.exec()
+
     # ------------------------------------------------------------------
     # 槽函数 - API 配置字段
     # ------------------------------------------------------------------
+
+    def _on_fetch_requested(self) -> None:
+        """ModelListWidget 发起获取模型列表前的回调: 先持久化字段并刷新 provider."""
+        if self._current_provider_id is None:
+            return
+
+        self._save_provider_changes()
+
+        # 刷新 ModelListWidget 持有的 provider 对象为最新版本
+        registry = it(ProviderRegistry)
+        try:
+            provider = registry.get(self._current_provider_id)
+        except KeyError:
+            return
+        self._model_list_widget.update_provider_ref(provider)
 
     def _on_field_text_changed(self, *_args) -> None:
         """ProtocolFieldStack 内部字段文本变更时的处理."""
@@ -439,6 +472,33 @@ class ProviderDetailPanel(ScrollArea):
             except Exception:
                 pass
 
+        # 持久化配置到磁盘
+        self._persist_config()
+
+    def _persist_config(self) -> None:
+        """触发 ConfigPersistence.save() 将当前配置写入磁盘。
+
+        使用 creart 获取 PathFunc 和 ProviderRegistry 单例，
+        将完整的 providers 列表和活跃状态持久化到 agent_config.json。
+        如果持久化失败，记录 error 日志但不阻塞 UI。
+        """
+        try:
+            from src.core.agent.config_persistence import ConfigPersistence
+            from src.core.runtime.paths import PathFunc
+
+            path_func: PathFunc = it(PathFunc)
+            config_file_path = path_func.config_dir_path / "agent_config.json"
+            persistence = ConfigPersistence(config_file_path)
+
+            # 加载现有配置并同步 providers 列表
+            config_data = persistence.load()
+            registry: ProviderRegistry = it(ProviderRegistry)
+            config_data.providers = registry.list_all()
+
+            persistence.save(config_data)
+        except Exception as _exc:
+            logger.error("ProviderDetailPanel 持久化配置失败")
+
     # ------------------------------------------------------------------
     # 槽函数 - 删除 / 模型列表
     # ------------------------------------------------------------------
@@ -476,6 +536,7 @@ class ProviderDetailPanel(ScrollArea):
             return
 
         registry.update_provider(self._current_provider_id, models=provider.models)
+        self._persist_config()
         self.provider_changed.emit(self._current_provider_id)
 
     # ------------------------------------------------------------------

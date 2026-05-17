@@ -101,7 +101,8 @@ class ProviderPanel(QWidget):
         """面板显示时刷新列表并自动选中第一个供应商."""
         super().showEvent(event)
 
-        # 如果 registry 为空(首次打开或配置文件无供应商), 注入默认供应商
+        # ProviderRegistryCreator 已在创建时从磁盘加载配置,
+        # 此处仅作为防御性兜底: 若 registry 仍为空则注入默认供应商
         registry: ProviderRegistry = it(ProviderRegistry)
         if not registry.list_all():
             from src.core.agent.default_providers import get_default_providers
