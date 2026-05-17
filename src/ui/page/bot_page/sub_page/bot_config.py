@@ -219,11 +219,10 @@ class ConfigPage(QWidget):
                     log_source=LogSource.UI,
                 )
                 error_bar(
-                    self.tr("Bot 数量已达上限"),
                     self.tr(
-                        f"已有 {existing_count} 个 Bot 配置, 达到 NTQQ 多开 4 个上限. "
-                        "请先删除部分 Bot 配置后再新增."
+                        f"已有 {existing_count} 个 Bot 配置, 达到 NTQQ 多开 4 个上限"
                     ),
+                    title=self.tr("Bot 数量已达上限"),
                 )
                 return
 
@@ -529,12 +528,10 @@ class ConfigPage(QWidget):
                     "NapCat" if profile.backend_flavor == BackendFlavor.NAPCAT else "SnowLuma"
                 )
                 error_bar(
-                    self.tr("后端类型不匹配"),
                     self.tr(
-                        f"Bot 后端为 {bot_label}, 但目标服务器 [{profile.name}] "
-                        f"的后端为 {server_label}, 无法迁移. "
-                        "请选择匹配的服务器或修改 Bot 后端类型."
+                        f"Bot 后端 ({bot_label}) 与服务器 [{profile.name}] 后端 ({server_label}) 不匹配"
                     ),
+                    title=self.tr("后端类型不匹配"),
                 )
                 logger.warning(
                     f"迁移被拒: backend_type={backend_type.value} vs "

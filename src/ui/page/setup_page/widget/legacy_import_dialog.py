@@ -681,7 +681,9 @@ class LegacyImportDialog(MessageBoxBase):
         self.yesButton.setEnabled(False)
         self.options_page.update_scan_context(has_app_config=False, has_bot_mode=False)
         self._show_drop_page()
-        error_bar(self.tr(f"扫描失败: {error_type}: {error_message}"), parent=self)
+        logger.warning(f"旧版配置扫描失败: {error_type}: {error_message}", log_source=LogSource.UI)
+        short_msg = error_message if len(error_message) <= 50 else error_message[:49] + "…"
+        error_bar(self.tr(f"扫描失败: {short_msg}"), parent=self)
 
     def _resolve_bot_import_plan(self) -> tuple[str, frozenset[int]]:
         if self._scan_result is None or self._scan_result.bot_config_path is None:
@@ -767,7 +769,9 @@ class LegacyImportDialog(MessageBoxBase):
             )
         except Exception as error:
             logger.error(f"旧版配置导入失败: {type(error).__name__}: {error}", log_source=LogSource.UI)
-            error_bar(self.tr(f"导入失败: {type(error).__name__}: {error}"), parent=self)
+            err_text = str(error)
+            short_err = err_text if len(err_text) <= 50 else err_text[:49] + "…"
+            error_bar(self.tr(f"导入失败: {short_err}"), parent=self)
             return
 
         if result.app_imported:

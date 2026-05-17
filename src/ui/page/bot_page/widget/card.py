@@ -490,11 +490,8 @@ class BotCard(HeaderCardWidget):
 
         if not candidates:
             error_bar(
-                self.tr("热启动失败"),
-                self.tr(
-                    "系统中没有检测到正在运行的 QQ.exe 进程. "
-                    "请先手动启动并登录 QQ, 或改用冷启动模式 (Desktop 自动启动 QQ)."
-                ),
+                self.tr("未检测到 QQ.exe, 请先手动启动并登录 QQ"),
+                title=self.tr("热启动失败"),
                 parent=self,
             )
             logger.warning(
@@ -525,8 +522,8 @@ class BotCard(HeaderCardWidget):
             attach_pid = picker.get_value()
             if attach_pid <= 0:
                 error_bar(
-                    self.tr("热启动失败"),
                     self.tr("未选中任何 QQ.exe 进程"),
+                    title=self.tr("热启动失败"),
                     parent=self,
                 )
                 return
@@ -787,7 +784,11 @@ class BotCard(HeaderCardWidget):
         login_state = it(ManagerNapCatQQLoginState).get_login_state(qq_id)
 
         if login_state is None:
-            error_bar(self.tr("WebUI 未就绪"), self.tr("该 Bot 尚未启动或 WebUI 信息未获取"), parent=self)
+            error_bar(
+                self.tr("该 Bot 尚未启动或 WebUI 信息未获取"),
+                title=self.tr("WebUI 未就绪"),
+                parent=self,
+            )
             logger.warning(f"打开 WebUI 失败：Bot 未就绪(QQID: {mask_qqid(qq_id)})", log_source=LogSource.UI)
             return
 

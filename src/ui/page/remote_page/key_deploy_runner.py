@@ -46,15 +46,15 @@ class KeyDeployRunner(QRunnable):
         from creart import it
 
         from src.core.remote import ServerManager
-        from src.ui.page.remote_page.deployment_runner import _tracked
+        from src.ui.page.remote_page.deployment_runner import _server_label_suffix, _tracked
 
         manager = it(ServerManager)
         profile = manager.get_server(self._server_id)
-        title_name = profile.name if profile is not None else self._server_id
+        suffix = _server_label_suffix(profile)
         with _tracked(
             f"ssh-key-deploy-{self._server_id}",
-            f"配置 SSH 密钥 ({title_name})",
-            content="正在用密码登录并下发公钥…",
+            f"配置 SSH 密钥{suffix}",
+            content="密码登录并下发公钥…",
         ) as tracker:
             ok, message = manager.auto_setup_ssh_key(
                 self._server_id, password=self._password

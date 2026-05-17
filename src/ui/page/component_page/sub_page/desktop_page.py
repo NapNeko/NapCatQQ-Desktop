@@ -72,7 +72,7 @@ class DesktopPage(PageBase):
 
         if self.remote_version is None:
             # 如果没有远程版本则提示错误
-            error_bar(self.tr("无法获取 NapCatQQ Desktop 版本信息, 请检查网络连接"))
+            error_bar(self.tr("无法获取 Desktop 远程版本, 请检查网络"))
             return
 
         if self.remote_version != self.local_version:

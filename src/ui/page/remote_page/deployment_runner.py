@@ -21,6 +21,51 @@ from PySide6.QtCore import QObject, QRunnable, Signal
 from src.core.logging import LogSource, LogType, logger
 
 
+_MAX_TRACKER_MESSAGE_LEN = 60
+"""ProgressInfoBar 完成态 chip 的文案上限.
+
+ProgressInfoBar / InfoBar 最佳可视宽度大概 320~360px, 中文一行约 28~32 个字.
+留 60 字符 (中文 ~30 字, 含 ":" 和 "..." 截断) 是一个 "尽可能保留信息但不撑开
+chip" 的折中. 超长部分由 logger 完整记录.
+"""
+
+_MAX_LABEL_NAME_LEN = 12
+"""label 中 server 名字部分的截断长度.
+
+label 形如 "部署远端 SnowLuma (我的服务器)", server 名作为后缀; 超过这个长度
+就截断 + "…", 防止 UUID / 用户起的超长名字撑爆 InfoBar 标题.
+"""
+
+
+def _short_exc(exc: BaseException) -> str:
+    """把异常压成 chip 单行可展示的短文案 (含截断省略号).
+
+    长异常 (典型如 ``RemoteDeploymentError`` 含 "请检查网络..." 多句子诊断) 会把
+    ProgressInfoBar 撑得很丑; 这里统一限长. 完整文本由调用方记 logger.
+    """
+    text = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+    if len(text) > _MAX_TRACKER_MESSAGE_LEN:
+        text = text[: _MAX_TRACKER_MESSAGE_LEN - 1] + "…"
+    return text
+
+
+def _server_label_suffix(profile) -> str:  # noqa: ANN001 - profile 是可选 ServerProfile
+    """生成 label 末尾的 ``(name)`` 后缀, 用人可读名而非 UUID, 并截断.
+
+    label 形如 "部署远端 SnowLuma (我的服务器)"; 用 ``profile.name`` 而非
+    ``profile.id`` 是因为 UUID 对用户没有任何意义还会撑爆 InfoBar 标题.
+    profile 拿不到时返回空串, 让调用方降级为不带后缀的纯动作文案.
+    """
+    if profile is None:
+        return ""
+    name = (getattr(profile, "name", None) or "").strip()
+    if not name:
+        return ""
+    if len(name) > _MAX_LABEL_NAME_LEN:
+        name = name[: _MAX_LABEL_NAME_LEN - 1] + "…"
+    return f" ({name})"
+
+
 class _TaskTracker:
     """BackgroundTaskCenter 报到把手, 支持显式调 :meth:`success` / :meth:`fail`.
 
@@ -86,10 +131,15 @@ def _tracked(task_id: str, label: str, *, content: str = "") -> Iterator[_TaskTr
     try:
         yield tracker
     except BaseException as exc:  # noqa: BLE001 - 异常路径标记失败再上抛
-        tracker.fail(f"{type(exc).__name__}: {exc}")
+        tracker.fail(_short_exc(exc))
         raise
     finally:
         tracker.report_to(center)
+
+
+def _attach_exc_handler(tracker: _TaskTracker, exc: BaseException) -> None:
+    """统一: 把异常的精简版给 chip, 完整版给 logger."""
+    tracker.fail(_short_exc(exc))
 
 
 class DeploymentRunnerSignals(QObject):
@@ -137,26 +187,27 @@ class DeploymentRunner(QRunnable):
             profile is not None
             and profile.backend_flavor == BackendFlavor.SNOWLUMA
         )
+        suffix = _server_label_suffix(profile)
         if self._force_napcat_update:
             if is_sl:
-                label = f"重新部署 SnowLuma.Framework ({self._server_id})"
-                success_msg = "远端 SnowLuma.Framework 重新部署完成"
+                label = f"重新部署 SnowLuma.Framework{suffix}"
+                success_msg = "SnowLuma.Framework 重新部署完成"
             else:
-                label = f"强制更新 NapCat ({self._server_id})"
-                success_msg = "远端 NapCat 强制更新完成"
+                label = f"强制更新 NapCat{suffix}"
+                success_msg = "NapCat 强制更新完成"
         elif self._force_linuxqq_reinstall:
-            label = f"强制重装 LinuxQQ ({self._server_id})"
-            success_msg = "远端 LinuxQQ 强制重装完成"
+            label = f"强制重装 LinuxQQ{suffix}"
+            success_msg = "LinuxQQ 强制重装完成"
         else:
             if is_sl:
-                label = f"部署远端 SnowLuma ({self._server_id})"
+                label = f"部署远端 SnowLuma{suffix}"
             else:
-                label = f"部署远端 NapCat ({self._server_id})"
+                label = f"部署远端 NapCat{suffix}"
             success_msg = "远端部署完成"
         with _tracked(
             f"deploy-{self._server_id}",
             label,
-            content="正在通过 SSH 执行部署脚本…",
+            content="SSH 执行部署脚本…",
         ) as tracker:
             try:
                 manager.deploy_server(
@@ -172,7 +223,7 @@ class DeploymentRunner(QRunnable):
                     LogType.NETWORK,
                     LogSource.UI,
                 )
-                tracker.fail(f"{type(exc).__name__}: {exc}")
+                tracker.fail(_short_exc(exc))
             finally:
                 self.signals.finished.emit(self._server_id)
 
@@ -211,10 +262,11 @@ class RedetectRunner(QRunnable):
             and profile.backend_flavor == BackendFlavor.SNOWLUMA
         )
         backend_label = "SnowLuma.Framework" if is_sl else "NapCat"
+        suffix = _server_label_suffix(profile)
         with _tracked(
             f"redetect-{self._server_id}",
-            f"检测远端版本 ({self._server_id})",
-            content=f"正在与远端交互, 读取 {backend_label} / LinuxQQ 版本信息…",
+            f"检测远端版本{suffix}",
+            content=f"读取 {backend_label} / LinuxQQ 版本…",
         ) as tracker:
             try:
                 napcat_version, qq_version = manager.redetect_versions(self._server_id)
@@ -230,7 +282,7 @@ class RedetectRunner(QRunnable):
                     LogSource.UI,
                 )
                 self.signals.finished.emit(self._server_id, False, None, None, str(exc))
-                tracker.fail(f"{type(exc).__name__}: {exc}")
+                tracker.fail(_short_exc(exc))
 
 
 class RollbackRunnerSignals(QObject):
@@ -268,13 +320,14 @@ class RollbackRunner(QRunnable):
             and profile.backend_flavor == BackendFlavor.SNOWLUMA
         )
         tracker_content = (
-            "正在清理远端 SnowLuma.Framework / launcher / runtime 产物…"
+            "清理远端 SnowLuma.Framework / launcher / runtime…"
             if is_sl
-            else "正在清理远端 NapCat / LinuxQQ 产物…"
+            else "清理远端 NapCat / LinuxQQ 产物…"
         )
+        suffix = _server_label_suffix(profile)
         with _tracked(
             f"rollback-{self._server_id}",
-            f"回滚远端部署 ({self._server_id})",
+            f"回滚远端部署{suffix}",
             content=tracker_content,
         ) as tracker:
             try:
@@ -288,4 +341,4 @@ class RollbackRunner(QRunnable):
                     LogSource.UI,
                 )
                 self.signals.finished.emit(self._server_id, False, str(exc))
-                tracker.fail(f"{type(exc).__name__}: {exc}")
+                tracker.fail(_short_exc(exc))

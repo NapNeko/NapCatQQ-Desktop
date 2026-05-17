@@ -797,9 +797,12 @@ class BotMigrationRunnable(QRunnable):
             from src.core.runtime.background_tasks import BackgroundTaskCenter
 
             center = it(BackgroundTaskCenter)
+            # source/dest 可能是 "local" 或 UUID, UUID 截短到 8 字符避免撑爆 label
+            src_short = self._plan.source_target if self._plan.source_target == "local" else self._plan.source_target[:8]
+            dst_short = self._plan.dest_target if self._plan.dest_target == "local" else self._plan.dest_target[:8]
             center.begin(
                 task_id,
-                f"迁移 Bot {self._plan.qq_id} ({self._plan.source_target} → {self._plan.dest_target})",
+                f"迁移 Bot {self._plan.qq_id} ({src_short} → {dst_short})",
                 content="正在搬运数据并切换 runtime_target…",
             )
         except Exception:  # noqa: BLE001 - center 不可用时不阻断主流程

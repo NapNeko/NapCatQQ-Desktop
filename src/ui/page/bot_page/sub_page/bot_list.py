@@ -247,8 +247,8 @@ class BotListPage(ScrollArea):
         unique_qqids = list(dict.fromkeys(truncated))
         masked = ", ".join(mask_qqid(q) for q in unique_qqids)
         warning_bar(
-            self.tr(f"检测到 {len(unique_qqids)} 个 Bot 超过 NTQQ 多开 4 个上限"),
-            self.tr(f"已隐藏 QQID: {masked}; 如需调整, 请删除现有 Bot 后再添加"),
+            self.tr(f"已隐藏 {len(unique_qqids)} 个超出 NTQQ 4 开上限的 Bot"),
+            title=self.tr("Bot 数量超限"),
             parent=self,
         )
 
@@ -443,11 +443,8 @@ class BotListPage(ScrollArea):
             snowluma_start_mode = mode_dialog.get_value()
             if snowluma_start_mode == SnowLumaStartMode.HOT_START:
                 error_bar(
-                    self.tr("批量启动不支持热启动"),
-                    self.tr(
-                        "热启动需为每个 SnowLuma Bot 单独选择目标 QQ.exe 进程, "
-                        "请单个启动 SnowLuma Bot 或改用冷启动."
-                    ),
+                    self.tr("批量启动不支持热启动, 请改用冷启动或单个启动"),
+                    title=self.tr("批量启动失败"),
                     parent=self,
                 )
                 logger.info(
@@ -592,7 +589,7 @@ class BotListPage(ScrollArea):
             )[:200]
             error_bar(
                 self.tr(f"批量操作部分失败: 成功 {success} / 失败 {failed}"),
-                self.tr(errors_preview),
+                title=self.tr("批量操作"),
                 parent=self,
             )
         # 删除场景需要重建列表; 启停场景由 process_changed_signal 已自动刷新卡片
@@ -601,10 +598,14 @@ class BotListPage(ScrollArea):
     # =================== 槽函数 =======================
     def slot_add_button(self) -> None:
         """添加按钮槽函数"""
-        # 判断有没有安装 NapCatQQ
+        # 判断有没有安装本地后端 (NapCat 或 SnowLuma)
         from src.core.versioning import LocalVersionTask
 
-        if LocalVersionTask().get_napcat_version():
+        local_task = LocalVersionTask()
+        has_napcat = bool(local_task.get_napcat_version())
+        has_snowluma = bool(local_task.get_snowluma_version())
+
+        if has_napcat or has_snowluma:
             # 项目内模块导入
             from src.ui.page.bot_page import BotPage
 
@@ -617,6 +618,6 @@ class BotListPage(ScrollArea):
         else:
             from src.ui.components.info_bar import warning_bar
 
-            logger.warning("新增 Bot 配置被拒绝: 未检测到 NapCatQQ 安装", log_source=LogSource.UI)
-            warning_bar("请先安装 NapCatQQ 后再添加 Bot 配置！")
+            logger.warning("新增 Bot 配置被拒绝: 未检测到本地后端安装", log_source=LogSource.UI)
+            warning_bar(self.tr("请先安装本地后端 (NapCat 或 SnowLuma)"))
 
