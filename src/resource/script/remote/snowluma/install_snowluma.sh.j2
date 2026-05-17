@@ -321,15 +321,14 @@ fi
 if [ "$FRAMEWORK_DOWNLOADED" -eq 0 ]; then
     # GitHub 直连 + 镜像站 fallback
     # 镜像站格式: ${MIRROR_BASE}/${GITHUB_RAW_URL}
-    # 例: https://ghproxy.cc/https://github.com/SnowLuma/SnowLuma/releases/download/v1.7.7/xxx.tar.gz
     for url in \
         "$FRAMEWORK_URL" \
         "https://gh.ddlc.top/$FRAMEWORK_URL" \
-        "https://slink.ltd/$FRAMEWORK_URL" \
+        "https://gh-proxy.com/$FRAMEWORK_URL" \
+        "https://ghfast.top/$FRAMEWORK_URL" \
         "https://cors.isteed.cc/$FRAMEWORK_URL" \
-        "https://hub.gitmirror.com/$FRAMEWORK_URL" \
         "https://ghproxy.cc/$FRAMEWORK_URL" \
-        "https://github.moeyy.xyz/$FRAMEWORK_URL"
+        "https://github.akams.cn/$FRAMEWORK_URL"
     do
         echo "[INFO] 尝试下载: $url"
         if curl --connect-timeout 8 --max-time 120 --speed-limit 10240 --speed-time 30 \

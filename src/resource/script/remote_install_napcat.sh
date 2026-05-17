@@ -136,13 +136,12 @@ ensure_command() {
 # 内置候选列表 (按优先级排序, 直连放第一便于海外 / 无 GFW 用户)
 DEFAULT_MIRROR_CANDIDATES=(
   ""                                   # 0. 直连
-  "https://gh-proxy.com/"              # 1. gh-proxy
-  "https://mirror.ghproxy.com/"        # 2. ghproxy 镜像
-  "https://ghproxy.net/"               # 3. ghproxy 备用域名
-  "https://github.moeyy.xyz/"          # 4. moeyy 个人维护
-  "https://gh.api.99988866.xyz/"       # 5. 99988866
-  "https://hub.gitmirror.com/"         # 6. gitmirror
-  "https://ghps.cc/"                   # 7. ghps
+  "https://gh.ddlc.top/"               # 1. ddlc (国内带宽最优)
+  "https://gh-proxy.com/"              # 2. gh-proxy
+  "https://ghfast.top/"                # 3. ghfast
+  "https://cors.isteed.cc/"            # 4. isteed
+  "https://ghproxy.cc/"                # 5. ghproxy
+  "https://github.akams.cn/"           # 6. akams
 )
 
 # 全局: 探测后按优先级排序的可用镜像列表 (初始为空; 探测后填充)

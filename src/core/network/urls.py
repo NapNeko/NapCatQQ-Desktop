@@ -66,14 +66,14 @@ class Urls(Enum):
     QQ_AVATAR = QUrl("https://q.qlogo.cn/headimg_dl")
     QQ_Version = QUrl("https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json")
 
-    # 镜像站地址
+    # 镜像站地址 (按国内服务器实测下载带宽排序, 2026-05-17 验证)
     MIRROR_SITE = [
         QUrl("https://gh.ddlc.top"),
-        QUrl("https://slink.ltd"),
+        QUrl("https://gh-proxy.com"),
+        QUrl("https://ghfast.top"),
         QUrl("https://cors.isteed.cc"),
-        QUrl("https://hub.gitmirror.com"),
         QUrl("https://ghproxy.cc"),
-        QUrl("https://github.moeyy.xyz"),
+        QUrl("https://github.akams.cn"),
     ]
 
     # SnowLuma 相关地址 (P1 SnowLuma 适配)
