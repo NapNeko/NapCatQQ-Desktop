@@ -18,7 +18,7 @@ def build_update_confirmation_message(
     """构建 Desktop 更新确认弹窗文案. """
 
     install_type_text, process_text = _get_install_type_copy(translate, install_type)
-    warning_text = translate("⚠️ 所有运行中的 Bot 将被强制关闭\n\n") if has_running_bot else ""
+    warning_text = translate("所有运行中的 Bot 将被强制关闭\n\n") if has_running_bot else ""
 
     if test_mode:
         version_left = translate("当前版本")

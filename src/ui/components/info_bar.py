@@ -38,7 +38,7 @@ def _resolve_parent(parent: QObject | None) -> QWidget:
     return it(MainWindow)
 
 
-def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent: QObject | None = None) -> None:
+def info_bar(content: str, title: str = "提示", duration: int = 5000, parent: QObject | None = None) -> None:
     """
     创建信息提示消息条
 
@@ -62,7 +62,7 @@ def info_bar(content: str, title: str = "Tips✨", duration: int = 5000, parent:
     )
 
 
-def success_bar(content: str, title: str = "Success✅", duration: int = 5000, parent: QObject | None = None) -> None:
+def success_bar(content: str, title: str = "成功", duration: int = 5000, parent: QObject | None = None) -> None:
     """
     创建成功提示消息条
 
@@ -85,7 +85,7 @@ def success_bar(content: str, title: str = "Success✅", duration: int = 5000, p
     )
 
 
-def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 10000, parent: QObject | None = None) -> None:
+def warning_bar(content: str, title: str = "警告", duration: int = 10000, parent: QObject | None = None) -> None:
     """
     创建警告提示消息条
 
@@ -108,7 +108,7 @@ def warning_bar(content: str, title: str = "Warning⚠️", duration: int = 1000
     )
 
 
-def error_bar(content: str, title: str = "Failed❌", duration: int = -1, parent: QObject | None = None) -> None:
+def error_bar(content: str, title: str = "失败", duration: int = -1, parent: QObject | None = None) -> None:
     """
     创建错误提示消息条
 

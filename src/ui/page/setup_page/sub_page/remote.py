@@ -137,7 +137,7 @@ class Remote(QWidget):
     def _create_widgets(self) -> None:
         """创建所有控件. """
         # ========== 标题栏 ==========
-        self.title_label = TitleLabel(self.tr("🌐 远程管理"), self)
+        self.title_label = TitleLabel(self.tr("远程管理"), self)
         self.status_indicator = CaptionLabel(self.tr("● 未连接"), self)
         self.status_indicator.setStyleSheet("color: #999;")
 
@@ -195,7 +195,7 @@ class Remote(QWidget):
         # 状态卡片
         self.status_card = QWidget(self)
         self.status_card.setObjectName("statusCard")
-        self.status_title = StrongBodyLabel(self.tr("📊 服务器状态"), self.status_card)
+        self.status_title = StrongBodyLabel(self.tr("服务器状态"), self.status_card)
         self.status_detail = BodyLabel(
             self.tr("连接状态: 未连接\n系统: --\n架构: --\nQQ版本: --\nNapCat: --"),
             self.status_card,
@@ -205,7 +205,7 @@ class Remote(QWidget):
         # 快捷操作卡片
         self.quick_action_card = QWidget(self)
         self.quick_action_card.setObjectName("quickActionCard")
-        self.quick_action_title = StrongBodyLabel(self.tr("🚀 快捷操作"), self.quick_action_card)
+        self.quick_action_title = StrongBodyLabel(self.tr("快捷操作"), self.quick_action_card)
         self.start_btn = PushButton(FI.PLAY, self.tr("启动"), self.quick_action_card)
         self.stop_btn = PushButton(FI.PAUSE, self.tr("停止"), self.quick_action_card)
         self.restart_btn = PushButton(FI.SYNC, self.tr("重启"), self.quick_action_card)
@@ -214,7 +214,7 @@ class Remote(QWidget):
         # 部署流程卡片
         self.deploy_card = QWidget(self)
         self.deploy_card.setObjectName("deployCard")
-        self.deploy_title = StrongBodyLabel(self.tr("📋 部署流程"), self.deploy_card)
+        self.deploy_title = StrongBodyLabel(self.tr("部署流程"), self.deploy_card)
         self.probe_btn = PushButton(FI.SEARCH, self.tr("探测"), self.deploy_card)
         self.init_btn = PushButton(FI.FOLDER_ADD, self.tr("初始化"), self.deploy_card)
         self.sync_btn = PushButton(FI.SYNC, self.tr("同步配置"), self.deploy_card)
@@ -248,7 +248,7 @@ class Remote(QWidget):
         conn_layout.setContentsMargins(12, 12, 12, 12)
 
         conn_header = QHBoxLayout()
-        conn_header.addWidget(StrongBodyLabel(self.tr("📡 SSH 连接配置")))
+        conn_header.addWidget(StrongBodyLabel(self.tr("SSH 连接配置")))
         conn_layout.addLayout(conn_header)
 
         # 紧凑的输入卡片布局 (2列)
@@ -289,7 +289,7 @@ class Remote(QWidget):
         ws_layout = QVBoxLayout(self.workspace_card)
         ws_layout.setSpacing(8)
         ws_layout.setContentsMargins(12, 12, 12, 12)
-        ws_layout.addWidget(StrongBodyLabel(self.tr("📁 工作区设置")))
+        ws_layout.addWidget(StrongBodyLabel(self.tr("工作区设置")))
         ws_layout.addWidget(self.workspace_dir_card)
         left_panel.addWidget(self.workspace_card)
 

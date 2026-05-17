@@ -118,7 +118,7 @@ class HostKeyConfirmDialog(MessageBoxBase):
     # ==================== UI ====================
     def _setup_ui(self) -> None:
         if self._is_warning:
-            title_text = "⚠ 主机指纹变化警告"
+            title_text = "主机指纹变化警告"
             caption_text = (
                 f"已知主机 {self._prompt.hostname}:{self._prompt.port} 的指纹已变化, "
                 "可能是 SSH 服务器重装, 也可能是中间人攻击, 请谨慎处理."

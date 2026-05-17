@@ -155,7 +155,7 @@ class RemoteRollbackCard(SettingCard):
         from src.ui.window.main_window import MainWindow
 
         ask = AskBox(
-            "⚠️ 确认回滚远端安装",
+            "确认回滚远端安装",
             f"将清空服务器 “{profile.name}” 上的:\n\n"
             "  • NapCat 安装目录\n"
             "  • LinuxQQ 安装目录及下载的安装包\n"

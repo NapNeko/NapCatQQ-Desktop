@@ -165,14 +165,14 @@ class DeploymentConsoleDialog(MessageBoxBase):
         self.yesButton.hide()
         self.cancelButton.setEnabled(True)
         if ok:
-            self.title_label.setText(f"✅ 部署完成: {self._server_name}")
+            self.title_label.setText(f"部署完成: {self._server_name}")
             self.stage_label.setText(message)
             self.stage_label.setStyleSheet("color: #107c10; font-weight: 600;")
             self._write_line("", transient=False)
             # 加 [SUCCESS] 让 LogHighlighter 自动着色
             self._write_line(f"[SUCCESS] {message}", transient=False)
         else:
-            self.title_label.setText(f"❌ 部署失败: {self._server_name}")
+            self.title_label.setText(f"部署失败: {self._server_name}")
             self.stage_label.setText(message)
             self.stage_label.setStyleSheet("color: #d83b01; font-weight: 600;")
             self._write_line("", transient=False)
