@@ -57,7 +57,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             Action(
                 icon=FIF.CLOSE,
                 text=self.tr("关闭程序"),
-                triggered=lambda: (it(BotProcessManager).stop_all_bots(), sys.exit()),
+                triggered=self.on_close_program,
             )
         )
 
@@ -80,6 +80,35 @@ class SystemTrayIcon(QSystemTrayIcon):
         """
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.check_show_state()
+
+    @Slot()
+    def on_close_program(self) -> None:
+        """托盘菜单 "关闭程序" 槽函数
+
+        语义与主窗口关闭按钮一致: 有本地 Bot 在运行时弹窗拦截,
+        无本地 Bot 时停掉本地 Bot 并退出进程.
+        远端 Bot 跑在服务器上, 与桌面进程生命周期解耦, 此处不查询也不停止.
+        """
+        # 项目内模块导入
+        from src.ui.components.message_box import AskBox
+        from src.ui.window.main_window.window import MainWindow
+
+        process_manager = it(BotProcessManager)
+        if process_manager.has_running_local_bot():
+            main_window = it(MainWindow)
+            # 主窗口隐藏到托盘时弹窗会失去焦点, 先恢复显示再弹拦截框
+            self.check_show_state()
+            msg_box = AskBox(
+                self.tr("无法退出"),
+                self.tr("有本地机器人正在运行, 请关闭它们后再退出程序"),
+                main_window,
+            )
+            msg_box.cancelButton.hide()
+            msg_box.exec()
+            return
+
+        process_manager.stop_all_bots()
+        sys.exit()
 
     def check_show_state(self) -> None:
         """检查主窗口显示状态并切换

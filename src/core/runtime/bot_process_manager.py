@@ -2270,19 +2270,31 @@ class BotProcessManager(QObject):
         Returns:
             bool: 任意一类有 Running 实例则返回 True.
         """
+        if self.has_running_local_bot():
+            return True
+        return any(
+            record.state == QProcess.ProcessState.Running
+            for record in self.remote_process_dict.values()
+        )
+
+    def has_running_local_bot(self) -> bool:
+        """检查是否有正在运行的本地 Bot (本地 NapCat / 本地 SnowLuma).
+
+        与 :meth:`has_running_bot` 区别: 不计入远端 Bot.
+        远端 Bot 跑在服务器上, 与桌面进程生命周期解耦,
+        用于"关闭桌面客户端"等仅关心本地资源占用的场景.
+
+        Returns:
+            bool: 任意本地 Bot 处于 Running 状态则返回 True.
+        """
         if any(
             process_model.state == QProcess.ProcessState.Running
             for process_model in self.napcat_process_dict.values()
         ):
             return True
-        if any(
+        return any(
             snow.state == QProcess.ProcessState.Running
             for snow in self._snowluma_driver.list_processes()
-        ):
-            return True
-        return any(
-            record.state == QProcess.ProcessState.Running
-            for record in self.remote_process_dict.values()
         )
 
     def stop_bot(self, qq_id: str) -> None:

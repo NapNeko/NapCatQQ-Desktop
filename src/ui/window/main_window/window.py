@@ -235,13 +235,17 @@ class MainWindow(MSFluentWindow):
         logger.info(f"主窗口收到关闭请求, action={close_action.name}", log_source=LogSource.UI)
         if close_action == CloseActionEnum.CLOSE:
 
-            # 如果有机器人在线, 则提示用户关闭实例
-            if it(BotProcessManager).has_running_bot():
+            # 仅本地 Bot 与桌面进程生命周期相关; 远端 Bot 跑在服务器上, 关窗不影响其运行
+            if it(BotProcessManager).has_running_local_bot():
                 # 项目内模块导入
                 from src.ui.components.message_box import AskBox
 
-                logger.warning("检测到仍有机器人运行，拒绝关闭主窗口", log_source=LogSource.UI)
-                msg_box = AskBox(self.tr("无法退出"), self.tr("有机器人正在运行, 请关闭它们后再退出程序"), self)
+                logger.warning("检测到仍有本地机器人运行，拒绝关闭主窗口", log_source=LogSource.UI)
+                msg_box = AskBox(
+                    self.tr("无法退出"),
+                    self.tr("有本地机器人正在运行, 请关闭它们后再退出程序"),
+                    self,
+                )
                 msg_box.cancelButton.hide()
                 msg_box.exec()
                 return False
