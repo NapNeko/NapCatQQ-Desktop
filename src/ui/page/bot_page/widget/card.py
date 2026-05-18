@@ -172,6 +172,7 @@ class BotCard(HeaderCardWidget):
         self.run_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("启动"), self)
         self.stop_button = TransparentPushButton(FluentIcon.POWER_BUTTON, self.tr("停止"), self)
         self.web_ui_button = TransparentToolButton(FluentIcon.CONNECT, self)
+        self.vnc_button = TransparentToolButton(FluentIcon.VIDEO, self)
         self.qr_code_button = TransparentToolButton(FluentIcon.QRCODE, self)
         self.log_button = TransparentToolButton(NapCatDesktopIcon.LOG, self)
         self.setting_button = TransparentToolButton(FluentIcon.SETTING, self)
@@ -183,6 +184,7 @@ class BotCard(HeaderCardWidget):
         self.stop_button.hide()
         self.log_button.hide()
         self.web_ui_button.hide()
+        self.vnc_button.hide()
         self.qr_code_button.hide()
 
         # 设置布局
@@ -197,6 +199,7 @@ class BotCard(HeaderCardWidget):
         self.headerLayout.addWidget(self.stop_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.log_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.web_ui_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.headerLayout.addWidget(self.vnc_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.qr_code_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.setting_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.headerLayout.addWidget(self.remove_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -209,6 +212,7 @@ class BotCard(HeaderCardWidget):
         self.stop_button.clicked.connect(self.slot_stop_button)
         self.log_button.clicked.connect(self.slot_log_button)
         self.web_ui_button.clicked.connect(self.slot_web_ui_button)
+        self.vnc_button.clicked.connect(self.slot_vnc_button)
         self.qr_code_button.clicked.connect(self.slot_qr_code_button)
         self.setting_button.clicked.connect(self.slot_setting_button)
         self.remove_button.clicked.connect(self.slot_remove_button)
@@ -237,6 +241,7 @@ class BotCard(HeaderCardWidget):
                 self.stop_button,
                 self.log_button,
                 self.web_ui_button,
+                self.vnc_button,
                 self.qr_code_button,
                 self.setting_button,
                 self.remove_button,
@@ -320,6 +325,7 @@ class BotCard(HeaderCardWidget):
         self.stop_button.setToolTip(self.tr("停止 Bot"))
         self.log_button.setToolTip(self.tr("查看日志"))
         self.web_ui_button.setToolTip(self.tr("打开 WebUI"))
+        self.vnc_button.setToolTip(self.tr("打开 VNC 扫码页"))
         self.qr_code_button.setToolTip(self.tr("查看登录二维码"))
         self.setting_button.setToolTip(self.tr("配置 Bot"))
         self.remove_button.setToolTip(self.tr("移除 Bot"))
@@ -329,6 +335,7 @@ class BotCard(HeaderCardWidget):
             self.stop_button,
             self.log_button,
             self.web_ui_button,
+            self.vnc_button,
             self.qr_code_button,
             self.setting_button,
             self.remove_button,
@@ -582,6 +589,7 @@ class BotCard(HeaderCardWidget):
             self.stop_button.hide()
             self.log_button.hide()
             self.web_ui_button.hide()
+            self.vnc_button.hide()
             return
 
         # 离开 Starting: 还原按钮可用性与文案
@@ -593,11 +601,18 @@ class BotCard(HeaderCardWidget):
             self.stop_button.show()
             self.log_button.show()
             self.web_ui_button.show()
+            # VNC 按钮仅在远端 SnowLuma 场景显示 (本地 SL 用户已在桌面看见 Xvfb 画面;
+            # 远端 NC / 本地 NC 没有 noVNC 端点)
+            if self._is_remote_snowluma():
+                self.vnc_button.show()
+            else:
+                self.vnc_button.hide()
         else:
             self.run_button.show()
             self.stop_button.hide()
             self.log_button.hide()
             self.web_ui_button.hide()
+            self.vnc_button.hide()
 
     def slot_log_button(self) -> None:
         """处理日志按钮槽函数"""
@@ -797,6 +812,114 @@ class BotCard(HeaderCardWidget):
 
         QDesktopServices.openUrl(QUrl(web_ui_url))
         logger.info(f"已打开 WebUI(QQID: {mask_qqid(qq_id)}, url={web_ui_url})", log_source=LogSource.UI)
+
+    def slot_vnc_button(self) -> None:
+        """处理 VNC 按钮槽函数, 在浏览器打开远端 SnowLuma noVNC 扫码页.
+
+        仅远端 SnowLuma 场景可见; 走 :meth:`RemoteSnowLumaBackend.open_vnc` 一站式
+        (拿 daemon 隧道 bundle + 读 vnc.secret + 调系统浏览器). 失败时 error_bar 提示.
+        """
+        from src.core.remote import ServerManager
+
+        qq_id = str(self._config.bot.QQID)
+        if not self._is_remote_snowluma():
+            # 防御性兜底: 按钮显隐已经卡了, 这条理论上不会触发
+            error_bar(
+                self.tr("仅远端 SnowLuma Bot 支持打开 VNC"),
+                title=self.tr("不支持的操作"),
+                parent=self,
+            )
+            return
+
+        server_id = self._config.bot.runtime_target or ""
+        if not server_id:
+            error_bar(
+                self.tr("该 Bot 未绑定远端服务器, 无法打开 VNC"),
+                title=self.tr("VNC 打开失败"),
+                parent=self,
+            )
+            return
+
+        try:
+            backend = it(ServerManager).get_backend(server_id)
+        except Exception as exc:  # noqa: BLE001
+            error_bar(
+                self.tr("获取远端 SnowLuma backend 失败: {err}").format(
+                    err=f"{type(exc).__name__}: {exc}"
+                ),
+                title=self.tr("VNC 打开失败"),
+                parent=self,
+            )
+            logger.warning(
+                (
+                    f"打开远端 SnowLuma VNC 失败: ServerManager.get_backend 异常 "
+                    f"(QQID: {mask_qqid(qq_id)}, server_id={server_id}, "
+                    f"exc={type(exc).__name__}: {exc})"
+                ),
+                log_source=LogSource.UI,
+            )
+            return
+
+        open_vnc = getattr(backend, "open_vnc", None)
+        if open_vnc is None:
+            # backend 不是 RemoteSnowLumaBackend (例如远端 NC); 理论上 _is_remote_snowluma
+            # 已经过滤, 这里仅做防御
+            error_bar(
+                self.tr("当前 backend 不支持 VNC 操作"),
+                title=self.tr("VNC 打开失败"),
+                parent=self,
+            )
+            return
+
+        try:
+            ok, message = open_vnc()
+        except Exception as exc:  # noqa: BLE001
+            error_bar(
+                self.tr("打开 VNC 异常: {err}").format(
+                    err=f"{type(exc).__name__}: {exc}"
+                ),
+                title=self.tr("VNC 打开失败"),
+                parent=self,
+            )
+            logger.warning(
+                (
+                    f"打开远端 SnowLuma VNC 异常 "
+                    f"(QQID: {mask_qqid(qq_id)}, server_id={server_id}): "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+                log_source=LogSource.UI,
+            )
+            return
+
+        if ok:
+            info_bar(
+                self.tr("已在浏览器打开 noVNC 扫码页 ({url})").format(url=message),
+                title=self.tr("VNC 已打开"),
+                parent=self,
+            )
+            logger.info(
+                f"已打开远端 SnowLuma VNC(QQID: {mask_qqid(qq_id)}, server_id={server_id}, "
+                f"endpoint={message})",
+                log_source=LogSource.UI,
+            )
+        else:
+            error_bar(
+                self.tr("打开 VNC 失败: {msg}").format(msg=message),
+                title=self.tr("VNC 打开失败"),
+                parent=self,
+            )
+            logger.warning(
+                f"打开远端 SnowLuma VNC 失败 "
+                f"(QQID: {mask_qqid(qq_id)}, server_id={server_id}): {message}",
+                log_source=LogSource.UI,
+            )
+
+    def _is_remote_snowluma(self) -> bool:
+        """当前 Bot 是否为 "远端 + SnowLuma backend"; VNC 按钮显隐依据."""
+        return (
+            self._config.bot.backend_type == BackendType.SNOWLUMA
+            and self._config.bot.is_remote
+        )
 
     def slot_qr_code_button(self) -> None:
         """处理二维码按钮槽函数.

@@ -677,6 +677,36 @@ class RemoteSnowLumaBackend(OperationBackend):
         """SL 隧道由 daemon 引用计数管, 不在 per-bot 级别关闭. 协议兼容用 (no-op)."""
         return None
 
+    def open_vnc(self) -> tuple[bool, str]:
+        """打开远端 SnowLuma noVNC 扫码页 (BotCard "打开 VNC" 按钮入口).
+
+        前置条件: daemon 必须已构造且处于 READY 态 (即至少一个 Bot 已启动 / reattach 成功).
+        实现复用 :func:`src.core.remote.snowluma.vnc_launcher.open_snowluma_vnc`,
+        仅在调用方一侧把 daemon / 隧道存活性校验前置, 失败时给出可读 message.
+
+        注意:
+        - 不调 ``daemon.ensure_running``: 避免无脑加 ref_count 导致用户后续 stop_bot
+          时 daemon 不释放. 如果 daemon 没构造, 提示用户先启动 Bot.
+        - URL 含明文 vnc 密码, 仅经 ``webbrowser.open`` 交给系统浏览器, 不返回上层.
+
+        Returns:
+            ``(ok, message)``;
+
+            - ``ok=True`` 时 message 是脱敏端点描述 (``http://127.0.0.1:<port>``);
+            - ``ok=False`` 时 message 是用户可读错误描述.
+        """
+        if self._daemon is None:
+            return False, "SnowLuma daemon 未启动, 请先启动 Bot 或等待 reattach 完成"
+
+        bundle = self._daemon.tunnel_manager.get_endpoints()
+        if bundle is None:
+            return False, "SnowLuma 隧道尚未建立, 请稍后重试"
+
+        # 项目内模块导入: 局部 import 避免顶层耦合 vnc_launcher
+        from src.core.remote.snowluma.vnc_launcher import open_snowluma_vnc
+
+        return open_snowluma_vnc(self._exec_backend, self.sl_paths, bundle.novnc)
+
     # ==================== 配置同步 ====================
     def write_bot_runtime_config(self, config: "Config") -> tuple[str, str]:
         """把当前 SL Bot 的 ``onebot_<uin>.json`` 同步到远端 ``$config_dir``.
