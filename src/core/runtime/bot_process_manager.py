@@ -1044,13 +1044,13 @@ class NapCatQQLoginState(QObject):
         if self._is_logged_in:
             self._login_state_timer.setInterval(interval_ms)
             logger.trace(
-                f"NapCat 登录状态检查间隔已更新(QQID: {self.config.bot.QQID}, interval={interval_ms}ms)",
+                f"Bot WebUI 登录状态检查间隔已更新(QQID: {self.config.bot.QQID}, interval={interval_ms}ms)",
                 LogType.NETWORK,
                 LogSource.CORE,
             )
         else:
             logger.trace(
-                f"NapCat 未登录状态，保持1秒检查间隔(QQID: {self.config.bot.QQID}, configured={interval_ms}ms)",
+                f"Bot WebUI 未登录状态，保持1秒检查间隔(QQID: {self.config.bot.QQID}, configured={interval_ms}ms)",
                 LogType.NETWORK,
                 LogSource.CORE,
             )
@@ -1116,7 +1116,7 @@ class NapCatQQLoginState(QObject):
 
         self.auth = None
         logger.trace(
-            f"NapCat 请求立即刷新认证(QQID: {self.config.bot.QQID})",
+            f"Bot WebUI 请求立即刷新认证(QQID: {self.config.bot.QQID})",
             LogType.NETWORK,
             LogSource.CORE,
         )
@@ -1128,7 +1128,7 @@ class NapCatQQLoginState(QObject):
             return
         self.auth = auth
         logger.trace(
-            f"NapCat 登录认证信息已更新(QQID: {self.config.bot.QQID}, has_auth={bool(auth)})",
+            f"Bot WebUI 登录认证信息已更新(QQID: {self.config.bot.QQID}, has_auth={bool(auth)})",
             LogType.NETWORK,
             LogSource.CORE,
         )
@@ -1140,7 +1140,7 @@ class NapCatQQLoginState(QObject):
         prev_login = self._is_logged_in
         self._is_logged_in = is_login
         logger.trace(
-            f"NapCat 登录状态更新(QQID: {self.config.bot.QQID}, is_login={is_login})",
+            f"Bot WebUI 登录状态更新(QQID: {self.config.bot.QQID}, is_login={is_login})",
             LogType.NETWORK,
             LogSource.CORE,
         )
@@ -1151,7 +1151,7 @@ class NapCatQQLoginState(QObject):
             if self._login_state_timer.interval() != configured_interval:
                 self._login_state_timer.setInterval(configured_interval)
                 logger.trace(
-                    f"NapCat 已登录，恢复配置的检查间隔(QQID: {self.config.bot.QQID}, interval={configured_interval}ms)",
+                    f"Bot WebUI 已登录，恢复配置的检查间隔(QQID: {self.config.bot.QQID}, interval={configured_interval}ms)",
                     LogType.NETWORK,
                     LogSource.CORE,
                 )
@@ -1159,7 +1159,7 @@ class NapCatQQLoginState(QObject):
             if self._login_state_timer.interval() != 1000:
                 self._login_state_timer.setInterval(1000)
                 logger.trace(
-                    f"NapCat 未登录，强制使用1秒检查间隔(QQID: {self.config.bot.QQID})",
+                    f"Bot WebUI 未登录，强制使用1秒检查间隔(QQID: {self.config.bot.QQID})",
                     LogType.NETWORK,
                     LogSource.CORE,
                 )
@@ -1173,7 +1173,7 @@ class NapCatQQLoginState(QObject):
         if prev_login and self._online_status:
             self._login_invalidated_while_online = True
             logger.trace(
-                f"NapCat 检测到登录状态在在线期间失效(QQID: {self.config.bot.QQID})，等待在线状态确认后处理二维码",
+                f"Bot WebUI 检测到登录状态在在线期间失效(QQID: {self.config.bot.QQID})，等待在线状态确认后处理二维码",
                 LogType.NETWORK,
                 LogSource.CORE,
             )
@@ -1188,7 +1188,7 @@ class NapCatQQLoginState(QObject):
         self._online_status = online_status
         logger.trace(
             (
-                "NapCat 在线状态更新: "
+                "Bot WebUI 在线状态更新: "
                 f"QQID={self.config.bot.QQID}, prev_online={prev_online}, online={online_status}, "
                 f"is_logged_in={self._is_logged_in}, offline_notice_sent={self._offline_notice}, "
                 f"offline_auto_restart={self.config.bot.offlineAutoRestart}, "
@@ -1259,7 +1259,7 @@ class NapCatQQLoginState(QObject):
             return
         if self._login_invalidated_while_online or self._suppress_qrcode_until_online:
             logger.trace(
-                f"NapCat 跳过展示已失效的登录二维码(QQID: {self.config.bot.QQID})",
+                f"Bot WebUI 跳过展示已失效的登录二维码(QQID: {self.config.bot.QQID})",
                 LogType.NETWORK,
                 LogSource.CORE,
             )
