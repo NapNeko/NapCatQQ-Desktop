@@ -24,6 +24,10 @@ class RemoteNapCatStatus:
     version: str | None = None
     log_file: str | None = None
     raw_payload: dict[str, Any] = field(default_factory=dict)
+    # 远端进程已运行的秒数 (来自 ``ps -o etimes=``); ``running=False`` 时为 None.
+    # 主要给 reattach 路径换算 ``record.started_at`` (monotonic 基准) 用,
+    # 避免桌面端把"刚认领回来"误当成"刚启动".
+    elapsed_seconds: float | None = None
 
 
 @dataclass(slots=True)
@@ -89,6 +93,11 @@ class RemoteRuntimeService:
                     running = True
                     break
 
+        # 拿到 PID 后顺手探一次进程已运行秒数, 给 reattach 路径换算 monotonic 起点.
+        # ``ps -o etimes=`` 是 POSIX 标准, 直接给 "已运行秒数" 整数, 跨发行版稳定;
+        # 失败/无 PID 时静默置 None, 调用方需兜底.
+        elapsed_seconds = self._fetch_elapsed_seconds(pid) if running and pid else None
+
         # 2. 读取该 Bot 的 status_<qq_id>.json (launcher 脚本写出)
         status_path = f"{self.paths.runtime_dir}/status_{qq_id}.json"
         status_result = self.backend.run(
@@ -113,7 +122,33 @@ class RemoteRuntimeService:
             version=version,
             log_file=log_file,
             raw_payload=payload,
+            elapsed_seconds=elapsed_seconds,
         )
+
+    def _fetch_elapsed_seconds(self, pid: int) -> float | None:
+        """通过 ``ps -o etimes=`` 拿目标 PID 已运行秒数; 失败返回 None.
+
+        Args:
+            pid: 目标进程 ID
+
+        Returns:
+            float 已运行秒数; ``ps`` 不可用 / PID 已死 / 解析失败时为 None.
+        """
+        try:
+            result = self.backend.run(
+                f"ps -o etimes= -p {int(pid)} 2>/dev/null || true"
+            )
+        except Exception:  # noqa: BLE001 - SSH 异常此处兜底, 调用方仍能拿到 running=True
+            return None
+        if not result.ok:
+            return None
+        text = result.stdout.strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
 
     def get_status(self) -> RemoteNapCatStatus:
         """读取远端状态. 

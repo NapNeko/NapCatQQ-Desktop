@@ -135,6 +135,9 @@ class SnowLumaRemoteBotStatus:
         pid: qq.exe 进程 pid; ``None`` = stopped
         running: status JSON 中的 running 标志
         started_at: ISO 8601
+        elapsed_seconds: 远端进程已运行的秒数 (来自 ``ps -o etimes=``);
+            非 ``from_json`` 路径填入, 给 reattach 路径换算 monotonic 起点;
+            ``running=False`` 或探测失败时为 None
         raw: 原始 dict
     """
 
@@ -143,6 +146,7 @@ class SnowLumaRemoteBotStatus:
     pid: int | None = None
     running: bool = False
     started_at: str | None = None
+    elapsed_seconds: float | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -253,9 +257,33 @@ class SnowLumaRemoteRuntimeService:
         if not result.ok or not result.stdout.strip():
             return SnowLumaRemoteBotStatus.stopped(qq_id)
         try:
-            return SnowLumaRemoteBotStatus.from_json(qq_id, result.stdout)
+            status = SnowLumaRemoteBotStatus.from_json(qq_id, result.stdout)
         except ValueError:
             return SnowLumaRemoteBotStatus.stopped(qq_id)
+
+        # 进程在跑且有 PID 时, 顺手探一次 etimes 给 reattach 用 (失败静默)
+        if status.running and status.pid:
+            status.elapsed_seconds = self._fetch_elapsed_seconds(status.pid)
+        return status
+
+    def _fetch_elapsed_seconds(self, pid: int) -> float | None:
+        """通过 ``ps -o etimes=`` 拿目标 PID 已运行秒数; 失败返回 None."""
+        try:
+            result = self.backend.run(
+                f"ps -o etimes= -p {int(pid)} 2>/dev/null || true",
+                check=False,
+            )
+        except Exception:  # noqa: BLE001 - SSH 异常静默兜底
+            return None
+        if not result.ok:
+            return None
+        text = result.stdout.strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
 
     def list_bots(self) -> list[SnowLumaRemoteBotStatus]:
         """枚举远端所有 ``status_bot_*.json`` 并解析.

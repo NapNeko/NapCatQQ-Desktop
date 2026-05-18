@@ -387,6 +387,7 @@ class RemoteSnowLumaBackend(OperationBackend):
                 "launcher_stdout": result.stdout,
                 "inject_status": inject_status,
                 "inject_error": inject_error,
+                "elapsed_seconds": status.elapsed_seconds,
             },
         )
 
@@ -500,7 +501,10 @@ class RemoteSnowLumaBackend(OperationBackend):
             started_at=status.started_at,
             memory_rss_bytes=rss,
             server_total_memory_bytes=self._resolve_server_total_memory_bytes(),
-            extra={"uin": status.uin},
+            extra={
+                "uin": status.uin,
+                "elapsed_seconds": status.elapsed_seconds,
+            },
         )
 
     def get_memory_usage(self, qq_id: str) -> int | None:

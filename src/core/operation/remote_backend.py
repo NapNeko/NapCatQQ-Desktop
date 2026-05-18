@@ -262,6 +262,7 @@ class RemoteBackend(OperationBackend):
                 "version": status.version,
                 "log_file": status.log_file,
                 "launcher_stdout": result.stdout,
+                "elapsed_seconds": status.elapsed_seconds,
             },
         )
 
@@ -304,6 +305,7 @@ class RemoteBackend(OperationBackend):
                 "raw_qq": status.qq,
                 "version": status.version,
                 "log_file": status.log_file,
+                "elapsed_seconds": status.elapsed_seconds,
             },
         )
 
