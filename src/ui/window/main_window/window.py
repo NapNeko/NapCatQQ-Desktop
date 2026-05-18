@@ -55,7 +55,32 @@ class MainWindow(MSFluentWindow):
 
         # 组件加载完成结束 SplashScreen
         self.splash_screen.finish()
+        # UI 渲染完成后异步认领远端 Bot 状态; 与 Desktop 启动解耦, 避免阻塞
+        self._schedule_remote_bot_reattach()
         logger.trace("主窗口初始化完成", log_source=LogSource.UI)
+
+    def _schedule_remote_bot_reattach(self) -> None:
+        """在事件循环空闲时异步触发远端 Bot 状态认领.
+
+        远端 Bot 跑在服务器上, 桌面进程关闭后字典丢失;
+        :meth:`BotProcessManager.reattach_remote_bots` 通过 SSH 重新探测每个
+        ``is_remote=True`` 的 Bot 是否仍在运行, 把 Running 的重新登记到字典里.
+        失败/掉线兜底已在 reattach 内部处理, 不会阻塞启动也不弹错.
+        """
+        # 局部 import: QTimer 仅此处使用, 避免污染顶层
+        from PySide6.QtCore import QTimer
+
+        def _do_reattach() -> None:
+            try:
+                it(BotProcessManager).reattach_remote_bots()
+            except Exception as exc:  # noqa: BLE001 - reattach 不应阻断主窗口可用
+                logger.warning(
+                    f"远端 Bot reattach 触发失败: {type(exc).__name__}: {exc}",
+                    log_source=LogSource.UI,
+                )
+
+        # singleShot(0): 让当前主循环把绘制 / 信号处理走完再发起 SSH 任务派发
+        QTimer.singleShot(0, _do_reattach)
 
     def _install_progress_info_bar_bridge(self) -> None:
         """挂载 [`ProgressInfoBarBridge`](src/ui/components/progress_info_bar_bridge.py).

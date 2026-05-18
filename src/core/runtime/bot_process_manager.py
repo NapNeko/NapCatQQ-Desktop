@@ -656,6 +656,9 @@ class RemoteBotOperationRunnable(QObject, QRunnable):
       成功时 ``operation_finished_signal`` 携带 None.
     - ``"poll"``: 调用 ``get_process_status`` + ``get_webui_endpoint``;
       成功时 ``operation_finished_signal`` 携带 ``(ProcessStatus, WebUIEndpoint | None)`` 元组.
+    - ``"attach_tunnel"``: SL 专用; 在 reattach 路径下补建本地 daemon + WebUI 隧道.
+      调 ``backend.daemon.ensure_running()`` (NC backend 无此方法时静默 no-op);
+      成功时 ``operation_finished_signal`` 携带 ``WebUIEndpoint | None``.
     """
 
     # 信号: (qq_id, action, payload).  payload 类型按 action 区分.
@@ -757,6 +760,26 @@ class RemoteBotOperationRunnable(QObject, QRunnable):
                     self._qq_id, self._action, (status, endpoint)
                 )
                 # poll 不上报 center, 这里 success 状态无意义
+                return
+
+            if self._action == "attach_tunnel":
+                # SL backend 才暴露 ``daemon`` 属性; NC backend 无 daemon 概念,
+                # 直接试一次 ``get_webui_endpoint`` 即可 (NC 没本地隧道, 端点是 None
+                # 也是合法的, 调用方会自行兜底).
+                daemon = getattr(backend, "daemon", None)
+                if daemon is not None:
+                    daemon.ensure_running()
+                endpoint = None
+                try:
+                    endpoint = backend.get_webui_endpoint(self._qq_id)
+                except Exception as exc:  # noqa: BLE001 - 端点拿不到不视为失败
+                    logger.trace(
+                        f"reattach attach_tunnel: get_webui_endpoint 失败(QQID: {self._qq_id}): "
+                        f"{type(exc).__name__}: {exc}",
+                        LogType.NETWORK,
+                        LogSource.CORE,
+                    )
+                self.operation_finished_signal.emit(self._qq_id, self._action, endpoint)
                 return
 
             failure_message = f"未知远端操作: {self._action}"
@@ -2522,6 +2545,283 @@ class BotProcessManager(QObject):
         runner.operation_finished_signal.connect(self._on_remote_op_finished)
         runner.operation_failed_signal.connect(self._on_remote_op_failed)
         remote_ssh_pool().start(cast(QRunnable, runner))
+
+    def reattach_remote_bots(self) -> None:
+        """启动期重新认领远端 Bot 的运行状态.
+
+        远端 Bot 进程跑在服务器上, 与桌面进程生命周期解耦; 桌面端的
+        :attr:`remote_process_dict` 是 session-scoped 的内存字典, 进程关掉就丢.
+        本方法在 Desktop 启动后异步触发, 对每个 ``is_remote=True`` 的 Bot 配置
+        发起一次远端 ``poll`` 探测, 把仍在跑的 Bot 状态重新登记进字典 + 起轮询计时器.
+
+        异步策略:
+        - 主线程: 预先创建 ``state=Starting`` 的 :class:`RemoteProcessRecord`,
+          UI 立刻看到 "正在认领" 状态;
+        - 后台 :class:`RemoteBotOperationRunnable` (action=``poll``) 跑 SSH 调用;
+        - 回调成功 ``running=True``: 走 :meth:`_finalize_remote_attach` 切 Running +
+          起轮询 + 注册自动重启 + 发布 WebUI 登录态 (语义对齐 :meth:`_handle_remote_start_succeeded`);
+        - 回调成功 ``running=False``: 走既有 :meth:`_handle_remote_stop_succeeded` 清掉占位记录;
+        - 回调失败 (SSH 不通 / 服务器掉线): 静默 pop 占位记录,
+          通过 ``notification_signal`` 发 warning, 不阻塞启动也不弹错.
+
+        幂等: 已经在 :attr:`remote_process_dict` 中的 Bot 直接跳过, 多次调用安全.
+        """
+        # 项目内模块导入: 局部 import 避免 bot_process_manager 顶层耦合 operate_config
+        from src.core.config.operate_config import read_config
+
+        try:
+            configs = read_config()
+        except Exception as exc:  # noqa: BLE001 - 配置读取失败不应阻塞启动
+            logger.warning(
+                f"reattach 远端 Bot 时读取配置失败: {type(exc).__name__}: {exc}",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+            return
+
+        remote_configs = [c for c in configs if c.bot.is_remote]
+        if not remote_configs:
+            logger.trace("无 is_remote 的 Bot 配置, 跳过 reattach", log_source=LogSource.CORE)
+            return
+
+        logger.info(
+            f"开始 reattach 远端 Bot (count={len(remote_configs)})",
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+        for config in remote_configs:
+            self._reattach_single_remote_bot(config)
+
+    def _reattach_single_remote_bot(self, config: Config) -> None:
+        """对单个远端 Bot 配置发起认领探测.
+
+        Args:
+            config: 已知 ``is_remote=True`` 的 Bot 配置对象.
+        """
+        qq_id = str(config.bot.QQID)
+
+        if qq_id in self.remote_process_dict:
+            logger.trace(
+                f"reattach 跳过 (Bot 已在管理中, QQID: {qq_id})",
+                log_source=LogSource.CORE,
+            )
+            return
+
+        if len(self.remote_process_dict) >= 4:
+            logger.warning(
+                f"reattach 触达远端 Bot 上限, 跳过(QQID: {qq_id})",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+            return
+
+        record = RemoteProcessRecord(
+            qq_id=qq_id,
+            config=config,
+            state=QProcess.ProcessState.Starting,
+            started_at=monotonic(),
+        )
+        self.remote_process_dict[qq_id] = record
+        it(ManagerNapCatQQLog).create_remote_log(config)
+        self.process_changed_signal.emit(qq_id, QProcess.ProcessState.Starting)
+
+        runner = RemoteBotOperationRunnable(qq_id, config, "poll")
+        runner.operation_finished_signal.connect(self._on_remote_reattach_finished)
+        runner.operation_failed_signal.connect(self._on_remote_reattach_failed)
+        record.poll_in_flight = True
+        remote_ssh_pool().start(cast(QRunnable, runner))
+        logger.trace(
+            f"已派发 reattach poll 任务(QQID: {qq_id}, target={config.bot.runtime_target})",
+            log_source=LogSource.CORE,
+        )
+
+    def _on_remote_reattach_finished(self, qq_id: str, action: str, payload: object) -> None:
+        """reattach 探测成功的主线程回调; 与轮询路径分离避免误判 NotRunning.
+
+        Args:
+            qq_id: Bot QQ 号.
+            action: 应当固定为 ``"poll"``.
+            payload: ``(ProcessStatus, WebUIEndpoint | None)`` 元组.
+        """
+        if action != "poll":
+            return
+        record = self.remote_process_dict.get(qq_id)
+        if record is None:
+            return
+        record.poll_in_flight = False
+
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            self._cleanup_failed_reattach(qq_id, reason="payload 格式异常")
+            return
+
+        status, endpoint = payload
+        if not getattr(status, "running", False):
+            logger.info(
+                f"reattach: 远端 Bot 当前未运行, 清理占位记录(QQID: {qq_id})",
+                LogType.FILE_FUNC,
+                LogSource.CORE,
+            )
+            self._handle_remote_stop_succeeded(qq_id)
+            return
+
+        self._finalize_remote_attach(qq_id, status, endpoint)
+
+    def _on_remote_reattach_failed(self, qq_id: str, action: str, error: str) -> None:
+        """reattach 探测失败的主线程回调; SSH 不通时静默清理 + 通知用户."""
+        if action != "poll":
+            return
+        logger.warning(
+            f"reattach 远端 Bot 探测失败(QQID: {qq_id}): {error}",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
+        self._cleanup_failed_reattach(qq_id, reason=error)
+
+    def _cleanup_failed_reattach(self, qq_id: str, *, reason: str) -> None:
+        """reattach 失败时回滚占位记录 + 一条 warning 通知, 不弹错."""
+        record = self.remote_process_dict.pop(qq_id, None)
+        if record is not None:
+            self._teardown_remote_polling(record)
+        it(ManagerNapCatQQLog).remove_log(qq_id)
+        self.process_changed_signal.emit(qq_id, QProcess.ProcessState.NotRunning)
+        self.notification_signal.emit(
+            "warning",
+            f"远端 Bot {qq_id} 状态未能同步: {reason}",
+        )
+
+    def _finalize_remote_attach(self, qq_id: str, status: object, endpoint: object) -> None:
+        """reattach 探测确认 Running 后, 把记录切到 Running 并启动轮询/登录态发布.
+
+        语义对齐 :meth:`_handle_remote_start_succeeded`, 但额外接管首次 ``poll`` 拿到的
+        ``endpoint`` 立即发布登录态, 不等下一轮 5s 轮询.
+
+        ``record.started_at`` 走"远端真实启动时刻 → 桌面端 monotonic 基准"换算:
+        backend 在 ``ProcessStatus.extra["elapsed_seconds"]`` 里给出远端进程已运行秒数
+        (来自 ``ps -o etimes=``); 桌面端取 ``monotonic() - elapsed_seconds`` 即得对齐
+        本进程时钟基准的"虚拟启动时刻", UI ``card.py`` 用 ``monotonic() - start_time``
+        算出的运行时长就和远端真实运行时长一致, 而不是从"刚 reattach"算起.
+        探测失败/字段缺失时兜底 ``monotonic()``.
+
+        关键差异: 不调用 ``ManagerAutoRestartProcess.create_auto_restart_timer``.
+        ``autoRestartSchedule`` 是周期性 ``QTimer`` (每 N 分钟无条件 restart_bot),
+        其语义起点是"用户最近一次手动启动该 Bot". reattach 只是恢复状态显示,
+        远端 Bot 的真实启动时刻在上一次桌面会话, 本次以"现在 + duration" 立即起新周期
+        会让一个已经稳定运行的 Bot 在 reattach 后被强制重启一次, 与用户预期不符.
+        用户下次手动 start / restart 时会重新走 :meth:`_handle_remote_start_succeeded`
+        正常路径, 自动重启 timer 自然回归.
+        """
+        record = self.remote_process_dict.get(qq_id)
+        if record is None:
+            return
+
+        # 项目内模块导入: 局部 alias 避免顶层循环
+        from src.core.operation.backend import ProcessStatus as _ProcessStatus
+
+        record.state = QProcess.ProcessState.Running
+        record.started_at = self._derive_attach_started_at(status)
+        if isinstance(status, _ProcessStatus):
+            record.last_memory_rss_bytes = status.memory_rss_bytes
+            if status.server_total_memory_bytes is not None:
+                record.server_total_memory_bytes = status.server_total_memory_bytes
+
+        self.process_changed_signal.emit(qq_id, QProcess.ProcessState.Running)
+        logger.info(
+            (
+                f"reattach 成功, 远端 Bot 已重新接管"
+                f"(QQID: {qq_id}, target={record.config.bot.runtime_target})"
+            ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+        self._start_remote_polling(record)
+        if endpoint is not None:
+            self._publish_remote_login_state(record, endpoint)
+        else:
+            # SL backend lazy 模式下首次 poll 拿不到 endpoint (daemon 未构造);
+            # 派一次 ``attach_tunnel`` 任务在后台 ensure daemon + 建本地隧道,
+            # 完成后由 :meth:`_on_remote_attach_tunnel_finished` 发布登录态.
+            # NC backend 没有 daemon 概念, ``attach_tunnel`` 内部会安全 no-op.
+            self._dispatch_attach_tunnel(record)
+
+    def _dispatch_attach_tunnel(self, record: "RemoteProcessRecord") -> None:
+        """派发 ``attach_tunnel`` 后台任务给 reattach 路径补建 SL 隧道."""
+        runner = RemoteBotOperationRunnable(record.qq_id, record.config, "attach_tunnel")
+        runner.operation_finished_signal.connect(self._on_remote_attach_tunnel_finished)
+        runner.operation_failed_signal.connect(self._on_remote_attach_tunnel_failed)
+        remote_ssh_pool().start(cast(QRunnable, runner))
+        logger.trace(
+            f"已派发 attach_tunnel 任务(QQID: {record.qq_id})",
+            log_source=LogSource.CORE,
+        )
+
+    def _on_remote_attach_tunnel_finished(
+        self, qq_id: str, action: str, payload: object
+    ) -> None:
+        """attach_tunnel 完成主线程回调: 拿到 endpoint 就发布登录态."""
+        if action != "attach_tunnel":
+            return
+        record = self.remote_process_dict.get(qq_id)
+        if record is None:
+            return
+        if payload is None:
+            logger.trace(
+                f"attach_tunnel 完成但 endpoint 为 None(QQID: {qq_id}); "
+                "下一轮 poll 仍会自动尝试发布",
+                log_source=LogSource.CORE,
+            )
+            return
+        self._publish_remote_login_state(record, payload)
+        logger.info(
+            f"reattach 隧道补建完成, WebUI 登录态已发布(QQID: {qq_id})",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
+
+    def _on_remote_attach_tunnel_failed(
+        self, qq_id: str, action: str, error: str
+    ) -> None:
+        """attach_tunnel 失败回调: 仅一条 warning, 不回滚 record.
+
+        Bot 仍在远端正常运行, 只是本地隧道暂时建不起来. 用户后续可手动点 "打开 WebUI"
+        触发再次 ensure_running, 不应因此回滚 reattach 状态.
+        """
+        if action != "attach_tunnel":
+            return
+        logger.warning(
+            f"reattach 隧道补建失败(QQID: {qq_id}): {error}; "
+            "Bot 仍在跑, 用户可在 WebUI 按钮重试",
+            LogType.NETWORK,
+            LogSource.CORE,
+        )
+        self.notification_signal.emit(
+            "warning",
+            f"Bot {qq_id} 状态已恢复, 但 WebUI 隧道未建立: {error}",
+        )
+
+    @staticmethod
+    def _derive_attach_started_at(status: object) -> float:
+        """从 backend 探测结果换算 ``record.started_at`` (monotonic 基准).
+
+        优先消费 ``ProcessStatus.extra["elapsed_seconds"]`` (远端 ``ps -o etimes=``
+        给出的进程已运行秒数), 用 ``monotonic() - elapsed`` 反推一个"虚拟启动时刻".
+        缺失或非法时兜底为当前 ``monotonic()``, UI 退化为"从认领时刻算运行时长"的旧行为.
+
+        Args:
+            status: ``RemoteBotOperationRunnable`` ``poll`` 回传的 ``ProcessStatus``;
+                类型放宽为 ``object`` 是历史回调签名约定.
+
+        Returns:
+            float, 桌面端 monotonic 基准下的虚拟启动时刻.
+        """
+        elapsed = None
+        extra = getattr(status, "extra", None)
+        if isinstance(extra, dict):
+            raw = extra.get("elapsed_seconds")
+            if isinstance(raw, (int, float)) and raw >= 0:
+                elapsed = float(raw)
+        if elapsed is None:
+            return monotonic()
+        return monotonic() - elapsed
 
     def _stop_remote_process(self, qq_id: str) -> None:
         """停止远端 Bot 进程; 不存在时静默返回."""
