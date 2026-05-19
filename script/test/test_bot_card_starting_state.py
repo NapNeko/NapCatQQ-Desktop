@@ -239,3 +239,142 @@ def test_update_info_card_reflects_starting_state(
     assert card.run_button.isEnabled() is False
     assert card.run_button.text() == "启动中…"
     assert card.run_button.isHidden() is False
+
+
+# ==================== "关闭中" UX 防御 (2026-05-20 SnowLuma 析构竞态) ====================
+def test_begin_stopping_locks_both_buttons(
+    monkeypatch: pytest.MonkeyPatch, config_factory
+) -> None:
+    """``_begin_stopping``: run/stop 按钮均 disabled, 文案均改 "关闭中…", 阻止重启."""
+    card = _make_card(monkeypatch, config_factory(11112222))
+    # 先到 Running 态以便 stop_button 可见
+    card.slot_process_changed_button("11112222", QProcess.ProcessState.Running)
+
+    card._begin_stopping()
+
+    assert card._stopping is True
+    assert card.run_button.isEnabled() is False
+    assert card.run_button.text() == "关闭中…"
+    assert card.stop_button.isEnabled() is False
+    assert card.stop_button.text() == "关闭中…"
+    assert card._stopping_timer.isActive() is True
+
+
+def test_finish_stopping_restores_ui_to_not_running(
+    monkeypatch: pytest.MonkeyPatch, config_factory
+) -> None:
+    """``_finish_stopping``: 解除关闭中态, run_button 恢复 + 其他按钮隐藏 (NotRunning UI)."""
+    card = _make_card(monkeypatch, config_factory(11112222))
+    card.slot_process_changed_button("11112222", QProcess.ProcessState.Running)
+    card._begin_stopping()
+
+    card._finish_stopping()
+
+    assert card._stopping is False
+    assert card._stopping_timer.isActive() is False
+    assert card.run_button.isEnabled() is True
+    assert card.run_button.text() == "启动"
+    assert card.stop_button.text() == "停止"
+    assert card.run_button.isHidden() is False
+    assert card.stop_button.isHidden() is True
+
+
+def test_not_running_during_stopping_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, config_factory
+) -> None:
+    """关闭中收到 NotRunning 信号 → **忽略**, 不解锁 UI; 让定时器超时再解锁.
+
+    背景: stop_bot 同步路径立即 emit NotRunning, 但底层 SnowLuma zombie QProcess
+    实际还在回收中 (terminate 优雅退出 ~1-5s, 期间用户点启动会触发析构竞态).
+    UX 防御必须忽略 NotRunning, 强制等定时器超时, 确保 zombie 真正完成.
+    """
+    card = _make_card(monkeypatch, config_factory(11112222))
+    card.slot_process_changed_button("11112222", QProcess.ProcessState.Running)
+    card._begin_stopping()
+
+    card.slot_process_changed_button("11112222", QProcess.ProcessState.NotRunning)
+
+    # 关闭中态不应被 NotRunning 解锁
+    assert card._stopping is True
+    assert card.run_button.isEnabled() is False
+    assert card.run_button.text() == "关闭中…"
+    assert card._stopping_timer.isActive() is True
+
+
+def test_starting_during_stopping_breaks_guard(
+    monkeypatch: pytest.MonkeyPatch, config_factory
+) -> None:
+    """关闭中收到 Starting (异常路径) → 解除关闭中态, 走 Starting UI."""
+    card = _make_card(monkeypatch, config_factory(11112222))
+    card.slot_process_changed_button("11112222", QProcess.ProcessState.Running)
+    card._begin_stopping()
+
+    card.slot_process_changed_button("11112222", QProcess.ProcessState.Starting)
+
+    # 关闭中被打破, 走 Starting UI
+    assert card._stopping is False
+    assert card._stopping_timer.isActive() is False
+    assert card.run_button.text() == "启动中…"
+    assert card.run_button.isEnabled() is False
+
+
+def test_stop_button_napcat_backend_skips_stopping_guard(
+    monkeypatch: pytest.MonkeyPatch, config_factory
+) -> None:
+    """NapCat backend 同步退出, 不需要关闭中态防御 — ``slot_stop_button`` 直接走 stop_bot."""
+    card_module = _get_card_module()
+    config = config_factory(11112222)
+    # 默认 backend 是 NAPCAT
+    card = _make_card(monkeypatch, config)
+    assert card._needs_stopping_guard() is False
+
+    stop_called: list[str] = []
+    remove_called: list[str] = []
+    monkeypatch.setattr(
+        card_module,
+        "it",
+        lambda cls: {
+            "BotProcessManager": SimpleNamespace(stop_bot=lambda qq_id: stop_called.append(qq_id)),
+            "ManagerAutoRestartProcess": SimpleNamespace(
+                remove_auto_restart_timer=lambda qq_id: remove_called.append(qq_id)
+            ),
+        }[cls.__name__],
+    )
+
+    card.slot_stop_button()
+
+    assert card._stopping is False
+    assert stop_called == ["11112222"]
+    assert remove_called == ["11112222"]
+
+
+def test_stop_button_local_snowluma_enables_stopping_guard(
+    monkeypatch: pytest.MonkeyPatch, config_factory
+) -> None:
+    """本地 SnowLuma backend → ``slot_stop_button`` 启用关闭中态防御."""
+    from src.core.runtime.backend_type import BackendType
+
+    card_module = _get_card_module()
+    config = config_factory(11112222)
+    config.bot.backend_type = BackendType.SNOWLUMA
+    card = _make_card(monkeypatch, config)
+    # 先到 Running 状态
+    card.slot_process_changed_button("11112222", QProcess.ProcessState.Running)
+
+    stop_called: list[str] = []
+    monkeypatch.setattr(
+        card_module,
+        "it",
+        lambda cls: {
+            "BotProcessManager": SimpleNamespace(stop_bot=lambda qq_id: stop_called.append(qq_id)),
+            "ManagerAutoRestartProcess": SimpleNamespace(remove_auto_restart_timer=lambda qq_id: None),
+        }[cls.__name__],
+    )
+
+    card.slot_stop_button()
+
+    assert card._stopping is True
+    assert card.run_button.text() == "关闭中…"
+    assert card.stop_button.text() == "关闭中…"
+    assert card._stopping_timer.isActive() is True
+    assert stop_called == ["11112222"]

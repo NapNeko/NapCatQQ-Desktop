@@ -165,6 +165,16 @@ class BotCard(HeaderCardWidget):
         # P4 F2 / P4 W4: 批量模式 - 整卡可点击切换"选中态", 不再使用复选框
         self._batch_mode: bool = False
         self._selected: bool = False
+        # SnowLuma stop -> 立即重启 竞态防御 (2026-05-20):
+        # 底层 stop_bot 返回得很快, 但 OS 进程退出、zombie QProcess 回收需要 1-5 秒.
+        # 期间用户若点 "启动", 旧 QProcess 的迟到 finished 信号会和新 Bot 启动流程交叠,
+        # 触发 Qt 析构竞态. 加 _stopping 标志 + 文案 "关闭中…" 从源头阻止用户重启.
+        self._stopping: bool = False
+        # 关闭中的超时兜底 (terminate_async 5s kill + 缓冲), 单次, 由 _begin_stopping 启
+        self._stopping_timer: QTimer = QTimer(self)
+        self._stopping_timer.setSingleShot(True)
+        self._stopping_timer.setInterval(5500)
+        self._stopping_timer.timeout.connect(self._finish_stopping)
 
         # 创建控件
         self.avatar_widget = BotAvatarWidget(str(self._config.bot.QQID), self)
@@ -549,8 +559,62 @@ class BotCard(HeaderCardWidget):
     def slot_stop_button(self) -> None:
         """处理停止按钮点击"""
         logger.info(f"请求停止 Bot(QQID: {mask_qqid(self._config.bot.QQID)})", log_source=LogSource.UI)
+        # 本地 SnowLuma 才有 zombie QProcess 析构竞态问题, 才需要关闭中态防御.
+        # NapCat 路径同步退出 + 远端走 SSH, 都无此问题, 直接走原 stop_bot.
+        if self._needs_stopping_guard():
+            self._begin_stopping()
         it(BotProcessManager).stop_bot(str(self._config.bot.QQID))
         it(ManagerAutoRestartProcess).remove_auto_restart_timer(str(self._config.bot.QQID))
+
+    def _needs_stopping_guard(self) -> bool:
+        """是否需要 "关闭中" UX 防御 (仅本地 SnowLuma)."""
+        return (
+            self._config.bot.backend_type == BackendType.SNOWLUMA
+            and not self._config.bot.is_remote
+        )
+
+    def _begin_stopping(self) -> None:
+        """进入 "关闭中" 视觉态: 锁住 run/stop 按钮 + 启动 5.5s 超时定时器.
+
+        防御场景: 用户点停止 → 底层 ``stop_bot`` 立即返回 + emit NotRunning, 但 zombie
+        QProcess 实际要等 ``terminate_async`` 5s 兜底 kill (或 OS 进程更快退出) + finished
+        信号到达后才完全回收. 期间若用户点启动, 旧 process 迟到的 Qt 信号会和新 Bot 启动
+        交叠触发析构竞态. 本方法把按钮锁住 5.5s, 文案改 "关闭中…", 强制等到 zombie 回收完.
+
+        若批量模式下被调用, 同步内部 enabled/text 状态即可, visibility 不动 (与
+        :meth:`slot_process_changed_button` 批量分支一致).
+        """
+        self._stopping = True
+        self.run_button.setEnabled(False)
+        self.run_button.setText(self.tr("关闭中…"))
+        self.stop_button.setEnabled(False)
+        self.stop_button.setText(self.tr("关闭中…"))
+        self._stopping_timer.start()
+
+    def _finish_stopping(self) -> None:
+        """超时兜底: 解除 "关闭中" 锁, 恢复按钮文案 + 走 NotRunning 的 UI 状态.
+
+        正常情况下 :meth:`slot_process_changed_button` 收到迟到的 NotRunning 时
+        会主动调本方法; 异常情况 (NotRunning 已在 stop_bot 同步路径里发完了,
+        定时器才超时触发) 也由本方法兜底.
+        """
+        if not self._stopping:
+            return
+        self._stopping = False
+        self._stopping_timer.stop()
+        self.run_button.setEnabled(True)
+        self.run_button.setText(self.tr("启动"))
+        self.stop_button.setEnabled(True)
+        self.stop_button.setText(self.tr("停止"))
+        # 不主动 emit NotRunning UI, 让 slot_process_changed_button 接管 visibility.
+        # 但若 stop_bot 的 NotRunning 早已 emit 过, 这里要补一次 visibility 回到 NotRunning.
+        if self._batch_mode:
+            return
+        self.run_button.show()
+        self.stop_button.hide()
+        self.log_button.hide()
+        self.web_ui_button.hide()
+        self.vnc_button.hide()
 
     def slot_process_changed_button(self, qq_id: str, state: QProcess.ProcessState) -> None:
         """处理 NapCatQQ 进程变化时, 切换按钮显示.
@@ -566,6 +630,18 @@ class BotCard(HeaderCardWidget):
         """
         if qq_id != str(self._config.bot.QQID):
             return
+
+        # "关闭中" UX 防御 (2026-05-20):
+        # 用户点停止后, ``_begin_stopping`` 已锁住按钮 + 启 5.5s 兜底定时器. 此处:
+        # - 收到 NotRunning: stop_bot 立即 emit NotRunning, 但底层 zombie QProcess 还在
+        #   回收中. 此时**忽略**该信号, 不解锁 UI, 让定时器自己跑完到 zombie 真正回收.
+        # - 收到 Starting / Running: 不应该发生 (关闭中不应再启动), 防御性解锁后走原逻辑.
+        if self._stopping:
+            if state == QProcess.ProcessState.NotRunning:
+                return
+            # 异常路径 (Starting / Running): 关闭中收到启动态, 解锁后走原逻辑
+            self._stopping = False
+            self._stopping_timer.stop()
 
         # P4 W4 修复: 批量模式下不响应 process state 变化, 否则远端 Bot 停止/启动
         # 完成时这里会把 run/stop/log/web_ui 按钮重新 show 出来, 与批量模式预期
