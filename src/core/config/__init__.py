@@ -69,7 +69,7 @@ from src.core.logging import LogSource, logger
 from src.core.remote.models import LinuxCorePaths, SSHCredentials
 from src.core.runtime.paths import PathFunc
 
-__version__ = "v2.2.5"
+__version__ = "v2.2.6"
 _CONFIG_MIGRATION_BACKUP_SUFFIX = ".bak"
 _CONFIG_MIGRATION_TMP_MARKER = "tmp"
 _LEGACY_CONFIG_VERSION = "v1.7.28"

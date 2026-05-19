@@ -1,4 +1,4 @@
-# 🚀 NapCatQQ Desktop 更新日志（v2.2.5）
+# 🚀 NapCatQQ Desktop 更新日志（v2.2.6）
 
 ## Tips
 - v2.0 起为破坏性更新，旧版无法直接更新，请手动下载新版安装包。
@@ -6,17 +6,17 @@
 
 <!-- BEGIN AUTO RELEASE NOTES -->
 ## 🐛 修复功能
-- 修复引导窗口背景色随主题切换的问题
-- 更新 GitHub 加速镜像站列表
-- 修复 InfoBar 长文案与硬编码 NapCat 的问题
+- 修复关闭/退出仅阻止本地 Bot，远端 Bot 不再阻止退出
+- 修复 SnowLuma 停止后立即重启导致的 `Signal source has been deleted` 崩溃
+- 修复 SnowLuma 停止过程中快速重复操作引发的竞态问题，新增“关闭中…”状态防护
 
 ## ✨ 新增功能
-- 接入 GitHub API HMAC 签名中转代理
-- 改用 GitHub releases API 进行 SHA256 校验
+- 远端 Bot 状态透传 `elapsed_seconds` 字段
+- 启动期间自动重新附加远端 Bot 状态，并补建 SnowLuma 隧道
+- 远端 SnowLuma Bot 卡片新增“打开 VNC 工具”按钮
 
 ## 🔧 优化功能
-- 优化 VersionService 启动逻辑，单例化避免重复请求
-- 移除 UI 文案中的彩色 emoji，统一标点符号
+- 优化 NapCatQQLoginState 日志文案，统一使用中性词“Bot WebUI”
 <!-- END AUTO RELEASE NOTES -->
 
 ## ⚠️ 重要提醒
