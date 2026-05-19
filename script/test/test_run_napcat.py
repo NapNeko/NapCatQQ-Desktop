@@ -655,6 +655,111 @@ def test_stop_process_removes_process_and_login_state(
     assert state_changes == [("334455", QProcess.ProcessState.NotRunning)]
 
 
+def test_snowluma_state_changed_ignores_stale_qprocess(monkeypatch: pytest.MonkeyPatch, mute_run_napcat_logger) -> None:
+    """stop 后快速 restart 时, 旧 QQ.exe 的 stateChanged 不应写入新 SnowLuma model."""
+    from src.core.runtime.snowluma_driver import SnowLumaProcessModel
+
+    manager = run_napcat.BotProcessManager()
+    old_process = FakeManagedProcess(pid=1, state=QProcess.ProcessState.NotRunning)
+    new_process = FakeManagedProcess(pid=2, state=QProcess.ProcessState.Running)
+    new_model = SnowLumaProcessModel(
+        qq_id="334455",
+        qq_process=new_process,  # type: ignore[arg-type]
+        qq_pid=2,
+        state=QProcess.ProcessState.Starting,
+        started_at=1.0,
+    )
+    manager._snowluma_driver._processes["334455"] = new_model
+    state_changes: list[tuple[str, QProcess.ProcessState]] = []
+    manager.process_changed_signal.connect(lambda qq_id, state: state_changes.append((qq_id, state)))
+
+    manager._handle_process_state_changed(
+        "334455", QProcess.ProcessState.NotRunning, old_process  # type: ignore[arg-type]
+    )
+
+    assert new_model.state == QProcess.ProcessState.Starting
+    assert state_changes == []
+
+    manager._handle_process_state_changed(
+        "334455", QProcess.ProcessState.Running, new_process  # type: ignore[arg-type]
+    )
+
+    assert new_model.state == QProcess.ProcessState.Running
+    assert state_changes == [("334455", QProcess.ProcessState.Running)]
+
+
+def test_snowluma_driver_stop_holds_qprocess_until_finished(monkeypatch: pytest.MonkeyPatch) -> None:
+    """stop() 后旧 QQ.exe QProcess 进入 zombie 池保活, 直到 OS 进程真正 finished 才回收.
+
+    背景: PySide6 默认 Python 端 wrapper 拥有 QProcess 所有权; wrapper 一旦没有
+    Python 引用就会析构, 同步析构 C++ 对象. 若 stop() 后没有强引用持有 wrapper,
+    OS 层进程还在跑时 wrapper 已被 GC, Qt 析构 QProcess 时 internal signal emit 会触发
+    ``RuntimeError: Signal source has been deleted`` 崩溃.
+
+    本测试验证: stop 后 process 被 driver 持强引用到 _zombie_processes; finished
+    信号 emit 后 driver 从 zombie 列表移除并 deleteLater (用 Qt 安全销毁).
+    """
+    from PySide6.QtCore import QObject, Signal
+
+    from src.core.runtime.snowluma_driver import (
+        SnowLumaDriver,
+        SnowLumaProcessModel,
+    )
+
+    class _FakeQQProcess(QObject):
+        stateChanged = Signal(int)
+        errorOccurred = Signal(int)
+        finished = Signal(int, int)
+
+        def __init__(self) -> None:
+            super().__init__()
+            self._state = QProcess.ProcessState.Running
+            self.delete_later_called = False
+
+        def state(self):
+            return self._state
+
+        def terminate(self) -> None:
+            self._state = QProcess.ProcessState.NotRunning
+
+        def deleteLater(self) -> None:
+            self.delete_later_called = True
+
+    fake_qq = _FakeQQProcess()
+    model = SnowLumaProcessModel(
+        qq_id="998877",
+        qq_process=fake_qq,  # type: ignore[arg-type]
+        qq_pid=1234,
+        state=QProcess.ProcessState.Running,
+        started_at=1.0,
+    )
+
+    driver = SnowLumaDriver()
+    driver._processes["998877"] = model
+
+    class _FakeDaemon:
+        def webui_client(self):
+            raise RuntimeError("daemon not ready in test")
+
+        def release(self) -> None:
+            pass
+
+    monkeypatch.setattr(driver, "_get_daemon", lambda: _FakeDaemon())
+
+    driver.stop("998877")
+
+    # stop 后 process 应进入 zombie 池保活, 尚未 deleteLater
+    assert fake_qq in driver._zombie_processes
+    assert fake_qq.delete_later_called is False
+
+    # 模拟 OS 进程真正退出: emit finished
+    fake_qq.finished.emit(0, 0)
+
+    # 现在应该被回收
+    assert fake_qq not in driver._zombie_processes
+    assert fake_qq.delete_later_called is True
+
+
 def test_get_memory_usage_sums_process_tree(monkeypatch: pytest.MonkeyPatch, mute_run_napcat_logger) -> None:
     """内存统计应汇总主进程和子进程 RSS。"""
     manager = run_napcat.BotProcessManager()

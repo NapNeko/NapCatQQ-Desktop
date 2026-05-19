@@ -554,3 +554,72 @@ class TestRunnablePsutilWorker:
         assert len(emitted) == 1
         _procs, _qq, candidate_pids = emitted[0]
         assert candidate_pids == []  # uin_locked=True 时不算 candidate_pids
+
+
+# ==================== poller stop 后 in-flight runnable 不再触发槽 ====================
+class TestStopDisconnectsInFlightRunnable:
+    """方案 A 重构: ``stop()`` 必须断开 in-flight runnable 的槽连接, 否则后台
+    HTTP 跑完时 ``processes_signal`` queued 投递, poller 已被上层
+    ``deleteLater``, PySide 抛 ``RuntimeError: Signal source has been deleted``.
+
+    复现路径: 用户停止 Bot → poller.stop() → driver.stop() 调 poller.deleteLater();
+    此时若 ``_tick`` 已经把 runnable 投到 QThreadPool, runnable 还在后台 HTTP,
+    后台跑完 emit signal → 崩溃.
+    """
+
+    def test_stop_disconnects_processes_signal(self, monkeypatch) -> None:
+        """``stop()`` 应断开 in-flight runnable 的 processes_signal 连接."""
+        import src.core.runtime.snowluma_status_poller as poller_mod
+
+        captured: list = []
+
+        class _Pool:
+            def start(self, runnable):
+                captured.append(runnable)
+
+        monkeypatch.setattr(poller_mod.QThreadPool, "globalInstance", lambda: _Pool())
+
+        poller = _make_poller()
+        state_payloads: list = []
+        poller.state_changed.connect(lambda qq, st: state_payloads.append((qq, st)))
+
+        poller._tick()
+
+        assert len(captured) == 1
+        runnable = captured[0]
+        assert poller._in_flight_runnable is runnable
+
+        # poller stop: 模拟用户停止 Bot
+        poller.stop()
+        assert poller._in_flight_runnable is None
+
+        # 后台 runnable 这时才跑完 emit (模拟 HTTP 终于回来)
+        # 槽连接已被 stop 断开, _on_processes 不应被触发, 不会崩溃
+        runnable.processes_signal.emit([], [], [])
+        runnable.error_signal.emit("simulated late error")
+
+        # poller 已 dispose, 不应再发任何 logged_in/disconnected (除了 stop 本身那条)
+        # stop() 内部会 emit 一次 disconnected
+        assert state_payloads == [(poller.qq_id, "disconnected")]
+
+    def test_on_processes_releases_in_flight_reference(self, monkeypatch) -> None:
+        """正常路径: runnable 跑完后槽入口应释放 in-flight 引用, 防止泄漏堆积."""
+        import src.core.runtime.snowluma_status_poller as poller_mod
+
+        captured: list = []
+
+        class _Pool:
+            def start(self, runnable):
+                captured.append(runnable)
+
+        monkeypatch.setattr(poller_mod.QThreadPool, "globalInstance", lambda: _Pool())
+
+        poller = _make_poller()
+        poller._tick()
+        runnable = captured[0]
+        assert poller._in_flight_runnable is runnable
+
+        # runnable 正常跑完 emit processes_signal
+        runnable.processes_signal.emit([], [], [])
+
+        assert poller._in_flight_runnable is None

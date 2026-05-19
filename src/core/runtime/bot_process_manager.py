@@ -1662,7 +1662,12 @@ class BotProcessManager(QObject):
             raise
 
     # ==================== 私有: QProcess 信号处理 ====================
-    def _handle_process_state_changed(self, qq_id: str, state: QProcess.ProcessState) -> None:
+    def _handle_process_state_changed(
+        self,
+        qq_id: str,
+        state: QProcess.ProcessState,
+        process: QProcess | None = None,
+    ) -> None:
         """同步底层 QProcess 状态，避免 UI 卡在旧状态。
 
         Q2 (shutdown race 修复): 两层防御:
@@ -1672,15 +1677,21 @@ class BotProcessManager(QObject):
         2. **Qt 层兜底**: emit 走 :meth:`_safe_emit_process_changed`, 自动吞 "deleted" 错误.
         """
         process_model = self.napcat_process_dict.get(qq_id)
-        if process_model is not None:
+        is_napcat_process = process_model is not None and (
+            process is None or process_model.process is process
+        )
+        if is_napcat_process:
             process_model.state = state
         # SnowLuma 模型也同步状态
         snow_model = self._snowluma_driver.get_process_model(qq_id)
-        if snow_model is not None:
+        is_snow_process = snow_model is not None and (
+            process is None or snow_model.qq_process is process
+        )
+        if is_snow_process:
             snow_model.state = state
 
-        # 防御层 1: model 全没了 → stop 已走完, 不再 emit (避免 shutdown race 时空 emit)
-        if process_model is None and snow_model is None:
+        # 防御层 1: model 全没了或信号来自旧 QProcess → stop/restart 已走完, 不再 emit.
+        if not is_napcat_process and not is_snow_process:
             return
 
         # 防御层 2: Qt 侧可能已销毁, 兜底
@@ -1938,7 +1949,9 @@ class BotProcessManager(QObject):
 
         # 接 QProcess 信号 (用 lambda 闭包同时捕获 qq_id 与 process)
         process.stateChanged.connect(
-            lambda state, emitted_qq_id=qq_id: self._handle_process_state_changed(emitted_qq_id, state)
+            lambda state, emitted_qq_id=qq_id, emitted_process=process: self._handle_process_state_changed(
+                emitted_qq_id, state, emitted_process
+            )
         )
         process.errorOccurred.connect(
             lambda error, emitted_qq_id=qq_id, emitted_process=process: self._handle_local_start_error(
@@ -2069,8 +2082,8 @@ class BotProcessManager(QObject):
         # + W7 daemon.crashed 全员清理覆盖.
         if primary_process is not None:
             primary_process.stateChanged.connect(
-                lambda state, emitted_qq_id=qq_id: self._handle_process_state_changed(
-                    emitted_qq_id, state
+                lambda state, emitted_qq_id=qq_id, emitted_process=primary_process: self._handle_process_state_changed(
+                    emitted_qq_id, state, emitted_process
                 )
             )
             primary_process.errorOccurred.connect(

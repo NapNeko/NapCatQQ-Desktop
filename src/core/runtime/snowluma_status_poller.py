@@ -219,6 +219,12 @@ class SnowLumaStatusPoller(QObject):
         self._last_state: str | None = None
         self._disposed = False
         self._in_flight = False
+        # 当前正在 QThreadPool 里跑的 runnable; ``_tick`` 提交时写入,
+        # 槽函数入口或 ``stop`` 时统一通过 :meth:`_dispose_in_flight_runnable`
+        # disconnect + deleteLater 释放. 这样即便后台 runnable 在 poller stop 之后
+        # 才跑完 emit 信号, 槽连接已被断开, 不会再触达已 deleteLater 的 poller 槽,
+        # 避免 "RuntimeError: Signal source has been deleted".
+        self._in_flight_runnable: "_ListProcessesRunnable | None" = None
 
         # W3 新增: UIN 锁 + PID 集合
         self._uin: str = ""
@@ -265,6 +271,8 @@ class SnowLumaStatusPoller(QObject):
             return
         self._disposed = True
         self._timer.stop()
+        self._in_flight = False
+        self._dispose_in_flight_runnable()
         logger.trace(
             f"SnowLumaStatusPoller 停止 (QQID: {self._qq_id})",
             LogType.NETWORK,
@@ -301,6 +309,7 @@ class SnowLumaStatusPoller(QObject):
         )
         runnable.processes_signal.connect(self._on_processes)
         runnable.error_signal.connect(self._on_error)
+        self._in_flight_runnable = runnable
         QThreadPool.globalInstance().start(runnable)
 
     def _on_processes(
@@ -323,6 +332,7 @@ class SnowLumaStatusPoller(QObject):
         """
         # 注意: 即使本对象已 dispose, 也允许这次回调正常处理 in_flight 标记; 之后 emit 检查.
         self._in_flight = False
+        self._dispose_in_flight_runnable()
         if self._disposed:
             return
 
@@ -525,6 +535,7 @@ class SnowLumaStatusPoller(QObject):
     def _on_error(self, _message: str) -> None:
         """list_processes 调用失败的回调."""
         self._in_flight = False
+        self._dispose_in_flight_runnable()
         if self._disposed:
             return
 
@@ -542,3 +553,36 @@ class SnowLumaStatusPoller(QObject):
             if self._last_state != SNOWLUMA_STATE_DISCONNECTED:
                 self.state_changed.emit(self._qq_id, SNOWLUMA_STATE_DISCONNECTED)
                 self._last_state = SNOWLUMA_STATE_DISCONNECTED
+
+    def _dispose_in_flight_runnable(self) -> None:
+        """断开 ``_in_flight_runnable`` 的两个槽连接并 deleteLater 释放.
+
+        在两个时机调用:
+
+        - **runnable 跑完** (``_on_processes`` / ``_on_error`` 入口): 这是正常路径,
+          槽连接到此完成使命; 不主动 disconnect 也不会再触发, 但显式 disconnect +
+          deleteLater 让 Qt 立即收回 C++ 端, 避免 ``setAutoDelete(False)`` 导致的
+          泄漏堆积.
+        - **poller 自身 stop**: 此时 runnable 可能仍在 ``QThreadPool`` 后台跑
+          (HTTP 未回). 必须先 disconnect — 否则后台跑完 emit 时, queued connection
+          会把 signal 投递到主线程, 而 poller 已被上层 ``deleteLater``, PySide6
+          抛 ``RuntimeError: Signal source has been deleted``.
+
+        多次调用幂等. 异常静默吞掉 (``deleteLater`` 在已释放对象上调一次也安全).
+        """
+        runnable = self._in_flight_runnable
+        if runnable is None:
+            return
+        self._in_flight_runnable = None
+        try:
+            runnable.processes_signal.disconnect(self._on_processes)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            runnable.error_signal.disconnect(self._on_error)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            runnable.deleteLater()
+        except RuntimeError:
+            pass

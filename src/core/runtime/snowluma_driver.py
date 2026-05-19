@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import enum
 import threading
+import warnings
 from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, Callable, Optional
@@ -89,12 +90,23 @@ def terminate_async(
     if process is None or process.state() == QProcess.ProcessState.NotRunning:
         return
     process.terminate()
-    QTimer.singleShot(
-        timeout_ms,
-        lambda p=process: (
-            p.kill() if p.state() != QProcess.ProcessState.NotRunning else None
-        ),
-    )
+
+    def _safe_kill(p: "QProcess" = process) -> None:
+        """5s 兜底强杀; 容忍 process 已被上层 (zombie 路径) 提前 deleteLater 的情况.
+
+        zombie 回收路径 (``SnowLumaDriver._on_zombie_finished``) 在 OS 进程退出 +
+        finished 信号到达后会 ``deleteLater(process)``. 若 OS 进程退出很快 (<5s),
+        zombie 回收会先于本兜底 lambda 触发, 此时 C++ QProcess 已被 Qt 销毁,
+        访问 ``p.state()`` 抛 ``RuntimeError: Internal C++ object already deleted``.
+        这种情况下兜底 kill 本来就没必要做, 捕获异常静默忽略即可.
+        """
+        try:
+            if p.state() != QProcess.ProcessState.NotRunning:
+                p.kill()
+        except RuntimeError:
+            pass
+
+    QTimer.singleShot(timeout_ms, _safe_kill)
 
 
 # ==================== Process model (W2 裁剪后) ====================
@@ -161,6 +173,13 @@ class SnowLumaDriver(BotBackendDriver):
         self._pollers: dict[str, "SnowLumaStatusPoller"] = {}
         # daemon 实例 (lazy 通过 ``it(SnowLumaDaemon)``; 避免 import 期就触发 QObject 构造).
         self._daemon: Optional[SnowLumaDaemon] = None
+        # 已 stop 但 OS 进程尚未真正退出的 QQ.exe QProcess; 通过 finished 信号回收.
+        # 不放进 ``self._processes`` 字典是因为 model 已被 pop, qq_id 可能被新 Bot 复用.
+        # 这里持强引用保活 Python QProcess wrapper, 防止 Python GC 提前析构 wrapper
+        # 导致 C++ QProcess 在 OS 进程还在跑时被销毁 (PySide6 默认 Python 拥有所有权,
+        # wrapper 析构会同步析构 C++ 对象, 此时 OS 进程的 finished 信号还会试图 emit,
+        # 触发 ``RuntimeError: Signal source has been deleted``).
+        self._zombie_processes: list[QProcess] = []
 
     # ==================== 内部: daemon 取用 ====================
     def _get_daemon(self) -> SnowLumaDaemon:
@@ -581,8 +600,18 @@ class SnowLumaDriver(BotBackendDriver):
                 pass
 
         # 3. kill QQ.exe (COLD only; HOT 模式 qq_process 为 None, no-op).
+        # 关键: 把 process 加入 _zombie_processes 持强引用, 然后接 finished 信号到
+        # _on_zombie_finished 做回收. 不再 disconnect manager 的 lambda — 那些 lambda
+        # 已经按 process 身份校验, 旧 process 的迟到信号自然被忽略 (见
+        # ``BotProcessManager._handle_process_state_changed`` / ``_handle_process_finished``).
+        # 让 Qt 自己持有 process 直到 OS 进程真正退出 + finished 信号送达, 再 deleteLater.
         if model.qq_process is not None:
-            terminate_async(model.qq_process)
+            qq_process = model.qq_process
+            self._zombie_processes.append(qq_process)
+            qq_process.finished.connect(
+                lambda _exit_code, _exit_status, p=qq_process: self._on_zombie_finished(p)
+            )
+            terminate_async(qq_process)
 
         # 4. 字典清理 (放在 daemon.release 之前避免 release 触发 shutdown 时
         #    manager 的 finished 信号回调还能看到 model)
@@ -603,6 +632,53 @@ class SnowLumaDriver(BotBackendDriver):
                 f"SnowLuma Bot 已停止 (QQID: {qq_id}; "
                 "unload 后台 fire-and-forget → kill QQ.exe (COLD) → daemon.release)"
             ),
+            LogType.FILE_FUNC,
+            LogSource.CORE,
+        )
+
+    def _on_zombie_finished(self, process: QProcess) -> None:
+        """旧 QQ.exe QProcess 收到 ``finished`` 信号后的主线程回调.
+
+        步骤 (顺序重要):
+
+        1. **先 disconnect 所有 connection**: 旧 process 启动时 manager 接了
+           ``stateChanged`` / ``errorOccurred`` / ``finished`` 三个 lambda, 闭包持有
+           process 强引用. 不 disconnect 直接 ``deleteLater`` 时, Qt 销毁 C++ 对象
+           过程中会自动断开 connection, lambda 闭包随之释放 → Python wrapper 立即析构
+           → 同步析构 C++ → 与 Qt 自己的销毁流程重叠 → 触发 ``RuntimeError: Signal
+           source has been deleted`` 崩溃. **必须先主动 disconnect**, 让 lambda
+           闭包先于 deleteLater 释放, 此时 zombie pool 仍持强引用, wrapper 安全.
+        2. ``deleteLater()``: 标记 Qt 销毁; 事件循环空闲时 Qt 接管 C++ 对象销毁.
+        3. 从 ``_zombie_processes`` 移除: 释放 driver 这边的强引用. 此后函数栈
+           ``process`` 变量是 wrapper 的最后引用, 函数返回时 wrapper 析构 — 因为
+           deleteLater 已 schedule, sip 走 "已 schedule" 路径, 不会重复销毁 C++.
+
+        多次触发安全 (``list.remove`` 找不到时静默忽略).
+        """
+        # Step 1: disconnect 所有 connection (manager lambda + 自己的回收 slot)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            for signal in (
+                process.stateChanged,
+                process.errorOccurred,
+                process.finished,
+            ):
+                try:
+                    signal.disconnect()
+                except (RuntimeError, TypeError):
+                    pass
+
+        # Step 2: 让 Qt 接管销毁
+        process.deleteLater()
+
+        # Step 3: 释放 zombie pool 引用
+        try:
+            self._zombie_processes.remove(process)
+        except ValueError:
+            pass
+
+        logger.trace(
+            f"SnowLuma zombie QProcess 已回收 (剩余 zombie={len(self._zombie_processes)})",
             LogType.FILE_FUNC,
             LogSource.CORE,
         )
