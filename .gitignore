@@ -98,3 +98,7 @@ ehthumbs*.db
 
 # Linux
 *~
+
+### 临时和开发文档忽略 ###
+docs/rust_migration_blueprint_local.md
+docs/nexus_map/
