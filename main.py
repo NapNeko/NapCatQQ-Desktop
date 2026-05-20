@@ -169,17 +169,25 @@ def main_entry() -> int:
         if path and not os.path.exists(path):
             del os.environ[env_var]
 
-    # 动态防御: 解决 httpx 在打包或精简 Windows 下因证书被杀毒误杀、缓存缺失导致 FileNotFoundError 的闪退或卡死 Bug
+    # 动态防御: 解决标准库 ssl.create_default_context 和 httpx 在打包或精简 Windows 下因证书被杀毒误杀、缓存缺失导致 FileNotFoundError 的闪退或卡死 Bug
     try:
-        import httpx
-        _orig_create_ssl_context = httpx._config.create_ssl_context
-        def _patched_create_ssl_context(*args, **kwargs):
+        import ssl
+        _orig_create_default_context = ssl.create_default_context
+        def _patched_create_default_context(*args, **kwargs):
             try:
-                return _orig_create_ssl_context(*args, **kwargs)
+                return _orig_create_default_context(*args, **kwargs)
             except FileNotFoundError:
-                import ssl
-                return ssl.create_default_context()
-        httpx._config.create_ssl_context = _patched_create_ssl_context
+                try:
+                    import certifi
+                    if "cafile" not in kwargs and "capath" not in kwargs and "cadata" not in kwargs:
+                        kwargs["cafile"] = certifi.where()
+                    return _orig_create_default_context(*args, **kwargs)
+                except Exception:
+                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                    return context
+        ssl.create_default_context = _patched_create_default_context
     except Exception:
         pass
 
