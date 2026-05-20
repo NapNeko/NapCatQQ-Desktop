@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -30,6 +30,7 @@ from qfluentwidgets import (
     TitleLabel,
 )
 
+from src.core.runtime.q_port_probe import probe_qq_login
 from src.core.runtime.snowluma_driver import SnowLumaStartMode
 
 if TYPE_CHECKING:
@@ -45,11 +46,18 @@ class QQProcessInfo:
         pid: 进程 PID.
         create_time_iso: 进程启动时间 (ISO 8601, 本地时区, 精度到秒).
         memory_mb: 物理内存占用 (MB, 整数, 仅作参考让用户辨识哪个是"主"实例).
+        login_uin: 通过 :func:`probe_qq_login` 探测到的当前登录 uin; 空字符串表示
+            未登录或探测失败. **仅供 UI 展示**, 不参与注入决策 (uin 与配置 QQID
+            的最终匹配仍由 SnowLumaStatusPoller 在 inject 后确认).
+        login_probed: 是否完成过登录探测 (区分 "未探测" 与 "探测了但未登录").
     """
 
     pid: int
     create_time_iso: str
     memory_mb: int
+    login_uin: str = ""
+    login_probed: bool = False
+
 
 
 def _enumerate_qq_processes_via_toolhelp32() -> list[QQProcessInfo] | None:
@@ -388,6 +396,20 @@ class _PidPickerCard(SimpleCardWidget):
 
         self.pid_label = BodyLabel(f"PID = {info.pid}", self)
         self.pid_label.setStyleSheet("font-weight: bold;")
+
+        # 登录账号显示 (上游 SnowLuma#56 思路): 探测命中且已登录时显示 uin,
+        # 探测过但未登录显示 "未登录", 没探测过 (旧测试 / 主线程构造) 不显示这行.
+        if info.login_probed:
+            if info.login_uin:
+                self.login_label = BodyLabel(
+                    self.tr("已登录: {uin}").format(uin=info.login_uin), self
+                )
+            else:
+                self.login_label = BodyLabel(self.tr("未登录"), self)
+                self.login_label.setStyleSheet("color: #6c757d;")
+        else:
+            self.login_label = None
+
         self.detail_label = CaptionLabel(
             self.tr("启动于 {started_at} · 内存 {mem_mb} MB").format(
                 started_at=info.create_time_iso, mem_mb=info.memory_mb
@@ -396,7 +418,7 @@ class _PidPickerCard(SimpleCardWidget):
         )
         self.detail_label.setWordWrap(True)
 
-        self.setMinimumHeight(80)
+        self.setMinimumHeight(100 if info.login_probed else 80)
         self.setMinimumWidth(320)
 
         v_layout = QVBoxLayout(self)
@@ -404,9 +426,12 @@ class _PidPickerCard(SimpleCardWidget):
         v_layout.setSpacing(4)
         v_layout.addWidget(self.button, alignment=Qt.AlignmentFlag.AlignTop)
         v_layout.addWidget(self.pid_label)
+        if self.login_label is not None:
+            v_layout.addWidget(self.login_label)
         v_layout.addWidget(self.detail_label)
 
         self.clicked.connect(lambda: self.button.setChecked(True))
+
 
 
 class SnowLumaPidPickerDialog(MessageBoxBase):
@@ -416,10 +441,11 @@ class SnowLumaPidPickerDialog(MessageBoxBase):
     (1 个时直接用, 0 个时显示错误并 abort 热启动).
 
     Note:
-        本对话框**只**展示 psutil 拿到的进程信息 (PID, 启动时间, 内存). uin (账号号码) 在
-        SnowLuma 注入之后才能拿到, 所以这里看不到. 用户根据启动时间 + 内存大小辨识哪个是
-        他想要的那个 QQ; 如果选错了, 注入完 SnowLuma Poller 报错 (uin 不匹配 config), 用户
-        可以停止后重选.
+        卡片展示 PID / 启动时间 / 内存, 并通过 :func:`probe_qq_login` 探测每个 QQ.exe
+        当前登录的 ``uin`` (走 QQ 自带的 ``tencent://`` 深链接 9210-9219 端口服务,
+        无需注入). 用户能直接看到哪个 QQ 登录的是哪个号, 大幅降低多开场景下选错的风险.
+        若探测失败 (端口未开 / 权限不足) 卡片显示"未登录", 此时仍可通过启动时间 + 内存辨识;
+        最终 uin 与配置 QQID 是否匹配仍由 SnowLumaStatusPoller 在 inject 后兜底确认.
     """
 
     def __init__(self, parent: QObject, candidates: list[QQProcessInfo]) -> None:
@@ -428,13 +454,20 @@ class SnowLumaPidPickerDialog(MessageBoxBase):
             raise ValueError("SnowLumaPidPickerDialog 需要至少 1 个候选 QQProcessInfo")
 
         self.title_label = TitleLabel(self.tr("选择要注入的 QQ.exe"), self)
-        self.hint_label = BodyLabel(
-            self.tr(
+        # 探测命中时优先按"已登录"提示, 否则退化到旧的启动时间提示
+        any_logged_in = any(info.login_uin for info in candidates)
+        if any_logged_in:
+            hint_text = self.tr(
+                "检测到 {count} 个 QQ.exe 进程, 请选择 SnowLuma 应该注入到哪一个. "
+                "提示: 已显示当前登录的 QQ 号, 选择与 Bot 配置 QQID 一致的进程."
+            ).format(count=len(candidates))
+        else:
+            hint_text = self.tr(
                 "检测到 {count} 个 QQ.exe 进程, 请选择 SnowLuma 应该注入到哪一个. "
                 "提示: 启动时间最久的通常是你已经登录的那个."
-            ).format(count=len(candidates)),
-            self,
-        )
+            ).format(count=len(candidates))
+        self.hint_label = BodyLabel(hint_text, self)
+
         self.hint_label.setWordWrap(True)
 
         self.button_group = QButtonGroup(self)
@@ -519,9 +552,27 @@ class EnumerateQQProcessesWorker(QObject, QRunnable):
                 LogSource.UI,
             )
             results = []
+
+        # 对每个候选 PID 同步探测登录账号 (上游 SnowLuma#56 思路).
+        # 每个端口探测 ≤1s, 实测命中后 <100ms; 主候选 1-3 个, 总耗时可控.
+        # 探测失败不阻塞流程, login_probed=True + login_uin="" 表示 "已尝试但未登录/无响应".
+        probed: list[QQProcessInfo] = []
+        for info in results:
+            try:
+                login_info = probe_qq_login(info.pid)
+            except Exception as exc:  # noqa: BLE001
+                logger.trace(
+                    f"probe_qq_login 异常 (pid={info.pid}): {type(exc).__name__}: {exc}",
+                    LogType.NETWORK,
+                    LogSource.UI,
+                )
+                login_info = None
+            uin = login_info.uin if (login_info and login_info.logged_in) else ""
+            probed.append(replace(info, login_uin=uin, login_probed=True))
+
         logger.trace(
-            f"EnumerateQQProcessesWorker.run 完成 (results={len(results)}), 即将 emit finished",
+            f"EnumerateQQProcessesWorker.run 完成 (results={len(probed)}), 即将 emit finished",
             LogType.NONE_TYPE,
             LogSource.UI,
         )
-        self.finished.emit(results)
+        self.finished.emit(probed)
