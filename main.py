@@ -163,6 +163,26 @@ def main_entry() -> int:
     """CLI 入口, 负责安装全局异常钩子并返回进程退出码. """
     logger.install_exception_hooks()
 
+    # 清洗物理上不存在的无效 SSL 证书环境变量
+    for env_var in ("SSL_CERT_FILE", "SSL_CERT_DIR"):
+        path = os.environ.get(env_var)
+        if path and not os.path.exists(path):
+            del os.environ[env_var]
+
+    # 动态防御: 解决 httpx 在打包或精简 Windows 下因证书被杀毒误杀、缓存缺失导致 FileNotFoundError 的闪退或卡死 Bug
+    try:
+        import httpx
+        _orig_create_ssl_context = httpx._config.create_ssl_context
+        def _patched_create_ssl_context(*args, **kwargs):
+            try:
+                return _orig_create_ssl_context(*args, **kwargs)
+            except FileNotFoundError:
+                import ssl
+                return ssl.create_default_context()
+        httpx._config.create_ssl_context = _patched_create_ssl_context
+    except Exception:
+        pass
+
     try:
         return run_application()
     except SystemExit:
