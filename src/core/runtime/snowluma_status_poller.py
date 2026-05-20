@@ -127,44 +127,50 @@ class _ListProcessesRunnable(QRunnable, QObject):
 
     def run(self) -> None:  # noqa: D401 - QRunnable 协议
         try:
-            processes = self._webui_client.list_processes()
-        except SnowLumaWebUIError as exc:
-            logger.trace(
-                f"SnowLuma list_processes 失败 (status={exc.status_code}): {exc.message}",
-                LogType.NETWORK,
-                LogSource.CORE,
-            )
-            self.error_signal.emit(exc.message)
-            return
-        except Exception as exc:  # noqa: BLE001 - SSH / 网络抖动等不应停轮询
-            logger.trace(
-                f"SnowLuma list_processes 未知异常: {type(exc).__name__}: {exc}",
-                LogType.NETWORK,
-                LogSource.CORE,
-            )
-            self.error_signal.emit(f"{type(exc).__name__}: {exc}")
-            return
+            try:
+                processes = self._webui_client.list_processes()
+            except SnowLumaWebUIError as exc:
+                logger.trace(
+                    f"SnowLuma list_processes 失败 (status={exc.status_code}): {exc.message}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                self.error_signal.emit(exc.message)
+                return
+            except Exception as exc:  # noqa: BLE001 - SSH / 网络抖动等不应停轮询
+                logger.trace(
+                    f"SnowLuma list_processes 未知异常: {type(exc).__name__}: {exc}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                self.error_signal.emit(f"{type(exc).__name__}: {exc}")
+                return
 
-        # qq-list 失败不致命 (老版 SL 可能没这个端点), 静默 fallback 到空 list.
-        try:
-            qq_instances = self._webui_client.list_qq_instances()
-        except Exception as exc:  # noqa: BLE001
-            logger.trace(
-                f"SnowLuma list_qq_instances 静默忽略: {type(exc).__name__}: {exc}",
-                LogType.NETWORK,
-                LogSource.CORE,
+            # qq-list 失败不致命 (老版 SL 可能没这个端点), 静默 fallback 到空 list.
+            try:
+                qq_instances = self._webui_client.list_qq_instances()
+            except Exception as exc:  # noqa: BLE001
+                logger.trace(
+                    f"SnowLuma list_qq_instances 静默忽略: {type(exc).__name__}: {exc}",
+                    LogType.NETWORK,
+                    LogSource.CORE,
+                )
+                qq_instances = []
+
+            # psutil 子进程树 walk (主线程禁止直调; 这里在工作线程跑安全).
+            # UIN 已锁定后无需此数据 (slot 不会调 _try_lock_uin), 跳过省开销.
+            candidate_pids: list[int] = (
+                sorted(_collect_candidate_pids(self._initial_pid))
+                if not self._uin_locked
+                else []
             )
-            qq_instances = []
 
-        # psutil 子进程树 walk (主线程禁止直调; 这里在工作线程跑安全).
-        # UIN 已锁定后无需此数据 (slot 不会调 _try_lock_uin), 跳过省开销.
-        candidate_pids: list[int] = (
-            sorted(_collect_candidate_pids(self._initial_pid))
-            if not self._uin_locked
-            else []
-        )
-
-        self.processes_signal.emit(processes, qq_instances, candidate_pids)
+            self.processes_signal.emit(processes, qq_instances, candidate_pids)
+        except RuntimeError as exc:
+            # 动态防护: 后台线程运行中如果 QObject 的 C++ 部分已被主线程 deleteLater 销毁, 静默退出以防 sys.excepthook 触发崩溃
+            if "deleted" in str(exc):
+                return
+            raise
 
 
 class SnowLumaStatusPoller(QObject):
