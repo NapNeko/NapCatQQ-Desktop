@@ -3,11 +3,15 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ncd_core::{BootstrapSnapshot, DomainEvent, EventBus};
+use ncd_core::{BootstrapSnapshot, DomainEvent, EventBus, RemoteFileEntry};
 use tauri::State;
 
+use crate::runtime::{
+    ConnectRemoteHostRequest, GetRemoteRuntimeStatusRequest, GetRemoteWebuiEndpointRequest,
+    ListRemoteFilesRequest, RemoteHostConnectionInfo, RemoteRuntimeStatusResponse,
+    RemoteWebuiEndpointResponse, SpawnLocalBotRequest, StopLocalBotRequest,
+};
 use crate::AppState;
-use crate::runtime::{SpawnLocalBotRequest, StopLocalBotRequest};
 
 #[tauri::command]
 pub fn get_bootstrap_status(state: State<'_, AppState>) -> BootstrapSnapshot {
@@ -35,6 +39,38 @@ pub async fn get_all_bot_statuses(
     state: State<'_, AppState>,
 ) -> Result<Vec<ncd_core::BotStatus>, String> {
     Ok(state.runtime.get_all_bot_statuses().await)
+}
+
+#[tauri::command]
+pub async fn connect_remote_host(
+    state: State<'_, AppState>,
+    request: ConnectRemoteHostRequest,
+) -> Result<RemoteHostConnectionInfo, String> {
+    state.runtime.connect_remote_host(request).await
+}
+
+#[tauri::command]
+pub async fn list_remote_files(
+    state: State<'_, AppState>,
+    request: ListRemoteFilesRequest,
+) -> Result<Vec<RemoteFileEntry>, String> {
+    state.runtime.list_remote_files(request).await
+}
+
+#[tauri::command]
+pub async fn get_remote_runtime_status(
+    state: State<'_, AppState>,
+    request: GetRemoteRuntimeStatusRequest,
+) -> Result<RemoteRuntimeStatusResponse, String> {
+    state.runtime.get_remote_runtime_status(request).await
+}
+
+#[tauri::command]
+pub async fn get_remote_webui_endpoint(
+    state: State<'_, AppState>,
+    request: GetRemoteWebuiEndpointRequest,
+) -> Result<RemoteWebuiEndpointResponse, String> {
+    state.runtime.get_remote_webui_endpoint(request).await
 }
 
 #[tauri::command]
@@ -78,15 +114,13 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AppState;
     use crate::runtime::{SpawnLocalBotRequest, StopLocalBotRequest};
-    use ncd_core::{BootstrapSnapshot, BroadcastEventBus, EventBus, EventFilter};
     use tempfile::tempdir;
 
     #[tokio::test]
     async fn publish_runtime_status_emits_events() {
         let root = tempdir().unwrap();
-        let bus = BroadcastEventBus::default();
+        let bus = ncd_core::BroadcastEventBus::default();
         let runtime = crate::runtime::AppRuntime::new(root.path(), bus.clone());
         let state = AppState {
             data_root: root.path().to_path_buf(),
@@ -94,7 +128,7 @@ mod tests {
             event_bus: bus.clone(),
             runtime,
         };
-        let mut subscription = bus.subscribe(EventFilter::kind(
+        let mut subscription = bus.subscribe(ncd_core::EventFilter::kind(
             ncd_core::DomainEventKind::BotStatusChanged,
         ));
 
@@ -136,6 +170,55 @@ mod tests {
             })
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn remote_commands_use_registered_remote_service() {
+        let root = tempdir().unwrap();
+        let bus = ncd_core::BroadcastEventBus::default();
+        let runtime = crate::runtime::AppRuntime::new(root.path(), bus);
+
+        let connection = runtime
+            .connect_remote_host(ConnectRemoteHostRequest {
+                remote_id: "remote-a".to_string(),
+                host: "127.0.0.1".to_string(),
+                port: 22,
+                username: "napcat".to_string(),
+                password: None,
+                webui_url: Some("http://127.0.0.1:3000".to_string()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(connection.remote_id, "remote-a");
+
+        let files = runtime
+            .list_remote_files(ListRemoteFilesRequest {
+                remote_id: "remote-a".to_string(),
+                path: "/etc".to_string(),
+            })
+            .await
+            .unwrap();
+        assert!(files.is_empty());
+
+        let status = runtime
+            .get_remote_runtime_status(GetRemoteRuntimeStatusRequest {
+                remote_id: "remote-a".to_string(),
+                bot_id: "20001".to_string(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(status.remote_id, "remote-a");
+        assert_eq!(status.bot_id, "20001");
+
+        let webui = runtime
+            .get_remote_webui_endpoint(GetRemoteWebuiEndpointRequest {
+                remote_id: "remote-a".to_string(),
+                bot_id: "20001".to_string(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(webui.remote_id, "remote-a");
+        assert_eq!(webui.webui_url.as_deref(), Some("http://127.0.0.1:3000"));
     }
 }
 
