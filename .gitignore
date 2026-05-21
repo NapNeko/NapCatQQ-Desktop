@@ -1,104 +1,45 @@
 ### 开发环境 ###
-# 虚拟环境和开发工具配置
-venv/
 .venv/
-.pdm-python/
-.python-version
+venv/
 .idea/
 .vscode/
 .claude/
 .codex/
 .nexus-map/
 .kiro/
-docs/plans/
-docs/requirements/
+.references/
 
+### Rust / Tauri ###
+target/
+src-tauri/target/
+**/*.rs.bk
 
-### 依赖管理 ###
-# Python 依赖和锁定文件
-pdm.lock
-.pdm-python
-Pipfile.lock
-poetry.lock
-
-### 构建产物 ###
-# 构建和发布生成的文件
-build/
+### Node / 前端 ###
+node_modules/
 dist/
-*.egg-info/
-*.egg
-__pycache__/
-*$py.class
-.ruff_cache/
-outputs/
+build/
+.vite/
+.next/
+coverage/
 
 ### 日志和临时文件 ###
-# 日志和临时文件
 log/
 logs/
 *.log
 tmp/
 *.tmp
 *.temp
-
-### 配置文件 ###
-# 本地配置和敏感文件
-/config/
-# Tier G: SnowLuma WebUI 密码记录 (含明文密码), 不得入 git.
-# 锚定 Desktop 侧 runtime/config/, 与 W4b snowluma_session.session_path() 返回值一致.
-# 即使 /runtime/* 整目录已忽略, 也显式列出以防止 /runtime/* 规则被改动后的回归泄漏.
-/runtime/config/snowluma-session.json
-*.local
-*.env
-.env
-.env.local
-PatchConfig.json
-
-# AI 更新日志生成脚本的本地配置
-script/utils/.env
-
-# 中转代理客户端密钥 (构建期注入)
-src/core/network/_build_constants.py
-
-# Cloudflare Worker 服务端实现 (独立部署, 不与桌面端代码同库)
-script/cloudflare-worker/
-
-### SSH ###
-# SSH 主机指纹等配置
-/ssh/
-
-### 特定项目忽略 ###
-# 项目特定目录和文件
-NapCat/*
-/src/pysidedeploy.spec
-/runtime/*
-
-# W3: SnowLuma.Framework lite tarball 由 build_snowluma_framework_lite.py 在 CI/本地构建期生成
-# 大文件 (5-100MB), 不入 git; .gitkeep 保留目录占位
-/src/resource/runtime/*.tar.gz
-/src/resource/runtime/*.version.txt
-
-### 测试相关 ###
-/test/
-/tests/
-*.test
-*.test.py
-test-artifacts/
-example/
-
-### 操作系统生成文件 ###
-# macOS
 .DS_Store
-._*
-
-# Windows
 Thumbs.db
 ehthumbs*.db
 [Dd]esktop.ini
-
-# Linux
 *~
 
-### 临时和开发文档忽略 ###
-docs/rust_migration_blueprint_local.md
-docs/nexus_map/
+### 本地配置和敏感文件 ###
+.env
+.env.*
+*.local
+/config/
+/runtime/config/snowluma-session.json
+ssh/
+.ace-tool/

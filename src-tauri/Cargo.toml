@@ -1,0 +1,16 @@
+[package]
+name = "ncd-tauri"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[dependencies]
+ncd-core = { path = "../crates/ncd-core" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ncd-tauri"
+path = "src/main.rs"

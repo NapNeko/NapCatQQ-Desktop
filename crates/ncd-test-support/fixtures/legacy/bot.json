@@ -1,0 +1,10 @@
+{
+  "bots": [
+    {
+      "qq": "123456789",
+      "runtime_target": "local",
+      "backend_type": "napcat",
+      "backend_flavor": "napcat"
+    }
+  ]
+}
