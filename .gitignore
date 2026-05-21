@@ -4,10 +4,13 @@ venv/
 .idea/
 .vscode/
 .claude/
+.ccg/
 .codex/
 .nexus-map/
 .kiro/
 .references/
+legacy-python/
+CLAUDE.md
 
 ### Rust / Tauri ###
 target/
@@ -21,6 +24,11 @@ build/
 .vite/
 .next/
 coverage/
+
+### 迁移计划文档 ###
+docs/rust_migration_blueprint_local.md
+docs/tauri_reference_projects.md
+docs/v3/
 
 ### 日志和临时文件 ###
 log/
