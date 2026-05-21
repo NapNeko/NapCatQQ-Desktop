@@ -8,6 +8,11 @@ build = "build.rs"
 [dependencies]
 ncd-core = { path = "../crates/ncd-core" }
 dirs = "5"
+serde_json = { workspace = true }
+tauri = "2"
+
+[build-dependencies]
+tauri-build = "2"
 
 [lib]
 path = "src/lib.rs"
