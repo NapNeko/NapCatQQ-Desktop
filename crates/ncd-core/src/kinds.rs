@@ -129,6 +129,7 @@ impl SchemaVersion {
     pub const V1: Self = Self(1);
     pub const V2: Self = Self(2);
     pub const V3: Self = Self(3);
+    pub const CURRENT: Self = Self::V3;
 
     pub const fn new(value: u16) -> Self {
         Self(value)

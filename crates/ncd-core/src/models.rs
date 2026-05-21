@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 use crate::ids::{BackendId, BotId};
 use crate::kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion};
@@ -36,6 +37,24 @@ impl MigrationWarning {
             message: message.into(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct MigrationSource {
+    pub root: PathBuf,
+    #[serde(default)]
+    pub app_config: Option<PathBuf>,
+    #[serde(default)]
+    pub bot_config: Option<PathBuf>,
+    #[serde(default)]
+    pub auxiliary_files: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct BackupInfo {
+    pub root: PathBuf,
+    #[serde(default)]
+    pub files: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

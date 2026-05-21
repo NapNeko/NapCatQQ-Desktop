@@ -1,18 +1,36 @@
+pub mod app_config_migration;
 pub mod bootstrap;
+pub mod bot_config_migration;
+pub mod config_store_impl;
 pub mod errors;
 pub mod ids;
 pub mod kinds;
+pub mod legacy_discovery;
+pub mod migration;
 pub mod models;
+pub mod path_probe_impl;
 pub mod report;
+pub mod secret_store_impl;
 pub mod traits;
 
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
+pub use config_store_impl::LocalConfigStore;
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use ids::{BackendId, BotId};
 pub use kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion};
-pub use models::{BotRuntimeSummary, MigrationOutcome, MigrationStage, MigrationWarning};
+pub use legacy_discovery::{LegacyDiscovery, LegacySelection};
+pub use migration::MigrationOrchestrator;
+pub use models::{
+    BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationSource, MigrationStage,
+    MigrationWarning,
+};
+pub use path_probe_impl::LocalPathProbe;
 pub use report::MigrationReport;
-pub use traits::{ConfigStore, MigrationStep, PathProbe, SecretStore};
+pub use secret_store_impl::SecretStoreImpl;
+pub use traits::{
+    ConfigStore, JsonTransaction, JsonWrite, MigrationStep, PathProbe, SecretStore,
+    TransactionReport,
+};
 
 #[cfg(test)]
 mod tests {

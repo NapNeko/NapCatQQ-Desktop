@@ -8,5 +8,11 @@ rust-version.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+keyring = "2"
+aes-gcm = "0.10"
+rand = "0.8"
+dirs = "5"
+tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
+tempfile = "3"

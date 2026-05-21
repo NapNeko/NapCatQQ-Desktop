@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{MigrationOutcome, MigrationStage, MigrationWarning};
+use crate::bootstrap::RepairAction;
+use crate::models::{
+    BackupInfo, MigrationOutcome, MigrationSource, MigrationStage, MigrationWarning,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MigrationReport {
@@ -8,6 +11,14 @@ pub struct MigrationReport {
     pub outcome: MigrationOutcome,
     #[serde(default)]
     pub warnings: Vec<MigrationWarning>,
+    #[serde(default)]
+    pub source: Option<MigrationSource>,
+    #[serde(default)]
+    pub backup: Option<BackupInfo>,
+    #[serde(default)]
+    pub rules_applied: Vec<String>,
+    #[serde(default)]
+    pub repair_actions: Vec<RepairAction>,
 }
 
 impl MigrationReport {
@@ -16,6 +27,22 @@ impl MigrationReport {
             stage: MigrationStage::Completed,
             outcome: MigrationOutcome::NoChange,
             warnings: Vec::new(),
+            source: None,
+            backup: None,
+            rules_applied: Vec::new(),
+            repair_actions: Vec::new(),
+        }
+    }
+
+    pub fn migrated(rules_applied: Vec<String>) -> Self {
+        Self {
+            stage: MigrationStage::Completed,
+            outcome: MigrationOutcome::Updated,
+            warnings: Vec::new(),
+            source: None,
+            backup: None,
+            rules_applied,
+            repair_actions: Vec::new(),
         }
     }
 
@@ -24,6 +51,10 @@ impl MigrationReport {
             stage: MigrationStage::Running,
             outcome: MigrationOutcome::NoChange,
             warnings: Vec::new(),
+            source: None,
+            backup: None,
+            rules_applied: Vec::new(),
+            repair_actions: Vec::new(),
         }
     }
 
@@ -32,6 +63,13 @@ impl MigrationReport {
             stage: MigrationStage::RepairRequired,
             outcome: MigrationOutcome::NeedsRepair,
             warnings,
+            source: None,
+            backup: None,
+            rules_applied: Vec::new(),
+            repair_actions: vec![
+                RepairAction::OpenDataDir,
+                RepairAction::ExportMigrationReport,
+            ],
         }
     }
 
@@ -40,7 +78,36 @@ impl MigrationReport {
             stage: MigrationStage::Failed,
             outcome: MigrationOutcome::NeedsRepair,
             warnings: vec![MigrationWarning::new("migration_failed", message)],
+            source: None,
+            backup: None,
+            rules_applied: Vec::new(),
+            repair_actions: vec![
+                RepairAction::OpenDataDir,
+                RepairAction::ExportMigrationReport,
+            ],
         }
+    }
+
+    pub fn with_source(mut self, source: MigrationSource) -> Self {
+        self.source = Some(source);
+        self
+    }
+
+    pub fn with_backup(mut self, backup: BackupInfo) -> Self {
+        self.backup = Some(backup);
+        self
+    }
+
+    pub fn with_warnings(mut self, warnings: Vec<MigrationWarning>) -> Self {
+        self.warnings = warnings;
+        self
+    }
+
+    pub fn with_repair_action(mut self, action: RepairAction) -> Self {
+        if !self.repair_actions.contains(&action) {
+            self.repair_actions.push(action);
+        }
+        self
     }
 }
 
@@ -70,5 +137,6 @@ mod tests {
         assert_eq!(report.stage, MigrationStage::Failed);
         assert_eq!(report.outcome, MigrationOutcome::NeedsRepair);
         assert_eq!(report.warnings[0].code, "migration_failed");
+        assert!(report.repair_actions.contains(&RepairAction::OpenDataDir));
     }
 }
