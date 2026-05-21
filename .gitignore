@@ -15,6 +15,7 @@ CLAUDE.md
 ### Rust / Tauri ###
 target/
 src-tauri/target/
+src-tauri/gen/
 **/*.rs.bk
 
 ### Node / 前端 ###
