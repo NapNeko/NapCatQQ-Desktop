@@ -1,4 +1,6 @@
-use ncd_core::{BootstrapSnapshot, LocalConfigStore, LocalPathProbe, MigrationOrchestrator, SecretStoreImpl};
+use ncd_core::{
+    BootstrapSnapshot, LocalConfigStore, LocalPathProbe, MigrationOrchestrator, SecretStoreImpl,
+};
 
 pub(crate) fn resolve_data_root() -> std::path::PathBuf {
     dirs::data_local_dir()

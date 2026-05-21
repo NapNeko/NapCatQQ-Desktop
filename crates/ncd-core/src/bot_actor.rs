@@ -483,7 +483,10 @@ fn resolve_repair(snapshot: &mut BotActorSnapshot) -> Result<bool, BotActorError
     }
 }
 
-fn reset_token(snapshot: &mut BotActorSnapshot, cancellation_token: &Arc<Mutex<CancellationToken>>) {
+fn reset_token(
+    snapshot: &mut BotActorSnapshot,
+    cancellation_token: &Arc<Mutex<CancellationToken>>,
+) {
     let mut guard = cancellation_token.lock().expect("cancellation token lock");
     *guard = CancellationToken::new();
     snapshot.token_generation = snapshot.token_generation.saturating_add(1);
@@ -545,9 +548,15 @@ mod tests {
 
         actor.request_start().await.unwrap();
         actor.confirm_running().await.unwrap();
-        let crashed = actor.mark_crashed("process exited unexpectedly").await.unwrap();
+        let crashed = actor
+            .mark_crashed("process exited unexpectedly")
+            .await
+            .unwrap();
         assert_eq!(crashed.state, BotActorState::Crashed);
-        assert_eq!(crashed.last_error.as_deref(), Some("process exited unexpectedly"));
+        assert_eq!(
+            crashed.last_error.as_deref(),
+            Some("process exited unexpectedly")
+        );
 
         let repairing = actor.enter_repair("manual repair required").await.unwrap();
         assert_eq!(repairing.state, BotActorState::Repairing);

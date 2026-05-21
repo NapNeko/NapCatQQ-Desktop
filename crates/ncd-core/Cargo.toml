@@ -13,7 +13,7 @@ keyring = "2"
 aes-gcm = "0.10"
 rand = "0.8"
 dirs = "5"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "macros"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 
 [dev-dependencies]

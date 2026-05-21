@@ -3,11 +3,13 @@ use tokio::sync::broadcast;
 
 use crate::bot_actor::BotActorSnapshot;
 use crate::ids::BotId;
+use crate::runtime_backend::BotStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DomainEventKind {
     BotStateChanged,
+    BotStatusChanged,
     BotLogAppended,
     BotError,
     TaskProgress,
@@ -20,6 +22,11 @@ pub enum DomainEvent {
         snapshot: BotActorSnapshot,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
+    },
+    BotStatusChanged {
+        status: BotStatus,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<String>,
     },
     BotLogAppended {
         bot_id: BotId,
@@ -44,6 +51,7 @@ impl DomainEvent {
     pub fn kind(&self) -> DomainEventKind {
         match self {
             Self::BotStateChanged { .. } => DomainEventKind::BotStateChanged,
+            Self::BotStatusChanged { .. } => DomainEventKind::BotStatusChanged,
             Self::BotLogAppended { .. } => DomainEventKind::BotLogAppended,
             Self::BotError { .. } => DomainEventKind::BotError,
             Self::TaskProgress { .. } => DomainEventKind::TaskProgress,
@@ -53,6 +61,7 @@ impl DomainEvent {
     pub fn tauri_event_name(&self) -> &'static str {
         match self {
             Self::BotStateChanged { .. } => "bot_state_changed",
+            Self::BotStatusChanged { .. } => "bot_status_changed",
             Self::BotLogAppended { .. } => "log_appended",
             Self::BotError { .. } => "bot_error",
             Self::TaskProgress { .. } => "task_progress",
@@ -62,6 +71,7 @@ impl DomainEvent {
     pub fn bot_id(&self) -> Option<&BotId> {
         match self {
             Self::BotStateChanged { snapshot, .. } => Some(&snapshot.bot_id),
+            Self::BotStatusChanged { status, .. } => Some(&status.bot_id),
             Self::BotLogAppended { bot_id, .. } => Some(bot_id),
             Self::BotError { bot_id, .. } => Some(bot_id),
             Self::TaskProgress { .. } => None,
@@ -83,15 +93,10 @@ impl DomainEvent {
         }
     }
 
-    pub fn bot_error(
-        bot_id: impl Into<BotId>,
-        message: impl Into<String>,
-        hint: Option<String>,
-    ) -> Self {
-        Self::BotError {
-            bot_id: bot_id.into(),
-            message: message.into(),
-            hint,
+    pub fn bot_status_changed(status: BotStatus, source: impl Into<String>) -> Self {
+        Self::BotStatusChanged {
+            status,
+            source: Some(source.into()),
         }
     }
 
@@ -134,10 +139,14 @@ impl EventFilter {
     }
 
     pub fn matches(&self, event: &DomainEvent) -> bool {
-        if let Some(kind) = self.kind && event.kind() != kind {
+        if let Some(kind) = self.kind
+            && event.kind() != kind
+        {
             return false;
         }
-        if let Some(bot_id) = &self.bot_id && event.bot_id() != Some(bot_id) {
+        if let Some(bot_id) = &self.bot_id
+            && event.bot_id() != Some(bot_id)
+        {
             return false;
         }
         true
@@ -227,6 +236,15 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
+    }
+
+    #[test]
+    fn bot_status_changed_event_serializes() {
+        let status = BotStatus::running("10004", 1234, 5678);
+        let event = DomainEvent::bot_status_changed(status, "runtime_poll");
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("bot_status_changed"));
+        assert!(json.contains("runtime_poll"));
     }
 
     #[test]

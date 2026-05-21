@@ -8,11 +8,16 @@ build = "build.rs"
 [dependencies]
 ncd-core = { path = "../crates/ncd-core" }
 dirs = "5"
+serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = "2"
+tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "macros"] }
 
 [build-dependencies]
 tauri-build = "2"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lib]
 path = "src/lib.rs"

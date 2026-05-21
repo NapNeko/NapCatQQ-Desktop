@@ -6,6 +6,8 @@
 
 - [通用规则](general/general_rules.md) - 项目开发的基本原则和通用规范
 - [迁移计划](general/migration_plan.md) - 现有代码向新规范迁移的计划
+- [v3 重构总入口](v3/plan.md) - v3 总计划、路线图和迁移文档的唯一入口
+- [v3 文档索引](v3/README.md) - v3 相关文档目录
 - [远程 SSH 直连方案规划](general/remote_ssh_plan.md) - 本地 Desktop 直连远程 Linux 的最优路线、阶段目标与安全边界
 - [远程 SSH 推进进度](general/remote_ssh_progress.md) - 当前阶段、已完成事项、P1 进行中任务与下一步计划
 - [代码命名规范](code_style/naming_conventions.md) - 类、函数、变量等代码元素的命名规则

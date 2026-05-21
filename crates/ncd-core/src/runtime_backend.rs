@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use crate::bot_actor::BotActorState;
 use crate::ids::BotId;
 use crate::kinds::{BackendKind, BotFlavor, RuntimeTarget};
+use crate::remote_host::{RemoteHost, RemoteHostError, ShellCmd};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -176,6 +177,14 @@ pub enum BotBackendError {
     Io(String),
     #[error("json error: {0}")]
     Json(String),
+    #[error("remote host error: {0}")]
+    RemoteHost(String),
+}
+
+impl From<RemoteHostError> for BotBackendError {
+    fn from(error: RemoteHostError) -> Self {
+        Self::RemoteHost(error.to_string())
+    }
 }
 
 #[async_trait]
@@ -188,14 +197,183 @@ pub trait BotBackend: Send + Sync {
     async fn stop(&self, bot_id: BotId, mode: StopMode) -> Result<(), BotBackendError>;
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError>;
     async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError>;
-    async fn write_config(&self, bot_id: BotId, cfg: &BotRuntimeConfig) -> Result<(), BotBackendError>;
-    async fn tail_log(&self, bot_id: BotId, opts: TailOpts) -> Result<LogSnapshot, BotBackendError>;
+    async fn write_config(
+        &self,
+        bot_id: BotId,
+        cfg: &BotRuntimeConfig,
+    ) -> Result<(), BotBackendError>;
+    async fn tail_log(&self, bot_id: BotId, opts: TailOpts)
+    -> Result<LogSnapshot, BotBackendError>;
+}
+
+pub struct RemoteRuntimeBackend<H: RemoteHost> {
+    backend_id: BotId,
+    host: H,
+}
+
+impl<H: RemoteHost> RemoteRuntimeBackend<H> {
+    pub fn new(backend_id: impl Into<BotId>, host: H) -> Self {
+        Self {
+            backend_id: backend_id.into(),
+            host,
+        }
+    }
+
+    pub fn host(&self) -> &H {
+        &self.host
+    }
+}
+
+fn remote_config_path(bot_id: &BotId) -> String {
+    format!("runtime/config/bots/{}.json", bot_id.as_str())
+}
+
+fn remote_log_path(bot_id: &BotId) -> String {
+    format!("runtime/log/bots/{}.log", bot_id.as_str())
+}
+
+#[async_trait]
+impl<H: RemoteHost> BotBackend for RemoteRuntimeBackend<H> {
+    fn id(&self) -> &BotId {
+        &self.backend_id
+    }
+
+    fn kind(&self) -> BackendKind {
+        BackendKind::RemoteSsh
+    }
+
+    fn flavor(&self) -> BotFlavor {
+        BotFlavor::NapCat
+    }
+
+    async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        if ctx.config.launch_command.is_empty() {
+            return Err(BotBackendError::EmptyLaunchCommand);
+        }
+        self.write_config(ctx.config.bot_id.clone(), &ctx.config)
+            .await?;
+        let (program, args) = ctx
+            .config
+            .launch_command
+            .split_first()
+            .ok_or(BotBackendError::EmptyLaunchCommand)?;
+        let result = self
+            .host
+            .exec(ShellCmd {
+                program: program.clone(),
+                args: args.to_vec(),
+                working_dir: ctx
+                    .config
+                    .working_dir
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().to_string()),
+                environment: ctx.config.environment.clone(),
+            })
+            .await?;
+        if result.exit_code != 0 {
+            return Err(BotBackendError::RemoteHost(result.stderr));
+        }
+        self.status(ctx.config.bot_id.clone()).await
+    }
+
+    async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+        let result = self
+            .host
+            .exec(ShellCmd::new("napcat-stop").arg(bot_id.as_str()))
+            .await?;
+        if result.exit_code == 0 {
+            Ok(())
+        } else {
+            Err(BotBackendError::RemoteHost(result.stderr))
+        }
+    }
+
+    async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
+        let tree = match self.host.process_tree(bot_id.clone()).await {
+            Ok(tree) => tree,
+            Err(RemoteHostError::ProcessTreeFailed(_)) | Err(RemoteHostError::NotFound(_)) => {
+                return Ok(BotStatus::stopped(bot_id));
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let mut status = BotStatus::running(bot_id, tree.root.pid, 0);
+        status.extra.insert(
+            "backend_kind".to_string(),
+            Value::String(BackendKind::RemoteSsh.as_str().to_string()),
+        );
+        status
+            .extra
+            .insert("process_name".to_string(), Value::String(tree.root.name));
+        Ok(status)
+    }
+
+    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
+        let path = remote_config_path(&bot_id);
+        let bytes = match self.host.read_file(&path).await {
+            Ok(bytes) => bytes,
+            Err(RemoteHostError::NotFound(_)) => {
+                return Err(BotBackendError::ConfigNotFound(bot_id));
+            }
+            Err(error) => return Err(error.into()),
+        };
+        serde_json::from_slice(&bytes).map_err(|error| BotBackendError::Json(error.to_string()))
+    }
+
+    async fn write_config(
+        &self,
+        bot_id: BotId,
+        cfg: &BotRuntimeConfig,
+    ) -> Result<(), BotBackendError> {
+        let mut payload =
+            serde_json::to_value(cfg).map_err(|error| BotBackendError::Json(error.to_string()))?;
+        if let Value::Object(map) = &mut payload {
+            map.insert(
+                "bot_id".to_string(),
+                Value::String(bot_id.as_str().to_string()),
+            );
+            map.insert(
+                "backend_kind".to_string(),
+                Value::String(BackendKind::RemoteSsh.as_str().to_string()),
+            );
+        }
+        let bytes = serde_json::to_vec_pretty(&payload)
+            .map_err(|error| BotBackendError::Json(error.to_string()))?;
+        self.host
+            .write_file(&remote_config_path(&bot_id), &bytes, 0o600)
+            .await?;
+        Ok(())
+    }
+
+    async fn tail_log(
+        &self,
+        bot_id: BotId,
+        opts: TailOpts,
+    ) -> Result<LogSnapshot, BotBackendError> {
+        let bytes = match self.host.read_file(&remote_log_path(&bot_id)).await {
+            Ok(bytes) => bytes,
+            Err(RemoteHostError::NotFound(_)) => {
+                return Ok(LogSnapshot {
+                    lines: Vec::new(),
+                    total_lines: 0,
+                });
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let total_lines = lines.len();
+        if opts.lines > 0 && lines.len() > opts.lines {
+            lines = lines.split_off(lines.len() - opts.lines);
+        }
+        Ok(LogSnapshot { lines, total_lines })
+    }
 }
 
 #[derive(Debug)]
 pub struct LocalRuntimeBackend {
     root: PathBuf,
     backend_id: BotId,
+    flavor: BotFlavor,
     processes: Mutex<HashMap<BotId, ManagedProcess>>,
     logs: Mutex<HashMap<BotId, RuntimeLogBuffer>>,
 }
@@ -244,9 +422,18 @@ impl RuntimeLogBuffer {
 
 impl LocalRuntimeBackend {
     pub fn new(root: impl Into<PathBuf>, backend_id: impl Into<BotId>) -> Self {
+        Self::new_with_flavor(root, backend_id, BotFlavor::NapCat)
+    }
+
+    pub fn new_with_flavor(
+        root: impl Into<PathBuf>,
+        backend_id: impl Into<BotId>,
+        flavor: BotFlavor,
+    ) -> Self {
         Self {
             root: root.into(),
             backend_id: backend_id.into(),
+            flavor,
             processes: Mutex::new(HashMap::new()),
             logs: Mutex::new(HashMap::new()),
         }
@@ -340,7 +527,11 @@ impl LocalRuntimeBackend {
         self.write_log_line(bot_id, line).await
     }
 
-    pub async fn log_snapshot(&self, bot_id: &BotId, limit: usize) -> Result<LogSnapshot, BotBackendError> {
+    pub async fn log_snapshot(
+        &self,
+        bot_id: &BotId,
+        limit: usize,
+    ) -> Result<LogSnapshot, BotBackendError> {
         {
             let logs = self.logs.lock().await;
             if let Some(buffer) = logs.get(bot_id) {
@@ -382,7 +573,7 @@ impl BotBackend for LocalRuntimeBackend {
     }
 
     fn flavor(&self) -> BotFlavor {
-        BotFlavor::NapCat
+        self.flavor
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
@@ -481,10 +672,13 @@ impl BotBackend for LocalRuntimeBackend {
         bot_id: BotId,
         cfg: &BotRuntimeConfig,
     ) -> Result<(), BotBackendError> {
-        let mut payload = serde_json::to_value(cfg)
-            .map_err(|error| BotBackendError::Json(error.to_string()))?;
+        let mut payload =
+            serde_json::to_value(cfg).map_err(|error| BotBackendError::Json(error.to_string()))?;
         if let Value::Object(map) = &mut payload {
-            map.insert("bot_id".to_string(), Value::String(bot_id.as_str().to_string()));
+            map.insert(
+                "bot_id".to_string(),
+                Value::String(bot_id.as_str().to_string()),
+            );
         }
 
         Self::ensure_parent_dir(&cfg.config_path).await?;
@@ -495,7 +689,11 @@ impl BotBackend for LocalRuntimeBackend {
             .map_err(|error| BotBackendError::Io(error.to_string()))
     }
 
-    async fn tail_log(&self, bot_id: BotId, opts: TailOpts) -> Result<LogSnapshot, BotBackendError> {
+    async fn tail_log(
+        &self,
+        bot_id: BotId,
+        opts: TailOpts,
+    ) -> Result<LogSnapshot, BotBackendError> {
         self.log_snapshot(&bot_id, opts.lines).await
     }
 }
