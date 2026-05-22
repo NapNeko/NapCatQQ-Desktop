@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait = "0.1"
+futures-util = "0.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -16,6 +17,9 @@ dirs = "5"
 tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "rt-multi-thread", "macros"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 ts-rs = { version = "10", features = ["serde-compat"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
 
 [dev-dependencies]
 tempfile = "3"

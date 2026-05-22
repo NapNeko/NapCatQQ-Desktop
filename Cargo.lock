@@ -992,7 +992,7 @@ dependencies = [
  "rustc_version",
  "toml 1.1.2+spec-1.1.0",
  "vswhom",
- "winreg",
+ "winreg 0.55.0",
 ]
 
 [[package]]
@@ -2311,6 +2311,7 @@ dependencies = [
  "aes-gcm",
  "async-trait",
  "dirs 5.0.1",
+ "futures-util",
  "keyring",
  "rand",
  "serde",
@@ -2320,6 +2321,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "ts-rs",
+ "winreg 0.52.0",
 ]
 
 [[package]]
@@ -5339,6 +5341,16 @@ name = "winnow"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0592e1c9d151f854e6fd382574c3a0855250e1d9b2f99d9281c6e6391af352f1"
+
+[[package]]
+name = "winreg"
+version = "0.52.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.48.0",
+]
 
 [[package]]
 name = "winreg"
