@@ -11,9 +11,6 @@ use ncd_core::{
     RemoteFileEntry, RemoteHost, RemoteHostError, RuntimeTarget, StopMode,
 };
 
-
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpawnLocalBotRequest {
     pub bot_id: String,
@@ -116,7 +113,9 @@ impl RuntimeRegistry {
     }
 
     fn flavor_for(&self, bot_id: &BotId) -> Option<BotFlavor> {
-        self.records.get(bot_id.as_str()).map(|record| record.flavor)
+        self.records
+            .get(bot_id.as_str())
+            .map(|record| record.flavor)
     }
 
     fn status_for(&self, bot_id: &BotId) -> Option<&BotStatus> {
@@ -157,7 +156,10 @@ impl RemoteRuntimeService {
     }
 
     async fn list_remote_files(&self, path: &str) -> Result<Vec<RemoteFileEntry>, String> {
-        self.host.list_dir(path).await.map_err(map_remote_host_error)
+        self.host
+            .list_dir(path)
+            .await
+            .map_err(map_remote_host_error)
     }
 
     async fn get_runtime_status(
@@ -174,10 +176,12 @@ impl RemoteRuntimeService {
                 );
                 status.extra.insert(
                     "runtime_target".to_string(),
-                    serde_json::Value::String(match RuntimeTarget::server(self.remote_id.clone()) {
-                        RuntimeTarget::Local => "local".to_string(),
-                        RuntimeTarget::Server(id) => id,
-                    }),
+                    serde_json::Value::String(
+                        match RuntimeTarget::server(self.remote_id.clone()) {
+                            RuntimeTarget::Local => "local".to_string(),
+                            RuntimeTarget::Server(id) => id,
+                        },
+                    ),
                 );
                 status.extra.insert(
                     "process_name".to_string(),
@@ -200,7 +204,10 @@ impl RemoteRuntimeService {
         })
     }
 
-    async fn get_webui_endpoint(&self, bot_id: &str) -> Result<RemoteWebuiEndpointResponse, String> {
+    async fn get_webui_endpoint(
+        &self,
+        bot_id: &str,
+    ) -> Result<RemoteWebuiEndpointResponse, String> {
         Ok(RemoteWebuiEndpointResponse {
             remote_id: self.remote_id.clone(),
             bot_id: bot_id.to_string(),
@@ -287,7 +294,10 @@ impl AppRuntime {
             .start(&BotStartCtx { config })
             .await
             .map_err(map_backend_error)?;
-        let status = backend.status(bot_id.clone()).await.map_err(map_backend_error)?;
+        let status = backend
+            .status(bot_id.clone())
+            .await
+            .map_err(map_backend_error)?;
         self.record_bot(&bot_id, flavor, Some(status.clone())).await;
         self.emit_status(status.clone(), "spawn_local_bot");
         Ok(status)
@@ -302,7 +312,10 @@ impl AppRuntime {
             .stop(bot_id.clone(), request.mode)
             .await
             .map_err(map_backend_error)?;
-        let status = backend.status(bot_id.clone()).await.map_err(map_backend_error)?;
+        let status = backend
+            .status(bot_id.clone())
+            .await
+            .map_err(map_backend_error)?;
         self.record_bot(&bot_id, flavor, Some(status.clone())).await;
         self.emit_status(status, "stop_local_bot");
         Ok(())
@@ -379,7 +392,10 @@ impl AppRuntime {
             let Ok(status) = backend.status(bot_id.clone()).await else {
                 continue;
             };
-            if self.record_status_change(&bot_id, flavor, status.clone()).await {
+            if self
+                .record_status_change(&bot_id, flavor, status.clone())
+                .await
+            {
                 self.emit_status(status, "runtime_watch");
             }
         }
@@ -397,7 +413,8 @@ impl AppRuntime {
             {
                 let _ = backend.stop(bot_id.clone(), StopMode::Force).await;
                 let stopped = BotStatus::stopped(bot_id.clone());
-                self.record_bot(&bot_id, flavor, Some(stopped.clone())).await;
+                self.record_bot(&bot_id, flavor, Some(stopped.clone()))
+                    .await;
                 self.emit_status(stopped, "runtime_shutdown");
             }
         }
@@ -405,9 +422,12 @@ impl AppRuntime {
     }
 
     async fn has_running_bot(&self) -> bool {
-        self.registry.lock().await.latest_statuses().iter().any(|status| {
-            status.state == ncd_core::BotActorState::Running
-        })
+        self.registry
+            .lock()
+            .await
+            .latest_statuses()
+            .iter()
+            .any(|status| status.state == ncd_core::BotActorState::Running)
     }
 
     async fn known_bots(&self) -> Vec<(BotId, BotFlavor)> {
@@ -669,7 +689,8 @@ mod tests {
             .await
             .unwrap();
 
-        let config_path = BotRuntimeConfig::default_path(root.path(), BotId::new("10005")).config_path;
+        let config_path =
+            BotRuntimeConfig::default_path(root.path(), BotId::new("10005")).config_path;
         tokio::fs::remove_file(&config_path).await.unwrap();
 
         runtime
@@ -720,11 +741,8 @@ mod tests {
         let _ = subscription.next().await.expect("expected spawn event");
 
         runtime.publish_runtime_status_changes().await;
-        let unchanged = tokio::time::timeout(
-            std::time::Duration::from_millis(50),
-            subscription.next(),
-        )
-        .await;
+        let unchanged =
+            tokio::time::timeout(std::time::Duration::from_millis(50), subscription.next()).await;
         assert!(unchanged.is_err());
 
         runtime
@@ -737,11 +755,8 @@ mod tests {
         let _ = subscription.next().await.expect("expected stop event");
 
         runtime.publish_runtime_status_changes().await;
-        let unchanged = tokio::time::timeout(
-            std::time::Duration::from_millis(50),
-            subscription.next(),
-        )
-        .await;
+        let unchanged =
+            tokio::time::timeout(std::time::Duration::from_millis(50), subscription.next()).await;
         assert!(unchanged.is_err());
     }
     #[tokio::test]

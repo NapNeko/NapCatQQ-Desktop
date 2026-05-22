@@ -1,3 +1,5 @@
+pub mod bot;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -6,12 +8,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ncd_core::{BootstrapSnapshot, DomainEvent, EventBus, RemoteFileEntry};
 use tauri::State;
 
+use crate::AppState;
 use crate::runtime::{
     ConnectRemoteHostRequest, GetRemoteRuntimeStatusRequest, GetRemoteWebuiEndpointRequest,
     ListRemoteFilesRequest, RemoteHostConnectionInfo, RemoteRuntimeStatusResponse,
     RemoteWebuiEndpointResponse, SpawnLocalBotRequest, StopLocalBotRequest,
 };
-use crate::AppState;
 
 #[tauri::command]
 pub fn get_bootstrap_status(state: State<'_, AppState>) -> BootstrapSnapshot {
@@ -115,19 +117,47 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::runtime::{SpawnLocalBotRequest, StopLocalBotRequest};
+    use ncd_core::ConfigStore;
+    use std::sync::Arc;
     use tempfile::tempdir;
+
+    fn make_test_state(root: &std::path::Path) -> (AppState, ncd_core::BroadcastEventBus) {
+        let bus = ncd_core::BroadcastEventBus::default();
+        let runtime = crate::runtime::AppRuntime::new(root, bus.clone());
+        let store = Arc::new(ncd_core::LocalConfigStore::new(root));
+        let secrets: Arc<dyn ncd_core::SecretStore + Send + Sync> =
+            Arc::new(ncd_core::SecretStoreImpl::new(root.join("secrets")));
+        let repo = Arc::new(ncd_core::LocalBotConfigRepo::new(
+            Arc::clone(&store),
+            secrets,
+        ));
+        let renderer = Arc::new(ncd_core::DispatchRenderer::new(store.config_dir()));
+        let backend = Arc::new(ncd_core::LocalRuntimeBackend::new(root, "test-local"));
+        let launch_planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
+            root.join("runtime"),
+        ));
+        let bot_manager = Arc::new(ncd_core::BotManager::new(
+            repo,
+            Arc::clone(&store),
+            renderer,
+            backend,
+            launch_planner,
+            Arc::new(bus.clone()),
+        ));
+        let state = AppState {
+            data_root: root.to_path_buf(),
+            snapshot: BootstrapSnapshot::ready(),
+            event_bus: bus.clone(),
+            runtime,
+            bot_manager,
+        };
+        (state, bus)
+    }
 
     #[tokio::test]
     async fn publish_runtime_status_emits_events() {
         let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
-        let runtime = crate::runtime::AppRuntime::new(root.path(), bus.clone());
-        let state = AppState {
-            data_root: root.path().to_path_buf(),
-            snapshot: BootstrapSnapshot::ready(),
-            event_bus: bus.clone(),
-            runtime,
-        };
+        let (state, bus) = make_test_state(root.path());
         let mut subscription = bus.subscribe(ncd_core::EventFilter::kind(
             ncd_core::DomainEventKind::BotStatusChanged,
         ));
