@@ -1,0 +1,33 @@
+.ndf-statusbar {
+  height: 28px;
+  background-color: var(--ndf-bg-sidebar);
+  border-top: 1px solid var(--ndf-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.ndf-statusbar-left,
+.ndf-statusbar-right {
+  display: flex;
+  align-items: center;
+}
+
+.ndf-status-icon {
+  font-size: 14px;
+  color: var(--colorNeutralForeground4);
+  margin-right: 6px;
+}
+
+.ndf-status-icon.success {
+  color: #107c41;
+}
+
+.ndf-status-text {
+  color: var(--colorNeutralForeground3) !important;
+  font-size: 11px !important;
+}

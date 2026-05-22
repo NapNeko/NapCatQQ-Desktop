@@ -1,0 +1,33 @@
+.ndf-page-header {
+  height: 52px;
+  background-color: var(--ndf-bg-canvas);
+  border-bottom: 1px solid var(--ndf-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.ndf-page-header-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.ndf-page-title {
+  color: var(--colorNeutralForeground1) !important;
+  line-height: 1.2 !important;
+}
+
+.ndf-page-description {
+  color: var(--colorNeutralForeground4) !important;
+  margin-top: 2px !important;
+  font-size: 11px !important;
+}
+
+.ndf-page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

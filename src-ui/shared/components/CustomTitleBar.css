@@ -1,0 +1,108 @@
+.ndf-titlebar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  background-color: transparent;
+  user-select: none;
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  z-index: 9999;
+  transition: all 0.15s cubic-bezier(0.1, 0.9, 0.2, 1.0);
+}
+
+.ndf-titlebar-left {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  height: 100%;
+  width: 210px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transition: all 0.15s cubic-bezier(0.1, 0.9, 0.2, 1.0);
+}
+
+.ndf-titlebar-drag-region {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+.ndf-titlebar-logo {
+  font-size: 16px;
+  color: #0078d4;
+  flex-shrink: 0;
+}
+
+.ndf-titlebar-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--colorNeutralForeground1);
+  line-height: 1.1;
+  margin-left: 8px;
+  white-space: nowrap;
+  transition: all 0.12s ease-in-out;
+  opacity: 1;
+}
+
+.ndf-titlebar.collapsed .ndf-titlebar-left {
+  width: 48px;
+  padding-left: 0;
+  justify-content: center;
+}
+
+.ndf-titlebar.collapsed .ndf-titlebar-title {
+  opacity: 0;
+  width: 0;
+  margin-left: 0;
+  overflow: hidden;
+}
+
+.ndf-titlebar-window-controls {
+  display: flex;
+  height: 100%;
+  flex-shrink: 0;
+  z-index: 10000;
+}
+
+.ndf-win-btn {
+  width: 46px;
+  height: 40px;
+  background-color: transparent;
+  border: none;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--colorNeutralForeground1);
+  cursor: default;
+  transition: background-color 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+
+.ndf-win-btn:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.ndf-win-btn:active {
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+.ndf-win-close:hover {
+  background-color: #e81123 !important;
+  color: #ffffff !important;
+}
+
+.ndf-win-close:active {
+  background-color: #f1707a !important;
+  color: #ffffff !important;
+}
+
+.dark .ndf-win-btn:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.dark .ndf-win-btn:active {
+  background-color: rgba(255, 255, 255, 0.12);
+}
