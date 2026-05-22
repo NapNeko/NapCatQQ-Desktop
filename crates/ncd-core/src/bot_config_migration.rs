@@ -535,10 +535,7 @@ fn normalize_urls(payload: &mut Map<String, Value>) -> Vec<String> {
                 if let Some(obj) = entry.as_object_mut() {
                     if let Some(url) = obj.get("url").and_then(Value::as_str) {
                         if url.trim().is_empty() {
-                            obj.insert(
-                                "url".to_string(),
-                                Value::from("ws://127.0.0.1:6700"),
-                            );
+                            obj.insert("url".to_string(), Value::from("ws://127.0.0.1:6700"));
                         }
                     }
                 }

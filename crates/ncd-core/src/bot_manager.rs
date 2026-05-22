@@ -3,11 +3,16 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use crate::backend_config_renderer::output_paths_for_backend;
 use crate::bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
-use crate::bot_config::{BotConfig, BotConfigError};
+use crate::bot_config::{BackendType, BotConfig, BotConfigError};
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::ids::BotId;
-use crate::traits::{BackendConfigRenderer, BotConfigRepo, ConfigStore};
+use crate::runtime_backend::{
+    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, RuntimeLaunchPlanError,
+    RuntimeLaunchPlanner, StopMode,
+};
+use crate::traits::{BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
 
@@ -43,12 +48,21 @@ pub enum BotManagerError {
     #[error("renderer error: {0}")]
     Render(String),
 
+    #[error("runtime backend error: {0}")]
+    Runtime(#[from] BotBackendError),
+
     #[error("task join failed: {0}")]
     TaskJoinFailed(String),
 }
 
 impl From<crate::traits::RenderError> for BotManagerError {
     fn from(err: crate::traits::RenderError) -> Self {
+        Self::Render(err.to_string())
+    }
+}
+
+impl From<RuntimeLaunchPlanError> for BotManagerError {
+    fn from(err: RuntimeLaunchPlanError) -> Self {
         Self::Render(err.to_string())
     }
 }
@@ -82,6 +96,8 @@ pub struct BotManager<R: BotConfigRepo, S: ConfigStore + 'static> {
     repo: Arc<R>,
     store: Arc<S>,
     renderer: Arc<dyn BackendConfigRenderer>,
+    backend: Arc<dyn BotBackend>,
+    launch_planner: Arc<dyn RuntimeLaunchPlanner>,
     event_bus: Arc<BroadcastEventBus>,
     actors: RwLock<HashMap<BotId, BotActorHandle>>,
 }
@@ -91,12 +107,16 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
         repo: Arc<R>,
         store: Arc<S>,
         renderer: Arc<dyn BackendConfigRenderer>,
+        backend: Arc<dyn BotBackend>,
+        launch_planner: Arc<dyn RuntimeLaunchPlanner>,
         event_bus: Arc<BroadcastEventBus>,
     ) -> Self {
         Self {
             repo,
             store,
             renderer,
+            backend,
+            launch_planner,
             event_bus,
             actors: RwLock::new(HashMap::new()),
         }
@@ -155,67 +175,107 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
     /// 前置条件：Actor 已存在且处于可启动状态（Stopped / Crashed）。
     pub async fn start_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
-        let snapshot = handle.request_start().await?;
-        self.publish_state_change(&snapshot, "start_requested");
-        Ok(snapshot)
+        let config = self.get_required_bot_config(bot_id).await?;
+        self.render_backend_config(bot_id, &config).await?;
+
+        let starting = handle.request_start().await?;
+        self.publish_state_change(&starting, "start_requested");
+
+        let runtime_config = self.build_runtime_config(bot_id, &config);
+        let runtime_config = match self.launch_planner.build_plan(bot_id, &config).await {
+            Ok(plan) => plan.into_runtime_config(runtime_config),
+            Err(err) => {
+                let message = err.to_string();
+                let crashed = handle.mark_crashed(message.clone()).await?;
+                self.publish_state_change(&crashed, "start_failed");
+                self.event_bus.publish(DomainEvent::bot_error(
+                    bot_id.clone(),
+                    message,
+                    Some("NapCat 运行时组件缺失或 SnowLuma 启动链路未接入".to_string()),
+                ));
+                return Err(BotManagerError::Render(err.to_string()));
+            }
+        };
+        match self
+            .backend
+            .start(&BotStartCtx {
+                config: runtime_config,
+            })
+            .await
+        {
+            Ok(status) => {
+                self.event_bus
+                    .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
+                let running = handle.confirm_running().await?;
+                self.publish_state_change(&running, "start_completed");
+                Ok(running)
+            }
+            Err(err) => {
+                let message = err.to_string();
+                let crashed = handle.mark_crashed(message.clone()).await?;
+                self.publish_state_change(&crashed, "start_failed");
+                self.event_bus.publish(DomainEvent::bot_error(
+                    bot_id.clone(),
+                    message,
+                    Some("请在运行时设置中配置 NapCat/SnowLuma 启动命令后重试".to_string()),
+                ));
+                Err(err.into())
+            }
+        }
     }
 
     /// 停止指定 Bot。
     pub async fn stop_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
-        let snapshot = handle.request_stop().await?;
-        self.publish_state_change(&snapshot, "stop_requested");
-        Ok(snapshot)
+        let stopping = handle.request_stop().await?;
+        self.publish_state_change(&stopping, "stop_requested");
+
+        let status = self.backend.status(bot_id.clone()).await?;
+        if status.state == BotActorState::Stopped {
+            let stopped = match stopping.state {
+                BotActorState::Stopping => handle.confirm_stopped().await?,
+                _ => stopping,
+            };
+            self.publish_state_change(&stopped, "stop_completed");
+            return Ok(stopped);
+        }
+
+        match self.backend.stop(bot_id.clone(), StopMode::Force).await {
+            Ok(()) => {
+                let status = self.backend.status(bot_id.clone()).await?;
+                self.event_bus
+                    .publish(DomainEvent::bot_status_changed(status, "runtime_stop"));
+                let stopped = handle.confirm_stopped().await?;
+                self.publish_state_change(&stopped, "stop_completed");
+                Ok(stopped)
+            }
+            Err(err) => {
+                let message = err.to_string();
+                let crashed = handle.mark_crashed(message.clone()).await?;
+                self.publish_state_change(&crashed, "stop_failed");
+                self.event_bus.publish(DomainEvent::bot_error(
+                    bot_id.clone(),
+                    message,
+                    Some("请检查进程是否仍在运行，必要时手动结束后重试".to_string()),
+                ));
+                Err(err.into())
+            }
+        }
     }
 
     // ─── 批量操作 ─────────────────────────────────────────────────────────
 
     /// 批量启动。并发调度所有目标 Bot，收集成功/失败。
     pub async fn batch_start(&self, bot_ids: &[BotId]) -> Result<BatchResult, BotManagerError> {
-        let mut handles = Vec::with_capacity(bot_ids.len());
-
-        {
-            let actors = self.actors.read().await;
-            for bot_id in bot_ids {
-                if let Some(actor) = actors.get(bot_id) {
-                    handles.push((bot_id.clone(), actor.clone()));
-                }
-            }
-        }
-
-        let mut tasks = Vec::with_capacity(handles.len());
-        for (bot_id, actor) in handles {
-            let event_bus = Arc::clone(&self.event_bus);
-            let id_for_join = bot_id.clone();
-            tasks.push((id_for_join, tokio::spawn(async move {
-                match actor.request_start().await {
-                    Ok(snapshot) => {
-                        event_bus.publish(DomainEvent::bot_state_changed(
-                            snapshot.clone(),
-                            "batch_start",
-                        ));
-                        Ok(bot_id)
-                    }
-                    Err(err) => Err((bot_id, BotManagerError::from(err))),
-                }
-            })));
-        }
-
         let mut result = BatchResult {
             succeeded: Vec::new(),
             failed: Vec::new(),
         };
 
-        for (fallback_id, task) in tasks {
-            match task.await {
-                Ok(Ok(bot_id)) => result.succeeded.push(bot_id),
-                Ok(Err((bot_id, err))) => result.failed.push((bot_id, err)),
-                Err(join_err) => {
-                    result.failed.push((
-                        fallback_id,
-                        BotManagerError::TaskJoinFailed(join_err.to_string()),
-                    ));
-                }
+        for bot_id in bot_ids {
+            match self.start_bot(bot_id).await {
+                Ok(_) => result.succeeded.push(bot_id.clone()),
+                Err(err) => result.failed.push((bot_id.clone(), err)),
             }
         }
 
@@ -224,50 +284,15 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 批量停止。
     pub async fn batch_stop(&self, bot_ids: &[BotId]) -> Result<BatchResult, BotManagerError> {
-        let mut handles = Vec::with_capacity(bot_ids.len());
-
-        {
-            let actors = self.actors.read().await;
-            for bot_id in bot_ids {
-                if let Some(actor) = actors.get(bot_id) {
-                    handles.push((bot_id.clone(), actor.clone()));
-                }
-            }
-        }
-
-        let mut tasks = Vec::with_capacity(handles.len());
-        for (bot_id, actor) in handles {
-            let event_bus = Arc::clone(&self.event_bus);
-            let id_for_join = bot_id.clone();
-            tasks.push((id_for_join, tokio::spawn(async move {
-                match actor.request_stop().await {
-                    Ok(snapshot) => {
-                        event_bus.publish(DomainEvent::bot_state_changed(
-                            snapshot.clone(),
-                            "batch_stop",
-                        ));
-                        Ok(bot_id)
-                    }
-                    Err(err) => Err((bot_id, BotManagerError::from(err))),
-                }
-            })));
-        }
-
         let mut result = BatchResult {
             succeeded: Vec::new(),
             failed: Vec::new(),
         };
 
-        for (fallback_id, task) in tasks {
-            match task.await {
-                Ok(Ok(bot_id)) => result.succeeded.push(bot_id),
-                Ok(Err((bot_id, err))) => result.failed.push((bot_id, err)),
-                Err(join_err) => {
-                    result.failed.push((
-                        fallback_id,
-                        BotManagerError::TaskJoinFailed(join_err.to_string()),
-                    ));
-                }
+        for bot_id in bot_ids {
+            match self.stop_bot(bot_id).await {
+                Ok(_) => result.succeeded.push(bot_id.clone()),
+                Err(err) => result.failed.push((bot_id.clone(), err)),
             }
         }
 
@@ -326,7 +351,22 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
         self.repo.upsert(config.clone()).await?;
 
         // 2. 再渲染并写入派生配置文件（失败不会造成不可恢复的不一致）
-        let txn = self.renderer.render(&bot_id, &config)?;
+        let mut txn = self.renderer.render(&bot_id, &config)?;
+        let target_backend = config.bot.backend_type;
+        let current_paths =
+            output_paths_for_backend(target_backend, self.store.config_dir(), &bot_id);
+        let all_paths = {
+            let mut paths = self.renderer.output_paths(&bot_id);
+            paths.sort();
+            paths.dedup();
+            paths
+        };
+        for path in all_paths
+            .into_iter()
+            .filter(|path| !current_paths.contains(path))
+        {
+            txn = txn.delete(path);
+        }
         if !txn.is_empty() {
             let store = Arc::clone(&self.store);
             tokio::task::spawn_blocking(move || store.apply_transaction(txn))
@@ -348,9 +388,7 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
         } else {
             let handle = self.get_actor(&bot_id).await?;
             let current = handle.snapshot();
-            if current.state == BotActorState::Running
-                || current.state == BotActorState::Starting
-            {
+            if current.state == BotActorState::Running || current.state == BotActorState::Starting {
                 let snapshot = handle.request_restart().await?;
                 self.publish_state_change(&snapshot, "config_hot_reload");
                 Ok(snapshot)
@@ -365,10 +403,7 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 删除 Bot 配置及其 Actor。如果 Bot 正在运行，先停止。
-    pub async fn delete_bot_config(
-        &self,
-        bot_id: &BotId,
-    ) -> Result<(), BotManagerError> {
+    pub async fn delete_bot_config(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
         self.delete_bot_internal(bot_id).await
     }
 
@@ -381,12 +416,21 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 获取指定 Bot 的当前快照。
-    pub async fn get_snapshot(
-        &self,
-        bot_id: &BotId,
-    ) -> Result<BotActorSnapshot, BotManagerError> {
+    pub async fn get_snapshot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
         Ok(handle.snapshot())
+    }
+
+    /// 获取指定 Bot 的当前配置。
+    pub async fn get_bot_config(
+        &self,
+        bot_id: &BotId,
+    ) -> Result<Option<BotConfig>, BotManagerError> {
+        let qq_id: u64 = bot_id
+            .as_str()
+            .parse()
+            .map_err(|_| BotManagerError::BotNotFound(bot_id.clone()))?;
+        self.repo.get(qq_id).await.map_err(BotManagerError::from)
     }
 
     /// 当前托管的 Bot 数量。
@@ -413,6 +457,40 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
             .ok_or_else(|| BotManagerError::BotNotFound(bot_id.clone()))
     }
 
+    async fn get_required_bot_config(&self, bot_id: &BotId) -> Result<BotConfig, BotManagerError> {
+        let qq_id: u64 = bot_id
+            .as_str()
+            .parse()
+            .map_err(|_| BotManagerError::BotNotFound(bot_id.clone()))?;
+        self.repo
+            .get(qq_id)
+            .await?
+            .ok_or_else(|| BotManagerError::BotNotFound(bot_id.clone()))
+    }
+
+    async fn render_backend_config(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+    ) -> Result<(), BotManagerError> {
+        let txn = self.renderer.render(bot_id, config)?;
+        if txn.is_empty() {
+            return Ok(());
+        }
+        let store = Arc::clone(&self.store);
+        tokio::task::spawn_blocking(move || store.apply_transaction(txn))
+            .await
+            .map_err(|e| BotManagerError::Render(e.to_string()))?
+            .map_err(|e| BotManagerError::Render(e.to_string()))?;
+        Ok(())
+    }
+
+    fn build_runtime_config(&self, bot_id: &BotId, config: &BotConfig) -> BotRuntimeConfig {
+        BotRuntimeConfig::default_path(self.store.root(), bot_id.clone())
+            .with_runtime_defaults(self.store.root())
+            .with_bot_config(config)
+    }
+
     fn publish_state_change(&self, snapshot: &BotActorSnapshot, reason: &str) {
         self.event_bus
             .publish(DomainEvent::bot_state_changed(snapshot.clone(), reason));
@@ -433,7 +511,24 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
 
         self.repo.delete(qq_id).await?;
 
-        // 2. 再停止和 shutdown Actor（持久化已删，失败也不会导致 "复活"）
+        // 2. 再删除派生配置文件（NapCat / SnowLuma 两套路径都清理）
+        let mut txn = JsonTransaction::new();
+        for path in output_paths_for_backend(BackendType::NapCat, self.store.config_dir(), bot_id) {
+            txn = txn.delete(path);
+        }
+        for path in output_paths_for_backend(BackendType::SnowLuma, self.store.config_dir(), bot_id)
+        {
+            txn = txn.delete(path);
+        }
+        if !txn.is_empty() {
+            let store = Arc::clone(&self.store);
+            tokio::task::spawn_blocking(move || store.apply_transaction(txn))
+                .await
+                .map_err(|e| BotManagerError::Render(e.to_string()))?
+                .map_err(|e| BotManagerError::Render(e.to_string()))?;
+        }
+
+        // 3. 再停止和 shutdown Actor（持久化已删，失败也不会导致 "复活"）
         let maybe_handle = {
             let actors = self.actors.read().await;
             actors.get(bot_id).cloned()
@@ -447,7 +542,7 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
             let _ = handle.shutdown().await;
         }
 
-        // 3. 最后移除内存态 Actor
+        // 4. 最后移除内存态 Actor
         {
             let mut actors = self.actors.write().await;
             actors.remove(bot_id);

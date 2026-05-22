@@ -193,17 +193,24 @@ impl SnowLumaConfigRenderer {
     }
 
     fn build_networks(connect: &ConnectConfig) -> Value {
-        let no_servers = connect.http_servers.is_empty()
-            && connect.websocket_servers.is_empty();
+        let no_servers = connect.http_servers.is_empty() && connect.websocket_servers.is_empty();
 
         if no_servers {
             let mut networks = Self::build_fallback_networks();
             let obj = networks.as_object_mut().unwrap();
             obj["httpClients"] = json!(
-                connect.http_clients.iter().map(Self::render_http_client).collect::<Vec<_>>()
+                connect
+                    .http_clients
+                    .iter()
+                    .map(Self::render_http_client)
+                    .collect::<Vec<_>>()
             );
             obj["wsClients"] = json!(
-                connect.websocket_clients.iter().map(Self::render_ws_client).collect::<Vec<_>>()
+                connect
+                    .websocket_clients
+                    .iter()
+                    .map(Self::render_ws_client)
+                    .collect::<Vec<_>>()
             );
             networks
         } else {
@@ -246,6 +253,53 @@ pub fn create_renderer(
     match backend_type {
         BackendType::NapCat => Box::new(NapCatConfigRenderer::new(config_dir)),
         BackendType::SnowLuma => Box::new(SnowLumaConfigRenderer::new(config_dir)),
+    }
+}
+
+/// Return the derived config paths for a specific backend type.
+pub fn output_paths_for_backend(
+    backend_type: BackendType,
+    config_dir: impl Into<PathBuf>,
+    bot_id: &BotId,
+) -> Vec<PathBuf> {
+    match backend_type {
+        BackendType::NapCat => NapCatConfigRenderer::new(config_dir).output_paths(bot_id),
+        BackendType::SnowLuma => SnowLumaConfigRenderer::new(config_dir).output_paths(bot_id),
+    }
+}
+
+// ==================== Dispatch Renderer ====================
+
+/// A composite renderer that dispatches to the appropriate backend renderer
+/// based on `config.bot.backend_type`. Used by `BotManager` which holds a single
+/// `Arc<dyn BackendConfigRenderer>`.
+pub struct DispatchRenderer {
+    napcat: NapCatConfigRenderer,
+    snowluma: SnowLumaConfigRenderer,
+}
+
+impl DispatchRenderer {
+    pub fn new(config_dir: impl Into<PathBuf>) -> Self {
+        let dir: PathBuf = config_dir.into();
+        Self {
+            napcat: NapCatConfigRenderer::new(dir.clone()),
+            snowluma: SnowLumaConfigRenderer::new(dir),
+        }
+    }
+}
+
+impl BackendConfigRenderer for DispatchRenderer {
+    fn render(&self, bot_id: &BotId, config: &BotConfig) -> Result<JsonTransaction, RenderError> {
+        match config.bot.backend_type {
+            BackendType::NapCat => self.napcat.render(bot_id, config),
+            BackendType::SnowLuma => self.snowluma.render(bot_id, config),
+        }
+    }
+
+    fn output_paths(&self, bot_id: &BotId) -> Vec<PathBuf> {
+        let mut paths = self.napcat.output_paths(bot_id);
+        paths.extend(self.snowluma.output_paths(bot_id));
+        paths
     }
 }
 
@@ -348,7 +402,11 @@ mod tests {
         assert_eq!(txn.writes.len(), 2);
         assert!(txn.deletes.is_empty());
 
-        let paths: Vec<_> = txn.writes.iter().map(|w| w.path.to_string_lossy().to_string()).collect();
+        let paths: Vec<_> = txn
+            .writes
+            .iter()
+            .map(|w| w.path.to_string_lossy().to_string())
+            .collect();
         assert!(paths.iter().any(|p| p.contains("onebot11_10001.json")));
         assert!(paths.iter().any(|p| p.contains("napcat_10001.json")));
     }
@@ -360,9 +418,11 @@ mod tests {
         let config = make_full_config();
 
         let txn = renderer.render(&bot_id, &config).unwrap();
-        let onebot_write = txn.writes.iter().find(|w| {
-            w.path.to_string_lossy().contains("onebot11_")
-        }).unwrap();
+        let onebot_write = txn
+            .writes
+            .iter()
+            .find(|w| w.path.to_string_lossy().contains("onebot11_"))
+            .unwrap();
 
         let payload = &onebot_write.payload;
         assert!(payload.get("network").is_some());
@@ -382,9 +442,11 @@ mod tests {
         let config = make_full_config();
 
         let txn = renderer.render(&bot_id, &config).unwrap();
-        let napcat_write = txn.writes.iter().find(|w| {
-            w.path.to_string_lossy().contains("napcat_")
-        }).unwrap();
+        let napcat_write = txn
+            .writes
+            .iter()
+            .find(|w| w.path.to_string_lossy().contains("napcat_"))
+            .unwrap();
 
         let payload = &napcat_write.payload;
         assert_eq!(payload["fileLog"], true);
@@ -416,7 +478,12 @@ mod tests {
 
         assert_eq!(txn.writes.len(), 1);
         assert!(txn.deletes.is_empty());
-        assert!(txn.writes[0].path.to_string_lossy().contains("onebot_10001.json"));
+        assert!(
+            txn.writes[0]
+                .path
+                .to_string_lossy()
+                .contains("onebot_10001.json")
+        );
     }
 
     #[test]
@@ -629,7 +696,10 @@ mod tests {
         let config = make_full_config();
 
         let txn = renderer.render(&bot_id, &config).unwrap();
-        assert_eq!(txn.writes[0].payload["musicSignUrl"], "https://sign.example.com");
+        assert_eq!(
+            txn.writes[0].payload["musicSignUrl"],
+            "https://sign.example.com"
+        );
     }
 
     #[test]
@@ -743,8 +813,7 @@ mod tests {
         let config = make_full_config();
 
         let render_txn = renderer.render(&bot_id, &config).unwrap();
-        let mut repo_txn = JsonTransaction::new()
-            .write("/tmp/bot.json", json!({"bots": []}));
+        let mut repo_txn = JsonTransaction::new().write("/tmp/bot.json", json!({"bots": []}));
 
         repo_txn.merge(render_txn);
 

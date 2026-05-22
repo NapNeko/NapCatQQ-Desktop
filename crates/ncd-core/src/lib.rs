@@ -21,6 +21,9 @@ pub mod runtime_backend;
 pub mod secret_store_impl;
 pub mod traits;
 
+pub use backend_config_renderer::{
+    DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
+};
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
 pub use bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 pub use bot_config::{
@@ -30,6 +33,7 @@ pub use bot_config::{
     WebsocketServerConfig, WsRole,
 };
 pub use bot_config_repo_impl::LocalBotConfigRepo;
+pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError};
 pub use config_store_impl::LocalConfigStore;
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use events::{
@@ -50,13 +54,12 @@ pub use remote_host::{
 };
 pub use report::MigrationReport;
 pub use runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LocalRuntimeBackend,
-    LogSnapshot, ProcessHandle, RemoteRuntimeBackend, StopMode, TailOpts,
+    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus,
+    FileSystemRuntimeLaunchPlanner, LocalRuntimeBackend, LogSnapshot, NapCatLaunchPlan,
+    ProcessHandle, RemoteRuntimeBackend, RuntimeLaunchPlan, RuntimeLaunchPlanError,
+    RuntimeLaunchPlanner, SnowLumaLaunchPlan, StopMode, TailOpts,
+    build_napcat_launch_plan_with_qq_install_path,
 };
-pub use backend_config_renderer::{
-    NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
-};
-pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError};
 pub use secret_store_impl::SecretStoreImpl;
 pub use traits::{
     BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, JsonWrite, MigrationStep,

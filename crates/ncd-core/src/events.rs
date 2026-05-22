@@ -100,6 +100,18 @@ impl DomainEvent {
         }
     }
 
+    pub fn bot_error(
+        bot_id: impl Into<BotId>,
+        message: impl Into<String>,
+        hint: Option<String>,
+    ) -> Self {
+        Self::BotError {
+            bot_id: bot_id.into(),
+            message: message.into(),
+            hint,
+        }
+    }
+
     pub fn task_progress(
         task_id: impl Into<String>,
         progress: u8,
