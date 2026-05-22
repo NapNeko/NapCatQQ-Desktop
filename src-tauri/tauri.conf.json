@@ -14,7 +14,14 @@
       {
         "title": "NapCatQQ Desktop",
         "width": 1280,
-        "height": 800
+        "height": 800,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "windowEffects": {
+          "effects": ["mica"],
+          "state": "active"
+        }
       }
     ]
   }
