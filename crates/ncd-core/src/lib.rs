@@ -5,6 +5,7 @@ pub mod bot_actor;
 pub mod bot_config;
 pub mod bot_config_migration;
 pub mod bot_config_repo_impl;
+pub mod bot_manager;
 pub mod config_store_impl;
 pub mod errors;
 pub mod events;
@@ -55,6 +56,7 @@ pub use runtime_backend::{
 pub use backend_config_renderer::{
     NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
 };
+pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError};
 pub use secret_store_impl::SecretStoreImpl;
 pub use traits::{
     BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, JsonWrite, MigrationStep,
