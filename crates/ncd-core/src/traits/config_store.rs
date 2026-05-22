@@ -47,6 +47,13 @@ impl JsonTransaction {
     pub fn is_empty(&self) -> bool {
         self.writes.is_empty() && self.deletes.is_empty()
     }
+
+    /// Merge another transaction into this one.
+    /// Writes and deletes from `other` are appended to `self`.
+    pub fn merge(&mut self, other: JsonTransaction) {
+        self.writes.extend(other.writes);
+        self.deletes.extend(other.deletes);
+    }
 }
 
 pub trait ConfigStore: Send + Sync {

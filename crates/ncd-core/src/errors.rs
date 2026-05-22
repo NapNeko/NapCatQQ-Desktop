@@ -20,6 +20,8 @@ pub enum ConfigError {
     InvalidPayload,
     #[error("invalid config payload: {0}")]
     InvalidPayloadDetail(String),
+    #[error("configuration file not found: {0}")]
+    NotFound(String),
     #[error("configuration I/O failed: {0}")]
     Io(String),
     #[error("configuration JSON failed: {0}")]

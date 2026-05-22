@@ -151,7 +151,13 @@ impl ConfigStore for LocalConfigStore {
 
     fn read_json(&self, path: &Path) -> Result<Value, ConfigError> {
         self.ensure_within_root(path)?;
-        let text = fs::read_to_string(path).map_err(to_io_error)?;
+        let text = match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(ConfigError::NotFound(path.display().to_string()));
+            }
+            Err(error) => return Err(to_io_error(error)),
+        };
         serde_json::from_str(&text).map_err(|error| ConfigError::Json(error.to_string()))
     }
 

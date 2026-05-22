@@ -102,6 +102,8 @@ fn migrate_bot_entry(
     rules.extend(ensure_connect_shape(payload));
     rules.extend(normalize_advanced(payload));
     rules.extend(normalize_bot_fields(payload, index, secrets, warnings)?);
+    rules.extend(normalize_qqid(payload));
+    rules.extend(normalize_urls(payload));
 
     Ok(rules)
 }
@@ -485,6 +487,65 @@ fn legacy_websocket_clients(reverse_ws: &Value) -> Vec<Value> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Convert string QQID to number in the raw JSON so that `BotConfig` can
+/// deserialize it with plain `u64` (no `deserialize_with` needed).
+fn normalize_qqid(payload: &mut Map<String, Value>) -> Vec<String> {
+    let mut rules = Vec::new();
+    let bot = match payload.get_mut("bot").and_then(Value::as_object_mut) {
+        Some(bot) => bot,
+        None => return rules,
+    };
+    if let Some(value) = bot.get("QQID") {
+        match value {
+            Value::String(s) => {
+                if let Ok(num) = s.trim().parse::<u64>() {
+                    bot.insert("QQID".to_string(), Value::from(num));
+                    rules.push("bot.QQID string -> number".to_string());
+                }
+            }
+            Value::Number(n) => {
+                if n.as_u64().is_none() {
+                    if let Some(i) = n.as_i64() {
+                        if let Ok(u) = u64::try_from(i) {
+                            bot.insert("QQID".to_string(), Value::from(u));
+                            rules.push("bot.QQID i64 -> u64".to_string());
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    rules
+}
+
+/// Validate that URL fields in connect entries are non-empty.
+/// Replaces the `deserialize_url` serde helper — validation now happens at the Value level.
+fn normalize_urls(payload: &mut Map<String, Value>) -> Vec<String> {
+    let rules = Vec::new();
+    let connect = match payload.get_mut("connect").and_then(Value::as_object_mut) {
+        Some(c) => c,
+        None => return rules,
+    };
+    for key in ["httpClients", "websocketClients"] {
+        if let Some(entries) = connect.get_mut(key).and_then(Value::as_array_mut) {
+            for entry in entries.iter_mut() {
+                if let Some(obj) = entry.as_object_mut() {
+                    if let Some(url) = obj.get("url").and_then(Value::as_str) {
+                        if url.trim().is_empty() {
+                            obj.insert(
+                                "url".to_string(),
+                                Value::from("ws://127.0.0.1:6700"),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rules
 }
 
 #[cfg(test)]

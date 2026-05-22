@@ -1,7 +1,10 @@
 pub mod app_config_migration;
+pub mod backend_config_renderer;
 pub mod bootstrap;
 pub mod bot_actor;
+pub mod bot_config;
 pub mod bot_config_migration;
+pub mod bot_config_repo_impl;
 pub mod config_store_impl;
 pub mod errors;
 pub mod events;
@@ -19,6 +22,13 @@ pub mod traits;
 
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
 pub use bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
+pub use bot_config::{
+    AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
+    BypassConfig, ConnectConfig, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LogLevel,
+    MessagePostFormat, NetworkBaseFields, O3HookMode, TimeUnit, WebsocketClientConfig,
+    WebsocketServerConfig, WsRole,
+};
+pub use bot_config_repo_impl::LocalBotConfigRepo;
 pub use config_store_impl::LocalConfigStore;
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use events::{
@@ -42,10 +52,13 @@ pub use runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LocalRuntimeBackend,
     LogSnapshot, ProcessHandle, RemoteRuntimeBackend, StopMode, TailOpts,
 };
+pub use backend_config_renderer::{
+    NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
+};
 pub use secret_store_impl::SecretStoreImpl;
 pub use traits::{
-    ConfigStore, JsonTransaction, JsonWrite, MigrationStep, PathProbe, SecretStore,
-    TransactionReport,
+    BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, JsonWrite, MigrationStep,
+    PathProbe, RenderError, SecretStore, TransactionReport,
 };
 
 #[cfg(test)]
