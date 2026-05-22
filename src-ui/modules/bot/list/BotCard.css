@@ -32,7 +32,19 @@
 }
 
 .state-starting .ndf-card-accent-bar {
-  background-color: var(--ndf-border-accent); /* Blue */
+  background-color: var(--colorBrandForegroundLink); /* Blue */
+}
+
+.state-stopping .ndf-card-accent-bar {
+  background-color: #d83b01; /* Orange warning */
+}
+
+.state-crashed .ndf-card-accent-bar {
+  background-color: #bc2f32; /* Red danger */
+}
+
+.state-repairing .ndf-card-accent-bar {
+  background-color: #0078d4; /* Repairing info blue */
 }
 
 /* Header actions layout */
@@ -102,6 +114,8 @@
   flex-direction: column;
   gap: 6px;
   flex: 1;
+  max-height: 100px;
+  overflow-y: auto;
 }
 
 .ndf-info-item {
@@ -117,17 +131,6 @@
   flex-shrink: 0;
 }
 
-.ndf-pill-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.ndf-pill {
-  font-size: 9px !important;
-  padding: 1px 4px !important;
-}
-
 /* Batch mode styles - no checkbox, whole card selection */
 .ndf-bot-card.batch-mode {
   cursor: pointer;
@@ -140,6 +143,6 @@
 }
 
 .ndf-bot-card.batch-mode.selected {
-  border-color: var(--ndf-border-accent) !important;
-  box-shadow: 0 0 0 2px var(--ndf-border-accent), var(--ndf-shadow-card) !important;
+  border-color: var(--colorBrandForegroundLink) !important;
+  box-shadow: 0 0 0 2px var(--colorBrandForegroundLink), var(--ndf-shadow-card) !important;
 }

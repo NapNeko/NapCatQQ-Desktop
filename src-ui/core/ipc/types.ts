@@ -112,18 +112,25 @@ export interface RemoteFileEntry {
   size: number;
 }
 
+export interface BotActorSnapshot {
+  bot_id: string;
+  state: BotActorState;
+  revision: number;
+  token_generation: number;
+  pending_restart: boolean;
+  last_transition?: string | null;
+  last_error?: string | null;
+}
+
+export interface BatchResultResponse {
+  succeeded: string[];
+  failed: [string, string][];
+}
+
 export type DomainEvent =
   | {
       kind: 'bot_state_changed';
-      snapshot: {
-        bot_id: string;
-        state: BotActorState;
-        revision: number;
-        token_generation: number;
-        pending_restart: boolean;
-        last_transition?: string | null;
-        last_error?: string | null;
-      };
+      snapshot: BotActorSnapshot;
       reason?: string | null;
     }
   | {

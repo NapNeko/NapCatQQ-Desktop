@@ -1,0 +1,40 @@
+/* Overlay Floating Bottom CommandBar Chip for Batch Actions */
+.ndf-bottom-overlay-toolbar {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--ndf-bg-card);
+  border: 1px solid var(--ndf-border-strong);
+  border-radius: 10px;
+  box-shadow: var(--ndf-shadow-popup);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 999;
+  animation: slideUpToolbar 0.18s cubic-bezier(0.1, 0.9, 0.2, 1.0) forwards;
+}
+
+.ndf-bottom-toolbar-left {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.ndf-bottom-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes slideUpToolbar {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}

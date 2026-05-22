@@ -5,7 +5,7 @@ import { PageHeader } from '../shared/components/PageHeader';
 import { StatusBar } from '../shared/components/StatusBar';
 
 import { BootstrapPanel } from '../modules/bootstrap/BootstrapPanel';
-import { BotStatusPanel } from '../modules/bot/BotStatusPanel';
+import { BotPage } from '../modules/bot/BotPage';
 import { RemoteHostPanel } from '../modules/remote/RemoteHostPanel';
 import { EventPanel } from '../modules/events/EventPanel';
 import { client, isTauri } from '../core/ipc/client';
@@ -33,7 +33,7 @@ export const App: React.FC = () => {
       case 'overview':
         return <BootstrapPanel onNavigate={(tab) => setActiveTab(tab)} />;
       case 'bots':
-        return <BotStatusPanel />;
+        return <BotPage />;
       case 'remote':
         return <RemoteHostPanel />;
       case 'events':

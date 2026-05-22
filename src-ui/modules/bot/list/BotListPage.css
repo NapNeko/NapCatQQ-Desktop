@@ -7,7 +7,7 @@
 .ndf-bot-flow-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); /* Flow wrap layout */
-  gap: 12px;
+  gap: 16px;
   max-width: 1200px;
   margin: 0 auto;
   padding-bottom: 80px; /* Room for floating action button overlap */
@@ -17,19 +17,19 @@
 .ndf-floating-group {
   position: absolute;
   right: 24px;
-  bottom: 24px; /* 完美禁锢在内容画布内部，不发生状态栏重叠与截断 */
+  bottom: 24px; /* Canvas-bound overlay floating group, no overlap with footer */
   display: flex;
-  flex-direction: column-reverse; /* 主按钮置底，辅按钮向上层叠 */
+  flex-direction: column-reverse; /* Main FAB at the bottom, helpers pile above it */
   gap: 10px;
   z-index: 1000;
 }
 
-/* Custom circular buttons following qfluentwidgets aesthetics */
+/* Custom circular buttons following fluent aesthetics */
 .ndf-circle-btn {
   width: 42px !important;
   height: 42px !important;
   min-width: auto !important;
-  flex-shrink: 0 !important; /* 核心：防止圆按钮在窗口收窄或受 Flex 约束时被压扁 */
+  flex-shrink: 0 !important; /* Prevent squishing inside Flex layouts */
   border-radius: 50% !important;
   padding: 0 !important;
   display: inline-flex !important;
@@ -48,54 +48,14 @@
 
 .ndf-circle-btn.active {
   background-color: #edf4fa !important;
-  border-color: var(--ndf-border-accent) !important;
+  border-color: var(--colorBrandForegroundLink) !important;
 }
 
 .ndf-primary-circle {
-  background-color: var(--ndf-border-accent) !important;
+  background-color: var(--colorBrandForegroundLink) !important;
   border: none !important;
 }
 
 .ndf-primary-circle:hover {
-  background-color: #1c86ee !important;
-}
-
-/* Overlay Floating Bottom CommandBar Chip */
-.ndf-bottom-overlay-toolbar {
-  position: fixed;
-  bottom: 48px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: var(--ndf-bg-card);
-  border: 1px solid var(--ndf-border-strong);
-  border-radius: 10px;
-  box-shadow: var(--ndf-shadow-popup);
-  padding: 6px 14px;
-  display: flex;
-  align-items: center;
-  z-index: 999;
-  animation: slideUp 0.18s cubic-bezier(0.1, 0.9, 0.2, 1.0) forwards;
-}
-
-.ndf-bottom-toolbar-left {
-  display: flex;
-  align-items: center;
-  white-space: nowrap;
-}
-
-.ndf-bottom-toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 12px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
+  background-color: var(--colorBrandBackgroundHover) !important;
 }

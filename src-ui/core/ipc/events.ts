@@ -5,6 +5,19 @@ import { isTauri } from './client';
 export type EventCallback = (event: any) => void;
 export type UnsubscribeFn = () => void;
 
+const activeMockCallbacks = new Set<EventCallback>();
+
+// Helper to trigger custom mock events in standalone mode
+export function emitMockEvent(event: any) {
+  for (const cb of activeMockCallbacks) {
+    try {
+      cb(event);
+    } catch (err) {
+      console.error('Error invoking mock event callback:', err);
+    }
+  }
+}
+
 // Listen to all relevant Tauri events
 export async function subscribeToEvents(callback: EventCallback): Promise<UnsubscribeFn> {
   if (isTauri) {
@@ -41,6 +54,7 @@ export async function subscribeToEvents(callback: EventCallback): Promise<Unsubs
       }
     };
   } else {
+    activeMockCallbacks.add(callback);
     // Standalone Web View: generate elegant periodic mock events
     let isUnsubscribed = false;
     const intervalIds: any[] = [];
@@ -95,6 +109,7 @@ export async function subscribeToEvents(callback: EventCallback): Promise<Unsubs
 
     return () => {
       isUnsubscribed = true;
+      activeMockCallbacks.delete(callback);
       for (const id of intervalIds) {
         clearTimeout(id);
         clearInterval(id);
