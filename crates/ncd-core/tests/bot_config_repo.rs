@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use ncd_core::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
-    BotConfigRepo, ConnectConfig, LocalBotConfigRepo, LocalConfigStore, RuntimeTarget, SecretStore,
-    SecretStoreImpl, JsonTransaction, ConfigStore,
+    BotConfigRepo, ConfigStore, ConnectConfig, JsonTransaction, LocalBotConfigRepo,
+    LocalConfigStore, RuntimeTarget, SecretStore, SecretStoreImpl,
 };
 
 fn bot_config(qq_id: u64, name: &str) -> BotConfig {
@@ -24,10 +24,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
 
 fn make_repo(
     root: &std::path::Path,
-) -> (
-    Arc<LocalConfigStore>,
-    LocalBotConfigRepo<LocalConfigStore>,
-) {
+) -> (Arc<LocalConfigStore>, LocalBotConfigRepo<LocalConfigStore>) {
     let store = Arc::new(LocalConfigStore::new(root));
     let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),

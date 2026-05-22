@@ -1,11 +1,141 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
+use async_trait::async_trait;
+use tokio::sync::Mutex;
+
 use ncd_core::{
-    AdvancedConfig, AutoRestartSchedule, BackendType, BotActorState, BotBasicConfig, BotConfig,
-    BotConfigRepo, BotId, BotManager, BotManagerError, BroadcastEventBus, ConnectConfig,
-    EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore, NapCatConfigRenderer,
-    RuntimeTarget, SecretStore, SecretStoreImpl,
+    AdvancedConfig, AutoRestartSchedule, BackendKind, BackendType, BotActorState, BotBackend,
+    BotBackendError, BotBasicConfig, BotConfig, BotConfigRepo, BotId, BotManager, BotManagerError,
+    BotRuntimeConfig, BotStartCtx, BotStatus, BroadcastEventBus, ConfigStore, ConnectConfig,
+    DispatchRenderer, EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore,
+    RuntimeLaunchPlan, RuntimeLaunchPlanError, RuntimeLaunchPlanner, SecretStore, SecretStoreImpl,
+    StopMode, TailOpts,
 };
+
+#[derive(Default)]
+struct FakeBackend {
+    running: Mutex<HashSet<BotId>>,
+    fail_start: Mutex<HashSet<BotId>>,
+    last_config: Mutex<Option<BotRuntimeConfig>>,
+}
+
+impl FakeBackend {
+    async fn fail_next_start(&self, bot_id: impl Into<BotId>) {
+        self.fail_start.lock().await.insert(bot_id.into());
+    }
+}
+
+#[async_trait]
+impl BotBackend for FakeBackend {
+    fn id(&self) -> &BotId {
+        static ID: std::sync::OnceLock<BotId> = std::sync::OnceLock::new();
+        ID.get_or_init(|| BotId::new("fake-backend"))
+    }
+
+    fn kind(&self) -> BackendKind {
+        BackendKind::Local
+    }
+
+    fn flavor(&self) -> ncd_core::BotFlavor {
+        ncd_core::BotFlavor::NapCat
+    }
+
+    async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        self.last_config.lock().await.replace(ctx.config.clone());
+        if self.fail_start.lock().await.remove(&ctx.config.bot_id) {
+            return Err(BotBackendError::Io("fake start failed".to_string()));
+        }
+        self.running.lock().await.insert(ctx.config.bot_id.clone());
+        Ok(BotStatus::running(ctx.config.bot_id.clone(), 42, 1))
+    }
+
+    async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+        self.running.lock().await.remove(&bot_id);
+        Ok(())
+    }
+
+    async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
+        if self.running.lock().await.contains(&bot_id) {
+            Ok(BotStatus::running(bot_id, 42, 1))
+        } else {
+            Ok(BotStatus::stopped(bot_id))
+        }
+    }
+
+    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
+        Err(BotBackendError::ConfigNotFound(bot_id))
+    }
+
+    async fn write_config(
+        &self,
+        _bot_id: BotId,
+        _cfg: &BotRuntimeConfig,
+    ) -> Result<(), BotBackendError> {
+        Ok(())
+    }
+
+    async fn tail_log(
+        &self,
+        _bot_id: BotId,
+        _opts: TailOpts,
+    ) -> Result<ncd_core::LogSnapshot, BotBackendError> {
+        Ok(ncd_core::LogSnapshot {
+            lines: Vec::new(),
+            total_lines: 0,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TestLaunchPlanner;
+
+#[async_trait]
+impl RuntimeLaunchPlanner for TestLaunchPlanner {
+    async fn build_plan(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+    ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
+        match config.bot.backend_type {
+            BackendType::NapCat => Ok(RuntimeLaunchPlan::NapCat(ncd_core::NapCatLaunchPlan {
+                runtime_root: std::path::PathBuf::from("test-runtime"),
+                napcat_dir: std::path::PathBuf::from("test-runtime/NapCatQQ"),
+                program: std::path::PathBuf::from("test-runtime/NapCatQQ/NapCatWinBootMain.exe"),
+                args: vec![
+                    "C:/QQ/QQ.exe".to_string(),
+                    "test-runtime/NapCatQQ/NapCatWinBootHook.dll".to_string(),
+                    bot_id.as_str().to_string(),
+                ],
+                environment: std::collections::BTreeMap::from([
+                    (
+                        "NAPCAT_PATCH_PACKAGE".to_string(),
+                        "test-runtime/NapCatQQ/qqnt.json".to_string(),
+                    ),
+                    (
+                        "NAPCAT_LOAD_PATH".to_string(),
+                        "test-runtime/NapCatQQ/loadNapCat.js".to_string(),
+                    ),
+                    (
+                        "NAPCAT_INJECT_PATH".to_string(),
+                        "test-runtime/NapCatQQ/NapCatWinBootHook.dll".to_string(),
+                    ),
+                    (
+                        "NAPCAT_LAUNCHER_PATH".to_string(),
+                        "test-runtime/NapCatQQ/NapCatWinBootMain.exe".to_string(),
+                    ),
+                    (
+                        "NAPCAT_MAIN_PATH".to_string(),
+                        "test-runtime/NapCatQQ/napcat.mjs".to_string(),
+                    ),
+                ]),
+                working_dir: std::path::PathBuf::from("test-runtime/NapCatQQ"),
+                load_script_path: std::path::PathBuf::from("test-runtime/NapCatQQ/loadNapCat.js"),
+            })),
+            BackendType::SnowLuma => Err(RuntimeLaunchPlanError::SnowLumaNotImplemented),
+        }
+    }
+}
 
 fn bot_config(qq_id: u64, name: &str) -> BotConfig {
     BotConfig {
@@ -15,7 +145,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
             music_sign_url: String::new(),
             auto_restart_schedule: AutoRestartSchedule::default(),
             offline_auto_restart: false,
-            runtime_target: RuntimeTarget::Local,
+            runtime_target: ncd_core::RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
         },
         connect: ConnectConfig::default(),
@@ -34,6 +164,7 @@ fn make_manager(
 ) -> (
     Arc<LocalConfigStore>,
     Arc<LocalBotConfigRepo<LocalConfigStore>>,
+    Arc<FakeBackend>,
     BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>,
 ) {
     let store = Arc::new(LocalConfigStore::new(root));
@@ -41,15 +172,177 @@ fn make_manager(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
     );
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(NapCatConfigRenderer::new(root.join("napcat_config")));
+    let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
+    let backend = Arc::new(FakeBackend::default());
+    let event_bus = Arc::new(BroadcastEventBus::default());
+    let planner = Arc::new(TestLaunchPlanner);
+    let manager = BotManager::new(
+        Arc::clone(&repo),
+        Arc::clone(&store),
+        renderer,
+        backend.clone(),
+        planner,
+        event_bus,
+    );
+    (store, repo, backend, manager)
+}
+
+fn make_manager_with_planner(
+    root: &std::path::Path,
+    planner: Arc<dyn RuntimeLaunchPlanner>,
+) -> (
+    Arc<LocalConfigStore>,
+    Arc<LocalBotConfigRepo<LocalConfigStore>>,
+    Arc<FakeBackend>,
+    BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>,
+) {
+    let store = Arc::new(LocalConfigStore::new(root));
+    let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
+        SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
+    );
+    let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
+    let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
+    let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
     let manager = BotManager::new(
         Arc::clone(&repo),
         Arc::clone(&store),
         renderer,
+        backend.clone(),
+        planner,
         event_bus,
     );
-    (store, repo, manager)
+    (store, repo, backend, manager)
+}
+
+fn touch(path: &std::path::Path) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, b"").unwrap();
+}
+
+fn prepare_napcat_runtime(root: &std::path::Path) {
+    let napcat_dir = root.join("NapCatQQ");
+    touch(&napcat_dir.join("NapCatWinBootMain.exe"));
+    touch(&napcat_dir.join("NapCatWinBootHook.dll"));
+    touch(&napcat_dir.join("napcat.mjs"));
+    touch(&napcat_dir.join("qqnt.json"));
+}
+
+async fn build_plan_with_fake_qq(
+    runtime_root: &std::path::Path,
+    qq_install: &std::path::Path,
+) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
+    ncd_core::build_napcat_launch_plan_with_qq_install_path(
+        &BotId::new("10001"),
+        &bot_config(10001, "bot"),
+        runtime_root,
+        qq_install,
+    )
+    .await
+}
+
+// ─── NapCat 启动计划 ───────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn napcat_launch_plan_builds_command_env_working_dir_and_load_script() {
+    let temp = tempfile::tempdir().unwrap();
+    let runtime_root = temp.path().join("runtime");
+    let qq_install = temp.path().join("QQNT");
+    prepare_napcat_runtime(&runtime_root);
+    touch(&qq_install.join("QQ.exe"));
+
+    let plan = build_plan_with_fake_qq(&runtime_root, &qq_install)
+        .await
+        .unwrap();
+    let RuntimeLaunchPlan::NapCat(plan) = plan else {
+        panic!("expected NapCat plan");
+    };
+
+    assert_eq!(
+        plan.program,
+        runtime_root.join("NapCatQQ/NapCatWinBootMain.exe")
+    );
+    assert_eq!(
+        plan.args,
+        vec![
+            qq_install.join("QQ.exe").to_string_lossy().to_string(),
+            runtime_root
+                .join("NapCatQQ")
+                .join("NapCatWinBootHook.dll")
+                .to_string_lossy()
+                .to_string(),
+            "10001".to_string(),
+        ]
+    );
+    assert_eq!(plan.working_dir, runtime_root.join("NapCatQQ"));
+    let patch_package = runtime_root
+        .join("NapCatQQ")
+        .join("qqnt.json")
+        .to_string_lossy()
+        .to_string();
+    assert_eq!(
+        plan.environment
+            .get("NAPCAT_PATCH_PACKAGE")
+            .map(String::as_str),
+        Some(patch_package.as_str())
+    );
+    let load_path = plan.load_script_path.to_string_lossy().to_string();
+    assert_eq!(
+        plan.environment.get("NAPCAT_LOAD_PATH").map(String::as_str),
+        Some(load_path.as_str())
+    );
+
+    let script = std::fs::read_to_string(plan.load_script_path).unwrap();
+    assert!(script.starts_with("(async () => {await import('file:///"));
+    assert!(script.contains("napcat.mjs"));
+    assert!(script.ends_with("')})()"));
+}
+
+#[tokio::test]
+async fn napcat_launch_plan_reports_missing_runtime_components() {
+    let temp = tempfile::tempdir().unwrap();
+    let runtime_root = temp.path().join("runtime");
+    let qq_install = temp.path().join("QQNT");
+    touch(&qq_install.join("QQ.exe"));
+
+    let err = build_plan_with_fake_qq(&runtime_root, &qq_install)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("NapCatWinBootMain.exe"));
+
+    prepare_napcat_runtime(&runtime_root);
+    std::fs::remove_file(runtime_root.join("NapCatQQ/NapCatWinBootHook.dll")).unwrap();
+    let err = build_plan_with_fake_qq(&runtime_root, &qq_install)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("NapCatWinBootHook.dll"));
+
+    prepare_napcat_runtime(&runtime_root);
+    std::fs::remove_file(runtime_root.join("NapCatQQ/napcat.mjs")).unwrap();
+    let err = build_plan_with_fake_qq(&runtime_root, &qq_install)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("napcat.mjs"));
+
+    prepare_napcat_runtime(&runtime_root);
+    std::fs::remove_file(runtime_root.join("NapCatQQ/qqnt.json")).unwrap();
+    let err = build_plan_with_fake_qq(&runtime_root, &qq_install)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("qqnt.json"));
+}
+
+#[tokio::test]
+async fn napcat_launch_plan_reports_missing_qq_exe() {
+    let temp = tempfile::tempdir().unwrap();
+    let runtime_root = temp.path().join("runtime");
+    let qq_install = temp.path().join("QQNT");
+    prepare_napcat_runtime(&runtime_root);
+
+    let err = build_plan_with_fake_qq(&runtime_root, &qq_install)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("QQ.exe"));
 }
 
 // ─── 4 开上限 ─────────────────────────────────────────────────────────────────
@@ -57,7 +350,7 @@ fn make_manager(
 #[tokio::test]
 async fn upsert_enforces_4_bot_limit() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
     for i in 1..=4 {
         manager
@@ -80,7 +373,7 @@ async fn upsert_enforces_4_bot_limit() {
 #[tokio::test]
 async fn upsert_existing_bot_does_not_count_toward_limit() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
     for i in 1..=4 {
         manager
@@ -103,28 +396,120 @@ async fn upsert_existing_bot_does_not_count_toward_limit() {
 #[tokio::test]
 async fn start_and_stop_transitions() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
     let bot_id = BotId::new("10001");
-    manager.upsert_bot_config(bot_config(10001, "bot")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10001, "bot"))
+        .await
+        .unwrap();
 
     // 初始状态 Stopped
     let snap = manager.get_snapshot(&bot_id).await.unwrap();
     assert_eq!(snap.state, BotActorState::Stopped);
 
-    // 启动 → Starting
+    // 启动 → Running
     let snap = manager.start_bot(&bot_id).await.unwrap();
-    assert_eq!(snap.state, BotActorState::Starting);
+    assert_eq!(snap.state, BotActorState::Running);
 
-    // 停止 → Stopping
+    // 停止 → Stopped
     let snap = manager.stop_bot(&bot_id).await.unwrap();
-    assert_eq!(snap.state, BotActorState::Stopping);
+    assert_eq!(snap.state, BotActorState::Stopped);
+}
+
+#[tokio::test]
+async fn start_napcat_uses_launch_plan_instead_of_empty_command() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10010");
+
+    manager
+        .upsert_bot_config(bot_config(10010, "bot"))
+        .await
+        .unwrap();
+
+    let snap = manager.start_bot(&bot_id).await.unwrap();
+    assert_eq!(snap.state, BotActorState::Running);
+
+    let config = backend
+        .last_config
+        .lock()
+        .await
+        .clone()
+        .expect("runtime config should be passed to backend");
+    assert_eq!(
+        config.launch_command,
+        vec![
+            "test-runtime/NapCatQQ/NapCatWinBootMain.exe".to_string(),
+            "C:/QQ/QQ.exe".to_string(),
+            "test-runtime/NapCatQQ/NapCatWinBootHook.dll".to_string(),
+            "10010".to_string(),
+        ]
+    );
+    assert_eq!(
+        config.working_dir.as_deref(),
+        Some(std::path::Path::new("test-runtime/NapCatQQ"))
+    );
+    assert_eq!(
+        config
+            .environment
+            .get("NAPCAT_MAIN_PATH")
+            .map(String::as_str),
+        Some("test-runtime/NapCatQQ/napcat.mjs")
+    );
+}
+
+#[tokio::test]
+async fn start_backend_failure_marks_crashed() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10011");
+
+    manager
+        .upsert_bot_config(bot_config(10011, "bot"))
+        .await
+        .unwrap();
+    backend.fail_next_start(bot_id.clone()).await;
+
+    let err = manager.start_bot(&bot_id).await.unwrap_err();
+    assert!(matches!(
+        err,
+        BotManagerError::Runtime(BotBackendError::Io(_))
+    ));
+
+    let snap = manager.get_snapshot(&bot_id).await.unwrap();
+    assert_eq!(snap.state, BotActorState::Crashed);
+    assert_eq!(
+        snap.last_error.as_deref(),
+        Some("io error: fake start failed")
+    );
+}
+
+#[tokio::test]
+async fn snowluma_start_returns_not_implemented_without_running() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10012");
+    let mut config = bot_config(10012, "snowluma");
+    config.bot.backend_type = BackendType::SnowLuma;
+
+    manager.upsert_bot_config(config).await.unwrap();
+
+    let err = manager.start_bot(&bot_id).await.unwrap_err();
+    assert!(err.to_string().contains("SnowLuma 启动链路尚未接入"));
+
+    let snap = manager.get_snapshot(&bot_id).await.unwrap();
+    assert_eq!(snap.state, BotActorState::Crashed);
+    assert_eq!(
+        snap.last_error.as_deref(),
+        Some("SnowLuma 启动链路尚未接入：需要 daemon + WebUI load_process 支持")
+    );
 }
 
 #[tokio::test]
 async fn start_nonexistent_bot_returns_not_found() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
     let err = manager.start_bot(&BotId::new("99999")).await.unwrap_err();
     assert!(matches!(err, BotManagerError::BotNotFound(_)));
@@ -135,12 +520,10 @@ async fn start_nonexistent_bot_returns_not_found() {
 #[tokio::test]
 async fn batch_start_starts_multiple_bots_concurrently() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
     let ids: Vec<BotId> = (1..=3)
-        .map(|i| {
-            BotId::new(format!("{}", 10000 + i))
-        })
+        .map(|i| BotId::new(format!("{}", 10000 + i)))
         .collect();
 
     for i in 1..=3u64 {
@@ -154,17 +537,46 @@ async fn batch_start_starts_multiple_bots_concurrently() {
     assert_eq!(result.succeeded.len(), 3);
     assert!(result.failed.is_empty());
 
-    // 所有 bot 都进入 Starting
+    // 所有 bot 都进入 Running
     for id in &ids {
         let snap = manager.get_snapshot(id).await.unwrap();
-        assert_eq!(snap.state, BotActorState::Starting);
+        assert_eq!(snap.state, BotActorState::Running);
     }
+}
+
+#[tokio::test]
+async fn batch_start_reports_napcat_missing_runtime_component() {
+    let temp = tempfile::tempdir().unwrap();
+    let planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
+        temp.path().join("runtime"),
+    ));
+    let (_, _, _, manager) = make_manager_with_planner(temp.path(), planner);
+    let bot_id = BotId::new("10020");
+
+    manager
+        .upsert_bot_config(bot_config(10020, "bot"))
+        .await
+        .unwrap();
+
+    let result = manager.batch_start(&[bot_id.clone()]).await.unwrap();
+    assert!(result.succeeded.is_empty());
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.failed[0].0, bot_id);
+    assert!(
+        result.failed[0]
+            .1
+            .to_string()
+            .contains("NapCatWinBootMain.exe")
+    );
+
+    let snap = manager.get_snapshot(&BotId::new("10020")).await.unwrap();
+    assert_eq!(snap.state, BotActorState::Crashed);
 }
 
 #[tokio::test]
 async fn batch_stop_stops_running_bots() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
     let ids: Vec<BotId> = (1..=2)
         .map(|i| BotId::new(format!("{}", 10000 + i)))
@@ -187,7 +599,7 @@ async fn batch_stop_stops_running_bots() {
 
     for id in &ids {
         let snap = manager.get_snapshot(id).await.unwrap();
-        assert_eq!(snap.state, BotActorState::Stopping);
+        assert_eq!(snap.state, BotActorState::Stopped);
     }
 }
 
@@ -196,24 +608,24 @@ async fn batch_stop_stops_running_bots() {
 #[tokio::test]
 async fn upsert_running_bot_triggers_restart() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
     let bot_id = BotId::new("10001");
-    manager.upsert_bot_config(bot_config(10001, "bot")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10001, "bot"))
+        .await
+        .unwrap();
 
-    // 启动 → Starting
+    // 启动 → Running
     manager.start_bot(&bot_id).await.unwrap();
     let snap = manager.get_snapshot(&bot_id).await.unwrap();
-    assert_eq!(snap.state, BotActorState::Starting);
+    assert_eq!(snap.state, BotActorState::Running);
 
-    // 由于我们没有直接暴露 actor handle 的 confirm_running，
-    // 我们验证 Starting 状态下 upsert 也会触发 restart
     let snap = manager
         .upsert_bot_config(bot_config(10001, "bot-updated"))
         .await
         .unwrap();
 
-    // Starting 状态 + request_restart → Stopping (pending_restart=true)
     assert_eq!(snap.state, BotActorState::Stopping);
     assert!(snap.pending_restart);
 }
@@ -221,9 +633,12 @@ async fn upsert_running_bot_triggers_restart() {
 #[tokio::test]
 async fn upsert_stopped_bot_does_not_restart() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
-    manager.upsert_bot_config(bot_config(10001, "bot")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10001, "bot"))
+        .await
+        .unwrap();
 
     // Bot 是 Stopped，更新配置不应触发 restart
     let snap = manager
@@ -238,10 +653,12 @@ async fn upsert_stopped_bot_does_not_restart() {
 #[tokio::test]
 async fn bootstrap_auto_starts_marked_bots() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, repo, manager) = make_manager(temp.path());
+    let (_, repo, _, manager) = make_manager(temp.path());
 
     // 先通过 repo 直接写入配置（模拟已有持久化数据）
-    repo.upsert(bot_config_auto_start(10001, "auto-bot")).await.unwrap();
+    repo.upsert(bot_config_auto_start(10001, "auto-bot"))
+        .await
+        .unwrap();
     repo.upsert(bot_config(10002, "manual-bot")).await.unwrap();
 
     let result = manager.bootstrap().await.unwrap();
@@ -256,9 +673,9 @@ async fn bootstrap_auto_starts_marked_bots() {
     // 两个 bot 都被注册为 actor
     assert_eq!(manager.bot_count().await, 2);
 
-    // auto-bot 进入 Starting
+    // auto-bot 进入 Running
     let snap = manager.get_snapshot(&BotId::new("10001")).await.unwrap();
-    assert_eq!(snap.state, BotActorState::Starting);
+    assert_eq!(snap.state, BotActorState::Running);
 
     // manual-bot 保持 Stopped
     let snap = manager.get_snapshot(&BotId::new("10002")).await.unwrap();
@@ -268,10 +685,12 @@ async fn bootstrap_auto_starts_marked_bots() {
 #[tokio::test]
 async fn bootstrap_respects_4_bot_limit_and_reports_skipped() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, repo, manager) = make_manager(temp.path());
+    let (_, repo, _, manager) = make_manager(temp.path());
 
     for i in 1..=6u64 {
-        repo.upsert(bot_config(10000 + i, &format!("bot-{i}"))).await.unwrap();
+        repo.upsert(bot_config(10000 + i, &format!("bot-{i}")))
+            .await
+            .unwrap();
     }
 
     let result = manager.bootstrap().await.unwrap();
@@ -290,12 +709,18 @@ async fn bootstrap_respects_4_bot_limit_and_reports_skipped() {
 #[tokio::test]
 async fn delete_bot_removes_actor_and_config() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, repo, manager) = make_manager(temp.path());
+    let (_, repo, _, manager) = make_manager(temp.path());
 
-    manager.upsert_bot_config(bot_config(10001, "bot")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10001, "bot"))
+        .await
+        .unwrap();
     assert_eq!(manager.bot_count().await, 1);
 
-    manager.delete_bot_config(&BotId::new("10001")).await.unwrap();
+    manager
+        .delete_bot_config(&BotId::new("10001"))
+        .await
+        .unwrap();
 
     assert_eq!(manager.bot_count().await, 0);
     assert_eq!(repo.get(10001).await.unwrap(), None);
@@ -304,7 +729,7 @@ async fn delete_bot_removes_actor_and_config() {
 #[tokio::test]
 async fn batch_delete_stops_and_removes_bots() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, repo, manager) = make_manager(temp.path());
+    let (_, repo, _, manager) = make_manager(temp.path());
 
     for i in 1..=3u64 {
         manager
@@ -318,7 +743,9 @@ async fn batch_delete_stops_and_removes_bots() {
     manager.batch_start(&ids).await.unwrap();
 
     // 批量删除所有 3 个
-    let all_ids: Vec<BotId> = (1..=3).map(|i| BotId::new(format!("{}", 10000 + i))).collect();
+    let all_ids: Vec<BotId> = (1..=3)
+        .map(|i| BotId::new(format!("{}", 10000 + i)))
+        .collect();
     let result = manager.batch_delete(&all_ids).await.unwrap();
 
     assert_eq!(result.succeeded.len(), 3);
@@ -337,7 +764,10 @@ async fn start_bot_publishes_state_change_event() {
         SecretStoreImpl::new_with_force_fallback(temp.path().join("secrets"), true),
     );
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(NapCatConfigRenderer::new(temp.path().join("napcat_config")));
+    let renderer = Arc::new(DispatchRenderer::new(
+        temp.path().join("runtime").join("config"),
+    ));
+    let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
 
     // 先订阅，再操作
@@ -347,10 +777,15 @@ async fn start_bot_publishes_state_change_event() {
         Arc::clone(&repo),
         Arc::clone(&store),
         renderer,
+        backend,
+        Arc::new(TestLaunchPlanner),
         Arc::clone(&event_bus),
     );
 
-    manager.upsert_bot_config(bot_config(10001, "bot")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10001, "bot"))
+        .await
+        .unwrap();
     manager.start_bot(&BotId::new("10001")).await.unwrap();
 
     // 应该收到 bot_created 和 start_requested 两个事件
@@ -365,9 +800,31 @@ async fn start_bot_publishes_state_change_event() {
 // ─── list_snapshots ───────────────────────────────────────────────────────────
 
 #[tokio::test]
+async fn upsert_backend_switch_cleans_old_backend_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+    let config_dir = temp.path().join("runtime").join("config");
+
+    let mut napcat_config = bot_config(10008, "bot");
+    napcat_config.bot.backend_type = BackendType::NapCat;
+    manager.upsert_bot_config(napcat_config).await.unwrap();
+    assert!(config_dir.join("onebot11_10008.json").exists());
+    assert!(config_dir.join("napcat_10008.json").exists());
+    assert!(!config_dir.join("onebot_10008.json").exists());
+
+    let mut snowluma_config = bot_config(10008, "bot");
+    snowluma_config.bot.backend_type = BackendType::SnowLuma;
+    manager.upsert_bot_config(snowluma_config).await.unwrap();
+
+    assert!(config_dir.join("onebot_10008.json").exists());
+    assert!(!config_dir.join("onebot11_10008.json").exists());
+    assert!(!config_dir.join("napcat_10008.json").exists());
+}
+
+#[tokio::test]
 async fn list_snapshots_returns_all_actors() {
     let temp = tempfile::tempdir().unwrap();
-    let (_, _, manager) = make_manager(temp.path());
+    let (_, _, _, manager) = make_manager(temp.path());
 
     for i in 1..=3u64 {
         manager
@@ -387,9 +844,12 @@ async fn upsert_persists_before_creating_actor() {
     // 回归测试：upsert 先写 bot.json 再创建 Actor。
     // 验证：upsert 成功后，repo 里已有数据。
     let temp = tempfile::tempdir().unwrap();
-    let (_, repo, manager) = make_manager(temp.path());
+    let (_, repo, _, manager) = make_manager(temp.path());
 
-    manager.upsert_bot_config(bot_config(10001, "bot")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10001, "bot"))
+        .await
+        .unwrap();
 
     // repo 中必须能读到
     let stored = repo.get(10001).await.unwrap();
@@ -402,10 +862,16 @@ async fn delete_persists_before_removing_actor() {
     // 回归测试：delete 先删 bot.json 再清理 Actor。
     // 验证：即使 Actor 还在（假设 shutdown 慢），repo 里已无数据。
     let temp = tempfile::tempdir().unwrap();
-    let (_, repo, manager) = make_manager(temp.path());
+    let (_, repo, _, manager) = make_manager(temp.path());
 
-    manager.upsert_bot_config(bot_config(10001, "bot")).await.unwrap();
-    manager.delete_bot_config(&BotId::new("10001")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10001, "bot"))
+        .await
+        .unwrap();
+    manager
+        .delete_bot_config(&BotId::new("10001"))
+        .await
+        .unwrap();
 
     // 持久化已删
     assert_eq!(repo.get(10001).await.unwrap(), None);
@@ -417,13 +883,17 @@ async fn delete_persists_before_removing_actor() {
 async fn bootstrap_skipped_bots_are_not_auto_started() {
     // 回归测试：超出上限且标记 auto_start 的 bot 不会被启动。
     let temp = tempfile::tempdir().unwrap();
-    let (_, repo, manager) = make_manager(temp.path());
+    let (_, repo, _, manager) = make_manager(temp.path());
 
     // 前 4 个不自动启动，第 5 个标记 auto_start
     for i in 1..=4u64 {
-        repo.upsert(bot_config(10000 + i, &format!("bot-{i}"))).await.unwrap();
+        repo.upsert(bot_config(10000 + i, &format!("bot-{i}")))
+            .await
+            .unwrap();
     }
-    repo.upsert(bot_config_auto_start(10005, "auto-skipped")).await.unwrap();
+    repo.upsert(bot_config_auto_start(10005, "auto-skipped"))
+        .await
+        .unwrap();
 
     let result = manager.bootstrap().await.unwrap();
 

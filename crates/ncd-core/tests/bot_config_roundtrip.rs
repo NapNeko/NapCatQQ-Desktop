@@ -52,16 +52,19 @@ fn test_legacy_field_names_preserved() {
         enable_websocket: false,
         path: "/".to_string(),
     });
-    config.connect.websocket_servers.push(WebsocketServerConfig {
-        base: network_base("ws"),
-        host: "127.0.0.1".to_string(),
-        port: 3001,
-        report_self_message: false,
-        enable_force_push_event: false,
-        heart_interval: 30000,
-        path: "/".to_string(),
-        role: WsRole::Universal,
-    });
+    config
+        .connect
+        .websocket_servers
+        .push(WebsocketServerConfig {
+            base: network_base("ws"),
+            host: "127.0.0.1".to_string(),
+            port: 3001,
+            report_self_message: false,
+            enable_force_push_event: false,
+            heart_interval: 30000,
+            path: "/".to_string(),
+            role: WsRole::Universal,
+        });
 
     let json = serde_json::to_string(&config).unwrap();
 
@@ -109,16 +112,19 @@ fn test_validate_rejects_duplicate_connect_names_case_insensitive() {
         enable_websocket: false,
         path: "/".to_string(),
     });
-    config.connect.websocket_servers.push(WebsocketServerConfig {
-        base: network_base("MAIN"),
-        host: "127.0.0.1".to_string(),
-        port: 3001,
-        report_self_message: false,
-        enable_force_push_event: false,
-        heart_interval: 30000,
-        path: "/".to_string(),
-        role: WsRole::Universal,
-    });
+    config
+        .connect
+        .websocket_servers
+        .push(WebsocketServerConfig {
+            base: network_base("MAIN"),
+            host: "127.0.0.1".to_string(),
+            port: 3001,
+            report_self_message: false,
+            enable_force_push_event: false,
+            heart_interval: 30000,
+            path: "/".to_string(),
+            role: WsRole::Universal,
+        });
 
     let error = config.validate().unwrap_err();
 
