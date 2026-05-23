@@ -28,6 +28,8 @@ export async function subscribeToEvents(callback: EventCallback): Promise<Unsubs
       'log_appended',
       'bot_error',
       'task_progress',
+      'napcat_webui_available',
+      'bot_process_exited',
     ];
 
     for (const name of eventNames) {

@@ -47,8 +47,6 @@ export type BotFlavor = 'napcat' | 'snowluma';
 
 export type BackendKind = 'local' | 'remote_ssh';
 
-export type StopMode = 'graceful' | 'force';
-
 export interface BotStatus {
   bot_id: string;
   state: BotActorState;
@@ -60,19 +58,6 @@ export interface BotStatus {
   flavor?: BotFlavor; // client-side decorator if needed, or in extra
   backend_kind?: BackendKind; // local or remote_ssh
   runtime_target?: string;
-}
-
-export interface SpawnLocalBotRequest {
-  bot_id: string;
-  flavor?: BotFlavor;
-  launch_command: string[];
-  working_dir?: string | null;
-  environment?: Record<string, string>;
-}
-
-export interface StopLocalBotRequest {
-  bot_id: string;
-  mode?: StopMode;
 }
 
 export interface ConnectRemoteHostRequest {
@@ -129,30 +114,42 @@ export interface BatchResultResponse {
 
 export type DomainEvent =
   | {
-      kind: 'bot_state_changed';
-      snapshot: BotActorSnapshot;
-      reason?: string | null;
-    }
+    kind: 'bot_state_changed';
+    snapshot: BotActorSnapshot;
+    reason?: string | null;
+  }
   | {
-      kind: 'bot_status_changed';
-      status: BotStatus;
-      source?: string | null;
-    }
+    kind: 'bot_status_changed';
+    status: BotStatus;
+    source?: string | null;
+  }
   | {
-      kind: 'bot_log_appended';
-      bot_id: string;
-      line: string;
-      channel?: string | null;
-    }
+    kind: 'bot_log_appended';
+    bot_id: string;
+    line: string;
+    channel?: string | null;
+  }
   | {
-      kind: 'bot_error';
-      bot_id: string;
-      message: string;
-      hint?: string | null;
-    }
+    kind: 'bot_error';
+    bot_id: string;
+    message: string;
+    hint?: string | null;
+  }
   | {
-      kind: 'task_progress';
-      task_id: string;
-      progress: number;
-      message: string;
-    };
+    kind: 'task_progress';
+    task_id: string;
+    progress: number;
+    message: string;
+  }
+  | {
+    kind: 'napcat_webui_available';
+    bot_id: string;
+    port: number;
+    token: string;
+  }
+  | {
+    kind: 'bot_process_exited';
+    bot_id: string;
+    exit_code?: number | null;
+    reason?: string | null;
+  };

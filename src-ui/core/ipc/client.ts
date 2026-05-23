@@ -3,8 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   BootstrapSnapshot,
   BotStatus,
-  SpawnLocalBotRequest,
-  StopLocalBotRequest,
   ConnectRemoteHostRequest,
   RemoteHostConnectionInfo,
   RemoteFileEntry,
@@ -100,58 +98,6 @@ export const client = {
       return await invoke<BotStatus[]>('get_all_bot_statuses');
     }
     return new Promise((resolve) => setTimeout(() => resolve([...mockBots]), 300));
-  },
-
-  spawnLocalBot: async (request: SpawnLocalBotRequest): Promise<BotStatus> => {
-    if (isTauri) {
-      return await invoke<BotStatus>('spawn_local_bot', { request });
-    }
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const bot = mockBots.find((b) => b.bot_id === request.bot_id);
-        if (bot) {
-          bot.state = 'Running';
-          bot.pid = Math.floor(Math.random() * 20000) + 1000;
-          bot.started_at = Math.floor(Date.now() / 1000);
-          bot.memory_rss_bytes = 48000000 + Math.floor(Math.random() * 50000000);
-          resolve(bot);
-        } else {
-          const newBot: BotStatus = {
-            bot_id: request.bot_id,
-            state: 'Running',
-            pid: Math.floor(Math.random() * 20000) + 1000,
-            started_at: Math.floor(Date.now() / 1000),
-            memory_rss_bytes: 64000000,
-            server_total_memory_bytes: 17179869184,
-            backend_kind: 'local',
-            runtime_target: 'local',
-            extra: {},
-          };
-          mockBots.push(newBot);
-          resolve(newBot);
-        }
-      }, 500);
-    });
-  },
-
-  stopLocalBot: async (request: StopLocalBotRequest): Promise<void> => {
-    if (isTauri) {
-      return await invoke<void>('stop_local_bot', { request });
-    }
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const bot = mockBots.find((b) => b.bot_id === request.bot_id);
-        if (bot) {
-          bot.state = 'Stopped';
-          bot.pid = null;
-          bot.started_at = null;
-          bot.memory_rss_bytes = null;
-          resolve();
-        } else {
-          reject(`未找到 Bot ID: ${request.bot_id}`);
-        }
-      }, 500);
-    });
   },
 
   connectRemoteHost: async (request: ConnectRemoteHostRequest): Promise<RemoteHostConnectionInfo> => {
