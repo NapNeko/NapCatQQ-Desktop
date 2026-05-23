@@ -17,6 +17,10 @@ dirs = "5"
 tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "rt-multi-thread", "macros", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 ts-rs = { version = "10", features = ["serde-compat"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+sha2 = "0.10"
+hex = "0.4"
+tracing = "0.1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
@@ -24,3 +28,10 @@ encoding_rs = "0.8"
 
 [dev-dependencies]
 tempfile = "3"
+wiremock = "0.6"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# `test-util` feature enables `tokio::test(start_paused = true)` and
+# `tokio::time::pause()`，专供 `napcat_login_poller` 状态机端到端单测使用。
+tokio = { version = "1", features = ["test-util"] }
+# `proptest` 用于 `napcat_login_poller` 的属性测试 (Property 1/2/3/4/6/7)。
+proptest = "1"
