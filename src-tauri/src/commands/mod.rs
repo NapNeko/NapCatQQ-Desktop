@@ -12,28 +12,12 @@ use crate::AppState;
 use crate::runtime::{
     ConnectRemoteHostRequest, GetRemoteRuntimeStatusRequest, GetRemoteWebuiEndpointRequest,
     ListRemoteFilesRequest, RemoteHostConnectionInfo, RemoteRuntimeStatusResponse,
-    RemoteWebuiEndpointResponse, SpawnLocalBotRequest, StopLocalBotRequest,
+    RemoteWebuiEndpointResponse,
 };
 
 #[tauri::command]
 pub fn get_bootstrap_status(state: State<'_, AppState>) -> BootstrapSnapshot {
     state.snapshot.clone()
-}
-
-#[tauri::command]
-pub async fn spawn_local_bot(
-    state: State<'_, AppState>,
-    request: SpawnLocalBotRequest,
-) -> Result<ncd_core::BotStatus, String> {
-    state.runtime.spawn_local_bot(request).await
-}
-
-#[tauri::command]
-pub async fn stop_local_bot(
-    state: State<'_, AppState>,
-    request: StopLocalBotRequest,
-) -> Result<(), String> {
-    state.runtime.stop_local_bot(request).await
 }
 
 #[tauri::command]
@@ -116,7 +100,6 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::{SpawnLocalBotRequest, StopLocalBotRequest};
     use ncd_core::ConfigStore;
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -164,24 +147,8 @@ mod tests {
 
         state
             .runtime
-            .spawn_local_bot(SpawnLocalBotRequest {
-                bot_id: "10001".to_string(),
-                flavor: ncd_core::BotFlavor::NapCat,
-                launch_command: if cfg!(windows) {
-                    vec![
-                        "timeout".to_string(),
-                        "/T".to_string(),
-                        "2".to_string(),
-                        "/NOBREAK".to_string(),
-                    ]
-                } else {
-                    vec!["sleep".to_string(), "2".to_string()]
-                },
-                working_dir: None,
-                environment: std::collections::BTreeMap::new(),
-            })
-            .await
-            .unwrap();
+            .record_external_status_for_test(ncd_core::BotStatus::running("10001", 42, 1))
+            .await;
 
         state.runtime.publish_runtime_statuses().await;
         let event = subscription.next().await.expect("expected status event");
@@ -191,15 +158,6 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
-
-        state
-            .runtime
-            .stop_local_bot(StopLocalBotRequest {
-                bot_id: "10001".to_string(),
-                mode: ncd_core::StopMode::Force,
-            })
-            .await
-            .unwrap();
     }
 
     #[tokio::test]
