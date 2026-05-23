@@ -5,6 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
 use crate::kinds::RuntimeTarget;
+use crate::snowluma::launch_plan::SnowLumaStartMode;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
@@ -163,6 +164,13 @@ pub struct BotBasicConfig {
     pub runtime_target: RuntimeTarget,
     #[serde(default)]
     pub backend_type: BackendType,
+    #[serde(
+        default,
+        rename = "snowlumaStartMode",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[ts(optional)]
+    pub snowluma_start_mode: Option<SnowLumaStartMode>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -496,4 +504,96 @@ fn default_console_log_level() -> LogLevel {
 
 fn default_o3_hook_mode() -> O3HookMode {
     O3HookMode::On
+}
+
+#[cfg(test)]
+mod snowluma_start_mode_tests {
+    //! `BotBasicConfig.snowluma_start_mode` 字节级 round-trip 锁定。
+    //! 字段约定（ / / ）：
+    //! - JSON key 必须是驼峰 `snowlumaStartMode`（与 legacy `autoRestartSchedule`
+    //! 等已有字段保持驼峰一致）。
+    //! - 字段 `Option<SnowLumaStartMode>` 默认值为 `None`，缺省时**禁止**出现
+    //! 在序列化输出中（`skip_serializing_if = "Option::is_none"`），保证
+    //! 纯 NapCat 用户的配置不会引入新字段。
+    //! - `SnowLumaStartMode` 复用 `snowluma::launch_plan` 已有 enum，通过
+    //! `#[serde(tag = "mode", rename_all = "snake_case")]` 序列化。
+    //! 三个用例分别覆盖 None / ColdStart / HotStart，任一字段 / 字面量漂移
+    //! 都会让对应测试失败。
+    use super::*;
+
+    fn make_basic_config(start_mode: Option<SnowLumaStartMode>) -> BotBasicConfig {
+        BotBasicConfig {
+            name: "test-bot".to_string(),
+            qq_id: 10001,
+            music_sign_url: String::new(),
+            auto_restart_schedule: AutoRestartSchedule::default,
+            offline_auto_restart: false,
+            runtime_target: RuntimeTarget::Local,
+            backend_type: BackendType::SnowLuma,
+            snowluma_start_mode: start_mode,
+        }
+    }
+
+    /// 缺省（`None`）时序列化 **不得** 出现 `snowlumaStartMode` key
+    /// 反序列化忽略缺省字段后字段值仍为 `None`。
+    #[test]
+    fn snowluma_start_mode_none_is_omitted_in_serialization() {
+        let config = make_basic_config(None);
+
+        let json = serde_json::to_string(&config).expect("serialize None");
+        assert!(
+            !json.contains("snowlumaStartMode"),
+            "None 模式不应出现 snowlumaStartMode key，实际 JSON: {json}"
+        );
+
+        let decoded: BotBasicConfig = serde_json::from_str(&json).expect("deserialize None");
+        assert_eq!(decoded, config);
+        assert_eq!(decoded.snowluma_start_mode, None);
+    }
+
+    /// `Some(ColdStart)` 序列化形态：`{"snowlumaStartMode":{"mode":"cold_start"}, ...}`。
+    #[test]
+    fn snowluma_start_mode_cold_start_is_byte_stable() {
+        let config = make_basic_config(Some(SnowLumaStartMode::ColdStart));
+
+        let json = serde_json::to_string(&config).expect("serialize ColdStart");
+        assert!(
+            json.contains(r#""snowlumaStartMode":{"mode":"cold_start"}"#),
+            "缺少 ColdStart 字面量，实际 JSON: {json}"
+        );
+
+        let decoded: BotBasicConfig = serde_json::from_str(&json).expect("deserialize ColdStart");
+        assert_eq!(decoded, config);
+        assert_eq!(
+            decoded.snowluma_start_mode,
+            Some(SnowLumaStartMode::ColdStart)
+        );
+
+        // 二次序列化字节等价。
+        let json_again = serde_json::to_string(&decoded).expect("re-serialize ColdStart");
+        assert_eq!(json.as_bytes(), json_again.as_bytes());
+    }
+
+    /// `Some(HotStart { attach_pid })` 序列化形态：
+    /// `{"snowlumaStartMode":{"mode":"hot_start","attach_pid":12345}, ...}`。
+    #[test]
+    fn snowluma_start_mode_hot_start_is_byte_stable() {
+        let config = make_basic_config(Some(SnowLumaStartMode::HotStart { attach_pid: 12345 }));
+
+        let json = serde_json::to_string(&config).expect("serialize HotStart");
+        assert!(
+            json.contains(r#""snowlumaStartMode":{"mode":"hot_start","attach_pid":12345}"#),
+            "缺少 HotStart 字面量，实际 JSON: {json}"
+        );
+
+        let decoded: BotBasicConfig = serde_json::from_str(&json).expect("deserialize HotStart");
+        assert_eq!(decoded, config);
+        assert_eq!(
+            decoded.snowluma_start_mode,
+            Some(SnowLumaStartMode::HotStart { attach_pid: 12345 })
+        );
+
+        let json_again = serde_json::to_string(&decoded).expect("re-serialize HotStart");
+        assert_eq!(json.as_bytes(), json_again.as_bytes());
+    }
 }

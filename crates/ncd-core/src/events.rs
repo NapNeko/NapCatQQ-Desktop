@@ -4,6 +4,8 @@ use tokio::sync::broadcast;
 use crate::bot_actor::BotActorSnapshot;
 use crate::ids::BotId;
 use crate::runtime_backend::BotStatus;
+use crate::snowluma::daemon::DaemonState;
+use crate::snowluma::status_poller::SnowLumaLoginState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -14,7 +16,7 @@ pub enum DomainEventKind {
     BotError,
     TaskProgress,
     // serde 默认 snake_case 会把 `NapCat...` 切成 `nap_cat_...`；这里
-    // 显式 rename，与 `DomainEvent::tauri_event_name()` 单一来源对齐。
+    // 显式 rename，与 `DomainEvent::tauri_event_name` 单一来源对齐。
     #[serde(rename = "napcat_webui_available")]
     NapCatWebuiAvailable,
     BotProcessExited,
@@ -26,13 +28,25 @@ pub enum DomainEventKind {
     NapCatLoginOnline,
     #[serde(rename = "napcat_login_invalidated")]
     NapCatLoginInvalidated,
+    // SnowLuma 系列：避免 `rename_all = "snake_case"` 把 `SnowLuma...` 切成
+    // `snow_luma_...`，每个 variant 显式 rename。
+    #[serde(rename = "snowluma_daemon_state_changed")]
+    SnowLumaDaemonStateChanged,
+    #[serde(rename = "snowluma_bot_injected")]
+    SnowLumaBotInjected,
+    #[serde(rename = "snowluma_uin_detected")]
+    SnowLumaUinDetected,
+    #[serde(rename = "snowluma_login_state_changed")]
+    SnowLumaLoginStateChanged,
+    #[serde(rename = "snowluma_pid_set_changed")]
+    SnowLumaPidSetChanged,
+    #[serde(rename = "snowluma_daemon_log")]
+    SnowLumaDaemonLog,
 }
 
 /// 描述 NapCat WebUI 登录失效的原因。
-///
 /// - `Kicked`: 在线状态下账号被踢下线（在线 → 离线 + `is_login=false`）。
 /// - `LoggedOut`: 用户主动登出或会话过期，从未达到 `online=true` 即失效。
-///
 /// `#[serde(rename_all = "snake_case")]` 与前端 `NapCatLoginInvalidationReason`
 /// 字面量类型 (`'kicked' | 'logged_out'`) 保持字面量一致。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,7 +90,7 @@ pub enum DomainEvent {
     //
     // 注意：serde 默认 snake_case 会把 `NapCatWebuiAvailable` 切成
     // `nap_cat_webui_available`（连续大写字母都算单词边界）。这里显式
-    // rename，与 `tauri_event_name()` 保持单一字面量来源。
+    // rename，与 `tauri_event_name` 保持单一字面量来源。
     #[serde(rename = "napcat_webui_available")]
     NapCatWebuiAvailable {
         bot_id: BotId,
@@ -92,30 +106,63 @@ pub enum DomainEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
-    /// NapCat WebUI 登录二维码可用：通常是 `data:image/png;base64,...`，
+    /// NapCat WebUI 登录二维码可用：通常是 `data:image/png;base64,...`
     /// 也可能是普通 URL；后端透传，不做解析。
     #[serde(rename = "napcat_login_qrcode")]
-    NapCatLoginQrcode {
-        bot_id: BotId,
-        qrcode_url: String,
-    },
+    NapCatLoginQrcode { bot_id: BotId, qrcode_url: String },
     /// NapCat WebUI 登录二维码应当从 UI 上移除（已扫码登录、被踢、Poller dispose 等场景）。
     #[serde(rename = "napcat_login_qrcode_removed")]
-    NapCatLoginQrcodeRemoved {
-        bot_id: BotId,
-    },
+    NapCatLoginQrcodeRemoved { bot_id: BotId },
     /// NapCat WebUI 在线状态变化（来自 `GetQQLoginInfo.online`）。
     #[serde(rename = "napcat_login_online")]
-    NapCatLoginOnline {
-        bot_id: BotId,
-        online: bool,
-    },
+    NapCatLoginOnline { bot_id: BotId, online: bool },
     /// NapCat WebUI 登录失效（被踢 / 主动登出）。
     #[serde(rename = "napcat_login_invalidated")]
     NapCatLoginInvalidated {
         bot_id: BotId,
         reason: NapCatLoginInvalidationReason,
     },
+    // ------------------------------------------------------------------
+    // SnowLuma 系列 6 个 variant
+    //
+    // 每个 variant **显式** `#[serde(rename = "snowluma_xxx")]`：避免顶层
+    // `rename_all = "snake_case"` 把 `SnowLuma...` 切成 `snow_luma_...`
+    // 。
+    // ------------------------------------------------------------------
+    /// SnowLuma daemon 状态机切换。
+    /// `state` 复用 `crates/ncd-core/src/snowluma/daemon.rs` 中的 ts-rs
+    /// 派生 enum；`ref_count` 仅作监控信号；`reason` 在 Crashed 时携带
+    /// daemon 最近一次错误描述。
+    #[serde(rename = "snowluma_daemon_state_changed")]
+    SnowLumaDaemonStateChanged {
+        state: DaemonState,
+        ref_count: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    /// `/api/processes/:pid/load` 注入成功后发布（物理就绪）。
+    /// **不**等同于 QQ 已登录在线（业务就绪由 `SnowLumaLoginStateChanged` 表达）。
+    #[serde(rename = "snowluma_bot_injected")]
+    SnowLumaBotInjected { bot_id: BotId, qq_pid: u32 },
+    /// SnowLumaStatusPoller 首次锁定 UIN 时发布。
+    /// UIN 为字符串（与 `/api/qq-list` / `/api/processes` payload 字段类型对齐）。
+    #[serde(rename = "snowluma_uin_detected")]
+    SnowLumaUinDetected { bot_id: BotId, uin: String },
+    /// SnowLumaStatusPoller 合成出的 4 档登录态变化事件。
+    #[serde(rename = "snowluma_login_state_changed")]
+    SnowLumaLoginStateChanged {
+        bot_id: BotId,
+        state: SnowLumaLoginState,
+    },
+    /// 已锁定 UIN 关联的 PID 集合发生变化（升序），由 manager 据此回写
+    /// `ancillary_pids`。
+    #[serde(rename = "snowluma_pid_set_changed")]
+    SnowLumaPidSetChanged { bot_id: BotId, pids: Vec<u32> },
+    /// SnowLuma daemon 共享的 node.exe stdout 单行（已经过 ANSI / 控制
+    /// 字符清洗）。多 SL Bot 共享同一份 daemon stdout，故本 variant **不**
+    /// 携带 `bot_id`，订阅方根据需要广播给所有 SL flavor BotLogPage。
+    #[serde(rename = "snowluma_daemon_log")]
+    SnowLumaDaemonLog { line: String },
 }
 
 impl DomainEvent {
@@ -132,6 +179,12 @@ impl DomainEvent {
             Self::NapCatLoginQrcodeRemoved { .. } => DomainEventKind::NapCatLoginQrcodeRemoved,
             Self::NapCatLoginOnline { .. } => DomainEventKind::NapCatLoginOnline,
             Self::NapCatLoginInvalidated { .. } => DomainEventKind::NapCatLoginInvalidated,
+            Self::SnowLumaDaemonStateChanged { .. } => DomainEventKind::SnowLumaDaemonStateChanged,
+            Self::SnowLumaBotInjected { .. } => DomainEventKind::SnowLumaBotInjected,
+            Self::SnowLumaUinDetected { .. } => DomainEventKind::SnowLumaUinDetected,
+            Self::SnowLumaLoginStateChanged { .. } => DomainEventKind::SnowLumaLoginStateChanged,
+            Self::SnowLumaPidSetChanged { .. } => DomainEventKind::SnowLumaPidSetChanged,
+            Self::SnowLumaDaemonLog { .. } => DomainEventKind::SnowLumaDaemonLog,
         }
     }
 
@@ -148,6 +201,12 @@ impl DomainEvent {
             Self::NapCatLoginQrcodeRemoved { .. } => "napcat_login_qrcode_removed",
             Self::NapCatLoginOnline { .. } => "napcat_login_online",
             Self::NapCatLoginInvalidated { .. } => "napcat_login_invalidated",
+            Self::SnowLumaDaemonStateChanged { .. } => "snowluma_daemon_state_changed",
+            Self::SnowLumaBotInjected { .. } => "snowluma_bot_injected",
+            Self::SnowLumaUinDetected { .. } => "snowluma_uin_detected",
+            Self::SnowLumaLoginStateChanged { .. } => "snowluma_login_state_changed",
+            Self::SnowLumaPidSetChanged { .. } => "snowluma_pid_set_changed",
+            Self::SnowLumaDaemonLog { .. } => "snowluma_daemon_log",
         }
     }
 
@@ -164,6 +223,14 @@ impl DomainEvent {
             Self::NapCatLoginQrcodeRemoved { bot_id, .. } => Some(bot_id),
             Self::NapCatLoginOnline { bot_id, .. } => Some(bot_id),
             Self::NapCatLoginInvalidated { bot_id, .. } => Some(bot_id),
+            // SnowLuma 系列：daemon 级事件 / 仅 daemon log 不携带 bot_id
+            // 其他 5 个 per-Bot 事件返回 Some。
+            Self::SnowLumaDaemonStateChanged { .. } => None,
+            Self::SnowLumaBotInjected { bot_id, .. } => Some(bot_id),
+            Self::SnowLumaUinDetected { bot_id, .. } => Some(bot_id),
+            Self::SnowLumaLoginStateChanged { bot_id, .. } => Some(bot_id),
+            Self::SnowLumaPidSetChanged { bot_id, .. } => Some(bot_id),
+            Self::SnowLumaDaemonLog { .. } => None,
         }
     }
 
@@ -265,6 +332,57 @@ impl DomainEvent {
             bot_id: bot_id.into(),
             reason,
         }
+    }
+
+    // ------------------------------------------------------------------
+    // SnowLuma 系列 helper 构造器
+    // ------------------------------------------------------------------
+
+    pub fn snowluma_daemon_state_changed(
+        state: DaemonState,
+        ref_count: u32,
+        reason: Option<String>,
+    ) -> Self {
+        Self::SnowLumaDaemonStateChanged {
+            state,
+            ref_count,
+            reason,
+        }
+    }
+
+    pub fn snowluma_bot_injected(bot_id: impl Into<BotId>, qq_pid: u32) -> Self {
+        Self::SnowLumaBotInjected {
+            bot_id: bot_id.into(),
+            qq_pid,
+        }
+    }
+
+    pub fn snowluma_uin_detected(bot_id: impl Into<BotId>, uin: impl Into<String>) -> Self {
+        Self::SnowLumaUinDetected {
+            bot_id: bot_id.into(),
+            uin: uin.into(),
+        }
+    }
+
+    pub fn snowluma_login_state_changed(
+        bot_id: impl Into<BotId>,
+        state: SnowLumaLoginState,
+    ) -> Self {
+        Self::SnowLumaLoginStateChanged {
+            bot_id: bot_id.into(),
+            state,
+        }
+    }
+
+    pub fn snowluma_pid_set_changed(bot_id: impl Into<BotId>, pids: Vec<u32>) -> Self {
+        Self::SnowLumaPidSetChanged {
+            bot_id: bot_id.into(),
+            pids,
+        }
+    }
+
+    pub fn snowluma_daemon_log(line: impl Into<String>) -> Self {
+        Self::SnowLumaDaemonLog { line: line.into() }
     }
 }
 
@@ -371,7 +489,7 @@ mod tests {
     #[test]
     fn event_name_mapping_matches_frontend_contract() {
         let event = DomainEvent::bot_log("10001", "hello");
-        assert_eq!(event.tauri_event_name(), "bot_log_appended");
+        assert_eq!(event.tauri_event_name, "bot_log_appended");
         assert_eq!(event.kind(), DomainEventKind::BotLogAppended);
     }
 
@@ -397,7 +515,7 @@ mod tests {
     fn bot_status_changed_event_serializes() {
         let status = BotStatus::running("10004", 1234, 5678);
         let event = DomainEvent::bot_status_changed(status, "runtime_poll");
-        let json = serde_json::to_string(&event).unwrap();
+        let json = serde_json::to_string(&event).unwrap;
         assert!(json.contains("bot_status_changed"));
         assert!(json.contains("runtime_poll"));
     }
@@ -406,7 +524,7 @@ mod tests {
     fn bot_state_changed_event_serializes() {
         let snapshot = BotActorSnapshot::new("10003");
         let event = DomainEvent::bot_state_changed(snapshot, "start_requested");
-        let json = serde_json::to_string(&event).unwrap();
+        let json = serde_json::to_string(&event).unwrap;
         assert!(json.contains("bot_state_changed"));
         assert!(json.contains("start_requested"));
     }
@@ -415,9 +533,9 @@ mod tests {
     // 事件名稳定性测试
     //
     // 1) 4 个新 variant 字节级 round-trip：序列化后再反序列化必须等价。
-    // 2) 4 个新 variant 的 `tauri_event_name()` 字面量值锁定。
+    // 2) 4 个新 variant 的 `tauri_event_name` 字面量值锁定。
     // 3) 跨文件契约：4 个 tauri_event_name 必须全部出现在前端 `events.ts`
-    //    的 `eventNames` 数组中（编译期 `include_str!` 取出文本后 grep）。
+    // 的 `eventNames` 数组中（编译期 `include_str!` 取出文本后 grep）。
     // ------------------------------------------------------------------
 
     /// 编译期把前端事件清单嵌入测试二进制，避免运行时 IO 与路径漂移。
@@ -469,16 +587,16 @@ mod tests {
     fn napcat_login_invalidation_reason_serializes_snake_case() {
         // 字面量锁定：前端 TS 字面量类型为 'kicked' | 'logged_out'。
         assert_eq!(
-            serde_json::to_string(&NapCatLoginInvalidationReason::Kicked).unwrap(),
+            serde_json::to_string(&NapCatLoginInvalidationReason::Kicked).unwrap,
             "\"kicked\""
         );
         assert_eq!(
-            serde_json::to_string(&NapCatLoginInvalidationReason::LoggedOut).unwrap(),
+            serde_json::to_string(&NapCatLoginInvalidationReason::LoggedOut).unwrap,
             "\"logged_out\""
         );
     }
 
-    /// 4 个新 variant 的 `tauri_event_name()` 字面量值锁定，
+    /// 4 个新 variant 的 `tauri_event_name` 字面量值锁定
     /// 任何一处 typo 都会让此测试失败。
     #[test]
     fn napcat_login_event_name_literals_are_stable() {
@@ -504,12 +622,11 @@ mod tests {
             ),
         ];
         for (event, expected) in &cases {
-            assert_eq!(event.tauri_event_name(), *expected);
+            assert_eq!(event.tauri_event_name, *expected);
         }
     }
 
     /// 前后端事件契约一一对应。
-    ///
     /// 4 个新 `tauri_event_name` 必须在前端 `events.ts` 中出现为
     /// 单引号字符串字面量。这样可避免误把出现在注释或别的标识符中的
     /// 子串当作匹配。
@@ -528,12 +645,12 @@ mod tests {
                 FRONTEND_EVENTS_TS.contains(&needle_single)
                     || FRONTEND_EVENTS_TS.contains(&needle_double),
                 "frontend events.ts must contain literal {name:?} as a quoted string \
-                 (检查 src-ui/core/ipc/events.ts 的 eventNames 数组)",
+ (检查 src-ui/core/ipc/events.ts 的 eventNames 数组)",
             );
         }
     }
 
-    /// 反向防呆：所有 DomainEvent variant 的 `tauri_event_name()` 都必须
+    /// 反向防呆：所有 DomainEvent variant 的 `tauri_event_name` 都必须
     /// 出现在前端 `events.ts` 中，否则前端无法订阅到对应事件。
     /// 这条断言锁定了「Rust → events.ts」单向覆盖，但允许 events.ts 含
     /// DomainEvent 之外的额外通道（按任务说明）。
@@ -553,21 +670,147 @@ mod tests {
             DomainEvent::napcat_login_qrcode("10001", "url"),
             DomainEvent::napcat_login_qrcode_removed("10001"),
             DomainEvent::napcat_login_online("10001", true),
-            DomainEvent::napcat_login_invalidated(
-                "10001",
-                NapCatLoginInvalidationReason::Kicked,
-            ),
+            DomainEvent::napcat_login_invalidated("10001", NapCatLoginInvalidationReason::Kicked),
+            // SnowLuma 系列 6 个 variant
+            // ，与前端 events.ts eventNames 一一对应。
+            DomainEvent::snowluma_daemon_state_changed(DaemonState::Ready, 1, None),
+            DomainEvent::snowluma_bot_injected("10001", 12345),
+            DomainEvent::snowluma_uin_detected("10001", "100200"),
+            DomainEvent::snowluma_login_state_changed("10001", SnowLumaLoginState::LoggedIn),
+            DomainEvent::snowluma_pid_set_changed("10001", vec![1234, 5678]),
+            DomainEvent::snowluma_daemon_log("hello world"),
         ];
         for event in &all {
-            let name = event.tauri_event_name();
+            let name = event.tauri_event_name;
             let needle_single = format!("'{name}'");
             let needle_double = format!("\"{name}\"");
             assert!(
                 FRONTEND_EVENTS_TS.contains(&needle_single)
                     || FRONTEND_EVENTS_TS.contains(&needle_double),
                 "DomainEvent::{:?} 的 tauri_event_name {name:?} 未出现在 \
-                 src-ui/core/ipc/events.ts，前端将无法订阅",
+ src-ui/core/ipc/events.ts，前端将无法订阅",
                 event.kind(),
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // SnowLuma 系列 6 个 variant 的稳定性测试
+    //
+    //
+    // 1) 6 个 variant 字节级 round-trip：序列化后再反序列化必须等价。
+    // 2) 6 个 variant `tauri_event_name` 字面量值锁定，防 typo / 防
+    // `rename_all = "snake_case"` 把 `SnowLuma` 切成 `snow_luma`。
+    // 3) 跨文件契约：6 个 tauri_event_name 必须全部出现在前端 events.ts。
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn snowluma_daemon_state_changed_round_trips() {
+        assert_round_trip(DomainEvent::snowluma_daemon_state_changed(
+            DaemonState::Ready,
+            1,
+            None,
+        ));
+        assert_round_trip(DomainEvent::snowluma_daemon_state_changed(
+            DaemonState::Crashed,
+            0,
+            Some("node child exited unexpectedly".into()),
+        ));
+    }
+
+    #[test]
+    fn snowluma_bot_injected_round_trips() {
+        assert_round_trip(DomainEvent::snowluma_bot_injected("10001", 12345));
+    }
+
+    #[test]
+    fn snowluma_uin_detected_round_trips() {
+        assert_round_trip(DomainEvent::snowluma_uin_detected("10001", "100200"));
+    }
+
+    #[test]
+    fn snowluma_login_state_changed_round_trips() {
+        assert_round_trip(DomainEvent::snowluma_login_state_changed(
+            "10001",
+            SnowLumaLoginState::LoggedIn,
+        ));
+        assert_round_trip(DomainEvent::snowluma_login_state_changed(
+            "10001",
+            SnowLumaLoginState::WaitingForQrScan,
+        ));
+    }
+
+    #[test]
+    fn snowluma_pid_set_changed_round_trips() {
+        assert_round_trip(DomainEvent::snowluma_pid_set_changed(
+            "10001",
+            vec![1234, 5678],
+        ));
+        // 空集合也必须可 round-trip（poller dispose 时可能下发空集合）。
+        assert_round_trip(DomainEvent::snowluma_pid_set_changed("10001", vec![]));
+    }
+
+    #[test]
+    fn snowluma_daemon_log_round_trips() {
+        assert_round_trip(DomainEvent::snowluma_daemon_log("hello world"));
+    }
+
+    /// 6 个 SL variant 的 `tauri_event_name` 字面量值锁定
+    /// 任何一处 typo（包括 `snow_luma_xxx` 这种 snake_case 误切）都会失败。
+    #[test]
+    fn snowluma_event_name_literals_are_stable() {
+        let cases: [(DomainEvent, &str); 6] = [
+            (
+                DomainEvent::snowluma_daemon_state_changed(DaemonState::Ready, 1, None),
+                "snowluma_daemon_state_changed",
+            ),
+            (
+                DomainEvent::snowluma_bot_injected("10001", 12345),
+                "snowluma_bot_injected",
+            ),
+            (
+                DomainEvent::snowluma_uin_detected("10001", "100200"),
+                "snowluma_uin_detected",
+            ),
+            (
+                DomainEvent::snowluma_login_state_changed("10001", SnowLumaLoginState::LoggedIn),
+                "snowluma_login_state_changed",
+            ),
+            (
+                DomainEvent::snowluma_pid_set_changed("10001", vec![1234, 5678]),
+                "snowluma_pid_set_changed",
+            ),
+            (
+                DomainEvent::snowluma_daemon_log("hello world"),
+                "snowluma_daemon_log",
+            ),
+        ];
+        for (event, expected) in &cases {
+            assert_eq!(event.tauri_event_name, *expected);
+        }
+    }
+
+    /// 前后端事件契约一一对应（SnowLuma 系列）。
+    /// 6 个新 `tauri_event_name` 必须在前端 `events.ts` 中出现为
+    /// 单/双引号字符串字面量，避免误把出现在注释或别的标识符中的子串当作匹配。
+    #[test]
+    fn snowluma_event_names_are_present_in_frontend_events_ts() {
+        let names = [
+            "snowluma_daemon_state_changed",
+            "snowluma_bot_injected",
+            "snowluma_uin_detected",
+            "snowluma_login_state_changed",
+            "snowluma_pid_set_changed",
+            "snowluma_daemon_log",
+        ];
+        for name in &names {
+            let needle_single = format!("'{name}'");
+            let needle_double = format!("\"{name}\"");
+            assert!(
+                FRONTEND_EVENTS_TS.contains(&needle_single)
+                    || FRONTEND_EVENTS_TS.contains(&needle_double),
+                "frontend events.ts must contain literal {name:?} as a quoted string \
+ (检查 src-ui/core/ipc/events.ts 的 eventNames 数组)",
             );
         }
     }
