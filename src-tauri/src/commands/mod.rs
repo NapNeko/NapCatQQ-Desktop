@@ -1,4 +1,5 @@
 pub mod bot;
+pub mod snowluma;
 
 use std::fs;
 use std::path::{Path, PathBuf};

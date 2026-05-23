@@ -251,6 +251,7 @@ mod tests {
                 offline_auto_restart: false,
                 runtime_target: ncd_core::RuntimeTarget::Local,
                 backend_type: ncd_core::BackendType::NapCat,
+                snowluma_start_mode: None,
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),

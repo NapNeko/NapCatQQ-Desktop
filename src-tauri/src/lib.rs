@@ -44,9 +44,13 @@ pub fn run() {
         LocalRuntimeBackend::new(&data_root, "bot-manager-local")
             .with_event_bus(Arc::new(event_bus.clone())),
     );
-    let launch_planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
-        data_root.join("runtime"),
-    ));
+    let launch_planner = Arc::new(
+        ncd_core::FileSystemRuntimeLaunchPlanner::new(data_root.join("runtime"))
+            // SnowLuma daemon 装在 `<data_root>/runtime/SnowLuma/`，与 NapCat
+            // 的 `<data_root>/runtime/` 严格分离。注意目录名大小写：installer 写的是 `SnowLuma`。
+            .with_snowluma_runtime_root(data_root.join("runtime").join("SnowLuma"))
+            .with_snowluma_data_root(data_root.join("snowluma")),
+    );
     // NapCat WebUI 登录轮询所需依赖（design.md §15.1）。
     // - `ReqwestNapCatWebUiClient` 走 rustls-tls，仅访问 127.0.0.1。
     // - `NoopOfflineNotifier` 是占位实现，真实通道由后续 Spec 接入。
@@ -69,13 +73,45 @@ pub fn run() {
         poller_settings,
     ));
 
+    // SnowLuma daemon + backend wiring。
+    //
+    // 路径起源严格来自 `bootstrap::resolve_data_root()`：
+    // - SnowLuma 持久化数据根：`<data_root>/snowluma/`
+    // - SnowLuma 安装根：`<data_root>/runtime/snowluma`（与 `runtime_launch_plan`
+    // 建图时使用的 runtime_root 同源；后续如果 PathProbe 暴露 SnowLuma
+    // 单独路径，再切到 PathProbe 输出）。
+    let snowluma_data_root = data_root.join("snowluma");
+    let snowluma_runtime_root = data_root.join("runtime").join("SnowLuma");
+    let snowluma_factory: Arc<dyn ncd_core::SnowLumaWebUiClientFactory> = Arc::new(
+        ncd_core::ReqwestSnowLumaWebUiClientFactory::new(ncd_core::default_snowluma_port()),
+    );
+    let snowluma_daemon = ncd_core::SnowLumaDaemon::new(
+        snowluma_data_root,
+        snowluma_runtime_root,
+        Arc::new(event_bus.clone()),
+        snowluma_factory,
+    );
+    let snowluma_backend: Arc<dyn ncd_core::BotBackend> =
+        Arc::new(ncd_core::SnowLumaRuntimeBackend::new(
+            ncd_core::BotId::new("snowluma-backend-local"),
+            Arc::clone(&snowluma_daemon),
+            Arc::new(event_bus.clone()),
+        ));
+    let bot_manager = Arc::new(
+        Arc::try_unwrap(bot_manager)
+            .ok()
+            .expect("bot_manager Arc not yet shared")
+            .with_snowluma(snowluma_backend, Arc::clone(&snowluma_daemon)),
+    );
+
     let bot_manager_bootstrap = Arc::clone(&bot_manager);
     let bot_manager_listener = Arc::clone(&bot_manager);
     let bot_manager_login_listener = Arc::clone(&bot_manager);
+    let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
     let bot_manager_shutdown = Arc::clone(&bot_manager);
 
     tauri::Builder::default()
-        // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI），
+        // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI）
         // webview 自身不支持 target=_blank。
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
@@ -137,8 +173,8 @@ pub fn run() {
                     }
                 }
             });
-            // 订阅运行时事件总线，把 BotProcessExited 转成 actor 状态机转移，
-            // 防止 UI 残留假 Running。必须用 tauri::async_runtime::spawn，
+            // 订阅运行时事件总线，把 BotProcessExited 转成 actor 状态机转移
+            // 防止 UI 残留假 Running。必须用 tauri::async_runtime::spawn
             // setup 回调本身没有 tokio current handle，直接 tokio::spawn 会 panic。
             tauri::async_runtime::spawn(async move {
                 (*bot_manager_listener)
@@ -151,9 +187,12 @@ pub fn run() {
             // 驱动 NapCatLoginPoller 的创建与回收。`run_napcat_login_listener`
             // 需要 `Arc<Self>` 作为接收者（用于 cast 到 `Arc<dyn RestartHandle>`）。
             tauri::async_runtime::spawn(async move {
-                bot_manager_login_listener
-                    .run_napcat_login_listener()
-                    .await;
+                bot_manager_login_listener.run_napcat_login_listener().await;
+            });
+
+            // SnowLuma daemon Crashed 级联级 actor。
+            tauri::async_runtime::spawn(async move {
+                bot_manager_snowluma_listener.run_snowluma_listener().await;
             });
             Ok(())
         })
@@ -204,6 +243,10 @@ pub fn run() {
             commands::bot::count_bot_configs,
             commands::bot::active_bot_count,
             commands::bot::tail_bot_log,
+            commands::snowluma::list_qq_processes,
+            commands::snowluma::set_snowluma_attach_pid,
+            commands::snowluma::set_snowluma_password_override,
+            commands::snowluma::open_snowluma_webui,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
