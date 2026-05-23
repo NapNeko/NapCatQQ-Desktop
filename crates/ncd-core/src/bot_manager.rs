@@ -1,17 +1,18 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use futures_util::stream::{FuturesUnordered, StreamExt};
 use tokio::sync::RwLock;
 
 use crate::backend_config_renderer::output_paths_for_backend;
 use crate::bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 use crate::bot_config::{BackendType, BotConfig, BotConfigError};
-use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
+use crate::events::{BroadcastEventBus, DomainEvent, EventBus, EventFilter};
 use crate::ids::BotId;
 use crate::runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, RuntimeLaunchPlanError,
-    RuntimeLaunchPlanner, StopMode,
+    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, StopMode,
 };
+use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
 use crate::traits::{BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
@@ -92,17 +93,31 @@ pub struct BootstrapResult {
 ///
 /// `BotManager` 自身不持有可变业务状态，所有可变状态都封装在
 /// `actors` map（由 `RwLock` 保护）和各 `BotActorHandle` 内部。
-pub struct BotManager<R: BotConfigRepo, S: ConfigStore + 'static> {
+pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     repo: Arc<R>,
     store: Arc<S>,
     renderer: Arc<dyn BackendConfigRenderer>,
     backend: Arc<dyn BotBackend>,
     launch_planner: Arc<dyn RuntimeLaunchPlanner>,
     event_bus: Arc<BroadcastEventBus>,
-    actors: RwLock<HashMap<BotId, BotActorHandle>>,
+    actors: Arc<RwLock<HashMap<BotId, BotActorHandle>>>,
 }
 
-impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
+impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
+    fn clone(&self) -> Self {
+        Self {
+            repo: Arc::clone(&self.repo),
+            store: Arc::clone(&self.store),
+            renderer: Arc::clone(&self.renderer),
+            backend: Arc::clone(&self.backend),
+            launch_planner: Arc::clone(&self.launch_planner),
+            event_bus: Arc::clone(&self.event_bus),
+            actors: Arc::clone(&self.actors),
+        }
+    }
+}
+
+impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     pub fn new(
         repo: Arc<R>,
         store: Arc<S>,
@@ -118,7 +133,7 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
             backend,
             launch_planner,
             event_bus,
-            actors: RwLock::new(HashMap::new()),
+            actors: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -271,11 +286,27 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
             succeeded: Vec::new(),
             failed: Vec::new(),
         };
+        let mut tasks = FuturesUnordered::new();
 
         for bot_id in bot_ids {
-            match self.start_bot(bot_id).await {
-                Ok(_) => result.succeeded.push(bot_id.clone()),
-                Err(err) => result.failed.push((bot_id.clone(), err)),
+            let manager = self.clone();
+            let bot_id = bot_id.clone();
+            let task_bot_id = bot_id.clone();
+            let handle =
+                tokio::spawn(async move { manager.start_bot(&task_bot_id).await.map(|_| ()) });
+            tasks.push(async move {
+                let outcome = match handle.await {
+                    Ok(outcome) => outcome,
+                    Err(err) => Err(BotManagerError::TaskJoinFailed(err.to_string())),
+                };
+                (bot_id, outcome)
+            });
+        }
+
+        while let Some((bot_id, outcome)) = tasks.next().await {
+            match outcome {
+                Ok(()) => result.succeeded.push(bot_id),
+                Err(err) => result.failed.push((bot_id, err)),
             }
         }
 
@@ -288,11 +319,27 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
             succeeded: Vec::new(),
             failed: Vec::new(),
         };
+        let mut tasks = FuturesUnordered::new();
 
         for bot_id in bot_ids {
-            match self.stop_bot(bot_id).await {
-                Ok(_) => result.succeeded.push(bot_id.clone()),
-                Err(err) => result.failed.push((bot_id.clone(), err)),
+            let manager = self.clone();
+            let bot_id = bot_id.clone();
+            let task_bot_id = bot_id.clone();
+            let handle =
+                tokio::spawn(async move { manager.stop_bot(&task_bot_id).await.map(|_| ()) });
+            tasks.push(async move {
+                let outcome = match handle.await {
+                    Ok(outcome) => outcome,
+                    Err(err) => Err(BotManagerError::TaskJoinFailed(err.to_string())),
+                };
+                (bot_id, outcome)
+            });
+        }
+
+        while let Some((bot_id, outcome)) = tasks.next().await {
+            match outcome {
+                Ok(()) => result.succeeded.push(bot_id),
+                Err(err) => result.failed.push((bot_id, err)),
             }
         }
 
@@ -494,6 +541,123 @@ impl<R: BotConfigRepo, S: ConfigStore + 'static> BotManager<R, S> {
     fn publish_state_change(&self, snapshot: &BotActorSnapshot, reason: &str) {
         self.event_bus
             .publish(DomainEvent::bot_state_changed(snapshot.clone(), reason));
+    }
+
+    /// 应用退出收口：尝试停止所有运行中的 Bot 并 shutdown 它们的 Actor。
+    ///
+    /// 用法：Tauri `WindowEvent::CloseRequested` 时调用，避免 QQ.exe 残留。
+    ///
+    /// 行为：
+    /// - 对所有处于 active 状态的 Bot 调用 `stop_bot`（内部走 `kill_process_tree`）。
+    /// - 不论 stop 是否成功，都会 shutdown 对应的 actor 释放邮箱。
+    /// - 任何错误只记录到返回值，不会阻塞其它 Bot 的清理。
+    pub async fn shutdown_all(&self) -> BatchResult {
+        let snapshots: Vec<BotActorSnapshot> = {
+            let actors = self.actors.read().await;
+            actors.values().map(|h| h.snapshot()).collect()
+        };
+
+        let active_ids: Vec<BotId> = snapshots
+            .iter()
+            .filter(|s| s.state.is_active() || matches!(s.state, BotActorState::Running))
+            .map(|s| s.bot_id.clone())
+            .collect();
+
+        let mut result = BatchResult {
+            succeeded: Vec::new(),
+            failed: Vec::new(),
+        };
+
+        for bot_id in &active_ids {
+            match self.stop_bot(bot_id).await {
+                Ok(_) => result.succeeded.push(bot_id.clone()),
+                Err(err) => result.failed.push((bot_id.clone(), err)),
+            }
+        }
+
+        // 关闭所有 actor 邮箱，释放后台任务。
+        let handles: Vec<BotActorHandle> = {
+            let actors = self.actors.read().await;
+            actors.values().cloned().collect()
+        };
+        for handle in handles {
+            let _ = handle.shutdown().await;
+        }
+        {
+            let mut actors = self.actors.write().await;
+            actors.clear();
+        }
+
+        result
+    }
+
+    /// 订阅运行时事件总线，将 `BotProcessExited` 转换为 actor 状态机转移：
+    /// - 进程正常或异常退出 → 调用 `confirm_stopped` / `mark_crashed`，
+    ///   防止 UI 残留假 Running。
+    /// - 在 `tauri::async_runtime::spawn` 后台运行，直到事件总线关闭。
+    pub fn spawn_runtime_event_listener(&self) {
+        let manager = self.clone();
+        tokio::spawn(async move {
+            let mut subscription = manager.event_bus.subscribe(EventFilter::kind(
+                crate::events::DomainEventKind::BotProcessExited,
+            ));
+            while let Some(event) = subscription.next().await {
+                if let DomainEvent::BotProcessExited {
+                    bot_id,
+                    exit_code,
+                    reason,
+                } = event
+                {
+                    manager
+                        .handle_process_exited(bot_id, exit_code, reason)
+                        .await;
+                }
+            }
+        });
+    }
+
+    async fn handle_process_exited(
+        &self,
+        bot_id: BotId,
+        exit_code: Option<i32>,
+        reason: Option<String>,
+    ) {
+        let handle = {
+            let actors = self.actors.read().await;
+            actors.get(&bot_id).cloned()
+        };
+        let Some(handle) = handle else {
+            return;
+        };
+
+        let snapshot = handle.snapshot();
+        match snapshot.state {
+            // 主动停止流程：进程退出意味着 stop 完成。
+            BotActorState::Stopping => {
+                if let Ok(updated) = handle.confirm_stopped().await {
+                    self.publish_state_change(&updated, "process_exited");
+                }
+            }
+            // 还在运行中却收到退出事件：进程被外部 kill 或自身崩溃。
+            BotActorState::Running | BotActorState::Starting => {
+                let detail = match (exit_code, reason.as_deref()) {
+                    (Some(code), _) if code == 0 => "process exited with code 0".to_string(),
+                    (Some(code), _) => format!("process exited with code {code}"),
+                    (None, Some(reason)) => format!("process terminated: {reason}"),
+                    (None, None) => "process terminated by signal".to_string(),
+                };
+                if let Ok(updated) = handle.mark_crashed(detail.clone()).await {
+                    self.publish_state_change(&updated, "process_exited");
+                    self.event_bus.publish(DomainEvent::bot_error(
+                        bot_id,
+                        detail,
+                        Some("Bot 进程已退出，请检查日志或手动重启。".to_string()),
+                    ));
+                }
+            }
+            // 已是 Stopped / Crashed / Repairing：不再做转移，避免无效转移报错。
+            _ => {}
+        }
     }
 
     /// 内部删除流程：持久化删除 → 停止 → shutdown → 移除内存 Actor。
