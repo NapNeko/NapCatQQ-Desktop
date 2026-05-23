@@ -40,23 +40,20 @@ export const EventPanel: React.FC = () => {
         // Extract reader-friendly messaging from dynamic payloads
         switch (event.kind) {
           case 'bot_state_changed':
-            message = `Bot ${event.snapshot.bot_id} 状态转移至 ${event.snapshot.state}${
-              event.reason ? `，原因: ${event.reason}` : ''
-            }`;
+            message = `Bot ${event.snapshot.bot_id} 状态转移至 ${event.snapshot.state}${event.reason ? `，原因: ${event.reason}` : ''
+              }`;
             break;
           case 'bot_status_changed':
-            message = `Bot ${event.status.bot_id} 运行时指标刷新 (RSS: ${
-              event.status.memory_rss_bytes ? Math.floor(event.status.memory_rss_bytes / 1024 / 1024) + 'MB' : '无'
-            })`;
+            message = `Bot ${event.status.bot_id} 运行时指标刷新 (RSS: ${event.status.memory_rss_bytes ? Math.floor(event.status.memory_rss_bytes / 1024 / 1024) + 'MB' : '无'
+              })`;
             break;
           case 'bot_log_appended':
             message = `[Log] Bot ${event.bot_id}: ${event.line}`;
-            kind = 'log_appended';
+            kind = 'bot_log_appended';
             break;
           case 'bot_error':
-            message = `Bot ${event.bot_id} 异常报错: ${event.message}${
-              event.hint ? ` (排查建议: ${event.hint})` : ''
-            }`;
+            message = `Bot ${event.bot_id} 异常报错: ${event.message}${event.hint ? ` (排查建议: ${event.hint})` : ''
+              }`;
             break;
           case 'task_progress':
             message = `[Task] ${event.task_id} 进度: ${event.progress}% - ${event.message}`;
@@ -110,7 +107,7 @@ export const EventPanel: React.FC = () => {
         return 'brand';
       case 'bot_status_changed':
         return 'success';
-      case 'log_appended':
+      case 'bot_log_appended':
         return 'informative';
       case 'bot_error':
         return 'danger';
@@ -127,7 +124,7 @@ export const EventPanel: React.FC = () => {
         return '状态改变';
       case 'bot_status_changed':
         return '指标更新';
-      case 'log_appended':
+      case 'bot_log_appended':
         return '日志流';
       case 'bot_error':
         return '运行报错';
@@ -171,7 +168,7 @@ export const EventPanel: React.FC = () => {
                 <option value="all">所有事件类型 (All)</option>
                 <option value="bot_state_changed">状态转移 (bot_state_changed)</option>
                 <option value="bot_status_changed">指标更新 (bot_status_changed)</option>
-                <option value="log_appended">日志追加 (log_appended)</option>
+                <option value="bot_log_appended">日志追加 (bot_log_appended)</option>
                 <option value="bot_error">异常报错 (bot_error)</option>
                 <option value="task_progress">任务进度 (task_progress)</option>
               </Select>
@@ -205,9 +202,8 @@ export const EventPanel: React.FC = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '4px',
-                    borderLeft: `3px solid ${
-                      item.kind === 'bot_error' ? '#bc2f32' : item.kind === 'bot_state_changed' ? '#0078d4' : '#858585'
-                    }`,
+                    borderLeft: `3px solid ${item.kind === 'bot_error' ? '#bc2f32' : item.kind === 'bot_state_changed' ? '#0078d4' : '#858585'
+                      }`,
                   }}
                   className="event-row"
                 >

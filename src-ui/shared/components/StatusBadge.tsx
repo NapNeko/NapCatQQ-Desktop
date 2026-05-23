@@ -12,30 +12,30 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'medium
   let text = String(status);
 
   switch (status) {
-    case 'Running':
+    case 'running':
     case 'ready':
       color = 'success';
       text = status === 'ready' ? '就绪' : '运行中';
       break;
-    case 'Stopped':
-      color = 'informative'; // Use Fluent standard subtle neutral/grey informative badge
+    case 'stopped':
+      color = 'informative';
       text = '已停止';
       break;
-    case 'Starting':
+    case 'starting':
     case 'migrating':
       color = 'warning';
       text = status === 'migrating' ? '迁移中' : '启动中';
       break;
-    case 'Stopping':
+    case 'stopping':
       color = 'severe';
       text = '停止中';
       break;
-    case 'Repairing':
+    case 'repairing':
     case 'repair_required':
       color = 'warning';
       text = status === 'repair_required' ? '需要修复' : '修复中';
       break;
-    case 'Crashed':
+    case 'crashed':
     case 'failed':
       color = 'danger';
       text = status === 'failed' ? '失败' : '崩溃';

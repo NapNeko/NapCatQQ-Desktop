@@ -10,6 +10,7 @@ import {
   DocumentRegular,
   GlobeRegular,
 } from '@fluentui/react-icons';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { BotActorSnapshot, NapCatLoginInvalidationReason } from '../../../core/ipc/types';
 import './BotCard.css';
 
@@ -49,10 +50,12 @@ export const BotCard: React.FC<BotCardProps> = ({
   webuiPort,
   webuiToken,
 }) => {
-  const isRunning = bot.state === 'Running';
-  const isStarting = bot.state === 'Starting';
-  const isStopping = bot.state === 'Stopping';
-  const isRepairing = bot.state === 'Repairing';
+  // 后端 BotActorState 用 #[serde(rename_all = "snake_case")] 序列化，
+  // 所以前端拿到的是 "running" / "starting" / ... 而非 "Running"。
+  const isRunning = bot.state === 'running';
+  const isStarting = bot.state === 'starting';
+  const isStopping = bot.state === 'stopping';
+  const isRepairing = bot.state === 'repairing';
 
   // 踢线提示自动隐藏：每次 invalidationReason 变更触发 3s 计时器
   const [showKickedToast, setShowKickedToast] = useState(false);
@@ -74,18 +77,19 @@ export const BotCard: React.FC<BotCardProps> = ({
   };
 
   const getBadgeAppearanceAndColor = () => {
+    // 与后端 snake_case 序列化对齐。
     switch (bot.state) {
-      case 'Running':
+      case 'running':
         return { color: 'success', label: '运行中' };
-      case 'Starting':
+      case 'starting':
         return { color: 'brand', label: '启动中' };
-      case 'Stopping':
+      case 'stopping':
         return { color: 'warning', label: '停止中' };
-      case 'Stopped':
+      case 'stopped':
         return { color: 'tiny', label: '已停止' };
-      case 'Crashed':
+      case 'crashed':
         return { color: 'danger', label: '崩溃' };
-      case 'Repairing':
+      case 'repairing':
         return { color: 'warning', label: '修复中' };
       default:
         return { color: 'neutral', label: bot.state };
@@ -95,14 +99,16 @@ export const BotCard: React.FC<BotCardProps> = ({
   const badgeInfo = getBadgeAppearanceAndColor();
 
   const hasQrcode = !!qrcodeUrl;
-  const webuiAvailable =
-    isOnline === true && typeof webuiPort === 'number' && !!webuiToken;
+  // WebUI HTTP 服务在 napcat_webui_available 事件到达时就已就绪——这跟 QQ 是否
+  // 登录无关。用户恰恰需要先打开 WebUI 去扫码，所以按钮启用条件只看 port/token，
+  // 不看 isOnline。
+  const webuiAvailable = typeof webuiPort === 'number' && !!webuiToken;
   const webuiHref = webuiAvailable
     ? `http://127.0.0.1:${webuiPort}/webui?token=${encodeURIComponent(webuiToken!)}`
     : undefined;
   const webuiTooltip = webuiAvailable
     ? '在浏览器中打开 NapCat WebUI'
-    : 'WebUI 链接将在 Bot 在线后可用';
+    : 'WebUI 链接将在 Bot 启动后可用';
 
   return (
     <Card
@@ -128,7 +134,12 @@ export const BotCard: React.FC<BotCardProps> = ({
               </Badge>
             </Tooltip>
           )}
-          {/* 在线 / 离线徽章 */}
+          {/* 在线 / 离线徽章。
+              - isOnline===true：QQ 账号已登录（来自 NapCat GetQQLoginInfo.online）
+              - isOnline===false：进程已就绪但 QQ 未登录（等扫码或被踢）
+              - isOnline===null/undefined：Poller 还没收到首轮响应；
+                此时若 webui 已 available（port/token 在）显示「等待登录态」，
+                否则保持空白让 Bot 状态 Badge 兜底。 */}
           {isOnline === true && (
             <span className="ndf-online-indicator ndf-online-indicator-online">
               <span className="ndf-online-dot ndf-online-dot-online" />
@@ -139,6 +150,12 @@ export const BotCard: React.FC<BotCardProps> = ({
             <span className="ndf-online-indicator ndf-online-indicator-offline">
               <span className="ndf-online-dot ndf-online-dot-offline" />
               <Text size={100} weight="semibold">离线</Text>
+            </span>
+          )}
+          {(isOnline === null || isOnline === undefined) && webuiAvailable && (
+            <span className="ndf-online-indicator ndf-online-indicator-offline">
+              <span className="ndf-online-dot ndf-online-dot-offline" />
+              <Text size={100} weight="semibold">等待登录态</Text>
             </span>
           )}
         </div>
@@ -176,24 +193,21 @@ export const BotCard: React.FC<BotCardProps> = ({
               />
             </Tooltip>
             <Tooltip content={webuiTooltip} relationship="label">
-              {webuiAvailable ? (
-                <Button
-                  as="a"
-                  icon={<GlobeRegular />}
-                  size="small"
-                  appearance="subtle"
-                  href={webuiHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
-              ) : (
-                <Button
-                  icon={<GlobeRegular />}
-                  size="small"
-                  appearance="subtle"
-                  disabled
-                />
-              )}
+              <Button
+                icon={<GlobeRegular />}
+                size="small"
+                appearance="subtle"
+                disabled={!webuiAvailable}
+                onClick={() => {
+                  if (webuiHref) {
+                    // Tauri webview 不支持 target=_blank；走 plugin-opener
+                    // 由系统默认浏览器打开 NapCat WebUI。
+                    openUrl(webuiHref).catch((err) => {
+                      console.error('打开 NapCat WebUI 失败:', err);
+                    });
+                  }
+                }}
+              />
             </Tooltip>
             <Tooltip content="配置信息" relationship="label">
               <Button
