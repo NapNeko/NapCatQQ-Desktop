@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Text, Button, Badge, Tooltip } from '@fluentui/react-components';
 import {
   PlayFilled,
@@ -10,7 +10,7 @@ import {
   DocumentRegular,
   GlobeRegular,
 } from '@fluentui/react-icons';
-import { BotActorSnapshot } from '../../../core/ipc/types';
+import { BotActorSnapshot, NapCatLoginInvalidationReason } from '../../../core/ipc/types';
 import './BotCard.css';
 
 interface BotCardProps {
@@ -22,6 +22,16 @@ interface BotCardProps {
   isBatchMode: boolean;
   isSelected: boolean;
   onToggleSelect: (botId: string) => void;
+  /** NapCat WebUI 登录二维码 (data URL 或 普通 URL)，非空时渲染二维码区域。 */
+  qrcodeUrl?: string | null;
+  /** Bot 是否在线。`true` 显示在线徽章，`false` 显示离线徽章，`null/undefined` 不显示。 */
+  isOnline?: boolean | null;
+  /** 登录失效原因，`'kicked'` 时弹出一次性踢线提示（3 秒自动消失）。 */
+  invalidationReason?: NapCatLoginInvalidationReason | null;
+  /** NapCat WebUI 监听端口（由 BotListPage 从 napcat_webui_available 事件聚合）。 */
+  webuiPort?: number | null;
+  /** NapCat WebUI 一次性 token（由 BotListPage 从 napcat_webui_available 事件聚合）。 */
+  webuiToken?: string | null;
 }
 
 export const BotCard: React.FC<BotCardProps> = ({
@@ -33,11 +43,28 @@ export const BotCard: React.FC<BotCardProps> = ({
   isBatchMode,
   isSelected,
   onToggleSelect,
+  qrcodeUrl,
+  isOnline,
+  invalidationReason,
+  webuiPort,
+  webuiToken,
 }) => {
   const isRunning = bot.state === 'Running';
   const isStarting = bot.state === 'Starting';
   const isStopping = bot.state === 'Stopping';
   const isRepairing = bot.state === 'Repairing';
+
+  // 踢线提示自动隐藏：每次 invalidationReason 变更触发 3s 计时器
+  const [showKickedToast, setShowKickedToast] = useState(false);
+  useEffect(() => {
+    if (invalidationReason === 'kicked') {
+      setShowKickedToast(true);
+      const timer = setTimeout(() => setShowKickedToast(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    setShowKickedToast(false);
+    return undefined;
+  }, [invalidationReason]);
 
   // Handle card click in batch mode
   const handleCardClick = () => {
@@ -67,6 +94,16 @@ export const BotCard: React.FC<BotCardProps> = ({
 
   const badgeInfo = getBadgeAppearanceAndColor();
 
+  const hasQrcode = !!qrcodeUrl;
+  const webuiAvailable =
+    isOnline === true && typeof webuiPort === 'number' && !!webuiToken;
+  const webuiHref = webuiAvailable
+    ? `http://127.0.0.1:${webuiPort}/webui?token=${encodeURIComponent(webuiToken!)}`
+    : undefined;
+  const webuiTooltip = webuiAvailable
+    ? '在浏览器中打开 NapCat WebUI'
+    : 'WebUI 链接将在 Bot 在线后可用';
+
   return (
     <Card
       className={`ndf-bot-card ${isBatchMode ? 'batch-mode' : ''} ${isSelected ? 'selected' : ''} state-${bot.state.toLowerCase()}`}
@@ -90,6 +127,19 @@ export const BotCard: React.FC<BotCardProps> = ({
                 待重启
               </Badge>
             </Tooltip>
+          )}
+          {/* 在线 / 离线徽章 */}
+          {isOnline === true && (
+            <span className="ndf-online-indicator ndf-online-indicator-online">
+              <span className="ndf-online-dot ndf-online-dot-online" />
+              <Text size={100} weight="semibold">在线</Text>
+            </span>
+          )}
+          {isOnline === false && (
+            <span className="ndf-online-indicator ndf-online-indicator-offline">
+              <span className="ndf-online-dot ndf-online-dot-offline" />
+              <Text size={100} weight="semibold">离线</Text>
+            </span>
           )}
         </div>
 
@@ -125,13 +175,25 @@ export const BotCard: React.FC<BotCardProps> = ({
                 onClick={() => onViewLogs(bot.bot_id)}
               />
             </Tooltip>
-            <Tooltip content="WebUI 链接将在运行时接入后可用" relationship="label">
-              <Button
-                icon={<GlobeRegular />}
-                size="small"
-                appearance="subtle"
-                disabled
-              />
+            <Tooltip content={webuiTooltip} relationship="label">
+              {webuiAvailable ? (
+                <Button
+                  as="a"
+                  icon={<GlobeRegular />}
+                  size="small"
+                  appearance="subtle"
+                  href={webuiHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              ) : (
+                <Button
+                  icon={<GlobeRegular />}
+                  size="small"
+                  appearance="subtle"
+                  disabled
+                />
+              )}
             </Tooltip>
             <Tooltip content="配置信息" relationship="label">
               <Button
@@ -145,17 +207,36 @@ export const BotCard: React.FC<BotCardProps> = ({
         )}
       </div>
 
+      {/* 踢线提示 toast：黄色背景，3 秒后自动消失 */}
+      {showKickedToast && (
+        <div className="ndf-kicked-toast" role="status">
+          <Text size={100} weight="semibold">Bot 账号被踢，正在重新登录…</Text>
+        </div>
+      )}
+
       {/* Card Technical details pane */}
       <div className="ndf-card-body-row">
-        {/* Left: Interactive Avatar */}
+        {/* Left: Interactive Avatar / WebUI 二维码 */}
         <div className="ndf-bot-avatar-wrapper">
-          <div className="ndf-bot-avatar-container">
-            <div className="ndf-bot-avatar-circle">
-              <Text size={500} weight="semibold" style={{ color: 'var(--colorBrandForegroundLink)' }}>
-                {bot.bot_id.slice(-2)}
-              </Text>
+          {hasQrcode ? (
+            <Tooltip content="使用 QQ 扫码登录" relationship="label">
+              <div className="ndf-bot-qrcode-container">
+                <img
+                  className="ndf-bot-qrcode-img"
+                  src={qrcodeUrl!}
+                  alt="WebUI 登录二维码"
+                />
+              </div>
+            </Tooltip>
+          ) : (
+            <div className="ndf-bot-avatar-container">
+              <div className="ndf-bot-avatar-circle">
+                <Text size={500} weight="semibold" style={{ color: 'var(--colorBrandForegroundLink)' }}>
+                  {bot.bot_id.slice(-2)}
+                </Text>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right: Technical monitoring items */}
@@ -190,3 +271,4 @@ export const BotCard: React.FC<BotCardProps> = ({
     </Card>
   );
 };
+

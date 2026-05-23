@@ -23,28 +23,34 @@
   top: 0;
   bottom: 0;
   width: 4px;
-  background-color: #5f5f5f; /* Default stopped */
+  background-color: #5f5f5f;
+  /* Default stopped */
   transition: background-color 0.15s ease;
 }
 
 .state-running .ndf-card-accent-bar {
-  background-color: #107c41; /* Green */
+  background-color: #107c41;
+  /* Green */
 }
 
 .state-starting .ndf-card-accent-bar {
-  background-color: var(--colorBrandForegroundLink); /* Blue */
+  background-color: var(--colorBrandForegroundLink);
+  /* Blue */
 }
 
 .state-stopping .ndf-card-accent-bar {
-  background-color: #d83b01; /* Orange warning */
+  background-color: #d83b01;
+  /* Orange warning */
 }
 
 .state-crashed .ndf-card-accent-bar {
-  background-color: #bc2f32; /* Red danger */
+  background-color: #bc2f32;
+  /* Red danger */
 }
 
 .state-repairing .ndf-card-accent-bar {
-  background-color: #0078d4; /* Repairing info blue */
+  background-color: #0078d4;
+  /* Repairing info blue */
 }
 
 /* Header actions layout */
@@ -89,7 +95,8 @@
 }
 
 .ndf-bot-card:hover .ndf-bot-avatar-container {
-  transform: translateY(-4px); /* Float up elegantly */
+  transform: translateY(-4px);
+  /* Float up elegantly */
 }
 
 .ndf-bot-avatar-circle {
@@ -145,4 +152,94 @@
 .ndf-bot-card.batch-mode.selected {
   border-color: var(--colorBrandForegroundLink) !important;
   box-shadow: 0 0 0 2px var(--colorBrandForegroundLink), var(--ndf-shadow-card) !important;
+}
+
+
+/* ======================================================================== */
+/* NapCat WebUI 登录态 UI（二维码 / 在线徽章 / 踢线提示）                    */
+/* ======================================================================== */
+
+/* 在线 / 离线 徽章 */
+.ndf-online-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--ndf-border-subtle);
+  background-color: var(--ndf-bg-window);
+  line-height: 1;
+}
+
+.ndf-online-indicator-online {
+  border-color: rgba(16, 124, 65, 0.4);
+  background-color: rgba(16, 124, 65, 0.08);
+  color: #107c41;
+}
+
+.ndf-online-indicator-offline {
+  border-color: rgba(95, 95, 95, 0.4);
+  background-color: rgba(95, 95, 95, 0.08);
+  color: #5f5f5f;
+}
+
+.ndf-online-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ndf-online-dot-online {
+  background-color: #107c41;
+  box-shadow: 0 0 0 2px rgba(16, 124, 65, 0.18);
+}
+
+.ndf-online-dot-offline {
+  background-color: #5f5f5f;
+}
+
+/* 踢线提示 toast（黄色背景，3 秒后自动消失） */
+.ndf-kicked-toast {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background-color: rgba(247, 198, 49, 0.18);
+  border: 1px solid rgba(216, 174, 28, 0.5);
+  color: #8a6d00;
+  font-size: 12px;
+  z-index: 2;
+}
+
+.dark .ndf-kicked-toast {
+  background-color: rgba(247, 198, 49, 0.14);
+  color: #f7c631;
+}
+
+/* WebUI 二维码区域（替换默认头像位置） */
+.ndf-bot-qrcode-container {
+  width: 90px;
+  height: 90px;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #ffffff;
+  border: 1px solid var(--ndf-border-subtle);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px;
+  box-sizing: border-box;
+  transition: transform 0.2s cubic-bezier(0.1, 0.9, 0.2, 1.0);
+}
+
+.ndf-bot-card:hover .ndf-bot-qrcode-container {
+  transform: translateY(-4px);
+}
+
+.ndf-bot-qrcode-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }

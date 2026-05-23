@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -21,7 +21,7 @@ import {
 } from '@fluentui/react-icons';
 import { botCommands } from '../../../core/ipc/botCommands';
 import { subscribeToEvents } from '../../../core/ipc/events';
-import { BotActorSnapshot } from '../../../core/ipc/types';
+import { BotActorSnapshot, NapCatLoginInvalidationReason } from '../../../core/ipc/types';
 import { BotCard } from './BotCard';
 import { BatchToolbar } from './BatchToolbar';
 import './BotListPage.css';
@@ -43,6 +43,14 @@ export const BotListPage: React.FC<BotListPageProps> = ({
   const [selectedBotIds, setSelectedBotIds] = useState<Set<string>>(new Set());
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
 
+  // NapCat WebUI 登录态聚合 state（来自 5 个领域事件）
+  const [webuiByBot, setWebuiByBot] = useState<Record<string, { port: number; token: string }>>({});
+  const [qrcodeByBot, setQrcodeByBot] = useState<Record<string, string>>({});
+  const [onlineByBot, setOnlineByBot] = useState<Record<string, boolean>>({});
+  const [invalidatedByBot, setInvalidatedByBot] = useState<Record<string, NapCatLoginInvalidationReason>>({});
+  // 失效事件 3s 自动清除定时器引用，按 bot_id 索引
+  const invalidationTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   // Query bot snapshots
   const { data: botSnapshots = [], isLoading, error, refetch } = useQuery<BotActorSnapshot[], Error>({
     queryKey: ['botSnapshots'],
@@ -54,23 +62,86 @@ export const BotListPage: React.FC<BotListPageProps> = ({
     let unsubscribe: (() => void) | undefined;
     const setup = async () => {
       unsubscribe = await subscribeToEvents((event) => {
-        if (event.kind === 'bot_state_changed') {
-          console.log('Bot state changed event received:', event);
-          queryClient.setQueryData<BotActorSnapshot[]>(['botSnapshots'], (old) => {
-            if (!old) return old;
-            return old.map((snap) => {
-              if (snap.bot_id === event.snapshot.bot_id) {
-                return event.snapshot;
-              }
-              return snap;
+        switch (event.kind) {
+          case 'bot_state_changed': {
+            console.log('Bot state changed event received:', event);
+            queryClient.setQueryData<BotActorSnapshot[]>(['botSnapshots'], (old) => {
+              if (!old) return old;
+              return old.map((snap) => {
+                if (snap.bot_id === event.snapshot.bot_id) {
+                  return event.snapshot;
+                }
+                return snap;
+              });
             });
-          });
+            break;
+          }
+          case 'napcat_webui_available': {
+            setWebuiByBot((prev) => ({
+              ...prev,
+              [event.bot_id]: { port: event.port, token: event.token },
+            }));
+            break;
+          }
+          case 'napcat_login_qrcode': {
+            setQrcodeByBot((prev) => ({
+              ...prev,
+              [event.bot_id]: event.qrcode_url,
+            }));
+            break;
+          }
+          case 'napcat_login_qrcode_removed': {
+            setQrcodeByBot((prev) => {
+              if (!(event.bot_id in prev)) return prev;
+              const next = { ...prev };
+              delete next[event.bot_id];
+              return next;
+            });
+            break;
+          }
+          case 'napcat_login_online': {
+            setOnlineByBot((prev) => ({
+              ...prev,
+              [event.bot_id]: event.online,
+            }));
+            break;
+          }
+          case 'napcat_login_invalidated': {
+            const botId: string = event.bot_id;
+            setInvalidatedByBot((prev) => ({
+              ...prev,
+              [botId]: event.reason,
+            }));
+            // 清掉旧定时器（如果有），避免覆盖时窗错位
+            const prevTimer = invalidationTimersRef.current[botId];
+            if (prevTimer) {
+              clearTimeout(prevTimer);
+            }
+            invalidationTimersRef.current[botId] = setTimeout(() => {
+              setInvalidatedByBot((prev) => {
+                if (!(botId in prev)) return prev;
+                const next = { ...prev };
+                delete next[botId];
+                return next;
+              });
+              delete invalidationTimersRef.current[botId];
+            }, 3000);
+            break;
+          }
+          default:
+            break;
         }
       });
     };
     setup();
     return () => {
       if (unsubscribe) unsubscribe();
+      // 清理所有挂起的失效定时器
+      const timers = invalidationTimersRef.current;
+      for (const id of Object.keys(timers)) {
+        clearTimeout(timers[id]);
+        delete timers[id];
+      }
     };
   }, [queryClient]);
 
@@ -260,19 +331,29 @@ export const BotListPage: React.FC<BotListPageProps> = ({
       ) : (
         /* 4. Grid Flow Panels of BotCards */
         <div className="ndf-bot-flow-grid">
-          {botSnapshots.map((bot) => (
-            <BotCard
-              key={bot.bot_id}
-              bot={bot}
-              onStart={handleStartBot}
-              onStop={handleStopBot}
-              onConfigure={onConfigureBot}
-              onViewLogs={onViewLogs}
-              isBatchMode={isBatchMode}
-              isSelected={selectedBotIds.has(bot.bot_id)}
-              onToggleSelect={handleToggleSelect}
-            />
-          ))}
+          {botSnapshots.map((bot) => {
+            const webui = webuiByBot[bot.bot_id];
+            return (
+              <BotCard
+                key={bot.bot_id}
+                bot={bot}
+                onStart={handleStartBot}
+                onStop={handleStopBot}
+                onConfigure={onConfigureBot}
+                onViewLogs={onViewLogs}
+                isBatchMode={isBatchMode}
+                isSelected={selectedBotIds.has(bot.bot_id)}
+                onToggleSelect={handleToggleSelect}
+                qrcodeUrl={qrcodeByBot[bot.bot_id] ?? null}
+                isOnline={
+                  bot.bot_id in onlineByBot ? onlineByBot[bot.bot_id] : null
+                }
+                invalidationReason={invalidatedByBot[bot.bot_id] ?? null}
+                webuiPort={webui ? webui.port : null}
+                webuiToken={webui ? webui.token : null}
+              />
+            );
+          })}
         </div>
       )}
 
