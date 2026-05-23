@@ -838,22 +838,102 @@ impl LocalRuntimeBackend {
     }
 }
 
-/// 按 GBK / UTF-8 解码 NapCat 子进程的一行原始字节。
+/// 按 GBK / UTF-8 解码 NapCat 子进程的一行原始字节，并清洗 ANSI 转义。
 ///
 /// NapCatWinBootMain.exe 在中文 Windows 上输出 GBK；其它平台默认 UTF-8。
 /// 优先尝试 UTF-8，失败再退回 GBK；都失败则使用 lossy UTF-8。
+///
+/// Linux 上 NapCat 通过 logger 输出会带 `\x1b[32m` 之类颜色转义，直接渲染会
+/// 在 UI 上残留 tofu 字符并干扰 LogHighlighter 的级别匹配（参考 legacy
+/// `_sanitize_log_text` 的处理）。这里在解码后做一次 ANSI 清洗。
 fn decode_log_line(raw: &[u8]) -> String {
-    if let Ok(s) = std::str::from_utf8(raw) {
-        return s.to_string();
-    }
-    #[cfg(windows)]
-    {
-        let (cow, _, had_errors) = encoding_rs::GBK.decode(raw);
-        if !had_errors {
-            return cow.into_owned();
+    let decoded = if let Ok(s) = std::str::from_utf8(raw) {
+        s.to_string()
+    } else {
+        #[cfg(windows)]
+        {
+            let (cow, _, had_errors) = encoding_rs::GBK.decode(raw);
+            if !had_errors {
+                cow.into_owned()
+            } else {
+                String::from_utf8_lossy(raw).into_owned()
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            String::from_utf8_lossy(raw).into_owned()
+        }
+    };
+    strip_ansi_escapes(&decoded)
+}
+
+/// 移除字符串中的 ANSI 转义序列（CSI、OSC、单字符 ESC 命令）。
+///
+/// 对齐 legacy 正则 `\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])` 的覆盖范围，
+/// 但用 byte 级状态机实现，不引入 regex 依赖：
+///
+/// - `ESC [` 进入 CSI：吞掉参数字节(`0x30..=0x3F`) 和 intermediate (`0x20..=0x2F`)，
+///   到 final 字节 (`0x40..=0x7E`) 为止。
+/// - `ESC ]` / `ESC P` 等开 string-context：吞到 BEL (`\x07`) 或 `ESC \` (ST)。
+/// - 其它 `ESC X`：直接丢弃 ESC 和 X 两字节。
+///
+/// 不破坏多字节 UTF-8：ESC = 0x1B，UTF-8 continuation 字节均 ≥ 0x80，不冲突。
+fn strip_ansi_escapes(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b != 0x1B {
+            out.push(b);
+            i += 1;
+            continue;
+        }
+        // 进入 ESC 处理。
+        i += 1;
+        if i >= bytes.len() {
+            // 末尾孤立 ESC，丢弃。
+            break;
+        }
+        match bytes[i] {
+            b'[' => {
+                // CSI: 跳过参数 + intermediate + final。
+                i += 1;
+                while i < bytes.len() && (0x30..=0x3F).contains(&bytes[i]) {
+                    i += 1;
+                }
+                while i < bytes.len() && (0x20..=0x2F).contains(&bytes[i]) {
+                    i += 1;
+                }
+                if i < bytes.len() && (0x40..=0x7E).contains(&bytes[i]) {
+                    i += 1;
+                }
+            }
+            b']' | b'P' | b'X' | b'^' | b'_' => {
+                // string-context: OSC/DCS/SOS/PM/APC，吞到 BEL 或 ESC \\。
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == 0x07 {
+                        i += 1;
+                        break;
+                    }
+                    if bytes[i] == 0x1B && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                        i += 2;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            _ => {
+                // 其它两字节命令（包括 `ESC @-Z`, `ESC \\`, `ESC -_`），整体丢弃。
+                i += 1;
+            }
         }
     }
-    String::from_utf8_lossy(raw).into_owned()
+    // bytes 路径下 out 是有效 UTF-8（ESC 是单字节 ASCII，且所有跳过的字节都 ≤ 0x7E
+    // 都是 ASCII；不会拆裂多字节字符）。
+    String::from_utf8(out)
+        .unwrap_or_else(|err| String::from_utf8_lossy(err.as_bytes()).into_owned())
 }
 
 /// 从一行 NapCat stdout 解析出 WebUI 登录入口的 (port, token)。
@@ -1016,6 +1096,50 @@ mod tests {
     fn decode_log_line_handles_utf8_passthrough() {
         let bytes = "你好 NapCat".as_bytes();
         assert_eq!(decode_log_line(bytes), "你好 NapCat");
+    }
+
+    #[test]
+    fn strip_ansi_escapes_removes_color_csi_sequences() {
+        // legacy NapCat Linux 端常见的彩色级别标签
+        let input = "\x1b[32m[info]\x1b[0m hello";
+        assert_eq!(strip_ansi_escapes(input), "[info] hello");
+    }
+
+    #[test]
+    fn strip_ansi_escapes_removes_cursor_csi_with_params() {
+        // 带参数 + intermediate 的 CSI
+        let input = "before\x1b[1;31mred\x1b[0;39mafter\x1b[2J";
+        assert_eq!(strip_ansi_escapes(input), "beforeredafter");
+    }
+
+    #[test]
+    fn strip_ansi_escapes_removes_osc_with_bel_and_st() {
+        // OSC 通常用于设置窗口标题，分别用 BEL 和 ESC\\ 终止
+        let bel = "pre\x1b]0;title\x07post";
+        assert_eq!(strip_ansi_escapes(bel), "prepost");
+        let st = "pre\x1b]0;title\x1b\\post";
+        assert_eq!(strip_ansi_escapes(st), "prepost");
+    }
+
+    #[test]
+    fn strip_ansi_escapes_drops_two_byte_esc_commands() {
+        // ESC = 选字符集；ESC c 重置
+        let input = "a\x1b=b\x1bcc";
+        assert_eq!(strip_ansi_escapes(input), "abc");
+    }
+
+    #[test]
+    fn strip_ansi_escapes_preserves_multibyte_utf8() {
+        // 多字节字符的 continuation byte ≥ 0x80，不会被状态机吞掉
+        let input = "\x1b[32m你好\x1b[0m";
+        assert_eq!(strip_ansi_escapes(input), "你好");
+    }
+
+    #[test]
+    fn decode_log_line_strips_ansi_after_decoding() {
+        // 模拟 Linux 上 NapCat logger 输出的彩色 [info] 标签
+        let raw = b"\x1b[32m[info]\x1b[0m [NapCat] starting";
+        assert_eq!(decode_log_line(raw), "[info] [NapCat] starting");
     }
 
     #[cfg(windows)]
