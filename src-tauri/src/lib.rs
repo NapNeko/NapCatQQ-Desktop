@@ -12,7 +12,7 @@ pub mod bootstrap;
 pub mod commands;
 pub mod runtime;
 
-pub use bootstrap::build_snapshot;
+pub use bootstrap::{build_snapshot, build_snapshot_for_data_root};
 
 pub type AppBotManager = BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>;
 
@@ -27,7 +27,7 @@ pub struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let data_root = bootstrap::resolve_data_root();
-    let snapshot = build_snapshot();
+    let snapshot = build_snapshot_for_data_root(&data_root);
     let event_bus = BroadcastEventBus::default();
     let runtime = runtime::AppRuntime::new(&data_root, event_bus.clone());
     let runtime_watcher = runtime.clone();
@@ -38,7 +38,10 @@ pub fn run() {
         Arc::new(SecretStoreImpl::new(data_root.join("secrets")));
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
     let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
-    let bot_backend = Arc::new(LocalRuntimeBackend::new(&data_root, "bot-manager-local"));
+    let bot_backend = Arc::new(
+        LocalRuntimeBackend::new(&data_root, "bot-manager-local")
+            .with_event_bus(Arc::new(event_bus.clone())),
+    );
     let launch_planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
         data_root.join("runtime"),
     ));
@@ -52,6 +55,8 @@ pub fn run() {
     ));
 
     let bot_manager_bootstrap = Arc::clone(&bot_manager);
+    let bot_manager_listener = Arc::clone(&bot_manager);
+    let bot_manager_shutdown = Arc::clone(&bot_manager);
 
     tauri::Builder::default()
         .manage(AppState {
@@ -99,13 +104,30 @@ pub fn run() {
                     }
                 }
             });
+            // 订阅运行时事件总线，把 BotProcessExited 转成 actor 状态机转移，
+            // 防止 UI 残留假 Running。
+            bot_manager_listener.spawn_runtime_event_listener();
             Ok(())
         })
-        .on_window_event(move |_window, event| {
-            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+        .on_window_event(move |window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // 阻塞窗口关闭，先做 BotManager + AppRuntime 收尾，再退出。
+                api.prevent_close();
                 let runtime_shutdown = runtime_shutdown.clone();
+                let bot_manager_shutdown = Arc::clone(&bot_manager_shutdown);
+                let window = window.clone();
                 tauri::async_runtime::spawn(async move {
+                    // 先关掉所有运行中的 Bot：递归 kill 进程树，避免 QQ.exe 残留。
+                    let result = bot_manager_shutdown.shutdown_all().await;
+                    if !result.failed.is_empty() {
+                        eprintln!(
+                            "[bot_manager] shutdown_all: {} bot(s) failed to stop cleanly",
+                            result.failed.len()
+                        );
+                    }
                     runtime_shutdown.shutdown().await;
+                    // 收尾完成后真正关闭窗口。
+                    let _ = window.destroy();
                 });
             }
         })
@@ -120,8 +142,6 @@ pub fn run() {
             commands::open_data_dir,
             commands::publish_demo_event,
             commands::publish_runtime_status,
-            commands::spawn_local_bot,
-            commands::stop_local_bot,
             commands::bot::bootstrap_bot_manager,
             commands::bot::list_bot_snapshots,
             commands::bot::get_bot_snapshot,
