@@ -15,21 +15,21 @@ export interface LogSnapshot {
 let mockSnapshots: BotActorSnapshot[] = [
   {
     bot_id: '10001',
-    state: 'Running',
+    state: 'running',
     revision: 1,
     token_generation: 1,
     pending_restart: false,
     last_transition: 'Start SUCCESS',
-    last_error: null,
+    last_error: undefined,
   },
   {
     bot_id: '10002',
-    state: 'Stopped',
+    state: 'stopped',
     revision: 1,
     token_generation: 1,
     pending_restart: false,
     last_transition: 'Stopped gracefully',
-    last_error: null,
+    last_error: undefined,
   },
 ];
 
@@ -127,7 +127,7 @@ export const botCommands = {
         const snap = mockSnapshots.find(s => s.bot_id === botId);
         if (snap) {
           // 1. Transition to Starting
-          snap.state = 'Starting';
+          snap.state = 'starting';
           snap.revision += 1;
           snap.last_transition = 'Manual starting';
           emitMockEvent({
@@ -138,7 +138,7 @@ export const botCommands = {
 
           // 2. Schedule transition to Running after 1.5s
           setTimeout(() => {
-            snap.state = 'Running';
+            snap.state = 'running';
             snap.revision += 1;
             snap.last_transition = 'Start SUCCESS';
             emitMockEvent({
@@ -165,7 +165,7 @@ export const botCommands = {
         const snap = mockSnapshots.find(s => s.bot_id === botId);
         if (snap) {
           // 1. Transition to Stopping
-          snap.state = 'Stopping';
+          snap.state = 'stopping';
           snap.revision += 1;
           snap.last_transition = 'Manual stopping';
           emitMockEvent({
@@ -176,7 +176,7 @@ export const botCommands = {
 
           // 2. Schedule transition to Stopped after 1.5s
           setTimeout(() => {
-            snap.state = 'Stopped';
+            snap.state = 'stopped';
             snap.revision += 1;
             snap.last_transition = 'Stopped gracefully';
             emitMockEvent({
@@ -205,7 +205,7 @@ export const botCommands = {
         for (const id of botIds) {
           const snap = mockSnapshots.find(s => s.bot_id === id);
           if (snap) {
-            snap.state = 'Starting';
+            snap.state = 'starting';
             snap.revision += 1;
             snap.last_transition = 'Batch manual starting';
             succeeded.push(id);
@@ -216,7 +216,7 @@ export const botCommands = {
             });
 
             setTimeout(() => {
-              snap.state = 'Running';
+              snap.state = 'running';
               snap.revision += 1;
               snap.last_transition = 'Start SUCCESS';
               emitMockEvent({
@@ -245,7 +245,7 @@ export const botCommands = {
         for (const id of botIds) {
           const snap = mockSnapshots.find(s => s.bot_id === id);
           if (snap) {
-            snap.state = 'Stopping';
+            snap.state = 'stopping';
             snap.revision += 1;
             snap.last_transition = 'Batch manual stopping';
             succeeded.push(id);
@@ -256,7 +256,7 @@ export const botCommands = {
             });
 
             setTimeout(() => {
-              snap.state = 'Stopped';
+              snap.state = 'stopped';
               snap.revision += 1;
               snap.last_transition = 'Stopped gracefully';
               emitMockEvent({
@@ -300,7 +300,7 @@ export const botCommands = {
     if (isTauri) {
       return await invoke<number>('active_bot_count');
     }
-    return mockSnapshots.filter(s => s.state === 'Running' || s.state === 'Starting' || s.state === 'Stopping').length;
+    return mockSnapshots.filter(s => s.state === 'running' || s.state === 'starting' || s.state === 'stopping').length;
   },
 
   /// 拉取 Bot 最近 `lines` 行历史日志。
@@ -356,12 +356,12 @@ export const botCommands = {
         } else {
           const newSnap: BotActorSnapshot = {
             bot_id: botId,
-            state: 'Stopped',
+            state: 'stopped',
             revision: 1,
             token_generation: 1,
             pending_restart: false,
             last_transition: 'Config created',
-            last_error: null,
+            last_error: undefined,
           };
           mockSnapshots.push(newSnap);
           resolve({ ...newSnap });

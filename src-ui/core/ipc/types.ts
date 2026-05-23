@@ -41,7 +41,12 @@ export interface BootstrapSnapshot {
   report: MigrationReport;
 }
 
-export type BotActorState = 'Stopped' | 'Starting' | 'Running' | 'Stopping' | 'Crashed' | 'Repairing';
+// 与后端 ts-rs 派生的强类型对齐——直接 re-export 生成版本，避免手写漂移。
+export type { BotActorState } from './generated/BotActorState';
+export type { BotActorSnapshot } from './generated/BotActorSnapshot';
+
+import type { BotActorState } from './generated/BotActorState';
+import type { BotActorSnapshot } from './generated/BotActorSnapshot';
 
 export type BotFlavor = 'napcat' | 'snowluma';
 
@@ -95,16 +100,6 @@ export interface RemoteFileEntry {
   name: string;
   is_dir: boolean;
   size: number;
-}
-
-export interface BotActorSnapshot {
-  bot_id: string;
-  state: BotActorState;
-  revision: number;
-  token_generation: number;
-  pending_restart: boolean;
-  last_transition?: string | null;
-  last_error?: string | null;
 }
 
 export interface BatchResultResponse {

@@ -43,7 +43,7 @@ let mockBootstrap: BootstrapSnapshot = {
 let mockBots: BotStatus[] = [
   {
     bot_id: '10001',
-    state: 'Running',
+    state: 'running',
     pid: 14052,
     started_at: Math.floor((Date.now() - 7200000) / 1000),
     memory_rss_bytes: 124518400, // ~118MB
@@ -58,7 +58,7 @@ let mockBots: BotStatus[] = [
   },
   {
     bot_id: '10002',
-    state: 'Stopped',
+    state: 'stopped',
     pid: null,
     started_at: null,
     memory_rss_bytes: null,
@@ -150,7 +150,7 @@ export const client = {
           bot_id,
           status: {
             bot_id,
-            state: 'Running',
+            state: 'running',
             pid: 8848,
             started_at: Math.floor((Date.now() - 3600000) / 1000),
             memory_rss_bytes: 145000000,

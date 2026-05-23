@@ -25,7 +25,7 @@ export async function subscribeToEvents(callback: EventCallback): Promise<Unsubs
     const eventNames = [
       'bot_state_changed',
       'bot_status_changed',
-      'log_appended',
+      'bot_log_appended',
       'bot_error',
       'task_progress',
       'napcat_webui_available',
@@ -43,6 +43,9 @@ export async function subscribeToEvents(callback: EventCallback): Promise<Unsubs
             // In Tauri v2, if Rust serialized with serde_json::to_string, payload is a JSON string
             const payloadStr = tauriEvent.payload;
             const parsed = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
+            // 诊断日志：临时打印所有事件，确认链路是否通。稳定后可移除。
+            // eslint-disable-next-line no-console
+            console.log('[Tauri event]', name, parsed);
             callback(parsed);
           } catch (err) {
             console.error(`解析 Tauri 事件 ${name} payload 失败:`, err, tauriEvent);
@@ -53,6 +56,8 @@ export async function subscribeToEvents(callback: EventCallback): Promise<Unsubs
         console.error(`监听 Tauri 事件 ${name} 失败:`, err);
       }
     }
+    // eslint-disable-next-line no-console
+    console.log('[Tauri events] subscribed to', eventNames.length, 'channels');
 
     return () => {
       for (const unlisten of unlisteners) {
