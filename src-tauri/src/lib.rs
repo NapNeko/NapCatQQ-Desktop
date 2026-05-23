@@ -75,6 +75,9 @@ pub fn run() {
     let bot_manager_shutdown = Arc::clone(&bot_manager);
 
     tauri::Builder::default()
+        // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI），
+        // webview 自身不支持 target=_blank。
+        .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             data_root,
             snapshot,
@@ -87,8 +90,22 @@ pub fn run() {
             let mut subscription = event_bus.subscribe(EventFilter::all());
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = subscription.next().await {
+                    let event_name = event.tauri_event_name();
                     if let Ok(payload) = serde_json::to_string(&event) {
-                        let _ = handle.emit(event.tauri_event_name(), payload);
+                        // 诊断日志：确认事件链是否真的把事件发到 webview。
+                        // 稳定后可改成 tracing::debug。
+                        eprintln!(
+                            "[event-emit] {} bot={:?} payload_len={}",
+                            event_name,
+                            event.bot_id().map(|b| b.as_str().to_string()),
+                            payload.len()
+                        );
+                        let emit_result = handle.emit(event_name, payload);
+                        if let Err(err) = emit_result {
+                            eprintln!("[event-emit] FAILED to emit {event_name}: {err}");
+                        }
+                    } else {
+                        eprintln!("[event-emit] FAILED to serialize event {event_name}");
                     }
                 }
             });

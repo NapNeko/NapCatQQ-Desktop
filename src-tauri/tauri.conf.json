@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.napcatqq.desktop",
   "build": {
-    "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420"
   },
@@ -19,7 +19,9 @@
         "transparent": true,
         "shadow": true,
         "windowEffects": {
-          "effects": ["mica"],
+          "effects": [
+            "mica"
+          ],
           "state": "active"
         }
       }
