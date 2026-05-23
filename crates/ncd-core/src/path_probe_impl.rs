@@ -50,10 +50,6 @@ impl LocalPathProbe {
                 let pd_path = PathBuf::from(pd);
                 allowed_roots.push(pd_path.join("NapCatQQ-Desktop"));
                 allowed_roots.push(pd_path.join("NapCatQQ Desktop"));
-            } else {
-                let pd_path = PathBuf::from("C:\\ProgramData");
-                allowed_roots.push(pd_path.join("NapCatQQ-Desktop"));
-                allowed_roots.push(pd_path.join("NapCatQQ Desktop"));
             }
         }
 
@@ -87,10 +83,6 @@ impl PathProbe for LocalPathProbe {
         {
             if let Ok(pd) = env::var("ProgramData") {
                 let pd_path = PathBuf::from(pd);
-                candidates.push(pd_path.join("NapCatQQ Desktop"));
-                candidates.push(pd_path.join("NapCatQQ-Desktop"));
-            } else {
-                let pd_path = PathBuf::from("C:\\ProgramData");
                 candidates.push(pd_path.join("NapCatQQ Desktop"));
                 candidates.push(pd_path.join("NapCatQQ-Desktop"));
             }
