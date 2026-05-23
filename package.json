@@ -7,13 +7,20 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
+    "rust:check": "cargo check --workspace --all-targets",
+    "rust:test": "cargo test --workspace",
+    "ts-bindings": "cargo test -p ncd-core --lib export_bindings_ -- --quiet",
+    "verify": "npm run ts-bindings && npm run typecheck && npm run rust:check",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:watch": "cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\""
   },
   "dependencies": {
     "@fluentui/react-components": "^9.54.0",
     "@fluentui/react-icons": "^2.0.242",
     "@tanstack/react-query": "^5.32.0",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
