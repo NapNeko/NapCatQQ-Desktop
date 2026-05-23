@@ -142,7 +142,9 @@ impl RuntimeLaunchPlanner for TestLaunchPlanner {
                 working_dir: std::path::PathBuf::from("test-runtime/NapCatQQ"),
                 load_script_path: std::path::PathBuf::from("test-runtime/NapCatQQ/loadNapCat.js"),
             })),
-            BackendType::SnowLuma => Err(RuntimeLaunchPlanError::SnowLumaNotImplemented),
+            BackendType::SnowLuma => Err(RuntimeLaunchPlanError::SnowLumaInvalidStartMode(
+                "snowluma backend not wired in test planner".to_string(),
+            )),
         }
     }
 }
@@ -157,6 +159,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
             offline_auto_restart: false,
             runtime_target: ncd_core::RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
+            snowluma_start_mode: None,
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
@@ -540,14 +543,23 @@ async fn snowluma_start_returns_not_implemented_without_running() {
 
     manager.upsert_bot_config(config).await.unwrap();
 
+    // Test planner 在 SnowLuma 分支显式返回 `SnowLumaInvalidStartMode`，
+    // 模拟"SnowLuma 启动链路尚未在 BotManager wiring 内打通"的场景。task 2.7
+    // 把 `RuntimeLaunchPlanError` 的 `SnowLumaNotImplemented` 砍掉后，本测试
+    // 仅锁定"start_bot 应当因为启动计划构造失败而把 actor 转 Crashed"这一行为。
     let err = manager.start_bot(&bot_id).await.unwrap_err();
-    assert!(err.to_string().contains("SnowLuma 启动链路尚未接入"));
+    let err_message = err.to_string();
+    assert!(
+        err_message.contains("snowluma backend not wired in test planner"),
+        "expected planner error to surface, got: {err_message}"
+    );
 
     let snap = manager.get_snapshot(&bot_id).await.unwrap();
     assert_eq!(snap.state, BotActorState::Crashed);
-    assert_eq!(
-        snap.last_error.as_deref(),
-        Some("SnowLuma 启动链路尚未接入：需要 daemon + WebUI load_process 支持")
+    let last_error = snap.last_error.as_deref().unwrap_or_default();
+    assert!(
+        last_error.contains("snowluma backend not wired in test planner"),
+        "expected last_error to capture planner error, got: {last_error:?}"
     );
 }
 

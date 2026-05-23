@@ -15,6 +15,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
             offline_auto_restart: false,
             runtime_target: RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
+            snowluma_start_mode: None,
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
