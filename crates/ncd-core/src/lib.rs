@@ -1,3 +1,4 @@
+pub mod app_config;
 pub mod app_config_migration;
 pub mod backend_config_renderer;
 pub mod bootstrap;
@@ -14,6 +15,9 @@ pub mod kinds;
 pub mod legacy_discovery;
 pub mod migration;
 pub mod models;
+pub mod napcat_login_poller;
+pub mod napcat_webui_client;
+pub mod offline_notifier;
 pub mod path_probe_impl;
 pub mod remote_host;
 pub mod report;
@@ -25,6 +29,7 @@ pub mod traits;
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
 };
+pub use app_config::{WebUiPollerSettings, default_login_interval};
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
 pub use bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 pub use bot_config::{
@@ -48,6 +53,9 @@ pub use models::{
     BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationSource, MigrationStage,
     MigrationWarning,
 };
+pub use napcat_login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
+pub use napcat_webui_client::{NapCatWebUiClient, NapCatWebUiError, ReqwestNapCatWebUiClient};
+pub use offline_notifier::{NoopOfflineNotifier, OfflineNoticeKind, OfflineNotifier};
 pub use path_probe_impl::LocalPathProbe;
 pub use remote_host::{
     ExecResult, MockRemoteHost, PosixPath, ProcessNode, ProcessTree, RemoteFileEntry, RemoteHost,
