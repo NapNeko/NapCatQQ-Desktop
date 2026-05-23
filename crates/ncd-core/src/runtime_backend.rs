@@ -1,16 +1,19 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
 use crate::bot_actor::BotActorState;
 use crate::bot_config::{BackendType, BotConfig};
+use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::ids::BotId;
 use crate::kinds::{BackendKind, BotFlavor, RuntimeTarget};
 use crate::remote_host::{RemoteHost, RemoteHostError, ShellCmd};
@@ -164,245 +167,6 @@ impl BotRuntimeConfig {
         };
         self
     }
-}
-
-#[async_trait]
-pub trait RuntimeLaunchPlanner: Send + Sync {
-    async fn build_plan(
-        &self,
-        bot_id: &BotId,
-        config: &BotConfig,
-    ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError>;
-}
-
-#[derive(Debug, Clone)]
-pub struct FileSystemRuntimeLaunchPlanner {
-    runtime_root: PathBuf,
-}
-
-impl FileSystemRuntimeLaunchPlanner {
-    pub fn new(runtime_root: impl Into<PathBuf>) -> Self {
-        Self {
-            runtime_root: runtime_root.into(),
-        }
-    }
-}
-
-#[async_trait]
-impl RuntimeLaunchPlanner for FileSystemRuntimeLaunchPlanner {
-    async fn build_plan(
-        &self,
-        bot_id: &BotId,
-        config: &BotConfig,
-    ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
-        build_runtime_launch_plan(bot_id, config, &self.runtime_root).await
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RuntimeLaunchPlan {
-    NapCat(NapCatLaunchPlan),
-    SnowLuma(SnowLumaLaunchPlan),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NapCatLaunchPlan {
-    pub runtime_root: PathBuf,
-    pub napcat_dir: PathBuf,
-    pub program: PathBuf,
-    pub args: Vec<String>,
-    pub environment: BTreeMap<String, String>,
-    pub working_dir: PathBuf,
-    pub load_script_path: PathBuf,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SnowLumaLaunchPlan {
-    pub runtime_root: PathBuf,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum RuntimeLaunchPlanError {
-    #[error("unsupported runtime target: {0:?}")]
-    UnsupportedTarget(RuntimeTarget),
-    #[error("SnowLuma 启动链路尚未接入：需要 daemon + WebUI load_process 支持")]
-    SnowLumaNotImplemented,
-    #[error("unsupported platform for QQ registry lookup: {0}")]
-    UnsupportedPlatform(String),
-    #[error("required runtime file missing: {0}")]
-    MissingFile(String),
-    #[error("failed to write loadNapCat.js: {0}")]
-    LoadScript(String),
-}
-
-impl RuntimeLaunchPlan {
-    pub fn into_runtime_config(self, mut cfg: BotRuntimeConfig) -> BotRuntimeConfig {
-        match self {
-            RuntimeLaunchPlan::NapCat(plan) => {
-                cfg.launch_command = std::iter::once(plan.program.to_string_lossy().to_string())
-                    .chain(plan.args.into_iter())
-                    .collect();
-                cfg.working_dir = Some(plan.working_dir);
-                cfg.environment = plan.environment;
-            }
-            RuntimeLaunchPlan::SnowLuma(plan) => {
-                cfg.launch_command = Vec::new();
-                cfg.working_dir = Some(plan.runtime_root);
-            }
-        }
-        cfg
-    }
-}
-
-pub async fn build_runtime_launch_plan(
-    bot_id: &BotId,
-    config: &BotConfig,
-    runtime_root: impl AsRef<Path>,
-) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
-    match config.bot.backend_type {
-        BackendType::NapCat => {
-            build_napcat_launch_plan(bot_id, config, runtime_root.as_ref()).await
-        }
-        BackendType::SnowLuma => Err(RuntimeLaunchPlanError::SnowLumaNotImplemented),
-    }
-}
-
-pub async fn build_napcat_launch_plan_with_qq_install_path(
-    bot_id: &BotId,
-    _config: &BotConfig,
-    runtime_root: impl AsRef<Path>,
-    qq_install: impl AsRef<Path>,
-) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
-    build_napcat_launch_plan_inner(bot_id, runtime_root.as_ref(), qq_install.as_ref()).await
-}
-
-pub async fn build_napcat_launch_plan(
-    bot_id: &BotId,
-    _config: &BotConfig,
-    runtime_root: impl AsRef<Path>,
-) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
-    let qq_install = resolve_qq_install_path()?;
-    build_napcat_launch_plan_inner(bot_id, runtime_root.as_ref(), &qq_install).await
-}
-
-async fn build_napcat_launch_plan_inner(
-    bot_id: &BotId,
-    runtime_root: &Path,
-    qq_install: &Path,
-) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
-    let napcat_dir = runtime_root.join("NapCatQQ");
-    ensure_runtime_file(
-        &napcat_dir.join("NapCatWinBootMain.exe"),
-        "未检测到 NapCatWinBootMain.exe，请先安装 NapCat 运行时组件",
-    )?;
-    ensure_runtime_file(
-        &napcat_dir.join("NapCatWinBootHook.dll"),
-        "未检测到 NapCatWinBootHook.dll，请先安装 NapCat 运行时组件",
-    )?;
-    ensure_runtime_file(
-        &napcat_dir.join("napcat.mjs"),
-        "未检测到 napcat.mjs，请先安装 NapCat 运行时组件",
-    )?;
-    ensure_runtime_file(
-        &napcat_dir.join("qqnt.json"),
-        "未检测到 qqnt.json，请先安装 NapCat 运行时组件",
-    )?;
-
-    let qq_exe = qq_install.join("QQ.exe");
-    ensure_runtime_file(&qq_exe, "未检测到 QQ.exe，请确认已安装 QQ NT")?;
-
-    let load_script_path = napcat_dir.join("loadNapCat.js");
-    let napcat_mjs_uri = path_to_file_uri(&napcat_dir.join("napcat.mjs"));
-    let load_script = format!("(async () => {{await import('{}')}})()", napcat_mjs_uri);
-    tokio::fs::write(&load_script_path, load_script)
-        .await
-        .map_err(|error| RuntimeLaunchPlanError::LoadScript(error.to_string()))?;
-
-    let mut environment = BTreeMap::new();
-    environment.insert(
-        "NAPCAT_PATCH_PACKAGE".to_string(),
-        napcat_dir.join("qqnt.json").to_string_lossy().to_string(),
-    );
-    environment.insert(
-        "NAPCAT_LOAD_PATH".to_string(),
-        load_script_path.to_string_lossy().to_string(),
-    );
-    environment.insert(
-        "NAPCAT_INJECT_PATH".to_string(),
-        napcat_dir
-            .join("NapCatWinBootHook.dll")
-            .to_string_lossy()
-            .to_string(),
-    );
-    environment.insert(
-        "NAPCAT_LAUNCHER_PATH".to_string(),
-        napcat_dir
-            .join("NapCatWinBootMain.exe")
-            .to_string_lossy()
-            .to_string(),
-    );
-    environment.insert(
-        "NAPCAT_MAIN_PATH".to_string(),
-        napcat_dir.join("napcat.mjs").to_string_lossy().to_string(),
-    );
-
-    Ok(RuntimeLaunchPlan::NapCat(NapCatLaunchPlan {
-        runtime_root: runtime_root.to_path_buf(),
-        napcat_dir: napcat_dir.clone(),
-        program: napcat_dir.join("NapCatWinBootMain.exe"),
-        args: vec![
-            qq_exe.to_string_lossy().to_string(),
-            napcat_dir
-                .join("NapCatWinBootHook.dll")
-                .to_string_lossy()
-                .to_string(),
-            bot_id.as_str().to_string(),
-        ],
-        environment,
-        working_dir: napcat_dir,
-        load_script_path,
-    }))
-}
-
-fn path_to_file_uri(path: &Path) -> String {
-    let normalized = path.to_string_lossy().replace('\\', "/");
-    if normalized.contains(":/") {
-        format!("file:///{}", normalized)
-    } else if normalized.starts_with('/') {
-        format!("file://{}", normalized)
-    } else {
-        format!("file:///{}", normalized)
-    }
-}
-
-fn ensure_runtime_file(path: &Path, message: &str) -> Result<(), RuntimeLaunchPlanError> {
-    if path.exists() {
-        Ok(())
-    } else {
-        Err(RuntimeLaunchPlanError::MissingFile(message.to_string()))
-    }
-}
-
-#[cfg(windows)]
-fn resolve_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
-    use winreg::RegKey;
-    use winreg::enums::HKEY_LOCAL_MACHINE;
-
-    let hkml = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let key = hkml
-        .open_subkey(r"SOFTWARE\WOW6432Node\Tencent\QQNT")
-        .map_err(|error| RuntimeLaunchPlanError::UnsupportedPlatform(error.to_string()))?;
-    let install: String = key
-        .get_value("Install")
-        .map_err(|error| RuntimeLaunchPlanError::UnsupportedPlatform(error.to_string()))?;
-    Ok(PathBuf::from(install))
-}
-
-#[cfg(not(windows))]
-fn resolve_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
-    Err(RuntimeLaunchPlanError::UnsupportedPlatform(
-        "non-windows platform does not support QQ registry lookup".to_string(),
-    ))
 }
 
 fn default_backend_kind() -> BackendKind {
@@ -628,13 +392,14 @@ pub struct LocalRuntimeBackend {
     root: PathBuf,
     backend_id: BotId,
     flavor: BotFlavor,
-    processes: Mutex<HashMap<BotId, ManagedProcess>>,
-    logs: Mutex<HashMap<BotId, RuntimeLogBuffer>>,
+    processes: Arc<Mutex<HashMap<BotId, ManagedProcess>>>,
+    logs: Arc<Mutex<HashMap<BotId, RuntimeLogBuffer>>>,
+    event_bus: Option<Arc<BroadcastEventBus>>,
 }
 
 #[derive(Debug)]
 struct ManagedProcess {
-    child: tokio::process::Child,
+    pid: u32,
     started_at: u64,
     config: BotRuntimeConfig,
 }
@@ -688,9 +453,16 @@ impl LocalRuntimeBackend {
             root: root.into(),
             backend_id: backend_id.into(),
             flavor,
-            processes: Mutex::new(HashMap::new()),
-            logs: Mutex::new(HashMap::new()),
+            processes: Arc::new(Mutex::new(HashMap::new())),
+            logs: Arc::new(Mutex::new(HashMap::new())),
+            event_bus: None,
         }
+    }
+
+    /// 注入事件总线，用于发布 BotLogAppended / NapCatWebuiAvailable / BotProcessExited 事件。
+    pub fn with_event_bus(mut self, bus: Arc<BroadcastEventBus>) -> Self {
+        self.event_bus = Some(bus);
+        self
     }
 
     fn default_config_path(&self, bot_id: &BotId) -> PathBuf {
@@ -733,12 +505,7 @@ impl LocalRuntimeBackend {
     }
 
     fn build_status(&self, bot_id: BotId, record: &ManagedProcess) -> BotStatus {
-        let pid = record.child.id();
-        let mut status = if let Some(pid) = pid {
-            BotStatus::running(bot_id, pid, record.started_at)
-        } else {
-            BotStatus::stopped(bot_id)
-        };
+        let mut status = BotStatus::running(bot_id, record.pid, record.started_at);
         status.state = BotActorState::Running;
         status.extra.insert(
             "backend_kind".to_string(),
@@ -850,10 +617,19 @@ impl BotBackend for LocalRuntimeBackend {
         for (key, value) in &cfg.environment {
             command.env(key, value);
         }
-        command.stdout(std::process::Stdio::null());
-        command.stderr(std::process::Stdio::null());
+        // 必须捕获 stdout/stderr：legacy 从中解析 NapCat WebUI URL/token，
+        // 也用作运行时日志来源。
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
 
-        let child = command
+        // Windows 上避免弹出额外控制台窗口。
+        #[cfg(windows)]
+        {
+            // CREATE_NO_WINDOW = 0x08000000
+            command.creation_flags(0x0800_0000);
+        }
+
+        let mut child = command
             .spawn()
             .map_err(|error| BotBackendError::Io(error.to_string()))?;
         let pid = child.id().unwrap_or(0);
@@ -862,45 +638,54 @@ impl BotBackend for LocalRuntimeBackend {
             .unwrap_or_default()
             .as_secs();
 
+        // 取出 stdout/stderr，转交给后台读取任务。
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let bot_id = cfg.bot_id.clone();
+
+        if let Some(stream) = stdout {
+            self.spawn_log_reader(bot_id.clone(), stream, "stdout");
+        }
+        if let Some(stream) = stderr {
+            self.spawn_log_reader(bot_id.clone(), stream, "stderr");
+        }
+        self.spawn_exit_watcher(bot_id.clone(), child);
+
         let mut processes = self.processes.lock().await;
         processes.insert(
-            cfg.bot_id.clone(),
+            bot_id.clone(),
             ManagedProcess {
-                child,
+                pid,
                 started_at,
                 config: cfg.clone(),
             },
         );
 
-        Ok(BotStatus::running(cfg.bot_id, pid, started_at))
+        Ok(BotStatus::running(bot_id, pid, started_at))
     }
 
     async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
         let record = {
             let mut processes = self.processes.lock().await;
             processes.remove(&bot_id)
-        }
-        .ok_or_else(|| BotBackendError::ProcessNotFound(bot_id.clone()))?;
+        };
+        // 没有运行中的记录视为已停止（exit watcher 可能已先一步清理），按幂等返回。
+        let Some(record) = record else {
+            return Ok(());
+        };
 
-        let mut child = record.child;
-        child
-            .kill()
+        // NapCat 是注入器：NapCatWinBootMain.exe → QQ.exe → renderer 子进程。
+        // 必须递归 kill 整个进程树，否则 QQ.exe 会残留。
+        kill_process_tree(record.pid)
             .await
-            .map_err(|error| BotBackendError::Io(error.to_string()))?;
+            .map_err(BotBackendError::Io)?;
         Ok(())
     }
 
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
-        let mut processes = self.processes.lock().await;
-        if let Some(record) = processes.get_mut(&bot_id) {
-            match record.child.try_wait() {
-                Ok(Some(_)) => {
-                    processes.remove(&bot_id);
-                    Ok(BotStatus::stopped(bot_id))
-                }
-                Ok(None) => Ok(self.build_status(bot_id, record)),
-                Err(error) => Err(BotBackendError::Io(error.to_string())),
-            }
+        let processes = self.processes.lock().await;
+        if let Some(record) = processes.get(&bot_id) {
+            Ok(self.build_status(bot_id, record))
         } else {
             Ok(BotStatus::stopped(bot_id))
         }
@@ -960,6 +745,191 @@ impl LocalRuntimeBackend {
             .map(|(bot_id, record)| self.build_status(bot_id.clone(), record))
             .collect()
     }
+
+    /// 异步读取子进程的 stdout 或 stderr，按行解码后写入日志缓冲、磁盘日志，
+    /// 并通过事件总线广播 `BotLogAppended` / `NapCatWebuiAvailable` 事件。
+    fn spawn_log_reader<R>(&self, bot_id: BotId, stream: R, channel: &'static str)
+    where
+        R: tokio::io::AsyncRead + Send + Unpin + 'static,
+    {
+        let logs = Arc::clone(&self.logs);
+        let log_path = self.log_path_for(&bot_id);
+        let event_bus = self.event_bus.clone();
+
+        tokio::spawn(async move {
+            let mut reader = BufReader::new(stream);
+            let mut buf: Vec<u8> = Vec::with_capacity(1024);
+            loop {
+                buf.clear();
+                match reader.read_until(b'\n', &mut buf).await {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+                // 去除尾部换行符。
+                while matches!(buf.last(), Some(b'\n' | b'\r')) {
+                    buf.pop();
+                }
+                if buf.is_empty() {
+                    continue;
+                }
+                let line = decode_log_line(&buf);
+                if line.is_empty() {
+                    continue;
+                }
+
+                {
+                    let mut guard = logs.lock().await;
+                    guard.entry(bot_id.clone()).or_default().push_text(&line);
+                }
+
+                // 写文件失败不致命，仅打日志。
+                if let Some(parent) = log_path.parent() {
+                    let _ = tokio::fs::create_dir_all(parent).await;
+                }
+                if let Ok(mut file) = tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                    .await
+                {
+                    let _ = file.write_all(line.as_bytes()).await;
+                    let _ = file.write_all(b"\n").await;
+                }
+
+                if let Some(bus) = event_bus.as_ref() {
+                    bus.publish(DomainEvent::BotLogAppended {
+                        bot_id: bot_id.clone(),
+                        line: line.clone(),
+                        channel: Some(channel.to_string()),
+                    });
+
+                    if let Some((port, token)) = parse_napcat_webui_line(&line) {
+                        bus.publish(DomainEvent::napcat_webui_available(
+                            bot_id.clone(),
+                            port,
+                            token,
+                        ));
+                    }
+                }
+            }
+        });
+    }
+
+    /// 监听子进程退出。退出后从 processes 中移除记录，并广播 `BotProcessExited`。
+    fn spawn_exit_watcher(&self, bot_id: BotId, mut child: tokio::process::Child) {
+        let processes = Arc::clone(&self.processes);
+        let event_bus = self.event_bus.clone();
+
+        tokio::spawn(async move {
+            let result = child.wait().await;
+            {
+                let mut guard = processes.lock().await;
+                guard.remove(&bot_id);
+            }
+            if let Some(bus) = event_bus.as_ref() {
+                let (exit_code, reason) = match result {
+                    Ok(status) => (status.code(), None),
+                    Err(err) => (None, Some(format!("wait failed: {err}"))),
+                };
+                bus.publish(DomainEvent::bot_process_exited(bot_id, exit_code, reason));
+            }
+        });
+    }
+}
+
+/// 按 GBK / UTF-8 解码 NapCat 子进程的一行原始字节。
+///
+/// NapCatWinBootMain.exe 在中文 Windows 上输出 GBK；其它平台默认 UTF-8。
+/// 优先尝试 UTF-8，失败再退回 GBK；都失败则使用 lossy UTF-8。
+fn decode_log_line(raw: &[u8]) -> String {
+    if let Ok(s) = std::str::from_utf8(raw) {
+        return s.to_string();
+    }
+    #[cfg(windows)]
+    {
+        let (cow, _, had_errors) = encoding_rs::GBK.decode(raw);
+        if !had_errors {
+            return cow.into_owned();
+        }
+    }
+    String::from_utf8_lossy(raw).into_owned()
+}
+
+/// 从一行 NapCat stdout 解析出 WebUI 登录入口的 (port, token)。
+///
+/// 对齐 legacy 正则：
+/// `\[info\] \[NapCat\] \[WebUi\] WebUi User Panel Url: http://127\.0\.0\.1:(\d+)/webui\?token=(\S+)`
+fn parse_napcat_webui_line(line: &str) -> Option<(u16, String)> {
+    let needle = "[info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:";
+    let idx = line.find(needle)?;
+    let rest = &line[idx + needle.len()..];
+    let (port_str, after_port) = rest.split_once("/webui?token=")?;
+    let port: u16 = port_str.trim().parse().ok()?;
+    let token: String = after_port
+        .chars()
+        .take_while(|c| !c.is_whitespace())
+        .collect();
+    if token.is_empty() {
+        return None;
+    }
+    Some((port, token))
+}
+
+/// 递归 kill 进程树（NapCatWinBootMain.exe → QQ.exe → renderer 链）。
+///
+/// - Windows 用 `taskkill /F /T /PID <pid>`，由系统按进程树递归终止。
+/// - Unix 用 `kill -KILL -<pid>`（进程组）；失败则退回 `kill -KILL <pid>`。
+async fn kill_process_tree(pid: u32) -> Result<(), String> {
+    if pid == 0 {
+        return Ok(());
+    }
+    #[cfg(windows)]
+    {
+        let mut command = tokio::process::Command::new("taskkill");
+        command.arg("/F").arg("/T").arg("/PID").arg(pid.to_string());
+        // taskkill 自身也用 CREATE_NO_WINDOW，避免闪窗。
+        command.creation_flags(0x0800_0000);
+        let output = command
+            .output()
+            .await
+            .map_err(|err| format!("taskkill spawn failed: {err}"))?;
+        if !output.status.success() {
+            // 进程已退出（128）通常不是错误。
+            let code = output.status.code().unwrap_or(-1);
+            if code == 128 {
+                return Ok(());
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "taskkill exited with code {code}: {}",
+                stderr.trim()
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let mut command = tokio::process::Command::new("kill");
+        command.arg("-KILL").arg(format!("-{pid}"));
+        let output = command
+            .output()
+            .await
+            .map_err(|err| format!("kill spawn failed: {err}"))?;
+        if !output.status.success() {
+            let mut fallback = tokio::process::Command::new("kill");
+            fallback.arg("-KILL").arg(pid.to_string());
+            let fb = fallback
+                .output()
+                .await
+                .map_err(|err| format!("kill fallback spawn failed: {err}"))?;
+            if !fb.status.success() {
+                let stderr = String::from_utf8_lossy(&fb.stderr);
+                return Err(format!("kill failed: {}", stderr.trim()));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1007,10 +977,158 @@ mod tests {
 
     #[test]
     fn runtime_backend_config_path_is_stable() {
-        let root = PathBuf::from("C:/ProgramData/NapCatQQ Desktop");
+        let root = PathBuf::from("test-data").join("NapCatQQ Desktop");
         let backend = LocalRuntimeBackend::new(root.clone(), "backend-1");
         let path = backend.default_config_path(&BotId::new("10001"));
         assert!(path.ends_with("runtime/config/bots/10001.json"));
         assert!(path.starts_with(&root));
+    }
+
+    #[test]
+    fn parse_napcat_webui_line_extracts_port_and_token() {
+        let line = "[2026-05-23 10:00:00.000] [info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token=abc123XYZ";
+        let parsed = parse_napcat_webui_line(line).expect("expected to parse");
+        assert_eq!(parsed.0, 6099);
+        assert_eq!(parsed.1, "abc123XYZ");
+    }
+
+    #[test]
+    fn parse_napcat_webui_line_stops_at_whitespace_in_token() {
+        let line = "[info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token=tok123 trailing comment";
+        let parsed = parse_napcat_webui_line(line).expect("expected to parse");
+        assert_eq!(parsed.0, 6099);
+        assert_eq!(parsed.1, "tok123");
+    }
+
+    #[test]
+    fn parse_napcat_webui_line_returns_none_for_unrelated_line() {
+        assert!(parse_napcat_webui_line("[info] [Core] starting").is_none());
+        // 缺 token 部分
+        assert!(
+            parse_napcat_webui_line(
+                "[info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token="
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn decode_log_line_handles_utf8_passthrough() {
+        let bytes = "你好 NapCat".as_bytes();
+        assert_eq!(decode_log_line(bytes), "你好 NapCat");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn decode_log_line_falls_back_to_gbk_on_windows() {
+        // GBK encoded "你好" = 0xC4 0xE3 0xBA 0xC3
+        let bytes: &[u8] = &[0xC4, 0xE3, 0xBA, 0xC3];
+        let decoded = decode_log_line(bytes);
+        assert_eq!(decoded, "你好");
+    }
+
+    #[tokio::test]
+    async fn runtime_backend_stop_is_idempotent_when_process_already_gone() {
+        let root = tempdir().unwrap();
+        let backend = LocalRuntimeBackend::new(root.path(), "backend-1");
+        // 不存在的 bot_id 调用 stop 应当幂等成功，不再返回 ProcessNotFound。
+        backend
+            .stop(BotId::new("ghost"), StopMode::Force)
+            .await
+            .expect("stop should be idempotent");
+    }
+
+    #[tokio::test]
+    async fn runtime_backend_publishes_log_and_exit_events() {
+        use crate::events::{BroadcastEventBus, DomainEventKind, EventFilter};
+
+        let root = tempdir().unwrap();
+        let bus = BroadcastEventBus::default();
+        let backend = LocalRuntimeBackend::new(root.path(), "backend-1")
+            .with_event_bus(Arc::new(bus.clone()));
+
+        // 用一个能立刻退出且打印一行 NapCat-like log 的命令。
+        // Windows 下用 cmd /C echo，其他平台用 sh -c。
+        #[cfg(windows)]
+        let (program, args) = (
+            "cmd".to_string(),
+            vec![
+                "/C".to_string(),
+                "echo [info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token=t"
+                    .to_string(),
+            ],
+        );
+        #[cfg(not(windows))]
+        let (program, args) = (
+            "sh".to_string(),
+            vec![
+                "-c".to_string(),
+                "echo '[info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token=t'"
+                    .to_string(),
+            ],
+        );
+
+        let cfg = BotRuntimeConfig {
+            bot_id: BotId::new("10100"),
+            config_path: root.path().join("runtime/config/bots/10100.json"),
+            backend_kind: BackendKind::Local,
+            flavor: BotFlavor::NapCat,
+            runtime_target: RuntimeTarget::Local,
+            launch_command: std::iter::once(program).chain(args).collect(),
+            working_dir: None,
+            log_path: None,
+            environment: BTreeMap::new(),
+        };
+
+        let mut log_sub = bus.subscribe(EventFilter::kind(DomainEventKind::BotLogAppended));
+        let mut webui_sub = bus.subscribe(EventFilter::kind(DomainEventKind::NapCatWebuiAvailable));
+        let mut exit_sub = bus.subscribe(EventFilter::kind(DomainEventKind::BotProcessExited));
+
+        backend.start(&BotStartCtx { config: cfg }).await.unwrap();
+
+        // 给 reader/exit watcher 留点时间。
+        let log_event = tokio::time::timeout(std::time::Duration::from_secs(5), log_sub.next())
+            .await
+            .expect("log event timeout")
+            .expect("log event closed");
+        match log_event {
+            DomainEvent::BotLogAppended { bot_id, line, .. } => {
+                assert_eq!(bot_id.as_str(), "10100");
+                assert!(line.contains("WebUi User Panel Url"));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+
+        let webui_event = tokio::time::timeout(std::time::Duration::from_secs(5), webui_sub.next())
+            .await
+            .expect("webui event timeout")
+            .expect("webui event closed");
+        match webui_event {
+            DomainEvent::NapCatWebuiAvailable {
+                bot_id,
+                port,
+                token,
+            } => {
+                assert_eq!(bot_id.as_str(), "10100");
+                assert_eq!(port, 6099);
+                assert_eq!(token, "t");
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+
+        let exit_event = tokio::time::timeout(std::time::Duration::from_secs(5), exit_sub.next())
+            .await
+            .expect("exit event timeout")
+            .expect("exit event closed");
+        match exit_event {
+            DomainEvent::BotProcessExited { bot_id, .. } => {
+                assert_eq!(bot_id.as_str(), "10100");
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+
+        // 进程退出后 status 应自动转回 Stopped（exit watcher 已移除记录）。
+        let status = backend.status(BotId::new("10100")).await.unwrap();
+        assert_eq!(status.state, BotActorState::Stopped);
     }
 }
