@@ -24,12 +24,15 @@ pub mod report;
 pub mod runtime_backend;
 pub mod runtime_launch_plan;
 pub mod secret_store_impl;
+pub mod snowluma;
 pub mod traits;
 
+pub use app_config::{
+    SnowLumaAppConfig, WebUiPollerSettings, default_login_interval, default_snowluma_port,
+};
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
 };
-pub use app_config::{WebUiPollerSettings, default_login_interval};
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
 pub use bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 pub use bot_config::{
@@ -71,6 +74,14 @@ pub use runtime_launch_plan::{
     RuntimeLaunchPlanner, SnowLumaLaunchPlan, build_napcat_launch_plan_with_qq_install_path,
 };
 pub use secret_store_impl::SecretStoreImpl;
+pub use snowluma::{
+    AuthState, DaemonState, HookProcessInfo, HookProcessStatus, MockProcessTreeProbe,
+    OneBotInstanceInfo, ProcessTreeProbe, ReqwestSnowLumaWebUiClient,
+    ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon, SnowLumaDaemonError, SnowLumaLoginState,
+    SnowLumaRuntimeBackend, SnowLumaSession, SnowLumaStartMode, SnowLumaStatusPoller,
+    SnowLumaWebUiClient, SnowLumaWebUiClientFactory, SnowLumaWebUiError, SysinfoProcessTreeProbe,
+    load_or_create_session, render_daemon_globals, sanitize_log_line,
+};
 pub use traits::{
     BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, JsonWrite, MigrationStep,
     PathProbe, RenderError, SecretStore, TransactionReport,
