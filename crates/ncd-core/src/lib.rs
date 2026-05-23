@@ -18,6 +18,7 @@ pub mod path_probe_impl;
 pub mod remote_host;
 pub mod report;
 pub mod runtime_backend;
+pub mod runtime_launch_plan;
 pub mod secret_store_impl;
 pub mod traits;
 
@@ -54,11 +55,12 @@ pub use remote_host::{
 };
 pub use report::MigrationReport;
 pub use runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus,
-    FileSystemRuntimeLaunchPlanner, LocalRuntimeBackend, LogSnapshot, NapCatLaunchPlan,
-    ProcessHandle, RemoteRuntimeBackend, RuntimeLaunchPlan, RuntimeLaunchPlanError,
-    RuntimeLaunchPlanner, SnowLumaLaunchPlan, StopMode, TailOpts,
-    build_napcat_launch_plan_with_qq_install_path,
+    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LocalRuntimeBackend,
+    LogSnapshot, ProcessHandle, RemoteRuntimeBackend, StopMode, TailOpts,
+};
+pub use runtime_launch_plan::{
+    FileSystemRuntimeLaunchPlanner, NapCatLaunchPlan, RuntimeLaunchPlan, RuntimeLaunchPlanError,
+    RuntimeLaunchPlanner, SnowLumaLaunchPlan, build_napcat_launch_plan_with_qq_install_path,
 };
 pub use secret_store_impl::SecretStoreImpl;
 pub use traits::{
