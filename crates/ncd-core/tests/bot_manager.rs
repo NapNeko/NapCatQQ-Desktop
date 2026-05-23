@@ -17,12 +17,17 @@ use ncd_core::{
 struct FakeBackend {
     running: Mutex<HashSet<BotId>>,
     fail_start: Mutex<HashSet<BotId>>,
+    fail_stop: Mutex<HashSet<BotId>>,
     last_config: Mutex<Option<BotRuntimeConfig>>,
 }
 
 impl FakeBackend {
     async fn fail_next_start(&self, bot_id: impl Into<BotId>) {
         self.fail_start.lock().await.insert(bot_id.into());
+    }
+
+    async fn fail_next_stop(&self, bot_id: impl Into<BotId>) {
+        self.fail_stop.lock().await.insert(bot_id.into());
     }
 }
 
@@ -43,6 +48,7 @@ impl BotBackend for FakeBackend {
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         self.last_config.lock().await.replace(ctx.config.clone());
+        assert_ne!(ctx.config.bot_id.as_str(), "19998", "fake backend panic");
         if self.fail_start.lock().await.remove(&ctx.config.bot_id) {
             return Err(BotBackendError::Io("fake start failed".to_string()));
         }
@@ -51,6 +57,10 @@ impl BotBackend for FakeBackend {
     }
 
     async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+        assert_ne!(bot_id.as_str(), "19997", "fake backend panic");
+        if self.fail_stop.lock().await.remove(&bot_id) {
+            return Err(BotBackendError::Io("fake stop failed".to_string()));
+        }
         self.running.lock().await.remove(&bot_id);
         Ok(())
     }
@@ -308,7 +318,18 @@ async fn napcat_launch_plan_reports_missing_runtime_components() {
     let err = build_plan_with_fake_qq(&runtime_root, &qq_install)
         .await
         .unwrap_err();
-    assert!(err.to_string().contains("NapCatWinBootMain.exe"));
+    let err = err.to_string();
+    assert!(err.contains("NapCatWinBootMain.exe"));
+    assert!(err.contains("checked path:"));
+    assert!(
+        err.contains(
+            runtime_root
+                .join("NapCatQQ")
+                .join("NapCatWinBootMain.exe")
+                .to_string_lossy()
+                .as_ref()
+        )
+    );
 
     prepare_napcat_runtime(&runtime_root);
     std::fs::remove_file(runtime_root.join("NapCatQQ/NapCatWinBootHook.dll")).unwrap();
@@ -342,7 +363,10 @@ async fn napcat_launch_plan_reports_missing_qq_exe() {
     let err = build_plan_with_fake_qq(&runtime_root, &qq_install)
         .await
         .unwrap_err();
-    assert!(err.to_string().contains("QQ.exe"));
+    let err = err.to_string();
+    assert!(err.contains("QQ.exe"));
+    assert!(err.contains("checked path:"));
+    assert!(err.contains(qq_install.join("QQ.exe").to_string_lossy().as_ref()));
 }
 
 // ─── 4 开上限 ─────────────────────────────────────────────────────────────────
@@ -545,6 +569,60 @@ async fn batch_start_starts_multiple_bots_concurrently() {
 }
 
 #[tokio::test]
+async fn batch_start_reports_partial_failure_without_blocking_others() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let ids: Vec<BotId> = ["10001", "10002", "10003"]
+        .into_iter()
+        .map(BotId::new)
+        .collect();
+
+    for i in 1..=3u64 {
+        manager
+            .upsert_bot_config(bot_config(10000 + i, &format!("bot-{i}")))
+            .await
+            .unwrap();
+    }
+    backend.fail_next_start("10002").await;
+
+    let result = manager.batch_start(&ids).await.unwrap();
+    assert_eq!(result.succeeded.len(), 2);
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.failed[0].0, BotId::new("10002"));
+    assert!(result.failed[0].1.to_string().contains("fake start failed"));
+
+    let running = backend.running.lock().await;
+    assert!(running.contains(&BotId::new("10001")));
+    assert!(running.contains(&BotId::new("10003")));
+    assert!(!running.contains(&BotId::new("10002")));
+}
+
+#[tokio::test]
+async fn batch_start_reports_join_error_for_panicking_task() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+    let ids: Vec<BotId> = ["10001", "19998"].into_iter().map(BotId::new).collect();
+
+    manager
+        .upsert_bot_config(bot_config(10001, "bot-ok"))
+        .await
+        .unwrap();
+    manager
+        .upsert_bot_config(bot_config(19998, "bot-panic"))
+        .await
+        .unwrap();
+
+    let result = manager.batch_start(&ids).await.unwrap();
+    assert_eq!(result.succeeded, vec![BotId::new("10001")]);
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.failed[0].0, BotId::new("19998"));
+    assert!(matches!(
+        result.failed[0].1,
+        BotManagerError::TaskJoinFailed(_)
+    ));
+}
+
+#[tokio::test]
 async fn batch_start_reports_napcat_missing_runtime_component() {
     let temp = tempfile::tempdir().unwrap();
     let planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
@@ -601,6 +679,62 @@ async fn batch_stop_stops_running_bots() {
         let snap = manager.get_snapshot(id).await.unwrap();
         assert_eq!(snap.state, BotActorState::Stopped);
     }
+}
+
+#[tokio::test]
+async fn batch_stop_reports_partial_failure_without_blocking_others() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let ids: Vec<BotId> = ["10001", "10002", "10003"]
+        .into_iter()
+        .map(BotId::new)
+        .collect();
+
+    for i in 1..=3u64 {
+        manager
+            .upsert_bot_config(bot_config(10000 + i, &format!("bot-{i}")))
+            .await
+            .unwrap();
+    }
+    manager.batch_start(&ids).await.unwrap();
+    backend.fail_next_stop("10002").await;
+
+    let result = manager.batch_stop(&ids).await.unwrap();
+    assert_eq!(result.succeeded.len(), 2);
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.failed[0].0, BotId::new("10002"));
+    assert!(result.failed[0].1.to_string().contains("fake stop failed"));
+
+    let running = backend.running.lock().await;
+    assert!(!running.contains(&BotId::new("10001")));
+    assert!(running.contains(&BotId::new("10002")));
+    assert!(!running.contains(&BotId::new("10003")));
+}
+
+#[tokio::test]
+async fn batch_stop_reports_join_error_for_panicking_task() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let ids: Vec<BotId> = ["10001", "19997"].into_iter().map(BotId::new).collect();
+
+    manager
+        .upsert_bot_config(bot_config(10001, "bot-ok"))
+        .await
+        .unwrap();
+    manager
+        .upsert_bot_config(bot_config(19997, "bot-panic"))
+        .await
+        .unwrap();
+    backend.running.lock().await.extend(ids.iter().cloned());
+
+    let result = manager.batch_stop(&ids).await.unwrap();
+    assert_eq!(result.succeeded, vec![BotId::new("10001")]);
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.failed[0].0, BotId::new("19997"));
+    assert!(matches!(
+        result.failed[0].1,
+        BotManagerError::TaskJoinFailed(_)
+    ));
 }
 
 // ─── 配置变更热推送 ──────────────────────────────────────────────────────────
@@ -904,4 +1038,108 @@ async fn bootstrap_skipped_bots_are_not_auto_started() {
     // 没有 bot 被自动启动（前 4 个不是 auto_start，第 5 个被 skip）
     assert_eq!(result.started.succeeded.len(), 0);
     assert_eq!(manager.bot_count().await, 4);
+}
+
+#[tokio::test]
+async fn shutdown_all_stops_running_bots_and_clears_actors() {
+    // shutdown_all 应该把 active 的 Bot 停掉并清空 actor map。
+    let temp = tempfile::tempdir().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    prepare_napcat_runtime(temp.path());
+
+    manager
+        .upsert_bot_config(bot_config(10001, "bot-1"))
+        .await
+        .unwrap();
+    manager
+        .upsert_bot_config(bot_config(10002, "bot-2"))
+        .await
+        .unwrap();
+
+    manager.start_bot(&BotId::new("10001")).await.unwrap();
+    manager.start_bot(&BotId::new("10002")).await.unwrap();
+    assert_eq!(manager.active_count().await, 2);
+
+    let result = manager.shutdown_all().await;
+    assert_eq!(result.succeeded.len(), 2);
+    assert!(result.failed.is_empty());
+
+    // FakeBackend 内部 running set 应被清空。
+    assert!(backend.status(BotId::new("10001")).await.unwrap().state == BotActorState::Stopped);
+    assert!(backend.status(BotId::new("10002")).await.unwrap().state == BotActorState::Stopped);
+    // Actor map 已清空。
+    assert_eq!(manager.bot_count().await, 0);
+}
+
+#[tokio::test]
+async fn process_exit_event_transitions_running_actor_to_crashed() {
+    use ncd_core::{DomainEvent, DomainEventKind};
+
+    // 当 Running 状态的 Bot 收到非 0 退出，actor 应转为 Crashed。
+    let temp = tempfile::tempdir().unwrap();
+
+    let store = Arc::new(LocalConfigStore::new(temp.path()));
+    let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
+        SecretStoreImpl::new_with_force_fallback(temp.path().join("secrets"), true),
+    );
+    let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
+    let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
+    let backend = Arc::new(FakeBackend::default());
+    let event_bus = Arc::new(BroadcastEventBus::default());
+    let planner = Arc::new(TestLaunchPlanner);
+    let manager = BotManager::new(
+        Arc::clone(&repo),
+        Arc::clone(&store),
+        renderer,
+        backend.clone(),
+        planner,
+        Arc::clone(&event_bus),
+    );
+    prepare_napcat_runtime(temp.path());
+
+    let mut state_sub = event_bus.subscribe(EventFilter::kind(DomainEventKind::BotStateChanged));
+
+    manager
+        .upsert_bot_config(bot_config(10010, "bot"))
+        .await
+        .unwrap();
+    manager.start_bot(&BotId::new("10010")).await.unwrap();
+    assert_eq!(
+        manager
+            .get_snapshot(&BotId::new("10010"))
+            .await
+            .unwrap()
+            .state,
+        BotActorState::Running
+    );
+
+    manager.spawn_runtime_event_listener();
+    // 给后台 listener 时间完成 subscribe，否则下面的 publish 会丢。
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // 模拟运行时上报：进程崩溃退出，码 1。
+    event_bus.publish(DomainEvent::bot_process_exited(
+        BotId::new("10010"),
+        Some(1),
+        None,
+    ));
+
+    // 等待 listener 处理事件，最多 2s。
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let mut got_crashed = false;
+    while std::time::Instant::now() < deadline {
+        if let Some(event) =
+            tokio::time::timeout(std::time::Duration::from_millis(200), state_sub.next())
+                .await
+                .ok()
+                .flatten()
+            && let DomainEvent::BotStateChanged { snapshot, .. } = event
+            && snapshot.bot_id.as_str() == "10010"
+            && snapshot.state == BotActorState::Crashed
+        {
+            got_crashed = true;
+            break;
+        }
+    }
+    assert!(got_crashed, "expected actor to transition to Crashed");
 }
