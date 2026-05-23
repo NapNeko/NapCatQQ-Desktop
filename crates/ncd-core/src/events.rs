@@ -15,6 +15,24 @@ pub enum DomainEventKind {
     TaskProgress,
     NapCatWebuiAvailable,
     BotProcessExited,
+    NapCatLoginQrcode,
+    NapCatLoginQrcodeRemoved,
+    NapCatLoginOnline,
+    NapCatLoginInvalidated,
+}
+
+/// 描述 NapCat WebUI 登录失效的原因。
+///
+/// - `Kicked`: 在线状态下账号被踢下线（在线 → 离线 + `is_login=false`）。
+/// - `LoggedOut`: 用户主动登出或会话过期，从未达到 `online=true` 即失效。
+///
+/// `#[serde(rename_all = "snake_case")]` 与前端 `NapCatLoginInvalidationReason`
+/// 字面量类型 (`'kicked' | 'logged_out'`) 保持字面量一致。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NapCatLoginInvalidationReason {
+    Kicked,
+    LoggedOut,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +80,26 @@ pub enum DomainEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    /// NapCat WebUI 登录二维码可用：通常是 `data:image/png;base64,...`，
+    /// 也可能是普通 URL；后端透传，不做解析。
+    NapCatLoginQrcode {
+        bot_id: BotId,
+        qrcode_url: String,
+    },
+    /// NapCat WebUI 登录二维码应当从 UI 上移除（已扫码登录、被踢、Poller dispose 等场景）。
+    NapCatLoginQrcodeRemoved {
+        bot_id: BotId,
+    },
+    /// NapCat WebUI 在线状态变化（来自 `GetQQLoginInfo.online`）。
+    NapCatLoginOnline {
+        bot_id: BotId,
+        online: bool,
+    },
+    /// NapCat WebUI 登录失效（被踢 / 主动登出）。
+    NapCatLoginInvalidated {
+        bot_id: BotId,
+        reason: NapCatLoginInvalidationReason,
+    },
 }
 
 impl DomainEvent {
@@ -74,6 +112,10 @@ impl DomainEvent {
             Self::TaskProgress { .. } => DomainEventKind::TaskProgress,
             Self::NapCatWebuiAvailable { .. } => DomainEventKind::NapCatWebuiAvailable,
             Self::BotProcessExited { .. } => DomainEventKind::BotProcessExited,
+            Self::NapCatLoginQrcode { .. } => DomainEventKind::NapCatLoginQrcode,
+            Self::NapCatLoginQrcodeRemoved { .. } => DomainEventKind::NapCatLoginQrcodeRemoved,
+            Self::NapCatLoginOnline { .. } => DomainEventKind::NapCatLoginOnline,
+            Self::NapCatLoginInvalidated { .. } => DomainEventKind::NapCatLoginInvalidated,
         }
     }
 
@@ -86,6 +128,10 @@ impl DomainEvent {
             Self::TaskProgress { .. } => "task_progress",
             Self::NapCatWebuiAvailable { .. } => "napcat_webui_available",
             Self::BotProcessExited { .. } => "bot_process_exited",
+            Self::NapCatLoginQrcode { .. } => "napcat_login_qrcode",
+            Self::NapCatLoginQrcodeRemoved { .. } => "napcat_login_qrcode_removed",
+            Self::NapCatLoginOnline { .. } => "napcat_login_online",
+            Self::NapCatLoginInvalidated { .. } => "napcat_login_invalidated",
         }
     }
 
@@ -98,6 +144,10 @@ impl DomainEvent {
             Self::TaskProgress { .. } => None,
             Self::NapCatWebuiAvailable { bot_id, .. } => Some(bot_id),
             Self::BotProcessExited { bot_id, .. } => Some(bot_id),
+            Self::NapCatLoginQrcode { bot_id, .. } => Some(bot_id),
+            Self::NapCatLoginQrcodeRemoved { bot_id, .. } => Some(bot_id),
+            Self::NapCatLoginOnline { bot_id, .. } => Some(bot_id),
+            Self::NapCatLoginInvalidated { bot_id, .. } => Some(bot_id),
         }
     }
 
@@ -167,6 +217,36 @@ impl DomainEvent {
         Self::BotProcessExited {
             bot_id: bot_id.into(),
             exit_code,
+            reason,
+        }
+    }
+
+    pub fn napcat_login_qrcode(bot_id: impl Into<BotId>, qrcode_url: impl Into<String>) -> Self {
+        Self::NapCatLoginQrcode {
+            bot_id: bot_id.into(),
+            qrcode_url: qrcode_url.into(),
+        }
+    }
+
+    pub fn napcat_login_qrcode_removed(bot_id: impl Into<BotId>) -> Self {
+        Self::NapCatLoginQrcodeRemoved {
+            bot_id: bot_id.into(),
+        }
+    }
+
+    pub fn napcat_login_online(bot_id: impl Into<BotId>, online: bool) -> Self {
+        Self::NapCatLoginOnline {
+            bot_id: bot_id.into(),
+            online,
+        }
+    }
+
+    pub fn napcat_login_invalidated(
+        bot_id: impl Into<BotId>,
+        reason: NapCatLoginInvalidationReason,
+    ) -> Self {
+        Self::NapCatLoginInvalidated {
+            bot_id: bot_id.into(),
             reason,
         }
     }
@@ -313,5 +393,166 @@ mod tests {
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("bot_state_changed"));
         assert!(json.contains("start_requested"));
+    }
+
+    // ------------------------------------------------------------------
+    // 事件名稳定性测试
+    //
+    // 1) 4 个新 variant 字节级 round-trip：序列化后再反序列化必须等价。
+    // 2) 4 个新 variant 的 `tauri_event_name()` 字面量值锁定。
+    // 3) 跨文件契约：4 个 tauri_event_name 必须全部出现在前端 `events.ts`
+    //    的 `eventNames` 数组中（编译期 `include_str!` 取出文本后 grep）。
+    // ------------------------------------------------------------------
+
+    /// 编译期把前端事件清单嵌入测试二进制，避免运行时 IO 与路径漂移。
+    /// 路径相对于本文件 (`crates/ncd-core/src/events.rs`) → 仓库根
+    /// → `src-ui/core/ipc/events.ts`。
+    const FRONTEND_EVENTS_TS: &str = include_str!("../../../src-ui/core/ipc/events.ts");
+
+    fn assert_round_trip(event: DomainEvent) {
+        let json = serde_json::to_string(&event).expect("serialize");
+        let decoded: DomainEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(decoded, event, "round-trip must preserve equality");
+        // 二次序列化后字节也应该等价（serde_json 的输出对同一结构是稳定的）。
+        let json2 = serde_json::to_string(&decoded).expect("re-serialize");
+        assert_eq!(json, json2, "byte-level round-trip must be stable");
+    }
+
+    #[test]
+    fn napcat_login_qrcode_round_trips() {
+        assert_round_trip(DomainEvent::napcat_login_qrcode(
+            "10001",
+            "data:image/png;base64,AAAA",
+        ));
+    }
+
+    #[test]
+    fn napcat_login_qrcode_removed_round_trips() {
+        assert_round_trip(DomainEvent::napcat_login_qrcode_removed("10001"));
+    }
+
+    #[test]
+    fn napcat_login_online_round_trips() {
+        assert_round_trip(DomainEvent::napcat_login_online("10001", true));
+        assert_round_trip(DomainEvent::napcat_login_online("10001", false));
+    }
+
+    #[test]
+    fn napcat_login_invalidated_round_trips() {
+        assert_round_trip(DomainEvent::napcat_login_invalidated(
+            "10001",
+            NapCatLoginInvalidationReason::Kicked,
+        ));
+        assert_round_trip(DomainEvent::napcat_login_invalidated(
+            "10001",
+            NapCatLoginInvalidationReason::LoggedOut,
+        ));
+    }
+
+    #[test]
+    fn napcat_login_invalidation_reason_serializes_snake_case() {
+        // 字面量锁定：前端 TS 字面量类型为 'kicked' | 'logged_out'。
+        assert_eq!(
+            serde_json::to_string(&NapCatLoginInvalidationReason::Kicked).unwrap(),
+            "\"kicked\""
+        );
+        assert_eq!(
+            serde_json::to_string(&NapCatLoginInvalidationReason::LoggedOut).unwrap(),
+            "\"logged_out\""
+        );
+    }
+
+    /// 4 个新 variant 的 `tauri_event_name()` 字面量值锁定，
+    /// 任何一处 typo 都会让此测试失败。
+    #[test]
+    fn napcat_login_event_name_literals_are_stable() {
+        let cases: [(DomainEvent, &str); 4] = [
+            (
+                DomainEvent::napcat_login_qrcode("10001", "url"),
+                "napcat_login_qrcode",
+            ),
+            (
+                DomainEvent::napcat_login_qrcode_removed("10001"),
+                "napcat_login_qrcode_removed",
+            ),
+            (
+                DomainEvent::napcat_login_online("10001", true),
+                "napcat_login_online",
+            ),
+            (
+                DomainEvent::napcat_login_invalidated(
+                    "10001",
+                    NapCatLoginInvalidationReason::Kicked,
+                ),
+                "napcat_login_invalidated",
+            ),
+        ];
+        for (event, expected) in &cases {
+            assert_eq!(event.tauri_event_name(), *expected);
+        }
+    }
+
+    /// 前后端事件契约一一对应。
+    ///
+    /// 4 个新 `tauri_event_name` 必须在前端 `events.ts` 中出现为
+    /// 单引号字符串字面量。这样可避免误把出现在注释或别的标识符中的
+    /// 子串当作匹配。
+    #[test]
+    fn napcat_login_event_names_are_present_in_frontend_events_ts() {
+        let names = [
+            "napcat_login_qrcode",
+            "napcat_login_qrcode_removed",
+            "napcat_login_online",
+            "napcat_login_invalidated",
+        ];
+        for name in &names {
+            let needle_single = format!("'{name}'");
+            let needle_double = format!("\"{name}\"");
+            assert!(
+                FRONTEND_EVENTS_TS.contains(&needle_single)
+                    || FRONTEND_EVENTS_TS.contains(&needle_double),
+                "frontend events.ts must contain literal {name:?} as a quoted string \
+                 (检查 src-ui/core/ipc/events.ts 的 eventNames 数组)",
+            );
+        }
+    }
+
+    /// 反向防呆：所有 DomainEvent variant 的 `tauri_event_name()` 都必须
+    /// 出现在前端 `events.ts` 中，否则前端无法订阅到对应事件。
+    /// 这条断言锁定了「Rust → events.ts」单向覆盖，但允许 events.ts 含
+    /// DomainEvent 之外的额外通道（按任务说明）。
+    #[test]
+    fn every_domain_event_variant_is_listed_in_frontend_events_ts() {
+        // 用每种 variant 的代表实例覆盖全部分支。
+        let snapshot = BotActorSnapshot::new("10001");
+        let status = BotStatus::running("10001", 1, 0);
+        let all: Vec<DomainEvent> = vec![
+            DomainEvent::bot_state_changed(snapshot, "init"),
+            DomainEvent::bot_status_changed(status, "init"),
+            DomainEvent::bot_log("10001", "x"),
+            DomainEvent::bot_error("10001", "x", None),
+            DomainEvent::task_progress("t", 0, "x"),
+            DomainEvent::napcat_webui_available("10001", 6099, "tk"),
+            DomainEvent::bot_process_exited("10001", Some(0), None),
+            DomainEvent::napcat_login_qrcode("10001", "url"),
+            DomainEvent::napcat_login_qrcode_removed("10001"),
+            DomainEvent::napcat_login_online("10001", true),
+            DomainEvent::napcat_login_invalidated(
+                "10001",
+                NapCatLoginInvalidationReason::Kicked,
+            ),
+        ];
+        for event in &all {
+            let name = event.tauri_event_name();
+            let needle_single = format!("'{name}'");
+            let needle_double = format!("\"{name}\"");
+            assert!(
+                FRONTEND_EVENTS_TS.contains(&needle_single)
+                    || FRONTEND_EVENTS_TS.contains(&needle_double),
+                "DomainEvent::{:?} 的 tauri_event_name {name:?} 未出现在 \
+                 src-ui/core/ipc/events.ts，前端将无法订阅",
+                event.kind(),
+            );
+        }
     }
 }
