@@ -12,6 +12,7 @@ use crate::bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActor
 use crate::bot_config::{BackendType, BotConfig, BotConfigError};
 use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
 use crate::ids::BotId;
+use crate::kinds::BotFlavor;
 use crate::napcat_login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat_webui_client::NapCatWebUiClient;
 use crate::offline_notifier::OfflineNotifier;
@@ -91,12 +92,10 @@ pub struct BootstrapResult {
 // ─── BotManager ────────────────────────────────────────────────────────────────
 
 /// 编排层：统一管理所有 Bot 的生命周期。
-///
 /// - 每个 Bot 对应一个 `BotActorHandle`（状态机）。
 /// - `BotConfigRepo` 负责持久化配置。
 /// - `BackendConfigRenderer` 负责生成后端运行时配置文件。
 /// - `BroadcastEventBus` 负责事件广播给前端。
-///
 /// `BotManager` 自身不持有可变业务状态，所有可变状态都封装在
 /// `actors` map（由 `RwLock` 保护）和各 `BotActorHandle` 内部。
 pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
@@ -109,15 +108,21 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     actors: Arc<RwLock<HashMap<BotId, BotActorHandle>>>,
     /// per-Bot WebUI 登录轮询组件，由 `run_napcat_login_listener` 在收到
     /// `NapCatWebuiAvailable` 事件时插入；`BotProcessExited` / `delete_bot`
-    /// / `shutdown_all` 时移除并 `dispose()`。
+    /// / `shutdown_all` 时移除并 `dispose`。
     login_pollers: Arc<RwLock<HashMap<BotId, NapCatLoginPoller>>>,
     /// NapCat WebUI HTTP 客户端依赖，可注入 mock 用于测试。
     webui_client: Arc<dyn NapCatWebUiClient>,
     /// 离线通知通道依赖，可注入 mock；默认 wiring 走 `NoopOfflineNotifier`。
     offline_notifier: Arc<dyn OfflineNotifier>,
-    /// App 级 Poller 设置，热更新通过 `poller_settings.write()` 即可生效，
+    /// App 级 Poller 设置，热更新通过 `poller_settings.write()` 即可生效
     /// 下次 `handle_webui_available` 创建 Poller 时读取最新值。
     poller_settings: Arc<RwLock<WebUiPollerSettings>>,
+    /// SnowLuma flavor backend（可选）。`None` 时所有 bot 走 `backend`（NapCat 路径）。
+    /// 由 wiring 阶段构造并通过 `with_snowluma_backend` 注入。
+    snowluma_backend: Option<Arc<dyn BotBackend>>,
+    /// SnowLuma 全局 daemon 句柄（可选），用于 `shutdown_all` 关闭 daemon、
+    /// `run_snowluma_listener` 监听 daemon Crashed 级联级 actor。
+    snowluma_daemon: Option<Arc<crate::snowluma::SnowLumaDaemon>>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -134,6 +139,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             webui_client: Arc::clone(&self.webui_client),
             offline_notifier: Arc::clone(&self.offline_notifier),
             poller_settings: Arc::clone(&self.poller_settings),
+            snowluma_backend: self.snowluma_backend.clone(),
+            snowluma_daemon: self.snowluma_daemon.clone(),
         }
     }
 }
@@ -162,13 +169,38 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             webui_client,
             offline_notifier,
             poller_settings,
+            snowluma_backend: None,
+            snowluma_daemon: None,
+        }
+    }
+
+    /// 注入 SnowLuma flavor 路由依赖（ wiring 阶段调用）。
+    /// 链式 builder 风格，便于 setup 代码组装。
+    pub fn with_snowluma(
+        mut self,
+        backend: Arc<dyn BotBackend>,
+        daemon: Arc<crate::snowluma::SnowLumaDaemon>,
+    ) -> Self {
+        self.snowluma_backend = Some(backend);
+        self.snowluma_daemon = Some(daemon);
+        self
+    }
+
+    /// 按 flavor 选择 backend：`SnowLuma` 时优先用注入的 SL backend，否则
+    /// 回落到默认 `backend`（向后兼容：未注入 SL 时与历史行为一致）。
+    fn backend_for(&self, flavor: BotFlavor) -> Arc<dyn BotBackend> {
+        match flavor {
+            BotFlavor::SnowLuma => self
+                .snowluma_backend
+                .clone()
+                .unwrap_or_else(|| Arc::clone(&self.backend)),
+            _ => Arc::clone(&self.backend),
         }
     }
 
     // ─── bootstrap ─────────────────────────────────────────────────────────
 
     /// 启动时从持久化配置恢复所有 Bot Actor，并自动启动标记了 `auto_start` 的 Bot。
-    ///
     /// 返回 `BootstrapResult`，其中 `skipped` 包含超出 4 开上限而未注册的 Bot ID。
     pub async fn bootstrap(&self) -> Result<BootstrapResult, BotManagerError> {
         let configs = self.repo.list().await?;
@@ -214,7 +246,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     // ─── 单 Bot 操作 ──────────────────────────────────────────────────────
 
     /// 启动指定 Bot。
-    ///
     /// 前置条件：Actor 已存在且处于可启动状态（Stopped / Crashed）。
     pub async fn start_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
@@ -229,18 +260,29 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Ok(plan) => plan.into_runtime_config(runtime_config),
             Err(err) => {
                 let message = err.to_string();
+                // 按错误类型给出针对性提示，方便用户定位是哪一种缺失。
+                let hint = match &err {
+                    RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
+                        "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
+                        path.display()
+                    )),
+                    RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => Some(format!(
+                        "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式 / attach_pid。"
+                    )),
+                    RuntimeLaunchPlanError::MissingFile { .. } => {
+                        Some("NapCat 运行时组件缺失，请先在「设置」页安装运行时。".to_string())
+                    }
+                    _ => Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string()),
+                };
                 let crashed = handle.mark_crashed(message.clone()).await?;
                 self.publish_state_change(&crashed, "start_failed");
-                self.event_bus.publish(DomainEvent::bot_error(
-                    bot_id.clone(),
-                    message,
-                    Some("NapCat 运行时组件缺失或 SnowLuma 启动链路未接入".to_string()),
-                ));
+                self.event_bus
+                    .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
                 return Err(BotManagerError::Render(err.to_string()));
             }
         };
         match self
-            .backend
+            .backend_for(map_backend_flavor(config.bot.backend_type))
             .start(&BotStartCtx {
                 config: runtime_config,
             })
@@ -273,7 +315,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let stopping = handle.request_stop().await?;
         self.publish_state_change(&stopping, "stop_requested");
 
-        let status = self.backend.status(bot_id.clone()).await?;
+        // 解析 flavor → 选 backend；读不到 config 时回落到默认 backend（向后兼容）。
+        let flavor = match self.get_required_bot_config(bot_id).await {
+            Ok(cfg) => map_backend_flavor(cfg.bot.backend_type),
+            Err(_) => BotFlavor::NapCat,
+        };
+        let backend = self.backend_for(flavor);
+
+        let status = backend.status(bot_id.clone()).await?;
         if status.state == BotActorState::Stopped {
             let stopped = match stopping.state {
                 BotActorState::Stopping => handle.confirm_stopped().await?,
@@ -283,9 +332,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Ok(stopped);
         }
 
-        match self.backend.stop(bot_id.clone(), StopMode::Force).await {
+        match backend.stop(bot_id.clone(), StopMode::Force).await {
             Ok(()) => {
-                let status = self.backend.status(bot_id.clone()).await?;
+                let status = backend.status(bot_id.clone()).await?;
                 self.event_bus
                     .publish(DomainEvent::bot_status_changed(status, "runtime_stop"));
                 let stopped = handle.confirm_stopped().await?;
@@ -307,14 +356,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 重启指定 Bot。
-    ///
     /// 6 状态分支语义：
     /// - `Running | Starting`：`actor.request_restart()`（标记 `pending_restart` 并转 `Stopping`）
-    ///   → `backend.stop(Force)` → 等 actor 经 `confirm_stopped` 转入 `Starting` → `start_bot`
+    /// → `backend.stop(Force)` → 等 actor 经 `confirm_stopped` 转入 `Starting` → `start_bot`
     /// - `Stopped | Crashed`：直接 `start_bot`
     /// - `Stopping`：`actor.request_restart()` 标 `pending_restart` → 等 actor 转入 `Starting` → `start_bot`
     /// - `Repairing`：返回 `BotManagerError::InvalidState`
-    ///
     /// 设计：复用 `BotActor` 现有的 `pending_restart` 机制，**不**新增状态机分支。
     /// 错误返回给调用方；`RestartHandle::restart_bot` impl 会把
     /// 错误转为 `DomainEvent::bot_error` 发布给前端。
@@ -348,8 +395,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 监听 actor 的 `watch::Receiver` 直到进入指定 `target` 状态或超时。
-    ///
-    /// 用 `watch::Receiver::borrow_and_update` 先消化已有快照，再 `changed()`
+    /// 用 `watch::Receiver::borrow_and_update` 先消化已有快照，再 `changed`
     /// 等下次更新；超时返回 `BotManagerError::Render`，邮箱关闭则返回
     /// `BotManagerError::Actor(MailboxClosed)`。
     async fn wait_until_state(
@@ -462,12 +508,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     // ─── 配置管理 ─────────────────────────────────────────────────────────
 
     /// 新增或更新 Bot 配置。
-    ///
     /// 策略：**先持久化 bot.json（source of truth），再写派生文件**。
     /// - 如果 bot.json 写入失败，派生文件不会被写入，状态完全未变。
-    /// - 如果派生文件写入失败，bot.json 已是最新，派生文件可在下次启动时重新生成，
-    ///   不会造成不可恢复的不一致。
-    ///
+    /// - 如果派生文件写入失败，bot.json 已是最新，派生文件可在下次启动时重新生成
+    /// 不会造成不可恢复的不一致。
     /// - 新增时：检查 4 开上限，持久化，写派生文件，创建 Actor。
     /// - 更新时：持久化，写派生文件，热推送（通过 restart 通知 Actor 重新加载）。
     pub async fn upsert_bot_config(
@@ -591,7 +635,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 拉取指定 Bot 的最近 `lines` 行日志快照。
-    ///
     /// 返回 [`LogSnapshot`]，包含已截尾的日志行 + 总行数。供 UI 在 BotLogPage
     /// 初次开页时一次性加载历史，再叠加 `bot_log_appended` 实时事件。对齐
     /// legacy `NapCatQQProcessLog.get_log_content` 行为：本地是内存 deque
@@ -665,9 +708,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 应用退出收口：尝试停止所有运行中的 Bot 并 shutdown 它们的 Actor。
-    ///
     /// 用法：Tauri `WindowEvent::CloseRequested` 时调用，避免 QQ.exe 残留。
-    ///
     /// 行为：
     /// - 对所有处于 active 状态的 Bot 调用 `stop_bot`（内部走 `kill_process_tree`）。
     /// - 不论 stop 是否成功，都会 shutdown 对应的 actor 释放邮箱。
@@ -717,15 +758,77 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
+        // SnowLuma daemon 优雅关闭。
+        if let Some(daemon) = self.snowluma_daemon.as_ref() {
+            daemon.shutdown().await;
+        }
+
         result
     }
 
+    /// 长任务：监听 `SnowLumaDaemonStateChanged` 事件，daemon 转 `Crashed` 时
+    /// 把所有 SnowLuma flavor 且 active 的 actor 级联转 `Crashed`，并各发一次
+    /// `BotError`。
+    /// 调用方应在 setup 阶段 `tokio::spawn(manager.clone().run_snowluma_listener)`。
+    pub async fn run_snowluma_listener(self: Arc<Self>) {
+        use crate::snowluma::DaemonState;
+
+        let mut sub = self.event_bus.subscribe(EventFilter::kind(
+            DomainEventKind::SnowLumaDaemonStateChanged,
+        ));
+        loop {
+            let evt = match sub.next().await {
+                Some(e) => e,
+                None => break,
+            };
+            let DomainEvent::SnowLumaDaemonStateChanged { state, reason, .. } = evt else {
+                continue;
+            };
+            if state != DaemonState::Crashed {
+                continue;
+            }
+            // 收到 Crashed → 把 SL flavor active actor 转 Crashed
+            let snapshots: Vec<BotActorSnapshot> = {
+                let actors = self.actors.read().await;
+                actors.values().map(|h| h.snapshot()).collect()
+            };
+            // MVP：通过 repo 反查每个 active bot 的 flavor，避免在 actor snapshot 上扩字段。
+            for snap in snapshots {
+                if !matches!(snap.state, BotActorState::Starting | BotActorState::Running) {
+                    continue;
+                }
+                let bot_id = snap.bot_id.clone();
+                let cfg = match self.get_required_bot_config(&bot_id).await {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                if !matches!(cfg.bot.backend_type, BackendType::SnowLuma) {
+                    continue;
+                }
+                let handle = match self.get_actor(&bot_id).await {
+                    Ok(h) => h,
+                    Err(_) => continue,
+                };
+                let reason_str = reason
+                    .clone()
+                    .unwrap_or_else(|| "snowluma daemon crashed".to_string());
+                if let Ok(crashed) = handle.mark_crashed(reason_str.clone()).await {
+                    self.publish_state_change(&crashed, "snowluma_daemon_crashed");
+                }
+                self.event_bus.publish(DomainEvent::bot_error(
+                    bot_id,
+                    reason_str,
+                    Some("SnowLuma daemon 已崩溃，请重启 App".to_string()),
+                ));
+            }
+        }
+    }
+
     /// 订阅运行时事件总线，将 `BotProcessExited` 转换为 actor 状态机转移：
-    /// - 进程正常或异常退出 → 调用 `confirm_stopped` / `mark_crashed`，
-    ///   防止 UI 残留假 Running。
-    ///
+    /// - 进程正常或异常退出 → 调用 `confirm_stopped` / `mark_crashed`
+    /// 防止 UI 残留假 Running。
     /// 返回的 future 由调用方在合适的运行时上 spawn（例如
-    /// `tauri::async_runtime::spawn`）。它**不依赖** tokio current handle，
+    /// `tauri::async_runtime::spawn`）。它**不依赖** tokio current handle
     /// 因此可以在 Tauri `setup` 回调里安全启动；用 `tokio::spawn` 在
     /// 没有 tokio 运行时上下文的位置直接跑会 panic。
     pub async fn run_runtime_event_listener(self) {
@@ -745,16 +848,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 在当前 tokio 运行时上 spawn 事件监听任务。
-    ///
     /// 仅在调用方已处于 tokio 运行时上下文（`#[tokio::test]` 或被
     /// `tauri::async_runtime::spawn` 包过的 future）中使用；在 Tauri
     /// `setup` 这种无 tokio handle 的位置请改用：
-    ///
     /// ```ignore
-    /// let manager = bot_manager.clone();
+    /// let manager = bot_manager.clone()
     /// tauri::async_runtime::spawn(async move {
-    ///     (*manager).clone().run_runtime_event_listener().await;
-    /// });
+    /// (*manager).clone().run_runtime_event_listener().await
+    /// })
     /// ```
     pub fn spawn_runtime_event_listener(&self) {
         let manager = self.clone();
@@ -806,11 +907,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 内部删除流程：持久化删除 → 停止 → shutdown → 移除内存 Actor。
-    ///
     /// 策略：**先删持久化（source of truth），再清理内存**。
     /// - 如果 repo.delete 失败，Actor 保持不变，可重试。
-    /// - 如果 repo.delete 成功但 shutdown 失败，持久化已删除，
-    ///   下次 bootstrap 不会恢复此 Bot，内存态在进程结束时自然清理。
+    /// - 如果 repo.delete 成功但 shutdown 失败，持久化已删除
+    /// 下次 bootstrap 不会恢复此 Bot，内存态在进程结束时自然清理。
     async fn delete_bot_internal(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
         // 1. 先删持久化配置（source of truth）
         let qq_id: u64 = bot_id
@@ -869,28 +969,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 处理 `NapCatWebuiAvailable` 事件：为给定 Bot 创建/替换 `NapCatLoginPoller`。
-    ///
     /// 行为：
     /// - `repo.get(bot_id)` 不到对应配置时**直接 return**（不报错），避免在
-    ///   配置删除后还接到延迟的 WebuiAvailable 事件时崩溃。
+    /// 配置删除后还接到延迟的 WebuiAvailable 事件时崩溃。
     /// - 从 `poller_settings.read().await` 取最新值组装 `PollerConfig`：
-    ///   - `login_check_interval` ← `settings.bot_login_check_interval_ms`
-    ///   - `unlogged_interval` 固定 1s
-    ///   - `auth_refresh_period` 30 min；`auth_refresh_throttle` 5s；`http_timeout` 5s
-    ///   - `offline_auto_restart` ← `bot_cfg.bot.offline_auto_restart`
-    ///   - `offline_notice_enabled = bot_cfg.advanced.offline_notice
-    ///       && (settings.offline_webhook_notice || settings.offline_email_notice)`
-    /// - 旧 Poller 先 `dispose()`（取消其 `CancellationToken` 并触发 `Drop` 兜底）
-    ///   再插入新实例，保证不会同时存在两个 Poller 抢同一 BotId 的事件。
-    ///
-    /// `restart_handle` 通过 `Arc::clone(self) as Arc<dyn RestartHandle>` 注入，
+    /// - `login_check_interval` ← `settings.bot_login_check_interval_ms`
+    /// - `unlogged_interval` 固定 1s
+    /// - `auth_refresh_period` 30 min；`auth_refresh_throttle` 5s；`http_timeout` 5s
+    /// - `offline_auto_restart` ← `bot_cfg.bot.offline_auto_restart`
+    /// - `offline_notice_enabled = bot_cfg.advanced.offline_notice
+    /// && (settings.offline_webhook_notice || settings.offline_email_notice)`
+    /// - 旧 Poller 先 `dispose`（取消其 `CancellationToken` 并触发 `Drop` 兜底）
+    /// 再插入新实例，保证不会同时存在两个 Poller 抢同一 BotId 的事件。
+    /// `restart_handle` 通过 `Arc::clone(self) as Arc<dyn RestartHandle>` 注入
     /// 利用本类型的 `impl RestartHandle for BotManager`（见文件末尾）。
-    pub async fn handle_webui_available(
-        self: &Arc<Self>,
-        bot_id: BotId,
-        port: u16,
-        token: String,
-    ) {
+    pub async fn handle_webui_available(self: &Arc<Self>, bot_id: BotId, port: u16, token: String) {
         // 1. 取 BotConfig；解析失败或不存在时静默 return（事件可能晚到）。
         let qq_id: u64 = match bot_id.as_str().parse() {
             Ok(v) => v,
@@ -932,8 +1025,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 移除并取消指定 Bot 的 `NapCatLoginPoller`。多次调用幂等。
-    ///
-    /// 由 `run_napcat_login_listener` 在 `BotProcessExited` 事件到达时调用，
+    /// 由 `run_napcat_login_listener` 在 `BotProcessExited` 事件到达时调用
     /// 也由 `delete_bot_internal` / `shutdown_all` 在生命周期收尾时调用。
     pub async fn dispose_poller(&self, bot_id: &BotId) {
         let mut pollers = self.login_pollers.write().await;
@@ -944,13 +1036,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 监听 `NapCatWebuiAvailable` 与 `BotProcessExited` 两路事件，分别驱动
     /// Poller 的创建与回收。
-    ///
     /// - `Arc<Self>` 作为 receiver：`handle_webui_available` 需要把
-    ///   `Arc<BotManager<R, S>>` 转成 `Arc<dyn RestartHandle>` 注入 `PollerDeps`。
+    /// `Arc<BotManager<R, S>>` 转成 `Arc<dyn RestartHandle>` 注入 `PollerDeps`。
     /// - `tokio::select!` 同时消费两路 subscription；任一路关闭都会让 `else =>`
-    ///   分支退出循环，避免半挂死。
+    /// 分支退出循环，避免半挂死。
     /// - 调用方（Tauri `setup` 或测试）通过 `tauri::async_runtime::spawn` /
-    ///   `tokio::spawn` 启动；与 `run_runtime_event_listener` 风格一致。
+    /// `tokio::spawn` 启动；与 `run_runtime_event_listener` 风格一致。
     pub async fn run_napcat_login_listener(self: Arc<Self>) {
         let mut webui_sub = self
             .event_bus
@@ -960,20 +1051,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .subscribe(EventFilter::kind(DomainEventKind::BotProcessExited));
         loop {
             tokio::select! {
-                ev = webui_sub.next() => match ev {
-                    Some(DomainEvent::NapCatWebuiAvailable { bot_id, port, token }) => {
-                        self.handle_webui_available(bot_id, port, token).await;
-                    }
-                    Some(_) => continue,
-                    None => break,
-                },
-                ev = exit_sub.next() => match ev {
-                    Some(DomainEvent::BotProcessExited { bot_id, .. }) => {
-                        self.dispose_poller(&bot_id).await;
-                    }
-                    Some(_) => continue,
-                    None => break,
-                },
+            ev = webui_sub.next() => match ev {
+            Some(DomainEvent::NapCatWebuiAvailable { bot_id, port, token }) => {
+            self.handle_webui_available(bot_id, port, token).await;
+            }
+            Some(_) => continue,
+            None => break,
+            },
+            ev = exit_sub.next() => match ev {
+            Some(DomainEvent::BotProcessExited { bot_id, .. }) => {
+            self.dispose_poller(&bot_id).await;
+            }
+            Some(_) => continue,
+            None => break,
+            },
             }
         }
     }
@@ -983,7 +1074,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 /// `BotManager` 实现 `RestartHandle`，让 `NapCatLoginPoller` 可以在踢线 +
 /// `offline_auto_restart=true` 分支调用 `restart_bot` 而不直接持有
 /// `BotManager` 引用（避免循环依赖）。
-///
 /// 失败处理：把错误转成 `DomainEvent::bot_error` 发布到事件总线，附中文
 /// 提示「自动重启失败，请手动启动 Bot」。Poller 不感知失败。
 #[async_trait]
@@ -996,5 +1086,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> RestartHandle for Bot
                 Some("自动重启失败，请手动启动 Bot".to_string()),
             ));
         }
+    }
+}
+
+/// 把 `BackendType` 映射到 `BotFlavor`。
+fn map_backend_flavor(backend: BackendType) -> BotFlavor {
+    match backend {
+        BackendType::NapCat => BotFlavor::NapCat,
+        BackendType::SnowLuma => BotFlavor::SnowLuma,
     }
 }
