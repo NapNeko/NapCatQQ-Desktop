@@ -3,11 +3,13 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
+use ts_rs::TS;
 
 use crate::ids::BotId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
 pub enum BotActorState {
     #[default]
     Stopped,
@@ -24,16 +26,22 @@ impl BotActorState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
 pub struct BotActorSnapshot {
+    #[ts(type = "string")]
     pub bot_id: BotId,
     pub state: BotActorState,
+    #[ts(type = "number")]
     pub revision: u64,
+    #[ts(type = "number")]
     pub token_generation: u64,
     pub pending_restart: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub last_transition: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub last_error: Option<String>,
 }
 

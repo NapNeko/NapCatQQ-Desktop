@@ -13,11 +13,18 @@ pub enum DomainEventKind {
     BotLogAppended,
     BotError,
     TaskProgress,
+    // serde 默认 snake_case 会把 `NapCat...` 切成 `nap_cat_...`；这里
+    // 显式 rename，与 `DomainEvent::tauri_event_name()` 单一来源对齐。
+    #[serde(rename = "napcat_webui_available")]
     NapCatWebuiAvailable,
     BotProcessExited,
+    #[serde(rename = "napcat_login_qrcode")]
     NapCatLoginQrcode,
+    #[serde(rename = "napcat_login_qrcode_removed")]
     NapCatLoginQrcodeRemoved,
+    #[serde(rename = "napcat_login_online")]
     NapCatLoginOnline,
+    #[serde(rename = "napcat_login_invalidated")]
     NapCatLoginInvalidated,
 }
 
@@ -66,6 +73,11 @@ pub enum DomainEvent {
         message: String,
     },
     /// NapCat WebUI 已就绪：从 NapCat stdout 解析得到的登录入口。
+    //
+    // 注意：serde 默认 snake_case 会把 `NapCatWebuiAvailable` 切成
+    // `nap_cat_webui_available`（连续大写字母都算单词边界）。这里显式
+    // rename，与 `tauri_event_name()` 保持单一字面量来源。
+    #[serde(rename = "napcat_webui_available")]
     NapCatWebuiAvailable {
         bot_id: BotId,
         port: u16,
@@ -82,20 +94,24 @@ pub enum DomainEvent {
     },
     /// NapCat WebUI 登录二维码可用：通常是 `data:image/png;base64,...`，
     /// 也可能是普通 URL；后端透传，不做解析。
+    #[serde(rename = "napcat_login_qrcode")]
     NapCatLoginQrcode {
         bot_id: BotId,
         qrcode_url: String,
     },
     /// NapCat WebUI 登录二维码应当从 UI 上移除（已扫码登录、被踢、Poller dispose 等场景）。
+    #[serde(rename = "napcat_login_qrcode_removed")]
     NapCatLoginQrcodeRemoved {
         bot_id: BotId,
     },
     /// NapCat WebUI 在线状态变化（来自 `GetQQLoginInfo.online`）。
+    #[serde(rename = "napcat_login_online")]
     NapCatLoginOnline {
         bot_id: BotId,
         online: bool,
     },
     /// NapCat WebUI 登录失效（被踢 / 主动登出）。
+    #[serde(rename = "napcat_login_invalidated")]
     NapCatLoginInvalidated {
         bot_id: BotId,
         reason: NapCatLoginInvalidationReason,
@@ -123,7 +139,7 @@ impl DomainEvent {
         match self {
             Self::BotStateChanged { .. } => "bot_state_changed",
             Self::BotStatusChanged { .. } => "bot_status_changed",
-            Self::BotLogAppended { .. } => "log_appended",
+            Self::BotLogAppended { .. } => "bot_log_appended",
             Self::BotError { .. } => "bot_error",
             Self::TaskProgress { .. } => "task_progress",
             Self::NapCatWebuiAvailable { .. } => "napcat_webui_available",
@@ -355,7 +371,7 @@ mod tests {
     #[test]
     fn event_name_mapping_matches_frontend_contract() {
         let event = DomainEvent::bot_log("10001", "hello");
-        assert_eq!(event.tauri_event_name(), "log_appended");
+        assert_eq!(event.tauri_event_name(), "bot_log_appended");
         assert_eq!(event.kind(), DomainEventKind::BotLogAppended);
     }
 
