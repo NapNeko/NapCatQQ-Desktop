@@ -9,8 +9,8 @@ use ncd_core::{
     BotBackendError, BotBasicConfig, BotConfig, BotConfigRepo, BotId, BotManager, BotManagerError,
     BotRuntimeConfig, BotStartCtx, BotStatus, BroadcastEventBus, ConfigStore, ConnectConfig,
     DispatchRenderer, EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore,
-    RuntimeLaunchPlan, RuntimeLaunchPlanError, RuntimeLaunchPlanner, SecretStore, SecretStoreImpl,
-    StopMode, TailOpts,
+    NoopOfflineNotifier, ReqwestNapCatWebUiClient, RuntimeLaunchPlan, RuntimeLaunchPlanError,
+    RuntimeLaunchPlanner, SecretStore, SecretStoreImpl, StopMode, TailOpts, WebUiPollerSettings,
 };
 
 #[derive(Default)]
@@ -169,6 +169,21 @@ fn bot_config_auto_start(qq_id: u64, name: &str) -> BotConfig {
     config
 }
 
+/// 默认 wiring：一个本地 `ReqwestNapCatWebUiClient` + `NoopOfflineNotifier`
+/// + 默认 `WebUiPollerSettings`。测试不真正发起 WebUI 请求，仅占位填充
+/// `BotManager::new` 新增的 4 个依赖（design.md §15.1）。
+fn default_webui_client() -> Arc<dyn ncd_core::NapCatWebUiClient> {
+    Arc::new(ReqwestNapCatWebUiClient::new().expect("构造默认 webui client 失败"))
+}
+
+fn default_offline_notifier() -> Arc<dyn ncd_core::OfflineNotifier> {
+    Arc::new(NoopOfflineNotifier)
+}
+
+fn default_poller_settings() -> Arc<tokio::sync::RwLock<WebUiPollerSettings>> {
+    Arc::new(tokio::sync::RwLock::new(WebUiPollerSettings::default()))
+}
+
 fn make_manager(
     root: &std::path::Path,
 ) -> (
@@ -193,6 +208,9 @@ fn make_manager(
         backend.clone(),
         planner,
         event_bus,
+        default_webui_client(),
+        default_offline_notifier(),
+        default_poller_settings(),
     );
     (store, repo, backend, manager)
 }
@@ -221,6 +239,9 @@ fn make_manager_with_planner(
         backend.clone(),
         planner,
         event_bus,
+        default_webui_client(),
+        default_offline_notifier(),
+        default_poller_settings(),
     );
     (store, repo, backend, manager)
 }
@@ -914,6 +935,9 @@ async fn start_bot_publishes_state_change_event() {
         backend,
         Arc::new(TestLaunchPlanner),
         Arc::clone(&event_bus),
+        default_webui_client(),
+        default_offline_notifier(),
+        default_poller_settings(),
     );
 
     manager
@@ -1094,6 +1118,9 @@ async fn process_exit_event_transitions_running_actor_to_crashed() {
         backend.clone(),
         planner,
         Arc::clone(&event_bus),
+        default_webui_client(),
+        default_offline_notifier(),
+        default_poller_settings(),
     );
     prepare_napcat_runtime(temp.path());
 
