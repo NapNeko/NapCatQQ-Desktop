@@ -112,6 +112,8 @@ export interface BatchResultResponse {
   failed: [string, string][];
 }
 
+export type NapCatLoginInvalidationReason = 'kicked' | 'logged_out';
+
 export type DomainEvent =
   | {
     kind: 'bot_state_changed';
@@ -152,4 +154,23 @@ export type DomainEvent =
     bot_id: string;
     exit_code?: number | null;
     reason?: string | null;
+  }
+  | {
+    kind: 'napcat_login_qrcode';
+    bot_id: string;
+    qrcode_url: string;
+  }
+  | {
+    kind: 'napcat_login_qrcode_removed';
+    bot_id: string;
+  }
+  | {
+    kind: 'napcat_login_online';
+    bot_id: string;
+    online: boolean;
+  }
+  | {
+    kind: 'napcat_login_invalidated';
+    bot_id: string;
+    reason: NapCatLoginInvalidationReason;
   };

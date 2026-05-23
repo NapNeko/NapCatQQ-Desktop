@@ -5,6 +5,12 @@ import { BotActorSnapshot, BatchResultResponse } from './types';
 import { BotConfig } from './generated/BotConfig';
 import { emitMockEvent } from './events';
 
+/// 日志快照（与 Rust `LogSnapshot` 对齐）。
+export interface LogSnapshot {
+  lines: string[];
+  total_lines: number;
+}
+
 // In-memory mock database for browser preview mode
 let mockSnapshots: BotActorSnapshot[] = [
   {
@@ -295,6 +301,27 @@ export const botCommands = {
       return await invoke<number>('active_bot_count');
     }
     return mockSnapshots.filter(s => s.state === 'Running' || s.state === 'Starting' || s.state === 'Stopping').length;
+  },
+
+  /// 拉取 Bot 最近 `lines` 行历史日志。
+  /// BotLogPage 开页时一次调用，再叠加 `log_appended` 实时事件。
+  tailBotLog: async (botId: string, lines: number = 1000): Promise<LogSnapshot> => {
+    if (isTauri) {
+      return await invoke<LogSnapshot>('tail_bot_log', { botId, lines });
+    }
+    // 浏览器预览模式：返回若干条占位日志。
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          lines: [
+            '[mock] BotLogPage 处于浏览器预览模式',
+            `[mock] bot_id=${botId} lines=${lines}`,
+            '[mock] 真实日志会在 Tauri 应用内显示',
+          ],
+          total_lines: 3,
+        });
+      }, 100);
+    });
   },
 
   deleteBotConfig: async (botId: string): Promise<void> => {

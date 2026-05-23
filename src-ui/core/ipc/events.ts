@@ -30,6 +30,10 @@ export async function subscribeToEvents(callback: EventCallback): Promise<Unsubs
       'task_progress',
       'napcat_webui_available',
       'bot_process_exited',
+      'napcat_login_qrcode',
+      'napcat_login_qrcode_removed',
+      'napcat_login_online',
+      'napcat_login_invalidated',
     ];
 
     for (const name of eventNames) {
