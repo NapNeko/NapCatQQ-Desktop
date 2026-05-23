@@ -6,29 +6,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use ncd_core::{
-    BackendKind, BotBackend, BotBackendError, BotFlavor, BotId, BotRuntimeConfig, BotStartCtx,
-    BotStatus, BroadcastEventBus, DomainEvent, EventBus, LocalRuntimeBackend, MockRemoteHost,
-    RemoteFileEntry, RemoteHost, RemoteHostError, RuntimeTarget, StopMode,
+    BackendKind, BotId, BotStatus, BroadcastEventBus, DomainEvent, EventBus, MockRemoteHost,
+    RemoteFileEntry, RemoteHost, RemoteHostError, RuntimeTarget,
 };
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpawnLocalBotRequest {
-    pub bot_id: String,
-    #[serde(default = "default_bot_flavor")]
-    pub flavor: BotFlavor,
-    pub launch_command: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub working_dir: Option<PathBuf>,
-    #[serde(default)]
-    pub environment: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StopLocalBotRequest {
-    pub bot_id: String,
-    #[serde(default)]
-    pub mode: StopMode,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectRemoteHostRequest {
@@ -92,7 +72,6 @@ pub struct RemoteWebuiEndpointResponse {
 
 #[derive(Debug, Clone)]
 struct RuntimeRecord {
-    flavor: BotFlavor,
     latest_status: Option<BotStatus>,
 }
 
@@ -102,33 +81,14 @@ struct RuntimeRegistry {
 }
 
 impl RuntimeRegistry {
-    fn upsert(&mut self, bot_id: &BotId, flavor: BotFlavor, status: Option<BotStatus>) {
+    #[cfg(test)]
+    fn upsert(&mut self, bot_id: &BotId, status: Option<BotStatus>) {
         self.records.insert(
             bot_id.as_str().to_string(),
             RuntimeRecord {
-                flavor,
                 latest_status: status,
             },
         );
-    }
-
-    fn flavor_for(&self, bot_id: &BotId) -> Option<BotFlavor> {
-        self.records
-            .get(bot_id.as_str())
-            .map(|record| record.flavor)
-    }
-
-    fn status_for(&self, bot_id: &BotId) -> Option<&BotStatus> {
-        self.records
-            .get(bot_id.as_str())
-            .and_then(|record| record.latest_status.as_ref())
-    }
-
-    fn known_bots(&self) -> Vec<(BotId, BotFlavor)> {
-        self.records
-            .iter()
-            .map(|(bot_id, record)| (BotId::new(bot_id.clone()), record.flavor))
-            .collect()
     }
 
     fn latest_statuses(&self) -> Vec<BotStatus> {
@@ -218,8 +178,6 @@ impl RemoteRuntimeService {
 #[derive(Debug, Clone)]
 pub struct AppRuntime {
     data_root: PathBuf,
-    local_napcat_backend: Arc<LocalRuntimeBackend>,
-    local_snowluma_backend: Arc<LocalRuntimeBackend>,
     event_bus: BroadcastEventBus,
     registry: Arc<Mutex<RuntimeRegistry>>,
     remote_services: Arc<Mutex<BTreeMap<String, RemoteRuntimeService>>>,
@@ -229,16 +187,6 @@ impl AppRuntime {
     pub fn new(data_root: impl Into<PathBuf>, event_bus: BroadcastEventBus) -> Self {
         let data_root = data_root.into();
         Self {
-            local_napcat_backend: Arc::new(LocalRuntimeBackend::new_with_flavor(
-                &data_root,
-                "local-napcat",
-                BotFlavor::NapCat,
-            )),
-            local_snowluma_backend: Arc::new(LocalRuntimeBackend::new_with_flavor(
-                &data_root,
-                "local-snowluma",
-                BotFlavor::SnowLuma,
-            )),
             data_root,
             event_bus,
             registry: Arc::new(Mutex::new(RuntimeRegistry::default())),
@@ -250,89 +198,13 @@ impl AppRuntime {
         &self.data_root
     }
 
-    fn backend_for(&self, flavor: BotFlavor) -> &LocalRuntimeBackend {
-        match flavor {
-            BotFlavor::NapCat => &self.local_napcat_backend,
-            BotFlavor::SnowLuma => &self.local_snowluma_backend,
-        }
-    }
-
-    async fn record_bot(&self, bot_id: &BotId, flavor: BotFlavor, status: Option<BotStatus>) {
-        self.registry.lock().await.upsert(bot_id, flavor, status);
-    }
-
     fn emit_status(&self, status: BotStatus, source: impl Into<String>) {
         self.event_bus
             .publish(DomainEvent::bot_status_changed(status, source));
     }
 
-    pub async fn spawn_local_bot(
-        &self,
-        request: SpawnLocalBotRequest,
-    ) -> Result<BotStatus, String> {
-        validate_bot_id(&request.bot_id)?;
-        validate_launch_command(&request.launch_command)?;
-
-        let bot_id = BotId::new(request.bot_id);
-        let flavor = request.flavor;
-        let backend = self.backend_for(flavor);
-        let config = BotRuntimeConfig {
-            bot_id: bot_id.clone(),
-            config_path: BotRuntimeConfig::default_path(&self.data_root, bot_id.clone())
-                .config_path,
-            backend_kind: BackendKind::Local,
-            flavor,
-            runtime_target: RuntimeTarget::Local,
-            launch_command: request.launch_command,
-            working_dir: request.working_dir,
-            log_path: None,
-            environment: request.environment,
-        }
-        .with_runtime_defaults(&self.data_root);
-
-        backend
-            .start(&BotStartCtx { config })
-            .await
-            .map_err(map_backend_error)?;
-        let status = backend
-            .status(bot_id.clone())
-            .await
-            .map_err(map_backend_error)?;
-        self.record_bot(&bot_id, flavor, Some(status.clone())).await;
-        self.emit_status(status.clone(), "spawn_local_bot");
-        Ok(status)
-    }
-
-    pub async fn stop_local_bot(&self, request: StopLocalBotRequest) -> Result<(), String> {
-        validate_bot_id(&request.bot_id)?;
-        let bot_id = BotId::new(request.bot_id);
-        let flavor = self.flavor_for(&bot_id).await;
-        let backend = self.backend_for(flavor);
-        backend
-            .stop(bot_id.clone(), request.mode)
-            .await
-            .map_err(map_backend_error)?;
-        let status = backend
-            .status(bot_id.clone())
-            .await
-            .map_err(map_backend_error)?;
-        self.record_bot(&bot_id, flavor, Some(status.clone())).await;
-        self.emit_status(status, "stop_local_bot");
-        Ok(())
-    }
-
     pub async fn get_all_bot_statuses(&self) -> Vec<BotStatus> {
-        let napcat_statuses = self.local_napcat_backend.list_running().await;
-        let snowluma_statuses = self.local_snowluma_backend.list_running().await;
-        let mut registry = self.registry.lock().await;
-        for status in &napcat_statuses {
-            registry.upsert(&status.bot_id, BotFlavor::NapCat, Some(status.clone()));
-        }
-        for status in &snowluma_statuses {
-            registry.upsert(&status.bot_id, BotFlavor::SnowLuma, Some(status.clone()));
-        }
-
-        let mut statuses = registry.latest_statuses();
+        let mut statuses = self.registry.lock().await.latest_statuses();
         statuses.sort_by(|left, right| left.bot_id.as_str().cmp(right.bot_id.as_str()));
         statuses
     }
@@ -387,18 +259,7 @@ impl AppRuntime {
     }
 
     pub async fn publish_runtime_status_changes(&self) {
-        for (bot_id, flavor) in self.known_bots().await {
-            let backend = self.backend_for(flavor);
-            let Ok(status) = backend.status(bot_id.clone()).await else {
-                continue;
-            };
-            if self
-                .record_status_change(&bot_id, flavor, status.clone())
-                .await
-            {
-                self.emit_status(status, "runtime_watch");
-            }
-        }
+        self.publish_runtime_statuses().await;
     }
 
     pub async fn watcher_interval_secs(&self) -> u64 {
@@ -406,18 +267,6 @@ impl AppRuntime {
     }
 
     pub async fn shutdown(&self) {
-        for (bot_id, flavor) in self.known_bots().await {
-            let backend = self.backend_for(flavor);
-            if let Ok(status) = backend.status(bot_id.clone()).await
-                && status.state == ncd_core::BotActorState::Running
-            {
-                let _ = backend.stop(bot_id.clone(), StopMode::Force).await;
-                let stopped = BotStatus::stopped(bot_id.clone());
-                self.record_bot(&bot_id, flavor, Some(stopped.clone()))
-                    .await;
-                self.emit_status(stopped, "runtime_shutdown");
-            }
-        }
         self.remote_services.lock().await.clear();
     }
 
@@ -428,25 +277,6 @@ impl AppRuntime {
             .latest_statuses()
             .iter()
             .any(|status| status.state == ncd_core::BotActorState::Running)
-    }
-
-    async fn known_bots(&self) -> Vec<(BotId, BotFlavor)> {
-        self.registry.lock().await.known_bots()
-    }
-
-    async fn record_status_change(
-        &self,
-        bot_id: &BotId,
-        flavor: BotFlavor,
-        status: BotStatus,
-    ) -> bool {
-        let mut registry = self.registry.lock().await;
-        let changed = registry
-            .status_for(bot_id)
-            .map(|previous| previous != &status)
-            .unwrap_or(true);
-        registry.upsert(bot_id, flavor, Some(status));
-        changed
     }
 
     pub async fn get_remote_webui_endpoint(
@@ -466,48 +296,15 @@ impl AppRuntime {
             .ok_or_else(|| format!("远端主机未连接: {remote_id}"))
     }
 
-    async fn flavor_for(&self, bot_id: &BotId) -> BotFlavor {
-        if let Some(flavor) = self.registry.lock().await.flavor_for(bot_id) {
-            return flavor;
-        }
-
-        let path = BotRuntimeConfig::default_path(&self.data_root, bot_id.clone()).config_path;
-        match tokio::fs::read_to_string(&path)
-            .await
-            .ok()
-            .and_then(|text| serde_json::from_str::<BotRuntimeConfig>(&text).ok())
-            .map(|cfg| cfg.flavor)
-        {
-            Some(flavor) => flavor,
-            None => BotFlavor::NapCat,
-        }
+    #[cfg(test)]
+    pub async fn record_external_status_for_test(&self, status: BotStatus) {
+        let bot_id = status.bot_id.clone();
+        self.registry.lock().await.upsert(&bot_id, Some(status));
     }
-}
-
-fn default_bot_flavor() -> BotFlavor {
-    BotFlavor::NapCat
 }
 
 fn default_remote_port() -> u16 {
     22
-}
-
-fn validate_bot_id(bot_id: &str) -> Result<(), String> {
-    let trimmed = bot_id.trim();
-    if trimmed.is_empty() {
-        return Err("bot_id 不能为空".to_string());
-    }
-    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
-        return Err("bot_id 不能包含路径分隔符".to_string());
-    }
-    Ok(())
-}
-
-fn validate_launch_command(command: &[String]) -> Result<(), String> {
-    if command.is_empty() {
-        return Err("launch_command 不能为空".to_string());
-    }
-    Ok(())
 }
 
 fn validate_remote_id(remote_id: &str) -> Result<(), String> {
@@ -531,10 +328,6 @@ fn validate_username(username: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn map_backend_error(error: BotBackendError) -> String {
-    error.to_string()
-}
-
 fn map_remote_host_error(error: RemoteHostError) -> String {
     match error {
         RemoteHostError::Unavailable => "远端主机不可用".to_string(),
@@ -551,176 +344,8 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    fn sleep_command() -> Vec<String> {
-        if cfg!(windows) {
-            vec![
-                "timeout".to_string(),
-                "/T".to_string(),
-                "2".to_string(),
-                "/NOBREAK".to_string(),
-            ]
-        } else {
-            vec!["sleep".to_string(), "2".to_string()]
-        }
-    }
-
     #[tokio::test]
-    async fn spawn_and_list_running_local_bot() {
-        let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
-        let runtime = AppRuntime::new(root.path(), bus.clone());
-
-        let status = runtime
-            .spawn_local_bot(SpawnLocalBotRequest {
-                bot_id: "10001".to_string(),
-                flavor: BotFlavor::NapCat,
-                launch_command: sleep_command(),
-                working_dir: None,
-                environment: BTreeMap::new(),
-            })
-            .await
-            .unwrap();
-
-        assert_eq!(status.bot_id.as_str(), "10001");
-        assert_eq!(status.state, ncd_core::BotActorState::Running);
-
-        let statuses = runtime.get_all_bot_statuses().await;
-        assert_eq!(statuses.len(), 1);
-        assert_eq!(statuses[0].bot_id.as_str(), "10001");
-
-        runtime
-            .stop_local_bot(StopLocalBotRequest {
-                bot_id: "10001".to_string(),
-                mode: StopMode::Force,
-            })
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn routes_bots_by_flavor() {
-        let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
-        let runtime = AppRuntime::new(root.path(), bus.clone());
-
-        let napcat = runtime
-            .spawn_local_bot(SpawnLocalBotRequest {
-                bot_id: "10003".to_string(),
-                flavor: BotFlavor::NapCat,
-                launch_command: sleep_command(),
-                working_dir: None,
-                environment: BTreeMap::new(),
-            })
-            .await
-            .unwrap();
-        assert_eq!(
-            napcat.extra.get("flavor").and_then(|value| value.as_str()),
-            Some("napcat")
-        );
-
-        let snowluma = runtime
-            .spawn_local_bot(SpawnLocalBotRequest {
-                bot_id: "10004".to_string(),
-                flavor: BotFlavor::SnowLuma,
-                launch_command: sleep_command(),
-                working_dir: None,
-                environment: BTreeMap::new(),
-            })
-            .await
-            .unwrap();
-        assert_eq!(
-            snowluma
-                .extra
-                .get("flavor")
-                .and_then(|value| value.as_str()),
-            Some("snowluma")
-        );
-
-        runtime
-            .stop_local_bot(StopLocalBotRequest {
-                bot_id: "10003".to_string(),
-                mode: StopMode::Force,
-            })
-            .await
-            .unwrap();
-        runtime
-            .stop_local_bot(StopLocalBotRequest {
-                bot_id: "10004".to_string(),
-                mode: StopMode::Force,
-            })
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn rejects_invalid_bot_id() {
-        let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
-        let runtime = AppRuntime::new(root.path(), bus.clone());
-
-        let error = runtime
-            .spawn_local_bot(SpawnLocalBotRequest {
-                bot_id: "../escape".to_string(),
-                flavor: BotFlavor::NapCat,
-                launch_command: vec!["sleep".to_string(), "1".to_string()],
-                working_dir: None,
-                environment: BTreeMap::new(),
-            })
-            .await
-            .unwrap_err();
-
-        assert!(error.contains("路径分隔符"));
-    }
-
-    #[tokio::test]
-    async fn stop_routes_snowluma_without_falling_back_to_napcat() {
-        let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
-        let runtime = AppRuntime::new(root.path(), bus.clone());
-
-        runtime
-            .spawn_local_bot(SpawnLocalBotRequest {
-                bot_id: "10005".to_string(),
-                flavor: BotFlavor::SnowLuma,
-                launch_command: sleep_command(),
-                working_dir: None,
-                environment: BTreeMap::new(),
-            })
-            .await
-            .unwrap();
-
-        let config_path =
-            BotRuntimeConfig::default_path(root.path(), BotId::new("10005")).config_path;
-        tokio::fs::remove_file(&config_path).await.unwrap();
-
-        runtime
-            .stop_local_bot(StopLocalBotRequest {
-                bot_id: "10005".to_string(),
-                mode: StopMode::Force,
-            })
-            .await
-            .unwrap();
-
-        let statuses = runtime.get_all_bot_statuses().await;
-        let status = statuses
-            .iter()
-            .find(|status| status.bot_id.as_str() == "10005")
-            .unwrap();
-        assert_eq!(status.state, ncd_core::BotActorState::Stopped);
-    }
-
-    #[tokio::test]
-    async fn fallback_to_napcat_when_registry_and_config_are_missing() {
-        let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
-        let runtime = AppRuntime::new(root.path(), bus.clone());
-
-        let flavor = runtime.flavor_for(&BotId::new("10006")).await;
-        assert_eq!(flavor, BotFlavor::NapCat);
-    }
-
-    #[tokio::test]
-    async fn runtime_watch_emits_only_changed_status() {
+    async fn runtime_status_publication_uses_external_records_only() {
         let root = tempdir().unwrap();
         let bus = ncd_core::BroadcastEventBus::default();
         let runtime = AppRuntime::new(root.path(), bus.clone());
@@ -729,35 +354,12 @@ mod tests {
         ));
 
         runtime
-            .spawn_local_bot(SpawnLocalBotRequest {
-                bot_id: "10008".to_string(),
-                flavor: BotFlavor::NapCat,
-                launch_command: sleep_command(),
-                working_dir: None,
-                environment: BTreeMap::new(),
-            })
-            .await
-            .unwrap();
-        let _ = subscription.next().await.expect("expected spawn event");
+            .record_external_status_for_test(BotStatus::running("10008", 42, 1))
+            .await;
 
         runtime.publish_runtime_status_changes().await;
-        let unchanged =
-            tokio::time::timeout(std::time::Duration::from_millis(50), subscription.next()).await;
-        assert!(unchanged.is_err());
-
-        runtime
-            .stop_local_bot(StopLocalBotRequest {
-                bot_id: "10008".to_string(),
-                mode: StopMode::Force,
-            })
-            .await
-            .unwrap();
-        let _ = subscription.next().await.expect("expected stop event");
-
-        runtime.publish_runtime_status_changes().await;
-        let unchanged =
-            tokio::time::timeout(std::time::Duration::from_millis(50), subscription.next()).await;
-        assert!(unchanged.is_err());
+        let event = subscription.next().await.expect("expected status event");
+        assert_eq!(event.bot_id().map(BotId::as_str), Some("10008"));
     }
     #[tokio::test]
     async fn connect_and_query_remote_runtime_contract() {
