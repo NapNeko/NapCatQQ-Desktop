@@ -14,12 +14,13 @@ keyring = "2"
 aes-gcm = "0.10"
 rand = "0.8"
 dirs = "5"
-tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "rt-multi-thread", "macros", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 ts-rs = { version = "10", features = ["serde-compat"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+encoding_rs = "0.8"
 
 [dev-dependencies]
 tempfile = "3"
