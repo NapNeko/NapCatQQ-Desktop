@@ -12,6 +12,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }
 tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "macros", "time"] }
+tauri-plugin-opener = "2.5.4"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
