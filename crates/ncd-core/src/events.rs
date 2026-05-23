@@ -13,6 +13,8 @@ pub enum DomainEventKind {
     BotLogAppended,
     BotError,
     TaskProgress,
+    NapCatWebuiAvailable,
+    BotProcessExited,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,6 +47,21 @@ pub enum DomainEvent {
         progress: u8,
         message: String,
     },
+    /// NapCat WebUI 已就绪：从 NapCat stdout 解析得到的登录入口。
+    NapCatWebuiAvailable {
+        bot_id: BotId,
+        port: u16,
+        token: String,
+    },
+    /// Bot 进程退出（包括正常退出、崩溃、被信号终止）。
+    BotProcessExited {
+        bot_id: BotId,
+        /// 进程退出码；被信号终止或 wait 失败时可能为 None。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
 }
 
 impl DomainEvent {
@@ -55,6 +72,8 @@ impl DomainEvent {
             Self::BotLogAppended { .. } => DomainEventKind::BotLogAppended,
             Self::BotError { .. } => DomainEventKind::BotError,
             Self::TaskProgress { .. } => DomainEventKind::TaskProgress,
+            Self::NapCatWebuiAvailable { .. } => DomainEventKind::NapCatWebuiAvailable,
+            Self::BotProcessExited { .. } => DomainEventKind::BotProcessExited,
         }
     }
 
@@ -65,6 +84,8 @@ impl DomainEvent {
             Self::BotLogAppended { .. } => "log_appended",
             Self::BotError { .. } => "bot_error",
             Self::TaskProgress { .. } => "task_progress",
+            Self::NapCatWebuiAvailable { .. } => "napcat_webui_available",
+            Self::BotProcessExited { .. } => "bot_process_exited",
         }
     }
 
@@ -75,6 +96,8 @@ impl DomainEvent {
             Self::BotLogAppended { bot_id, .. } => Some(bot_id),
             Self::BotError { bot_id, .. } => Some(bot_id),
             Self::TaskProgress { .. } => None,
+            Self::NapCatWebuiAvailable { bot_id, .. } => Some(bot_id),
+            Self::BotProcessExited { bot_id, .. } => Some(bot_id),
         }
     }
 
@@ -121,6 +144,30 @@ impl DomainEvent {
             task_id: task_id.into(),
             progress,
             message: message.into(),
+        }
+    }
+
+    pub fn napcat_webui_available(
+        bot_id: impl Into<BotId>,
+        port: u16,
+        token: impl Into<String>,
+    ) -> Self {
+        Self::NapCatWebuiAvailable {
+            bot_id: bot_id.into(),
+            port,
+            token: token.into(),
+        }
+    }
+
+    pub fn bot_process_exited(
+        bot_id: impl Into<BotId>,
+        exit_code: Option<i32>,
+        reason: Option<String>,
+    ) -> Self {
+        Self::BotProcessExited {
+            bot_id: bot_id.into(),
+            exit_code,
+            reason,
         }
     }
 }
