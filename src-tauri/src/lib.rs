@@ -4,9 +4,11 @@ use std::time::Duration;
 
 use ncd_core::{
     BootstrapSnapshot, BotManager, BroadcastEventBus, ConfigStore, DispatchRenderer, EventBus,
-    EventFilter, LocalBotConfigRepo, LocalConfigStore, LocalRuntimeBackend, SecretStoreImpl,
+    EventFilter, LocalBotConfigRepo, LocalConfigStore, LocalRuntimeBackend, NoopOfflineNotifier,
+    ReqwestNapCatWebUiClient, SecretStoreImpl, WebUiPollerSettings,
 };
 use tauri::Emitter;
+use tokio::sync::RwLock;
 
 pub mod bootstrap;
 pub mod commands;
@@ -45,6 +47,16 @@ pub fn run() {
     let launch_planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
         data_root.join("runtime"),
     ));
+    // NapCat WebUI 登录轮询所需依赖（design.md §15.1）。
+    // - `ReqwestNapCatWebUiClient` 走 rustls-tls，仅访问 127.0.0.1。
+    // - `NoopOfflineNotifier` 是占位实现，真实通道由后续 Spec 接入。
+    // - `WebUiPollerSettings` 默认轮询 5s + 关闭离线通知，调用方可热更新。
+    let webui_client: Arc<dyn ncd_core::NapCatWebUiClient> = Arc::new(
+        ReqwestNapCatWebUiClient::new()
+            .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
+    );
+    let offline_notifier: Arc<dyn ncd_core::OfflineNotifier> = Arc::new(NoopOfflineNotifier);
+    let poller_settings = Arc::new(RwLock::new(WebUiPollerSettings::default()));
     let bot_manager = Arc::new(BotManager::new(
         repo,
         Arc::clone(&store),
@@ -52,10 +64,14 @@ pub fn run() {
         bot_backend,
         launch_planner,
         Arc::new(event_bus.clone()),
+        webui_client,
+        offline_notifier,
+        poller_settings,
     ));
 
     let bot_manager_bootstrap = Arc::clone(&bot_manager);
     let bot_manager_listener = Arc::clone(&bot_manager);
+    let bot_manager_login_listener = Arc::clone(&bot_manager);
     let bot_manager_shutdown = Arc::clone(&bot_manager);
 
     tauri::Builder::default()
@@ -105,8 +121,23 @@ pub fn run() {
                 }
             });
             // 订阅运行时事件总线，把 BotProcessExited 转成 actor 状态机转移，
-            // 防止 UI 残留假 Running。
-            bot_manager_listener.spawn_runtime_event_listener();
+            // 防止 UI 残留假 Running。必须用 tauri::async_runtime::spawn，
+            // setup 回调本身没有 tokio current handle，直接 tokio::spawn 会 panic。
+            tauri::async_runtime::spawn(async move {
+                (*bot_manager_listener)
+                    .clone()
+                    .run_runtime_event_listener()
+                    .await;
+            });
+            // NapCat WebUI 登录轮询监听（design.md §15.3 / §15.4）：
+            // 同时订阅 NapCatWebuiAvailable / BotProcessExited 两路事件，分别
+            // 驱动 NapCatLoginPoller 的创建与回收。`run_napcat_login_listener`
+            // 需要 `Arc<Self>` 作为接收者（用于 cast 到 `Arc<dyn RestartHandle>`）。
+            tauri::async_runtime::spawn(async move {
+                bot_manager_login_listener
+                    .run_napcat_login_listener()
+                    .await;
+            });
             Ok(())
         })
         .on_window_event(move |window, event| {
@@ -155,6 +186,7 @@ pub fn run() {
             commands::bot::batch_delete_bots,
             commands::bot::count_bot_configs,
             commands::bot::active_bot_count,
+            commands::bot::tail_bot_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

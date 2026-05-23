@@ -119,6 +119,13 @@ mod tests {
         let launch_planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
             root.join("runtime"),
         ));
+        let webui_client: Arc<dyn ncd_core::NapCatWebUiClient> =
+            Arc::new(ncd_core::ReqwestNapCatWebUiClient::new().expect("init webui client"));
+        let offline_notifier: Arc<dyn ncd_core::OfflineNotifier> =
+            Arc::new(ncd_core::NoopOfflineNotifier);
+        let poller_settings = Arc::new(tokio::sync::RwLock::new(
+            ncd_core::WebUiPollerSettings::default(),
+        ));
         let bot_manager = Arc::new(ncd_core::BotManager::new(
             repo,
             Arc::clone(&store),
@@ -126,6 +133,9 @@ mod tests {
             backend,
             launch_planner,
             Arc::new(bus.clone()),
+            webui_client,
+            offline_notifier,
+            poller_settings,
         ));
         let state = AppState {
             data_root: root.to_path_buf(),
