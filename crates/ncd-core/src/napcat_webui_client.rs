@@ -163,11 +163,7 @@ pub struct GetQQLoginInfoData {
 pub trait NapCatWebUiClient: Send + Sync {
     /// 计算 `sha256(token + ".napcat")` hex，POST 到
     /// `http://127.0.0.1:{port}/api/auth/login`，并返回响应 `data.Credential`。
-    async fn fetch_credential(
-        &self,
-        port: u16,
-        token: &str,
-    ) -> Result<String, NapCatWebUiError>;
+    async fn fetch_credential(&self, port: u16, token: &str) -> Result<String, NapCatWebUiError>;
 
     /// 携带 `Authorization: Bearer {auth}` POST 到
     /// `http://127.0.0.1:{port}/api/QQLogin/CheckLoginStatus`，返回 `data`。
@@ -245,11 +241,7 @@ impl ReqwestNapCatWebUiClient {
 
 #[async_trait]
 impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
-    async fn fetch_credential(
-        &self,
-        port: u16,
-        token: &str,
-    ) -> Result<String, NapCatWebUiError> {
+    async fn fetch_credential(&self, port: u16, token: &str) -> Result<String, NapCatWebUiError> {
         // sha256(token + ".napcat") 的 hex，对齐 NapCat WebUI 服务端的
         // 鉴权握手协议。
         let hash = {
@@ -376,8 +368,7 @@ mod tests {
 
     #[test]
     fn check_login_status_response_deserializes_full_payload() {
-        let json =
-            r#"{"data":{"isLogin":false,"qrcodeurl":"data:image/png;base64,QR=="}}"#;
+        let json = r#"{"data":{"isLogin":false,"qrcodeurl":"data:image/png;base64,QR=="}}"#;
         let resp: CheckLoginStatusResponse =
             serde_json::from_str(json).expect("deserialize CheckLoginStatusResponse");
         assert!(!resp.data.is_login);
@@ -437,7 +428,10 @@ mod tests {
     #[test]
     fn error_http_display_includes_inner_message() {
         let err = NapCatWebUiError::Http("connection refused".to_string());
-        assert_eq!(err.to_string(), "napcat webui http error: connection refused");
+        assert_eq!(
+            err.to_string(),
+            "napcat webui http error: connection refused"
+        );
     }
 
     #[test]
@@ -472,7 +466,10 @@ mod tests {
         let err = result.expect_err("request to unreachable host should error");
         let mapped: NapCatWebUiError = err.into();
         assert!(
-            matches!(mapped, NapCatWebUiError::Timeout | NapCatWebUiError::Http(_)),
+            matches!(
+                mapped,
+                NapCatWebUiError::Timeout | NapCatWebUiError::Http(_)
+            ),
             "reqwest error should map to Timeout or Http, got {mapped:?}"
         );
     }
@@ -601,8 +598,7 @@ mod tests {
         let actual = hex::encode(hasher.finalize());
 
         // Python: hashlib.sha256(b"abc.napcat").hexdigest()
-        let expected =
-            "42e5515d256cb0ab3de18017ee3adefc15aa70229c27788bab5aee39d5d439e6";
+        let expected = "42e5515d256cb0ab3de18017ee3adefc15aa70229c27788bab5aee39d5d439e6";
         assert_eq!(
             actual, expected,
             "sha256(token + \".napcat\") must match legacy Python hashlib output"
@@ -639,17 +635,15 @@ mod tests {
         let port = mock_server_port(&server);
 
         // 期望 body.hash == sha256(b"abc.napcat") hex
-        let expected_hash =
-            "42e5515d256cb0ab3de18017ee3adefc15aa70229c27788bab5aee39d5d439e6";
+        let expected_hash = "42e5515d256cb0ab3de18017ee3adefc15aa70229c27788bab5aee39d5d439e6";
         Mock::given(method("POST"))
             .and(path("/api/auth/login"))
-            .and(body_partial_json(serde_json::json!({ "hash": expected_hash })))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({
-                        "data": { "Credential": "bearer-from-mock" }
-                    })),
-            )
+            .and(body_partial_json(
+                serde_json::json!({ "hash": expected_hash }),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": { "Credential": "bearer-from-mock" }
+            })))
             .expect(1)
             .mount(&server)
             .await;
@@ -715,9 +709,7 @@ mod tests {
         // 200 + 非 JSON body → reqwest::Response::json 反序列化失败 → Decode
         Mock::given(method("POST"))
             .and(path("/api/auth/login"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_string("not a json payload"),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_string("not a json payload"))
             .mount(&server)
             .await;
 
@@ -778,14 +770,12 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/api/QQLogin/CheckLoginStatus"))
             .and(header("authorization", "Bearer the-bearer-token"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "data": {
-                        "isLogin": false,
-                        "qrcodeurl": "data:image/png;base64,QR=="
-                    }
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": {
+                    "isLogin": false,
+                    "qrcodeurl": "data:image/png;base64,QR=="
+                }
+            })))
             .expect(1)
             .mount(&server)
             .await;
@@ -850,9 +840,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/api/QQLogin/CheckLoginStatus"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_string("<html>oops</html>"),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_string("<html>oops</html>"))
             .mount(&server)
             .await;
 
@@ -875,11 +863,9 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/api/QQLogin/GetQQLoginInfo"))
             .and(header("authorization", "Bearer my-bearer"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "data": { "online": true }
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": { "online": true }
+            })))
             .expect(1)
             .mount(&server)
             .await;
@@ -943,10 +929,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/api/QQLogin/GetQQLoginInfo"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_string("definitely not json {[}"),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_string("definitely not json {[}"))
             .mount(&server)
             .await;
 

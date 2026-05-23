@@ -499,8 +499,10 @@ async fn apply_online_status(
     state.online = data.online;
 
     // 步骤 1：总是先发 NapCatLoginOnline。
-    deps.event_bus
-        .publish(DomainEvent::napcat_login_online(bot_id.clone(), data.online));
+    deps.event_bus.publish(DomainEvent::napcat_login_online(
+        bot_id.clone(),
+        data.online,
+    ));
 
     // 步骤 2：在线 → 重置离线相关 flag。
     if data.online {
@@ -545,7 +547,9 @@ async fn apply_online_status(
 
     // 步骤 7：手动重启路径。
     if !state.offline_notice_sent && cfg.offline_notice_enabled {
-        deps.notifier.notify(bot_id, OfflineNoticeKind::Manual).await;
+        deps.notifier
+            .notify(bot_id, OfflineNoticeKind::Manual)
+            .await;
         state.offline_notice_sent = true;
     }
 }
@@ -889,7 +893,10 @@ mod tests {
         do_auth_refresh(&bot_id, 6099, "smoke-token", &cfg, &deps, &mut state).await;
 
         // auth 保持调用前值不动（None）。
-        assert!(state.auth.is_none(), "auth must remain unchanged on failure");
+        assert!(
+            state.auth.is_none(),
+            "auth must remain unchanged on failure"
+        );
         assert_eq!(client.calls(), 1);
         // timestamp 仍被刷新（节流计时从「尝试」起算）。
         assert!(
@@ -899,8 +906,7 @@ mod tests {
 
         // 验证没有任何事件被发布到 bot 流（包括 BotError）。
         // 用一个极短超时让 broadcast receiver 报告「无消息」。
-        let recv =
-            tokio::time::timeout(Duration::from_millis(10), sub.next()).await;
+        let recv = tokio::time::timeout(Duration::from_millis(10), sub.next()).await;
         assert!(
             recv.is_err(),
             "do_auth_refresh failure path must not publish any DomainEvent, got {:?}",
@@ -1504,7 +1510,10 @@ mod transition_tests {
         let events = drain_events(&mut sub).await;
         assert_eq!(events.len(), 1);
         match &events[0] {
-            DomainEvent::NapCatLoginQrcode { bot_id: b, qrcode_url } => {
+            DomainEvent::NapCatLoginQrcode {
+                bot_id: b,
+                qrcode_url,
+            } => {
                 assert_eq!(b, &bot_id);
                 assert_eq!(qrcode_url, "data:image/png;base64,QR1");
             }
@@ -1576,7 +1585,10 @@ mod transition_tests {
         );
 
         let events = drain_events(&mut sub).await;
-        assert!(events.is_empty(), "Qrcode must be suppressed; got {events:?}");
+        assert!(
+            events.is_empty(),
+            "Qrcode must be suppressed; got {events:?}"
+        );
     }
 
     /// `is_login=false ∧ qrcode_url=""` → 没有可发的二维码，无事件。
@@ -1752,22 +1764,24 @@ mod transition_tests {
         // 应至少发 2 个事件：NapCatLoginOnline{false} + NapCatLoginQrcodeRemoved。
         let events = drain_events(&mut sub).await;
         assert!(
-            events.iter().any(|e| matches!(
-                e,
-                DomainEvent::NapCatLoginOnline { online: false, .. }
-            )),
+            events
+                .iter()
+                .any(|e| matches!(e, DomainEvent::NapCatLoginOnline { online: false, .. })),
             "expected NapCatLoginOnline{{false}} in {events:?}"
         );
         assert!(
-            events.iter().any(|e| matches!(
-                e,
-                DomainEvent::NapCatLoginQrcodeRemoved { .. }
-            )),
+            events
+                .iter()
+                .any(|e| matches!(e, DomainEvent::NapCatLoginQrcodeRemoved { .. })),
             "expected NapCatLoginQrcodeRemoved in {events:?}"
         );
 
         // 自动重启分支：restart 至多 1 次。
-        assert_eq!(restart.calls(), 1, "auto_restart must call restart_bot once");
+        assert_eq!(
+            restart.calls(),
+            1,
+            "auto_restart must call restart_bot once"
+        );
         // 通知至多 1 次（AutoRestart kind）。
         let notice_calls = notifier.calls();
         assert_eq!(notice_calls.len(), 1);
@@ -2454,10 +2468,7 @@ mod property_tests {
     /// `PollerCommand::RequestAuthRefresh` 分支的判定语义；初始
     /// `last_attempt` 设为 `None` 模拟 `LoginState::new` 的「过去 1 小时」
     /// 远过去状态——首次到达必通过节流。
-    fn simulate_passive_refresh_throttle(
-        arrivals_ms: &[u64],
-        throttle_ms: u64,
-    ) -> Vec<u64> {
+    fn simulate_passive_refresh_throttle(arrivals_ms: &[u64], throttle_ms: u64) -> Vec<u64> {
         let mut last_attempt: Option<u64> = None;
         let mut actual = Vec::new();
         for &arrival in arrivals_ms {
