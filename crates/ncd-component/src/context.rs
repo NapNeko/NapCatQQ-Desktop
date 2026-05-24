@@ -11,10 +11,12 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use ts_rs::TS;
 
 /// 进度事件类型。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum ProgressKind {
     /// 整个 Action 开始,带步骤总数
     Started { total_steps: u32 },
@@ -38,8 +40,9 @@ pub enum ProgressKind {
 }
 
 /// 日志级别(对齐 tracing 风格)。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum LogLevel {
     Trace,
     Debug,
@@ -49,7 +52,8 @@ pub enum LogLevel {
 }
 
 /// 进度事件(envelope)。跨边界事件必须带版本号,便于增量演进。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ProgressEvent {
     /// 协议版本(默认 1,bump 时同步前端)
     #[serde(default = "default_version")]

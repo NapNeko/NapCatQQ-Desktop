@@ -6,6 +6,7 @@ use crate::ids::BotId;
 use crate::runtime_backend::BotStatus;
 use crate::snowluma::daemon::DaemonState;
 use crate::snowluma::status_poller::SnowLumaLoginState;
+use ncd_component::ProgressEvent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -42,6 +43,10 @@ pub enum DomainEventKind {
     SnowLumaPidSetChanged,
     #[serde(rename = "snowluma_daemon_log")]
     SnowLumaDaemonLog,
+    /// Components 页 install / update / uninstall 等任务进度。
+    /// 不绑 bot，task_id 由 backend 生成（uuid v4）。
+    #[serde(rename = "component_action_progress")]
+    ComponentActionProgress,
 }
 
 /// 描述 NapCat WebUI 登录失效的原因。
@@ -163,6 +168,14 @@ pub enum DomainEvent {
     /// 携带 `bot_id`，订阅方根据需要广播给所有 SL flavor BotLogPage。
     #[serde(rename = "snowluma_daemon_log")]
     SnowLumaDaemonLog { line: String },
+    /// Components 页：组件 install / update / uninstall / verify 任务进度。
+    /// `task_id` 由 backend 生成（uuid v4），`event` 直接复用
+    /// `ncd_component::ProgressEvent`，不再发明 progress 类型。
+    #[serde(rename = "component_action_progress")]
+    ComponentActionProgress {
+        task_id: String,
+        event: ProgressEvent,
+    },
 }
 
 impl DomainEvent {
@@ -185,6 +198,7 @@ impl DomainEvent {
             Self::SnowLumaLoginStateChanged { .. } => DomainEventKind::SnowLumaLoginStateChanged,
             Self::SnowLumaPidSetChanged { .. } => DomainEventKind::SnowLumaPidSetChanged,
             Self::SnowLumaDaemonLog { .. } => DomainEventKind::SnowLumaDaemonLog,
+            Self::ComponentActionProgress { .. } => DomainEventKind::ComponentActionProgress,
         }
     }
 
@@ -207,6 +221,7 @@ impl DomainEvent {
             Self::SnowLumaLoginStateChanged { .. } => "snowluma_login_state_changed",
             Self::SnowLumaPidSetChanged { .. } => "snowluma_pid_set_changed",
             Self::SnowLumaDaemonLog { .. } => "snowluma_daemon_log",
+            Self::ComponentActionProgress { .. } => "component_action_progress",
         }
     }
 
@@ -231,6 +246,8 @@ impl DomainEvent {
             Self::SnowLumaLoginStateChanged { bot_id, .. } => Some(bot_id),
             Self::SnowLumaPidSetChanged { bot_id, .. } => Some(bot_id),
             Self::SnowLumaDaemonLog { .. } => None,
+            // task 级事件，不绑定具体 Bot；前端按 task_id 订阅 / 路由。
+            Self::ComponentActionProgress { .. } => None,
         }
     }
 
@@ -383,6 +400,15 @@ impl DomainEvent {
 
     pub fn snowluma_daemon_log(line: impl Into<String>) -> Self {
         Self::SnowLumaDaemonLog { line: line.into() }
+    }
+
+    /// 构造 `ComponentActionProgress` 事件。`task_id` 由 backend 生成（uuid v4），
+    /// `event` 由 ncd-component 自身的进度通道吐出，原样转发到前端。
+    pub fn component_action_progress(task_id: impl Into<String>, event: ProgressEvent) -> Self {
+        Self::ComponentActionProgress {
+            task_id: task_id.into(),
+            event,
+        }
     }
 }
 
@@ -682,6 +708,13 @@ mod tests {
             DomainEvent::snowluma_login_state_changed("10001", SnowLumaLoginState::LoggedIn),
             DomainEvent::snowluma_pid_set_changed("10001", vec![1234, 5678]),
             DomainEvent::snowluma_daemon_log("hello world"),
+            // Components 页 task 级进度。
+            DomainEvent::component_action_progress(
+                "task-1",
+                ncd_component::ProgressEvent::new(ncd_component::ProgressKind::Started {
+                    total_steps: 3,
+                }),
+            ),
         ];
         for event in &all {
             let name = event.tauri_event_name();
@@ -819,5 +852,48 @@ mod tests {
  DOMAIN_EVENT_NAMES 数组)",
             );
         }
+    }
+
+    // ------------------------------------------------------------------
+    // ComponentActionProgress 稳定性测试
+    //
+    // 1) round-trip：复用 ProgressEvent 的 v=1 envelope，序列化后再反序列化
+    //    必须等价。
+    // 2) tauri_event_name 字面量值锁定。
+    // 3) 前端 DOMAIN_EVENT_NAMES 必须包含 "component_action_progress"。
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn component_action_progress_round_trips() {
+        let evt = ncd_component::ProgressEvent::new(ncd_component::ProgressKind::StepBegin {
+            step: 2,
+            message: "downloading".to_string(),
+        });
+        assert_round_trip(DomainEvent::component_action_progress("task-1", evt));
+    }
+
+    #[test]
+    fn component_action_progress_event_name_literal_is_stable() {
+        let evt = ncd_component::ProgressEvent::new(ncd_component::ProgressKind::Started {
+            total_steps: 1,
+        });
+        let event = DomainEvent::component_action_progress("task-1", evt);
+        assert_eq!(event.tauri_event_name(), "component_action_progress");
+        assert_eq!(event.kind(), DomainEventKind::ComponentActionProgress);
+        // 不绑定 bot_id；前端按 task_id 订阅。
+        assert_eq!(event.bot_id(), None);
+    }
+
+    #[test]
+    fn component_action_progress_event_name_present_in_frontend_events_ts() {
+        let name = "component_action_progress";
+        let needle_single = format!("'{name}'");
+        let needle_double = format!("\"{name}\"");
+        assert!(
+            FRONTEND_EVENTS_TS.contains(&needle_single)
+                || FRONTEND_EVENTS_TS.contains(&needle_double),
+            "frontend event-stream.service.ts must contain literal {name:?} \
+ (检查 src-ui/core/services/event-stream.service.ts 的 DOMAIN_EVENT_NAMES)",
+        );
     }
 }

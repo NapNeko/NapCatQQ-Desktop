@@ -101,6 +101,25 @@ impl NapCatComponent {
     fn qq_package_json(&self) -> HostPath {
         self.qq_base_path().join("resources/app/package.json")
     }
+
+    /// 组件元数据，给 `list_components` Tauri command 使用。
+    ///
+    /// `supported_targets` 必须与 `Component::supported_targets` 返回值一致；
+    /// 单测里有断言锁定。Windows 上的 NapCat 通过 `NapCatWinBootMain.exe`
+    /// 走完全不同的注入路径，由 backend 自己处理，不走本 component。
+    pub fn info() -> crate::types::ComponentInfo {
+        crate::types::ComponentInfo {
+            id: ComponentId::NapCat,
+            display_name: "NapCat".to_string(),
+            description: "QQ 注入式 OneBot 11 框架".to_string(),
+            repo_url: Some("https://github.com/NapNeko/NapCatQQ".to_string()),
+            supported_targets: vec![
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
+            ],
+            category: crate::types::ComponentCategory::Framework,
+        }
+    }
 }
 
 
@@ -113,7 +132,7 @@ impl NapCatComponent {
 ///
 /// 关键点:等号到目标版本之间隔了 `"undefined"` 字符串字面量,必须用非贪婪匹配。
 /// 使用纯字符串扫描(不依赖 regex crate),避免引入新依赖。
-fn parse_napcat_version(content: &str) -> Option<String> {
+pub fn parse_napcat_version(content: &str) -> Option<String> {
     // 找到 `napCatVersion` 关键字
     let key_idx = content.find("napCatVersion")?;
     let after_key = &content[key_idx + "napCatVersion".len()..];

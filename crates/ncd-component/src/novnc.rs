@@ -127,6 +127,21 @@ impl NoVncComponent {
         };
         HostCommand::new("sh").arg("-c").arg(cmd_str)
     }
+
+    /// 组件元数据，给 `list_components` Tauri command 使用。
+    pub fn info() -> crate::types::ComponentInfo {
+        crate::types::ComponentInfo {
+            id: ComponentId::NoVnc,
+            display_name: "noVNC".to_string(),
+            description: "浏览器端 HTML5 VNC 客户端 + 图形栈".to_string(),
+            repo_url: Some("https://novnc.com/".to_string()),
+            supported_targets: vec![
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
+            ],
+            category: crate::types::ComponentCategory::RuntimeDep,
+        }
+    }
 }
 
 impl Default for NoVncComponent {

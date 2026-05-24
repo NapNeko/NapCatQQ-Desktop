@@ -10,6 +10,7 @@ pub mod legacy_discovery;
 pub mod migration;
 pub mod napcat;
 pub mod path_probe_impl;
+pub mod release;
 pub mod remote_host;
 pub mod runtime_backend;
 pub mod runtime_launch_plan;
@@ -24,17 +25,18 @@ pub use ncd_domain::{
     AdvancedConfig, AppError, AutoRestartSchedule, BackendId, BackendKind, BackendType,
     BackupInfo, BootstrapSnapshot, BootstrapStatus, BotBasicConfig, BotConfig, BotConfigError,
     BotFlavor, BotId, BotRuntimeSummary, BypassConfig, ConfigError, ConnectConfig, HttpClientConfig,
-    HttpServerConfig, HttpSseServerConfig, LogLevel, MessagePostFormat, MigrationError,
-    MigrationOutcome, MigrationReport, MigrationSource, MigrationStage, MigrationWarning,
-    NetworkBaseFields, O3HookMode, PathError, RepairAction, RuntimeTarget, SchemaVersion,
-    SecretError, SnowLumaAppConfig, SnowLumaStartMode, TimeUnit, WebUiPollerSettings,
-    WebsocketClientConfig, WebsocketServerConfig, WsRole, default_login_interval,
-    default_snowluma_port,
+    HttpServerConfig, HttpSseServerConfig, LocalVersionSnapshot, LogLevel, MessagePostFormat,
+    MigrationError, MigrationOutcome, MigrationReport, MigrationSource, MigrationStage,
+    MigrationWarning, NetworkBaseFields, O3HookMode, PathError, ReleaseInfo, ReleaseSnapshot,
+    RepairAction, RuntimeTarget, SchemaVersion, SecretError, SnowLumaAppConfig, SnowLumaStartMode,
+    TimeUnit, WebUiPollerSettings, WebsocketClientConfig, WebsocketServerConfig, WsRole,
+    default_login_interval, default_snowluma_port,
 };
 
 // 兼容老路径:`ncd_runtime::ids::BotId` / `ncd_runtime::bot_config::...` 这种调用继续可用
 pub use ncd_domain::{
-    app_config, bootstrap, bot_config, errors, ids, kinds, models, report, snowluma_start_mode,
+    app_config, bootstrap, bot_config, errors, ids, kinds, models, release_snapshot, report,
+    snowluma_start_mode, version_snapshot,
 };
 
 pub use backend_config_renderer::{

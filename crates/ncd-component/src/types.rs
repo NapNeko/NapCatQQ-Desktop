@@ -1,16 +1,38 @@
 //! Component / Action 共享数据类型。
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Component 标识。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+///
+/// 跨边界时各 variant 的字面量（serde / ts-rs）锁定为：
+///
+/// | Rust variant   | wire format    |
+/// |---|---|
+/// | `NapCat`       | `napcat`       |
+/// | `SnowLuma`     | `snowluma`     |
+/// | `LinuxQq`      | `linuxqq`      |
+/// | `NodeJs`       | `nodejs`       |
+/// | `NoVnc`        | `novnc`        |
+/// | `DesktopSelf`  | `desktop_self` |
+///
+/// 与项目内 `napcat_*` / `snowluma_*` 事件名风格保持一致；不直接走 serde
+/// 的 `rename_all = "snake_case"`，因为它会把 `NapCat` 切成 `nap_cat`、
+/// `LinuxQq` 切成 `linux_qq`，与 [`Self::as_str`] 不一致。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum ComponentId {
+    #[serde(rename = "napcat")]
     NapCat,
+    #[serde(rename = "snowluma")]
     SnowLuma,
+    #[serde(rename = "linuxqq")]
     LinuxQq,
+    #[serde(rename = "nodejs")]
     NodeJs,
+    #[serde(rename = "novnc")]
     NoVnc,
+    #[serde(rename = "desktop_self")]
     DesktopSelf,
 }
 
@@ -28,7 +50,8 @@ impl ComponentId {
 }
 
 /// 探测结果(Component::detect 返回值)。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DetectedVersion {
     /// 探测到的版本号(如 "v20.10.0" / "3.2.25-45758")
     pub version: String,
@@ -83,6 +106,83 @@ pub struct LaunchArgs {
     pub working_dir: Option<ncd_host::HostPath>,
 }
 
+/// 组件分类。
+///
+/// - `Framework`：用户主动选择安装的 Bot 框架（NapCat / SnowLuma）。
+/// - `RuntimeDep`：Framework 依赖的运行时（LinuxQQ / NodeJs / NoVnc）。
+/// - `SelfApp`：Desktop 自身（仅本地，自更新走 ncd-update）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum ComponentCategory {
+    Framework,
+    RuntimeDep,
+    SelfApp,
+}
+
+/// `(Os, Locality)` 组合的强类型表达。
+///
+/// `Component::supported_targets` 暴露的是 `&'static [(Os, Locality)]`，跨边界
+/// 时拍扁成本结构以保留字段名（前端按 `os` / `locality` 字段访问）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct SupportedTarget {
+    pub os: ncd_host::Os,
+    pub locality: ncd_host::Locality,
+}
+
+impl SupportedTarget {
+    pub const fn new(os: ncd_host::Os, locality: ncd_host::Locality) -> Self {
+        Self { os, locality }
+    }
+}
+
+impl From<(ncd_host::Os, ncd_host::Locality)> for SupportedTarget {
+    fn from((os, locality): (ncd_host::Os, ncd_host::Locality)) -> Self {
+        Self { os, locality }
+    }
+}
+
+/// 组件元数据。Components 页直接消费的清单数据。
+///
+/// 字段都由各 Component 实装的 `info()` 静态方法写死；前端不做任何派生
+/// （比如 i18n 文案就由后端写死中文 + 简短描述）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct ComponentInfo {
+    pub id: ComponentId,
+    /// UI 显示名（"NapCat" / "SnowLuma" / "Node.js" / "LinuxQQ" 等）。
+    pub display_name: String,
+    /// 一行简介，2-30 字。
+    pub description: String,
+    /// GitHub / 官网链接（None 表示无对应外链）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo_url: Option<String>,
+    /// 支持的 (Os, Locality) 组合，前端用来判断"在某主机上能不能装"。
+    pub supported_targets: Vec<SupportedTarget>,
+    /// 分类。
+    pub category: ComponentCategory,
+}
+
+/// 1 个 component 在 1 台 host 上的探测结果。
+///
+/// `detect_component` Tauri command 出参；前端按字段渲染"是否已装 / 哪个
+/// 版本 / 该 host 是否支持本 component"。任一字段缺失都不影响其它字段
+/// 的解释（比如 `supported=false` 时 `detected` 必为 None，但前端仍可
+/// 显示 host_id）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct ComponentDetectResult {
+    pub component_id: ComponentId,
+    pub host_id: String,
+    /// None 表示未安装；Some 表示已装。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detected: Option<DetectedVersion>,
+    /// 当前 host 是否在 component 的 supported_targets 中；不支持时
+    /// `detected` 始终为 None。
+    pub supported: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,6 +200,27 @@ mod tests {
         assert_eq!(s, "\"desktop_self\"");
     }
 
+    /// 锁定每个 ComponentId variant 的 wire 字面量与 `as_str()` 一致；
+    /// 同时锁定 round-trip 等价。任何 typo（包括误用 serde 默认 snake_case
+    /// 把 NapCat 切成 nap_cat）都会让此测试失败。
+    #[test]
+    fn component_id_serde_aligns_with_as_str() {
+        for id in [
+            ComponentId::NapCat,
+            ComponentId::SnowLuma,
+            ComponentId::LinuxQq,
+            ComponentId::NodeJs,
+            ComponentId::NoVnc,
+            ComponentId::DesktopSelf,
+        ] {
+            let s = serde_json::to_string(&id).unwrap();
+            let expected = format!("\"{}\"", id.as_str());
+            assert_eq!(s, expected);
+            let decoded: ComponentId = serde_json::from_str(&s).unwrap();
+            assert_eq!(decoded, id);
+        }
+    }
+
     #[test]
     fn verify_report_ok_starts_empty() {
         let r = VerifyReport::ok();
@@ -114,5 +235,49 @@ mod tests {
             .with_check("b", false, Some("missing".into()));
         assert!(!r.ok);
         assert_eq!(r.checks.len(), 2);
+    }
+
+    /// ComponentInfo 字面量字节级 round-trip：锁定前后端契约。
+    /// 任何字段重命名 / 顺序变更都会让此测试失败。
+    #[test]
+    fn component_info_round_trips() {
+        let info = ComponentInfo {
+            id: ComponentId::NapCat,
+            display_name: "NapCat".to_string(),
+            description: "NapCat 框架（注入 QQ 进程）".to_string(),
+            repo_url: Some("https://github.com/NapNeko/NapCatQQ".to_string()),
+            supported_targets: vec![
+                SupportedTarget::new(ncd_host::Os::Windows, ncd_host::Locality::Local),
+                SupportedTarget::new(ncd_host::Os::Linux, ncd_host::Locality::Remote),
+            ],
+            category: ComponentCategory::Framework,
+        };
+        let json = serde_json::to_string(&info).expect("serialize ComponentInfo");
+        let decoded: ComponentInfo =
+            serde_json::from_str(&json).expect("deserialize ComponentInfo");
+        assert_eq!(decoded, info);
+    }
+
+    #[test]
+    fn component_category_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&ComponentCategory::RuntimeDep).unwrap(),
+            "\"runtime_dep\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ComponentCategory::SelfApp).unwrap(),
+            "\"self_app\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ComponentCategory::Framework).unwrap(),
+            "\"framework\""
+        );
+    }
+
+    #[test]
+    fn supported_target_from_tuple() {
+        let st: SupportedTarget = (ncd_host::Os::Linux, ncd_host::Locality::Remote).into();
+        assert_eq!(st.os, ncd_host::Os::Linux);
+        assert_eq!(st.locality, ncd_host::Locality::Remote);
     }
 }

@@ -116,6 +116,21 @@ impl SnowLumaComponent {
             })
             .collect()
     }
+
+    /// 组件元数据，给 `list_components` Tauri command 使用。
+    pub fn info() -> crate::types::ComponentInfo {
+        crate::types::ComponentInfo {
+            id: ComponentId::SnowLuma,
+            display_name: "SnowLuma".to_string(),
+            description: "QQNT daemon 注入式框架，远端 VNC 接入".to_string(),
+            repo_url: Some("https://github.com/SnowLuma/SnowLuma".to_string()),
+            supported_targets: vec![
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
+            ],
+            category: crate::types::ComponentCategory::Framework,
+        }
+    }
 }
 
 

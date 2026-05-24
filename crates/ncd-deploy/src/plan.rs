@@ -10,11 +10,15 @@
 use std::sync::Arc;
 
 use ncd_component::Component;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::error::DeployError;
 
 /// Step 操作类型(StepKind)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum StepKind {
     /// 探测 + 必要时 install(已装则跳过)
     EnsureInstalled,
@@ -305,6 +309,25 @@ mod tests {
         assert_eq!(StepKind::Update.as_str(), "update");
         assert_eq!(StepKind::Uninstall.as_str(), "uninstall");
         assert_eq!(StepKind::Verify.as_str(), "verify");
+    }
+
+    /// serde 序列化必须与 `as_str()` 字面量保持一致：前端拿到的是
+    /// 同一份 snake_case 字符串。任何漂移会破坏 Tauri command 入参解析。
+    #[test]
+    fn step_kind_serde_aligns_with_as_str() {
+        for kind in [
+            StepKind::EnsureInstalled,
+            StepKind::ForceInstall,
+            StepKind::Update,
+            StepKind::Uninstall,
+            StepKind::Verify,
+        ] {
+            let serialized = serde_json::to_string(&kind).unwrap();
+            let expected = format!("\"{}\"", kind.as_str());
+            assert_eq!(serialized, expected);
+            let decoded: StepKind = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(decoded, kind);
+        }
     }
 
     #[test]

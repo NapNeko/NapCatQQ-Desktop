@@ -125,6 +125,22 @@ impl NodeJsComponent {
         };
         format!("node-v{}-{platform}-{arch}", self.version)
     }
+
+    /// 组件元数据，给 `list_components` Tauri command 使用。
+    pub fn info() -> crate::types::ComponentInfo {
+        crate::types::ComponentInfo {
+            id: ComponentId::NodeJs,
+            display_name: "Node.js".to_string(),
+            description: "JavaScript 运行时（NapCat / SnowLuma 依赖）".to_string(),
+            repo_url: Some("https://nodejs.org/".to_string()),
+            supported_targets: vec![
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
+                crate::types::SupportedTarget::new(Os::MacOs, Locality::Local),
+            ],
+            category: crate::types::ComponentCategory::RuntimeDep,
+        }
+    }
 }
 
 #[async_trait]

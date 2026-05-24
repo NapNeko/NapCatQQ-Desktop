@@ -53,6 +53,22 @@ impl DesktopSelfComponent {
         };
         Ok(Self::new(env!("CARGO_PKG_VERSION"), host_path))
     }
+
+    /// 组件元数据，给 `list_components` Tauri command 使用。
+    pub fn info() -> crate::types::ComponentInfo {
+        crate::types::ComponentInfo {
+            id: ComponentId::DesktopSelf,
+            display_name: "NapCatQQ Desktop".to_string(),
+            description: "桌面端自身（自更新走 ncd-update）".to_string(),
+            repo_url: Some("https://github.com/NapNeko/NapCatQQ-Desktop".to_string()),
+            supported_targets: vec![
+                crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
+                crate::types::SupportedTarget::new(Os::MacOs, Locality::Local),
+            ],
+            category: crate::types::ComponentCategory::SelfApp,
+        }
+    }
 }
 
 #[async_trait]

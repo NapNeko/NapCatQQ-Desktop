@@ -25,7 +25,7 @@ pub mod snowluma;
 pub mod traits;
 pub mod types;
 
-pub use context::{ActionCtx, ProgressEvent, ProgressKind};
+pub use context::{ActionCtx, LogLevel, ProgressEvent, ProgressKind};
 pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;
@@ -35,4 +35,7 @@ pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;
 pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};
-pub use types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
+pub use types::{
+    ComponentCategory, ComponentDetectResult, ComponentId, ComponentInfo, DetectedVersion,
+    LaunchArgs, SupportedTarget, VerifyReport,
+};

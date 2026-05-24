@@ -146,6 +146,21 @@ impl LinuxQQComponent {
     fn qq_package_json(&self) -> HostPath {
         self.qq_base_path().join("resources/app/package.json")
     }
+
+    /// 组件元数据，给 `list_components` Tauri command 使用。
+    pub fn info() -> crate::types::ComponentInfo {
+        crate::types::ComponentInfo {
+            id: ComponentId::LinuxQq,
+            display_name: "LinuxQQ".to_string(),
+            description: "腾讯 QQ Linux 客户端（rootless 安装）".to_string(),
+            repo_url: Some("https://im.qq.com/linuxqq/".to_string()),
+            supported_targets: vec![
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
+            ],
+            category: crate::types::ComponentCategory::RuntimeDep,
+        }
+    }
 }
 
 #[async_trait]
