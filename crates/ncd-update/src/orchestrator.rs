@@ -1,10 +1,11 @@
 //! `UpdateOrchestrator`:Desktop 自更新业务编排器。
 //!
-//! 蓝图 §7.2:5 个核心方法。
+//! 提供 5 个核心方法 `check` / `precheck` / `resume_after_update` /
+//! `record_failure` / `detect_pending_failures`。
 //!
-//! M5.4 阶段:
-//! - ✅ `check` / `precheck` / `resume_after_update` / `record_failure` / `detect_pending_failures`
-//! - ⏳ `install_with_graceful_shutdown`(待 M6 ncd-runtime 拆出 BotManager 后接入,本节只留 stub)
+//! `install_with_graceful_shutdown` 当前只保存 resume snapshot 然后调
+//! `provider.download_and_install`;待 BotManager 重构完成后再接入"先 graceful
+//! stop 在跑 bot / SnowLuma daemon 再调用 provider"的完整链路。
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -105,10 +106,11 @@ impl UpdateOrchestrator {
         Ok(report)
     }
 
-    // ===== 3. install_with_graceful_shutdown(stub,M6 接入)=====
+    // ===== 3. install_with_graceful_shutdown =====
 
-    /// **stub**:M6 拆出 ncd-runtime 后接入 BotManager / SnowLumaDaemon。
     /// 当前只保存 resume snapshot 然后调 provider.download_and_install。
+    /// BotManager 重构完成后会在此处加上"先 graceful stop 在跑 bot / SnowLuma
+    /// daemon"的完整链路。
     pub async fn install_with_graceful_shutdown(
         &self,
         update: AvailableUpdate,

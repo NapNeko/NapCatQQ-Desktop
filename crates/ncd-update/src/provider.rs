@@ -1,7 +1,7 @@
 //! `UpdateProvider`:更新源抽象。
 //!
-//! 蓝图 §7.1:实际的 `tauri-plugin-updater` 集成由 `src-tauri` 实装,
-//! 本 trait 让 ncd-update 自己也能用 mock provider 测试,不依赖 Tauri runtime。
+//! 实际的 `tauri-plugin-updater` 集成由 `src-tauri` 实装,本 trait 让
+//! ncd-update 自己也能用 mock provider 测试,不依赖 Tauri runtime。
 
 use async_trait::async_trait;
 use std::sync::Mutex;

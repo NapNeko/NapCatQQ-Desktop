@@ -10,7 +10,7 @@ use ts_rs::TS;
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/update/")]
 pub struct AvailableUpdate {
-    /// 协议版本(R14)
+    /// 协议版本(envelope,与前端契约同步)
     #[serde(default = "default_v")]
     pub v: u32,
     /// 新版本号(SemVer)
@@ -38,7 +38,7 @@ fn default_v() -> u32 {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/update/")]
 pub struct PrecheckReport {
-    /// 协议版本(R14)
+    /// 协议版本(envelope,与前端契约同步)
     #[serde(default = "default_v")]
     pub v: u32,
     pub can_upgrade: bool,

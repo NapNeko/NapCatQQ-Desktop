@@ -1,6 +1,6 @@
 //! 发布通道(stable / beta / nightly)。
 //!
-//! 蓝图 §7.4:多通道预留,endpoint URL 模板里 `{channel}` 替换。
+//! 多通道复用同一 endpoint URL 模板,通过 `{channel}` 占位符替换。
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
