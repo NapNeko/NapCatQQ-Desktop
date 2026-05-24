@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ncd_core::{
+use ncd_runtime::{
     BootstrapSnapshot, BotManager, BroadcastEventBus, ConfigStore, DispatchRenderer, EventBus,
     EventFilter, LocalBotConfigRepo, LocalConfigStore, LocalRuntimeBackend, NoopOfflineNotifier,
     ReqwestNapCatWebUiClient, SecretStoreImpl, WebUiPollerSettings,
@@ -36,7 +36,7 @@ pub fn run() {
     let runtime_shutdown = runtime.clone();
 
     let store = Arc::new(LocalConfigStore::new(&data_root));
-    let secrets: Arc<dyn ncd_core::SecretStore + Send + Sync> =
+    let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
         Arc::new(SecretStoreImpl::new(data_root.join("secrets")));
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
     let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
@@ -45,7 +45,7 @@ pub fn run() {
             .with_event_bus(Arc::new(event_bus.clone())),
     );
     let launch_planner = Arc::new(
-        ncd_core::FileSystemRuntimeLaunchPlanner::new(data_root.join("runtime"))
+        ncd_runtime::FileSystemRuntimeLaunchPlanner::new(data_root.join("runtime"))
             // SnowLuma daemon 装在 `<data_root>/runtime/SnowLuma/`，与 NapCat
             // 的 `<data_root>/runtime/` 严格分离。注意目录名大小写：installer 写的是 `SnowLuma`。
             .with_snowluma_runtime_root(data_root.join("runtime").join("SnowLuma"))
@@ -55,11 +55,11 @@ pub fn run() {
     // - `ReqwestNapCatWebUiClient` 走 rustls-tls，仅访问 127.0.0.1。
     // - `NoopOfflineNotifier` 是占位实现，真实通道由后续 Spec 接入。
     // - `WebUiPollerSettings` 默认轮询 5s + 关闭离线通知，调用方可热更新。
-    let webui_client: Arc<dyn ncd_core::NapCatWebUiClient> = Arc::new(
+    let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> = Arc::new(
         ReqwestNapCatWebUiClient::new()
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
     );
-    let offline_notifier: Arc<dyn ncd_core::OfflineNotifier> = Arc::new(NoopOfflineNotifier);
+    let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = Arc::new(NoopOfflineNotifier);
     let poller_settings = Arc::new(RwLock::new(WebUiPollerSettings::default()));
     let bot_manager = Arc::new(BotManager::new(
         repo,
@@ -82,18 +82,18 @@ pub fn run() {
     // 单独路径，再切到 PathProbe 输出）。
     let snowluma_data_root = data_root.join("snowluma");
     let snowluma_runtime_root = data_root.join("runtime").join("SnowLuma");
-    let snowluma_factory: Arc<dyn ncd_core::SnowLumaWebUiClientFactory> = Arc::new(
-        ncd_core::ReqwestSnowLumaWebUiClientFactory::new(ncd_core::default_snowluma_port()),
+    let snowluma_factory: Arc<dyn ncd_runtime::SnowLumaWebUiClientFactory> = Arc::new(
+        ncd_runtime::ReqwestSnowLumaWebUiClientFactory::new(ncd_runtime::default_snowluma_port()),
     );
-    let snowluma_daemon = ncd_core::SnowLumaDaemon::new(
+    let snowluma_daemon = ncd_runtime::SnowLumaDaemon::new(
         snowluma_data_root,
         snowluma_runtime_root,
         Arc::new(event_bus.clone()),
         snowluma_factory,
     );
-    let snowluma_backend: Arc<dyn ncd_core::BotBackend> =
-        Arc::new(ncd_core::SnowLumaRuntimeBackend::new(
-            ncd_core::BotId::new("snowluma-backend-local"),
+    let snowluma_backend: Arc<dyn ncd_runtime::BotBackend> =
+        Arc::new(ncd_runtime::SnowLumaRuntimeBackend::new(
+            ncd_runtime::BotId::new("snowluma-backend-local"),
             Arc::clone(&snowluma_daemon),
             Arc::new(event_bus.clone()),
         ));

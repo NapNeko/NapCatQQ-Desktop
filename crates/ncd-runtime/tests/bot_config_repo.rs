@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ncd_core::{
+use ncd_runtime::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
     BotConfigRepo, ConfigStore, ConnectConfig, JsonTransaction, LocalBotConfigRepo,
     LocalConfigStore, RuntimeTarget, SecretStore, SecretStoreImpl,

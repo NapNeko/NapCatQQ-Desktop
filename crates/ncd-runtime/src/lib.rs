@@ -19,7 +19,7 @@ pub mod snowluma;
 // ===== Layer 1 数据(已迁移到 ncd-domain,此处 re-export 保持向后兼容) =====
 //
 // M2.1 / M2.2:这些类型从 ncd-core 移动到 ncd-domain crate(蓝图 §2.1 / §3.1)。
-// 下游代码可继续 `use ncd_core::{BotId, ...}`,但**新代码应直接** `use ncd_domain::...`。
+// 下游代码可继续 `use ncd_runtime::{BotId, ...}`,但**新代码应直接** `use ncd_domain::...`。
 // M6 阶段 ncd-core 改名 ncd-runtime 时,这些 re-export 会被移除。
 pub use ncd_domain::{
     AdvancedConfig, AppError, AutoRestartSchedule, BackendId, BackendKind, BackendType,
@@ -33,7 +33,7 @@ pub use ncd_domain::{
     default_snowluma_port,
 };
 
-// 兼容老路径:`ncd_core::ids::BotId` / `ncd_core::bot_config::...` 这种调用继续可用
+// 兼容老路径:`ncd_runtime::ids::BotId` / `ncd_runtime::bot_config::...` 这种调用继续可用
 pub use ncd_domain::{
     app_config, bootstrap, bot_config, errors, ids, kinds, models, report, snowluma_start_mode,
 };
@@ -80,7 +80,7 @@ pub use traits::{
     PathProbe, RenderError, SecretStore, TransactionReport,
 };
 
-// 兼容老路径:`ncd_core::traits::xxx::*` 老调用继续可用
+// 兼容老路径:`ncd_runtime::traits::xxx::*` 老调用继续可用
 pub use ncd_traits as traits;
 
 #[cfg(test)]

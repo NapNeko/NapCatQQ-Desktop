@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "rust:check": "cargo check --workspace --all-targets",
     "rust:test": "cargo test --workspace",
-    "ts-bindings": "cargo test -p ncd-core --lib export_bindings_ -- --quiet",
+    "ts-bindings": "cargo test -p ncd-runtime --lib export_bindings_ -- --quiet",
     "verify": "npm run ts-bindings && npm run typecheck && npm run rust:check",
     "preview": "vite preview",
     "tauri": "tauri",

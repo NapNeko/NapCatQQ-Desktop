@@ -1,0 +1,29 @@
+[package]
+name = "ncd-update"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+ncd-host = { path = "../ncd-host" }
+ncd-component = { path = "../ncd-component" }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs"] }
+tracing = "0.1"
+semver = { version = "1", features = ["serde"] }
+ts-rs = { version = "10", features = ["serde-compat"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# tauri-plugin-updater 集成在 src-tauri 层做(因为它依赖 tauri::App),
+# ncd-update 这层只提供 plain Rust 的 orchestrator 逻辑
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
+tempfile = "3"

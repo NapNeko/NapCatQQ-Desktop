@@ -1,5 +1,5 @@
-use ncd_core::bot_config::NetworkBaseFields;
-use ncd_core::{
+use ncd_runtime::bot_config::NetworkBaseFields;
+use ncd_runtime::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
     ConnectConfig, HttpServerConfig, MessagePostFormat, O3HookMode, RuntimeTarget,
     WebsocketServerConfig, WsRole,

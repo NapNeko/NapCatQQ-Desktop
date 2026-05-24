@@ -1,4 +1,4 @@
-use ncd_core::{BotActorSnapshot, BotConfig, BotId, LogSnapshot};
+use ncd_runtime::{BotActorSnapshot, BotConfig, BotId, LogSnapshot};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -16,11 +16,11 @@ pub struct BootstrapResultResponse {
     pub skipped: Vec<String>,
 }
 
-fn map_err(err: ncd_core::BotManagerError) -> String {
+fn map_err(err: ncd_runtime::BotManagerError) -> String {
     err.to_string()
 }
 
-fn batch_to_response(result: ncd_core::BatchResult) -> BatchResultResponse {
+fn batch_to_response(result: ncd_runtime::BatchResult) -> BatchResultResponse {
     BatchResultResponse {
         succeeded: result
             .succeeded
@@ -192,7 +192,7 @@ pub async fn tail_bot_log(
 mod tests {
     use std::sync::Arc;
 
-    use ncd_core::{
+    use ncd_runtime::{
         AdvancedConfig, BotActorState, BotBasicConfig, BotConfig, BotManager, BroadcastEventBus,
         ConfigStore, ConnectConfig, DispatchRenderer, DomainEventKind, EventBus, EventFilter,
         LocalBotConfigRepo, LocalConfigStore, SecretStoreImpl,
@@ -205,20 +205,20 @@ mod tests {
         let bus = BroadcastEventBus::default();
         let runtime = crate::runtime::AppRuntime::new(root, bus.clone());
         let store = Arc::new(LocalConfigStore::new(root));
-        let secrets: Arc<dyn ncd_core::SecretStore + Send + Sync> =
+        let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
             Arc::new(SecretStoreImpl::new(root.join("secrets")));
         let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
         let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
-        let backend = Arc::new(ncd_core::LocalRuntimeBackend::new(root, "test-local"));
-        let launch_planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
+        let backend = Arc::new(ncd_runtime::LocalRuntimeBackend::new(root, "test-local"));
+        let launch_planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
             root.join("runtime"),
         ));
-        let webui_client: Arc<dyn ncd_core::NapCatWebUiClient> =
-            Arc::new(ncd_core::ReqwestNapCatWebUiClient::new().expect("init webui client"));
-        let offline_notifier: Arc<dyn ncd_core::OfflineNotifier> =
-            Arc::new(ncd_core::NoopOfflineNotifier);
+        let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
+            Arc::new(ncd_runtime::ReqwestNapCatWebUiClient::new().expect("init webui client"));
+        let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> =
+            Arc::new(ncd_runtime::NoopOfflineNotifier);
         let poller_settings = Arc::new(tokio::sync::RwLock::new(
-            ncd_core::WebUiPollerSettings::default(),
+            ncd_runtime::WebUiPollerSettings::default(),
         ));
         let bot_manager = Arc::new(BotManager::new(
             repo,
@@ -233,7 +233,7 @@ mod tests {
         ));
         let state = AppState {
             data_root: root.to_path_buf(),
-            snapshot: ncd_core::BootstrapSnapshot::ready(),
+            snapshot: ncd_runtime::BootstrapSnapshot::ready(),
             event_bus: bus.clone(),
             runtime,
             bot_manager,
@@ -249,8 +249,8 @@ mod tests {
                 music_sign_url: String::new(),
                 auto_restart_schedule: Default::default(),
                 offline_auto_restart: false,
-                runtime_target: ncd_core::RuntimeTarget::Local,
-                backend_type: ncd_core::BackendType::NapCat,
+                runtime_target: ncd_runtime::RuntimeTarget::Local,
+                backend_type: ncd_runtime::BackendType::NapCat,
                 snowluma_start_mode: None,
             },
             connect: ConnectConfig::default(),
@@ -289,14 +289,14 @@ mod tests {
 
         let err = state
             .bot_manager
-            .start_bot(&ncd_core::BotId::new("10002"))
+            .start_bot(&ncd_runtime::BotId::new("10002"))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("NapCatWinBootMain.exe"));
 
         let snapshot = state
             .bot_manager
-            .get_snapshot(&ncd_core::BotId::new("10002"))
+            .get_snapshot(&ncd_runtime::BotId::new("10002"))
             .await
             .unwrap();
         assert_eq!(snapshot.state, BotActorState::Crashed);
@@ -316,7 +316,7 @@ mod tests {
 
         state
             .bot_manager
-            .delete_bot_config(&ncd_core::BotId::new("10003"))
+            .delete_bot_config(&ncd_runtime::BotId::new("10003"))
             .await
             .unwrap();
         assert_eq!(state.bot_manager.bot_count().await, 0);
@@ -336,7 +336,7 @@ mod tests {
 
         let event = subscription.next().await.expect("expected state event");
         match event {
-            ncd_core::DomainEvent::BotStateChanged { snapshot, .. } => {
+            ncd_runtime::DomainEvent::BotStateChanged { snapshot, .. } => {
                 assert_eq!(snapshot.bot_id.as_str(), "10004");
             }
             other => panic!("unexpected event: {other:?}"),
@@ -369,7 +369,7 @@ mod tests {
             .await
             .unwrap();
 
-        let ids = vec![ncd_core::BotId::new("10005"), ncd_core::BotId::new("10006")];
+        let ids = vec![ncd_runtime::BotId::new("10005"), ncd_runtime::BotId::new("10006")];
         let started = state.bot_manager.batch_start(&ids).await.unwrap();
         assert!(started.succeeded.is_empty());
         assert_eq!(started.failed.len(), 2);
@@ -397,7 +397,7 @@ mod tests {
 
         let err = state
             .bot_manager
-            .start_bot(&ncd_core::BotId::new("10007"))
+            .start_bot(&ncd_runtime::BotId::new("10007"))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("NapCatWinBootMain.exe"));

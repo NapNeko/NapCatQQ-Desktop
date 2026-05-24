@@ -56,7 +56,7 @@ pub async fn set_snowluma_attach_pid(
     bot_id: String,
     attach_pid: u32,
 ) -> Result<(), String> {
-    use ncd_core::{BotId, SnowLumaStartMode};
+    use ncd_runtime::{BotId, SnowLumaStartMode};
     let bot_id = BotId::new(bot_id);
     let mut config = state
         .bot_manager
@@ -82,7 +82,7 @@ pub async fn set_snowluma_password_override(
     state: State<'_, AppState>,
     password: Option<String>,
 ) -> Result<(), String> {
-    use ncd_core::SnowLumaAppConfig;
+    use ncd_runtime::SnowLumaAppConfig;
     let path = state.data_root.join("snowluma").join("app-config.json");
     let mut cfg: SnowLumaAppConfig = if path.exists() {
         let text = std::fs::read_to_string(&path)
@@ -129,7 +129,7 @@ pub async fn open_snowluma_webui(
     state: State<'_, AppState>,
     _bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_core::SnowLumaAppConfig;
+    use ncd_runtime::SnowLumaAppConfig;
 
     let data_root = state.data_root.clone();
 
@@ -147,7 +147,7 @@ pub async fn open_snowluma_webui(
             .and_then(|v| v.as_u64())
             .map(|n| n as u16)
     })()
-    .unwrap_or_else(ncd_core::default_snowluma_port);
+    .unwrap_or_else(ncd_runtime::default_snowluma_port);
 
     // 密码：先看 App-level override，否则读 session.json。
     let app_cfg_path = data_root.join("snowluma").join("app-config.json");

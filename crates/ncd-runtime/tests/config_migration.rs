@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use ncd_core::{
+use ncd_runtime::{
     ConfigStore, JsonTransaction, LocalConfigStore, MigrationOrchestrator, PathProbe,
     SchemaVersion, SecretError, SecretStore,
 };
@@ -13,7 +13,7 @@ struct StaticPathProbe {
 }
 
 impl PathProbe for StaticPathProbe {
-    fn probe(&self) -> Result<Vec<PathBuf>, ncd_core::PathError> {
+    fn probe(&self) -> Result<Vec<PathBuf>, ncd_runtime::PathError> {
         Ok(self.roots.clone())
     }
 
@@ -97,7 +97,7 @@ fn secret_store_failure_keeps_legacy_field() {
         }
     }
 
-    let result = ncd_core::migration::migrate_payload_for_tests(
+    let result = ncd_runtime::migration::migrate_payload_for_tests(
         serde_json::json!([{
             "bot": {
                 "QQID": "10001",
@@ -170,7 +170,7 @@ fn orchestrator_prefers_best_candidate_root() {
 
     let snapshot = orchestrator.bootstrap();
     assert_eq!(snapshot.schema_version, SchemaVersion::CURRENT);
-    assert_eq!(snapshot.report.outcome, ncd_core::MigrationOutcome::Updated);
+    assert_eq!(snapshot.report.outcome, ncd_runtime::MigrationOutcome::Updated);
     assert_eq!(
         snapshot.report.source.as_ref().unwrap().root,
         legacy_root.path()
@@ -228,7 +228,7 @@ fn orchestrator_migrates_legacy_tree_and_is_idempotent() {
 
     let first = orchestrator.bootstrap();
     assert_eq!(first.schema_version, SchemaVersion::CURRENT);
-    assert_eq!(first.report.outcome, ncd_core::MigrationOutcome::Updated);
+    assert_eq!(first.report.outcome, ncd_runtime::MigrationOutcome::Updated);
     assert!(secrets.contains_key("bot:10001:snowluma_webui_password_override"));
 
     let app_payload = store
@@ -266,5 +266,5 @@ fn orchestrator_migrates_legacy_tree_and_is_idempotent() {
     assert_eq!(summary["bot_id"], "10001");
 
     let second = orchestrator.bootstrap();
-    assert_eq!(second.report.outcome, ncd_core::MigrationOutcome::NoChange);
+    assert_eq!(second.report.outcome, ncd_runtime::MigrationOutcome::NoChange);
 }

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use ncd_core::{
+use ncd_runtime::{
     BootstrapSnapshot, LocalConfigStore, LocalPathProbe, MigrationOrchestrator, SecretStoreImpl,
 };
 

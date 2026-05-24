@@ -17,7 +17,7 @@
 /// 清洗 SnowLuma 子进程一行 stdout，剥除 ANSI CSI 序列与非打印控制字符。
 /// # Examples
 /// ```
-/// use ncd_core::snowluma::log_sanitize::sanitize_log_line;
+/// use ncd_runtime::snowluma::log_sanitize::sanitize_log_line;
 /// assert_eq!(sanitize_log_line("\x1b[31mred\x1b[0m"), "red");
 /// assert_eq!(sanitize_log_line("plain"), "plain");
 /// ```

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use ncd_core::{
+use ncd_runtime::{
     BackendKind, BotActorHandle, BotActorState, BotBackend, BotId, BotRuntimeConfig, BotStartCtx,
     BroadcastEventBus, DomainEvent, EventBus, EventFilter, LocalRuntimeBackend, MockRemoteHost,
     ProcessNode, ProcessTree, RemoteRuntimeBackend, RuntimeTarget, TailOpts,
@@ -15,7 +15,7 @@ async fn runtime_backend_syncs_runtime_defaults() {
         bot_id: BotId::new("10001"),
         config_path: root.path().join("runtime/config/bots/10001.json"),
         backend_kind: BackendKind::Local,
-        flavor: ncd_core::BotFlavor::NapCat,
+        flavor: ncd_runtime::BotFlavor::NapCat,
         runtime_target: RuntimeTarget::Local,
         launch_command: vec!["rustc".to_string(), "--version".to_string()],
         working_dir: None,
@@ -59,7 +59,7 @@ async fn runtime_backend_keeps_log_buffer_and_tail_consistent() {
 async fn event_bus_and_bot_actor_stay_serializable() {
     let bus = BroadcastEventBus::default();
     let mut subscription =
-        bus.subscribe(EventFilter::kind(ncd_core::DomainEventKind::TaskProgress));
+        bus.subscribe(EventFilter::kind(ncd_runtime::DomainEventKind::TaskProgress));
 
     bus.publish(DomainEvent::task_progress("p1-demo", 80, "almost done"));
     let event = subscription.next().await.expect("expected task progress");
@@ -87,7 +87,7 @@ async fn runtime_backend_start_and_stop_updates_status() {
         bot_id: BotId::new("10004"),
         config_path: root.path().join("runtime/config/bots/10004.json"),
         backend_kind: BackendKind::Local,
-        flavor: ncd_core::BotFlavor::NapCat,
+        flavor: ncd_runtime::BotFlavor::NapCat,
         runtime_target: RuntimeTarget::Local,
         launch_command: vec!["rustc".to_string(), "--version".to_string()],
         working_dir: None,
@@ -100,7 +100,7 @@ async fn runtime_backend_start_and_stop_updates_status() {
     let status = backend.status(BotId::new("10004")).await.unwrap();
     assert_eq!(status.state, BotActorState::Running);
     backend
-        .stop(BotId::new("10004"), ncd_core::StopMode::Force)
+        .stop(BotId::new("10004"), ncd_runtime::StopMode::Force)
         .await
         .unwrap();
     let status = backend.status(BotId::new("10004")).await.unwrap();
@@ -115,7 +115,7 @@ async fn remote_runtime_backend_reads_and_writes_config() {
         bot_id: BotId::new("20001"),
         config_path: "runtime/config/bots/20001.json".into(),
         backend_kind: BackendKind::RemoteSsh,
-        flavor: ncd_core::BotFlavor::NapCat,
+        flavor: ncd_runtime::BotFlavor::NapCat,
         runtime_target: RuntimeTarget::server("server-1"),
         launch_command: vec!["napcat-start".to_string(), "20001".to_string()],
         working_dir: None,

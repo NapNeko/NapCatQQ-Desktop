@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ncd_core::{BootstrapSnapshot, DomainEvent, EventBus, RemoteFileEntry};
+use ncd_runtime::{BootstrapSnapshot, DomainEvent, EventBus, RemoteFileEntry};
 use tauri::State;
 
 use crate::AppState;
@@ -24,7 +24,7 @@ pub fn get_bootstrap_status(state: State<'_, AppState>) -> BootstrapSnapshot {
 #[tauri::command]
 pub async fn get_all_bot_statuses(
     state: State<'_, AppState>,
-) -> Result<Vec<ncd_core::BotStatus>, String> {
+) -> Result<Vec<ncd_runtime::BotStatus>, String> {
     Ok(state.runtime.get_all_bot_statuses().await)
 }
 
@@ -101,33 +101,33 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ncd_core::ConfigStore;
+    use ncd_runtime::ConfigStore;
     use std::sync::Arc;
     use tempfile::tempdir;
 
-    fn make_test_state(root: &std::path::Path) -> (AppState, ncd_core::BroadcastEventBus) {
-        let bus = ncd_core::BroadcastEventBus::default();
+    fn make_test_state(root: &std::path::Path) -> (AppState, ncd_runtime::BroadcastEventBus) {
+        let bus = ncd_runtime::BroadcastEventBus::default();
         let runtime = crate::runtime::AppRuntime::new(root, bus.clone());
-        let store = Arc::new(ncd_core::LocalConfigStore::new(root));
-        let secrets: Arc<dyn ncd_core::SecretStore + Send + Sync> =
-            Arc::new(ncd_core::SecretStoreImpl::new(root.join("secrets")));
-        let repo = Arc::new(ncd_core::LocalBotConfigRepo::new(
+        let store = Arc::new(ncd_runtime::LocalConfigStore::new(root));
+        let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
+            Arc::new(ncd_runtime::SecretStoreImpl::new(root.join("secrets")));
+        let repo = Arc::new(ncd_runtime::LocalBotConfigRepo::new(
             Arc::clone(&store),
             secrets,
         ));
-        let renderer = Arc::new(ncd_core::DispatchRenderer::new(store.config_dir()));
-        let backend = Arc::new(ncd_core::LocalRuntimeBackend::new(root, "test-local"));
-        let launch_planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
+        let renderer = Arc::new(ncd_runtime::DispatchRenderer::new(store.config_dir()));
+        let backend = Arc::new(ncd_runtime::LocalRuntimeBackend::new(root, "test-local"));
+        let launch_planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
             root.join("runtime"),
         ));
-        let webui_client: Arc<dyn ncd_core::NapCatWebUiClient> =
-            Arc::new(ncd_core::ReqwestNapCatWebUiClient::new().expect("init webui client"));
-        let offline_notifier: Arc<dyn ncd_core::OfflineNotifier> =
-            Arc::new(ncd_core::NoopOfflineNotifier);
+        let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
+            Arc::new(ncd_runtime::ReqwestNapCatWebUiClient::new().expect("init webui client"));
+        let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> =
+            Arc::new(ncd_runtime::NoopOfflineNotifier);
         let poller_settings = Arc::new(tokio::sync::RwLock::new(
-            ncd_core::WebUiPollerSettings::default(),
+            ncd_runtime::WebUiPollerSettings::default(),
         ));
-        let bot_manager = Arc::new(ncd_core::BotManager::new(
+        let bot_manager = Arc::new(ncd_runtime::BotManager::new(
             repo,
             Arc::clone(&store),
             renderer,
@@ -152,13 +152,13 @@ mod tests {
     async fn publish_runtime_status_emits_events() {
         let root = tempdir().unwrap();
         let (state, bus) = make_test_state(root.path());
-        let mut subscription = bus.subscribe(ncd_core::EventFilter::kind(
-            ncd_core::DomainEventKind::BotStatusChanged,
+        let mut subscription = bus.subscribe(ncd_runtime::EventFilter::kind(
+            ncd_runtime::DomainEventKind::BotStatusChanged,
         ));
 
         state
             .runtime
-            .record_external_status_for_test(ncd_core::BotStatus::running("10001", 42, 1))
+            .record_external_status_for_test(ncd_runtime::BotStatus::running("10001", 42, 1))
             .await;
 
         state.runtime.publish_runtime_statuses().await;
@@ -174,7 +174,7 @@ mod tests {
     #[tokio::test]
     async fn remote_commands_use_registered_remote_service() {
         let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
+        let bus = ncd_runtime::BroadcastEventBus::default();
         let runtime = crate::runtime::AppRuntime::new(root.path(), bus);
 
         let connection = runtime

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use ncd_core::{
+use ncd_runtime::{
     BackendKind, BotId, BotStatus, BroadcastEventBus, DomainEvent, EventBus, MockRemoteHost,
     RemoteFileEntry, RemoteHost, RemoteHostError, RuntimeTarget,
 };
@@ -276,7 +276,7 @@ impl AppRuntime {
             .await
             .latest_statuses()
             .iter()
-            .any(|status| status.state == ncd_core::BotActorState::Running)
+            .any(|status| status.state == ncd_runtime::BotActorState::Running)
     }
 
     pub async fn get_remote_webui_endpoint(
@@ -347,10 +347,10 @@ mod tests {
     #[tokio::test]
     async fn runtime_status_publication_uses_external_records_only() {
         let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
+        let bus = ncd_runtime::BroadcastEventBus::default();
         let runtime = AppRuntime::new(root.path(), bus.clone());
-        let mut subscription = bus.subscribe(ncd_core::EventFilter::kind(
-            ncd_core::DomainEventKind::BotStatusChanged,
+        let mut subscription = bus.subscribe(ncd_runtime::EventFilter::kind(
+            ncd_runtime::DomainEventKind::BotStatusChanged,
         ));
 
         runtime
@@ -364,7 +364,7 @@ mod tests {
     #[tokio::test]
     async fn connect_and_query_remote_runtime_contract() {
         let root = tempdir().unwrap();
-        let bus = ncd_core::BroadcastEventBus::default();
+        let bus = ncd_runtime::BroadcastEventBus::default();
         let runtime = AppRuntime::new(root.path(), bus.clone());
 
         let connection = runtime

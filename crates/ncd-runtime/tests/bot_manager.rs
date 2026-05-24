@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
-use ncd_core::{
+use ncd_runtime::{
     AdvancedConfig, AutoRestartSchedule, BackendKind, BackendType, BotActorState, BotBackend,
     BotBackendError, BotBasicConfig, BotConfig, BotConfigRepo, BotId, BotManager, BotManagerError,
     BotRuntimeConfig, BotStartCtx, BotStatus, BroadcastEventBus, ConfigStore, ConnectConfig,
@@ -42,8 +42,8 @@ impl BotBackend for FakeBackend {
         BackendKind::Local
     }
 
-    fn flavor(&self) -> ncd_core::BotFlavor {
-        ncd_core::BotFlavor::NapCat
+    fn flavor(&self) -> ncd_runtime::BotFlavor {
+        ncd_runtime::BotFlavor::NapCat
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
@@ -89,8 +89,8 @@ impl BotBackend for FakeBackend {
         &self,
         _bot_id: BotId,
         _opts: TailOpts,
-    ) -> Result<ncd_core::LogSnapshot, BotBackendError> {
-        Ok(ncd_core::LogSnapshot {
+    ) -> Result<ncd_runtime::LogSnapshot, BotBackendError> {
+        Ok(ncd_runtime::LogSnapshot {
             lines: Vec::new(),
             total_lines: 0,
         })
@@ -108,7 +108,7 @@ impl RuntimeLaunchPlanner for TestLaunchPlanner {
         config: &BotConfig,
     ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
         match config.bot.backend_type {
-            BackendType::NapCat => Ok(RuntimeLaunchPlan::NapCat(ncd_core::NapCatLaunchPlan {
+            BackendType::NapCat => Ok(RuntimeLaunchPlan::NapCat(ncd_runtime::NapCatLaunchPlan {
                 runtime_root: std::path::PathBuf::from("test-runtime"),
                 napcat_dir: std::path::PathBuf::from("test-runtime/NapCatQQ"),
                 program: std::path::PathBuf::from("test-runtime/NapCatQQ/NapCatWinBootMain.exe"),
@@ -157,7 +157,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
             music_sign_url: String::new(),
             auto_restart_schedule: AutoRestartSchedule::default(),
             offline_auto_restart: false,
-            runtime_target: ncd_core::RuntimeTarget::Local,
+            runtime_target: ncd_runtime::RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
             snowluma_start_mode: None,
         },
@@ -175,11 +175,11 @@ fn bot_config_auto_start(qq_id: u64, name: &str) -> BotConfig {
 /// 默认 wiring：一个本地 `ReqwestNapCatWebUiClient` + `NoopOfflineNotifier`
 /// + 默认 `WebUiPollerSettings`。测试不真正发起 WebUI 请求，仅占位填充
 /// `BotManager::new` 新增的 4 个依赖（design.md §15.1）。
-fn default_webui_client() -> Arc<dyn ncd_core::NapCatWebUiClient> {
+fn default_webui_client() -> Arc<dyn ncd_runtime::NapCatWebUiClient> {
     Arc::new(ReqwestNapCatWebUiClient::new().expect("构造默认 webui client 失败"))
 }
 
-fn default_offline_notifier() -> Arc<dyn ncd_core::OfflineNotifier> {
+fn default_offline_notifier() -> Arc<dyn ncd_runtime::OfflineNotifier> {
     Arc::new(NoopOfflineNotifier)
 }
 
@@ -266,7 +266,7 @@ async fn build_plan_with_fake_qq(
     runtime_root: &std::path::Path,
     qq_install: &std::path::Path,
 ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
-    ncd_core::build_napcat_launch_plan_with_qq_install_path(
+    ncd_runtime::build_napcat_launch_plan_with_qq_install_path(
         &BotId::new("10001"),
         &bot_config(10001, "bot"),
         runtime_root,
@@ -658,7 +658,7 @@ async fn batch_start_reports_join_error_for_panicking_task() {
 #[tokio::test]
 async fn batch_start_reports_napcat_missing_runtime_component() {
     let temp = tempfile::tempdir().unwrap();
-    let planner = Arc::new(ncd_core::FileSystemRuntimeLaunchPlanner::new(
+    let planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
         temp.path().join("runtime"),
     ));
     let (_, _, _, manager) = make_manager_with_planner(temp.path(), planner);
@@ -1109,7 +1109,7 @@ async fn shutdown_all_stops_running_bots_and_clears_actors() {
 
 #[tokio::test]
 async fn process_exit_event_transitions_running_actor_to_crashed() {
-    use ncd_core::{DomainEvent, DomainEventKind};
+    use ncd_runtime::{DomainEvent, DomainEventKind};
 
     // 当 Running 状态的 Bot 收到非 0 退出，actor 应转为 Crashed。
     let temp = tempfile::tempdir().unwrap();

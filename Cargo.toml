@@ -5,7 +5,9 @@ members = [
     "crates/ncd-traits",
     "crates/ncd-host",
     "crates/ncd-component",
-    "crates/ncd-core",
+    "crates/ncd-deploy",
+    "crates/ncd-update",
+    "crates/ncd-runtime",
     "crates/ncd-test-support",
 ]
 resolver = "3"

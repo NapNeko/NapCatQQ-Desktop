@@ -2848,35 +2848,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "ncd-core"
+name = "ncd-deploy"
 version = "0.1.0"
 dependencies = [
- "aes-gcm",
  "async-trait",
- "dirs 5.0.1",
- "encoding_rs",
- "futures-util",
- "hex",
- "keyring",
+ "bytes",
+ "ncd-component",
  "ncd-domain",
- "ncd-traits",
- "proptest",
- "rand 0.8.6",
- "reqwest 0.12.28",
- "scrypt",
+ "ncd-host",
  "serde",
  "serde_json",
- "sha2",
- "sysinfo",
- "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
- "ts-rs",
- "winreg 0.52.0",
- "wiremock",
 ]
 
 [[package]]
@@ -2910,11 +2895,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "ncd-runtime"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "async-trait",
+ "dirs 5.0.1",
+ "encoding_rs",
+ "futures-util",
+ "hex",
+ "keyring",
+ "ncd-domain",
+ "ncd-traits",
+ "proptest",
+ "rand 0.8.6",
+ "reqwest 0.12.28",
+ "scrypt",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sysinfo",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "ts-rs",
+ "winreg 0.52.0",
+ "wiremock",
+]
+
+[[package]]
 name = "ncd-tauri"
 version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
- "ncd-core",
+ "ncd-runtime",
  "serde",
  "serde_json",
  "sysinfo",
@@ -2939,6 +2956,25 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "ncd-update"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "ncd-component",
+ "ncd-domain",
+ "ncd-host",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "ts-rs",
 ]
 
 [[package]]
