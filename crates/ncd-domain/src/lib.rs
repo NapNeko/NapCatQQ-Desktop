@@ -11,8 +11,10 @@ pub mod errors;
 pub mod ids;
 pub mod kinds;
 pub mod models;
+pub mod release_snapshot;
 pub mod report;
 pub mod snowluma_start_mode;
+pub mod version_snapshot;
 
 // ===== 顶层 re-export(对齐旧 ncd-core API,方便下游 crate 引用) =====
 
@@ -33,5 +35,7 @@ pub use models::{
     BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationSource, MigrationStage,
     MigrationWarning,
 };
+pub use release_snapshot::{ReleaseInfo, ReleaseSnapshot};
 pub use report::MigrationReport;
 pub use snowluma_start_mode::SnowLumaStartMode;
+pub use version_snapshot::LocalVersionSnapshot;
