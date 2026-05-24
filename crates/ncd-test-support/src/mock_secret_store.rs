@@ -172,3 +172,62 @@ mod tests {
         assert_eq!(store.get("token").unwrap(), None);
     }
 }
+
+
+// ============================================================
+// impl SecretStore(让 MockSecretStore 直接当 ncd-traits::SecretStore 实装用)
+// ============================================================
+
+use ncd_domain::errors::SecretError;
+use ncd_traits::SecretStore;
+
+/// 把 MockSecretStoreError 映射成 SecretError(注入失败 = 模拟存储不可用)。
+impl From<MockSecretStoreError> for SecretError {
+    fn from(_value: MockSecretStoreError) -> Self {
+        SecretError::Unavailable
+    }
+}
+
+impl SecretStore for MockSecretStore {
+    fn get(&self, key: &str) -> Result<Option<String>, SecretError> {
+        // 注意:这里调用的是 inherent method `get`(返回 MockSecretStoreError),
+        // 通过 ? 自动转换到 SecretError
+        Self::get(self, key).map_err(SecretError::from)
+    }
+
+    fn put(&self, key: &str, value: &str) -> Result<(), SecretError> {
+        Self::put(self, key, value).map_err(SecretError::from)
+    }
+
+    fn delete(&self, key: &str) -> Result<(), SecretError> {
+        // inherent delete 返回 Result<bool>,trait delete 返回 Result<()>
+        // 这里把 bool 信息丢弃(trait 不区分 "key 之前存在" 与 "key 不存在")
+        Self::delete(self, key)
+            .map(|_| ())
+            .map_err(SecretError::from)
+    }
+}
+
+#[cfg(test)]
+mod trait_impl_tests {
+    use super::*;
+
+    #[test]
+    fn impl_works_via_trait_object() {
+        let store: Box<dyn SecretStore> = Box::new(MockSecretStore::new());
+        store.put("token", "abc").unwrap();
+        let v = store.get("token").unwrap();
+        assert_eq!(v.as_deref(), Some("abc"));
+        store.delete("token").unwrap();
+        let v = store.get("token").unwrap();
+        assert_eq!(v, None);
+    }
+
+    #[test]
+    fn injected_failure_maps_to_unavailable() {
+        let store = MockSecretStore::new();
+        store.fail_next_get("network down");
+        let err = SecretStore::get(&store, "any").unwrap_err();
+        assert!(matches!(err, SecretError::Unavailable));
+    }
+}
