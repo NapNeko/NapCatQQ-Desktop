@@ -1,9 +1,9 @@
 //! App-level configuration types backing `AppConfig`.
-//! 当前承载两类 App 级设置：
-//! - `WebUiPollerSettings`（来自 `napcat-webui-login` Spec）：
-//! 控制 NapCat WebUI 登录态轮询间隔与离线通知开关。
-//! - `SnowLumaAppConfig`（来自 `snowluma-backend-runtime` Spec）：
-//! 承载 SnowLuma daemon 的密码 override 与 WebUI 监听端口。
+//!
+//! 当前承载两类 App 级设置:
+//! - `WebUiPollerSettings`:控制 NapCat WebUI 登录态轮询间隔与离线通知开关。
+//! - `SnowLumaAppConfig`:承载 SnowLuma daemon 的密码 override 与 WebUI 监听端口。
+//!
 //! 所有字段通过 ts-rs 派生导出到 `src-ui/core/ipc/generated/` 以避免前后端漂移。
 
 use serde::{Deserialize, Serialize};
@@ -48,14 +48,14 @@ impl Default for WebUiPollerSettings {
 }
 
 /// `SnowLumaAppConfig.webui_port` 的默认值（5099）。
-/// 单独抽成自由函数是为了给 `#[serde(default = "...")]` 复用
-/// 同时锁死本 spec 与 legacy SnowLuma daemon 已使用端口一致。
+/// 单独抽成自由函数是为了给 `#[serde(default = "...")]` 复用，
+/// 同时锁死与 legacy SnowLuma daemon 已使用端口一致。
 pub fn default_snowluma_port() -> u16 {
     5099
 }
 
 /// SnowLuma 后端运行时的 App 级配置。
-/// 与 `WebUiPollerSettings` 同级承载在同一份 `app_config.rs` 中，**不**新建第二份。
+/// 与 `WebUiPollerSettings` 同级承载在同一份 `app_config.rs` 中，不新建第二份。
 /// 字段：
 /// - `webui_password_override`：App 级密码 override，最高优先级密码来源。
 /// 空字符串视作未设置；具体优先级解析在 `snowluma::session::render_daemon_globals` 内执行。

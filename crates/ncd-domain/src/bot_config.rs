@@ -512,7 +512,7 @@ mod snowluma_start_mode_tests {
     //! 字段约定（ / / ）：
     //! - JSON key 必须是驼峰 `snowlumaStartMode`（与 legacy `autoRestartSchedule`
     //! 等已有字段保持驼峰一致）。
-    //! - 字段 `Option<SnowLumaStartMode>` 默认值为 `None`，缺省时**禁止**出现
+    //! - 字段 `Option<SnowLumaStartMode>` 默认值为 `None`，缺省时禁止出现
     //! 在序列化输出中（`skip_serializing_if = "Option::is_none"`），保证
     //! 纯 NapCat 用户的配置不会引入新字段。
     //! - `SnowLumaStartMode` 复用 `snowluma::launch_plan` 已有 enum，通过
@@ -534,7 +534,7 @@ mod snowluma_start_mode_tests {
         }
     }
 
-    /// 缺省（`None`）时序列化 **不得** 出现 `snowlumaStartMode` key
+    /// 缺省（`None`）时序列化不得出现 `snowlumaStartMode` key
     /// 反序列化忽略缺省字段后字段值仍为 `None`。
     #[test]
     fn snowluma_start_mode_none_is_omitted_in_serialization() {

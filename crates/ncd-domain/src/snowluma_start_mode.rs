@@ -14,7 +14,7 @@ use ts_rs::TS;
 /// - [`SnowLumaStartMode::ColdStart`]：用户希望 backend 全权 spawn QQ.exe
 /// 随后由 SnowLuma daemon 注入。stop 时由 backend 负责终结 QQ.exe 进程树。
 /// - [`SnowLumaStartMode::HotStart`]：用户已自己启动了 QQ.exe（典型场景：
-/// 想保留人手登录得到的会话），backend 仅 attach 到该 PID；stop 时**绝不**
+/// 想保留人手登录得到的会话），backend 仅 attach 到该 PID；stop 时绝不
 /// kill 用户的 QQ.exe 进程，只是 unload daemon 的 hook。
 /// 序列化形态（`#[serde(tag = "mode", rename_all = "snake_case")]`）：
 /// ```json
