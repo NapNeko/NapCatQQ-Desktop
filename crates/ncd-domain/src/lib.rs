@@ -11,16 +11,28 @@
 //! - 未来:把 events.rs 的"数据"部分(DomainEvent / DomainEventKind / EventFilter)
 //!   也迁过来,实装(BroadcastEventBus)留在 ncd-runtime
 
+pub mod app_config;
 pub mod bootstrap;
+pub mod bot_config;
 pub mod errors;
 pub mod ids;
 pub mod kinds;
 pub mod models;
 pub mod report;
+pub mod snowluma_start_mode;
 
 // ===== 顶层 re-export(对齐旧 ncd-core API,方便下游 crate 引用) =====
 
+pub use app_config::{
+    SnowLumaAppConfig, WebUiPollerSettings, default_login_interval, default_snowluma_port,
+};
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
+pub use bot_config::{
+    AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
+    BypassConfig, ConnectConfig, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LogLevel,
+    MessagePostFormat, NetworkBaseFields, O3HookMode, TimeUnit, WebsocketClientConfig,
+    WebsocketServerConfig, WsRole,
+};
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use ids::{BackendId, BotId};
 pub use kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion};
@@ -29,3 +41,4 @@ pub use models::{
     MigrationWarning,
 };
 pub use report::MigrationReport;
+pub use snowluma_start_mode::SnowLumaStartMode;
