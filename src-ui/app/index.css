@@ -1,0 +1,137 @@
+/* Tailwind v4 入口：CSS-first 配置，无 tailwind.config.js。
+   这个文件仅在新 UI 树（VITE_UI_NEXT=1）下加载，不污染旧 Fluent 树。 */
+
+@import "tailwindcss";
+@import "./fonts.css";
+@import "../core/design/tokens.css";
+
+/* 把 design token 暴露给 tailwind utility class。
+   这样写完之后 className="bg-surface-card text-primary rounded-md" 就能直接用。 */
+@theme {
+    /* color: bg-* / text-* / border-* utilities */
+    --color-canvas: var(--surface-canvas);
+    --color-surface: var(--surface-card);
+    --color-elevated: var(--surface-elevated);
+    --color-inset: var(--surface-inset);
+    --color-muted: var(--surface-muted);
+    --color-sidebar: var(--surface-sidebar);
+
+    --color-text: var(--text-primary);
+    --color-text-secondary: var(--text-secondary);
+    --color-text-tertiary: var(--text-tertiary);
+    --color-text-disabled: var(--text-disabled);
+
+    --color-border: var(--border-default);
+    --color-border-subtle: var(--border-subtle);
+    --color-border-strong: var(--border-strong);
+
+    --color-brand: var(--brand-500);
+    --color-brand-hover: var(--brand-600);
+    --color-brand-soft: var(--brand-100);
+    --color-brand-tint: var(--brand-50);
+
+    --color-accent: var(--accent-500);
+    --color-accent-soft: var(--accent-100);
+
+    --color-success: var(--state-success);
+    --color-success-soft: var(--state-success-bg);
+    --color-warning: var(--state-warning);
+    --color-warning-soft: var(--state-warning-bg);
+    --color-danger: var(--state-danger);
+    --color-danger-soft: var(--state-danger-bg);
+    --color-info: var(--state-info);
+    --color-info-soft: var(--state-info-bg);
+
+    /* radius: rounded-* utilities */
+    --radius-xs: var(--radius-xs);
+    --radius-sm: var(--radius-sm);
+    --radius-md: var(--radius-md);
+    --radius-lg: var(--radius-lg);
+    --radius-xl: var(--radius-xl);
+    --radius-pill: var(--radius-pill);
+
+    /* shadow: shadow-* utilities */
+    --shadow-card: var(--shadow-md);
+    --shadow-popover: var(--shadow-lg);
+    --shadow-glow-success: var(--shadow-glow-success);
+    --shadow-glow-brand: var(--shadow-glow-brand);
+
+    /* font family */
+    --font-display: var(--font-display);
+    --font-sans: var(--font-body);
+    --font-mono: var(--font-mono);
+
+    /* font size: text-* utilities */
+    --text-2xs: var(--text-2xs);
+    --text-xs: var(--text-xs);
+    --text-sm: var(--text-sm);
+    --text-base: var(--text-base);
+    --text-md: var(--text-md);
+    --text-lg: var(--text-lg);
+    --text-xl: var(--text-xl);
+    --text-2xl: var(--text-2xl);
+}
+
+/* 全局 reset / 基础样式：仅在新 UI 树激活。 */
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--surface-canvas);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* OpenType 特性：cv11 = Inter 单层 a，ss01 = 直角 i/l 顶，ss03 = 平 g。
+       让 Inter 看起来更现代不那么"邮件" */
+    font-feature-settings: "cv11", "ss01", "ss03";
+}
+
+/* mono 字体保证连字 + 等宽数字 */
+code,
+kbd,
+pre,
+samp,
+.font-mono {
+    font-feature-settings: "calt", "liga";
+    font-variant-numeric: tabular-nums;
+}
+
+/* 角落柔光：参考图最有氛围感的细节。
+   两块大宽幅渐变互相叠加：左上桃粉 / 右上冰蓝 / 中下暖橙。 */
+.ndf-canvas-glow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+        radial-gradient(70% 50% at -5% -10%, color-mix(in srgb, var(--accent-300) 38%, transparent), transparent 60%),
+        radial-gradient(70% 50% at 105% -10%, color-mix(in srgb, var(--blue-500) 22%, transparent), transparent 60%),
+        radial-gradient(80% 60% at 50% 110%, color-mix(in srgb, var(--brand-300) 16%, transparent), transparent 60%);
+}
+
+/* 暖色低对比 scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--neutral-900) 14%, transparent);
+    border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--neutral-900) 24%, transparent);
+}

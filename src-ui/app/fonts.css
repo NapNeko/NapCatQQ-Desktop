@@ -1,0 +1,9 @@
+/* 自托管 variable fonts，Tauri 离线包不依赖 CDN。
+   每个文件只要 wght 轴（不要 italic / opsz），woff2 一个文件 ~30KB 涵盖 100-900。
+   import 顺序：先 latin → 中文走系统 fallback。CJK 字体不打包（中文字符集一个
+   weight 就 5MB+，得不偿失），靠 font-family fallback 链保证现代 Windows / macOS
+   下都有不错的字形。 */
+
+@import "@fontsource-variable/plus-jakarta-sans/wght.css";
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource-variable/jetbrains-mono/wght.css";
