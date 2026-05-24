@@ -4,6 +4,7 @@ members = [
     "crates/ncd-domain",
     "crates/ncd-traits",
     "crates/ncd-host",
+    "crates/ncd-component",
     "crates/ncd-core",
     "crates/ncd-test-support",
 ]
