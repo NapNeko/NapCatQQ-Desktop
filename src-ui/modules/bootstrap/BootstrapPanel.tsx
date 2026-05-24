@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
 import {
   Button,
   Card,
@@ -23,9 +22,10 @@ import {
   SettingsRegular,
   DeviceEqRegular,
 } from '@fluentui/react-icons';
-import { client } from '../../core/ipc/client';
 import { StatusBadge } from '../../shared/components/StatusBadge';
-import { formatTimestamp, compactPath } from '../../shared/utils';
+import { compactPath, formatTimestamp } from '../../core/domain/bootstrap/format';
+import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
+import { useResourceMonitor } from '../../hooks/diagnostics/useResourceMonitor';
 import './BootstrapPanel.css';
 
 interface BootstrapPanelProps {
@@ -33,59 +33,35 @@ interface BootstrapPanelProps {
 }
 
 export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) => {
+  const {
+    bootstrap,
+    isLoading,
+    error,
+    openDataDir,
+    exportMigrationReport,
+    isOpeningDir,
+    isExporting,
+  } = useBootstrap();
+  const { cpu, ram } = useResourceMonitor();
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isOpeningDir, setIsOpeningDir] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-
-  // 资源监视器模拟状态 (Fluctuations)
-  const [cpuUsage, setCpuUsage] = useState(12);
-  const [ramUsage, setRamUsage] = useState(45);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCpuUsage((prev) => {
-        const delta = Math.floor(Math.random() * 5) - 2;
-        const next = prev + delta;
-        return Math.max(5, Math.min(30, next));
-      });
-      setRamUsage((prev) => {
-        const delta = Math.floor(Math.random() * 3) - 1;
-        const next = prev + delta;
-        return Math.max(42, Math.min(48, next));
-      });
-    }, 2000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Fetch bootstrap status using React Query
-  const { data: bootstrap, isLoading, error } = useQuery({
-    queryKey: ['bootstrapStatus'],
-    queryFn: client.getBootstrapStatus,
-  });
 
   const handleOpenDataDir = async () => {
-    setIsOpeningDir(true);
     setActionMessage(null);
     try {
-      const path = await client.openDataDir();
+      const path = await openDataDir();
       setActionMessage({ type: 'success', text: `成功打开数据目录: ${path}` });
     } catch (err: any) {
       setActionMessage({ type: 'error', text: `打开数据目录失败: ${err}` });
-    } finally {
-      setIsOpeningDir(false);
     }
   };
 
   const handleExportReport = async () => {
-    setIsExporting(true);
     setActionMessage(null);
     try {
-      const path = await client.exportMigrationReport();
+      const path = await exportMigrationReport();
       setActionMessage({ type: 'success', text: `成功导出迁移报告至: ${path}` });
     } catch (err: any) {
       setActionMessage({ type: 'error', text: `导出迁移报告失败: ${err}` });
-    } finally {
-      setIsExporting(false);
     }
   };
 
@@ -120,12 +96,8 @@ export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) =>
         </div>
       )}
 
-      {/* Main 7:5 Column Layout (Dashboard Workspace) */}
       <div className="ndf-home-grid">
-        
-        {/* LEFT COLUMN - 7fr (Main Core panels) */}
         <div className="ndf-home-col ndf-col-7">
-          {/* HelloCard - Welcoming Page banner */}
           <Card className="fluent-card ndf-hello-card">
             <div className="ndf-hello-content">
               <div>
@@ -152,7 +124,6 @@ export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) =>
             </div>
           </Card>
 
-          {/* RemoteSummaryCard - Dynamic Quick jump block */}
           <Card className="fluent-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('remote')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -168,7 +139,6 @@ export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) =>
             </div>
           </Card>
 
-          {/* NoticeCard - Diagnosis details and legacy migrations */}
           {report && (
             <Card className="fluent-card">
               <CardHeader
@@ -179,7 +149,7 @@ export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) =>
                   </div>
                 }
               />
-              
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="ndf-inner-info-box">
@@ -242,9 +212,7 @@ export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) =>
           )}
         </div>
 
-        {/* RIGHT COLUMN - 5fr (Version Cards and Occupancy Panel) */}
         <div className="ndf-home-col ndf-col-5">
-          {/* VersionCardsPanel - Core version summary */}
           <Card className="fluent-card">
             <CardHeader
               header={
@@ -278,7 +246,6 @@ export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) =>
             </div>
           </Card>
 
-          {/* OccupancyPanel / Resources View (CPU / RAM Progress indicators) */}
           <Card className="fluent-card">
             <CardHeader
               header={
@@ -293,17 +260,17 @@ export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) =>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <Text size={100} style={{ color: 'var(--colorNeutralForeground4)' }}>CPU 占用率</Text>
-                  <Text size={100} weight="semibold" style={{ fontFamily: 'var(--ndf-font-mono)' }}>{cpuUsage}%</Text>
+                  <Text size={100} weight="semibold" style={{ fontFamily: 'var(--ndf-font-mono)' }}>{cpu}%</Text>
                 </div>
-                <ProgressBar value={cpuUsage / 100} color="brand" />
+                <ProgressBar value={cpu / 100} color="brand" />
               </div>
 
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <Text size={100} style={{ color: 'var(--colorNeutralForeground4)' }}>物理内存 (RAM)</Text>
-                  <Text size={100} weight="semibold" style={{ fontFamily: 'var(--ndf-font-mono)' }}>{ramUsage}% (7.2 GB / 16.0 GB)</Text>
+                  <Text size={100} weight="semibold" style={{ fontFamily: 'var(--ndf-font-mono)' }}>{ram}% (7.2 GB / 16.0 GB)</Text>
                 </div>
-                <ProgressBar value={ramUsage / 100} color="brand" />
+                <ProgressBar value={ram / 100} color="brand" />
               </div>
 
               <Divider style={{ margin: '4px 0' }} />
@@ -342,7 +309,6 @@ export const BootstrapPanel: React.FC<BootstrapPanelProps> = ({ onNavigate }) =>
             </div>
           </Card>
         </div>
-
       </div>
     </div>
   );

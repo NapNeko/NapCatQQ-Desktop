@@ -16,24 +16,16 @@ import {
     DialogContent,
     DialogActions,
 } from '@fluentui/react-components';
-import { invoke } from '@tauri-apps/api/core';
 import { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 import { TimeUnit } from '../../../../core/ipc/generated/domain/TimeUnit';
 import { SnowLumaStartMode } from '../../../../core/ipc/generated/domain/SnowLumaStartMode';
-import { isTauri } from '../../../../core/ipc/client';
+import { useQQProcessList } from '../../../../hooks/bot/useQQProcessList';
 
 interface BotBasicTabProps {
     data: BotBasicConfig;
     onChange: (updated: Partial<BotBasicConfig>) => void;
     isEditMode: boolean;
-}
-
-interface QQProcessInfo {
-    pid: number;
-    name: string;
-    started_at: number;
-    command_line: string;
 }
 
 export const BotBasicTab: React.FC<BotBasicTabProps> = ({
@@ -93,31 +85,11 @@ export const BotBasicTab: React.FC<BotBasicTabProps> = ({
     };
 
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [pickerLoading, setPickerLoading] = useState(false);
-    const [pickerProcesses, setPickerProcesses] = useState<QQProcessInfo[]>([]);
-    const [pickerError, setPickerError] = useState<string | null>(null);
+    const qqPicker = useQQProcessList();
 
     const openProcessPicker = async () => {
         setPickerOpen(true);
-        setPickerLoading(true);
-        setPickerError(null);
-        setPickerProcesses([]);
-        try {
-            if (isTauri) {
-                const result = await invoke<QQProcessInfo[]>('list_qq_processes');
-                setPickerProcesses(result);
-            } else {
-                // Web 预览 mock
-                setPickerProcesses([
-                    { pid: 12345, name: 'QQ.exe', started_at: 0, command_line: '' },
-                    { pid: 23456, name: 'QQ.exe', started_at: 0, command_line: '' },
-                ]);
-            }
-        } catch (err) {
-            setPickerError(`列出 QQ 进程失败: ${String(err)}`);
-        } finally {
-            setPickerLoading(false);
-        }
+        await qqPicker.load();
     };
 
     const choosePid = (pid: number) => {
@@ -267,14 +239,14 @@ export const BotBasicTab: React.FC<BotBasicTabProps> = ({
                     <DialogBody>
                         <DialogTitle>选择目标 QQ.exe</DialogTitle>
                         <DialogContent>
-                            {pickerLoading && <Text>加载中…</Text>}
-                            {pickerError && <Text style={{ color: 'crimson' }}>{pickerError}</Text>}
-                            {!pickerLoading && !pickerError && pickerProcesses.length === 0 && (
+                            {qqPicker.isLoading && <Text>加载中…</Text>}
+                            {qqPicker.error && <Text style={{ color: 'crimson' }}>{qqPicker.error}</Text>}
+                            {!qqPicker.isLoading && !qqPicker.error && qqPicker.processes.length === 0 && (
                                 <Text>未发现正在运行的 QQ.exe，请先手动启动。</Text>
                             )}
-                            {pickerProcesses.length > 0 && (
+                            {qqPicker.processes.length > 0 && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '300px', overflowY: 'auto' }}>
-                                    {pickerProcesses.map((p) => (
+                                    {qqPicker.processes.map((p) => (
                                         <Button
                                             key={p.pid}
                                             appearance="subtle"

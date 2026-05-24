@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   Spinner,
@@ -21,7 +20,8 @@ import {
   DeleteRegular,
 } from '@fluentui/react-icons';
 import { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
-import { botCommands } from '../../../core/ipc/botCommands';
+import { createDefaultBotConfig, validateBotConfig } from '../../../core/domain/bot/config-defaults';
+import { useBotConfig } from '../../../hooks/bot/useBotConfig';
 import { BotBasicTab } from './tabs/BotBasicTab';
 import { ConnectTab } from './tabs/ConnectTab';
 import { AdvancedTab } from './tabs/AdvancedTab';
@@ -31,67 +31,40 @@ interface BotConfigPageProps {
   onBack: () => void;
 }
 
-export const createDefaultBotConfig = (): BotConfig => ({
-  bot: {
-    name: '',
-    QQID: 0,
-    musicSignUrl: '',
-    autoRestartSchedule: { enable: false, time_unit: 'h', duration: 6 },
-    offlineAutoRestart: false,
-    runtime_target: 'local',
-    backend_type: 'napcat',
-  },
-  connect: {
-    httpServers: [],
-    httpSseServers: [],
-    httpClients: [],
-    websocketServers: [],
-    websocketClients: [],
-    plugins: [],
-  },
-  advanced: {
-    autoStart: false,
-    offlineNotice: false,
-    parseMultMsg: false,
-    packetServer: '',
-    packetBackend: 'auto',
-    enableLocalFile2Url: false,
-    fileLog: false,
-    consoleLog: true,
-    fileLogLevel: 'debug',
-    consoleLogLevel: 'info',
-    o3HookMode: 1,
-    bypass: { hook: false, window: false, module: false, process: false, container: false, js: false },
-  },
-});
+// 兼容旧 import，转发到 domain。
+export { createDefaultBotConfig } from '../../../core/domain/bot/config-defaults';
 
-export const BotConfigPage: React.FC<BotConfigPageProps> = ({
-  botId,
-  onBack,
-}) => {
-  const queryClient = useQueryClient();
+export const BotConfigPage: React.FC<BotConfigPageProps> = ({ botId, onBack }) => {
   const isEditMode = botId !== null;
 
-  // Tabs navigation
   const [activeTab, setActiveTab] = useState<'basic' | 'connect' | 'advanced'>('basic');
-
-  // Local Form state
   const [formData, setFormData] = useState<BotConfig>(createDefaultBotConfig());
-
-  // Alerts/notifications state
   const [alertMsg, setAlertMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Deletion Dialog confirm state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  // Query config of editing bot
-  const { data: loadedConfig, isLoading, error } = useQuery<BotConfig | null, Error>({
-    queryKey: ['botConfig', botId],
-    queryFn: () => (botId ? botCommands.getBotConfig(botId) : Promise.resolve(null)),
-    enabled: isEditMode,
+  const {
+    config: loadedConfig,
+    isLoading,
+    error,
+    save,
+    isSaving,
+    remove,
+    isDeleting,
+  } = useBotConfig(botId, {
+    onSaved: (savedBotId) => {
+      setAlertMsg({ type: 'success', text: `成功保存并推送 Bot 实例 [${savedBotId}] 配置！` });
+      setTimeout(onBack, 1000);
+    },
+    onDeleted: () => {
+      setIsDeleteDialogOpen(false);
+      onBack();
+    },
+    onError: (text) => {
+      setAlertMsg({ type: 'error', text });
+      setIsDeleteDialogOpen(false);
+    },
   });
 
-  // Sync loaded configuration into local form state
   useEffect(() => {
     if (loadedConfig) {
       setFormData(loadedConfig);
@@ -100,55 +73,14 @@ export const BotConfigPage: React.FC<BotConfigPageProps> = ({
     }
   }, [loadedConfig, isEditMode]);
 
-  // Save Config Mutation
-  const saveMutation = useMutation({
-    mutationFn: botCommands.upsertBotConfig,
-    onSuccess: (snapshot) => {
-      queryClient.invalidateQueries({ queryKey: ['botSnapshots'] });
-      setAlertMsg({ type: 'success', text: `成功保存并推送 Bot 实例 [${snapshot.bot_id}] 配置！` });
-      setTimeout(() => {
-        onBack();
-      }, 1000);
-    },
-    onError: (err: any) => {
-      setAlertMsg({ type: 'error', text: `保存配置失败: ${err.message || err}` });
-    },
-  });
-
-  // Delete Config Mutation
-  const deleteMutation = useMutation({
-    mutationFn: botCommands.deleteBotConfig,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['botSnapshots'] });
-      setIsDeleteDialogOpen(false);
-      onBack();
-    },
-    onError: (err: any) => {
-      setAlertMsg({ type: 'error', text: `删除配置失败: ${err.message || err}` });
-      setIsDeleteDialogOpen(false);
-    },
-  });
-
   const handleSave = () => {
     setAlertMsg(null);
-
-    // Basic frontend validations (no complex logic duplicated from Rust)
-    if (formData.bot.QQID <= 0 || isNaN(formData.bot.QQID)) {
-      setAlertMsg({ type: 'error', text: '账号 (QQ ID) 必须是一个正整数！' });
+    const validation = validateBotConfig(formData);
+    if (!validation.ok) {
+      setAlertMsg({ type: 'error', text: validation.reason });
       return;
     }
-    if (!formData.bot.name.trim()) {
-      setAlertMsg({ type: 'error', text: '实例名称不能为空！' });
-      return;
-    }
-
-    saveMutation.mutate(formData);
-  };
-
-  const handleDelete = () => {
-    if (botId) {
-      deleteMutation.mutate(botId);
-    }
+    save(formData);
   };
 
   const handleFieldChange = (section: keyof BotConfig, updatedFields: any) => {
@@ -182,7 +114,6 @@ export const BotConfigPage: React.FC<BotConfigPageProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minHeight: '100%' }}>
-      {/* 1. Header Toolbar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--ndf-border-subtle)', paddingBottom: '12px' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <Button icon={<ArrowLeftRegular />} onClick={onBack} appearance="subtle" />
@@ -196,7 +127,6 @@ export const BotConfigPage: React.FC<BotConfigPageProps> = ({
           </div>
         </div>
 
-        {/* Header Action buttons */}
         <div style={{ display: 'flex', gap: '8px' }}>
           {isEditMode && (
             <Button
@@ -212,28 +142,25 @@ export const BotConfigPage: React.FC<BotConfigPageProps> = ({
             icon={<SaveRegular />}
             appearance="primary"
             onClick={handleSave}
-            disabled={saveMutation.isPending}
+            disabled={isSaving}
           >
             保存配置
           </Button>
         </div>
       </div>
 
-      {/* 2. Messages Alert Area */}
       {alertMsg && (
         <MessageBar intent={alertMsg.type} style={{ width: '100%' }}>
           <MessageBarBody>{alertMsg.text}</MessageBarBody>
         </MessageBar>
       )}
 
-      {/* 3. Tabs Navigation bar */}
       <TabList selectedValue={activeTab} onTabSelect={(_, data) => setActiveTab(data.value as any)}>
         <Tab value="basic">基本配置 (Basic)</Tab>
         <Tab value="connect">协议连接 (Connect)</Tab>
         <Tab value="advanced">高阶优化 (Advanced)</Tab>
       </TabList>
 
-      {/* 4. Tab Panels Viewport */}
       <div style={{ flex: 1, backgroundColor: 'var(--ndf-bg-card)', border: '1px solid var(--ndf-border-subtle)', borderRadius: '8px', padding: '16px 20px', minHeight: '400px', overflowY: 'auto' }}>
         {activeTab === 'basic' && (
           <BotBasicTab
@@ -258,7 +185,6 @@ export const BotConfigPage: React.FC<BotConfigPageProps> = ({
         )}
       </div>
 
-      {/* 5. Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={(_, data) => setIsDeleteDialogOpen(data.open)}>
         <DialogSurface style={{ maxWidth: '400px' }}>
           <DialogBody>
@@ -278,8 +204,8 @@ export const BotConfigPage: React.FC<BotConfigPageProps> = ({
               <Button
                 appearance="primary"
                 style={{ backgroundColor: '#bc2f32', color: '#ffffff', border: 'none' }}
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
+                onClick={remove}
+                disabled={isDeleting}
               >
                 彻底删除
               </Button>

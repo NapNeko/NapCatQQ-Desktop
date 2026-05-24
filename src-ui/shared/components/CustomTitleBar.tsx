@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { SubtractRegular, BoxRegular, DismissRegular, DeviceEqRegular } from '@fluentui/react-icons';
+import { windowControlService } from '../../core/services/desktop.service';
 import './CustomTitleBar.css';
 
 interface CustomTitleBarProps {
@@ -9,91 +10,39 @@ interface CustomTitleBarProps {
 export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ sidebarCollapsed }) => {
   const [isMaximized, setIsMaximized] = useState(false);
 
-  const getTauriWindow = async () => {
-    try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      return getCurrentWindow();
-    } catch {
-      return null;
-    }
-  };
-
-  const handleMinimize = async () => {
-    const tauriWindow = await getTauriWindow();
-    if (!tauriWindow) {
-      console.log('浏览器预览: 最小化');
-      return;
-    }
-
-    try {
-      await tauriWindow.minimize();
-    } catch (error) {
-      console.error('窗口最小化失败:', error);
-    }
+  const handleMinimize = () => {
+    void windowControlService.minimize();
   };
 
   const handleMaximize = async () => {
-    const tauriWindow = await getTauriWindow();
-    if (!tauriWindow) {
-      console.log('浏览器预览: 最大化');
-      setIsMaximized((current) => !current);
-      return;
-    }
-
-    try {
-      await tauriWindow.toggleMaximize();
-      setIsMaximized(await tauriWindow.isMaximized());
-    } catch (error) {
-      console.error('窗口最大化/还原失败:', error);
+    const next = await windowControlService.toggleMaximize();
+    if (next !== null) {
+      setIsMaximized(next);
+    } else {
+      // 浏览器预览：本地翻转一下让按钮看上去有反应。
+      setIsMaximized((prev) => !prev);
     }
   };
 
-  const handleClose = async () => {
-    const tauriWindow = await getTauriWindow();
-    if (!tauriWindow) {
-      console.log('浏览器预览: 关闭');
-      return;
-    }
-
-    try {
-      await tauriWindow.close();
-    } catch (error) {
-      console.error('窗口关闭失败:', error);
-    }
+  const handleClose = () => {
+    void windowControlService.close();
   };
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
 
-    const setupListener = async () => {
-      const tauriWindow = await getTauriWindow();
-      if (!tauriWindow) {
-        return;
-      }
-
-      try {
-        setIsMaximized(await tauriWindow.isMaximized());
-
-        const { listen } = await import('@tauri-apps/api/event');
-        const unlistenFn = await listen('tauri://resize', async () => {
-          try {
-            setIsMaximized(await tauriWindow.isMaximized());
-          } catch (error) {
-            console.error('刷新窗口最大化状态失败:', error);
-          }
-        });
-        unlisten = unlistenFn;
-      } catch (error) {
-        console.error('初始化标题栏窗口状态失败:', error);
-      }
-    };
-
-    void setupListener();
+    (async () => {
+      const initial = await windowControlService.isMaximized();
+      if (!cancelled) setIsMaximized(initial);
+      unlisten = await windowControlService.onResize((next) => {
+        if (!cancelled) setIsMaximized(next);
+      });
+    })();
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      cancelled = true;
+      if (unlisten) unlisten();
     };
   }, []);
 

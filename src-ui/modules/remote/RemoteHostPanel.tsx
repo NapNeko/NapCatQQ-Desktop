@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
   Card,
@@ -18,56 +17,23 @@ import {
   GlobeRegular,
   CheckmarkRegular,
 } from '@fluentui/react-icons';
-import { client } from '../../core/ipc/client';
 import { StatusBadge } from '../../shared/components/StatusBadge';
-import { formatBytes } from '../../shared/utils';
+import { formatBytes } from '../../core/domain/bootstrap/format';
+import { useRemoteSession } from '../../hooks/remote/useRemoteSession';
 
 export const RemoteHostPanel: React.FC = () => {
-  const queryClient = useQueryClient();
   const [remoteId, setRemoteId] = useState('remote-production');
   const [host, setHost] = useState('192.168.1.100');
   const [port, setPort] = useState(22);
   const [username, setUsername] = useState('root');
   const [webuiUrl, setWebuiUrl] = useState('http://192.168.1.100:6099/webui');
 
-  const [connectedHost, setConnectedHost] = useState<any>(null);
-  const [currentPath, setCurrentPath] = useState('/');
   const [selectedBotId] = useState('20001');
 
-  // Connect mutation
-  const connectMutation = useMutation({
-    mutationFn: client.connectRemoteHost,
-    onSuccess: (data) => {
-      setConnectedHost(data);
-      queryClient.invalidateQueries({ queryKey: ['remoteFiles', data.remote_id, currentPath] });
-      queryClient.invalidateQueries({ queryKey: ['remoteRuntime', data.remote_id, selectedBotId] });
-      queryClient.invalidateQueries({ queryKey: ['remoteWebui', data.remote_id, selectedBotId] });
-    },
-  });
-
-  // Query remote files
-  const { data: files = [], isLoading: filesLoading } = useQuery({
-    queryKey: ['remoteFiles', connectedHost?.remote_id, currentPath],
-    queryFn: () => client.listRemoteFiles(connectedHost.remote_id, currentPath),
-    enabled: !!connectedHost,
-  });
-
-  // Query remote runtime status
-  const { data: runtimeStatus } = useQuery({
-    queryKey: ['remoteRuntime', connectedHost?.remote_id, selectedBotId],
-    queryFn: () => client.getRemoteRuntimeStatus(connectedHost.remote_id, selectedBotId),
-    enabled: !!connectedHost && !!selectedBotId,
-  });
-
-  // Query remote WebUI endpoint
-  const { data: webuiEndpoint } = useQuery({
-    queryKey: ['remoteWebui', connectedHost?.remote_id, selectedBotId],
-    queryFn: () => client.getRemoteWebuiEndpoint(connectedHost.remote_id, selectedBotId),
-    enabled: !!connectedHost && !!selectedBotId,
-  });
+  const session = useRemoteSession(selectedBotId);
 
   const handleConnect = () => {
-    connectMutation.mutate({
+    session.connect({
       remote_id: remoteId,
       host,
       port,
@@ -77,26 +43,27 @@ export const RemoteHostPanel: React.FC = () => {
   };
 
   const navigateToDirectory = (dirName: string) => {
-    let newPath = currentPath;
+    let newPath = session.currentPath;
     if (newPath === '/') {
       newPath = `/${dirName}`;
     } else {
       newPath = `${newPath}/${dirName}`;
     }
-    setCurrentPath(newPath);
+    session.setCurrentPath(newPath);
   };
 
   const navigateUp = () => {
-    if (currentPath === '/') return;
-    const parts = currentPath.split('/');
+    if (session.currentPath === '/') return;
+    const parts = session.currentPath.split('/');
     parts.pop();
     const newPath = parts.join('/') || '/';
-    setCurrentPath(newPath);
+    session.setCurrentPath(newPath);
   };
+
+  const connectedHost = session.connected;
 
   return (
     <div className="panel-container">
-      {/* Page Title & MOCK Badge */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -120,7 +87,6 @@ export const RemoteHostPanel: React.FC = () => {
       </MessageBar>
 
       <div style={{ display: 'flex', gap: '20px', flex: 1, minHeight: '500px' }}>
-        {/* Left: Connection and SSH Setup Form */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <Text weight="semibold" size={300}>连接参数设置 (SSH configuration)</Text>
           <Card className="fluent-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -149,9 +115,9 @@ export const RemoteHostPanel: React.FC = () => {
 
             <Button
               appearance="primary"
-              icon={connectMutation.isPending ? <Spinner size="tiny" /> : <CloudRegular />}
+              icon={session.isConnecting ? <Spinner size="tiny" /> : <CloudRegular />}
               onClick={handleConnect}
-              disabled={connectMutation.isPending}
+              disabled={session.isConnecting}
               style={{ marginTop: '8px' }}
             >
               模拟建立 SSH 连接
@@ -172,47 +138,45 @@ export const RemoteHostPanel: React.FC = () => {
           )}
         </div>
 
-        {/* Right: Remote Runtime Preview & File System Browser */}
         <div style={{ flex: 1.8, display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {connectedHost ? (
             <>
-              {/* Remote Runtime State Panel */}
               <Text weight="semibold" size={300}>远端容器运行时监控</Text>
               <Card className="fluent-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <Text size={300} weight="semibold">远端 Bot: {selectedBotId}</Text>
                     <Text size={100} block style={{ color: '#858585', marginTop: '2px' }}>
-                      运行目标: {runtimeStatus?.runtime_target || 'Linux remote_ssh'}
+                      运行目标: {session.runtimeStatus?.runtime_target || 'Linux remote_ssh'}
                     </Text>
                   </div>
-                  {runtimeStatus && <StatusBadge status={runtimeStatus.status.state} />}
+                  {session.runtimeStatus && <StatusBadge status={session.runtimeStatus.status.state} />}
                 </div>
 
-                {runtimeStatus && (
+                {session.runtimeStatus && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', backgroundColor: '#f3f3f4', padding: '10px', borderRadius: '4px', fontSize: '12px' }}>
                     <div>
                       <Text size={100} block style={{ color: '#616161' }}>远端进程 PID</Text>
-                      <Text size={200} weight="semibold" style={{ fontFamily: 'monospace' }}>{runtimeStatus.status.pid || '-'}</Text>
+                      <Text size={200} weight="semibold" style={{ fontFamily: 'monospace' }}>{session.runtimeStatus.status.pid || '-'}</Text>
                     </div>
                     <div>
                       <Text size={100} block style={{ color: '#616161' }}>内存利用指标</Text>
-                      <Text size={200} weight="semibold">{formatBytes(runtimeStatus.status.memory_rss_bytes)}</Text>
+                      <Text size={200} weight="semibold">{formatBytes(session.runtimeStatus.status.memory_rss_bytes)}</Text>
                     </div>
                     <div>
                       <Text size={100} block style={{ color: '#616161' }}>活跃连接连线</Text>
-                      <Text size={200} weight="semibold">{runtimeStatus.status.extra?.active_connections || 0} 个连接</Text>
+                      <Text size={200} weight="semibold">{session.runtimeStatus.status.extra?.active_connections || 0} 个连接</Text>
                     </div>
                   </div>
                 )}
 
                 <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                  {webuiEndpoint?.webui_url && (
+                  {session.webuiEndpoint?.webui_url && (
                     <Button
                       icon={<GlobeRegular />}
                       appearance="primary"
                       size="small"
-                      onClick={() => window.open(webuiEndpoint.webui_url!, '_blank')}
+                      onClick={() => window.open(session.webuiEndpoint!.webui_url!, '_blank')}
                     >
                       安全进入远端 WebUI
                     </Button>
@@ -221,18 +185,17 @@ export const RemoteHostPanel: React.FC = () => {
                 </div>
               </Card>
 
-              {/* File Explorer Panel */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                 <Text weight="semibold" size={300}>远端文件浏览器 (SFTP 挂载预览)</Text>
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <Button
                     icon={<ArrowLeftRegular />}
-                    disabled={currentPath === '/'}
+                    disabled={session.currentPath === '/'}
                     onClick={navigateUp}
                     size="small"
                     appearance="subtle"
                   />
-                  <Text size={100} style={{ fontFamily: 'monospace', color: '#616161' }}>{currentPath}</Text>
+                  <Text size={100} style={{ fontFamily: 'monospace', color: '#616161' }}>{session.currentPath}</Text>
                 </div>
               </div>
 
@@ -243,16 +206,16 @@ export const RemoteHostPanel: React.FC = () => {
                   <Text size={200} weight="semibold" style={{ textAlign: 'right' }}>大小</Text>
                 </div>
 
-                {filesLoading ? (
+                {session.isFilesLoading ? (
                   <div style={{ padding: '30px', display: 'flex', justifyContent: 'center' }}>
                     <Spinner size="small" label="正在拉取目录项..." />
                   </div>
-                ) : files.length === 0 ? (
+                ) : session.files.length === 0 ? (
                   <div style={{ padding: '24px', textAlign: 'center', color: '#858585' }}>
                     <Text size={200}>空目录</Text>
                   </div>
                 ) : (
-                  files.map((file, idx) => (
+                  session.files.map((file, idx) => (
                     <div
                       key={idx}
                       onDoubleClick={() => file.is_dir && navigateToDirectory(file.name)}

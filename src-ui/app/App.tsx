@@ -8,23 +8,21 @@ import { BootstrapPanel } from '../modules/bootstrap/BootstrapPanel';
 import { BotPage } from '../modules/bot/BotPage';
 import { RemoteHostPanel } from '../modules/remote/RemoteHostPanel';
 import { EventPanel } from '../modules/events/EventPanel';
-import { client, isTauri } from '../core/ipc/client';
+import { isTauri } from '../core/ipc/transport';
+import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
 import { Button, Divider, Text } from '@fluentui/react-components';
 import './App.css';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
-  const [isOpeningDir, setIsOpeningDir] = useState(false);
+  const { openDataDir, isOpeningDir } = useBootstrap();
 
   const handleOpenDataDir = async () => {
-    setIsOpeningDir(true);
     try {
-      await client.openDataDir();
+      await openDataDir();
     } catch (err) {
       console.error('打开数据目录失败:', err);
-    } finally {
-      setIsOpeningDir(false);
     }
   };
 
@@ -108,9 +106,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="ndf-app-shell">
-      {/* 1. 主体骨架 (从最顶部 y=0 延伸，全高通顶，不产生横向分界割裂) */}
       <div className="ndf-app-body-full">
-        {/* 1.1 侧边栏导航 */}
         <SidebarNavigation
           activeTab={activeTab}
           onChangeTab={setActiveTab}
@@ -118,22 +114,16 @@ export const App: React.FC = () => {
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
 
-        {/* 1.2 主内容工作空间 */}
         <div className="ndf-main-workspace-full">
-          {/* 1.2.1 紧凑页面头部 */}
           <PageHeader activeTab={activeTab} />
 
-          {/* 1.2.2 滚动视口工作盘 */}
           <main className="ndf-panel-viewport">
             {renderActivePanel()}
           </main>
         </div>
       </div>
 
-      {/* 2. 自绘全宽标题栏 (绝对定位，浮动在最顶部，实现无缝云母透明融合) */}
       <CustomTitleBar sidebarCollapsed={sidebarCollapsed} />
-
-      {/* 3. 底部状态栏 */}
       <StatusBar />
     </div>
   );
