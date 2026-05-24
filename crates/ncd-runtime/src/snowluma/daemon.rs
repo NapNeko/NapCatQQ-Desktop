@@ -1,17 +1,14 @@
 //! SnowLuma daemon 主体。
+//!
 //! 本文件落地：
-//! 1. `DaemonState` enum—— 5 档状态机；ts-rs 派生导出到前端。
-//! 2. `SnowLumaWebUiClientFactory` trait—— 直接以
-//! `Arc<dyn SnowLumaWebUiClient>` 暴露 client，不再使用 的关联类型
-//! 占位（ 已落地真身，本 task 完成统一对齐）。
+//! 1. `DaemonState` enum：5 档状态机；ts-rs 派生导出到前端。
+//! 2. `SnowLumaWebUiClientFactory` trait：直接以
+//!    `Arc<dyn SnowLumaWebUiClient>` 暴露 client。
 //! 3. `DaemonInner` 私有 struct + `SnowLumaDaemon` 主体（构造 / `ensure_running`
-//! / `release` / `shutdown` / `state` / `ref_count` / `subscribe_logs` /
-//! `current_client`）。
-//! `spawn_stdout_reader` / `watch_exit` 等长任务由 / 5.3 在本文件后续
-//! 追加；本 task 仅在 starter 路径里**预留挂载点**（占位 `take` + 注释说明
-//! 后续 task 接手）。
-//! 红线：本文件不引入 `serde_json::Value`，所有跨边界 enum 派生 ts-rs
-//! 。
+//!    / `release` / `shutdown` / `state` / `ref_count` / `subscribe_logs` /
+//!    `current_client`）。
+//!
+//! 红线：本文件不引入 `serde_json::Value`，所有跨边界 enum 派生 ts-rs。
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -66,19 +63,17 @@ pub enum DaemonState {
 /// `SnowLumaDaemon::ensure_running` 在 starter 路径里：
 /// 1. 渲染 `webui.json` + `runtime.json`
 /// 2. spawn `node.exe entry.js`
-/// 3. **调本 trait 的 `create(password)`** 拿到一个新 `Arc<dyn SnowLumaWebUiClient>`
+/// 3. 调本 trait 的 `create(password)` 拿到一个新 `Arc<dyn SnowLumaWebUiClient>`
 /// 4. 在该 client 上调 `wait_ready` + `login`
+///
 /// 把客户端构造抽到 trait 后，`SnowLumaDaemon` 单测可以注入
 /// `MockSnowLumaWebUiClientFactory`，不依赖真实 reqwest / wiremock。
-/// 占位时使用过 `type Client: ?Sized` 关联类型
-/// `SnowLumaWebUiClient` 真身（`webui_client.rs`），本 task 直接采用
-/// `Arc<dyn SnowLumaWebUiClient>` 终态签名。
 #[async_trait]
 pub trait SnowLumaWebUiClientFactory: Send + Sync {
     /// 用 daemon 当前生效的密码构造一个新的 WebUI client。
-    /// 注意：`password` 来自 `render_daemon_globals` 解析出的有效密码
-    /// （ 实装），并非从持久化文件直接读出来——所以本方法签名拿明文
-    /// `String` 而不是会触发文件 I/O 的 `&Path`。
+    /// 注意：`password` 来自 `render_daemon_globals` 解析出的有效密码，
+    /// 并非从持久化文件直接读出来——所以本方法签名拿明文 `String` 而不是会
+    /// 触发文件 I/O 的 `&Path`。
     async fn create(
         &self,
         password: String,
@@ -750,7 +745,7 @@ fn resolve_daemon_entry(runtime_root: &std::path::Path) -> std::path::PathBuf {
 /// 回滚 / 手动 `shutdown` 已经把 child 取走 —— 直接 return。
 /// 3. `child.wait().await` 阻塞等子进程退出，捕获 ExitStatus。
 /// 4. `dead_flag.store(true)`：任何还在等 `wait_ready` 的轮询会 fast-fail。
-/// 5. 重新锁 inner：根据**当前** state 判断 was_intentional：
+/// 5. 重新锁 inner：根据当前 state 判断 was_intentional：
 /// - `Stopping` / `Stopped` → 视为 intentional，目标态 `Stopped`，不写
 /// `last_error`（不污染下次 `ensure_running` 的错误信号）
 /// - 其它（Ready / Starting / Crashed）→ 视为意外退出，目标态 `Crashed`
@@ -1183,7 +1178,7 @@ mod tests {
         }
     }
 
-    /// 构造 daemon + tempdir 持有句柄。runtime_root **空目录**，spawn 时找不到
+    /// 构造 daemon + tempdir 持有句柄。runtime_root 为空目录，spawn 时找不到
     /// node.exe 必然失败 —— 这是测试 spawn 失败回滚路径的关键。
     /// 同时 snowluma_data_root 也用 tempdir，保证 `render_daemon_globals`
     /// 写 session.json / runtime.json / webui.json 不污染真实数据根。

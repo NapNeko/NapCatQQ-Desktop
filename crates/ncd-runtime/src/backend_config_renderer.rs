@@ -79,7 +79,7 @@ impl BackendConfigRenderer for NapCatConfigRenderer {
 /// SnowLuma reconnectIntervalMs lower bound (upstream enforces max(1000, value)).
 const SNOWLUMA_MIN_RECONNECT_MS: u32 = 1000;
 
-/// **Full implementation** — renders `BotConfig` into SnowLuma-specific JSON:
+/// Full implementation — renders `BotConfig` into SnowLuma-specific JSON:
 /// - `onebot_<qq>.json` — networks (httpServers/httpClients/wsServers/wsClients) + musicSignUrl
 ///
 /// This is a complete port of legacy `snowluma_config_renderer.py`, not a placeholder.

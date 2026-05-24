@@ -312,15 +312,15 @@ fn adjust_status_interval(
 
 /// auth credential 刷新。
 ///
-/// - **节流计时点**：在调用 `deps.http.fetch_credential` *之前* 把
+/// - 节流计时点：在调用 `deps.http.fetch_credential` *之前* 把
 ///   `state.last_auth_refresh_attempt_at` 更新为 `Instant::now()`，让 5s
 ///   节流（[`run_poller`] 中 `RequestAuthRefresh` 分支判定）从「尝试」
 ///   时刻起算——即使本轮 fetch 失败也已经消耗了节流额度，避免 401/403
 ///   立刻再触发同一路径形成雪崩。
-/// - **成功路径**：把响应里的 `Credential` 写入 `state.auth = Some(_)`，
+/// - 成功路径：把响应里的 `Credential` 写入 `state.auth = Some(_)`，
 ///   下一轮 `do_status_poll` 即可消费；不发布任何 `DomainEvent`，
 ///   登录态由后续 `apply_login_status` / `apply_online_status` 推送。
-/// - **失败路径**：仅 `tracing::warn!` 记日志，**不**发布
+/// - 失败路径：仅 `tracing::warn!` 记日志，不发布
 ///   `DomainEvent::BotError`——HTTP 噪音不应阻断 BotManager 命令路径。
 ///   `state.auth` 保持调用前的值不动；caller（`RequestAuthRefresh`
 ///   分支）若已先清空 `state.auth`，下一轮 status poll 会再次入队
@@ -354,14 +354,14 @@ async fn do_auth_refresh(
 ///
 /// 行为分支：
 ///
-/// 1. **没有 auth credential** (`state.auth.is_none()`) → 通过
+/// 1. 没有 auth credential (`state.auth.is_none()`) → 通过
 ///    `cmd_tx.try_send(PollerCommand::RequestAuthRefresh)` 让主循环受
 ///    5s 节流保护后刷新；本轮不发任何 HTTP 请求。
-/// 2. **有 auth** → 用 `tokio::join!` 并发调用 `check_login_status` +
+/// 2. 有 auth → 用 `tokio::join!` 并发调用 `check_login_status` +
 ///    `check_online_status`，对齐 legacy 的同时刻双查询行为。
-/// 3. **任意一路返回 `Unauthorized`** → 通过同样的 `try_send` 命令路径
+/// 3. 任意一路返回 `Unauthorized` → 通过同样的 `try_send` 命令路径
 ///    触发 auth 刷新；状态写入仍交给主循环单点完成。
-/// 4. **其它错误** → 仅 `tracing::warn!`，不发布 `BotError`，不堵塞命令
+/// 4. 其它错误 → 仅 `tracing::warn!`，不发布 `BotError`，不堵塞命令
 ///    路径。
 ///
 /// 状态写入只发生在 `apply_login_status` / `apply_online_status` 内部
@@ -416,7 +416,7 @@ async fn do_status_poll(
 ///
 /// 1. `is_login == true` → 清 `login_invalidated_while_online` /
 ///    `suppress_qrcode_until_online`，发布 `NapCatLoginQrcodeRemoved`
-///    并 **return**（绝不再发 `NapCatLoginQrcode`）。
+///    并 return（绝不再发 `NapCatLoginQrcode`）。
 /// 2. `prev_login == true ∧ state.online == true ∧ is_login == false` →
 ///    在线期间被踢：把 `login_invalidated_while_online` 置 `true`，
 ///    发布一次 `NapCatLoginInvalidated { reason: Kicked }`。
@@ -424,8 +424,8 @@ async fn do_status_poll(
 ///    !login_invalidated_while_online ∧ !suppress_qrcode_until_online` →
 ///    发布 `NapCatLoginQrcode` 让前端显示二维码。
 ///
-/// 三条分支保证 **同一调用内不会同时发布 `NapCatLoginQrcode` 与
-/// `NapCatLoginQrcodeRemoved`**。
+/// 三条分支保证同一调用内不会同时发布 `NapCatLoginQrcode` 与
+/// `NapCatLoginQrcodeRemoved`。
 fn apply_login_status(
     bot_id: &BotId,
     data: CheckLoginStatusData,
@@ -471,10 +471,10 @@ fn apply_login_status(
 ///
 /// 行为顺序：
 ///
-/// 1. **总是先发** `NapCatLoginOnline { online }`。
+/// 1. 总是先发 `NapCatLoginOnline { online }`。
 /// 2. `online == true` → 重置 `offline_notice_sent` /
 ///    `login_invalidated_while_online` / `suppress_qrcode_until_online`。
-///    **return**。
+///    return。
 /// 3. `prev_online == false` → 一直离线状态，无副作用（避免离线期间每轮
 ///    都触发 notify / restart）。
 /// 4. `prev_online == true ∧ online == false ∧ kicked` → 踢线导致的离线：
@@ -482,10 +482,10 @@ fn apply_login_status(
 ///    发 `NapCatLoginQrcodeRemoved`。
 /// 5. 普通的「未登录 + 不在线」（`!is_logged_in ∧ !kicked`）→ 等扫码，
 ///    无副作用。
-/// 6. **离线分支 + auto_restart**：若 `offline_notice_enabled` 且未发过
+/// 6. 离线分支 + auto_restart：若 `offline_notice_enabled` 且未发过
 ///    通知，调一次 `notify(AutoRestart)` 并置 `offline_notice_sent = true`；
 ///    随后调 `restart_handle.restart_bot(bot_id)`。
-/// 7. **离线分支 + 非 auto_restart**：若 `offline_notice_enabled` 且未发过
+/// 7. 离线分支 + 非 auto_restart：若 `offline_notice_enabled` 且未发过
 ///    通知，调一次 `notify(Manual)` 并置 `offline_notice_sent = true`。
 async fn apply_online_status(
     bot_id: &BotId,

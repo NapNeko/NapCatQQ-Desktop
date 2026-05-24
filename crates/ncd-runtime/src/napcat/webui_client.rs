@@ -43,7 +43,7 @@ use thiserror::Error;
 /// - [`NapCatWebUiError::Http`]：reqwest 网络层错误。
 /// - [`NapCatWebUiError::Decode`]：JSON 反序列化失败 / 字段缺失。
 ///
-/// **设计决策**：本枚举不实现 `From<NapCatWebUiError> for BotManagerError`
+/// 设计决策：本枚举不实现 `From<NapCatWebUiError> for BotManagerError`
 /// —— Poller 内部消化所有错误，只在彻底放弃时把摘要发 `BotError`。
 #[derive(Debug, Error)]
 pub enum NapCatWebUiError {

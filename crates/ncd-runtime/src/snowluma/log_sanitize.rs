@@ -1,5 +1,5 @@
 //! SnowLuma 子进程 stdout 行清洗工具。
-//! 由 spec `snowluma-backend-runtime` 落地。
+//!
 //! NapCat / SnowLuma 守护进程在不同平台上会输出 ANSI 颜色码、光标移动等
 //! 转义序列以及零散的控制字符（BEL/BS/VT 等），如果直接送进事件总线、
 //! UI 日志面板或文本搜索都会产生 tofu 字符 / 错乱高亮 / 不可读分隔。

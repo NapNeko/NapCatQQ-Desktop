@@ -1,7 +1,7 @@
 //! `ProcessTreeProbe` 的真实系统实现 + 测试用 mock。
-//! 由 spec `snowluma-backend-runtime` 落地。
+//!
 //! `ProcessTreeProbe` trait 本体定义在
-//! [`crate::snowluma::status_poller`] 中（ 已落地）
+//! [`crate::snowluma::status_poller`] 中。
 //! 本文件仅提供 `SysinfoProcessTreeProbe`（生产实装）与 `MockProcessTreeProbe`
 //! （单元测试 helper），避免 trait 重复定义。
 //! 设计要点（与 对齐）：
@@ -61,7 +61,7 @@ impl ProcessTreeProbe for SysinfoProcessTreeProbe {
 
 /// 同步实现入口：在阻塞 pool 中执行的纯计算。
 /// 该函数对所有失败路径（sysinfo 拿不到进程、parent 链断裂、平台不支持）
-/// 都返回 `{initial_pid}` 单元素集合，**不**向上传播错误。
+/// 都返回 `{initial_pid}` 单元素集合，不向上传播错误。
 /// `#[cfg(windows)]` 路径在非 Windows 平台被裁剪，只剩 fallback 分支。
 #[cfg(windows)]
 fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {

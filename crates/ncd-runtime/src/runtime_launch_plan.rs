@@ -23,7 +23,7 @@ pub struct FileSystemRuntimeLaunchPlanner {
     runtime_root: PathBuf,
     snowluma_data_root: Option<PathBuf>,
     /// SnowLuma daemon 安装根（含 `node.exe` 与 entry 脚本）。
-    /// `None` 时回落到 `<runtime_root>/snowluma`。**注意**：这与 NapCat 的
+    /// `None` 时回落到 `<runtime_root>/snowluma`。注意：这与 NapCat 的
     /// `runtime_root` 不同——NapCat 直接装在 runtime 根，SnowLuma 装在子目录。
     snowluma_runtime_root: Option<PathBuf>,
 }
@@ -100,7 +100,7 @@ pub struct NapCatLaunchPlan {
 
 /// SnowLuma 启动计划。
 /// 路径来源：所有路径都必须由调用方（最终来自
-/// `bootstrap::resolve_data_root` 与 PathProbe）传入；本 struct **不**在
+/// `bootstrap::resolve_data_root` 与 PathProbe）传入；本 struct 不在
 /// 业务模块内硬编码 `%ProgramData%` / `%LocalAppData%`。
 /// 字段语义：
 /// - `runtime_root`：SnowLuma 安装根，含 `node.exe` 与 daemon entry 脚本。

@@ -1,16 +1,15 @@
 //! SnowLuma 持久化会话 + 全局配置渲染。
+//!
 //! grep self-check whitelist: `serde_json::Value` 仅在 `build_webui_json_payload`
-//! 输出 JSON 拼接处使用。本 spec 其它模块禁止
-//! 出现 `serde_json::Value`，违反即破坏红线 5.3。
+//! 输出 JSON 拼接处使用，本模块其它位置禁止出现 `serde_json::Value`。
+//!
 //! 落地能力：
 //! - `SnowLumaSession` 强类型 serde struct（`createdAt` / `lastRenderedAt` 驼峰）。
 //! - `load_or_create_session` / `update_last_rendered` 原子读写 `session.json`。
 //! - `generate_strong_password` 强密码生成（含 4 类字符 + 打乱）。
 //! - `build_webui_json_payload` scrypt(N=16384, r=8, p=1, dklen=64) + 16 字节 salt。
 //! - `render_runtime_json` / `write_webui_json` 原子写盘到 `<runtime_root>/config/`。
-//! - `render_daemon_globals` 协调 §3.5 优先级（override > session）+ 三文件渲染。
-//! 测试覆盖：本 task 仅写 smoke 级（路径拼接 / 密码长度 / payload 5 字段）。完整
-//! round-trip / scrypt 一致性 / 100 次随机抽样由 补齐。
+//! - `render_daemon_globals` 协调 override > session 优先级 + 三文件渲染。
 
 use std::fs;
 use std::io::Write;
@@ -50,7 +49,7 @@ const SCRYPT_SALT_BYTES: usize = 16;
 // SnowLumaSession：`<data_root>/snowluma/session.json` 强类型 wrapper
 // ============================================================================
 
-/// SnowLuma 会话密码持久化。**内部使用，永远不跨 Tauri 边界**，因此故意不派生 ts-rs。
+/// SnowLuma 会话密码持久化。内部使用，永远不跨 Tauri 边界，因此故意不派生 ts-rs。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnowLumaSession {
     pub password: String,
@@ -159,7 +158,7 @@ pub fn generate_strong_password(len: usize) -> String {
 // ============================================================================
 
 /// 构造 `webui.json` 的 5 字段 payload。
-/// 本函数是本 spec **唯一**允许引用 `serde_json::Value` 的位置（见文件头白名单）。
+/// 本函数是模块内唯一允许引用 `serde_json::Value` 的位置（见文件头白名单）。
 /// 错误：
 /// - `password` 空字符串 → `Password("password 不能为空字符串")`。
 /// - scrypt Params / scrypt 计算失败 → `Password("scrypt error: ...")`。
@@ -233,7 +232,7 @@ pub fn write_webui_json(
 /// `load_or_create_session.password`。
 /// 2. `render_runtime_json(port)`。
 /// 3. `build_webui_json_payload(effective, must_change=false)` + `write_webui_json`。
-/// 4. **仅当**未使用 override 时调用 `update_last_rendered`（override 模式只是临时
+/// 4. 仅当未使用 override 时调用 `update_last_rendered`（override 模式只是临时
 /// 覆盖，不污染 session 的"上次渲染时间"语义）。
 /// 返回本次启动生效的明文密码，由调用方喂给 `SnowLumaWebUiClient`。
 pub fn render_daemon_globals(

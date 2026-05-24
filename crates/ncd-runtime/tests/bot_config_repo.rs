@@ -157,7 +157,7 @@ async fn test_list_rejects_duplicate_qq_ids() {
 
 #[tokio::test]
 async fn test_concurrent_upsert_does_not_lose_updates() {
-    // 回归测试 codex M1 review 中的 Critical 问题：
+    // 回归测试 review 中发现的 Critical 问题：
     // 并发 upsert 走 read-modify-write，如果没有写锁就会互相覆盖。
     // 修复后 LocalBotConfigRepo 在 upsert/delete 上持 tokio::sync::Mutex 串行化，
     // 因此 8 路并发结束后 list 必须看到全部 8 个 Bot。

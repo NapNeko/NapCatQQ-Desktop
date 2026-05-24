@@ -1,8 +1,8 @@
 //! SnowLuma runtime backend：把 SnowLuma daemon + per-Bot QQ.exe 注入语义
 //! 包成 `BotBackend` 接口，由 `BotManager` 按 flavor 路由。
-//! 本文件覆盖 spec `snowluma-backend-runtime`：
-//! - ：`SnowLumaRuntimeBackend` struct、`SnowLumaProcessRecord`、Phase A
-//! （COLD/HOT 路由 + sysinfo 校验 attach_pid）。
+//!
+//! 落地内容：`SnowLumaRuntimeBackend` struct、`SnowLumaProcessRecord`、
+//! Phase A（COLD/HOT 路由 + sysinfo 校验 attach_pid）。
 //! - ：`BotBackend` trait impl、Phase C/D（`daemon.ensure_running` +
 //! `client.load_process` + spawn poller）、stop / abort_start / zombie reaper /
 //! `kill_process_tree` / read_config / write_config / tail_log。

@@ -362,7 +362,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// - `Stopped | Crashed`：直接 `start_bot`
     /// - `Stopping`：`actor.request_restart()` 标 `pending_restart` → 等 actor 转入 `Starting` → `start_bot`
     /// - `Repairing`：返回 `BotManagerError::InvalidState`
-    /// 设计：复用 `BotActor` 现有的 `pending_restart` 机制，**不**新增状态机分支。
+    /// 设计：复用 `BotActor` 现有的 `pending_restart` 机制，不新增状态机分支。
     /// 错误返回给调用方；`RestartHandle::restart_bot` impl 会把
     /// 错误转为 `DomainEvent::bot_error` 发布给前端。
     pub async fn restart_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
@@ -508,7 +508,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     // ─── 配置管理 ─────────────────────────────────────────────────────────
 
     /// 新增或更新 Bot 配置。
-    /// 策略：**先持久化 bot.json（source of truth），再写派生文件**。
+    /// 策略：先持久化 bot.json（source of truth），再写派生文件。
     /// - 如果 bot.json 写入失败，派生文件不会被写入，状态完全未变。
     /// - 如果派生文件写入失败，bot.json 已是最新，派生文件可在下次启动时重新生成
     /// 不会造成不可恢复的不一致。
@@ -618,6 +618,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .parse()
             .map_err(|_| BotManagerError::BotNotFound(bot_id.clone()))?;
         self.repo.get(qq_id).await.map_err(BotManagerError::from)
+    }
+
+    /// 批量返回所有 Bot 的 backend_type，用于 UI 列表页一次性拿 flavor map。
+    /// 避免 BotListPage 对每个 bot 单独调 `get_bot_config` 造成 N+1。
+    /// key 为 BotId.to_string()（即 QQID 数字字符串）。
+    pub async fn list_bot_flavors(
+        &self,
+    ) -> Result<std::collections::HashMap<String, ncd_domain::bot_config::BackendType>, BotManagerError>
+    {
+        let configs = self.repo.list().await?;
+        let mut out = std::collections::HashMap::with_capacity(configs.len());
+        for cfg in configs {
+            out.insert(cfg.bot.qq_id.to_string(), cfg.bot.backend_type);
+        }
+        Ok(out)
     }
 
     /// 当前托管的 Bot 数量。
@@ -828,7 +843,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// - 进程正常或异常退出 → 调用 `confirm_stopped` / `mark_crashed`
     /// 防止 UI 残留假 Running。
     /// 返回的 future 由调用方在合适的运行时上 spawn（例如
-    /// `tauri::async_runtime::spawn`）。它**不依赖** tokio current handle
+    /// `tauri::async_runtime::spawn`）。它不依赖 tokio current handle
     /// 因此可以在 Tauri `setup` 回调里安全启动；用 `tokio::spawn` 在
     /// 没有 tokio 运行时上下文的位置直接跑会 panic。
     pub async fn run_runtime_event_listener(self) {
@@ -907,7 +922,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 内部删除流程：持久化删除 → 停止 → shutdown → 移除内存 Actor。
-    /// 策略：**先删持久化（source of truth），再清理内存**。
+    /// 策略：先删持久化（source of truth），再清理内存。
     /// - 如果 repo.delete 失败，Actor 保持不变，可重试。
     /// - 如果 repo.delete 成功但 shutdown 失败，持久化已删除
     /// 下次 bootstrap 不会恢复此 Bot，内存态在进程结束时自然清理。
@@ -970,7 +985,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 处理 `NapCatWebuiAvailable` 事件：为给定 Bot 创建/替换 `NapCatLoginPoller`。
     /// 行为：
-    /// - `repo.get(bot_id)` 不到对应配置时**直接 return**（不报错），避免在
+    /// - `repo.get(bot_id)` 不到对应配置时直接 return（不报错），避免在
     /// 配置删除后还接到延迟的 WebuiAvailable 事件时崩溃。
     /// - 从 `poller_settings.read().await` 取最新值组装 `PollerConfig`：
     /// - `login_check_interval` ← `settings.bot_login_check_interval_ms`

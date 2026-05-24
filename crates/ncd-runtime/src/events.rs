@@ -125,7 +125,7 @@ pub enum DomainEvent {
     // ------------------------------------------------------------------
     // SnowLuma 系列 6 个 variant
     //
-    // 每个 variant **显式** `#[serde(rename = "snowluma_xxx")]`：避免顶层
+    // 每个 variant 显式 `#[serde(rename = "snowluma_xxx")]`：避免顶层
     // `rename_all = "snake_case"` 把 `SnowLuma...` 切成 `snow_luma_...`
     // 。
     // ------------------------------------------------------------------
@@ -141,7 +141,7 @@ pub enum DomainEvent {
         reason: Option<String>,
     },
     /// `/api/processes/:pid/load` 注入成功后发布（物理就绪）。
-    /// **不**等同于 QQ 已登录在线（业务就绪由 `SnowLumaLoginStateChanged` 表达）。
+    /// 不等同于 QQ 已登录在线（业务就绪由 `SnowLumaLoginStateChanged` 表达）。
     #[serde(rename = "snowluma_bot_injected")]
     SnowLumaBotInjected { bot_id: BotId, qq_pid: u32 },
     /// SnowLumaStatusPoller 首次锁定 UIN 时发布。
@@ -159,7 +159,7 @@ pub enum DomainEvent {
     #[serde(rename = "snowluma_pid_set_changed")]
     SnowLumaPidSetChanged { bot_id: BotId, pids: Vec<u32> },
     /// SnowLuma daemon 共享的 node.exe stdout 单行（已经过 ANSI / 控制
-    /// 字符清洗）。多 SL Bot 共享同一份 daemon stdout，故本 variant **不**
+    /// 字符清洗）。多 SL Bot 共享同一份 daemon stdout，故本 variant 不
     /// 携带 `bot_id`，订阅方根据需要广播给所有 SL flavor BotLogPage。
     #[serde(rename = "snowluma_daemon_log")]
     SnowLumaDaemonLog { line: String },
@@ -534,14 +534,16 @@ mod tests {
     //
     // 1) 4 个新 variant 字节级 round-trip：序列化后再反序列化必须等价。
     // 2) 4 个新 variant 的 `tauri_event_name` 字面量值锁定。
-    // 3) 跨文件契约：4 个 tauri_event_name 必须全部出现在前端 `events.ts`
-    // 的 `eventNames` 数组中（编译期 `include_str!` 取出文本后 grep）。
+    // 3) 跨文件契约：4 个 tauri_event_name 必须全部出现在前端
+    // `event-stream.service.ts` 的 `DOMAIN_EVENT_NAMES` 数组中
+    // （编译期 `include_str!` 取出文本后 grep）。
     // ------------------------------------------------------------------
 
     /// 编译期把前端事件清单嵌入测试二进制，避免运行时 IO 与路径漂移。
-    /// 路径相对于本文件 (`crates/ncd-core/src/events.rs`) → 仓库根
-    /// → `src-ui/core/ipc/events.ts`。
-    const FRONTEND_EVENTS_TS: &str = include_str!("../../../src-ui/core/ipc/events.ts");
+    /// 路径相对于本文件 (`crates/ncd-runtime/src/events.rs`) → 仓库根
+    /// → `src-ui/core/services/event-stream.service.ts`。
+    const FRONTEND_EVENTS_TS: &str =
+        include_str!("../../../src-ui/core/services/event-stream.service.ts");
 
     fn assert_round_trip(event: DomainEvent) {
         let json = serde_json::to_string(&event).expect("serialize");
@@ -627,9 +629,9 @@ mod tests {
     }
 
     /// 前后端事件契约一一对应。
-    /// 4 个新 `tauri_event_name` 必须在前端 `events.ts` 中出现为
-    /// 单引号字符串字面量。这样可避免误把出现在注释或别的标识符中的
-    /// 子串当作匹配。
+    /// 4 个新 `tauri_event_name` 必须在前端 `event-stream.service.ts` 的
+    /// `DOMAIN_EVENT_NAMES` 数组中出现为单/双引号字符串字面量。这样可避免
+    /// 误把出现在注释或别的标识符中的子串当作匹配。
     #[test]
     fn napcat_login_event_names_are_present_in_frontend_events_ts() {
         let names = [
@@ -644,16 +646,17 @@ mod tests {
             assert!(
                 FRONTEND_EVENTS_TS.contains(&needle_single)
                     || FRONTEND_EVENTS_TS.contains(&needle_double),
-                "frontend events.ts must contain literal {name:?} as a quoted string \
- (检查 src-ui/core/ipc/events.ts 的 eventNames 数组)",
+                "frontend event-stream.service.ts must contain literal {name:?} \
+ as a quoted string (检查 src-ui/core/services/event-stream.service.ts 的 \
+ DOMAIN_EVENT_NAMES 数组)",
             );
         }
     }
 
     /// 反向防呆：所有 DomainEvent variant 的 `tauri_event_name` 都必须
-    /// 出现在前端 `events.ts` 中，否则前端无法订阅到对应事件。
-    /// 这条断言锁定了「Rust → events.ts」单向覆盖，但允许 events.ts 含
-    /// DomainEvent 之外的额外通道（按任务说明）。
+    /// 出现在前端 `event-stream.service.ts` 中，否则前端无法订阅到对应事件。
+    /// 这条断言锁定了「Rust → DOMAIN_EVENT_NAMES」单向覆盖，但允许
+    /// DOMAIN_EVENT_NAMES 含 DomainEvent 之外的额外通道（按任务说明）。
     #[test]
     fn every_domain_event_variant_is_listed_in_frontend_events_ts() {
         // 用每种 variant 的代表实例覆盖全部分支。
@@ -672,7 +675,7 @@ mod tests {
             DomainEvent::napcat_login_online("10001", true),
             DomainEvent::napcat_login_invalidated("10001", NapCatLoginInvalidationReason::Kicked),
             // SnowLuma 系列 6 个 variant
-            // ，与前端 events.ts eventNames 一一对应。
+            // ，与前端 event-stream.service.ts DOMAIN_EVENT_NAMES 一一对应。
             DomainEvent::snowluma_daemon_state_changed(DaemonState::Ready, 1, None),
             DomainEvent::snowluma_bot_injected("10001", 12345),
             DomainEvent::snowluma_uin_detected("10001", "100200"),
@@ -688,7 +691,8 @@ mod tests {
                 FRONTEND_EVENTS_TS.contains(&needle_single)
                     || FRONTEND_EVENTS_TS.contains(&needle_double),
                 "DomainEvent::{:?} 的 tauri_event_name {name:?} 未出现在 \
- src-ui/core/ipc/events.ts，前端将无法订阅",
+ src-ui/core/services/event-stream.service.ts 的 DOMAIN_EVENT_NAMES，\
+ 前端将无法订阅",
                 event.kind(),
             );
         }
@@ -701,7 +705,8 @@ mod tests {
     // 1) 6 个 variant 字节级 round-trip：序列化后再反序列化必须等价。
     // 2) 6 个 variant `tauri_event_name` 字面量值锁定，防 typo / 防
     // `rename_all = "snake_case"` 把 `SnowLuma` 切成 `snow_luma`。
-    // 3) 跨文件契约：6 个 tauri_event_name 必须全部出现在前端 events.ts。
+    // 3) 跨文件契约：6 个 tauri_event_name 必须全部出现在前端
+    // event-stream.service.ts 的 DOMAIN_EVENT_NAMES 数组。
     // ------------------------------------------------------------------
 
     #[test]
@@ -791,8 +796,8 @@ mod tests {
     }
 
     /// 前后端事件契约一一对应（SnowLuma 系列）。
-    /// 6 个新 `tauri_event_name` 必须在前端 `events.ts` 中出现为
-    /// 单/双引号字符串字面量，避免误把出现在注释或别的标识符中的子串当作匹配。
+    /// 6 个新 `tauri_event_name` 必须在前端 `event-stream.service.ts` 的
+    /// `DOMAIN_EVENT_NAMES` 中出现为单/双引号字符串字面量。
     #[test]
     fn snowluma_event_names_are_present_in_frontend_events_ts() {
         let names = [
@@ -809,8 +814,9 @@ mod tests {
             assert!(
                 FRONTEND_EVENTS_TS.contains(&needle_single)
                     || FRONTEND_EVENTS_TS.contains(&needle_double),
-                "frontend events.ts must contain literal {name:?} as a quoted string \
- (检查 src-ui/core/ipc/events.ts 的 eventNames 数组)",
+                "frontend event-stream.service.ts must contain literal {name:?} \
+ as a quoted string (检查 src-ui/core/services/event-stream.service.ts 的 \
+ DOMAIN_EVENT_NAMES 数组)",
             );
         }
     }

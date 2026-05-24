@@ -39,9 +39,9 @@ pub enum SnowLumaLoginState {
 /// 给定起始 PID，返回该进程及其所有后代 PID 的集合（含自身）。
 /// 设计目的：把 sysinfo / Windows 进程枚举从 `SnowLumaStatusPoller` 内剥离
 /// 让 poller 单测可以注入 `MockProcessTreeProbe`，避免真实系统调用。
-/// 实现合约（ `SysinfoProcessTreeProbe` 落地时复核）：
+/// 实现合约（`SysinfoProcessTreeProbe` 落地时复核）：
 /// - 失败（PID 不存在 / 权限不足）必须返回 `BTreeSet::from([initial_pid])`
-/// **不**得 panic。
+/// 不得 panic。
 /// - 非 Windows 平台亦须返回 `BTreeSet::from([initial_pid])`，保持类型签名一致。
 #[async_trait::async_trait]
 pub trait ProcessTreeProbe: Send + Sync {
@@ -71,7 +71,7 @@ const START_DELAY: Duration = Duration::from_millis(500);
 /// 主循环 tick 周期。
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
-/// 连续 HTTP 失败门限：达到时**最多发一次**
+/// 连续 HTTP 失败门限：达到时最多发一次
 /// `Disconnected`，恢复前不再发新状态。
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
@@ -165,7 +165,7 @@ async fn run_poller(
     _ = sleep(START_DELAY) => {}
     }
 
-    // ticker：第一轮在 START_DELAY 之后**立刻**触发，与 legacy QTimer 对齐。
+    // ticker：第一轮在 START_DELAY 之后立刻触发，与 legacy QTimer 对齐。
     let mut ticker = interval_at(Instant::now(), POLL_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
 

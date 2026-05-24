@@ -1,16 +1,16 @@
 //! SnowLuma WebUI HTTP 客户端：强类型 payload + `SnowLumaWebUiClient` trait +
 //! `ReqwestSnowLumaWebUiClient` 默认实现。
-//! 严格红线：本文件**禁止**使用动态 JSON 值类型透传任何 HTTP 字段
-//! 所有请求 / 响应 payload 必须用强类型 serde struct 表达
-//! 。
-//! 本文件覆盖 spec `snowluma-backend-runtime`：
-//! - ：8 个 payload struct（`HookProcessStatus` / `HookProcessInfo` /
-//! `OneBotInstanceInfo` / `LoginRequest` / `LoginResponse` /
-//! `ListProcessesResponse` / `ListQqInstancesResponse` / `ProcessActionResponse`
-//! / `AuthState`）。
-//! - ：`SnowLumaWebUiClient` trait + `ReqwestSnowLumaWebUiClient`
-//! 默认实现，含 host probing / `no_proxy` / 401 自动重试 / host guard
-//! defense-in-depth。
+//!
+//! 严格红线：本文件禁止使用动态 JSON 值类型透传任何 HTTP 字段，所有请求 / 响应
+//! payload 必须用强类型 serde struct 表达。
+//!
+//! 内容覆盖：
+//! - 8 个 payload struct（`HookProcessStatus` / `HookProcessInfo` /
+//!   `OneBotInstanceInfo` / `LoginRequest` / `LoginResponse` /
+//!   `ListProcessesResponse` / `ListQqInstancesResponse` / `ProcessActionResponse`
+//!   / `AuthState`）。
+//! - `SnowLumaWebUiClient` trait + `ReqwestSnowLumaWebUiClient` 默认实现，
+//!   含 host probing / `no_proxy` / 401 自动重试 / host guard defense-in-depth。
 
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
@@ -76,7 +76,7 @@ pub struct OneBotInstanceInfo {
 // ---------------------------------------------------------------------------
 //
 // 这些 struct 仅在 Rust 端 HTTP 客户端内部使用，不跨 Tauri 边界
-// 因此**不**派生 ts-rs，避免污染前端类型表。
+// 因此不派生 ts-rs，避免污染前端类型表。
 
 /// `POST /api/login` 请求体。
 #[derive(Debug, Clone, Serialize)]
@@ -130,7 +130,6 @@ pub struct AuthState {
 /// 8 个 async 方法对应 SnowLuma daemon 暴露的 8 个 endpoint。trait 设计为
 /// object-safe（`async_trait` 装箱 future），方便测试用 `Arc<dyn ...>` 注入
 /// mock client。
-/// 详见 spec `snowluma-backend-runtime` 。
 #[async_trait]
 pub trait SnowLumaWebUiClient: Send + Sync {
     /// host probing：候选 `[<inner.host>, "localhost", "127.0.0.1", "[::1]"]`
@@ -985,7 +984,7 @@ mod tests {
     }
 
     /// 设置 `HTTP_PROXY` 环境变量后 client 仍走 loopback —— `no_proxy` 起作用。
-    /// **注意**：Rust 测试默认并发执行，`std::env::set_var` 会跨测试污染环境
+    /// 注意：Rust 测试默认并发执行，`std::env::set_var` 会跨测试污染环境
     /// 因此用 `#[ignore]` 标记，仅在显式 `cargo test -- --ignored
     /// --test-threads=1` 下运行。
     #[tokio::test]

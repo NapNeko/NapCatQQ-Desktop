@@ -1,6 +1,8 @@
 //! SnowLuma 错误类型定义。
-//! 对齐 spec `snowluma-backend-runtime` （`SnowLumaWebUiError`）和 §11
-//! （`SnowLumaDaemonError` + `From<SnowLumaDaemonError> for BotBackendError`）。
+//!
+//! 提供 `SnowLumaWebUiError`、`SnowLumaDaemonError` 与
+//! `From<SnowLumaDaemonError> for BotBackendError` 转换。
+//!
 //! 红线：禁止使用 `serde_json::Value`。本文件仅依赖 `thiserror`、
 //! `std::path::PathBuf`、`std::time::Duration`、`std::collections::BTreeMap`，无业务字段透传。
 
