@@ -1,6 +1,6 @@
 //! `ActionCtx`:Action 执行上下文(进度上报 + 取消 + 日志注入)。
 //!
-//! 蓝图 §5.4:统一进度反馈,杜绝 legacy 的 Qt Signal vs LogLineCallback 双套。
+//! 统一进度反馈,杜绝 legacy 的 Qt Signal vs LogLineCallback 双套。
 //!
 //! 上层(`ncd-deploy` / Tauri Command)通过 `ActionCtx` 拿到 ProgressEvent 流,
 //! 转发到 `BroadcastEventBus`,前端订阅。
@@ -48,10 +48,10 @@ pub enum LogLevel {
     Error,
 }
 
-/// 进度事件(envelope)。蓝图 R14:跨边界事件必须带版本号。
+/// 进度事件(envelope)。跨边界事件必须带版本号,便于增量演进。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgressEvent {
-    /// 协议版本(R14 铁律,默认 1,bump 时同步前端)
+    /// 协议版本(默认 1,bump 时同步前端)
     #[serde(default = "default_version")]
     pub v: u32,
     /// 事件时间戳(unix millis)
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn progress_event_round_trips_with_default_version() {
-        // R14:旧前端解析新事件应能 fallback 到 v=1
+        // 旧前端解析新事件应能 fallback 到 v=1
         let json = r#"{"timestamp_ms":1234,"kind":"started","total_steps":5}"#;
         let evt: ProgressEvent = serde_json::from_str(json).unwrap();
         assert_eq!(evt.v, 1);

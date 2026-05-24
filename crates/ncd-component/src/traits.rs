@@ -1,7 +1,7 @@
 //! `Component` / `Action` trait 定义。
 //!
-//! 蓝图 §5.3:Component 描述"是什么 + 怎么装 / 启",但**不直接 spawn 进程或调 SSH**,
-//! 只通过 [`ncd_host::Host`] 提供的能力实现操作。
+//! Component 描述"是什么 + 怎么装 / 启",但不直接 spawn 进程或调 SSH,只通过
+//! [`ncd_host::Host`] 提供的能力实现操作。
 
 use async_trait::async_trait;
 
@@ -31,12 +31,12 @@ pub trait Component: Send + Sync {
     async fn install(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError>;
 
     /// 更新到新版(可能复用 install 路径,但要求先 graceful stop)。
-    /// M4 默认实现:直接走 install(各 component 按需 override)。
+    /// 默认实现直接走 install,各 component 按需 override。
     async fn update(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         self.install(host, ctx).await
     }
 
-    /// 卸载。M4 默认实现:返回 `Other("uninstall not implemented")`,各 component 按需 override。
+    /// 卸载。默认实现返回 `Other("uninstall not implemented")`,各 component 按需 override。
     async fn uninstall(
         &self,
         _host: &dyn Host,
@@ -76,8 +76,8 @@ pub trait Component: Send + Sync {
 
 /// `Action` trait:对单个 Component 的具体操作。
 ///
-/// 蓝图 §5.2 Action 维度抽象。M4.1 阶段 Component trait 上的 detect/install/...
-/// 已经直接对应 5 种 Action;本 trait 主要在 `ncd-deploy`(M5)中拼接 Plan 时用。
+/// Component trait 上的 detect/install/... 已经直接对应 5 种 Action;本 trait
+/// 主要在 `ncd-deploy` 中拼接 Plan 时使用。
 #[async_trait]
 pub trait Action: Send + Sync {
     /// Action 名称(用于日志 / 进度上报)。

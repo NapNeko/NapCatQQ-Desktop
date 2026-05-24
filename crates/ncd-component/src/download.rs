@@ -1,12 +1,12 @@
 //! `DownloadHelper`:HTTP 下载 + SHA256 校验工具。
 //!
-//! 蓝图 §5.5:fallback 链("远端不通就走本地下载 + SFTP 上传")在 ncd-deploy 实装,
+//! fallback 链("远端不通就走本地下载 + SFTP 上传")在 ncd-deploy 实装,
 //! 本 helper 只做基础原语:从 URL 下载到本地路径 + 校验 SHA256 + 进度上报。
 //!
 //! 设计原则:
 //! - 复用 `reqwest`(已在 workspace 共享)
-//! - 流式下载,不一次性 buffer 全部内容到内存
-//! - SHA256 校验失败时**自动删除**已下载文件,防止下次复用损坏的副本
+//! - 流式下载,不一次性 buffer 全部内存
+//! - SHA256 校验失败时自动删除已下载文件,防止下次复用损坏的副本
 
 use std::path::Path;
 

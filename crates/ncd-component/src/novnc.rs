@@ -1,16 +1,14 @@
 //! `NoVncComponent`:noVNC + 图形栈组件(SnowLuma 远端 VNC 接入用)。
 //!
-//! 蓝图 §11.1 / M4.3:对齐 legacy `install_snowluma.sh.j2` 的"图形栈"安装步骤,
-//! 装一整套:`Xvfb / fluxbox / x11vnc / novnc / websockify` + dbus-x11。
+//! 对齐 legacy `install_snowluma.sh.j2` 的"图形栈"安装步骤,装一整套:
+//! `Xvfb / fluxbox / x11vnc / novnc / websockify` + dbus-x11。
 //!
-//! ## 安装策略
+//! 安装策略:不下载二进制,走 apt / dnf 装系统包(legacy 验证过的策略,
+//! SnowLuma 远端 VNC 接入必备)。
 //!
-//! 不下载二进制,**走 apt / dnf 装系统包**(legacy 验证过的策略,SnowLuma 远端 VNC 接入必备)。
+//! 包列表
 //!
-//! ## 包列表
-//!
-//! ### Debian / Ubuntu(apt)
-//!
+//! Debian / Ubuntu(apt):
 //! - `dbus-x11`(D-Bus session)
 //! - `fluxbox`(轻量窗口管理器)
 //! - `xvfb`(虚拟 framebuffer)
@@ -18,14 +16,11 @@
 //! - `novnc`(浏览器端 HTML5 VNC client)
 //! - `websockify`(VNC ↔ WebSocket 桥接)
 //!
-//! ### RHEL / CentOS / Fedora(dnf)
-//!
+//! RHEL / CentOS / Fedora(dnf):
 //! - `dbus-x11` `fluxbox` `openbox` `xorg-x11-server-Xvfb` `x11vnc`
 //! - `novnc` `python3-websockify`(在 EPEL)
 //!
-//! ## 探测
-//!
-//! 检查 `command -v websockify` && `command -v x11vnc` 是否同时存在。
+//! 探测:检查 `command -v websockify` && `command -v x11vnc` 是否同时存在。
 //! noVNC 是 web 资源不是 binary,但 websockify 是 noVNC 的运行时依赖,所以用它代理探测。
 
 use async_trait::async_trait;
@@ -37,7 +32,7 @@ use crate::error::ActionError;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
-/// Linux 包管理器枚举(本 component 内部用,M5 PackageManager trait 落地后会替换)。
+/// Linux 包管理器枚举(本 component 内部用,后续接 PackageManager trait 落地后可替换)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PkgMgr {
     Apt,

@@ -1,20 +1,17 @@
 //! `LinuxQQComponent`:LinuxQQ runtime 组件(rootless 安装)。
 //!
-//! 蓝图 §5 / M4.2:对齐 NapCat-Installer-main 官方一键脚本的 rootless 安装路径。
+//! 对齐 NapCat-Installer-main 官方一键脚本的 rootless 安装路径。
 //!
-//! ## 安装路径(对齐官方脚本 install.sh)
-//!
+//! 安装路径(对齐官方脚本 install.sh):
 //! - `$INSTALL_BASE_DIR/opt/QQ/`:QQ 解压根
 //! - `$INSTALL_BASE_DIR/opt/QQ/qq`:QQ 可执行
 //! - `$INSTALL_BASE_DIR/opt/QQ/resources/app/package.json`:版本探测点
 //!
-//! ## 版本号说明
+//! 版本号说明:腾讯 LinuxQQ 没有"latest"端点,版本号 + hash segment 都是硬编码,
+//! 改版时手动同步。当前(2026-05)锁定 `3.2.25-45758`(hash `7516007c`),与官方
+//! 脚本和 legacy `_LINUXQQ_VERSION` 一致。
 //!
-//! 腾讯 LinuxQQ 没有"latest"端点,版本号 + hash segment 都是硬编码,改版要手动同步。
-//! 当前(2026-05)锁定 `3.2.25-45758`(hash `7516007c`),与官方脚本和 legacy `_LINUXQQ_VERSION` 一致。
-//!
-//! ## 安装流程(rootless)
-//!
+//! 安装流程(rootless):
 //! 1. 探测 dpkg-deb 或 rpm2cpio 哪个可用(用 `which` 或 `command -v`)
 //! 2. 下载对应包 → 上传到远端 `<tmp>/linuxqq.<deb|rpm>`
 //! 3. dpkg-deb -x 或 rpm2cpio | cpio -idm 解压到 `<install_base_dir>`
@@ -69,7 +66,7 @@ impl LinuxQQComponent {
     }
 
     /// 默认配置:锁定已知版本 v3.2.25-45758,安装到 `$HOME/Napcat`。
-    /// 蓝图设计意图:腾讯改版后通过更新 v2 蓝图同步本默认值,业务代码不改。
+    /// 腾讯改版后通过更新本默认值即可,业务代码不改。
     pub fn default_v3_2_25(install_base_dir: HostPath) -> Self {
         Self::new("3.2.25-45758", "7516007c", install_base_dir)
     }

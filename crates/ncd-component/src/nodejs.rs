@@ -1,23 +1,20 @@
 //! `NodeJsComponent`:Node.js runtime 组件。
 //!
-//! 蓝图 §5 / M4.1:作为第一个完整 Component 实装,跑通 Component trait 的全套能力,
-//! 后续 component 照本模板扩展。
+//! 作为第一个完整 Component 实装,跑通 Component trait 的全套能力,后续
+//! component 照本模板扩展。
 //!
-//! ## 支持矩阵
+//! 支持矩阵:
+//! - `(Linux, Local)` / `(Linux, Remote)`:从 nodejs.org 下载 tar.xz 解压
+//! - `(Windows, Local)`:tar.xz 在 Windows 上解压暂未实装
+//!   (`HostError::Unsupported`),后续按需补 zip 形式的 node Windows 包
 //!
-//! - `(Linux, Local)` / `(Linux, Remote)`:从 nodejs.org 下载 tar.xz 解压(M4.1 实装)
-//! - `(Windows, Local)`:tar.xz 在 Windows 上解压暂未实装(`HostError::Unsupported`),
-//!   M4.2 阶段补 zip 形式的 node Windows 包
+//! 探测策略:
+//! 1. 目标安装目录 `<install_dir>/bin/node` 存在 + `node --version` 输出
+//! 2. PATH 中有 `node`(回退到系统 node)
 //!
-//! ## 探测策略
-//!
-//! 优先级 1:目标安装目录 `<install_dir>/bin/node` 存在 + `node --version` 输出
-//! 优先级 2:PATH 中有 `node`(回退到系统 node)
-//!
-//! ## 默认下载源
-//!
+//! 默认下载源:
 //! `https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz`
-//! 各 Component 用户可通过 `NodeJsComponent::with_url(...)` 覆盖镜像。
+//! 可通过 `NodeJsComponent::with_url(...)` 覆盖镜像。
 
 use std::sync::Arc;
 
@@ -137,7 +134,7 @@ impl Component for NodeJsComponent {
     }
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
-        // M4.1 实装:Linux 本地 / 远端,macOS 本地。Windows 暂未实装(tar.xz 在 Windows 端)
+        // 当前实装:Linux 本地 / 远端,macOS 本地。Windows 上 tar.xz 解压尚未支持。
         &[
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),

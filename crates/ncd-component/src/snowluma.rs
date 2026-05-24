@@ -1,24 +1,21 @@
 //! `SnowLumaComponent`:SnowLuma framework lite tarball 部署组件。
 //!
-//! 蓝图 §11.1 / M4.5:对齐 legacy `install_snowluma.sh.j2` L300-L360 的安装步骤。
+//! 对齐 legacy `install_snowluma.sh.j2` L300-L360 的安装步骤。
 //!
-//! ## 安装流程
-//!
+//! 安装流程:
 //! 1. 下载 lite tarball(GitHub release + 国内镜像 fallback,本 component 内置 fallback 列表)
 //! 2. 上传到 `<workspace_dir>/<FRAMEWORK_FILENAME>`
 //! 3. `tar -xzf $ARCHIVE -C $SNOWLUMA_DIR --strip-components=1`(注意 strip-components=1)
 //! 4. 校验 `$SNOWLUMA_DIR/index.mjs` 存在
 //!
-//! ## 路径约定(对齐 legacy)
-//!
+//! 路径约定(对齐 legacy):
 //! - `WORKSPACE_DIR`:`$HOME/Napcat/snowluma-workspace`(上层注入)
 //! - `SNOWLUMA_DIR`:`<workspace>/snowluma`(framework 解压根)
 //! - 入口文件:`<snowluma_dir>/index.mjs`
 //!
-//! ## 镜像 fallback
-//!
-//! 与 legacy 完全一致:GitHub 直连 + 6 个国内镜像
-//! (`gh.ddlc.top` / `gh-proxy.com` / `ghfast.top` / `cors.isteed.cc` / `ghproxy.cc` / `github.akams.cn`)。
+//! 镜像 fallback:与 legacy 完全一致,GitHub 直连 + 6 个国内镜像
+//! (`gh.ddlc.top` / `gh-proxy.com` / `ghfast.top` / `cors.isteed.cc` /
+//! `ghproxy.cc` / `github.akams.cn`)。
 
 use async_trait::async_trait;
 

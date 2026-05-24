@@ -1,17 +1,17 @@
 //! `DesktopSelfComponent`:Desktop 自身的组件描述。
 //!
-//! 蓝图 §7 / M4.6:Desktop 自更新走 `tauri-plugin-updater` + 业务包装层 `ncd-update`,
-//! **不**复用 `Component::install` 流程(因为自更新涉及"自杀 + 重生",必须走平台原生 updater)。
+//! Desktop 自更新走 `tauri-plugin-updater` + 业务包装层 `ncd-update`,不复用
+//! `Component::install` 流程(因为自更新涉及"自杀 + 重生",必须走平台原生 updater)。
 //!
 //! 本 component 在 ncd-component 这层只提供:
-//! - `detect`:读当前进程 exe 的版本号(从 cargo metadata 注入,通过 `env!("CARGO_PKG_VERSION")`)
+//! - `detect`:读当前进程 exe 的版本号(从 cargo metadata 注入,通过
+//!   `env!("CARGO_PKG_VERSION")`)
 //! - `verify`:检查 exe 是否在期望路径
 //! - `launch_command`:返回 self exe 路径(用于 ncd-update 在 SelfUpdate 后重启)
 //! - `install` / `update` / `uninstall`:返回 `Unsupported`,引导调用方走 ncd-update
 //!
-//! ## 仅本地 + 自动 OS 检测
-//!
-//! `supported_targets` 只声明 (任意 Os, Local) 三种,Remote 永远拒绝。
+//! 仅本地 + 自动 OS 检测:`supported_targets` 只声明 (任意 Os, Local) 三种,
+//! Remote 永远拒绝。
 
 use async_trait::async_trait;
 
@@ -84,7 +84,7 @@ impl Component for DesktopSelfComponent {
         _ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
         Err(ActionError::other(
-            "DesktopSelfComponent::install must go through ncd-update::UpdateOrchestrator (M5)",
+            "DesktopSelfComponent::install must go through ncd-update::UpdateOrchestrator",
         ))
     }
 
@@ -94,7 +94,7 @@ impl Component for DesktopSelfComponent {
         _ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
         Err(ActionError::other(
-            "DesktopSelfComponent::update must go through ncd-update::UpdateOrchestrator::install_with_graceful_shutdown (M5)",
+            "DesktopSelfComponent::update must go through ncd-update::UpdateOrchestrator::install_with_graceful_shutdown",
         ))
     }
 

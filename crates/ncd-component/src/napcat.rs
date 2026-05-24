@@ -1,22 +1,21 @@
 //! `NapCatComponent`:NapCat.Shell 注入式组件。
 //!
-//! 蓝图 §11.1 / M4.4:对齐 NapCat-Installer-main 官方一键脚本(install.sh L456-L770)。
+//! 对齐 NapCat-Installer-main 官方一键脚本(install.sh L456-L770)。
 //!
-//! ## 安装流程
+//! 安装流程:
+//! 1. 下载 `NapCat.Shell.zip`(默认
+//!    `https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip`)
+//! 2. 上传到远端 `<tmp>/`
+//! 3. 解压到 `<tmp>/NapCat/`(中间 staging,匹配官方 `unzip -d ./NapCat`)
+//! 4. 拷贝到 `<install_base>/opt/QQ/resources/app/app_launcher/napcat/`(target_folder)
+//! 5. 赋权 `chmod -R +x`
+//! 6. 写 loadNapCat.js(官方 install.sh L741)
+//! 7. 改 QQ package.json 的 `main` 字段为 `./loadNapCat.js`
 //!
-//! 1. **下载** `NapCat.Shell.zip`(默认 `https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip`)
-//! 2. **上传**到远端 `<tmp>/`
-//! 3. **解压**到 `<tmp>/NapCat/`(中间 staging,匹配官方 `unzip -d ./NapCat`)
-//! 4. **拷贝**到 `<install_base>/opt/QQ/resources/app/app_launcher/napcat/`(target_folder)
-//! 5. **赋权** `chmod -R +x`
-//! 6. **写 loadNapCat.js**(官方 install.sh L741)
-//! 7. **改 QQ package.json** 的 `main` 字段为 `./loadNapCat.js`
-//!
-//! ## 探测
-//!
-//! 检查 `<install_base>/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs` 是否存在。
-//! 版本号从 `napcat.mjs` 内容里 grep `napCatVersion = ... "<x.y.z>"` 拿(legacy 的做法,
-//! 见 `legacy-python/src/core/remote/deployment.py` _NAPCAT_VERSION_PATTERN)。
+//! 探测:检查 `<install_base>/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs`
+//! 是否存在。版本号从 `napcat.mjs` 内容里 grep `napCatVersion = ... "<x.y.z>"` 拿
+//! (legacy 的做法,见 `legacy-python/src/core/remote/deployment.py`
+//! `_NAPCAT_VERSION_PATTERN`)。
 
 use async_trait::async_trait;
 
@@ -112,7 +111,7 @@ impl NapCatComponent {
 /// const napCatVersion = typeof (__vite_import_meta_env__) !== "undefined" && "4.18.1" || "1.0.0-dev";
 /// ```
 ///
-/// 关键点:等号到目标版本之间隔了 `"undefined"` 字符串字面量,**必须用非贪婪**匹配。
+/// 关键点:等号到目标版本之间隔了 `"undefined"` 字符串字面量,必须用非贪婪匹配。
 /// 使用纯字符串扫描(不依赖 regex crate),避免引入新依赖。
 fn parse_napcat_version(content: &str) -> Option<String> {
     // 找到 `napCatVersion` 关键字
@@ -157,7 +156,7 @@ impl Component for NapCatComponent {
     }
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
-        // M4.4 阶段 NapCat 注入 LinuxQQ,只在 Linux 上有意义。
+        // 当前实装范围:NapCat 注入 LinuxQQ,只在 Linux 上有意义。
         // Windows 版 NapCat 通过 NapCatWinBootMain.exe 走完全不同的注入路径,
         // 由 ncd-backend-napcat 自己处理,不走本 component。
         &[
