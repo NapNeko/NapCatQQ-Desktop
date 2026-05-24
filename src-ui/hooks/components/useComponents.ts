@@ -5,11 +5,23 @@
 //   2. 对每个 (component, host) 组合 detect_component，merge 成 ComponentRow[]
 //   3. 暴露 refetch / lastError 给 UI
 //
-// 主机列表当前来自 mock；以后接入 Remote 页时换成 useRemoteHosts() 并集
-// `local` host。frontend-layering：本 hook 唯一允许调 service 的位置。
+// 主机来源策略：
+//   - Tauri 模式：当前后端没有 list_remote_hosts command，远端注册表 v1
+//     未实装；先只暴露本机 host。等后端把远端注册表接进来后扩成
+//     [local, ...listRemoteHosts()] 即可。
+//   - 浏览器预览：用 mockHosts 全集（local + 2 remote），便于演示多主机 UI。
+//
+// 错误分层：
+//   - catalogQuery 失败 = 整页爆，往外抛 error，UI 顶部 banner 显示
+//   - 单个 detectQuery 失败 = 那一行 host 的事，下沉到 row.status.unknown.reason
+//     让用户在那一行看到真错误（"remote host registry not implemented"），而不
+//     是误以为"整个清单都没拉到"
+//
+// frontend-layering：本 hook 唯一允许调 service 的位置。
 
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { isTauri } from '../../core/ipc/transport';
 import { componentService } from '../../core/services/component.service';
 import {
     deriveStatus,
@@ -19,16 +31,42 @@ import {
     type HostInfo,
 } from '../../core/domain/components/types';
 import { mockHosts } from '../../core/ipc/mock/component.mock';
+import type { Os } from '../../core/ipc/types';
 
-// TODO: 接入 Remote 页 useRemoteHosts() 后替换。当前直接用 mock 主机列表，
-// 真后端返回的 detect supported=false 时 UI 会显示"不支持"，行为正确。
+// 探测本机 OS。当前 Tauri 工程仅 Windows 编译 LocalHost（src-tauri/src/commands/
+// components.rs::local_host 上有 #[cfg(windows)]），所以 Windows 兜底是安全的；
+// 但保留 ua sniffing 让未来在 macOS / Linux 桌面跑起来时也能正确派生。
+function detectLocalOs(): Os {
+    if (typeof navigator === 'undefined') return 'windows';
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes('mac os') || ua.includes('macintosh')) return 'mac_os';
+    if (ua.includes('linux')) return 'linux';
+    return 'windows';
+}
+
 function useKnownHosts(): HostInfo[] {
-    return mockHosts;
+    return useMemo<HostInfo[]>(() => {
+        if (isTauri) {
+            // 真后端：先只本机。远端注册表 v1 实装后这里改成
+            // [...listRemoteHosts(), localHost] 形态。
+            return [
+                {
+                    host_id: 'local',
+                    display_name: '本机',
+                    os: detectLocalOs(),
+                    locality: 'local',
+                },
+            ];
+        }
+        // 浏览器预览：演示多主机 UI 用 mock 全集。
+        return mockHosts;
+    }, []);
 }
 
 export interface UseComponentsResult {
     view: ComponentsView;
     isLoading: boolean;
+    /** 仅 catalog 加载失败才有值；detect 单点失败下沉到 row.status。 */
     error: Error | null;
     /// 触发整页重新拉一次。
     refetch: () => void;
@@ -57,22 +95,34 @@ export function useComponents(): UseComponentsResult {
         ),
     });
 
-    // 把 catalog × hosts × detect 三者合成 ComponentRow[]
     const view = useMemo<ComponentsView>(() => {
         if (components.length === 0) {
             return { framework: [], runtimeDep: [], selfApp: [] };
         }
 
-        // 用 host 数量 + 平铺索引把 detectQueries 切回 (component → host[])
         const hostCount = hosts.length;
         const rows: ComponentRow[] = components.map((info, ci) => ({
             info,
             rows: hosts.map((host, hi) => {
                 const detectQuery = detectQueries[ci * hostCount + hi];
+                const detect = detectQuery?.data ?? null;
+                let status = deriveStatus(host, info, detect);
+
+                // detect 失败时把真错误信息塞进 row 的 unknown.reason，让用户
+                // 在那一行能看到 "remote host registry not implemented" 之类的具体
+                // 原因，而不是错误地以为还在 loading。
+                if (status.state === 'unknown' && detectQuery?.error) {
+                    const err = detectQuery.error as Error;
+                    status = {
+                        state: 'unknown',
+                        reason: err.message || '探测失败',
+                    };
+                }
+
                 return {
                     component_id: info.id,
                     host,
-                    status: deriveStatus(host, info, detectQuery?.data ?? null),
+                    status,
                 };
             }),
         }));
@@ -80,10 +130,8 @@ export function useComponents(): UseComponentsResult {
         return splitByCategory(rows);
     }, [components, hosts, detectQueries]);
 
-    const error =
-        (catalogQuery.error as Error | null) ??
-        (detectQueries.find((q) => q.error)?.error as Error | undefined) ??
-        null;
+    // catalog 失败 = 整页爆。detect 单点失败下沉到 row 不往外抛。
+    const error = (catalogQuery.error as Error | null) ?? null;
 
     const isLoading =
         catalogQuery.isLoading ||
