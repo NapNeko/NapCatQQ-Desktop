@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "rust:check": "cargo check --workspace --all-targets",
     "rust:test": "cargo test --workspace",
-    "ts-bindings": "cargo test -p ncd-runtime --lib export_bindings_ -- --quiet",
+    "ts-bindings": "cargo test -p ncd-runtime --lib export_bindings_ -- --quiet && cargo test -p ncd-domain --lib export_bindings_ -- --quiet && cargo test -p ncd-component --lib export_bindings_ -- --quiet && cargo test -p ncd-deploy --lib export_bindings_ -- --quiet && cargo test -p ncd-host --lib export_bindings_ -- --quiet && cargo test -p ncd-tauri --lib export_bindings_ -- --quiet",
     "verify": "npm run ts-bindings && npm run typecheck && npm run rust:check",
     "preview": "vite preview",
     "tauri": "tauri",

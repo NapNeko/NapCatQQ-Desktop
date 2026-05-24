@@ -13,13 +13,26 @@ import { StatusBar } from '../shared/components/next/StatusBar';
 import { TooltipProvider } from '../shared/ui';
 import { PagePlaceholder } from '../shared/components/next/PagePlaceholder';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
+import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { Showcase } from './Showcase';
+import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
 
 const SHOW_SHOWCASE = true;
 
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const [collapsed, setCollapsed] = useState(false);
+
+    // useBootstrap 提供 data_root 与连接状态推导：
+    //   - isLoading → 'connecting'
+    //   - 有数据 → 'connected'
+    //   - 出错 → 'disconnected'
+    const { bootstrap, isLoading, error } = useBootstrap();
+    const connectionState: 'connected' | 'connecting' | 'disconnected' = error
+        ? 'disconnected'
+        : isLoading
+            ? 'connecting'
+            : 'connected';
 
     return (
         <TooltipProvider>
@@ -51,7 +64,10 @@ export const AppNext: React.FC = () => {
                     </div>
                 </div>
 
-                <StatusBar connectionState="disconnected" />
+                <StatusBar
+                    connectionState={connectionState}
+                    dataRoot={bootstrap?.data_root || undefined}
+                />
             </div>
         </TooltipProvider>
     );
@@ -75,6 +91,8 @@ const RouteOutlet: React.FC<{ route: AppRoute }> = ({ route }) => {
                     ]}
                 />
             );
+        case 'components':
+            return <ComponentsPageNext />;
         case 'remote':
             return (
                 <PagePlaceholder

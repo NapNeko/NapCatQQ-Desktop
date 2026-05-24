@@ -23,6 +23,7 @@ import {
     ChevronsRight,
     LayoutDashboard,
     type LucideIcon,
+    Package,
     Server,
     Settings,
     Sparkles,
@@ -33,6 +34,7 @@ import logoPng from '../../../assets/logo.png';
 export type AppRoute =
     | 'overview'
     | 'bots'
+    | 'components'
     | 'remote'
     | 'events'
     | 'settings'
@@ -55,6 +57,7 @@ interface NavItem {
 const PRIMARY_NAV: NavItem[] = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'bots', label: 'Bots', icon: Bot },
+    { id: 'components', label: 'Components', icon: Package },
     { id: 'remote', label: 'Remote', icon: Server },
     { id: 'events', label: 'Events', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },

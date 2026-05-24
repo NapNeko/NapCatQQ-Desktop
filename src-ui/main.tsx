@@ -9,10 +9,15 @@ const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
 
 if (useNextUi) {
   // 动态 import 防止旧 UI 也把 tailwind 全套拉进来。
-  void import('./app/AppNext').then(({ AppNext }) => {
+  void Promise.all([
+    import('./app/AppNext'),
+    import('./app/AppProvidersNext'),
+  ]).then(([{ AppNext }, { AppProvidersNext }]) => {
     root.render(
       <React.StrictMode>
-        <AppNext />
+        <AppProvidersNext>
+          <AppNext />
+        </AppProvidersNext>
       </React.StrictMode>,
     );
   });

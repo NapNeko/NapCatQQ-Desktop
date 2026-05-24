@@ -1,39 +1,64 @@
-// Overview 页（next）。
+// Overview 页（next）。step 3 收尾：接入真实 hook。
 //
-// 信息架构沿用 legacy home_page，并按当前后端实情更新：
-//   - 后端不止 NapCat，还有 SnowLuma（SL，暂无 logo，使用几何占位）
-//   - mascot 衣服跟随主题色，半身从 Hero 卡顶端破圈而出（参考图风格）
-//
+// 信息架构（沿用 legacy home_page）：
 //   主列 (col-span-7)  HelloCard / RemoteSummary / NoticeTimeline
 //   副列 (col-span-5)  CoreCardsRow (NapCat + SnowLuma) / Occupancy(CPU) / Occupancy(RAM)
 //
-// 响应式：
-//   ≥ 1100px  双列 7:5
-//   < 1100px  单列堆叠
+// 数据流：
+//   - useBootstrap()        → 自检快照 + data_root + local_versions
+//   - useReleases()         → 远端 release 快照（已 normalize 为 view 类型）
+//   - useEventStream()      → 最近 100 条 DomainEvent
+//   - useResourceMonitor()  → CPU/RAM 24 点历史 + 当前值
+//   - buildNotices(...)     → 上面 3 个数据源派生 NoticeItem 列表
 //
-// 严守 frontend-layering：仅 import hooks / shared/ui / 自身 widgets，不碰 services / @tauri-apps。
+// 严守 frontend-layering：仅 import hooks / shared/ui / domain 派生 / 自身 widgets，
+// 不碰 services / @tauri-apps。
+//
+// 响应式：≥ 1100px 双列 7:5；< 1100px 单列堆叠。
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     AlertTriangle,
     BellRing,
-    Cpu,
-    HardDrive,
     type LucideIcon,
     MessageSquare,
+    Package,
     PowerOff,
     Server,
     Snowflake,
     ThumbsUp,
+    Cpu,
+    HardDrive,
 } from 'lucide-react';
 import { Card } from '../../shared/ui';
 import { Mascot } from '../../shared/components/next/Mascot';
 import logoPng from '../../assets/logo.png';
+import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { useResourceMonitor } from '../../hooks/diagnostics/useResourceMonitor';
+import { useReleases } from '../../hooks/diagnostics/useReleases';
+import { useEventStream } from '../../hooks/diagnostics/useEventStream';
+import {
+    buildNotices,
+    type NoticeItem,
+    type NoticeTone,
+} from '../../core/domain/events/notice-aggregator';
 import { OccupancyChart } from './widgets/OccupancyChart';
 
 export const BootstrapPanelNext: React.FC = () => {
+    const { bootstrap } = useBootstrap();
+    const { snapshot: releases } = useReleases();
+    const { events } = useEventStream();
     const resource = useResourceMonitor();
+
+    const notices = useMemo(
+        () =>
+            buildNotices({
+                bootstrap,
+                releases,
+                recentEvents: events,
+            }),
+        [bootstrap, releases, events],
+    );
 
     return (
         // flex-1 撑满父；min-h-0 让 grid 高度被父限定，不再被内容撑大；
@@ -43,14 +68,15 @@ export const BootstrapPanelNext: React.FC = () => {
             <div className="col-span-12 flex min-h-0 flex-col gap-4 [@media(min-width:1100px)]:col-span-7">
                 <HelloCard />
                 <RemoteSummaryCard />
-                {/* NoticeTimeline 吸收主列剩余高度，内部可滚动 */}
-                <NoticeTimelineCard className="min-h-0 flex-1" />
+                <NoticeTimelineCard notices={notices} className="min-h-0 flex-1" />
             </div>
 
             {/* ─── 副列：≥ 1100px 占 5 列；否则占满 12 列堆到主列下方 ─── */}
             <div className="col-span-12 flex min-h-0 flex-col gap-4 [@media(min-width:1100px)]:col-span-5">
-                <CoreCardsRow />
-                {/* CPU + RAM 平分副列剩余高度，等高 */}
+                <CoreCardsRow
+                    napcatVersion={bootstrap?.local_versions.napcat ?? null}
+                    snowlumaVersion={bootstrap?.local_versions.snowluma ?? null}
+                />
                 <OccupancyChart
                     title="CPU"
                     icon={Cpu}
@@ -75,11 +101,6 @@ export const BootstrapPanelNext: React.FC = () => {
 };
 
 // ─── HelloCard ───────────────────────────────────────────────────────────
-//
-// 设计点：
-//   - mascot 衣服跟主题色（brand-500 主 / brand-700 深），通过 <Mascot> 组件运行时染色
-//   - 卡 overflow-visible，mascot 头部从卡顶溢出 ~32px 制造"破圈"感（参考图风格）
-//   - mascot 仅在 md+ 显示，避免窄窗口压文字
 
 const HelloCard: React.FC = () => (
     <Card variant="hero" padding="lg" className="relative overflow-visible">
@@ -96,7 +117,7 @@ const HelloCard: React.FC = () => (
             </div>
         </div>
 
-        {/* mascot：身高 200px，bottom-0 贴卡底，头从卡顶溢出 ~30px。
+        {/* mascot：bottom-0 贴卡底，头从卡顶溢出 ~32px。
             主题色通过 Mascot 组件运行时替换 SVG 衣服色。
             < md 隐藏避免压文字。 */}
         <div className="pointer-events-none absolute -top-8 right-2 hidden md:block lg:right-6">
@@ -110,6 +131,8 @@ const HelloCard: React.FC = () => (
 );
 
 // ─── RemoteSummary 卡 ────────────────────────────────────────────────────
+//
+// step 3 暂时保留 0 hosts 占位；step 5 RemoteHostPanel 接入后再派生真数据。
 
 const RemoteSummaryCard: React.FC = () => (
     <Card padding="md" hover="lift" className="cursor-pointer">
@@ -131,133 +154,158 @@ const RemoteSummaryCard: React.FC = () => (
 );
 
 // ─── NoticeTimeline 卡 ───────────────────────────────────────────────────
+//
+// 接 buildNotices 派生结果。tone → icon / iconBg / iconColor 在本组件做
+// 视觉映射；domain 层只输出语义 tone。
 
-interface NoticeItem {
-    id: string;
-    icon: LucideIcon;
-    iconBg: string;
-    iconColor: string;
-    title: string;
-    detail: string;
-    date: string;
-    tone: 'info' | 'warning' | 'danger' | 'neutral';
-}
-
-const PLACEHOLDER_NOTICES: NoticeItem[] = [
-    {
-        id: 'n1',
+const TONE_VISUAL: Record<NoticeTone, { icon: LucideIcon; iconBg: string; iconColor: string; dot: string }> = {
+    info: {
         icon: BellRing,
-        iconBg: 'bg-brand/10',
-        iconColor: 'text-brand',
-        title: 'NapCat 有新版本',
-        detail: '最新版 v4.2.33 已发布，包含修复与性能改进。',
-        date: '12-16',
-        tone: 'info',
+        iconBg: 'bg-info/10',
+        iconColor: 'text-info',
+        dot: 'bg-info',
     },
-    {
-        id: 'n2',
+    success: {
+        icon: MessageSquare,
+        iconBg: 'bg-success-soft',
+        iconColor: 'text-success',
+        dot: 'bg-success',
+    },
+    warning: {
         icon: PowerOff,
         iconBg: 'bg-warning/10',
         iconColor: 'text-warning',
-        title: '机器人 永恒 已离线',
-        detail: '账号被踢下线，已开始尝试自动重连。',
-        date: '12-15',
-        tone: 'warning',
+        dot: 'bg-warning',
     },
-    {
-        id: 'n3',
+    danger: {
         icon: AlertTriangle,
         iconBg: 'bg-danger/10',
         iconColor: 'text-danger',
-        title: '内存使用率达到 70%',
-        detail: '建议优化资源以避免触发自愈重启。',
-        date: '12-14',
-        tone: 'danger',
+        dot: 'bg-danger',
     },
-    {
-        id: 'n4',
-        icon: MessageSquare,
-        iconBg: 'bg-accent-soft',
-        iconColor: 'text-accent',
-        title: '欢迎使用 NapCatQQ Desktop',
-        detail: '你可以在 Bots 页面创建第一个机器人实例。',
-        date: '12-13',
-        tone: 'neutral',
-    },
-];
-
-const dotToneClass: Record<NoticeItem['tone'], string> = {
-    info: 'bg-info',
-    warning: 'bg-warning',
-    danger: 'bg-danger',
-    neutral: 'bg-text-disabled',
 };
 
-const NoticeTimelineCard: React.FC<{ className?: string }> = ({ className }) => (
+interface NoticeTimelineCardProps {
+    notices: NoticeItem[];
+    className?: string;
+}
+
+const NoticeTimelineCard: React.FC<NoticeTimelineCardProps> = ({ notices, className }) => (
     <Card padding="md" className={`flex flex-col ${className ?? ''}`.trim()}>
         <div className="mb-3 flex shrink-0 items-center justify-between">
             <h3 className="font-display text-[15px] font-semibold text-text">
                 Recent Notices
             </h3>
             <span className="text-[12px] text-text-tertiary">
-                最近 {PLACEHOLDER_NOTICES.length} 条
+                {notices.length === 0 ? '一切正常' : `最近 ${notices.length} 条`}
             </span>
         </div>
 
-        {/* min-h-0 + overflow 让 list 在 flex 父高度受限时内部滚动 */}
-        <ol className="relative min-h-0 flex-1 space-y-2 overflow-y-auto pl-4 pr-1">
-            <span
-                aria-hidden
-                className="absolute left-[5px] top-2 bottom-2 w-px bg-border-subtle"
-            />
+        {notices.length === 0 ? (
+            <NoticeEmptyState />
+        ) : (
+            <ol className="relative min-h-0 flex-1 space-y-2 overflow-y-auto pl-4 pr-1">
+                <span
+                    aria-hidden
+                    className="absolute left-[5px] top-2 bottom-2 w-px bg-border-subtle"
+                />
 
-            {PLACEHOLDER_NOTICES.map((notice) => (
-                <li key={notice.id} className="relative">
-                    <span
-                        aria-hidden
-                        className={`absolute -left-4 top-3 h-2.5 w-2.5 rounded-full ring-2 ring-surface ${dotToneClass[notice.tone]}`}
-                    />
-
-                    <div className="flex items-start gap-3 rounded-sm bg-inset/50 px-3 py-2.5 transition-colors hover:bg-inset">
-                        <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-sm ${notice.iconBg}`}>
-                            <notice.icon size={16} strokeWidth={1.75} className={notice.iconColor} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-2">
-                                <p className="truncate text-[13.5px] font-semibold text-text">
-                                    {notice.title}
-                                </p>
-                                <span className="shrink-0 font-mono text-[11px] text-text-tertiary tabular-nums">
-                                    {notice.date}
-                                </span>
-                            </div>
-                            <p className="mt-0.5 truncate text-[12.5px] text-text-tertiary">
-                                {notice.detail}
-                            </p>
-                        </div>
-                    </div>
-                </li>
-            ))}
-        </ol>
+                {notices.map((notice) => (
+                    <NoticeRow key={notice.id} notice={notice} />
+                ))}
+            </ol>
+        )}
     </Card>
 );
 
+const NoticeRow: React.FC<{ notice: NoticeItem }> = ({ notice }) => {
+    const visual = TONE_VISUAL[notice.tone];
+    const Icon = visual.icon;
+    const dateText = notice.timestamp
+        ? formatShortDate(notice.timestamp)
+        : null;
+
+    const Inner = (
+        <>
+            <span
+                aria-hidden
+                className={`absolute -left-4 top-3 h-2.5 w-2.5 rounded-full ring-2 ring-surface ${visual.dot}`}
+            />
+            <div className="flex items-start gap-3 rounded-sm bg-inset/50 px-3 py-2.5 transition-colors hover:bg-inset">
+                <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-sm ${visual.iconBg}`}>
+                    <Icon size={16} strokeWidth={1.75} className={visual.iconColor} />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                        <p className="truncate text-[13.5px] font-semibold text-text">
+                            {notice.title}
+                        </p>
+                        {dateText && (
+                            <span className="shrink-0 font-mono text-[11px] text-text-tertiary tabular-nums">
+                                {dateText}
+                            </span>
+                        )}
+                    </div>
+                    <p className="mt-0.5 truncate text-[12.5px] text-text-tertiary">
+                        {notice.detail}
+                    </p>
+                </div>
+            </div>
+        </>
+    );
+
+    return notice.url ? (
+        <li className="relative">
+            <a
+                href={notice.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-sm"
+            >
+                {Inner}
+            </a>
+        </li>
+    ) : (
+        <li className="relative">{Inner}</li>
+    );
+};
+
+const NoticeEmptyState: React.FC = () => (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
+        <Package size={20} strokeWidth={1.75} className="text-text-disabled" />
+        <p className="text-[13px] text-text-tertiary">暂无新通知</p>
+        <p className="text-[11.5px] text-text-disabled">系统状态、更新、事件都会在这里出现</p>
+    </div>
+);
+
+function formatShortDate(unixSeconds: number): string {
+    const d = new Date(unixSeconds * 1000);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${mm}-${dd}`;
+}
+
 // ─── Core 双卡：NapCat + SnowLuma ────────────────────────────────────────
 //
-// 后端现支持 NapCat 和 SnowLuma 两套 core。SnowLuma 暂无 logo，
-// 用 lucide Snowflake 作占位（语义贴合"Snow"），等正式 logo 来直接换 src。
+// 接入 BootstrapSnapshot.local_versions：napcat / snowluma 字段为 null 表
+// 示未安装，UI 显示灰点 + "未安装"，整张卡 opacity 65% 暗示未启用。
 
-const CoreCardsRow: React.FC = () => (
+interface CoreCardsRowProps {
+    napcatVersion: string | null;
+    snowlumaVersion: string | null;
+}
+
+const CoreCardsRow: React.FC<CoreCardsRowProps> = ({ napcatVersion, snowlumaVersion }) => (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <CoreCard
             kind="napcat"
             label="NapCat"
-            version="V4.2.32"
+            version={napcatVersion}
         />
         <CoreCard
             kind="snowluma"
             label="SnowLuma"
-            version="未安装"
+            version={snowlumaVersion}
         />
     </div>
 );
@@ -265,28 +313,54 @@ const CoreCardsRow: React.FC = () => (
 interface CoreCardProps {
     kind: 'napcat' | 'snowluma';
     label: string;
-    version: string;
+    /** null = 未安装。 */
+    version: string | null;
 }
 
-const CoreCard: React.FC<CoreCardProps> = ({ kind, label, version }) => (
-    <Card padding="md" className="flex items-center gap-3">
-        <div
-            className={`grid h-12 w-12 shrink-0 place-items-center rounded-md ${kind === 'napcat' ? 'bg-brand-soft' : 'bg-info-soft'
-                }`}
+const CoreCard: React.FC<CoreCardProps> = ({ kind, label, version }) => {
+    const installed = version !== null;
+    const dotClass = installed ? 'bg-success shadow-glow-success' : 'bg-text-disabled';
+
+    return (
+        <Card
+            padding="md"
+            className={`flex items-center gap-3.5 transition-opacity ${installed ? '' : 'opacity-65'}`}
         >
-            {kind === 'napcat' ? (
-                <img src={logoPng} alt="" className="h-7 w-7 select-none" draggable={false} />
-            ) : (
-                // SnowLuma 占位 logo：lucide Snowflake + info 色块
-                <Snowflake size={22} strokeWidth={1.75} className="text-info" />
-            )}
-        </div>
-        <div className="min-w-0 flex-1">
-            <p className="text-[11px] uppercase tracking-wider text-text-tertiary">Core</p>
-            <p className="mt-0.5 truncate text-[14px] font-semibold text-text">{label}</p>
-            <p className="truncate font-mono text-[12px] text-text-tertiary tabular-nums">{version}</p>
-        </div>
-    </Card>
-);
+            <div
+                className={`grid h-11 w-11 shrink-0 place-items-center rounded-md ${kind === 'napcat' ? 'bg-brand-soft' : 'bg-info-soft'
+                    }`}
+            >
+                {kind === 'napcat' ? (
+                    <img src={logoPng} alt="" className="h-7 w-7 select-none" draggable={false} />
+                ) : (
+                    <Snowflake size={20} strokeWidth={1.75} className="text-info" />
+                )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                    <span
+                        aria-hidden
+                        className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`}
+                    />
+                    <p className="truncate font-display text-[15.5px] font-semibold leading-none text-text">
+                        {label}
+                    </p>
+                </div>
+                <p
+                    className={`mt-1.5 truncate text-[12px] tabular-nums ${installed ? 'font-mono text-text-secondary' : 'text-text-tertiary'
+                        }`}
+                >
+                    {installed ? formatVersion(version!) : '未安装'}
+                </p>
+            </div>
+        </Card>
+    );
+};
+
+/// 显示版本号时统一加 `v` 前缀（如果用户原始字符串没有的话）。
+function formatVersion(raw: string): string {
+    return /^[vV]/.test(raw) ? raw : `v${raw}`;
+}
 
 export default BootstrapPanelNext;

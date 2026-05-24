@@ -31,6 +31,7 @@ const DOMAIN_EVENT_NAMES = [
     'snowluma_login_state_changed',
     'snowluma_pid_set_changed',
     'snowluma_daemon_log',
+    'component_action_progress',
 ] as const;
 
 export const eventStreamService = {

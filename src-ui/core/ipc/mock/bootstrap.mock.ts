@@ -27,6 +27,11 @@ export const mockBootstrap: BootstrapSnapshot = {
         ],
         repair_actions: ['open_data_dir', 'export_migration_report'],
     },
+    data_root: 'C:\\ProgramData\\NapCatQQ Desktop',
+    local_versions: {
+        napcat: '4.18.1',
+        snowluma: null,
+    },
 };
 
 export const mockDataDir = 'C:\\Users\\QIAO\\AppData\\Roaming\\NapCatQQ-Desktop\\data';
