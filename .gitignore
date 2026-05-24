@@ -52,3 +52,4 @@ ehthumbs*.db
 /runtime/config/snowluma-session.json
 ssh/
 .ace-tool/
+docs/archive/rust_migration_blueprint_v1_2026-05-20.md
