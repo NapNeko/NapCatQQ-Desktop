@@ -134,7 +134,7 @@ const StatusLine: React.FC<{
         return (
             <div className="mt-1 flex items-center gap-2">
                 <Loader2 size={12} className="shrink-0 animate-spin text-brand" />
-                <span className="truncate font-mono text-[11.5px] text-text-secondary">
+                <span className="truncate text-[12px] text-text-secondary">
                     {activeProgress.progress.message || '处理中…'}
                 </span>
                 <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-text-secondary">

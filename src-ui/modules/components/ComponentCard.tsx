@@ -55,7 +55,7 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({
             <header className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                        <h3 className="truncate font-display text-[15.5px] font-semibold text-text">
+                        <h3 className="truncate font-display text-base font-semibold text-text">
                             {data.info.display_name}
                         </h3>
                         {latestRemoteVersion && (
@@ -64,7 +64,7 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({
                             </span>
                         )}
                     </div>
-                    <p className="mt-1 truncate text-[12.5px] text-text-tertiary">
+                    <p className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-text-tertiary">
                         {data.info.description}
                     </p>
                 </div>
