@@ -1,5 +1,6 @@
 use ncd_runtime::{BotActorSnapshot, BotConfig, BotId, LogSnapshot};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tauri::State;
 
 use crate::AppState;
@@ -79,6 +80,15 @@ pub async fn get_bot_config(
         .get_bot_config(&BotId::new(bot_id))
         .await
         .map_err(map_err)
+}
+
+/// 批量拉所有 Bot 的 backend_type，避免列表页对每个 bot 调 `get_bot_config` 的 N+1。
+/// 返回的 key 是 BotId 字符串（数字 QQID）。
+#[tauri::command]
+pub async fn list_bot_flavors(
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, ncd_runtime::BackendType>, String> {
+    state.bot_manager.list_bot_flavors().await.map_err(map_err)
 }
 
 #[tauri::command]

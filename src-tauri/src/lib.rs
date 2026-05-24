@@ -231,6 +231,7 @@ pub fn run() {
             commands::publish_runtime_status,
             commands::bot::bootstrap_bot_manager,
             commands::bot::list_bot_snapshots,
+            commands::bot::list_bot_flavors,
             commands::bot::get_bot_snapshot,
             commands::bot::get_bot_config,
             commands::bot::upsert_bot_config,
