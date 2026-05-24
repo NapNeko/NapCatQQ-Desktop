@@ -1,0 +1,171 @@
+//! `Host` trait:跨主机操作的统一接口。
+//!
+//! 蓝图 §6.1 / §6.2:本 trait 把"一台机器"抽象成统一接口,
+//! 上层 Component / Deploy / Backend 通过它完成所有"跑命令、传文件、装组件"操作。
+//!
+//! ## 实装路线图
+//!
+//! - **M3.2** `LocalWindowsHost`:本地 Windows 实装(基于 std::fs + tokio::process)
+//! - **M3.3** `RemoteLinuxHost`:远端 Linux 实装(基于 russh + russh-sftp)
+//! - **M3.4** `RemoteWindowsHost`:接口 stub,所有方法 unimplemented!
+//! - **未来** `LocalLinuxHost` / `LocalMacOsHost` / `DockerHost` / `AgentHost`
+//!
+//! ## 当前(M3.1)
+//!
+//! 只定义 trait,没有任何实装。具体实装在后续子里程碑落地。
+
+use async_trait::async_trait;
+use bytes::Bytes;
+use std::path::Path;
+
+use crate::command::{CommandOutput, HostCommand};
+use crate::error::HostError;
+use crate::package_manager::PackageManager;
+use crate::path::{ArchiveKind, DirEntry, HostPath};
+use crate::process::HostProcess;
+use crate::shell::HostShell;
+
+/// 主机所在操作系统。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Os {
+    Windows,
+    Linux,
+    MacOs,
+}
+
+/// 主机 CPU 架构。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Arch {
+    X86_64,
+    Aarch64,
+    X86,
+    Armv7,
+}
+
+/// 本地或远端。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Locality {
+    Local,
+    Remote,
+}
+
+/// 跨平台主机统一接口。
+///
+/// 调用方使用模式:
+/// ```ignore
+/// async fn install_napcat(host: &dyn Host) -> Result<(), HostError> {
+///     match host.os() {
+///         Os::Windows => host.spawn(HostCommand::new("powershell")
+///             .arg("-Command")
+///             .arg("Expand-Archive napcat.zip -DestinationPath 'C:/NapCat'")).await?.wait().await?,
+///         Os::Linux => host.spawn(HostCommand::new("tar")
+///             .arg("-xzf").arg("napcat.tar.gz")
+///             .arg("-C").arg("/opt/napcat")).await?.wait().await?,
+///         Os::MacOs => return Err(HostError::Unsupported { operation: "napcat-install-macos" }),
+///     };
+///     Ok(())
+/// }
+/// ```
+#[async_trait]
+pub trait Host: Send + Sync {
+    // ===== 身份信息(实装时探测一次缓存) =====
+
+    /// 主机所在 OS。
+    fn os(&self) -> Os;
+
+    /// 主机 CPU 架构。
+    fn arch(&self) -> Arch;
+
+    /// 本地或远端。
+    fn locality(&self) -> Locality;
+
+    /// 主机标识(local / remote-<server-id>),用于跨主机区分日志、进程 ID。
+    fn id(&self) -> &str;
+
+    /// 拿到 shell 抽象(用于命令拼接 / SSH 远端)。
+    fn shell(&self) -> &dyn HostShell;
+
+    /// 拿到包管理器(若该主机配置了)。
+    /// 调用方根据返回值是否 None 决定走包管理器路径还是手动下载路径。
+    fn pkg_manager(&self) -> Option<&dyn PackageManager>;
+
+    // ===== 文件操作 =====
+
+    /// 读文件全部内容到内存。
+    /// 调用方应保证文件 < 64 MB,大文件请用 [`Self::download`]。
+    async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError>;
+
+    /// 写文件(覆盖或新建)。
+    async fn write_file(&self, path: &HostPath, bytes: &[u8]) -> Result<(), HostError>;
+
+    /// 列目录。
+    async fn list_dir(&self, path: &HostPath) -> Result<Vec<DirEntry>, HostError>;
+
+    /// 创建目录(含父目录)。
+    async fn create_dir_all(&self, path: &HostPath) -> Result<(), HostError>;
+
+    /// 删除文件。
+    async fn remove_file(&self, path: &HostPath) -> Result<(), HostError>;
+
+    /// 递归删除目录。
+    async fn remove_dir_all(&self, path: &HostPath) -> Result<(), HostError>;
+
+    /// 检查路径是否存在。
+    async fn exists(&self, path: &HostPath) -> Result<bool, HostError>;
+
+    /// 上传本地文件到主机(本地 Host 等同于 copy)。
+    async fn upload(&self, local: &Path, remote: &HostPath) -> Result<(), HostError>;
+
+    /// 从主机下载文件到本地(本地 Host 等同于 copy)。
+    async fn download(&self, remote: &HostPath, local: &Path) -> Result<(), HostError>;
+
+    /// 解压归档(zip / tar.gz / tar.xz / msi)。
+    async fn extract_archive(
+        &self,
+        archive: &HostPath,
+        dest: &HostPath,
+        kind: ArchiveKind,
+    ) -> Result<(), HostError>;
+
+    // ===== 进程操作 =====
+
+    /// 启动进程,返回 [`HostProcess`] 句柄。
+    /// 句柄被消费即等待退出;调用方可保留句柄做 streaming I/O。
+    async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError>;
+
+    /// 启动进程并等待结束,返回完整 [`CommandOutput`]。
+    /// 适用于短命令 + 全量 stdout 收集场景。
+    async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn os_serialization_uses_snake_case() {
+        assert_eq!(serde_json::to_string(&Os::Windows).unwrap(), "\"windows\"");
+        assert_eq!(serde_json::to_string(&Os::MacOs).unwrap(), "\"mac_os\"");
+        assert_eq!(serde_json::to_string(&Os::Linux).unwrap(), "\"linux\"");
+    }
+
+    #[test]
+    fn arch_serialization_x86_64() {
+        // 严格 snake_case,与 Tauri 端口约定一致
+        let s = serde_json::to_string(&Arch::X86_64).unwrap();
+        assert_eq!(s, "\"x86_64\"");
+    }
+
+    #[test]
+    fn locality_round_trip() {
+        let local = serde_json::to_string(&Locality::Local).unwrap();
+        let remote = serde_json::to_string(&Locality::Remote).unwrap();
+        assert_eq!(local, "\"local\"");
+        assert_eq!(remote, "\"remote\"");
+        let back: Locality = serde_json::from_str(&local).unwrap();
+        assert_eq!(back, Locality::Local);
+    }
+}

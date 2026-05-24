@@ -1,0 +1,27 @@
+[package]
+name = "ncd-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt", "fs", "io-util", "process", "sync", "time"] }
+tracing = "0.1"
+bytes = "1"
+
+# M3.2/3.3 阶段会启用:
+# russh = "0.45"           # SSH 通道(M3.3)
+# russh-sftp = "0.5"       # SFTP(M3.3)
+# winreg = "0.52"          # Windows 注册表探测(M3.2,target 限制)
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
+tempfile = "3"
