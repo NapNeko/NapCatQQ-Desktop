@@ -7,7 +7,7 @@ use crate::bot_config::{BackendType, BotConfig};
 use crate::ids::BotId;
 use crate::kinds::RuntimeTarget;
 use crate::runtime_backend::BotRuntimeConfig;
-use crate::snowluma::launch_plan::SnowLumaStartMode;
+use crate::snowluma::SnowLumaStartMode;
 
 #[async_trait]
 pub trait RuntimeLaunchPlanner: Send + Sync {

@@ -2,6 +2,7 @@
 members = [
     "src-tauri",
     "crates/ncd-domain",
+    "crates/ncd-traits",
     "crates/ncd-core",
     "crates/ncd-test-support",
 ]

@@ -10,7 +10,6 @@
 
 pub mod daemon;
 pub mod error;
-pub mod launch_plan;
 pub mod log_sanitize;
 pub mod proc_tree;
 pub mod runtime_backend;
@@ -43,8 +42,8 @@ pub use daemon::{DaemonState, SnowLumaDaemon, SnowLumaWebUiClientFactory};
 // 当前仅 re-export 4 档登录态 + 进程树枚举 trait 占位。
 pub use status_poller::{ProcessTreeProbe, SnowLumaLoginState};
 
-// ---- launch_plan.rs ----
-pub use launch_plan::SnowLumaStartMode;
+// ---- launch_plan.rs(已搬到 ncd-domain::snowluma_start_mode,M2.2) ----
+pub use ncd_domain::snowluma_start_mode::SnowLumaStartMode;
 
 // ---- session.rs ----
 pub use session::{SnowLumaSession, load_or_create_session, render_daemon_globals};

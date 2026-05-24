@@ -26,9 +26,9 @@ use crate::runtime_backend::{
     TailOpts,
 };
 use crate::snowluma::daemon::SnowLumaDaemon;
-use crate::snowluma::launch_plan::SnowLumaStartMode;
 use crate::snowluma::proc_tree::SysinfoProcessTreeProbe;
 use crate::snowluma::status_poller::{PollerDeps, ProcessTreeProbe, SnowLumaStatusPoller};
+use ncd_domain::snowluma_start_mode::SnowLumaStartMode;
 
 /// `daemon.ensure_running` 总超时。
 const DAEMON_ENSURE_TIMEOUT: Duration = Duration::from_secs(35);

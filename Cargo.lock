@@ -2544,6 +2544,7 @@ dependencies = [
  "hex",
  "keyring",
  "ncd-domain",
+ "ncd-traits",
  "proptest",
  "rand 0.8.6",
  "reqwest 0.12.28",
@@ -2593,6 +2594,17 @@ dependencies = [
 [[package]]
 name = "ncd-test-support"
 version = "0.1.0"
+
+[[package]]
+name = "ncd-traits"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ncd-domain",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "ndk"
