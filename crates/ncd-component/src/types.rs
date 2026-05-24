@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum ComponentId {
     NapCat,
-    SnowLumaFramework,
+    SnowLuma,
     LinuxQq,
     NodeJs,
     NoVnc,
@@ -18,7 +18,7 @@ impl ComponentId {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NapCat => "napcat",
-            Self::SnowLumaFramework => "snowluma_framework",
+            Self::SnowLuma => "snowluma",
             Self::LinuxQq => "linuxqq",
             Self::NodeJs => "nodejs",
             Self::NoVnc => "novnc",
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn component_id_as_str_matches_snake_case() {
         assert_eq!(ComponentId::NapCat.as_str(), "napcat");
-        assert_eq!(ComponentId::SnowLumaFramework.as_str(), "snowluma_framework");
+        assert_eq!(ComponentId::SnowLuma.as_str(), "snowluma");
         assert_eq!(ComponentId::LinuxQq.as_str(), "linuxqq");
     }
 

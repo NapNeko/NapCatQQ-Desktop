@@ -26,15 +26,25 @@
 //!    `DesktopSelfComponent`(M4 后续 + M5)
 
 pub mod context;
+pub mod desktop_self;
 pub mod download;
 pub mod error;
+pub mod linuxqq;
+pub mod napcat;
 pub mod nodejs;
+pub mod novnc;
+pub mod snowluma;
 pub mod traits;
 pub mod types;
 
 pub use context::{ActionCtx, ProgressEvent, ProgressKind};
+pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;
+pub use linuxqq::LinuxQQComponent;
+pub use napcat::NapCatComponent;
 pub use nodejs::NodeJsComponent;
+pub use novnc::NoVncComponent;
+pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};
 pub use types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
