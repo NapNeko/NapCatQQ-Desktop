@@ -1,24 +1,11 @@
 //! `ncd-deploy`:NapCatQQ-Desktop 的部署编排层。
 //!
-//! 蓝图 §5.5 / M5:把 `Component` 列表 + `Host` 编排成 `DeployPlan`,
-//! 处理顺序执行 / 失败回滚 / fallback 链 / 流式进度上报。
+//! 把 `Component` 列表 + `Host` 编排成 `DeployPlan`,处理顺序执行 / 失败回滚 /
+//! fallback 链 / 流式进度上报。
 //!
-//! ## 三维抽象的最上层
-//!
-//! ```text
-//! Component(WHAT)  ×  Host(WHERE)  ×  Action(VERB)
-//!     ↓                 ↓                ↓
-//! ncd-component     ncd-host         ncd-component
-//!                      ↓
-//!                  ncd-deploy(本 crate)
-//! ```
-//!
-//! ## 当前(M5.1)
-//!
-//! - ✅ `DeployPlan` / `DeployStep` / `StepKind` 数据结构
-//! - ✅ `DeployBuilder` 链式 API
-//! - ⏳ `DeployPlan::run`(M5.2)
-//! - ⏳ Fallback 链 / 失败回滚(M5.2)
+//! 在 Component × Host × Action 三维抽象中,本 crate 处于最上层:
+//! `ncd-component` 提供 Component(WHAT)和 Action(VERB),`ncd-host` 提供
+//! Host(WHERE),本 crate 把它们拼起来。
 
 pub mod error;
 pub mod plan;

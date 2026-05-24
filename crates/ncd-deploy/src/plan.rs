@@ -1,10 +1,11 @@
 //! `DeployPlan`:多 Component 部署计划。
 //!
 //! 设计要点:
-//! - **顺序执行**:plan 内的 step 按 push 顺序执行(调用方负责依赖排序)
-//! - **每个 step 都是 Component + StepKind 二元组**
-//! - **失败回滚** 由 M5.2 实装(本节只放数据结构)
-//! - **enum dispatch** 通过 `Arc<dyn Component>` 走动态分发,plan 可序列化的元数据保留在 `name`/`kind`
+//! - 顺序执行:plan 内的 step 按 push 顺序执行(调用方负责依赖排序)
+//! - 每个 step 都是 Component + StepKind 二元组
+//! - 失败回滚走 `rollback_on_failure` 字段触发
+//! - enum dispatch 通过 `Arc<dyn Component>` 走动态分发,plan 可序列化的元数据
+//!   保留在 `name` / `kind`
 
 use std::sync::Arc;
 
@@ -50,7 +51,7 @@ pub struct DeployStep {
     /// 失败时是否中断 plan(默认 true,某些"可选"step 可设 false 让 plan 继续)
     pub fail_fast: bool,
     /// 是否在 plan 失败回滚时跑 uninstall(默认 false:不主动卸载已 install 的 component,
-    /// 因为可能产生环境破坏。M5.2 加更精细的 RollbackPolicy。)
+    /// 因为可能产生环境破坏)。
     pub rollback_on_failure: bool,
 }
 

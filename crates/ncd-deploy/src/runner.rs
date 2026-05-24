@@ -1,6 +1,6 @@
 //! `DeployPlan::run` 编排执行 + 失败回滚 + 进度上报。
 //!
-//! 蓝图 §5.5:把 plan 跑起来,emit 进度,失败时按需回滚已 install 的 step。
+//! 把 plan 跑起来,emit 进度,失败时按需回滚已 install 的 step。
 
 use std::time::Instant;
 
