@@ -279,7 +279,7 @@ async fn build_plan_with_fake_qq(
 
 #[tokio::test]
 async fn napcat_launch_plan_builds_command_env_working_dir_and_load_script() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let runtime_root = temp.path().join("runtime");
     let qq_install = temp.path().join("QQNT");
     prepare_napcat_runtime(&runtime_root);
@@ -334,7 +334,7 @@ async fn napcat_launch_plan_builds_command_env_working_dir_and_load_script() {
 
 #[tokio::test]
 async fn napcat_launch_plan_reports_missing_runtime_components() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let runtime_root = temp.path().join("runtime");
     let qq_install = temp.path().join("QQNT");
     touch(&qq_install.join("QQ.exe"));
@@ -379,7 +379,7 @@ async fn napcat_launch_plan_reports_missing_runtime_components() {
 
 #[tokio::test]
 async fn napcat_launch_plan_reports_missing_qq_exe() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let runtime_root = temp.path().join("runtime");
     let qq_install = temp.path().join("QQNT");
     prepare_napcat_runtime(&runtime_root);
@@ -397,7 +397,7 @@ async fn napcat_launch_plan_reports_missing_qq_exe() {
 
 #[tokio::test]
 async fn upsert_enforces_4_bot_limit() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     for i in 1..=4 {
@@ -420,7 +420,7 @@ async fn upsert_enforces_4_bot_limit() {
 
 #[tokio::test]
 async fn upsert_existing_bot_does_not_count_toward_limit() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     for i in 1..=4 {
@@ -443,7 +443,7 @@ async fn upsert_existing_bot_does_not_count_toward_limit() {
 
 #[tokio::test]
 async fn start_and_stop_transitions() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     let bot_id = BotId::new("10001");
@@ -467,7 +467,7 @@ async fn start_and_stop_transitions() {
 
 #[tokio::test]
 async fn start_napcat_uses_launch_plan_instead_of_empty_command() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
     let bot_id = BotId::new("10010");
 
@@ -509,7 +509,7 @@ async fn start_napcat_uses_launch_plan_instead_of_empty_command() {
 
 #[tokio::test]
 async fn start_backend_failure_marks_crashed() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
     let bot_id = BotId::new("10011");
 
@@ -535,7 +535,7 @@ async fn start_backend_failure_marks_crashed() {
 
 #[tokio::test]
 async fn snowluma_start_returns_not_implemented_without_running() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
     let bot_id = BotId::new("10012");
     let mut config = bot_config(10012, "snowluma");
@@ -565,7 +565,7 @@ async fn snowluma_start_returns_not_implemented_without_running() {
 
 #[tokio::test]
 async fn start_nonexistent_bot_returns_not_found() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     let err = manager.start_bot(&BotId::new("99999")).await.unwrap_err();
@@ -576,7 +576,7 @@ async fn start_nonexistent_bot_returns_not_found() {
 
 #[tokio::test]
 async fn batch_start_starts_multiple_bots_concurrently() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     let ids: Vec<BotId> = (1..=3)
@@ -603,7 +603,7 @@ async fn batch_start_starts_multiple_bots_concurrently() {
 
 #[tokio::test]
 async fn batch_start_reports_partial_failure_without_blocking_others() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
     let ids: Vec<BotId> = ["10001", "10002", "10003"]
         .into_iter()
@@ -632,7 +632,7 @@ async fn batch_start_reports_partial_failure_without_blocking_others() {
 
 #[tokio::test]
 async fn batch_start_reports_join_error_for_panicking_task() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
     let ids: Vec<BotId> = ["10001", "19998"].into_iter().map(BotId::new).collect();
 
@@ -657,7 +657,7 @@ async fn batch_start_reports_join_error_for_panicking_task() {
 
 #[tokio::test]
 async fn batch_start_reports_napcat_missing_runtime_component() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
         temp.path().join("runtime"),
     ));
@@ -686,7 +686,7 @@ async fn batch_start_reports_napcat_missing_runtime_component() {
 
 #[tokio::test]
 async fn batch_stop_stops_running_bots() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     let ids: Vec<BotId> = (1..=2)
@@ -716,7 +716,7 @@ async fn batch_stop_stops_running_bots() {
 
 #[tokio::test]
 async fn batch_stop_reports_partial_failure_without_blocking_others() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
     let ids: Vec<BotId> = ["10001", "10002", "10003"]
         .into_iter()
@@ -746,7 +746,7 @@ async fn batch_stop_reports_partial_failure_without_blocking_others() {
 
 #[tokio::test]
 async fn batch_stop_reports_join_error_for_panicking_task() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
     let ids: Vec<BotId> = ["10001", "19997"].into_iter().map(BotId::new).collect();
 
@@ -774,7 +774,7 @@ async fn batch_stop_reports_join_error_for_panicking_task() {
 
 #[tokio::test]
 async fn upsert_running_bot_triggers_restart() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     let bot_id = BotId::new("10001");
@@ -799,7 +799,7 @@ async fn upsert_running_bot_triggers_restart() {
 
 #[tokio::test]
 async fn upsert_stopped_bot_does_not_restart() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     manager
@@ -819,7 +819,7 @@ async fn upsert_stopped_bot_does_not_restart() {
 
 #[tokio::test]
 async fn bootstrap_auto_starts_marked_bots() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
     // 先通过 repo 直接写入配置（模拟已有持久化数据）
@@ -851,7 +851,7 @@ async fn bootstrap_auto_starts_marked_bots() {
 
 #[tokio::test]
 async fn bootstrap_respects_4_bot_limit_and_reports_skipped() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
     for i in 1..=6u64 {
@@ -875,7 +875,7 @@ async fn bootstrap_respects_4_bot_limit_and_reports_skipped() {
 
 #[tokio::test]
 async fn delete_bot_removes_actor_and_config() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
     manager
@@ -895,7 +895,7 @@ async fn delete_bot_removes_actor_and_config() {
 
 #[tokio::test]
 async fn batch_delete_stops_and_removes_bots() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
     for i in 1..=3u64 {
@@ -925,7 +925,7 @@ async fn batch_delete_stops_and_removes_bots() {
 
 #[tokio::test]
 async fn start_bot_publishes_state_change_event() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let store = Arc::new(LocalConfigStore::new(temp.path()));
     let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
         SecretStoreImpl::new_with_force_fallback(temp.path().join("secrets"), true),
@@ -971,7 +971,7 @@ async fn start_bot_publishes_state_change_event() {
 
 #[tokio::test]
 async fn upsert_backend_switch_cleans_old_backend_files() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
     let config_dir = temp.path().join("runtime").join("config");
 
@@ -993,7 +993,7 @@ async fn upsert_backend_switch_cleans_old_backend_files() {
 
 #[tokio::test]
 async fn list_snapshots_returns_all_actors() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
     for i in 1..=3u64 {
@@ -1013,7 +1013,7 @@ async fn list_snapshots_returns_all_actors() {
 async fn upsert_persists_before_creating_actor() {
     // 回归测试：upsert 先写 bot.json 再创建 Actor。
     // 验证：upsert 成功后，repo 里已有数据。
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
     manager
@@ -1031,7 +1031,7 @@ async fn upsert_persists_before_creating_actor() {
 async fn delete_persists_before_removing_actor() {
     // 回归测试：delete 先删 bot.json 再清理 Actor。
     // 验证：即使 Actor 还在（假设 shutdown 慢），repo 里已无数据。
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
     manager
@@ -1052,7 +1052,7 @@ async fn delete_persists_before_removing_actor() {
 #[tokio::test]
 async fn bootstrap_skipped_bots_are_not_auto_started() {
     // 回归测试：超出上限且标记 auto_start 的 bot 不会被启动。
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
     // 前 4 个不自动启动，第 5 个标记 auto_start
@@ -1079,7 +1079,7 @@ async fn bootstrap_skipped_bots_are_not_auto_started() {
 #[tokio::test]
 async fn shutdown_all_stops_running_bots_and_clears_actors() {
     // shutdown_all 应该把 active 的 Bot 停掉并清空 actor map。
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
     prepare_napcat_runtime(temp.path());
 
@@ -1112,7 +1112,7 @@ async fn process_exit_event_transitions_running_actor_to_crashed() {
     use ncd_runtime::{DomainEvent, DomainEventKind};
 
     // 当 Running 状态的 Bot 收到非 0 退出，actor 应转为 Crashed。
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
 
     let store = Arc::new(LocalConfigStore::new(temp.path()));
     let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(

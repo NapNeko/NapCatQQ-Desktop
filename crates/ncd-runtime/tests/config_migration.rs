@@ -4,8 +4,8 @@ use ncd_runtime::{
     ConfigStore, JsonTransaction, LocalConfigStore, MigrationOrchestrator, PathProbe,
     SchemaVersion, SecretError, SecretStore,
 };
+use ncd_test_support::{MockSecretStore, TempWorkspace};
 use serde_json::Value;
-use tempfile::tempdir;
 
 #[derive(Debug)]
 struct StaticPathProbe {
@@ -22,39 +22,9 @@ impl PathProbe for StaticPathProbe {
     }
 }
 
-#[derive(Debug, Default)]
-struct MemorySecretStore {
-    values: std::sync::Mutex<std::collections::HashMap<String, String>>,
-}
-
-impl MemorySecretStore {
-    fn contains_key(&self, key: &str) -> bool {
-        self.values.lock().unwrap().contains_key(key)
-    }
-}
-
-impl SecretStore for MemorySecretStore {
-    fn get(&self, key: &str) -> Result<Option<String>, SecretError> {
-        Ok(self.values.lock().unwrap().get(key).cloned())
-    }
-
-    fn put(&self, key: &str, value: &str) -> Result<(), SecretError> {
-        self.values
-            .lock()
-            .unwrap()
-            .insert(key.to_string(), value.to_string());
-        Ok(())
-    }
-
-    fn delete(&self, key: &str) -> Result<(), SecretError> {
-        self.values.lock().unwrap().remove(key);
-        Ok(())
-    }
-}
-
 #[test]
 fn transaction_failure_restores_previous_files() {
-    let temp = tempdir().unwrap();
+    let temp = TempWorkspace::new().unwrap();
     let store = LocalConfigStore::new(temp.path());
     let config_dir = store.config_dir();
     std::fs::create_dir_all(&config_dir).unwrap();
@@ -80,22 +50,9 @@ fn transaction_failure_restores_previous_files() {
 
 #[test]
 fn secret_store_failure_keeps_legacy_field() {
-    #[derive(Debug)]
-    struct FailingSecretStore;
-
-    impl SecretStore for FailingSecretStore {
-        fn get(&self, _: &str) -> Result<Option<String>, SecretError> {
-            Ok(None)
-        }
-
-        fn put(&self, _: &str, _: &str) -> Result<(), SecretError> {
-            Err(SecretError::Unavailable)
-        }
-
-        fn delete(&self, _: &str) -> Result<(), SecretError> {
-            Ok(())
-        }
-    }
+    let secrets = MockSecretStore::new();
+    // 注入一次 put 失败,模拟存储不可用
+    secrets.fail_next_put("simulated unavailable");
 
     let result = ncd_runtime::migration::migrate_payload_for_tests(
         serde_json::json!([{
@@ -106,7 +63,7 @@ fn secret_store_failure_keeps_legacy_field() {
             "connect": {},
             "advanced": {}
         }]),
-        &FailingSecretStore,
+        &secrets,
     )
     .unwrap();
 
@@ -115,9 +72,9 @@ fn secret_store_failure_keeps_legacy_field() {
 
 #[test]
 fn orchestrator_prefers_best_candidate_root() {
-    let legacy_root = tempdir().unwrap();
-    let legacy_root2 = tempdir().unwrap();
-    let target_root = tempdir().unwrap();
+    let legacy_root = TempWorkspace::new().unwrap();
+    let legacy_root2 = TempWorkspace::new().unwrap();
+    let target_root = TempWorkspace::new().unwrap();
 
     let best_config = legacy_root.path().join("runtime/config");
     std::fs::create_dir_all(&best_config).unwrap();
@@ -165,7 +122,7 @@ fn orchestrator_prefers_best_candidate_root() {
             legacy_root.path().to_path_buf(),
         ],
     };
-    let secrets = MemorySecretStore::default();
+    let secrets = MockSecretStore::new();
     let orchestrator = MigrationOrchestrator::new(&store, &probe, &secrets);
 
     let snapshot = orchestrator.bootstrap();
@@ -184,8 +141,8 @@ fn orchestrator_prefers_best_candidate_root() {
 
 #[test]
 fn orchestrator_migrates_legacy_tree_and_is_idempotent() {
-    let legacy_root = tempdir().unwrap();
-    let target_root = tempdir().unwrap();
+    let legacy_root = TempWorkspace::new().unwrap();
+    let target_root = TempWorkspace::new().unwrap();
     let legacy_config = legacy_root.path().join("runtime/config");
     std::fs::create_dir_all(&legacy_config).unwrap();
     std::fs::write(
@@ -223,7 +180,7 @@ fn orchestrator_migrates_legacy_tree_and_is_idempotent() {
     let probe = StaticPathProbe {
         roots: vec![legacy_root.path().to_path_buf()],
     };
-    let secrets = MemorySecretStore::default();
+    let secrets = MockSecretStore::new();
     let orchestrator = MigrationOrchestrator::new(&store, &probe, &secrets);
 
     let first = orchestrator.bootstrap();

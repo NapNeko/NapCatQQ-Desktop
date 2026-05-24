@@ -36,7 +36,7 @@ fn make_repo(
 
 #[tokio::test]
 async fn test_empty_repo_lists_empty() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo) = make_repo(temp.path());
 
     assert_eq!(repo.list().await.unwrap(), Vec::new());
@@ -44,7 +44,7 @@ async fn test_empty_repo_lists_empty() {
 
 #[tokio::test]
 async fn test_upsert_then_list_returns_one() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo) = make_repo(temp.path());
 
     repo.upsert(bot_config(10001, "x")).await.unwrap();
@@ -57,7 +57,7 @@ async fn test_upsert_then_list_returns_one() {
 
 #[tokio::test]
 async fn test_upsert_same_qq_id_replaces() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo) = make_repo(temp.path());
 
     repo.upsert(bot_config(10001, "x")).await.unwrap();
@@ -70,7 +70,7 @@ async fn test_upsert_same_qq_id_replaces() {
 
 #[tokio::test]
 async fn test_count_works() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo) = make_repo(temp.path());
 
     repo.upsert(bot_config(10001, "x")).await.unwrap();
@@ -81,7 +81,7 @@ async fn test_count_works() {
 
 #[tokio::test]
 async fn test_delete_existing_returns_true_and_removes() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo) = make_repo(temp.path());
 
     repo.upsert(bot_config(10001, "x")).await.unwrap();
@@ -92,7 +92,7 @@ async fn test_delete_existing_returns_true_and_removes() {
 
 #[tokio::test]
 async fn test_delete_missing_returns_false() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo) = make_repo(temp.path());
 
     repo.upsert(bot_config(10001, "x")).await.unwrap();
@@ -103,7 +103,7 @@ async fn test_delete_missing_returns_false() {
 
 #[tokio::test]
 async fn test_get_missing_returns_none() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo) = make_repo(temp.path());
 
     assert_eq!(repo.get(10001).await.unwrap(), None);
@@ -111,7 +111,7 @@ async fn test_get_missing_returns_none() {
 
 #[tokio::test]
 async fn test_validate_failure_blocks_upsert() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (store, repo) = make_repo(temp.path());
     let config = BotConfig {
         bot: BotBasicConfig {
@@ -136,7 +136,7 @@ async fn test_validate_failure_blocks_upsert() {
 
 #[tokio::test]
 async fn test_list_rejects_duplicate_qq_ids() {
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (store, repo) = make_repo(temp.path());
 
     let payload = serde_json::json!({
@@ -161,7 +161,7 @@ async fn test_concurrent_upsert_does_not_lose_updates() {
     // 并发 upsert 走 read-modify-write，如果没有写锁就会互相覆盖。
     // 修复后 LocalBotConfigRepo 在 upsert/delete 上持 tokio::sync::Mutex 串行化，
     // 因此 8 路并发结束后 list 必须看到全部 8 个 Bot。
-    let temp = tempfile::tempdir().unwrap();
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo) = make_repo(temp.path());
     let repo = Arc::new(repo);
 
