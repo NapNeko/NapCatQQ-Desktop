@@ -80,12 +80,15 @@ export function reduceActionProgress(
                 message: event.ok ? '完成' : '失败',
             };
         case 'log': {
+            // ts-rs 把 Rust u64 派生为 bigint；UI 侧统一用 number（Unix ms 在
+            // Number 安全整数范围内，到公元 285 千年才溢出）。边界转换放
+            // domain 层，参考 core/domain/release/normalize.ts。
             const next: ActionLogLine[] = [
                 ...prev.logs,
                 {
                     level: event.level,
                     message: event.message,
-                    timestamp_ms: event.timestamp_ms,
+                    timestamp_ms: Number(event.timestamp_ms),
                 },
             ];
             if (next.length > MAX_LOGS) next.splice(0, next.length - MAX_LOGS);

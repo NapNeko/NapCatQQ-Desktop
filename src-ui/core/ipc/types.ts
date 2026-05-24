@@ -50,33 +50,13 @@ export type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapsh
 export type { ReleaseInfo } from './generated/domain/ReleaseInfo';
 export type { ReleaseSnapshot } from './generated/domain/ReleaseSnapshot';
 
-// ProgressEvent / ProgressKind / LogLevel：后端 ts-rs 已生成
-// `generated/domain/ProgressEvent.ts` / `ProgressKind.ts` / `LogLevel.ts`，
-// 但生成版的 `timestamp_ms` 是 `bigint`（u64 默认映射），与 `Date.now()`
-// 返回的 `number` 不兼容；mock 与现有派生 reducer 都用 `number`，因此
-// 这里保留手写版本（结构 / variant 字面量与生成版一致）。如果未来切换
-// 到 BigInt 时间戳，再改 re-export。
-export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
-
-/// 后端 `ProgressEvent` 用 `#[serde(flatten)] kind: ProgressKind` 与 `#[serde(tag = "kind")]`
-/// 组合，wire 表现为 envelope `{ v, timestamp_ms, kind, ...kind 自身字段 }`。
-/// TS 这里用 union with discriminator `kind` 表达；外层 v / timestamp_ms 是 envelope 公共字段。
-export type ProgressEvent = ProgressEventEnvelope &
-    (
-        | { kind: 'started'; total_steps: number }
-        | { kind: 'step_begin'; step: number; message: string }
-        | { kind: 'step_progress'; step: number; percent: number; message: string }
-        | { kind: 'step_end'; step: number; ok: boolean }
-        | { kind: 'finished'; ok: boolean }
-        | { kind: 'log'; level: LogLevel; message: string }
-    );
-
-interface ProgressEventEnvelope {
-    /** 协议版本，默认 1 */
-    v: number;
-    /** Unix epoch 毫秒 */
-    timestamp_ms: number;
-}
+// ProgressEvent / ProgressKind / LogLevel 由 ts-rs 自动生成，re-export 保证
+// wire format 与后端一致。注意 ProgressEvent.timestamp_ms 是 bigint
+// (Rust u64 默认映射)，UI 侧消费时应在 domain 层用 Number() 转 number；
+// 边界写入时反过来用 BigInt() 包一下 Date.now()。
+export type { LogLevel } from './generated/domain/LogLevel';
+export type { ProgressKind } from './generated/domain/ProgressKind';
+export type { ProgressEvent } from './generated/domain/ProgressEvent';
 
 // ─── Component 层强类型（ts-rs 生成产物 re-export，杜绝手写漂移） ───
 //
@@ -99,6 +79,7 @@ export type { ComponentDetectResult } from './generated/domain/ComponentDetectRe
 import type { BotActorState } from './generated/BotActorState';
 import type { BotActorSnapshot } from './generated/BotActorSnapshot';
 import type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapshot';
+import type { ProgressEvent } from './generated/domain/ProgressEvent';
 
 export type BotFlavor = 'napcat' | 'snowluma';
 

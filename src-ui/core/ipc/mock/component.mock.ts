@@ -202,12 +202,16 @@ export function mockRunAction(
         } as DomainEvent);
     };
 
+    // ts-rs 生成的 ProgressEvent.timestamp_ms 是 bigint（u64 默认映射），
+    // mock 侧把 Date.now() 包成 BigInt 与 wire format 对齐。
+    const now = () => BigInt(Date.now());
+
     // started
     setTimeout(() => {
-        emit({ v: 1, timestamp_ms: Date.now(), kind: 'started', total_steps: 1 });
+        emit({ v: 1, timestamp_ms: now(), kind: 'started', total_steps: 1 });
         emit({
             v: 1,
-            timestamp_ms: Date.now(),
+            timestamp_ms: now(),
             kind: 'step_begin',
             step: 1,
             message: stepLabel(componentId, kind),
@@ -224,7 +228,7 @@ export function mockRunAction(
 
             emit({
                 v: 1,
-                timestamp_ms: Date.now(),
+                timestamp_ms: now(),
                 kind: 'step_progress',
                 step: 1,
                 percent: 100,
@@ -232,12 +236,12 @@ export function mockRunAction(
             });
             emit({
                 v: 1,
-                timestamp_ms: Date.now(),
+                timestamp_ms: now(),
                 kind: 'step_end',
                 step: 1,
                 ok: true,
             });
-            emit({ v: 1, timestamp_ms: Date.now(), kind: 'finished', ok: true });
+            emit({ v: 1, timestamp_ms: now(), kind: 'finished', ok: true });
 
             // 完成后更新 installedMatrix（让下次 detect 拿到新状态）
             applyMockOutcome(componentId, hostId, kind);
@@ -245,7 +249,7 @@ export function mockRunAction(
         }
         emit({
             v: 1,
-            timestamp_ms: Date.now(),
+            timestamp_ms: now(),
             kind: 'step_progress',
             step: 1,
             percent: progress,
@@ -266,7 +270,7 @@ export function mockCancelAction(taskId: string): void {
     emitMockEvent({
         kind: 'component_action_progress',
         task_id: taskId,
-        event: { v: 1, timestamp_ms: Date.now(), kind: 'finished', ok: false },
+        event: { v: 1, timestamp_ms: BigInt(Date.now()), kind: 'finished', ok: false },
     } as DomainEvent);
 }
 
