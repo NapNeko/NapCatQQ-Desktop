@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,7 +9,8 @@ use ncd_runtime::{
     ReqwestNapCatWebUiClient, SecretStoreImpl, WebUiPollerSettings,
 };
 use tauri::Emitter;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
+use tokio_util::sync::CancellationToken;
 
 pub mod bootstrap;
 pub mod commands;
@@ -24,6 +26,9 @@ pub struct AppState {
     pub(crate) event_bus: BroadcastEventBus,
     pub(crate) runtime: runtime::AppRuntime,
     pub(crate) bot_manager: Arc<AppBotManager>,
+    /// Components 页活跃 task 注册表，task_id → CancellationToken。
+    /// `run_component_action` 启动时插入；plan 完成 / 取消时移除。
+    pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -120,6 +125,7 @@ pub fn run() {
             event_bus: event_bus.clone(),
             runtime,
             bot_manager,
+            active_tasks: Arc::new(Mutex::new(HashMap::new())),
         })
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -229,6 +235,11 @@ pub fn run() {
             commands::open_data_dir,
             commands::publish_demo_event,
             commands::publish_runtime_status,
+            commands::release::get_release_snapshot,
+            commands::components::list_components,
+            commands::components::detect_component,
+            commands::components::run_component_action,
+            commands::components::cancel_component_action,
             commands::bot::bootstrap_bot_manager,
             commands::bot::list_bot_snapshots,
             commands::bot::list_bot_flavors,

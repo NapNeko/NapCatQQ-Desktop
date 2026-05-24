@@ -1,4 +1,6 @@
 pub mod bot;
+pub mod components;
+pub mod release;
 pub mod snowluma;
 
 use std::fs;
@@ -144,6 +146,7 @@ mod tests {
             event_bus: bus.clone(),
             runtime,
             bot_manager,
+            active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         };
         (state, bus)
     }

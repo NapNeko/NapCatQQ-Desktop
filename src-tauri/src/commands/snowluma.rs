@@ -10,7 +10,7 @@ use crate::AppState;
 
 /// 前端用来填 HOT 模式 attach_pid 时的 QQ 进程信息。
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct QQProcessInfo {
     pub pid: u32,
     pub name: String,
@@ -111,7 +111,7 @@ pub async fn set_snowluma_password_override(
 /// 1. 把 `password` 写入剪贴板，提示「已复制到剪贴板，粘贴即可登录」
 /// 2. 用系统默认浏览器打开 `url`。
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct SnowLumaWebuiEndpoint {
     pub url: String,
     pub password: String,
