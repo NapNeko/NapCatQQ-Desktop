@@ -17,10 +17,18 @@ tokio = { version = "1", features = ["macros", "rt", "fs", "io-util", "process",
 tracing = "0.1"
 bytes = "1"
 
-# M3.2/3.3 阶段会启用:
-# russh = "0.45"           # SSH 通道(M3.3)
-# russh-sftp = "0.5"       # SFTP(M3.3)
-# winreg = "0.52"          # Windows 注册表探测(M3.2,target 限制)
+# 归档解压(M3.2)
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1"
+
+# M3.3 阶段会启用:
+# russh = "0.45"           # SSH 通道
+# russh-sftp = "0.5"       # SFTP
+#
+# M5 阶段会启用(winget/choco PackageManager):
+# winreg = "0.52"
+# which = "6"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }

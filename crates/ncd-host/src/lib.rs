@@ -32,6 +32,7 @@
 pub mod command;
 pub mod error;
 pub mod host;
+pub mod local;
 pub mod package_manager;
 pub mod path;
 pub mod process;
