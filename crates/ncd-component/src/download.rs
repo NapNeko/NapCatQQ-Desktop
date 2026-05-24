@@ -100,12 +100,23 @@ impl DownloadHelper {
         let mut downloaded = 0u64;
 
         let mut stream = resp.bytes_stream();
-        while let Some(chunk_res) = stream.next().await {
-            if ctx.is_cancelled() {
-                drop(file);
-                let _ = fs::remove_file(dest_path).await;
-                return Err(ActionError::Cancelled);
-            }
+        let cancel_token = ctx.cancel_token();
+        loop {
+            // 同时等"下一块字节"和"取消信号"。任一就绪就 wake，避免连接 stall
+            // 时取消按钮没反应（取消只检查每个 chunk 边界 → 服务器不发字节 →
+            // stream.next() 永远挂着 → cancel token 永远不被观测）。
+            let chunk_res = tokio::select! {
+                biased;
+                _ = cancel_token.cancelled() => {
+                    drop(file);
+                    let _ = fs::remove_file(dest_path).await;
+                    return Err(ActionError::Cancelled);
+                }
+                next = stream.next() => match next {
+                    Some(c) => c,
+                    None => break,
+                },
+            };
             let chunk = chunk_res.map_err(|e| ActionError::DownloadFailed {
                 url: url.to_string(),
                 reason: format!("read chunk: {e}"),

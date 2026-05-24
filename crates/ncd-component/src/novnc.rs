@@ -133,7 +133,7 @@ impl NoVncComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NoVnc,
             display_name: "noVNC".to_string(),
-            description: "浏览器端 HTML5 VNC 客户端 + 图形栈".to_string(),
+            description: "浏览器端 VNC 客户端，远端 SnowLuma 扫码登录用".to_string(),
             repo_url: Some("https://novnc.com/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),

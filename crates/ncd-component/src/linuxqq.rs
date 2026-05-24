@@ -152,7 +152,7 @@ impl LinuxQQComponent {
         crate::types::ComponentInfo {
             id: ComponentId::LinuxQq,
             display_name: "LinuxQQ".to_string(),
-            description: "腾讯 QQ Linux 客户端（rootless 安装）".to_string(),
+            description: "腾讯 QQ Linux 客户端，远端部署 NapCat 时的 QQ 本体".to_string(),
             repo_url: Some("https://im.qq.com/linuxqq/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
