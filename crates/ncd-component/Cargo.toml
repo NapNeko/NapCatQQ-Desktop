@@ -17,6 +17,7 @@ thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
+ts-rs = { version = "10", features = ["serde-compat"] }
 bytes = "1"
 sha2 = "0.10"
 hex = "0.4"

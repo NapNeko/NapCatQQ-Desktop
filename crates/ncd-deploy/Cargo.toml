@@ -18,6 +18,7 @@ thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
+ts-rs = { version = "10", features = ["serde-compat"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }

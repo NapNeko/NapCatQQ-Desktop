@@ -2843,6 +2843,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "ts-rs",
  "url",
  "wiremock",
 ]
@@ -2862,6 +2863,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "ts-rs",
 ]
 
 [[package]]
@@ -2891,6 +2893,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "ts-rs",
  "zip",
 ]
 
@@ -2905,6 +2908,7 @@ dependencies = [
  "futures-util",
  "hex",
  "keyring",
+ "ncd-component",
  "ncd-domain",
  "ncd-test-support",
  "ncd-traits",
@@ -2932,6 +2936,9 @@ name = "ncd-tauri"
 version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
+ "ncd-component",
+ "ncd-deploy",
+ "ncd-host",
  "ncd-runtime",
  "ncd-test-support",
  "serde",
@@ -2942,7 +2949,10 @@ dependencies = [
  "tauri-plugin-opener",
  "tempfile",
  "tokio",
+ "tokio-util",
+ "tracing",
  "ts-rs",
+ "uuid",
 ]
 
 [[package]]

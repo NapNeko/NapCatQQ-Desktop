@@ -15,6 +15,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "fs", "io-util", "process", "sync", "time"] }
 tracing = "0.1"
+ts-rs = { version = "10", features = ["serde-compat"] }
 bytes = "1"
 
 # 归档解压(M3.2)
