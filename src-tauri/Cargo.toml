@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 
 [dev-dependencies]
 tempfile = "3"
+ncd-test-support = { path = "../crates/ncd-test-support" }
 
 [lib]
 path = "src/lib.rs"

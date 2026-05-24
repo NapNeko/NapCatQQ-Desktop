@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn data_root_prefers_programdata_primary_name() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let local_data = temp.path().join("LocalData");
         touch(
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn data_root_falls_back_to_legacy_programdata_name_when_primary_missing() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
         std::fs::create_dir_all(&legacy).unwrap();
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn data_root_prefers_programdata_primary_with_napcat_runtime() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let primary = program_data.join(APP_DATA_DIR_NAME);
         let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn data_root_prefers_programdata_runtime_candidate_even_when_legacy() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let primary = program_data.join(APP_DATA_DIR_NAME);
         let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn data_root_prefers_existing_programdata_primary_over_legacy_config() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let primary = program_data.join(APP_DATA_DIR_NAME);
         let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn data_root_ignores_local_data_when_programdata_exists() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let local_data = temp.path().join("LocalData");
         touch(
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn data_root_defaults_to_programdata_primary_when_candidates_are_missing() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
 
         let resolved = resolve_data_root_from_candidates(
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn data_root_falls_back_without_programdata() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let local_data = temp.path().join("LocalData");
         let legacy = local_data.join(LEGACY_APP_DATA_DIR_NAME);
         std::fs::create_dir_all(&legacy).unwrap();
