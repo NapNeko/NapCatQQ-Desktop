@@ -16,6 +16,7 @@ import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
 import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { Showcase } from './Showcase';
 import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
+import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 
 const SHOW_SHOWCASE = true;
 
@@ -33,6 +34,10 @@ export const AppNext: React.FC = () => {
         : isLoading
             ? 'connecting'
             : 'connected';
+
+    // 顶层挂一次 component-action 事件桥。路由切换不会断订阅，进度状态留在
+    // 模块级 store；切走 Components 页再切回来不会丢已经在跑的安装进度。
+    useComponentActionEventBridge();
 
     return (
         <TooltipProvider>
