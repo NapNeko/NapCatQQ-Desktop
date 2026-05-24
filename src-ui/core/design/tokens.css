@@ -1,0 +1,179 @@
+/* design token 三层：primitive 阶梯 → semantic 业务名 → component 局部覆写。
+   只有这一层允许出现具体颜色/像素值。组件全部 var(--xxx) 引用。
+   切主题（暗色 / 高对比 / 不同品牌色）时只改这个文件，组件零改动。 */
+
+:root {
+    /* primitive: brand 暖橙桃 9 阶（参考图 hello!! 的暖色基调） */
+    --brand-50: #fff5ec;
+    --brand-100: #ffe9cf;
+    --brand-200: #ffcfa8;
+    --brand-300: #ffb586;
+    --brand-400: #ff9a6b;
+    --brand-500: #ff6b3d;
+    --brand-600: #e85220;
+    --brand-700: #c33f15;
+    --brand-800: #9b3214;
+    --brand-900: #7a2912;
+
+    /* primitive: accent 桃粉 9 阶（左导航 / 时间轴节点 / 强调点缀） */
+    --accent-50: #fff5f9;
+    --accent-100: #ffe3ee;
+    --accent-200: #fdc9dd;
+    --accent-300: #fbc4dc;
+    --accent-400: #f9a3c5;
+    --accent-500: #f58fb6;
+    --accent-600: #e070a0;
+    --accent-700: #c76a8e;
+    --accent-800: #9c4f6e;
+    --accent-900: #6f3b51;
+
+    /* primitive: neutral 暖灰 12 阶（暖色画布友好的中性） */
+    --neutral-0: #ffffff;
+    --neutral-50: #faf7f2;
+    --neutral-100: #f4efe7;
+    --neutral-200: #e9e2d5;
+    --neutral-300: #d6cdbe;
+    --neutral-400: #b8ad9b;
+    --neutral-500: #9a8e84;
+    --neutral-600: #7a6e64;
+    --neutral-700: #5c534b;
+    --neutral-800: #3d3631;
+    --neutral-900: #2c1f18;
+    --neutral-950: #1a120d;
+
+    /* primitive: 状态色（保留 NapCat 业务语义，参考图同色系微调） */
+    --green-500: #4fb477;
+    --green-600: #3a9961;
+    --amber-500: #f2b43a;
+    --amber-600: #d99526;
+    --rose-500: #e85b57;
+    --rose-600: #c94340;
+    --blue-500: #5eb1ff;
+    --blue-600: #3d96ed;
+    --purple-500: #a280e8;
+
+    /* semantic: 表面层 */
+    --surface-canvas: var(--neutral-50);
+    /* 整窗画布 */
+    --surface-card: var(--neutral-0);
+    /* 默认卡片 */
+    --surface-elevated: #fff8f0;
+    /* 弹层 / 命令面板 */
+    --surface-inset: var(--neutral-100);
+    /* 卡内嵌区 / 输入框 */
+    --surface-muted: var(--neutral-100);
+    /* 副表面 */
+    --surface-sidebar: color-mix(in srgb, var(--accent-100) 28%, var(--surface-canvas));
+    /* 侧栏：极淡桃粉融入画布，不抢戏 */
+
+    /* semantic: 文字 */
+    --text-primary: var(--neutral-900);
+    --text-secondary: var(--neutral-700);
+    --text-tertiary: var(--neutral-500);
+    --text-disabled: var(--neutral-400);
+    --text-on-brand: var(--neutral-0);
+    --text-on-accent: var(--neutral-0);
+
+    /* semantic: 边框 */
+    --border-subtle: color-mix(in srgb, var(--neutral-900) 6%, transparent);
+    --border-default: color-mix(in srgb, var(--neutral-900) 12%, transparent);
+    --border-strong: color-mix(in srgb, var(--neutral-900) 22%, transparent);
+    --border-focus: var(--brand-500);
+
+    /* semantic: 状态语义（业务色绑定 NapCat 真实状态） */
+    --state-success: var(--green-500);
+    /* Bot online / running */
+    --state-success-bg: color-mix(in srgb, var(--green-500) 12%, transparent);
+    --state-warning: var(--amber-500);
+    /* 等待扫码 / pending_restart */
+    --state-warning-bg: color-mix(in srgb, var(--amber-500) 14%, transparent);
+    --state-danger: var(--rose-500);
+    /* daemon crashed / bot_error */
+    --state-danger-bg: color-mix(in srgb, var(--rose-500) 12%, transparent);
+    --state-info: var(--blue-500);
+    --state-info-bg: color-mix(in srgb, var(--blue-500) 12%, transparent);
+    --state-neutral: var(--neutral-500);
+
+    /* semantic: 主交互色 */
+    --action-primary: var(--brand-500);
+    --action-primary-hover: var(--brand-600);
+    --action-primary-active: var(--brand-700);
+    --action-secondary: var(--accent-500);
+    --action-secondary-hover: var(--accent-600);
+
+    /* semantic: 圆角 */
+    --radius-xs: 4px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    /* 默认卡片 */
+    --radius-lg: 20px;
+    /* hero / hello 卡 */
+    --radius-xl: 28px;
+    --radius-pill: 9999px;
+
+    /* semantic: 阴影（暖色低饱和柔光，不用纯黑投影） */
+    --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.04);
+    --shadow-md: 0 4px 12px rgba(60, 40, 20, 0.06), 0 1px 2px rgba(60, 40, 20, 0.04);
+    --shadow-lg: 0 12px 32px rgba(60, 40, 20, 0.08), 0 2px 6px rgba(60, 40, 20, 0.04);
+    --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 35%, transparent);
+    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 30%, transparent);
+
+    /* component: titlebar 高度（CustomTitleBar 仍走 Tauri drag region，无原生菜单栏） */
+    --titlebar-height: 36px;
+
+    /* component: sidebar */
+    --sidebar-width: 220px;
+    --sidebar-width-collapsed: 64px;
+
+    /* component: status bar */
+    --statusbar-height: 28px;
+
+    /* component: bot card 网格基线 */
+    --botcard-min-width: 320px;
+
+    /* type scale: 12 / 14 / 16 / 20 / 24 / 32 (Material 桌面适配) */
+    /* Display：标题、Hello!! 大字、卡片标题。圆润几何，比 Inter 友好。
+       自托管：@fontsource-variable/plus-jakarta-sans。
+       CJK fallback：用户装了华为 / 小米字体优先用，否则雅黑。 */
+    --font-display: "Plus Jakarta Sans Variable", "HarmonyOS Sans SC", "MiSans VF", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+
+    /* Body：正文、按钮、菜单、所有非显眼大字。Inter 工业事实标准。 */
+    --font-body: "Inter Variable", "HarmonyOS Sans SC", "MiSans VF", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+
+    /* Mono：QID、端口、时间戳、版本号、错误日志。等宽科技感。 */
+    --font-mono: "JetBrains Mono Variable", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+
+    --text-2xs: 11px;
+    --text-xs: 12px;
+    --text-sm: 13px;
+    --text-base: 14px;
+    --text-md: 16px;
+    --text-lg: 20px;
+    --text-xl: 24px;
+    --text-2xl: 32px;
+
+    --leading-tight: 1.2;
+    --leading-snug: 1.4;
+    --leading-normal: 1.5;
+    --leading-relaxed: 1.7;
+}
+
+/* 暗色模式占位：v2 再做，先把 token 名字定下来防止以后改组件。 */
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="dark"] {
+        --surface-canvas: #1a120d;
+        --surface-card: #261b13;
+        --surface-elevated: #322319;
+        --surface-inset: #1f150e;
+        --surface-muted: #2a1d14;
+
+        --text-primary: #f4efe7;
+        --text-secondary: #c9bfb6;
+        --text-tertiary: #9a8e84;
+        --text-disabled: #5c534b;
+
+        --border-subtle: rgba(255, 240, 220, 0.08);
+        --border-default: rgba(255, 240, 220, 0.14);
+        --border-strong: rgba(255, 240, 220, 0.22);
+    }
+}
