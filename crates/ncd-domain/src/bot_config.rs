@@ -5,11 +5,11 @@ use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
 use crate::kinds::RuntimeTarget;
-use crate::snowluma::launch_plan::SnowLumaStartMode;
+use crate::snowluma_start_mode::SnowLumaStartMode;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum BackendType {
     #[default]
     NapCat,
@@ -17,7 +17,7 @@ pub enum BackendType {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum TimeUnit {
     #[serde(rename = "m")]
     Minute,
@@ -34,7 +34,7 @@ pub enum TimeUnit {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum LogLevel {
     Debug,
     Info,
@@ -42,7 +42,7 @@ pub enum LogLevel {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum WsRole {
     Api,
     Event,
@@ -52,7 +52,7 @@ pub enum WsRole {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum MessagePostFormat {
     #[default]
     Array,
@@ -60,7 +60,7 @@ pub enum MessagePostFormat {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 #[ts(as = "u8")]
 pub enum O3HookMode {
     Off,
@@ -109,7 +109,7 @@ impl<'de> Deserialize<'de> for O3HookMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AutoRestartSchedule {
     #[serde(default)]
     pub enable: bool,
@@ -130,7 +130,7 @@ impl Default for AutoRestartSchedule {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct BypassConfig {
     #[serde(default)]
     pub hook: bool,
@@ -147,7 +147,7 @@ pub struct BypassConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct BotBasicConfig {
     pub name: String,
     #[serde(rename = "QQID")]
@@ -174,7 +174,7 @@ pub struct BotBasicConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct NetworkBaseFields {
     #[serde(default = "default_true")]
     pub enable: bool,
@@ -188,7 +188,7 @@ pub struct NetworkBaseFields {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct HttpServerConfig {
     #[serde(flatten)]
     pub base: NetworkBaseFields,
@@ -203,7 +203,7 @@ pub struct HttpServerConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct HttpSseServerConfig {
     #[serde(flatten)]
     pub base: NetworkBaseFields,
@@ -218,7 +218,7 @@ pub struct HttpSseServerConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct HttpClientConfig {
     #[serde(flatten)]
     pub base: NetworkBaseFields,
@@ -255,7 +255,7 @@ impl Serialize for HttpClientConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct WebsocketServerConfig {
     #[serde(flatten)]
     pub base: NetworkBaseFields,
@@ -274,7 +274,7 @@ pub struct WebsocketServerConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct WebsocketClientConfig {
     #[serde(flatten)]
     pub base: NetworkBaseFields,
@@ -290,7 +290,7 @@ pub struct WebsocketClientConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ConnectConfig {
     #[serde(rename = "httpServers", default)]
     pub http_servers: Vec<HttpServerConfig>,
@@ -308,7 +308,7 @@ pub struct ConnectConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AdvancedConfig {
     #[serde(rename = "autoStart", default)]
     pub auto_start: bool,
@@ -356,7 +356,7 @@ impl Default for AdvancedConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct BotConfig {
     pub bot: BotBasicConfig,
     pub connect: ConnectConfig,

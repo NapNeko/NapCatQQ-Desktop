@@ -1,7 +1,7 @@
 use serde_json::Value;
 
-use crate::errors::MigrationError;
-use crate::kinds::SchemaVersion;
+use ncd_domain::errors::MigrationError;
+use ncd_domain::kinds::SchemaVersion;
 
 pub trait MigrationStep: Send + Sync {
     fn id(&self) -> &'static str;

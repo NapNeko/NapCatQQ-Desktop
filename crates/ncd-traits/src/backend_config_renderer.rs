@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use crate::bot_config::BotConfig;
-use crate::ids::BotId;
-use crate::traits::config_store::JsonTransaction;
+use ncd_domain::bot_config::BotConfig;
+use ncd_domain::ids::BotId;
+use crate::config_store::JsonTransaction;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {

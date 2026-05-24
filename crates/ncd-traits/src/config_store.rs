@@ -2,10 +2,10 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::errors::ConfigError;
-use crate::kinds::SchemaVersion;
-use crate::models::BackupInfo;
-use crate::report::MigrationReport;
+use ncd_domain::errors::ConfigError;
+use ncd_domain::kinds::SchemaVersion;
+use ncd_domain::models::BackupInfo;
+use ncd_domain::report::MigrationReport;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JsonWrite {

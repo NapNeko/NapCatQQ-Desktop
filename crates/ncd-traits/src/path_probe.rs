@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::errors::PathError;
+use ncd_domain::errors::PathError;
 
 pub trait PathProbe: Send + Sync {
     fn probe(&self) -> Result<Vec<PathBuf>, PathError>;

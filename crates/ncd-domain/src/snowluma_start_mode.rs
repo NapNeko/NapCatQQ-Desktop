@@ -23,7 +23,7 @@ use ts_rs::TS;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "mode", rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum SnowLumaStartMode {
     /// 由 backend 负责 spawn QQ.exe（cold start 路径）。
     ColdStart,

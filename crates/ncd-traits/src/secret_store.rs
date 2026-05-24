@@ -1,4 +1,4 @@
-use crate::errors::SecretError;
+use ncd_domain::errors::SecretError;
 
 pub trait SecretStore: Send + Sync {
     fn get(&self, key: &str) -> Result<Option<String>, SecretError>;

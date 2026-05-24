@@ -23,7 +23,7 @@ pub fn default_login_interval() -> u64 {
 /// / `botOfflineEmailNotice`），并通过 `ts-rs` 派生 TypeScript 类型
 /// 杜绝前后端契约漂移。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct WebUiPollerSettings {
     /// 已登录状态下的轮询间隔（毫秒）。未登录时由 Poller 内部强制使用 1000ms。
     #[serde(rename = "botLoginCheckInterval", default = "default_login_interval")]
@@ -64,7 +64,7 @@ pub fn default_snowluma_port() -> u16 {
 /// （`snowlumaWebuiPasswordOverride` / `snowlumaWebuiPort`），并通过 `ts-rs`
 /// 派生 TypeScript 类型，杜绝前后端契约漂移。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct SnowLumaAppConfig {
     /// App 级 SnowLuma WebUI 密码 override。空字符串视为未设置。
     #[serde(default, rename = "snowlumaWebuiPasswordOverride")]

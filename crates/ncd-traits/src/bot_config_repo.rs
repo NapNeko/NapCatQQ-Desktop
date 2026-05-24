@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::bot_config::{BotConfig, BotConfigError};
+use ncd_domain::bot_config::{BotConfig, BotConfigError};
 
 #[async_trait]
 pub trait BotConfigRepo: Send + Sync {
