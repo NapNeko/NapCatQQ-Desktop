@@ -1,0 +1,30 @@
+[package]
+name = "ncd-component"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+ncd-host = { path = "../ncd-host" }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+bytes = "1"
+sha2 = "0.10"
+hex = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "stream"] }
+futures-util = "0.3"
+url = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
+tempfile = "3"
+wiremock = "0.6"
