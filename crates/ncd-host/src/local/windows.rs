@@ -1,21 +1,20 @@
 //! `LocalWindowsHost`:本地 Windows 实装。
 //!
-//! 蓝图 §6.3 / M3.2:把 [`Host`](crate::Host) trait 在本地 Windows 上跑通。
+//! 把 [`Host`](crate::Host) trait 在本地 Windows 上跑通。
 //!
 //! 实装映射:
 //! - 文件 IO:`tokio::fs`
 //! - 进程:`tokio::process::Command`
 //! - 解压 zip:`zip` crate
 //! - 解压 tar.gz:`tar` + `flate2`
-//! - 解压 tar.xz:`HostError::Unsupported`(M3.2 不实装,后续按需补)
+//! - 解压 tar.xz:`HostError::Unsupported`(暂不实装,后续按需补)
 //! - 解压 msi:走 `msiexec /a` 静默提取(简化版)
-//! - 提权:`HostCommand::elevated` 走 ShellExecuteW("runas") —— M3.2 暂返回 `Unsupported`,
-//!   完整提权链留给 `ncd-update` crate 的 `DesktopSelfComponent::SelfUpdate`。
+//! - 提权:`HostCommand::elevated` 走 ShellExecuteW("runas") —— 暂返回
+//!   `Unsupported`,完整提权链留给 `ncd-update` crate 的 `DesktopSelfComponent::SelfUpdate`。
 //!
-//! ## 注意
-//!
-//! - 本实装**只在 `target_os = "windows"` 下编译**(由 `local/mod.rs` 的 `#[cfg(windows)]` 控制)
-//! - PackageManager 默认返回 `None`(M3.2 不接 winget/choco,M5 阶段统一加)
+//! 注意:
+//! - 本实装只在 `target_os = "windows"` 下编译(由 `local/mod.rs` 的 `#[cfg(windows)]` 控制)
+//! - PackageManager 默认返回 `None`(暂不接 winget / choco,后续统一处理)
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -113,7 +112,7 @@ impl Host for LocalWindowsHost {
     }
 
     fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-        // M3.2 不实装 winget/choco;调用方应走"手动下载 + extract_archive"路径
+        // 暂不实装 winget / choco;调用方应走"手动下载 + extract_archive"路径
         None
     }
 
@@ -330,7 +329,7 @@ impl Host for LocalWindowsHost {
 
     async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
         if cmd.elevated {
-            // 提权链路留给 ncd-update 的 SelfUpdate Action,M3.2 不在 Host trait 实装
+            // 提权链路留给 ncd-update 的 SelfUpdate Action,Host trait 这层不实装
             return Err(HostError::ElevationFailed {
                 locality: "local",
                 reason: "elevation via UAC must go through ncd-update::desktop_self".into(),

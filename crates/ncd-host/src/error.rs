@@ -2,7 +2,7 @@
 //!
 //! 设计原则:
 //! - 错误必须能在 `LocalHost` / `RemoteHost` / 未来的 `DockerHost` 之间通用
-//! - 错误**不**包含 SSH / Windows API 的低层细节,只暴露语义类别
+//! - 错误不包含 SSH / Windows API 的低层细节,只暴露语义类别
 //! - 每个 variant 提供足够上下文(路径、命令、退出码)用于诊断,但不泄漏密钥
 
 use std::io;

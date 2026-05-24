@@ -9,10 +9,10 @@
 //! cargo test -p ncd-host --test remote_linux_smoke -- --ignored --test-threads=1
 //! ```
 //!
-//! 安全约束(蓝图 §10):
+//! 安全约束:
 //! - 所有测试只在 `/tmp/ncd-host-test-<pid>-<rand>/` 内操作,Drop 时清理
-//! - **禁止**触碰 `~/Napcat`、`/etc/`、`/var/`、`~/.ssh` 等任何业务目录
-//! - **禁止**杀任何已有进程(只测自己 spawn 出来的 sleep)
+//! - 禁止触碰 `~/Napcat`、`/etc/`、`/var/`、`~/.ssh` 等任何业务目录
+//! - 禁止杀任何已有进程(只测自己 spawn 出来的 sleep)
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -171,7 +171,7 @@ async fn smoke_run_respects_timeout() {
 #[tokio::test]
 #[ignore = "requires NCD_TEST_SSH_*"]
 async fn smoke_run_napcat_probe_matches_legacy_layout() {
-    // 蓝图 / NapCat-Installer 官方 rootless 路径:$HOME/Napcat/opt/QQ
+    // NapCat-Installer 官方 rootless 路径:$HOME/Napcat/opt/QQ
     // 这台测试机已装好,验证 ncd-host 能探测到 package.json 与 qq 可执行
     let host = make_host().await;
     let cmd = HostCommand::new("sh")
@@ -270,7 +270,7 @@ s.close()
         .await
         .unwrap();
 
-    // 等 server 打印 PORT=,M3.3 的 HostProcess::wait 是 blocking 全消费,
+    // 等 server 打印 PORT=,远端 HostProcess::wait 是 blocking 全消费,
     // 这里换个策略:也通过 ssh 远端命令直接抓启动后端口
     // 简化:让 server 把端口写到文件
     drop(server_proc); // 实际我们在 spawn 时还没读 stdout,这里先放

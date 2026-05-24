@@ -1,6 +1,6 @@
 //! SSH 连接配置。
 //!
-//! 蓝图 §11 对 M3.3 默认值的约定:
+//! 默认值:
 //! - 默认端口 22
 //! - 默认连接超时 30 秒
 //! - 默认命令超时 5 分钟(由 HostCommand::timeout 单独控制)
@@ -56,7 +56,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_blueprint() {
+    fn defaults_match_expected_values() {
         let cfg = ConnectionConfig::new(
             "example.com",
             22,

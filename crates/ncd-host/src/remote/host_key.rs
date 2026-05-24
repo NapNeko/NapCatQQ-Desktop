@@ -1,11 +1,10 @@
 //! Host key 校验策略。
 //!
-//! 蓝图 §6 + 安全红线:首次连接未知主机的处理由 `HostKeyPolicy` 控制。
-//!
-//! M3.3 实装:
+//! 首次连接未知主机的处理由 `HostKeyPolicy` 控制:
 //! - `Strict { known_hosts_path }`:严格模式,不在 known_hosts 里就拒
-//! - `Insecure`:测试 / 容器 / 同 LAN 受信网络专用,**生产禁用**
-//! - `AcceptOnFirstUse`:留 stub(需要 UI 回调,M5 ncd-update / ncd-deploy 那时一起搭)
+//! - `Insecure`:测试 / 容器 / 同 LAN 受信网络专用,生产禁用
+//! - `AcceptOnFirstUse`:留 stub(需要 UI 回调,后续与 ncd-update / ncd-deploy
+//!   一并搭出)
 
 use std::path::PathBuf;
 use tokio::fs;
@@ -19,10 +18,10 @@ pub enum HostKeyPolicy {
     Strict { known_hosts_path: PathBuf },
     /// 不校验(测试 / 受信网络专用,生产禁用)
     Insecure,
-    /// 首次接受 + 持久化(M5 实装,本节先 stub)
+    /// 首次接受 + 持久化(尚未实装,先 stub)
     AcceptOnFirstUse {
         known_hosts_path: PathBuf,
-        // 实际 UI 回调在 M5 ncd-deploy / ncd-update 阶段填入
+        // 实际 UI 回调由后续 ncd-deploy / ncd-update 阶段填入
     },
 }
 
@@ -33,7 +32,7 @@ impl HostKeyPolicy {
         }
     }
 
-    /// 默认的用户级 known_hosts(`<data_root>/secrets/known_hosts`,蓝图红线 §4.1)
+    /// 默认的用户级 known_hosts(`<data_root>/secrets/known_hosts`)
     pub fn strict_in(data_root: &std::path::Path) -> Self {
         Self::Strict {
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
@@ -43,7 +42,7 @@ impl HostKeyPolicy {
 
 /// 解析 OpenSSH 风格 known_hosts 文件。
 ///
-/// M3.3 简化版只支持精确 host:port 匹配,不支持 hostname hash(`|1|...|...`)
+/// 简化版只支持精确 host:port 匹配,不支持 hostname hash(`|1|...|...`)
 /// 与 wildcard。生产场景 known_hosts 由 ncd-update 派生写入,不复用 OpenSSH 的
 /// 历史文件,故无需兼容旧风格。
 pub struct KnownHostsStore {
@@ -95,7 +94,7 @@ impl KnownHostsStore {
         Ok(false)
     }
 
-    /// 把新条目追加到 known_hosts(`AcceptOnFirstUse` 用,M5 实装时调用)。
+    /// 把新条目追加到 known_hosts(`AcceptOnFirstUse` 用,实装时调用)。
     pub async fn append(
         &self,
         host: &str,

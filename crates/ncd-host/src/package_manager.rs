@@ -5,7 +5,7 @@
 //! - 各 PackageManager 自己知道怎么探测包是否已装、怎么 install
 //! - 上层 Component(如 `LinuxQQComponent`)只问 host.pkg_manager() 拿一个,然后调用 trait
 //!
-//! 当前(M3.1)只有 trait 定义和 5 个空 stub 实装,具体行为在 M3.2/M3.3 落地。
+//! 当前 trait 已定义、stub 实装为空,具体行为后续逐步落地。
 
 use async_trait::async_trait;
 

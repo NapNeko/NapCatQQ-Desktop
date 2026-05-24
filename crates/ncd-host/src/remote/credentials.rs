@@ -1,7 +1,7 @@
 //! SSH 凭证类型。
 //!
-//! 蓝图红线:凭证不进版本库,只在内存或受保护的 SecretStore 中流转。
-//! `SshKey` 提供从文件路径或字节加载,但**禁止** Display / Debug 暴露密钥内容。
+//! 红线:凭证不进版本库,只在内存或受保护的 SecretStore 中流转。`SshKey`
+//! 提供从文件路径或字节加载,但禁止 Display / Debug 暴露密钥内容。
 
 use std::fmt;
 use std::path::PathBuf;

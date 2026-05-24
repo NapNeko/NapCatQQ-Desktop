@@ -1,15 +1,15 @@
 //! `RemoteWindowsHost`:接口预留 stub。
 //!
-//! 蓝图 §6.4 / M3.4:把"远端 Windows 主机"接口预留出来,所有方法返回
-//! [`HostError::Unsupported`],真实实装留给未来(走 OpenSSH Server + PowerShell session)。
+//! 把"远端 Windows 主机"接口预留出来,所有方法返回 [`HostError::Unsupported`],
+//! 真实实装留给未来(走 OpenSSH Server + PowerShell session)。
 //!
-//! 当前(M3.3 + M3.4)状态:
+//! 当前状态:
 //! - 类型定义、`Host` trait 实装框架已就位
 //! - 所有方法返回 `HostError::Unsupported { operation: "RemoteWindowsHost: ..." }`
-//! - 集成测试用 `#[ignore = "M5+ RemoteWindowsHost real impl"]` 占位
+//! - 集成测试用 `#[ignore = "RemoteWindowsHost real impl pending"]` 占位
 //!
 //! 这样做的好处:
-//! - 上层 Component 代码可以提前 `match host.os()` 写好分支,不会等到 M5 才能开始
+//! - 上层 Component 代码可以提前 `match host.os()` 写好分支,不用等接口落地才能开工
 //! - 编译期就能拒绝调用方"假设 RemoteWindowsHost 已实装"的错误用法
 //! - 实装时只要把每个方法的 unimplemented 替换成真实代码,trait 签名零变更
 
@@ -32,13 +32,13 @@ use super::connection::ConnectionConfig;
 pub struct RemoteWindowsHost {
     id: String,
     shell: PowerShellShell,
-    #[allow(dead_code)] // M5+ 实装时会用到
+    #[allow(dead_code)] // 实装时会用到
     config: ConnectionConfig,
 }
 
 impl RemoteWindowsHost {
-    /// 创建 stub,**不**实际建立任何 SSH 连接。
-    /// 实装(M5+)时本方法会换成 `connect()` 走 SSH 握手。
+    /// 创建 stub,不实际建立任何 SSH 连接。
+    /// 实装时本方法会换成 `connect()` 走 SSH 握手。
     pub fn new_stub(id: impl Into<String>, config: ConnectionConfig) -> Self {
         Self {
             id: id.into(),

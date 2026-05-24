@@ -3,7 +3,7 @@
 //! 设计要点:
 //! - 本地 Host 实装包 `tokio::process::Child`
 //! - 远端 Host 实装包 SSH channel(由 `russh::Channel` 间接持有)
-//! - **不**直接暴露平台原生 PID(因为远端 Linux 的 PID 跟本地 Windows 不在同一空间),
+//! - 不直接暴露平台原生 PID(因为远端 Linux 的 PID 跟本地 Windows 不在同一空间),
 //!   通过 `ProcessId` newtype 表达,内含原生数值 + 来源主机标识
 //! - `wait()` 一次性消费句柄返回退出结果;长流式读由 Host 实装在 spawn 时通过回调注入
 
@@ -54,10 +54,8 @@ impl ExitStatus {
 /// 跨平台进程句柄。
 ///
 /// 由 [`Host::spawn`](crate::Host::spawn) 返回。具体实装:
-/// - `LocalWindowsHost::spawn` → 包 `tokio::process::Child`(M3.2)
-/// - `RemoteLinuxHost::spawn` → 包 `russh::Channel`(M3.3)
-///
-/// 当前(M3.1)只是 trait 接口定义,没有具体实装。
+/// - `LocalWindowsHost::spawn` → 包 `tokio::process::Child`
+/// - `RemoteLinuxHost::spawn` → 包 `russh::Channel`
 #[async_trait::async_trait]
 pub trait HostProcess: Send + Sync {
     /// 进程 ID。

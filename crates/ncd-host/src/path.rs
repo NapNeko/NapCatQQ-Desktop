@@ -2,11 +2,11 @@
 //!
 //! 设计要点:
 //! - 内部统一存为 POSIX 风格(`/` 分隔符,无盘符前缀),由 Host 实装在落地时转换
-//! - **不**直接用 `std::path::PathBuf`,因为它绑定本机 OS 路径风格
+//! - 不直接用 `std::path::PathBuf`,因为它绑定本机 OS 路径风格
 //! - Windows Host 实装会把 `/c/Users/foo` 翻译成 `C:\Users\foo`,反过来一样
 //! - 远端 Linux Host 直接透传 POSIX 字符串
 //!
-//! 安全约束(蓝图 §6 / `ncd-test-support::assertions`):
+//! 安全约束:
 //! - 禁止 `..` 父目录跳出
 //! - 禁止盘符 / Windows 前缀(`\\?\`、`C:`)出现在相对路径
 //! - 拒绝空路径

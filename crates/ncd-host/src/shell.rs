@@ -8,8 +8,8 @@
 //!   `CmdShell`(legacy Windows bat 兼容)
 //! - 各 shell 的 escape 规则不同,本 trait 抽象单一接口
 //!
-//! 蓝图 §6.2:`HostShell::escape` 输出必须是**单个 shell token**,
-//! 调用方拼接 `program + " " + args.join(" ")` 时直接安全。
+//! `HostShell::escape` 输出必须是单个 shell token,调用方拼接
+//! `program + " " + args.join(" ")` 时直接安全。
 
 use crate::command::HostCommand;
 

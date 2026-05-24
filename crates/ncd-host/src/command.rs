@@ -1,10 +1,10 @@
 //! `HostCommand`:跨平台命令构建器。
 //!
 //! 设计要点:
-//! - **不**用 `std::process::Command`,因为它已经绑定本机进程模型,远端 SSH 用不了
+//! - 不用 `std::process::Command`,因为它已经绑定本机进程模型,远端 SSH 用不了
 //! - 命令的 `program` 与 `args` 单独存,落地由 [`HostShell`](crate::HostShell) 做
 //!   shell escape(本地 `tokio::process` 直接传 args list,远端 SSH 拼成 shell 字符串)
-//! - 环境变量用 `BTreeMap` 保证序列化字节稳定(蓝图字节级 round-trip 红线)
+//! - 环境变量用 `BTreeMap` 保证序列化字节稳定(对齐字节级 round-trip 红线)
 //! - `working_dir` 用 [`HostPath`](crate::HostPath) 而非 `PathBuf`,跨平台
 
 use std::collections::BTreeMap;

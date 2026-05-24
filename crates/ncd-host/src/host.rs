@@ -1,18 +1,13 @@
 //! `Host` trait:跨主机操作的统一接口。
 //!
-//! 蓝图 §6.1 / §6.2:本 trait 把"一台机器"抽象成统一接口,
-//! 上层 Component / Deploy / Backend 通过它完成所有"跑命令、传文件、装组件"操作。
+//! 把"一台机器"抽象成统一接口,上层 Component / Deploy / Backend 通过它完成
+//! 所有"跑命令、传文件、装组件"操作。
 //!
-//! ## 实装路线图
-//!
-//! - **M3.2** `LocalWindowsHost`:本地 Windows 实装(基于 std::fs + tokio::process)
-//! - **M3.3** `RemoteLinuxHost`:远端 Linux 实装(基于 russh + russh-sftp)
-//! - **M3.4** `RemoteWindowsHost`:接口 stub,所有方法 unimplemented!
-//! - **未来** `LocalLinuxHost` / `LocalMacOsHost` / `DockerHost` / `AgentHost`
-//!
-//! ## 当前(M3.1)
-//!
-//! 只定义 trait,没有任何实装。具体实装在后续子里程碑落地。
+//! 实装矩阵:
+//! - `LocalWindowsHost`:本地 Windows 实装(基于 std::fs + tokio::process)
+//! - `RemoteLinuxHost`:远端 Linux 实装(基于 russh + russh-sftp)
+//! - `RemoteWindowsHost`:接口 stub,所有方法返回 `HostError::Unsupported`
+//! - 未来 `LocalLinuxHost` / `LocalMacOsHost` / `DockerHost` / `AgentHost`
 
 use async_trait::async_trait;
 use bytes::Bytes;

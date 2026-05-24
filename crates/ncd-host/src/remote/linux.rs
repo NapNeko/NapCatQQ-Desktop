@@ -1,14 +1,13 @@
 //! `RemoteLinuxHost`:基于 russh + russh-sftp 的远端 Linux 主机实装。
 //!
-//! 蓝图 §6.3 / M3.3 中档实装:
+//! 中档能力:
 //! - 密码 / 私钥认证(ed25519 + RSA)
 //! - exec channel(短命令 + 长流式)
 //! - SFTP 文件 IO
 //! - 端口转发(direct-tcpip)
 //! - 连接复用(单一 SSH session 复用)+ Keepalive
 //!
-//! ## 安全
-//!
+//! 安全:
 //! - 凭证(密码 / 私钥)由 [`SshCredentials`](super::credentials::SshCredentials) 持有,
 //!   不在日志中打印
 //! - Host key 校验由 [`HostKeyPolicy`](super::host_key::HostKeyPolicy) 控制
@@ -71,7 +70,7 @@ impl Handler for ClientCallback {
             HostKeyPolicy::AcceptOnFirstUse { .. } => {
                 tracing::warn!(
                     target: "ncd_host::remote",
-                    "AcceptOnFirstUse policy is stub, accepting unconditionally (M5 will implement)"
+                    "AcceptOnFirstUse policy is stub, accepting unconditionally (TODO: implement)"
                 );
                 Ok(true)
             }
@@ -210,7 +209,7 @@ impl Host for RemoteLinuxHost {
     }
 
     fn arch(&self) -> Arch {
-        // 远端架构应在 connect 时探测一次缓存,M3.3 简化:默认 X86_64,
+        // 远端架构应在 connect 时探测一次缓存,这里简化:默认 X86_64,
         // 实际部署逻辑会在 ncd-component 自己跑 `uname -m` 决策。
         Arch::X86_64
     }
@@ -228,8 +227,8 @@ impl Host for RemoteLinuxHost {
     }
 
     fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-        // M3.3 不实装 apt PackageManager,Component 直接走 spawn(`apt-get install ...`)。
-        // M5 阶段统一加 AptPackageManager / DnfPackageManager。
+        // 暂不实装 apt PackageManager,Component 直接走 spawn(`apt-get install ...`)。
+        // 后续可统一加 AptPackageManager / DnfPackageManager。
         None
     }
 
@@ -282,7 +281,7 @@ impl Host for RemoteLinuxHost {
     }
 
     async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
-        // M3.3 中档:spawn 也走 exec channel,但返回流式 HostProcess 让调用方逐步读
+        // 中档实装:spawn 也走 exec channel,但返回流式 HostProcess 让调用方逐步读
         // 暂不支持流式 stdin(开 channel 之后再 push stdin,语义复杂),只在 spawn 时一次性写
         if cmd.elevated {
             return Err(HostError::ElevationFailed {
