@@ -20,7 +20,7 @@ import {
   SaveRegular,
   DeleteRegular,
 } from '@fluentui/react-icons';
-import { BotConfig } from '../../../core/ipc/generated/BotConfig';
+import { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
 import { botCommands } from '../../../core/ipc/botCommands';
 import { BotBasicTab } from './tabs/BotBasicTab';
 import { ConnectTab } from './tabs/ConnectTab';

@@ -15,8 +15,8 @@ import {
   MessageBar,
   MessageBarBody,
 } from '@fluentui/react-components';
-import { HttpSseServerConfig } from '../../../core/ipc/generated/HttpSseServerConfig';
-import { MessagePostFormat } from '../../../core/ipc/generated/MessagePostFormat';
+import { HttpSseServerConfig } from '../../../core/ipc/generated/domain/HttpSseServerConfig';
+import { MessagePostFormat } from '../../../core/ipc/generated/domain/MessagePostFormat';
 
 interface HttpSseServerDialogProps {
   open: boolean;

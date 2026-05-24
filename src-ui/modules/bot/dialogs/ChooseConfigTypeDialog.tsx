@@ -14,7 +14,7 @@ import {
   GlobeSearchRegular,
   ChevronRightRegular,
 } from '@fluentui/react-icons';
-import { BackendType } from '../../../core/ipc/generated/BackendType';
+import { BackendType } from '../../../core/ipc/generated/domain/BackendType';
 
 interface ChooseConfigTypeDialogProps {
   open: boolean;

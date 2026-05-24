@@ -15,9 +15,9 @@ import {
   MessageBar,
   MessageBarBody,
 } from '@fluentui/react-components';
-import { WebsocketServerConfig } from '../../../core/ipc/generated/WebsocketServerConfig';
-import { MessagePostFormat } from '../../../core/ipc/generated/MessagePostFormat';
-import { WsRole } from '../../../core/ipc/generated/WsRole';
+import { WebsocketServerConfig } from '../../../core/ipc/generated/domain/WebsocketServerConfig';
+import { MessagePostFormat } from '../../../core/ipc/generated/domain/MessagePostFormat';
+import { WsRole } from '../../../core/ipc/generated/domain/WsRole';
 
 interface WebsocketServerDialogProps {
   open: boolean;

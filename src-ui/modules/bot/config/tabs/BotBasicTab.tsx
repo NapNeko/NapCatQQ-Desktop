@@ -17,10 +17,10 @@ import {
     DialogActions,
 } from '@fluentui/react-components';
 import { invoke } from '@tauri-apps/api/core';
-import { BotBasicConfig } from '../../../../core/ipc/generated/BotBasicConfig';
-import { BackendType } from '../../../../core/ipc/generated/BackendType';
-import { TimeUnit } from '../../../../core/ipc/generated/TimeUnit';
-import { SnowLumaStartMode } from '../../../../core/ipc/generated/SnowLumaStartMode';
+import { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
+import { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
+import { TimeUnit } from '../../../../core/ipc/generated/domain/TimeUnit';
+import { SnowLumaStartMode } from '../../../../core/ipc/generated/domain/SnowLumaStartMode';
 import { isTauri } from '../../../../core/ipc/client';
 
 interface BotBasicTabProps {

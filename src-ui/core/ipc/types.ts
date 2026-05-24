@@ -111,12 +111,12 @@ export type NapCatLoginInvalidationReason = 'kicked' | 'logged_out';
 
 // SnowLuma 后端类型—— re-export ts-rs 生成产物
 export type { DaemonState } from './generated/DaemonState';
-export type { SnowLumaStartMode } from './generated/SnowLumaStartMode';
+export type { SnowLumaStartMode } from './generated/domain/SnowLumaStartMode';
 export type { SnowLumaLoginState } from './generated/SnowLumaLoginState';
 export type { HookProcessStatus } from './generated/HookProcessStatus';
 export type { HookProcessInfo } from './generated/HookProcessInfo';
 export type { OneBotInstanceInfo } from './generated/OneBotInstanceInfo';
-export type { SnowLumaAppConfig } from './generated/SnowLumaAppConfig';
+export type { SnowLumaAppConfig } from './generated/domain/SnowLumaAppConfig';
 
 import type { DaemonState } from './generated/DaemonState';
 import type { SnowLumaLoginState } from './generated/SnowLumaLoginState';

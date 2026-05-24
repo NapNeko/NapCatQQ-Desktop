@@ -12,8 +12,8 @@ import {
   PhoneLaptopRegular,
   SettingsRegular,
 } from '@fluentui/react-icons';
-import { ConnectConfig } from '../../../../core/ipc/generated/ConnectConfig';
-import { BackendType } from '../../../../core/ipc/generated/BackendType';
+import { ConnectConfig } from '../../../../core/ipc/generated/domain/ConnectConfig';
+import { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 
 // Dialog imports
 import { ChooseConfigTypeDialog } from '../../dialogs/ChooseConfigTypeDialog';

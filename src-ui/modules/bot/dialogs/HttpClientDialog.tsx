@@ -15,9 +15,9 @@ import {
   MessageBar,
   MessageBarBody,
 } from '@fluentui/react-components';
-import { HttpClientConfig } from '../../../core/ipc/generated/HttpClientConfig';
-import { BackendType } from '../../../core/ipc/generated/BackendType';
-import { MessagePostFormat } from '../../../core/ipc/generated/MessagePostFormat';
+import { HttpClientConfig } from '../../../core/ipc/generated/domain/HttpClientConfig';
+import { BackendType } from '../../../core/ipc/generated/domain/BackendType';
+import { MessagePostFormat } from '../../../core/ipc/generated/domain/MessagePostFormat';
 
 interface HttpClientDialogProps {
   open: boolean;

@@ -2,7 +2,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from './client';
 import { BotActorSnapshot, BatchResultResponse } from './types';
-import { BotConfig } from './generated/BotConfig';
+import { BotConfig } from './generated/domain/BotConfig';
 import { emitMockEvent } from './events';
 
 /// 日志快照（与 Rust `LogSnapshot` 对齐）。

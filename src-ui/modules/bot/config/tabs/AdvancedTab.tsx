@@ -9,9 +9,9 @@ import {
   MessageBar,
   MessageBarBody,
 } from '@fluentui/react-components';
-import { AdvancedConfig } from '../../../../core/ipc/generated/AdvancedConfig';
-import { LogLevel } from '../../../../core/ipc/generated/LogLevel';
-import { BackendType } from '../../../../core/ipc/generated/BackendType';
+import { AdvancedConfig } from '../../../../core/ipc/generated/domain/AdvancedConfig';
+import { LogLevel } from '../../../../core/ipc/generated/domain/LogLevel';
+import { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 
 interface AdvancedTabProps {
   data: AdvancedConfig;
