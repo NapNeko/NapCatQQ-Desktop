@@ -1,0 +1,213 @@
+//! Host key 校验策略。
+//!
+//! 蓝图 §6 + 安全红线:首次连接未知主机的处理由 `HostKeyPolicy` 控制。
+//!
+//! M3.3 实装:
+//! - `Strict { known_hosts_path }`:严格模式,不在 known_hosts 里就拒
+//! - `Insecure`:测试 / 容器 / 同 LAN 受信网络专用,**生产禁用**
+//! - `AcceptOnFirstUse`:留 stub(需要 UI 回调,M5 ncd-update / ncd-deploy 那时一起搭)
+
+use std::path::PathBuf;
+use tokio::fs;
+
+use crate::error::HostError;
+
+/// Host key 校验策略。
+#[derive(Debug, Clone)]
+pub enum HostKeyPolicy {
+    /// 严格模式:必须在 known_hosts 中找到匹配
+    Strict { known_hosts_path: PathBuf },
+    /// 不校验(测试 / 受信网络专用,生产禁用)
+    Insecure,
+    /// 首次接受 + 持久化(M5 实装,本节先 stub)
+    AcceptOnFirstUse {
+        known_hosts_path: PathBuf,
+        // 实际 UI 回调在 M5 ncd-deploy / ncd-update 阶段填入
+    },
+}
+
+impl HostKeyPolicy {
+    pub fn strict(known_hosts_path: impl Into<PathBuf>) -> Self {
+        Self::Strict {
+            known_hosts_path: known_hosts_path.into(),
+        }
+    }
+
+    /// 默认的用户级 known_hosts(`<data_root>/secrets/known_hosts`,蓝图红线 §4.1)
+    pub fn strict_in(data_root: &std::path::Path) -> Self {
+        Self::Strict {
+            known_hosts_path: data_root.join("secrets").join("known_hosts"),
+        }
+    }
+}
+
+/// 解析 OpenSSH 风格 known_hosts 文件。
+///
+/// M3.3 简化版只支持精确 host:port 匹配,不支持 hostname hash(`|1|...|...`)
+/// 与 wildcard。生产场景 known_hosts 由 ncd-update 派生写入,不复用 OpenSSH 的
+/// 历史文件,故无需兼容旧风格。
+pub struct KnownHostsStore {
+    path: PathBuf,
+}
+
+impl KnownHostsStore {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
+    /// 检查 host:port 是否有匹配条目,且公钥的 base64 编码是否一致。
+    /// 文件不存在视作"无任何匹配"(strict 模式下应直接拒)。
+    pub async fn matches(
+        &self,
+        host: &str,
+        port: u16,
+        key_kind: &str,
+        key_b64: &str,
+    ) -> Result<bool, HostError> {
+        let content = match fs::read_to_string(&self.path).await {
+            Ok(c) => c,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(e) => return Err(HostError::Io(e)),
+        };
+
+        let target = format_host(host, port);
+        for raw in content.lines() {
+            let line = raw.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            // OpenSSH 行:`<host[,host2]> <key-type> <base64-key> [comment]`
+            let mut parts = line.split_whitespace();
+            let hosts = match parts.next() {
+                Some(h) => h,
+                None => continue,
+            };
+            let kind = parts.next().unwrap_or("");
+            let b64 = parts.next().unwrap_or("");
+
+            // 多 host 用逗号分隔
+            let host_list: Vec<&str> = hosts.split(',').map(str::trim).collect();
+            let host_match = host_list.iter().any(|h| matches_host(h, &target, host));
+            if host_match && kind == key_kind && b64 == key_b64 {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// 把新条目追加到 known_hosts(`AcceptOnFirstUse` 用,M5 实装时调用)。
+    pub async fn append(
+        &self,
+        host: &str,
+        port: u16,
+        key_kind: &str,
+        key_b64: &str,
+    ) -> Result<(), HostError> {
+        if let Some(parent) = self.path.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                fs::create_dir_all(parent).await?;
+            }
+        }
+        let line = format!("{} {} {}\n", format_host(host, port), key_kind, key_b64);
+        let mut existing = match fs::read(&self.path).await {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(HostError::Io(e)),
+        };
+        existing.extend_from_slice(line.as_bytes());
+        fs::write(&self.path, existing).await?;
+        Ok(())
+    }
+}
+
+fn format_host(host: &str, port: u16) -> String {
+    if port == 22 {
+        host.to_string()
+    } else {
+        format!("[{host}]:{port}")
+    }
+}
+
+fn matches_host(entry: &str, target_full: &str, target_bare: &str) -> bool {
+    // 完全匹配 (含端口)
+    if entry == target_full {
+        return true;
+    }
+    // 22 端口的简写形式:`example.com` 也认作 `example.com:22`
+    if entry == target_bare {
+        return true;
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn matches_returns_false_when_file_missing() {
+        let dir = tempdir().unwrap();
+        let store = KnownHostsStore::new(dir.path().join("nonexistent"));
+        let m = store.matches("example.com", 22, "ssh-ed25519", "AAAA").await.unwrap();
+        assert!(!m);
+    }
+
+    #[tokio::test]
+    async fn matches_finds_exact_entry_default_port() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        let content = "example.com ssh-ed25519 AAAAB3keyhere\n";
+        fs::write(&path, content).await.unwrap();
+        let store = KnownHostsStore::new(&path);
+        assert!(store.matches("example.com", 22, "ssh-ed25519", "AAAAB3keyhere").await.unwrap());
+        // 不同 key b64 不匹配
+        assert!(!store.matches("example.com", 22, "ssh-ed25519", "AAAAdifferent").await.unwrap());
+        // 不同 key 类型不匹配
+        assert!(!store.matches("example.com", 22, "ssh-rsa", "AAAAB3keyhere").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn matches_handles_nonstandard_port() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        fs::write(&path, "[example.com]:2222 ssh-ed25519 AAAAkey\n").await.unwrap();
+        let store = KnownHostsStore::new(&path);
+        assert!(store.matches("example.com", 2222, "ssh-ed25519", "AAAAkey").await.unwrap());
+        assert!(!store.matches("example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn matches_skips_comments() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        let content = "# comment line\n\nexample.com ssh-ed25519 AAAAkey\n";
+        fs::write(&path, content).await.unwrap();
+        let store = KnownHostsStore::new(&path);
+        assert!(store.matches("example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn append_creates_file_with_entry() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("subdir/known_hosts");
+        let store = KnownHostsStore::new(&path);
+        store.append("example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap();
+        let content = fs::read_to_string(&path).await.unwrap();
+        assert!(content.contains("example.com ssh-ed25519 AAAAkey"));
+        // 新加的条目应能 match
+        assert!(store.matches("example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn matches_finds_multi_host_entry() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        // 多 host 用逗号分隔(OpenSSH 风格)
+        fs::write(&path, "alpha.example.com,beta.example.com ssh-ed25519 AAAAkey\n").await.unwrap();
+        let store = KnownHostsStore::new(&path);
+        assert!(store.matches("alpha.example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+        assert!(store.matches("beta.example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+        assert!(!store.matches("gamma.example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+    }
+}
