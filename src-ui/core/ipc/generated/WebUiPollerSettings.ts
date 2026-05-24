@@ -2,11 +2,10 @@
 
 /**
  * 控制 NapCat WebUI 登录态轮询行为的 App 级设置。
- *
  * 所有字段通过 `#[serde(rename = "...")]` 严格对齐 legacy JSON 字段名
  * （Pydantic schema：`botLoginCheckInterval` / `botOfflineWebHookNotice`
- * / `botOfflineEmailNotice`），并通过 `ts-rs` 派生 TypeScript 类型，
- * 杜绝前后端契约漂移（架构铁律 5.3）。
+ * / `botOfflineEmailNotice`），并通过 `ts-rs` 派生 TypeScript 类型
+ * 杜绝前后端契约漂移。
  */
 export type WebUiPollerSettings = { 
 /**

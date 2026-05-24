@@ -2,7 +2,6 @@
 
 /**
  * SnowLuma WebUI `/api/processes` 单条 PID 的 hook 状态。
- *
  * 与 legacy SnowLuma 服务端字面量对齐，使用 `snake_case` 序列化。
  */
 export type HookProcessStatus = "available" | "loading" | "connecting" | "loaded" | "online" | "error" | "disconnected";
