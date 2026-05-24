@@ -35,9 +35,10 @@ pub async fn list_components() -> Vec<ComponentInfo> {
 pub async fn detect_component(
     component_id: ComponentId,
     host_id: String,
+    state: State<'_, AppState>,
 ) -> Result<ComponentDetectResult, String> {
-    let component = build_component(component_id);
     let host = resolve_host(&host_id)?;
+    let component = build_component_for_host(component_id, &state, host.as_ref());
     let host_ref: &dyn Host = host.as_ref();
 
     if component.check_target(host_ref).is_err() {
@@ -68,7 +69,7 @@ pub async fn run_component_action(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let host = resolve_host(&host_id)?;
-    let component = build_component(component_id);
+    let component = build_component_for_host(component_id, &state, host.as_ref());
 
     let plan = DeployPlan::builder()
         .step("single", kind, Arc::clone(&component))
@@ -158,22 +159,43 @@ fn catalog() -> Vec<ComponentInfo> {
     ]
 }
 
-/// 把 component_id 实例化成具体 Component。这里的字段值（install_dir /
-/// download_url 等）在 Components 页用作 detect / 占位安装目标；真实安装
-/// 路径仍由 backend 的 deploy planner 决定。
+/// 把 component_id 实例化成具体 Component。
 ///
-/// 这些参数主要满足 `Component::detect` 的路径假设；对 `install` / `update`
-/// 走 v1 时不需要"完美"的安装目录（Framework / RuntimeDep 由 backend
-/// 自己 wire），但参数必须语义合理才能让 detect 命中正确的 path。
-fn build_component(id: ComponentId) -> Arc<dyn Component> {
+/// NapCat / SnowLuma 在 Windows 本机走"扁平 zip 部署"分支(legacy 同款),
+/// 安装目录从 `state.data_root` 派生(对齐 `bootstrap::resolve_data_root`,
+/// 红线 §4.1)。其余组件保持 Linux 默认假设 —— Components 页 v1 只在
+/// Windows 本机和 Linux 远端两条路径上验证过,中间 case 留作后续工单。
+fn build_component_for_host(
+    id: ComponentId,
+    state: &AppState,
+    host: &dyn Host,
+) -> Arc<dyn Component> {
+    let data_root_host = data_root_to_host_path(&state.data_root, host.os());
     match id {
-        ComponentId::NapCat => Arc::new(NapCatComponent::new(HostPath::from_posix(
-            "/home/napcat/Napcat",
-        ))),
-        ComponentId::SnowLuma => Arc::new(SnowLumaComponent::new(
-            HostPath::from_posix("/home/napcat/Napcat/snowluma-workspace"),
-            "https://github.com/SnowLuma/SnowLuma/releases/latest/download/SnowLuma-linux-x64-lite.tar.gz",
-        )),
+        ComponentId::NapCat => {
+            if host.os() == ncd_host::Os::Windows {
+                // legacy `PathFunc.napcat_path = data_path/runtime/NapCatQQ`。
+                let install = data_root_host.join("runtime").join("NapCatQQ");
+                Arc::new(NapCatComponent::for_windows(install))
+            } else {
+                Arc::new(NapCatComponent::new(HostPath::from_posix("/home/napcat/Napcat")))
+            }
+        }
+        ComponentId::SnowLuma => {
+            if host.os() == ncd_host::Os::Windows {
+                // legacy `PathFunc.snowluma_path = data_path/runtime/SnowLuma`;
+                // tag 由前端 / release service 决定,这里先用 latest_known_tag
+                // (空 tag 仍允许 detect / verify;install 才需要真 tag)。
+                let install = data_root_host.join("runtime").join("SnowLuma");
+                let tag = state.snapshot.local_versions.snowluma.clone().unwrap_or_default();
+                Arc::new(SnowLumaComponent::for_windows(install, tag))
+            } else {
+                Arc::new(SnowLumaComponent::new(
+                    HostPath::from_posix("/home/napcat/Napcat/snowluma-workspace"),
+                    "https://github.com/SnowLuma/SnowLuma/releases/latest/download/SnowLuma-linux-x64-lite.tar.gz",
+                ))
+            }
+        }
         ComponentId::LinuxQq => Arc::new(LinuxQQComponent::default_v3_2_25(
             HostPath::from_posix("/home/napcat/Napcat"),
         )),
@@ -191,6 +213,19 @@ fn build_component(id: ComponentId) -> Arc<dyn Component> {
                     )
                 }),
         ),
+    }
+}
+
+/// 把 std::path::PathBuf(`AppState.data_root`)转成 HostPath,按 host 当前
+/// 平台决定字符串风格。data_root 由 `bootstrap::resolve_data_root` 决定,
+/// 不会自己再次推断 —— 严格遵守路径落盘红线。
+fn data_root_to_host_path(data_root: &std::path::Path, os: ncd_host::Os) -> HostPath {
+    let s = data_root.to_string_lossy();
+    match os {
+        ncd_host::Os::Windows => HostPath::from_windows(&s),
+        // Linux / Mac:data_root 在新工程里只在 Windows ProgramData 域使用,
+        // 真用 LinuxLocalHost 时再决定;当前直接当作 POSIX 字符串透传。
+        _ => HostPath::from_posix(s.into_owned()),
     }
 }
 
