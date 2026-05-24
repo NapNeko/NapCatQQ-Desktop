@@ -36,6 +36,7 @@ pub mod local;
 pub mod package_manager;
 pub mod path;
 pub mod process;
+pub mod remote;
 pub mod shell;
 
 pub use command::{CommandOutput, HostCommand};

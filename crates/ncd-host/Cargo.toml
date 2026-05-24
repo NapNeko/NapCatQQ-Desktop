@@ -22,10 +22,10 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
 
-# M3.3 阶段会启用:
-# russh = "0.45"           # SSH 通道
-# russh-sftp = "0.5"       # SFTP
-#
+# SSH / SFTP 远端通道(M3.3)
+russh = "0.45"
+russh-sftp = "2"
+
 # M5 阶段会启用(winget/choco PackageManager):
 # winreg = "0.52"
 # which = "6"
