@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn writes_json_atomically() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let store = LocalConfigStore::new(temp.path());
         let target = store.config_dir().join("config.json");
         store

@@ -2906,6 +2906,7 @@ dependencies = [
  "hex",
  "keyring",
  "ncd-domain",
+ "ncd-test-support",
  "ncd-traits",
  "proptest",
  "rand 0.8.6",
@@ -2932,6 +2933,7 @@ version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
  "ncd-runtime",
+ "ncd-test-support",
  "serde",
  "serde_json",
  "sysinfo",
@@ -2946,6 +2948,10 @@ dependencies = [
 [[package]]
 name = "ncd-test-support"
 version = "0.1.0"
+dependencies = [
+ "ncd-domain",
+ "ncd-traits",
+]
 
 [[package]]
 name = "ncd-traits"

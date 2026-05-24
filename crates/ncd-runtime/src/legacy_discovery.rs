@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn prefers_runtime_config_layout() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
         std::fs::create_dir_all(temp.path().join("runtime/config")).unwrap();
         std::fs::write(temp.path().join("config.json"), "{}").unwrap();
         std::fs::write(temp.path().join("runtime/config/config.json"), "{}").unwrap();

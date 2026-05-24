@@ -530,7 +530,7 @@ mod tests {
     /// 首启写入 `session.json`；再次调用直接读，密码与 createdAt 全部稳定。
     #[test]
     fn load_or_create_session_is_idempotent_after_first_call() {
-        let temp = tempfile::tempdir().expect("tempdir");
+        let temp = ncd_test_support::TempWorkspace::new().expect("tempdir");
         let root = temp.path();
 
         let first = load_or_create_session(root).expect("first");
@@ -564,7 +564,7 @@ mod tests {
     /// `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`。无 `regex` crate，手写 24 字符校验。
     #[test]
     fn now_iso8601_matches_iso_8601_format() {
-        let temp = tempfile::tempdir().expect("tempdir");
+        let temp = ncd_test_support::TempWorkspace::new().expect("tempdir");
         let session = load_or_create_session(temp.path()).expect("session");
         assert_iso8601_millis(&session.created_at);
         assert_iso8601_millis(&session.last_rendered_at);
@@ -597,7 +597,7 @@ mod tests {
     /// `update_last_rendered` 必须把时间戳推进到 ≥ 原值，并且大概率严格 >（毫秒精度时钟）。
     #[test]
     fn update_last_rendered_advances_timestamp() {
-        let temp = tempfile::tempdir().expect("tempdir");
+        let temp = ncd_test_support::TempWorkspace::new().expect("tempdir");
         let root = temp.path();
 
         let original = load_or_create_session(root).expect("create session");
@@ -627,8 +627,8 @@ mod tests {
     /// session 密码。无论走哪条分支，runtime.json / webui.json 都应原子落盘。
     #[test]
     fn render_daemon_globals_uses_override_when_present() {
-        let snow_dir = tempfile::tempdir().expect("snow tempdir");
-        let runtime_dir = tempfile::tempdir().expect("runtime tempdir");
+        let snow_dir = ncd_test_support::TempWorkspace::new().expect("snow tempdir");
+        let runtime_dir = ncd_test_support::TempWorkspace::new().expect("runtime tempdir");
         let snow = snow_dir.path();
         let runtime = runtime_dir.path();
 

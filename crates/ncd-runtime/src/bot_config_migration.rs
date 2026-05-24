@@ -548,28 +548,13 @@ fn normalize_urls(payload: &mut Map<String, Value>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    struct MemorySecretStore;
-
-    impl SecretStore for MemorySecretStore {
-        fn get(&self, _: &str) -> Result<Option<String>, crate::errors::SecretError> {
-            Ok(None)
-        }
-
-        fn put(&self, _: &str, _: &str) -> Result<(), crate::errors::SecretError> {
-            Ok(())
-        }
-
-        fn delete(&self, _: &str) -> Result<(), crate::errors::SecretError> {
-            Ok(())
-        }
-    }
+    use ncd_test_support::MockSecretStore;
 
     #[test]
     fn migrates_root_list_to_collection() {
         let result = migrate_bot_config(
             serde_json::json!([{ "bot": {"QQID": "10001", "name": "A"}, "connect": {}, "advanced": {} }]),
-            &MemorySecretStore,
+            &MockSecretStore::new(),
         )
         .unwrap();
 
