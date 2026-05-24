@@ -5,7 +5,7 @@
  */
 export type PrecheckReport = { 
 /**
- * 协议版本(R14)
+ * 协议版本(envelope,与前端契约同步)
  */
 v: number, can_upgrade: boolean, 
 /**

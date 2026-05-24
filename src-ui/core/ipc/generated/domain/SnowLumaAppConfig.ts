@@ -2,7 +2,7 @@
 
 /**
  * SnowLuma 后端运行时的 App 级配置。
- * 与 `WebUiPollerSettings` 同级承载在同一份 `app_config.rs` 中，**不**新建第二份。
+ * 与 `WebUiPollerSettings` 同级承载在同一份 `app_config.rs` 中，不新建第二份。
  * 字段：
  * - `webui_password_override`：App 级密码 override，最高优先级密码来源。
  * 空字符串视作未设置；具体优先级解析在 `snowluma::session::render_daemon_globals` 内执行。
