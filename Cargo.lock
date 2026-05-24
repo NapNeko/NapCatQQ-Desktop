@@ -2543,6 +2543,7 @@ dependencies = [
  "futures-util",
  "hex",
  "keyring",
+ "ncd-domain",
  "proptest",
  "rand 0.8.6",
  "reqwest 0.12.28",
@@ -2560,6 +2561,16 @@ dependencies = [
  "ts-rs",
  "winreg 0.52.0",
  "wiremock",
+]
+
+[[package]]
+name = "ncd-domain"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "ts-rs",
 ]
 
 [[package]]

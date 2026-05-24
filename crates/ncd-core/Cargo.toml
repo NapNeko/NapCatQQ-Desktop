@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+ncd-domain = { path = "../ncd-domain" }
 async-trait = "0.1"
 futures-util = "0.3"
 serde = { workspace = true }
