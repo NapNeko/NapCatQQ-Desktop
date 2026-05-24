@@ -20,7 +20,7 @@
 //!   禁止跨主机；调用方传入的 `path` 直接拼接，不做 host override。
 //! - token 仅在内存中以参数形式流转，不持久化。
 //!
-//! [`napcat_login_poller::PollerDeps`]: crate::napcat_login_poller::PollerDeps
+//! [`napcat_login_poller::PollerDeps`]: crate::napcat::login_poller::PollerDeps
 
 use std::time::Duration;
 
@@ -35,7 +35,7 @@ use thiserror::Error;
 
 /// NapCat WebUI HTTP 客户端的统一错误枚举。
 ///
-/// 每个 variant 对应 [`crate::napcat_login_poller::NapCatLoginPoller`] 状态机的一个分支：
+/// 每个 variant 对应 [`crate::napcat::login_poller::NapCatLoginPoller`] 状态机的一个分支：
 /// - [`NapCatWebUiError::Unauthorized`]：caller 必须触发 auth refresh（受 5s 节流）。
 /// - [`NapCatWebUiError::Status`]：其它非 2xx，仅记日志。
 /// - [`NapCatWebUiError::Throttled`]:刷新节流命中（仅 `fetch_credential` 路径）。
@@ -87,7 +87,7 @@ impl From<reqwest::Error> for NapCatWebUiError {
 
 /// `POST /api/auth/login` 请求体。
 ///
-/// `hash` 字段由 [`crate::napcat_login_poller`] 计算 `sha256(token + ".napcat")` hex
+/// `hash` 字段由 [`crate::napcat::login_poller`] 计算 `sha256(token + ".napcat")` hex
 /// 后传入；本 struct 不做哈希计算，保持 IO 与业务分离。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AuthLoginRequest {

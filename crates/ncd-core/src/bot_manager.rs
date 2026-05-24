@@ -13,9 +13,9 @@ use crate::bot_config::{BackendType, BotConfig, BotConfigError};
 use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
 use crate::ids::BotId;
 use crate::kinds::BotFlavor;
-use crate::napcat_login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
-use crate::napcat_webui_client::NapCatWebUiClient;
-use crate::offline_notifier::OfflineNotifier;
+use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
+use crate::napcat::offline_notifier::OfflineNotifier;
+use crate::napcat::webui_client::NapCatWebUiClient;
 use crate::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, StopMode,
 };

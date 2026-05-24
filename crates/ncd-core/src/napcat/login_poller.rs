@@ -26,10 +26,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus, NapCatLoginInvalidationReason};
 use crate::ids::BotId;
-use crate::napcat_webui_client::{
+use super::webui_client::{
     CheckLoginStatusData, GetQQLoginInfoData, NapCatWebUiClient, NapCatWebUiError,
 };
-use crate::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
+use super::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
 
 /// 单个 Poller 的运行参数。
 ///
@@ -559,7 +559,7 @@ mod tests {
     use super::*;
 
     use crate::events::EventFilter;
-    use crate::offline_notifier::NoopOfflineNotifier;
+    use super::super::offline_notifier::NoopOfflineNotifier;
 
     // ── 既有测试：确保骨架未被破坏 ──
 
@@ -1052,7 +1052,7 @@ mod transition_tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use crate::events::EventFilter;
-    use crate::offline_notifier::OfflineNoticeKind;
+    use super::super::offline_notifier::OfflineNoticeKind;
 
     // ── mock client：login + online 响应序列 ──────────────────────────────
 
@@ -2021,10 +2021,10 @@ mod property_tests {
         NapCatLoginInvalidationReason,
     };
     use crate::ids::BotId;
-    use crate::napcat_webui_client::{
+    use super::super::webui_client::{
         CheckLoginStatusData, GetQQLoginInfoData, NapCatWebUiClient, NapCatWebUiError,
     };
-    use crate::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
+    use super::super::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
 
     use super::{
         LoginState, PollerConfig, PollerDeps, RestartHandle, apply_login_status,

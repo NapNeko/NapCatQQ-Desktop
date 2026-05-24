@@ -15,9 +15,7 @@ pub mod kinds;
 pub mod legacy_discovery;
 pub mod migration;
 pub mod models;
-pub mod napcat_login_poller;
-pub mod napcat_webui_client;
-pub mod offline_notifier;
+pub mod napcat;
 pub mod path_probe_impl;
 pub mod remote_host;
 pub mod report;
@@ -56,9 +54,9 @@ pub use models::{
     BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationSource, MigrationStage,
     MigrationWarning,
 };
-pub use napcat_login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
-pub use napcat_webui_client::{NapCatWebUiClient, NapCatWebUiError, ReqwestNapCatWebUiClient};
-pub use offline_notifier::{NoopOfflineNotifier, OfflineNoticeKind, OfflineNotifier};
+pub use napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
+pub use napcat::offline_notifier::{NoopOfflineNotifier, OfflineNoticeKind, OfflineNotifier};
+pub use napcat::webui_client::{NapCatWebUiClient, NapCatWebUiError, ReqwestNapCatWebUiClient};
 pub use path_probe_impl::LocalPathProbe;
 pub use remote_host::{
     ExecResult, MockRemoteHost, PosixPath, ProcessNode, ProcessTree, RemoteFileEntry, RemoteHost,
