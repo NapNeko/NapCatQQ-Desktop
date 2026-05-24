@@ -452,7 +452,7 @@ mod tests {
 
     impl MockClient {
         fn new() -> (Arc<Self>, Arc<TokioMutex<MockBehavior>>) {
-            let behavior = Arc::new(TokioMutex::new(MockBehavior::default));
+            let behavior = Arc::new(TokioMutex::new(MockBehavior::default()));
             (
                 Arc::new(Self {
                     behavior: Arc::clone(&behavior),
@@ -512,7 +512,7 @@ mod tests {
             })
         }
         async fn get_auth_state(&self) -> Result<AuthState, SnowLumaWebUiError> {
-            Ok(AuthState::default)
+            Ok(AuthState::default())
         }
     }
 
@@ -679,7 +679,7 @@ mod tests {
 
     #[tokio::test]
     async fn tick_once_locks_uin_and_emits_logged_in() {
-        let (client, behavior) = MockClient::new;
+        let (client, behavior) = MockClient::new();
         {
             let mut b = behavior.lock().await;
             b.processes_responses.push_back(Ok(vec![proc(
@@ -731,7 +731,7 @@ mod tests {
 
     #[tokio::test]
     async fn tick_once_consecutive_failures_emit_disconnected_only_once() {
-        let (client, behavior) = MockClient::new;
+        let (client, behavior) = MockClient::new();
         {
             let mut b = behavior.lock().await;
             // 让两端都失败，复用最后一条
@@ -780,7 +780,7 @@ mod tests {
 
     #[tokio::test]
     async fn tick_once_pid_set_change_emits_event() {
-        let (client, behavior) = MockClient::new;
+        let (client, behavior) = MockClient::new();
         let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::with_set([
             12345u32, 12346u32, 12347u32,
         ]));
@@ -840,7 +840,7 @@ mod tests {
             DomainEventKind::SnowLumaLoginStateChanged,
         ));
         let mut state = PollerState::new(12345);
-        let (client, _b) = MockClient::new;
+        let (client, _b) = MockClient::new();
         let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::new());
         let deps = PollerDeps {
             event_bus: Arc::clone(&bus),

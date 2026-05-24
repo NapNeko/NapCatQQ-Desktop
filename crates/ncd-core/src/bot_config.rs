@@ -526,7 +526,7 @@ mod snowluma_start_mode_tests {
             name: "test-bot".to_string(),
             qq_id: 10001,
             music_sign_url: String::new(),
-            auto_restart_schedule: AutoRestartSchedule::default,
+            auto_restart_schedule: AutoRestartSchedule::default(),
             offline_auto_restart: false,
             runtime_target: RuntimeTarget::Local,
             backend_type: BackendType::SnowLuma,

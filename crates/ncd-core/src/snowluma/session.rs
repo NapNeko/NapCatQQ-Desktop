@@ -406,14 +406,14 @@ mod tests {
             .and_then(|v| v.as_str())
             .expect("hash str");
         assert_eq!(hash.len(), SCRYPT_DKLEN * 2);
-        assert!(hash.bytes().all(|b| b.is_ascii_hexdigit));
+        assert!(hash.bytes().all(|b| b.is_ascii_hexdigit()));
 
         let salt = payload
             .get("passwordSalt")
             .and_then(|v| v.as_str())
             .expect("salt str");
         assert_eq!(salt.len(), SCRYPT_SALT_BYTES * 2);
-        assert!(salt.bytes().all(|b| b.is_ascii_hexdigit));
+        assert!(salt.bytes().all(|b| b.is_ascii_hexdigit()));
 
         assert_eq!(
             payload.get("mustChangePassword"),
@@ -472,7 +472,7 @@ mod tests {
     #[test]
     fn generate_strong_password_emits_only_whitelisted_chars() {
         let pwd = generate_strong_password(64);
-        for (idx, b) in pwd.bytes().enumerate {
+        for (idx, b) in pwd.bytes().enumerate() {
             let allowed = UPPERCASE.contains(&b)
                 || LOWERCASE.contains(&b)
                 || DIGITS.contains(&b)
@@ -530,8 +530,8 @@ mod tests {
     /// 首启写入 `session.json`；再次调用直接读，密码与 createdAt 全部稳定。
     #[test]
     fn load_or_create_session_is_idempotent_after_first_call() {
-        let temp = tempfile::tempdir.expect("tempdir");
-        let root = temp.path;
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
 
         let first = load_or_create_session(root).expect("first");
         let second = load_or_create_session(root).expect("second");
@@ -551,12 +551,12 @@ mod tests {
         let a = build_webui_json_payload(pwd, false).expect("payload a");
         let b = build_webui_json_payload(pwd, false).expect("payload b");
 
-        let salt_a = a.get("passwordSalt").and_then(|v| v.as_str()).unwrap;
-        let salt_b = b.get("passwordSalt").and_then(|v| v.as_str()).unwrap;
+        let salt_a = a.get("passwordSalt").and_then(|v| v.as_str()).unwrap();
+        let salt_b = b.get("passwordSalt").and_then(|v| v.as_str()).unwrap();
         assert_ne!(salt_a, salt_b, "salts collided: {salt_a} == {salt_b}");
 
-        let hash_a = a.get("passwordHash").and_then(|v| v.as_str()).unwrap;
-        let hash_b = b.get("passwordHash").and_then(|v| v.as_str()).unwrap;
+        let hash_a = a.get("passwordHash").and_then(|v| v.as_str()).unwrap();
+        let hash_b = b.get("passwordHash").and_then(|v| v.as_str()).unwrap();
         assert_ne!(hash_a, hash_b, "hashes collided: {hash_a} == {hash_b}");
     }
 
@@ -564,8 +564,8 @@ mod tests {
     /// `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`。无 `regex` crate，手写 24 字符校验。
     #[test]
     fn now_iso8601_matches_iso_8601_format() {
-        let temp = tempfile::tempdir.expect("tempdir");
-        let session = load_or_create_session(temp.path).expect("session");
+        let temp = tempfile::tempdir().expect("tempdir");
+        let session = load_or_create_session(temp.path()).expect("session");
         assert_iso8601_millis(&session.created_at);
         assert_iso8601_millis(&session.last_rendered_at);
     }
@@ -597,8 +597,8 @@ mod tests {
     /// `update_last_rendered` 必须把时间戳推进到 ≥ 原值，并且大概率严格 >（毫秒精度时钟）。
     #[test]
     fn update_last_rendered_advances_timestamp() {
-        let temp = tempfile::tempdir.expect("tempdir");
-        let root = temp.path;
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
 
         let original = load_or_create_session(root).expect("create session");
         // 至少跨越 1ms tick，留余量给 Windows 时钟分辨率（典型 ~15ms）。
@@ -627,10 +627,10 @@ mod tests {
     /// session 密码。无论走哪条分支，runtime.json / webui.json 都应原子落盘。
     #[test]
     fn render_daemon_globals_uses_override_when_present() {
-        let snow_dir = tempfile::tempdir.expect("snow tempdir");
-        let runtime_dir = tempfile::tempdir.expect("runtime tempdir");
-        let snow = snow_dir.path;
-        let runtime = runtime_dir.path;
+        let snow_dir = tempfile::tempdir().expect("snow tempdir");
+        let runtime_dir = tempfile::tempdir().expect("runtime tempdir");
+        let snow = snow_dir.path();
+        let runtime = runtime_dir.path();
 
         // 1) override = Some("OVERRIDE!@123") → 返回 override 原值。
         let override_pwd = "OVERRIDE!@123";

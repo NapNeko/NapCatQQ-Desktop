@@ -298,7 +298,7 @@ async fn build_napcat_launch_plan_inner(
 
     let load_script_path = napcat_dir.join("loadNapCat.js");
     let napcat_mjs_uri = path_to_file_uri(&napcat_dir.join("napcat.mjs"));
-    let load_script = format!("(async => {{await import('{}')}})", napcat_mjs_uri);
+    let load_script = format!("(async () => {{await import('{}')}})()", napcat_mjs_uri);
     tokio::fs::write(&load_script_path, load_script)
         .await
         .map_err(|error| RuntimeLaunchPlanError::LoadScript(error.to_string()))?;
@@ -420,14 +420,14 @@ mod snowluma_plan_tests {
                 name: "snowluma-bot".to_string(),
                 qq_id: 100200,
                 music_sign_url: String::new(),
-                auto_restart_schedule: AutoRestartSchedule::default,
+                auto_restart_schedule: AutoRestartSchedule::default(),
                 offline_auto_restart: false,
                 runtime_target: RuntimeTarget::Local,
                 backend_type: BackendType::SnowLuma,
                 snowluma_start_mode: start_mode,
             },
-            connect: ConnectConfig::default,
-            advanced: AdvancedConfig::default,
+            connect: ConnectConfig::default(),
+            advanced: AdvancedConfig::default(),
         }
     }
 
@@ -435,10 +435,10 @@ mod snowluma_plan_tests {
     /// 携带的路径精确指向缺失的 `<runtime_root>/node.exe`。
     #[tokio::test]
     async fn snowluma_plan_rejects_missing_node_exe() {
-        let runtime_root_dir = tempdir.unwrap;
-        let data_root_dir = tempdir.unwrap;
-        let runtime_root = runtime_root_dir.path;
-        let data_root = data_root_dir.path;
+        let runtime_root_dir = tempdir().unwrap();
+        let data_root_dir = tempdir().unwrap();
+        let runtime_root = runtime_root_dir.path();
+        let data_root = data_root_dir.path();
         let bot_id = BotId::from("bot-1");
         let config = make_config(Some(SnowLumaStartMode::ColdStart));
 
@@ -457,14 +457,14 @@ mod snowluma_plan_tests {
     /// HotStart attach_pid=0 是非法输入，构造前直接拒绝。
     #[tokio::test]
     async fn snowluma_plan_rejects_zero_attach_pid() {
-        let runtime_root_dir = tempdir.unwrap;
-        let data_root_dir = tempdir.unwrap;
-        let runtime_root = runtime_root_dir.path;
-        let data_root = data_root_dir.path;
+        let runtime_root_dir = tempdir().unwrap();
+        let data_root_dir = tempdir().unwrap();
+        let runtime_root = runtime_root_dir.path();
+        let data_root = data_root_dir.path();
         // node.exe 必须先存在，否则会被 NodeMissing 拦下。
         tokio::fs::write(runtime_root.join("node.exe"), b"stub")
             .await
-            .unwrap;
+            .unwrap();
 
         let bot_id = BotId::from("bot-1");
         let config = make_config(Some(SnowLumaStartMode::HotStart { attach_pid: 0 }));
@@ -485,13 +485,13 @@ mod snowluma_plan_tests {
     /// `qq_install_path = None`，`bot_qq_id` 与 `snowluma_data_root` 透传。
     #[tokio::test]
     async fn snowluma_plan_hot_start_skips_qq_install_resolution() {
-        let runtime_root_dir = tempdir.unwrap;
-        let data_root_dir = tempdir.unwrap;
-        let runtime_root = runtime_root_dir.path;
-        let data_root = data_root_dir.path;
+        let runtime_root_dir = tempdir().unwrap();
+        let data_root_dir = tempdir().unwrap();
+        let runtime_root = runtime_root_dir.path();
+        let data_root = data_root_dir.path();
         tokio::fs::write(runtime_root.join("node.exe"), b"stub")
             .await
-            .unwrap;
+            .unwrap();
 
         let bot_id = BotId::from("bot-1");
         let config = make_config(Some(SnowLumaStartMode::HotStart { attach_pid: 12345 }));
@@ -521,13 +521,13 @@ mod snowluma_plan_tests {
     #[cfg(not(windows))]
     #[tokio::test]
     async fn snowluma_plan_cold_start_attempts_qq_install_lookup() {
-        let runtime_root_dir = tempdir.unwrap;
-        let data_root_dir = tempdir.unwrap;
-        let runtime_root = runtime_root_dir.path;
-        let data_root = data_root_dir.path;
+        let runtime_root_dir = tempdir().unwrap();
+        let data_root_dir = tempdir().unwrap();
+        let runtime_root = runtime_root_dir.path();
+        let data_root = data_root_dir.path();
         tokio::fs::write(runtime_root.join("node.exe"), b"stub")
             .await
-            .unwrap;
+            .unwrap();
 
         let bot_id = BotId::from("bot-1");
         let config = make_config(Some(SnowLumaStartMode::ColdStart));
@@ -548,13 +548,13 @@ mod snowluma_plan_tests {
     #[cfg(not(windows))]
     #[tokio::test]
     async fn snowluma_plan_defaults_to_cold_start_when_unset() {
-        let runtime_root_dir = tempdir.unwrap;
-        let data_root_dir = tempdir.unwrap;
-        let runtime_root = runtime_root_dir.path;
-        let data_root = data_root_dir.path;
+        let runtime_root_dir = tempdir().unwrap();
+        let data_root_dir = tempdir().unwrap();
+        let runtime_root = runtime_root_dir.path();
+        let data_root = data_root_dir.path();
         tokio::fs::write(runtime_root.join("node.exe"), b"stub")
             .await
-            .unwrap;
+            .unwrap();
 
         let bot_id = BotId::from("bot-1");
         let config = make_config(None);

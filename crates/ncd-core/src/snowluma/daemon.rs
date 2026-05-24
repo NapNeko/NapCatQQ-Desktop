@@ -839,23 +839,23 @@ mod tests {
         // 防字面量漂移： / 9.1 的前端事件 payload `state` 字段
         // 严格依赖这五个 snake_case 字面量；这里 lock 一遍。
         assert_eq!(
-            serde_json::to_string(&DaemonState::Stopped).unwrap,
+            serde_json::to_string(&DaemonState::Stopped).unwrap(),
             "\"stopped\""
         );
         assert_eq!(
-            serde_json::to_string(&DaemonState::Starting).unwrap,
+            serde_json::to_string(&DaemonState::Starting).unwrap(),
             "\"starting\""
         );
         assert_eq!(
-            serde_json::to_string(&DaemonState::Ready).unwrap,
+            serde_json::to_string(&DaemonState::Ready).unwrap(),
             "\"ready\""
         );
         assert_eq!(
-            serde_json::to_string(&DaemonState::Stopping).unwrap,
+            serde_json::to_string(&DaemonState::Stopping).unwrap(),
             "\"stopping\""
         );
         assert_eq!(
-            serde_json::to_string(&DaemonState::Crashed).unwrap,
+            serde_json::to_string(&DaemonState::Crashed).unwrap(),
             "\"crashed\""
         );
     }
@@ -919,14 +919,14 @@ mod tests {
 
     #[tokio::test]
     async fn daemon_initial_state_is_stopped() {
-        let daemon = build_smoke_daemon;
-        assert_eq!(daemon.state.await, DaemonState::Stopped);
+        let daemon = build_smoke_daemon();
+        assert_eq!(daemon.state().await, DaemonState::Stopped);
     }
 
     #[tokio::test]
     async fn daemon_ref_count_is_zero_initially() {
-        let daemon = build_smoke_daemon;
-        assert_eq!(daemon.ref_count.await, 0);
+        let daemon = build_smoke_daemon();
+        assert_eq!(daemon.ref_count().await, 0);
     }
 
     /// 编译期断言：`SnowLumaWebUiClientFactory` 直接以 `Arc<dyn SnowLumaWebUiClient>`
@@ -944,8 +944,8 @@ mod tests {
     /// `subscribe_logs` 应当直接返回一个 broadcast Receiver；不需要 daemon 已启动。
     #[tokio::test]
     async fn daemon_subscribe_logs_does_not_require_start() {
-        let daemon = build_smoke_daemon;
-        let _rx: broadcast::Receiver<String> = daemon.subscribe_logs;
+        let daemon = build_smoke_daemon();
+        let _rx: broadcast::Receiver<String> = daemon.subscribe_logs();
     }
 
     // -----------------------------------------------------------------------
@@ -1126,7 +1126,7 @@ mod tests {
         async fn get_auth_state(
             &self,
         ) -> Result<crate::snowluma::webui_client::AuthState, SnowLumaWebUiError> {
-            Ok(crate::snowluma::webui_client::AuthState::default)
+            Ok(crate::snowluma::webui_client::AuthState::default())
         }
     }
 
@@ -1195,16 +1195,16 @@ mod tests {
         tempfile::TempDir,
         Arc<TokioMutex<MockBehavior>>,
     ) {
-        let runtime_dir = tempdir.expect("tempdir runtime");
-        let snowluma_dir = tempdir.expect("tempdir snowluma_data");
+        let runtime_dir = tempdir().expect("tempdir runtime");
+        let snowluma_dir = tempdir().expect("tempdir snowluma_data");
         let event_bus = Arc::new(BroadcastEventBus::default());
-        let behavior = Arc::new(TokioMutex::new(MockBehavior::default));
+        let behavior = Arc::new(TokioMutex::new(MockBehavior::default()));
         let factory: Arc<dyn SnowLumaWebUiClientFactory> = Arc::new(MockFactory {
             behavior: Arc::clone(&behavior),
         });
         let daemon = SnowLumaDaemon::new(
-            snowluma_dir.path.to_path_buf(),
-            runtime_dir.path.to_path_buf(),
+            snowluma_dir.path().to_path_buf(),
+            runtime_dir.path().to_path_buf(),
             event_bus,
             factory,
         );
@@ -1216,7 +1216,7 @@ mod tests {
     /// last_error 非空。事件序列：先 Starting，再 Stopped(reason=Some)。
     #[tokio::test]
     async fn daemon_spawn_failure_rolls_back_to_stopped() {
-        let (daemon, _runtime_dir, _snowluma_dir, _behavior) = build_test_daemon;
+        let (daemon, _runtime_dir, _snowluma_dir, _behavior) = build_test_daemon();
         let mut sub = daemon.event_bus.subscribe(EventFilter::kind(
             DomainEventKind::SnowLumaDaemonStateChanged,
         ));
@@ -1227,8 +1227,8 @@ mod tests {
             "spawn must fail without node.exe in runtime_root"
         );
 
-        assert_eq!(daemon.state.await, DaemonState::Stopped);
-        assert_eq!(daemon.ref_count.await, 0);
+        assert_eq!(daemon.state().await, DaemonState::Stopped);
+        assert_eq!(daemon.ref_count().await, 0);
 
         // 收到 Starting 事件。
         let first = tokio::time::timeout(Duration::from_secs(2), sub.next())
@@ -1271,7 +1271,7 @@ mod tests {
     /// node.exe，留给端到端集成测试）。
     #[tokio::test]
     async fn daemon_concurrent_callers_share_starting_then_all_fail() {
-        let (daemon, _runtime_dir, _snowluma_dir, _behavior) = build_test_daemon;
+        let (daemon, _runtime_dir, _snowluma_dir, _behavior) = build_test_daemon();
 
         let d1 = Arc::clone(&daemon);
         let d2 = Arc::clone(&daemon);
@@ -1289,18 +1289,18 @@ mod tests {
         assert!(r3.is_err(), "caller 3 should err");
 
         // 全部失败后应回到稳态 Stopped，ref_count 归零（rollback 强制清零）。
-        assert_eq!(daemon.state.await, DaemonState::Stopped);
-        assert_eq!(daemon.ref_count.await, 0);
+        assert_eq!(daemon.state().await, DaemonState::Stopped);
+        assert_eq!(daemon.ref_count().await, 0);
     }
 
     /// release 在 ref_count == 0 时是安全的：多次调用不 panic、不 underflow
     /// ref_count 仍然 == 0（`saturating_sub` 语义）。
     #[tokio::test]
     async fn daemon_release_is_safe_when_ref_count_is_zero() {
-        let daemon = build_smoke_daemon;
+        let daemon = build_smoke_daemon();
         for _ in 0..10 {
             daemon.release().await;
-            assert_eq!(daemon.ref_count.await, 0);
+            assert_eq!(daemon.ref_count().await, 0);
         }
     }
 
@@ -1308,10 +1308,10 @@ mod tests {
     /// 不 panic、不发任何状态事件、状态保持 Stopped。
     #[tokio::test]
     async fn daemon_shutdown_from_stopped_is_noop() {
-        let daemon = build_smoke_daemon;
+        let daemon = build_smoke_daemon();
         daemon.shutdown().await;
-        assert_eq!(daemon.state.await, DaemonState::Stopped);
-        assert_eq!(daemon.ref_count.await, 0);
+        assert_eq!(daemon.state().await, DaemonState::Stopped);
+        assert_eq!(daemon.ref_count().await, 0);
     }
 
     // -------------------------------------------------------------------
@@ -1323,22 +1323,22 @@ mod tests {
     proptest! {
     #![proptest_config(ProptestConfig {
     cases: 16,
-    ..ProptestConfig::default
+    ..ProptestConfig::default()
     })]
 
     #[test]
     fn daemon_release_never_underflows(call_count in 0u32..50) {
     // proptest case 内部跑 tokio runtime；用 current_thread 即可。
-    let rt = tokio::runtime::Builder::new_current_thread
-    .enable_all
-    .build
+    let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_all()
+    .build()
     .expect("build rt");
     rt.block_on(async {
-    let daemon = build_smoke_daemon;
+    let daemon = build_smoke_daemon();
     for _ in 0..call_count {
     daemon.release().await;
     }
-    let final_ref = daemon.ref_count.await;
+    let final_ref = daemon.ref_count().await;
     prop_assert_eq!(final_ref, 0);
     Ok(())
     }).expect("proptest async block");

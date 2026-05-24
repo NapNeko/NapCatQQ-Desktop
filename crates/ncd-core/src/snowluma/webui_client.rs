@@ -631,7 +631,7 @@ mod tests {
 
     #[test]
     fn validate_host_rejects_non_loopback() {
-        let err = validate_host("evil.example.com").unwrap_err;
+        let err = validate_host("evil.example.com").unwrap_err();
         match err {
             SnowLumaWebUiError::Http { endpoint, cause } => {
                 assert_eq!(endpoint, "<host-guard>");
@@ -676,7 +676,7 @@ mod tests {
     // 起一个绑定在 `127.0.0.1:0`（OS 分配端口）的假 SnowLuma WebUI 服务
     // 验证 `ReqwestSnowLumaWebUiClient` 在真实 HTTP 链路上的行为。
     //
-    // wiremock 0.6 默认 `MockServer::start.await` 监听 `127.0.0.1`，与本
+    // wiremock 0.6 默认 `MockServer::start().await` 监听 `127.0.0.1`，与本
     // 客户端的 host guard（仅放行 `localhost` / `127.0.0.1` / `[::1]`）天然匹配。
     // -----------------------------------------------------------------------
 
@@ -686,19 +686,19 @@ mod tests {
 
     /// 取出 wiremock 在 `127.0.0.1` 上分配到的随机端口。
     fn mock_server_port(server: &MockServer) -> u16 {
-        let addr = server.address;
+        let addr = server.address();
         assert_eq!(
-            addr.ip.to_string(),
+            addr.ip().to_string(),
             "127.0.0.1",
             "wiremock must bind to 127.0.0.1 only (host guard)"
         );
-        addr.port
+        addr.port()
     }
 
     /// `/api/status` 任意 HTTP 响应即视为 ready。这里直接 200 OK。
     #[tokio::test]
     async fn wait_ready_succeeds_when_status_endpoint_responds() {
-        let server = MockServer::start.await;
+        let server = MockServer::start().await;
         let port = mock_server_port(&server);
 
         Mock::given(method("GET"))
@@ -771,7 +771,7 @@ mod tests {
     /// `LoginRequest` body 字段名锁定：`{"password": "<pwd>"}`。
     #[tokio::test]
     async fn login_serializes_password_in_request_body() {
-        let server = MockServer::start.await;
+        let server = MockServer::start().await;
         let port = mock_server_port(&server);
 
         Mock::given(method("GET"))
@@ -800,7 +800,7 @@ mod tests {
     /// `GET /api/processes` 响应是 `{"list": [...]}` wrapped 形态，需要解包。
     #[tokio::test]
     async fn list_processes_unwraps_wrapped_list() {
-        let server = MockServer::start.await;
+        let server = MockServer::start().await;
         let port = mock_server_port(&server);
 
         Mock::given(method("POST"))
@@ -839,7 +839,7 @@ mod tests {
     /// 返回 `HookProcessInfo`。
     #[tokio::test]
     async fn load_process_success_path() {
-        let server = MockServer::start.await;
+        let server = MockServer::start().await;
         let port = mock_server_port(&server);
 
         Mock::given(method("POST"))
@@ -878,7 +878,7 @@ mod tests {
     /// `ServerRejected { endpoint, message }`。
     #[tokio::test]
     async fn load_process_server_rejected() {
-        let server = MockServer::start.await;
+        let server = MockServer::start().await;
         let port = mock_server_port(&server);
 
         Mock::given(method("POST"))
@@ -919,7 +919,7 @@ mod tests {
     /// 配合 `up_to_n_times(1)` 实现"第一次走 A，之后走 B"的状态机。
     #[tokio::test]
     async fn auto_retries_login_on_401_then_succeeds() {
-        let server = MockServer::start.await;
+        let server = MockServer::start().await;
         let port = mock_server_port(&server);
 
         // 低优先级（先挂载）：第一次失败之后的回落响应。
@@ -962,7 +962,7 @@ mod tests {
     /// `GET /api/auth/state` 反序列化 `mustChangePassword` (camelCase)。
     #[tokio::test]
     async fn get_auth_state_decodes_must_change_password() {
-        let server = MockServer::start.await;
+        let server = MockServer::start().await;
         let port = mock_server_port(&server);
 
         Mock::given(method("GET"))
@@ -975,7 +975,7 @@ mod tests {
 
         let client = ReqwestSnowLumaWebUiClient::new(port, "pwd".into()).expect("build client");
         let state = client
-            .get_auth_state
+            .get_auth_state()
             .await
             .expect("get_auth_state should succeed");
         assert!(
@@ -999,7 +999,7 @@ mod tests {
         // 在断言之前已恢复，符合"无外部观察者读到不一致状态"的安全契约。
         unsafe { std::env::set_var("HTTP_PROXY", "http://bogus-proxy.invalid:9") }
 
-        let server = MockServer::start.await;
+        let server = MockServer::start().await;
         let port = mock_server_port(&server);
         Mock::given(method("GET"))
             .and(path("/api/status"))

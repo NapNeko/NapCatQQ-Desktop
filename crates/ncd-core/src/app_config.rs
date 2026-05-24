@@ -118,7 +118,7 @@ mod tests {
         let parsed: WebUiPollerSettings =
             serde_json::from_str("{}").expect("空对象应能反序列化为默认值");
 
-        assert_eq!(parsed, WebUiPollerSettings::default);
+        assert_eq!(parsed, WebUiPollerSettings::default());
         assert_eq!(parsed.bot_login_check_interval_ms, default_login_interval());
         assert!(!parsed.offline_webhook_notice);
         assert!(!parsed.offline_email_notice);
@@ -164,7 +164,7 @@ mod tests {
     /// `Default` 实例的语义与字节级一致性。
     #[test]
     fn snowluma_default_matches_canonical_json() {
-        let cfg = SnowLumaAppConfig::default;
+        let cfg = SnowLumaAppConfig::default();
         assert_eq!(cfg.webui_password_override, "");
         assert_eq!(cfg.webui_port, default_snowluma_port());
         assert_eq!(cfg.webui_port, 5099);
@@ -178,7 +178,7 @@ mod tests {
 
         let parsed: SnowLumaAppConfig = serde_json::from_str(SNOWLUMA_DEFAULT_CANONICAL_JSON)
             .expect("默认 JSON 应可被反序列化");
-        assert_eq!(parsed, SnowLumaAppConfig::default);
+        assert_eq!(parsed, SnowLumaAppConfig::default());
     }
 
     /// 空对象走 `#[serde(default ...)]` 路径，应当还原成 `Default` 等价值
@@ -188,7 +188,7 @@ mod tests {
         let parsed: SnowLumaAppConfig =
             serde_json::from_str("{}").expect("空对象应能反序列化为默认值");
 
-        assert_eq!(parsed, SnowLumaAppConfig::default);
+        assert_eq!(parsed, SnowLumaAppConfig::default());
         assert_eq!(parsed.webui_password_override, "");
         assert_eq!(parsed.webui_port, default_snowluma_port());
     }

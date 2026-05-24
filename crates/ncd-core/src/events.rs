@@ -489,7 +489,7 @@ mod tests {
     #[test]
     fn event_name_mapping_matches_frontend_contract() {
         let event = DomainEvent::bot_log("10001", "hello");
-        assert_eq!(event.tauri_event_name, "bot_log_appended");
+        assert_eq!(event.tauri_event_name(), "bot_log_appended");
         assert_eq!(event.kind(), DomainEventKind::BotLogAppended);
     }
 
@@ -515,7 +515,7 @@ mod tests {
     fn bot_status_changed_event_serializes() {
         let status = BotStatus::running("10004", 1234, 5678);
         let event = DomainEvent::bot_status_changed(status, "runtime_poll");
-        let json = serde_json::to_string(&event).unwrap;
+        let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("bot_status_changed"));
         assert!(json.contains("runtime_poll"));
     }
@@ -524,7 +524,7 @@ mod tests {
     fn bot_state_changed_event_serializes() {
         let snapshot = BotActorSnapshot::new("10003");
         let event = DomainEvent::bot_state_changed(snapshot, "start_requested");
-        let json = serde_json::to_string(&event).unwrap;
+        let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("bot_state_changed"));
         assert!(json.contains("start_requested"));
     }
@@ -587,11 +587,11 @@ mod tests {
     fn napcat_login_invalidation_reason_serializes_snake_case() {
         // 字面量锁定：前端 TS 字面量类型为 'kicked' | 'logged_out'。
         assert_eq!(
-            serde_json::to_string(&NapCatLoginInvalidationReason::Kicked).unwrap,
+            serde_json::to_string(&NapCatLoginInvalidationReason::Kicked).unwrap(),
             "\"kicked\""
         );
         assert_eq!(
-            serde_json::to_string(&NapCatLoginInvalidationReason::LoggedOut).unwrap,
+            serde_json::to_string(&NapCatLoginInvalidationReason::LoggedOut).unwrap(),
             "\"logged_out\""
         );
     }
@@ -622,7 +622,7 @@ mod tests {
             ),
         ];
         for (event, expected) in &cases {
-            assert_eq!(event.tauri_event_name, *expected);
+            assert_eq!(event.tauri_event_name(), *expected);
         }
     }
 
@@ -681,7 +681,7 @@ mod tests {
             DomainEvent::snowluma_daemon_log("hello world"),
         ];
         for event in &all {
-            let name = event.tauri_event_name;
+            let name = event.tauri_event_name();
             let needle_single = format!("'{name}'");
             let needle_double = format!("\"{name}\"");
             assert!(
@@ -786,7 +786,7 @@ mod tests {
             ),
         ];
         for (event, expected) in &cases {
-            assert_eq!(event.tauri_event_name, *expected);
+            assert_eq!(event.tauri_event_name(), *expected);
         }
     }
 

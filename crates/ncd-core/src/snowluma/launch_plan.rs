@@ -100,12 +100,12 @@ mod tests {
     fn helpers_report_mode_correctly() {
         let cold = SnowLumaStartMode::ColdStart;
         assert!(cold.is_cold());
-        assert!(!cold.is_hot);
-        assert_eq!(cold.attach_pid, None);
+        assert!(!cold.is_hot());
+        assert_eq!(cold.attach_pid(), None);
 
         let hot = SnowLumaStartMode::HotStart { attach_pid: 9876 };
         assert!(!hot.is_cold());
-        assert!(hot.is_hot);
-        assert_eq!(hot.attach_pid, Some(9876));
+        assert!(hot.is_hot());
+        assert_eq!(hot.attach_pid(), Some(9876));
     }
 }

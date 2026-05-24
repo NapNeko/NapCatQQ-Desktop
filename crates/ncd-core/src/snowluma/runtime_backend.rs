@@ -474,7 +474,7 @@ mod tests {
         let probe: Arc<dyn ProcessTreeProbe> = Arc::new(ContainsPidProbe {
             set: BTreeSet::from([99999u32]),
         });
-        let err = validate_hot_attach_pid(&probe, 12345).await.unwrap_err;
+        let err = validate_hot_attach_pid(&probe, 12345).await.unwrap_err();
         match err {
             BotBackendError::InvalidConfig(msg) => {
                 assert!(msg.contains("12345"));

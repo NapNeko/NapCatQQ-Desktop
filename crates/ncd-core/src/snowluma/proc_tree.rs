@@ -237,7 +237,7 @@ mod tests {
     #[tokio::test]
     async fn sysinfo_probe_windows_current_pid_includes_self() {
         let probe = SysinfoProcessTreeProbe::new();
-        let pid = std::process::id;
+        let pid = std::process::id();
         let result = probe.collect_descendants(pid).await;
         assert!(
             result.contains(&pid),
