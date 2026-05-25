@@ -11,9 +11,10 @@
 
 import React, { useCallback, useMemo } from 'react';
 import { Box, Loader2, RefreshCw } from 'lucide-react';
-import { Button } from '../../shared/ui';
+import { Button, InfoBarStack } from '../../shared/ui';
 import { useComponents } from '../../hooks/components/useComponents';
 import { useComponentAction } from '../../hooks/components/useComponentAction';
+import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { ComponentCard } from './ComponentCard';
 import type { ComponentId, StepKind } from '../../core/ipc/types';
@@ -21,7 +22,8 @@ import type { ComponentRow } from '../../core/domain/components/types';
 
 export const ComponentsPageNext: React.FC = () => {
     const { view, isLoading, error, refetch } = useComponents();
-    const { startAction, cancelAction, getProgressFor } = useComponentAction();
+    const { startAction, cancelAction, getProgressFor, onTaskTerminal } =
+        useComponentAction();
     const { snapshot: releases } = useReleases();
 
     // 隐藏"全部 host 都 unsupported"的整张卡。当前 Tauri 模式只有 local
@@ -35,6 +37,13 @@ export const ComponentsPageNext: React.FC = () => {
         }),
         [view],
     );
+
+    // 给 InfoBarStack 用的扁平 row 列表，用来反查 (componentId, hostId) → 显示名。
+    const allRows = useMemo<ComponentRow[]>(
+        () => [...visibleView.framework, ...visibleView.runtimeDep, ...visibleView.selfApp],
+        [visibleView],
+    );
+    const { banners, dismiss } = useComponentActionErrors(allRows);
 
     const latestVersionFor = useCallback(
         (id: ComponentId): string | null => {
@@ -65,14 +74,18 @@ export const ComponentsPageNext: React.FC = () => {
                     await cancelAction(payload.cancelTaskId);
                     return;
                 }
-                await startAction(componentId, hostId, payload.stepKind);
-                // 操作成功后稍后再 refetch detect（500ms 等后端同步）
-                setTimeout(refetch, 500);
+                const taskId = await startAction(componentId, hostId, payload.stepKind);
+                // 不能用固定 setTimeout(refetch, 500)：NapCat 装包要几十秒，
+                // 500ms 后 detect 仍是未安装，UI 看起来会"装动画一闪就消失、
+                // 按钮回到点击前"。改成订阅终态信号，真正完成才刷新 detect。
+                onTaskTerminal(taskId, () => {
+                    refetch();
+                });
             } catch (err) {
                 console.error('[ComponentsPage] action failed:', err);
             }
         },
-        [startAction, cancelAction, refetch],
+        [startAction, cancelAction, onTaskTerminal, refetch],
     );
 
     const allEmpty =
@@ -82,6 +95,7 @@ export const ComponentsPageNext: React.FC = () => {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
+            <InfoBarStack items={banners} onDismiss={dismiss} />
             {/* 头部固定，不参与滚动 */}
             <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
                 <div>
