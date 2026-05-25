@@ -256,6 +256,9 @@ async fn emit_step(
         percent,
         message,
         speed_bps,
+        downloaded_bytes: None,
+        total_bytes: None,
+        download_stage: None,
     })
     .await;
 }
@@ -318,6 +321,12 @@ impl DownloadProgressSink for CtxSink {
             DownloadStage::SwitchingMirror => "switch mirror",
             DownloadStage::Resuming => "resume",
         };
+        let stage_id = match update.stage {
+            DownloadStage::Racing => "racing",
+            DownloadStage::Streaming => "streaming",
+            DownloadStage::SwitchingMirror => "switching_mirror",
+            DownloadStage::Resuming => "resuming",
+        };
 
         let mirror = update.mirror_url.as_deref().unwrap_or(&self.primary_url);
         let mut message = match (update.total, update.speed_bps) {
@@ -353,6 +362,9 @@ impl DownloadProgressSink for CtxSink {
                 percent: pct,
                 message,
                 speed_bps: update.speed_bps,
+                downloaded_bytes: Some(update.downloaded),
+                total_bytes: update.total,
+                download_stage: Some(stage_id.to_string()),
             })
             .await;
     }

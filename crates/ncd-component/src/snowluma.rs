@@ -387,27 +387,17 @@ impl SnowLumaComponent {
                     .unwrap_or(0)
             ));
 
-            let mut last_err: Option<ActionError> = None;
-            for url in self.mirror_urls() {
-                ctx.info(format!("trying mirror: {url}")).await;
-                match helper
-                    .download_to_file(&url, &local_tmp, self.expected_sha256.as_deref(), ctx, 1)
-                    .await
-                {
-                    Ok(()) => {
-                        last_err = None;
-                        break;
-                    }
-                    Err(e) => {
-                        ctx.warn(format!("mirror failed: {e}")).await;
-                        last_err = Some(e);
-                        let _ = tokio::fs::remove_file(&local_tmp).await;
-                    }
-                }
-            }
-            if let Some(e) = last_err {
-                return Err(e);
-            }
+            let mirrors = self.mirror_urls();
+            ctx.info(format!("racing {} mirrors", mirrors.len())).await;
+            helper
+                .download_with_mirrors(
+                    &mirrors,
+                    &local_tmp,
+                    self.expected_sha256.as_deref(),
+                    ctx,
+                    1,
+                )
+                .await?;
             host.upload(&local_tmp, &remote_archive).await?;
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }
@@ -598,25 +588,18 @@ impl SnowLumaComponent {
                 .unwrap_or(0)
         ));
 
-        let mut last_err: Option<ActionError> = None;
-        for url in self.mirror_urls() {
-            ctx.info(format!("trying mirror: {url}")).await;
-            match helper
-                .download_to_file(&url, &local_tmp, self.expected_sha256.as_deref(), ctx, 1)
-                .await
-            {
-                Ok(()) => {
-                    last_err = None;
-                    break;
-                }
-                Err(e) => {
-                    ctx.warn(format!("mirror failed: {e}")).await;
-                    last_err = Some(e);
-                    let _ = tokio::fs::remove_file(&local_tmp).await;
-                }
-            }
-        }
-        if let Some(e) = last_err {
+        let mirrors = self.mirror_urls();
+        ctx.info(format!("racing {} mirrors", mirrors.len())).await;
+        if let Err(e) = helper
+            .download_with_mirrors(
+                &mirrors,
+                &local_tmp,
+                self.expected_sha256.as_deref(),
+                ctx,
+                1,
+            )
+            .await
+        {
             let _ = host.remove_dir_all(&stage_dir).await;
             return Err(e);
         }

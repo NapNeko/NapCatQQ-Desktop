@@ -20,6 +20,7 @@
 use async_trait::async_trait;
 
 use ncd_host::{Host, HostCommand, HostError, HostPath, Locality, Os};
+use ncd_network::build_mirror_urls;
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
@@ -411,9 +412,10 @@ impl NapCatComponent {
             chrono_ms()
         ));
         let helper = DownloadHelper::new()?;
+        let mirrors = build_mirror_urls(&self.download_url, None);
         helper
-            .download_to_file(
-                &self.download_url,
+            .download_with_mirrors(
+                &mirrors,
                 &local_tmp,
                 self.expected_sha256.as_deref(),
                 ctx,
@@ -569,9 +571,10 @@ impl NapCatComponent {
             chrono_ms()
         ));
         let helper = DownloadHelper::new()?;
+        let mirrors = build_mirror_urls(&self.download_url, None);
         helper
-            .download_to_file(
-                &self.download_url,
+            .download_with_mirrors(
+                &mirrors,
                 &local_tmp,
                 self.expected_sha256.as_deref(),
                 ctx,

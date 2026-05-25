@@ -31,6 +31,16 @@ pub enum ProgressKind {
         /// 前端据此显示 "已下载 12.3 MB / 28.0 MB · 850 KB/s"。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         speed_bps: Option<u64>,
+        /// 已下载字节。前端用于格式化与 ETA 计算。仅下载步骤填充。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        downloaded_bytes: Option<u64>,
+        /// 总字节数（服务端返 Content-Length 时有）。仅下载步骤填充。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total_bytes: Option<u64>,
+        /// 下载阶段："racing" / "streaming" / "switching_mirror" / "resuming"。
+        /// 仅下载步骤填充；前端按阶段切话术（"正在选择镜像" vs "下载中"）。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        download_stage: Option<String>,
     },
     /// 第 N 步结束
     StepEnd { step: u32, ok: bool },
