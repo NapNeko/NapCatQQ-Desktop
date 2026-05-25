@@ -31,3 +31,6 @@ export {
     DialogFooter,
 } from './Dialog';
 export { Spinner, type SpinnerProps } from './Spinner';
+export { Progress, type ProgressProps } from './Progress';
+export { InfoBar, type InfoBarProps } from './InfoBar';
+export { InfoBarStack, type InfoBarStackItem } from './InfoBarStack';
