@@ -12,4 +12,9 @@ v: number,
 /**
  * 事件时间戳(unix millis)
  */
-timestamp_ms: bigint, } & ({ "kind": "started", total_steps: number, } | { "kind": "step_begin", step: number, message: string, } | { "kind": "step_progress", step: number, percent: number, message: string, } | { "kind": "step_end", step: number, ok: boolean, } | { "kind": "finished", ok: boolean, } | { "kind": "log", level: LogLevel, message: string, });
+timestamp_ms: bigint, } & ({ "kind": "started", total_steps: number, } | { "kind": "step_begin", step: number, message: string, } | { "kind": "step_progress", step: number, percent: number, message: string, 
+/**
+ * 瞬时下载速度（字节/秒）。仅下载步骤填充，其他步骤为 None。
+ * 前端据此显示 "已下载 12.3 MB / 28.0 MB · 850 KB/s"。
+ */
+speed_bps: bigint | null, } | { "kind": "step_end", step: number, ok: boolean, } | { "kind": "finished", ok: boolean, } | { "kind": "log", level: LogLevel, message: string, });

@@ -21,6 +21,8 @@ export interface ActionProgressView {
     percent: number;
     /// 当前 step 的提示文字
     message: string;
+    /// 当前下载步骤的瞬时速度（字节/秒），非下载步骤为 null
+    speedBps: number | null;
     /// 累计 log（最多保留 50 条）
     logs: ActionLogLine[];
 }
@@ -33,6 +35,7 @@ export const initialActionProgress: ActionProgressView = {
     totalSteps: 0,
     percent: 0,
     message: '',
+    speedBps: null,
     logs: [],
 };
 
@@ -49,6 +52,7 @@ export function reduceActionProgress(
                 currentStep: 0,
                 percent: 0,
                 message: '准备中…',
+                speedBps: null,
             };
         case 'step_begin':
             return {
@@ -57,6 +61,7 @@ export function reduceActionProgress(
                 currentStep: event.step,
                 percent: 0,
                 message: event.message,
+                speedBps: null,
             };
         case 'step_progress':
             return {
@@ -65,12 +70,14 @@ export function reduceActionProgress(
                 currentStep: event.step,
                 percent: event.percent,
                 message: event.message,
+                speedBps:
+                    event.speed_bps == null ? null : Number(event.speed_bps),
             };
         case 'step_end':
             return {
                 ...prev,
                 percent: 100,
-                // step_end 不切 status，等 finished 决定整体成败
+                speedBps: null,
             };
         case 'finished':
             return {
@@ -78,6 +85,7 @@ export function reduceActionProgress(
                 status: event.ok ? 'success' : 'failed',
                 percent: 100,
                 message: event.ok ? '完成' : '失败',
+                speedBps: null,
             };
         case 'log': {
             // ts-rs 把 Rust u64 派生为 bigint；UI 侧统一用 number（Unix ms 在

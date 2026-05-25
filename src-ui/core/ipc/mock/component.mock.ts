@@ -233,6 +233,7 @@ export function mockRunAction(
                 step: 1,
                 percent: 100,
                 message: '完成',
+                speed_bps: null,
             });
             emit({
                 v: 1,
@@ -254,6 +255,7 @@ export function mockRunAction(
             step: 1,
             percent: progress,
             message: `${stepLabel(componentId, kind)} ${progress}%`,
+            speed_bps: null,
         });
     }, 300);
     activeMockTasks.set(taskId, intervalId);
