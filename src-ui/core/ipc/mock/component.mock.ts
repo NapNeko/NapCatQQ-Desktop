@@ -219,7 +219,9 @@ export function mockRunAction(
     }, 50);
 
     // 进度推进：300ms 一帧，10 帧到 100%
+    // 0% 阶段模拟 mirror race，10-90% 模拟切片下载（带速度），100% 完成
     let progress = 0;
+    const TOTAL_BYTES = 28_000_000; // 28 MB 模拟 NapCat.Shell.zip
     const intervalId = setInterval(() => {
         progress += 10;
         if (progress >= 100) {
@@ -234,6 +236,9 @@ export function mockRunAction(
                 percent: 100,
                 message: '完成',
                 speed_bps: null,
+                downloaded_bytes: BigInt(TOTAL_BYTES),
+                total_bytes: BigInt(TOTAL_BYTES),
+                download_stage: 'streaming',
             });
             emit({
                 v: 1,
@@ -248,14 +253,24 @@ export function mockRunAction(
             applyMockOutcome(componentId, hostId, kind);
             return;
         }
+        const stage = progress === 0 ? 'racing' : 'streaming';
+        const downloaded = Math.round((TOTAL_BYTES * progress) / 100);
+        // 速度 ramp 到 1.1 MB/s 上下抖动
+        const baseBps = stage === 'racing' ? 0 : 900_000 + Math.random() * 400_000;
         emit({
             v: 1,
             timestamp_ms: now(),
             kind: 'step_progress',
             step: 1,
             percent: progress,
-            message: `${stepLabel(componentId, kind)} ${progress}%`,
-            speed_bps: null,
+            message:
+                stage === 'racing'
+                    ? `${stepLabel(componentId, kind)} · 选择镜像`
+                    : `${stepLabel(componentId, kind)}`,
+            speed_bps: stage === 'racing' ? null : BigInt(Math.round(baseBps)),
+            downloaded_bytes: BigInt(downloaded),
+            total_bytes: BigInt(TOTAL_BYTES),
+            download_stage: stage,
         });
     }, 300);
     activeMockTasks.set(taskId, intervalId);
