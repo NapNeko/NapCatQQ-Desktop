@@ -30,6 +30,7 @@ use crate::client::shared_client;
 use crate::download::{download_with_resume, DownloadConfig, DEFAULT_IDLE_TIMEOUT};
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
+use crate::range::part_path;
 
 #[derive(Debug, Clone)]
 pub struct MirrorRaceConfig {
@@ -115,6 +116,11 @@ pub async fn download_with_mirror_race(
             continue;
         }
         tried.push(idx);
+        // 切 mirror 时丢掉 .part：不同 mirror（尤其是国内代理）缓存的 release
+        // 资产可能与上游不严格一致（缓存截断 / 旧版本 / 反代解压），跨 mirror
+        // 续传 offset 会在 .part 里拼出错位字节，下游 zip 解压报 "Could not
+        // find EOCD"。宁可全文件重下，也不能拼错。
+        let _ = tokio::fs::remove_file(&part_path(dest)).await;
         push_stage(&sink, DownloadStage::SwitchingMirror, url, "switch").await;
         let dl_cfg = DownloadConfig {
             idle_timeout: cfg.idle_timeout,

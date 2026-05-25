@@ -80,40 +80,79 @@ pub async fn download_smart(
     }
 
     let client = shared_client();
-    let probe_url = &mirrors[0];
 
-    let (total, accept_ranges) = match probe_size_and_range(
-        client,
-        probe_url,
-        &cancel,
-        cfg.idle_timeout,
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            warn!(target: "ncd_network::chunked", url=%probe_url, err=%e, "probe failed; fallback to race");
-            return download_with_mirror_race(mirrors, dest, sink, cancel, cfg.race_cfg).await;
+    // 找到第一个能用的 mirror 来切片：probe 通过且返回 total + accept_ranges。
+    // 切片必须**所有片用同一个 mirror**，否则代理之间缓存差异 / Range
+    // 实现差异会导致拼出来的字节错位（zip "Could not find EOCD" 的根因）。
+    // 任何 mirror probe 失败 → 试下一个；全部失败或都不支持 Range / 总大小不
+    // 够阈值 → fallback 到 race 单流（race 自己也会按需切 mirror，不切片）。
+    let mut chunk_mirror_idx: Option<usize> = None;
+    let mut chunk_total: Option<u64> = None;
+    for (i, m) in mirrors.iter().enumerate() {
+        match probe_size_and_range(client, m, &cancel, cfg.idle_timeout).await {
+            Ok((Some(t), true)) if t >= cfg.threshold && cfg.parts > 1 => {
+                chunk_mirror_idx = Some(i);
+                chunk_total = Some(t);
+                break;
+            }
+            Ok((total, accept_ranges)) => {
+                debug!(
+                    target: "ncd_network::chunked",
+                    mirror=%m, total=?total, accept_ranges,
+                    "mirror not eligible for chunked, try next"
+                );
+            }
+            Err(e) => {
+                warn!(target: "ncd_network::chunked", url=%m, err=%e, "probe failed; try next mirror");
+            }
         }
-    };
+        if cancel.is_cancelled() {
+            return Err(NetworkError::Cancelled);
+        }
+    }
 
-    let total = match total {
-        Some(t) if t >= cfg.threshold && accept_ranges && cfg.parts > 1 => t,
+    let (chunk_mirror_idx, total) = match (chunk_mirror_idx, chunk_total) {
+        (Some(i), Some(t)) => (i, t),
         _ => {
             debug!(
                 target: "ncd_network::chunked",
-                total=?total, accept_ranges, parts=cfg.parts,
-                "fallback to race (small file or no range)"
+                "no chunked-capable mirror found; fallback to race"
             );
             return download_with_mirror_race(mirrors, dest, sink, cancel, cfg.race_cfg).await;
         }
     };
 
-    download_chunked_inner(mirrors, dest, total, sink, cancel, cfg).await
+    // 主选 mirror 切片下载；如果整个切片失败，fallback 到 race 用剩下 mirror
+    // 走单流。race 内部还会再做整文件级别的 mirror 切换 + 续传。
+    let primary_mirror = &mirrors[chunk_mirror_idx];
+    match download_chunked_inner(
+        primary_mirror,
+        dest,
+        total,
+        sink.clone(),
+        cancel.clone(),
+        cfg.clone(),
+    )
+    .await
+    {
+        Ok(n) => Ok(n),
+        Err(NetworkError::Cancelled) => Err(NetworkError::Cancelled),
+        Err(e) => {
+            warn!(
+                target: "ncd_network::chunked",
+                primary=%primary_mirror, err=%e,
+                "chunked failed on primary mirror, fallback to race over all mirrors"
+            );
+            // 清理可能残留的 .chunk-N
+            let chunk_paths: Vec<PathBuf> = (0..cfg.parts).map(|i| chunk_path(dest, i)).collect();
+            cleanup_chunks(&chunk_paths).await;
+            download_with_mirror_race(mirrors, dest, sink, cancel, cfg.race_cfg).await
+        }
+    }
 }
 
 async fn download_chunked_inner(
-    mirrors: &[String],
+    primary_mirror: &str,
     dest: &Path,
     total: u64,
     sink: Arc<dyn DownloadProgressSink>,
@@ -132,7 +171,7 @@ async fn download_chunked_inner(
         downloaded: 0,
         total: Some(total),
         speed_bps: None,
-        mirror_url: Some(mirrors[0].clone()),
+        mirror_url: Some(primary_mirror.to_string()),
         message: format!("chunked: {parts} parts, total {total} bytes"),
     })
     .await;
@@ -141,22 +180,22 @@ async fn download_chunked_inner(
     let ticker_handle = spawn_progress_ticker(
         sink.clone(),
         aggregated.clone(),
-        Some(mirrors[0].clone()),
+        Some(primary_mirror.to_string()),
         ticker_cancel.clone(),
     );
 
     let mut tasks: JoinSet<(usize, Result<u64, NetworkError>)> = JoinSet::new();
     for (idx, range) in ranges.iter().enumerate() {
-        let mirrors = mirrors.to_vec();
         let dest_chunk = chunk_paths[idx].clone();
         let cancel = cancel.child_token();
         let agg = aggregated.clone();
         let idle_timeout = cfg.idle_timeout;
         let range = *range;
+        let mirror = primary_mirror.to_string();
 
         tasks.spawn(async move {
             let res = download_chunk_with_retry(
-                idx, &mirrors, &dest_chunk, range, cancel, idle_timeout, agg,
+                idx, &mirror, &dest_chunk, range, cancel, idle_timeout, agg,
             )
             .await;
             (idx, res)
@@ -201,7 +240,7 @@ async fn download_chunked_inner(
         downloaded: total,
         total: Some(total),
         speed_bps: None,
-        mirror_url: Some(mirrors[0].clone()),
+        mirror_url: Some(primary_mirror.to_string()),
         message: "chunked: done".into(),
     })
     .await;
@@ -211,7 +250,7 @@ async fn download_chunked_inner(
 
 async fn download_chunk_with_retry(
     chunk_idx: usize,
-    mirrors: &[String],
+    mirror: &str,
     dest_chunk: &Path,
     range: (u64, u64),
     cancel: CancellationToken,
@@ -219,23 +258,20 @@ async fn download_chunk_with_retry(
     aggregated: AggregatedProgress,
 ) -> Result<u64, NetworkError> {
     let client = shared_client();
-    // 切片之间错开起点：chunk_idx 的初始 mirror = chunk_idx % N，
-    // 让 4 片分散到不同 mirror 上，否则前 4 片全打 mirror[0]。
-    let start_mirror = chunk_idx % mirrors.len();
 
     let mut attempts = 0;
     let mut last_err: Option<NetworkError> = None;
 
-    while attempts < PER_CHUNK_MAX_RETRIES.min(mirrors.len()) {
-        let mirror_idx = (start_mirror + attempts) % mirrors.len();
-        let url = &mirrors[mirror_idx];
-
+    // 切片现在固定走单一 mirror（probe winner）。这里的 retry 主要是给临时
+    // 抖动（短暂网络故障 / 服务端 429）兜底；如果是 mirror 真的坏了，外层
+    // download_smart 会接住整片失败后 fallback 到 race 走其它 mirror。
+    while attempts < PER_CHUNK_MAX_RETRIES {
         // 每次重试前清掉残片，下次 download_byte_range 重新开 file
         let _ = fs::remove_file(dest_chunk).await;
 
         match download_byte_range(
             client,
-            url,
+            mirror,
             dest_chunk,
             range,
             cancel.clone(),
@@ -249,7 +285,7 @@ async fn download_chunk_with_retry(
             Err(e) => {
                 warn!(
                     target: "ncd_network::chunked",
-                    chunk_idx, url=%url, attempt=attempts, err=%e,
+                    chunk_idx, url=%mirror, attempt=attempts, err=%e,
                     "chunk attempt failed"
                 );
                 last_err = Some(e);

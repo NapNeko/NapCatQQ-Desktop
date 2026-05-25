@@ -25,7 +25,8 @@ use crate::client::shared_client;
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
 use crate::range::{
-    parse_content_length_from_range, range_header_value, supports_resume, PartFile,
+    parse_content_length_from_range, parse_content_range_bounds, range_header_value,
+    supports_resume, PartFile,
 };
 use crate::speed::SpeedSampler;
 
@@ -185,6 +186,24 @@ pub async fn download_with_client(
     )
     .await;
 
+    // 流自然结束 ≠ 下完。服务端 / 中间代理可能在没发完 Content-Length 字节
+    // 的情况下 EOF（连接被掐断、反代上游超时、CDN 缓存只缓了一部分）。
+    // 不校验就 finalize，会留下残缺的 .part 改名成 dest，下游 zip / tar
+    // 解压立刻 "Could not find EOCD"。这里强制对齐 total，差一个字节也
+    // 算失败，把 .part 留着让上层切 mirror 时清掉重下（mirror 间内容可能
+    // 不一致，续传 offset 是危险操作，所以 race 切 mirror 时也会主动
+    // truncate）。
+    if let Some(t) = total {
+        if downloaded < t {
+            // .part 仍保留在磁盘上以便观察/调试；finalize() 没被调用，
+            // 不会污染 dest。
+            return Err(NetworkError::Truncated {
+                downloaded,
+                total: t,
+            });
+        }
+    }
+
     part.finalize(dest).await?;
     Ok(downloaded)
 }
@@ -286,6 +305,26 @@ pub(crate) async fn download_byte_range(
     let status = resp.status();
     if !supports_resume(status) {
         return Err(NetworkError::Status(status.as_u16()));
+    }
+
+    // 服务器声称 206，但代理 / 反代不一定真切了 byte range；有些镜像会
+    // 拿一份缓存的"前 N 字节"副本贴 206 头返回，等于 byte range mismatch。
+    // 这种情况下盲信会写出错位字节，merge 时拼出无法解析的 zip / tar，
+    // EOCD 找不到错的根因。强制比对 Content-Range，不一致直接拒掉，让
+    // chunked 上层重试下个 mirror。
+    match parse_content_range_bounds(&resp) {
+        Some((start, end)) if start == range.0 && end == range.1 => {}
+        Some((start, end)) => {
+            return Err(NetworkError::Http(format!(
+                "Content-Range mismatch: requested {}-{}, got {}-{}",
+                range.0, range.1, start, end
+            )));
+        }
+        None => {
+            return Err(NetworkError::Http(
+                "Content-Range header missing on 206 response".into(),
+            ));
+        }
     }
 
     let mut file = tokio::fs::File::create(dest_chunk).await?;
