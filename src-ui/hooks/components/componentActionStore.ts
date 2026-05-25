@@ -9,6 +9,10 @@
 //
 // 订阅入口由 AppNext 顶层挂一次（见 useComponentActionEventBridge），路由切换
 // 不会断流。Components 页里的 useComponentAction 只是个 selector + dispatcher。
+//
+// 终态保留：success / failed / cancelled 收到时不立刻清 activeByTarget，
+// 让 UI 多显示 LINGER_AFTER_FINISH 毫秒。否则后端报错时进度条"咻"地消失，
+// 用户只看到状态回到点击前，没有任何错误反馈。
 
 import {
     initialActionProgress,
@@ -17,16 +21,28 @@ import {
 } from '../../core/domain/components/progress';
 import type { ComponentId, ProgressEvent } from '../../core/ipc/types';
 
+/// 终态保留时长。3 秒足够用户读完 "已完成 / 失败" 提示，又不会卡到下次操作。
+const LINGER_AFTER_FINISH = 3000;
+
 export interface ComponentActionStoreState {
     /** task_id → 进度视图 */
     tasks: Record<string, ActionProgressView>;
     /** "<componentId>::<hostId>" → 该 (component, host) 当前活跃的 task_id */
     activeByTarget: Record<string, string>;
+    /**
+     * task_id → 它属于的 (componentId, hostId)。
+     * 终态后 activeByTarget 会被 linger 计时器清掉，但 InfoBar 这类场景需要在
+     * 终态发生那一刻立刻知道这个 task 是哪个组件 / 哪台主机的，否则 banner
+     * 标题就只能写"安装失败"四个字、丢失上下文。所以单独再开一张表，活到
+     * task 整个被遗忘为止。
+     */
+    taskTargets: Record<string, { componentId: ComponentId; hostId: string }>;
 }
 
 const initialState: ComponentActionStoreState = {
     tasks: {},
     activeByTarget: {},
+    taskTargets: {},
 };
 
 export function targetKey(componentId: ComponentId, hostId: string): string {
@@ -35,9 +51,24 @@ export function targetKey(componentId: ComponentId, hostId: string): string {
 
 let state: ComponentActionStoreState = initialState;
 const listeners = new Set<() => void>();
+const lingerTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function emit(): void {
     for (const fn of listeners) fn();
+}
+
+function clearActiveForTask(taskId: string): void {
+    const cleanedActive: Record<string, string> = {};
+    for (const [k, v] of Object.entries(state.activeByTarget)) {
+        if (v !== taskId) cleanedActive[k] = v;
+    }
+    // 同步从 taskTargets 移除：banner 已经显示完了，没人再需要这条映射。
+    const cleanedTargets: Record<string, { componentId: ComponentId; hostId: string }> = {};
+    for (const [k, v] of Object.entries(state.taskTargets)) {
+        if (k !== taskId) cleanedTargets[k] = v;
+    }
+    state = { ...state, activeByTarget: cleanedActive, taskTargets: cleanedTargets };
+    emit();
 }
 
 export const componentActionStore = {
@@ -54,9 +85,17 @@ export const componentActionStore = {
     /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
     started(taskId: string, componentId: ComponentId, hostId: string): void {
         const key = targetKey(componentId, hostId);
+        // 同 (component, host) 上一次的 linger 计时器要先清掉，否则新任务起来
+        // 几秒后旧计时器到期把新任务的 active 标记给清了。
+        const prevTaskId = state.activeByTarget[key];
+        if (prevTaskId && lingerTimers.has(prevTaskId)) {
+            clearTimeout(lingerTimers.get(prevTaskId)!);
+            lingerTimers.delete(prevTaskId);
+        }
         state = {
             tasks: { ...state.tasks, [taskId]: initialActionProgress },
             activeByTarget: { ...state.activeByTarget, [key]: taskId },
+            taskTargets: { ...state.taskTargets, [taskId]: { componentId, hostId } },
         };
         emit();
     },
@@ -66,32 +105,36 @@ export const componentActionStore = {
      * 收到未注册 task_id 时（典型场景：dev 重载、其它窗口、或 started 还没回来）
      * 自动给 task_id 创建一条空记录，让进度照样累计；这种"孤立 task"只更
      * tasks，不更 activeByTarget（因为不知道属于哪个 (component, host)）。
+     *
+     * 终态：保留 LINGER_AFTER_FINISH 毫秒后再从 activeByTarget 移除，让 UI
+     * 有时间显示"已完成 / 失败"反馈。
      */
     applyProgress(taskId: string, event: ProgressEvent): void {
         const prev = state.tasks[taskId] ?? initialActionProgress;
         const next = reduceActionProgress(prev, event);
-        let activeByTarget = state.activeByTarget;
-        if (
-            next.status === 'success' ||
-            next.status === 'failed' ||
-            next.status === 'cancelled'
-        ) {
-            // 终态：清掉 active 标记，但保留 tasks[taskId] 让 UI 还能读最终状态。
-            const cleaned: Record<string, string> = {};
-            for (const [k, v] of Object.entries(activeByTarget)) {
-                if (v !== taskId) cleaned[k] = v;
-            }
-            activeByTarget = cleaned;
-        }
         state = {
+            ...state,
             tasks: { ...state.tasks, [taskId]: next },
-            activeByTarget,
         };
         emit();
+
+        const isTerminal =
+            next.status === 'success' ||
+            next.status === 'failed' ||
+            next.status === 'cancelled';
+        if (isTerminal && !lingerTimers.has(taskId)) {
+            const timer = setTimeout(() => {
+                lingerTimers.delete(taskId);
+                clearActiveForTask(taskId);
+            }, LINGER_AFTER_FINISH);
+            lingerTimers.set(taskId, timer);
+        }
     },
 
     /** 测试 / dev 重置用。生产代码不要碰。 */
     _reset(): void {
+        for (const t of lingerTimers.values()) clearTimeout(t);
+        lingerTimers.clear();
         state = initialState;
         emit();
     },

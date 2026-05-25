@@ -30,6 +30,18 @@ export interface UseComponentActionResult {
         componentId: ComponentId,
         hostId: string,
     ) => { taskId: string; progress: ActionProgressView } | null;
+    /**
+     * 当指定 task 进入终态（success / failed / cancelled）时回调一次。
+     * 返回 unsubscribe；如果 task 已经在终态会立刻 fire 一次。
+     *
+     * 用途：操作发起方拿到 taskId 后挂上 listener，等终态再 refetch detect，
+     * 比 setTimeout 估个延迟更靠谱（NapCat 装包要几十秒，500ms refetch 拿到的
+     * 还是未安装；refetch 必须等真正完成）。
+     */
+    onTaskTerminal: (
+        taskId: string,
+        cb: (status: 'success' | 'failed' | 'cancelled') => void,
+    ) => () => void;
 }
 
 export function useComponentAction(): UseComponentActionResult {
@@ -68,5 +80,36 @@ export function useComponentAction(): UseComponentActionResult {
         [state],
     );
 
-    return { startAction, cancelAction, getProgressFor };
+    const onTaskTerminal = useCallback(
+        (
+            taskId: string,
+            cb: (status: 'success' | 'failed' | 'cancelled') => void,
+        ) => {
+            // 已经在终态：下一帧 fire，让调用方有机会先 store ref/state
+            const initial = componentActionStore.getSnapshot().tasks[taskId]?.status;
+            if (
+                initial === 'success' ||
+                initial === 'failed' ||
+                initial === 'cancelled'
+            ) {
+                queueMicrotask(() => cb(initial));
+                return () => {};
+            }
+            const unsub = componentActionStore.subscribe(() => {
+                const status = componentActionStore.getSnapshot().tasks[taskId]?.status;
+                if (
+                    status === 'success' ||
+                    status === 'failed' ||
+                    status === 'cancelled'
+                ) {
+                    cb(status);
+                    unsub();
+                }
+            });
+            return unsub;
+        },
+        [],
+    );
+
+    return { startAction, cancelAction, getProgressFor, onTaskTerminal };
 }
