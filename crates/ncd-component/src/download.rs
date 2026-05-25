@@ -1,52 +1,43 @@
-//! `DownloadHelper`:HTTP 下载 + SHA256 校验工具。
+//! `DownloadHelper`：HTTP 下载 + SHA256 校验 + 多镜像 race + 切片并行。
 //!
-//! fallback 链("远端不通就走本地下载 + SFTP 上传")在 ncd-deploy 实装,
-//! 本 helper 只做基础原语:从 URL 下载到本地路径 + 校验 SHA256 + 进度上报。
+//! 单 URL 路径走 ncd_network::download_with_resume（idle timeout + Range
+//! 续传）；调用 [`DownloadHelper::download_with_mirrors`] 走 ncd_network 的
+//! mirror race + ≥16MB 切片并行下载。SHA256 在所有路径下载完成后做。
 //!
-//! 设计原则:
-//! - 复用 `reqwest`(已在 workspace 共享)
-//! - 流式下载,不一次性 buffer 全部内存
-//! - SHA256 校验失败时自动删除已下载文件,防止下次复用损坏的副本
+//! 设计：
+//! - 进度桥接：实现一个 `CtxSink`，把 ncd_network::ProgressUpdate 翻成
+//!   ProgressKind::StepProgress + speed_bps，emit 到 ActionCtx
+//! - 校验失败：删除已落盘的 dest 文件，再返回 ChecksumMismatch
+//! - 取消：cancel token 来自 ctx，原子传递给 ncd_network
 
 use std::path::Path;
+use std::sync::Arc;
 
-use futures_util::StreamExt;
-use reqwest::Client;
+use async_trait::async_trait;
+use ncd_network::{
+    download_smart, download_with_mirror_race, download_with_resume, ChunkedConfig,
+    DownloadConfig, DownloadProgressSink, DownloadStage, MirrorRaceConfig, NetworkError,
+    ProgressUpdate,
+};
 use sha2::{Digest, Sha256};
 use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use tokio::io::AsyncReadExt;
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::error::ActionError;
 
-/// 下载辅助。
-pub struct DownloadHelper {
-    client: Client,
-}
+/// 下载辅助。保留 stateful 接口以兼容旧调用点；内部不再持有 reqwest::Client，
+/// 走 ncd_network::shared_client() 共享连接池。
+pub struct DownloadHelper;
 
 impl DownloadHelper {
-    /// 用默认 reqwest 客户端创建。
     pub fn new() -> Result<Self, ActionError> {
-        let client = Client::builder()
-            .user_agent("ncd-component/0.1")
-            .gzip(true)
-            .build()
-            .map_err(|e| ActionError::DownloadFailed {
-                url: "<client init>".to_string(),
-                reason: format!("reqwest client build: {e}"),
-            })?;
-        Ok(Self { client })
+        Ok(Self)
     }
 
-    /// 注入自定义 reqwest::Client(测试用)。
-    pub fn with_client(client: Client) -> Self {
-        Self { client }
-    }
-
-    /// 下载 url 到本地 dest_path,带可选 SHA256 校验和进度上报。
+    /// 兼容旧 API：单 URL 下载到本地，可选 SHA256。
     ///
-    /// `step`:进度步骤号(用于 ProgressKind::StepProgress)。
-    /// `expected_sha256`:`None` 表示跳过校验。
+    /// 内部走 ncd_network::download_with_resume（带 idle timeout + 续传）。
     pub async fn download_to_file(
         &self,
         url: &str,
@@ -59,119 +50,214 @@ impl DownloadHelper {
             return Err(ActionError::Cancelled);
         }
 
-        ctx.emit(ProgressKind::StepProgress {
-            step,
-            percent: 0,
-            message: format!("download {url}"),
-        })
-        .await;
+        emit_step(ctx, step, 0, format!("download {url}"), None).await;
 
-        let resp = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| ActionError::DownloadFailed {
-                url: url.to_string(),
-                reason: format!("http get: {e}"),
-            })?;
+        let sink: Arc<dyn DownloadProgressSink> =
+            Arc::new(CtxSink::new(ctx.clone(), step, url.to_string()));
 
-        if !resp.status().is_success() {
-            return Err(ActionError::DownloadFailed {
-                url: url.to_string(),
-                reason: format!("http status: {}", resp.status()),
-            });
+        let cfg = DownloadConfig {
+            mirror_url: Some(url.to_string()),
+            ..Default::default()
+        };
+
+        match download_with_resume(url, dest_path, sink, ctx.cancel_token(), cfg).await {
+            Ok(_) => {}
+            Err(NetworkError::Cancelled) => return Err(ActionError::Cancelled),
+            Err(e) => return Err(map_network_err(url, e)),
         }
-
-        let total = resp.content_length();
-
-        if let Some(parent) = dest_path.parent() {
-            if !parent.as_os_str().is_empty() && !parent.exists() {
-                fs::create_dir_all(parent).await.map_err(|e| {
-                    ActionError::install_step("mkdir_parent", format!("{e}"))
-                })?;
-            }
-        }
-
-        let mut file = fs::File::create(dest_path).await.map_err(|e| {
-            ActionError::install_step("create_file", format!("{e}"))
-        })?;
-        let mut hasher = Sha256::new();
-        let mut downloaded = 0u64;
-
-        let mut stream = resp.bytes_stream();
-        let cancel_token = ctx.cancel_token();
-        loop {
-            // 同时等"下一块字节"和"取消信号"。任一就绪就 wake，避免连接 stall
-            // 时取消按钮没反应（取消只检查每个 chunk 边界 → 服务器不发字节 →
-            // stream.next() 永远挂着 → cancel token 永远不被观测）。
-            let chunk_res = tokio::select! {
-                biased;
-                _ = cancel_token.cancelled() => {
-                    drop(file);
-                    let _ = fs::remove_file(dest_path).await;
-                    return Err(ActionError::Cancelled);
-                }
-                next = stream.next() => match next {
-                    Some(c) => c,
-                    None => break,
-                },
-            };
-            let chunk = chunk_res.map_err(|e| ActionError::DownloadFailed {
-                url: url.to_string(),
-                reason: format!("read chunk: {e}"),
-            })?;
-            hasher.update(&chunk);
-            file.write_all(&chunk).await.map_err(|e| {
-                ActionError::install_step("write_chunk", format!("{e}"))
-            })?;
-            downloaded += chunk.len() as u64;
-
-            // 进度上报(每 1 MB 一次,避免 channel 风暴)
-            if let Some(t) = total {
-                if t > 0 {
-                    let pct = ((downloaded as f64 / t as f64) * 100.0) as u8;
-                    if downloaded % (1024 * 1024) < chunk.len() as u64 {
-                        ctx.emit(ProgressKind::StepProgress {
-                            step,
-                            percent: pct.min(99),
-                            message: format!(
-                                "download {} / {}",
-                                fmt_bytes(downloaded),
-                                fmt_bytes(t)
-                            ),
-                        })
-                        .await;
-                    }
-                }
-            }
-        }
-
-        file.flush()
-            .await
-            .map_err(|e| ActionError::install_step("flush", format!("{e}")))?;
-        drop(file);
-
-        let actual_hash = hex::encode(hasher.finalize());
 
         if let Some(expected) = expected_sha256 {
-            if !expected.eq_ignore_ascii_case(&actual_hash) {
-                let _ = fs::remove_file(dest_path).await;
-                return Err(ActionError::ChecksumMismatch {
-                    expected: expected.to_string(),
-                    actual: actual_hash,
-                });
-            }
+            verify_sha256(dest_path, expected).await?;
         }
 
-        ctx.emit(ProgressKind::StepProgress {
+        emit_step(
+            ctx,
             step,
-            percent: 100,
-            message: format!("downloaded {}", fmt_bytes(downloaded)),
-        })
+            100,
+            format!("downloaded {}", file_size_label(dest_path).await),
+            None,
+        )
         .await;
         Ok(())
     }
+
+    /// 多镜像下载：自动 race 选 winner，stall 时切镜像，≥16MB 自动切片。
+    ///
+    /// `mirrors`：候选 URL 列表（一般用 `ncd_network::build_mirror_urls(原始 URL)`
+    /// 生成）。第一个 URL 用作进度上报里的 "primary" 标识。
+    pub async fn download_with_mirrors(
+        &self,
+        mirrors: &[String],
+        dest_path: &Path,
+        expected_sha256: Option<&str>,
+        ctx: &ActionCtx,
+        step: u32,
+    ) -> Result<(), ActionError> {
+        if ctx.is_cancelled() {
+            return Err(ActionError::Cancelled);
+        }
+        if mirrors.is_empty() {
+            return Err(ActionError::InvalidConfig {
+                reason: "mirrors is empty".into(),
+            });
+        }
+
+        emit_step(
+            ctx,
+            step,
+            0,
+            format!("download {} (race {} mirrors)", &mirrors[0], mirrors.len()),
+            None,
+        )
+        .await;
+
+        let sink: Arc<dyn DownloadProgressSink> =
+            Arc::new(CtxSink::new(ctx.clone(), step, mirrors[0].clone()));
+
+        let cfg = ChunkedConfig::default();
+        match download_smart(mirrors, dest_path, sink, ctx.cancel_token(), cfg).await {
+            Ok(_) => {}
+            Err(NetworkError::Cancelled) => return Err(ActionError::Cancelled),
+            Err(e) => return Err(map_network_err(&mirrors[0], e)),
+        }
+
+        if let Some(expected) = expected_sha256 {
+            verify_sha256(dest_path, expected).await?;
+        }
+
+        emit_step(
+            ctx,
+            step,
+            100,
+            format!("downloaded {}", file_size_label(dest_path).await),
+            None,
+        )
+        .await;
+        Ok(())
+    }
+
+    /// 多镜像下载，但强制只走 race + 单流（不切片）。给小文件 / 不支持 Range
+    /// 的端点（部分镜像 reverse-proxy 会丢 Range header）专用。
+    pub async fn download_with_mirrors_no_chunk(
+        &self,
+        mirrors: &[String],
+        dest_path: &Path,
+        expected_sha256: Option<&str>,
+        ctx: &ActionCtx,
+        step: u32,
+    ) -> Result<(), ActionError> {
+        if ctx.is_cancelled() {
+            return Err(ActionError::Cancelled);
+        }
+        if mirrors.is_empty() {
+            return Err(ActionError::InvalidConfig {
+                reason: "mirrors is empty".into(),
+            });
+        }
+
+        emit_step(
+            ctx,
+            step,
+            0,
+            format!("download {} (race {} mirrors)", &mirrors[0], mirrors.len()),
+            None,
+        )
+        .await;
+
+        let sink: Arc<dyn DownloadProgressSink> =
+            Arc::new(CtxSink::new(ctx.clone(), step, mirrors[0].clone()));
+
+        match download_with_mirror_race(
+            mirrors,
+            dest_path,
+            sink,
+            ctx.cancel_token(),
+            MirrorRaceConfig::default(),
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(NetworkError::Cancelled) => return Err(ActionError::Cancelled),
+            Err(e) => return Err(map_network_err(&mirrors[0], e)),
+        }
+
+        if let Some(expected) = expected_sha256 {
+            verify_sha256(dest_path, expected).await?;
+        }
+
+        emit_step(
+            ctx,
+            step,
+            100,
+            format!("downloaded {}", file_size_label(dest_path).await),
+            None,
+        )
+        .await;
+        Ok(())
+    }
+}
+
+async fn verify_sha256(dest_path: &Path, expected: &str) -> Result<(), ActionError> {
+    let mut file = fs::File::open(dest_path).await.map_err(|e| {
+        ActionError::install_step("open_for_hash", format!("{e}"))
+    })?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 256 * 1024];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .await
+            .map_err(|e| ActionError::install_step("read_for_hash", format!("{e}")))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let actual = hex::encode(hasher.finalize());
+    if !expected.eq_ignore_ascii_case(&actual) {
+        let _ = fs::remove_file(dest_path).await;
+        return Err(ActionError::ChecksumMismatch {
+            expected: expected.to_string(),
+            actual,
+        });
+    }
+    Ok(())
+}
+
+fn map_network_err(url: &str, e: NetworkError) -> ActionError {
+    match e {
+        NetworkError::Cancelled => ActionError::Cancelled,
+        NetworkError::ChecksumMismatch { expected, actual } => {
+            ActionError::ChecksumMismatch { expected, actual }
+        }
+        other => ActionError::DownloadFailed {
+            url: url.to_string(),
+            reason: other.to_string(),
+        },
+    }
+}
+
+async fn file_size_label(path: &Path) -> String {
+    match fs::metadata(path).await {
+        Ok(m) => fmt_bytes(m.len()),
+        Err(_) => "?".into(),
+    }
+}
+
+async fn emit_step(
+    ctx: &ActionCtx,
+    step: u32,
+    percent: u8,
+    message: String,
+    speed_bps: Option<u64>,
+) {
+    ctx.emit(ProgressKind::StepProgress {
+        step,
+        percent,
+        message,
+        speed_bps,
+    })
+    .await;
 }
 
 fn fmt_bytes(n: u64) -> String {
@@ -186,6 +272,89 @@ fn fmt_bytes(n: u64) -> String {
         format!("{:.2} KB", n as f64 / KB as f64)
     } else {
         format!("{n} B")
+    }
+}
+
+fn fmt_bps(bps: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * 1024;
+    if bps >= MB {
+        format!("{:.2} MB/s", bps as f64 / MB as f64)
+    } else if bps >= KB {
+        format!("{:.0} KB/s", bps as f64 / KB as f64)
+    } else {
+        format!("{bps} B/s")
+    }
+}
+
+/// 把 ncd_network::ProgressUpdate 翻成 ActionCtx::emit。
+struct CtxSink {
+    ctx: ActionCtx,
+    step: u32,
+    primary_url: String,
+}
+
+impl CtxSink {
+    fn new(ctx: ActionCtx, step: u32, primary_url: String) -> Self {
+        Self {
+            ctx,
+            step,
+            primary_url,
+        }
+    }
+}
+
+#[async_trait]
+impl DownloadProgressSink for CtxSink {
+    async fn tick(&self, update: ProgressUpdate) {
+        let pct = match (update.total, update.downloaded) {
+            (Some(t), d) if t > 0 => ((d as f64 / t as f64) * 100.0).clamp(0.0, 99.0) as u8,
+            _ => 0,
+        };
+
+        let stage_label = match update.stage {
+            DownloadStage::Racing => "race",
+            DownloadStage::Streaming => "download",
+            DownloadStage::SwitchingMirror => "switch mirror",
+            DownloadStage::Resuming => "resume",
+        };
+
+        let mirror = update.mirror_url.as_deref().unwrap_or(&self.primary_url);
+        let mut message = match (update.total, update.speed_bps) {
+            (Some(t), Some(bps)) => format!(
+                "{stage_label} {} / {} - {}",
+                fmt_bytes(update.downloaded),
+                fmt_bytes(t),
+                fmt_bps(bps)
+            ),
+            (Some(t), None) => format!(
+                "{stage_label} {} / {}",
+                fmt_bytes(update.downloaded),
+                fmt_bytes(t)
+            ),
+            (None, Some(bps)) => format!(
+                "{stage_label} {} - {}",
+                fmt_bytes(update.downloaded),
+                fmt_bps(bps)
+            ),
+            (None, None) => format!("{stage_label} {}", fmt_bytes(update.downloaded)),
+        };
+        if matches!(
+            update.stage,
+            DownloadStage::Racing | DownloadStage::SwitchingMirror
+        ) {
+            message.push_str(" @ ");
+            message.push_str(mirror);
+        }
+
+        self.ctx
+            .emit(ProgressKind::StepProgress {
+                step: self.step,
+                percent: pct,
+                message,
+                speed_bps: update.speed_bps,
+            })
+            .await;
     }
 }
 
@@ -235,7 +404,10 @@ mod tests {
         let (ctx, _rx) = ActionCtx::new();
 
         let url = format!("{}/missing", server.uri());
-        let err = helper.download_to_file(&url, &dest, None, &ctx, 1).await.unwrap_err();
+        let err = helper
+            .download_to_file(&url, &dest, None, &ctx, 1)
+            .await
+            .unwrap_err();
         assert!(matches!(err, ActionError::DownloadFailed { .. }));
     }
 
@@ -259,13 +431,11 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, ActionError::ChecksumMismatch { .. }));
-        // 文件应被删除
         assert!(!dest.exists());
     }
 
     #[tokio::test]
     async fn download_passes_correct_sha256() {
-        // sha256("hello") = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/payload"))
@@ -295,7 +465,6 @@ mod tests {
     #[tokio::test]
     async fn download_respects_cancel() {
         let server = MockServer::start().await;
-        // 用一个 delay 较长的响应,够我们取消
         Mock::given(method("GET"))
             .and(path("/slow"))
             .respond_with(
@@ -311,11 +480,13 @@ mod tests {
         let dest = dir.path().join("slow.bin");
         let (ctx, _rx) = ActionCtx::new();
 
-        // 立即取消
         ctx.cancel();
 
         let url = format!("{}/slow", server.uri());
-        let err = helper.download_to_file(&url, &dest, None, &ctx, 1).await.unwrap_err();
+        let err = helper
+            .download_to_file(&url, &dest, None, &ctx, 1)
+            .await
+            .unwrap_err();
         assert!(matches!(err, ActionError::Cancelled));
     }
 }

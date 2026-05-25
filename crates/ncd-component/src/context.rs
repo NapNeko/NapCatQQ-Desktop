@@ -27,6 +27,10 @@ pub enum ProgressKind {
         step: u32,
         percent: u8,
         message: String,
+        /// 瞬时下载速度（字节/秒）。仅下载步骤填充，其他步骤为 None。
+        /// 前端据此显示 "已下载 12.3 MB / 28.0 MB · 850 KB/s"。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speed_bps: Option<u64>,
     },
     /// 第 N 步结束
     StepEnd { step: u32, ok: bool },
