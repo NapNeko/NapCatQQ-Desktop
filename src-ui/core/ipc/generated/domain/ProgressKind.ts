@@ -9,4 +9,17 @@ export type ProgressKind = { "kind": "started", total_steps: number, } | { "kind
  * 瞬时下载速度（字节/秒）。仅下载步骤填充，其他步骤为 None。
  * 前端据此显示 "已下载 12.3 MB / 28.0 MB · 850 KB/s"。
  */
-speed_bps: bigint | null, } | { "kind": "step_end", step: number, ok: boolean, } | { "kind": "finished", ok: boolean, } | { "kind": "log", level: LogLevel, message: string, };
+speed_bps: bigint | null, 
+/**
+ * 已下载字节。前端用于格式化与 ETA 计算。仅下载步骤填充。
+ */
+downloaded_bytes: bigint | null, 
+/**
+ * 总字节数（服务端返 Content-Length 时有）。仅下载步骤填充。
+ */
+total_bytes: bigint | null, 
+/**
+ * 下载阶段："racing" / "streaming" / "switching_mirror" / "resuming"。
+ * 仅下载步骤填充；前端按阶段切话术（"正在选择镜像" vs "下载中"）。
+ */
+download_stage: string | null, } | { "kind": "step_end", step: number, ok: boolean, } | { "kind": "finished", ok: boolean, } | { "kind": "log", level: LogLevel, message: string, };
