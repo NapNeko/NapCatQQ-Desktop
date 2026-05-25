@@ -70,6 +70,33 @@
     --text-lg: var(--text-lg);
     --text-xl: var(--text-xl);
     --text-2xl: var(--text-2xl);
+
+    /* progress bar indeterminate：1.4s 一轮，从 -100% 到 100%，
+       配合 width:35% 的 thumb 和 overflow:hidden 容器形成滑条效果。 */
+    --animate-progress-indeterminate: progress-indeterminate 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+}
+
+@keyframes progress-indeterminate {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(285%);
+    }
+}
+
+/* InfoBar 进场：从右上轻滑入并淡入。
+   滑入距离 12px 比常见 24px 克制，搭配 cubic-bezier(0.2,0.7,0.2,1)
+   能有"贴住"的手感，不抢主内容焦点。 */
+@keyframes infobar-in {
+    0% {
+        opacity: 0;
+        transform: translateX(12px) scale(0.985);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
 }
 
 /* 全局 reset / 基础样式：仅在新 UI 树激活。 */
