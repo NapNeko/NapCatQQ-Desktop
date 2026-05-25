@@ -2834,6 +2834,7 @@ dependencies = [
  "hex",
  "ncd-domain",
  "ncd-host",
+ "ncd-network",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -2895,6 +2896,25 @@ dependencies = [
  "tracing",
  "ts-rs",
  "zip",
+]
+
+[[package]]
+name = "ncd-network"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures-util",
+ "hex",
+ "reqwest 0.12.28",
+ "serde",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "wiremock",
 ]
 
 [[package]]
