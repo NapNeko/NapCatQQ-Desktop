@@ -1,0 +1,26 @@
+[package]
+name = "ncd-network"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = "0.1"
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt", "fs", "io-util", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+bytes = "1"
+futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls", "gzip"] }
+sha2 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
+tempfile = "3"
+wiremock = "0.6"
