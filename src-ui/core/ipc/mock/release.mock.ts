@@ -11,9 +11,16 @@ const NOW = Math.floor(Date.now() / 1000);
 export const mockReleaseSnapshot: ReleaseSnapshot = {
     napcat_latest: {
         version: '4.20.0',
+        tag: 'v4.20.0',
         published_at: BigInt(NOW - 86400 * 3),
         html_url: 'https://github.com/NapNeko/NapCatQQ/releases/tag/v4.20.0',
         release_notes: '修复一些已知问题，提升登录稳定性。',
+        assets: [
+            {
+                name: 'NapCat.Shell.zip',
+                sha256: '0'.repeat(64),
+            },
+        ],
     },
     snowluma_latest: null,
     desktop_latest: null,
