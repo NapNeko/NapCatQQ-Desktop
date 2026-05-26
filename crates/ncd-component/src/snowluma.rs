@@ -475,8 +475,13 @@ impl SnowLumaComponent {
             if let Ok(bytes) = host.read_file(&tag_path).await {
                 let tag = String::from_utf8_lossy(&bytes).trim().to_string();
                 if !tag.is_empty() {
+                    // 与 release_snapshot::ReleaseInfo.version（strip_v_prefix）
+                    // 对齐：UI 直接拿来跟 latest 字符串相等比较时不会因为 `v`
+                    // 前缀差异误报 "有更新"。`.installed_tag` 文件本身保留
+                    // 原样 tag（含 `v`），兼容 legacy SnowLumaInstall。
+                    let normalized = tag.strip_prefix('v').unwrap_or(&tag).to_string();
                     return Ok(Some(DetectedVersion {
-                        version: tag,
+                        version: normalized,
                         source: format!("{tag_path}"),
                     }));
                 }
@@ -990,12 +995,13 @@ mod tests {
             let ws = tempfile::tempdir().unwrap();
             let install = windows_path(&ws, "snowluma");
             // .installed_tag 写 v1.7.5,package.json 写 1.7.4(不一致),
-            // detect 必须取 .installed_tag。
+            // detect 必须取 .installed_tag。返回值的 v 前缀已剥（UI 直接跟
+            // ReleaseInfo.version 比较）。
             lay_out_release(&host, &install, Some("v1.7.5"), "1.7.4").await;
 
             let comp = SnowLumaComponent::for_windows(install.clone(), "v1.7.5");
             let v = comp.detect(&host).await.unwrap().expect("已装应返回 Some");
-            assert_eq!(v.version, "v1.7.5");
+            assert_eq!(v.version, "1.7.5");
             assert!(v.source.contains(".installed_tag"));
         }
 
