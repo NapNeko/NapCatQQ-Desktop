@@ -1,8 +1,8 @@
 // 全局 InfoBar 显示队列（模块级单例）。
 //
-// 形态参考 componentActionStore：模块级 state + listeners + useSyncExternalStore
-// 订阅，不依赖 React Context / Provider。任何 hook / service 都可以直接 import
-// push / dismiss 推条目。
+// 形态参考 createStore：state + listeners + useSyncExternalStore 订阅，不依赖
+// React Context / Provider。任何 hook / service 都可以直接 import push / dismiss
+// 推条目。
 //
 // 跟 componentActionStore 是两件事，不要合并：
 //   - componentActionStore 记"哪个 task 跑到多少 %"，是状态机
@@ -12,6 +12,7 @@
 // 渲染入口：AppNext.tsx 顶层挂一次 <InfoBarStack items={bars} onDismiss={...} />
 // 全应用唯一渲染处。跨路由切换 banner 不丢，因为 state 在模块级、跟组件树解耦。
 
+import { createStore } from '../utils/createStore';
 import type { InfoBarStackItem } from '../../shared/ui';
 
 /// push 接口：与 InfoBarStackItem 一致，但 id 由 store 自己生成或走 key 顶替；
@@ -29,13 +30,9 @@ interface State {
 }
 
 const initialState: State = { bars: [] };
-let state: State = initialState;
-const listeners = new Set<() => void>();
-let nextId = 1;
+const store = createStore<State>(initialState);
 
-function emit(): void {
-    for (const fn of listeners) fn();
-}
+let nextId = 1;
 
 function genId(prefix: string): string {
     return `${prefix}-${nextId++}`;
@@ -43,14 +40,9 @@ function genId(prefix: string): string {
 
 export const globalInfoBarStore = {
     /** 当前快照（同步），useSyncExternalStore 用。 */
-    getSnapshot(): State {
-        return state;
-    },
+    getSnapshot: store.getSnapshot,
 
-    subscribe(listener: () => void): () => void {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-    },
+    subscribe: store.subscribe,
 
     /**
      * 推一条 banner，返回它的 id（外部可以用 id 主动 dismiss）。
@@ -65,43 +57,41 @@ export const globalInfoBarStore = {
             ...rest,
             id: key ? `key:${key}` : genId('bar'),
         };
+        const current = store.getSnapshot();
 
         if (key) {
-            const idx = state.bars.findIndex((b) => b.id === item.id);
+            const idx = current.bars.findIndex((b) => b.id === item.id);
             if (idx >= 0) {
-                const next = state.bars.slice();
+                const next = current.bars.slice();
                 next[idx] = item;
-                state = { bars: next };
-                emit();
+                store.setState({ bars: next });
                 return item.id;
             }
         }
 
-        state = { bars: [...state.bars, item] };
-        emit();
+        store.setState({ bars: [...current.bars, item] });
         return item.id;
     },
 
     /** 主动消除一条 banner。多次调用幂等。 */
     dismiss(id: string): void {
-        const next = state.bars.filter((b) => b.id !== id);
-        if (next.length === state.bars.length) return;
-        state = { bars: next };
-        emit();
+        const current = store.getSnapshot();
+        const next = current.bars.filter((b) => b.id !== id);
+        if (next.length === current.bars.length) return;
+        store.setState({ bars: next });
     },
 
     /** 清空（极少用，主要给测试 / 极端 reset 场景）。 */
     clear(): void {
-        if (state.bars.length === 0) return;
-        state = { bars: [] };
-        emit();
+        const current = store.getSnapshot();
+        if (current.bars.length === 0) return;
+        store.setState({ bars: [] });
     },
 
     /** 测试 / dev 重置用，生产代码不要碰。 */
     _reset(): void {
-        state = initialState;
         nextId = 1;
-        emit();
+        store._reset();
     },
 };
 

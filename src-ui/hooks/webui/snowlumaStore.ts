@@ -1,6 +1,7 @@
 // SnowLuma daemon + per-bot 聚合 store（模块级单例）。
-// 跟 napcatLoginStore 同型：state 持久不丢，事件订阅一次，路由切回不重置。
+// state 持久不丢，事件订阅一次（首个 React 订阅者来时挂上），路由切回不重置。
 
+import { createStore } from '../utils/createStore';
 import { eventStreamService } from '../../core/services/event-stream.service';
 import {
     initialSnowlumaState,
@@ -8,41 +9,28 @@ import {
     type SnowlumaState,
 } from '../../core/domain/events/snowluma-aggregator';
 
-let state: SnowlumaState = initialSnowlumaState;
-const listeners = new Set<() => void>();
+const store = createStore<SnowlumaState>(initialSnowlumaState);
 
 let subscribePromise: Promise<() => void> | null = null;
-
-function emit(): void {
-    for (const fn of listeners) fn();
-}
 
 function ensureSubscribed(): void {
     if (subscribePromise) return;
     subscribePromise = eventStreamService.subscribe((event) => {
-        const next = reduceSnowluma(state, event);
-        if (next === state) return;
-        state = next;
-        emit();
+        const next = reduceSnowluma(store.getSnapshot(), event);
+        store.setState(next);
     });
 }
 
 export const snowlumaStore = {
-    getSnapshot(): SnowlumaState {
-        return state;
-    },
+    getSnapshot: store.getSnapshot,
 
     subscribe(listener: () => void): () => void {
         ensureSubscribed();
-        listeners.add(listener);
-        return () => {
-            listeners.delete(listener);
-        };
+        return store.subscribe(listener);
     },
 
     /** 测试 / dev 重置用。 */
     _reset(): void {
-        state = initialSnowlumaState;
-        emit();
+        store._reset();
     },
 };

@@ -14,6 +14,7 @@
 // 让 UI 多显示 LINGER_AFTER_FINISH 毫秒。否则后端报错时进度条"咻"地消失，
 // 用户只看到状态回到点击前，没有任何错误反馈。
 
+import { createStore } from '../utils/createStore';
 import {
     initialActionProgress,
     reduceActionProgress,
@@ -45,59 +46,50 @@ const initialState: ComponentActionStoreState = {
     taskTargets: {},
 };
 
+const store = createStore<ComponentActionStoreState>(initialState);
+
+const lingerTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export function targetKey(componentId: ComponentId, hostId: string): string {
     return `${componentId}::${hostId}`;
 }
 
-let state: ComponentActionStoreState = initialState;
-const listeners = new Set<() => void>();
-const lingerTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function emit(): void {
-    for (const fn of listeners) fn();
-}
-
 function clearActiveForTask(taskId: string): void {
+    const current = store.getSnapshot();
     const cleanedActive: Record<string, string> = {};
-    for (const [k, v] of Object.entries(state.activeByTarget)) {
+    for (const [k, v] of Object.entries(current.activeByTarget)) {
         if (v !== taskId) cleanedActive[k] = v;
     }
     // 同步从 taskTargets 移除：banner 已经显示完了，没人再需要这条映射。
     const cleanedTargets: Record<string, { componentId: ComponentId; hostId: string }> = {};
-    for (const [k, v] of Object.entries(state.taskTargets)) {
+    for (const [k, v] of Object.entries(current.taskTargets)) {
         if (k !== taskId) cleanedTargets[k] = v;
     }
-    state = { ...state, activeByTarget: cleanedActive, taskTargets: cleanedTargets };
-    emit();
+    store.setState({ ...current, activeByTarget: cleanedActive, taskTargets: cleanedTargets });
 }
 
 export const componentActionStore = {
     /** 当前快照（同步）。useSyncExternalStore 用。 */
-    getSnapshot(): ComponentActionStoreState {
-        return state;
-    },
+    getSnapshot: store.getSnapshot,
 
-    subscribe(listener: () => void): () => void {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-    },
+    subscribe: store.subscribe,
 
     /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
     started(taskId: string, componentId: ComponentId, hostId: string): void {
+        const current = store.getSnapshot();
         const key = targetKey(componentId, hostId);
         // 同 (component, host) 上一次的 linger 计时器要先清掉，否则新任务起来
         // 几秒后旧计时器到期把新任务的 active 标记给清了。
-        const prevTaskId = state.activeByTarget[key];
+        const prevTaskId = current.activeByTarget[key];
         if (prevTaskId && lingerTimers.has(prevTaskId)) {
             clearTimeout(lingerTimers.get(prevTaskId)!);
             lingerTimers.delete(prevTaskId);
         }
-        state = {
-            tasks: { ...state.tasks, [taskId]: initialActionProgress },
-            activeByTarget: { ...state.activeByTarget, [key]: taskId },
-            taskTargets: { ...state.taskTargets, [taskId]: { componentId, hostId } },
-        };
-        emit();
+        store.setState({
+            tasks: { ...current.tasks, [taskId]: initialActionProgress },
+            activeByTarget: { ...current.activeByTarget, [key]: taskId },
+            taskTargets: { ...current.taskTargets, [taskId]: { componentId, hostId } },
+        });
     },
 
     /**
@@ -110,13 +102,13 @@ export const componentActionStore = {
      * 有时间显示"已完成 / 失败"反馈。
      */
     applyProgress(taskId: string, event: ProgressEvent): void {
-        const prev = state.tasks[taskId] ?? initialActionProgress;
+        const current = store.getSnapshot();
+        const prev = current.tasks[taskId] ?? initialActionProgress;
         const next = reduceActionProgress(prev, event);
-        state = {
-            ...state,
-            tasks: { ...state.tasks, [taskId]: next },
-        };
-        emit();
+        store.setState({
+            ...current,
+            tasks: { ...current.tasks, [taskId]: next },
+        });
 
         const isTerminal =
             next.status === 'success' ||
@@ -135,7 +127,6 @@ export const componentActionStore = {
     _reset(): void {
         for (const t of lingerTimers.values()) clearTimeout(t);
         lingerTimers.clear();
-        state = initialState;
-        emit();
+        store._reset();
     },
 };
