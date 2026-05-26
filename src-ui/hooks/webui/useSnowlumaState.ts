@@ -1,24 +1,10 @@
-// SnowLuma daemon + per-bot 聚合 hook。
+// SnowLuma 聚合 hook —— 现在只是模块级 store 的 useSyncExternalStore 视图。
+// 路由切换组件 mount/unmount 不影响 state，事件订阅启动一次后台累积。
 
-import { useReducer } from 'react';
-import { useDomainEvents } from '../events/useDomainEvents';
-import {
-    initialSnowlumaState,
-    reduceSnowluma,
-    type SnowlumaState,
-} from '../../core/domain/events/snowluma-aggregator';
-import type { DomainEvent } from '../../core/ipc/types';
+import { useSyncExternalStore } from 'react';
+import { snowlumaStore } from './snowlumaStore';
+import type { SnowlumaState } from '../../core/domain/events/snowluma-aggregator';
 
-function reducer(state: SnowlumaState, event: DomainEvent): SnowlumaState {
-    return reduceSnowluma(state, event);
-}
-
-export function useSnowlumaState() {
-    const [state, dispatch] = useReducer(reducer, initialSnowlumaState);
-
-    useDomainEvents((event) => {
-        dispatch(event);
-    });
-
-    return state;
+export function useSnowlumaState(): SnowlumaState {
+    return useSyncExternalStore(snowlumaStore.subscribe, snowlumaStore.getSnapshot);
 }
