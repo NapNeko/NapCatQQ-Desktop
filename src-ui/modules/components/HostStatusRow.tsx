@@ -49,6 +49,21 @@ export const HostStatusRowView: React.FC<HostStatusRowProps> = ({
 }) => {
     const { host, status } = row;
 
+    // 任务三态划分：
+    //   - 进行中（pending / running / paused）：UI 显示"取消"按钮
+    //   - 终态 linger（success / failed / cancelled）：后端已结束，store 有
+    //     3 秒缓冲让用户看清结果。这段时间继续显示"取消"会误导（按了 no-op，
+    //     且 ProgressLine 已经写"已完成 / 失败 / 已取消"）。按钮区直接留白，
+    //     让文字反馈独立说话；linger 结束 store 自然清掉 activeProgress 之后，
+    //     ActionButtons 会重新挂上。
+    //   - 无 activeProgress：正常的 ActionButtons
+    const isTerminal =
+        activeProgress != null &&
+        (activeProgress.progress.status === 'success' ||
+            activeProgress.progress.status === 'failed' ||
+            activeProgress.progress.status === 'cancelled');
+    const isCancelable = activeProgress != null && !isTerminal;
+
     return (
         <div className="relative flex items-center gap-3 overflow-hidden rounded-sm bg-inset/40 px-3 py-2.5 transition-colors hover:bg-inset/70">
             <StatusDot row={row} hasUpdate={hasUpdate(status, latestRemoteVersion)} />
@@ -68,16 +83,18 @@ export const HostStatusRowView: React.FC<HostStatusRowProps> = ({
                 />
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-                {activeProgress ? (
+                {isCancelable ? (
                     <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => onAction({ kind: 'cancel', taskId: activeProgress.taskId })}
+                        onClick={() =>
+                            onAction({ kind: 'cancel', taskId: activeProgress!.taskId })
+                        }
                     >
                         <X size={14} strokeWidth={2} />
                         取消
                     </Button>
-                ) : (
+                ) : isTerminal ? null : (
                     <ActionButtons
                         row={row}
                         latestRemoteVersion={latestRemoteVersion}

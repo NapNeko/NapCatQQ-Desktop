@@ -11,7 +11,7 @@
 
 import React, { useCallback, useMemo } from 'react';
 import { Box, Loader2, RefreshCw } from 'lucide-react';
-import { Button, InfoBarStack } from '../../shared/ui';
+import { Button } from '../../shared/ui';
 import { useComponents } from '../../hooks/components/useComponents';
 import { useComponentAction } from '../../hooks/components/useComponentAction';
 import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
@@ -38,12 +38,14 @@ export const ComponentsPageNext: React.FC = () => {
         [view],
     );
 
-    // 给 InfoBarStack 用的扁平 row 列表，用来反查 (componentId, hostId) → 显示名。
+    // 把 (component_id, host_id) 反查显示名扁平化给 useComponentActionErrors，
+    // 它会订阅 componentActionStore 终态自动 push 进全局 InfoBar 队列。
+    // banner 渲染统一靠 AppNext 顶层的 InfoBarStack，本页不再自己挂。
     const allRows = useMemo<ComponentRow[]>(
         () => [...visibleView.framework, ...visibleView.runtimeDep, ...visibleView.selfApp],
         [visibleView],
     );
-    const { banners, dismiss } = useComponentActionErrors(allRows);
+    useComponentActionErrors(allRows);
 
     const latestVersionFor = useCallback(
         (id: ComponentId): string | null => {
@@ -95,7 +97,6 @@ export const ComponentsPageNext: React.FC = () => {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            <InfoBarStack items={banners} onDismiss={dismiss} />
             {/* 头部固定，不参与滚动 */}
             <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
                 <div>
