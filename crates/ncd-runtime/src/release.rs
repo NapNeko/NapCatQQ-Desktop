@@ -16,7 +16,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use ncd_domain::release_snapshot::{ReleaseInfo, ReleaseSnapshot};
+use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo, ReleaseSnapshot};
 use serde::Deserialize;
 use tracing::warn;
 
@@ -105,8 +105,12 @@ fn build_http_client() -> Result<reqwest::Client, reqwest::Error> {
         .build()
 }
 
-/// GitHub releases API 单条记录子集。仅取本模块需要的字段，其它字段
-/// （author / assets / draft 等）显式忽略。
+/// GitHub releases API 单条记录子集。
+///
+/// 仅取本模块需要的字段，其它字段（author / draft 等）显式忽略。`assets`
+/// 字段是 release 完整性校验的关键来源——每个 asset 的 `digest` 形如
+/// `"sha256:<64-hex>"`，安装层用它在下载完后做 SHA256 校验，防止国内代理
+/// CDN 投毒（"长度对、Content-Range 对、流不截断、字节是垃圾" 这一类）。
 #[derive(Debug, Clone, Deserialize)]
 struct GhReleaseDto {
     tag_name: String,
@@ -114,6 +118,17 @@ struct GhReleaseDto {
     published_at: Option<String>,
     html_url: Option<String>,
     body: Option<String>,
+    #[serde(default)]
+    assets: Vec<GhAssetDto>,
+}
+
+/// release 单 asset。`digest` 是 GitHub 2024-Q4 上线的字段，老 release 没有；
+/// 缺失或前缀非 `sha256:` 时安装层退化到"无 hash"分支。
+#[derive(Debug, Clone, Deserialize)]
+struct GhAssetDto {
+    name: String,
+    #[serde(default)]
+    digest: Option<String>,
 }
 
 async fn fetch_one(client: &reqwest::Client, url: &str) -> Option<ReleaseInfo> {
@@ -140,6 +155,7 @@ async fn fetch_one(client: &reqwest::Client, url: &str) -> Option<ReleaseInfo> {
 
     Some(ReleaseInfo {
         version: strip_v_prefix(&dto.tag_name).to_string(),
+        tag: dto.tag_name.clone(),
         published_at: dto
             .published_at
             .as_deref()
@@ -147,7 +163,38 @@ async fn fetch_one(client: &reqwest::Client, url: &str) -> Option<ReleaseInfo> {
             .unwrap_or(0),
         html_url: dto.html_url.unwrap_or_default(),
         release_notes: dto.body.unwrap_or_default(),
+        assets: dto
+            .assets
+            .into_iter()
+            .filter_map(|asset| {
+                let sha = parse_sha256_digest(asset.digest.as_deref()).unwrap_or_default();
+                if asset.name.is_empty() {
+                    None
+                } else {
+                    Some(ReleaseAsset {
+                        name: asset.name,
+                        sha256: sha,
+                    })
+                }
+            })
+            .collect(),
     })
+}
+
+/// 从 GitHub digest 字段（`"sha256:<64-hex>"`）抽出 64-hex SHA256。
+///
+/// 缺失 / 非 `sha256:` 前缀 / hex 不合法时返回 None。GitHub 当前只用 sha256
+/// 算法，未来可能扩展（sha512 等），届时按前缀分派。
+pub(crate) fn parse_sha256_digest(digest: Option<&str>) -> Option<String> {
+    let raw = digest?.trim();
+    let hex = raw.strip_prefix("sha256:")?;
+    if hex.len() != 64 {
+        return None;
+    }
+    if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(hex.to_ascii_lowercase())
 }
 
 /// `v4.18.1` → `4.18.1`；其它形式原样返回。
@@ -225,6 +272,18 @@ fn read_cache(data_root: &Path) -> Option<ReleaseSnapshot> {
     serde_json::from_str(&content).ok()
 }
 
+/// 仅读磁盘缓存的快照，不发起网络请求。
+///
+/// 给 Tauri command 同步路径使用：`run_component_action` 在 build component
+/// 阶段必须立刻拿到 sha256 才能注入 `with_sha256`，等不起一次完整 GitHub
+/// 拉取（且每次安装都拉 = 速率限制）。缓存由 `fetch_release_snapshot` 在
+/// 启动 / 前端轮询时维护，本函数只消费。缓存缺失返 None；上层应当当作
+/// "无 hash 数据"分支，跳过校验或弹二次确认（对齐 legacy
+/// `run_napcat_archive_hash_check` 行为）。
+pub fn read_cached_release_snapshot(data_root: &Path) -> Option<ReleaseSnapshot> {
+    read_cache(data_root)
+}
+
 fn write_cache(data_root: &Path, snap: &ReleaseSnapshot) -> std::io::Result<()> {
     let dir = data_root.join(CACHE_DIR_NAME);
     std::fs::create_dir_all(&dir)?;
@@ -237,16 +296,21 @@ fn write_cache(data_root: &Path, snap: &ReleaseSnapshot) -> std::io::Result<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ncd_domain::release_snapshot::{ReleaseInfo, ReleaseSnapshot};
+    use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo, ReleaseSnapshot};
     use tempfile::tempdir;
 
     fn fresh_snapshot() -> ReleaseSnapshot {
         ReleaseSnapshot {
             napcat_latest: Some(ReleaseInfo {
                 version: "4.18.1".to_string(),
+                tag: "v4.18.1".to_string(),
                 published_at: 1_700_000_000,
                 html_url: "https://example.com/r".to_string(),
                 release_notes: "notes".to_string(),
+                assets: vec![ReleaseAsset {
+                    name: "NapCat.Shell.zip".to_string(),
+                    sha256: "0".repeat(64),
+                }],
             }),
             snowluma_latest: None,
             desktop_latest: None,
@@ -324,6 +388,44 @@ mod tests {
         assert_eq!(strip_v_prefix("v4.18.1"), "4.18.1");
         assert_eq!(strip_v_prefix("4.18.1"), "4.18.1");
         assert_eq!(strip_v_prefix("v0.0.0-pre.1"), "0.0.0-pre.1");
+    }
+
+    #[test]
+    fn parse_sha256_digest_accepts_lowercase_hex() {
+        let hex = "a".repeat(64);
+        let digest = format!("sha256:{hex}");
+        assert_eq!(parse_sha256_digest(Some(&digest)), Some(hex));
+    }
+
+    #[test]
+    fn parse_sha256_digest_normalizes_uppercase_to_lowercase() {
+        let hex_upper = "A".repeat(64);
+        let digest = format!("sha256:{hex_upper}");
+        assert_eq!(parse_sha256_digest(Some(&digest)), Some("a".repeat(64)));
+    }
+
+    #[test]
+    fn parse_sha256_digest_rejects_non_sha256_algorithm() {
+        let digest = format!("sha512:{}", "0".repeat(64));
+        assert_eq!(parse_sha256_digest(Some(&digest)), None);
+    }
+
+    #[test]
+    fn parse_sha256_digest_rejects_wrong_length() {
+        let digest = format!("sha256:{}", "0".repeat(63));
+        assert_eq!(parse_sha256_digest(Some(&digest)), None);
+    }
+
+    #[test]
+    fn parse_sha256_digest_rejects_non_hex_chars() {
+        let digest = format!("sha256:{}", "z".repeat(64));
+        assert_eq!(parse_sha256_digest(Some(&digest)), None);
+    }
+
+    #[test]
+    fn parse_sha256_digest_handles_missing_field() {
+        assert_eq!(parse_sha256_digest(None), None);
+        assert_eq!(parse_sha256_digest(Some("")), None);
     }
 
     /// GitHub 实测形态：`2023-11-14T12:34:56Z`。Unix epoch 验证基准日期。
