@@ -20,6 +20,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use sha2::{Digest, Sha256};
+use tokio::fs;
+use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio::time::timeout;
@@ -42,6 +45,10 @@ pub struct MirrorRaceConfig {
     pub probe_first_chunk_timeout: Duration,
     /// 正式下载阶段每 chunk 的 idle timeout。默认 20s。
     pub idle_timeout: Duration,
+    /// 期望 SHA256（64-hex 小写）。Some 时每个 mirror 下完后立即校验，
+    /// mismatch 视为该镜像投毒（返完整长度的垃圾字节，所有字节级防御失效），
+    /// truncate `.part` 切下一家。None 时跳过校验。
+    pub expected_sha256: Option<String>,
 }
 
 impl Default for MirrorRaceConfig {
@@ -51,6 +58,7 @@ impl Default for MirrorRaceConfig {
             stagger: Duration::from_secs(3),
             probe_first_chunk_timeout: Duration::from_secs(30),
             idle_timeout: DEFAULT_IDLE_TIMEOUT,
+            expected_sha256: None,
         }
     }
 }
@@ -103,7 +111,23 @@ pub async fn download_with_mirror_race(
         mirror_url: Some(primary.clone()),
     };
     match download_with_resume(primary, dest, sink.clone(), cancel.clone(), dl_cfg).await {
-        Ok(n) => return Ok(n),
+        Ok(_) => match verify_sha256_if_needed(dest, cfg.expected_sha256.as_deref()).await {
+            Ok(n) => return Ok(n),
+            Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
+            Err(e) => {
+                // 完整长度的垃圾字节是国内代理常见 case：长度对、Content-Range 对、
+                // 流不截断，但 body 是另一份缓存对象。这里把它当作"该镜像投毒"，
+                // 删掉 .part + dest 切下家。
+                warn!(
+                    target: "ncd_network::race",
+                    url = %primary, err = %e,
+                    "primary mirror passed transport checks but failed sha256, treating as poisoned cache"
+                );
+                let _ = tokio::fs::remove_file(dest).await;
+                let _ = tokio::fs::remove_file(&part_path(dest)).await;
+                last_err = Some(e);
+            }
+        },
         Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
         Err(e) => {
             warn!(target: "ncd_network::race", url = %primary, err = %e, "primary mirror failed");
@@ -128,7 +152,20 @@ pub async fn download_with_mirror_race(
             mirror_url: Some(url.clone()),
         };
         match download_with_resume(url, dest, sink.clone(), cancel.clone(), dl_cfg).await {
-            Ok(n) => return Ok(n),
+            Ok(_) => match verify_sha256_if_needed(dest, cfg.expected_sha256.as_deref()).await {
+                Ok(n) => return Ok(n),
+                Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
+                Err(e) => {
+                    warn!(
+                        target: "ncd_network::race",
+                        url = %url, err = %e,
+                        "fallback mirror passed transport checks but failed sha256"
+                    );
+                    let _ = tokio::fs::remove_file(dest).await;
+                    let _ = tokio::fs::remove_file(&part_path(dest)).await;
+                    last_err = Some(e);
+                }
+            },
             Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
             Err(e) => {
                 warn!(target: "ncd_network::race", url = %url, err = %e, "fallback mirror failed");
@@ -142,6 +179,42 @@ pub async fn download_with_mirror_race(
             .map(|e| e.to_string())
             .unwrap_or_else(|| "no further mirrors".into()),
     ))
+}
+
+/// 算 dest 文件的 SHA256（64-hex 小写），与 `expected` 严格比对。
+///
+/// `expected = None` 直接返回字节数（无校验）；空串视为"无 hash 数据"
+/// 也跳过。校验通过返字节数；mismatch 返 [`NetworkError::ChecksumMismatch`]，
+/// 让上层切镜像；IO 失败返对应 [`NetworkError::Io`]。
+async fn verify_sha256_if_needed(
+    dest: &Path,
+    expected: Option<&str>,
+) -> Result<u64, NetworkError> {
+    let metadata = fs::metadata(dest).await?;
+    let size = metadata.len();
+    let expected = match expected {
+        Some(h) if !h.is_empty() => h,
+        _ => return Ok(size),
+    };
+
+    let mut file = fs::File::open(dest).await?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 256 * 1024];
+    loop {
+        let n = file.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let actual = hex::encode(hasher.finalize());
+    if !expected.eq_ignore_ascii_case(&actual) {
+        return Err(NetworkError::ChecksumMismatch {
+            expected: expected.to_string(),
+            actual,
+        });
+    }
+    Ok(size)
 }
 
 async fn run_race(

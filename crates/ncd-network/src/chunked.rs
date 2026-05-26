@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use sha2::{Digest, Sha256};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinSet;
@@ -49,6 +50,12 @@ pub struct ChunkedConfig {
     pub idle_timeout: Duration,
     /// 不切片时（小文件 / 不支持 Range），fallback 到 race 模式的配置。
     pub race_cfg: MirrorRaceConfig,
+    /// 期望 SHA256（64-hex 小写）。Some 时切片 merge 完整体之后立即校验，
+    /// mismatch 视为该 primary mirror 投毒（返完整字节数但内容是另一份缓存
+    /// 对象），删 dest 切回 race 让其它 mirror 接力。None 跳过校验。
+    /// 注意 ChunkedConfig 与 race_cfg.expected_sha256 在外层调用入口由
+    /// 同一个值同步设置；任一为空都会跳过对应阶段的校验。
+    pub expected_sha256: Option<String>,
 }
 
 impl Default for ChunkedConfig {
@@ -58,6 +65,7 @@ impl Default for ChunkedConfig {
             threshold: CHUNKED_THRESHOLD,
             idle_timeout: DEFAULT_IDLE_TIMEOUT,
             race_cfg: MirrorRaceConfig::default(),
+            expected_sha256: None,
         }
     }
 }
@@ -135,7 +143,30 @@ pub async fn download_smart(
     )
     .await
     {
-        Ok(n) => Ok(n),
+        Ok(n) => match verify_sha256_if_needed(dest, cfg.expected_sha256.as_deref()).await {
+            Ok(_) => Ok(n),
+            Err(NetworkError::Cancelled) => Err(NetworkError::Cancelled),
+            Err(e) => {
+                // 切片完成、字节数对，但 sha256 不一致：primary mirror 的缓存被
+                // 投毒（"长度对、Content-Range 对、流不截断" 都骗过去了）。
+                // 删 dest + .part 切回 race，让其它 mirror 接力，同时把 sha256
+                // 透给 race 让它继续校验（race_cfg.expected_sha256 已含）。
+                warn!(
+                    target: "ncd_network::chunked",
+                    primary=%primary_mirror, err=%e,
+                    "chunked sha256 mismatch on primary, fallback to race over other mirrors"
+                );
+                let _ = fs::remove_file(dest).await;
+                let chunk_paths: Vec<PathBuf> =
+                    (0..cfg.parts).map(|i| chunk_path(dest, i)).collect();
+                cleanup_chunks(&chunk_paths).await;
+                let mut race_cfg = cfg.race_cfg.clone();
+                if race_cfg.expected_sha256.is_none() {
+                    race_cfg.expected_sha256 = cfg.expected_sha256.clone();
+                }
+                download_with_mirror_race(mirrors, dest, sink, cancel, race_cfg).await
+            }
+        },
         Err(NetworkError::Cancelled) => Err(NetworkError::Cancelled),
         Err(e) => {
             warn!(
@@ -146,7 +177,11 @@ pub async fn download_smart(
             // 清理可能残留的 .chunk-N
             let chunk_paths: Vec<PathBuf> = (0..cfg.parts).map(|i| chunk_path(dest, i)).collect();
             cleanup_chunks(&chunk_paths).await;
-            download_with_mirror_race(mirrors, dest, sink, cancel, cfg.race_cfg).await
+            let mut race_cfg = cfg.race_cfg.clone();
+            if race_cfg.expected_sha256.is_none() {
+                race_cfg.expected_sha256 = cfg.expected_sha256.clone();
+            }
+            download_with_mirror_race(mirrors, dest, sink, cancel, race_cfg).await
         }
     }
 }
@@ -356,6 +391,42 @@ async fn merge_chunks(dest: &Path, chunk_paths: &[PathBuf]) -> Result<(), Networ
     fs::rename(&part_path, dest).await?;
     cleanup_chunks(chunk_paths).await;
     Ok(())
+}
+
+/// 算 dest 文件的 SHA256（64-hex 小写），与 `expected` 严格比对。
+///
+/// `expected = None` / 空串视为"无 hash 数据"跳过。校验通过返字节数；mismatch
+/// 返 [`NetworkError::ChecksumMismatch`] 让上层切镜像；IO 失败返对应
+/// [`NetworkError::Io`]。
+async fn verify_sha256_if_needed(
+    dest: &Path,
+    expected: Option<&str>,
+) -> Result<u64, NetworkError> {
+    let metadata = fs::metadata(dest).await?;
+    let size = metadata.len();
+    let expected = match expected {
+        Some(h) if !h.is_empty() => h,
+        _ => return Ok(size),
+    };
+
+    let mut file = fs::File::open(dest).await?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 256 * 1024];
+    loop {
+        let n = file.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let actual = hex::encode(hasher.finalize());
+    if !expected.eq_ignore_ascii_case(&actual) {
+        return Err(NetworkError::ChecksumMismatch {
+            expected: expected.to_string(),
+            actual,
+        });
+    }
+    Ok(size)
 }
 
 fn spawn_progress_ticker(
