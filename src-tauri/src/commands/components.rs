@@ -20,7 +20,7 @@ use ncd_component::{
 };
 use ncd_deploy::{DeployPlan, StepKind};
 use ncd_host::{Host, HostPath};
-use ncd_runtime::{DomainEvent, EventBus};
+use ncd_runtime::{release::read_cached_release_snapshot, DomainEvent, EventBus, ReleaseInfo};
 use tauri::State;
 use uuid::Uuid;
 
@@ -171,12 +171,24 @@ fn build_component_for_host(
     host: &dyn Host,
 ) -> Arc<dyn Component> {
     let data_root_host = data_root_to_host_path(&state.data_root, host.os());
+    // 读 release 缓存反查 SHA256：缓存缺失 / 无 digest 时退化到"无 hash"分支，
+    // 让安装链路走原有路径（race 仍尝试切 mirror，但失去内容级保护）。
+    // 缓存由前端 useReleases hook 在启动/轮询时通过 get_release_snapshot 维护。
+    let snapshot = read_cached_release_snapshot(&state.data_root);
     match id {
         ComponentId::NapCat => {
             if host.os() == ncd_host::Os::Windows {
                 // legacy `PathFunc.napcat_path = data_path/runtime/NapCatQQ`。
                 let install = data_root_host.join("runtime").join("NapCatQQ");
-                Arc::new(NapCatComponent::for_windows(install))
+                let mut comp = NapCatComponent::for_windows(install);
+                if let Some(sha) = snapshot
+                    .as_ref()
+                    .and_then(|s| s.napcat_latest.as_ref())
+                    .and_then(|info| asset_sha256(info, "NapCat.Shell.zip"))
+                {
+                    comp = comp.with_sha256(sha);
+                }
+                Arc::new(comp)
             } else {
                 Arc::new(NapCatComponent::new(HostPath::from_posix("/home/napcat/Napcat")))
             }
@@ -184,11 +196,31 @@ fn build_component_for_host(
         ComponentId::SnowLuma => {
             if host.os() == ncd_host::Os::Windows {
                 // legacy `PathFunc.snowluma_path = data_path/runtime/SnowLuma`;
-                // tag 由前端 / release service 决定,这里先用 latest_known_tag
-                // (空 tag 仍允许 detect / verify;install 才需要真 tag)。
+                // tag 来源优先级：release 缓存的 latest tag → 已装版本 fallback
+                // → 空串（install 阶段会拒绝）。已装版本不能直接拿来拼装 URL，
+                // 因为它是当前安装的旧版，需要装的是 latest（这是 EOCD 调查
+                // 顺带发现的二次 bug：之前永远拿旧 tag 拼 URL）。
                 let install = data_root_host.join("runtime").join("SnowLuma");
-                let tag = state.snapshot.local_versions.snowluma.clone().unwrap_or_default();
-                Arc::new(SnowLumaComponent::for_windows(install, tag))
+                let latest = snapshot
+                    .as_ref()
+                    .and_then(|s| s.snowluma_latest.as_ref());
+                let tag = latest
+                    .map(|info| {
+                        if !info.tag.is_empty() {
+                            info.tag.clone()
+                        } else {
+                            format!("v{}", info.version)
+                        }
+                    })
+                    .or_else(|| state.snapshot.local_versions.snowluma.clone())
+                    .unwrap_or_default();
+                let mut comp = SnowLumaComponent::for_windows(install, tag.clone());
+                if let Some(sha) = latest.and_then(|info| {
+                    asset_sha256(info, &format!("SnowLuma-{tag}-win-x64.zip"))
+                }) {
+                    comp = comp.with_sha256(sha);
+                }
+                Arc::new(comp)
             } else {
                 Arc::new(SnowLumaComponent::new(
                     HostPath::from_posix("/home/napcat/Napcat/snowluma-workspace"),
@@ -214,6 +246,15 @@ fn build_component_for_host(
                 }),
         ),
     }
+}
+
+/// 在 ReleaseInfo 的 assets 里按文件名反查 sha256，命中且非空才返回。
+fn asset_sha256(info: &ReleaseInfo, name: &str) -> Option<String> {
+    info.assets
+        .iter()
+        .find(|a| a.name == name)
+        .map(|a| a.sha256.clone())
+        .filter(|s| !s.is_empty())
 }
 
 /// 把 std::path::PathBuf(`AppState.data_root`)转成 HostPath,按 host 当前
