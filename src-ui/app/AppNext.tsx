@@ -4,19 +4,21 @@
 // 简单 useState 路由（5 主路由 + 1 dev showcase）。
 
 import React, { useState } from 'react';
-import { Activity, Bot, Server, Settings as SettingsIcon } from 'lucide-react';
+import { Activity, Server, Settings as SettingsIcon } from 'lucide-react';
 import './index.css';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
 import { StatusBar } from '../shared/components/next/StatusBar';
-import { TooltipProvider } from '../shared/ui';
+import { InfoBarStack, TooltipProvider } from '../shared/ui';
 import { PagePlaceholder } from '../shared/components/next/PagePlaceholder';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
 import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
+import { BotPageNext } from '../modules/bot/BotPage.next';
 import { Showcase } from './Showcase';
 import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
+import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 
 const SHOW_SHOWCASE = true;
 
@@ -38,6 +40,11 @@ export const AppNext: React.FC = () => {
     // 顶层挂一次 component-action 事件桥。路由切换不会断订阅，进度状态留在
     // 模块级 store；切走 Components 页再切回来不会丢已经在跑的安装进度。
     useComponentActionEventBridge();
+
+    // 全局 InfoBar：所有页面 / hook / service 通过 useGlobalInfoBars().push 或
+    // pushInfoBar() 推条目，这里是整个 App 唯一的渲染处。模块级 store 跟组件
+    // 树解耦，路由切换不会丢 banner。
+    const { bars, dismiss } = useGlobalInfoBars();
 
     return (
         <TooltipProvider>
@@ -73,6 +80,10 @@ export const AppNext: React.FC = () => {
                     connectionState={connectionState}
                     dataRoot={bootstrap?.data_root || undefined}
                 />
+
+                {/* 全局 InfoBar 队列：portal 到 body，固定右上角；任何页面调
+                    pushInfoBar / useGlobalInfoBars().push 都汇集到这一处渲染。 */}
+                <InfoBarStack items={bars} onDismiss={dismiss} />
             </div>
         </TooltipProvider>
     );
@@ -83,19 +94,7 @@ const RouteOutlet: React.FC<{ route: AppRoute }> = ({ route }) => {
         case 'overview':
             return <BootstrapPanelNext />;
         case 'bots':
-            return (
-                <PagePlaceholder
-                    title="Bots"
-                    icon={Bot}
-                    description="多实例 QQ Bot 列表与生命周期管理。"
-                    pendingItems={[
-                        'BotCard 卡片网格（含二维码 + flavor 徽章）',
-                        '批量勾选模式 + 批量启停删',
-                        '浮动 FAB：刷新 / 切批量 / 新建',
-                        'NapCat / SnowLuma 双 flavor 视觉区分',
-                    ]}
-                />
-            );
+            return <BotPageNext />;
         case 'components':
             return <ComponentsPageNext />;
         case 'remote':
