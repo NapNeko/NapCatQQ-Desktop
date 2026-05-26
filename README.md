@@ -88,7 +88,7 @@ v1 老用户迁移到 v2 后：
 - 在使用本项目之前，请确保您已仔细阅读并完全理解此声明。如果您不同意此声明中的任何条款，请勿使用本项目。
 
 ## 鸣谢
-- [futureppo(F一串)的公益站大力支持！](blog.futureppo.top)
+- [futureppo(F一串)的公益站大力支持！](https://blog.futureppo.top)
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
 - [PySide6](https://wiki.qt.io/Qt_for_Python)
 - [PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
