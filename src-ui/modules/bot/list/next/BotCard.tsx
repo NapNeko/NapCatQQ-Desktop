@@ -1,0 +1,891 @@
+// 列表行式 BotCard（new tree）。
+//
+// 单卡内部布局：
+//   1. Header 行：[复选框] [Avatar] [身份块（标题 + 徽章 / QQ ID · flavor · 时间 · 状态）] [操作区]
+//   2. Chip 行：对外 / 自启 / 运行位置 / daemon / 注入 / UIN / 启动模式 / WebUI 端口 / rev
+//   3. （可选）错误行 / 踢线 toast：仅高 priority 状态独立显示
+//
+// 卡片走内容自适应高度（不再固定 h-[120px]）：固定高度遇到只有一两个 chip 时
+// 下方会出现大块留白看着稀疏。普通状态文案（"运行中" / "已登录"）合并到副标题
+// 行，不单独占一整行；只有错误 / 被踢这类高 priority 的红色标签会撑出独立行。
+//
+// 操作区按钮按状态收缩：日志 / WebUI 只在 running / starting 时显示（停止状态
+// 这俩按了也没意义）；启停 / 配置永远显示。
+//
+// 头像 BotAvatar 把 overflow-hidden 限制在内层 img 包装上，外层留给指示点的
+// absolute 定位，圆点不会被裁。
+//
+// 批量模式下整行变 selectable，左侧出复选框。
+
+import { useEffect, useState } from 'react';
+import {
+    Activity,
+    AlertTriangle,
+    Cpu,
+    DoorOpen,
+    FileText,
+    Globe,
+    Hash,
+    LinkIcon,
+    Play,
+    Power,
+    QrCode,
+    RefreshCw,
+    Settings,
+    Square,
+    UserCheck,
+    Wifi,
+    Zap,
+} from 'lucide-react';
+import {
+    Badge,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '../../../../shared/ui';
+import type {
+    BotActorSnapshot,
+    DaemonState,
+    NapCatLoginInvalidationReason,
+    SnowLumaLoginState,
+} from '../../../../core/ipc/types';
+import type { BotConfig } from '../../../../core/ipc/generated/domain/BotConfig';
+import {
+    botStateBadge,
+    canStartBot,
+    canStopBot,
+    isBotRunning,
+    isBotStarting,
+} from '../../../../core/domain/bot/status';
+import {
+    isWebuiAvailable,
+    webuiTooltip,
+    type NapcatWebuiBinding,
+} from '../../../../core/domain/webui/availability';
+import { isSnowLumaFlavor, type Flavor } from '../../../../core/domain/bot/flavor';
+import { cn } from '../../../../shared/utils/cn';
+import { QrCodeDialog } from './QrCodeDialog';
+
+interface BotCardProps {
+    bot: BotActorSnapshot;
+    config?: BotConfig | null;
+    flavor: Flavor | null;
+    qrcodeUrl?: string | null;
+    isOnline?: boolean | null;
+    invalidationReason?: NapCatLoginInvalidationReason | null;
+    napcatBinding?: NapcatWebuiBinding | null;
+    snowlumaDaemonState?: DaemonState | null;
+    snowlumaInjected?: boolean;
+    snowlumaUin?: string | null;
+    snowlumaLoginState?: SnowLumaLoginState | null;
+
+    isBatchMode: boolean;
+    isSelected: boolean;
+
+    onStart: (botId: string) => void;
+    onStop: (botId: string) => void;
+    onConfigure: (botId: string) => void;
+    onViewLogs: (botId: string) => void;
+    onToggleSelect: (botId: string) => void;
+    onOpenWebui: (params: {
+        botId: string;
+        flavor: Flavor | null;
+        napcat: NapcatWebuiBinding | null;
+    }) => void;
+}
+
+export function BotCard({
+    bot,
+    config,
+    flavor,
+    qrcodeUrl,
+    isOnline,
+    invalidationReason,
+    napcatBinding,
+    snowlumaDaemonState,
+    snowlumaInjected,
+    snowlumaUin,
+    snowlumaLoginState,
+    isBatchMode,
+    isSelected,
+    onStart,
+    onStop,
+    onConfigure,
+    onViewLogs,
+    onToggleSelect,
+    onOpenWebui,
+}: BotCardProps) {
+    const [qrOpen, setQrOpen] = useState(false);
+
+    const [showKickedToast, setShowKickedToast] = useState(false);
+    useEffect(() => {
+        if (invalidationReason === 'kicked') {
+            setShowKickedToast(true);
+            const timer = setTimeout(() => setShowKickedToast(false), 3000);
+            return () => clearTimeout(timer);
+        }
+        setShowKickedToast(false);
+        return undefined;
+    }, [invalidationReason]);
+
+    const stateBadge = botStateBadge(bot.state);
+    const stateBadgeTone = mapStateBadgeTone(stateBadge.color);
+    const isSL = isSnowLumaFlavor(flavor);
+    const hasQrcode = !!qrcodeUrl;
+
+    const webuiAvailable = isWebuiAvailable({
+        flavor,
+        napcat: napcatBinding ?? null,
+        snowlumaDaemonState: snowlumaDaemonState ?? null,
+    });
+    const webuiTip = webuiTooltip({ flavor, available: webuiAvailable });
+
+    const displayName =
+        config?.bot.name && config.bot.name.trim().length > 0
+            ? config.bot.name.trim()
+            : bot.bot_id;
+    const enabledChannels = config ? countEnabledChannels(config) : null;
+    const restartHint = config ? formatRestartHint(config) : null;
+    const runtimeTarget = config?.bot.runtime_target ?? null;
+    const slStartMode = config?.bot.snowluma_start_mode;
+
+    const handleRowClick = () => {
+        if (isBatchMode) onToggleSelect(bot.bot_id);
+    };
+
+    const stopAction = (fn: () => void) => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        fn();
+    };
+
+    const lastTransitionRel = bot.last_transition
+        ? formatRelativeTime(bot.last_transition)
+        : null;
+
+    const statusLine = computeStatusLine({
+        bot,
+        isSL,
+        showKickedToast,
+        snowlumaDaemonState,
+        snowlumaLoginState,
+        snowlumaInjected,
+        snowlumaUin,
+        isOnline,
+        hasQrcode,
+        webuiAvailable,
+    });
+
+    const chips: React.ReactNode[] = [];
+    if (!isSL && enabledChannels !== null) {
+        chips.push(
+            <InfoChip
+                key="channels"
+                icon={<LinkIcon size={11} strokeWidth={2.4} />}
+                label="对外"
+                value={
+                    enabledChannels.total > 0
+                        ? `${enabledChannels.total} 路`
+                        : '未配置'
+                }
+                muted={enabledChannels.total === 0}
+                tooltip={
+                    enabledChannels.total > 0
+                        ? channelDetailLabel(enabledChannels)
+                        : '在配置页中添加 HTTP / WebSocket / 反向连接以接入业务'
+                }
+            />,
+        );
+    }
+    if (restartHint) {
+        chips.push(
+            <InfoChip
+                key="restart"
+                icon={<RefreshCw size={11} strokeWidth={2.4} />}
+                label="自启"
+                value={restartHint}
+            />,
+        );
+    }
+    if (runtimeTarget) {
+        chips.push(
+            <InfoChip
+                key="runtime"
+                icon={<Activity size={11} strokeWidth={2.4} />}
+                label="运行"
+                value={runtimeTarget === 'local' ? '本机' : runtimeTarget}
+                muted={runtimeTarget === 'local'}
+            />,
+        );
+    }
+    if (isSL && slStartMode) {
+        chips.push(
+            <InfoChip
+                key="sl-mode"
+                icon={<Power size={11} strokeWidth={2.4} />}
+                label="启动"
+                value={
+                    slStartMode.mode === 'cold_start'
+                        ? '冷启动'
+                        : `热启动 PID ${slStartMode.attach_pid}`
+                }
+            />,
+        );
+    }
+    if (isSL && snowlumaDaemonState) {
+        chips.push(
+            <InfoChip
+                key="daemon"
+                icon={<Cpu size={11} strokeWidth={2.4} />}
+                label="daemon"
+                value={daemonStateLabel(snowlumaDaemonState)}
+                muted={snowlumaDaemonState !== 'ready'}
+                tooltip="SnowLuma daemon 是全局单例，所有 SL Bot 共享"
+            />,
+        );
+    }
+    if (isSL && snowlumaInjected) {
+        chips.push(
+            <InfoChip
+                key="injected"
+                icon={<Zap size={11} strokeWidth={2.4} />}
+                label="注入"
+                value="已就绪"
+            />,
+        );
+    }
+    if (isSL && snowlumaUin) {
+        chips.push(
+            <InfoChip
+                key="uin"
+                icon={<UserCheck size={11} strokeWidth={2.4} />}
+                label="UIN"
+                value={snowlumaUin}
+            />,
+        );
+    }
+    if (napcatBinding?.port) {
+        chips.push(
+            <InfoChip
+                key="webui"
+                icon={<Wifi size={11} strokeWidth={2.4} />}
+                label="WebUI"
+                value={`:${napcatBinding.port}`}
+            />,
+        );
+    }
+    if (bot.revision > 0) {
+        chips.push(
+            <InfoChip
+                key="rev"
+                icon={<Hash size={11} strokeWidth={2.4} />}
+                label="rev"
+                value={`#${bot.revision}`}
+                muted
+                tooltip={`状态机第 ${bot.revision} 次状态变更 · token 代数 ${bot.token_generation}`}
+            />,
+        );
+    }
+
+    return (
+        <>
+            <div
+                role={isBatchMode ? 'button' : undefined}
+                onClick={handleRowClick}
+                className={cn(
+                    'group relative flex flex-col gap-2 rounded-md bg-elevated px-4 py-3',
+                    'ring-1 ring-border-subtle shadow-card transition-all duration-150',
+                    'hover:shadow-popover hover:bg-elevated/90',
+                    isBatchMode && 'cursor-pointer',
+                    isSelected && 'ring-2 ring-brand bg-brand-soft/30',
+                )}
+            >
+                {/* Header 行：复选框 + 头像 + 身份块 + 操作区 */}
+                <div className="flex items-center gap-3">
+                    {isBatchMode && (
+                        <span
+                            aria-hidden
+                            className={cn(
+                                'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border',
+                                isSelected
+                                    ? 'border-brand bg-brand text-white'
+                                    : 'border-border bg-canvas',
+                            )}
+                        >
+                            {isSelected && <span className="text-2xs">✓</span>}
+                        </span>
+                    )}
+
+                    <BotAvatar
+                        qqid={bot.bot_id}
+                        displayName={displayName}
+                        flavorTone={isSL ? 'info' : 'brand'}
+                    />
+
+                    {/* 身份块（占满剩余空间，可压缩） */}
+                    <div className="flex min-w-0 flex-1 flex-col">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <h3
+                                className="truncate font-display text-md font-semibold leading-tight text-text"
+                                title={displayName}
+                            >
+                                {displayName}
+                            </h3>
+                            <Badge
+                                tone={stateBadgeTone}
+                                appearance="soft"
+                                dot={bot.state === 'running'}
+                            >
+                                {stateBadge.label}
+                            </Badge>
+                            {bot.pending_restart && (
+                                <Badge tone="warning" appearance="outline">
+                                    待重启
+                                </Badge>
+                            )}
+                        </div>
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-text-tertiary">
+                            <span className="font-mono tabular-nums">
+                                QQ {bot.bot_id}
+                            </span>
+                            {flavor && (
+                                <>
+                                    <span aria-hidden className="text-border">·</span>
+                                    <span
+                                        className={cn(
+                                            'font-medium',
+                                            isSL ? 'text-info' : 'text-brand',
+                                        )}
+                                    >
+                                        {flavor}
+                                    </span>
+                                </>
+                            )}
+                            {lastTransitionRel && (
+                                <>
+                                    <span aria-hidden className="text-border">·</span>
+                                    <span className="tabular-nums">{lastTransitionRel}</span>
+                                </>
+                            )}
+                            {/* 状态文案：跟着副标题走，避免单独占一整行造成稀疏空白。
+                                错误 / 踢线 toast 视觉权重更高，下方独立行展示。 */}
+                            {!showKickedToast && !bot.last_error && statusLine && (
+                                <>
+                                    <span aria-hidden className="text-border">·</span>
+                                    <span
+                                        className={cn(
+                                            'inline-flex min-w-0 items-center gap-1 truncate',
+                                            statusLineTextClass(statusLine.tone),
+                                        )}
+                                    >
+                                        {statusLine.icon}
+                                        <span className="truncate">{statusLine.text}</span>
+                                    </span>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 操作区 */}
+                    {!isBatchMode && (
+                        <div
+                            className="flex shrink-0 items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {hasQrcode && (
+                                <IconButton
+                                    tooltip="扫码登录"
+                                    onClick={() => setQrOpen(true)}
+                                    tone="brand"
+                                >
+                                    <QrCode size={16} strokeWidth={2.2} />
+                                </IconButton>
+                            )}
+                            {isBotRunning(bot.state) || isBotStarting(bot.state) ? (
+                                <IconButton
+                                    tooltip="停止 Bot"
+                                    onClick={stopAction(() => onStop(bot.bot_id))}
+                                    disabled={!canStopBot(bot.state)}
+                                    tone="danger"
+                                >
+                                    <Square size={14} strokeWidth={2.6} />
+                                </IconButton>
+                            ) : (
+                                <IconButton
+                                    tooltip="启动 Bot"
+                                    onClick={stopAction(() => onStart(bot.bot_id))}
+                                    disabled={!canStartBot(bot.state)}
+                                    tone="success"
+                                >
+                                    <Play size={14} strokeWidth={2.6} />
+                                </IconButton>
+                            )}
+                            {/* 日志 / WebUI 按钮只在运行态（含启动 / 停止过渡）显示。
+                                stopped 时这俩没意义：进程不在，日志看不动，WebUI
+                                也连不上。让按钮区随状态收缩，避免按了之后没反应。 */}
+                            {(isBotRunning(bot.state) || isBotStarting(bot.state)) && (
+                                <>
+                                    <IconButton
+                                        tooltip="查看日志"
+                                        onClick={stopAction(() => onViewLogs(bot.bot_id))}
+                                    >
+                                        <FileText size={14} strokeWidth={2.2} />
+                                    </IconButton>
+                                    <IconButton
+                                        tooltip={webuiTip}
+                                        disabled={!webuiAvailable}
+                                        onClick={stopAction(() =>
+                                            onOpenWebui({
+                                                botId: bot.bot_id,
+                                                flavor,
+                                                napcat: napcatBinding ?? null,
+                                            }),
+                                        )}
+                                    >
+                                        <Globe size={14} strokeWidth={2.2} />
+                                    </IconButton>
+                                </>
+                            )}
+                            <IconButton
+                                tooltip="配置"
+                                onClick={stopAction(() => onConfigure(bot.bot_id))}
+                            >
+                                <Settings size={14} strokeWidth={2.2} />
+                            </IconButton>
+                        </div>
+                    )}
+                </div>
+
+                {/* Chip 行 */}
+                {chips.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">{chips}</div>
+                )}
+
+                {/* 错误行 / 踢线 toast：高 priority 视觉，独占一行。
+                    普通状态文案（"运行中" / "已登录"）已经合并到副标题行，不再
+                    单独占一行避免稀疏空白。 */}
+                {(showKickedToast || bot.last_error) && (
+                    <div className="flex min-w-0 items-center">
+                        {showKickedToast ? (
+                            <span
+                                role="status"
+                                className="inline-flex items-center gap-1.5 rounded-sm bg-danger-soft px-2 py-0.5 text-xs text-danger ring-1 ring-danger/20"
+                            >
+                                <DoorOpen size={12} strokeWidth={2.4} />
+                                Bot 账号被踢，正在重新登录…
+                            </span>
+                        ) : bot.last_error ? (
+                            <span
+                                className="inline-flex min-w-0 items-center gap-1.5 rounded-sm bg-danger-soft px-2 py-0.5 text-xs text-danger ring-1 ring-danger/15"
+                                title={bot.last_error}
+                            >
+                                <AlertTriangle size={12} strokeWidth={2.4} />
+                                <span className="font-medium shrink-0">最后错误</span>
+                                <span className="text-danger/40">·</span>
+                                <span className="truncate font-mono">{bot.last_error}</span>
+                            </span>
+                        ) : null}
+                    </div>
+                )}
+            </div>
+
+            <QrCodeDialog
+                open={qrOpen}
+                onOpenChange={setQrOpen}
+                qrcodeUrl={qrcodeUrl ?? null}
+                botId={bot.bot_id}
+            />
+        </>
+    );
+}
+
+// ============== 头像 ==============
+
+function BotAvatar({
+    qqid,
+    displayName,
+    flavorTone,
+}: {
+    qqid: string;
+    displayName: string;
+    flavorTone: 'brand' | 'info';
+}) {
+    const [failed, setFailed] = useState(false);
+    const numericQQ = /^\d+$/.test(qqid) ? qqid : null;
+    const showImg = numericQQ && !failed;
+    const initials = (displayName.trim().charAt(0) || '?').toUpperCase();
+    const palette = pickAvatarPalette(qqid);
+
+    return (
+        <div className="relative h-12 w-12 shrink-0">
+            <div
+                className={cn(
+                    'h-full w-full overflow-hidden rounded-md ring-1 ring-border-subtle',
+                    'bg-gradient-to-br',
+                    palette,
+                )}
+            >
+                {showImg && (
+                    <img
+                        src={`https://q.qlogo.cn/headimg_dl?dst_uin=${numericQQ}&spec=640`}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                        draggable={false}
+                        onError={() => setFailed(true)}
+                    />
+                )}
+                {!showImg && (
+                    <div className="flex h-full w-full items-center justify-center font-display text-base font-semibold text-white/95">
+                        {initials}
+                    </div>
+                )}
+            </div>
+            <span
+                aria-hidden
+                className={cn(
+                    'absolute -bottom-0.5 -right-0.5 inline-block h-2.5 w-2.5 rounded-full ring-2 ring-elevated',
+                    flavorTone === 'info' ? 'bg-info' : 'bg-brand',
+                )}
+            />
+        </div>
+    );
+}
+
+const PALETTES = [
+    'from-pink-300 to-rose-400',
+    'from-amber-300 to-orange-400',
+    'from-emerald-300 to-teal-400',
+    'from-sky-300 to-indigo-400',
+    'from-violet-300 to-fuchsia-400',
+    'from-rose-300 to-red-400',
+] as const;
+
+function pickAvatarPalette(seed: string): string {
+    let h = 0;
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+    return PALETTES[Math.abs(h) % PALETTES.length] ?? PALETTES[0];
+}
+
+// ============== Status line（替代 Callout） ==============
+
+interface StatusLine {
+    text: string;
+    tone: 'success' | 'warning' | 'danger' | 'brand' | 'neutral';
+    icon?: React.ReactNode;
+}
+
+function computeStatusLine(args: {
+    bot: BotActorSnapshot;
+    isSL: boolean;
+    showKickedToast: boolean;
+    snowlumaDaemonState: DaemonState | null | undefined;
+    snowlumaLoginState: SnowLumaLoginState | null | undefined;
+    snowlumaInjected: boolean | undefined;
+    snowlumaUin: string | null | undefined;
+    isOnline: boolean | null | undefined;
+    hasQrcode: boolean;
+    webuiAvailable: boolean;
+}): StatusLine | null {
+    const {
+        bot,
+        isSL,
+        showKickedToast,
+        snowlumaDaemonState,
+        snowlumaLoginState,
+        snowlumaInjected,
+        snowlumaUin,
+        isOnline,
+        hasQrcode,
+        webuiAvailable,
+    } = args;
+
+    if (showKickedToast || bot.last_error) return null;
+
+    // stopped 状态：徽章已经讲清楚，状态行就别再画蛇添足；并且后端事件链可能
+    // 滞后清理 isOnline / loginState，这里短路掉避免出现"徽章说停了，状态行
+    // 说在线"的矛盾画面。
+    if (bot.state === 'stopped') return null;
+
+    if (isSL) {
+        if (snowlumaDaemonState === 'crashed') {
+            return {
+                text: 'daemon 已崩溃',
+                tone: 'danger',
+                icon: <AlertTriangle size={12} strokeWidth={2.4} />,
+            };
+        }
+        if (snowlumaDaemonState === 'starting') {
+            return { text: 'daemon 启动中', tone: 'brand' };
+        }
+        if (snowlumaLoginState === 'logged_in') {
+            return {
+                text: snowlumaUin ? `已登录 · ${snowlumaUin}` : '已登录',
+                tone: 'success',
+            };
+        }
+        if (snowlumaLoginState === 'waiting_for_qr_scan') {
+            return { text: '等待扫码 — 打开 WebUI', tone: 'warning' };
+        }
+        if (snowlumaLoginState === 'starting') {
+            return { text: '正在连接 QQ', tone: 'brand' };
+        }
+        if (snowlumaLoginState === 'disconnected') {
+            return { text: '已断开 — 重启可恢复', tone: 'neutral' };
+        }
+        if (snowlumaInjected) {
+            return { text: '已注入，等待登录', tone: 'neutral' };
+        }
+    } else {
+        if (isOnline === true) {
+            return { text: 'Bot 在线 · 接收 OneBot 事件', tone: 'success' };
+        }
+        if (hasQrcode) {
+            return { text: '新二维码，点 QR 扫码', tone: 'warning' };
+        }
+        if (isOnline === false) {
+            return { text: 'Bot 已离线', tone: 'neutral' };
+        }
+        if ((isOnline === null || isOnline === undefined) && webuiAvailable) {
+            return { text: '等待登录态首次推送', tone: 'neutral' };
+        }
+    }
+
+    if (bot.state === 'starting') return { text: '正在启动…', tone: 'brand' };
+    if (bot.state === 'stopping') return { text: '正在停止…', tone: 'warning' };
+    if (bot.state === 'repairing') return { text: '正在修复…', tone: 'warning' };
+    if (bot.state === 'running') return { text: '运行中', tone: 'success' };
+    if (bot.state === 'crashed') {
+        return {
+            text: 'Bot 已崩溃',
+            tone: 'danger',
+            icon: <AlertTriangle size={12} strokeWidth={2.4} />,
+        };
+    }
+    return null;
+}
+
+function statusLineTextClass(tone: StatusLine['tone']): string {
+    switch (tone) {
+        case 'success':
+            return 'text-success';
+        case 'warning':
+            return 'text-warning';
+        case 'danger':
+            return 'text-danger';
+        case 'brand':
+            return 'text-brand';
+        case 'neutral':
+        default:
+            return 'text-text-secondary';
+    }
+}
+
+// ============== Chip / IconButton ==============
+
+function InfoChip({
+    icon,
+    label,
+    value,
+    muted,
+    tooltip,
+}: {
+    icon: React.ReactNode;
+    label: string;
+    value: React.ReactNode;
+    muted?: boolean;
+    tooltip?: string;
+}) {
+    const node = (
+        <span
+            className={cn(
+                'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-2xs',
+                'border-border-subtle/80 bg-canvas/60',
+                muted ? 'text-text-tertiary' : 'text-text-secondary',
+            )}
+        >
+            <span className="inline-flex text-text-tertiary">{icon}</span>
+            <span className="text-text-tertiary">{label}</span>
+            <span className={cn('font-medium', muted ? 'text-text-tertiary' : 'text-text')}>
+                {value}
+            </span>
+        </span>
+    );
+    if (!tooltip) return node;
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>{node}</TooltipTrigger>
+            <TooltipContent>{tooltip}</TooltipContent>
+        </Tooltip>
+    );
+}
+
+interface IconButtonProps {
+    tooltip: string;
+    onClick: (e: React.MouseEvent) => void;
+    disabled?: boolean;
+    tone?: 'neutral' | 'brand' | 'success' | 'danger';
+    children: React.ReactNode;
+}
+
+function IconButton({
+    tooltip,
+    onClick,
+    disabled,
+    tone = 'neutral',
+    children,
+}: IconButtonProps) {
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <button
+                    type="button"
+                    onClick={onClick}
+                    disabled={disabled}
+                    className={cn(
+                        'inline-flex h-8 w-8 items-center justify-center rounded-xs',
+                        'transition-colors duration-100',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                        'disabled:cursor-not-allowed disabled:opacity-40',
+                        tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
+                        tone === 'brand' && 'text-brand hover:bg-brand-soft',
+                        tone === 'success' && 'text-success hover:bg-success-soft',
+                        tone === 'danger' && 'text-danger hover:bg-danger-soft',
+                    )}
+                >
+                    {children}
+                </button>
+            </TooltipTrigger>
+            <TooltipContent>{tooltip}</TooltipContent>
+        </Tooltip>
+    );
+}
+
+// ============== Helpers ==============
+
+function mapStateBadgeTone(
+    color: ReturnType<typeof botStateBadge>['color'],
+): 'brand' | 'success' | 'warning' | 'danger' | 'neutral' | 'info' {
+    switch (color) {
+        case 'success':
+            return 'success';
+        case 'warning':
+            return 'warning';
+        case 'danger':
+            return 'danger';
+        case 'brand':
+            return 'brand';
+        case 'informative':
+            return 'info';
+        case 'severe':
+        case 'important':
+            return 'danger';
+        case 'tiny':
+        case 'subtle':
+        case 'neutral':
+        default:
+            return 'neutral';
+    }
+}
+
+interface ChannelCount {
+    httpServer: number;
+    httpSse: number;
+    httpClient: number;
+    wsServer: number;
+    wsClient: number;
+    plugins: number;
+    total: number;
+}
+
+function countEnabledChannels(config: BotConfig): ChannelCount {
+    const c = config.connect;
+    const httpServer = c.httpServers.filter((x) => x.enable).length;
+    const httpSse = c.httpSseServers.filter((x) => x.enable).length;
+    const httpClient = c.httpClients.filter((x) => x.enable).length;
+    const wsServer = c.websocketServers.filter((x) => x.enable).length;
+    const wsClient = c.websocketClients.filter((x) => x.enable).length;
+    const plugins = c.plugins.length;
+    return {
+        httpServer,
+        httpSse,
+        httpClient,
+        wsServer,
+        wsClient,
+        plugins,
+        total: httpServer + httpSse + httpClient + wsServer + wsClient + plugins,
+    };
+}
+
+function channelDetailLabel(c: ChannelCount): string {
+    const parts: string[] = [];
+    if (c.httpServer || c.httpSse) parts.push(`HTTP ${c.httpServer + c.httpSse}`);
+    if (c.httpClient) parts.push(`回调 ${c.httpClient}`);
+    if (c.wsServer) parts.push(`WS ${c.wsServer}`);
+    if (c.wsClient) parts.push(`反向 WS ${c.wsClient}`);
+    if (c.plugins) parts.push(`插件 ${c.plugins}`);
+    return parts.join(' · ');
+}
+
+function formatRestartHint(config: BotConfig): string | null {
+    const sched = config.bot.autoRestartSchedule;
+    const offline = config.bot.offlineAutoRestart;
+    const parts: string[] = [];
+    if (sched.enable) parts.push(`每 ${sched.duration}${formatTimeUnit(sched.time_unit)}`);
+    if (offline) parts.push('离线时');
+    if (parts.length === 0) return null;
+    return parts.join(' · ');
+}
+
+function formatTimeUnit(unit: BotConfig['bot']['autoRestartSchedule']['time_unit']): string {
+    switch (unit) {
+        case 'm':
+            return '分钟';
+        case 'h':
+            return '小时';
+        case 'd':
+            return '天';
+        case 'mon':
+            return '个月';
+        case 'year':
+            return '年';
+        default:
+            return String(unit);
+    }
+}
+
+function daemonStateLabel(state: DaemonState): string {
+    switch (state) {
+        case 'ready':
+            return '就绪';
+        case 'starting':
+            return '启动中';
+        case 'stopping':
+            return '停止中';
+        case 'crashed':
+            return '已崩溃';
+        case 'stopped':
+            return '已停止';
+        default:
+            return String(state);
+    }
+}
+
+function formatRelativeTime(iso: string): string | null {
+    const ts = Date.parse(iso);
+    if (Number.isNaN(ts)) return null;
+    const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    if (diffSec < 5) return '刚刚';
+    if (diffSec < 60) return `${diffSec} 秒前`;
+    const min = Math.floor(diffSec / 60);
+    if (min < 60) return `${min} 分钟前`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr} 小时前`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day} 天前`;
+    const week = Math.floor(day / 7);
+    if (week < 4) return `${week} 周前`;
+    const month = Math.floor(day / 30);
+    if (month < 12) return `${month} 个月前`;
+    const year = Math.floor(day / 365);
+    return `${year} 年前`;
+}
