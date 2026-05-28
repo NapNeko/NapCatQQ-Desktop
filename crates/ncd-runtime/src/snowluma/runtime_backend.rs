@@ -2,7 +2,7 @@
 //! 包成 `BotBackend` 接口，由 `BotManager` 按 flavor 路由。
 //!
 //! 落地内容：`SnowLumaRuntimeBackend` struct、`SnowLumaProcessRecord`、
-//! Phase A（COLD/HOT 路由 + sysinfo 校验 attach_pid）。
+//! Phase A（COLD spawn QQ.exe / HOT 按 qq_id 自动匹配 PID）。
 //! - ：`BotBackend` trait impl、Phase C/D（`daemon.ensure_running` +
 //! `client.load_process` + spawn poller）、stop / abort_start / zombie reaper /
 //! `kill_process_tree` / read_config / write_config / tail_log。
@@ -57,7 +57,7 @@ pub struct SnowLumaRuntimeBackend {
     pollers: Arc<RwLock<HashMap<BotId, SnowLumaStatusPoller>>>,
     /// COLD 模式 stop 后等 child.wait() 完成的回收池。
     zombies: Arc<RwLock<Vec<tokio::process::Child>>>,
-    /// 可注入 `ProcessTreeProbe`，便于测试覆盖 attach_pid 校验路径。
+    /// 可注入 `ProcessTreeProbe`，便于测试覆盖 HotStart PID 校验路径。
     proc_tree: Arc<dyn ProcessTreeProbe>,
 }
 
@@ -78,7 +78,7 @@ impl SnowLumaRuntimeBackend {
         }
     }
 
-    /// 测试入口：注入自定义 ProcessTreeProbe（attach_pid 校验时使用）。
+    /// 测试入口：注入自定义 ProcessTreeProbe（HotStart PID 二次校验时使用）。
     #[cfg(test)]
     #[allow(dead_code)]
     pub(crate) fn with_proc_tree(mut self, probe: Arc<dyn ProcessTreeProbe>) -> Self {
@@ -102,35 +102,51 @@ fn read_start_mode(config: &BotRuntimeConfig) -> SnowLumaStartMode {
         .get("SNOWLUMA_START_MODE")
         .map(|s| s.as_str())
     {
-        Some("hot_start") => {
-            let pid: u32 = config
-                .environment
-                .get("SNOWLUMA_ATTACH_PID")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-            SnowLumaStartMode::HotStart { attach_pid: pid }
-        }
+        Some("hot_start") => SnowLumaStartMode::HotStart,
         _ => SnowLumaStartMode::ColdStart,
     }
 }
 
+/// 从 environment 读出 qq_id（HotStart 自动匹配 PID 用）。
+fn read_qq_id(config: &BotRuntimeConfig) -> Option<u64> {
+    config
+        .environment
+        .get("SNOWLUMA_QQ_ID")
+        .and_then(|s| s.parse::<u64>().ok())
+}
+
 // ---------------------------------------------------------------------------
-// Phase A：spawn QQ.exe (COLD) / 校验 attach_pid (HOT)
+// Phase A：spawn QQ.exe (COLD) / 按 qq_id 自动匹配并校验 PID (HOT)
 // ---------------------------------------------------------------------------
 
-/// HOT 模式 PID 校验：candidate set 含 attach_pid 即视为存活。
-async fn validate_hot_attach_pid(
+/// HOT 模式：按 qq_id 在系统中自动定位登录此账号的 QQ.exe 主进程 PID。
+///
+/// 流程：
+/// 1. `qq_login_probe::find_pid_by_qq_id(qq_id)` 走 9210-9219 tencent:// 探测
+///    匹配 uin == qq_id 的 PID
+/// 2. 拿到 PID 后用 `ProcessTreeProbe` 二次校验进程仍存活（防止 probe 拿到结
+///    果到 inject 之间有窗口期 PID 退出）
+async fn locate_hot_pid_by_qq_id(
     probe: &Arc<dyn ProcessTreeProbe>,
-    attach_pid: u32,
-) -> Result<(), BotBackendError> {
-    let candidates = probe.collect_descendants(attach_pid).await;
-    if candidates.contains(&attach_pid) {
-        Ok(())
-    } else {
-        Err(BotBackendError::InvalidConfig(format!(
-            "snowluma hot start: attach_pid {attach_pid} not running"
-        )))
+    qq_id: u64,
+) -> Result<u32, BotBackendError> {
+    let probed = super::qq_login_probe::find_pid_by_qq_id(qq_id)
+        .await
+        .ok_or_else(|| {
+            BotBackendError::InvalidConfig(format!(
+                "snowluma hot start: 未找到登录 QQ {qq_id} 的 QQ.exe 进程，请先在 QQ 客户端登录该账号"
+            ))
+        })?;
+
+    let candidates = probe.collect_descendants(probed.pid).await;
+    if !candidates.contains(&probed.pid) {
+        // probe 阶段拿到的 PID 已退出（窗口期内）→ 当作匹配失败处理
+        return Err(BotBackendError::InvalidConfig(format!(
+            "snowluma hot start: 已探测到 QQ {qq_id} 的进程 PID={pid}，但二次校验发现进程已退出",
+            pid = probed.pid,
+        )));
     }
+    Ok(probed.pid)
 }
 
 /// COLD 模式 spawn QQ.exe。
@@ -265,11 +281,16 @@ impl BotBackend for SnowLumaRuntimeBackend {
             let bot_id = ctx.config.bot_id.clone();
             let start_mode = read_start_mode(&ctx.config);
 
-            // === Phase A：解析 attach_pid（HOT）/ spawn QQ.exe（COLD）===
+            // === Phase A：HOT 自动按 qq_id 匹配 PID / COLD spawn QQ.exe ===
             let (qq_pid, qq_child) = match start_mode {
-                SnowLumaStartMode::HotStart { attach_pid } => {
-                    validate_hot_attach_pid(&self.proc_tree, attach_pid).await?;
-                    (attach_pid, None)
+                SnowLumaStartMode::HotStart => {
+                    let qq_id = read_qq_id(&ctx.config).ok_or_else(|| {
+                        BotBackendError::InvalidConfig(
+                            "snowluma hot start: SNOWLUMA_QQ_ID env var missing".into(),
+                        )
+                    })?;
+                    let pid = locate_hot_pid_by_qq_id(&self.proc_tree, qq_id).await?;
+                    (pid, None)
                 }
                 SnowLumaStartMode::ColdStart => {
                     let (pid, child) = spawn_cold_qq(&ctx.config).await?;
@@ -438,60 +459,54 @@ impl BotBackend for SnowLumaRuntimeBackend {
 // 由于 SnowLumaRuntimeBackend 主路径强依赖 Windows + 真实 sysinfo + 真起 QQ.exe
 // 端到端 start/stop 测试只能在真机覆盖。本测试模块仅验证：
 // 1) flavor / kind / id 三个 trivial 方法
-// 2) HOT 模式 attach_pid 校验失败 fail-fast
-// 3) `validate_hot_attach_pid` 直接对 mock probe 的契约。
+// 2) `read_start_mode` 缺失环境变量回落 ColdStart
+//
+// HotStart 自动按 qq_id 匹配的端到端覆盖见 `qq_login_probe::tests`，那里测了
+// JWT decode / extract 这些纯函数；真机匹配只能在 windows + 真实 QQ.exe 下验。
 // ===========================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeSet;
-
-    use async_trait::async_trait;
-
-    /// 简化 mock probe：返回构造时配置的固定集合。
-    struct ContainsPidProbe {
-        set: BTreeSet<u32>,
-    }
-
-    #[async_trait]
-    impl ProcessTreeProbe for ContainsPidProbe {
-        async fn collect_descendants(&self, _initial_pid: u32) -> BTreeSet<u32> {
-            self.set.clone()
-        }
-    }
-
-    #[tokio::test]
-    async fn validate_hot_attach_pid_accepts_running_pid() {
-        let probe: Arc<dyn ProcessTreeProbe> = Arc::new(ContainsPidProbe {
-            set: BTreeSet::from([12345u32]),
-        });
-        assert!(validate_hot_attach_pid(&probe, 12345).await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn validate_hot_attach_pid_rejects_dead_pid() {
-        let probe: Arc<dyn ProcessTreeProbe> = Arc::new(ContainsPidProbe {
-            set: BTreeSet::from([99999u32]),
-        });
-        let err = validate_hot_attach_pid(&probe, 12345).await.unwrap_err();
-        match err {
-            BotBackendError::InvalidConfig(msg) => {
-                assert!(msg.contains("12345"));
-                assert!(msg.contains("attach_pid"));
-            }
-            other => panic!("expected InvalidConfig, got {other:?}"),
-        }
-    }
 
     #[test]
     fn read_start_mode_defaults_to_cold() {
-        // BotRuntimeConfig 不带 start_mode 字段；MVP 默认走 ColdStart 直到 wiring
-        // 阶段从 BotConfig 解析后注入。
+        // BotRuntimeConfig 不带 start_mode 字段；缺失环境变量时默认走 ColdStart。
         let config = BotRuntimeConfig::default_path("/tmp", BotId::new("10001"));
         match read_start_mode(&config) {
             SnowLumaStartMode::ColdStart => {}
             other => panic!("expected ColdStart, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn read_start_mode_recognizes_hot_start_env() {
+        let mut config = BotRuntimeConfig::default_path("/tmp", BotId::new("10001"));
+        config
+            .environment
+            .insert("SNOWLUMA_START_MODE".to_string(), "hot_start".to_string());
+        assert!(matches!(
+            read_start_mode(&config),
+            SnowLumaStartMode::HotStart
+        ));
+    }
+
+    #[test]
+    fn read_qq_id_parses_decimal_string() {
+        let mut config = BotRuntimeConfig::default_path("/tmp", BotId::new("10001"));
+        config
+            .environment
+            .insert("SNOWLUMA_QQ_ID".to_string(), "572381217".to_string());
+        assert_eq!(read_qq_id(&config), Some(572381217));
+    }
+
+    #[test]
+    fn read_qq_id_returns_none_when_missing_or_invalid() {
+        let mut config = BotRuntimeConfig::default_path("/tmp", BotId::new("10001"));
+        assert_eq!(read_qq_id(&config), None);
+        config
+            .environment
+            .insert("SNOWLUMA_QQ_ID".to_string(), "abc".to_string());
+        assert_eq!(read_qq_id(&config), None);
     }
 }

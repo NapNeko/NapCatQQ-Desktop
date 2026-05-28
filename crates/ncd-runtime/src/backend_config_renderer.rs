@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde_json::{Value, json};
@@ -10,7 +11,53 @@ use crate::ids::BotId;
 use crate::traits::backend_config_renderer::{BackendConfigRenderer, RenderError};
 use crate::traits::config_store::JsonTransaction;
 
+// ==================== Deep merge helper ====================
+//
+// 把 `existing` 中 `known_keys` 之外的字段保留下来合进 `rendered`。两层都按 JSON
+// object merge 处理，不递归更深的层级——内层结构（network、bypass）由 schema 完全
+// 拥有，用户在子层加字段不在保留范围内（避免破坏 NapCat 反序列化）。
+//
+// 我们关心的"未知字段保留"边界仅限**顶层**：用户最常见的需求是给 onebot11 加
+// `imageDownloadProxy`、给 napcat 加 `autoTimeSync` 这种顶层扩展字段。
+fn merge_unknown_top_level(
+    rendered: Value,
+    existing: Option<&Value>,
+    known_keys: &[&str],
+) -> Value {
+    let Some(existing_obj) = existing.and_then(Value::as_object) else {
+        return rendered;
+    };
+    let Value::Object(mut rendered_obj) = rendered else {
+        return Value::Object(existing_obj.clone());
+    };
+    for (key, value) in existing_obj {
+        if known_keys.contains(&key.as_str()) {
+            continue;
+        }
+        rendered_obj.insert(key.clone(), value.clone());
+    }
+    Value::Object(rendered_obj)
+}
+
 // ==================== NapCat Renderer ====================
+
+/// onebot11_<qq>.json 顶层"已知" key 集合（renderer 输出范围）。
+/// 用户在派生文件里加这个集合之外的字段（如 `imageDownloadProxy`）会在
+/// `render_with_existing` 里被保留下来，每次启动重新渲染时不会丢。
+const NAPCAT_ONEBOT_KNOWN_KEYS: &[&str] =
+    &["network", "musicSignUrl", "enableLocalFile2Url", "parseMultMsg"];
+
+/// napcat_<qq>.json 顶层"已知" key 集合。
+const NAPCAT_NAPCAT_KNOWN_KEYS: &[&str] = &[
+    "fileLog",
+    "consoleLog",
+    "fileLogLevel",
+    "consoleLogLevel",
+    "packetBackend",
+    "packetServer",
+    "o3HookMode",
+    "bypass",
+];
 
 /// Renders `BotConfig` into NapCat-specific JSON files:
 /// - `onebot11_<qq>.json` — OneBot network + musicSignUrl + enableLocalFile2Url + parseMultMsg
@@ -69,12 +116,41 @@ impl BackendConfigRenderer for NapCatConfigRenderer {
         Ok(txn)
     }
 
+    fn render_with_existing(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+        existing: &HashMap<PathBuf, Value>,
+    ) -> Result<JsonTransaction, RenderError> {
+        let onebot_path = self.onebot_path(bot_id);
+        let napcat_path = self.napcat_path(bot_id);
+
+        let onebot = merge_unknown_top_level(
+            Self::build_onebot_payload(config),
+            existing.get(&onebot_path),
+            NAPCAT_ONEBOT_KNOWN_KEYS,
+        );
+        let napcat = merge_unknown_top_level(
+            Self::build_napcat_payload(config),
+            existing.get(&napcat_path),
+            NAPCAT_NAPCAT_KNOWN_KEYS,
+        );
+
+        let txn = JsonTransaction::new()
+            .write(onebot_path, onebot)
+            .write(napcat_path, napcat);
+        Ok(txn)
+    }
+
     fn output_paths(&self, bot_id: &BotId) -> Vec<PathBuf> {
         vec![self.onebot_path(bot_id), self.napcat_path(bot_id)]
     }
 }
 
 // ==================== SnowLuma Renderer ====================
+
+/// SnowLuma onebot_<qq>.json 顶层"已知" key 集合。
+const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] = &["networks", "musicSignUrl"];
 
 /// SnowLuma reconnectIntervalMs lower bound (upstream enforces max(1000, value)).
 const SNOWLUMA_MIN_RECONNECT_MS: u32 = 1000;
@@ -238,6 +314,22 @@ impl BackendConfigRenderer for SnowLumaConfigRenderer {
         Ok(txn)
     }
 
+    fn render_with_existing(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+        existing: &HashMap<PathBuf, Value>,
+    ) -> Result<JsonTransaction, RenderError> {
+        let path = self.onebot_path(bot_id);
+        let payload = merge_unknown_top_level(
+            Self::build_onebot_payload(config),
+            existing.get(&path),
+            SNOWLUMA_ONEBOT_KNOWN_KEYS,
+        );
+        let txn = JsonTransaction::new().write(path, payload);
+        Ok(txn)
+    }
+
     fn output_paths(&self, bot_id: &BotId) -> Vec<PathBuf> {
         vec![self.onebot_path(bot_id)]
     }
@@ -279,11 +371,10 @@ pub struct DispatchRenderer {
 }
 
 impl DispatchRenderer {
-    pub fn new(config_dir: impl Into<PathBuf>) -> Self {
-        let dir: PathBuf = config_dir.into();
+    pub fn new(napcat_config_dir: impl Into<PathBuf>, snowluma_config_dir: impl Into<PathBuf>) -> Self {
         Self {
-            napcat: NapCatConfigRenderer::new(dir.clone()),
-            snowluma: SnowLumaConfigRenderer::new(dir),
+            napcat: NapCatConfigRenderer::new(napcat_config_dir),
+            snowluma: SnowLumaConfigRenderer::new(snowluma_config_dir),
         }
     }
 }
@@ -293,6 +384,18 @@ impl BackendConfigRenderer for DispatchRenderer {
         match config.bot.backend_type {
             BackendType::NapCat => self.napcat.render(bot_id, config),
             BackendType::SnowLuma => self.snowluma.render(bot_id, config),
+        }
+    }
+
+    fn render_with_existing(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+        existing: &HashMap<PathBuf, Value>,
+    ) -> Result<JsonTransaction, RenderError> {
+        match config.bot.backend_type {
+            BackendType::NapCat => self.napcat.render_with_existing(bot_id, config, existing),
+            BackendType::SnowLuma => self.snowluma.render_with_existing(bot_id, config, existing),
         }
     }
 

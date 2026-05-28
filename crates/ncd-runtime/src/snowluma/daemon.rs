@@ -1123,6 +1123,10 @@ mod tests {
         ) -> Result<crate::snowluma::webui_client::AuthState, SnowLumaWebUiError> {
             Ok(crate::snowluma::webui_client::AuthState::default())
         }
+
+            async fn update_onebot_config(&self, _uin: &str, _config: &serde_json::Value) -> Result<bool, SnowLumaWebUiError> {
+                Ok(true)
+            }
     }
 
     /// `SnowLumaWebUiError` 不实现 `Clone`（含 `BTreeMap` 字段）；测试里需要

@@ -180,6 +180,16 @@ pub trait NapCatWebUiClient: Send + Sync {
         port: u16,
         auth: &str,
     ) -> Result<GetQQLoginInfoData, NapCatWebUiError>;
+
+    /// 热推送 OneBot11 配置。携带 `Authorization: Bearer {auth}` POST 到
+    /// `http://127.0.0.1:{port}/api/OB11Config/SetConfig`，body = `{ "config": <json_string> }`。
+    /// NapCat 后端要求 QQ 已登录,否则返回 "Not Login"。
+    async fn set_ob11_config(
+        &self,
+        port: u16,
+        auth: &str,
+        config_json: &str,
+    ) -> Result<(), NapCatWebUiError>;
 }
 
 // =============================================================================
@@ -306,6 +316,33 @@ impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
             .await
             .map_err(|e| NapCatWebUiError::Decode(e.to_string()))?;
         Ok(body.data)
+    }
+
+    async fn set_ob11_config(
+        &self,
+        port: u16,
+        auth: &str,
+        config_json: &str,
+    ) -> Result<(), NapCatWebUiError> {
+        // NapCat expects { "config": "<json_string>" } where the value is a
+        // stringified JSON (not a nested object). This matches the legacy
+        // Python client behavior and the official NapCat WebUI frontend.
+        let body = serde_json::json!({ "config": config_json });
+        let resp = self
+            .client
+            .post(Self::webui_url(port, "/api/OB11Config/SetConfig"))
+            .bearer_auth(auth)
+            .json(&body)
+            .send()
+            .await?;
+        if let Some(err) = Self::handle_unauth(resp.status()) {
+            return Err(err);
+        }
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(NapCatWebUiError::Status(status.as_u16()));
+        }
+        Ok(())
     }
 }
 
@@ -519,6 +556,14 @@ mod tests {
                 _auth: &str,
             ) -> Result<GetQQLoginInfoData, NapCatWebUiError> {
                 Ok(GetQQLoginInfoData::default())
+            }
+            async fn set_ob11_config(
+                &self,
+                _port: u16,
+                _auth: &str,
+                _config_json: &str,
+            ) -> Result<(), NapCatWebUiError> {
+                Ok(())
             }
         }
 

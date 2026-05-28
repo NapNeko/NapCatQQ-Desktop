@@ -166,6 +166,15 @@ pub trait SnowLumaWebUiClient: Send + Sync {
 
     /// `GET /api/auth/state`：免鉴权，用于侦测 daemon 是否要求强制改密。
     async fn get_auth_state(&self) -> Result<AuthState, SnowLumaWebUiError>;
+
+    /// `POST /api/config/:uin`：热推送 OneBot 配置。body = 完整 OneBotConfig JSON。
+    /// daemon 会 `saveOneBotConfig` 写盘 + `oneBotManager.reloadConfig(uin)` 热 reload。
+    /// 返回 `reloaded=true` 表示当场生效,`false` 表示会话不在线下次连接生效。
+    async fn update_onebot_config(
+        &self,
+        uin: &str,
+        config: &serde_json::Value,
+    ) -> Result<bool, SnowLumaWebUiError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -592,6 +601,55 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
         // /api/auth/state 不需要鉴权。
         self.anon_get_json("/api/auth/state", DEFAULT_REQUEST_TIMEOUT)
             .await
+    }
+
+    async fn update_onebot_config(
+        &self,
+        uin: &str,
+        config: &serde_json::Value,
+    ) -> Result<bool, SnowLumaWebUiError> {
+        #[derive(serde::Deserialize)]
+        struct Resp {
+            #[serde(default)]
+            success: bool,
+            #[serde(default)]
+            reloaded: bool,
+        }
+        let inner = self.inner.read().await;
+        let url = Self::url_for(&inner.host, self.port, &format!("/api/config/{uin}"));
+        let token = inner.token.clone().unwrap_or_default();
+        let http = inner.http.clone();
+        drop(inner);
+
+        let resp = http
+            .post(&url)
+            .bearer_auth(&token)
+            .json(config)
+            .timeout(DEFAULT_REQUEST_TIMEOUT)
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    SnowLumaWebUiError::Timeout { endpoint: url.clone() }
+                } else {
+                    SnowLumaWebUiError::Http { endpoint: url.clone(), cause: e.to_string() }
+                }
+            })?;
+        let status = resp.status().as_u16();
+        if status == 401 {
+            return Err(SnowLumaWebUiError::LoginFailed("unauthorized".into()));
+        }
+        let body: Resp = resp
+            .json()
+            .await
+            .map_err(|e| SnowLumaWebUiError::Decode { endpoint: url.clone(), message: e.to_string() })?;
+        if !body.success {
+            return Err(SnowLumaWebUiError::ServerRejected {
+                endpoint: url,
+                message: "config update rejected by daemon".into(),
+            });
+        }
+        Ok(body.reloaded)
     }
 }
 

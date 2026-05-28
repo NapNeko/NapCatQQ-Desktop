@@ -4,6 +4,7 @@ pub mod bot_actor;
 pub mod bot_config_migration;
 pub mod bot_config_repo_impl;
 pub mod bot_manager;
+pub mod config_drift;
 pub mod config_store_impl;
 pub mod events;
 pub mod legacy_discovery;

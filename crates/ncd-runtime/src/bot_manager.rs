@@ -245,12 +245,124 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     // ─── 单 Bot 操作 ──────────────────────────────────────────────────────
 
-    /// 启动指定 Bot。
+    /// 启动前检测派生配置文件 drift。
+    ///
+    /// 返回 `None`：派生文件不存在或跟 BotConfig 完全一致,可以直接启动。
+    /// 返回 `Some(drift)`：有差异,前端应弹 ConfigDriftDialog 让用户抉择。
+    pub async fn detect_config_drift(
+        &self,
+        bot_id: &BotId,
+    ) -> Result<Option<crate::config_drift::ConfigDrift>, BotManagerError> {
+        let config = self.get_required_bot_config(bot_id).await?;
+        let drift = crate::config_drift::detect_drift(bot_id, &config, self.renderer.as_ref())
+            .await
+            .map_err(|e| BotManagerError::Render(e.to_string()))?;
+        if drift.is_clean() {
+            Ok(None)
+        } else {
+            Ok(Some(drift))
+        }
+    }
+
+    /// 带用户决议启动 Bot。
+    ///
+    /// decisions 来自前端 ConfigDriftDialog,包含：
+    /// - `AcceptExternal { file, path, value }`：渲染输出时把对应 path 覆盖为外部值
+    /// - `DropAdded { file, path }`：不保留新增字段（覆盖时这些字段不出现在 existing 里即可）
+    /// - `KeepAdded` / `UseInternal`：无需特别处理(默认行为)
+    pub async fn start_bot_with_decisions(
+        &self,
+        bot_id: &BotId,
+        decisions: &[crate::config_drift::DriftDecision],
+    ) -> Result<BotActorSnapshot, BotManagerError> {
+        use crate::config_drift::DriftDecision;
+
+        // 把 AcceptExternal 的决议转成 overrides map
+        let mut overrides: std::collections::HashMap<
+            String,
+            Vec<(String, serde_json::Value)>,
+        > = std::collections::HashMap::new();
+        for d in decisions {
+            if let DriftDecision::AcceptExternal { file, path, value } = d {
+                overrides
+                    .entry(file.clone())
+                    .or_default()
+                    .push((path.clone(), value.clone()));
+            }
+        }
+
+        // DropAdded 的决议：从 existing 文件里删掉对应 key 再渲染。这里不做
+        // 额外处理——因为 render_with_existing 只合并 existing 里在 known_keys
+        // **之外**的顶层字段。如果要 drop 某个顶层扩展字段,需要从 existing map
+        // 里主动 remove。但当前 render_backend_config 是从磁盘现读的 existing,
+        // 要 drop 的字段仍然在磁盘文件里。
+        //
+        // 处理方式：把 DropAdded 转成"用 null 覆盖"→ set_value_at_dot_path 遇到
+        // null 会 remove 该 key,效果等价于"用户选择丢弃"。
+        for d in decisions {
+            if let DriftDecision::DropAdded { file, path } = d {
+                overrides
+                    .entry(file.clone())
+                    .or_default()
+                    .push((path.clone(), serde_json::Value::Null));
+            }
+        }
+
+        let handle = self.get_actor(bot_id).await?;
+        let config = self.get_required_bot_config(bot_id).await?;
+        self.render_backend_config(bot_id, &config, &overrides).await?;
+
+        let starting = handle.request_start().await?;
+        self.publish_state_change(&starting, "start_requested");
+
+        let runtime_config = self.build_runtime_config(bot_id, &config);
+        let runtime_config = match self.launch_planner.build_plan(bot_id, &config).await {
+            Ok(plan) => plan.into_runtime_config(runtime_config),
+            Err(err) => {
+                let message = err.to_string();
+                let hint = Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string());
+                let crashed = handle.mark_crashed(message.clone()).await?;
+                self.publish_state_change(&crashed, "start_failed");
+                self.event_bus
+                    .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
+                return Err(BotManagerError::Render(err.to_string()));
+            }
+        };
+        match self
+            .backend_for(map_backend_flavor(config.bot.backend_type))
+            .start(&BotStartCtx {
+                config: runtime_config,
+            })
+            .await
+        {
+            Ok(status) => {
+                self.event_bus
+                    .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
+                let running = handle.confirm_running().await?;
+                self.publish_state_change(&running, "start_completed");
+                Ok(running)
+            }
+            Err(err) => {
+                let message = err.to_string();
+                let crashed = handle.mark_crashed(message.clone()).await?;
+                self.publish_state_change(&crashed, "start_failed");
+                self.event_bus.publish(DomainEvent::bot_error(
+                    bot_id.clone(),
+                    message,
+                    Some("请在运行时设置中配置 NapCat/SnowLuma 启动命令后重试".to_string()),
+                ));
+                Err(err.into())
+            }
+        }
+    }
+
+    /// 启动指定 Bot（无 drift 决议版本,等价于全部 UseInternal）。
     /// 前置条件：Actor 已存在且处于可启动状态（Stopped / Crashed）。
     pub async fn start_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
         let config = self.get_required_bot_config(bot_id).await?;
-        self.render_backend_config(bot_id, &config).await?;
+        self.render_backend_config(bot_id, &config, &std::collections::HashMap::new())
+            .await?;
 
         let starting = handle.request_start().await?;
         self.publish_state_change(&starting, "start_requested");
@@ -267,7 +379,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         path.display()
                     )),
                     RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => Some(format!(
-                        "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式 / attach_pid。"
+                        "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式。"
                     )),
                     RuntimeLaunchPlanError::MissingFile { .. } => {
                         Some("NapCat 运行时组件缺失，请先在「设置」页安装运行时。".to_string())
@@ -369,21 +481,40 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let handle = self.get_actor(bot_id).await?;
         let snap = handle.snapshot();
 
+        // 解析当前 flavor，确保 stop 调用走对应 backend；切换场景由
+        // upsert_bot_config 走 restart_bot_with_backend_switch 单独处理，
+        // 这里只服务"同 backend 重启"。
+        let flavor = match self.get_required_bot_config(bot_id).await {
+            Ok(cfg) => map_backend_flavor(cfg.bot.backend_type),
+            Err(_) => BotFlavor::NapCat,
+        };
+
         match snap.state {
             BotActorState::Running | BotActorState::Starting => {
                 let stopping = handle.request_restart().await?;
                 self.publish_state_change(&stopping, "restart_requested");
-                self.backend.stop(bot_id.clone(), StopMode::Force).await?;
-                self.wait_until_state(bot_id, BotActorState::Starting, Duration::from_secs(10))
+                self.backend_for(flavor)
+                    .stop(bot_id.clone(), StopMode::Force)
                     .await?;
+                // confirm_stopped 可能跟 exit watcher listener 竞争：listener 先
+                // 一步把 actor 从 Stopping 推到 Starting,我们再调时 actor 已经在
+                // Starting 会 InvalidTransition。这种情况直接跳过——目标已达成。
+                match handle.confirm_stopped().await {
+                    Ok(s) => self.publish_state_change(&s, "restart_stopped"),
+                    Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
+                    Err(e) => return Err(e.into()),
+                }
                 self.start_bot(bot_id).await
             }
             BotActorState::Stopped | BotActorState::Crashed => self.start_bot(bot_id).await,
             BotActorState::Stopping => {
                 let stopping = handle.request_restart().await?;
                 self.publish_state_change(&stopping, "restart_requested");
-                self.wait_until_state(bot_id, BotActorState::Starting, Duration::from_secs(10))
-                    .await?;
+                match handle.confirm_stopped().await {
+                    Ok(s) => self.publish_state_change(&s, "restart_stopped"),
+                    Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
+                    Err(e) => return Err(e.into()),
+                }
                 self.start_bot(bot_id).await
             }
             BotActorState::Repairing => Err(BotManagerError::InvalidState {
@@ -398,6 +529,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 用 `watch::Receiver::borrow_and_update` 先消化已有快照，再 `changed`
     /// 等下次更新；超时返回 `BotManagerError::Render`，邮箱关闭则返回
     /// `BotManagerError::Actor(MailboxClosed)`。
+    ///
+    /// 当前 restart 路径全部走 fast-path（`confirm_stopped` 直接推进），不再
+    /// 用这个 helper；保留是为了将来真正需要等异步状态转移时可以复用。
+    #[allow(dead_code)]
     async fn wait_until_state(
         &self,
         bot_id: &BotId,
@@ -514,9 +649,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 不会造成不可恢复的不一致。
     /// - 新增时：检查 4 开上限，持久化，写派生文件，创建 Actor。
     /// - 更新时：持久化，写派生文件，热推送（通过 restart 通知 Actor 重新加载）。
+    /// - 如果 backend_type 发生切换（NapCat ↔ SnowLuma），必须用**旧** backend
+    ///   停掉运行中的进程，再用**新** backend 启动，避免老进程留尸。
     pub async fn upsert_bot_config(
         &self,
         config: BotConfig,
+    ) -> Result<BotActorSnapshot, BotManagerError> {
+        self.upsert_bot_config_with_overrides(config, &std::collections::HashMap::new()).await
+    }
+
+    /// 带 drift overrides 的 upsert。前端保存时如果检测到 drift 并确认了决议,
+    /// 把 overrides 带进来;无 drift 时传空 map。
+    pub async fn upsert_bot_config_with_overrides(
+        &self,
+        config: BotConfig,
+        overrides: &std::collections::HashMap<String, Vec<(String, serde_json::Value)>>,
     ) -> Result<BotActorSnapshot, BotManagerError> {
         let bot_id = BotId::new(config.bot.qq_id.to_string());
         let is_new = {
@@ -534,11 +681,25 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
+        // 0. 读旧 config 拿原 backend_type，用于检测 backend 切换走特殊路径。
+        //    新建 bot 没有旧 config，这步返回 None。
+        let previous_backend_type: Option<BackendType> = if is_new {
+            None
+        } else {
+            self.repo
+                .get(config.bot.qq_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|c| c.bot.backend_type)
+        };
+
         // 1. 先持久化 bot.json（source of truth）
         self.repo.upsert(config.clone()).await?;
 
-        // 2. 再渲染并写入派生配置文件（失败不会造成不可恢复的不一致）
-        let mut txn = self.renderer.render(&bot_id, &config)?;
+        // 2. 渲染派生配置文件（走 render_backend_config：读 existing + merge unknown + apply overrides）
+        self.render_backend_config(&bot_id, &config, overrides).await?;
+        // 清理不再需要的旧 backend 派生文件（例如 NapCat→SL 时删除 onebot11/napcat 文件）
         let target_backend = config.bot.backend_type;
         let current_paths =
             output_paths_for_backend(target_backend, self.store.config_dir(), &bot_id);
@@ -548,13 +709,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             paths.dedup();
             paths
         };
-        for path in all_paths
+        let delete_paths: Vec<_> = all_paths
             .into_iter()
             .filter(|path| !current_paths.contains(path))
-        {
-            txn = txn.delete(path);
-        }
-        if !txn.is_empty() {
+            .collect();
+        if !delete_paths.is_empty() {
+            let mut txn = crate::traits::config_store::JsonTransaction::new();
+            for path in delete_paths {
+                txn = txn.delete(path);
+            }
             let store = Arc::clone(&self.store);
             tokio::task::spawn_blocking(move || store.apply_transaction(txn))
                 .await
@@ -576,9 +739,64 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let handle = self.get_actor(&bot_id).await?;
             let current = handle.snapshot();
             if current.state == BotActorState::Running || current.state == BotActorState::Starting {
-                let snapshot = handle.request_restart().await?;
-                self.publish_state_change(&snapshot, "config_hot_reload");
-                Ok(snapshot)
+                let backend_switched = matches!(
+                    previous_backend_type,
+                    Some(prev) if prev != target_backend
+                );
+                if backend_switched {
+                    // backend 切换:必须停旧 + 起新,没法热推送(NapCat ↔ SL 协议完全不同)
+                    let prev_flavor = map_backend_flavor(
+                        previous_backend_type.expect("backend_switched => previous Some"),
+                    );
+                    let snapshot =
+                        self.restart_bot_with_backend_switch(&bot_id, prev_flavor).await?;
+                    self.publish_state_change(&snapshot, "config_hot_reload");
+                    Ok(snapshot)
+                } else {
+                    // 同 backend 运行中:派生文件已写盘(step 2),尝试通过 WebUI 热推送。
+                    // NapCat: POST /api/OB11Config/SetConfig (需要 port + auth,当前实装延后)
+                    // SnowLuma: POST /api/config/:uin (用 daemon 共享 client)
+                    // 热推送失败不阻塞保存流程,只给前端一个 warning;下次重启生效。
+                    if target_backend == BackendType::SnowLuma {
+                        if let Some(daemon) = &self.snowluma_daemon {
+                            if let Ok(client) = daemon.current_client().await {
+                                let uin = config.bot.qq_id.to_string();
+                                let payload = self.renderer.render(&bot_id, &config)
+                                    .ok()
+                                    .and_then(|txn| txn.writes.into_iter().next())
+                                    .map(|w| w.payload);
+                                if let Some(payload) = payload {
+                                    match client.update_onebot_config(&uin, &payload).await {
+                                        Ok(reloaded) => {
+                                            let msg = if reloaded {
+                                                "config_hot_reloaded"
+                                            } else {
+                                                "config_saved_pending_reload"
+                                            };
+                                            self.event_bus.publish(DomainEvent::bot_state_changed(
+                                                current.clone(), msg,
+                                            ));
+                                        }
+                                        Err(_) => {
+                                            // 热推送失败,配置已写盘下次重启生效
+                                            self.event_bus.publish(DomainEvent::bot_state_changed(
+                                                current.clone(), "config_updated",
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // NapCat 热推送:需要 poller 持有的 port + auth 才能调
+                        // WebUI。当前 poller 没暴露这些,先只写盘不推。
+                        // TODO: 从 login_pollers 里拿 port/auth,调 set_ob11_config
+                        self.event_bus.publish(DomainEvent::bot_state_changed(
+                            current.clone(), "config_updated",
+                        ));
+                    }
+                    Ok(current)
+                }
             } else {
                 self.event_bus.publish(DomainEvent::bot_state_changed(
                     current.clone(),
@@ -587,6 +805,40 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 Ok(current)
             }
         }
+    }
+
+    /// 切换 backend_type 时的专用 restart：用 `previous_flavor` 对应的 backend
+    /// 停掉老进程，再用 `start_bot`（自动按新 config 选 backend）启动新进程。
+    ///
+    /// 与普通 `restart_bot` 的关键差异：
+    /// - stop 阶段不再用 `self.backend`（写死 NapCat backend），而是用
+    ///   `backend_for(previous_flavor)`，避免切换 NapCat → SnowLuma 时老进程留尸。
+    /// - stop 返回后**直接** `confirm_stopped` 推进 actor 到 Starting，不依赖
+    ///   异步 `BotProcessExited` 事件链。原因：
+    ///   1. `backend.stop` 是同步 await 的，返回时进程树已被 force kill
+    ///   2. 切换 backend 时 actor 上层不一定能立刻收到旧 backend 的 exit 事件
+    ///      （例如旧 backend processes map 已被 stop 主动 remove，spawn_exit_watcher
+    ///      持有的 child handle 还在等 wait 完成，wait_until_state 会 10s 超时）
+    async fn restart_bot_with_backend_switch(
+        &self,
+        bot_id: &BotId,
+        previous_flavor: BotFlavor,
+    ) -> Result<BotActorSnapshot, BotManagerError> {
+        let handle = self.get_actor(bot_id).await?;
+        let stopping = handle.request_restart().await?;
+        self.publish_state_change(&stopping, "restart_requested");
+        // 用旧 flavor 的 backend 停老进程
+        self.backend_for(previous_flavor)
+            .stop(bot_id.clone(), StopMode::Force)
+            .await?;
+        // confirm_stopped 可能跟 exit watcher listener 竞争(参见 restart_bot 注释)
+        match handle.confirm_stopped().await {
+            Ok(s) => self.publish_state_change(&s, "restart_stopped"),
+            Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
+            Err(e) => return Err(e.into()),
+        }
+        // start_bot 内部按当前 config 重新选 backend，自动用新 flavor 启动。
+        self.start_bot(bot_id).await
     }
 
     /// 删除 Bot 配置及其 Actor。如果 Bot 正在运行，先停止。
@@ -694,15 +946,69 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .ok_or_else(|| BotManagerError::BotNotFound(bot_id.clone()))
     }
 
+    /// 渲染派生配置文件。
+    ///
+    /// 调用 `renderer.render_with_existing` 而不是 `render`，让 NapCat / SnowLuma
+    /// renderer 把磁盘上派生文件里**用户加的扩展字段**（如 `imageDownloadProxy`、
+    /// `autoTimeSync`）合并进新输出，避免每次启动覆盖时丢掉用户的手改。
+    ///
+    /// `overrides` 来自前端 ConfigDriftDialog 的 `AcceptExternal` 决议：先按
+    /// 默认 BotConfig 渲染输出，再用 overrides 把对应 JSON path 的值换成外部值。
+    /// 没有决议时传空 map。
     async fn render_backend_config(
         &self,
         bot_id: &BotId,
         config: &BotConfig,
+        overrides: &std::collections::HashMap<String, Vec<(String, serde_json::Value)>>,
     ) -> Result<(), BotManagerError> {
-        let txn = self.renderer.render(bot_id, config)?;
+        // 1. 把现有派生文件读进来（不存在的跳过）
+        let mut existing: std::collections::HashMap<std::path::PathBuf, serde_json::Value> =
+            std::collections::HashMap::new();
+        for path in self.renderer.output_paths(bot_id) {
+            match tokio::fs::read(&path).await {
+                Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    Ok(value) => {
+                        existing.insert(path, value);
+                    }
+                    Err(_) => {
+                        // 派生文件被人改坏了，无法 parse；当作"不存在"处理，下面
+                        // render_with_existing 会写一份干净的覆盖。
+                    }
+                },
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    return Err(BotManagerError::Render(format!(
+                        "read derived file {} failed: {e}",
+                        path.display()
+                    )));
+                }
+            }
+        }
+
+        // 2. 渲染（合并 unknown 顶层字段）
+        let mut txn = self.renderer.render_with_existing(bot_id, config, &existing)?;
         if txn.is_empty() {
             return Ok(());
         }
+
+        // 3. 应用 overrides：按文件名找 write 项，按 dot-path 替换值
+        if !overrides.is_empty() {
+            for write in txn.writes.iter_mut() {
+                let Some(file_name) = write
+                    .path
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                else {
+                    continue;
+                };
+                if let Some(file_overrides) = overrides.get(&file_name) {
+                    for (path, value) in file_overrides {
+                        set_value_at_dot_path(&mut write.payload, path, value.clone());
+                    }
+                }
+            }
+        }
+
         let store = Arc::clone(&self.store);
         tokio::task::spawn_blocking(move || store.apply_transaction(txn))
             .await
@@ -899,8 +1205,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     self.publish_state_change(&updated, "process_exited");
                 }
             }
-            // 还在运行中却收到退出事件：进程被外部 kill 或自身崩溃。
-            BotActorState::Running | BotActorState::Starting => {
+            // 已运行中却收到退出事件：进程被外部 kill 或自身崩溃。
+            BotActorState::Running => {
                 let detail = match (exit_code, reason.as_deref()) {
                     (Some(code), _) if code == 0 => "process exited with code 0".to_string(),
                     (Some(code), _) => format!("process exited with code {code}"),
@@ -916,6 +1222,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     ));
                 }
             }
+            // Starting：可能是 restart 路径里 fast-path confirm_stopped 后转过来的，
+            // 旧 backend 的 spawn_exit_watcher 还在 wait 旧 child handle，wait 返回时
+            // 发出来的 exit 事件其实指向的是上一轮已被 force kill 的进程。如果在这里
+            // mark_crashed 会把刚 Starting 的新进程误标崩溃。直接忽略最稳。
+            // 真正"启动失败"的情况由 start_bot 里 backend.start 的 Err 分支处理。
+            BotActorState::Starting => {}
             // 已是 Stopped / Crashed / Repairing：不再做转移，避免无效转移报错。
             _ => {}
         }
@@ -1109,5 +1421,34 @@ fn map_backend_flavor(backend: BackendType) -> BotFlavor {
     match backend {
         BackendType::NapCat => BotFlavor::NapCat,
         BackendType::SnowLuma => BotFlavor::SnowLuma,
+    }
+}
+
+/// 按 dot-path（如 `network.httpServers`）在 JSON Value 树里设值。
+/// 路径不存在的中间节点自动创建为 object。用于应用前端 ConfigDriftDialog
+/// 的 `AcceptExternal` 决议到渲染输出。
+fn set_value_at_dot_path(root: &mut serde_json::Value, dot_path: &str, value: serde_json::Value) {
+    let segments: Vec<&str> = dot_path.split('.').collect();
+    if segments.is_empty() {
+        return;
+    }
+    let mut cursor = root;
+    for seg in &segments[..segments.len() - 1] {
+        if !cursor.is_object() {
+            return;
+        }
+        cursor = cursor
+            .as_object_mut()
+            .unwrap()
+            .entry(seg.to_string())
+            .or_insert_with(|| serde_json::json!({}));
+    }
+    if let Some(obj) = cursor.as_object_mut() {
+        let last = segments[segments.len() - 1];
+        if value.is_null() {
+            obj.remove(last);
+        } else {
+            obj.insert(last.to_string(), value);
+        }
     }
 }

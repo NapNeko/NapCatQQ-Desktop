@@ -514,6 +514,10 @@ mod tests {
         async fn get_auth_state(&self) -> Result<AuthState, SnowLumaWebUiError> {
             Ok(AuthState::default())
         }
+
+            async fn update_onebot_config(&self, _uin: &str, _config: &serde_json::Value) -> Result<bool, SnowLumaWebUiError> {
+                Ok(true)
+            }
     }
 
     fn proc(pid: u32, uin: &str, status: HookProcessStatus) -> HookProcessInfo {

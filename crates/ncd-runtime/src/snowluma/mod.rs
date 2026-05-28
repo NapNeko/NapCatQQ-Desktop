@@ -6,6 +6,7 @@ pub mod daemon;
 pub mod error;
 pub mod log_sanitize;
 pub mod proc_tree;
+pub mod qq_login_probe;
 pub mod runtime_backend;
 pub mod session;
 pub mod status_poller;

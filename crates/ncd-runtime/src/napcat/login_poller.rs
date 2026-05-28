@@ -715,6 +715,10 @@ mod tests {
             ) -> Result<GetQQLoginInfoData, NapCatWebUiError> {
                 Err(NapCatWebUiError::Decode("stub".into()))
             }
+
+            async fn set_ob11_config(&self, _port: u16, _auth: &str, _config_json: &str) -> Result<(), NapCatWebUiError> {
+                Ok(())
+            }
         }
 
         struct StubRestart;
@@ -826,6 +830,10 @@ mod tests {
         ) -> Result<GetQQLoginInfoData, NapCatWebUiError> {
             Ok(GetQQLoginInfoData::default())
         }
+
+            async fn set_ob11_config(&self, _port: u16, _auth: &str, _config_json: &str) -> Result<(), NapCatWebUiError> {
+                Ok(())
+            }
     }
 
     struct StubRestart;
@@ -1119,6 +1127,10 @@ mod transition_tests {
             q.pop()
                 .unwrap_or_else(|| Err(NapCatWebUiError::Decode("online queue empty".into())))
         }
+
+            async fn set_ob11_config(&self, _port: u16, _auth: &str, _config_json: &str) -> Result<(), NapCatWebUiError> {
+                Ok(())
+            }
     }
 
     // ── recording notifier：记录 (bot_id, kind) 调用 ──────────────────────
@@ -2058,6 +2070,10 @@ mod property_tests {
         ) -> Result<GetQQLoginInfoData, NapCatWebUiError> {
             Ok(GetQQLoginInfoData::default())
         }
+
+            async fn set_ob11_config(&self, _port: u16, _auth: &str, _config_json: &str) -> Result<(), NapCatWebUiError> {
+                Ok(())
+            }
     }
 
     // ── property notifier / restart：仅记录调用次数 ────────────────────────

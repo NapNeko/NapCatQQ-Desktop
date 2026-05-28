@@ -155,23 +155,25 @@ impl RuntimeLaunchPlan {
                 cfg.launch_command = Vec::new();
                 cfg.working_dir = Some(plan.snowluma_data_root);
                 // SnowLumaRuntimeBackend.start 通过 environment 渠道拿 QQ.exe 路径
-                // / start_mode / attach_pid（避免给 BotRuntimeConfig 加新字段）。
+                // / start_mode（避免给 BotRuntimeConfig 加新字段）。
+                // HotStart 不再透传 attach_pid，由 backend 在 Phase A 自动按 qq_id
+                // 扫一遍系统进程 + tencent:// 探测匹配出真实 PID。
                 if let Some(qq_install) = plan.qq_install_path {
                     cfg.environment.insert(
                         "SNOWLUMA_QQ_EXE".to_string(),
                         qq_install.join("QQ.exe").to_string_lossy().into_owned(),
                     );
                 }
+                // 把 qq_id 也注入环境变量，让 backend 在 HotStart 时自动匹配；
+                // ColdStart 也用得到（落盘配置文件名等）。
+                cfg.environment
+                    .insert("SNOWLUMA_QQ_ID".to_string(), plan.bot_qq_id.to_string());
                 let mode_str = match plan.start_mode {
-                    SnowLumaStartMode::ColdStart => "cold_start".to_string(),
-                    SnowLumaStartMode::HotStart { attach_pid } => {
-                        cfg.environment
-                            .insert("SNOWLUMA_ATTACH_PID".to_string(), attach_pid.to_string());
-                        "hot_start".to_string()
-                    }
+                    SnowLumaStartMode::ColdStart => "cold_start",
+                    SnowLumaStartMode::HotStart => "hot_start",
                 };
                 cfg.environment
-                    .insert("SNOWLUMA_START_MODE".to_string(), mode_str);
+                    .insert("SNOWLUMA_START_MODE".to_string(), mode_str.to_string());
             }
         }
         cfg
@@ -226,12 +228,9 @@ async fn build_snowluma_launch_plan(
 
     let qq_install_path = match start_mode {
         SnowLumaStartMode::ColdStart => Some(resolve_qq_install_path()?),
-        SnowLumaStartMode::HotStart { attach_pid } => {
-            if attach_pid == 0 {
-                return Err(RuntimeLaunchPlanError::SnowLumaInvalidStartMode(
-                    "hot_start attach_pid must be non-zero".to_string(),
-                ));
-            }
+        SnowLumaStartMode::HotStart => {
+            // HotStart 自带 PID 自动匹配语义（backend Phase A 按 qq_id 扫进程），
+            // 这里不需要 QQ install path：用户手动启动了 QQ，QQ 路径已经定了。
             None
         }
     };
@@ -400,9 +399,9 @@ mod snowluma_plan_tests {
     //! 1. `node.exe` 缺失立即返回 `SnowLumaNodeMissing`。
     //! 2. ColdStart（含 `None` 默认）携带 `qq_install_path = Some(_)`（仅
     //! Windows 平台能解析 QQ install path；非 Windows 退化为 UnsupportedPlatform）。
-    //! 3. HotStart 携带 attach_pid，跳过 QQ install 解析。
-    //! 4. HotStart 的 attach_pid=0 直接拒绝为 `SnowLumaInvalidStartMode`。
-    //! 5. `into_runtime_config` 把 SnowLuma working_dir 设到 snowluma_data_root
+    //! 3. HotStart 跳过 QQ install 解析，`qq_install_path = None`，PID 由
+    //! backend Phase A 自动按 qq_id 匹配，落盘配置不再持久化 PID。
+    //! 4. `into_runtime_config` 把 SnowLuma working_dir 设到 snowluma_data_root
     //! 且 launch_command 为空。
 
     use super::*;
@@ -454,35 +453,9 @@ mod snowluma_plan_tests {
         }
     }
 
-    /// HotStart attach_pid=0 是非法输入，构造前直接拒绝。
-    #[tokio::test]
-    async fn snowluma_plan_rejects_zero_attach_pid() {
-        let runtime_root_dir = tempdir().unwrap();
-        let data_root_dir = tempdir().unwrap();
-        let runtime_root = runtime_root_dir.path();
-        let data_root = data_root_dir.path();
-        // node.exe 必须先存在，否则会被 NodeMissing 拦下。
-        tokio::fs::write(runtime_root.join("node.exe"), b"stub")
-            .await
-            .unwrap();
-
-        let bot_id = BotId::from("bot-1");
-        let config = make_config(Some(SnowLumaStartMode::HotStart { attach_pid: 0 }));
-
-        let result =
-            build_runtime_launch_plan(&bot_id, &config, runtime_root, runtime_root, data_root)
-                .await;
-
-        match result {
-            Err(RuntimeLaunchPlanError::SnowLumaInvalidStartMode(msg)) => {
-                assert!(msg.contains("attach_pid"), "msg={msg}");
-            }
-            other => panic!("expected SnowLumaInvalidStartMode, got {other:?}"),
-        }
-    }
-
     /// HotStart 路径：跳过 QQ install path 解析（即便 Windows 注册表查询失败也应该 OK）。
     /// `qq_install_path = None`，`bot_qq_id` 与 `snowluma_data_root` 透传。
+    /// PID 不再持久化，由 backend 在 Phase A 按 qq_id 自动匹配。
     #[tokio::test]
     async fn snowluma_plan_hot_start_skips_qq_install_resolution() {
         let runtime_root_dir = tempdir().unwrap();
@@ -494,7 +467,7 @@ mod snowluma_plan_tests {
             .unwrap();
 
         let bot_id = BotId::from("bot-1");
-        let config = make_config(Some(SnowLumaStartMode::HotStart { attach_pid: 12345 }));
+        let config = make_config(Some(SnowLumaStartMode::HotStart));
 
         let plan =
             build_runtime_launch_plan(&bot_id, &config, runtime_root, runtime_root, data_root)
@@ -506,10 +479,7 @@ mod snowluma_plan_tests {
         };
         assert_eq!(plan.runtime_root, runtime_root);
         assert_eq!(plan.snowluma_data_root, data_root);
-        assert_eq!(
-            plan.start_mode,
-            SnowLumaStartMode::HotStart { attach_pid: 12345 }
-        );
+        assert_eq!(plan.start_mode, SnowLumaStartMode::HotStart);
         assert!(plan.qq_install_path.is_none());
         assert_eq!(plan.bot_qq_id, 100200);
     }
