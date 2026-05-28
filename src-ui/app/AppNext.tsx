@@ -4,7 +4,7 @@
 // 简单 useState 路由（5 主路由 + 1 dev showcase）。
 
 import React, { useEffect, useState } from 'react';
-import { Activity, Server } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import './index.css';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
@@ -15,6 +15,7 @@ import { PagePlaceholder } from '../shared/components/next/PagePlaceholder';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
 import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { BotPageNext } from '../modules/bot/BotPage.next';
+import { RemoteHostPanelNext } from '../modules/remote/RemoteHostPanel.next';
 import { SettingsPageNext } from '../modules/settings/SettingsPage.next';
 import { Showcase } from './Showcase';
 import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
@@ -107,19 +108,7 @@ const RouteOutlet: React.FC<{ route: AppRoute }> = ({ route }) => {
         case 'components':
             return <ComponentsPageNext />;
         case 'remote':
-            return (
-                <PagePlaceholder
-                    title="Remote Hosts"
-                    icon={Server}
-                    description="通过 SSH 接管远端 Linux 主机上的 NapCat 部署。"
-                    pendingItems={[
-                        'SSH 连接表单 + 已连接信息卡',
-                        '远端 runtime 监控（PID / RSS / 活跃连接数）',
-                        'SFTP 只读浏览',
-                        '远端 WebUI 跳转 / 重启容器',
-                    ]}
-                />
-            );
+            return <RemoteHostPanelNext />;
         case 'events':
             return (
                 <PagePlaceholder
