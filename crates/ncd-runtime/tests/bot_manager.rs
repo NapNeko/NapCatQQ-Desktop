@@ -200,7 +200,7 @@ fn make_manager(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
     );
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
+    let renderer = Arc::new(DispatchRenderer::new(store.config_dir(), store.config_dir()));
     let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
     let planner = Arc::new(TestLaunchPlanner);
@@ -232,7 +232,7 @@ fn make_manager_with_planner(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
     );
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
+    let renderer = Arc::new(DispatchRenderer::new(store.config_dir(), store.config_dir()));
     let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
     let manager = BotManager::new(
@@ -933,6 +933,7 @@ async fn start_bot_publishes_state_change_event() {
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
     let renderer = Arc::new(DispatchRenderer::new(
         temp.path().join("runtime").join("config"),
+        temp.path().join("runtime").join("config"),
     ));
     let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
@@ -1119,7 +1120,7 @@ async fn process_exit_event_transitions_running_actor_to_crashed() {
         SecretStoreImpl::new_with_force_fallback(temp.path().join("secrets"), true),
     );
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
+    let renderer = Arc::new(DispatchRenderer::new(store.config_dir(), store.config_dir()));
     let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
     let planner = Arc::new(TestLaunchPlanner);
