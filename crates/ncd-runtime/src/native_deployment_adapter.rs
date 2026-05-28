@@ -20,7 +20,7 @@ use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, TailOpts,
 };
-use crate::runtime_launch_plan::{FileSystemRuntimeLaunchPlanner, RuntimeLaunchPlanner};
+use crate::runtime_launch_plan::RuntimeLaunchPlanner;
 use crate::kinds::BackendKind;
 
 // ============================================================

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use ncd_host::{CommandOutput, DirEntry, Host, HostCommand, HostError, HostPath};
+use ncd_host::{DirEntry, Host, HostCommand, HostError, HostPath};
 use ncd_host::remote::{ConnectionConfig, RemoteLinuxHost, SshCredentials, HostKeyPolicy};
 use ncd_runtime::{
     BackendKind, BotId, BotStatus, BroadcastEventBus, DomainEvent, EventBus, RuntimeTarget,
