@@ -3,4 +3,4 @@ import type { AutoRestartSchedule } from "./AutoRestartSchedule";
 import type { BackendType } from "./BackendType";
 import type { SnowLumaStartMode } from "./SnowLumaStartMode";
 
-export type BotBasicConfig = { name: string, QQID: number, musicSignUrl: string, autoRestartSchedule: AutoRestartSchedule, offlineAutoRestart: boolean, runtime_target: string, backend_type: BackendType, snowluma_start_mode?: SnowLumaStartMode, };
+export type BotBasicConfig = { name: string, QQID: number, musicSignUrl: string, autoRestartSchedule: AutoRestartSchedule, offlineAutoRestart: boolean, runtime_target: string, backend_type: BackendType, snowlumaStartMode?: SnowLumaStartMode, };
