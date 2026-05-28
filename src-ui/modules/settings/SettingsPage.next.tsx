@@ -6,7 +6,8 @@
 //   - 每个 Tab 内用 'space-y-6'：每行 flex items-center justify-between
 //     左侧 Label + Description 堆叠，右侧控件
 //   - 行间用 hairline 短线分隔（border-b border-border-subtle pb-6）
-//   - 整页限宽 720px 居中，跟 shadcn 默认 max-w-2xl 同节奏
+//   - 容器宽度由 AppNext 的 main 控制（xl:max-w-[1280px]），本页不再自行限宽，
+//     避免设置页跟其它页宽度不一致
 //
 // 这版跟前几版不同：不画大卡片，不画 Card padding-lg 容器；行布局
 // space-between 让控件天然右对齐，比 SettingRow 抽象更直接。
@@ -50,7 +51,7 @@ export function SettingsPageNext() {
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                <Tabs value={tab} onValueChange={setTab} className="mx-auto max-w-[720px]">
+                <Tabs value={tab} onValueChange={setTab} className="w-full">
                     <TabsList className="mb-6">
                         <TabsTrigger value="general">通用</TabsTrigger>
                         <TabsTrigger value="data">数据</TabsTrigger>

@@ -247,7 +247,7 @@ export function BotConfigPageNext({ botId, onBack }: BotConfigPageNextProps) {
     return (
         <div className="flex h-full w-full flex-col">
             {/* ────── Header ────── */}
-            <header className="flex items-start justify-between gap-3 border-b border-border-subtle px-6 py-3">
+            <header className="flex items-start justify-between gap-3 border-b border-border-subtle py-3">
                 <div className="flex items-start gap-3">
                     <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回列表">
                         <ArrowLeft size={16} />
@@ -278,7 +278,7 @@ export function BotConfigPageNext({ botId, onBack }: BotConfigPageNextProps) {
 
             {/* ────── Tabs + 主体 ────── */}
             <div className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto">
-                <div className="flex flex-1 flex-col px-6">
+                <div className="flex flex-1 flex-col">
                     <Tabs
                         value={activeTab}
                         onValueChange={(v) => setActiveTab(v as TabValue)}
