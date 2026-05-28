@@ -1,14 +1,12 @@
 // 推倒重写版 BotLogPage：
 //
-// 视觉：暗色控制台风，顶部一条工具栏 + 中部彩色行 + 底部统计/状态。
-// 交互：搜索筛选、级别筛选、清空、复制、自动滚动开关。
-// 行为：复用 useBotLogStream（hook 层），不直接调 service。
-//
-// 跟旧版的差异：
-//   - 不再用 Fluent Button/Badge/Input；改用 shared/ui + tailwind。
-//   - channel 的 stdout/stderr 标签改为 LEVEL（info/warn/error...）+ 行首时间戳。
-//   - 增加级别筛选 chip 行。
-//   - 空状态文案沿用旧版语义但更简洁。
+// 视觉：和项目暖白基调对齐（不用 GitHub 黑），日志面板用 surface-inset。
+// 布局：
+//   顶部 一行 返回按钮 + 标题 + 行数 chip
+//   工具栏 一行 搜索框 + 级别 chip + 自动滚动 + 复制 + 清空
+//   主体  flex-1 overflow-auto，每行高 22px 单行，左侧 2px 彩色条表 level
+// 行结构 grid 三列：时间戳 / level 标签 / 文本（文本内 break-all）
+// 历史与增量数据来自 useBotLogStream，不直接调 service。
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -18,13 +16,12 @@ import {
     Search,
     ScrollText,
     Pause,
-    PlayCircle,
+    Play,
 } from 'lucide-react';
 import { Badge, Button } from '../../../shared/ui';
 import {
     filterLogs,
     serializeLogs,
-    logLevelTone,
     type ChannelFilter,
     type LevelFilter,
     type LogEntry,
@@ -38,14 +35,14 @@ interface BotLogPageNextProps {
 }
 
 const LEVEL_LABEL: Record<LogLevel, string> = {
-    trace: 'TRACE',
-    debug: 'DEBUG',
-    info: 'INFO',
+    trace: 'TRC',
+    debug: 'DBG',
+    info: 'INF',
     success: 'OK',
-    warn: 'WARN',
+    warn: 'WRN',
     error: 'ERR',
-    fatal: 'FATAL',
-    unknown: '—',
+    fatal: 'FTL',
+    unknown: '·',
 };
 
 const LEVEL_FILTERS: { value: LevelFilter; label: string }[] = [
@@ -59,7 +56,7 @@ const LEVEL_FILTERS: { value: LevelFilter; label: string }[] = [
 export function BotLogPageNext({ botId, onBack }: BotLogPageNextProps) {
     const { logs, clear } = useBotLogStream(botId);
     const [query, setQuery] = useState('');
-    const [channelFilter, _setChannelFilter] = useState<ChannelFilter>('all');
+    const [channelFilter] = useState<ChannelFilter>('all');
     const [levelFilter, setLevelFilter] = useState<LevelFilter>('all');
     const [autoScroll, setAutoScroll] = useState(true);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -80,34 +77,35 @@ export function BotLogPageNext({ botId, onBack }: BotLogPageNextProps) {
         try {
             await navigator.clipboard.writeText(serializeLogs(filtered));
         } catch (err) {
-            // 剪贴板失败不弹错（可能用户没授权），打个 console 日志即可。
             // eslint-disable-next-line no-console
             console.warn('复制日志失败:', err);
         }
     };
 
+    const emptyKind: 'no-logs' | 'no-match' | 'has' =
+        logs.length === 0 ? 'no-logs' : filtered.length === 0 ? 'no-match' : 'has';
+
     return (
-        <div className="flex h-full flex-col gap-3">
-            <Header botId={botId} onBack={onBack} total={logs.length} shown={filtered.length} />
+        <div className="flex h-full min-h-0 flex-col gap-2">
+            <Header
+                botId={botId}
+                onBack={onBack}
+                total={logs.length}
+                shown={filtered.length}
+            />
             <Toolbar
                 query={query}
                 onQuery={setQuery}
                 levelFilter={levelFilter}
                 onLevelFilter={setLevelFilter}
                 autoScroll={autoScroll}
-                onToggleAutoScroll={() => setAutoScroll((prev) => !prev)}
+                onToggleAutoScroll={() => setAutoScroll((p) => !p)}
                 onClear={clear}
                 onCopy={onCopy}
                 hasLogs={logs.length > 0}
                 hasVisible={filtered.length > 0}
             />
-            <LogViewport
-                ref={containerRef}
-                entries={filtered}
-                emptyKind={
-                    logs.length === 0 ? 'no-logs' : filtered.length === 0 ? 'no-match' : 'has'
-                }
-            />
+            <LogViewport ref={containerRef} entries={filtered} emptyKind={emptyKind} />
         </div>
     );
 }
@@ -116,7 +114,7 @@ export default BotLogPageNext;
 
 
 // ============================================================================
-// 子组件 Header / Toolbar / LogViewport / LogLine
+// 子组件
 // ============================================================================
 
 function Header({
@@ -131,26 +129,21 @@ function Header({
     shown: number;
 }) {
     return (
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回">
                 <ArrowLeft size={16} />
             </Button>
-            <div className="flex flex-1 flex-col gap-1">
-                <div className="flex items-baseline gap-2">
-                    <h2 className="text-base font-semibold text-text">实例 {botId} 运行日志</h2>
-                    <Badge tone="neutral" appearance="soft">
-                        共 {total} 行
-                    </Badge>
-                    {shown !== total && (
-                        <Badge tone="info" appearance="soft">
-                            筛后 {shown} 行
-                        </Badge>
-                    )}
-                </div>
-                <p className="text-[12px] text-text-tertiary">
-                    实时订阅子进程输出。NapCat 重启时旧日志自动清空；SnowLuma 多 Bot 共享 daemon 输出
-                </p>
-            </div>
+            <h2 className="text-[15px] font-semibold leading-none text-text">
+                实例 {botId} 运行日志
+            </h2>
+            <Badge tone="neutral" appearance="soft">
+                {total} 行
+            </Badge>
+            {shown !== total && (
+                <Badge tone="info" appearance="soft">
+                    筛后 {shown}
+                </Badge>
+            )}
         </div>
     );
 }
@@ -179,57 +172,71 @@ function Toolbar({
     hasVisible: boolean;
 }) {
     return (
-        <div className="flex flex-wrap items-center gap-2 rounded-md bg-elevated/60 p-2 ring-1 ring-border-subtle">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-elevated px-2 py-1.5 ring-1 ring-border-subtle">
             {/* 搜索框 */}
             <div className="relative min-w-[200px] flex-1">
                 <Search
-                    size={14}
+                    size={13}
                     className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-tertiary"
                 />
                 <input
                     value={query}
                     onChange={(e) => onQuery(e.target.value)}
-                    placeholder="搜索关键字 (Ctrl+F 风格)"
-                    className="h-8 w-full rounded-md bg-inset pl-7 pr-2 text-[13px] text-text outline-none ring-1 ring-border-subtle focus:ring-brand"
+                    placeholder="搜索关键字"
+                    className="h-7 w-full rounded-sm bg-field pl-7 pr-2 text-[12px] text-text outline-none ring-1 ring-border-subtle placeholder:text-text-tertiary focus:ring-brand"
                 />
             </div>
             {/* 级别筛选 */}
-            <div className="flex items-center gap-1">
+            <div className="flex h-7 items-center gap-0.5 rounded-sm bg-inset p-0.5">
                 {LEVEL_FILTERS.map((f) => (
                     <button
                         key={f.value}
                         type="button"
                         onClick={() => onLevelFilter(f.value)}
                         className={
-                            'rounded-md px-2 py-1 text-[12px] transition-colors ' +
+                            'h-6 rounded-sm px-2 text-[11.5px] font-medium leading-6 transition-colors ' +
                             (levelFilter === f.value
-                                ? 'bg-brand text-white'
-                                : 'bg-inset text-text-secondary hover:bg-inset-hover')
+                                ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.05)]'
+                                : 'text-text-tertiary hover:text-text')
                         }
                     >
                         {f.label}
                     </button>
                 ))}
             </div>
-            {/* 自动滚动开关 */}
+            {/* 自动滚动 */}
             <Button
-                variant={autoScroll ? 'secondary' : 'ghost'}
+                variant="ghost"
                 size="sm"
                 onClick={onToggleAutoScroll}
-                title={autoScroll ? '已启用自动滚动到底' : '已暂停自动滚动'}
+                title={autoScroll ? '已启用自动滚动' : '已暂停自动滚动'}
             >
-                {autoScroll ? <Pause size={14} /> : <PlayCircle size={14} />}
-                <span className="ml-1">{autoScroll ? '滚动中' : '已暂停'}</span>
+                {autoScroll ? <Pause size={13} /> : <Play size={13} />}
+                <span className="ml-1 text-[11.5px]">
+                    {autoScroll ? '滚动中' : '已暂停'}
+                </span>
             </Button>
             {/* 复制 */}
-            <Button variant="ghost" size="sm" onClick={onCopy} disabled={!hasVisible}>
-                <Copy size={14} />
-                <span className="ml-1">复制</span>
+            <Button
+                variant="ghost"
+                size="sm"
+                onClick={onCopy}
+                disabled={!hasVisible}
+                title="复制当前可见日志"
+            >
+                <Copy size={13} />
+                <span className="ml-1 text-[11.5px]">复制</span>
             </Button>
             {/* 清空 */}
-            <Button variant="ghost" size="sm" onClick={onClear} disabled={!hasLogs}>
-                <Brush size={14} />
-                <span className="ml-1">清空</span>
+            <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClear}
+                disabled={!hasLogs}
+                title="清空面板（不删磁盘归档）"
+            >
+                <Brush size={13} />
+                <span className="ml-1 text-[11.5px]">清空</span>
             </Button>
         </div>
     );
@@ -245,7 +252,7 @@ const LogViewport = forwardRef<
             <EmptyState
                 title="暂无日志"
                 body="实例可能尚未启动，或当前还没触发任何输出"
-                icon={<ScrollText size={18} className="opacity-60" />}
+                icon={<ScrollText size={20} className="opacity-50" />}
             />
         );
     }
@@ -253,72 +260,108 @@ const LogViewport = forwardRef<
         return (
             <EmptyState
                 title="没有匹配的行"
-                body="试试修改搜索关键字或切换级别筛选"
-                icon={<Search size={18} className="opacity-60" />}
+                body="试试改下搜索关键字或切换级别筛选"
+                icon={<Search size={20} className="opacity-50" />}
             />
         );
     }
     return (
         <div
             ref={ref}
-            className="flex-1 overflow-auto rounded-md bg-[#0d1117] font-mono text-[12.5px] leading-[1.55] ring-1 ring-border-subtle"
-            style={{ fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace' }}
+            className="min-h-0 flex-1 overflow-auto rounded-md bg-inset font-mono text-[12px] leading-[18px] ring-1 ring-border-subtle"
+            style={{ fontFamily: 'var(--font-mono)' }}
         >
-            {entries.map((e) => (
-                <LogLine key={e.id} entry={e} />
-            ))}
+            <div className="py-1">
+                {entries.map((e) => (
+                    <LogLine key={e.id} entry={e} />
+                ))}
+            </div>
         </div>
     );
 });
 
 function LogLine({ entry }: { entry: LogEntry }) {
-    const tone = logLevelTone(entry.level);
-    const levelClass = logLevelToClass(entry.level);
     return (
-        <div className="grid grid-cols-[68px_44px_1fr] items-start gap-2 px-3 py-[3px] hover:bg-white/[0.03]">
-            <span className="select-none text-[#7f8c98]">{entry.timestamp}</span>
-            <span className={'select-none text-[10.5px] uppercase tabular-nums ' + levelClass}>
+        <div className="group flex h-[20px] items-center gap-2 px-2 hover:bg-elevated">
+            <span
+                className="h-[12px] w-[3px] shrink-0 rounded-[1px]"
+                style={{ background: levelBarColor(entry.level) }}
+            />
+            <span className="w-[58px] shrink-0 select-none text-[11px] tabular-nums text-text-tertiary">
+                {entry.timestamp}
+            </span>
+            <span
+                className="w-[28px] shrink-0 select-none text-[10px] font-semibold uppercase tracking-wider"
+                style={{ color: levelLabelColor(entry.level) }}
+            >
                 {LEVEL_LABEL[entry.level]}
             </span>
-            <span className={'whitespace-pre-wrap break-all ' + lineTextClass(tone)}>
-                {entry.text}
+            <span
+                className="min-w-0 flex-1 overflow-hidden truncate"
+                style={{ color: lineTextColor(entry.level) }}
+                title={entry.text}
+            >
+                {entry.text || '\u00A0'}
             </span>
         </div>
     );
 }
 
-function logLevelToClass(level: LogLevel): string {
+// 暖色调下的 level 颜色映射，与 design tokens 的 state-* 对齐但稍微提亮，
+// 让小字号下也能在浅米色背景上区分。
+function levelBarColor(level: LogLevel): string {
     switch (level) {
         case 'fatal':
         case 'error':
-            return 'text-[#ff7b7b]';
+            return 'var(--state-danger)';
         case 'warn':
-            return 'text-[#f5c971]';
+            return 'var(--state-warning)';
         case 'success':
-            return 'text-[#9ece6a]';
+            return 'var(--state-success)';
         case 'info':
-            return 'text-[#7aa2f7]';
+            return 'var(--state-info)';
         case 'debug':
         case 'trace':
-            return 'text-[#9aa5ce]';
+            return 'var(--neutral-300, #d1c4b6)';
         default:
-            return 'text-[#7f8c98]';
+            return 'transparent';
     }
 }
 
-function lineTextClass(tone: ReturnType<typeof logLevelTone>): string {
-    switch (tone) {
-        case 'danger':
-            return 'text-[#fca5a5]';
-        case 'warning':
-            return 'text-[#fcd34d]';
+function levelLabelColor(level: LogLevel): string {
+    switch (level) {
+        case 'fatal':
+        case 'error':
+            return 'var(--state-danger)';
+        case 'warn':
+            return 'var(--state-warning)';
         case 'success':
-            return 'text-[#bbf7d0]';
+            return 'var(--state-success)';
         case 'info':
-            return 'text-[#bfdbfe]';
-        case 'neutral':
+            return 'var(--state-info)';
+        case 'debug':
+        case 'trace':
+            return 'var(--text-tertiary)';
         default:
-            return 'text-[#d1d5db]';
+            return 'var(--text-disabled)';
+    }
+}
+
+function lineTextColor(level: LogLevel): string {
+    switch (level) {
+        case 'fatal':
+        case 'error':
+            return 'var(--state-danger)';
+        case 'warn':
+            return 'var(--text-primary)';
+        case 'success':
+            return 'var(--state-success)';
+        case 'info':
+        case 'debug':
+        case 'trace':
+            return 'var(--text-secondary)';
+        default:
+            return 'var(--text-secondary)';
     }
 }
 
@@ -332,7 +375,7 @@ function EmptyState({
     icon?: React.ReactNode;
 }) {
     return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-md bg-elevated/40 p-6 text-center text-text-tertiary ring-1 ring-border-subtle">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-md bg-inset/50 p-8 text-center text-text-tertiary ring-1 ring-border-subtle">
             {icon}
             <p className="text-[13px] font-semibold text-text-secondary">{title}</p>
             <p className="text-[12px]">{body}</p>

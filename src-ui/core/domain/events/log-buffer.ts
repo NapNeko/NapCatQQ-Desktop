@@ -92,13 +92,19 @@ export function buildHistoryEntries(
     lines: string[],
     now = new Date().toLocaleTimeString(),
 ): LogEntry[] {
-    return lines.map((line, idx) => ({
-        id: `hist-${idx}-${counter++}`,
-        text: line,
-        channel: 'unknown' as const,
-        level: parseLogLevel(line),
-        timestamp: now,
-    }));
+    const out: LogEntry[] = [];
+    for (let idx = 0; idx < lines.length; idx++) {
+        const raw = lines[idx];
+        if (!raw || !raw.trim()) continue;
+        out.push({
+            id: `hist-${idx}-${counter++}`,
+            text: raw,
+            channel: 'unknown' as const,
+            level: parseLogLevel(raw),
+            timestamp: now,
+        });
+    }
+    return out;
 }
 
 export function appendLine(
@@ -106,6 +112,7 @@ export function appendLine(
     line: string,
     channel: LogChannel,
 ): LogEntry[] {
+    if (!line || !line.trim()) return prev;
     const entry: LogEntry = {
         id: nextId(),
         text: line,
