@@ -36,7 +36,51 @@ pub async fn connect_remote_host(
     state: State<'_, AppState>,
     request: ConnectRemoteHostRequest,
 ) -> Result<RemoteHostConnectionInfo, String> {
-    state.runtime.connect_remote_host(request).await
+    // 兼容旧前端 contract：把 connect 请求翻译成 ServerManager add + test。
+    let profile = ncd_runtime::ServerProfile {
+        id: request.remote_id.clone(),
+        name: request.remote_id.clone(),
+        host: request.host.clone(),
+        port: if request.port == 0 { 22 } else { request.port },
+        username: request.username.clone(),
+        auth_method: if request.password.is_some() {
+            ncd_runtime::AuthMethod::Password
+        } else {
+            ncd_runtime::AuthMethod::Key
+        },
+        private_key_path: None,
+        remember_credential: request.password.is_some(),
+        state: ncd_runtime::ServerState::Disconnected,
+        webui_url: request.webui_url.clone(),
+    };
+
+    // 如果已存在就 update，不存在就 add。
+    let existing = state.server_manager.list_servers().await;
+    if existing.iter().any(|p| p.id == request.remote_id) {
+        state
+            .server_manager
+            .update_server(profile.clone(), request.password.clone())
+            .await?;
+    } else {
+        state
+            .server_manager
+            .add_server(profile.clone(), request.password.clone())
+            .await?;
+    }
+
+    // test_connection 会真正建立 SSH 连接并缓存。
+    let _report = state
+        .server_manager
+        .test_connection(&request.remote_id, request.password)
+        .await?;
+
+    Ok(RemoteHostConnectionInfo {
+        remote_id: profile.id,
+        host: profile.host,
+        port: profile.port,
+        username: profile.username,
+        webui_url: profile.webui_url,
+    })
 }
 
 #[tauri::command]
@@ -44,7 +88,13 @@ pub async fn list_remote_files(
     state: State<'_, AppState>,
     request: ListRemoteFilesRequest,
 ) -> Result<Vec<ncd_host::DirEntry>, String> {
-    state.runtime.list_remote_files(request).await
+    let host = state
+        .server_manager
+        .get_host(&request.remote_id)
+        .await
+        .ok_or_else(|| format!("远端主机未连接: {}", request.remote_id))?;
+    let path = ncd_host::HostPath::from_posix(&request.path);
+    host.list_dir(&path).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -52,7 +102,38 @@ pub async fn get_remote_runtime_status(
     state: State<'_, AppState>,
     request: GetRemoteRuntimeStatusRequest,
 ) -> Result<RemoteRuntimeStatusResponse, String> {
-    state.runtime.get_remote_runtime_status(request).await
+    let host = state
+        .server_manager
+        .get_host(&request.remote_id)
+        .await
+        .ok_or_else(|| format!("远端主机未连接: {}", request.remote_id))?;
+
+    let bot_id = ncd_runtime::BotId::new(&request.bot_id);
+    let cmd = ncd_host::HostCommand::new("pgrep")
+        .arg("-f")
+        .arg(format!("napcat.*{}", request.bot_id));
+    let output = host.run_to_string(cmd).await;
+    let status = match output {
+        Ok(out) if out.success() && !out.stdout.trim().is_empty() => {
+            let pid: u32 = out
+                .stdout
+                .trim()
+                .lines()
+                .next()
+                .and_then(|l| l.trim().parse().ok())
+                .unwrap_or(0);
+            ncd_runtime::BotStatus::running(bot_id.clone(), pid, 0)
+        }
+        _ => ncd_runtime::BotStatus::stopped(bot_id.clone()),
+    };
+
+    Ok(RemoteRuntimeStatusResponse {
+        remote_id: request.remote_id.clone(),
+        bot_id: request.bot_id,
+        status,
+        backend_kind: Some(ncd_runtime::BackendKind::RemoteSsh),
+        runtime_target: Some(ncd_runtime::RuntimeTarget::server(request.remote_id)),
+    })
 }
 
 #[tauri::command]
@@ -60,7 +141,18 @@ pub async fn get_remote_webui_endpoint(
     state: State<'_, AppState>,
     request: GetRemoteWebuiEndpointRequest,
 ) -> Result<RemoteWebuiEndpointResponse, String> {
-    state.runtime.get_remote_webui_endpoint(request).await
+    // 从 ServerProfile 读 webui_url。
+    let servers = state.server_manager.list_servers().await;
+    let webui_url = servers
+        .iter()
+        .find(|p| p.id == request.remote_id)
+        .and_then(|p| p.webui_url.clone());
+
+    Ok(RemoteWebuiEndpointResponse {
+        remote_id: request.remote_id,
+        bot_id: request.bot_id,
+        webui_url,
+    })
 }
 
 #[tauri::command]
@@ -188,6 +280,11 @@ mod tests {
             event_bus: bus.clone(),
             runtime,
             bot_manager,
+            server_manager: Arc::new(ncd_runtime::ServerManager::new(
+                root,
+                Arc::new(ncd_runtime::InMemoryCredentialStore::default()),
+                Arc::new(bus.clone()),
+            )),
             active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         };
         (state, bus)
@@ -214,56 +311,6 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
-    }
-
-    #[tokio::test]
-    #[ignore] // 真 SSH 测试，需要本地 22 端口 sshd 才能通过
-    async fn remote_commands_use_registered_remote_service() {
-        let root = tempdir().unwrap();
-        let bus = ncd_runtime::BroadcastEventBus::default();
-        let runtime = crate::runtime::AppRuntime::new(root.path(), bus);
-
-        let connection = runtime
-            .connect_remote_host(ConnectRemoteHostRequest {
-                remote_id: "remote-a".to_string(),
-                host: "127.0.0.1".to_string(),
-                port: 22,
-                username: "napcat".to_string(),
-                password: None,
-                webui_url: Some("http://127.0.0.1:3000".to_string()),
-            })
-            .await
-            .unwrap();
-        assert_eq!(connection.remote_id, "remote-a");
-
-        let files = runtime
-            .list_remote_files(ListRemoteFilesRequest {
-                remote_id: "remote-a".to_string(),
-                path: "/etc".to_string(),
-            })
-            .await
-            .unwrap();
-        assert!(files.is_empty());
-
-        let status = runtime
-            .get_remote_runtime_status(GetRemoteRuntimeStatusRequest {
-                remote_id: "remote-a".to_string(),
-                bot_id: "20001".to_string(),
-            })
-            .await
-            .unwrap();
-        assert_eq!(status.remote_id, "remote-a");
-        assert_eq!(status.bot_id, "20001");
-
-        let webui = runtime
-            .get_remote_webui_endpoint(GetRemoteWebuiEndpointRequest {
-                remote_id: "remote-a".to_string(),
-                bot_id: "20001".to_string(),
-            })
-            .await
-            .unwrap();
-        assert_eq!(webui.remote_id, "remote-a");
-        assert_eq!(webui.webui_url.as_deref(), Some("http://127.0.0.1:3000"));
     }
 }
 
