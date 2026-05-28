@@ -13,7 +13,6 @@ pub mod napcat;
 pub mod path_probe_impl;
 pub mod release;
 pub mod native_deployment_adapter;
-pub mod remote_host;
 pub mod runtime_backend;
 pub mod runtime_launch_plan;
 pub mod secret_store_impl;
@@ -59,10 +58,6 @@ pub use napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, Rest
 pub use napcat::offline_notifier::{NoopOfflineNotifier, OfflineNoticeKind, OfflineNotifier};
 pub use napcat::webui_client::{NapCatWebUiClient, NapCatWebUiError, ReqwestNapCatWebUiClient};
 pub use path_probe_impl::LocalPathProbe;
-pub use remote_host::{
-    ExecResult, MockRemoteHost, PosixPath, ProcessNode, ProcessTree, RemoteFileEntry, RemoteHost,
-    RemoteHostError, RemoteInstallInfo, ShellCmd, TunnelHandle, TunnelSpec,
-};
 pub use runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot,
     ProcessHandle, StopMode, TailOpts,

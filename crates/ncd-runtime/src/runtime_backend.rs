@@ -9,7 +9,6 @@ use crate::bot_actor::BotActorState;
 use crate::bot_config::{BackendType, BotConfig};
 use crate::ids::BotId;
 use crate::kinds::{BackendKind, BotFlavor, RuntimeTarget};
-use crate::remote_host::RemoteHostError;
 
 // StopMode 已下沉到 ncd-domain (2026-05-29 远端架构重构 P1.a)。
 // 本模块通过 pub use 让既有 `crate::runtime_backend::StopMode` 路径继续可用。
@@ -180,14 +179,6 @@ pub enum BotBackendError {
     Io(String),
     #[error("json error: {0}")]
     Json(String),
-    #[error("remote host error: {0}")]
-    RemoteHost(String),
-}
-
-impl From<RemoteHostError> for BotBackendError {
-    fn from(error: RemoteHostError) -> Self {
-        Self::RemoteHost(error.to_string())
-    }
 }
 
 #[async_trait]
