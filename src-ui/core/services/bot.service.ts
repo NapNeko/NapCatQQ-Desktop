@@ -1,11 +1,14 @@
-// Bot 子领域 IPC 服务（生命周期 / 配置 / 日志 / QQ 进程枚举）。
-// 集中所有 `*_bot` / `*_bot_config` / `tail_bot_log` / `list_qq_processes` 类
-// Tauri command 的字面量。
+// Bot 子领域 IPC 服务（生命周期 / 配置 / 日志 / QQ 进程枚举 / QQ 登录探测）。
+// 集中所有 `*_bot` / `*_bot_config` / `tail_bot_log` / `list_qq_processes`
+// / `probe_qq_login_info` 类 Tauri command 的字面量。
 
 import { invoke, isTauri } from '../ipc/transport';
 import type { BatchResultResponse, BotActorSnapshot } from '../ipc/types';
 import type { BotConfig } from '../ipc/generated/domain/BotConfig';
 import type { BackendType } from '../ipc/generated/domain/BackendType';
+import type { QqLoginInfo } from '../ipc/generated/QqLoginInfo';
+import type { ConfigDrift } from '../ipc/generated/ConfigDrift';
+import type { DriftDecision } from '../ipc/generated/DriftDecision';
 import {
     buildMockBotConfig,
     mockBatchDelete,
@@ -126,6 +129,32 @@ export const botService = {
         return new Promise((resolve) => setTimeout(() => resolve(mockLogSnapshot), 100));
     },
 
+    /// 带用户决议保存配置。前端保存时如果检测到 drift 并确认了决议后调此命令。
+    upsertConfigWithDecisions: async (
+        config: BotConfig,
+        decisions: DriftDecision[],
+    ): Promise<BotActorSnapshot> => {
+        if (isTauri) return invoke<BotActorSnapshot>('upsert_bot_config_with_decisions', { config, decisions });
+        return mockUpsertBotConfig(config);
+    },
+
+    // ── Config drift 检测 ────────────────────────────────────────────────
+    /// 启动前检测派生配置文件是否被外部修改。返回 null 表示无差异可直接启动。
+    detectConfigDrift: async (botId: string): Promise<ConfigDrift | null> => {
+        if (isTauri) return invoke<ConfigDrift | null>('detect_bot_config_drift', { botId });
+        // 浏览器 mock：无 drift
+        return null;
+    },
+
+    /// 带用户决议启动 Bot。前端在 ConfigDriftDialog 确认后调此命令。
+    startWithDecisions: async (
+        botId: string,
+        decisions: DriftDecision[],
+    ): Promise<BotActorSnapshot> => {
+        if (isTauri) return invoke<BotActorSnapshot>('start_bot_with_drift_decisions', { botId, decisions });
+        return mockStartBot(botId);
+    },
+
     // ── 系统进程枚举（QQ.exe）─────────────────────────────────────────────
     listQQProcesses: async (): Promise<QQProcessInfo[]> => {
         if (isTauri) return invoke<QQProcessInfo[]>('list_qq_processes');
@@ -133,5 +162,29 @@ export const botService = {
             { pid: 12345, name: 'QQ.exe', started_at: 0, command_line: '' },
             { pid: 23456, name: 'QQ.exe', started_at: 0, command_line: '' },
         ]);
+    },
+
+    /// 探测指定 PID 当前登录的 QQ 账号（HOT 模式 PID picker 用）。
+    /// 走 QQ NT 自带的 9210-9219 tencent:// HTTP 端点，response 里夹带的 JWT
+    /// payload 包含 uin / nickName。`null` = 端口全部不响应或当前未登录。
+    /// 实测每个 PID 命中通常 < 200ms，全端口扫超时上限 10s。
+    probeQQLoginInfo: async (pid: number): Promise<QqLoginInfo | null> => {
+        if (isTauri) return invoke<QqLoginInfo | null>('probe_qq_login_info', { pid });
+        // 浏览器 mock：偶数 PID 当作已登录，构造一个伪 uin。
+        return new Promise((resolve) =>
+            setTimeout(() => {
+                if (pid % 2 === 0) {
+                    resolve({
+                        port: 9210,
+                        uin: String(10000 + pid),
+                        uid: '',
+                        nickname: `Mock-${pid}`,
+                        logged_in: true,
+                    });
+                } else {
+                    resolve(null);
+                }
+            }, 80),
+        );
     },
 };
