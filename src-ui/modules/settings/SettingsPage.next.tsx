@@ -1,14 +1,14 @@
 // 客户端偏好页。
 //
-// 视觉哲学：长文档读法，不画框。
-// 整页只有间距 + 字号 + 一根行间细线，不画卡片、不画组容器。眼睛靠空白
-// 自然区分段落，跟 BotConfigPage.next 的 FormSection 同套思路。
-//
-// 数据：纯前端 preferences + useBootstrap.openDataDir / data_root。
-// 后端 IPC 待接入的功能用一段灰色注释样的"待接入"列表交代，不画 InfoBar。
+// 视觉方向（参考 macOS Settings / Notion settings）：
+//   - 页头跟 Components 页同节奏：components 小标 + 大字标题 + 副描述
+//   - 整页一张大白卡 padding-lg，所有设置在卡内分段
+//   - 段落标题 14px font-semibold，行间 border-b 极淡灰
+//   - 行高 h-12，左 label/hint，右控件，无 hover bg、无 icon tile
+//   - Card padding-lg 提供整体内边距，行不需要再 px-x
 
 import { Sun, Moon, MonitorCog } from 'lucide-react';
-import { Button, Select, Switch } from '../../shared/ui';
+import { Button, Card, Select, Switch } from '../../shared/ui';
 import {
     preferencesStore,
     usePreferences,
@@ -33,12 +33,23 @@ export function SettingsPageNext() {
     };
 
     return (
-        <div className="flex h-full min-h-0 flex-col gap-1">
-            <Header />
+        <div className="flex min-h-0 flex-1 flex-col">
+            <header className="shrink-0 pb-4 pt-2">
+                <p className="text-2xs uppercase tracking-widest text-text-tertiary">
+                    settings
+                </p>
+                <h1 className="font-display text-xl font-semibold text-text">
+                    客户端偏好
+                </h1>
+                <p className="mt-1 text-sm text-text-secondary">
+                    外观主题、行为开关、数据目录与版本信息。需要后端支撑的设置已收在底部「待接入」。
+                </p>
+            </header>
+
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                <div className="mx-auto flex max-w-[640px] flex-col gap-10 py-6">
+                <Card padding="lg" className="mb-4 flex flex-col gap-7">
                     <Section title="外观">
-                        <Row label="主题">
+                        <Row label="主题" hint="切换后立即生效，无需重启">
                             <ThemeSegment
                                 value={prefs.theme}
                                 onChange={preferencesStore.setTheme}
@@ -50,7 +61,11 @@ export function SettingsPageNext() {
                                 onCheckedChange={preferencesStore.setShowMascot}
                             />
                         </Row>
-                        <Row label="窗口不透明度" hint="80–100">
+                        <Row
+                            label="窗口不透明度"
+                            hint="80–100，仅作用于主背景；真窗口透明需 Tauri 配置（待）"
+                            last
+                        >
                             <OpacitySlider
                                 value={prefs.windowOpacity}
                                 onChange={preferencesStore.setWindowOpacity}
@@ -59,7 +74,11 @@ export function SettingsPageNext() {
                     </Section>
 
                     <Section title="行为">
-                        <Row label="关闭按钮">
+                        <Row
+                            label="点击关闭按钮"
+                            hint="tray 模式需要 Tauri 系统托盘配套，当前选 tray 暂同 close"
+                            last
+                        >
                             <Select
                                 value={prefs.closeAction}
                                 onValueChange={(v) =>
@@ -73,10 +92,10 @@ export function SettingsPageNext() {
                         </Row>
                     </Section>
 
-                    <Section title="数据">
-                        <Row label="数据目录" hint={dataRoot}>
+                    <Section title="数据与版本">
+                        <Row label="数据根目录" hint={dataRoot}>
                             <Button
-                                variant="ghost"
+                                variant="secondary"
                                 size="sm"
                                 onClick={handleOpen}
                                 disabled={isOpeningDir}
@@ -84,10 +103,7 @@ export function SettingsPageNext() {
                                 打开
                             </Button>
                         </Row>
-                    </Section>
-
-                    <Section title="关于">
-                        <Row label="NapCatQQ Desktop">
+                        <Row label="NapCatQQ Desktop 版本" last>
                             <span className="font-mono text-[12px] text-text-tertiary">
                                 {String(version)}
                             </span>
@@ -100,7 +116,7 @@ export function SettingsPageNext() {
                             SnowLuma 全局密码 override 等设置依赖后端 IPC，下个迭代落地。
                         </p>
                     </Section>
-                </div>
+                </Card>
             </div>
         </div>
     );
@@ -113,23 +129,10 @@ export default SettingsPageNext;
 // 子组件
 // ============================================================================
 
-function Header() {
-    return (
-        <div className="flex items-baseline gap-3 pb-2">
-            <h1 className="text-[16px] font-semibold leading-none text-text">
-                偏好
-            </h1>
-            <span className="text-[12px] text-text-tertiary">客户端</span>
-        </div>
-    );
-}
-
-/// 段落：标题（半粗深灰）+ 内容垂直堆叠。无卡片、无外框、无背景色。
-/// 段落之间靠父级 gap-10 区分；标题靠字重 + 字号区分。
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-        <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-semibold leading-none text-text-secondary">
+        <section className="flex flex-col">
+            <h3 className="mb-1 text-[14px] font-semibold leading-none text-text">
                 {title}
             </h3>
             <div className="flex flex-col">{children}</div>
@@ -137,23 +140,28 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     );
 }
 
-/// 单行：左 label（13px 主色）+ 可选 hint（12px 灰）/ 右控件。
-/// 行间用 border-b 极淡灰线分隔，最后一行不画线。无 hover 态。
 function Row({
     label,
     hint,
+    last,
     children,
 }: {
     label: string;
     hint?: string;
+    last?: boolean;
     children?: React.ReactNode;
 }) {
     return (
-        <div className="flex min-h-[36px] items-center gap-3 border-b border-border-subtle py-2 last:border-b-0">
+        <div
+            className={
+                'flex min-h-[48px] items-center gap-4 py-2.5 ' +
+                (last ? '' : 'border-b border-border-subtle')
+            }
+        >
             <div className="min-w-0 flex-1">
-                <div className="text-[13px] text-text">{label}</div>
+                <div className="text-[13.5px] text-text">{label}</div>
                 {hint && (
-                    <div className="truncate text-[11.5px] text-text-tertiary" title={hint}>
+                    <div className="mt-0.5 truncate text-[12px] text-text-tertiary" title={hint}>
                         {hint}
                     </div>
                 )}
@@ -163,8 +171,6 @@ function Row({
     );
 }
 
-/// 主题 segmented：3 选 1，最低视觉重量。
-/// 不用 inset 底色（那是"控件容器"语义），用纯 ghost 按钮 + 选中态 brand。
 function ThemeSegment({
     value,
     onChange,
@@ -182,16 +188,16 @@ function ThemeSegment({
             { value: 'dark', label: '暗色', icon: <Moon size={13} /> },
         ];
     return (
-        <div className="flex h-7 items-center gap-1">
+        <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
             {items.map((it) => (
                 <button
                     key={it.value}
                     type="button"
                     onClick={() => onChange(it.value)}
                     className={
-                        'flex h-7 items-center gap-1 rounded-sm px-2 text-[12px] transition-colors ' +
+                        'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-colors ' +
                         (value === it.value
-                            ? 'text-brand'
+                            ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
                             : 'text-text-tertiary hover:text-text')
                     }
                 >
