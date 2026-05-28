@@ -523,6 +523,24 @@ impl HostProcess for ChildHostProcess {
         child.stdin = None;
         Ok(())
     }
+
+    fn take_stdout(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
+        let child = self.child.as_mut()?;
+        // 注意：take_stdout 只能调一次。spawn 时已经 .stdout(Stdio::piped())，
+        // 这里 take 走 ChildStdout，wait 阶段 wait_with_output 自然只读 stderr。
+        child
+            .stdout
+            .take()
+            .map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Send + Unpin>)
+    }
+
+    fn take_stderr(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
+        let child = self.child.as_mut()?;
+        child
+            .stderr
+            .take()
+            .map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Send + Unpin>)
+    }
 }
 
 // _Arc 已使用 prelude 引入但 Rust analyzer 可能报 unused —— 这里实际未用,删除即可

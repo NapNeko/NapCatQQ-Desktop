@@ -9,6 +9,8 @@
 
 use std::fmt;
 
+use tokio::io::AsyncRead;
+
 use crate::command::CommandOutput;
 use crate::error::HostError;
 
@@ -79,6 +81,27 @@ pub trait HostProcess: Send + Sync {
 
     /// 关闭 stdin(发送 EOF)。
     async fn close_stdin(&mut self) -> Result<(), HostError>;
+
+    /// 取走 stdout 流式句柄。返回的 `AsyncRead` 给调用方做"边运行边读"的
+    /// 长流处理（NapCat / SnowLuma 这类需要从 stdout 解析 WebUI URL 或者
+    /// 实时输出日志的场景必备）。
+    ///
+    /// 语义：
+    /// - 调用一次后流被消费，再次调用返回 `None`
+    /// - spawn 时若 stdout 没有 piped（例如 elevated 模式 stdio 被重定向），
+    ///   实装可返回 `None`
+    /// - 远端 SSH 实装暂不支持时返回 `None`，调用方应回退到 `wait()` 路径
+    ///
+    /// 默认实装返回 `None`，让现有 stub / 远端实装保持向后兼容。NativeDeployment
+    /// 调用 take_stdout 拿到 None 时会回退到一次性 wait(child) 路径。
+    fn take_stdout(&mut self) -> Option<Box<dyn AsyncRead + Send + Unpin>> {
+        None
+    }
+
+    /// 取走 stderr 流式句柄，语义同 [`Self::take_stdout`]。
+    fn take_stderr(&mut self) -> Option<Box<dyn AsyncRead + Send + Unpin>> {
+        None
+    }
 }
 
 #[cfg(test)]
