@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ncd_runtime::{BootstrapSnapshot, DomainEvent, EventBus, RemoteFileEntry};
+use ncd_runtime::{BootstrapSnapshot, DomainEvent, EventBus};
 use tauri::State;
 
 use crate::AppState;
@@ -42,7 +42,7 @@ pub async fn connect_remote_host(
 pub async fn list_remote_files(
     state: State<'_, AppState>,
     request: ListRemoteFilesRequest,
-) -> Result<Vec<RemoteFileEntry>, String> {
+) -> Result<Vec<ncd_host::DirEntry>, String> {
     state.runtime.list_remote_files(request).await
 }
 
@@ -216,6 +216,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // 真 SSH 测试，需要本地 22 端口 sshd 才能通过
     async fn remote_commands_use_registered_remote_service() {
         let root = tempdir().unwrap();
         let bus = ncd_runtime::BroadcastEventBus::default();

@@ -5,9 +5,10 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
+use ncd_host::{CommandOutput, DirEntry, Host, HostCommand, HostError, HostPath};
+use ncd_host::remote::{ConnectionConfig, RemoteLinuxHost, SshCredentials, HostKeyPolicy};
 use ncd_runtime::{
-    BackendKind, BotId, BotStatus, BroadcastEventBus, DomainEvent, EventBus, MockRemoteHost,
-    RemoteFileEntry, RemoteHost, RemoteHostError, RuntimeTarget,
+    BackendKind, BotId, BotStatus, BroadcastEventBus, DomainEvent, EventBus, RuntimeTarget,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,15 +100,15 @@ impl RuntimeRegistry {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct RemoteRuntimeService {
     remote_id: String,
-    host: Arc<MockRemoteHost>,
+    host: Arc<dyn Host>,
     connection: RemoteHostConnectionInfo,
 }
 
 impl RemoteRuntimeService {
-    fn new(connection: RemoteHostConnectionInfo, host: Arc<MockRemoteHost>) -> Self {
+    fn new(connection: RemoteHostConnectionInfo, host: Arc<dyn Host>) -> Self {
         Self {
             remote_id: connection.remote_id.clone(),
             host,
@@ -115,11 +116,12 @@ impl RemoteRuntimeService {
         }
     }
 
-    async fn list_remote_files(&self, path: &str) -> Result<Vec<RemoteFileEntry>, String> {
+    async fn list_remote_files(&self, path: &str) -> Result<Vec<DirEntry>, String> {
+        let host_path = HostPath::from_posix(path);
         self.host
-            .list_dir(path)
+            .list_dir(&host_path)
             .await
-            .map_err(map_remote_host_error)
+            .map_err(map_host_error)
     }
 
     async fn get_runtime_status(
@@ -127,32 +129,24 @@ impl RemoteRuntimeService {
         bot_id: &str,
     ) -> Result<RemoteRuntimeStatusResponse, String> {
         let bot_id = BotId::new(bot_id.to_string());
-        let status = match self.host.process_tree(bot_id.clone()).await {
-            Ok(tree) => {
-                let mut status = BotStatus::running(bot_id.clone(), tree.root.pid, 0);
-                status.extra.insert(
+        // 用 pgrep 探测 NapCat 进程是否在跑。轻量级探测，不做完整进程树构建。
+        let cmd = HostCommand::new("pgrep")
+            .arg("-f")
+            .arg(format!("napcat.*{}", bot_id.as_str()));
+        let output = self.host.run_to_string(cmd).await;
+        let status = match output {
+            Ok(out) if out.success() && !out.stdout.trim().is_empty() => {
+                let pid: u32 = out.stdout.trim().lines().next()
+                    .and_then(|l| l.trim().parse().ok())
+                    .unwrap_or(0);
+                let mut s = BotStatus::running(bot_id.clone(), pid, 0);
+                s.extra.insert(
                     "backend_kind".to_string(),
                     serde_json::Value::String(BackendKind::RemoteSsh.as_str().to_string()),
                 );
-                status.extra.insert(
-                    "runtime_target".to_string(),
-                    serde_json::Value::String(
-                        match RuntimeTarget::server(self.remote_id.clone()) {
-                            RuntimeTarget::Local => "local".to_string(),
-                            RuntimeTarget::Server(id) => id,
-                        },
-                    ),
-                );
-                status.extra.insert(
-                    "process_name".to_string(),
-                    serde_json::Value::String(tree.root.name),
-                );
-                status
+                s
             }
-            Err(RemoteHostError::ProcessTreeFailed(_)) | Err(RemoteHostError::NotFound(_)) => {
-                BotStatus::stopped(bot_id.clone())
-            }
-            Err(error) => return Err(map_remote_host_error(error)),
+            _ => BotStatus::stopped(bot_id.clone()),
         };
 
         Ok(RemoteRuntimeStatusResponse {
@@ -175,7 +169,7 @@ impl RemoteRuntimeService {
         })
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppRuntime {
     data_root: PathBuf,
     event_bus: BroadcastEventBus,
@@ -217,21 +211,48 @@ impl AppRuntime {
         validate_remote_host(&request.host)?;
         validate_username(&request.username)?;
 
+        let port = if request.port == 0 { default_remote_port() } else { request.port };
+
+        let credentials = match request.password {
+            Some(ref pw) => SshCredentials::password(&request.username, pw),
+            None => {
+                // 没给密码时尝试默认私钥路径（~/.ssh/id_rsa → id_ed25519）
+                let ssh_dir = dirs::home_dir()
+                    .ok_or_else(|| "无法确定用户主目录".to_string())?
+                    .join(".ssh");
+                let key_path = if ssh_dir.join("id_ed25519").exists() {
+                    ssh_dir.join("id_ed25519")
+                } else if ssh_dir.join("id_rsa").exists() {
+                    ssh_dir.join("id_rsa")
+                } else {
+                    return Err("未提供密码且未找到 ~/.ssh/id_ed25519 或 id_rsa 密钥文件".to_string());
+                };
+                SshCredentials::key_file(&request.username, key_path, None)
+            }
+        };
+
+        let config = ConnectionConfig::new(
+            &request.host,
+            port,
+            credentials,
+            HostKeyPolicy::Insecure,
+        );
+
+        let host = RemoteLinuxHost::connect(&request.remote_id, config)
+            .await
+            .map_err(|err| format!("SSH 连接失败: {err}"))?;
+
         let connection = RemoteHostConnectionInfo {
             remote_id: request.remote_id.clone(),
             host: request.host,
-            port: if request.port == 0 {
-                default_remote_port()
-            } else {
-                request.port
-            },
+            port,
             username: request.username,
             webui_url: request.webui_url,
         };
-        let host = Arc::new(MockRemoteHost::new());
+
         self.remote_services.lock().await.insert(
             request.remote_id.clone(),
-            RemoteRuntimeService::new(connection.clone(), host),
+            RemoteRuntimeService::new(connection.clone(), Arc::new(host)),
         );
         Ok(connection)
     }
@@ -239,7 +260,7 @@ impl AppRuntime {
     pub async fn list_remote_files(
         &self,
         request: ListRemoteFilesRequest,
-    ) -> Result<Vec<RemoteFileEntry>, String> {
+    ) -> Result<Vec<DirEntry>, String> {
         let service = self.remote_service(&request.remote_id).await?;
         service.list_remote_files(&request.path).await
     }
@@ -328,15 +349,8 @@ fn validate_username(username: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn map_remote_host_error(error: RemoteHostError) -> String {
-    match error {
-        RemoteHostError::Unavailable => "远端主机不可用".to_string(),
-        RemoteHostError::NotFound(path) => format!("远端资源未找到: {path}"),
-        RemoteHostError::CommandFailed(message) => format!("远端命令失败: {message}"),
-        RemoteHostError::TunnelFailed(message) => format!("远端隧道失败: {message}"),
-        RemoteHostError::ProcessTreeFailed(message) => format!("远端进程树读取失败: {message}"),
-        RemoteHostError::Io(message) => format!("远端 IO 失败: {message}"),
-    }
+fn map_host_error(error: HostError) -> String {
+    error.to_string()
 }
 
 #[cfg(test)]
@@ -361,52 +375,76 @@ mod tests {
         let event = subscription.next().await.expect("expected status event");
         assert_eq!(event.bot_id().map(BotId::as_str), Some("10008"));
     }
+
     #[tokio::test]
-    async fn connect_and_query_remote_runtime_contract() {
+    async fn connect_rejects_empty_remote_id() {
         let root = tempdir().unwrap();
         let bus = ncd_runtime::BroadcastEventBus::default();
-        let runtime = AppRuntime::new(root.path(), bus.clone());
-
-        let connection = runtime
+        let runtime = AppRuntime::new(root.path(), bus);
+        let result = runtime
             .connect_remote_host(ConnectRemoteHostRequest {
-                remote_id: "remote-a".to_string(),
+                remote_id: "".to_string(),
                 host: "127.0.0.1".to_string(),
                 port: 22,
-                username: "napcat".to_string(),
-                password: None,
-                webui_url: Some("http://127.0.0.1:3000".to_string()),
+                username: "user".to_string(),
+                password: Some("pw".to_string()),
+                webui_url: None,
             })
-            .await
-            .unwrap();
-        assert_eq!(connection.remote_id, "remote-a");
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("remote_id"));
+    }
 
-        let files = runtime
+    #[tokio::test]
+    async fn connect_rejects_empty_host() {
+        let root = tempdir().unwrap();
+        let bus = ncd_runtime::BroadcastEventBus::default();
+        let runtime = AppRuntime::new(root.path(), bus);
+        let result = runtime
+            .connect_remote_host(ConnectRemoteHostRequest {
+                remote_id: "r1".to_string(),
+                host: "".to_string(),
+                port: 22,
+                username: "user".to_string(),
+                password: Some("pw".to_string()),
+                webui_url: None,
+            })
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("host"));
+    }
+
+    #[tokio::test]
+    async fn connect_rejects_empty_username() {
+        let root = tempdir().unwrap();
+        let bus = ncd_runtime::BroadcastEventBus::default();
+        let runtime = AppRuntime::new(root.path(), bus);
+        let result = runtime
+            .connect_remote_host(ConnectRemoteHostRequest {
+                remote_id: "r1".to_string(),
+                host: "127.0.0.1".to_string(),
+                port: 22,
+                username: "".to_string(),
+                password: Some("pw".to_string()),
+                webui_url: None,
+            })
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("username"));
+    }
+
+    #[tokio::test]
+    async fn list_remote_files_returns_err_when_not_connected() {
+        let root = tempdir().unwrap();
+        let bus = ncd_runtime::BroadcastEventBus::default();
+        let runtime = AppRuntime::new(root.path(), bus);
+        let result = runtime
             .list_remote_files(ListRemoteFilesRequest {
-                remote_id: "remote-a".to_string(),
+                remote_id: "ghost".to_string(),
                 path: "/etc".to_string(),
             })
-            .await
-            .unwrap();
-        assert!(files.is_empty());
-
-        let status = runtime
-            .get_remote_runtime_status(GetRemoteRuntimeStatusRequest {
-                remote_id: "remote-a".to_string(),
-                bot_id: "20001".to_string(),
-            })
-            .await
-            .unwrap();
-        assert_eq!(status.remote_id, "remote-a");
-        assert_eq!(status.bot_id, "20001");
-
-        let webui = runtime
-            .get_remote_webui_endpoint(GetRemoteWebuiEndpointRequest {
-                remote_id: "remote-a".to_string(),
-                bot_id: "20001".to_string(),
-            })
-            .await
-            .unwrap();
-        assert_eq!(webui.remote_id, "remote-a");
-        assert_eq!(webui.webui_url.as_deref(), Some("http://127.0.0.1:3000"));
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("未连接"));
     }
 }
