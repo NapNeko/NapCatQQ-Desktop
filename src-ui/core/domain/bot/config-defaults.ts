@@ -51,13 +51,7 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
     if (!config.bot.name.trim()) {
         return { ok: false, reason: '实例名称不能为空！' };
     }
-    if (config.bot.backend_type === 'snowluma') {
-        const mode = config.bot.snowluma_start_mode;
-        if (mode?.mode === 'hot_start') {
-            if (!Number.isFinite(mode.attach_pid) || mode.attach_pid <= 0) {
-                return { ok: false, reason: 'SnowLuma HotStart 模式下需要选择目标 QQ.exe PID。' };
-            }
-        }
-    }
+    // SnowLuma HotStart 不再持久化 attach_pid，PID 由 backend 启动时自动按 qq_id 匹配。
+    // 如果 qq_id 缺失上面已挡掉；这里不再有额外校验。
     return { ok: true };
 }
