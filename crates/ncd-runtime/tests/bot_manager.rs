@@ -773,7 +773,11 @@ async fn batch_stop_reports_join_error_for_panicking_task() {
 // ─── 配置变更热推送 ──────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn upsert_running_bot_triggers_restart() {
+async fn upsert_running_bot_keeps_running_and_writes_config() {
+    // M6.5 行为变更：同 backend 同 flavor 的运行中保存配置不再重启 bot，
+    // 改走 WebUI 热推送。本测试用 FakeBackend 跑流程，napcat_endpoints 表里
+    // 不会有任何条目（端点表只在收到 NapCatWebuiAvailable 事件时才填），
+    // 因此热推送分支会落到 "config_saved_pending_reload"，bot 状态保持 Running。
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
@@ -793,8 +797,17 @@ async fn upsert_running_bot_triggers_restart() {
         .await
         .unwrap();
 
-    assert_eq!(snap.state, BotActorState::Stopping);
-    assert!(snap.pending_restart);
+    // bot 仍在跑，没有触发重启
+    assert_eq!(snap.state, BotActorState::Running);
+    assert!(!snap.pending_restart);
+
+    // 新配置必须已经写入持久化层
+    let cfg = manager
+        .get_bot_config(&bot_id)
+        .await
+        .unwrap()
+        .expect("config persisted");
+    assert_eq!(cfg.bot.name, "bot-updated");
 }
 
 #[tokio::test]

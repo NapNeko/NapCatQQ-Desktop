@@ -13,6 +13,7 @@ use crate::bot_config::{BackendType, BotConfig, BotConfigError};
 use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
 use crate::ids::BotId;
 use crate::kinds::BotFlavor;
+use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
@@ -110,6 +111,11 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// `NapCatWebuiAvailable` 事件时插入；`BotProcessExited` / `delete_bot`
     /// / `shutdown_all` 时移除并 `dispose`。
     login_pollers: Arc<RwLock<HashMap<BotId, NapCatLoginPoller>>>,
+    /// per-Bot NapCat WebUI 端点 (port + token) 的内存表。
+    /// NapCat 多 bot 启动时端口会自动 +1，webui.json 不能区分，必须从每个 bot
+    /// 自己的 stdout 抓 `WebUi User Panel Url`。本表的写/删时机与 `login_pollers`
+    /// 完全对齐，供配置热推送在保存配置时反查 (port, token)。
+    napcat_endpoints: NapCatEndpointTable,
     /// NapCat WebUI HTTP 客户端依赖，可注入 mock 用于测试。
     webui_client: Arc<dyn NapCatWebUiClient>,
     /// 离线通知通道依赖，可注入 mock；默认 wiring 走 `NoopOfflineNotifier`。
@@ -136,6 +142,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             event_bus: Arc::clone(&self.event_bus),
             actors: Arc::clone(&self.actors),
             login_pollers: Arc::clone(&self.login_pollers),
+            napcat_endpoints: self.napcat_endpoints.clone(),
             webui_client: Arc::clone(&self.webui_client),
             offline_notifier: Arc::clone(&self.offline_notifier),
             poller_settings: Arc::clone(&self.poller_settings),
@@ -166,6 +173,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             event_bus,
             actors: Arc::new(RwLock::new(HashMap::new())),
             login_pollers: Arc::new(RwLock::new(HashMap::new())),
+            napcat_endpoints: NapCatEndpointTable::new(),
             webui_client,
             offline_notifier,
             poller_settings,
@@ -788,12 +796,46 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             }
                         }
                     } else {
-                        // NapCat 热推送:需要 poller 持有的 port + auth 才能调
-                        // WebUI。当前 poller 没暴露这些,先只写盘不推。
-                        // TODO: 从 login_pollers 里拿 port/auth,调 set_ob11_config
-                        self.event_bus.publish(DomainEvent::bot_state_changed(
-                            current.clone(), "config_updated",
-                        ));
+                        // NapCat 热推送：endpoint 表里有 (port, token) 才能继续
+                        // （bot 已经把 WebUI 端点报到 stdout 上）。没有就只写盘
+                        // 等下次启动生效。配置 payload 直接复用 renderer 写入
+                        // onebot11_{bot}.json 的内容——NapCat WebUI
+                        // /api/OB11Config/SetConfig 期望的 schema 与该文件一致。
+                        let endpoint = self.napcat_endpoints.snapshot(&bot_id).await;
+                        let onebot_payload = self
+                            .renderer
+                            .render(&bot_id, &config)
+                            .ok()
+                            .and_then(|txn| {
+                                txn.writes
+                                    .into_iter()
+                                    .find(|w| {
+                                        w.path
+                                            .file_name()
+                                            .and_then(|n| n.to_str())
+                                            .is_some_and(|n| n.starts_with("onebot11_"))
+                                    })
+                                    .map(|w| w.payload)
+                            });
+                        match (endpoint, onebot_payload) {
+                            (Some(ep), Some(payload)) => {
+                                let reason = self
+                                    .push_napcat_hot_reload(ep, payload)
+                                    .await;
+                                self.event_bus.publish(DomainEvent::bot_state_changed(
+                                    current.clone(),
+                                    reason,
+                                ));
+                            }
+                            // 端点没拿到（bot 还没 ready）或者渲染异常 → 配置已落盘，
+                            // 等下次重启再生效。
+                            _ => {
+                                self.event_bus.publish(DomainEvent::bot_state_changed(
+                                    current.clone(),
+                                    "config_saved_pending_reload",
+                                ));
+                            }
+                        }
                     }
                     Ok(current)
                 }
@@ -1311,6 +1353,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// `restart_handle` 通过 `Arc::clone(self) as Arc<dyn RestartHandle>` 注入
     /// 利用本类型的 `impl RestartHandle for BotManager`（见文件末尾）。
     pub async fn handle_webui_available(self: &Arc<Self>, bot_id: BotId, port: u16, token: String) {
+        // 0. 先把 (port, token) 落进 endpoint 表，让保存配置时的热推送可查。
+        //    NapCat 多 bot 时 6099 会被先到的占住，后到的自动 +1，token 也是
+        //    每进程随机的，必须按 bot 隔离记忆。本步在 BotConfig 解析之前做：
+        //    即便 BotConfig 不再存在（事件晚到 / 配置已删），表里多一条孤儿
+        //    记录也无害——dispose_poller 会清掉，最坏情况是占一个 BotId 槽位。
+        self.napcat_endpoints
+            .insert(
+                bot_id.clone(),
+                NapCatEndpoint {
+                    port,
+                    token: token.clone(),
+                },
+            )
+            .await;
+
         // 1. 取 BotConfig；解析失败或不存在时静默 return（事件可能晚到）。
         let qq_id: u64 = match bot_id.as_str().parse() {
             Ok(v) => v,
@@ -1351,14 +1408,81 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         pollers.insert(bot_id, poller);
     }
 
+    /// 把一份 OneBot 配置 payload 通过 NapCat WebUI 热推送给运行中的 bot。
+    ///
+    /// 调用链：login（fetch_credential）→ check_login_status → set_ob11_config。
+    /// 任何一步失败都不阻塞保存——已经写盘了，最差就是等下次重启生效。返回
+    /// 一个 `BotStateChanged` 的 reason 字符串，让前端区分提示：
+    /// - `config_hot_reloaded`：推送成功，配置已生效。
+    /// - `config_saved_pending_login`：QQ 还没扫码，待登录后下次启动生效。
+    /// - `config_saved_pending_reload`：网络 / 401 / 业务错误，等下次重启生效。
+    async fn push_napcat_hot_reload(
+        &self,
+        endpoint: NapCatEndpoint,
+        payload: serde_json::Value,
+    ) -> &'static str {
+        let NapCatEndpoint { port, token } = endpoint;
+        let credential = match self.webui_client.fetch_credential(port, &token).await {
+            Ok(c) => c,
+            Err(err) => {
+                tracing::warn!(
+                    port,
+                    error = ?err,
+                    "napcat hot reload: fetch_credential failed; saved without push"
+                );
+                return "config_saved_pending_reload";
+            }
+        };
+        // QQ 未登录时 set_ob11_config 会返回 NotLogin；提前查一把可以让
+        // 前端拿到更准确的语义（避免把"等扫码"误显示成"推送失败"）。
+        match self.webui_client.check_login_status(port, &credential).await {
+            Ok(data) if !data.is_login => return "config_saved_pending_login",
+            Ok(_) => {}
+            Err(err) => {
+                tracing::warn!(
+                    port,
+                    error = ?err,
+                    "napcat hot reload: check_login_status failed; pushing anyway"
+                );
+            }
+        }
+        let body = match serde_json::to_string(&payload) {
+            Ok(s) => s,
+            Err(err) => {
+                tracing::warn!(error = ?err, "napcat hot reload: serialize payload failed");
+                return "config_saved_pending_reload";
+            }
+        };
+        match self
+            .webui_client
+            .set_ob11_config(port, &credential, &body)
+            .await
+        {
+            Ok(_) => "config_hot_reloaded",
+            Err(crate::napcat::webui_client::NapCatWebUiError::NotLogin) => {
+                "config_saved_pending_login"
+            }
+            Err(err) => {
+                tracing::warn!(port, error = ?err, "napcat hot reload: set_ob11_config failed");
+                "config_saved_pending_reload"
+            }
+        }
+    }
+
     /// 移除并取消指定 Bot 的 `NapCatLoginPoller`。多次调用幂等。
     /// 由 `run_napcat_login_listener` 在 `BotProcessExited` 事件到达时调用
     /// 也由 `delete_bot_internal` / `shutdown_all` 在生命周期收尾时调用。
+    /// 同步清理 `napcat_endpoints` 中对应记录，避免后续保存配置查到陈旧端口。
     pub async fn dispose_poller(&self, bot_id: &BotId) {
         let mut pollers = self.login_pollers.write().await;
         if let Some(poller) = pollers.remove(bot_id) {
             poller.dispose();
         }
+        drop(pollers);
+        // endpoint 表与 poller 生命周期严格对齐：bot 进程一旦退出，原来的
+        // (port, token) 立即作废（NapCat 重启时 token 会换、端口也可能换），
+        // 必须立刻清掉，避免后续 upsert 查到陈旧值打到一个已经死亡的端口。
+        self.napcat_endpoints.remove(bot_id).await;
     }
 
     /// 监听 `NapCatWebuiAvailable` 与 `BotProcessExited` 两路事件，分别驱动

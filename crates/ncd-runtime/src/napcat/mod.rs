@@ -7,7 +7,9 @@
 //! - [`webui_client`]:NapCat WebUI HTTP 客户端 + payload 类型
 //! - [`login_poller`]:NapCat 登录状态机轮询器
 //! - [`offline_notifier`]:Bot 下线通知接口与默认实现
+//! - [`endpoint_table`]:per-Bot WebUI 端点 (port + token) 内存表
 
+pub mod endpoint_table;
 pub mod login_poller;
 pub mod offline_notifier;
 pub mod webui_client;

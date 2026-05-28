@@ -42,6 +42,9 @@ use thiserror::Error;
 /// - [`NapCatWebUiError::Timeout`]：reqwest 超时。
 /// - [`NapCatWebUiError::Http`]：reqwest 网络层错误。
 /// - [`NapCatWebUiError::Decode`]：JSON 反序列化失败 / 字段缺失。
+/// - [`NapCatWebUiError::NotLogin`]：QQ 未登录（NapCat 业务码 -1 + message="Not Login"），
+///   `set_ob11_config` 路径专用，调用方应降级提示「保存成功，登录后下次重启生效」。
+/// - [`NapCatWebUiError::BusinessCode`]：NapCat 业务码 != 0 的其它错误。
 ///
 /// 设计决策：本枚举不实现 `From<NapCatWebUiError> for BotManagerError`
 /// —— Poller 内部消化所有错误，只在彻底放弃时把摘要发 `BotError`。
@@ -65,6 +68,14 @@ pub enum NapCatWebUiError {
     /// JSON 反序列化失败 / 字段缺失。
     #[error("napcat webui decode error: {0}")]
     Decode(String),
+    /// QQ 未登录（NapCat 业务码 -1 + message="Not Login"）。`set_ob11_config`
+    /// 在 QQ 没扫码登录时返回此错误；调用方应降级提示「保存成功，待下次启动生效」。
+    #[error("napcat webui rejected: QQ not login")]
+    NotLogin,
+    /// NapCat 业务码 != 0 的其它错误。`code` 是 NapCat 自家的业务码（通常是 -1），
+    /// `message` 是 server 返回的描述。
+    #[error("napcat webui business error (code {code}): {message}")]
+    BusinessCode { code: i64, message: String },
 }
 
 impl From<reqwest::Error> for NapCatWebUiError {
@@ -342,7 +353,26 @@ impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
         if !status.is_success() {
             return Err(NapCatWebUiError::Status(status.as_u16()));
         }
-        Ok(())
+        // NapCat 即使 HTTP 200 也可能返回业务错误：QQ 未登录时 body 是
+        // { code: -1, message: "Not Login", data: null }。这里解析 body 区分
+        // NotLogin / 其它业务错误，让调用方做差异化降级提示。
+        let payload: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| NapCatWebUiError::Decode(e.to_string()))?;
+        let code = payload.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+        if code == 0 {
+            return Ok(());
+        }
+        let message = payload
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if message.eq_ignore_ascii_case("Not Login") {
+            return Err(NapCatWebUiError::NotLogin);
+        }
+        Err(NapCatWebUiError::BusinessCode { code, message })
     }
 }
 
@@ -986,6 +1016,110 @@ mod tests {
         assert!(
             matches!(err, NapCatWebUiError::Decode(_)),
             "expected Decode(_), got {err:?}"
+        );
+    }
+
+    // -------- set_ob11_config 业务码分支 --------
+
+    #[tokio::test]
+    async fn set_ob11_config_success_with_business_code_zero() {
+        let server = MockServer::start().await;
+        let port = mock_server_port(&server);
+
+        Mock::given(method("POST"))
+            .and(path("/api/OB11Config/SetConfig"))
+            .and(header("authorization", "Bearer tok"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "code": 0,
+                "message": "success",
+                "data": null,
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = ReqwestNapCatWebUiClient::new().expect("build client");
+        client
+            .set_ob11_config(port, "tok", r#"{"any":"json"}"#)
+            .await
+            .expect("business code 0 should be Ok");
+    }
+
+    #[tokio::test]
+    async fn set_ob11_config_not_login_maps_to_dedicated_variant() {
+        let server = MockServer::start().await;
+        let port = mock_server_port(&server);
+
+        // NapCat 在 QQ 未登录时返回 HTTP 200 + body { code:-1, message:"Not Login" }。
+        Mock::given(method("POST"))
+            .and(path("/api/OB11Config/SetConfig"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "code": -1,
+                "message": "Not Login",
+                "data": null,
+            })))
+            .mount(&server)
+            .await;
+
+        let client = ReqwestNapCatWebUiClient::new().expect("build client");
+        let err = client
+            .set_ob11_config(port, "tok", r#"{}"#)
+            .await
+            .expect_err("Not Login must surface");
+        assert!(
+            matches!(err, NapCatWebUiError::NotLogin),
+            "expected NotLogin, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn set_ob11_config_other_business_error_preserves_code_and_message() {
+        let server = MockServer::start().await;
+        let port = mock_server_port(&server);
+
+        Mock::given(method("POST"))
+            .and(path("/api/OB11Config/SetConfig"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "code": -1,
+                "message": "schema invalid",
+                "data": null,
+            })))
+            .mount(&server)
+            .await;
+
+        let client = ReqwestNapCatWebUiClient::new().expect("build client");
+        let err = client
+            .set_ob11_config(port, "tok", r#"{}"#)
+            .await
+            .expect_err("non-zero business code must surface");
+        match err {
+            NapCatWebUiError::BusinessCode { code, message } => {
+                assert_eq!(code, -1);
+                assert_eq!(message, "schema invalid");
+            }
+            other => panic!("expected BusinessCode, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn set_ob11_config_401_still_maps_to_unauthorized() {
+        let server = MockServer::start().await;
+        let port = mock_server_port(&server);
+
+        Mock::given(method("POST"))
+            .and(path("/api/OB11Config/SetConfig"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let client = ReqwestNapCatWebUiClient::new().expect("build client");
+        let err = client
+            .set_ob11_config(port, "stale", r#"{}"#)
+            .await
+            .expect_err("401 must surface");
+        assert!(
+            matches!(err, NapCatWebUiError::Unauthorized(401)),
+            "expected Unauthorized(401), got {err:?}"
         );
     }
 }
