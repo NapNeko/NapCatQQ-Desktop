@@ -17,6 +17,7 @@ target/
 src-tauri/target/
 src-tauri/gen/
 **/*.rs.bk
+*.rlib
 
 ### Node / 前端 ###
 node_modules/
