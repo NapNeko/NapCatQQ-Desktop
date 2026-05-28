@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { Button } from '../../shared/ui';
 import { BotListPageNext } from './list/BotListPage.next';
 import { BotConfigPageNext } from './config/BotConfigPage.next';
-import { BotLogPage } from './log/BotLogPage';
+import { BotLogPageNext } from './log/BotLogPage.next';
 
 type View = 'list' | 'config' | 'log';
 
@@ -41,7 +41,7 @@ export function BotPageNext() {
             )}
             {view === 'log' &&
                 (selectedBotId ? (
-                    <BotLogPage botId={selectedBotId} onBack={goList} />
+                    <BotLogPageNext botId={selectedBotId} onBack={goList} />
                 ) : (
                     <div className="flex flex-col items-center gap-3 rounded-md bg-elevated p-6 ring-1 ring-border-subtle">
                         <p className="text-sm text-text-secondary">未选择要查看日志的 Bot 实例</p>
