@@ -6,15 +6,8 @@ import {
     Dropdown,
     Option,
     Text,
-    Button,
     Radio,
     RadioGroup,
-    Dialog,
-    DialogSurface,
-    DialogTitle,
-    DialogBody,
-    DialogContent,
-    DialogActions,
 } from '@fluentui/react-components';
 import { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
@@ -55,47 +48,27 @@ export const BotBasicTab: React.FC<BotBasicTabProps> = ({
         { value: 'snowluma', label: 'SnowLuma (轻量/高并发底座)' },
     ];
 
-    // SnowLuma 启动模式：从 data.snowluma_start_mode 推导。
-    // null/undefined → cold_start 默认；HotStart{ attach_pid } → hot_start。
+    // SnowLuma 启动模式：从 data.snowlumaStartMode 推导。
+    // null/undefined → cold_start 默认；HotStart 不再带字段，PID 由 backend 启动时
+    // 自动按 qq_id 匹配。这一层 UI 只决定 enum variant。
     const snowlumaMode: 'cold_start' | 'hot_start' =
-        data.snowluma_start_mode?.mode === 'hot_start' ? 'hot_start' : 'cold_start';
-    const snowlumaAttachPid: number | null =
-        data.snowluma_start_mode?.mode === 'hot_start'
-            ? data.snowluma_start_mode.attach_pid
-            : null;
+        data.snowlumaStartMode?.mode === 'hot_start' ? 'hot_start' : 'cold_start';
 
     const handleSnowLumaModeChange = (next: 'cold_start' | 'hot_start') => {
-        if (next === 'cold_start') {
-            // ColdStart：清掉 attach_pid 字段，写 null 让后端按默认（ColdStart）解析。
-            const value: SnowLumaStartMode = { mode: 'cold_start' };
-            onChange({ snowluma_start_mode: value });
-        } else {
-            // HotStart：保留旧 PID（若存在），否则用 0 占位（保存前会校验）。
-            const value: SnowLumaStartMode = {
-                mode: 'hot_start',
-                attach_pid: snowlumaAttachPid ?? 0,
-            };
-            onChange({ snowluma_start_mode: value });
-        }
+        const value: SnowLumaStartMode =
+            next === 'cold_start' ? { mode: 'cold_start' } : { mode: 'hot_start' };
+        onChange({ snowlumaStartMode: value });
     };
 
-    const handleAttachPidChange = (pidNum: number) => {
-        const value: SnowLumaStartMode = { mode: 'hot_start', attach_pid: pidNum };
-        onChange({ snowluma_start_mode: value });
-    };
-
+    // 旧 Fluent 树残留：以前 HotStart 模式让用户选 PID 这一套已经废弃。
+    // 新 schema 下 SnowLuma HotStart 由 backend 启动时按 qq_id 自动匹配 PID
+    // 没有 picker dialog。下面的状态 / hook 引用保留是为了让旧 Fluent 树仍能
+    // 编译通过；蓝绿模式切走旧树之后可以整段清掉。
     const [pickerOpen, setPickerOpen] = useState(false);
+    void pickerOpen;
+    void setPickerOpen;
     const qqPicker = useQQProcessList();
-
-    const openProcessPicker = async () => {
-        setPickerOpen(true);
-        await qqPicker.load();
-    };
-
-    const choosePid = (pid: number) => {
-        handleAttachPidChange(pid);
-        setPickerOpen(false);
-    };
+    void qqPicker;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '500px', padding: '12px 4px' }}>
@@ -150,20 +123,9 @@ export const BotBasicTab: React.FC<BotBasicTabProps> = ({
                     </RadioGroup>
 
                     {snowlumaMode === 'hot_start' && (
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                            <Field label="目标 QQ.exe PID" style={{ flex: 1 }} hint="保存前请确保该 PID 在系统进程列表中存在">
-                                <Input
-                                    type="number"
-                                    value={snowlumaAttachPid && snowlumaAttachPid > 0 ? String(snowlumaAttachPid) : ''}
-                                    onChange={(_, val) => handleAttachPidChange(Number(val.value) || 0)}
-                                    placeholder="例如: 12345"
-                                    style={{ width: '100%' }}
-                                />
-                            </Field>
-                            <Button onClick={openProcessPicker} appearance="secondary">
-                                列出 QQ 进程…
-                            </Button>
-                        </div>
+                        <Text size={200} style={{ color: 'var(--ndf-fg-secondary, #666)' }}>
+                            启动时会按 QQ 号 {data.QQID || '（未填写）'} 自动定位已登录的 QQ.exe 进程并注入；请在 Bot 启动前先在 QQ 客户端登录此账号。
+                        </Text>
                     )}
                 </div>
             )}
@@ -233,47 +195,6 @@ export const BotBasicTab: React.FC<BotBasicTabProps> = ({
                     </div>
                 )}
             </div>
-
-            <Dialog open={pickerOpen} onOpenChange={(_, val) => setPickerOpen(val.open)}>
-                <DialogSurface>
-                    <DialogBody>
-                        <DialogTitle>选择目标 QQ.exe</DialogTitle>
-                        <DialogContent>
-                            {qqPicker.isLoading && <Text>加载中…</Text>}
-                            {qqPicker.error && <Text style={{ color: 'crimson' }}>{qqPicker.error}</Text>}
-                            {!qqPicker.isLoading && !qqPicker.error && qqPicker.processes.length === 0 && (
-                                <Text>未发现正在运行的 QQ.exe，请先手动启动。</Text>
-                            )}
-                            {qqPicker.processes.length > 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '300px', overflowY: 'auto' }}>
-                                    {qqPicker.processes.map((p) => (
-                                        <Button
-                                            key={p.pid}
-                                            appearance="subtle"
-                                            style={{ justifyContent: 'flex-start', textAlign: 'left' }}
-                                            onClick={() => choosePid(p.pid)}
-                                        >
-                                            <span>
-                                                <strong>PID {p.pid}</strong> · {p.name}
-                                                {p.command_line && (
-                                                    <span style={{ color: 'var(--ndf-fg-secondary, #666)', marginLeft: 8, fontSize: 12 }}>
-                                                        {p.command_line}
-                                                    </span>
-                                                )}
-                                            </span>
-                                        </Button>
-                                    ))}
-                                </div>
-                            )}
-                        </DialogContent>
-                        <DialogActions>
-                            <Button appearance="secondary" onClick={() => setPickerOpen(false)}>
-                                取消
-                            </Button>
-                        </DialogActions>
-                    </DialogBody>
-                </DialogSurface>
-            </Dialog>
         </div>
     );
 };
