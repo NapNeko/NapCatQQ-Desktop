@@ -14,6 +14,7 @@
     --color-elevated: var(--surface-elevated);
     --color-inset: var(--surface-inset);
     --color-muted: var(--surface-muted);
+    --color-field: var(--surface-field);
     --color-sidebar: var(--surface-sidebar);
 
     --color-text: var(--text-primary);
@@ -80,6 +81,7 @@
     0% {
         transform: translateX(-100%);
     }
+
     100% {
         transform: translateX(285%);
     }
@@ -93,6 +95,7 @@
         opacity: 0;
         transform: translateX(12px) scale(0.985);
     }
+
     100% {
         opacity: 1;
         transform: translateX(0) scale(1);
@@ -161,4 +164,16 @@ samp,
 
 ::-webkit-scrollbar-thumb:hover {
     background: color-mix(in srgb, var(--neutral-900) 24%, transparent);
+}
+
+/* scrollbar-hide：隐藏滚动条但保留滚动行为；用于配置页等不需要可见滚动条的场景 */
+.scrollbar-hide {
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE / 旧 Edge */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
 }
