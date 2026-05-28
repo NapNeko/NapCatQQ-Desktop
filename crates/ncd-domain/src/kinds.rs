@@ -33,6 +33,35 @@ impl BotFlavor {
     }
 }
 
+/// bot 停止模式：优雅停止 vs 强杀。
+///
+/// 历史上定义在 ncd-runtime/src/runtime_backend.rs，2026-05-29 远端架构重构
+/// 时下沉到 ncd-domain，让 ncd-deploy 等下游 crate 可以用，避免循环依赖。
+/// ncd-runtime 仍 re-export 保持向后兼容。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StopMode {
+    /// 优雅停止：发 SIGTERM / 容器 stop signal，等子进程自己收尾。
+    Graceful,
+    /// 强杀：发 SIGKILL / 容器 kill，立即结束。
+    Force,
+}
+
+impl Default for StopMode {
+    fn default() -> Self {
+        Self::Graceful
+    }
+}
+
+impl StopMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Graceful => "graceful",
+            Self::Force => "force",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeTarget {
     Local,

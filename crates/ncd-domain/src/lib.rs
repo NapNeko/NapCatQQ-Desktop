@@ -30,7 +30,7 @@ pub use bot_config::{
 };
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use ids::{BackendId, BotId};
-pub use kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion};
+pub use kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion, StopMode};
 pub use models::{
     BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationSource, MigrationStage,
     MigrationWarning,

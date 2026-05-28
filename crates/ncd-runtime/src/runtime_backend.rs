@@ -18,18 +18,10 @@ use crate::ids::BotId;
 use crate::kinds::{BackendKind, BotFlavor, RuntimeTarget};
 use crate::remote_host::{RemoteHost, RemoteHostError, ShellCmd};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum StopMode {
-    Graceful,
-    Force,
-}
-
-impl Default for StopMode {
-    fn default() -> Self {
-        Self::Graceful
-    }
-}
+// StopMode 已下沉到 ncd-domain (2026-05-29 远端架构重构 P1.a)。
+// 本模块通过 pub use 让既有 `crate::runtime_backend::StopMode` 路径继续可用。
+// 新代码请直接 use ncd_domain::StopMode。
+pub use ncd_domain::StopMode;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProcessHandle {

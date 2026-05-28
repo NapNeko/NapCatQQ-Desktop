@@ -33,6 +33,8 @@ pub use ncd_domain::{
     TimeUnit, WebUiPollerSettings, WebsocketClientConfig, WebsocketServerConfig, WsRole,
     default_login_interval, default_snowluma_port,
 };
+// StopMode 也来自 ncd-domain 但在 runtime_backend pub use 链已 re-export，
+// 这里就不再重复导出避免 ambiguity。
 
 // 兼容老路径:`ncd_runtime::ids::BotId` / `ncd_runtime::bot_config::...` 这种调用继续可用
 pub use ncd_domain::{
