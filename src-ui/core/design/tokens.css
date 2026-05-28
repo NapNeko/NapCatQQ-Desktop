@@ -166,9 +166,14 @@
    --leading-relaxed: 1.7;
 }
 
-/* 暗色模式占位：v2 再做，先把 token 名字定下来防止以后改组件。 */
+/* Dark theme tokens：
+   - `data-theme="dark"`：手动 dark，无视系统
+   - `data-theme="light"`：手动 light，无视系统
+   - 缺失或 `data-theme="auto"`：跟随系统 prefers-color-scheme
+   两份独立 token 块，不复用，避免选择器优先级耦合。 */
+
 @media (prefers-color-scheme: dark) {
-   :root[data-theme="dark"] {
+   :root:not([data-theme="light"]) {
       --surface-canvas: #1a120d;
       --surface-card: #261b13;
       --surface-elevated: #322319;
@@ -185,10 +190,28 @@
       --border-default: rgba(255, 240, 220, 0.14);
       --border-strong: rgba(255, 240, 220, 0.22);
 
-      /* QR：暗色主题下保持高对比，前景仍取近黑、背景跟弹窗 elevated 表面
-           融为一体。摄像头扫描所需的"亮通道"由前景的高对比保证，不需要
-           背景再硬塞纯白。 */
       --qr-foreground: var(--neutral-900);
       --qr-background: var(--surface-elevated);
    }
+}
+
+:root[data-theme="dark"] {
+   --surface-canvas: #1a120d;
+   --surface-card: #261b13;
+   --surface-elevated: #322319;
+   --surface-inset: #1f150e;
+   --surface-muted: #2a1d14;
+   --surface-field: #2e2117;
+
+   --text-primary: #f4efe7;
+   --text-secondary: #c9bfb6;
+   --text-tertiary: #9a8e84;
+   --text-disabled: #5c534b;
+
+   --border-subtle: rgba(255, 240, 220, 0.08);
+   --border-default: rgba(255, 240, 220, 0.14);
+   --border-strong: rgba(255, 240, 220, 0.22);
+
+   --qr-foreground: var(--neutral-900);
+   --qr-background: var(--surface-elevated);
 }

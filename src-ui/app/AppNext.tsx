@@ -3,8 +3,8 @@
 //
 // 简单 useState 路由（5 主路由 + 1 dev showcase）。
 
-import React, { useState } from 'react';
-import { Activity, Server, Settings as SettingsIcon } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Activity, Server } from 'lucide-react';
 import './index.css';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
@@ -15,10 +15,12 @@ import { PagePlaceholder } from '../shared/components/next/PagePlaceholder';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
 import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { BotPageNext } from '../modules/bot/BotPage.next';
+import { SettingsPageNext } from '../modules/settings/SettingsPage.next';
 import { Showcase } from './Showcase';
 import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
+import { applySideEffects as applyPreferences } from '../hooks/preferences/preferencesStore';
 
 const SHOW_SHOWCASE = true;
 
@@ -40,6 +42,13 @@ export const AppNext: React.FC = () => {
     // 顶层挂一次 component-action 事件桥。路由切换不会断订阅，进度状态留在
     // 模块级 store；切走 Components 页再切回来不会丢已经在跑的安装进度。
     useComponentActionEventBridge();
+
+    // 启动时 apply 一次客户端偏好（主题 / 窗口透明度等）。preferencesStore
+    // 已经从 localStorage 加载初始值，这里只是把它落到 DOM。后续通过
+    // store update 会自动触发 applySideEffects，不需要重复挂监听。
+    useEffect(() => {
+        applyPreferences();
+    }, []);
 
     // 全局 InfoBar：所有页面 / hook / service 通过 useGlobalInfoBars().push 或
     // pushInfoBar() 推条目，这里是整个 App 唯一的渲染处。模块级 store 跟组件
@@ -126,19 +135,7 @@ const RouteOutlet: React.FC<{ route: AppRoute }> = ({ route }) => {
                 />
             );
         case 'settings':
-            return (
-                <PagePlaceholder
-                    title="Settings"
-                    icon={SettingsIcon}
-                    description="客户端偏好 / 系统环境 / 数据目录。"
-                    pendingItems={[
-                        '主题切换（暖粉浅色 / 暖夜暗色）',
-                        '资源监视采样间隔',
-                        'mascot 显示开关',
-                        '关于 / 版本信息',
-                    ]}
-                />
-            );
+            return <SettingsPageNext />;
         case 'showcase':
             return <Showcase />;
         default: {

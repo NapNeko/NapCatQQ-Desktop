@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../../shared/ui';
 import { Mascot } from '../../shared/components/next/Mascot';
+import { usePreferences } from '../../hooks/preferences/preferencesStore';
 import logoPng from '../../assets/logo.png';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { useResourceMonitor } from '../../hooks/diagnostics/useResourceMonitor';
@@ -102,33 +103,39 @@ export const BootstrapPanelNext: React.FC = () => {
 
 // ─── HelloCard ───────────────────────────────────────────────────────────
 
-const HelloCard: React.FC = () => (
-    <Card variant="hero" padding="lg" className="relative overflow-visible">
-        <div className="max-w-[300px] pr-2 sm:pr-0">
-            <h1 className="font-display text-[36px] font-extrabold leading-none text-brand">
-                Hello !!
-            </h1>
-            <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">
-                欢迎回到主页 NapCatQQ Desktop 帮你高效管理多个 QQ 机器人实例。
-            </p>
-            <div className="mt-4 inline-flex items-center gap-2 text-[13.5px] text-brand">
-                <ThumbsUp size={14} strokeWidth={2} className="shrink-0" />
-                <span>如果你喜欢，请去 GitHub 给个 Star</span>
+const HelloCard: React.FC = () => {
+    const showMascot = usePreferences().showMascot;
+    return (
+        <Card variant="hero" padding="lg" className="relative overflow-visible">
+            <div className="max-w-[300px] pr-2 sm:pr-0">
+                <h1 className="font-display text-[36px] font-extrabold leading-none text-brand">
+                    Hello !!
+                </h1>
+                <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">
+                    欢迎回到主页 NapCatQQ Desktop 帮你高效管理多个 QQ 机器人实例。
+                </p>
+                <div className="mt-4 inline-flex items-center gap-2 text-[13.5px] text-brand">
+                    <ThumbsUp size={14} strokeWidth={2} className="shrink-0" />
+                    <span>如果你喜欢，请去 GitHub 给个 Star</span>
+                </div>
             </div>
-        </div>
 
-        {/* mascot：bottom-0 贴卡底，头从卡顶溢出 ~32px。
-            主题色通过 Mascot 组件运行时替换 SVG 衣服色。
-            < md 隐藏避免压文字。 */}
-        <div className="pointer-events-none absolute -top-8 right-2 hidden md:block lg:right-6">
-            <Mascot
-                primaryColor="var(--brand-500)"
-                secondaryColor="var(--brand-700)"
-                className="h-[200px] w-[133px] drop-shadow-md [&>svg]:h-full [&>svg]:w-full"
-            />
-        </div>
-    </Card>
-);
+            {/* mascot：bottom-0 贴卡底，头从卡顶溢出 ~32px。
+                主题色通过 Mascot 组件运行时替换 SVG 衣服色。
+                < md 隐藏避免压文字。
+                设置页 prefs.showMascot 关闭后整块隐藏。 */}
+            {showMascot && (
+                <div className="pointer-events-none absolute -top-8 right-2 hidden md:block lg:right-6">
+                    <Mascot
+                        primaryColor="var(--brand-500)"
+                        secondaryColor="var(--brand-700)"
+                        className="h-[200px] w-[133px] drop-shadow-md [&>svg]:h-full [&>svg]:w-full"
+                    />
+                </div>
+            )}
+        </Card>
+    );
+};
 
 // ─── RemoteSummary 卡 ────────────────────────────────────────────────────
 //
