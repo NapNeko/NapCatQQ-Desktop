@@ -172,8 +172,8 @@ function Toolbar({
     hasVisible: boolean;
 }) {
     return (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-elevated px-2 py-1.5 ring-1 ring-border-subtle">
-            {/* 搜索框 */}
+        <div className="flex flex-wrap items-center gap-1 border-b border-border-subtle pb-2">
+            {/* 搜索框：弱化视觉，无背景无边框，hover/focus 才浮起 */}
             <div className="relative min-w-[200px] flex-1">
                 <Search
                     size={13}
@@ -183,20 +183,20 @@ function Toolbar({
                     value={query}
                     onChange={(e) => onQuery(e.target.value)}
                     placeholder="搜索关键字"
-                    className="h-7 w-full rounded-sm bg-field pl-7 pr-2 text-[12px] text-text outline-none ring-1 ring-border-subtle placeholder:text-text-tertiary focus:ring-brand"
+                    className="h-7 w-full bg-transparent pl-7 pr-2 text-[12px] text-text outline-none transition-colors placeholder:text-text-tertiary hover:bg-inset/60 focus:bg-inset"
                 />
             </div>
-            {/* 级别筛选 */}
-            <div className="flex h-7 items-center gap-0.5 rounded-sm bg-inset p-0.5">
+            {/* 级别筛选：单一胶囊条，inset 底色，active 项高亮 */}
+            <div className="flex h-7 items-center gap-0.5 bg-inset/60 p-0.5">
                 {LEVEL_FILTERS.map((f) => (
                     <button
                         key={f.value}
                         type="button"
                         onClick={() => onLevelFilter(f.value)}
                         className={
-                            'h-6 rounded-sm px-2 text-[11.5px] font-medium leading-6 transition-colors ' +
+                            'h-6 px-2 text-[11.5px] font-medium leading-6 transition-colors ' +
                             (levelFilter === f.value
-                                ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.05)]'
+                                ? 'bg-surface text-text'
                                 : 'text-text-tertiary hover:text-text')
                         }
                     >
@@ -268,7 +268,7 @@ const LogViewport = forwardRef<
     return (
         <div
             ref={ref}
-            className="min-h-0 flex-1 overflow-auto rounded-md bg-inset font-mono text-[12px] leading-[18px] ring-1 ring-border-subtle"
+            className="min-h-0 flex-1 overflow-auto bg-inset font-mono text-[12px] leading-[18px]"
             style={{ fontFamily: 'var(--font-mono)' }}
         >
             <div className="py-1">
@@ -284,7 +284,7 @@ function LogLine({ entry }: { entry: LogEntry }) {
     return (
         <div className="group flex h-[20px] items-center gap-2 px-2 hover:bg-elevated">
             <span
-                className="h-[12px] w-[3px] shrink-0 rounded-[1px]"
+                className="h-[12px] w-[3px] shrink-0"
                 style={{ background: levelBarColor(entry.level) }}
             />
             <span className="w-[58px] shrink-0 select-none text-[11px] tabular-nums text-text-tertiary">
@@ -375,7 +375,7 @@ function EmptyState({
     icon?: React.ReactNode;
 }) {
     return (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-md bg-inset/50 p-8 text-center text-text-tertiary ring-1 ring-border-subtle">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-inset/50 p-8 text-center text-text-tertiary">
             {icon}
             <p className="text-[13px] font-semibold text-text-secondary">{title}</p>
             <p className="text-[12px]">{body}</p>
