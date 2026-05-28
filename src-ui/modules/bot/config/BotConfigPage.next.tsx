@@ -45,6 +45,7 @@ import {
     createDefaultBotConfig,
     validateBotConfig,
 } from '../../../core/domain/bot/config-defaults';
+import { describeSaveResult } from '../../../core/domain/bot/save-result';
 import { botService } from '../../../core/services/bot.service';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
 import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
@@ -93,11 +94,12 @@ export function BotConfigPageNext({ botId, onBack }: BotConfigPageNextProps) {
         remove,
         isDeleting,
     } = useBotConfig(botId, {
-        onSaved: (savedBotId) => {
+        onSaved: (savedBotId, reason) => {
+            const desc = describeSaveResult(reason, savedBotId);
             pushInfoBar({
-                tone: 'success',
-                title: '配置已保存',
-                content: `Bot ${savedBotId} 的配置已下发并热生效`,
+                tone: desc.tone,
+                title: desc.title,
+                content: desc.content,
                 autoDismissMs: 3000,
             });
             // 同步 pristine 让 dirty 重置；500ms 后回列表（让用户看到反馈）
