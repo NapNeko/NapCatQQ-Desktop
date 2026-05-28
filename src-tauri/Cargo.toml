@@ -28,6 +28,7 @@ netstat2 = "0.9"
 tauri-build = { version = "2", features = [] }
 
 [dev-dependencies]
+async-trait = "0.1"
 tempfile = "3"
 ncd-test-support = { path = "../crates/ncd-test-support" }
 

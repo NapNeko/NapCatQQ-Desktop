@@ -8,8 +8,7 @@
 //!
 //! 2. 新轨 Deployment trait（[`deployment::Deployment`]）：bot 部署形态的
 //!    统一抽象，把"在哪跑（Host）"和"怎么跑（Native / Docker / External）"
-//!    解耦。Component 沦为 NativeDeployment 的实现细节。这一轨用于把
-//!    LocalRuntimeBackend / RemoteRuntimeBackend 收敛成统一接口。
+//!    解耦。Component 沦为 NativeDeployment 的实现细节。
 
 pub mod deployment;
 pub mod deployments;

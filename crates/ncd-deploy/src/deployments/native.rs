@@ -83,7 +83,7 @@ struct ManagedProcess {
     started_at: u64,
 }
 
-/// 内存日志环形缓冲，上限 10_000 行（与 legacy LocalRuntimeBackend 对齐）。
+/// 内存日志环形缓冲，上限 10_000 行。
 #[derive(Debug, Default)]
 struct RuntimeLogBuffer {
     lines: VecDeque<String>,
@@ -175,8 +175,7 @@ impl std::fmt::Debug for NativeDeployment {
 // 这几段 helper 行为与上游 runtime_backend 中的同名函数一致。
 // 之所以再写一份不复用：
 // - ncd-deploy 不能反向依赖上游 crate；
-// - 旧版 LocalRuntimeBackend 移除后这套实现的归宿就是这里，
-//   后续再考虑下沉到 ncd-host 公共 utils。
+// - 后续再考虑下沉到 ncd-host 公共 utils。
 // ============================================================
 
 /// 按 GBK / UTF-8 解码 NapCat 子进程的一行原始字节，并清洗 ANSI 转义。
@@ -658,7 +657,7 @@ impl NativeDeployment {
     }
 }
 
-// 兼容老 LocalRuntimeBackend 的字段类型导出（环境变量 BTreeMap 用）。
+// 兼容环境变量 BTreeMap 类型导出。
 #[doc(hidden)]
 pub type NativeEnv = BTreeMap<String, String>;
 

@@ -64,8 +64,8 @@ pub use remote_host::{
     RemoteHostError, RemoteInstallInfo, ShellCmd, TunnelHandle, TunnelSpec,
 };
 pub use runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LocalRuntimeBackend,
-    LogSnapshot, ProcessHandle, RemoteRuntimeBackend, StopMode, TailOpts,
+    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot,
+    ProcessHandle, StopMode, TailOpts,
 };
 pub use runtime_launch_plan::{
     FileSystemRuntimeLaunchPlanner, NapCatLaunchPlan, RuntimeLaunchPlan, RuntimeLaunchPlanError,

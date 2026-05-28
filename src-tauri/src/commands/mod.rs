@@ -103,9 +103,47 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ncd_runtime::ConfigStore;
+    use async_trait::async_trait;
+    use ncd_runtime::{
+        BackendKind, BotBackend, BotBackendError, BotFlavor, BotRuntimeConfig, BotStartCtx,
+        BotStatus, ConfigStore, LogSnapshot, StopMode, TailOpts,
+    };
     use std::sync::Arc;
     use tempfile::tempdir;
+
+    struct FakeBackend;
+
+    #[async_trait]
+    impl BotBackend for FakeBackend {
+        fn id(&self) -> &ncd_runtime::BotId {
+            static ID: std::sync::OnceLock<ncd_runtime::BotId> = std::sync::OnceLock::new();
+            ID.get_or_init(|| ncd_runtime::BotId::new("fake-backend"))
+        }
+        fn kind(&self) -> BackendKind {
+            BackendKind::Local
+        }
+        fn flavor(&self) -> BotFlavor {
+            BotFlavor::NapCat
+        }
+        async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+            Ok(BotStatus::running(ctx.config.bot_id.clone(), 1, 1))
+        }
+        async fn stop(&self, _bot_id: ncd_runtime::BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+            Ok(())
+        }
+        async fn status(&self, bot_id: ncd_runtime::BotId) -> Result<BotStatus, BotBackendError> {
+            Ok(BotStatus::stopped(bot_id))
+        }
+        async fn read_config(&self, bot_id: ncd_runtime::BotId) -> Result<BotRuntimeConfig, BotBackendError> {
+            Err(BotBackendError::ConfigNotFound(bot_id))
+        }
+        async fn write_config(&self, _bot_id: ncd_runtime::BotId, _cfg: &BotRuntimeConfig) -> Result<(), BotBackendError> {
+            Ok(())
+        }
+        async fn tail_log(&self, _bot_id: ncd_runtime::BotId, _opts: TailOpts) -> Result<LogSnapshot, BotBackendError> {
+            Ok(LogSnapshot { lines: Vec::new(), total_lines: 0 })
+        }
+    }
 
     fn make_test_state(root: &std::path::Path) -> (AppState, ncd_runtime::BroadcastEventBus) {
         let bus = ncd_runtime::BroadcastEventBus::default();
@@ -121,7 +159,7 @@ mod tests {
             store.config_dir(),
             store.config_dir(),
         ));
-        let backend = Arc::new(ncd_runtime::LocalRuntimeBackend::new(root, "test-local"));
+        let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
         let launch_planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
             root.join("runtime"),
         ));
