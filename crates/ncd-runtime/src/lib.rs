@@ -12,6 +12,7 @@ pub mod migration;
 pub mod napcat;
 pub mod path_probe_impl;
 pub mod release;
+pub mod native_deployment_adapter;
 pub mod remote_host;
 pub mod runtime_backend;
 pub mod runtime_launch_plan;
@@ -69,6 +70,9 @@ pub use runtime_backend::{
 pub use runtime_launch_plan::{
     FileSystemRuntimeLaunchPlanner, NapCatLaunchPlan, RuntimeLaunchPlan, RuntimeLaunchPlanError,
     RuntimeLaunchPlanner, SnowLumaLaunchPlan, build_napcat_launch_plan_with_qq_install_path,
+};
+pub use native_deployment_adapter::{
+    EventBusSink, NativeDeploymentBackend, RuntimeLaunchPlannerAdapter,
 };
 pub use secret_store_impl::SecretStoreImpl;
 pub use snowluma::{

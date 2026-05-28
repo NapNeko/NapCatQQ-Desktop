@@ -15,11 +15,15 @@ async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs", "io-util", "process"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
 ts-rs = { version = "10", features = ["serde-compat"] }
 
+[target.'cfg(windows)'.dependencies]
+encoding_rs = "0.8"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
+async-trait = "0.1"
 bytes = "1"

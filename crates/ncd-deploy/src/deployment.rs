@@ -10,7 +10,7 @@
 //! docker compose"。组合不合法时由 [`Deployment::supports`] 静态判定，让 UI
 //! 在用户连进去之前就能区分能不能选。
 //!
-//! 详见 .kiro/REMOTE_REFACTOR_PLAN.md §3。
+//! 详见仓库内远端架构重构开发文档。
 
 use async_trait::async_trait;
 use ncd_domain::{BotConfig, BotFlavor, BotId, StopMode};
@@ -130,6 +130,43 @@ pub struct NullProgressSink;
 impl DeploymentProgressSink for NullProgressSink {
     fn report(&self, _stage: &str, _message: &str, _percent: u8) {}
     fn log(&self, _line: &str) {}
+}
+
+// ============================================================
+// NativeLaunchTranslator：把 BotConfig 翻译成原生进程启动命令
+// ============================================================
+
+/// 原生进程启动命令——NativeDeployment 真正用得上的字段。
+///
+/// 调用方把 `BotConfig` 喂给 `NativeLaunchTranslator`，
+/// 拿到一个 `NativeLaunchCommand`，然后 NativeDeployment 用 `host.spawn` 起进程。
+///
+/// 字段刻意比 `BotRuntimeConfig` 简化：丢掉 config_path / log_path / runtime_target
+/// 这些 spawn 不直接消费的元数据，只保留"起进程要敲的命令 + 工作目录 + 环境变量"
+/// 三件套。这样：
+/// - 跟 BotRuntimeConfig 解耦
+/// - Docker / External 部署不需要这个结构
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeLaunchCommand {
+    pub program: String,
+    pub args: Vec<String>,
+    /// 工作目录。为 None 时由 host 决定（一般继承当前进程）。
+    pub working_dir: Option<std::path::PathBuf>,
+    /// 环境变量。BTreeMap 保证字典序，方便日志可重现。
+    pub environment: std::collections::BTreeMap<String, String>,
+}
+
+/// NativeLaunchTranslator：把用户配置翻译成原生进程启动命令。
+///
+/// 实装住在调用方那边，ncd-deploy 这边只看到 trait object。
+/// 这样避免循环依赖，每种 Deployment 形态又能自带自己的翻译能力。
+#[async_trait]
+pub trait NativeLaunchTranslator: Send + Sync {
+    /// 把用户配置翻译成原生进程启动命令。
+    async fn translate(
+        &self,
+        config: &BotConfig,
+    ) -> Result<NativeLaunchCommand, DeploymentError>;
 }
 
 /// 部署形态的统一接口。

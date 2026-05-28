@@ -2855,6 +2855,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "encoding_rs",
  "ncd-component",
  "ncd-domain",
  "ncd-host",
@@ -2930,7 +2931,9 @@ dependencies = [
  "hex",
  "keyring",
  "ncd-component",
+ "ncd-deploy",
  "ncd-domain",
+ "ncd-host",
  "ncd-test-support",
  "ncd-traits",
  "netstat2",

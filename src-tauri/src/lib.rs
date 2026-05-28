@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use ncd_runtime::{
     BootstrapSnapshot, BotManager, BroadcastEventBus, ConfigStore, DispatchRenderer, EventBus,
-    EventFilter, LocalBotConfigRepo, LocalConfigStore, LocalRuntimeBackend, NoopOfflineNotifier,
+    EventFilter, LocalBotConfigRepo, LocalConfigStore, NoopOfflineNotifier,
     ReqwestNapCatWebUiClient, SecretStoreImpl, WebUiPollerSettings,
 };
 use tauri::Emitter;
@@ -48,17 +48,31 @@ pub fn run() {
         data_root.join("runtime").join("NapCatQQ").join("config"),
         data_root.join("runtime").join("SnowLuma").join("config"),
     ));
-    let bot_backend = Arc::new(
-        LocalRuntimeBackend::new(&data_root, "bot-manager-local")
-            .with_event_bus(Arc::new(event_bus.clone())),
-    );
     let launch_planner = Arc::new(
         ncd_runtime::FileSystemRuntimeLaunchPlanner::new(data_root.join("runtime"))
-            // SnowLuma daemon 装在 `<data_root>/runtime/SnowLuma/`，与 NapCat
-            // 的 `<data_root>/runtime/` 严格分离。注意目录名大小写：installer 写的是 `SnowLuma`。
             .with_snowluma_runtime_root(data_root.join("runtime").join("SnowLuma"))
             .with_snowluma_data_root(data_root.join("snowluma")),
     );
+    // NativeDeployment 替代旧 LocalRuntimeBackend：通过适配器壳对外仍是 BotBackend。
+    let local_host: Arc<dyn ncd_host::Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
+    let event_sink: Arc<dyn ncd_deploy::NativeRuntimeEventSink> =
+        Arc::new(ncd_runtime::EventBusSink::new(Arc::new(event_bus.clone())));
+    let translator: Arc<dyn ncd_deploy::NativeLaunchTranslator> =
+        Arc::new(ncd_runtime::RuntimeLaunchPlannerAdapter::new(
+            launch_planner.clone() as Arc<dyn ncd_runtime::RuntimeLaunchPlanner>,
+        ));
+    let native_deployment = Arc::new(ncd_deploy::NativeDeployment::new(
+        translator,
+        event_sink,
+        Some(data_root.join("runtime").join("log")),
+    ));
+    let bot_backend: Arc<dyn ncd_runtime::BotBackend> =
+        Arc::new(ncd_runtime::NativeDeploymentBackend::new(
+            native_deployment,
+            local_host,
+            "bot-manager-local",
+            ncd_runtime::BotFlavor::NapCat,
+        ));
     // NapCat WebUI 登录轮询所需依赖（design.md §15.1）。
     // - `ReqwestNapCatWebUiClient` 走 rustls-tls，仅访问 127.0.0.1。
     // - `NoopOfflineNotifier` 是占位实现，真实通道由后续 Spec 接入。
