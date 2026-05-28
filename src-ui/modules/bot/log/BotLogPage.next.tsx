@@ -86,26 +86,32 @@ export function BotLogPageNext({ botId, onBack }: BotLogPageNextProps) {
         logs.length === 0 ? 'no-logs' : filtered.length === 0 ? 'no-match' : 'has';
 
     return (
-        <div className="flex h-full min-h-0 flex-col gap-2">
+        <div className="flex h-full min-h-0 flex-col gap-3">
             <Header
                 botId={botId}
                 onBack={onBack}
                 total={logs.length}
                 shown={filtered.length}
             />
-            <Toolbar
-                query={query}
-                onQuery={setQuery}
-                levelFilter={levelFilter}
-                onLevelFilter={setLevelFilter}
-                autoScroll={autoScroll}
-                onToggleAutoScroll={() => setAutoScroll((p) => !p)}
-                onClear={clear}
-                onCopy={onCopy}
-                hasLogs={logs.length > 0}
-                hasVisible={filtered.length > 0}
-            />
-            <LogViewport ref={containerRef} entries={filtered} emptyKind={emptyKind} />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md ring-1 ring-border-subtle">
+                <Toolbar
+                    query={query}
+                    onQuery={setQuery}
+                    levelFilter={levelFilter}
+                    onLevelFilter={setLevelFilter}
+                    autoScroll={autoScroll}
+                    onToggleAutoScroll={() => setAutoScroll((p) => !p)}
+                    onClear={clear}
+                    onCopy={onCopy}
+                    hasLogs={logs.length > 0}
+                    hasVisible={filtered.length > 0}
+                />
+                <LogViewport
+                    ref={containerRef}
+                    entries={filtered}
+                    emptyKind={emptyKind}
+                />
+            </div>
         </div>
     );
 }
@@ -172,8 +178,8 @@ function Toolbar({
     hasVisible: boolean;
 }) {
     return (
-        <div className="flex flex-wrap items-center gap-1 border-b border-border-subtle pb-2">
-            {/* 搜索框：弱化视觉，无背景无边框，hover/focus 才浮起 */}
+        <div className="flex flex-wrap items-center gap-1 border-b border-border-subtle bg-elevated/40 px-2 py-1.5">
+            {/* 搜索框：弱化视觉，hover/focus 才显示 inset 底色 */}
             <div className="relative min-w-[200px] flex-1">
                 <Search
                     size={13}
@@ -183,20 +189,20 @@ function Toolbar({
                     value={query}
                     onChange={(e) => onQuery(e.target.value)}
                     placeholder="搜索关键字"
-                    className="h-7 w-full bg-transparent pl-7 pr-2 text-[12px] text-text outline-none transition-colors placeholder:text-text-tertiary hover:bg-inset/60 focus:bg-inset"
+                    className="h-7 w-full rounded-sm bg-transparent pl-7 pr-2 text-[12px] text-text outline-none transition-colors placeholder:text-text-tertiary hover:bg-inset/60 focus:bg-inset"
                 />
             </div>
-            {/* 级别筛选：单一胶囊条，inset 底色，active 项高亮 */}
-            <div className="flex h-7 items-center gap-0.5 bg-inset/60 p-0.5">
+            {/* 级别筛选：单一胶囊条 */}
+            <div className="flex h-7 items-center gap-0.5 rounded-md bg-inset/60 p-0.5">
                 {LEVEL_FILTERS.map((f) => (
                     <button
                         key={f.value}
                         type="button"
                         onClick={() => onLevelFilter(f.value)}
                         className={
-                            'h-6 px-2 text-[11.5px] font-medium leading-6 transition-colors ' +
+                            'h-6 rounded-sm px-2 text-[11.5px] font-medium leading-6 transition-colors ' +
                             (levelFilter === f.value
-                                ? 'bg-surface text-text'
+                                ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
                                 : 'text-text-tertiary hover:text-text')
                         }
                     >
