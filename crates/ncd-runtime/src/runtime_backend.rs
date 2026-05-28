@@ -643,6 +643,13 @@ impl BotBackend for LocalRuntimeBackend {
         let stderr = child.stderr.take();
         let bot_id = cfg.bot_id.clone();
 
+        // 启动新进程前清掉这个 bot 旧的内存日志，让 BotLogPage 一开页拿到的是
+        // 当前实例的输出，不会混入上一轮 crash 的历史行。
+        {
+            let mut guard = self.logs.lock().await;
+            guard.remove(&bot_id);
+        }
+
         if let Some(stream) = stdout {
             self.spawn_log_reader(bot_id.clone(), stream, "stdout");
         }
@@ -819,12 +826,23 @@ impl LocalRuntimeBackend {
     /// 监听子进程退出。退出后从 processes 中移除记录，并广播 `BotProcessExited`。
     fn spawn_exit_watcher(&self, bot_id: BotId, mut child: tokio::process::Child) {
         let processes = Arc::clone(&self.processes);
+        let logs = Arc::clone(&self.logs);
         let event_bus = self.event_bus.clone();
 
         tokio::spawn(async move {
             let result = child.wait().await;
             {
                 let mut guard = processes.lock().await;
+                guard.remove(&bot_id);
+            }
+            // 进程退出后清空内存日志缓冲，避免 bot 重启后老日志残留在 UI 上。
+            // 写盘的 .log 文件不动 —— 那是用户手动追溯崩溃时用的归档，需要保留。
+            // BotLogPage 走 tail_log 拉历史时，如果内存里没有就从磁盘文件加载，
+            // 重启后第一次拉到的会是上一轮残留的尾部，但上面 spawn_log_reader
+            // 同时会在新进程启动后立刻写新行，UI 上就是旧尾部 + 新行，既保留崩前
+            // 上下文又不会重复增量。
+            {
+                let mut guard = logs.lock().await;
                 guard.remove(&bot_id);
             }
             if let Some(bus) = event_bus.as_ref() {

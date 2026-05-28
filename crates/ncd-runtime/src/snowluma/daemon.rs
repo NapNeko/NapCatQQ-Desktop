@@ -145,7 +145,10 @@ pub struct SnowLumaDaemon {
 const LOG_CHANNEL_CAPACITY: usize = 10_000;
 
 /// 启动期 last_error 拼接的最近日志行数。
-const RECENT_LOG_CAPACITY: usize = 50;
+/// daemon stdout 由所有 SL bot 共享；当 BotLogPage 开页时也是从这里拿初始
+/// 历史，所以这个容量等于 SL bot 看到的最大历史窗口。设到 1000 行能覆盖一次
+/// 启动到登录 + 几次配置 hot reload 的输出，再多对内存压力开始显现，按需调。
+const RECENT_LOG_CAPACITY: usize = 1000;
 
 /// `wait_ready` 单轮总超时。
 const WAIT_READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -185,8 +188,9 @@ impl SnowLumaDaemon {
     }
 
     /// 取最近的日志行快照（按时间顺序），用于把 node 启动失败前的 stderr 拼进
-    /// 用户可见的错误消息。
-    fn snapshot_recent_log(&self) -> Vec<String> {
+    /// 用户可见的错误消息。也供 BotLogPage 一开页时拉历史用。容量上限是
+    /// [`RECENT_LOG_CAPACITY`]（1000 行），按时间顺序返回。
+    pub fn snapshot_recent_log(&self) -> Vec<String> {
         match self.recent_log.lock() {
             Ok(buf) => buf.iter().cloned().collect(),
             Err(_) => Vec::new(),

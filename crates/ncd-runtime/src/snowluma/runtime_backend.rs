@@ -443,12 +443,22 @@ impl BotBackend for SnowLumaRuntimeBackend {
         _bot_id: BotId,
         opts: TailOpts,
     ) -> Result<LogSnapshot, BotBackendError> {
-        // SnowLuma daemon stdout 由所有 SL bot 共享，per-Bot tail_log 当前返回空快照
-        // 真实日志通过 daemon.subscribe_logs / DomainEvent::SnowLumaDaemonLog 暴露。
-        let _ = opts;
+        // SnowLuma daemon stdout 是所有 SL bot 共享的物理事实，没有 per-bot 的
+        // stdout 通道。BotLogPage 一开页拿到的历史日志，从 daemon 自己的
+        // recent_log ring buffer 转过来。daemon 本身就用这份 buffer 给启动失败
+        // 的 last_error 拼上下文，复用即可，不需要再额外维护一份镜像。
+        // 实时增量仍然走 DomainEvent::SnowLumaDaemonLog，前端 useBotLogStream
+        // 已经在订阅。
+        let lines = self.daemon.snapshot_recent_log();
+        let total = lines.len();
+        let limited = if opts.lines > 0 && lines.len() > opts.lines {
+            lines[lines.len() - opts.lines..].to_vec()
+        } else {
+            lines
+        };
         Ok(LogSnapshot {
-            lines: Vec::new(),
-            total_lines: 0,
+            lines: limited,
+            total_lines: total,
         })
     }
 }
