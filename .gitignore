@@ -33,8 +33,11 @@ docs/tauri_reference_projects.md
 docs/v3/
 
 ### 日志和临时文件 ###
-log/
-logs/
+# 仅忽略运行时 / 根级日志目录，避免误伤 src-ui/modules/bot/log/ 这种源码目录。
+/log/
+/logs/
+**/runtime/log/
+**/runtime/logs/
 *.log
 tmp/
 *.tmp
