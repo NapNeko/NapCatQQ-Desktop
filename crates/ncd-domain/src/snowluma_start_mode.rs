@@ -14,12 +14,19 @@ use ts_rs::TS;
 /// - [`SnowLumaStartMode::ColdStart`]：用户希望 backend 全权 spawn QQ.exe
 /// 随后由 SnowLuma daemon 注入。stop 时由 backend 负责终结 QQ.exe 进程树。
 /// - [`SnowLumaStartMode::HotStart`]：用户已自己启动了 QQ.exe（典型场景：
-/// 想保留人手登录得到的会话），backend 仅 attach 到该 PID；stop 时绝不
-/// kill 用户的 QQ.exe 进程，只是 unload daemon 的 hook。
+/// 想保留人手登录得到的会话），backend 启动时按 `BotConfig.bot.qq_id` 扫一遍
+/// 当前所有主 QQ.exe 进程，找出登录账号 == qq_id 的那个 PID 注入；stop 时
+/// 绝不 kill 用户的 QQ.exe，只是 unload daemon 的 hook。
+///
+/// 设计约定：HotStart 不再持久化 `attach_pid`。原因：
+/// - 进程重启后 PID 一定变化，落盘的 PID 永远是过期值
+/// - 用户在 UI 选 PID 是技术细节泄漏；qq_id 已经是配置层的强约束
+/// - 后端在每次 start 时基于 qq_id + 运行时探测自动匹配
+///
 /// 序列化形态（`#[serde(tag = "mode", rename_all = "snake_case")]`）：
 /// ```json
 /// { "mode": "cold_start" }
-/// { "mode": "hot_start", "attach_pid": 12345 }
+/// { "mode": "hot_start" }
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "mode", rename_all = "snake_case")]
@@ -27,23 +34,11 @@ use ts_rs::TS;
 pub enum SnowLumaStartMode {
     /// 由 backend 负责 spawn QQ.exe（cold start 路径）。
     ColdStart,
-    /// 由用户自行启动 QQ.exe，backend 仅 attach 到给定 PID（hot start 路径）。
-    HotStart {
-        /// 用户已启动的 QQ.exe 进程 PID。
-        attach_pid: u32,
-    },
+    /// 由用户自行启动 QQ.exe，backend 启动时按 qq_id 自动匹配 PID 注入（hot start 路径）。
+    HotStart,
 }
 
 impl SnowLumaStartMode {
-    /// 返回 hot start 携带的 `attach_pid`，cold start 返回 `None`。
-    /// 用于 backend Phase A 决策与日志打印。
-    pub fn attach_pid(&self) -> Option<u32> {
-        match self {
-            SnowLumaStartMode::ColdStart => None,
-            SnowLumaStartMode::HotStart { attach_pid } => Some(*attach_pid),
-        }
-    }
-
     /// 是否 cold start 模式（backend spawn QQ.exe）。
     pub fn is_cold(&self) -> bool {
         matches!(self, SnowLumaStartMode::ColdStart)
@@ -51,7 +46,7 @@ impl SnowLumaStartMode {
 
     /// 是否 hot start 模式（attach 到用户自启的 QQ.exe）。
     pub fn is_hot(&self) -> bool {
-        matches!(self, SnowLumaStartMode::HotStart { .. })
+        matches!(self, SnowLumaStartMode::HotStart)
     }
 }
 
@@ -62,9 +57,9 @@ mod tests {
     /// 字节级 round-trip：序列化后字面量必须与设计一致，且再反序列化等价。
     /// 锁定 wire format：
     /// - `ColdStart` → `{"mode":"cold_start"}`
-    /// - `HotStart { attach_pid: 12345 }` → `{"mode":"hot_start","attach_pid":12345}`
-    /// 这两条字面量是前后端契约（ts-rs 导出后由前端 BotConfigPage 直接消费）
-    /// 任何字段名 / variant 名变更都会破坏迁移，不允许漂移。
+    /// - `HotStart`  → `{"mode":"hot_start"}`
+    /// 这两条字面量是前后端契约（ts-rs 导出后由前端 BotConfigPage 直接消费），
+    /// 任何字段名 / variant 名变更都会破坏前后端交互，不允许漂移。
     #[test]
     fn cold_start_round_trip_is_byte_stable() {
         let value = SnowLumaStartMode::ColdStart;
@@ -83,10 +78,10 @@ mod tests {
 
     #[test]
     fn hot_start_round_trip_is_byte_stable() {
-        let value = SnowLumaStartMode::HotStart { attach_pid: 12345 };
+        let value = SnowLumaStartMode::HotStart;
 
         let serialized = serde_json::to_string(&value).expect("serialize HotStart");
-        assert_eq!(serialized, r#"{"mode":"hot_start","attach_pid":12345}"#);
+        assert_eq!(serialized, r#"{"mode":"hot_start"}"#);
 
         let decoded: SnowLumaStartMode =
             serde_json::from_str(&serialized).expect("deserialize HotStart");
@@ -101,11 +96,9 @@ mod tests {
         let cold = SnowLumaStartMode::ColdStart;
         assert!(cold.is_cold());
         assert!(!cold.is_hot());
-        assert_eq!(cold.attach_pid(), None);
 
-        let hot = SnowLumaStartMode::HotStart { attach_pid: 9876 };
+        let hot = SnowLumaStartMode::HotStart;
         assert!(!hot.is_cold());
         assert!(hot.is_hot());
-        assert_eq!(hot.attach_pid(), Some(9876));
     }
 }

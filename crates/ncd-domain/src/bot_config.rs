@@ -153,23 +153,23 @@ pub struct BotBasicConfig {
     #[serde(rename = "QQID")]
     #[ts(type = "number")]
     pub qq_id: u64,
-    #[serde(rename = "musicSignUrl", default)]
+    #[serde(default)]
+    #[serde(rename = "musicSignUrl")]
     pub music_sign_url: String,
-    #[serde(rename = "autoRestartSchedule", default)]
+    #[serde(default)]
+    #[serde(rename = "autoRestartSchedule")]
     pub auto_restart_schedule: AutoRestartSchedule,
-    #[serde(rename = "offlineAutoRestart", default)]
+    #[serde(default)]
+    #[serde(rename = "offlineAutoRestart")]
     pub offline_auto_restart: bool,
     #[serde(default = "default_runtime_target")]
     #[ts(type = "string")]
     pub runtime_target: RuntimeTarget,
     #[serde(default)]
     pub backend_type: BackendType,
-    #[serde(
-        default,
-        rename = "snowlumaStartMode",
-        skip_serializing_if = "Option::is_none"
-    )]
-    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "snowlumaStartMode")]
+    #[ts(optional, rename = "snowlumaStartMode")]
     pub snowluma_start_mode: Option<SnowLumaStartMode>,
 }
 
@@ -179,7 +179,8 @@ pub struct NetworkBaseFields {
     #[serde(default = "default_true")]
     pub enable: bool,
     pub name: String,
-    #[serde(rename = "messagePostFormat", default)]
+    #[serde(default)]
+    #[serde(rename = "messagePostFormat")]
     pub message_post_format: MessagePostFormat,
     #[serde(default)]
     pub token: String,
@@ -194,9 +195,11 @@ pub struct HttpServerConfig {
     pub base: NetworkBaseFields,
     pub host: String,
     pub port: u16,
-    #[serde(rename = "enableCors", default)]
+    #[serde(default)]
+    #[serde(rename = "enableCors")]
     pub enable_cors: bool,
-    #[serde(rename = "enableWebsocket", default)]
+    #[serde(default)]
+    #[serde(rename = "enableWebsocket")]
     pub enable_websocket: bool,
     #[serde(default = "default_root_path")]
     pub path: String,
@@ -209,11 +212,14 @@ pub struct HttpSseServerConfig {
     pub base: NetworkBaseFields,
     pub host: String,
     pub port: u16,
-    #[serde(rename = "enableCors", default)]
+    #[serde(default)]
+    #[serde(rename = "enableCors")]
     pub enable_cors: bool,
-    #[serde(rename = "enableWebsocket", default)]
+    #[serde(default)]
+    #[serde(rename = "enableWebsocket")]
     pub enable_websocket: bool,
-    #[serde(rename = "reportSelfMessage", default)]
+    #[serde(default)]
+    #[serde(rename = "reportSelfMessage")]
     pub report_self_message: bool,
 }
 
@@ -223,9 +229,11 @@ pub struct HttpClientConfig {
     #[serde(flatten)]
     pub base: NetworkBaseFields,
     pub url: String,
-    #[serde(rename = "reportSelfMessage", default)]
+    #[serde(default)]
+    #[serde(rename = "reportSelfMessage")]
     pub report_self_message: bool,
-    #[serde(rename = "timeoutMs", default)]
+    #[serde(default)]
+    #[serde(rename = "timeoutMs")]
     #[ts(optional)]
     pub timeout_ms: Option<u32>,
 }
@@ -261,11 +269,14 @@ pub struct WebsocketServerConfig {
     pub base: NetworkBaseFields,
     pub host: String,
     pub port: u16,
-    #[serde(rename = "reportSelfMessage", default)]
+    #[serde(default)]
+    #[serde(rename = "reportSelfMessage")]
     pub report_self_message: bool,
-    #[serde(rename = "enableForcePushEvent", default)]
+    #[serde(default)]
+    #[serde(rename = "enableForcePushEvent")]
     pub enable_force_push_event: bool,
-    #[serde(rename = "heartInterval", default = "default_heart_interval")]
+    #[serde(default = "default_heart_interval")]
+    #[serde(rename = "heartInterval")]
     pub heart_interval: u32,
     #[serde(default = "default_root_path")]
     pub path: String,
@@ -279,11 +290,14 @@ pub struct WebsocketClientConfig {
     #[serde(flatten)]
     pub base: NetworkBaseFields,
     pub url: String,
-    #[serde(rename = "reportSelfMessage", default)]
+    #[serde(default)]
+    #[serde(rename = "reportSelfMessage")]
     pub report_self_message: bool,
-    #[serde(rename = "heartInterval", default = "default_heart_interval")]
+    #[serde(default = "default_heart_interval")]
+    #[serde(rename = "heartInterval")]
     pub heart_interval: u32,
-    #[serde(rename = "reconnectInterval", default = "default_reconnect_interval")]
+    #[serde(default = "default_reconnect_interval")]
+    #[serde(rename = "reconnectInterval")]
     pub reconnect_interval: u32,
     #[serde(default)]
     pub role: WsRole,
@@ -292,15 +306,20 @@ pub struct WebsocketClientConfig {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ConnectConfig {
-    #[serde(rename = "httpServers", default)]
+    #[serde(default)]
+    #[serde(rename = "httpServers")]
     pub http_servers: Vec<HttpServerConfig>,
-    #[serde(rename = "httpSseServers", default)]
+    #[serde(default)]
+    #[serde(rename = "httpSseServers")]
     pub http_sse_servers: Vec<HttpSseServerConfig>,
-    #[serde(rename = "httpClients", default)]
+    #[serde(default)]
+    #[serde(rename = "httpClients")]
     pub http_clients: Vec<HttpClientConfig>,
-    #[serde(rename = "websocketServers", default)]
+    #[serde(default)]
+    #[serde(rename = "websocketServers")]
     pub websocket_servers: Vec<WebsocketServerConfig>,
-    #[serde(rename = "websocketClients", default)]
+    #[serde(default)]
+    #[serde(rename = "websocketClients")]
     pub websocket_clients: Vec<WebsocketClientConfig>,
     #[serde(default)]
     #[ts(type = "Array<unknown>")]
@@ -310,27 +329,38 @@ pub struct ConnectConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AdvancedConfig {
-    #[serde(rename = "autoStart", default)]
+    #[serde(default)]
+    #[serde(rename = "autoStart")]
     pub auto_start: bool,
-    #[serde(rename = "offlineNotice", default)]
+    #[serde(default)]
+    #[serde(rename = "offlineNotice")]
     pub offline_notice: bool,
-    #[serde(rename = "parseMultMsg", default)]
+    #[serde(default)]
+    #[serde(rename = "parseMultMsg")]
     pub parse_mult_msg: bool,
-    #[serde(rename = "packetServer", default)]
+    #[serde(default)]
+    #[serde(rename = "packetServer")]
     pub packet_server: String,
-    #[serde(rename = "packetBackend", default = "default_packet_backend")]
+    #[serde(default = "default_packet_backend")]
+    #[serde(rename = "packetBackend")]
     pub packet_backend: String,
-    #[serde(rename = "enableLocalFile2Url", default)]
+    #[serde(default)]
+    #[serde(rename = "enableLocalFile2Url")]
     pub enable_local_file_to_url: bool,
-    #[serde(rename = "fileLog", default)]
+    #[serde(default)]
+    #[serde(rename = "fileLog")]
     pub file_log: bool,
-    #[serde(rename = "consoleLog", default = "default_true")]
+    #[serde(default = "default_true")]
+    #[serde(rename = "consoleLog")]
     pub console_log: bool,
-    #[serde(rename = "fileLogLevel", default = "default_file_log_level")]
+    #[serde(default = "default_file_log_level")]
+    #[serde(rename = "fileLogLevel")]
     pub file_log_level: LogLevel,
-    #[serde(rename = "consoleLogLevel", default = "default_console_log_level")]
+    #[serde(default = "default_console_log_level")]
+    #[serde(rename = "consoleLogLevel")]
     pub console_log_level: LogLevel,
-    #[serde(rename = "o3HookMode", default = "default_o3_hook_mode")]
+    #[serde(default = "default_o3_hook_mode")]
+    #[serde(rename = "o3HookMode")]
     pub o3_hook_mode: O3HookMode,
     #[serde(default)]
     pub bypass: BypassConfig,
@@ -574,24 +604,22 @@ mod snowluma_start_mode_tests {
         assert_eq!(json.as_bytes(), json_again.as_bytes());
     }
 
-    /// `Some(HotStart { attach_pid })` 序列化形态：
-    /// `{"snowlumaStartMode":{"mode":"hot_start","attach_pid":12345}, ...}`。
+    /// `Some(HotStart)` 序列化形态：
+    /// `{"snowlumaStartMode":{"mode":"hot_start"}, ...}`。
+    /// HotStart 不再带 attach_pid 字段，PID 由 backend 在 start 时自动按 qq_id 匹配。
     #[test]
     fn snowluma_start_mode_hot_start_is_byte_stable() {
-        let config = make_basic_config(Some(SnowLumaStartMode::HotStart { attach_pid: 12345 }));
+        let config = make_basic_config(Some(SnowLumaStartMode::HotStart));
 
         let json = serde_json::to_string(&config).expect("serialize HotStart");
         assert!(
-            json.contains(r#""snowlumaStartMode":{"mode":"hot_start","attach_pid":12345}"#),
+            json.contains(r#""snowlumaStartMode":{"mode":"hot_start"}"#),
             "缺少 HotStart 字面量，实际 JSON: {json}"
         );
 
         let decoded: BotBasicConfig = serde_json::from_str(&json).expect("deserialize HotStart");
         assert_eq!(decoded, config);
-        assert_eq!(
-            decoded.snowluma_start_mode,
-            Some(SnowLumaStartMode::HotStart { attach_pid: 12345 })
-        );
+        assert_eq!(decoded.snowluma_start_mode, Some(SnowLumaStartMode::HotStart));
 
         let json_again = serde_json::to_string(&decoded).expect("re-serialize HotStart");
         assert_eq!(json.as_bytes(), json_again.as_bytes());
