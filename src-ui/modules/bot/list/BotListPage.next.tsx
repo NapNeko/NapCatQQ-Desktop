@@ -10,7 +10,7 @@
 //   - 浮动菜单拆出 FloatingActions / BatchBottomBar 两个组件，互斥显示。
 //   - 卡片网格用 Tailwind grid auto-fit，按窗口宽度自动 1/2/3 列。
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
 import {
     Button,
@@ -30,9 +30,13 @@ import { useNapcatLogin } from '../../../hooks/webui/useNapcatLogin';
 import { useSnowlumaState } from '../../../hooks/webui/useSnowlumaState';
 import { useOpenWebui } from '../../../hooks/webui/useOpenWebui';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { botService } from '../../../core/services/bot.service';
+import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
+import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
 import { BotCard } from './next/BotCard';
 import { FloatingActions } from './next/FloatingActions';
 import { BatchBottomBar } from './next/BatchBottomBar';
+import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
 
 interface BotListPageNextProps {
     onConfigureBot: (botId: string | null) => void;
@@ -69,6 +73,58 @@ export function BotListPageNext({
     };
 
     const mutations = useBotMutations({ onMessage: handleMessage });
+
+    // ── Config drift detection before start ──────────────────────────────
+    const [pendingDrift, setPendingDrift] = useState<ConfigDrift | null>(null);
+    const [driftBotId, setDriftBotId] = useState<string | null>(null);
+
+    const handleStartBot = useCallback(async (botId: string) => {
+        try {
+            const drift = await botService.detectConfigDrift(botId);
+            if (drift && !drift.added.length && !drift.modified.length) {
+                // clean, start directly
+                mutations.startBot(botId);
+                return;
+            }
+            if (drift) {
+                // has drift, show dialog
+                setDriftBotId(botId);
+                setPendingDrift(drift);
+            } else {
+                // null = no drift or files don't exist
+                mutations.startBot(botId);
+            }
+        } catch (err: unknown) {
+            // detection failed, fallback to direct start
+            mutations.startBot(botId);
+        }
+    }, [mutations]);
+
+    const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
+        if (!driftBotId) return;
+        setPendingDrift(null);
+        try {
+            const snap = await botService.startWithDecisions(driftBotId, decisions);
+            pushInfoBar({
+                tone: 'success',
+                title: '操作完成',
+                content: `已发送启动指令给 Bot: ${snap.bot_id}`,
+                autoDismissMs: 4000,
+            });
+        } catch (err: unknown) {
+            pushInfoBar({
+                tone: 'danger',
+                title: '启动失败',
+                content: String(err),
+            });
+        }
+        setDriftBotId(null);
+    }, [driftBotId]);
+
+    const handleDriftCancel = useCallback(() => {
+        setPendingDrift(null);
+        setDriftBotId(null);
+    }, []);
 
     // 加载 / 错误状态也接 InfoBar，让顶部状态信息统一。但只在错误首次出现时
     // 推一次，避免 react-query 重试反复推。
@@ -162,7 +218,7 @@ export function BotListPageNext({
                                     snowlumaLoginState={snowlumaBot?.loginState ?? null}
                                     isBatchMode={batch.isBatchMode}
                                     isSelected={batch.selectedIds.has(bot.bot_id)}
-                                    onStart={mutations.startBot}
+                                    onStart={handleStartBot}
                                     onStop={mutations.stopBot}
                                     onConfigure={onConfigureBot}
                                     onViewLogs={onViewLogs}
@@ -234,6 +290,16 @@ export function BotListPageNext({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Config drift 确认 */}
+            {pendingDrift && (
+                <ConfigDriftDialog
+                    open={!!pendingDrift}
+                    drift={pendingDrift}
+                    onConfirm={handleDriftConfirm}
+                    onCancel={handleDriftCancel}
+                />
+            )}
         </div>
     );
 }

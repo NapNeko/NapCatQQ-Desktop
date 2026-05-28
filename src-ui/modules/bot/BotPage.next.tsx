@@ -1,15 +1,14 @@
 // Bot 业务区路由壳（next）。
 //
-// 跟旧 BotPage.tsx 对应：3 视图 (list / config / log) 的浅路由切换。Step 7 只
-// 做了 BotListPage.next，config / log 仍走旧 Fluent 树（蓝绿模式过渡，避免
-// 单步改动太大）；Step 8 / 9 做完后这里再切。
+// 跟旧 BotPage.tsx 对应：3 视图 (list / config / log) 的浅路由切换。
+// Step 7 完成 list；Step 8 (本次) 完成 config 推倒重写。log 仍走旧 Fluent 树等 Step 9。
 //
 // 切到 list 时把 selectedBotId 清掉，避免下次进 config 复用陈旧 ID。
 
 import { useState } from 'react';
 import { Button } from '../../shared/ui';
 import { BotListPageNext } from './list/BotListPage.next';
-import { BotConfigPage } from './config/BotConfigPage';
+import { BotConfigPageNext } from './config/BotConfigPage.next';
 import { BotLogPage } from './log/BotLogPage';
 
 type View = 'list' | 'config' | 'log';
@@ -38,7 +37,7 @@ export function BotPageNext() {
                 />
             )}
             {view === 'config' && (
-                <BotConfigPage botId={selectedBotId} onBack={goList} />
+                <BotConfigPageNext botId={selectedBotId} onBack={goList} />
             )}
             {view === 'log' &&
                 (selectedBotId ? (

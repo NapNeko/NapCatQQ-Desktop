@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import {
     Activity,
     AlertTriangle,
+    Check,
     Cpu,
     DoorOpen,
     FileText,
@@ -64,6 +65,7 @@ import {
 } from '../../../../core/domain/webui/availability';
 import { isSnowLumaFlavor, type Flavor } from '../../../../core/domain/bot/flavor';
 import { cn } from '../../../../shared/utils/cn';
+import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { QrCodeDialog } from './QrCodeDialog';
 
 interface BotCardProps {
@@ -121,12 +123,17 @@ export function BotCard({
     useEffect(() => {
         if (invalidationReason === 'kicked') {
             setShowKickedToast(true);
-            const timer = setTimeout(() => setShowKickedToast(false), 3000);
+            // 自动重启场景下后端会很快触发 restart，状态会自然刷新，3s 足够；
+            // 手动重启场景下 toast 是用户行动指引，给 15s 让用户来得及反应。
+            // 真踢线 → 重启过程 isOnline 跳 true 后这个 toast 已经被父组件
+            // 通过 invalidationReason=null 清掉，没必要担心残留。
+            const dismissMs = config?.bot.offlineAutoRestart ? 3000 : 15000;
+            const timer = setTimeout(() => setShowKickedToast(false), dismissMs);
             return () => clearTimeout(timer);
         }
         setShowKickedToast(false);
         return undefined;
-    }, [invalidationReason]);
+    }, [invalidationReason, config?.bot.offlineAutoRestart]);
 
     const stateBadge = botStateBadge(bot.state);
     const stateBadgeTone = mapStateBadgeTone(stateBadge.color);
@@ -147,7 +154,7 @@ export function BotCard({
     const enabledChannels = config ? countEnabledChannels(config) : null;
     const restartHint = config ? formatRestartHint(config) : null;
     const runtimeTarget = config?.bot.runtime_target ?? null;
-    const slStartMode = config?.bot.snowluma_start_mode;
+    const slStartMode = config?.bot.snowlumaStartMode;
 
     const handleRowClick = () => {
         if (isBatchMode) onToggleSelect(bot.bot_id);
@@ -166,6 +173,7 @@ export function BotCard({
         bot,
         isSL,
         showKickedToast,
+        offlineAutoRestart: !!config?.bot.offlineAutoRestart,
         snowlumaDaemonState,
         snowlumaLoginState,
         snowlumaInjected,
@@ -223,15 +231,14 @@ export function BotCard({
                 key="sl-mode"
                 icon={<Power size={11} strokeWidth={2.4} />}
                 label="启动"
-                value={
-                    slStartMode.mode === 'cold_start'
-                        ? '冷启动'
-                        : `热启动 PID ${slStartMode.attach_pid}`
-                }
+                value={slStartMode.mode === 'cold_start' ? '冷启动' : '热启动'}
             />,
         );
     }
-    if (isSL && snowlumaDaemonState) {
+    // SnowLuma 运行时 chip 只在 bot active 时显示。stopped 后这些 domain event
+    // 的值残留在 store 里不会主动清掉,但对用户没有参考价值——已经停了就别展示了。
+    const isActive = isBotRunning(bot.state) || isBotStarting(bot.state);
+    if (isSL && snowlumaDaemonState && isActive) {
         chips.push(
             <InfoChip
                 key="daemon"
@@ -243,7 +250,7 @@ export function BotCard({
             />,
         );
     }
-    if (isSL && snowlumaInjected) {
+    if (isSL && snowlumaInjected && isActive) {
         chips.push(
             <InfoChip
                 key="injected"
@@ -253,7 +260,7 @@ export function BotCard({
             />,
         );
     }
-    if (isSL && snowlumaUin) {
+    if (isSL && snowlumaUin && isActive) {
         chips.push(
             <InfoChip
                 key="uin"
@@ -263,7 +270,7 @@ export function BotCard({
             />,
         );
     }
-    if (napcatBinding?.port) {
+    if (napcatBinding?.port && isActive) {
         chips.push(
             <InfoChip
                 key="webui"
@@ -311,7 +318,7 @@ export function BotCard({
                                     : 'border-border bg-canvas',
                             )}
                         >
-                            {isSelected && <span className="text-2xs">✓</span>}
+                            {isSelected && <Check size={10} strokeWidth={3} />}
                         </span>
                     )}
 
@@ -367,8 +374,9 @@ export function BotCard({
                                 </>
                             )}
                             {/* 状态文案：跟着副标题走，避免单独占一整行造成稀疏空白。
-                                错误 / 踢线 toast 视觉权重更高，下方独立行展示。 */}
-                            {!showKickedToast && !bot.last_error && statusLine && (
+                                被踢 / 错误这类高 priority 事件也合并进这里（红 tone +
+                                完整文本悬停 tooltip），不再单独占一行撑高卡片。 */}
+                            {statusLine && (
                                 <>
                                     <span aria-hidden className="text-border">·</span>
                                     <span
@@ -376,6 +384,13 @@ export function BotCard({
                                             'inline-flex min-w-0 items-center gap-1 truncate',
                                             statusLineTextClass(statusLine.tone),
                                         )}
+                                        title={
+                                            // 错误类长文案截断后用原生 tooltip 露出全文，
+                                            // 踢线 / 普通状态的文案本身就短，不需要 title。
+                                            statusLine.tone === 'danger' && bot.last_error
+                                                ? bot.last_error
+                                                : undefined
+                                        }
                                     >
                                         {statusLine.icon}
                                         <span className="truncate">{statusLine.text}</span>
@@ -459,33 +474,6 @@ export function BotCard({
                 {chips.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5">{chips}</div>
                 )}
-
-                {/* 错误行 / 踢线 toast：高 priority 视觉，独占一行。
-                    普通状态文案（"运行中" / "已登录"）已经合并到副标题行，不再
-                    单独占一行避免稀疏空白。 */}
-                {(showKickedToast || bot.last_error) && (
-                    <div className="flex min-w-0 items-center">
-                        {showKickedToast ? (
-                            <span
-                                role="status"
-                                className="inline-flex items-center gap-1.5 rounded-sm bg-danger-soft px-2 py-0.5 text-xs text-danger ring-1 ring-danger/20"
-                            >
-                                <DoorOpen size={12} strokeWidth={2.4} />
-                                Bot 账号被踢，正在重新登录…
-                            </span>
-                        ) : bot.last_error ? (
-                            <span
-                                className="inline-flex min-w-0 items-center gap-1.5 rounded-sm bg-danger-soft px-2 py-0.5 text-xs text-danger ring-1 ring-danger/15"
-                                title={bot.last_error}
-                            >
-                                <AlertTriangle size={12} strokeWidth={2.4} />
-                                <span className="font-medium shrink-0">最后错误</span>
-                                <span className="text-danger/40">·</span>
-                                <span className="truncate font-mono">{bot.last_error}</span>
-                            </span>
-                        ) : null}
-                    </div>
-                )}
             </div>
 
             <QrCodeDialog
@@ -493,6 +481,30 @@ export function BotCard({
                 onOpenChange={setQrOpen}
                 qrcodeUrl={qrcodeUrl ?? null}
                 botId={bot.bot_id}
+                isOnline={isOnline}
+                invalidationReason={invalidationReason}
+                onLoginSuccess={() => {
+                    setQrOpen(false);
+                    pushInfoBar({
+                        tone: 'success',
+                        title: '扫码登录成功',
+                        // 保留 QQ 号定位上下文：多 Bot 同时挂着时一眼能分清是哪个登录上了。
+                        content: `Bot ${bot.bot_id} 已上线`,
+                        autoDismissMs: 3000,
+                    });
+                }}
+                onKicked={() => {
+                    setQrOpen(false);
+                    pushInfoBar({
+                        tone: 'warning',
+                        title: '账号已被踢',
+                        // 文案区分恢复路径，与卡片内的踢线 toast 对齐。
+                        content: config?.bot.offlineAutoRestart
+                            ? `Bot ${bot.bot_id} 被踢，正在自动重启`
+                            : `Bot ${bot.bot_id} 被踢，请手动重启`,
+                        autoDismissMs: 5000,
+                    });
+                }}
             />
         </>
     );
@@ -578,6 +590,8 @@ function computeStatusLine(args: {
     bot: BotActorSnapshot;
     isSL: boolean;
     showKickedToast: boolean;
+    /** 被踢后恢复路径文案的判断依据（开了自动重启就显示"自动重启中"，否则提示手动重启）。 */
+    offlineAutoRestart: boolean;
     snowlumaDaemonState: DaemonState | null | undefined;
     snowlumaLoginState: SnowLumaLoginState | null | undefined;
     snowlumaInjected: boolean | undefined;
@@ -590,6 +604,7 @@ function computeStatusLine(args: {
         bot,
         isSL,
         showKickedToast,
+        offlineAutoRestart,
         snowlumaDaemonState,
         snowlumaLoginState,
         snowlumaInjected,
@@ -599,7 +614,26 @@ function computeStatusLine(args: {
         webuiAvailable,
     } = args;
 
-    if (showKickedToast || bot.last_error) return null;
+    // 踢线提示视觉权重最高，先判断；保留 DoorOpen 图标做语义区分。
+    if (showKickedToast) {
+        return {
+            text: offlineAutoRestart
+                ? '账号被踢，自动重启中…'
+                : '账号被踢，请手动重启',
+            tone: 'danger',
+            icon: <DoorOpen size={12} strokeWidth={2.4} />,
+        };
+    }
+
+    // last_error 同样合并进副标题行；完整错误信息靠悬停 tooltip 看，避免独立
+    // 一行红字撑高卡片。
+    if (bot.last_error) {
+        return {
+            text: bot.last_error,
+            tone: 'danger',
+            icon: <AlertTriangle size={12} strokeWidth={2.4} />,
+        };
+    }
 
     // stopped 状态：徽章已经讲清楚，状态行就别再画蛇添足；并且后端事件链可能
     // 滞后清理 isOnline / loginState，这里短路掉避免出现"徽章说停了，状态行
