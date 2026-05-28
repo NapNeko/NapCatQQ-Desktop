@@ -17,7 +17,7 @@ keyring = "2"
 aes-gcm = "0.10"
 rand = "0.8"
 dirs = "5"
-tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "rt-multi-thread", "macros", "time"] }
+tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "rt-multi-thread", "macros", "time", "net"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 ts-rs = { version = "10", features = ["serde-compat"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
@@ -30,6 +30,8 @@ tracing = "0.1"
 # - rand:    强随机密码生成（已在上方声明，复用）
 sysinfo = "0.31"
 scrypt = "0.11"
+base64 = "0.22"
+netstat2 = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
