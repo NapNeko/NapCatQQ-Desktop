@@ -16,6 +16,7 @@ pub mod native_deployment_adapter;
 pub mod runtime_backend;
 pub mod runtime_launch_plan;
 pub mod secret_store_impl;
+pub mod server_manager;
 pub mod snowluma;
 
 // ===== Layer 1 数据(已迁移到 ncd-domain,此处 re-export 保持向后兼容) =====
@@ -70,6 +71,10 @@ pub use native_deployment_adapter::{
     EventBusSink, NativeDeploymentBackend, RuntimeLaunchPlannerAdapter,
 };
 pub use secret_store_impl::SecretStoreImpl;
+pub use server_manager::{
+    AuthMethod, InMemoryCredentialStore, KeyringCredentialStore, ProbeReport, ServerCredentialStore,
+    ServerManager, ServerProfile, ServerState,
+};
 pub use snowluma::{
     AuthState, DaemonState, HookProcessInfo, HookProcessStatus, MockProcessTreeProbe,
     OneBotInstanceInfo, ProcessTreeProbe, ReqwestSnowLumaWebUiClient,

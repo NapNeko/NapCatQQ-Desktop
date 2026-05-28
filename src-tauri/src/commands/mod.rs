@@ -1,6 +1,7 @@
 pub mod bot;
 pub mod components;
 pub mod release;
+pub mod servers;
 pub mod snowluma;
 
 use std::fs;

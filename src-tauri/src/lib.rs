@@ -26,6 +26,7 @@ pub struct AppState {
     pub(crate) event_bus: BroadcastEventBus,
     pub(crate) runtime: runtime::AppRuntime,
     pub(crate) bot_manager: Arc<AppBotManager>,
+    pub(crate) server_manager: Arc<ncd_runtime::ServerManager>,
     /// Components 页活跃 task 注册表，task_id → CancellationToken。
     /// `run_component_action` 启动时插入；plan 完成 / 取消时移除。
     pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
@@ -132,6 +133,11 @@ pub fn run() {
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
     let bot_manager_shutdown = Arc::clone(&bot_manager);
 
+    let server_manager = Arc::new(ncd_runtime::ServerManager::new(
+        &data_root,
+        Arc::new(ncd_runtime::KeyringCredentialStore),
+    ));
+
     tauri::Builder::default()
         // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI）
         // webview 自身不支持 target=_blank。
@@ -142,6 +148,7 @@ pub fn run() {
             event_bus: event_bus.clone(),
             runtime,
             bot_manager,
+            server_manager,
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
         })
         .setup(move |app| {
@@ -279,6 +286,11 @@ pub fn run() {
             commands::snowluma::probe_qq_login_info,
             commands::snowluma::set_snowluma_password_override,
             commands::snowluma::open_snowluma_webui,
+            commands::servers::list_servers,
+            commands::servers::add_server,
+            commands::servers::update_server,
+            commands::servers::delete_server,
+            commands::servers::test_server_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
