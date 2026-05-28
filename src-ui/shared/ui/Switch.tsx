@@ -1,7 +1,9 @@
 // Switch 原子件。语义：开关而不是勾选。比 Checkbox 视觉更明确，用于
 // "启用此连接 / 启用 O3 Hook 注入 / 开机自启" 这类二元状态。
 //
-// 默认尺寸 28×16，比常见 Switch 小一档，匹配密集表单的紧凑感。
+// 尺寸 36×20（thumb 16），比 shadcn 默认 44×24 小一档，匹配密集表单。
+// 不画 border：靠 bg-inset / bg-brand 的色差区分态，border + thumb 同时
+// 显示会让 thumb 看起来"挤"。
 
 import * as RadixSwitch from '@radix-ui/react-switch';
 import { forwardRef, type ReactNode } from 'react';
@@ -24,17 +26,17 @@ export const Switch = forwardRef<React.ElementRef<typeof RadixSwitch.Root>, Swit
                 disabled={disabled}
                 onCheckedChange={onCheckedChange}
                 className={cn(
-                    'relative inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-pill',
-                    'border border-border-strong bg-inset transition-colors',
-                    'data-[state=checked]:border-brand data-[state=checked]:bg-brand',
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-pill',
+                    'bg-border-strong transition-colors',
+                    'data-[state=checked]:bg-brand',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
                     'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
                 {...rest}
             >
                 <RadixSwitch.Thumb className={cn(
-                    'block h-3 w-3 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform',
-                    'data-[state=checked]:translate-x-[14px]',
+                    'block h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform',
+                    'data-[state=checked]:translate-x-[18px]',
                 )} />
             </RadixSwitch.Root>
         );
