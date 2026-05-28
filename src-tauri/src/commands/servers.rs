@@ -45,3 +45,20 @@ pub async fn test_server_connection(
 ) -> Result<ProbeReport, String> {
     state.server_manager.test_connection(&id, password).await
 }
+
+#[tauri::command]
+pub async fn deploy_server(
+    state: State<'_, AppState>,
+    id: String,
+    flavor: ncd_runtime::BotFlavor,
+) -> Result<(), String> {
+    state.server_manager.deploy(&id, flavor).await
+}
+
+#[tauri::command]
+pub async fn cancel_deployment(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    state.server_manager.cancel_deploy(&id).await
+}

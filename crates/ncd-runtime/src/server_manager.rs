@@ -19,6 +19,10 @@ use ts_rs::TS;
 use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteLinuxHost, SshCredentials};
 use ncd_host::Host;
 
+use ncd_component::{Component, ComponentId};
+
+use crate::events::EventBus;
+
 // ============================================================
 // 数据结构
 // ============================================================
@@ -216,14 +220,24 @@ pub struct ServerManager {
     credentials: Arc<dyn ServerCredentialStore>,
     /// 活跃 SSH 连接缓存：server_id → Arc<dyn Host>。
     hosts: Arc<RwLock<HashMap<String, Arc<dyn Host>>>>,
+    /// 事件总线，用于发布部署进度。
+    event_bus: Arc<crate::events::BroadcastEventBus>,
+    /// 活跃部署任务的取消令牌：server_id → CancellationToken。
+    deploy_tasks: Arc<RwLock<HashMap<String, tokio_util::sync::CancellationToken>>>,
 }
 
 impl ServerManager {
-    pub fn new(data_root: &Path, credentials: Arc<dyn ServerCredentialStore>) -> Self {
+    pub fn new(
+        data_root: &Path,
+        credentials: Arc<dyn ServerCredentialStore>,
+        event_bus: Arc<crate::events::BroadcastEventBus>,
+    ) -> Self {
         Self {
             repo: ServerProfileRepo::new(data_root),
             credentials,
             hosts: Arc::new(RwLock::new(HashMap::new())),
+            event_bus,
+            deploy_tasks: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -354,6 +368,62 @@ impl ServerManager {
         self.hosts.read().await.get(id).cloned()
     }
 
+    /// 在指定远端部署运行时组件（NapCat / SnowLuma）。
+    ///
+    /// 走 ncd-deploy 的 DeployPlan 编排（Component × Host × Action）。
+    /// 进度通过 TaskProgress 事件广播，task_id = `deploy:<server_id>`。
+    /// 可通过 `cancel_deploy` 取消。
+    pub async fn deploy(
+        &self,
+        server_id: &str,
+        flavor: ncd_domain::BotFlavor,
+    ) -> Result<(), String> {
+        let host = self
+            .get_host(server_id)
+            .await
+            .ok_or_else(|| format!("主机未连接: {server_id}，请先测试连接"))?;
+
+        let task_id = format!("deploy:{server_id}");
+        let cancel = tokio_util::sync::CancellationToken::new();
+        self.deploy_tasks
+            .write()
+            .await
+            .insert(server_id.to_string(), cancel.clone());
+
+        // 发起始进度事件。
+        self.event_bus.publish(crate::events::DomainEvent::task_progress(
+            &task_id, 0, "开始部署",
+        ));
+
+        // 选择 component 列表。
+        use ncd_component::ActionCtx;
+
+        // 组件工厂尚未就绪——远端安装路径推导逻辑待后续 spec 补充。
+        // 当前先返回明确错误，让前端知道此功能未实装。
+        let _ = cancel;
+        self.deploy_tasks.write().await.remove(server_id);
+        let msg = format!(
+            "远端部署 {:?} 尚未实装：组件安装路径推导逻辑待补充",
+            flavor
+        );
+        self.event_bus.publish(crate::events::DomainEvent::task_progress(
+            &task_id, 0, &msg,
+        ));
+        Err(msg)
+    }
+
+    /// 取消正在进行的部署任务。
+    pub async fn cancel_deploy(&self, server_id: &str) -> Result<(), String> {
+        let token = self.deploy_tasks.read().await.get(server_id).cloned();
+        match token {
+            Some(t) => {
+                t.cancel();
+                Ok(())
+            }
+            None => Err(format!("没有正在进行的部署任务: {server_id}")),
+        }
+    }
+
     // ---- helpers ----
 
     fn build_credentials(
@@ -402,6 +472,15 @@ fn short_uuid() -> String {
     hex::encode(bytes)
 }
 
+/// 按 ComponentId 查找对应的 Component 实例。
+/// 远端安装需要知道 install_dir 等参数，当前返回 None 表示组件工厂尚未就绪。
+/// 后续实装时由 deploy 方法根据 ServerProfile + Host 信息构造合适的 Component。
+fn component_for(_id: ComponentId) -> Option<Arc<dyn Component>> {
+    // 组件工厂待后续 spec 补充——NapCatComponent / SnowLumaComponent 的远端
+    // 安装路径需要从 host 的运行时目录推导，不能用空值构造。
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,11 +501,17 @@ mod tests {
         }
     }
 
+    fn make_mgr(root: &Path) -> (ServerManager, Arc<InMemoryCredentialStore>) {
+        let creds = Arc::new(InMemoryCredentialStore::default());
+        let bus = Arc::new(crate::events::BroadcastEventBus::default());
+        let mgr = ServerManager::new(root, creds.clone(), bus);
+        (mgr, creds)
+    }
+
     #[tokio::test]
     async fn add_and_list_servers() {
         let root = tempdir().unwrap();
-        let creds = Arc::new(InMemoryCredentialStore::default());
-        let mgr = ServerManager::new(root.path(), creds.clone());
+        let (mgr, creds) = make_mgr(root.path());
 
         let p = mgr
             .add_server(make_profile("s1", "My Server"), Some("pw123".into()))
@@ -438,15 +523,13 @@ mod tests {
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "My Server");
 
-        // 密码应该存进 keyring mock
         assert_eq!(creds.get_password("s1"), Some("pw123".into()));
     }
 
     #[tokio::test]
     async fn add_rejects_duplicate_id() {
         let root = tempdir().unwrap();
-        let creds = Arc::new(InMemoryCredentialStore::default());
-        let mgr = ServerManager::new(root.path(), creds);
+        let (mgr, _) = make_mgr(root.path());
 
         mgr.add_server(make_profile("s1", "A"), None).await.unwrap();
         let err = mgr.add_server(make_profile("s1", "B"), None).await;
@@ -456,8 +539,7 @@ mod tests {
     #[tokio::test]
     async fn update_server_changes_fields() {
         let root = tempdir().unwrap();
-        let creds = Arc::new(InMemoryCredentialStore::default());
-        let mgr = ServerManager::new(root.path(), creds);
+        let (mgr, _) = make_mgr(root.path());
 
         mgr.add_server(make_profile("s1", "Old"), None).await.unwrap();
         let mut updated = make_profile("s1", "New Name");
@@ -472,8 +554,7 @@ mod tests {
     #[tokio::test]
     async fn delete_server_removes_and_cleans_credential() {
         let root = tempdir().unwrap();
-        let creds = Arc::new(InMemoryCredentialStore::default());
-        let mgr = ServerManager::new(root.path(), creds.clone());
+        let (mgr, creds) = make_mgr(root.path());
 
         mgr.add_server(make_profile("s1", "A"), Some("secret".into()))
             .await
@@ -488,8 +569,7 @@ mod tests {
     #[tokio::test]
     async fn delete_nonexistent_returns_error() {
         let root = tempdir().unwrap();
-        let creds = Arc::new(InMemoryCredentialStore::default());
-        let mgr = ServerManager::new(root.path(), creds);
+        let (mgr, _) = make_mgr(root.path());
         let err = mgr.delete_server("ghost").await;
         assert!(err.is_err());
     }

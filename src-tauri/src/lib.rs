@@ -136,6 +136,7 @@ pub fn run() {
     let server_manager = Arc::new(ncd_runtime::ServerManager::new(
         &data_root,
         Arc::new(ncd_runtime::KeyringCredentialStore),
+        Arc::new(event_bus.clone()),
     ));
 
     tauri::Builder::default()
@@ -291,6 +292,8 @@ pub fn run() {
             commands::servers::update_server,
             commands::servers::delete_server,
             commands::servers::test_server_connection,
+            commands::servers::deploy_server,
+            commands::servers::cancel_deployment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
