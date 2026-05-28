@@ -19,7 +19,7 @@ use ts_rs::TS;
 use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteLinuxHost, SshCredentials};
 use ncd_host::Host;
 
-use ncd_component::{Component, ComponentId};
+use ncd_component::Component;
 
 use crate::events::EventBus;
 
@@ -370,7 +370,7 @@ impl ServerManager {
 
     /// 在指定远端部署运行时组件（NapCat / SnowLuma）。
     ///
-    /// 走 ncd-deploy 的 DeployPlan 编排（Component × Host × Action）。
+    /// 流程：探测远端 $HOME → 构造 Component → DeployPlan → 顺序执行。
     /// 进度通过 TaskProgress 事件广播，task_id = `deploy:<server_id>`。
     /// 可通过 `cancel_deploy` 取消。
     pub async fn deploy(
@@ -390,26 +390,94 @@ impl ServerManager {
             .await
             .insert(server_id.to_string(), cancel.clone());
 
-        // 发起始进度事件。
         self.event_bus.publish(crate::events::DomainEvent::task_progress(
-            &task_id, 0, "开始部署",
+            &task_id, 0, "探测远端环境",
         ));
 
-        // 选择 component 列表。
+        // 探测远端 $HOME。
+        let home = probe_remote_home(host.as_ref()).await?;
+        let runtime_root = ncd_host::HostPath::from_posix(format!("{home}/napcat-runtime"));
+
+        // 构造 component 列表。
         use ncd_component::ActionCtx;
+        let components: Vec<(&str, Arc<dyn Component>)> = match flavor {
+            ncd_domain::BotFlavor::NapCat => {
+                let napcat = ncd_component::NapCatComponent::new(runtime_root.clone());
+                vec![("napcat", Arc::new(napcat) as Arc<dyn Component>)]
+            }
+            ncd_domain::BotFlavor::SnowLuma => {
+                let node_dir = runtime_root.join("node");
+                let nodejs = ncd_component::NodeJsComponent::new("20.18.1", node_dir);
+                let sl = ncd_component::SnowLumaComponent::new(
+                    runtime_root.join("snowluma-workspace"),
+                    "https://github.com/aspect-build/snowluma/releases/latest/download/snowluma-linux-x64.tar.gz",
+                );
+                vec![
+                    ("nodejs", Arc::new(nodejs) as Arc<dyn Component>),
+                    ("snowluma", Arc::new(sl) as Arc<dyn Component>),
+                ]
+            }
+        };
 
-        // 组件工厂尚未就绪——远端安装路径推导逻辑待后续 spec 补充。
-        // 当前先返回明确错误，让前端知道此功能未实装。
-        let _ = cancel;
+        let mut builder = ncd_deploy::DeployPlan::builder();
+        for (name, comp) in components {
+            builder = builder.ensure_installed(name, comp);
+        }
+        let plan = builder.build();
+
+        // 进度转发。
+        let (mut ctx, mut progress_rx) = ActionCtx::new();
+        let bus = Arc::clone(&self.event_bus);
+        let tid = task_id.clone();
+        tokio::spawn(async move {
+            while let Some(evt) = progress_rx.recv().await {
+                let (percent, msg) = match &evt.kind {
+                    ncd_component::ProgressKind::StepProgress { percent, message, .. } => {
+                        (*percent, message.clone())
+                    }
+                    ncd_component::ProgressKind::StepBegin { message, .. } => {
+                        (0, message.clone())
+                    }
+                    ncd_component::ProgressKind::Finished { ok } => {
+                        (if *ok { 100 } else { 0 }, String::new())
+                    }
+                    _ => continue,
+                };
+                bus.publish(crate::events::DomainEvent::task_progress(&tid, percent, &msg));
+            }
+        });
+
+        // 跑 plan，支持取消。
+        let result = tokio::select! {
+            r = plan.run(host.as_ref(), &mut ctx) => r,
+            _ = cancel.cancelled() => {
+                ctx.cancel();
+                Err(ncd_deploy::DeployError::Cancelled)
+            }
+        };
+
         self.deploy_tasks.write().await.remove(server_id);
-        let msg = format!(
-            "远端部署 {:?} 尚未实装：组件安装路径推导逻辑待补充",
-            flavor
-        );
-        self.event_bus.publish(crate::events::DomainEvent::task_progress(
-            &task_id, 0, &msg,
-        ));
-        Err(msg)
+
+        match result {
+            Ok(_) => {
+                self.event_bus.publish(crate::events::DomainEvent::task_progress(
+                    &task_id, 100, "部署完成",
+                ));
+                Ok(())
+            }
+            Err(ncd_deploy::DeployError::Cancelled) => {
+                self.event_bus.publish(crate::events::DomainEvent::task_progress(
+                    &task_id, 0, "部署已取消",
+                ));
+                Err("部署已取消".to_string())
+            }
+            Err(err) => {
+                self.event_bus.publish(crate::events::DomainEvent::task_progress(
+                    &task_id, 0, &format!("部署失败: {err}"),
+                ));
+                Err(err.to_string())
+            }
+        }
     }
 
     /// 取消正在进行的部署任务。
@@ -472,13 +540,23 @@ fn short_uuid() -> String {
     hex::encode(bytes)
 }
 
-/// 按 ComponentId 查找对应的 Component 实例。
-/// 远端安装需要知道 install_dir 等参数，当前返回 None 表示组件工厂尚未就绪。
-/// 后续实装时由 deploy 方法根据 ServerProfile + Host 信息构造合适的 Component。
-fn component_for(_id: ComponentId) -> Option<Arc<dyn Component>> {
-    // 组件工厂待后续 spec 补充——NapCatComponent / SnowLumaComponent 的远端
-    // 安装路径需要从 host 的运行时目录推导，不能用空值构造。
-    None
+/// 探测远端 $HOME 目录。
+async fn probe_remote_home(host: &dyn Host) -> Result<String, String> {
+    let cmd = ncd_host::HostCommand::new("sh")
+        .arg("-c")
+        .arg("echo $HOME");
+    let output = host
+        .run_to_string(cmd)
+        .await
+        .map_err(|e| format!("探测 $HOME 失败: {e}"))?;
+    if !output.success() {
+        return Err(format!("探测 $HOME 命令失败: {}", output.stderr.trim()));
+    }
+    let home = output.stdout.trim().to_string();
+    if home.is_empty() {
+        return Err("远端 $HOME 为空".to_string());
+    }
+    Ok(home)
 }
 
 #[cfg(test)]
