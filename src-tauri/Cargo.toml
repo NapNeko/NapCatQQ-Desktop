@@ -14,13 +14,15 @@ dirs = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }
-tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "macros", "time"] }
+tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "macros", "time", "net"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tauri-plugin-opener = "2.5.4"
 sysinfo = "0.31"
 ts-rs = { version = "10", features = ["serde-compat"] }
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
+base64 = "0.22"
+netstat2 = "0.9"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

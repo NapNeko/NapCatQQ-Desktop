@@ -117,7 +117,10 @@ mod tests {
             Arc::clone(&store),
             secrets,
         ));
-        let renderer = Arc::new(ncd_runtime::DispatchRenderer::new(store.config_dir()));
+        let renderer = Arc::new(ncd_runtime::DispatchRenderer::new(
+            store.config_dir(),
+            store.config_dir(),
+        ));
         let backend = Arc::new(ncd_runtime::LocalRuntimeBackend::new(root, "test-local"));
         let launch_planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
             root.join("runtime"),

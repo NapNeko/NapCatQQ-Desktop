@@ -1,4 +1,5 @@
 use ncd_runtime::{BotActorSnapshot, BotConfig, BotId, LogSnapshot};
+use ncd_runtime::config_drift::{ConfigDrift, DriftDecision};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
@@ -124,6 +125,64 @@ pub async fn start_bot(
         .map_err(map_err)
 }
 
+/// 启动前检测派生配置文件是否被外部修改。返回 `None` 表示无差异可直接启动。
+#[tauri::command]
+pub async fn detect_bot_config_drift(
+    state: State<'_, AppState>,
+    bot_id: String,
+) -> Result<Option<ConfigDrift>, String> {
+    state
+        .bot_manager
+        .detect_config_drift(&BotId::new(bot_id))
+        .await
+        .map_err(map_err)
+}
+
+/// 带用户决议启动 Bot。前端在 ConfigDriftDialog 确认后调此命令。
+#[tauri::command]
+pub async fn start_bot_with_drift_decisions(
+    state: State<'_, AppState>,
+    bot_id: String,
+    decisions: Vec<DriftDecision>,
+) -> Result<BotActorSnapshot, String> {
+    state
+        .bot_manager
+        .start_bot_with_decisions(&BotId::new(bot_id), &decisions)
+        .await
+        .map_err(map_err)
+}
+
+/// 带用户决议保存配置。前端保存时如果检测到 drift 并确认了决议后调此命令。
+#[tauri::command]
+pub async fn upsert_bot_config_with_decisions(
+    state: State<'_, AppState>,
+    config: BotConfig,
+    decisions: Vec<DriftDecision>,
+) -> Result<BotActorSnapshot, String> {
+    use ncd_runtime::config_drift::DriftDecision as DD;
+    let mut overrides: std::collections::HashMap<String, Vec<(String, serde_json::Value)>> =
+        std::collections::HashMap::new();
+    for d in &decisions {
+        match d {
+            DD::AcceptExternal { file, path, value } => {
+                overrides.entry(file.clone()).or_default().push((path.clone(), value.clone()));
+            }
+            DD::DropAdded { file, path } => {
+                overrides
+                    .entry(file.clone())
+                    .or_default()
+                    .push((path.clone(), serde_json::Value::Null));
+            }
+            _ => {}
+        }
+    }
+    state
+        .bot_manager
+        .upsert_bot_config_with_overrides(config, &overrides)
+        .await
+        .map_err(map_err)
+}
+
 #[tauri::command]
 pub async fn stop_bot(
     state: State<'_, AppState>,
@@ -218,7 +277,10 @@ mod tests {
         let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
             Arc::new(SecretStoreImpl::new(root.join("secrets")));
         let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-        let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
+        let renderer = Arc::new(DispatchRenderer::new(
+            store.config_dir(),
+            store.config_dir(),
+        ));
         let backend = Arc::new(ncd_runtime::LocalRuntimeBackend::new(root, "test-local"));
         let launch_planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
             root.join("runtime"),

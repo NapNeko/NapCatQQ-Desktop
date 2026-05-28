@@ -44,7 +44,10 @@ pub fn run() {
     let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
         Arc::new(SecretStoreImpl::new(data_root.join("secrets")));
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(DispatchRenderer::new(store.config_dir()));
+    let renderer = Arc::new(DispatchRenderer::new(
+        data_root.join("runtime").join("NapCatQQ").join("config"),
+        data_root.join("runtime").join("SnowLuma").join("config"),
+    ));
     let bot_backend = Arc::new(
         LocalRuntimeBackend::new(&data_root, "bot-manager-local")
             .with_event_bus(Arc::new(event_bus.clone())),
@@ -248,6 +251,9 @@ pub fn run() {
             commands::bot::upsert_bot_config,
             commands::bot::delete_bot_config,
             commands::bot::start_bot,
+            commands::bot::detect_bot_config_drift,
+            commands::bot::start_bot_with_drift_decisions,
+            commands::bot::upsert_bot_config_with_decisions,
             commands::bot::stop_bot,
             commands::bot::batch_start_bots,
             commands::bot::batch_stop_bots,
@@ -256,7 +262,7 @@ pub fn run() {
             commands::bot::active_bot_count,
             commands::bot::tail_bot_log,
             commands::snowluma::list_qq_processes,
-            commands::snowluma::set_snowluma_attach_pid,
+            commands::snowluma::probe_qq_login_info,
             commands::snowluma::set_snowluma_password_override,
             commands::snowluma::open_snowluma_webui,
         ])
