@@ -945,9 +945,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 拉取指定 Bot 的最近 `lines` 行日志快照。
     /// 返回 [`LogSnapshot`]，包含已截尾的日志行 + 总行数。供 UI 在 BotLogPage
-    /// 初次开页时一次性加载历史，再叠加 `bot_log_appended` 实时事件。对齐
-    /// legacy `NapCatQQProcessLog.get_log_content` 行为：本地是内存 deque
-    /// 快照（进程存活期间累计的全量），进程被 stop / 重启时缓冲清零。
+    /// 初次开页时一次性加载历史，再叠加 `bot_log_appended` / `snowluma_daemon_log`
+    /// 实时事件。对齐 legacy `NapCatQQProcessLog.get_log_content` 行为：本地是
+    /// 内存 deque 快照（进程存活期间累计的全量），进程被 stop / 重启时缓冲清零。
+    ///
+    /// 必须按 bot 当前配置的 backend 路由，不能写死走默认 NapCat backend：
+    /// 否则 SnowLuma flavor 的 bot 会去 NapCat backend 拉历史，拿到的是磁盘
+    /// 归档里 NC 旧日志，配置切换 NC → SL 后用户看到的依然是 NC 的内容。
     pub async fn tail_log(
         &self,
         bot_id: &BotId,
@@ -960,8 +964,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 total_lines: 0,
             });
         }
+        // 按 bot 当前 backend 选 backend；读不到 config 时退回默认 NapCat backend。
+        let qq_id: u64 = bot_id.as_str().parse().unwrap_or(0);
+        let flavor = match self.repo.get(qq_id).await {
+            Ok(Some(cfg)) => map_backend_flavor(cfg.bot.backend_type),
+            _ => BotFlavor::NapCat,
+        };
         let opts = crate::runtime_backend::TailOpts { lines };
-        self.backend
+        self.backend_for(flavor)
             .tail_log(bot_id.clone(), opts)
             .await
             .map_err(BotManagerError::from)

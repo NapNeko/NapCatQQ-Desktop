@@ -553,33 +553,18 @@ impl LocalRuntimeBackend {
         bot_id: &BotId,
         limit: usize,
     ) -> Result<LogSnapshot, BotBackendError> {
-        {
-            let logs = self.logs.lock().await;
-            if let Some(buffer) = logs.get(bot_id) {
-                return Ok(buffer.snapshot(limit));
-            }
+        // 只看内存 buffer。bot 退出 / 重启时 spawn_exit_watcher 会清掉，
+        // 这样 BotLogPage 拿到的历史快照永远是当前实例的输出，不会混到上轮
+        // crash 前的归档。磁盘 .log 文件继续按 append 模式写，留给用户事后
+        // 从 runtime/log/bots/ 自行查阅，不再回填到 UI。
+        let logs = self.logs.lock().await;
+        if let Some(buffer) = logs.get(bot_id) {
+            return Ok(buffer.snapshot(limit));
         }
-
-        let path = self.log_path_for(bot_id);
-        if !tokio::fs::try_exists(&path)
-            .await
-            .map_err(|error| BotBackendError::Io(error.to_string()))?
-        {
-            return Ok(LogSnapshot {
-                lines: Vec::new(),
-                total_lines: 0,
-            });
-        }
-
-        let text = tokio::fs::read_to_string(&path)
-            .await
-            .map_err(|error| BotBackendError::Io(error.to_string()))?;
-        let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
-        let total_lines = lines.len();
-        if limit > 0 && lines.len() > limit {
-            lines = lines.split_off(lines.len() - limit);
-        }
-        Ok(LogSnapshot { lines, total_lines })
+        Ok(LogSnapshot {
+            lines: Vec::new(),
+            total_lines: 0,
+        })
     }
 }
 
