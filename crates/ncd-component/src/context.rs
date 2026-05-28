@@ -48,16 +48,23 @@ pub enum ProgressKind {
     Finished { ok: bool },
     /// 普通日志(不算进度,只是过程信息)
     Log {
-        level: LogLevel,
+        level: ProgressLogLevel,
         message: String,
     },
 }
 
 /// 日志级别(对齐 tracing 风格)。
+///
+/// 命名说明：本 enum 跟 [`ncd_domain::bot_config::LogLevel`] 不同——后者是
+/// "bot 配置文件里写要 console_log_level 用 info" 的选项语义；本 enum 是
+/// "ProgressEvent 里这条日志的级别" 的事件语义。两者跨边界场景不同，2026-05-29
+/// 远端架构重构 P1.a fix 改名 `ProgressLogLevel` 解决 ts-rs 派生时同名互相覆盖
+/// 的问题，避免前端 `LogLevel.ts` 被静默缩成 3 档（debug/info/error）丢掉
+/// trace/warn。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub enum LogLevel {
+pub enum ProgressLogLevel {
     Trace,
     Debug,
     Info,
@@ -156,15 +163,15 @@ impl ActionCtx {
     }
 
     /// 便捷 helper:发 Log 事件。
-    pub async fn log(&self, level: LogLevel, message: impl Into<String>) {
+    pub async fn log(&self, level: ProgressLogLevel, message: impl Into<String>) {
         let msg = message.into();
         // 同时写 tracing
         match level {
-            LogLevel::Trace => tracing::trace!(target: "ncd_component", "{}", msg),
-            LogLevel::Debug => tracing::debug!(target: "ncd_component", "{}", msg),
-            LogLevel::Info => tracing::info!(target: "ncd_component", "{}", msg),
-            LogLevel::Warn => tracing::warn!(target: "ncd_component", "{}", msg),
-            LogLevel::Error => tracing::error!(target: "ncd_component", "{}", msg),
+            ProgressLogLevel::Trace => tracing::trace!(target: "ncd_component", "{}", msg),
+            ProgressLogLevel::Debug => tracing::debug!(target: "ncd_component", "{}", msg),
+            ProgressLogLevel::Info => tracing::info!(target: "ncd_component", "{}", msg),
+            ProgressLogLevel::Warn => tracing::warn!(target: "ncd_component", "{}", msg),
+            ProgressLogLevel::Error => tracing::error!(target: "ncd_component", "{}", msg),
         }
         if let Some(cb) = &self.logger {
             cb(&msg);
@@ -178,12 +185,12 @@ impl ActionCtx {
 
     /// 便捷 helper:Info 级别日志。
     pub async fn info(&self, message: impl Into<String>) {
-        self.log(LogLevel::Info, message).await;
+        self.log(ProgressLogLevel::Info, message).await;
     }
 
     /// 便捷 helper:Warn 级别日志。
     pub async fn warn(&self, message: impl Into<String>) {
-        self.log(LogLevel::Warn, message).await;
+        self.log(ProgressLogLevel::Warn, message).await;
     }
 }
 
@@ -225,7 +232,7 @@ mod tests {
         let evt = rx.recv().await.unwrap();
         match evt.kind {
             ProgressKind::Log { level, message } => {
-                assert_eq!(level, LogLevel::Info);
+                assert_eq!(level, ProgressLogLevel::Info);
                 assert_eq!(message, "hello");
             }
             other => panic!("expected Log, got {other:?}"),

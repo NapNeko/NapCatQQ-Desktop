@@ -5,7 +5,7 @@
 // 这些字段只在 step_progress 事件里有，且要在 step_end / finished 时清零。
 // 不直接解析 message 字符串：所有数字字段从后端结构化字段拿。
 
-import type { LogLevel, ProgressEvent } from '../../ipc/types';
+import type { ProgressEvent, ProgressLogLevel } from '../../ipc/types';
 
 export type ActionStatus = 'pending' | 'running' | 'paused' | 'success' | 'failed' | 'cancelled';
 
@@ -19,7 +19,7 @@ export type DownloadStage =
     | 'unknown';
 
 export interface ActionLogLine {
-    level: LogLevel;
+    level: ProgressLogLevel;
     message: string;
     timestamp_ms: number;
 }

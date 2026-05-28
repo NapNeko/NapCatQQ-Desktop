@@ -55,6 +55,7 @@ export type { ReleaseSnapshot } from './generated/domain/ReleaseSnapshot';
 // (Rust u64 默认映射)，UI 侧消费时应在 domain 层用 Number() 转 number；
 // 边界写入时反过来用 BigInt() 包一下 Date.now()。
 export type { LogLevel } from './generated/domain/LogLevel';
+export type { ProgressLogLevel } from './generated/domain/ProgressLogLevel';
 export type { ProgressKind } from './generated/domain/ProgressKind';
 export type { ProgressEvent } from './generated/domain/ProgressEvent';
 

@@ -114,7 +114,7 @@ pub async fn run_component_action(
         // 保证前端 ActionProgressView 一定能终结。
         if let Err(err) = outcome {
             let progress_event = ncd_component::ProgressEvent::new(ProgressKind::Log {
-                level: ncd_component::LogLevel::Error,
+                level: ncd_component::ProgressLogLevel::Error,
                 message: format!("plan failed: {err}"),
             });
             event_bus.publish(DomainEvent::component_action_progress(

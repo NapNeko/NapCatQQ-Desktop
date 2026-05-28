@@ -25,7 +25,7 @@ pub mod snowluma;
 pub mod traits;
 pub mod types;
 
-pub use context::{ActionCtx, LogLevel, ProgressEvent, ProgressKind};
+pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;

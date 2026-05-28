@@ -19,15 +19,12 @@ import type { ComponentRow } from '../../core/domain/components/types';
 import type { ComponentId } from '../../core/ipc/types';
 import { globalInfoBarStore } from '../ui/globalInfoBarStore';
 
-/// 从 progress.logs 倒序找最近一条 error 记录的 message。
+/// 从 progress.logs 倒序找最近一条 error / warn 记录的 message。
 /// 没找到回退到 progress.message。
-/// 注：当前 ts-rs 派生的 LogLevel 因 bot_config::LogLevel 与 component::LogLevel
-/// 同名跨 crate 冲突（pre-existing bug），被覆盖成 debug/info/error 三档；
-/// component 自己定义的 trace/warn 不在边界类型里。这里只挑 error 已够。
 function pickErrorMessage(progress: ActionProgressView): string {
     for (let i = progress.logs.length - 1; i >= 0; i--) {
         const log = progress.logs[i];
-        if (log.level === 'error') return log.message;
+        if (log.level === 'error' || log.level === 'warn') return log.message;
     }
     return progress.message || '未知错误';
 }
