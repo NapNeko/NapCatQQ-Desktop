@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use ncd_runtime::{
     ConfigStore, JsonTransaction, LocalConfigStore, MigrationOrchestrator, PathProbe,
-    SchemaVersion, SecretError, SecretStore,
+    SchemaVersion,
 };
 use ncd_test_support::{MockSecretStore, TempWorkspace};
 use serde_json::Value;

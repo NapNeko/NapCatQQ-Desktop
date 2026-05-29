@@ -85,6 +85,9 @@ pub struct RemoteLinuxHost {
     /// SSH session 句柄(用 Mutex 串行化,避免多线程同时操作 channel)。
     /// 实际连接保留为 Arc 以便 spawn 出多个 channel 用同一 session。
     handle: Arc<Mutex<ClientHandle<ClientCallback>>>,
+    /// 连接配置。当前断线后由上层 ServerManager 重新 connect,本结构体内部
+    /// 还没用到它重连,先留着等断线自愈实装。
+    #[allow(dead_code)]
     config: ConnectionConfig,
 }
 
@@ -246,7 +249,7 @@ impl Host for RemoteLinuxHost {
 
         let handle = self.handle.clone();
         let exec_fut = async move {
-            let mut session = handle.lock().await;
+            let session = handle.lock().await;
             let mut channel = session
                 .channel_open_session()
                 .await
@@ -291,8 +294,8 @@ impl Host for RemoteLinuxHost {
         }
         let line = build_remote_command_line(&self.shell, &cmd);
 
-        let mut session = self.handle.lock().await;
-        let mut channel = session
+        let session = self.handle.lock().await;
+        let channel = session
             .channel_open_session()
             .await
             .map_err(|e| HostError::remote_disconnected(format!("open channel: {e}")))?;
@@ -555,7 +558,7 @@ fn build_remote_command_line(shell: &dyn HostShell, cmd: &HostCommand) -> String
 async fn open_sftp(
     handle: &Arc<Mutex<ClientHandle<ClientCallback>>>,
 ) -> Result<russh_sftp::client::SftpSession, HostError> {
-    let mut session = handle.lock().await;
+    let session = handle.lock().await;
     let channel = session
         .channel_open_session()
         .await

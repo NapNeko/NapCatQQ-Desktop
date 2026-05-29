@@ -405,25 +405,6 @@ fn short_uuid() -> String {
     hex::encode(bytes)
 }
 
-/// 探测远端 $HOME 目录。
-async fn probe_remote_home(host: &dyn Host) -> Result<String, String> {
-    let cmd = ncd_host::HostCommand::new("sh")
-        .arg("-c")
-        .arg("echo $HOME");
-    let output = host
-        .run_to_string(cmd)
-        .await
-        .map_err(|e| format!("探测 $HOME 失败: {e}"))?;
-    if !output.success() {
-        return Err(format!("探测 $HOME 命令失败: {}", output.stderr.trim()));
-    }
-    let home = output.stdout.trim().to_string();
-    if home.is_empty() {
-        return Err("远端 $HOME 为空".to_string());
-    }
-    Ok(home)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

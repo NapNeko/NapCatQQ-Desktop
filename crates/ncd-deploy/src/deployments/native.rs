@@ -33,8 +33,10 @@ use tokio::sync::Mutex;
 
 use crate::deployment::{
     Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
-    NativeLaunchCommand, NativeLaunchTranslator,
+    NativeLaunchTranslator,
 };
+#[cfg(test)]
+use crate::deployment::NativeLaunchCommand;
 
 /// 原生部署的运行时事件桥接。
 ///
@@ -353,7 +355,7 @@ fn spawn_log_reader(
 /// 通过 sink 广播 BotProcessExited。
 fn spawn_exit_watcher(
     bot_id: BotId,
-    mut process: Box<dyn HostProcess>,
+    process: Box<dyn HostProcess>,
     processes: Arc<Mutex<HashMap<BotId, ManagedProcess>>>,
     logs: Arc<Mutex<HashMap<BotId, RuntimeLogBuffer>>>,
     event_sink: Arc<dyn NativeRuntimeEventSink>,

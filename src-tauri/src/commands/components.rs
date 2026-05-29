@@ -383,24 +383,6 @@ fn data_root_to_host_path(data_root: &std::path::Path, os: ncd_host::Os) -> Host
 /// - `"local"`：本机 Host
 /// - `"remote:<server_id>"`：远端 SSH，从 ServerManager 取已建立的连接
 ///
-/// 远端连接前置：用户必须先在远端页测试连接成功（ServerManager.test_connection
-/// 会建立 SSH 并缓存到 hosts map）；否则 resolve_host 返回 "尚未连接" 错误。
-async fn resolve_host(host_id: &str, state: &AppState) -> Result<Arc<dyn Host>, String> {
-    if host_id == "local" {
-        return local_host();
-    }
-    if let Some(server_id) = host_id.strip_prefix("remote:") {
-        return state
-            .server_manager
-            .get_host(server_id)
-            .await
-            .ok_or_else(|| {
-                format!("远端主机 {server_id} 尚未连接，请先在远端页测试连接")
-            });
-    }
-    Err(format!("unknown host_id: {host_id}"))
-}
-
 /// resolve_host 的"自动连接"包装：远端 host 缓存命中直接用；不命中尝试调
 /// `ServerManager.test_connection(server_id, None)` 用 keyring 缓存的凭据建立
 /// SSH 连接。专给 detect_component / run_component_action 用——用户进组件页

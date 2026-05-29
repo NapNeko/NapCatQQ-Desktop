@@ -200,8 +200,8 @@ const Section: React.FC<SectionProps> = ({
             </div>
             {/*
               自适应网格：每张卡最少 360px。窗口宽 ≥ 760 自动两列、≥ 1140 三列。
-              不再用 [@media(...)]:grid-cols-2 这种死写的断点，靠
-              auto-fill + minmax 让 grid 自己根据可用宽度决定列数，永远撑满。
+              不再用死写断点的 media variant，靠 auto-fill + minmax 让 grid 自己
+              根据可用宽度决定列数，永远撑满。
             */}
             <div
                 className="grid gap-3"

@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use ncd_component::{ActionCtx, Component, ProgressKind};
+use ncd_component::{ActionCtx, ProgressKind};
 use ncd_host::Host;
 
 use crate::error::DeployError;

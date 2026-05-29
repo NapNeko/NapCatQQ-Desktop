@@ -234,7 +234,7 @@ async fn smoke_extract_tar_gz() {
 #[tokio::test]
 #[ignore = "requires NCD_TEST_SSH_*"]
 async fn smoke_open_tunnel_to_remote_localhost() {
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::io::AsyncWriteExt;
     use tokio::net::TcpStream;
     let host = make_host().await;
 
