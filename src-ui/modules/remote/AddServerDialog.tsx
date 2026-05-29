@@ -6,7 +6,7 @@
 // 提交时：远端页只管"档案"——password 仅作可选凭据存进 keyring，是否记忆
 // 由 rememberCredential 字段控制；连接测试由用户在卡片上点"测试连接"完成。
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -17,6 +17,7 @@ import {
     DialogClose,
     Button,
 } from '../../shared/ui';
+import { serverService } from '../../core/services/server.service';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { AuthMethod } from '../../core/ipc/generated/domain/AuthMethod';
 
@@ -41,6 +42,25 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
     const [authMethod, setAuthMethod] = useState<AuthMethod>('password');
     const [keyPath, setKeyPath] = useState('');
     const [remember, setRemember] = useState(true);
+
+    // 切到密钥认证 / 打开弹窗时扫一次本地 ~/.ssh/。
+    // 候选项不为空时默认选第一个（ed25519 优先），用户也可手填路径。
+    const [scannedKeys, setScannedKeys] = useState<string[]>([]);
+    useEffect(() => {
+        if (!open || authMethod !== 'key') return;
+        let cancelled = false;
+        serverService.scanLocalSshKeys().then((keys) => {
+            if (cancelled) return;
+            setScannedKeys(keys);
+            // keyPath 为空时自动填第一个候选；用户已选则不覆盖。
+            if (keys.length > 0) {
+                setKeyPath((current) => current || keys[0]);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [open, authMethod]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -139,11 +159,51 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
 
                     {authMethod === 'key' && (
                         <Field label="私钥文件路径">
-                            <TextInput
-                                placeholder="例：~/.ssh/id_ed25519"
-                                value={keyPath}
-                                onChange={setKeyPath}
-                            />
+                            {scannedKeys.length > 0 ? (
+                                <div className="flex flex-col gap-1.5">
+                                    <select
+                                        className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none focus:ring-1 focus:ring-brand"
+                                        value={
+                                            scannedKeys.includes(keyPath) ? keyPath : '__custom__'
+                                        }
+                                        onChange={(e) => {
+                                            if (e.target.value === '__custom__') {
+                                                setKeyPath('');
+                                            } else {
+                                                setKeyPath(e.target.value);
+                                            }
+                                        }}
+                                    >
+                                        {scannedKeys.map((path) => (
+                                            <option key={path} value={path}>
+                                                {fileName(path)}
+                                            </option>
+                                        ))}
+                                        <option value="__custom__">自定义路径…</option>
+                                    </select>
+                                    {!scannedKeys.includes(keyPath) && (
+                                        <TextInput
+                                            placeholder="例：~/.ssh/id_ed25519"
+                                            value={keyPath}
+                                            onChange={setKeyPath}
+                                        />
+                                    )}
+                                    <p className="text-2xs text-text-tertiary">
+                                        已在 ~/.ssh/ 中发现 {scannedKeys.length} 个标准密钥
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-1">
+                                    <TextInput
+                                        placeholder="例：~/.ssh/id_ed25519"
+                                        value={keyPath}
+                                        onChange={setKeyPath}
+                                    />
+                                    <p className="text-2xs text-text-tertiary">
+                                        ~/.ssh/ 下未发现标准命名密钥，请手动填路径
+                                    </p>
+                                </div>
+                            )}
                         </Field>
                     )}
 
@@ -220,3 +280,9 @@ const TextInput: React.FC<TextInputProps> = ({
         className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none transition-colors placeholder:text-text-tertiary focus:ring-1 focus:ring-brand"
     />
 );
+
+/// 取路径最后一段（兼容 / 和 \）。
+function fileName(path: string): string {
+    const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return idx >= 0 ? path.slice(idx + 1) : path;
+}

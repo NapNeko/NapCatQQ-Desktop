@@ -38,6 +38,7 @@ import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { useResourceMonitor } from '../../hooks/diagnostics/useResourceMonitor';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useEventStream } from '../../hooks/diagnostics/useEventStream';
+import { useServerManager } from '../../hooks/remote/useServerManager';
 import {
     buildNotices,
     type NoticeItem,
@@ -139,26 +140,34 @@ const HelloCard: React.FC = () => {
 
 // ─── RemoteSummary 卡 ────────────────────────────────────────────────────
 //
-// step 3 暂时保留 0 hosts 占位；step 5 RemoteHostPanel 接入后再派生真数据。
+// 接 useServerManager 拿到 ServerManager 中已保存的服务器档案数量。
+// react-query 缓存 key 为 ['servers']，与远端页 / useComponents 共享同一份。
 
-const RemoteSummaryCard: React.FC = () => (
-    <Card padding="md" hover="lift" className="cursor-pointer">
-        <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-info/10 text-info">
-                <Server size={18} strokeWidth={1.75} />
+const RemoteSummaryCard: React.FC = () => {
+    const { servers, isLoading } = useServerManager();
+    const count = servers.length;
+    const description =
+        count === 0
+            ? '尚未配置远端主机，点击进入 Remote 页面添加。'
+            : `已配置 ${count} 台远端主机，点击进入 Remote 页面管理。`;
+
+    return (
+        <Card padding="md" hover="lift" className="cursor-pointer">
+            <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-info/10 text-info">
+                    <Server size={18} strokeWidth={1.75} />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-semibold text-text">远端主机集群</p>
+                    <p className="mt-0.5 text-[12.5px] text-text-tertiary">{description}</p>
+                </div>
+                <span className="shrink-0 rounded-pill bg-inset px-2.5 py-0.5 text-[11.5px] font-medium text-text-secondary tabular-nums">
+                    {isLoading ? '…' : `${count} hosts`}
+                </span>
             </div>
-            <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-semibold text-text">远端主机集群</p>
-                <p className="mt-0.5 text-[12.5px] text-text-tertiary">
-                    尚未配置远端主机，点击进入 Remote 页面添加。
-                </p>
-            </div>
-            <span className="shrink-0 rounded-pill bg-inset px-2.5 py-0.5 text-[11.5px] font-medium text-text-secondary">
-                0 hosts
-            </span>
-        </div>
-    </Card>
-);
+        </Card>
+    );
+};
 
 // ─── NoticeTimeline 卡 ───────────────────────────────────────────────────
 //

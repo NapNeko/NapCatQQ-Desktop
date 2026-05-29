@@ -48,3 +48,27 @@ pub async fn test_server_connection(
 ) -> Result<ProbeReport, String> {
     state.server_manager.test_connection(&id, password).await
 }
+
+/// 扫描本地 ~/.ssh/ 下的标准命名私钥（id_ed25519 / id_ecdsa / id_rsa / id_dsa）。
+/// 仅返回已存在的文件绝对路径，按现代算法优先级排序。
+/// 不读取私钥内容，纯路径枚举——给 UI 做候选项下拉用。
+#[tauri::command]
+pub async fn scan_local_ssh_keys() -> Result<Vec<String>, String> {
+    const STANDARD_KEY_NAMES: &[&str] = &["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"];
+
+    let ssh_dir = match dirs::home_dir() {
+        Some(home) => home.join(".ssh"),
+        None => return Ok(Vec::new()),
+    };
+    if !ssh_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut found = Vec::new();
+    for name in STANDARD_KEY_NAMES {
+        let candidate = ssh_dir.join(name);
+        if candidate.is_file() {
+            found.push(candidate.to_string_lossy().into_owned());
+        }
+    }
+    Ok(found)
+}

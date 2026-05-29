@@ -291,6 +291,7 @@ pub fn run() {
             commands::servers::update_server,
             commands::servers::delete_server,
             commands::servers::test_server_connection,
+            commands::servers::scan_local_ssh_keys,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

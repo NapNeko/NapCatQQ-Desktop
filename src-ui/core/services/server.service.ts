@@ -30,4 +30,10 @@ export const serverService = {
         if (isTauri) return invoke<ProbeReport>('test_server_connection', { id, password: password ?? null });
         return { success: false, osInfo: null, error: 'not in Tauri', latencyMs: BigInt(0) };
     },
+
+    /// 扫描 ~/.ssh/ 下标准命名私钥，返回路径列表（id_ed25519 / id_ecdsa / id_rsa / id_dsa）。
+    scanLocalSshKeys: async (): Promise<string[]> => {
+        if (isTauri) return invoke<string[]>('scan_local_ssh_keys');
+        return [];
+    },
 };
