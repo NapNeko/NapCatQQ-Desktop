@@ -261,7 +261,15 @@ impl Component for NapCatComponent {
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
         let mjs = self.napcat_mjs_for_mode();
-        if !host.exists(&mjs).await? {
+        let mjs_exists = host.exists(&mjs).await?;
+        eprintln!(
+            "[napcat::detect] base={} mode={:?} mjs={} exists={}",
+            self.install_base_dir.as_posix(),
+            self.mode,
+            mjs.as_posix(),
+            mjs_exists
+        );
+        if !mjs_exists {
             return Ok(None);
         }
 
@@ -300,14 +308,9 @@ impl Component for NapCatComponent {
         host: &dyn Host,
         _ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
-        // 只在 Windows 模式上实装 uninstall(对齐 legacy NapCatInstall::remove_old_file
-        // 的语义:删 install_base_dir 下除 config/ log/ 外所有文件)。Linux 注入式
-        // 安装会污染 LinuxQQ 自身,uninstall 是 LinuxQQ 卸载的事,不在 NapCat 边界。
         match host.os() {
             Os::Windows => self.uninstall_windows(host).await,
-            _ => Err(ActionError::other(
-                "NapCat uninstall is only implemented for Windows local; Linux 注入式 uninstall 由 LinuxQQ 卸载承担"
-            )),
+            _ => self.uninstall_linux(host).await,
         }
     }
 
@@ -730,6 +733,83 @@ impl NapCatComponent {
             }
             result.map_err(ActionError::Host)?;
         }
+        Ok(())
+    }
+
+    /// Linux uninstall：删 NapCat 注入物 + 还原 QQ package.json。
+    /// 与 install 流程对应：
+    /// 1) 删 napcat_dir（`<base>/opt/QQ/.../napcat/`）
+    /// 2) 删 loadNapCat.js
+    /// 3) 把 package.json 的 main 字段还原成 `./app_launcher/index.js`（QQ 默认）
+    async fn uninstall_linux(&self, host: &dyn Host) -> Result<(), ActionError> {
+        let napcat_dir = self.napcat_dir();
+        let load_script = self.load_script_path();
+        let pkg_json = self.qq_package_json();
+        let sudo = self.sudo_prefix();
+
+        // Step 1: 删 napcat_dir。rootless 走 SFTP；system 走 sudo rm -rf。
+        if host.exists(&napcat_dir).await? {
+            if self.requires_sudo {
+                let cmd = HostCommand::new("sh").arg("-c").arg(format!(
+                    "{sudo}rm -rf {}",
+                    shell_quote(napcat_dir.as_posix())
+                ));
+                let out = host.run_to_string(cmd).await?;
+                if !out.success() {
+                    return Err(ActionError::other(format!(
+                        "rm napcat_dir failed: exit={:?} stderr={}",
+                        out.exit_code,
+                        out.stderr.trim()
+                    )));
+                }
+            } else {
+                host.remove_dir_all(&napcat_dir).await?;
+            }
+        }
+
+        // Step 2: 删 loadNapCat.js。
+        if host.exists(&load_script).await? {
+            if self.requires_sudo {
+                let cmd = HostCommand::new("sh").arg("-c").arg(format!(
+                    "{sudo}rm -f {}",
+                    shell_quote(load_script.as_posix())
+                ));
+                let _ = host.run_to_string(cmd).await;
+            } else {
+                let _ = host.remove_file(&load_script).await;
+            }
+        }
+
+        // Step 3: 还原 package.json::main。如果 package.json 不存在或读不到，
+        // 跳过——QQ 本体可能已经被卸载了，没必要再 patch。
+        if host.exists(&pkg_json).await? {
+            if let Ok(bytes) = host.read_file(&pkg_json).await {
+                if let Ok(mut json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    if let Some(obj) = json.as_object_mut() {
+                        // 恢复 QQ 自带默认值。官方 QQ Linux 的 main 是 `./app_launcher/index.js`。
+                        obj.insert(
+                            "main".to_string(),
+                            serde_json::Value::String("./app_launcher/index.js".to_string()),
+                        );
+                    }
+                    if let Ok(new_bytes) = serde_json::to_vec_pretty(&json) {
+                        if self.requires_sudo {
+                            let cmd = HostCommand::new("sh")
+                                .arg("-c")
+                                .arg(format!(
+                                    "{sudo}tee {} > /dev/null",
+                                    shell_quote(pkg_json.as_posix())
+                                ))
+                                .stdin(new_bytes);
+                            let _ = host.run_to_string(cmd).await;
+                        } else {
+                            let _ = host.write_file(&pkg_json, &new_bytes).await;
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 

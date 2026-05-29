@@ -220,14 +220,23 @@ async fn probe_napcat_layout(
     let system_mjs = ncd_host::HostPath::from_posix(
         "/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs",
     );
-    if matches!(host.exists(&system_mjs).await, Ok(true)) {
+    let system_exists = matches!(host.exists(&system_mjs).await, Ok(true));
+    eprintln!(
+        "[probe_napcat_layout] host={host_id} home={home:?} system_mjs_exists={system_exists}"
+    );
+    if system_exists {
         return RemoteLayout::System;
     }
     if let Some(h) = home {
         let rootless_mjs = ncd_host::HostPath::from_posix(format!(
             "{h}/Napcat/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs"
         ));
-        if matches!(host.exists(&rootless_mjs).await, Ok(true)) {
+        let rootless_exists = matches!(host.exists(&rootless_mjs).await, Ok(true));
+        eprintln!(
+            "[probe_napcat_layout] host={host_id} rootless_mjs={} exists={rootless_exists}",
+            rootless_mjs.as_posix()
+        );
+        if rootless_exists {
             return RemoteLayout::Rootless;
         }
     }

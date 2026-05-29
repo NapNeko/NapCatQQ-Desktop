@@ -151,9 +151,9 @@ impl LinuxQQComponent {
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::LinuxQq,
-            display_name: "LinuxQQ".to_string(),
-            description: "腾讯 QQ Linux 客户端，远端部署 NapCat 时的 QQ 本体".to_string(),
-            repo_url: Some("https://im.qq.com/linuxqq/".to_string()),
+            display_name: "QQ".to_string(),
+            description: "腾讯 QQ 客户端（Linux 远端部署 NapCat 时的 QQ 本体；Windows 本机请通过官方安装包自行安装）".to_string(),
+            repo_url: Some("https://im.qq.com/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
@@ -299,6 +299,30 @@ impl Component for LinuxQQComponent {
         // 清理远端安装包
         let _ = host.remove_file(&remote_pkg).await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
+        ctx.emit(ProgressKind::Finished { ok: true }).await;
+        Ok(())
+    }
+
+    async fn uninstall(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
+        // rootless 卸载：删 <install_base>/opt/QQ 整棵子树。
+        // System 布局（/opt/QQ）需要 sudo，但 rootless 是当前默认布局；
+        // 如果 install_base = "/" 删 /opt/QQ 会因权限失败，那时让用户用
+        // 系统包管理器（dpkg -P linuxqq / apt remove linuxqq）卸载。
+        let qq_root = self.qq_base_path();
+        ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
+        ctx.emit(ProgressKind::StepBegin {
+            step: 1,
+            message: format!("remove {}", qq_root.as_posix()),
+        })
+        .await;
+        if host.exists(&qq_root).await? {
+            host.remove_dir_all(&qq_root).await?;
+        }
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }

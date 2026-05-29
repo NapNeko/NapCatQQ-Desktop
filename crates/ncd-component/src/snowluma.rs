@@ -254,9 +254,7 @@ impl Component for SnowLumaComponent {
     ) -> Result<(), ActionError> {
         match host.os() {
             Os::Windows => self.uninstall_windows(host).await,
-            _ => Err(ActionError::other(
-                "SnowLuma uninstall 仅在 Windows 本机实装;Linux daemon 注入卸载由上层编排",
-            )),
+            _ => self.uninstall_linux(host).await,
         }
     }
 
@@ -712,6 +710,16 @@ impl SnowLumaComponent {
     ) -> Result<(), ActionError> {
         host.create_dir_all(&self.snowluma_dir).await?;
         copy_tree(host, payload_root, &self.snowluma_dir, &["config", "data"]).await
+    }
+
+    /// Linux uninstall：删 snowluma_dir（lite tarball 解压根）。
+    /// 保留 workspace_dir 父目录——daemon 数据 / config / runtime / log
+    /// 都在 workspace 但不属于 framework，由用户自行清理。
+    async fn uninstall_linux(&self, host: &dyn Host) -> Result<(), ActionError> {
+        if host.exists(&self.snowluma_dir).await? {
+            host.remove_dir_all(&self.snowluma_dir).await?;
+        }
+        Ok(())
     }
 
     /// Windows uninstall:删 install_dir 下除 config/ data/ 外所有文件和目录,

@@ -295,6 +295,26 @@ impl Component for NodeJsComponent {
         Ok(())
     }
 
+    async fn uninstall(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
+        ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
+        ctx.emit(ProgressKind::StepBegin {
+            step: 1,
+            message: format!("remove {}", self.install_dir.as_posix()),
+        })
+        .await;
+        // install_dir 不存在视为已卸载，幂等成功。
+        if host.exists(&self.install_dir).await? {
+            host.remove_dir_all(&self.install_dir).await?;
+        }
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+        ctx.emit(ProgressKind::Finished { ok: true }).await;
+        Ok(())
+    }
+
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
         let binary = self.node_binary_path();
         let exists = host.exists(&binary).await?;

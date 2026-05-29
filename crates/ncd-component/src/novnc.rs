@@ -27,7 +27,7 @@ use async_trait::async_trait;
 
 use ncd_host::{Host, HostCommand, Locality, Os};
 
-use crate::context::{ActionCtx, ProgressKind};
+use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::error::ActionError;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
@@ -243,6 +243,50 @@ impl Component for NoVncComponent {
             ));
         }
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
+        ctx.emit(ProgressKind::Finished { ok: true }).await;
+        Ok(())
+    }
+
+    async fn uninstall(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
+        self.check_target(host)?;
+        ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
+        ctx.emit(ProgressKind::StepBegin {
+            step: 1,
+            message: "remove novnc / websockify / x11vnc / fluxbox / xvfb".into(),
+        })
+        .await;
+        let mgr = self.detect_pkg_manager(host).await?;
+        let pkgs_apt = "novnc websockify x11vnc fluxbox xvfb";
+        let pkgs_dnf = "novnc python3-websockify x11vnc fluxbox openbox xorg-x11-server-Xvfb";
+        let cmd_str = match mgr {
+            PkgMgr::Apt => {
+                let prefix = if self.use_sudo { "sudo -n " } else { "" };
+                format!("DEBIAN_FRONTEND=noninteractive {prefix}apt-get remove -y {pkgs_apt}")
+            }
+            PkgMgr::Dnf => {
+                let prefix = if self.use_sudo { "sudo -n " } else { "" };
+                format!("{prefix}dnf remove -y {pkgs_dnf}")
+            }
+        };
+        let cmd = HostCommand::new("sh").arg("-c").arg(cmd_str);
+        let out = host.run_to_string(cmd).await?;
+        if !out.success() {
+            // 卸载失败一般是某个包未安装；不视为致命错误，只记录。
+            ctx.log(
+                ProgressLogLevel::Warn,
+                format!(
+                    "novnc uninstall: exit={:?} stderr={}",
+                    out.exit_code,
+                    out.stderr.trim()
+                ),
+            )
+            .await;
+        }
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }
