@@ -62,6 +62,10 @@ pub struct NapCatComponent {
     pub tmp_dir: HostPath,
     /// 平台模式。Linux 走注入式,Windows 走扁平 zip 解压。
     mode: PlatformMode,
+    /// install/uninstall 是否需要 sudo（仅 Linux 模式生效）。
+    /// System 布局（install_base_dir = "/"）写 /opt/QQ 必须 sudo；
+    /// Rootless 布局（$HOME/Napcat）一般不需要。
+    requires_sudo: bool,
 }
 
 impl NapCatComponent {
@@ -76,6 +80,7 @@ impl NapCatComponent {
             expected_sha256: None,
             tmp_dir: HostPath::from_posix("/tmp"),
             mode: PlatformMode::Linux,
+            requires_sudo: false,
         }
     }
 
@@ -97,7 +102,15 @@ impl NapCatComponent {
             expected_sha256: None,
             tmp_dir,
             mode: PlatformMode::Windows,
+            requires_sudo: false,
         }
+    }
+
+    /// 标记为 system 布局：install/uninstall 写系统目录，命令需要 sudo。
+    /// 只在 Linux 模式有意义；Windows 上设置无效。
+    pub fn with_sudo(mut self, requires: bool) -> Self {
+        self.requires_sudo = requires;
+        self
     }
 
     pub fn with_url(mut self, url: impl Into<String>) -> Self {
@@ -462,16 +475,27 @@ impl NapCatComponent {
         })
         .await;
         let napcat_dir = self.napcat_dir();
-        host.create_dir_all(&napcat_dir).await?;
+        let sudo = self.sudo_prefix();
+        // System 布局下 napcat_dir 在 /opt/QQ 系统目录，create_dir_all 走 SFTP
+        // 不能 sudo，必须用 shell 命令包 sudo。Rootless 布局 sudo 为空字符串
+        // 退化到普通命令。
+        let mkdir_cmd = HostCommand::new("sh").arg("-c").arg(format!(
+            "{sudo}mkdir -p {}",
+            shell_quote(napcat_dir.as_posix())
+        ));
+        let out = host.run_to_string(mkdir_cmd).await?;
+        if !out.success() {
+            return Err(ActionError::install_step(
+                "mkdir_napcat",
+                format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
+            ));
+        }
         // 官方 install.sh L730:`cp -r -f ./NapCat/* TARGET_FOLDER/napcat/`
-        // 先尝试 stage_dir 直接 copy(NapCat.Shell.zip 顶层就是 napcat 文件,无 NapCat/ 子目录)
-        // 但 legacy + 官方都用 `unzip -d ./NapCat NapCat.Shell.zip` 让解压有 NapCat/ 包装
-        // 我们 extract_archive 直接到 stage_dir,所以 stage_dir 下直接是 napcat.mjs 等
         let cp_cmd = HostCommand::new("sh").arg("-c").arg(format!(
-            "cp -r -f {}/* {}/ && chmod -R +x {}/",
-            stage_dir.as_posix(),
-            napcat_dir.as_posix(),
-            napcat_dir.as_posix(),
+            "{sudo}cp -r -f {}/* {}/ && {sudo}chmod -R +x {}/",
+            shell_quote(stage_dir.as_posix()),
+            shell_quote(napcat_dir.as_posix()),
+            shell_quote(napcat_dir.as_posix()),
         ));
         let out = host.run_to_string(cp_cmd).await?;
         if !out.success() {
@@ -494,8 +518,26 @@ impl NapCatComponent {
             "(async () => {{await import('file://{}/napcat.mjs');}})();\n",
             napcat_dir.as_posix()
         );
-        host.write_file(&self.load_script_path(), load_script.as_bytes())
-            .await?;
+        // System 布局走 sudo tee；rootless 走 SFTP write_file。
+        if self.requires_sudo {
+            let tee_cmd = HostCommand::new("sh")
+                .arg("-c")
+                .arg(format!(
+                    "{sudo}tee {} > /dev/null",
+                    shell_quote(self.load_script_path().as_posix())
+                ))
+                .stdin(load_script.into_bytes());
+            let out = host.run_to_string(tee_cmd).await?;
+            if !out.success() {
+                return Err(ActionError::install_step(
+                    "write_load_script",
+                    format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
+                ));
+            }
+        } else {
+            host.write_file(&self.load_script_path(), load_script.as_bytes())
+                .await?;
+        }
         ctx.emit(ProgressKind::StepEnd { step: 5, ok: true }).await;
 
         // ===== Step 6:改 QQ package.json 的 main 字段 =====
@@ -537,8 +579,33 @@ impl NapCatComponent {
         let new_bytes = serde_json::to_vec_pretty(&json).map_err(|e| {
             ActionError::install_step("serialize_qq_package_json", format!("{e}"))
         })?;
-        host.write_file(&path, &new_bytes).await?;
+        // System 布局走 sudo tee；rootless 走 SFTP write_file。
+        if self.requires_sudo {
+            let sudo = self.sudo_prefix();
+            let tee_cmd = HostCommand::new("sh")
+                .arg("-c")
+                .arg(format!(
+                    "{sudo}tee {} > /dev/null",
+                    shell_quote(path.as_posix())
+                ))
+                .stdin(new_bytes);
+            let out = host.run_to_string(tee_cmd).await?;
+            if !out.success() {
+                return Err(ActionError::install_step(
+                    "patch_qq_main_write",
+                    format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
+                ));
+            }
+        } else {
+            host.write_file(&path, &new_bytes).await?;
+        }
         Ok(())
+    }
+
+    /// sudo 前缀：requires_sudo=true 时返回 `"sudo -n "`（非交互式 sudo），
+    /// 否则空串。`sudo -n` 在没配 NOPASSWD 时直接失败而不是挂起等密码。
+    fn sudo_prefix(&self) -> &'static str {
+        if self.requires_sudo { "sudo -n " } else { "" }
     }
 
     /// Windows 扁平 zip 部署。对齐 legacy `NapCatInstall`(installers.py):
@@ -675,6 +742,13 @@ impl NapCatComponent {
         }
         self.remove_old_files_windows(host).await
     }
+}
+
+/// 把 POSIX 路径包成单引号字面量，避免空格 / `$` / `'` 等元字符注入。
+/// Bash 单引号内除 `'` 外所有字符按字面量；内部 `'` 替换成 `'\''`。
+fn shell_quote(s: &str) -> String {
+    let escaped = s.replace('\'', r"'\''");
+    format!("'{escaped}'")
 }
 
 /// 当前 unix 毫秒(用于临时文件名),失败返回 0。

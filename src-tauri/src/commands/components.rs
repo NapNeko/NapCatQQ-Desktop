@@ -274,10 +274,13 @@ fn build_component_for_host(
                 }
                 Arc::new(comp)
             } else {
-                // 对齐官方 NapCat-Installer：装到 /opt/QQ/resources/app/app_launcher/napcat。
-                // NapCatComponent 内部把 base + opt/QQ/... 拼成完整路径，所以传 "/" 让
-                // 拼出来正好等于官方路径。需要 sudo 权限。
-                Arc::new(NapCatComponent::new(HostPath::from_posix("/")))
+                // 远端 Linux：layout 决定 base_dir + 是否需要 sudo。
+                // System 走 /opt/QQ 必须 sudo（对齐官方 NapCat-Installer.py）；
+                // Rootless 走 $HOME/Napcat 不需要 sudo（对齐 NapCat-TUI-CLI）。
+                Arc::new(
+                    NapCatComponent::new(napcat_base.clone())
+                        .with_sudo(matches!(layout, RemoteLayout::System)),
+                )
             }
         }
         ComponentId::SnowLuma => {
