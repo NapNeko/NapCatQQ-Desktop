@@ -193,12 +193,18 @@ const StatusLine: React.FC<{
                     不支持当前平台
                 </p>
             );
-        case 'unknown':
+        case 'unknown': {
+            // 区分"正在探测"和"真异常"。loading 用中性灰，异常才用 warning 黄。
+            const isLoading = row.status.reason === '正在探测';
             return (
-                <p className="mt-0.5 truncate text-[11.5px] text-warning">
-                    探测异常 · {row.status.reason}
+                <p
+                    className={`mt-0.5 truncate text-[11.5px] ${isLoading ? 'text-text-tertiary' : 'text-warning'
+                        }`}
+                >
+                    {isLoading ? row.status.reason : `探测异常 · ${row.status.reason}`}
                 </p>
             );
+        }
     }
 };
 
@@ -290,14 +296,12 @@ const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progress }) 
             <div className="mt-1 flex items-center gap-2">
                 <span
                     aria-hidden
-                    className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
-                        isCancelled ? 'bg-warning' : 'bg-danger'
-                    }`}
+                    className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${isCancelled ? 'bg-warning' : 'bg-danger'
+                        }`}
                 />
                 <span
-                    className={`truncate text-[12px] ${
-                        isCancelled ? 'text-warning' : 'text-danger'
-                    }`}
+                    className={`truncate text-[12px] ${isCancelled ? 'text-warning' : 'text-danger'
+                        }`}
                 >
                     {isCancelled ? '已取消' : '失败 · 详见顶部提示'}
                 </span>

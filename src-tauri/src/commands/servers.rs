@@ -15,6 +15,15 @@ pub async fn list_servers(state: State<'_, AppState>) -> Result<Vec<ServerProfil
 }
 
 #[tauri::command]
+pub async fn test_server_connection(
+    state: State<'_, AppState>,
+    id: String,
+    password: Option<String>,
+) -> Result<ProbeReport, String> {
+    state.server_manager.test_connection(&id, password).await
+}
+
+#[tauri::command]
 pub async fn add_server(
     state: State<'_, AppState>,
     profile: ServerProfile,
@@ -38,15 +47,6 @@ pub async fn delete_server(
     id: String,
 ) -> Result<(), String> {
     state.server_manager.delete_server(&id).await
-}
-
-#[tauri::command]
-pub async fn test_server_connection(
-    state: State<'_, AppState>,
-    id: String,
-    password: Option<String>,
-) -> Result<ProbeReport, String> {
-    state.server_manager.test_connection(&id, password).await
 }
 
 /// 扫描本地 ~/.ssh/ 下的标准命名私钥（id_ed25519 / id_ecdsa / id_rsa / id_dsa）。

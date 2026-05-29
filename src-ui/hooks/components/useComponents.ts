@@ -19,7 +19,7 @@
 //
 // frontend-layering：本 hook 唯一允许调 service 的位置。
 
-import { useQuery, useQueries } from '@tanstack/react-query';
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 import { isTauri } from '../../core/ipc/transport';
 import { componentService } from '../../core/services/component.service';
@@ -34,7 +34,6 @@ import {
 import { mockHosts } from '../../core/ipc/mock/component.mock';
 import type { Os } from '../../core/ipc/types';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
-import { useQueryClient } from '@tanstack/react-query';
 
 // 探测本机 OS。当前 Tauri 工程仅 Windows 编译 LocalHost（src-tauri/src/commands/
 // components.rs::local_host 上有 #[cfg(windows)]），所以 Windows 兜底是安全的；
@@ -69,8 +68,6 @@ function useKnownHosts(): { hosts: HostInfo[]; servers: ServerProfile[] } {
         const remotes: HostInfo[] = (serversQuery.data ?? []).map((p) => ({
             host_id: `remote:${p.id}`,
             display_name: p.name || p.host,
-            // 远端默认 Linux —— RemoteLinuxHost 是当前唯一实装。后续接入
-            // RemoteWindowsHost 时按 ServerProfile 增加 os 字段。
             os: 'linux' as Os,
             locality: 'remote',
         }));
@@ -94,9 +91,8 @@ export function useComponents(): UseComponentsResult {
     const queryClient = useQueryClient();
 
     // 自动连接：进入组件页时，对所有 ServerState=disconnected/failed 的远端 host
-    // 触发一次 test_server_connection（密码用 keyring 缓存），让组件 detect 不
-    // 报"未连接"。已经是 connected/connecting 的跳过，避免重复打扰。
-    // useRef 防止 effect 在 servers 数组身份变化时重复触发同一台主机。
+    // 触发一次 test_server_connection（密码用 keyring 缓存）。后端 detect 命令
+    // 内部也有 resolve_host_with_autoconnect 兜底，本 effect 是双重保险。
     const autoConnectedRef = useRef<Set<string>>(new Set());
     useEffect(() => {
         if (!isTauri) return;
@@ -108,13 +104,14 @@ export function useComponents(): UseComponentsResult {
                 .testConnection(profile.id)
                 .then((report) => {
                     if (report.success) {
-                        // 连接建立后让 detect 矩阵重新拉一遍。
                         queryClient.invalidateQueries({ queryKey: ['componentDetect'] });
                         queryClient.invalidateQueries({ queryKey: ['servers'] });
+                    } else {
+                        autoConnectedRef.current.delete(profile.id);
                     }
                 })
                 .catch(() => {
-                    // 凭据缺失 / 网络错误等：让用户去远端页手动测试，组件页不弹红。
+                    autoConnectedRef.current.delete(profile.id);
                 });
         }
     }, [servers, queryClient]);
@@ -152,9 +149,19 @@ export function useComponents(): UseComponentsResult {
                 const detect = detectQuery?.data ?? null;
                 let status = deriveStatus(host, info, detect);
 
-                // detect 失败时把真错误信息塞进 row 的 unknown.reason，让用户
-                // 在那一行能看到 "remote host registry not implemented" 之类的具体
-                // 原因，而不是错误地以为还在 loading。
+                // detect 还在跑（首次加载或 invalidate 后重新拉）：状态改为
+                // "正在探测"，不要让 UI 一直显示"尚未探测"误以为出了错。
+                // isFetching 覆盖 isLoading + 重新拉取场景；只在 detect 为 null
+                // 时才覆盖，已经拿到 detect 数据后即使 isFetching 也保留旧值。
+                if (status.state === 'unknown' && detect === null && detectQuery?.isFetching) {
+                    status = {
+                        state: 'unknown',
+                        reason: '正在探测',
+                    };
+                }
+
+                // detect 真失败时把错误信息塞进 reason，让用户能看到具体原因
+                // （如 "auto-connect failed" / "ssh connect timeout"）。
                 if (status.state === 'unknown' && detectQuery?.error) {
                     const err = detectQuery.error as Error;
                     status = {

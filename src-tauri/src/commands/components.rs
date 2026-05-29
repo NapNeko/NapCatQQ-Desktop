@@ -37,9 +37,16 @@ pub async fn detect_component(
     host_id: String,
     state: State<'_, AppState>,
 ) -> Result<ComponentDetectResult, String> {
-    let host = resolve_host(&host_id, &state).await?;
+    let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let remote_home = probe_remote_home_if_needed(&host_id, host.as_ref()).await;
-    let component = build_component_for_host(component_id, &state, host.as_ref(), remote_home.as_deref());
+    let layout = probe_napcat_layout(&host_id, host.as_ref(), remote_home.as_deref()).await;
+    let component = build_component_for_host(
+        component_id,
+        &state,
+        host.as_ref(),
+        remote_home.as_deref(),
+        layout,
+    );
     let host_ref: &dyn Host = host.as_ref();
 
     if component.check_target(host_ref).is_err() {
@@ -69,9 +76,16 @@ pub async fn run_component_action(
     kind: StepKind,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let host = resolve_host(&host_id, &state).await?;
+    let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let remote_home = probe_remote_home_if_needed(&host_id, host.as_ref()).await;
-    let component = build_component_for_host(component_id, &state, host.as_ref(), remote_home.as_deref());
+    let layout = probe_napcat_layout(&host_id, host.as_ref(), remote_home.as_deref()).await;
+    let component = build_component_for_host(
+        component_id,
+        &state,
+        host.as_ref(),
+        remote_home.as_deref(),
+        layout,
+    );
 
     let plan = DeployPlan::builder()
         .step("single", kind, Arc::clone(&component))
@@ -176,6 +190,47 @@ async fn probe_remote_home_if_needed(host_id: &str, host: &dyn Host) -> Option<S
     }
 }
 
+/// 远端 NapCat / LinuxQQ 的安装布局：system 是官方 NapCat-Installer 风格
+/// （/opt/QQ），rootless 是 NapCat-TUI-CLI 风格（$HOME/Napcat）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteLayout {
+    /// 系统安装：/opt/QQ/...，install_base_dir = "/"
+    System,
+    /// 用户安装：$HOME/Napcat/opt/QQ/...，install_base_dir = "$HOME/Napcat"
+    Rootless,
+}
+
+/// 远端 NapCat 安装布局自动探测：
+///
+/// 1. 先看 /opt/QQ/resources/app/app_launcher/napcat/napcat.mjs（system）
+/// 2. 再看 $HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs（rootless）
+/// 3. 都没有 → 默认 System（从零安装时跟随官方 NapCat-Installer.py）
+async fn probe_napcat_layout(
+    host_id: &str,
+    host: &dyn Host,
+    home: Option<&str>,
+) -> RemoteLayout {
+    if !host_id.starts_with("remote:") {
+        return RemoteLayout::System;
+    }
+    // 尽量用 host.exists 而不是 shell test，SFTP 一次 stat 比 SSH 起 shell 快。
+    let system_mjs = ncd_host::HostPath::from_posix(
+        "/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs",
+    );
+    if matches!(host.exists(&system_mjs).await, Ok(true)) {
+        return RemoteLayout::System;
+    }
+    if let Some(h) = home {
+        let rootless_mjs = ncd_host::HostPath::from_posix(format!(
+            "{h}/Napcat/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs"
+        ));
+        if matches!(host.exists(&rootless_mjs).await, Ok(true)) {
+            return RemoteLayout::Rootless;
+        }
+    }
+    RemoteLayout::System
+}
+
 /// 把 component_id 实例化成具体 Component。
 ///
 /// NapCat / SnowLuma 在 Windows 本机走"扁平 zip 部署"分支(legacy 同款),
@@ -187,12 +242,23 @@ fn build_component_for_host(
     state: &AppState,
     host: &dyn Host,
     remote_home: Option<&str>,
+    layout: RemoteLayout,
 ) -> Arc<dyn Component> {
     let data_root_host = data_root_to_host_path(&state.data_root, host.os());
     // 读 release 缓存反查 SHA256：缓存缺失 / 无 digest 时退化到"无 hash"分支，
     // 让安装链路走原有路径（race 仍尝试切 mirror，但失去内容级保护）。
     // 缓存由前端 useReleases hook 在启动/轮询时通过 get_release_snapshot 维护。
     let snapshot = read_cached_release_snapshot(&state.data_root);
+
+    // 远端 NapCat / LinuxQQ 共用 install_base_dir：layout 决定 / 还是 $HOME/Napcat。
+    let napcat_base = match layout {
+        RemoteLayout::System => HostPath::from_posix("/"),
+        RemoteLayout::Rootless => match remote_home {
+            Some(h) => HostPath::from_posix(format!("{h}/Napcat")),
+            None => HostPath::from_posix("/root/Napcat"),
+        },
+    };
+
     match id {
         ComponentId::NapCat => {
             if host.os() == ncd_host::Os::Windows {
@@ -323,6 +389,44 @@ async fn resolve_host(host_id: &str, state: &AppState) -> Result<Arc<dyn Host>, 
             });
     }
     Err(format!("unknown host_id: {host_id}"))
+}
+
+/// resolve_host 的"自动连接"包装：远端 host 缓存命中直接用；不命中尝试调
+/// `ServerManager.test_connection(server_id, None)` 用 keyring 缓存的凭据建立
+/// SSH 连接。专给 detect_component / run_component_action 用——用户进组件页
+/// 时不需要先去远端页点测试。
+///
+/// 失败时返回原始错误，让前端在那一行 host status 显示"未连接 + 原因"。
+async fn resolve_host_with_autoconnect(
+    host_id: &str,
+    state: &AppState,
+) -> Result<Arc<dyn Host>, String> {
+    if host_id == "local" {
+        return local_host();
+    }
+    let Some(server_id) = host_id.strip_prefix("remote:") else {
+        return Err(format!("unknown host_id: {host_id}"));
+    };
+
+    if let Some(host) = state.server_manager.get_host(server_id).await {
+        return Ok(host);
+    }
+
+    // 缓存未命中——尝试用 keyring 缓存凭据自动连一次。
+    match state.server_manager.test_connection(server_id, None).await {
+        Ok(report) if report.success => state
+            .server_manager
+            .get_host(server_id)
+            .await
+            .ok_or_else(|| format!("auto-connect 成功但缓存为空: {server_id}（不应发生）")),
+        Ok(report) => {
+            let err = report.error.clone().unwrap_or_else(|| "未知错误".into());
+            Err(format!("自动连接失败: {err}（请去远端页手动测试连接）"))
+        }
+        Err(err) => Err(format!(
+            "自动连接被拒绝: {err}（凭据可能未保存，请去远端页手动测试）"
+        )),
+    }
 }
 
 #[cfg(windows)]

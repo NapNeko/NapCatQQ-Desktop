@@ -76,7 +76,7 @@ export function deriveStatus(
         return { state: 'unsupported' };
     }
     if (!detect) {
-        return { state: 'unknown', reason: '尚未探测' };
+        return { state: 'unknown', reason: '正在探测' };
     }
     if (!detect.supported) {
         return { state: 'unsupported' };
