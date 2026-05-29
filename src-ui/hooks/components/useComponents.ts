@@ -20,7 +20,7 @@
 // frontend-layering：本 hook 唯一允许调 service 的位置。
 
 import { useQuery, useQueries } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { isTauri } from '../../core/ipc/transport';
 import { componentService } from '../../core/services/component.service';
 import { serverService } from '../../core/services/server.service';
@@ -33,6 +33,8 @@ import {
 } from '../../core/domain/components/types';
 import { mockHosts } from '../../core/ipc/mock/component.mock';
 import type { Os } from '../../core/ipc/types';
+import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
+import { useQueryClient } from '@tanstack/react-query';
 
 // 探测本机 OS。当前 Tauri 工程仅 Windows 编译 LocalHost（src-tauri/src/commands/
 // components.rs::local_host 上有 #[cfg(windows)]），所以 Windows 兜底是安全的；
@@ -47,14 +49,14 @@ function detectLocalOs(): Os {
 
 /// Tauri 模式下从 ServerManager 拉服务器档案，组合本机 + 远端 host 列表。
 /// 浏览器预览用 mockHosts。
-function useKnownHosts(): HostInfo[] {
+function useKnownHosts(): { hosts: HostInfo[]; servers: ServerProfile[] } {
     const serversQuery = useQuery({
         queryKey: ['servers'],
         queryFn: () => serverService.list(),
         enabled: isTauri,
     });
 
-    return useMemo<HostInfo[]>(() => {
+    const hosts = useMemo<HostInfo[]>(() => {
         if (!isTauri) {
             return mockHosts;
         }
@@ -74,6 +76,8 @@ function useKnownHosts(): HostInfo[] {
         }));
         return [local, ...remotes];
     }, [serversQuery.data]);
+
+    return { hosts, servers: serversQuery.data ?? [] };
 }
 
 export interface UseComponentsResult {
@@ -86,7 +90,34 @@ export interface UseComponentsResult {
 }
 
 export function useComponents(): UseComponentsResult {
-    const hosts = useKnownHosts();
+    const { hosts, servers } = useKnownHosts();
+    const queryClient = useQueryClient();
+
+    // 自动连接：进入组件页时，对所有 ServerState=disconnected/failed 的远端 host
+    // 触发一次 test_server_connection（密码用 keyring 缓存），让组件 detect 不
+    // 报"未连接"。已经是 connected/connecting 的跳过，避免重复打扰。
+    // useRef 防止 effect 在 servers 数组身份变化时重复触发同一台主机。
+    const autoConnectedRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        if (!isTauri) return;
+        for (const profile of servers) {
+            if (profile.state === 'connected' || profile.state === 'connecting') continue;
+            if (autoConnectedRef.current.has(profile.id)) continue;
+            autoConnectedRef.current.add(profile.id);
+            serverService
+                .testConnection(profile.id)
+                .then((report) => {
+                    if (report.success) {
+                        // 连接建立后让 detect 矩阵重新拉一遍。
+                        queryClient.invalidateQueries({ queryKey: ['componentDetect'] });
+                        queryClient.invalidateQueries({ queryKey: ['servers'] });
+                    }
+                })
+                .catch(() => {
+                    // 凭据缺失 / 网络错误等：让用户去远端页手动测试，组件页不弹红。
+                });
+        }
+    }, [servers, queryClient]);
 
     const catalogQuery = useQuery({
         queryKey: ['componentCatalog'],

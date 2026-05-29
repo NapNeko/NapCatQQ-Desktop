@@ -38,7 +38,8 @@ pub async fn detect_component(
     state: State<'_, AppState>,
 ) -> Result<ComponentDetectResult, String> {
     let host = resolve_host(&host_id, &state).await?;
-    let component = build_component_for_host(component_id, &state, host.as_ref());
+    let remote_home = probe_remote_home_if_needed(&host_id, host.as_ref()).await;
+    let component = build_component_for_host(component_id, &state, host.as_ref(), remote_home.as_deref());
     let host_ref: &dyn Host = host.as_ref();
 
     if component.check_target(host_ref).is_err() {
@@ -69,7 +70,8 @@ pub async fn run_component_action(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let host = resolve_host(&host_id, &state).await?;
-    let component = build_component_for_host(component_id, &state, host.as_ref());
+    let remote_home = probe_remote_home_if_needed(&host_id, host.as_ref()).await;
+    let component = build_component_for_host(component_id, &state, host.as_ref(), remote_home.as_deref());
 
     let plan = DeployPlan::builder()
         .step("single", kind, Arc::clone(&component))
@@ -159,6 +161,21 @@ fn catalog() -> Vec<ComponentInfo> {
     ]
 }
 
+/// 仅在远端 host 上探测 $HOME（轻量级，失败回退 None 让组件使用绝对路径默认值）。
+async fn probe_remote_home_if_needed(host_id: &str, host: &dyn Host) -> Option<String> {
+    if !host_id.starts_with("remote:") {
+        return None;
+    }
+    let cmd = ncd_host::HostCommand::new("sh").arg("-c").arg("echo $HOME");
+    match host.run_to_string(cmd).await {
+        Ok(out) if out.success() => {
+            let home = out.stdout.trim().to_string();
+            if home.is_empty() { None } else { Some(home) }
+        }
+        _ => None,
+    }
+}
+
 /// 把 component_id 实例化成具体 Component。
 ///
 /// NapCat / SnowLuma 在 Windows 本机走"扁平 zip 部署"分支(legacy 同款),
@@ -169,6 +186,7 @@ fn build_component_for_host(
     id: ComponentId,
     state: &AppState,
     host: &dyn Host,
+    remote_home: Option<&str>,
 ) -> Arc<dyn Component> {
     let data_root_host = data_root_to_host_path(&state.data_root, host.os());
     // 读 release 缓存反查 SHA256：缓存缺失 / 无 digest 时退化到"无 hash"分支，
@@ -190,7 +208,10 @@ fn build_component_for_host(
                 }
                 Arc::new(comp)
             } else {
-                Arc::new(NapCatComponent::new(HostPath::from_posix("/home/napcat/Napcat")))
+                // 对齐官方 NapCat-Installer：装到 /opt/QQ/resources/app/app_launcher/napcat。
+                // NapCatComponent 内部把 base + opt/QQ/... 拼成完整路径，所以传 "/" 让
+                // 拼出来正好等于官方路径。需要 sudo 权限。
+                Arc::new(NapCatComponent::new(HostPath::from_posix("/")))
             }
         }
         ComponentId::SnowLuma => {
@@ -222,19 +243,31 @@ fn build_component_for_host(
                 }
                 Arc::new(comp)
             } else {
+                // 对齐 legacy SnowLumaRemotePaths：装到 $HOME/snowluma-remote/workspace。
+                // SnowLumaComponent::new 内部把 workspace 推出 snowluma 子目录。
+                let workspace = match remote_home {
+                    Some(home) => HostPath::from_posix(format!("{home}/snowluma-remote/workspace")),
+                    None => HostPath::from_posix("/root/snowluma-remote/workspace"),
+                };
                 Arc::new(SnowLumaComponent::new(
-                    HostPath::from_posix("/home/napcat/Napcat/snowluma-workspace"),
+                    workspace,
                     "https://github.com/SnowLuma/SnowLuma/releases/latest/download/SnowLuma-linux-x64-lite.tar.gz",
                 ))
             }
         }
-        ComponentId::LinuxQq => Arc::new(LinuxQQComponent::default_v3_2_25(
-            HostPath::from_posix("/home/napcat/Napcat"),
-        )),
-        ComponentId::NodeJs => Arc::new(NodeJsComponent::new(
-            "20.10.0",
-            HostPath::from_posix("/home/napcat/Napcat/usr/node"),
-        )),
+        ComponentId::LinuxQq => {
+            // 官方 NapCat-Installer 把 LinuxQQ 装到 /opt/QQ（系统 deb/rpm 包），
+            // base 传 "/" 让拼出来的 opt/QQ 落到根。
+            Arc::new(LinuxQQComponent::default_v3_2_25(HostPath::from_posix("/")))
+        }
+        ComponentId::NodeJs => {
+            // SnowLuma 才需要 Node.js；装到 SnowLuma workspace 下。
+            let install_dir = match remote_home {
+                Some(home) => HostPath::from_posix(format!("{home}/snowluma-remote/workspace/node")),
+                None => HostPath::from_posix("/root/snowluma-remote/workspace/node"),
+            };
+            Arc::new(NodeJsComponent::new("20.10.0", install_dir))
+        }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::DesktopSelf => Arc::new(
             DesktopSelfComponent::from_env()
