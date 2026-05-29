@@ -23,6 +23,7 @@ import { useQuery, useQueries } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { isTauri } from '../../core/ipc/transport';
 import { componentService } from '../../core/services/component.service';
+import { serverService } from '../../core/services/server.service';
 import {
     deriveStatus,
     splitByCategory,
@@ -44,23 +45,35 @@ function detectLocalOs(): Os {
     return 'windows';
 }
 
+/// Tauri 模式下从 ServerManager 拉服务器档案，组合本机 + 远端 host 列表。
+/// 浏览器预览用 mockHosts。
 function useKnownHosts(): HostInfo[] {
+    const serversQuery = useQuery({
+        queryKey: ['servers'],
+        queryFn: () => serverService.list(),
+        enabled: isTauri,
+    });
+
     return useMemo<HostInfo[]>(() => {
-        if (isTauri) {
-            // 真后端：先只本机。远端注册表 v1 实装后这里改成
-            // [...listRemoteHosts(), localHost] 形态。
-            return [
-                {
-                    host_id: 'local',
-                    display_name: '本机',
-                    os: detectLocalOs(),
-                    locality: 'local',
-                },
-            ];
+        if (!isTauri) {
+            return mockHosts;
         }
-        // 浏览器预览：演示多主机 UI 用 mock 全集。
-        return mockHosts;
-    }, []);
+        const local: HostInfo = {
+            host_id: 'local',
+            display_name: '本机',
+            os: detectLocalOs(),
+            locality: 'local',
+        };
+        const remotes: HostInfo[] = (serversQuery.data ?? []).map((p) => ({
+            host_id: `remote:${p.id}`,
+            display_name: p.name || p.host,
+            // 远端默认 Linux —— RemoteLinuxHost 是当前唯一实装。后续接入
+            // RemoteWindowsHost 时按 ServerProfile 增加 os 字段。
+            os: 'linux' as Os,
+            locality: 'remote',
+        }));
+        return [local, ...remotes];
+    }, [serversQuery.data]);
 }
 
 export interface UseComponentsResult {

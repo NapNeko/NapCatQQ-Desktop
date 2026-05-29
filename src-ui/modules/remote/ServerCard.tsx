@@ -15,6 +15,7 @@ import type { ServerState } from '../../core/ipc/generated/domain/ServerState';
 interface ServerCardProps {
     server: ServerProfile;
     isTesting: boolean;
+    revealIp: boolean;
     onTest: (password?: string) => void;
     onDelete: () => void;
 }
@@ -22,10 +23,17 @@ interface ServerCardProps {
 export const ServerCard: React.FC<ServerCardProps> = ({
     server,
     isTesting,
+    revealIp,
     onTest,
     onDelete,
 }) => {
     const stateMeta = stateBadge(server.state);
+    const displayHost = revealIp ? server.host : maskHost(server.host);
+    const displayWebui = server.webuiUrl
+        ? revealIp
+            ? new URL(server.webuiUrl).host
+            : maskHost(new URL(server.webuiUrl).host)
+        : null;
 
     return (
         <Card padding="md" className="flex flex-col gap-3">
@@ -34,14 +42,14 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                     <div className="flex items-center gap-2">
                         <Server size={16} className="shrink-0 text-text-tertiary" />
                         <h3 className="truncate font-display text-base font-semibold text-text">
-                            {server.name || server.host}
+                            {server.name || (revealIp ? server.host : '远端服务器')}
                         </h3>
                         <Badge tone={stateMeta.tone} appearance="soft" dot={server.state === 'connected'}>
                             {stateMeta.label}
                         </Badge>
                     </div>
                     <p className="mt-1 truncate font-mono text-[12.5px] text-text-tertiary tabular-nums">
-                        {server.username}@{server.host}:{server.port}
+                        {server.username}@{displayHost}:{server.port}
                     </p>
                 </div>
             </header>
@@ -53,9 +61,9 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                 {server.rememberCredential && (
                     <span className="rounded-pill bg-inset px-2 py-0.5">已保存凭据</span>
                 )}
-                {server.webuiUrl && (
+                {displayWebui && (
                     <span className="rounded-pill bg-inset px-2 py-0.5">
-                        WebUI {new URL(server.webuiUrl).host}
+                        WebUI {displayWebui}
                     </span>
                 )}
             </div>
@@ -116,4 +124,14 @@ function stateBadge(state: ServerState): {
         default:
             return { tone: 'neutral', label: '未连接' };
     }
+}
+
+/// 把主机名 / IP 转成视觉脱敏形式：保留首尾字符，中间换 ····。
+/// 例：
+///   192.168.1.100 → 1·········0
+///   prod.example.com → p··············m
+/// 长度 < 4 时直接返回 ····。
+function maskHost(host: string): string {
+    if (host.length < 4) return '····';
+    return `${host[0]}${'·'.repeat(Math.min(host.length - 2, 12))}${host[host.length - 1]}`;
 }

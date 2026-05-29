@@ -13,8 +13,8 @@
 // 严守 frontend-layering：仅 import hooks / shared/ui / 自身组件。
 
 import React, { useState } from 'react';
-import { Server, RefreshCw, Plus } from 'lucide-react';
-import { Button } from '../../shared/ui';
+import { Server, RefreshCw, Plus, Eye, EyeOff } from 'lucide-react';
+import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { ServerCard } from './ServerCard';
 import { AddServerDialog } from './AddServerDialog';
@@ -34,6 +34,7 @@ export const RemoteHostPanelNext: React.FC = () => {
 
     const [addOpen, setAddOpen] = useState(false);
     const [testingId, setTestingId] = useState<string | null>(null);
+    const [revealIp, setRevealIp] = useState(false);
 
     const handleTest = (id: string, password?: string) => {
         setTestingId(id);
@@ -54,15 +55,32 @@ export const RemoteHostPanelNext: React.FC = () => {
                         管理 SSH 服务器档案。在组件页选择主机后可在远端部署 NapCat 运行时。
                     </p>
                 </div>
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => refetch()}
-                    disabled={isLoading}
-                >
-                    <RefreshCw size={14} className={isLoading ? 'animate-spin' : undefined} />
-                    刷新
-                </Button>
+                <div className="flex items-center gap-1.5">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onClick={() => setRevealIp((v) => !v)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                aria-label={revealIp ? '隐藏 IP 信息' : '显示 IP 信息'}
+                            >
+                                {revealIp ? <Eye size={14} /> : <EyeOff size={14} />}
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            {revealIp ? '隐藏 IP 信息' : '显示 IP 信息'}
+                        </TooltipContent>
+                    </Tooltip>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => refetch()}
+                        disabled={isLoading}
+                    >
+                        <RefreshCw size={14} className={isLoading ? 'animate-spin' : undefined} />
+                        刷新
+                    </Button>
+                </div>
             </header>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-24 pt-1">
@@ -83,6 +101,7 @@ export const RemoteHostPanelNext: React.FC = () => {
                                 key={server.id}
                                 server={server}
                                 isTesting={isTesting && testingId === server.id}
+                                revealIp={revealIp}
                                 onTest={(pw) => handleTest(server.id, pw)}
                                 onDelete={() => deleteServer(server.id)}
                             />
