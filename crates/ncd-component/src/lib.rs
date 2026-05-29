@@ -1,6 +1,6 @@
 //! `ncd-component`:NapCatQQ-Desktop 的"组件"抽象。
 //!
-//! 把"装什么"(NapCat / SnowLuma / LinuxQQ / Node / noVNC / Desktop 自身)
+//! 把"装什么"(NapCat / SnowLuma / QQ / Node / noVNC / Desktop 自身)
 //! 抽成统一的 [`Component`] trait,与 [`ncd_host::Host`] trait 正交。
 //!
 //! 与 `ncd-host`(WHERE,提供 `Host` trait)、`ncd-deploy`(VERB,负责把
@@ -17,7 +17,7 @@ pub mod context;
 pub mod desktop_self;
 pub mod download;
 pub mod error;
-pub mod linuxqq;
+pub mod qq;
 pub mod napcat;
 pub mod nodejs;
 pub mod novnc;
@@ -29,7 +29,7 @@ pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;
-pub use linuxqq::LinuxQQComponent;
+pub use qq::QQComponent;
 pub use napcat::NapCatComponent;
 pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;

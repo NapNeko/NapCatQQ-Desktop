@@ -321,7 +321,7 @@ mod tests {
     #[tokio::test]
     async fn run_executes_all_steps_in_order() {
         let (a, a_install, _) = comp(ComponentId::NodeJs, false, false);
-        let (b, b_install, _) = comp(ComponentId::LinuxQq, false, false);
+        let (b, b_install, _) = comp(ComponentId::Qq, false, false);
         let plan = DeployPlan::builder()
             .ensure_installed("a", a)
             .ensure_installed("b", b)
@@ -365,7 +365,7 @@ mod tests {
     #[tokio::test]
     async fn fail_fast_stops_after_failed_step() {
         let (a, a_install, _) = comp(ComponentId::NodeJs, false, false);
-        let (b, b_install, _) = comp(ComponentId::LinuxQq, false, true); // install fail
+        let (b, b_install, _) = comp(ComponentId::Qq, false, true); // install fail
         let (c, c_install, _) = comp(ComponentId::NapCat, false, false);
         let plan = DeployPlan::builder()
             .ensure_installed("a", a)
@@ -386,7 +386,7 @@ mod tests {
     #[tokio::test]
     async fn fail_continue_when_step_marked_optional() {
         let (a, a_install, _) = comp(ComponentId::NodeJs, false, true); // optional step fails
-        let (b, b_install, _) = comp(ComponentId::LinuxQq, false, false);
+        let (b, b_install, _) = comp(ComponentId::Qq, false, false);
         let plan = DeployPlan::builder()
             .ensure_installed("a_optional", a)
             .last_fail_fast(false)
@@ -405,7 +405,7 @@ mod tests {
     #[tokio::test]
     async fn rollback_runs_uninstall_for_marked_steps_in_reverse() {
         let (a, _, a_un) = comp(ComponentId::NodeJs, false, false);
-        let (b, _, b_un) = comp(ComponentId::LinuxQq, false, false);
+        let (b, _, b_un) = comp(ComponentId::Qq, false, false);
         let (c, _, c_un) = comp(ComponentId::NapCat, false, true); // 第三步 fails
         let plan = DeployPlan::builder()
             .ensure_installed("a", a).last_rollback_on_failure(true)
@@ -425,7 +425,7 @@ mod tests {
     #[tokio::test]
     async fn cancelled_ctx_aborts_remaining_steps() {
         let (a, a_install, _) = comp(ComponentId::NodeJs, false, false);
-        let (b, b_install, _) = comp(ComponentId::LinuxQq, false, false);
+        let (b, b_install, _) = comp(ComponentId::Qq, false, false);
         let plan = DeployPlan::builder()
             .ensure_installed("a", a)
             .ensure_installed("b", b)

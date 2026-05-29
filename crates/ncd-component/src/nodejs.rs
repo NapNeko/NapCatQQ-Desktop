@@ -131,7 +131,7 @@ impl NodeJsComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NodeJs,
             display_name: "Node.js".to_string(),
-            description: "JavaScript 运行时（NapCat / SnowLuma 依赖）".to_string(),
+            description: "JavaScript 运行时（仅 SnowLuma 需要）".to_string(),
             repo_url: Some("https://nodejs.org/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),

@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use ncd_component::{
     Component, ComponentDetectResult, ComponentId, ComponentInfo, DesktopSelfComponent,
-    LinuxQQComponent, NapCatComponent, NoVncComponent, NodeJsComponent, ProgressKind,
+    NapCatComponent, NoVncComponent, NodeJsComponent, ProgressKind, QQComponent,
     SnowLumaComponent,
 };
 use ncd_deploy::{DeployPlan, StepKind};
@@ -169,7 +169,7 @@ fn catalog() -> Vec<ComponentInfo> {
         NapCatComponent::info(),
         SnowLumaComponent::info(),
         NodeJsComponent::info(),
-        LinuxQQComponent::info(),
+        QQComponent::info(),
         NoVncComponent::info(),
         DesktopSelfComponent::info(),
     ]
@@ -190,7 +190,7 @@ async fn probe_remote_home_if_needed(host_id: &str, host: &dyn Host) -> Option<S
     }
 }
 
-/// 远端 NapCat / LinuxQQ 的安装布局：system 是官方 NapCat-Installer 风格
+/// 远端 NapCat / QQ 的安装布局：system 是官方 NapCat-Installer 风格
 /// （/opt/QQ，需要 sudo），rootless 是 NapCat-TUI-CLI 风格（$HOME/Napcat，
 /// 不需要 sudo，本工程默认）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,9 +221,6 @@ async fn probe_napcat_layout(
         "/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs",
     );
     let system_exists = matches!(host.exists(&system_mjs).await, Ok(true));
-    eprintln!(
-        "[probe_napcat_layout] host={host_id} home={home:?} system_mjs_exists={system_exists}"
-    );
     if system_exists {
         return RemoteLayout::System;
     }
@@ -231,12 +228,7 @@ async fn probe_napcat_layout(
         let rootless_mjs = ncd_host::HostPath::from_posix(format!(
             "{h}/Napcat/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs"
         ));
-        let rootless_exists = matches!(host.exists(&rootless_mjs).await, Ok(true));
-        eprintln!(
-            "[probe_napcat_layout] host={host_id} rootless_mjs={} exists={rootless_exists}",
-            rootless_mjs.as_posix()
-        );
-        if rootless_exists {
+        if matches!(host.exists(&rootless_mjs).await, Ok(true)) {
             return RemoteLayout::Rootless;
         }
     }
@@ -262,7 +254,7 @@ fn build_component_for_host(
     // 缓存由前端 useReleases hook 在启动/轮询时通过 get_release_snapshot 维护。
     let snapshot = read_cached_release_snapshot(&state.data_root);
 
-    // 远端 NapCat / LinuxQQ 共用 install_base_dir：layout 决定 / 还是 $HOME/Napcat。
+    // 远端 NapCat / QQ 共用 install_base_dir：layout 决定 / 还是 $HOME/Napcat。
     let napcat_base = match layout {
         RemoteLayout::System => HostPath::from_posix("/"),
         RemoteLayout::Rootless => match remote_home {
@@ -336,13 +328,13 @@ fn build_component_for_host(
                 ))
             }
         }
-        ComponentId::LinuxQq => {
-            // 远端 LinuxQQ 跟随 NapCat 的 layout：
+        ComponentId::Qq => {
+            // 远端 QQ 跟随 NapCat 的 layout：
             //   System：base="/"，QQ 装到 /opt/QQ（系统包）—— 但当前实装走
             //     dpkg-deb -x 解包不会调系统包管理器，没法在 /opt 创目录，
             //     用户应该用官方 deb/rpm 自己装，detect 能识别。
             //   Rootless：base="$HOME/Napcat"，QQ 装到 $HOME/Napcat/opt/QQ。
-            Arc::new(LinuxQQComponent::default_v3_2_25(napcat_base.clone()))
+            Arc::new(QQComponent::default_v3_2_25(napcat_base.clone()))
         }
         ComponentId::NodeJs => {
             // SnowLuma 才需要 Node.js；装到 SnowLuma workspace 下。
@@ -472,7 +464,7 @@ mod tests {
                 ComponentId::NapCat,
                 ComponentId::SnowLuma,
                 ComponentId::NodeJs,
-                ComponentId::LinuxQq,
+                ComponentId::Qq,
                 ComponentId::NoVnc,
                 ComponentId::DesktopSelf,
             ]
@@ -490,7 +482,7 @@ mod tests {
                 Arc::new(SnowLumaComponent::new(HostPath::from_posix("/x"), "https://example.com/x.tar.gz")),
             ),
             (NodeJsComponent::info(), Arc::new(NodeJsComponent::new("20.10.0", HostPath::from_posix("/x")))),
-            (LinuxQQComponent::info(), Arc::new(LinuxQQComponent::default_v3_2_25(HostPath::from_posix("/x")))),
+            (QQComponent::info(), Arc::new(QQComponent::default_v3_2_25(HostPath::from_posix("/x")))),
             (NoVncComponent::info(), Arc::new(NoVncComponent::new())),
         ];
         for (info, component) in pairs {

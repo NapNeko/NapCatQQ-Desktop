@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn failed_outcome_carries_error() {
         let s = StepOutcome::failed(
-            "linuxqq",
+            "qq",
             StepKind::ForceInstall,
             500,
             "download failed",

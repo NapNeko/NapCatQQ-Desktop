@@ -11,7 +11,7 @@ import type { SupportedTarget } from "./SupportedTarget";
  */
 export type ComponentInfo = { id: ComponentId, 
 /**
- * UI 显示名（"NapCat" / "SnowLuma" / "Node.js" / "LinuxQQ" 等）。
+ * UI 显示名（"NapCat" / "SnowLuma" / "Node.js" / "QQ" 等）。
  */
 display_name: string, 
 /**

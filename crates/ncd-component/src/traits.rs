@@ -19,7 +19,7 @@ pub trait Component: Send + Sync {
 
     /// 该组件支持哪些 (Os, Locality) 组合。
     /// 例:NapCat 支持 (Windows, Local) + (Linux, Remote)
-    ///     LinuxQQ 仅支持 (Linux, Remote)
+    ///     QQ 支持 (Windows, Local) + (Linux, Local) + (Linux, Remote)
     ///     DesktopSelf 仅支持 (*, Local)
     fn supported_targets(&self) -> &'static [(Os, Locality)];
 

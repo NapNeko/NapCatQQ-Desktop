@@ -244,7 +244,7 @@ mod tests {
     fn builder_collects_steps_in_order() {
         let plan = DeployPlan::builder()
             .ensure_installed("nodejs", dummy(ComponentId::NodeJs))
-            .ensure_installed("linuxqq", dummy(ComponentId::LinuxQq))
+            .ensure_installed("qq", dummy(ComponentId::Qq))
             .force_install("napcat", dummy(ComponentId::NapCat))
             .build();
         assert_eq!(plan.len(), 3);
@@ -266,7 +266,7 @@ mod tests {
     fn validate_rejects_duplicate_step_names() {
         let plan = DeployPlan::builder()
             .ensure_installed("step1", dummy(ComponentId::NodeJs))
-            .ensure_installed("step1", dummy(ComponentId::LinuxQq))
+            .ensure_installed("step1", dummy(ComponentId::Qq))
             .build();
         let err = plan.validate().unwrap_err();
         assert!(matches!(err, DeployError::InvalidPlan { .. }));
@@ -277,7 +277,7 @@ mod tests {
     fn validate_passes_for_unique_names() {
         let plan = DeployPlan::builder()
             .ensure_installed("a", dummy(ComponentId::NodeJs))
-            .ensure_installed("b", dummy(ComponentId::LinuxQq))
+            .ensure_installed("b", dummy(ComponentId::Qq))
             .build();
         assert!(plan.validate().is_ok());
     }

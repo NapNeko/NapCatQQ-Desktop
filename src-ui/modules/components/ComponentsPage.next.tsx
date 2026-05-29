@@ -27,8 +27,8 @@ export const ComponentsPageNext: React.FC = () => {
     const { snapshot: releases } = useReleases();
 
     // 隐藏"全部 host 都 unsupported"的整张卡。当前 Tauri 模式只有 local
-    // 一台 host：LinuxQQ / NoVnc 在本机 Windows 上整张都 unsupported，应当
-    // 整张藏掉而不是显示一行"不支持"。
+    // 一台 host：NoVnc 在本机 Windows 上整张都 unsupported，应当整张藏
+    // 掉而不是显示一行"不支持"。
     const visibleView = useMemo(
         () => ({
             framework: view.framework.filter(hasAtLeastOneSupportedHost),

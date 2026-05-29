@@ -11,14 +11,14 @@ use ts_rs::TS;
 /// |---|---|
 /// | `NapCat`       | `napcat`       |
 /// | `SnowLuma`     | `snowluma`     |
-/// | `LinuxQq`      | `linuxqq`      |
+/// | `Qq`           | `qq`           |
 /// | `NodeJs`       | `nodejs`       |
 /// | `NoVnc`        | `novnc`        |
 /// | `DesktopSelf`  | `desktop_self` |
 ///
 /// 与项目内 `napcat_*` / `snowluma_*` 事件名风格保持一致；不直接走 serde
 /// 的 `rename_all = "snake_case"`，因为它会把 `NapCat` 切成 `nap_cat`、
-/// `LinuxQq` 切成 `linux_qq`，与 [`Self::as_str`] 不一致。
+/// `Qq` 切成 `qq` 也算巧合，但 `NapCat` 不行，所以统一都用显式 rename。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum ComponentId {
@@ -26,8 +26,8 @@ pub enum ComponentId {
     NapCat,
     #[serde(rename = "snowluma")]
     SnowLuma,
-    #[serde(rename = "linuxqq")]
-    LinuxQq,
+    #[serde(rename = "qq")]
+    Qq,
     #[serde(rename = "nodejs")]
     NodeJs,
     #[serde(rename = "novnc")]
@@ -41,7 +41,7 @@ impl ComponentId {
         match self {
             Self::NapCat => "napcat",
             Self::SnowLuma => "snowluma",
-            Self::LinuxQq => "linuxqq",
+            Self::Qq => "qq",
             Self::NodeJs => "nodejs",
             Self::NoVnc => "novnc",
             Self::DesktopSelf => "desktop_self",
@@ -109,7 +109,7 @@ pub struct LaunchArgs {
 /// 组件分类。
 ///
 /// - `Framework`：用户主动选择安装的 Bot 框架（NapCat / SnowLuma）。
-/// - `RuntimeDep`：Framework 依赖的运行时（LinuxQQ / NodeJs / NoVnc）。
+/// - `RuntimeDep`：Framework 依赖的运行时（QQ / NodeJs / NoVnc）。
 /// - `SelfApp`：Desktop 自身（仅本地，自更新走 ncd-update）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -151,7 +151,7 @@ impl From<(ncd_host::Os, ncd_host::Locality)> for SupportedTarget {
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ComponentInfo {
     pub id: ComponentId,
-    /// UI 显示名（"NapCat" / "SnowLuma" / "Node.js" / "LinuxQQ" 等）。
+    /// UI 显示名（"NapCat" / "SnowLuma" / "Node.js" / "QQ" 等）。
     pub display_name: String,
     /// 一行简介，2-30 字。
     pub description: String,
@@ -191,7 +191,7 @@ mod tests {
     fn component_id_as_str_matches_snake_case() {
         assert_eq!(ComponentId::NapCat.as_str(), "napcat");
         assert_eq!(ComponentId::SnowLuma.as_str(), "snowluma");
-        assert_eq!(ComponentId::LinuxQq.as_str(), "linuxqq");
+        assert_eq!(ComponentId::Qq.as_str(), "qq");
     }
 
     #[test]
@@ -208,7 +208,7 @@ mod tests {
         for id in [
             ComponentId::NapCat,
             ComponentId::SnowLuma,
-            ComponentId::LinuxQq,
+            ComponentId::Qq,
             ComponentId::NodeJs,
             ComponentId::NoVnc,
             ComponentId::DesktopSelf,

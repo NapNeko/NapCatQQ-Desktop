@@ -261,15 +261,7 @@ impl Component for NapCatComponent {
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
         let mjs = self.napcat_mjs_for_mode();
-        let mjs_exists = host.exists(&mjs).await?;
-        eprintln!(
-            "[napcat::detect] base={} mode={:?} mjs={} exists={}",
-            self.install_base_dir.as_posix(),
-            self.mode,
-            mjs.as_posix(),
-            mjs_exists
-        );
-        if !mjs_exists {
+        if !host.exists(&mjs).await? {
             return Ok(None);
         }
 

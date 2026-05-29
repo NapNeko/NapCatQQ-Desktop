@@ -41,17 +41,21 @@ export const mockComponentCatalog: ComponentInfo[] = [
         category: 'framework',
     },
     {
-        id: 'linuxqq',
-        display_name: 'LinuxQQ',
-        description: 'QQ for Linux 桌面客户端，远端部署的运行时基础',
-        repo_url: 'https://im.qq.com/linuxqq/',
-        supported_targets: [{ os: 'linux', locality: 'remote' }],
+        id: 'qq',
+        display_name: 'QQ',
+        description: 'QQ 桌面客户端，NapCat / SnowLuma 注入运行所需的宿主程序',
+        repo_url: 'https://im.qq.com/',
+        supported_targets: [
+            { os: 'windows', locality: 'local' },
+            { os: 'linux', locality: 'local' },
+            { os: 'linux', locality: 'remote' },
+        ],
         category: 'runtime_dep',
     },
     {
         id: 'nodejs',
         display_name: 'Node.js',
-        description: 'NapCat / SnowLuma 的 JavaScript 运行时',
+        description: 'JavaScript 运行时（仅 SnowLuma 需要）',
         repo_url: 'https://nodejs.org',
         supported_targets: [
             { os: 'windows', locality: 'local' },
@@ -120,7 +124,7 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
         'remote:production': null,
         'remote:dev': null,
     },
-    linuxqq: {
+    qq: {
         local: null,
         'remote:production': { version: '3.2.25-45758', source: 'qq --version' },
         'remote:dev': null,
