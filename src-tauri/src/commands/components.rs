@@ -191,7 +191,8 @@ async fn probe_remote_home_if_needed(host_id: &str, host: &dyn Host) -> Option<S
 }
 
 /// 远端 NapCat / LinuxQQ 的安装布局：system 是官方 NapCat-Installer 风格
-/// （/opt/QQ），rootless 是 NapCat-TUI-CLI 风格（$HOME/Napcat）。
+/// （/opt/QQ，需要 sudo），rootless 是 NapCat-TUI-CLI 风格（$HOME/Napcat，
+/// 不需要 sudo，本工程默认）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RemoteLayout {
     /// 系统安装：/opt/QQ/...，install_base_dir = "/"
@@ -202,16 +203,18 @@ enum RemoteLayout {
 
 /// 远端 NapCat 安装布局自动探测：
 ///
-/// 1. 先看 /opt/QQ/resources/app/app_launcher/napcat/napcat.mjs（system）
-/// 2. 再看 $HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs（rootless）
-/// 3. 都没有 → 默认 System（从零安装时跟随官方 NapCat-Installer.py）
+/// 1. 先看 /opt/QQ/resources/app/app_launcher/napcat/napcat.mjs（system，
+///    用户已用 NapCat-Installer.py 装过）
+/// 2. 再看 $HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs
+///    （rootless，用户已用 NapCat-TUI-CLI 装过）
+/// 3. 都没有 → 默认 Rootless（从零安装走 TUI 风格，不需要 sudo，简单）
 async fn probe_napcat_layout(
     host_id: &str,
     host: &dyn Host,
     home: Option<&str>,
 ) -> RemoteLayout {
     if !host_id.starts_with("remote:") {
-        return RemoteLayout::System;
+        return RemoteLayout::Rootless;
     }
     // 尽量用 host.exists 而不是 shell test，SFTP 一次 stat 比 SSH 起 shell 快。
     let system_mjs = ncd_host::HostPath::from_posix(
@@ -228,7 +231,7 @@ async fn probe_napcat_layout(
             return RemoteLayout::Rootless;
         }
     }
-    RemoteLayout::System
+    RemoteLayout::Rootless
 }
 
 /// 把 component_id 实例化成具体 Component。
@@ -325,9 +328,12 @@ fn build_component_for_host(
             }
         }
         ComponentId::LinuxQq => {
-            // 官方 NapCat-Installer 把 LinuxQQ 装到 /opt/QQ（系统 deb/rpm 包），
-            // base 传 "/" 让拼出来的 opt/QQ 落到根。
-            Arc::new(LinuxQQComponent::default_v3_2_25(HostPath::from_posix("/")))
+            // 远端 LinuxQQ 跟随 NapCat 的 layout：
+            //   System：base="/"，QQ 装到 /opt/QQ（系统包）—— 但当前实装走
+            //     dpkg-deb -x 解包不会调系统包管理器，没法在 /opt 创目录，
+            //     用户应该用官方 deb/rpm 自己装，detect 能识别。
+            //   Rootless：base="$HOME/Napcat"，QQ 装到 $HOME/Napcat/opt/QQ。
+            Arc::new(LinuxQQComponent::default_v3_2_25(napcat_base.clone()))
         }
         ComponentId::NodeJs => {
             // SnowLuma 才需要 Node.js；装到 SnowLuma workspace 下。
