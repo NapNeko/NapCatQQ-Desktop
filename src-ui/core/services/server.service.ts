@@ -1,5 +1,6 @@
 // ServerManager IPC 服务层。
-// 对接后端 commands/servers.rs 的 5+2 个 Tauri 命令。
+// 对接后端 commands/servers.rs 的 5 个 CRUD/test Tauri 命令。
+// 部署走组件页（host_id = "remote:<id>"），不在这层。
 
 import { invoke, isTauri } from '../ipc/transport';
 import type { ServerProfile } from '../ipc/generated/domain/ServerProfile';
@@ -28,13 +29,5 @@ export const serverService = {
     testConnection: async (id: string, password?: string): Promise<ProbeReport> => {
         if (isTauri) return invoke<ProbeReport>('test_server_connection', { id, password: password ?? null });
         return { success: false, osInfo: null, error: 'not in Tauri', latencyMs: BigInt(0) };
-    },
-
-    deploy: async (id: string, flavor: 'NapCat' | 'SnowLuma'): Promise<void> => {
-        if (isTauri) return invoke<void>('deploy_server', { id, flavor });
-    },
-
-    cancelDeploy: async (id: string): Promise<void> => {
-        if (isTauri) return invoke<void>('cancel_deployment', { id });
     },
 };

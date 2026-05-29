@@ -1,4 +1,7 @@
 //! Tauri 命令：远端主机 ServerProfile CRUD + test_connection。
+//!
+//! 这层只管"档案"——服务器列表、连接测试、连接缓存。组件部署走 components.rs
+//! 的 run_component_action（host_id = "remote:<server_id>"）。
 
 use tauri::State;
 
@@ -44,21 +47,4 @@ pub async fn test_server_connection(
     password: Option<String>,
 ) -> Result<ProbeReport, String> {
     state.server_manager.test_connection(&id, password).await
-}
-
-#[tauri::command]
-pub async fn deploy_server(
-    state: State<'_, AppState>,
-    id: String,
-    flavor: ncd_runtime::BotFlavor,
-) -> Result<(), String> {
-    state.server_manager.deploy(&id, flavor).await
-}
-
-#[tauri::command]
-pub async fn cancel_deployment(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
-    state.server_manager.cancel_deploy(&id).await
 }

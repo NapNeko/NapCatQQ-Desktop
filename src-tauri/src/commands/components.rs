@@ -37,7 +37,7 @@ pub async fn detect_component(
     host_id: String,
     state: State<'_, AppState>,
 ) -> Result<ComponentDetectResult, String> {
-    let host = resolve_host(&host_id)?;
+    let host = resolve_host(&host_id, &state).await?;
     let component = build_component_for_host(component_id, &state, host.as_ref());
     let host_ref: &dyn Host = host.as_ref();
 
@@ -68,7 +68,7 @@ pub async fn run_component_action(
     kind: StepKind,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let host = resolve_host(&host_id)?;
+    let host = resolve_host(&host_id, &state).await?;
     let component = build_component_for_host(component_id, &state, host.as_ref());
 
     let plan = DeployPlan::builder()
@@ -272,19 +272,24 @@ fn data_root_to_host_path(data_root: &std::path::Path, os: ncd_host::Os) -> Host
 
 /// host_id 字符串约定：
 /// - `"local"`：本机 Host
-/// - `"remote:<remote_id>"`：远端 SSH（v1 还未接入，先返回 Err）
+/// - `"remote:<server_id>"`：远端 SSH，从 ServerManager 取已建立的连接
 ///
-/// 返回 `Arc<dyn Host>` 因为 `LocalWindowsHost` 只在 Windows 编译；
-/// non-Windows 下当前没有本机 Host 实装，返回 Unsupported 错误。
-fn resolve_host(host_id: &str) -> Result<Arc<dyn Host>, String> {
-    match host_id {
-        "local" => local_host(),
-        other if other.starts_with("remote:") => {
-            // 占位：远端 host 注册表 v1 暂未接入。
-            Err("remote host registry not implemented".to_string())
-        }
-        _ => Err(format!("unknown host_id: {host_id}")),
+/// 远端连接前置：用户必须先在远端页测试连接成功（ServerManager.test_connection
+/// 会建立 SSH 并缓存到 hosts map）；否则 resolve_host 返回 "尚未连接" 错误。
+async fn resolve_host(host_id: &str, state: &AppState) -> Result<Arc<dyn Host>, String> {
+    if host_id == "local" {
+        return local_host();
     }
+    if let Some(server_id) = host_id.strip_prefix("remote:") {
+        return state
+            .server_manager
+            .get_host(server_id)
+            .await
+            .ok_or_else(|| {
+                format!("远端主机 {server_id} 尚未连接，请先在远端页测试连接")
+            });
+    }
+    Err(format!("unknown host_id: {host_id}"))
 }
 
 #[cfg(windows)]
@@ -354,24 +359,5 @@ mod tests {
         // tauri::command 内部就是调 catalog()，本测试直接验等价。
         let result = catalog();
         assert_eq!(result.len(), 6);
-    }
-
-    #[tokio::test]
-    async fn resolve_host_rejects_remote_with_clear_error() {
-        match resolve_host("remote:production") {
-            Err(err) => assert!(
-                err.contains("remote host registry not implemented"),
-                "unexpected error: {err}"
-            ),
-            Ok(_) => panic!("expected Err for remote host_id"),
-        }
-    }
-
-    #[tokio::test]
-    async fn resolve_host_rejects_unknown_id() {
-        match resolve_host("does-not-exist") {
-            Err(err) => assert!(err.contains("unknown host_id"), "unexpected error: {err}"),
-            Ok(_) => panic!("expected Err for unknown host_id"),
-        }
     }
 }

@@ -1,4 +1,5 @@
-// ServerManager CRUD + 连接测试 + 部署的 React 适配层。
+// ServerManager CRUD + 连接测试的 React 适配层。
+// 远端组件部署走组件页 (run_component_action with host_id = "remote:<id>")。
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serverService } from '../../core/services/server.service';
@@ -44,11 +45,6 @@ export function useServerManager() {
         },
     });
 
-    const deployMutation = useMutation({
-        mutationFn: (args: { id: string; flavor: 'NapCat' | 'SnowLuma' }) =>
-            serverService.deploy(args.id, args.flavor),
-    });
-
     return {
         servers: serversQuery.data ?? [],
         isLoading: serversQuery.isLoading,
@@ -66,8 +62,5 @@ export function useServerManager() {
         testConnection: testMutation.mutate,
         isTesting: testMutation.isPending,
         testResult: testMutation.data as ProbeReport | undefined,
-
-        deploy: deployMutation.mutate,
-        isDeploying: deployMutation.isPending,
     };
 }

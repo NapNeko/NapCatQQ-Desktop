@@ -349,7 +349,6 @@ mod tests {
             server_manager: Arc::new(ncd_runtime::ServerManager::new(
                 root,
                 Arc::new(ncd_runtime::InMemoryCredentialStore::default()),
-                Arc::new(bus.clone()),
             )),
             active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         };

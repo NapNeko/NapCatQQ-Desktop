@@ -19,10 +19,6 @@ use ts_rs::TS;
 use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteLinuxHost, SshCredentials};
 use ncd_host::Host;
 
-use ncd_component::Component;
-
-use crate::events::EventBus;
-
 // ============================================================
 // 数据结构
 // ============================================================
@@ -220,24 +216,17 @@ pub struct ServerManager {
     credentials: Arc<dyn ServerCredentialStore>,
     /// 活跃 SSH 连接缓存：server_id → Arc<dyn Host>。
     hosts: Arc<RwLock<HashMap<String, Arc<dyn Host>>>>,
-    /// 事件总线，用于发布部署进度。
-    event_bus: Arc<crate::events::BroadcastEventBus>,
-    /// 活跃部署任务的取消令牌：server_id → CancellationToken。
-    deploy_tasks: Arc<RwLock<HashMap<String, tokio_util::sync::CancellationToken>>>,
 }
 
 impl ServerManager {
     pub fn new(
         data_root: &Path,
         credentials: Arc<dyn ServerCredentialStore>,
-        event_bus: Arc<crate::events::BroadcastEventBus>,
     ) -> Self {
         Self {
             repo: ServerProfileRepo::new(data_root),
             credentials,
             hosts: Arc::new(RwLock::new(HashMap::new())),
-            event_bus,
-            deploy_tasks: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -368,130 +357,6 @@ impl ServerManager {
         self.hosts.read().await.get(id).cloned()
     }
 
-    /// 在指定远端部署运行时组件（NapCat / SnowLuma）。
-    ///
-    /// 流程：探测远端 $HOME → 构造 Component → DeployPlan → 顺序执行。
-    /// 进度通过 TaskProgress 事件广播，task_id = `deploy:<server_id>`。
-    /// 可通过 `cancel_deploy` 取消。
-    pub async fn deploy(
-        &self,
-        server_id: &str,
-        flavor: ncd_domain::BotFlavor,
-    ) -> Result<(), String> {
-        let host = self
-            .get_host(server_id)
-            .await
-            .ok_or_else(|| format!("主机未连接: {server_id}，请先测试连接"))?;
-
-        let task_id = format!("deploy:{server_id}");
-        let cancel = tokio_util::sync::CancellationToken::new();
-        self.deploy_tasks
-            .write()
-            .await
-            .insert(server_id.to_string(), cancel.clone());
-
-        self.event_bus.publish(crate::events::DomainEvent::task_progress(
-            &task_id, 0, "探测远端环境",
-        ));
-
-        // 探测远端 $HOME。
-        let home = probe_remote_home(host.as_ref()).await?;
-        let runtime_root = ncd_host::HostPath::from_posix(format!("{home}/napcat-runtime"));
-
-        // 构造 component 列表。
-        use ncd_component::ActionCtx;
-        let components: Vec<(&str, Arc<dyn Component>)> = match flavor {
-            ncd_domain::BotFlavor::NapCat => {
-                let napcat = ncd_component::NapCatComponent::new(runtime_root.clone());
-                vec![("napcat", Arc::new(napcat) as Arc<dyn Component>)]
-            }
-            ncd_domain::BotFlavor::SnowLuma => {
-                let node_dir = runtime_root.join("node");
-                let nodejs = ncd_component::NodeJsComponent::new("20.18.1", node_dir);
-                let sl = ncd_component::SnowLumaComponent::new(
-                    runtime_root.join("snowluma-workspace"),
-                    "https://github.com/aspect-build/snowluma/releases/latest/download/snowluma-linux-x64.tar.gz",
-                );
-                vec![
-                    ("nodejs", Arc::new(nodejs) as Arc<dyn Component>),
-                    ("snowluma", Arc::new(sl) as Arc<dyn Component>),
-                ]
-            }
-        };
-
-        let mut builder = ncd_deploy::DeployPlan::builder();
-        for (name, comp) in components {
-            builder = builder.ensure_installed(name, comp);
-        }
-        let plan = builder.build();
-
-        // 进度转发。
-        let (mut ctx, mut progress_rx) = ActionCtx::new();
-        let bus = Arc::clone(&self.event_bus);
-        let tid = task_id.clone();
-        tokio::spawn(async move {
-            while let Some(evt) = progress_rx.recv().await {
-                let (percent, msg) = match &evt.kind {
-                    ncd_component::ProgressKind::StepProgress { percent, message, .. } => {
-                        (*percent, message.clone())
-                    }
-                    ncd_component::ProgressKind::StepBegin { message, .. } => {
-                        (0, message.clone())
-                    }
-                    ncd_component::ProgressKind::Finished { ok } => {
-                        (if *ok { 100 } else { 0 }, String::new())
-                    }
-                    _ => continue,
-                };
-                bus.publish(crate::events::DomainEvent::task_progress(&tid, percent, &msg));
-            }
-        });
-
-        // 跑 plan，支持取消。
-        let result = tokio::select! {
-            r = plan.run(host.as_ref(), &mut ctx) => r,
-            _ = cancel.cancelled() => {
-                ctx.cancel();
-                Err(ncd_deploy::DeployError::Cancelled)
-            }
-        };
-
-        self.deploy_tasks.write().await.remove(server_id);
-
-        match result {
-            Ok(_) => {
-                self.event_bus.publish(crate::events::DomainEvent::task_progress(
-                    &task_id, 100, "部署完成",
-                ));
-                Ok(())
-            }
-            Err(ncd_deploy::DeployError::Cancelled) => {
-                self.event_bus.publish(crate::events::DomainEvent::task_progress(
-                    &task_id, 0, "部署已取消",
-                ));
-                Err("部署已取消".to_string())
-            }
-            Err(err) => {
-                self.event_bus.publish(crate::events::DomainEvent::task_progress(
-                    &task_id, 0, &format!("部署失败: {err}"),
-                ));
-                Err(err.to_string())
-            }
-        }
-    }
-
-    /// 取消正在进行的部署任务。
-    pub async fn cancel_deploy(&self, server_id: &str) -> Result<(), String> {
-        let token = self.deploy_tasks.read().await.get(server_id).cloned();
-        match token {
-            Some(t) => {
-                t.cancel();
-                Ok(())
-            }
-            None => Err(format!("没有正在进行的部署任务: {server_id}")),
-        }
-    }
-
     // ---- helpers ----
 
     fn build_credentials(
@@ -581,8 +446,7 @@ mod tests {
 
     fn make_mgr(root: &Path) -> (ServerManager, Arc<InMemoryCredentialStore>) {
         let creds = Arc::new(InMemoryCredentialStore::default());
-        let bus = Arc::new(crate::events::BroadcastEventBus::default());
-        let mgr = ServerManager::new(root, creds.clone(), bus);
+        let mgr = ServerManager::new(root, creds.clone());
         (mgr, creds)
     }
 
