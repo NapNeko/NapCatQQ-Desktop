@@ -285,8 +285,9 @@ impl Component for SnowLumaComponent {
 // ============================================================
 
 impl SnowLumaComponent {
-    /// Linux detect:lite tarball 没有 package.json,只能确认入口存在,版本固定
-    /// 标 "installed"。
+    /// Linux detect：先确认入口 `<snowluma_dir>/index.mjs` 存在，再尝试从
+    /// 同目录的 `package.json` 读 `version` 字段拿真实版本号；缺 package.json
+    /// 或字段时回退到 "installed" 占位（lite tarball 旧版本可能没有）。
     async fn detect_linux(
         &self,
         host: &dyn Host,
@@ -295,6 +296,23 @@ impl SnowLumaComponent {
         if !host.exists(&entry).await? {
             return Ok(None);
         }
+
+        // 尝试读 package.json::version
+        let pkg = self.package_json_path();
+        if host.exists(&pkg).await? {
+            if let Ok(bytes) = host.read_file(&pkg).await {
+                if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    if let Some(version) = json.get("version").and_then(|v| v.as_str()) {
+                        return Ok(Some(DetectedVersion {
+                            version: version.to_string(),
+                            source: format!("{pkg}"),
+                        }));
+                    }
+                }
+            }
+        }
+
+        // 回退：版本号未知，但确认已装
         Ok(Some(DetectedVersion {
             version: "installed".to_string(),
             source: format!("{entry}"),
