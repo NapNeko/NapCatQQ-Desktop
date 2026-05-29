@@ -17,4 +17,4 @@ import type { ReleaseAsset } from "./ReleaseAsset";
  * - `assets`：release 资产指纹列表（含 sha256），安装层下载完成后做
  *   完整性校验防代理投毒。老缓存没该字段时按空 Vec 反序列化。
  */
-export type ReleaseInfo = { version: string, tag: string, published_at: bigint, html_url: string, release_notes: string, assets: Array<ReleaseAsset>, };
+export type ReleaseInfo = { version: string, tag?: string, published_at: bigint, html_url: string, release_notes: string, assets?: Array<ReleaseAsset>, };

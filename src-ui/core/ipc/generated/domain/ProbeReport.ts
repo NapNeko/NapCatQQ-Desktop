@@ -3,4 +3,4 @@
 /**
  * test_connection 返回的探测报告。
  */
-export type ProbeReport = { success: boolean, osInfo: string | null, error: string | null, latencyMs: bigint, };
+export type ProbeReport = { success: boolean, osInfo?: string | null, error?: string | null, latencyMs: bigint, };

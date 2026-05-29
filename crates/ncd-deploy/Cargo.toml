@@ -18,7 +18,7 @@ thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs", "io-util", "process"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
-ts-rs = { version = "10", features = ["serde-compat"] }
+ts-rs = { version = "12", features = ["serde-compat"] }
 
 [target.'cfg(windows)'.dependencies]
 encoding_rs = "0.8"

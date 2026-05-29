@@ -14,7 +14,7 @@ export type ComponentDetectResult = { component_id: ComponentId, host_id: string
 /**
  * None 表示未安装；Some 表示已装。
  */
-detected: DetectedVersion | null, 
+detected?: DetectedVersion | null, 
 /**
  * 当前 host 是否在 component 的 supported_targets 中；不支持时
  * `detected` 始终为 None。

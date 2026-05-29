@@ -21,7 +21,7 @@ rand = "0.8"
 dirs = "5"
 tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "rt-multi-thread", "macros", "time", "net"] }
 tokio-util = { version = "0.7", features = ["rt"] }
-ts-rs = { version = "10", features = ["serde-compat"] }
+ts-rs = { version = "12", features = ["serde-compat"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
 sha2 = "0.10"
 hex = "0.4"

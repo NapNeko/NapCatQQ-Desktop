@@ -34,7 +34,7 @@ export interface ReleaseSnapshotView {
     fetchedAt: number | null;
 }
 
-function toView(info: ReleaseInfo | null): ReleaseInfoView | null {
+function toView(info: ReleaseInfo | null | undefined): ReleaseInfoView | null {
     if (!info) return null;
     return {
         version: info.version,
@@ -127,7 +127,7 @@ export function findUpdatesAvailable(
         if (cmp > 0) {
             out.push({
                 project: 'napcat',
-                localVersion: local.napcat,
+                localVersion: local.napcat ?? null,
                 remoteVersion: remote.napcat.version,
                 htmlUrl: remote.napcat.htmlUrl,
                 releaseNotes: remote.napcat.releaseNotes,
@@ -140,7 +140,7 @@ export function findUpdatesAvailable(
         if (cmp > 0) {
             out.push({
                 project: 'snowluma',
-                localVersion: local.snowluma,
+                localVersion: local.snowluma ?? null,
                 remoteVersion: remote.snowluma.version,
                 htmlUrl: remote.snowluma.htmlUrl,
                 releaseNotes: remote.snowluma.releaseNotes,

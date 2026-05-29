@@ -7,4 +7,4 @@
  * - `Some("4.18.1")`：已安装且解析到版本号
  * - `None`：未安装 / 安装文件不存在 / 解析失败（fallback，不抛错）
  */
-export type LocalVersionSnapshot = { napcat: string | null, snowluma: string | null, };
+export type LocalVersionSnapshot = { napcat?: string | null, snowluma?: string | null, };

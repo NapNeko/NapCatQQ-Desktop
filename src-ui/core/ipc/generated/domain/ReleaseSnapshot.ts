@@ -8,8 +8,8 @@ import type { ReleaseInfo } from "./ReleaseInfo";
  * 仓库未配置），前端单独按字段降级。`fetched_at` 为 None 表示从未成功
  * 拉取。
  */
-export type ReleaseSnapshot = { napcat_latest: ReleaseInfo | null, snowluma_latest: ReleaseInfo | null, desktop_latest: ReleaseInfo | null, 
+export type ReleaseSnapshot = { napcat_latest?: ReleaseInfo | null, snowluma_latest?: ReleaseInfo | null, desktop_latest?: ReleaseInfo | null, 
 /**
  * 本快照拉取的时间戳 Unix epoch 秒。None 表示从未成功拉取。
  */
-fetched_at: bigint | null, };
+fetched_at?: bigint | null, };

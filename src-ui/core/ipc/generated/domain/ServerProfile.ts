@@ -33,7 +33,7 @@ authMethod: AuthMethod,
 /**
  * 私钥文件路径（仅 Key 方式使用）。
  */
-privateKeyPath: string | null, 
+privateKeyPath?: string | null, 
 /**
  * 用户是否选择了"记住密码"。
  */
@@ -45,4 +45,4 @@ state: ServerState,
 /**
  * WebUI 端点 URL（用户手填的远端 NapCat WebUI 地址）。
  */
-webuiUrl: string | null, };
+webuiUrl?: string | null, };

@@ -21,7 +21,7 @@ description: string,
 /**
  * GitHub / 官网链接（None 表示无对应外链）。
  */
-repo_url: string | null, 
+repo_url?: string | null, 
 /**
  * 支持的 (Os, Locality) 组合，前端用来判断"在某主机上能不能装"。
  */

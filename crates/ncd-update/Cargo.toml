@@ -18,7 +18,7 @@ thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs"] }
 tracing = "0.1"
 semver = { version = "1", features = ["serde"] }
-ts-rs = { version = "10", features = ["serde-compat"] }
+ts-rs = { version = "12", features = ["serde-compat"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # tauri-plugin-updater 集成在 src-tauri 层做(因为它依赖 tauri::App),
