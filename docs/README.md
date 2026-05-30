@@ -7,6 +7,7 @@ NapCatQQ-Desktop 从 Python/PySide6 迁移到 Rust + Tauri + React。本目录�
 | 文档 | 用途 | 入库 |
 | :--- | :--- | :--- |
 | `rust_migration_blueprint_local.md` | 架构权威蓝图 v2 | 否(gitignore,本地参考) |
+| `context/codemap.md` | 功能域→代码落点对照表,接手任务快速定位 | 是 |
 | `context/capabilities.md` | 后端各 crate 已就绪能力速查,规划前先查避免重发明 | 是 |
 | `context/frontend.md` | 前端分层铁律 + 推倒重写 playbook + hook/store 速查 | 是 |
 | `context/lessons.md` | 历史踩坑教训,规划新功能前自查 | 是 |
