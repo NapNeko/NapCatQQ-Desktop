@@ -12,7 +12,7 @@ NapCatQQ-Desktop 从 Python/PySide6 迁移到 Rust + Tauri + React。本目录�
 | `context/lessons.md` | 历史踩坑教训,规划新功能前自查 | 是 |
 | `tauri_reference_projects.md` | Tauri 参考项目 + 本地开发链状态 | 否(gitignore,本地参考) |
 
-注:`context/` 三件套是从原 `.claude/CLAUDE.md` 拆出的按需文档。项目硬约束在 `.claude/CLAUDE.md`,当前进度/待办看项目根 `STATE.md`。
+注:`context/` 三件套是从原 `.claude/CLAUDE.md` 拆出的按需文档。项目硬约束在 `.claude/CLAUDE.md`,当前进度/待办看 `.claude/STATE.md`。
 
 ## 历史归档(archive/)
 
