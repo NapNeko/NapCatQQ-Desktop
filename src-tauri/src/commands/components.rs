@@ -25,6 +25,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::AppState;
+use crate::commands::host_resolve::resolve_host_with_autoconnect;
 
 #[tauri::command]
 pub async fn list_components() -> Vec<ComponentInfo> {
@@ -38,14 +39,13 @@ pub async fn detect_component(
     state: State<'_, AppState>,
 ) -> Result<ComponentDetectResult, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let remote_home = probe_remote_home_if_needed(&host_id, host.as_ref()).await;
-    let layout = probe_napcat_layout(&host_id, host.as_ref(), remote_home.as_deref()).await;
+    let probe = cached_host_probe(&host_id, host.as_ref(), &state).await;
     let component = build_component_for_host(
         component_id,
         &state,
         host.as_ref(),
-        remote_home.as_deref(),
-        layout,
+        probe.home.as_deref(),
+        probe.layout,
     );
     let host_ref: &dyn Host = host.as_ref();
 
@@ -77,14 +77,13 @@ pub async fn run_component_action(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let remote_home = probe_remote_home_if_needed(&host_id, host.as_ref()).await;
-    let layout = probe_napcat_layout(&host_id, host.as_ref(), remote_home.as_deref()).await;
+    let probe = cached_host_probe(&host_id, host.as_ref(), &state).await;
     let component = build_component_for_host(
         component_id,
         &state,
         host.as_ref(),
-        remote_home.as_deref(),
-        layout,
+        probe.home.as_deref(),
+        probe.layout,
     );
 
     let plan = DeployPlan::builder()
@@ -104,6 +103,10 @@ pub async fn run_component_action(
 
     let event_bus = state.event_bus.clone();
     let active_tasks = Arc::clone(&state.active_tasks);
+    // 安装 / 卸载会改变远端布局（如新建 $HOME/Napcat），动作结束后失效该主机
+    // 的布局缓存，下次 detect 重新探一次拿到最新布局。
+    let host_probe_cache = Arc::clone(&state.host_probe_cache);
+    let probe_cache_key = host_id.clone();
 
     // 进度转发：rx → DomainEvent::ComponentActionProgress
     let event_task_id = task_id.clone();
@@ -123,6 +126,8 @@ pub async fn run_component_action(
         let outcome = plan.run(host.as_ref(), &mut ctx).await;
         // 任意 case 都要清理 active_tasks 注册条目，避免长期内存泄漏。
         active_tasks.lock().await.remove(&task_id_for_runner);
+        // 布局可能已变，丢弃该主机缓存。
+        host_probe_cache.lock().await.remove(&probe_cache_key);
 
         // plan.run 内部会 emit Finished 事件，但若它本身返回 Err
         // （比如 InvalidPlan / RollbackFailed），forward 通道就拿不到。
@@ -175,64 +180,85 @@ fn catalog() -> Vec<ComponentInfo> {
     ]
 }
 
-/// 仅在远端 host 上探测 $HOME（轻量级，失败回退 None 让组件使用绝对路径默认值）。
-async fn probe_remote_home_if_needed(host_id: &str, host: &dyn Host) -> Option<String> {
-    if !host_id.starts_with("remote:") {
-        return None;
-    }
-    let cmd = ncd_host::HostCommand::new("sh").arg("-c").arg("echo $HOME");
-    match host.run_to_string(cmd).await {
-        Ok(out) if out.success() => {
-            let home = out.stdout.trim().to_string();
-            if home.is_empty() { None } else { Some(home) }
-        }
-        _ => None,
-    }
-}
-
 /// 远端 NapCat / QQ 的安装布局：system 是官方 NapCat-Installer 风格
 /// （/opt/QQ，需要 sudo），rootless 是 NapCat-TUI-CLI 风格（$HOME/Napcat，
 /// 不需要 sudo，本工程默认）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteLayout {
+pub enum RemoteLayout {
     /// 系统安装：/opt/QQ/...，install_base_dir = "/"
     System,
     /// 用户安装：$HOME/Napcat/opt/QQ/...，install_base_dir = "$HOME/Napcat"
     Rootless,
 }
 
-/// 远端 NapCat 安装布局自动探测：
-///
-/// 1. 先看 /opt/QQ/resources/app/app_launcher/napcat/napcat.mjs（system，
-///    用户已用 NapCat-Installer.py 装过）
-/// 2. 再看 $HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs
-///    （rootless，用户已用 NapCat-TUI-CLI 装过）
-/// 3. 都没有 → 默认 Rootless（从零安装走 TUI 风格，不需要 sudo，简单）
-async fn probe_napcat_layout(
-    host_id: &str,
-    host: &dyn Host,
-    home: Option<&str>,
-) -> RemoteLayout {
-    if !host_id.starts_with("remote:") {
-        return RemoteLayout::Rootless;
-    }
-    // 尽量用 host.exists 而不是 shell test，SFTP 一次 stat 比 SSH 起 shell 快。
-    let system_mjs = ncd_host::HostPath::from_posix(
-        "/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs",
-    );
-    let system_exists = matches!(host.exists(&system_mjs).await, Ok(true));
-    if system_exists {
-        return RemoteLayout::System;
-    }
-    if let Some(h) = home {
-        let rootless_mjs = ncd_host::HostPath::from_posix(format!(
-            "{h}/Napcat/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs"
-        ));
-        if matches!(host.exists(&rootless_mjs).await, Ok(true)) {
-            return RemoteLayout::Rootless;
+/// 一台远端主机的布局探测结果：$HOME + NapCat 安装布局。
+/// 本机（host_id="local"）这两项都没意义，用默认值（home=None / Rootless）。
+#[derive(Debug, Clone)]
+pub struct RemoteHostProbe {
+    pub home: Option<String>,
+    pub layout: RemoteLayout,
+}
+
+impl RemoteHostProbe {
+    /// 本机 / 探测失败时的默认值。
+    fn local_default() -> Self {
+        Self {
+            home: None,
+            layout: RemoteLayout::Rootless,
         }
     }
-    RemoteLayout::Rootless
+}
+
+/// 取（或探测并缓存）一台主机的 home + layout。
+///
+/// 同一台远端在一次 UI 会话里 home / layout 是稳定的，5 个组件并发 detect 时
+/// 没必要各探一遍。缓存命中直接返回；未命中走单次合并探测，结果写缓存。安装 /
+/// 卸载动作结束后由 run_component_action 清掉对应条目（布局可能变）。
+async fn cached_host_probe(
+    host_id: &str,
+    host: &dyn Host,
+    state: &AppState,
+) -> RemoteHostProbe {
+    if !host_id.starts_with("remote:") {
+        return RemoteHostProbe::local_default();
+    }
+    if let Some(cached) = state.host_probe_cache.lock().await.get(host_id) {
+        return cached.clone();
+    }
+    let probe = probe_remote_host(host).await;
+    state
+        .host_probe_cache
+        .lock()
+        .await
+        .insert(host_id.to_string(), probe.clone());
+    probe
+}
+
+/// 一条 shell 命令同时拿 $HOME 和 system 布局标记，省掉原来"1 次 echo + 最多 2
+/// 次 SFTP stat"分多趟的往返。输出两行：HOME、system 标记存在与否
+/// （`test -e ... && echo 1 || echo 0`）。system 不存在时一律按 rootless 处理，
+/// 所以不必再单独探 rootless 标记。
+async fn probe_remote_host(host: &dyn Host) -> RemoteHostProbe {
+    let script = "echo \"$HOME\"; \
+         test -e /opt/QQ/resources/app/app_launcher/napcat/napcat.mjs && echo 1 || echo 0";
+    let cmd = ncd_host::HostCommand::new("sh").arg("-c").arg(script);
+    let out = match host.run_to_string(cmd).await {
+        Ok(out) if out.success() => out,
+        _ => return RemoteHostProbe::local_default(),
+    };
+
+    let mut lines = out.stdout.lines();
+    let home = lines.next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let system_exists = lines.next().map(str::trim) == Some("1");
+
+    // system（/opt/QQ）优先；否则一律 Rootless（$HOME/Napcat，含从零安装）。
+    let layout = if system_exists {
+        RemoteLayout::System
+    } else {
+        RemoteLayout::Rootless
+    };
+
+    RemoteHostProbe { home, layout }
 }
 
 /// 把 component_id 实例化成具体 Component。
@@ -377,58 +403,6 @@ fn data_root_to_host_path(data_root: &std::path::Path, os: ncd_host::Os) -> Host
         // 真用 LinuxLocalHost 时再决定;当前直接当作 POSIX 字符串透传。
         _ => HostPath::from_posix(s.into_owned()),
     }
-}
-
-/// host_id 字符串约定：
-/// - `"local"`：本机 Host
-/// - `"remote:<server_id>"`：远端 SSH，从 ServerManager 取已建立的连接
-///
-/// resolve_host 的"自动连接"包装：远端 host 缓存命中直接用；不命中尝试调
-/// `ServerManager.test_connection(server_id, None)` 用 keyring 缓存的凭据建立
-/// SSH 连接。专给 detect_component / run_component_action 用——用户进组件页
-/// 时不需要先去远端页点测试。
-///
-/// 失败时返回原始错误，让前端在那一行 host status 显示"未连接 + 原因"。
-async fn resolve_host_with_autoconnect(
-    host_id: &str,
-    state: &AppState,
-) -> Result<Arc<dyn Host>, String> {
-    if host_id == "local" {
-        return local_host();
-    }
-    let Some(server_id) = host_id.strip_prefix("remote:") else {
-        return Err(format!("unknown host_id: {host_id}"));
-    };
-
-    if let Some(host) = state.server_manager.get_host(server_id).await {
-        return Ok(host);
-    }
-
-    // 缓存未命中——尝试用 keyring 缓存凭据自动连一次。
-    match state.server_manager.test_connection(server_id, None).await {
-        Ok(report) if report.success => state
-            .server_manager
-            .get_host(server_id)
-            .await
-            .ok_or_else(|| format!("auto-connect 成功但缓存为空: {server_id}（不应发生）")),
-        Ok(report) => {
-            let err = report.error.clone().unwrap_or_else(|| "未知错误".into());
-            Err(format!("自动连接失败: {err}（请去远端页手动测试连接）"))
-        }
-        Err(err) => Err(format!(
-            "自动连接被拒绝: {err}（凭据可能未保存，请去远端页手动测试）"
-        )),
-    }
-}
-
-#[cfg(windows)]
-fn local_host() -> Result<Arc<dyn Host>, String> {
-    Ok(Arc::new(ncd_host::local::LocalWindowsHost::new()))
-}
-
-#[cfg(not(windows))]
-fn local_host() -> Result<Arc<dyn Host>, String> {
-    Err("local host on non-Windows targets is not yet implemented".to_string())
 }
 
 #[cfg(test)]

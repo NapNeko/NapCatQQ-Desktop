@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use ts_rs::TS;
 
 use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteLinuxHost, SshCredentials};
@@ -214,8 +214,17 @@ impl ServerProfileRepo {
 pub struct ServerManager {
     repo: ServerProfileRepo,
     credentials: Arc<dyn ServerCredentialStore>,
+    /// 生成的免密私钥落盘目录：`<data_root>/ssh_keys/`。
+    key_dir: PathBuf,
     /// 活跃 SSH 连接缓存：server_id → Arc<dyn Host>。
     hosts: Arc<RwLock<HashMap<String, Arc<dyn Host>>>>,
+    /// 每服务器的连接单飞锁：server_id → Mutex。
+    ///
+    /// 组件页进来时会并发触发 5+ 个 detect，每个都可能在冷缓存下尝试自动连接
+    /// 同一台远端。没有这把锁的话就是 5 个 SSH 握手同时砸过去，服务端
+    /// MaxStartups 很容易拒掉一部分（表现为时好时坏的探测失败）。ensure_connected
+    /// 抢这把锁后会二次检查缓存，等锁期间别人连上了就直接复用，真连接只发生一次。
+    connect_locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 impl ServerManager {
@@ -226,7 +235,9 @@ impl ServerManager {
         Self {
             repo: ServerProfileRepo::new(data_root),
             credentials,
+            key_dir: data_root.join("ssh_keys"),
             hosts: Arc::new(RwLock::new(HashMap::new())),
+            connect_locks: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -275,7 +286,100 @@ impl ServerManager {
         }
         all[pos] = profile.clone();
         self.repo.save(&all).await?;
+        // 连接信息可能已改（host/port/认证），丢弃缓存的旧连接，下次访问用新档案
+        // 重新连。否则编辑完仍走旧 SSH 会话，改了地址也不生效。
+        self.hosts.write().await.remove(&profile.id);
+        self.update_state(&profile.id, ServerState::Disconnected).await;
         Ok(profile)
+    }
+
+    /// 密码登录 → 自动配置免密。
+    ///
+    /// 流程：用密码连一次远端 → 本地生成 ed25519 密钥对 → 把公钥追加进远端
+    /// `~/.ssh/authorized_keys`（去重，已存在则不重复加）→ 私钥落盘到
+    /// `<data_root>/ssh_keys/<id>` → 档案切到 Key 认证、指向该私钥。之后连接
+    /// 走密钥免密，不再需要密码。
+    ///
+    /// 失败保持档案原样（仍是密码认证），返回人话错误。
+    pub async fn setup_key_auth(&self, id: &str, password: &str) -> Result<ServerProfile, String> {
+        let all = self.repo.load().await;
+        let profile = all
+            .iter()
+            .find(|p| p.id == id)
+            .ok_or_else(|| format!("server not found: {id}"))?
+            .clone();
+
+        // 1. 用密码连一次（不复用缓存，确保是密码通道）。
+        let credentials = SshCredentials::password(&profile.username, password);
+        let config = ConnectionConfig::new(
+            &profile.host,
+            profile.port,
+            credentials,
+            HostKeyPolicy::Insecure,
+        );
+        let host = RemoteLinuxHost::connect(&profile.id, config)
+            .await
+            .map_err(|e| format!("密码连接失败: {e}（请检查用户名 / 密码 / 网络）"))?;
+
+        // 2. 本地生成密钥对。
+        let comment = format!("napcatqq-desktop@{}", profile.id);
+        let pair = crate::ssh_keygen::generate_ed25519(&comment)?;
+
+        // 3. 公钥追加进远端 authorized_keys（幂等：先 grep 去重）。
+        //    用 sh 单行：建 ~/.ssh（700）→ 若公钥不在 authorized_keys 就追加 →
+        //    authorized_keys 设 600。authorized_keys 行用单引号包，避免 shell 解释。
+        let pub_line = pair.public_line.trim();
+        let script = format!(
+            "set -e; mkdir -p ~/.ssh && chmod 700 ~/.ssh; \
+             touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys; \
+             grep -qxF '{pub}' ~/.ssh/authorized_keys || echo '{pub}' >> ~/.ssh/authorized_keys",
+            pub = pub_line,
+        );
+        let out = host
+            .run_to_string(ncd_host::HostCommand::new("sh").arg("-c").arg(script))
+            .await
+            .map_err(|e| format!("写入远端 authorized_keys 失败: {e}"))?;
+        if !out.success() {
+            return Err(format!(
+                "写入远端 authorized_keys 失败（exit={:?}）: {}",
+                out.exit_code,
+                out.stderr.trim()
+            ));
+        }
+
+        // 4. 私钥落盘到 <data_root>/ssh_keys/<id>，权限 600（best-effort）。
+        tokio::fs::create_dir_all(&self.key_dir)
+            .await
+            .map_err(|e| format!("创建密钥目录失败: {e}"))?;
+        let key_path = self.key_dir.join(&profile.id);
+        tokio::fs::write(&key_path, pair.private_openssh.as_bytes())
+            .await
+            .map_err(|e| format!("写入私钥失败: {e}"))?;
+        set_key_file_permissions(&key_path).await;
+
+        // 5. 档案切到 Key 认证；之前若存了密码就清掉（不再需要）。
+        let key_path_str = key_path.to_string_lossy().into_owned();
+        let mut updated = profile.clone();
+        updated.auth_method = AuthMethod::Key;
+        updated.private_key_path = Some(key_path_str);
+        // 生成的私钥未设 passphrase，rememberCredential 对 Key 模式没有密码要存，
+        // 保持原值即可；清掉旧密码凭据避免残留。
+        let _ = self.credentials.delete_password(&profile.id);
+
+        let mut persisted = self.repo.load().await;
+        if let Some(slot) = persisted.iter_mut().find(|p| p.id == id) {
+            *slot = updated.clone();
+            self.repo.save(&persisted).await?;
+        }
+
+        // 6. 缓存这次连接（密码通道已建立，可直接复用），状态置已连接。
+        self.hosts
+            .write()
+            .await
+            .insert(profile.id.clone(), Arc::new(host));
+        self.update_state(id, ServerState::Connected).await;
+
+        Ok(updated)
     }
 
     pub async fn delete_server(&self, id: &str) -> Result<(), String> {
@@ -357,6 +461,51 @@ impl ServerManager {
         self.hosts.read().await.get(id).cloned()
     }
 
+    /// 确保某服务器已连接，返回缓存的 Host。
+    ///
+    /// 单飞语义：先查缓存命中直接返回；未命中时抢该服务器的连接锁，再查一次
+    /// 缓存（等锁期间别的并发请求可能已经连上），仍没有才用 keyring 缓存凭据
+    /// 真连一次。这样组件页并发触发的 N 个 detect 只会产生一次实际 SSH 握手，
+    /// 其余复用同一条连接，避免把远端 SSH 的 MaxStartups 打爆。
+    ///
+    /// 失败返回人话错误，调用方把它显示在对应 host 那行。
+    pub async fn ensure_connected(&self, id: &str) -> Result<Arc<dyn Host>, String> {
+        if let Some(host) = self.get_host(id).await {
+            return Ok(host);
+        }
+
+        let lock = self.connect_lock_for(id).await;
+        let _guard = lock.lock().await;
+
+        // 二次检查：等锁期间可能已有并发请求把连接建好并缓存。
+        if let Some(host) = self.get_host(id).await {
+            return Ok(host);
+        }
+
+        match self.test_connection(id, None).await {
+            Ok(report) if report.success => self
+                .get_host(id)
+                .await
+                .ok_or_else(|| format!("自动连接成功但缓存为空: {id}（不应发生）")),
+            Ok(report) => {
+                let err = report.error.unwrap_or_else(|| "未知错误".into());
+                Err(format!("自动连接失败: {err}（请去远端页手动测试连接）"))
+            }
+            Err(err) => Err(format!(
+                "自动连接被拒绝: {err}（凭据可能未保存，请去远端页手动测试）"
+            )),
+        }
+    }
+
+    /// 取（或惰性创建）某服务器的连接单飞锁。
+    async fn connect_lock_for(&self, id: &str) -> Arc<Mutex<()>> {
+        if let Some(lock) = self.connect_locks.read().await.get(id) {
+            return Arc::clone(lock);
+        }
+        let mut map = self.connect_locks.write().await;
+        Arc::clone(map.entry(id.to_string()).or_insert_with(|| Arc::new(Mutex::new(()))))
+    }
+
     // ---- helpers ----
 
     fn build_credentials(
@@ -395,6 +544,24 @@ impl ServerManager {
             p.state = state;
             let _ = self.repo.save(&all).await;
         }
+    }
+}
+
+/// 给落盘的私钥文件设权限。Unix 设 600（仅属主可读写，否则 ssh 会拒用）；
+/// Windows 上文件权限模型不同，依赖 NTFS ACL 继承用户目录权限，这里 no-op。
+async fn set_key_file_permissions(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = tokio::fs::metadata(path).await {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o600);
+            let _ = tokio::fs::set_permissions(path, perms).await;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
     }
 }
 

@@ -12,6 +12,7 @@
 
 pub mod deployment;
 pub mod deployments;
+pub mod docker;
 pub mod error;
 pub mod plan;
 pub mod result;
@@ -24,6 +25,9 @@ pub use deployment::{
 pub use deployments::{
     DockerDeployment, ExternalDeployment, NativeDeployment, NativeLogSnapshot,
     NativeRuntimeEventSink, NullRuntimeEventSink,
+};
+pub use docker::{
+    install_docker, render_compose, DockerCli, DockerCliError, DockerInstallOutcome,
 };
 pub use error::DeployError;
 pub use plan::{DeployBuilder, DeployPlan, DeployStep, StepKind};

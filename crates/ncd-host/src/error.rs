@@ -101,6 +101,15 @@ impl HostError {
         }
     }
 
+    /// 该错误是否意味着远端连接 / 会话已不可用。
+    /// 远端 SFTP 复用会话时用它判断要不要丢弃缓存的 session 重开。
+    pub fn is_disconnect(&self) -> bool {
+        matches!(
+            self,
+            Self::RemoteDisconnected { .. } | Self::RemoteConnection { .. }
+        )
+    }
+
     /// 命令失败的便捷构造器。
     pub fn command_failed(
         program: impl Into<String>,

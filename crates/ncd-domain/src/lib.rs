@@ -7,6 +7,7 @@
 pub mod app_config;
 pub mod bootstrap;
 pub mod bot_config;
+pub mod docker;
 pub mod errors;
 pub mod ids;
 pub mod kinds;
@@ -27,6 +28,10 @@ pub use bot_config::{
     BypassConfig, ConnectConfig, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LogLevel,
     MessagePostFormat, NetworkBaseFields, O3HookMode, TimeUnit, WebsocketClientConfig,
     WebsocketServerConfig, WsRole,
+};
+pub use docker::{
+    ContainerAction, ContainerInfo, ContainerState, DeployedContainer, DockerDeploySpec,
+    DockerFlavor, DockerSpecError, DockerStatus, PortMapping,
 };
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use ids::{BackendId, BotId};

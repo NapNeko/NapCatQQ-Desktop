@@ -30,6 +30,11 @@ pub struct AppState {
     /// Components 页活跃 task 注册表，task_id → CancellationToken。
     /// `run_component_action` 启动时插入；plan 完成 / 取消时移除。
     pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
+    /// 远端主机布局探测缓存：host_id → (home, layout)。
+    /// detect_component 对同一台机器的 home/layout 探测结果是稳定的，缓存后
+    /// 5 个并发组件 detect 只探一次，不再各跑一遍 `echo $HOME` + layout 检查。
+    /// run_component_action 会清掉对应条目，因为安装可能改变布局。
+    pub(crate) host_probe_cache: Arc<Mutex<HashMap<String, commands::components::RemoteHostProbe>>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -150,6 +155,7 @@ pub fn run() {
             bot_manager,
             server_manager,
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
+            host_probe_cache: Arc::new(Mutex::new(HashMap::new())),
         })
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -289,9 +295,17 @@ pub fn run() {
             commands::servers::list_servers,
             commands::servers::add_server,
             commands::servers::update_server,
+            commands::servers::setup_server_key_auth,
             commands::servers::delete_server,
             commands::servers::test_server_connection,
             commands::servers::scan_local_ssh_keys,
+            commands::docker::docker_probe,
+            commands::docker::docker_install,
+            commands::docker::docker_list_containers,
+            commands::docker::docker_container_action,
+            commands::docker::docker_logs,
+            commands::docker::docker_deploy,
+            commands::docker::docker_compose_down,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

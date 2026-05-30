@@ -85,6 +85,12 @@ pub struct RemoteLinuxHost {
     /// SSH session 句柄(用 Mutex 串行化,避免多线程同时操作 channel)。
     /// 实际连接保留为 Arc 以便 spawn 出多个 channel 用同一 session。
     handle: Arc<Mutex<ClientHandle<ClientCallback>>>,
+    /// 复用的 SFTP 会话。SFTP 子系统初始化(开 channel + request_subsystem +
+    /// 协议版本协商)有好几个往返,原来每次 exists/read_file 都重开一条用完即弃,
+    /// 是远端探测慢的大头。这里缓存一条 session 反复用;russh-sftp 的 SftpSession
+    /// 内部按 request id 多路复用,支持并发请求。连接断了时 op 报错会清空缓存,
+    /// 下次访问自动重开,实现断线自愈。
+    sftp: Arc<Mutex<Option<Arc<russh_sftp::client::SftpSession>>>>,
     /// 连接配置。当前断线后由上层 ServerManager 重新 connect,本结构体内部
     /// 还没用到它重连,先留着等断线自愈实装。
     #[allow(dead_code)]
@@ -155,6 +161,7 @@ impl RemoteLinuxHost {
             id: id.into(),
             shell: BashShell,
             handle: Arc::new(Mutex::new(handle)),
+            sftp: Arc::new(Mutex::new(None)),
             config,
         })
     }
@@ -162,6 +169,30 @@ impl RemoteLinuxHost {
     /// HostPath → 远端 POSIX 字符串
     fn to_remote(&self, path: &HostPath) -> String {
         path.render(PathStyle::Posix)
+    }
+
+    /// 取复用的 SFTP 会话；首次访问或缓存被清空时新建一条。
+    async fn sftp_session(&self) -> Result<Arc<russh_sftp::client::SftpSession>, HostError> {
+        {
+            let guard = self.sftp.lock().await;
+            if let Some(session) = guard.as_ref() {
+                return Ok(Arc::clone(session));
+            }
+        }
+        // 缓存未命中：开一条新 SFTP 会话并缓存。等锁期间可能已有别的请求建好，
+        // 二次检查避免重复开。
+        let mut guard = self.sftp.lock().await;
+        if let Some(session) = guard.as_ref() {
+            return Ok(Arc::clone(session));
+        }
+        let session = Arc::new(open_sftp(&self.handle).await?);
+        *guard = Some(Arc::clone(&session));
+        Ok(session)
+    }
+
+    /// 丢弃缓存的 SFTP 会话。某次 op 报错（多半连接断了）时调用，下次访问重开。
+    async fn invalidate_sftp(&self) {
+        *self.sftp.lock().await = None;
     }
 
     /// 主机 id 引用
@@ -330,11 +361,17 @@ impl Host for RemoteLinuxHost {
 
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
         let remote = self.to_remote(path);
-        let sftp = open_sftp(&self.handle).await?;
-        let mut file = sftp
-            .open(&remote)
-            .await
-            .map_err(|e| sftp_err_to_host(&remote, "read", e))?;
+        let sftp = self.sftp_session().await?;
+        let mut file = match sftp.open(&remote).await {
+            Ok(f) => f,
+            Err(e) => {
+                let err = sftp_err_to_host(&remote, "read", e);
+                if err.is_disconnect() {
+                    self.invalidate_sftp().await;
+                }
+                return Err(err);
+            }
+        };
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).await.map_err(HostError::Io)?;
         Ok(Bytes::from(buf))
@@ -351,11 +388,17 @@ impl Host for RemoteLinuxHost {
             }
         }
 
-        let sftp = open_sftp(&self.handle).await?;
-        let mut file = sftp
-            .create(&remote)
-            .await
-            .map_err(|e| sftp_err_to_host(&remote, "write", e))?;
+        let sftp = self.sftp_session().await?;
+        let mut file = match sftp.create(&remote).await {
+            Ok(f) => f,
+            Err(e) => {
+                let err = sftp_err_to_host(&remote, "write", e);
+                if err.is_disconnect() {
+                    self.invalidate_sftp().await;
+                }
+                return Err(err);
+            }
+        };
         file.write_all(bytes).await.map_err(HostError::Io)?;
         file.flush().await.map_err(HostError::Io)?;
         Ok(())
@@ -363,11 +406,17 @@ impl Host for RemoteLinuxHost {
 
     async fn list_dir(&self, path: &HostPath) -> Result<Vec<DirEntry>, HostError> {
         let remote = self.to_remote(path);
-        let sftp = open_sftp(&self.handle).await?;
-        let entries = sftp
-            .read_dir(&remote)
-            .await
-            .map_err(|e| sftp_err_to_host(&remote, "list", e))?;
+        let sftp = self.sftp_session().await?;
+        let entries = match sftp.read_dir(&remote).await {
+            Ok(e) => e,
+            Err(e) => {
+                let err = sftp_err_to_host(&remote, "list", e);
+                if err.is_disconnect() {
+                    self.invalidate_sftp().await;
+                }
+                return Err(err);
+            }
+        };
         let mut result = Vec::new();
         for entry in entries {
             let name = entry.file_name();
@@ -406,10 +455,17 @@ impl Host for RemoteLinuxHost {
 
     async fn remove_file(&self, path: &HostPath) -> Result<(), HostError> {
         let remote = self.to_remote(path);
-        let sftp = open_sftp(&self.handle).await?;
-        sftp.remove_file(&remote)
-            .await
-            .map_err(|e| sftp_err_to_host(&remote, "remove_file", e))
+        let sftp = self.sftp_session().await?;
+        match sftp.remove_file(&remote).await {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let err = sftp_err_to_host(&remote, "remove_file", e);
+                if err.is_disconnect() {
+                    self.invalidate_sftp().await;
+                }
+                Err(err)
+            }
+        }
     }
 
     async fn remove_dir_all(&self, path: &HostPath) -> Result<(), HostError> {
@@ -438,7 +494,7 @@ impl Host for RemoteLinuxHost {
 
     async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
         let remote = self.to_remote(path);
-        let sftp = open_sftp(&self.handle).await?;
+        let sftp = self.sftp_session().await?;
         match sftp.metadata(&remote).await {
             Ok(_) => Ok(true),
             Err(russh_sftp::client::error::Error::Status(s))
@@ -446,7 +502,13 @@ impl Host for RemoteLinuxHost {
             {
                 Ok(false)
             }
-            Err(e) => Err(sftp_err_to_host(&remote, "exists", e)),
+            Err(e) => {
+                let err = sftp_err_to_host(&remote, "exists", e);
+                if err.is_disconnect() {
+                    self.invalidate_sftp().await;
+                }
+                Err(err)
+            }
         }
     }
 
@@ -462,11 +524,17 @@ impl Host for RemoteLinuxHost {
         }
 
         let bytes = tokio::fs::read(local).await.map_err(HostError::Io)?;
-        let sftp = open_sftp(&self.handle).await?;
-        let mut file = sftp
-            .create(&remote_str)
-            .await
-            .map_err(|e| sftp_err_to_host(&remote_str, "upload", e))?;
+        let sftp = self.sftp_session().await?;
+        let mut file = match sftp.create(&remote_str).await {
+            Ok(f) => f,
+            Err(e) => {
+                let err = sftp_err_to_host(&remote_str, "upload", e);
+                if err.is_disconnect() {
+                    self.invalidate_sftp().await;
+                }
+                return Err(err);
+            }
+        };
         file.write_all(&bytes).await.map_err(HostError::Io)?;
         file.flush().await.map_err(HostError::Io)?;
         Ok(())
@@ -474,11 +542,17 @@ impl Host for RemoteLinuxHost {
 
     async fn download(&self, remote: &HostPath, local: &Path) -> Result<(), HostError> {
         let remote_str = self.to_remote(remote);
-        let sftp = open_sftp(&self.handle).await?;
-        let mut file = sftp
-            .open(&remote_str)
-            .await
-            .map_err(|e| sftp_err_to_host(&remote_str, "download", e))?;
+        let sftp = self.sftp_session().await?;
+        let mut file = match sftp.open(&remote_str).await {
+            Ok(f) => f,
+            Err(e) => {
+                let err = sftp_err_to_host(&remote_str, "download", e);
+                if err.is_disconnect() {
+                    self.invalidate_sftp().await;
+                }
+                return Err(err);
+            }
+        };
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).await.map_err(HostError::Io)?;
         if let Some(parent) = local.parent() {
@@ -593,9 +667,9 @@ fn sftp_err_to_host(
                 s.status_code
             ))),
         },
-        other => HostError::Io(std::io::Error::other(format!(
-            "sftp {op} {path}: {other}"
-        ))),
+        // 非 Status 错误（channel 关闭 / 流读写失败）= SFTP 会话本身坏了，标成
+        // 远端中断，让复用层 is_disconnect() 命中后丢弃缓存会话、下次重开。
+        other => HostError::remote_disconnected(format!("sftp {op} {path}: {other}")),
     }
 }
 

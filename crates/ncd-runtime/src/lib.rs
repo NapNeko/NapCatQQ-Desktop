@@ -17,6 +17,7 @@ pub mod runtime_backend;
 pub mod runtime_launch_plan;
 pub mod secret_store_impl;
 pub mod server_manager;
+pub mod ssh_keygen;
 pub mod snowluma;
 
 // ===== Layer 1 数据(已迁移到 ncd-domain,此处 re-export 保持向后兼容) =====

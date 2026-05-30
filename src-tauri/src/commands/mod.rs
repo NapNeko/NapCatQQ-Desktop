@@ -1,5 +1,7 @@
 pub mod bot;
 pub mod components;
+pub mod docker;
+pub mod host_resolve;
 pub mod release;
 pub mod servers;
 pub mod snowluma;
@@ -285,6 +287,7 @@ mod tests {
                 Arc::new(ncd_runtime::InMemoryCredentialStore::default()),
             )),
             active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            host_probe_cache: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         };
         (state, bus)
     }

@@ -41,6 +41,17 @@ pub async fn update_server(
     state.server_manager.update_server(profile, password).await
 }
 
+/// 密码登录 → 自动配置免密：用密码连一次，把本地新生成的公钥写进远端
+/// authorized_keys，档案切到密钥认证。成功后返回更新后的档案。
+#[tauri::command]
+pub async fn setup_server_key_auth(
+    state: State<'_, AppState>,
+    id: String,
+    password: String,
+) -> Result<ServerProfile, String> {
+    state.server_manager.setup_key_auth(&id, &password).await
+}
+
 #[tauri::command]
 pub async fn delete_server(
     state: State<'_, AppState>,
