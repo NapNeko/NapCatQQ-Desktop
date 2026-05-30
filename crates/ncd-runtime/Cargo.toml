@@ -26,6 +26,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 sha2 = "0.10"
 hex = "0.4"
 tracing = "0.1"
+# 免密登录：本地生成 ed25519 密钥对 + 把公钥写进远端 authorized_keys。
+ssh-key = { version = "0.6", features = ["ed25519", "std"] }
 # SnowLuma backend runtime 依赖（spec: snowluma-backend-runtime, task 1.1）
 # - sysinfo: Windows 子进程树枚举 (proc_tree.rs / commands/snowluma.rs)
 # - scrypt:  webui.json 密码哈希；纯 Rust 实现，免 OpenSSL (session.rs)

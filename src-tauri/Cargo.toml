@@ -10,6 +10,7 @@ ncd-runtime = { path = "../crates/ncd-runtime" }
 ncd-component = { path = "../crates/ncd-component" }
 ncd-deploy = { path = "../crates/ncd-deploy" }
 ncd-host = { path = "../crates/ncd-host" }
+ncd-domain = { path = "../crates/ncd-domain" }
 dirs = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
