@@ -77,6 +77,16 @@ export type { Locality } from './generated/domain/Locality';
 // `generated/domain/`（与其它 domain 类型同目录）。
 export type { ComponentDetectResult } from './generated/domain/ComponentDetectResult';
 
+// ─── Docker 管理面强类型（对齐 crates/ncd-domain/src/docker.rs） ───
+export type { DockerStatus } from './generated/domain/DockerStatus';
+export type { ContainerInfo } from './generated/domain/ContainerInfo';
+export type { ContainerState } from './generated/domain/ContainerState';
+export type { ContainerAction } from './generated/domain/ContainerAction';
+export type { DockerFlavor } from './generated/domain/DockerFlavor';
+export type { DockerDeploySpec } from './generated/domain/DockerDeploySpec';
+export type { DeployedContainer } from './generated/domain/DeployedContainer';
+export type { PortMapping } from './generated/domain/PortMapping';
+
 import type { BotActorState } from './generated/BotActorState';
 import type { BotActorSnapshot } from './generated/BotActorSnapshot';
 import type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapshot';

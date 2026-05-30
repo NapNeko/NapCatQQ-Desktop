@@ -1,0 +1,105 @@
+// Docker 管理面 React 适配层。
+//
+// 接口速查（写 UI 时照着接）：
+//   入参：hostId（"local" 或 "remote:<serverId>"）
+//   返回：
+//     status            DockerStatus | undefined   当前主机的 docker 探测结果
+//     isProbing         boolean                    probe 是否进行中
+//     containers        ContainerInfo[]            容器列表（含已停止）
+//     isLoadingList     boolean
+//     refetch()                                    手动刷新 probe + 列表
+//     install()         → Promise<string>          帮装 docker，返回结果文案
+//     isInstalling      boolean
+//     deploy(spec)      → Promise<DeployedContainer>一键部署 NapCat/SnowLuma
+//     isDeploying       boolean
+//     containerAction({name, action})              start/stop/restart/remove
+//     isActing          boolean
+//     composeDown({name, removeVolumes})           停并清理一个部署
+//     isComposingDown   boolean
+//     fetchLogs(name, tail?) → Promise<string>     取容器日志（命令式调用）
+
+import { useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+import { dockerService } from '../../core/services/docker.service';
+import type {
+    ContainerAction,
+    ContainerInfo,
+    DeployedContainer,
+    DockerDeploySpec,
+    DockerStatus,
+} from '../../core/ipc/types';
+
+export function useDocker(hostId: string) {
+    const queryClient = useQueryClient();
+
+    const statusQuery = useQuery({
+        queryKey: ['docker', 'status', hostId],
+        queryFn: () => dockerService.probe(hostId),
+    });
+
+    const containersQuery = useQuery({
+        queryKey: ['docker', 'containers', hostId],
+        queryFn: () => dockerService.listContainers(hostId),
+        // daemon 没起时列容器会失败，禁用查询避免反复报错。
+        enabled: statusQuery.data?.daemonRunning ?? false,
+    });
+
+    const invalidate = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: ['docker', 'status', hostId] });
+        queryClient.invalidateQueries({ queryKey: ['docker', 'containers', hostId] });
+    }, [queryClient, hostId]);
+
+    const installMutation = useMutation({
+        mutationFn: () => dockerService.install(hostId),
+        onSuccess: invalidate,
+    });
+
+    const deployMutation = useMutation({
+        mutationFn: (spec: DockerDeploySpec) => dockerService.deploy(hostId, spec),
+        onSuccess: invalidate,
+    });
+
+    const actionMutation = useMutation({
+        mutationFn: (args: { name: string; action: ContainerAction }) =>
+            dockerService.containerAction(hostId, args.name, args.action),
+        onSuccess: invalidate,
+    });
+
+    const composeDownMutation = useMutation({
+        mutationFn: (args: { name: string; removeVolumes: boolean }) =>
+            dockerService.composeDown(hostId, args.name, args.removeVolumes),
+        onSuccess: invalidate,
+    });
+
+    const fetchLogs = useCallback(
+        (name: string, tail = 400): Promise<string> => dockerService.logs(hostId, name, tail),
+        [hostId],
+    );
+
+    return {
+        status: statusQuery.data as DockerStatus | undefined,
+        isProbing: statusQuery.isLoading,
+
+        containers: (containersQuery.data ?? []) as ContainerInfo[],
+        isLoadingList: containersQuery.isLoading,
+
+        refetch: () => {
+            invalidate();
+        },
+
+        install: installMutation.mutateAsync,
+        isInstalling: installMutation.isPending,
+
+        deploy: deployMutation.mutateAsync as (spec: DockerDeploySpec) => Promise<DeployedContainer>,
+        isDeploying: deployMutation.isPending,
+
+        containerAction: actionMutation.mutate,
+        isActing: actionMutation.isPending,
+
+        composeDown: composeDownMutation.mutate,
+        isComposingDown: composeDownMutation.isPending,
+
+        fetchLogs,
+    };
+}

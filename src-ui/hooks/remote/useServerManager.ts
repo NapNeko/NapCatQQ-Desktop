@@ -45,12 +45,21 @@ export function useServerManager() {
         },
     });
 
+    const setupKeyAuthMutation = useMutation({
+        mutationFn: (args: { id: string; password: string }) =>
+            serverService.setupKeyAuth(args.id, args.password),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['servers'] });
+        },
+    });
+
     return {
         servers: serversQuery.data ?? [],
         isLoading: serversQuery.isLoading,
         refetch: serversQuery.refetch,
 
         addServer: addMutation.mutate,
+        addServerAsync: addMutation.mutateAsync,
         isAdding: addMutation.isPending,
 
         updateServer: updateMutation.mutate,
@@ -62,5 +71,8 @@ export function useServerManager() {
         testConnection: testMutation.mutate,
         isTesting: testMutation.isPending,
         testResult: testMutation.data as ProbeReport | undefined,
+
+        setupKeyAuth: setupKeyAuthMutation.mutateAsync,
+        isSettingUpKey: setupKeyAuthMutation.isPending,
     };
 }

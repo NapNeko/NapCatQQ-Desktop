@@ -21,6 +21,7 @@ import {
     Bot,
     ChevronsLeft,
     ChevronsRight,
+    Container,
     LayoutDashboard,
     type LucideIcon,
     Package,
@@ -35,6 +36,7 @@ export type AppRoute =
     | 'overview'
     | 'bots'
     | 'components'
+    | 'docker'
     | 'remote'
     | 'events'
     | 'settings'
@@ -46,6 +48,9 @@ interface SidebarProps {
     collapsed: boolean;
     onToggleCollapse: () => void;
     showShowcase?: boolean;
+    /// 是否显示 Docker 项。没有任何远端服务器时整项隐藏——Docker 只用于管理
+    /// 远端 Linux 容器，本机（Windows）用不上。
+    showDocker?: boolean;
 }
 
 interface NavItem {
@@ -58,6 +63,7 @@ const PRIMARY_NAV: NavItem[] = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'bots', label: 'Bots', icon: Bot },
     { id: 'components', label: 'Components', icon: Package },
+    { id: 'docker', label: 'Docker', icon: Container },
     { id: 'remote', label: 'Remote', icon: Server },
     { id: 'events', label: 'Events', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -69,7 +75,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     collapsed,
     onToggleCollapse,
     showShowcase,
+    showDocker = true,
 }) => {
+    const navItems = showDocker
+        ? PRIMARY_NAV
+        : PRIMARY_NAV.filter((item) => item.id !== 'docker');
     return (
         <aside
             className={cn(
@@ -149,7 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <nav className="flex-1 space-y-0.5 px-2">
                 <ul className="space-y-0.5">
-                    {PRIMARY_NAV.map((item) => (
+                    {navItems.map((item) => (
                         <NavRow
                             key={item.id}
                             item={item}

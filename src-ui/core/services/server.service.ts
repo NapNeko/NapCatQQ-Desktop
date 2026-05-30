@@ -31,6 +31,13 @@ export const serverService = {
         return { success: false, osInfo: null, error: 'not in Tauri', latencyMs: BigInt(0) };
     },
 
+    /// 密码登录 → 自动配置免密：把本地新生成的公钥写进远端 authorized_keys，
+    /// 档案切到密钥认证。成功返回更新后的档案。
+    setupKeyAuth: async (id: string, password: string): Promise<ServerProfile> => {
+        if (isTauri) return invoke<ServerProfile>('setup_server_key_auth', { id, password });
+        throw new Error('not in Tauri');
+    },
+
     /// 扫描 ~/.ssh/ 下标准命名私钥，返回路径列表（id_ed25519 / id_ecdsa / id_rsa / id_dsa）。
     scanLocalSshKeys: async (): Promise<string[]> => {
         if (isTauri) return invoke<string[]>('scan_local_ssh_keys');

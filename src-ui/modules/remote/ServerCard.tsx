@@ -4,10 +4,10 @@
 // 状态徽章用 Badge tone 映射：connected=success / failed=danger /
 // connecting=warning / disconnected=neutral。
 //
-// 操作按钮：测试连接（始终可用） / 删除（hover 出红）。编辑入口暂留给 v2。
+// 操作按钮：测试连接（始终可用） / 编辑（改连接信息） / 删除（hover 出红）。
 
 import React from 'react';
-import { Server, Wifi, Trash2, Loader2 } from 'lucide-react';
+import { Server, Wifi, KeyRound, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { Card, Badge, Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { ServerState } from '../../core/ipc/generated/domain/ServerState';
@@ -17,6 +17,9 @@ interface ServerCardProps {
     isTesting: boolean;
     revealIp: boolean;
     onTest: (password?: string) => void;
+    onEdit: () => void;
+    /// 配置免密登录。仅密码认证的档案给这个入口；密钥认证的传 undefined。
+    onSetupKey?: () => void;
     onDelete: () => void;
 }
 
@@ -25,6 +28,8 @@ export const ServerCard: React.FC<ServerCardProps> = ({
     isTesting,
     revealIp,
     onTest,
+    onEdit,
+    onSetupKey,
     onDelete,
 }) => {
     const stateMeta = stateBadge(server.state);
@@ -87,6 +92,38 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                     </TooltipTrigger>
                     <TooltipContent>
                         建立 SSH 连接并探测远端 OS
+                    </TooltipContent>
+                </Tooltip>
+                {onSetupKey && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onClick={onSetupKey}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                aria-label="配置免密登录"
+                            >
+                                <KeyRound size={14} />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            配置免密登录（用密码推送密钥到远端）
+                        </TooltipContent>
+                    </Tooltip>
+                )}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            onClick={onEdit}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                            aria-label="编辑服务器"
+                        >
+                            <Pencil size={14} />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        编辑连接信息
                     </TooltipContent>
                 </Tooltip>
                 <Tooltip>

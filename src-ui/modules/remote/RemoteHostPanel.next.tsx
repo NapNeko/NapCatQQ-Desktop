@@ -15,7 +15,16 @@
 import React, { useState } from 'react';
 import { Server, RefreshCw, Plus, Eye, EyeOff } from 'lucide-react';
 import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '../../shared/ui';
 import { useServerManager } from '../../hooks/remote/useServerManager';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { ServerCard } from './ServerCard';
 import { AddServerDialog } from './AddServerDialog';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
@@ -25,21 +34,58 @@ export const RemoteHostPanelNext: React.FC = () => {
         servers,
         isLoading,
         refetch,
-        addServer,
+        addServerAsync,
         isAdding,
+        updateServer,
+        isUpdating,
         deleteServer,
         testConnection,
         isTesting,
+        setupKeyAuth,
+        isSettingUpKey,
     } = useServerManager();
 
-    const [addOpen, setAddOpen] = useState(false);
+    // 表单弹窗：editingProfile=null 走新增，非空走编辑同一弹窗。
+    const [formOpen, setFormOpen] = useState(false);
+    const [editingProfile, setEditingProfile] = useState<ServerProfile | null>(null);
     const [testingId, setTestingId] = useState<string | null>(null);
     const [revealIp, setRevealIp] = useState(false);
+
+    const openAdd = () => {
+        setEditingProfile(null);
+        setFormOpen(true);
+    };
+    const openEdit = (profile: ServerProfile) => {
+        setEditingProfile(profile);
+        setFormOpen(true);
+    };
 
     const handleTest = (id: string, password?: string) => {
         setTestingId(id);
         testConnection({ id, password });
     };
+
+    // 配置免密：用密码连一次，把公钥写进远端 authorized_keys，档案切到密钥认证。
+    const runKeySetup = async (id: string, password: string) => {
+        try {
+            const updated = await setupKeyAuth({ id, password });
+            pushInfoBar({
+                tone: 'success',
+                title: '免密登录已配置',
+                content: `${updated.name || updated.host} 之后用密钥连接，不再需要密码`,
+                autoDismissMs: 5000,
+            });
+        } catch (err) {
+            pushInfoBar({
+                tone: 'danger',
+                title: '配置免密登录失败',
+                content: err instanceof Error ? err.message : String(err),
+            });
+        }
+    };
+
+    // 已添加服务器卡片上点"配置免密"时，弹这个小框输入当前密码。
+    const [keyAuthTarget, setKeyAuthTarget] = useState<ServerProfile | null>(null);
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -87,7 +133,7 @@ export const RemoteHostPanelNext: React.FC = () => {
                 {isLoading && servers.length === 0 ? (
                     <LoadingState />
                 ) : servers.length === 0 ? (
-                    <EmptyState onCreate={() => setAddOpen(true)} />
+                    <EmptyState onCreate={openAdd} />
                 ) : (
                     <div
                         className="grid gap-3"
@@ -103,6 +149,12 @@ export const RemoteHostPanelNext: React.FC = () => {
                                 isTesting={isTesting && testingId === server.id}
                                 revealIp={revealIp}
                                 onTest={(pw) => handleTest(server.id, pw)}
+                                onEdit={() => openEdit(server)}
+                                onSetupKey={
+                                    server.authMethod === 'password'
+                                        ? () => setKeyAuthTarget(server)
+                                        : undefined
+                                }
                                 onDelete={() => deleteServer(server.id)}
                             />
                         ))}
@@ -110,15 +162,45 @@ export const RemoteHostPanelNext: React.FC = () => {
                 )}
             </div>
 
-            <FloatingAddButton onClick={() => setAddOpen(true)} />
+            <FloatingAddButton onClick={openAdd} />
 
             <AddServerDialog
-                open={addOpen}
-                onOpenChange={setAddOpen}
-                isAdding={isAdding}
-                onSubmit={(profile, password) => {
-                    addServer({ profile, password });
-                    setAddOpen(false);
+                open={formOpen}
+                onOpenChange={setFormOpen}
+                isSubmitting={editingProfile ? isUpdating : isAdding}
+                initialProfile={editingProfile}
+                onSubmit={(profile, password, autoKey) => {
+                    if (editingProfile) {
+                        updateServer({ profile, password });
+                        setFormOpen(false);
+                        return;
+                    }
+                    setFormOpen(false);
+                    // 新增：先 add 拿到带 id 的档案；勾了自动免密就接着配。
+                    void addServerAsync({ profile, password })
+                        .then((created) => {
+                            if (autoKey && password) {
+                                void runKeySetup(created.id, password);
+                            }
+                        })
+                        .catch((err) => {
+                            pushInfoBar({
+                                tone: 'danger',
+                                title: '添加服务器失败',
+                                content: err instanceof Error ? err.message : String(err),
+                            });
+                        });
+                }}
+            />
+
+            <KeyAuthPasswordDialog
+                target={keyAuthTarget}
+                isSubmitting={isSettingUpKey}
+                onClose={() => setKeyAuthTarget(null)}
+                onConfirm={(password) => {
+                    const target = keyAuthTarget;
+                    setKeyAuthTarget(null);
+                    if (target) void runKeySetup(target.id, password);
                 }}
             />
         </div>
@@ -165,6 +247,69 @@ function FloatingAddButton({ onClick }: { onClick: () => void }) {
         >
             <Plus size={20} strokeWidth={2.4} />
         </button>
+    );
+}
+
+// 已添加服务器配置免密时弹的密码输入框。只问当前 SSH 密码，确认后把公钥推到
+// 远端。target 为 null 时不渲染。
+function KeyAuthPasswordDialog({
+    target,
+    isSubmitting,
+    onClose,
+    onConfirm,
+}: {
+    target: ServerProfile | null;
+    isSubmitting: boolean;
+    onClose: () => void;
+    onConfirm: (password: string) => void;
+}) {
+    const [password, setPassword] = useState('');
+    React.useEffect(() => {
+        if (target) setPassword('');
+    }, [target]);
+
+    if (!target) return null;
+
+    return (
+        <Dialog open onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>配置免密登录</DialogTitle>
+                    <DialogDescription>
+                        输入 {target.name || target.host} 的当前 SSH 密码。会用它连一次，把本机
+                        密钥写进远端，之后免密码连接。
+                    </DialogDescription>
+                </DialogHeader>
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        if (password) onConfirm(password);
+                    }}
+                >
+                    <input
+                        type="password"
+                        autoFocus
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="SSH 密码"
+                        className="h-9 w-full rounded-sm bg-inset px-3 text-sm text-text outline-none transition-colors placeholder:text-text-tertiary focus:ring-1 focus:ring-brand"
+                    />
+                    <DialogFooter>
+                        <Button size="sm" variant="ghost" type="button" onClick={onClose}>
+                            取消
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="primary"
+                            type="submit"
+                            disabled={!password || isSubmitting}
+                        >
+                            {isSubmitting ? '配置中…' : '配置免密'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     );
 }
 

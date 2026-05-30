@@ -14,12 +14,15 @@ import { InfoBarStack, TooltipProvider } from '../shared/ui';
 import { PagePlaceholder } from '../shared/components/next/PagePlaceholder';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
 import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
+import { DockerPageNext } from '../modules/docker/DockerPage.next';
 import { BotPageNext } from '../modules/bot/BotPage.next';
 import { RemoteHostPanelNext } from '../modules/remote/RemoteHostPanel.next';
 import { SettingsPageNext } from '../modules/settings/SettingsPage.next';
 import { Showcase } from './Showcase';
 import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
+import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
+import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { applySideEffects as applyPreferences } from '../hooks/preferences/preferencesStore';
 
@@ -44,6 +47,11 @@ export const AppNext: React.FC = () => {
     // 模块级 store；切走 Components 页再切回来不会丢已经在跑的安装进度。
     useComponentActionEventBridge();
 
+    // 启动即后台预热组件探测：拉服务器列表 + 自动连接远端 + catalog + 逐主机
+    // detect，全在 App 根节点常驻跑。用户切到组件页时数据已在 react-query 缓存，
+    // 秒开，不用再从零等一轮 SSH 探测。
+    useComponentsWarmup();
+
     // 启动时 apply 一次客户端偏好（主题 / 窗口透明度等）。preferencesStore
     // 已经从 localStorage 加载初始值，这里只是把它落到 DOM。后续通过
     // store update 会自动触发 applySideEffects，不需要重复挂监听。
@@ -55,6 +63,17 @@ export const AppNext: React.FC = () => {
     // pushInfoBar() 推条目，这里是整个 App 唯一的渲染处。模块级 store 跟组件
     // 树解耦，路由切换不会丢 banner。
     const { bars, dismiss } = useGlobalInfoBars();
+
+    // Docker 项门控：只有添加了远端服务器才显示。Docker 只用于管理远端 Linux
+    // 容器，本机（Windows）用不上。当前停在 docker 页时若远端被删光，回落到
+    // overview，避免停在一个已隐藏的空页。
+    const { servers } = useServerManager();
+    const showDocker = servers.length > 0;
+    useEffect(() => {
+        if (!showDocker && route === 'docker') {
+            setRoute('overview');
+        }
+    }, [showDocker, route]);
 
     return (
         <TooltipProvider>
@@ -68,6 +87,7 @@ export const AppNext: React.FC = () => {
                         collapsed={collapsed}
                         onToggleCollapse={() => setCollapsed((v) => !v)}
                         showShowcase={SHOW_SHOWCASE}
+                        showDocker={showDocker}
                     />
 
                     <div className="relative flex flex-1 flex-col overflow-hidden">
@@ -107,6 +127,8 @@ const RouteOutlet: React.FC<{ route: AppRoute }> = ({ route }) => {
             return <BotPageNext />;
         case 'components':
             return <ComponentsPageNext />;
+        case 'docker':
+            return <DockerPageNext />;
         case 'remote':
             return <RemoteHostPanelNext />;
         case 'events':
