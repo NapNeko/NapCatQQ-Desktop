@@ -30,7 +30,7 @@ coverage/
 ### 迁移计划文档 ###
 docs/rust_migration_blueprint_local.md
 docs/tauri_reference_projects.md
-docs/v3/
+docs/archive/v3-planning/
 
 ### 日志和临时文件 ###
 # 仅忽略运行时 / 根级日志目录，避免误伤 src-ui/modules/bot/log/ 这种源码目录。

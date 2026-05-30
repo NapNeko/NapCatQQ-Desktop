@@ -1,30 +1,34 @@
-# NapCatQQ Desktop 项目开发规范文档
+# docs 导航
 
-欢迎查阅NapCatQQ Desktop项目的开发规范文档。本规范旨在确保项目代码的一致性、可读性和可维护性，促进团队高效协作。
+NapCatQQ-Desktop 从 Python/PySide6 迁移到 Rust + Tauri + React。本目录只保留当前活跃文档,历史文档全部归到 archive/。
 
-## 文档导航
+## 活跃文档
 
-- [通用规则](general/general_rules.md) - 项目开发的基本原则和通用规范
-- [迁移计划](general/migration_plan.md) - 现有代码向新规范迁移的计划
-- [v3 重构总入口](v3/plan.md) - v3 总计划、路线图和迁移文档的唯一入口
-- [v3 文档索引](v3/README.md) - v3 相关文档目录
-- [远程 SSH 直连方案规划](general/remote_ssh_plan.md) - 本地 Desktop 直连远程 Linux 的最优路线、阶段目标与安全边界
-- [远程 SSH 推进进度](general/remote_ssh_progress.md) - 当前阶段、已完成事项、P1 进行中任务与下一步计划
-- [代码命名规范](code_style/naming_conventions.md) - 类、函数、变量等代码元素的命名规则
-- [文件与目录命名](code_style/file_naming.md) - 项目文件和目录的命名规范
-- [代码组织规范](code_style/code_organization.md) - 代码结构和组织方式的规范
-- [资源文件管理](resources/resource_management.md) - 图片、字体等资源文件的管理规范
-- [版本控制规范](workflow/version_control.md) - 分支、Issue和PR的管理流程
-- [发布使用说明](RELEASE_WORKFLOW.md) - 当前版本发布、CHANGELOG 和 CI 的正确使用方式
-- [AI 更新日志使用指南](AI_CHANGELOG_USAGE.md) - 本地交互式生成和改稿更新日志的当前用法
+| 文档 | 用途 | 入库 |
+| :--- | :--- | :--- |
+| `rust_migration_blueprint_local.md` | 架构权威蓝图 v2 | 否(gitignore,本地参考) |
+| `context/capabilities.md` | 后端各 crate 已就绪能力速查,规划前先查避免重发明 | 是 |
+| `context/frontend.md` | 前端分层铁律 + 推倒重写 playbook + hook/store 速查 | 是 |
+| `context/lessons.md` | 历史踩坑教训,规划新功能前自查 | 是 |
+| `tauri_reference_projects.md` | Tauri 参考项目 + 本地开发链状态 | 否(gitignore,本地参考) |
 
-## 规范的重要性
+注:`context/` 三件套是从原 `.claude/CLAUDE.md` 拆出的按需文档。项目硬约束在 `.claude/CLAUDE.md`,当前进度/待办看项目根 `STATE.md`。
 
-统一的开发规范有助于:
-- 提高代码可读性和可维护性
-- 减少团队成员间的沟通成本
-- 降低新成员的学习门槛
-- 保证代码质量和一致性
-- 便于后续功能扩展和重构
+## 历史归档(archive/)
 
-所有参与项目开发的成员都应熟悉并严格遵守这些规范(都是AI写的, 主要还是约束我自己)。
+只读,不再维护。需要追溯背景时去查。
+
+| 归档目录 | 内容 | 入库 |
+| :--- | :--- | :--- |
+| `archive/legacy-python-specs/` | 旧 Python 时代开发规范(PEP8/命名/资源/版本控制)+ 旧 daemon 部署指南 | 是 |
+| `archive/legacy-release-chain/` | 旧 Python 发布链文档(RELEASE_WORKFLOW / AI_CHANGELOG_USAGE / CHANGELOG) | 是 |
+| `archive/v3-planning/` | AI 早期 v3 重构规划(进度已过期,架构内容被蓝图取代) | 否(gitignore) |
+| `archive/snowluma-ssh-specs/` | 旧 Python 实现期的 SnowLuma/SSH 需求 + 执行计划 + smoke 指南 | 是 |
+| `archive/remote-ssh-docs/` | 更早的远端 SSH 方案规划与验收 | 是 |
+| `archive/daemon-v1/` | daemon v1 说明 | 是 |
+| `archive/v1-remote-ui/` | v1 远端 UI 说明 | 是 |
+| `archive/rust_migration_blueprint_v1_*.md` | 蓝图 v1 归档 | 否(gitignore) |
+
+## 已知隐患(待重写)
+
+旧发布链(`.github/workflows/release.yml` + `pyproject.toml` 版本读取 + 已归档的 CHANGELOG/RELEASE_WORKFLOW)是 Python 时代产物,Rust 迁移后尚未重写。release.yml:92 仍硬引用 `docs/CHANGELOG.md`(现已移到 archive/legacy-release-chain/)。重写 Rust 发布链时一并修正这个路径引用。
