@@ -663,8 +663,10 @@ fn parse_qq_package_version(bytes: &[u8]) -> Option<String> {
 /// 解析 `reg query ... /v Install` 的 stdout，抽出 `Install REG_SZ <path>`
 /// 里的 path。形如：
 ///
-///     HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Tencent\QQNT
-///         Install    REG_SZ    C:\Program Files\Tencent\QQNT
+/// ```text
+/// HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Tencent\QQNT
+///     Install    REG_SZ    C:\Program Files\Tencent\QQNT
+/// ```
 fn parse_reg_install_value(stdout: &str) -> Option<String> {
     for line in stdout.lines() {
         let trimmed = line.trim();
