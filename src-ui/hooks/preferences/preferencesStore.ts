@@ -8,7 +8,6 @@
 //   theme           light / dark / auto
 //   showMascot      true / false
 //   closeAction     close（关闭程序）/ tray（最小化到托盘，留给 Tauri 后续接入）
-//   windowOpacity   80-100 整数百分比
 //
 // 这些字段都不依赖后端 IPC，纯客户端偏好。后端可控的偏好（轮询间隔 /
 // GitHub PAT / 邮件 webhook）等扩了 IPC 再开新 store，不混进来。
@@ -22,8 +21,6 @@ export interface AppPreferences {
     theme: ThemeMode;
     showMascot: boolean;
     closeAction: CloseAction;
-    /** 窗口不透明度，整数百分比（80-100），<100 时窗口背景半透明。 */
-    windowOpacity: number;
 }
 
 const STORAGE_KEY = 'ncd:preferences:v1';
@@ -32,7 +29,6 @@ const defaultPrefs: AppPreferences = {
     theme: 'auto',
     showMascot: true,
     closeAction: 'close',
-    windowOpacity: 100,
 };
 
 let state: AppPreferences = loadFromStorage();
@@ -48,7 +44,6 @@ function loadFromStorage(): AppPreferences {
             theme: normalizeTheme(parsed.theme),
             showMascot: parsed.showMascot !== false,
             closeAction: parsed.closeAction === 'tray' ? 'tray' : 'close',
-            windowOpacity: clampOpacity(parsed.windowOpacity),
         };
     } catch {
         return defaultPrefs;
@@ -66,12 +61,6 @@ function persist() {
 
 function normalizeTheme(raw: unknown): ThemeMode {
     return raw === 'light' || raw === 'dark' || raw === 'auto' ? raw : 'auto';
-}
-
-function clampOpacity(raw: unknown): number {
-    const n = typeof raw === 'number' ? raw : 100;
-    if (Number.isNaN(n)) return 100;
-    return Math.max(80, Math.min(100, Math.round(n)));
 }
 
 function notify() {
@@ -96,9 +85,6 @@ export function applySideEffects() {
     } else {
         root.setAttribute('data-theme', state.theme);
     }
-    // 窗口不透明度：通过 root style 的 background-color alpha 实现简版。
-    // Tauri 真窗口透明需要 transparent: true 并改 window.opacity，留给后续。
-    root.style.setProperty('--window-opacity', String(state.windowOpacity / 100));
 }
 
 export const preferencesStore = {
@@ -113,9 +99,6 @@ export const preferencesStore = {
     },
     setCloseAction(action: CloseAction) {
         update({ closeAction: action === 'tray' ? 'tray' : 'close' });
-    },
-    setWindowOpacity(opacity: number) {
-        update({ windowOpacity: clampOpacity(opacity) });
     },
     reset() {
         state = { ...defaultPrefs };
