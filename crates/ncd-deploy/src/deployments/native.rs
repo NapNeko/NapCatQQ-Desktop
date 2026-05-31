@@ -955,7 +955,7 @@ mod tests {
     fn make_bot_config(qq_id: u64) -> BotConfig {
         use ncd_domain::{
             AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, ConnectConfig,
-            RuntimeTarget,
+            DeploymentType, RuntimeTarget,
         };
         BotConfig {
             bot: BotBasicConfig {
@@ -966,6 +966,7 @@ mod tests {
                 offline_auto_restart: false,
                 runtime_target: RuntimeTarget::Local,
                 backend_type: BackendType::NapCat,
+                deployment_type: DeploymentType::Native,
                 snowluma_start_mode: None,
             },
             connect: ConnectConfig::default(),

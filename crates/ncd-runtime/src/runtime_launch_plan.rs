@@ -407,6 +407,7 @@ mod snowluma_plan_tests {
     use super::*;
     use crate::bot_config::{
         AdvancedConfig, AutoRestartSchedule, BotBasicConfig, BotConfig, ConnectConfig,
+        DeploymentType,
     };
     use crate::ids::BotId;
     use crate::kinds::RuntimeTarget;
@@ -423,6 +424,7 @@ mod snowluma_plan_tests {
                 offline_auto_restart: false,
                 runtime_target: RuntimeTarget::Local,
                 backend_type: BackendType::SnowLuma,
+                deployment_type: DeploymentType::Native,
                 snowluma_start_mode: start_mode,
             },
             connect: ConnectConfig::default(),

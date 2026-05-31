@@ -247,6 +247,7 @@ export const ComponentsPageNext: React.FC = () => {
                         }}
                         isDeploying={dockerHosts.isDeploying}
                         onDeploy={dockerHosts.deploy}
+                        containers={dockerHosts.containersByHost[activeMachine.host.host_id] ?? []}
                     />
                 ) : null}
             </div>

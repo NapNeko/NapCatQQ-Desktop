@@ -12,6 +12,7 @@ export function createDefaultBotConfig(): BotConfig {
             offlineAutoRestart: false,
             runtime_target: 'local',
             backend_type: 'napcat',
+            deploymentType: 'native',
         },
         connect: {
             httpServers: [],
@@ -50,6 +51,15 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
     }
     if (!config.bot.name.trim()) {
         return { ok: false, reason: '实例名称不能为空！' };
+    }
+    // 运行宿主选了"远程"但还没选具体机器：runtime_target 仍是占位 'remote'
+    // （真实值应是 server_id）。挡住,否则后端解析 host 会失败。
+    if (config.bot.runtime_target === 'remote') {
+        return { ok: false, reason: '请选择一台具体的远程主机！' };
+    }
+    // Docker 启动方式当前仅支持 NapCat 底座。
+    if (config.bot.deploymentType === 'docker' && config.bot.backend_type !== 'napcat') {
+        return { ok: false, reason: 'Docker 启动方式当前仅支持 NapCat 底座，SnowLuma 容器化待后续支持。' };
     }
     // SnowLuma HotStart 不再持久化 attach_pid，PID 由 backend 启动时自动按 qq_id 匹配。
     // 如果 qq_id 缺失上面已挡掉；这里不再有额外校验。

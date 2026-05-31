@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ncd_runtime::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
-    BotConfigRepo, ConfigStore, ConnectConfig, JsonTransaction, LocalBotConfigRepo,
+    BotConfigRepo, ConfigStore, ConnectConfig, DeploymentType, JsonTransaction, LocalBotConfigRepo,
     LocalConfigStore, RuntimeTarget, SecretStore, SecretStoreImpl,
 };
 
@@ -16,6 +16,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
             offline_auto_restart: false,
             runtime_target: RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
+            deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
         },
         connect: ConnectConfig::default(),
@@ -122,6 +123,7 @@ async fn test_validate_failure_blocks_upsert() {
             offline_auto_restart: false,
             runtime_target: RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
+            deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
         },
         connect: ConnectConfig::default(),

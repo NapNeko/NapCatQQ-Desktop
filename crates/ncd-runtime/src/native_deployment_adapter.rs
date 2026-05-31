@@ -14,6 +14,8 @@ use ncd_deploy::{
     Deployment, DeploymentError, NativeDeployment, NativeLaunchCommand, NativeLaunchTranslator,
     NativeRuntimeEventSink,
 };
+use ncd_deploy::docker::DockerCli;
+use ncd_deploy::DockerDeployment;
 use ncd_domain::{BotConfig, BotFlavor, BotId, StopMode};
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
@@ -241,7 +243,7 @@ impl BotBackend for NativeDeploymentBackend {
 use ncd_domain::{BackendType, RuntimeTarget};
 
 fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
-    use ncd_domain::{AdvancedConfig, AutoRestartSchedule, BotBasicConfig, ConnectConfig};
+    use ncd_domain::{AdvancedConfig, AutoRestartSchedule, BotBasicConfig, ConnectConfig, DeploymentType};
     BotConfig {
         bot: BotBasicConfig {
             name: String::new(),
@@ -254,9 +256,140 @@ fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
                 BotFlavor::NapCat => BackendType::NapCat,
                 BotFlavor::SnowLuma => BackendType::SnowLuma,
             },
+            deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+    }
+}
+
+// ============================================================
+// DockerDeploymentBackend：把 DockerDeployment 包成 BotBackend
+//
+// 与 NativeDeploymentBackend 平行:让 BotManager 用统一的 BotBackend 接口起
+// docker 容器形态的 bot。start 走 install(拉镜像/写 compose)+ launch(compose up);
+// status 走 observe(docker ps);stop 走 docker stop;tail_log 走 docker logs。
+// host 在构造时注入(由 BotManager 按 runtime_target 解析后传入)。
+// ============================================================
+
+use ncd_deploy::{DeploymentHandle, DeploymentState, NullProgressSink};
+
+/// 过渡壳:让 DockerDeployment 穿上 BotBackend trait 外套。
+pub struct DockerDeploymentBackend {
+    deployment: Arc<DockerDeployment>,
+    host: Arc<dyn Host>,
+    backend_id: BotId,
+    flavor: BotFlavor,
+}
+
+impl DockerDeploymentBackend {
+    pub fn new(
+        deployment: Arc<DockerDeployment>,
+        host: Arc<dyn Host>,
+        backend_id: impl Into<BotId>,
+        flavor: BotFlavor,
+    ) -> Self {
+        Self {
+            deployment,
+            host,
+            backend_id: backend_id.into(),
+            flavor,
+        }
+    }
+}
+
+#[async_trait]
+impl BotBackend for DockerDeploymentBackend {
+    fn id(&self) -> &BotId {
+        &self.backend_id
+    }
+
+    fn kind(&self) -> BackendKind {
+        // docker 容器跑在 host 上;host 是本机还是远端由注入的 host 决定,
+        // 这里 kind 表达"部署形态来源",docker 统一归 Local 语义(非 SSH backend 抽象)。
+        BackendKind::Local
+    }
+
+    fn flavor(&self) -> BotFlavor {
+        self.flavor
+    }
+
+    async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        let qq_id: u64 = ctx.config.bot_id.as_str().parse().unwrap_or(0);
+        let bot_config = minimal_bot_config(qq_id, self.flavor);
+
+        // install:探 docker + 写 compose + 拉镜像。
+        let sink = NullProgressSink;
+        self.deployment
+            .install(self.host.as_ref(), &bot_config, &sink)
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+
+        // launch:compose up。
+        let handle = self
+            .deployment
+            .launch(self.host.as_ref(), &bot_config)
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+
+        match handle {
+            DeploymentHandle::Docker { started_at, .. } => {
+                // 容器没有宿主机 pid,用 0 占位;BotManager 只看 state 做决策。
+                Ok(BotStatus::running(ctx.config.bot_id.clone(), 0, started_at))
+            }
+            _ => Err(BotBackendError::Io("unexpected handle variant".into())),
+        }
+    }
+
+    async fn stop(&self, bot_id: BotId, mode: StopMode) -> Result<(), BotBackendError> {
+        self.deployment
+            .stop(self.host.as_ref(), &bot_id, mode)
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))
+    }
+
+    async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
+        let state = self
+            .deployment
+            .observe(self.host.as_ref(), &bot_id)
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        match state {
+            DeploymentState::Running => Ok(BotStatus::running(bot_id, 0, 0)),
+            _ => Ok(BotStatus::stopped(bot_id)),
+        }
+    }
+
+    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
+        Err(BotBackendError::ConfigNotFound(bot_id))
+    }
+
+    async fn write_config(
+        &self,
+        _bot_id: BotId,
+        _cfg: &BotRuntimeConfig,
+    ) -> Result<(), BotBackendError> {
+        Ok(())
+    }
+
+    async fn tail_log(
+        &self,
+        bot_id: BotId,
+        opts: TailOpts,
+    ) -> Result<LogSnapshot, BotBackendError> {
+        // docker logs <ncbot-qq>。容器名约定与 DockerDeployment 一致。
+        let name = format!("ncbot-{}", bot_id.as_str());
+        let cli = DockerCli::new(self.host.as_ref());
+        let logs = cli
+            .logs(&name, opts.lines as u32)
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        let lines: Vec<String> = logs.lines().map(|l| l.to_string()).collect();
+        let total = lines.len();
+        Ok(LogSnapshot {
+            lines,
+            total_lines: total,
+        })
     }
 }

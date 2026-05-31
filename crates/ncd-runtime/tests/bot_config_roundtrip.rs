@@ -1,7 +1,7 @@
 use ncd_runtime::bot_config::NetworkBaseFields;
 use ncd_runtime::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
-    ConnectConfig, HttpServerConfig, MessagePostFormat, O3HookMode, RuntimeTarget,
+    ConnectConfig, DeploymentType, HttpServerConfig, MessagePostFormat, O3HookMode, RuntimeTarget,
     WebsocketServerConfig, WsRole,
 };
 
@@ -15,6 +15,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
             offline_auto_restart: false,
             runtime_target: RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
+            deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
         },
         connect: ConnectConfig::default(),

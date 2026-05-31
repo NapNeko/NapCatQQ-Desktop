@@ -7,6 +7,7 @@ pub mod bot_manager;
 pub mod config_drift;
 pub mod config_store_impl;
 pub mod events;
+pub mod host_resolver;
 pub mod legacy_discovery;
 pub mod migration;
 pub mod napcat;
@@ -28,7 +29,7 @@ pub use ncd_domain::{
     AdvancedConfig, AppError, AppSettings, AppSettingsDto, AutoRestartSchedule, BackendId,
     BackendKind, BackendType, BackupInfo, BootstrapSnapshot, BootstrapStatus, BotBasicConfig,
     BotConfig, BotConfigError, BotFlavor, BotId, BotRuntimeSummary, BypassConfig, ConfigError,
-    ConnectConfig, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LocalVersionSnapshot,
+    ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LocalVersionSnapshot,
     LogLevel, MessagePostFormat, MigrationError, MigrationOutcome, MigrationReport, MigrationSource,
     MigrationStage, MigrationWarning, NetworkBaseFields, O3HookMode, PathError, ReleaseInfo,
     ReleaseSnapshot, RepairAction, RuntimeTarget, SchemaVersion, SecretError, SnowLumaAppConfig,
@@ -54,6 +55,7 @@ pub use config_store_impl::LocalConfigStore;
 pub use events::{
     BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter, EventSubscription,
 };
+pub use host_resolver::{HostResolver, LocalOnlyHostResolver};
 pub use legacy_discovery::{LegacyDiscovery, LegacySelection};
 pub use migration::MigrationOrchestrator;
 pub use napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
@@ -69,7 +71,7 @@ pub use runtime_launch_plan::{
     RuntimeLaunchPlanner, SnowLumaLaunchPlan, build_napcat_launch_plan_with_qq_install_path,
 };
 pub use native_deployment_adapter::{
-    EventBusSink, NativeDeploymentBackend, RuntimeLaunchPlannerAdapter,
+    DockerDeploymentBackend, EventBusSink, NativeDeploymentBackend, RuntimeLaunchPlannerAdapter,
 };
 pub use secret_store_impl::SecretStoreImpl;
 pub use server_manager::{

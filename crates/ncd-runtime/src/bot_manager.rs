@@ -21,6 +21,8 @@ use crate::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, StopMode,
 };
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
+use crate::native_deployment_adapter::DockerDeploymentBackend;
+use ncd_domain::{DeploymentType, RuntimeTarget};
 use crate::traits::{BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
@@ -129,6 +131,10 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// SnowLuma 全局 daemon 句柄（可选），用于 `shutdown_all` 关闭 daemon、
     /// `run_snowluma_listener` 监听 daemon Crashed 级联级 actor。
     snowluma_daemon: Option<Arc<crate::snowluma::SnowLumaDaemon>>,
+    /// 把 BotConfig 的 runtime_target 解析成 host（本机 / 远端 SSH）。
+    /// None 时走旧路径（backend 自带的本机 host，行为同历史版本）；生产侧由
+    /// `with_host_resolver` 注入 TauriHostResolver 后,启动时按 target 取 host。
+    host_resolver: Option<Arc<dyn crate::host_resolver::HostResolver>>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -148,6 +154,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             poller_settings: Arc::clone(&self.poller_settings),
             snowluma_backend: self.snowluma_backend.clone(),
             snowluma_daemon: self.snowluma_daemon.clone(),
+            host_resolver: self.host_resolver.clone(),
         }
     }
 }
@@ -179,7 +186,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             poller_settings,
             snowluma_backend: None,
             snowluma_daemon: None,
+            host_resolver: None,
         }
+    }
+
+    /// 注入 HostResolver（wiring 阶段调用），让启动时按 runtime_target 选本机/远端 host。
+    /// 不注入时走旧路径（全本机）。链式 builder 风格。
+    pub fn with_host_resolver(
+        mut self,
+        resolver: Arc<dyn crate::host_resolver::HostResolver>,
+    ) -> Self {
+        self.host_resolver = Some(resolver);
+        self
     }
 
     /// 注入 SnowLuma flavor 路由依赖（ wiring 阶段调用）。
@@ -210,6 +228,56 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 .clone()
                 .unwrap_or_else(|| Arc::clone(&self.backend)),
             _ => Arc::clone(&self.backend),
+        }
+    }
+
+    /// 按 BotConfig 的 deployment_type + runtime_target 选/造 backend。
+    ///
+    /// 路由矩阵:
+    /// - Docker: 按 runtime_target 解析 host(本机 Docker Desktop / 远端 SSH),
+    ///   现造 DockerDeploymentBackend。这是远端 + 容器化的真正可用路径。
+    /// - Native + Local: 走现有 baked backend(零行为变化,最低风险)。
+    /// - Native + Server(id): 远端原生启动需要远端 runtime 路径规划,launch_planner
+    ///   当前只产本机路径,贸然跑会用错路径。明确报错引导用户改用 Docker 方式,
+    ///   而不是静默跑错(诚实降级,非 bug)。
+    ///
+    /// 无 host_resolver 注入时(过渡期/测试)一律回落 baked backend,行为同历史。
+    async fn backend_for_config(
+        &self,
+        config: &BotConfig,
+    ) -> Result<Arc<dyn BotBackend>, BotManagerError> {
+        let flavor = map_backend_flavor(config.bot.backend_type);
+        let resolver = match &self.host_resolver {
+            Some(r) => r,
+            // 没注入 resolver:维持历史行为(全本机 native)。
+            None => return Ok(self.backend_for(flavor)),
+        };
+
+        match config.bot.deployment_type {
+            DeploymentType::Docker => {
+                if flavor != BotFlavor::NapCat {
+                    return Err(BotManagerError::Render(
+                        "Docker 部署当前仅支持 NapCat 底座,SnowLuma 容器化待后续支持".to_string(),
+                    ));
+                }
+                let host = resolver
+                    .resolve(&config.bot.runtime_target)
+                    .await
+                    .map_err(BotManagerError::Render)?;
+                let deployment = Arc::new(ncd_deploy::DockerDeployment::new());
+                let backend_id = BotId::new(format!("docker-{}", config.bot.qq_id));
+                Ok(Arc::new(DockerDeploymentBackend::new(
+                    deployment, host, backend_id, flavor,
+                )))
+            }
+            DeploymentType::Native => match &config.bot.runtime_target {
+                RuntimeTarget::Local => Ok(self.backend_for(flavor)),
+                RuntimeTarget::Server(_) => Err(BotManagerError::Render(
+                    "远端原生启动暂未支持(需远端 runtime 安装与路径规划)。\
+                     请将启动方式改为 Docker,即可在远端以容器运行。"
+                        .to_string(),
+                )),
+            },
         }
     }
 
@@ -330,21 +398,36 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let starting = handle.request_start().await?;
         self.publish_state_change(&starting, "start_requested");
 
-        let runtime_config = self.build_runtime_config(bot_id, &config);
-        let runtime_config = match self.launch_planner.build_plan(bot_id, &config).await {
-            Ok(plan) => plan.into_runtime_config(runtime_config),
+        // Docker 部署跳过 native launch planner;Native 仍走计划。
+        let runtime_config = if config.bot.deployment_type == DeploymentType::Docker {
+            self.build_runtime_config(bot_id, &config)
+        } else {
+            let base = self.build_runtime_config(bot_id, &config);
+            match self.launch_planner.build_plan(bot_id, &config).await {
+                Ok(plan) => plan.into_runtime_config(base),
+                Err(err) => {
+                    let message = err.to_string();
+                    let hint = Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string());
+                    let crashed = handle.mark_crashed(message.clone()).await?;
+                    self.publish_state_change(&crashed, "start_failed");
+                    self.event_bus
+                        .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
+                    return Err(BotManagerError::Render(err.to_string()));
+                }
+            }
+        };
+        let backend = match self.backend_for_config(&config).await {
+            Ok(b) => b,
             Err(err) => {
                 let message = err.to_string();
-                let hint = Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string());
                 let crashed = handle.mark_crashed(message.clone()).await?;
                 self.publish_state_change(&crashed, "start_failed");
                 self.event_bus
-                    .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
-                return Err(BotManagerError::Render(err.to_string()));
+                    .publish(DomainEvent::bot_error(bot_id.clone(), message, None));
+                return Err(err);
             }
         };
-        match self
-            .backend_for(map_backend_flavor(config.bot.backend_type))
+        match backend
             .start(&BotStartCtx {
                 config: runtime_config,
             })
@@ -382,34 +465,54 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let starting = handle.request_start().await?;
         self.publish_state_change(&starting, "start_requested");
 
-        let runtime_config = self.build_runtime_config(bot_id, &config);
-        let runtime_config = match self.launch_planner.build_plan(bot_id, &config).await {
-            Ok(plan) => plan.into_runtime_config(runtime_config),
+        // Docker 部署不走 native launch planner(那是本机进程的命令/路径规划)。
+        // 容器化由 DockerDeploymentBackend 内部 compose 起,只需带 bot_id 的
+        // runtime_config。Native 仍走 launch_planner 产出启动命令。
+        let runtime_config = if config.bot.deployment_type == DeploymentType::Docker {
+            self.build_runtime_config(bot_id, &config)
+        } else {
+            let base = self.build_runtime_config(bot_id, &config);
+            match self.launch_planner.build_plan(bot_id, &config).await {
+                Ok(plan) => plan.into_runtime_config(base),
+                Err(err) => {
+                    let message = err.to_string();
+                    // 按错误类型给出针对性提示，方便用户定位是哪一种缺失。
+                    let hint = match &err {
+                        RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
+                            "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
+                            path.display()
+                        )),
+                        RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => Some(format!(
+                            "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式。"
+                        )),
+                        RuntimeLaunchPlanError::MissingFile { .. } => {
+                            Some("NapCat 运行时组件缺失，请先在「设置」页安装运行时。".to_string())
+                        }
+                        _ => Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string()),
+                    };
+                    let crashed = handle.mark_crashed(message.clone()).await?;
+                    self.publish_state_change(&crashed, "start_failed");
+                    self.event_bus
+                        .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
+                    return Err(BotManagerError::Render(err.to_string()));
+                }
+            }
+        };
+
+        // 按 deployment_type + runtime_target 选/造 backend。失败(如远端原生不支持)
+        // 直接转 crashed + 报错引导。
+        let backend = match self.backend_for_config(&config).await {
+            Ok(b) => b,
             Err(err) => {
                 let message = err.to_string();
-                // 按错误类型给出针对性提示，方便用户定位是哪一种缺失。
-                let hint = match &err {
-                    RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
-                        "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
-                        path.display()
-                    )),
-                    RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => Some(format!(
-                        "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式。"
-                    )),
-                    RuntimeLaunchPlanError::MissingFile { .. } => {
-                        Some("NapCat 运行时组件缺失，请先在「设置」页安装运行时。".to_string())
-                    }
-                    _ => Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string()),
-                };
                 let crashed = handle.mark_crashed(message.clone()).await?;
                 self.publish_state_change(&crashed, "start_failed");
                 self.event_bus
-                    .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
-                return Err(BotManagerError::Render(err.to_string()));
+                    .publish(DomainEvent::bot_error(bot_id.clone(), message, None));
+                return Err(err);
             }
         };
-        match self
-            .backend_for(map_backend_flavor(config.bot.backend_type))
+        match backend
             .start(&BotStartCtx {
                 config: runtime_config,
             })
@@ -442,12 +545,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let stopping = handle.request_stop().await?;
         self.publish_state_change(&stopping, "stop_requested");
 
-        // 解析 flavor → 选 backend；读不到 config 时回落到默认 backend（向后兼容）。
-        let flavor = match self.get_required_bot_config(bot_id).await {
-            Ok(cfg) => map_backend_flavor(cfg.bot.backend_type),
-            Err(_) => BotFlavor::NapCat,
+        // 按 deployment_type + runtime_target 选 backend(docker bot 要走 docker
+        // 才能停对容器);读不到 config 时回落默认 backend（向后兼容）。
+        let backend = match self.get_required_bot_config(bot_id).await {
+            Ok(cfg) => self
+                .backend_for_config(&cfg)
+                .await
+                .unwrap_or_else(|_| self.backend_for(map_backend_flavor(cfg.bot.backend_type))),
+            Err(_) => self.backend_for(BotFlavor::NapCat),
         };
-        let backend = self.backend_for(flavor);
 
         let status = backend.status(bot_id.clone()).await?;
         if status.state == BotActorState::Stopped {

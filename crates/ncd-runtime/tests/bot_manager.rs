@@ -159,6 +159,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
             offline_auto_restart: false,
             runtime_target: ncd_runtime::RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
+            deployment_type: ncd_runtime::DeploymentType::Native,
             snowluma_start_mode: None,
         },
         connect: ConnectConfig::default(),
