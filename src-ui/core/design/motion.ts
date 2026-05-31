@@ -19,10 +19,12 @@
 
 import gsap from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
+import { CustomBounce } from 'gsap/CustomBounce';
+import { CustomWiggle } from 'gsap/CustomWiggle';
 
-// CustomEase 模块级注册:gsap 内部对同一插件的重复 register 是幂等的,但放在
-// 模块顶层比 useGSAP 散点注册更稳。
-gsap.registerPlugin(CustomEase);
+// CustomEase / CustomBounce / CustomWiggle 模块级注册。GSAP 对同插件重复 register
+// 是幂等的,放模块顶层最稳。
+gsap.registerPlugin(CustomEase, CustomBounce, CustomWiggle);
 
 // 自定义曲线 ID。命名前缀 ndf 避免跟用户/插件冲突。
 // critical-damped:物理 spring 临界阻尼,无超调直达,适合"立即归位"的 hover/press。
@@ -32,10 +34,20 @@ CustomEase.create('ndf-critical', 'M0,0 C0.18,1 0.45,1 1,1');
 CustomEase.create('ndf-spring', 'M0,0 C0.34,1.32 0.46,1.06 1,1');
 // elastic-spring:中度超调 + 一次小回振(峰值 ~1.12),rich 档 release。
 CustomEase.create('ndf-elastic', 'M0,0 C0.32,1.5 0.5,0.95 0.62,1.05 0.78,1 1,1 1,1');
-// aftershock:rich 档 Counter / pop 用,主峰过后再有一轮 0.97↔1.01 余震。
-CustomEase.create('ndf-aftershock', 'M0,0 C0.2,1.6 0.4,0.92 0.55,1.04 0.72,0.98 0.86,1.01 1,1');
 // quick-out:小元素进场,比 power2.out 收得更急(适合 indicator / chip)。
 CustomEase.create('ndf-quick', 'M0,0 C0.1,0.78 0.18,0.96 1,1');
+
+// CustomBounce / CustomWiggle 由 GSAP 内部根据物理参数生成曲线,不需要手画。
+// 名字带 .out 后缀,跟 GSAP 内置 ease 命名一致(power2.out / back.out 等)。
+//
+// ndf-aftershock:用 CustomBounce 生成。strength=0.4 = 弹性强度,squash=2 = 落地
+// 时被压扁的程度。挑选这两个值让 Counter 数字 / 状态 pop 看起来像"硬糖落地"。
+CustomBounce.create('ndf-aftershock', { strength: 0.4, squash: 2 });
+// ndf-bounce:更强的弹簧,rich 档专用 release。strength=0.55 让两次明显反弹。
+CustomBounce.create('ndf-bounce', { strength: 0.55, squash: 1 });
+// ndf-wiggle:水平摇摆 ease,replace 之前 5 段手挂的 shake。type=anticipate 让
+// 第一次摇摆方向预备,wiggles=4 = 四次反向摆动。
+CustomWiggle.create('ndf-wiggle', { wiggles: 4, type: 'anticipate' });
 
 export type MotionLevel = 'elegant' | 'standard' | 'rich';
 
@@ -175,7 +187,9 @@ export const motionPresets: Record<MotionLevel, PresetEntry> = {
                 enterMicro: 'back.out(2)',
                 hover: 'ndf-spring',
                 press: 'power2.out',
-                release: 'ndf-elastic',
+                // 真实物理 bounce(CustomBounce 生成),让按钮 release 弹两次有"啪嗒"质感。
+                release: 'ndf-bounce',
+                // aftershock 由 CustomBounce 生成,比手画曲线更有"落地"感。
                 pop: 'ndf-aftershock',
                 damped: 'ndf-critical',
             },

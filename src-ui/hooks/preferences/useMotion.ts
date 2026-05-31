@@ -373,14 +373,10 @@ export function useMotion(): MotionEnv {
             const t = env.preset.timing;
             const a = f.shakeAmplitude;
             if (a === 0) return;
-            const dur = scaleDuration(t.durationBase, env.speed);
-            // 5 段反向位移,衰减到 0。每段时长大致均分,用 linear 让节奏稳。
-            const tl = gsap.timeline();
-            tl.to(el, { x: -a, duration: dur * 0.15, ease: 'power2.out' });
-            tl.to(el, { x: a * 0.85, duration: dur * 0.18, ease: 'power1.inOut' });
-            tl.to(el, { x: -a * 0.6, duration: dur * 0.18, ease: 'power1.inOut' });
-            tl.to(el, { x: a * 0.35, duration: dur * 0.18, ease: 'power1.inOut' });
-            tl.to(el, { x: 0, duration: dur * 0.31, ease: 'power3.out' });
+            const dur = scaleDuration(t.durationBase, env.speed) * 1.4;
+            // CustomWiggle 生成的 ndf-wiggle 让 x 在 0 附近做四次衰减摇摆,
+            // 起点和终点都为 0,无须额外归位 tween。比手挂 5 段更平滑。
+            gsap.fromTo(el, { x: -a }, { x: 0, duration: dur, ease: 'ndf-wiggle' });
         };
 
         return { tween, fromTo, bindHover, bindPress, pop, shake };
