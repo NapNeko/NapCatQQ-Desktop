@@ -470,14 +470,13 @@ impl NapCatComponent {
         })
         .await;
         let napcat_dir = self.napcat_dir();
-        let sudo = self.sudo_prefix();
-        // System 布局下 napcat_dir 在 /opt/QQ 系统目录，create_dir_all 走 SFTP
-        // 不能 sudo，必须用 shell 命令包 sudo。Rootless 布局 sudo 为空字符串
-        // 退化到普通命令。
-        let mkdir_cmd = HostCommand::new("sh").arg("-c").arg(format!(
-            "{sudo}mkdir -p {}",
+        // System 布局下 napcat_dir 在 /opt/QQ 系统目录,create_dir_all 走 SFTP 不能
+        // 提权,必须用 shell 命令 + .elevated()(Host 层按注入的密码决定 sudo -S/-n)。
+        // Rootless 布局 maybe_elevated 原样返回,退化到普通命令。
+        let mkdir_cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+            "mkdir -p {}",
             shell_quote(napcat_dir.as_posix())
-        ));
+        )));
         let out = host.run_to_string(mkdir_cmd).await?;
         if !out.success() {
             return Err(ActionError::install_step(
@@ -486,12 +485,12 @@ impl NapCatComponent {
             ));
         }
         // 官方 install.sh L730:`cp -r -f ./NapCat/* TARGET_FOLDER/napcat/`
-        let cp_cmd = HostCommand::new("sh").arg("-c").arg(format!(
-            "{sudo}cp -r -f {}/* {}/ && {sudo}chmod -R +x {}/",
+        let cp_cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+            "cp -r -f {}/* {}/ && chmod -R +x {}/",
             shell_quote(stage_dir.as_posix()),
             shell_quote(napcat_dir.as_posix()),
             shell_quote(napcat_dir.as_posix()),
-        ));
+        )));
         let out = host.run_to_string(cp_cmd).await?;
         if !out.success() {
             return Err(ActionError::install_step(
@@ -513,14 +512,13 @@ impl NapCatComponent {
             "(async () => {{await import('file://{}/napcat.mjs');}})();\n",
             napcat_dir.as_posix()
         );
-        // System 布局走 sudo tee；rootless 走 SFTP write_file。
+        // System 布局走 elevated tee(密码由 Host 注入);rootless 走 SFTP write_file。
         if self.requires_sudo {
-            let tee_cmd = HostCommand::new("sh")
-                .arg("-c")
-                .arg(format!(
-                    "{sudo}tee {} > /dev/null",
+            let tee_cmd = self
+                .maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+                    "tee {} > /dev/null",
                     shell_quote(self.load_script_path().as_posix())
-                ))
+                )))
                 .stdin(load_script.into_bytes());
             let out = host.run_to_string(tee_cmd).await?;
             if !out.success() {
@@ -574,15 +572,13 @@ impl NapCatComponent {
         let new_bytes = serde_json::to_vec_pretty(&json).map_err(|e| {
             ActionError::install_step("serialize_qq_package_json", format!("{e}"))
         })?;
-        // System 布局走 sudo tee；rootless 走 SFTP write_file。
+        // System 布局走 elevated tee(密码由 Host 注入);rootless 走 SFTP write_file。
         if self.requires_sudo {
-            let sudo = self.sudo_prefix();
-            let tee_cmd = HostCommand::new("sh")
-                .arg("-c")
-                .arg(format!(
-                    "{sudo}tee {} > /dev/null",
+            let tee_cmd = self
+                .maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+                    "tee {} > /dev/null",
                     shell_quote(path.as_posix())
-                ))
+                )))
                 .stdin(new_bytes);
             let out = host.run_to_string(tee_cmd).await?;
             if !out.success() {
@@ -597,10 +593,16 @@ impl NapCatComponent {
         Ok(())
     }
 
-    /// sudo 前缀：requires_sudo=true 时返回 `"sudo -n "`（非交互式 sudo），
-    /// 否则空串。`sudo -n` 在没配 NOPASSWD 时直接失败而不是挂起等密码。
-    fn sudo_prefix(&self) -> &'static str {
-        if self.requires_sudo { "sudo -n " } else { "" }
+    /// System 布局(requires_sudo)下给命令打 `.elevated()` 标,提权细节(用 sudo -S
+    /// 喂密码还是 sudo -n 免密)由 Host 层按它注入的提权密码统一决定;Rootless 布局
+    /// 不需要提权,原样返回。Component 不再自己拼 `sudo -n`——那样在无免密 sudo 的
+    /// 机器上必败,且把提权逻辑泄漏到了组件层。
+    fn maybe_elevated(&self, cmd: HostCommand) -> HostCommand {
+        if self.requires_sudo {
+            cmd.elevated()
+        } else {
+            cmd
+        }
     }
 
     /// Windows 扁平 zip 部署。对齐 legacy `NapCatInstall`(installers.py):
@@ -737,15 +739,14 @@ impl NapCatComponent {
         let napcat_dir = self.napcat_dir();
         let load_script = self.load_script_path();
         let pkg_json = self.qq_package_json();
-        let sudo = self.sudo_prefix();
 
-        // Step 1: 删 napcat_dir。rootless 走 SFTP；system 走 sudo rm -rf。
+        // Step 1: 删 napcat_dir。rootless 走 SFTP;system 走 elevated rm -rf。
         if host.exists(&napcat_dir).await? {
             if self.requires_sudo {
-                let cmd = HostCommand::new("sh").arg("-c").arg(format!(
-                    "{sudo}rm -rf {}",
+                let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+                    "rm -rf {}",
                     shell_quote(napcat_dir.as_posix())
-                ));
+                )));
                 let out = host.run_to_string(cmd).await?;
                 if !out.success() {
                     return Err(ActionError::other(format!(
@@ -762,10 +763,10 @@ impl NapCatComponent {
         // Step 2: 删 loadNapCat.js。
         if host.exists(&load_script).await? {
             if self.requires_sudo {
-                let cmd = HostCommand::new("sh").arg("-c").arg(format!(
-                    "{sudo}rm -f {}",
+                let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+                    "rm -f {}",
                     shell_quote(load_script.as_posix())
-                ));
+                )));
                 let _ = host.run_to_string(cmd).await;
             } else {
                 let _ = host.remove_file(&load_script).await;
@@ -786,12 +787,11 @@ impl NapCatComponent {
                     }
                     if let Ok(new_bytes) = serde_json::to_vec_pretty(&json) {
                         if self.requires_sudo {
-                            let cmd = HostCommand::new("sh")
-                                .arg("-c")
-                                .arg(format!(
-                                    "{sudo}tee {} > /dev/null",
+                            let cmd = self
+                                .maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+                                    "tee {} > /dev/null",
                                     shell_quote(pkg_json.as_posix())
-                                ))
+                                )))
                                 .stdin(new_bytes);
                             let _ = host.run_to_string(cmd).await;
                         } else {

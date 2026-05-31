@@ -78,54 +78,48 @@ impl NoVncComponent {
         ))
     }
 
-    /// 拼接 apt / dnf install 命令。
+    /// 拼接 apt / dnf install 命令。提权交给 Host:use_sudo 时打 `.elevated()` 标,
+    /// Host 层按注入的提权密码决定 sudo -S(有密码)还是 sudo -n(免密)。命令体本身
+    /// 不含 sudo,不再写死 `sudo -n`——那在无免密 sudo 的机器上必败。
     fn build_install_command(&self, mgr: PkgMgr) -> HostCommand {
         let pkgs_apt = "dbus-x11 fluxbox xvfb x11vnc novnc websockify";
         let pkgs_dnf =
             "dbus-x11 fluxbox openbox xorg-x11-server-Xvfb x11vnc novnc python3-websockify";
 
         let cmd_str = match mgr {
-            PkgMgr::Apt => {
-                if self.use_sudo {
-                    format!(
-                        "DEBIAN_FRONTEND=noninteractive sudo -n apt-get install -y --no-install-recommends {pkgs_apt}"
-                    )
-                } else {
-                    format!(
-                        "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends {pkgs_apt}"
-                    )
-                }
-            }
+            PkgMgr::Apt => format!(
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends {pkgs_apt}"
+            ),
             PkgMgr::Dnf => {
-                let prefix = if self.use_sudo { "sudo -n " } else { "" };
                 // legacy install_snowluma.sh.j2 L112 等价:
                 // --allowerasing --setopt=strict=0 防止某个包匹配失败导致全 transaction abort
-                format!(
-                    "{prefix}dnf install --allowerasing --setopt=strict=0 -y {pkgs_dnf}"
-                )
+                format!("dnf install --allowerasing --setopt=strict=0 -y {pkgs_dnf}")
             }
         };
 
-        HostCommand::new("sh").arg("-c").arg(cmd_str)
+        self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(cmd_str))
     }
 
     /// 拼接 apt update / dnf check-update 刷新索引的命令。
     fn build_refresh_command(&self, mgr: PkgMgr) -> HostCommand {
-        let cmd_str = match mgr {
-            PkgMgr::Apt => {
-                if self.use_sudo {
-                    "sudo -n apt-get update -qq".to_string()
-                } else {
-                    "apt-get update -qq".to_string()
-                }
-            }
-            PkgMgr::Dnf => {
-                // dnf 不需要单独 update;装包时会自动检查;legacy 在 dnf 模式下也跳过
-                // 这里返回 true 命令充当 noop
-                "true".to_string()
-            }
-        };
-        HostCommand::new("sh").arg("-c").arg(cmd_str)
+        match mgr {
+            PkgMgr::Apt => self.maybe_elevated(
+                HostCommand::new("sh").arg("-c").arg("apt-get update -qq"),
+            ),
+            // dnf 不需要单独 update;装包时会自动检查;legacy 在 dnf 模式下也跳过。
+            // 返回 true 命令充当 noop(不提权,普通命令)。
+            PkgMgr::Dnf => HostCommand::new("sh").arg("-c").arg("true"),
+        }
+    }
+
+    /// use_sudo 时给命令打 `.elevated()` 标(提权细节由 Host 注入的密码决定),否则
+    /// 原样返回。Component 不自己拼 sudo,提权逻辑收敛到 Host 层。
+    fn maybe_elevated(&self, cmd: HostCommand) -> HostCommand {
+        if self.use_sudo {
+            cmd.elevated()
+        } else {
+            cmd
+        }
     }
 
     /// 组件元数据，给 `list_components` Tauri command 使用。
@@ -264,15 +258,11 @@ impl Component for NoVncComponent {
         let pkgs_dnf = "novnc python3-websockify x11vnc fluxbox openbox xorg-x11-server-Xvfb";
         let cmd_str = match mgr {
             PkgMgr::Apt => {
-                let prefix = if self.use_sudo { "sudo -n " } else { "" };
-                format!("DEBIAN_FRONTEND=noninteractive {prefix}apt-get remove -y {pkgs_apt}")
+                format!("DEBIAN_FRONTEND=noninteractive apt-get remove -y {pkgs_apt}")
             }
-            PkgMgr::Dnf => {
-                let prefix = if self.use_sudo { "sudo -n " } else { "" };
-                format!("{prefix}dnf remove -y {pkgs_dnf}")
-            }
+            PkgMgr::Dnf => format!("dnf remove -y {pkgs_dnf}"),
         };
-        let cmd = HostCommand::new("sh").arg("-c").arg(cmd_str);
+        let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(cmd_str));
         let out = host.run_to_string(cmd).await?;
         if !out.success() {
             // 卸载失败一般是某个包未安装；不视为致命错误，只记录。
@@ -380,15 +370,18 @@ mod tests {
 
     #[test]
     fn install_command_uses_sudo_by_default() {
+        // 提权改走 .elevated() 标志,命令体本身不含 sudo(由 Host 层注入 sudo -S/-n)。
         let comp = NoVncComponent::new();
         let cmd = comp.build_install_command(PkgMgr::Apt);
-        assert!(cmd.args.last().unwrap().contains("sudo -n"));
+        assert!(cmd.elevated, "默认 use_sudo 时必须打 elevated 标");
+        assert!(!cmd.args.last().unwrap().contains("sudo"), "命令体不该再硬编码 sudo");
     }
 
     #[test]
     fn install_command_skips_sudo_when_disabled() {
         let comp = NoVncComponent::new().with_sudo(false);
         let cmd = comp.build_install_command(PkgMgr::Apt);
+        assert!(!cmd.elevated, "use_sudo=false 不打 elevated 标");
         assert!(!cmd.args.last().unwrap().contains("sudo"));
     }
 

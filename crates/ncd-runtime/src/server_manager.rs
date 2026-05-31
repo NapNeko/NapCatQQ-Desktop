@@ -425,11 +425,15 @@ impl ServerManager {
             self.repo.save(&persisted).await?;
         }
 
-        // 6. 缓存这次连接（密码通道已建立，可直接复用），状态置已连接。
+        // 6. 缓存这次连接(密码通道已建立,可直接复用),状态置已连接。
+        //    顺手把这次的登录密码注入 host 当提权密码——刚挪存到 sudo 槽的就是它,
+        //    省得密钥登录后第一次 elevated 操作还得回 keyring 取。
+        let host: Arc<dyn Host> = Arc::new(host);
+        host.set_elevation_password(Some(password.to_string())).await;
         self.hosts
             .write()
             .await
-            .insert(profile.id.clone(), Arc::new(host));
+            .insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
 
         Ok(updated)
@@ -458,9 +462,17 @@ impl ServerManager {
             .or_else(|| self.credentials.get_password(id))
     }
 
-    /// 记住某服务器的 sudo 密码(用户在弹框勾了"记住密码"时调用)。
+    /// 记住某服务器的 sudo 密码(用户在弹框勾了"记住密码"时调用)。下次该服务器
+    /// 连接(或重连)时 inject_elevation_password 会把它注入 host。
     pub fn remember_sudo_password(&self, id: &str, password: &str) -> Result<(), String> {
         self.credentials.set_sudo_password(id, password)
+    }
+
+    /// 把 keyring 里这台服务器的提权密码注入一条已建立的 host 连接。没有任何缓存
+    /// 密码时注入 None(host 退回 sudo -n,免密/root 仍能跑)。test_connection
+    /// 缓存连接后调用,让这条 host 后续所有 elevated 操作自动带上密码。
+    async fn inject_elevation_password(&self, id: &str, host: &dyn Host) {
+        host.set_elevation_password(self.sudo_password(id)).await;
     }
 
     /// 测试 SSH 连接：握手 + 认证 + 执行 `uname -a` 拿 OS 信息。
@@ -509,11 +521,14 @@ impl ServerManager {
 
         let latency_ms = start.elapsed().as_millis() as u64;
 
-        // 缓存连接。
+        // 缓存连接,并把 keyring 里的提权密码注入这条 host:之后任何 elevated 操作
+        // (装 unzip、写 /opt/QQ、apt 装包、装 docker)都自动用上,不必每条命令各传。
+        let host: Arc<dyn Host> = Arc::new(host);
+        self.inject_elevation_password(id, host.as_ref()).await;
         self.hosts
             .write()
             .await
-            .insert(profile.id.clone(), Arc::new(host));
+            .insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
 
         Ok(ProbeReport {

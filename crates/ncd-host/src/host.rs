@@ -144,6 +144,17 @@ pub trait Host: Send + Sync {
     /// 适用于短命令 + 全量 stdout 收集场景。
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError>;
 
+    /// 注入提权密码,作为这台主机后续所有 `HostCommand::elevated` 命令的固有能力。
+    ///
+    /// 远端 Linux 上,有密码就让 elevated 命令走 `sudo -S`(密码喂 stdin),没有就
+    /// 退回 `sudo -n`(免密 / root 直接过,需要密码时立刻失败而非挂起)。调用方
+    /// (ServerManager)在连接建立后从 keyring 注入一次,docker 弹框拿到新密码时
+    /// 再覆盖。这样装 unzip、写 /opt/QQ、apt 装包等所有提权操作共用同一份密码,
+    /// 不必每条命令各自塞。
+    ///
+    /// 本机 Windows / stub 默认忽略:本机提权走 UAC,没有密码字符串这一说。
+    async fn set_elevation_password(&self, _password: Option<String>) {}
+
     /// 探测某个外部命令在主机上是否可用(在 PATH 里)。Linux/macOS 走
     /// `command -v`,Windows 走 `where`。探测本身失败(连接抖动等)按"不存在"
     /// 保守返回 false,让调用方走"装一下"或报错路径,而不是把探测错误当致命。

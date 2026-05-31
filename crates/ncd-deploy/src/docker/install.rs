@@ -1,8 +1,13 @@
 //! 帮用户装 docker(如果没有)。
 //!
-//! Linux:把官方 get.docker.com 脚本先落盘再执行,提权策略自适应——能 root /
-//! 免密 sudo 就不要密码,否则用调用方传进来的 sudo 密码走 sudo -S。都给不出
-//! 密码时返回 NeedSudoPassword,让上层弹框向用户索要后带密码重试。
+//! Linux:把官方 get.docker.com 脚本先落盘再执行。提权交给 Host 的固有能力——
+//! 把 sudo 密码注入 host 后,所有 `.elevated()` 命令由 host 层统一决定走 sudo -S
+//! (有密码)还是 sudo -n(免密 / root)。密码来源:调用方(docker 弹框)显式传入,
+//! 或 ServerManager 连接时从 keyring 注入。都没有且远端确实要密码时返回
+//! NeedSudoPassword,让上层弹框向用户索要后带密码重试。
+//!
+//! 安装脚本固定加 `--mirror Aliyun`:官方 download.docker.com 在国内常被
+//! Connection reset,阿里云镜像(mirrors.aliyun.com/docker-ce)国内稳定、海外也能通。
 //!
 //! 为什么不再用 `curl ... | sudo sh` 管道:管道右端的 sudo 一旦因为要密码而立刻
 //! 退出,左端 curl 往断开的管道写就报 "curl: (23) Failure writing output to
@@ -56,27 +61,31 @@ pub async fn install_docker(
     }
 }
 
-/// 解析后的提权方式:要么直接知道不用密码,要么带上这次要喂的密码,要么放弃。
-enum Elevation<'a> {
-    /// root 或免密 sudo:提权命令不带密码(sudo -n / 无 sudo)。
-    NoPassword,
-    /// 需要且拿到了密码:提权命令走 sudo -S,密码喂 stdin。
-    WithPassword(&'a str),
-    /// 需要密码但一个都没有:让上层去要。
+/// 提权可行性:能直接提权(root/免密/已有密码注入 host),还是缺密码得让上层去要。
+enum Elevation {
+    /// root / 免密 sudo / 已把密码注入 host:elevated 命令都能跑。
+    Ready,
+    /// 需要密码但一个都没有:让上层弹框去要。
     Need,
 }
 
-/// Linux 装 docker:先定提权方式,再 curl 落盘 + 执行脚本 + 起 daemon + 加用户组。
+/// Linux 装 docker:先把提权密码注入 host + 定提权方式,再 curl 落盘 + 执行脚本
+/// + 起 daemon + 加用户组。所有 elevated 命令的提权细节由 host 层统一处理。
 async fn install_docker_linux(
     host: &dyn Host,
     sudo_password: Option<&str>,
 ) -> Result<DockerInstallReport, DockerCliError> {
-    // 第一档:探主机本身的 sudo 能力。root / 免密直接无密码提权。
+    // 探主机 sudo 能力。root / 免密直接可提权;否则必须有密码。
     let elevation = match probe_sudo(host).await {
-        SudoAccess::RootAlready | SudoAccess::Passwordless => Elevation::NoPassword,
-        // 第二、三档:需要密码。有就用,没有就让上层弹框去要。
+        SudoAccess::RootAlready | SudoAccess::Passwordless => Elevation::Ready,
         SudoAccess::PasswordRequired => match sudo_password {
-            Some(pw) => Elevation::WithPassword(pw),
+            // 有密码:注入 host,之后所有 .elevated() 命令自动走 sudo -S。
+            Some(pw) => {
+                host.set_elevation_password(Some(pw.to_string())).await;
+                Elevation::Ready
+            }
+            // host 可能在连接时已被 ServerManager 注入了 keyring 密码,这里探不到
+            // 也没显式密码,交给上层弹框要(docker command 层会先用 keyring 兜底)。
             None => Elevation::Need,
         },
     };
@@ -106,11 +115,14 @@ async fn install_docker_linux(
     }
 
     // 执行脚本(提权)。官方脚本自己判断发行版,装 docker-ce + compose 插件。
-    let run_script = elevated(
-        HostCommand::new("sh").arg(INSTALL_SCRIPT_PATH),
-        &elevation,
-    )
-    .timeout(std::time::Duration::from_secs(600));
+    // --mirror Aliyun:把 download.docker.com 换成 mirrors.aliyun.com/docker-ce,
+    // 解掉国内访问官方源 Connection reset。提权由 host 注入的密码决定 sudo -S/-n。
+    let run_script = HostCommand::new("sh")
+        .arg(INSTALL_SCRIPT_PATH)
+        .arg("--mirror")
+        .arg("Aliyun")
+        .elevated()
+        .timeout(std::time::Duration::from_secs(600));
     let out = host.run_to_string(run_script).await?;
     if !out.success() {
         // 提权失败最常见就是密码错。区分出来让前端可以重新弹框,而不是笼统报"失败"。
@@ -121,7 +133,7 @@ async fn install_docker_linux(
         }
         return Ok(DockerInstallReport::manual_required(
             format!(
-                "安装脚本执行失败：{}。可登录远端手动执行 curl -fsSL https://get.docker.com | sudo sh",
+                "安装脚本执行失败：{}。可登录远端手动执行 curl -fsSL https://get.docker.com | sudo sh -s -- --mirror Aliyun",
                 out.stderr.trim()
             ),
             None,
@@ -130,22 +142,21 @@ async fn install_docker_linux(
 
     // 起 daemon 并设开机自启。失败不致命(部分容器化环境没 systemd),忽略错误,
     // 末尾用复探判定 daemon 真实状态。
-    let enable = elevated(
-        HostCommand::new("systemctl").arg("enable").arg("--now").arg("docker"),
-        &elevation,
-    )
-    .timeout(std::time::Duration::from_secs(60));
+    let enable = HostCommand::new("systemctl")
+        .arg("enable")
+        .arg("--now")
+        .arg("docker")
+        .elevated()
+        .timeout(std::time::Duration::from_secs(60));
     let _ = host.run_to_string(enable).await;
 
     // 把当前用户加进 docker 组,免得每条 docker 命令都要 sudo。需要重新登录才
     // 完全生效,这步失败也不致命。用 $USER 取当前登录名。
-    let usermod = elevated(
-        HostCommand::new("sh")
-            .arg("-c")
-            .arg("usermod -aG docker \"$USER\""),
-        &elevation,
-    )
-    .timeout(std::time::Duration::from_secs(30));
+    let usermod = HostCommand::new("sh")
+        .arg("-c")
+        .arg("usermod -aG docker \"$USER\"")
+        .elevated()
+        .timeout(std::time::Duration::from_secs(30));
     let _ = host.run_to_string(usermod).await;
 
     // 复探一次确认 daemon 真起来了。
@@ -163,17 +174,6 @@ async fn install_docker_linux(
             "安装脚本执行完毕但仍探测不到 Docker，请登录远端手动检查",
             None,
         ))
-    }
-}
-
-/// 按提权方式给命令打标:无密码档只标 .elevated()(host 层走 sudo -n);有密码档
-/// 标 .elevated() 并把密码塞进 stdin(host 层走 sudo -S 从 stdin 读)。
-fn elevated(cmd: HostCommand, elevation: &Elevation<'_>) -> HostCommand {
-    match elevation {
-        Elevation::NoPassword => cmd.elevated(),
-        Elevation::WithPassword(pw) => cmd.elevated().stdin(pw.as_bytes().to_vec()),
-        // Need 在调用前已被拦截返回,不会走到这里。
-        Elevation::Need => cmd,
     }
 }
 
@@ -202,20 +202,6 @@ mod tests {
         assert!(looks_like_bad_sudo_password("密码不正确"));
         assert!(!looks_like_bad_sudo_password("curl: (6) could not resolve host"));
         assert!(!looks_like_bad_sudo_password(""));
-    }
-
-    #[test]
-    fn elevated_no_password_only_marks_flag() {
-        let cmd = elevated(HostCommand::new("sh").arg("x"), &Elevation::NoPassword);
-        assert!(cmd.elevated);
-        assert!(cmd.stdin.is_none());
-    }
-
-    #[test]
-    fn elevated_with_password_feeds_stdin() {
-        let cmd = elevated(HostCommand::new("sh").arg("x"), &Elevation::WithPassword("hunter2"));
-        assert!(cmd.elevated);
-        assert_eq!(cmd.stdin.as_deref(), Some(b"hunter2".as_slice()));
     }
 
     #[test]

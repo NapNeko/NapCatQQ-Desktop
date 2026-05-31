@@ -104,6 +104,13 @@ pub struct RemoteLinuxHost {
     /// 内部按 request id 多路复用,支持并发请求。连接断了时 op 报错会清空缓存,
     /// 下次访问自动重开,实现断线自愈。
     sftp: Arc<Mutex<Option<Arc<russh_sftp::client::SftpSession>>>>,
+    /// 提权密码,这台主机所有 elevated 命令共用。connect 后由 ServerManager 从
+    /// keyring 注入(密码登录机器有登录密码,密钥登录机器可能有挪存的 sudo 密码),
+    /// docker 弹框拿到新密码时覆盖。有密码 → elevated 走 sudo -S 喂 stdin;None →
+    /// 退回 sudo -n(root / 免密直接过,真要密码立刻失败而非挂起)。
+    /// 用 Mutex 包,因为 set_elevation_password 是 &self 异步方法(trait 约束),
+    /// 且密码可能在连接生命周期内被 docker 弹框更新。
+    elevation_password: Arc<Mutex<Option<String>>>,
     /// 连接配置。当前断线后由上层 ServerManager 重新 connect,本结构体内部
     /// 还没用到它重连,先留着等断线自愈实装。
     #[allow(dead_code)]
@@ -175,6 +182,7 @@ impl RemoteLinuxHost {
             shell: BashShell,
             handle: Arc::new(Mutex::new(handle)),
             sftp: Arc::new(Mutex::new(None)),
+            elevation_password: Arc::new(Mutex::new(None)),
             config,
         })
     }
@@ -233,17 +241,20 @@ impl RemoteLinuxHost {
             });
         };
 
-        // 装包要 root。免密 / root 直接装;需要密码这里拿不到(extract 链路没带密码),
-        // 退回让用户手动装的人话提示,而不是静默挂起。
+        // 装包要 root。判定能不能提权:root / 免密 sudo 直接行;否则看 host 有没有
+        // 注入提权密码(ServerManager 从 keyring 注入的登录/ sudo 密码),有就能走
+        // sudo -S 装。两者都没有才退回让用户手动装的人话提示,而不是静默挂起。
+        let access = probe_sudo(self).await;
+        let has_password = self.elevation_password.lock().await.is_some();
         let elevation_ok = matches!(
-            probe_sudo(self).await,
+            access,
             SudoAccess::RootAlready | SudoAccess::Passwordless
-        );
+        ) || has_password;
         if !elevation_ok {
             return Err(HostError::ExtractFailed {
                 archive: HostPath::from_posix(tool),
                 reason: format!(
-                    "远端缺少 {tool},自动安装需要 root 权限但当前无免密 sudo,请手动执行 sudo {} 后重试",
+                    "远端缺少 {tool},自动安装需要 root 权限但当前无免密 sudo 也未保存密码,请去远端页配置免密或手动执行 sudo {} 后重试",
                     pm.install_hint(tool)
                 ),
             });
@@ -426,13 +437,16 @@ impl Host for RemoteLinuxHost {
 
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
         let inner_line = build_remote_command_line(&self.shell, &cmd);
-        // elevated 时把内层命令塞进 `sudo ... sh -c <inner>`,密码(带换行)走 stdin。
-        // 非 elevated 路径行为不变:line 就是内层命令,stdin 原样透传。
+        // elevated 时由 host 注入提权密码(set_elevation_password 存的那份):有密码走
+        // sudo -S,把 `密码\n` 拼在真实 stdin 前面一起喂过去——sudo -S 读首行当密码,
+        // 余下字节透传给内层命令(如 tee 收文件内容)。没密码退回 sudo -n。
+        // 非 elevated 路径行为不变:line 是内层命令,stdin 原样透传。
         let (line, stdin) = if cmd.elevated {
-            let pw = cmd.stdin.as_deref().map(ensure_trailing_newline);
+            let password = self.elevation_password.lock().await.clone();
+            let has_pw = password.is_some();
             (
-                wrap_with_sudo(&inner_line, &self.shell, pw.is_some()),
-                pw,
+                wrap_with_sudo(&inner_line, &self.shell, has_pw),
+                build_elevated_stdin(password.as_deref(), cmd.stdin),
             )
         } else {
             (inner_line, cmd.stdin)
@@ -480,10 +494,11 @@ impl Host for RemoteLinuxHost {
         // 暂不支持流式 stdin(开 channel 之后再 push stdin,语义复杂),只在 spawn 时一次性写
         let inner_line = build_remote_command_line(&self.shell, &cmd);
         let (line, stdin) = if cmd.elevated {
-            let pw = cmd.stdin.as_deref().map(ensure_trailing_newline);
+            let password = self.elevation_password.lock().await.clone();
+            let has_pw = password.is_some();
             (
-                wrap_with_sudo(&inner_line, &self.shell, pw.is_some()),
-                pw,
+                wrap_with_sudo(&inner_line, &self.shell, has_pw),
+                build_elevated_stdin(password.as_deref(), cmd.stdin),
             )
         } else {
             (inner_line, cmd.stdin)
@@ -518,6 +533,10 @@ impl Host for RemoteLinuxHost {
             },
             timeout: cmd.timeout,
         }))
+    }
+
+    async fn set_elevation_password(&self, password: Option<String>) {
+        *self.elevation_password.lock().await = password;
     }
 
 
@@ -830,6 +849,22 @@ fn ensure_trailing_newline(pw: &[u8]) -> Vec<u8> {
     }
 }
 
+/// 拼 elevated 命令喂给 SSH channel 的 stdin。有提权密码时 `密码\n` 打头(sudo -S
+/// 读首行当密码),后面接命令本身的 stdin(如 tee 收的文件内容)透传给内层命令;
+/// 没密码时(免密/root,走 sudo -n)原样返回命令 stdin。
+fn build_elevated_stdin(password: Option<&str>, cmd_stdin: Option<Vec<u8>>) -> Option<Vec<u8>> {
+    match password {
+        Some(pw) => {
+            let mut buf = ensure_trailing_newline(pw.as_bytes());
+            if let Some(data) = cmd_stdin {
+                buf.extend_from_slice(&data);
+            }
+            Some(buf)
+        }
+        None => cmd_stdin,
+    }
+}
+
 async fn open_sftp(
     handle: &Arc<Mutex<ClientHandle<ClientCallback>>>,
 ) -> Result<russh_sftp::client::SftpSession, HostError> {
@@ -1118,6 +1153,31 @@ mod tests {
     #[test]
     fn ensure_newline_keeps_single_when_present() {
         assert_eq!(ensure_trailing_newline(b"hunter2\n"), b"hunter2\n");
+    }
+
+    #[test]
+    fn elevated_stdin_prefixes_password_then_passes_through_inner_stdin() {
+        // 有密码 + 命令本身有 stdin(如 tee 收文件内容):密码\n 打头,后接文件内容。
+        // sudo -S 吃掉首行密码,余下字节正好透传给内层 tee。
+        let out = build_elevated_stdin(Some("hunter2"), Some(b"file body".to_vec()));
+        assert_eq!(out.unwrap(), b"hunter2\nfile body");
+    }
+
+    #[test]
+    fn elevated_stdin_password_only_when_no_inner_stdin() {
+        // 有密码但命令没有 stdin(如 apt-get install):只喂 `密码\n`。
+        let out = build_elevated_stdin(Some("hunter2"), None);
+        assert_eq!(out.unwrap(), b"hunter2\n");
+    }
+
+    #[test]
+    fn elevated_stdin_passes_through_unchanged_without_password() {
+        // 没密码(免密/root,走 sudo -n):命令 stdin 原样透传,不掺密码。
+        assert_eq!(
+            build_elevated_stdin(None, Some(b"file body".to_vec())).unwrap(),
+            b"file body"
+        );
+        assert!(build_elevated_stdin(None, None).is_none());
     }
 
     #[test]
