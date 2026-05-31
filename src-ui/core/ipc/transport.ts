@@ -44,3 +44,15 @@ export async function openExternalUrl(url: string): Promise<void> {
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     return openUrl(url);
 }
+
+/// 弹原生目录选择对话框，返回所选绝对路径；用户取消返回 null。
+/// 走 tauri-plugin-dialog 的 `open` 命令（directory 模式）。webview 无法用
+/// `<input type=file>` 拿真实文件系统路径，必须走插件。capabilities 已配
+/// `dialog:allow-open`。命令名字面量集中在 transport，不外泄到 services。
+export async function pickDirectory(title: string): Promise<string | null> {
+    const selected = await tauriInvoke<string | string[] | null>('plugin:dialog|open', {
+        options: { directory: true, multiple: false, title },
+    });
+    if (Array.isArray(selected)) return selected[0] ?? null;
+    return selected;
+}

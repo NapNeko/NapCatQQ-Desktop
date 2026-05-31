@@ -39,6 +39,10 @@ const DESKTOP_RELEASES_URL: &str =
 
 /// 拉取一次远端 releases 快照。
 ///
+/// `token`：可选 GitHub PAT。非 None 时给请求加 `Authorization: Bearer <token>`，
+/// 把匿名速率限制（60 次/小时/IP）提升到认证额度（5000 次/小时）。token 不参与
+/// 缓存 key——缓存只按 TTL，认证与否拿到的 release 数据一致。
+///
 /// 流程：
 /// 1. 尝试读 `<data_root>/cache/release-snapshot.json`；如果缓存还在 TTL 内
 ///    直接返回；
@@ -47,7 +51,7 @@ const DESKTOP_RELEASES_URL: &str =
 /// 4. 返回新快照。
 ///
 /// 任何 IO / 网络错误一律降级到 None 字段或老缓存，不向 caller 抛错。
-pub async fn fetch_release_snapshot(data_root: &Path) -> ReleaseSnapshot {
+pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> ReleaseSnapshot {
     if let Some(cached) = read_cache(data_root) {
         if !is_stale(&cached) {
             return cached;
@@ -64,9 +68,9 @@ pub async fn fetch_release_snapshot(data_root: &Path) -> ReleaseSnapshot {
     };
 
     let (napcat, snowluma, desktop) = tokio::join!(
-        fetch_one(&client, NAPCAT_RELEASES_URL),
-        fetch_one(&client, SNOWLUMA_RELEASES_URL),
-        fetch_one(&client, DESKTOP_RELEASES_URL),
+        fetch_one(&client, NAPCAT_RELEASES_URL, token),
+        fetch_one(&client, SNOWLUMA_RELEASES_URL, token),
+        fetch_one(&client, DESKTOP_RELEASES_URL, token),
     );
 
     let snapshot = ReleaseSnapshot {
@@ -131,8 +135,16 @@ struct GhAssetDto {
     digest: Option<String>,
 }
 
-async fn fetch_one(client: &reqwest::Client, url: &str) -> Option<ReleaseInfo> {
-    let response = match client.get(url).send().await {
+async fn fetch_one(
+    client: &reqwest::Client,
+    url: &str,
+    token: Option<&str>,
+) -> Option<ReleaseInfo> {
+    let mut request = client.get(url);
+    if let Some(token) = token.map(str::trim).filter(|t| !t.is_empty()) {
+        request = request.bearer_auth(token);
+    }
+    let response = match request.send().await {
         Ok(r) => r,
         Err(err) => {
             warn!(url, ?err, "release fetch failed");
@@ -473,7 +485,7 @@ mod tests {
     #[tokio::test]
     async fn live_fetch_release_snapshot_smoke() {
         let temp = tempdir().unwrap();
-        let snap = fetch_release_snapshot(temp.path()).await;
+        let snap = fetch_release_snapshot(temp.path(), None).await;
         // 能拉到任意一个仓库的 release 即视为通；网络抖动时全 None 也算
         // 通（只要不 panic / 不抛错）。
         assert!(snap.fetched_at.is_some());

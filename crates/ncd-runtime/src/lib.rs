@@ -25,15 +25,15 @@ pub mod snowluma;
 // 这些类型实际定义在 ncd-domain crate。下游代码可继续 `use ncd_runtime::{BotId, ...}`,
 // 但新代码应直接 `use ncd_domain::...`。这些 re-export 只作过渡。
 pub use ncd_domain::{
-    AdvancedConfig, AppError, AutoRestartSchedule, BackendId, BackendKind, BackendType,
-    BackupInfo, BootstrapSnapshot, BootstrapStatus, BotBasicConfig, BotConfig, BotConfigError,
-    BotFlavor, BotId, BotRuntimeSummary, BypassConfig, ConfigError, ConnectConfig, HttpClientConfig,
-    HttpServerConfig, HttpSseServerConfig, LocalVersionSnapshot, LogLevel, MessagePostFormat,
-    MigrationError, MigrationOutcome, MigrationReport, MigrationSource, MigrationStage,
-    MigrationWarning, NetworkBaseFields, O3HookMode, PathError, ReleaseInfo, ReleaseSnapshot,
-    RepairAction, RuntimeTarget, SchemaVersion, SecretError, SnowLumaAppConfig, SnowLumaStartMode,
-    TimeUnit, WebUiPollerSettings, WebsocketClientConfig, WebsocketServerConfig, WsRole,
-    default_login_interval, default_snowluma_port,
+    AdvancedConfig, AppError, AppSettings, AppSettingsDto, AutoRestartSchedule, BackendId,
+    BackendKind, BackendType, BackupInfo, BootstrapSnapshot, BootstrapStatus, BotBasicConfig,
+    BotConfig, BotConfigError, BotFlavor, BotId, BotRuntimeSummary, BypassConfig, ConfigError,
+    ConnectConfig, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LocalVersionSnapshot,
+    LogLevel, MessagePostFormat, MigrationError, MigrationOutcome, MigrationReport, MigrationSource,
+    MigrationStage, MigrationWarning, NetworkBaseFields, O3HookMode, PathError, ReleaseInfo,
+    ReleaseSnapshot, RepairAction, RuntimeTarget, SchemaVersion, SecretError, SnowLumaAppConfig,
+    SnowLumaStartMode, TimeUnit, WebUiPollerSettings, WebsocketClientConfig, WebsocketServerConfig,
+    WsRole, default_login_interval, default_perf_monitor_interval, default_snowluma_port,
 };
 // StopMode 也来自 ncd-domain 但在 runtime_backend pub use 链已 re-export，
 // 这里就不再重复导出避免 ambiguity。

@@ -1,42 +1,55 @@
-// 客户端偏好页（参考 shadcn/ui Settings Recipe）。
+// 设置页。两类设置共存：
+//   1. 纯客户端偏好（preferencesStore，localStorage）——主题 / 吉祥物 / 窗口不透明度 /
+//      关闭行为，切换即时生效，无保存按钮。
+//   2. 后端持久化设置（useBackendSettings）——Bot 登录检查间隔 / 性能监控 / GitHub PAT，
+//      走"草稿 + StickySaveBar 保存"模式，保存成功走全局 InfoBar。
 //
-// 视觉骨架：
-//   - 页头：紧凑标题 + 一句副标
-//   - Tabs 横向分类：通用 / 数据 / 关于
-//   - 每个 Tab 内用 'space-y-6'：每行 flex items-center justify-between
-//     左侧 Label + Description 堆叠，右侧控件
-//   - 行间用 hairline 短线分隔（border-b border-border-subtle pb-6）
-//   - 容器宽度由 AppNext 的 main 控制（xl:max-w-[1280px]），本页不再自行限宽，
-//     避免设置页跟其它页宽度不一致
+// 视觉骨架沿用 shadcn Settings recipe：Tabs 横向分类，每行 FieldRow 左标题右控件，
+// 行间 hairline 分隔。容器宽度由 AppNext 的 main 控制，本页不自行限宽。
 //
-// 这版跟前几版不同：不画大卡片，不画 Card padding-lg 容器；行布局
-// space-between 让控件天然右对齐，比 SettingRow 抽象更直接。
+// 后端设置草稿：进页时从 server 值拷一份本地草稿，改动累积到草稿，点保存才落盘。
+// server 值变化（首次加载完成 / 保存回写）时同步草稿，避免拿到空值。
 
-import { useState } from 'react';
-import { Sun, Moon, MonitorCog } from 'lucide-react';
-import { Button, Select, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from '../../shared/ui';
-import {
-    preferencesStore,
-    usePreferences,
-    type ThemeMode,
-} from '../../hooks/preferences/preferencesStore';
+import { useEffect, useState } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger, StickySaveBar } from '../../shared/ui';
+import { usePreferences } from '../../hooks/preferences/preferencesStore';
+import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
+import type { BackendSettings } from '../../core/services/settings.service';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
+import { GeneralTab } from './tabs/GeneralTab';
+import { NetworkTab } from './tabs/NetworkTab';
+import { DataTab } from './tabs/DataTab';
+import { AboutTab } from './tabs/AboutTab';
 
 export function SettingsPageNext() {
     const prefs = usePreferences();
     const { bootstrap, openDataDir, isOpeningDir } = useBootstrap();
+    const { settings, save, isSaving } = useBackendSettings();
     const [tab, setTab] = useState('general');
 
-    const dataRoot = (bootstrap as any)?.data_root ?? '—';
-    const version = (bootstrap as any)?.app_version ?? '0.1.0-alpha.1';
+    // 后端设置草稿。server 值首次到达 / 保存回写时同步进草稿。
+    const [draft, setDraft] = useState<BackendSettings | null>(null);
+    useEffect(() => {
+        if (settings) setDraft(settings);
+    }, [settings]);
 
-    const handleOpen = async () => {
-        try {
-            await openDataDir();
-        } catch (err) {
-            // eslint-disable-next-line no-console
-            console.warn('打开数据目录失败:', err);
-        }
+    // 草稿与 server 值是否有差异（控制 StickySaveBar 显隐 + 保存按钮可点）。
+    const dirty =
+        draft !== null &&
+        settings !== null &&
+        (draft.botLoginCheckIntervalMs !== settings.botLoginCheckIntervalMs ||
+            draft.performanceMonitorEnabled !== settings.performanceMonitorEnabled ||
+            draft.performanceMonitorIntervalMs !== settings.performanceMonitorIntervalMs ||
+            draft.githubPat !== settings.githubPat);
+
+    const patchDraft = (patch: Partial<BackendSettings>) =>
+        setDraft((cur) => (cur ? { ...cur, ...patch } : cur));
+
+    const handleSave = () => {
+        if (draft) save(draft);
+    };
+    const handleCancel = () => {
+        if (settings) setDraft(settings);
     };
 
     return (
@@ -54,188 +67,42 @@ export function SettingsPageNext() {
                 <Tabs value={tab} onValueChange={setTab} className="w-full">
                     <TabsList className="mb-6">
                         <TabsTrigger value="general">通用</TabsTrigger>
+                        <TabsTrigger value="network">网络</TabsTrigger>
                         <TabsTrigger value="data">数据</TabsTrigger>
                         <TabsTrigger value="about">关于</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="general" className="space-y-6">
-                        <FieldRow
-                            label="主题"
-                            description="切换后立即生效，无需重启"
-                        >
-                            <ThemeSegment
-                                value={prefs.theme}
-                                onChange={preferencesStore.setTheme}
-                            />
-                        </FieldRow>
+                        <GeneralTab prefs={prefs} draft={draft} patchDraft={patchDraft} />
+                    </TabsContent>
 
-                        <FieldRow
-                            label="主页吉祥物"
-                            description="概览页右上角的猫娘"
-                        >
-                            <Switch
-                                checked={prefs.showMascot}
-                                onCheckedChange={preferencesStore.setShowMascot}
-                            />
-                        </FieldRow>
-
-                        <FieldRow
-                            label="窗口不透明度"
-                            description="80–100，仅作用于主背景；真窗口透明需 Tauri 配置（待）"
-                        >
-                            <input
-                                type="range"
-                                min={80}
-                                max={100}
-                                step={1}
-                                value={prefs.windowOpacity}
-                                onChange={(e) =>
-                                    preferencesStore.setWindowOpacity(Number(e.target.value))
-                                }
-                                className="h-1 w-32 cursor-pointer accent-brand"
-                            />
-                            <span className="w-9 text-right font-mono text-[11.5px] tabular-nums text-text-tertiary">
-                                {prefs.windowOpacity}%
-                            </span>
-                        </FieldRow>
-
-                        <FieldRow
-                            label="点击关闭按钮"
-                            description="tray 模式需要 Tauri 系统托盘配套，当前选 tray 暂同 close"
-                            isLast
-                        >
-                            <Select
-                                value={prefs.closeAction}
-                                onValueChange={(v) =>
-                                    preferencesStore.setCloseAction(v as 'close' | 'tray')
-                                }
-                                items={[
-                                    { value: 'close', label: '关闭程序' },
-                                    { value: 'tray', label: '最小化到托盘' },
-                                ]}
-                            />
-                        </FieldRow>
+                    <TabsContent value="network" className="space-y-6">
+                        <NetworkTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
                     <TabsContent value="data" className="space-y-6">
-                        <FieldRow label="数据根目录" description={dataRoot}>
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={handleOpen}
-                                disabled={isOpeningDir}
-                            >
-                                打开
-                            </Button>
-                        </FieldRow>
-
-                        <FieldRow
-                            label="待接入功能"
-                            description="GitHub PAT、离线通知（邮件 / Webhook）、配置导入导出、SnowLuma 全局密码 override 依赖后端 IPC，下个迭代落地"
-                            isLast
-                        >
-                            <span className="text-[12px] text-text-tertiary">下次迭代</span>
-                        </FieldRow>
+                        <DataTab
+                            dataRoot={bootstrap?.data_root ?? '—'}
+                            onOpenDataDir={openDataDir}
+                            isOpeningDir={isOpeningDir}
+                        />
                     </TabsContent>
 
                     <TabsContent value="about" className="space-y-6">
-                        <FieldRow label="NapCatQQ Desktop" description="桌面端版本">
-                            <span className="font-mono text-[12.5px] text-text-secondary">
-                                {String(version)}
-                            </span>
-                        </FieldRow>
-
-                        <FieldRow
-                            label="许可"
-                            description="本项目以 GPL-3.0 协议开源，详见仓库 LICENSE"
-                            isLast
-                        >
-                            <span className="font-mono text-[12px] text-text-tertiary">GPL-3.0</span>
-                        </FieldRow>
+                        <AboutTab localVersions={bootstrap?.local_versions ?? null} />
                     </TabsContent>
                 </Tabs>
             </div>
+
+            <StickySaveBar
+                dirty={dirty}
+                saving={isSaving}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                saveLabel="保存设置"
+            />
         </div>
     );
 }
 
 export default SettingsPageNext;
-
-// ============================================================================
-// 子组件
-// ============================================================================
-
-/// shadcn Settings recipe 的标准行：左 label/description 堆叠 + 右控件，
-/// space-between 自动右对齐。行间用底部 border + padding 切。
-function FieldRow({
-    label,
-    description,
-    isLast,
-    children,
-}: {
-    label: string;
-    description?: string;
-    isLast?: boolean;
-    children?: React.ReactNode;
-}) {
-    return (
-        <div
-            className={
-                'flex items-center justify-between gap-6 ' +
-                (isLast ? '' : 'border-b border-border-subtle pb-6')
-            }
-        >
-            <div className="min-w-0 flex-1 space-y-1">
-                <label className="block text-[13.5px] font-medium leading-none text-text">
-                    {label}
-                </label>
-                {description && (
-                    <p className="text-[12px] leading-relaxed text-text-tertiary">
-                        {description}
-                    </p>
-                )}
-            </div>
-            {children && (
-                <div className="flex shrink-0 items-center gap-2">{children}</div>
-            )}
-        </div>
-    );
-}
-
-function ThemeSegment({
-    value,
-    onChange,
-}: {
-    value: ThemeMode;
-    onChange: (next: ThemeMode) => void;
-}) {
-    const items: ReadonlyArray<{
-        value: ThemeMode;
-        label: string;
-        icon: React.ReactNode;
-    }> = [
-            { value: 'auto', label: '系统', icon: <MonitorCog size={13} /> },
-            { value: 'light', label: '浅色', icon: <Sun size={13} /> },
-            { value: 'dark', label: '暗色', icon: <Moon size={13} /> },
-        ];
-    return (
-        <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
-            {items.map((it) => (
-                <button
-                    key={it.value}
-                    type="button"
-                    onClick={() => onChange(it.value)}
-                    className={
-                        'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-colors ' +
-                        (value === it.value
-                            ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
-                            : 'text-text-tertiary hover:text-text')
-                    }
-                >
-                    {it.icon}
-                    <span>{it.label}</span>
-                </button>
-            ))}
-        </div>
-    );
-}

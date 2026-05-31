@@ -49,6 +49,11 @@ export type { BotActorSnapshot } from './generated/BotActorSnapshot';
 export type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapshot';
 export type { ReleaseInfo } from './generated/domain/ReleaseInfo';
 export type { ReleaseSnapshot } from './generated/domain/ReleaseSnapshot';
+export type { AppSettings } from './generated/domain/AppSettings';
+export type { AppSettingsDto } from './generated/domain/AppSettingsDto';
+export type { WebUiPollerSettings } from './generated/domain/WebUiPollerSettings';
+export type { ConfigExportResult } from './generated/ConfigExportResult';
+export type { ConfigImportResult } from './generated/ConfigImportResult';
 
 // ProgressEvent / ProgressKind / LogLevel 由 ts-rs 自动生成，re-export 保证
 // wire format 与后端一致。注意 ProgressEvent.timestamp_ms 是 bigint
