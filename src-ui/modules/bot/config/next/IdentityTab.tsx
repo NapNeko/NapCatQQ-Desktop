@@ -50,7 +50,7 @@ const RUNTIME_ITEMS = [
 
 const DEPLOYMENT_ITEMS = [
     { value: 'native' as DeploymentType, label: '直接运行', hint: '在主机上直接拉起进程（默认）' },
-    { value: 'docker' as DeploymentType, label: 'Docker 容器', hint: '用 docker compose 起容器，仅 NapCat 底座' },
+    { value: 'docker' as DeploymentType, label: 'Docker 容器', hint: '用 docker compose 起容器，仅远程 SSH 主机 + NapCat 底座' },
 ];
 
 const TIME_UNIT_ITEMS = [
@@ -78,7 +78,9 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
     const onRuntimeModeChange = (mode: string) => {
         if (mode === 'local') {
-            onChange({ runtime_target: 'local' });
+            // 本机(Windows)不支持 Docker(Docker Desktop 安装链路太麻烦),切回本机时
+            // 强制把启动方式落回直接运行,避免残留 docker 选择导致保存被挡。
+            onChange({ runtime_target: 'local', deploymentType: 'native' });
         } else {
             // 切到远程:只有一台就直接选它,多台/没有给占位 'remote' 让用户在下拉里选。
             const only = servers.length === 1 ? servers[0].id : 'remote';
@@ -170,16 +172,26 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                     )
                 )}
 
-                <RadioGroup
-                    items={DEPLOYMENT_ITEMS}
-                    value={data.deploymentType}
-                    onValueChange={(v) => onChange({ deploymentType: v as DeploymentType })}
-                    orientation="horizontal"
-                    name="deployment-type"
-                />
-                {data.deploymentType === 'docker' && data.backend_type !== 'napcat' && (
-                    <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
-                        Docker 启动方式当前仅支持 NapCat 底座。SnowLuma 容器化待后续支持，请改回「直接运行」。
+                {/* 启动方式:本机(Windows)不支持 Docker,只能直接运行,这里直接给说明
+                    不让选;远程才给「直接运行 / Docker」二选一。 */}
+                {isRemote ? (
+                    <>
+                        <RadioGroup
+                            items={DEPLOYMENT_ITEMS}
+                            value={data.deploymentType}
+                            onValueChange={(v) => onChange({ deploymentType: v as DeploymentType })}
+                            orientation="horizontal"
+                            name="deployment-type"
+                        />
+                        {data.deploymentType === 'docker' && data.backend_type !== 'napcat' && (
+                            <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
+                                Docker 启动方式当前仅支持 NapCat 底座。SnowLuma 容器化待后续支持，请改回「直接运行」。
+                            </p>
+                        )}
+                    </>
+                ) : (
+                    <p className="rounded-sm bg-inset px-3 py-2 text-2xs leading-relaxed text-text-tertiary">
+                        本机以「直接运行」方式启动。本机（Windows）暂不支持 Docker 部署，需要容器请改用「远程 SSH 主机」。
                     </p>
                 )}
             </FormSection>

@@ -57,6 +57,11 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
     if (config.bot.runtime_target === 'remote') {
         return { ok: false, reason: '请选择一台具体的远程主机！' };
     }
+    // 本机(Windows)不支持 Docker:Docker Desktop 安装链路太麻烦,本机只走直接运行。
+    // Docker 启动方式只允许配合远程 SSH 主机。
+    if (config.bot.deploymentType === 'docker' && config.bot.runtime_target === 'local') {
+        return { ok: false, reason: '本机暂不支持 Docker 部署，请改用「直接运行」，或把运行宿主切换为远程 SSH 主机。' };
+    }
     // Docker 启动方式当前仅支持 NapCat 底座。
     if (config.bot.deploymentType === 'docker' && config.bot.backend_type !== 'napcat') {
         return { ok: false, reason: 'Docker 启动方式当前仅支持 NapCat 底座，SnowLuma 容器化待后续支持。' };

@@ -260,6 +260,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         "Docker 部署当前仅支持 NapCat 底座,SnowLuma 容器化待后续支持".to_string(),
                     ));
                 }
+                // 本机(Windows)不支持 Docker:Docker Desktop 安装链路太麻烦,产品上
+                // 不支持本机容器化。Docker 只允许配合远端 SSH 主机。前端已挡,这里
+                // 做后端兜底防御。
+                if config.bot.runtime_target.is_local() {
+                    return Err(BotManagerError::Render(
+                        "本机暂不支持 Docker 部署。请将启动方式改为「直接运行」,\
+                         或把运行宿主切换为远程 SSH 主机后再用 Docker。"
+                            .to_string(),
+                    ));
+                }
                 let host = resolver
                     .resolve(&config.bot.runtime_target)
                     .await

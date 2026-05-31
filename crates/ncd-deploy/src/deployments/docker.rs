@@ -93,10 +93,11 @@ impl Deployment for DockerDeployment {
     }
 
     fn supports(&self, host: &dyn Host) -> bool {
-        // Linux 远端(SSH 跑 docker)+ Windows 本机(Docker Desktop)。
-        // daemon 是否真在跑留给 install 阶段动态探测。
+        // 仅 Linux 主机(一般是远端 SSH)。本机 Windows 不支持 Docker bot 部署:
+        // Docker Desktop 安装链路太麻烦,产品上不在本机做容器化。daemon 是否真在
+        // 跑留给 install 阶段动态探测。
         use ncd_host::Os;
-        matches!(host.os(), Os::Linux | Os::Windows)
+        matches!(host.os(), Os::Linux)
     }
 
     async fn install(
@@ -286,9 +287,9 @@ mod tests {
     }
 
     #[test]
-    fn supports_linux_and_windows_not_macos() {
-        // 用 stub host 验证 supports 的 OS 判定。这里只断言 flavor 列表 + id,
-        // OS 判定逻辑在集成测试用 MockHost 覆盖。
+    fn only_supports_napcat_flavor() {
+        // supports 的 OS 判定(仅 Linux)用 MockHost 在集成测试覆盖;这里断言
+        // 只支持 NapCat 底座。
         let dep = DockerDeployment::new();
         assert_eq!(dep.supported_flavors(), &[BotFlavor::NapCat]);
     }
