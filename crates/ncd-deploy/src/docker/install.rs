@@ -130,11 +130,14 @@ async fn install_docker_linux(
         .timeout(std::time::Duration::from_secs(60));
     let _ = host.run_to_string(enable).await;
 
-    // 把当前用户加进 docker 组,免得每条 docker 命令都要 sudo。需要重新登录才
-    // 完全生效,这步失败也不致命。用 $USER 取当前登录名。
+    // 把真实登录用户加进 docker 组,之后该用户重连就能免 sudo 跑 docker。
+    // 不能用 $USER:这条经 sudo -S sh -c 跑,$USER 在 sudo 上下文里是 root,会把
+    // root 加进组而漏掉真正的登录用户。用 $SUDO_USER(sudo 记录的原始调用者,正是
+    // SSH 登录用户)优先,免密/root 直连无 SUDO_USER 时 fallback logname。加进组要
+    // 重新登录才生效,所以本次会话的探测仍走 sudo 兜底(probe 已处理),不致命。
     let usermod = HostCommand::new("sh")
         .arg("-c")
-        .arg("usermod -aG docker \"$USER\"")
+        .arg("usermod -aG docker \"${SUDO_USER:-$(logname 2>/dev/null)}\"")
         .elevated()
         .timeout(std::time::Duration::from_secs(30));
     let _ = host.run_to_string(usermod).await;

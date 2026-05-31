@@ -30,29 +30,53 @@ pub enum DockerCliError {
     ParseFailed(String),
 }
 
-/// docker CLI 封装。轻量,无状态,每次操作临时构造或复用都可以。
+/// docker CLI 封装。轻量,每个操作拼一条命令交给 host。
+///
+/// 提权:远端用户常不在 docker 组(装完没重登 / usermod 没生效),裸 docker
+/// 命令会 permission denied 连不上 /var/run/docker.sock。probe() 会探一次
+/// 「裸 docker 行不行,不行但 sudo 行」,把结果记在 elevated 里;之后所有命令
+/// 按它决定要不要 .elevated()(提权密码由 Host 层注入)。本机 Windows 用不到,
+/// elevated 恒 false。用 AtomicBool 是因为操作方法都是 &self,且要跨 await 保持 Send。
 pub struct DockerCli<'h> {
     host: &'h dyn Host,
+    elevated: std::sync::atomic::AtomicBool,
 }
 
 impl<'h> DockerCli<'h> {
     pub fn new(host: &'h dyn Host) -> Self {
-        Self { host }
+        Self {
+            host,
+            elevated: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// 按当前提权标志构造一条 docker 命令。elevated=true 时打 .elevated() 标,
+    /// Host 层用注入的 sudo 密码走 sudo -S/-n;否则裸 docker。所有 docker 操作
+    /// 都经这里,保证「探测判定要 sudo」后续操作就一致地 sudo,不会探测过了部署却挂。
+    fn docker_cmd(&self) -> HostCommand {
+        let cmd = HostCommand::new("docker");
+        if self.elevated.load(std::sync::atomic::Ordering::Relaxed) {
+            cmd.elevated()
+        } else {
+            cmd
+        }
     }
 
     /// 探测 docker 是否可用。任何一步失败都退化成"未装/未就绪",不报错——
     /// 探测本身不该把"没装 docker"当异常。
     pub async fn probe(&self) -> DockerStatus {
-        // docker 客户端版本。拿不到直接判定未装。
+        // docker 客户端版本(不连 daemon,普通用户就能跑)。拿不到直接判定未装。
         let version = match self.docker_client_version().await {
             Some(v) => v,
             None => return DockerStatus::absent(),
         };
 
-        // daemon 是否在跑:docker info 成功即说明 daemon 可达。
-        let daemon_running = self.docker_info_ok().await;
+        // 探 daemon。裸 docker info 能过最好(用户已在 docker 组);permission denied
+        // 但 sudo 能过 → daemon 其实在跑,只是当前会话没 socket 权限(没重登/没进组),
+        // 记下 elevated 让后续命令都走 sudo。两者都不过才是 daemon 真没起。
+        let daemon_running = self.probe_daemon_with_elevation().await;
 
-        // compose v2 插件。
+        // compose v2 插件(按已定的 elevated 标志跑)。
         let compose_available = self.docker_compose_ok().await;
 
         DockerStatus {
@@ -64,6 +88,7 @@ impl<'h> DockerCli<'h> {
     }
 
     /// `docker version --format '{{.Client.Version}}'`,失败返回 None。
+    /// 客户端版本不连 daemon,无需提权,固定裸跑——它是"装没装 docker"的判据。
     async fn docker_client_version(&self) -> Option<String> {
         let cmd = HostCommand::new("docker")
             .arg("version")
@@ -81,18 +106,37 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// `docker info --format '{{.ServerVersion}}'`,daemon 不可达时退出码非 0。
-    async fn docker_info_ok(&self) -> bool {
-        let cmd = HostCommand::new("docker")
+    /// 探 daemon 是否在跑,顺带定夺后续是否需要提权:先裸 docker info,过了说明
+    /// 用户有 socket 权限(elevated 保持 false);不过就用 sudo 再探一次,sudo 能过
+    /// 说明 daemon 就绪只是缺组权限,置 elevated=true 让后续命令都走 sudo。
+    async fn probe_daemon_with_elevation(&self) -> bool {
+        use std::sync::atomic::Ordering;
+        if self.docker_info_once(false).await {
+            self.elevated.store(false, Ordering::Relaxed);
+            return true;
+        }
+        if self.docker_info_once(true).await {
+            self.elevated.store(true, Ordering::Relaxed);
+            return true;
+        }
+        false
+    }
+
+    /// 跑一次 `docker info --format '{{.ServerVersion}}'`,elevated 决定要不要 sudo。
+    async fn docker_info_once(&self, elevated: bool) -> bool {
+        let mut cmd = HostCommand::new("docker")
             .arg("info")
             .arg("--format")
             .arg("{{.ServerVersion}}");
+        if elevated {
+            cmd = cmd.elevated();
+        }
         matches!(self.host.run_to_string(cmd).await, Ok(out) if out.success())
     }
 
-    /// `docker compose version`,compose v2 插件存在时退出码 0。
+    /// `docker compose version`,compose v2 插件存在时退出码 0。按 elevated 标志跑。
     async fn docker_compose_ok(&self) -> bool {
-        let cmd = HostCommand::new("docker").arg("compose").arg("version");
+        let cmd = self.docker_cmd().arg("compose").arg("version");
         matches!(self.host.run_to_string(cmd).await, Ok(out) if out.success())
     }
 }
@@ -100,7 +144,8 @@ impl<'h> DockerCli<'h> {
 impl<'h> DockerCli<'h> {
     /// 列所有容器(含已停止)。`docker ps -a --format '{{json .}}'` 逐行 JSON。
     pub async fn list_containers(&self) -> Result<Vec<ContainerInfo>, DockerCliError> {
-        let cmd = HostCommand::new("docker")
+        let cmd = self
+            .docker_cmd()
             .arg("ps")
             .arg("-a")
             .arg("--format")
@@ -122,7 +167,7 @@ impl<'h> DockerCli<'h> {
         action: &str,
         container: &str,
     ) -> Result<(), DockerCliError> {
-        let cmd = HostCommand::new("docker").arg(action).arg(container);
+        let cmd = self.docker_cmd().arg(action).arg(container);
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
@@ -136,7 +181,8 @@ impl<'h> DockerCli<'h> {
 
     /// 删除容器。默认带 -f 强制删(运行中也删),避免用户先 stop 再 remove 两步。
     pub async fn remove(&self, container: &str) -> Result<(), DockerCliError> {
-        let cmd = HostCommand::new("docker")
+        let cmd = self
+            .docker_cmd()
             .arg("rm")
             .arg("-f")
             .arg(container);
@@ -153,7 +199,8 @@ impl<'h> DockerCli<'h> {
 
     /// 取容器最近 tail 行日志。stdout + stderr 合并返回(docker logs 两路都吐)。
     pub async fn logs(&self, container: &str, tail: u32) -> Result<String, DockerCliError> {
-        let cmd = HostCommand::new("docker")
+        let cmd = self
+            .docker_cmd()
             .arg("logs")
             .arg("--tail")
             .arg(tail.to_string())
@@ -183,7 +230,8 @@ impl<'h> DockerCli<'h> {
     /// docker-compose.yml)。pull 由 compose 自己按需做;这里加 --pull missing
     /// 让首次部署自动拉镜像。
     pub async fn compose_up(&self, project_dir: &str) -> Result<(), DockerCliError> {
-        let cmd = HostCommand::new("docker")
+        let cmd = self
+            .docker_cmd()
             .arg("compose")
             .arg("up")
             .arg("-d")
@@ -208,7 +256,8 @@ impl<'h> DockerCli<'h> {
         project_dir: &str,
         remove_volumes: bool,
     ) -> Result<(), DockerCliError> {
-        let mut cmd = HostCommand::new("docker")
+        let mut cmd = self
+            .docker_cmd()
             .arg("compose")
             .arg("down")
             .working_dir(ncd_host::HostPath::from_posix(project_dir))
@@ -229,7 +278,8 @@ impl<'h> DockerCli<'h> {
 
     /// `docker pull <image>`,部署前显式拉一次让进度有反馈。
     pub async fn pull(&self, image: &str) -> Result<(), DockerCliError> {
-        let cmd = HostCommand::new("docker")
+        let cmd = self
+            .docker_cmd()
             .arg("pull")
             .arg(image)
             .timeout(std::time::Duration::from_secs(900));

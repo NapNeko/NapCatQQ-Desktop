@@ -348,10 +348,33 @@ fn build_component_for_host(
                     Some(home) => HostPath::from_posix(format!("{home}/snowluma-remote/workspace")),
                     None => HostPath::from_posix("/root/snowluma-remote/workspace"),
                 };
-                Arc::new(SnowLumaComponent::new(
-                    workspace,
-                    "https://github.com/SnowLuma/SnowLuma/releases/latest/download/SnowLuma-linux-x64-lite.tar.gz",
-                ))
+                // 不能写死 latest/download/SnowLuma-linux-x64-lite.tar.gz:真实资产名带
+                // 版本号(SnowLuma-v1.9.3-linux-x64-lite.tar.gz),无版本号的 URL 404,
+                // 镜像代理把 404 页当 200 转发,下载器没 hash 拦就把 HTML 当 tar.gz 上传,
+                // 远端 tar 解压报 "not in gzip format"。和 Windows 分支一样从 release 快照
+                // 拿 tag 拼对 URL + 反查 sha256,既修 404 又补上内容校验(双保险)。
+                let latest = snapshot
+                    .as_ref()
+                    .and_then(|s| s.snowluma_latest.as_ref());
+                let tag = latest
+                    .map(|info| {
+                        if !info.tag.is_empty() {
+                            info.tag.clone()
+                        } else {
+                            format!("v{}", info.version)
+                        }
+                    })
+                    .or_else(|| state.snapshot.local_versions.snowluma.clone())
+                    .unwrap_or_default();
+                let asset = format!("SnowLuma-{tag}-linux-x64-lite.tar.gz");
+                let url = format!(
+                    "https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/{asset}"
+                );
+                let mut comp = SnowLumaComponent::new(workspace, url);
+                if let Some(sha) = latest.and_then(|info| asset_sha256(info, &asset)) {
+                    comp = comp.with_sha256(sha);
+                }
+                Arc::new(comp)
             }
         }
         ComponentId::Qq => {

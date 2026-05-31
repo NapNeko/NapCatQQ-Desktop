@@ -414,6 +414,12 @@ impl SnowLumaComponent {
                     1,
                 )
                 .await?;
+            // 上传前验本地文件确实是 gzip(magic 1f 8b)。没传 sha256 时(release 快照
+            // 缺失)这是唯一的内容闸:URL 拼错 / 镜像代理返回 404 HTML 页时,这里直接
+            // 报人话错误,而不是把 HTML 当 tar.gz 传上去让远端 tar 报 "not in gzip format"。
+            verify_gzip_magic(&local_tmp).await.map_err(|reason| {
+                ActionError::install_step("verify_download", reason)
+            })?;
             host.upload(&local_tmp, &remote_archive).await?;
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }
@@ -809,6 +815,30 @@ async fn copy_tree(
     Ok(())
 }
 
+/// 校验本地文件确实是 gzip(开头 magic 1f 8b)。下载层没传 sha256 时这是唯一能
+/// 拦住"假 tar.gz"(404 HTML 页 / 损坏文件 / 镜像代理错误页)的内容闸。读不到文件
+/// 或开头不对都返回人话错误,让上层在上传前就拦下,而不是把垃圾传到远端让 tar 报
+/// "not in gzip format" 这种天书。
+async fn verify_gzip_magic(path: &std::path::Path) -> Result<(), String> {
+    use tokio::io::AsyncReadExt;
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|e| format!("打开下载文件失败: {e}"))?;
+    let mut magic = [0u8; 2];
+    file.read_exact(&mut magic)
+        .await
+        .map_err(|_| "下载文件过小或为空,可能是下载失败或返回了错误页".to_string())?;
+    if magic == [0x1f, 0x8b] {
+        Ok(())
+    } else {
+        Err(format!(
+            "下载内容不是 gzip 归档(开头字节 {:02x} {:02x},期望 1f 8b)。多半是下载 URL \
+             失效返回了 HTML 错误页,请检查 SnowLuma release 是否可达后重试",
+            magic[0], magic[1]
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -818,6 +848,32 @@ mod tests {
             HostPath::from_posix("/home/test/Napcat/snowluma-workspace"),
             "https://github.com/SnowLuma/SnowLuma/releases/download/v1.2.3/SnowLuma-v1.2.3-linux-x64-lite.tar.gz",
         )
+    }
+
+    #[tokio::test]
+    async fn gzip_magic_accepts_real_gzip_header() {
+        // 1f 8b 打头 = 合法 gzip,放行。
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("ok.tar.gz");
+        tokio::fs::write(&p, [0x1f, 0x8b, 0x08, 0x00]).await.unwrap();
+        assert!(verify_gzip_magic(&p).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn gzip_magic_rejects_html_error_page() {
+        // 404 错误页常以 "<!DOCTYPE" / "<html" 开头(0x3c ...),不是 gzip,必须拦。
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("fake.tar.gz");
+        tokio::fs::write(&p, b"<!DOCTYPE html><html>404</html>").await.unwrap();
+        assert!(verify_gzip_magic(&p).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn gzip_magic_rejects_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("empty.tar.gz");
+        tokio::fs::write(&p, b"").await.unwrap();
+        assert!(verify_gzip_magic(&p).await.is_err());
     }
 
     #[test]
