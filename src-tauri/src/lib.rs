@@ -13,6 +13,7 @@ use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub mod bootstrap;
+pub mod bot_host_resolver;
 pub mod commands;
 pub mod runtime;
 
@@ -75,7 +76,7 @@ pub fn run() {
     let bot_backend: Arc<dyn ncd_runtime::BotBackend> =
         Arc::new(ncd_runtime::NativeDeploymentBackend::new(
             native_deployment,
-            local_host,
+            Arc::clone(&local_host),
             "bot-manager-local",
             ncd_runtime::BotFlavor::NapCat,
         ));
@@ -92,17 +93,32 @@ pub fn run() {
     // 用户在设置页改的 Bot 登录检查间隔重启后仍生效。文件缺失回落 default。
     let app_settings = commands::app_settings::read_app_settings(&data_root);
     let poller_settings = Arc::new(RwLock::new(app_settings.poller.clone()));
-    let bot_manager = Arc::new(BotManager::new(
-        repo,
-        Arc::clone(&store),
-        renderer,
-        bot_backend,
-        launch_planner,
-        Arc::new(event_bus.clone()),
-        webui_client,
-        offline_notifier,
-        poller_settings,
+    // ServerManager 提前构造,既给下面 AppState 用,也给 HostResolver 用(让
+    // BotManager 能按 runtime_target 把 bot 启到本机 / 远端)。
+    let server_manager = Arc::new(ncd_runtime::ServerManager::new(
+        &data_root,
+        Arc::new(ncd_runtime::KeyringCredentialStore),
     ));
+    let host_resolver: Arc<dyn ncd_runtime::HostResolver> = Arc::new(
+        bot_host_resolver::TauriHostResolver::new(
+            Arc::clone(&server_manager),
+            Arc::clone(&local_host),
+        ),
+    );
+    let bot_manager = Arc::new(
+        BotManager::new(
+            repo,
+            Arc::clone(&store),
+            renderer,
+            bot_backend,
+            launch_planner,
+            Arc::new(event_bus.clone()),
+            webui_client,
+            offline_notifier,
+            poller_settings,
+        )
+        .with_host_resolver(host_resolver),
+    );
 
     // SnowLuma daemon + backend wiring。
     //
@@ -140,11 +156,6 @@ pub fn run() {
     let bot_manager_login_listener = Arc::clone(&bot_manager);
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
     let bot_manager_shutdown = Arc::clone(&bot_manager);
-
-    let server_manager = Arc::new(ncd_runtime::ServerManager::new(
-        &data_root,
-        Arc::new(ncd_runtime::KeyringCredentialStore),
-    ));
 
     tauri::Builder::default()
         // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI）
