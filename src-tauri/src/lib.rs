@@ -150,6 +150,8 @@ pub fn run() {
         // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI）
         // webview 自身不支持 target=_blank。
         .plugin(tauri_plugin_opener::init())
+        // 配置导入导出用原生文件 / 目录选择对话框（webview 无法拿真实文件系统路径）。
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             data_root,
             snapshot,
@@ -271,6 +273,8 @@ pub fn run() {
             commands::release::get_release_snapshot,
             commands::app_settings::get_app_settings,
             commands::app_settings::set_app_settings,
+            commands::config_transfer::export_config,
+            commands::config_transfer::import_config,
             commands::components::list_components,
             commands::components::detect_component,
             commands::components::run_component_action,
