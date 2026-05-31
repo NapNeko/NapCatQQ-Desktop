@@ -1,18 +1,17 @@
 //! 帮用户装 docker(如果没有)。
 //!
-//! Linux:把官方 get.docker.com 脚本先落盘再执行。提权交给 Host 的固有能力——
-//! 把 sudo 密码注入 host 后,所有 `.elevated()` 命令由 host 层统一决定走 sudo -S
-//! (有密码)还是 sudo -n(免密 / root)。密码来源:调用方(docker 弹框)显式传入,
-//! 或 ServerManager 连接时从 keyring 注入。都没有且远端确实要密码时返回
-//! NeedSudoPassword,让上层弹框向用户索要后带密码重试。
+//! Linux:不走官方 get.docker.com 一键脚本——get.docker.com / download.docker.com
+//! 这两个官方域名在国内被墙(实测 curl 直接 Connection reset),连脚本本身都拉不下来,
+//! 脚本里的 --mirror 参数根本没机会生效。改成在远端直接配阿里云 docker-ce 仓库走原生
+//! apt/dnf 安装:全程只打 mirrors.aliyun.com(实测 HTTP 200),不碰任何 docker 官方域名。
 //!
-//! 安装脚本固定加 `--mirror Aliyun`:官方 download.docker.com 在国内常被
-//! Connection reset,阿里云镜像(mirrors.aliyun.com/docker-ce)国内稳定、海外也能通。
+//! 提权交给 Host 的固有能力——把 sudo 密码注入 host 后,所有 `.elevated()` 命令由
+//! host 层统一决定走 sudo -S(有密码)还是 sudo -n(免密 / root)。密码来源:调用方
+//! (docker 弹框)显式传入,或 ServerManager 连接时从 keyring 注入。都没有且远端确实
+//! 要密码时返回 NeedSudoPassword,让上层弹框向用户索要后带密码重试。
 //!
-//! 为什么不再用 `curl ... | sudo sh` 管道:管道右端的 sudo 一旦因为要密码而立刻
-//! 退出,左端 curl 往断开的管道写就报 "curl: (23) Failure writing output to
-//! destination"——一个缺免密 sudo 的问题被放大成两条费解的错误。先 curl 下载到
-//! /tmp 再单独执行,curl 与提权解耦,错误归因清晰。
+//! 安装脚本是一段自包含 POSIX sh:识别发行版(apt 系 / dnf-yum 系)后写对应的阿里云
+//! 仓库再装 docker-ce + compose 插件。不识别的发行版返回 manual_required,不硬撑。
 //!
 //! Windows:不能静默装 Docker Desktop,只回一个引导结果让前端弹"去下载"。
 //! macOS 同理(本工程目前不在 macOS 上跑 docker 部署,留个明确分支)。
@@ -29,8 +28,9 @@ pub type DockerInstallOutcome = DockerInstallReport;
 /// Docker Desktop for Windows 下载页。
 const DOCKER_DESKTOP_URL: &str = "https://www.docker.com/products/docker-desktop/";
 
-/// get.docker.com 脚本在远端的落盘路径。固定 /tmp 下,装完不清理也无害。
-const INSTALL_SCRIPT_PATH: &str = "/tmp/ncd-get-docker.sh";
+/// 阿里云 docker-ce 镜像根。apt 的 gpg/仓库、dnf 的 .repo 都从这里派生。
+/// 实测国内 HTTP 200,海外也可达;替代被墙的 download.docker.com。
+const ALIYUN_DOCKER_CE: &str = "https://mirrors.aliyun.com/docker-ce";
 
 /// 在 host 上确保 docker 可用,没有就尝试装。
 ///
@@ -69,7 +69,7 @@ enum Elevation {
     Need,
 }
 
-/// Linux 装 docker:先把提权密码注入 host + 定提权方式,再 curl 落盘 + 执行脚本
+/// Linux 装 docker:先把提权密码注入 host + 定提权方式,再跑阿里云原生安装脚本
 /// + 起 daemon + 加用户组。所有 elevated 命令的提权细节由 host 层统一处理。
 async fn install_docker_linux(
     host: &dyn Host,
@@ -95,32 +95,12 @@ async fn install_docker_linux(
         ));
     }
 
-    // curl 下载脚本到 /tmp。这步不提权(写 /tmp 不需要 root),与提权解耦,
-    // 避免管道断裂式的 curl:(23)。-f 让 HTTP 错误也返回非零退出。
-    let download = HostCommand::new("curl")
-        .arg("-fsSL")
-        .arg("https://get.docker.com")
-        .arg("-o")
-        .arg(INSTALL_SCRIPT_PATH)
-        .timeout(std::time::Duration::from_secs(120));
-    let out = host.run_to_string(download).await?;
-    if !out.success() {
-        return Ok(DockerInstallReport::manual_required(
-            format!(
-                "下载 Docker 安装脚本失败：{}。请检查远端网络后重试。",
-                out.stderr.trim()
-            ),
-            None,
-        ));
-    }
-
-    // 执行脚本(提权)。官方脚本自己判断发行版,装 docker-ce + compose 插件。
-    // --mirror Aliyun:把 download.docker.com 换成 mirrors.aliyun.com/docker-ce,
-    // 解掉国内访问官方源 Connection reset。提权由 host 注入的密码决定 sudo -S/-n。
+    // 一段自包含脚本配阿里云仓库 + 装 docker-ce(提权)。识别发行版,全程只打
+    // mirrors.aliyun.com。脚本不含外部用户输入,整体交给 host 层 sudo -S sh -c
+    // 跑(单引号转义保护)。失败时 stderr 给上层拼错误文案。
     let run_script = HostCommand::new("sh")
-        .arg(INSTALL_SCRIPT_PATH)
-        .arg("--mirror")
-        .arg("Aliyun")
+        .arg("-c")
+        .arg(aliyun_install_script())
         .elevated()
         .timeout(std::time::Duration::from_secs(600));
     let out = host.run_to_string(run_script).await?;
@@ -133,7 +113,7 @@ async fn install_docker_linux(
         }
         return Ok(DockerInstallReport::manual_required(
             format!(
-                "安装脚本执行失败：{}。可登录远端手动执行 curl -fsSL https://get.docker.com | sudo sh -s -- --mirror Aliyun",
+                "安装脚本执行失败：{}。可登录远端按阿里云文档手动配置 docker-ce 仓库后重试。",
                 out.stderr.trim()
             ),
             None,
@@ -177,6 +157,53 @@ async fn install_docker_linux(
     }
 }
 
+/// 生成在远端以 root 跑的阿里云原生安装脚本(POSIX sh)。按包管理器分流:
+/// apt 系(Debian/Ubuntu)写 keyring + docker.list 指向阿里云;dnf/yum 系
+/// (CentOS/RHEL/Fedora)用 config-manager 加阿里云 .repo。都不是就报错退出。
+///
+/// 全程只下载 mirrors.aliyun.com,不碰被墙的 download.docker.com。脚本内无
+/// 外部用户输入,$() 命令替换(架构 / codename)在远端展开。
+fn aliyun_install_script() -> String {
+    // apt 用 $ID 区分 ubuntu / debian 子路径(阿里云两套独立目录),codename 取
+    // 自 /etc/os-release。dnf/yum 统一用阿里云 centos 的 docker-ce.repo,再把里头的
+    // download.docker.com 就地换成阿里云(repo 文件默认指向官方域名,不换照样被墙)。
+    format!(
+        r#"set -e
+ALI="{base}"
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq ca-certificates curl gnupg
+  install -m 0755 -d /etc/apt/keyrings
+  . /etc/os-release
+  DISTRO="$ID"
+  case "$DISTRO" in ubuntu|debian) : ;; *) DISTRO=ubuntu ;; esac
+  curl -fsSL "$ALI/linux/$DISTRO/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
+  CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+  ARCH="$(dpkg --print-architecture)"
+  echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] $ALI/linux/$DISTRO $CODENAME stable" > /etc/apt/sources.list.d/docker.list
+  apt-get update -qq
+  apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+elif command -v dnf >/dev/null 2>&1; then
+  dnf install -y dnf-plugins-core
+  dnf config-manager --add-repo "$ALI/linux/centos/docker-ce.repo"
+  sed -i "s#download.docker.com#mirrors.aliyun.com/docker-ce#g" /etc/yum.repos.d/docker-ce.repo
+  dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+elif command -v yum >/dev/null 2>&1; then
+  yum install -y yum-utils
+  yum-config-manager --add-repo "$ALI/linux/centos/docker-ce.repo"
+  sed -i "s#download.docker.com#mirrors.aliyun.com/docker-ce#g" /etc/yum.repos.d/docker-ce.repo
+  yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+else
+  echo "未识别到 apt-get / dnf / yum 包管理器,无法自动安装 Docker" >&2
+  exit 1
+fi
+"#,
+        base = ALIYUN_DOCKER_CE,
+    )
+}
+
 /// 从 sudo/stderr 粗判是不是密码错误。sudo 各发行版的提示不完全统一,匹配几个
 /// 常见关键片段:英文 "incorrect password" / "Sorry, try again",中文 locale 下的
 /// "密码不正确",以及 "a password is required"(密码为空或没读到)。
@@ -218,5 +245,43 @@ mod tests {
             DockerInstallReport::already_installed("27.0").status,
             DockerInstallStatus::AlreadyInstalled
         );
+    }
+
+    #[test]
+    fn install_script_uses_aliyun_not_official_docker_domain() {
+        let s = aliyun_install_script();
+        // 彻底不碰被墙的 get.docker.com(一键脚本域名)。
+        assert!(!s.contains("get.docker.com"), "不该再依赖 get.docker.com: {s}");
+        // 所有源都打阿里云。
+        assert!(s.contains("mirrors.aliyun.com/docker-ce"), "必须走阿里云镜像");
+        // download.docker.com 只能出现在 sed 替换式里(把 repo 文件里的官方域名换掉),
+        // 不能作为实际下载地址。出现处必须紧跟 mirrors.aliyun.com 替换目标。
+        for line in s.lines().filter(|l| l.contains("download.docker.com")) {
+            assert!(
+                line.trim_start().starts_with("sed"),
+                "download.docker.com 只允许出现在 sed 替换行: {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn install_script_covers_all_package_managers() {
+        let s = aliyun_install_script();
+        // apt / dnf / yum 三系分支齐全,不识别时报错退出(exit 1)。
+        assert!(s.contains("command -v apt-get"), "缺 apt 分支");
+        assert!(s.contains("command -v dnf"), "缺 dnf 分支");
+        assert!(s.contains("command -v yum"), "缺 yum 分支");
+        assert!(s.contains("exit 1"), "未识别包管理器必须报错退出");
+    }
+
+    #[test]
+    fn install_script_installs_docker_ce_and_compose_plugin() {
+        let s = aliyun_install_script();
+        // 装 docker-ce 全家桶 + compose v2 插件(部署 NapCat/SnowLuma 用 compose)。
+        assert!(s.contains("docker-ce"), "必须装 docker-ce");
+        assert!(s.contains("docker-compose-plugin"), "必须装 compose v2 插件");
+        // 非交互,否则 SSH 会话里 apt/dnf 会卡在确认提示。
+        assert!(s.contains("DEBIAN_FRONTEND=noninteractive"), "apt 必须非交互");
+        assert!(s.contains("set -e"), "出错即停,避免半装状态");
     }
 }
