@@ -8,11 +8,12 @@
 import { useCallback, useMemo } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 
-import { dockerService } from '../../core/services/docker.service';
+import { dockerService, type DockerInstallOptions } from '../../core/services/docker.service';
 import { openExternalUrl } from '../../core/ipc/transport';
 import type {
     DeployedContainer,
     DockerDeploySpec,
+    DockerInstallReport,
     DockerStatus,
 } from '../../core/ipc/types';
 
@@ -26,8 +27,9 @@ export interface UseDockerHostsResult {
     probingByHost: Record<string, boolean>;
     /// 刷新所有主机的 docker 探测。
     refetch: () => void;
-    /// 在某主机上装 / 起 docker，返回结果文案。
-    install: (hostId: string) => Promise<string>;
+    /// 在某主机上装 / 起 docker。返回结构化结果,调用方按 status 分流(可能需要
+    /// 弹框要 sudo 密码后带 options 重试)。
+    install: (hostId: string, options?: DockerInstallOptions) => Promise<DockerInstallReport>;
     isInstalling: boolean;
     /// 打开 Docker Desktop 下载页（Windows / macOS 手动安装引导用）。
     openDownloadPage: () => Promise<void>;
@@ -68,7 +70,8 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     }, [queryClient]);
 
     const installMutation = useMutation({
-        mutationFn: (hostId: string) => dockerService.install(hostId),
+        mutationFn: (args: { hostId: string; options?: DockerInstallOptions }) =>
+            dockerService.install(args.hostId, args.options),
         onSuccess: invalidate,
     });
 
@@ -82,7 +85,8 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         statusByHost,
         probingByHost,
         refetch: invalidate,
-        install: installMutation.mutateAsync,
+        install: (hostId, options) =>
+            installMutation.mutateAsync({ hostId, options }),
         isInstalling: installMutation.isPending,
         openDownloadPage: () => openExternalUrl(DOCKER_DESKTOP_URL),
         deploy: (hostId, spec) => deployMutation.mutateAsync({ hostId, spec }),

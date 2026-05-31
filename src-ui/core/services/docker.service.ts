@@ -8,6 +8,7 @@ import type {
     ContainerInfo,
     DeployedContainer,
     DockerDeploySpec,
+    DockerInstallReport,
     DockerStatus,
 } from '../ipc/types';
 import {
@@ -17,15 +18,36 @@ import {
     withMockDelay,
 } from '../ipc/mock/docker.mock';
 
+/// 安装 docker 的可选入参。sudoPassword 是用户在弹框输入的 sudo 密码,
+/// rememberSudo 是用户勾的"记住密码"。两者都不传时后端自动从 keyring 找缓存密码。
+export interface DockerInstallOptions {
+    sudoPassword?: string;
+    rememberSudo?: boolean;
+}
+
 export const dockerService = {
     probe: async (hostId: string): Promise<DockerStatus> => {
         if (isTauri) return invoke<DockerStatus>('docker_probe', { hostId });
         return withMockDelay(mockDockerStatus, 200);
     },
 
-    install: async (hostId: string): Promise<string> => {
-        if (isTauri) return invoke<string>('docker_install', { hostId });
-        return withMockDelay('docker 已就绪（mock）', 400);
+    install: async (
+        hostId: string,
+        options: DockerInstallOptions = {},
+    ): Promise<DockerInstallReport> => {
+        if (isTauri)
+            return invoke<DockerInstallReport>('docker_install', {
+                hostId,
+                sudoPassword: options.sudoPassword ?? null,
+                rememberSudo: options.rememberSudo ?? null,
+            });
+        return withMockDelay(
+            {
+                status: 'installed',
+                message: 'Docker 安装完成（mock）',
+            } satisfies DockerInstallReport,
+            400,
+        );
     },
 
     listContainers: async (hostId: string): Promise<ContainerInfo[]> => {

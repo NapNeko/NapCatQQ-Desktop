@@ -86,6 +86,8 @@ export type { DockerFlavor } from './generated/domain/DockerFlavor';
 export type { DockerDeploySpec } from './generated/domain/DockerDeploySpec';
 export type { DeployedContainer } from './generated/domain/DeployedContainer';
 export type { PortMapping } from './generated/domain/PortMapping';
+export type { DockerInstallReport } from './generated/domain/DockerInstallReport';
+export type { DockerInstallStatus } from './generated/domain/DockerInstallStatus';
 
 import type { BotActorState } from './generated/BotActorState';
 import type { BotActorSnapshot } from './generated/BotActorSnapshot';

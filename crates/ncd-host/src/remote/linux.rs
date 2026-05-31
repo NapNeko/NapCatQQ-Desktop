@@ -78,6 +78,19 @@ impl Handler for ClientCallback {
     }
 }
 
+/// 远端 sudo 提权能力探测结果。上层(ncd-deploy)据此决定要不要向用户要密码:
+/// RootAlready / Passwordless 直接装,PasswordRequired 才弹密码框。
+/// 不含任何凭证,可安全 Debug 打印。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SudoAccess {
+    /// 当前账号就是 root(id -u == 0),根本不走 sudo。
+    RootAlready,
+    /// 非 root 但配了 NOPASSWD,`sudo -n` 直接过。
+    Passwordless,
+    /// sudo 需要密码,装之前得先拿到用户密码。
+    PasswordRequired,
+}
+
 /// 远端 Linux 主机。
 pub struct RemoteLinuxHost {
     id: String,
@@ -201,6 +214,28 @@ impl RemoteLinuxHost {
     }
 }
 
+/// 探测某主机的 sudo 能力,供上层决定是否需要向用户索要密码。
+/// 取 &dyn Host 而非 &RemoteLinuxHost:install 编排只持有 trait object,且这套
+/// 探测对任何 Linux host 都成立(全走非提权命令,不消耗也不需要任何密码)。
+pub async fn probe_sudo(host: &dyn Host) -> SudoAccess {
+    // id -u == 0 说明已经是 root,后续装包根本不用 sudo。
+    // 探测失败(连接抖动等)按"非 root"保守处理,继续看 sudo -n。
+    if let Ok(out) = host.run_to_string(HostCommand::new("id").arg("-u")).await {
+        if out.stdout.trim() == "0" {
+            return SudoAccess::RootAlready;
+        }
+    }
+    // sudo -n true:配了 NOPASSWD 时静默成功;否则因为需要密码而非零退出
+    // (-n 保证它立刻失败而不是挂起等输入)。
+    match host
+        .run_to_string(HostCommand::new("sudo").arg("-n").arg("true"))
+        .await
+    {
+        Ok(out) if out.success() => SudoAccess::Passwordless,
+        _ => SudoAccess::PasswordRequired,
+    }
+}
+
 async fn load_key(key: &SshKey) -> Result<key::KeyPair, HostError> {
     match key {
         SshKey::Path { path, passphrase } => {
@@ -269,13 +304,18 @@ impl Host for RemoteLinuxHost {
     // ===== 进程操作(基于 SSH exec channel)=====
 
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
-        if cmd.elevated {
-            return Err(HostError::ElevationFailed {
-                locality: "remote",
-                reason: "remote elevation via sudo NOPASSWD must be configured by user".into(),
-            });
-        }
-        let line = build_remote_command_line(&self.shell, &cmd);
+        let inner_line = build_remote_command_line(&self.shell, &cmd);
+        // elevated 时把内层命令塞进 `sudo ... sh -c <inner>`,密码(带换行)走 stdin。
+        // 非 elevated 路径行为不变:line 就是内层命令,stdin 原样透传。
+        let (line, stdin) = if cmd.elevated {
+            let pw = cmd.stdin.as_deref().map(ensure_trailing_newline);
+            (
+                wrap_with_sudo(&inner_line, &self.shell, pw.is_some()),
+                pw,
+            )
+        } else {
+            (inner_line, cmd.stdin)
+        };
         let timeout = cmd.timeout.unwrap_or(Duration::from_secs(300));
 
         let handle = self.handle.clone();
@@ -292,7 +332,7 @@ impl Host for RemoteLinuxHost {
                 .map_err(|e| HostError::remote_disconnected(format!("exec: {e}")))?;
 
             // 写 stdin(若指定)
-            if let Some(data) = cmd.stdin {
+            if let Some(data) = stdin {
                 channel
                     .data(&data[..])
                     .await
@@ -317,13 +357,16 @@ impl Host for RemoteLinuxHost {
     async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
         // 中档实装:spawn 也走 exec channel,但返回流式 HostProcess 让调用方逐步读
         // 暂不支持流式 stdin(开 channel 之后再 push stdin,语义复杂),只在 spawn 时一次性写
-        if cmd.elevated {
-            return Err(HostError::ElevationFailed {
-                locality: "remote",
-                reason: "remote elevation via sudo NOPASSWD must be configured by user".into(),
-            });
-        }
-        let line = build_remote_command_line(&self.shell, &cmd);
+        let inner_line = build_remote_command_line(&self.shell, &cmd);
+        let (line, stdin) = if cmd.elevated {
+            let pw = cmd.stdin.as_deref().map(ensure_trailing_newline);
+            (
+                wrap_with_sudo(&inner_line, &self.shell, pw.is_some()),
+                pw,
+            )
+        } else {
+            (inner_line, cmd.stdin)
+        };
 
         let session = self.handle.lock().await;
         let channel = session
@@ -335,7 +378,7 @@ impl Host for RemoteLinuxHost {
             .await
             .map_err(|e| HostError::remote_disconnected(format!("exec: {e}")))?;
 
-        if let Some(data) = cmd.stdin {
+        if let Some(data) = stdin {
             channel
                 .data(&data[..])
                 .await
@@ -629,6 +672,32 @@ fn build_remote_command_line(shell: &dyn HostShell, cmd: &HostCommand) -> String
     format!("{prefix}{body}")
 }
 
+/// 把内层命令行包成 sudo 提权命令。inner_line 可能含 cd && 这类 shell 语法,
+/// 所以整体丢给 `sh -c <inner>` 跑,而不是让 sudo 直接 exec 单个程序。
+/// has_password 决定喂密码的方式:
+///   true  → `sudo -S -p '' sh -c <inner>`,-S 从 stdin 读密码,-p '' 清空提示符
+///           避免提示文字混进 stderr 干扰输出解析(密码字节另由调用方走 stdin 送)。
+///   false → `sudo -n -p '' sh -c <inner>`,-n 非交互:免密(NOPASSWD/root)直接过,
+///           真要密码时立刻失败而不是挂起等输入。
+/// inner 用 shell.escape 转义成单个 token,内部空格 / 分号 / 引号都被安全包裹。
+fn wrap_with_sudo(inner_line: &str, shell: &dyn HostShell, has_password: bool) -> String {
+    let mode = if has_password { "-S" } else { "-n" };
+    let inner = shell.escape(inner_line);
+    format!("sudo {mode} -p '' sh -c {inner}")
+}
+
+/// sudo -S 读的密码必须以换行结尾。调用方已带 \n 就不重复加,否则补一个。
+fn ensure_trailing_newline(pw: &[u8]) -> Vec<u8> {
+    if pw.last() == Some(&b'\n') {
+        pw.to_vec()
+    } else {
+        let mut out = Vec::with_capacity(pw.len() + 1);
+        out.extend_from_slice(pw);
+        out.push(b'\n');
+        out
+    }
+}
+
 async fn open_sftp(
     handle: &Arc<Mutex<ClientHandle<ClientCallback>>>,
 ) -> Result<russh_sftp::client::SftpSession, HostError> {
@@ -863,5 +932,59 @@ impl RemoteLinuxHost {
             shutdown,
             _task: task,
         })
+    }
+}
+
+// ============================================================
+// 单测:sudo 命令拼接是纯逻辑,从 async 方法里抽出来直接断言。
+// 真正的 SSH 往返不在这测(需要活的远端),只锁定命令行字符串形状。
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wrap_with_password_uses_dash_s_and_sh_c() {
+        let line = wrap_with_sudo("apt-get install -y docker.io", &BashShell, true);
+        assert!(line.contains("sudo -S -p ''"), "有密码必须用 -S 从 stdin 读: {line}");
+        assert!(line.contains("sh -c"), "内层要丢给 sh -c 跑: {line}");
+    }
+
+    #[test]
+    fn wrap_without_password_uses_dash_n() {
+        let line = wrap_with_sudo("apt-get install -y docker.io", &BashShell, false);
+        assert!(line.contains("sudo -n -p ''"), "免密走 -n 非交互: {line}");
+        assert!(!line.contains("-S"), "免密不该出现 -S: {line}");
+        assert!(line.contains("sh -c"), "内层要丢给 sh -c 跑: {line}");
+    }
+
+    #[test]
+    fn wrap_escapes_inner_with_shell_metachars() {
+        // 含 cd && 这类 shell 语法的内层命令必须被 escape 成单个单引号 token,
+        // 否则空格 / && 会被外层 sudo 命令行拆散。
+        let inner = "cd /opt/napcat && apt-get install -y docker";
+        let line = wrap_with_sudo(inner, &BashShell, true);
+        let escaped = BashShell.escape(inner);
+        assert!(line.ends_with(&escaped), "内层应原样 escape 追加在末尾: {line}");
+        assert!(escaped.starts_with('\''), "含空格的内层必须被单引号包裹: {escaped}");
+    }
+
+    #[test]
+    fn wrap_escapes_inner_with_semicolon() {
+        let inner = "echo hi; rm -rf /tmp/x";
+        let line = wrap_with_sudo(inner, &BashShell, false);
+        // 分号必须落在单引号内,不能泄漏成外层 sudo 命令行的语句分隔符。
+        assert!(line.contains("'echo hi; rm -rf /tmp/x'"), "分号应被单引号包住: {line}");
+    }
+
+    #[test]
+    fn ensure_newline_appends_when_missing() {
+        assert_eq!(ensure_trailing_newline(b"hunter2"), b"hunter2\n");
+    }
+
+    #[test]
+    fn ensure_newline_keeps_single_when_present() {
+        assert_eq!(ensure_trailing_newline(b"hunter2\n"), b"hunter2\n");
     }
 }

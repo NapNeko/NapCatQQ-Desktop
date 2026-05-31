@@ -31,7 +31,8 @@ pub use bot_config::{
 };
 pub use docker::{
     ContainerAction, ContainerInfo, ContainerState, DeployedContainer, DockerDeploySpec,
-    DockerFlavor, DockerSpecError, DockerStatus, PortMapping,
+    DockerFlavor, DockerInstallReport, DockerInstallStatus, DockerSpecError, DockerStatus,
+    PortMapping,
 };
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use ids::{BackendId, BotId};

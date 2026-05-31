@@ -108,44 +108,78 @@ fn default_port() -> u16 {
 const KEYRING_SERVICE: &str = "napcatqq-desktop";
 
 /// 系统凭据库操作。测试时可 mock。
+///
+/// 两类凭据分开存:SSH 登录密码(account `ssh:<id>`)与 sudo 提权密码
+/// (account `sudo:<id>`)。多数云主机两者相同,但密钥登录的机器只有后者,
+/// 分开存才能各自独立增删。
 pub trait ServerCredentialStore: Send + Sync {
     fn get_password(&self, server_id: &str) -> Option<String>;
     fn set_password(&self, server_id: &str, password: &str) -> Result<(), String>;
     fn delete_password(&self, server_id: &str) -> Result<(), String>;
+
+    fn get_sudo_password(&self, server_id: &str) -> Option<String>;
+    fn set_sudo_password(&self, server_id: &str, password: &str) -> Result<(), String>;
+    fn delete_sudo_password(&self, server_id: &str) -> Result<(), String>;
 }
 
 /// 基于 keyring crate 的生产实装（Windows wincred / macOS Keychain / Linux secret-service）。
 pub struct KeyringCredentialStore;
 
-impl ServerCredentialStore for KeyringCredentialStore {
-    fn get_password(&self, server_id: &str) -> Option<String> {
-        let account = format!("ssh:{server_id}");
-        keyring::Entry::new(KEYRING_SERVICE, &account)
-            .ok()
-            .and_then(|entry| entry.get_password().ok())
-    }
+/// keyring 读/写/删的公共逻辑,account 由 "<prefix>:<id>" 拼成,避免 ssh / sudo
+/// 两套各写一遍(DRY)。
+fn keyring_get(prefix: &str, server_id: &str) -> Option<String> {
+    let account = format!("{prefix}:{server_id}");
+    keyring::Entry::new(KEYRING_SERVICE, &account)
+        .ok()
+        .and_then(|entry| entry.get_password().ok())
+}
 
-    fn set_password(&self, server_id: &str, password: &str) -> Result<(), String> {
-        let account = format!("ssh:{server_id}");
-        keyring::Entry::new(KEYRING_SERVICE, &account)
-            .map_err(|e| e.to_string())?
-            .set_password(password)
-            .map_err(|e| e.to_string())
-    }
+fn keyring_set(prefix: &str, server_id: &str, password: &str) -> Result<(), String> {
+    let account = format!("{prefix}:{server_id}");
+    keyring::Entry::new(KEYRING_SERVICE, &account)
+        .map_err(|e| e.to_string())?
+        .set_password(password)
+        .map_err(|e| e.to_string())
+}
 
-    fn delete_password(&self, server_id: &str) -> Result<(), String> {
-        let account = format!("ssh:{server_id}");
-        match keyring::Entry::new(KEYRING_SERVICE, &account) {
-            Ok(entry) => {
-                let _ = entry.delete_password();
-                Ok(())
-            }
-            Err(_) => Ok(()),
+fn keyring_delete(prefix: &str, server_id: &str) -> Result<(), String> {
+    let account = format!("{prefix}:{server_id}");
+    match keyring::Entry::new(KEYRING_SERVICE, &account) {
+        Ok(entry) => {
+            let _ = entry.delete_password();
+            Ok(())
         }
+        Err(_) => Ok(()),
     }
 }
 
-/// 内存 mock（测试用）。
+impl ServerCredentialStore for KeyringCredentialStore {
+    fn get_password(&self, server_id: &str) -> Option<String> {
+        keyring_get("ssh", server_id)
+    }
+
+    fn set_password(&self, server_id: &str, password: &str) -> Result<(), String> {
+        keyring_set("ssh", server_id, password)
+    }
+
+    fn delete_password(&self, server_id: &str) -> Result<(), String> {
+        keyring_delete("ssh", server_id)
+    }
+
+    fn get_sudo_password(&self, server_id: &str) -> Option<String> {
+        keyring_get("sudo", server_id)
+    }
+
+    fn set_sudo_password(&self, server_id: &str, password: &str) -> Result<(), String> {
+        keyring_set("sudo", server_id, password)
+    }
+
+    fn delete_sudo_password(&self, server_id: &str) -> Result<(), String> {
+        keyring_delete("sudo", server_id)
+    }
+}
+
+/// 内存 mock（测试用）。ssh / sudo 用同一张表,key 带前缀区分。
 #[derive(Default)]
 pub struct InMemoryCredentialStore {
     store: std::sync::Mutex<HashMap<String, String>>,
@@ -153,19 +187,36 @@ pub struct InMemoryCredentialStore {
 
 impl ServerCredentialStore for InMemoryCredentialStore {
     fn get_password(&self, server_id: &str) -> Option<String> {
-        self.store.lock().unwrap().get(server_id).cloned()
+        self.store.lock().unwrap().get(&format!("ssh:{server_id}")).cloned()
     }
 
     fn set_password(&self, server_id: &str, password: &str) -> Result<(), String> {
         self.store
             .lock()
             .unwrap()
-            .insert(server_id.to_string(), password.to_string());
+            .insert(format!("ssh:{server_id}"), password.to_string());
         Ok(())
     }
 
     fn delete_password(&self, server_id: &str) -> Result<(), String> {
-        self.store.lock().unwrap().remove(server_id);
+        self.store.lock().unwrap().remove(&format!("ssh:{server_id}"));
+        Ok(())
+    }
+
+    fn get_sudo_password(&self, server_id: &str) -> Option<String> {
+        self.store.lock().unwrap().get(&format!("sudo:{server_id}")).cloned()
+    }
+
+    fn set_sudo_password(&self, server_id: &str, password: &str) -> Result<(), String> {
+        self.store
+            .lock()
+            .unwrap()
+            .insert(format!("sudo:{server_id}"), password.to_string());
+        Ok(())
+    }
+
+    fn delete_sudo_password(&self, server_id: &str) -> Result<(), String> {
+        self.store.lock().unwrap().remove(&format!("sudo:{server_id}"));
         Ok(())
     }
 }
@@ -357,13 +408,15 @@ impl ServerManager {
             .map_err(|e| format!("写入私钥失败: {e}"))?;
         set_key_file_permissions(&key_path).await;
 
-        // 5. 档案切到 Key 认证；之前若存了密码就清掉（不再需要）。
+        // 5. 档案切到 Key 认证；SSH 登录不再需要密码,清掉 ssh 凭据避免残留。
+        //    但把这个登录密码挪存到 sudo 槽:绝大多数云主机 sudo 密码就是登录密码,
+        //    切成密钥登录后若不留着,远端装 docker 等提权操作就只能再弹框问一次。
+        //    这正是"密码登录 -> 自动配密钥后仍能找到密码"的来源。
         let key_path_str = key_path.to_string_lossy().into_owned();
         let mut updated = profile.clone();
         updated.auth_method = AuthMethod::Key;
         updated.private_key_path = Some(key_path_str);
-        // 生成的私钥未设 passphrase，rememberCredential 对 Key 模式没有密码要存，
-        // 保持原值即可；清掉旧密码凭据避免残留。
+        let _ = self.credentials.set_sudo_password(&profile.id, password);
         let _ = self.credentials.delete_password(&profile.id);
 
         let mut persisted = self.repo.load().await;
@@ -391,8 +444,23 @@ impl ServerManager {
         }
         self.repo.save(&all).await?;
         let _ = self.credentials.delete_password(id);
+        let _ = self.credentials.delete_sudo_password(id);
         self.hosts.write().await.remove(id);
         Ok(())
+    }
+
+    /// 取某服务器可用于 sudo 提权的密码,给 docker 安装等提权操作用。
+    /// 优先专门的 sudo 槽(密钥登录机器在这);没有就退回 SSH 登录密码(密码
+    /// 登录机器 sudo 密码通常与登录密码相同)。两个都没有返回 None。
+    pub fn sudo_password(&self, id: &str) -> Option<String> {
+        self.credentials
+            .get_sudo_password(id)
+            .or_else(|| self.credentials.get_password(id))
+    }
+
+    /// 记住某服务器的 sudo 密码(用户在弹框勾了"记住密码"时调用)。
+    pub fn remember_sudo_password(&self, id: &str, password: &str) -> Result<(), String> {
+        self.credentials.set_sudo_password(id, password)
     }
 
     /// 测试 SSH 连接：握手 + 认证 + 执行 `uname -a` 拿 OS 信息。

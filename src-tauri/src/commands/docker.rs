@@ -14,7 +14,8 @@
 
 use ncd_deploy::docker::{install_docker, render_compose, DockerCli};
 use ncd_domain::{
-    ContainerAction, ContainerInfo, DeployedContainer, DockerDeploySpec, DockerFlavor, DockerStatus,
+    ContainerAction, ContainerInfo, DeployedContainer, DockerDeploySpec, DockerFlavor,
+    DockerInstallReport, DockerInstallStatus, DockerStatus,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use tauri::State;
@@ -31,27 +32,42 @@ pub async fn docker_probe(
     Ok(DockerCli::new(host.as_ref()).probe().await)
 }
 
+/// 安装 docker。返回结构化 report 让前端按 status 分流:installed/alreadyInstalled
+/// 弹绿条;needSudoPassword 弹密码输入框;manualRequired 弹红条带手动指引。
+///
+/// sudo_password:前端弹框收集到的 sudo 密码。None 时后端自动从 keyring 找该服务器
+/// 的缓存密码(密码登录机器有,或密码登录后转密钥登录时保留下来的)。两边都没有
+/// 且远端确实需要密码时,返回 needSudoPassword 让前端弹框。
+/// remember_sudo:用户在弹框勾了"记住密码"。仅当本次显式传了 sudo_password 且安装
+/// 成功时,才把它写进 keyring(sudo 槽)。
 #[tauri::command]
 pub async fn docker_install(
     host_id: String,
+    sudo_password: Option<String>,
+    remember_sudo: Option<bool>,
     state: State<'_, AppState>,
-) -> Result<String, String> {
+) -> Result<DockerInstallReport, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let outcome = install_docker(host.as_ref())
+
+    // 密码来源:前端显式传入优先,否则用 keyring 缓存(远端服务器才有 server_id)。
+    let server_id = host_id.strip_prefix("remote:");
+    let effective_password = sudo_password.clone().or_else(|| {
+        server_id.and_then(|id| state.server_manager.sudo_password(id))
+    });
+
+    let report = install_docker(host.as_ref(), effective_password.as_deref())
         .await
-        .map_err(|e| format!("docker 安装失败: {e}"))?;
-    // 三种结果分流到 Ok / Err:能用的回 Ok 给前端弹成功条;需要用户手动介入
-    // (Ubuntu 缺免密 sudo 是最常见的一种)回 Err,前端据此弹醒目的失败条,
-    // 不会再被当成"装好了"而悄悄回到原样。
-    use ncd_deploy::docker::DockerInstallOutcome::*;
-    match outcome {
-        AlreadyInstalled { version } => Ok(format!("Docker 已就绪（{version}）")),
-        Installed => Ok("Docker 安装完成，现在可以部署容器了".to_string()),
-        ManualRequired { reason, download_url } => Err(match download_url {
-            Some(url) => format!("{reason}（下载: {url}）"),
-            None => reason,
-        }),
+        .map_err(|e| format!("Docker 安装失败: {e}"))?;
+
+    // 装成功且用户勾了"记住密码":把本次显式输入的密码存进 keyring。只存用户这次
+    // 亲手输入的(sudo_password),不把 keyring 里已有的回写一遍。
+    if report.status == DockerInstallStatus::Installed && remember_sudo == Some(true) {
+        if let (Some(id), Some(pw)) = (server_id, sudo_password.as_deref()) {
+            let _ = state.server_manager.remember_sudo_password(id, pw);
+        }
     }
+
+    Ok(report)
 }
 
 #[tauri::command]

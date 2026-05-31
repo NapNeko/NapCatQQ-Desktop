@@ -24,6 +24,6 @@ pub mod windows_stub;
 pub use connection::ConnectionConfig;
 pub use credentials::{SshCredentials, SshKey};
 pub use host_key::{HostKeyPolicy, KnownHostsStore};
-pub use linux::RemoteLinuxHost;
+pub use linux::{probe_sudo, RemoteLinuxHost, SudoAccess};
 pub use tunnel::{TunnelHandle, TunnelSpec};
 pub use windows_stub::RemoteWindowsHost;

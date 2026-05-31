@@ -287,6 +287,74 @@ impl ContainerAction {
     }
 }
 
+/// docker_install 命令回给前端的结构化结果。
+///
+/// 不再裸返回一句 String:前端要靠 status 区分"装好了弹绿条""需要 sudo 密码弹
+/// 输入框""彻底装不了弹红条",光凭文案没法可靠分流。message 是给用户看的人话,
+/// download_url 仅 Windows/macOS 引导手动装时给下载入口。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct DockerInstallReport {
+    /// 本次安装尝试的结果分类。
+    pub status: DockerInstallStatus,
+    /// 给用户展示的人话文案(成功提示 / 失败原因 / 需要密码的说明)。
+    pub message: String,
+    /// 可选下载入口(Windows/macOS 不能静默装时给 Docker Desktop 链接)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_url: Option<String>,
+}
+
+/// docker_install 的结果分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum DockerInstallStatus {
+    /// 早就装好且 daemon 在跑,这次没动手。
+    AlreadyInstalled,
+    /// 这次成功装上了。
+    Installed,
+    /// 远端是密钥登录、keyring 里也没缓存密码,sudo 又要密码:需要前端弹框
+    /// 向用户要 sudo 密码后带着重试。这是唯一一个前端要弹输入框的分支。
+    NeedSudoPassword,
+    /// 装不了,需要用户去远端手动处理(非 Linux 平台、脚本跑完仍探不到等)。
+    ManualRequired,
+}
+
+impl DockerInstallReport {
+    pub fn already_installed(version: &str) -> Self {
+        Self {
+            status: DockerInstallStatus::AlreadyInstalled,
+            message: format!("Docker 已就绪（{version}）"),
+            download_url: None,
+        }
+    }
+
+    pub fn installed() -> Self {
+        Self {
+            status: DockerInstallStatus::Installed,
+            message: "Docker 安装完成，现在可以部署容器了".to_string(),
+            download_url: None,
+        }
+    }
+
+    pub fn need_sudo_password(message: impl Into<String>) -> Self {
+        Self {
+            status: DockerInstallStatus::NeedSudoPassword,
+            message: message.into(),
+            download_url: None,
+        }
+    }
+
+    pub fn manual_required(message: impl Into<String>, download_url: Option<String>) -> Self {
+        Self {
+            status: DockerInstallStatus::ManualRequired,
+            message: message.into(),
+            download_url,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
