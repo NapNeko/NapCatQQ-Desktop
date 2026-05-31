@@ -87,18 +87,29 @@
     }
 }
 
-/* InfoBar 进场：从右上轻滑入并淡入。
-   滑入距离 12px 比常见 24px 克制，搭配 cubic-bezier(0.2,0.7,0.2,1)
-   能有"贴住"的手感，不抢主内容焦点。 */
-@keyframes infobar-in {
-    0% {
-        opacity: 0;
-        transform: translateX(12px) scale(0.985);
-    }
+/* InfoBar 进场动画已迁移到 framer-motion + useMotion(),原 @keyframes infobar-in
+   不再使用,删除避免误用。
+   TabsContent 切换也已迁移到 framer + AnimatePresence,原 tabcontent-fade 也已移除。 */
 
+/* Shimmer 扫光:rich 档骨架卡片用。背景已经被业务侧以 200% 100% 拉宽,
+   这里只负责把 background-position 从 -100% 推到 100%。 */
+@keyframes shimmer-sweep {
+    0% {
+        background-position: 200% 0;
+    }
     100% {
+        background-position: -200% 0;
+    }
+}
+
+/* 角落柔光呼吸:rich 档启用,通过 .ndf-canvas-glow.is-breathing 类启用。
+   只在 BootstrapPanel mount 时附加这个类,避免全 App 常驻渲染。 */
+@keyframes glow-breath {
+    0%, 100% {
+        opacity: 0.85;
+    }
+    50% {
         opacity: 1;
-        transform: translateX(0) scale(1);
     }
 }
 
@@ -145,6 +156,19 @@ samp,
         radial-gradient(70% 50% at -5% -10%, color-mix(in srgb, var(--accent-300) 38%, transparent), transparent 60%),
         radial-gradient(70% 50% at 105% -10%, color-mix(in srgb, var(--blue-500) 22%, transparent), transparent 60%),
         radial-gradient(80% 60% at 50% 110%, color-mix(in srgb, var(--brand-300) 16%, transparent), transparent 60%);
+}
+
+/* rich 档独享:角落柔光呼吸。BootstrapPanel.next mount 时把 is-breathing 类
+   加到根 .ndf-canvas-glow,8s 一轮缓慢呼吸 opacity 0.85↔1。
+   prefers-reduced-motion 命中时浏览器会自动暂停 animation。 */
+.ndf-canvas-glow.is-breathing {
+    animation: glow-breath 8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-canvas-glow.is-breathing {
+        animation: none;
+    }
 }
 
 /* 暖色低对比 scrollbar */

@@ -18,6 +18,7 @@
 // 批量模式下整行变 selectable，左侧出复选框。
 
 import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     Activity,
     AlertTriangle,
@@ -44,6 +45,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from '../../../../shared/ui';
+import { useMotion } from '../../../../hooks/preferences/useMotion';
 import type {
     BotActorSnapshot,
     DaemonState,
@@ -400,52 +402,61 @@ export function BotCard({
                         </div>
                     </div>
 
-                    {/* 操作区 */}
+                    {/* 操作区。用 AnimatePresence + layout 让按钮按状态进退场:
+                        - 扫码按钮仅 hasQrcode 时存在
+                        - Play / Square 互换走 mode="popLayout" 同位置切换
+                        - 日志 / WebUI 仅 running / starting 时存在
+                        每个按钮带稳定 key 让 framer 跟踪。 */}
                     {!isBatchMode && (
-                        <div
+                        <motion.div
                             className="flex shrink-0 items-center gap-1"
                             onClick={(e) => e.stopPropagation()}
+                            layout
                         >
-                            {hasQrcode && (
-                                <IconButton
-                                    tooltip="扫码登录"
-                                    onClick={() => setQrOpen(true)}
-                                    tone="brand"
-                                >
-                                    <QrCode size={16} strokeWidth={2.2} />
-                                </IconButton>
-                            )}
-                            {isBotRunning(bot.state) || isBotStarting(bot.state) ? (
-                                <IconButton
-                                    tooltip="停止 Bot"
-                                    onClick={stopAction(() => onStop(bot.bot_id))}
-                                    disabled={!canStopBot(bot.state)}
-                                    tone="danger"
-                                >
-                                    <Square size={14} strokeWidth={2.6} />
-                                </IconButton>
-                            ) : (
-                                <IconButton
-                                    tooltip="启动 Bot"
-                                    onClick={stopAction(() => onStart(bot.bot_id))}
-                                    disabled={!canStartBot(bot.state)}
-                                    tone="success"
-                                >
-                                    <Play size={14} strokeWidth={2.6} />
-                                </IconButton>
-                            )}
-                            {/* 日志 / WebUI 按钮只在运行态（含启动 / 停止过渡）显示。
-                                stopped 时这俩没意义：进程不在，日志看不动，WebUI
-                                也连不上。让按钮区随状态收缩，避免按了之后没反应。 */}
-                            {(isBotRunning(bot.state) || isBotStarting(bot.state)) && (
-                                <>
+                            <AnimatePresence mode="popLayout" initial={false}>
+                                {hasQrcode && (
                                     <IconButton
+                                        key="qr"
+                                        tooltip="扫码登录"
+                                        onClick={() => setQrOpen(true)}
+                                        tone="brand"
+                                    >
+                                        <QrCode size={16} strokeWidth={2.2} />
+                                    </IconButton>
+                                )}
+                                {isBotRunning(bot.state) || isBotStarting(bot.state) ? (
+                                    <IconButton
+                                        key="stop"
+                                        tooltip="停止 Bot"
+                                        onClick={stopAction(() => onStop(bot.bot_id))}
+                                        disabled={!canStopBot(bot.state)}
+                                        tone="danger"
+                                    >
+                                        <Square size={14} strokeWidth={2.6} />
+                                    </IconButton>
+                                ) : (
+                                    <IconButton
+                                        key="start"
+                                        tooltip="启动 Bot"
+                                        onClick={stopAction(() => onStart(bot.bot_id))}
+                                        disabled={!canStartBot(bot.state)}
+                                        tone="success"
+                                    >
+                                        <Play size={14} strokeWidth={2.6} />
+                                    </IconButton>
+                                )}
+                                {(isBotRunning(bot.state) || isBotStarting(bot.state)) && (
+                                    <IconButton
+                                        key="logs"
                                         tooltip="查看日志"
                                         onClick={stopAction(() => onViewLogs(bot.bot_id))}
                                     >
                                         <FileText size={14} strokeWidth={2.2} />
                                     </IconButton>
+                                )}
+                                {(isBotRunning(bot.state) || isBotStarting(bot.state)) && (
                                     <IconButton
+                                        key="webui"
                                         tooltip={webuiTip}
                                         disabled={!webuiAvailable}
                                         onClick={stopAction(() =>
@@ -458,15 +469,16 @@ export function BotCard({
                                     >
                                         <Globe size={14} strokeWidth={2.2} />
                                     </IconButton>
-                                </>
-                            )}
-                            <IconButton
-                                tooltip="配置"
-                                onClick={stopAction(() => onConfigure(bot.bot_id))}
-                            >
-                                <Settings size={14} strokeWidth={2.2} />
-                            </IconButton>
-                        </div>
+                                )}
+                                <IconButton
+                                    key="config"
+                                    tooltip="配置"
+                                    onClick={stopAction(() => onConfigure(bot.bot_id))}
+                                >
+                                    <Settings size={14} strokeWidth={2.2} />
+                                </IconButton>
+                            </AnimatePresence>
+                        </motion.div>
                     )}
                 </div>
 
@@ -768,11 +780,28 @@ function IconButton({
     tone = 'neutral',
     children,
 }: IconButtonProps) {
+    const m = useMotion();
+    // 进退场:scale + opacity 轻弹入,适合按钮"出现消失"的局部场景。
+    // AnimatePresence 通过元素 key 跟踪,这里不需要额外 motionKey prop。
+    const enter = m.enabled
+        ? {
+              initial: { opacity: 0, scale: 0.7 },
+              animate: { opacity: 1, scale: 1 },
+              exit: { opacity: 0, scale: 0.7, transition: { duration: 0.12 } },
+          }
+        : {};
     return (
         <Tooltip>
             <TooltipTrigger asChild>
-                <button
+                <motion.button
                     type="button"
+                    layout
+                    {...enter}
+                    transition={m.transition(
+                        m.preset.bouncyOvershoot > 1 ? 'bouncy' : 'spring',
+                    )}
+                    whileHover={m.enabled ? { scale: m.preset.hoverScale } : undefined}
+                    whileTap={m.enabled ? { scale: m.preset.tapScale } : undefined}
                     onClick={onClick}
                     disabled={disabled}
                     className={cn(
@@ -787,7 +816,7 @@ function IconButton({
                     )}
                 >
                     {children}
-                </button>
+                </motion.button>
             </TooltipTrigger>
             <TooltipContent>{tooltip}</TooltipContent>
         </Tooltip>

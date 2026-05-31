@@ -6,10 +6,11 @@
 // 位置：默认 fixed top-right 贴 TitleBar 下方（top: 64px 让出 48px 窗口控件高度
 // + 一点 buffer），堆叠方向自上而下。可通过 className 覆盖。
 //
-// 为什么不用 React portal createPortal：当前 AppShell 已经 z-30 标题栏 +
-// z-10 主区，fixed 元素 z-index 50 已经够用，没必要专门引入 portal 节点。
+// 退场动画:外层用 AnimatePresence,onDismiss 回调由父级把对应 id 从 list 移除,
+// list 变短 → AnimatePresence 跑 InfoBar 的 exit variant。
 
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { InfoBar, type InfoBarProps } from './InfoBar';
 import { cn } from '../utils/cn';
@@ -46,13 +47,15 @@ export function InfoBarStack({
                 className,
             )}
         >
-            {items.map((item) => (
-                <InfoBar
-                    key={item.id}
-                    {...item}
-                    onDismiss={() => onDismiss(item.id)}
-                />
-            ))}
+            <AnimatePresence initial={true}>
+                {items.map((item) => (
+                    <InfoBar
+                        key={item.id}
+                        {...item}
+                        onDismiss={() => onDismiss(item.id)}
+                    />
+                ))}
+            </AnimatePresence>
             {children}
         </div>
     );

@@ -14,6 +14,7 @@
 
 import React, { useState } from 'react';
 import { Server, RefreshCw, Plus, Eye, EyeOff } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
 import {
     Dialog,
@@ -23,6 +24,9 @@ import {
     DialogDescription,
     DialogFooter,
 } from '../../shared/ui';
+import { ListItem } from '../../shared/ui/motion';
+import { useMotion } from '../../hooks/preferences/useMotion';
+import { listContainerVariants } from '../../core/design/motion';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { ServerCard } from './ServerCard';
@@ -135,30 +139,16 @@ export const RemoteHostPanelNext: React.FC = () => {
                 ) : servers.length === 0 ? (
                     <EmptyState onCreate={openAdd} />
                 ) : (
-                    <div
-                        className="grid gap-3"
-                        style={{
-                            gridTemplateColumns:
-                                'repeat(auto-fill, minmax(min(360px, 100%), 1fr))',
-                        }}
-                    >
-                        {servers.map((server) => (
-                            <ServerCard
-                                key={server.id}
-                                server={server}
-                                isTesting={isTesting && testingId === server.id}
-                                revealIp={revealIp}
-                                onTest={(pw) => handleTest(server.id, pw)}
-                                onEdit={() => openEdit(server)}
-                                onSetupKey={
-                                    server.authMethod === 'password'
-                                        ? () => setKeyAuthTarget(server)
-                                        : undefined
-                                }
-                                onDelete={() => deleteServer(server.id)}
-                            />
-                        ))}
-                    </div>
+                    <ServerGrid
+                        servers={servers}
+                        isTesting={isTesting}
+                        testingId={testingId}
+                        revealIp={revealIp}
+                        handleTest={handleTest}
+                        openEdit={openEdit}
+                        setKeyAuthTarget={setKeyAuthTarget}
+                        deleteServer={deleteServer}
+                    />
                 )}
             </div>
 
@@ -208,6 +198,61 @@ export const RemoteHostPanelNext: React.FC = () => {
 };
 
 // ─── 子件 ──────────────────────────────────────────────────────────────
+
+/// 服务器卡片网格 + stagger 进出场动画。卡片删除时走 ListItem 的 exit。
+function ServerGrid({
+    servers,
+    isTesting,
+    testingId,
+    revealIp,
+    handleTest,
+    openEdit,
+    setKeyAuthTarget,
+    deleteServer,
+}: {
+    servers: ServerProfile[];
+    isTesting: boolean;
+    testingId: string | null;
+    revealIp: boolean;
+    handleTest: (id: string, pw?: string) => void;
+    openEdit: (s: ServerProfile) => void;
+    setKeyAuthTarget: (s: ServerProfile | null) => void;
+    deleteServer: (id: string) => void;
+}) {
+    const m = useMotion();
+    return (
+        <motion.div
+            className="grid gap-3"
+            style={{
+                gridTemplateColumns:
+                    'repeat(auto-fill, minmax(min(360px, 100%), 1fr))',
+            }}
+            variants={listContainerVariants(m.preset.stagger)}
+            initial="initial"
+            animate="animate"
+        >
+            <AnimatePresence initial={false}>
+                {servers.map((server) => (
+                    <ListItem key={server.id} layout hoverable>
+                        <ServerCard
+                            server={server}
+                            isTesting={isTesting && testingId === server.id}
+                            revealIp={revealIp}
+                            onTest={(pw) => handleTest(server.id, pw)}
+                            onEdit={() => openEdit(server)}
+                            onSetupKey={
+                                server.authMethod === 'password'
+                                    ? () => setKeyAuthTarget(server)
+                                    : undefined
+                            }
+                            onDelete={() => deleteServer(server.id)}
+                        />
+                    </ListItem>
+                ))}
+            </AnimatePresence>
+        </motion.div>
+    );
+}
 
 function LoadingState() {
     return (

@@ -4,6 +4,7 @@
 // 简单 useState 路由（6 主路由 + 1 dev showcase）。
 
 import React, { useEffect, useState } from 'react';
+import { AnimatePresence, MotionConfig } from 'framer-motion';
 import './index.css';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
@@ -24,6 +25,8 @@ import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployPr
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { applySideEffects as applyPreferences } from '../hooks/preferences/preferencesStore';
+import { useMotion } from '../hooks/preferences/useMotion';
+import { PageTransition } from '../shared/ui/motion';
 
 // Showcase 是 dev-only 的原子件预览页。只在 Vite 开发构建（npm run
 // tauri:dev / dev）显示侧栏入口；正式 build 的 exe 里 import.meta.env.DEV
@@ -81,8 +84,18 @@ export const AppNext: React.FC = () => {
         }
     }, [showDocker, route]);
 
+    // 全局动画环境。MotionConfig 把 reducedMotion 提示和 transition 默认值
+    // 灌到整棵子树,业务里的 motion.* 没显式传 transition 时走这里的默认。
+    // reducedMotion='always' 时 framer 会自动把所有 transform 关键帧替成 opacity,
+    // 我们再叠一层 useMotion().enabled = false 时强制 duration 0,双保险。
+    const motion = useMotion();
+
     return (
         <TooltipProvider>
+            <MotionConfig
+                reducedMotion={motion.reduced ? 'always' : 'never'}
+                transition={motion.transition('base')}
+            >
             <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas">
                 {/* 主体行：Sidebar 从 y=0 开始顶到头，
                     TitleBar 浮在右侧顶端，和 sidebar header 同一水平面 */}
@@ -97,8 +110,19 @@ export const AppNext: React.FC = () => {
                     />
 
                     <div className="relative flex flex-1 flex-col overflow-hidden">
-                        {/* 角落柔光只覆盖右侧主内容区，不污染 sidebar */}
-                        <div className="ndf-canvas-glow" />
+                        {/* 角落柔光只覆盖右侧主内容区，不污染 sidebar。
+                            rich 档 + 当前在 overview 时叠 is-breathing 8s 呼吸,
+                            其它页面/档位维持静态以避免常驻 GPU 占用。 */}
+                        <div
+                            className={
+                                'ndf-canvas-glow' +
+                                (motion.preset.bouncyOvershoot > 1 &&
+                                    motion.enabled &&
+                                    route === 'overview'
+                                    ? ' is-breathing'
+                                    : '')
+                            }
+                        />
 
                         <CustomTitleBar />
 
@@ -121,11 +145,22 @@ export const AppNext: React.FC = () => {
                     pushInfoBar / useGlobalInfoBars().push 都汇集到这一处渲染。 */}
                 <InfoBarStack items={bars} onDismiss={dismiss} />
             </div>
+            </MotionConfig>
         </TooltipProvider>
     );
 };
 
 const RouteOutlet: React.FC<{ route: AppRoute }> = ({ route }) => {
+    return (
+        <AnimatePresence mode="wait" initial={false}>
+            <PageTransition key={route} className="flex min-h-0 flex-1 flex-col">
+                <RouteContent route={route} />
+            </PageTransition>
+        </AnimatePresence>
+    );
+};
+
+const RouteContent: React.FC<{ route: AppRoute }> = ({ route }) => {
     switch (route) {
         case 'overview':
             return <BootstrapPanelNext />;

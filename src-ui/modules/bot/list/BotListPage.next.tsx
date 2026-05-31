@@ -12,6 +12,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
     Button,
     Dialog,
@@ -21,6 +22,9 @@ import {
     DialogTitle,
     Spinner,
 } from '../../../shared/ui';
+import { ListItem } from '../../../shared/ui/motion';
+import { useMotion } from '../../../hooks/preferences/useMotion';
+import { listContainerVariants } from '../../../core/design/motion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
 import { useBotBatchSelection } from '../../../hooks/bot/useBotBatchSelection';
@@ -196,72 +200,49 @@ export function BotListPageNext({
                 ) : botSnapshots.length === 0 ? (
                     <EmptyState onCreate={() => onConfigureBot(null)} />
                 ) : (
-                    <div className="flex flex-col gap-3">
-                        {botSnapshots.map((bot) => {
-                            const flavor = flavorByBot[bot.bot_id] ?? null;
-                            const config = configByBot[bot.bot_id] ?? null;
-                            const napcatBot = napcat.byBot[bot.bot_id];
-                            const snowlumaBot = snowluma.byBot[bot.bot_id];
-                            return (
-                                <BotCard
-                                    key={bot.bot_id}
-                                    bot={bot}
-                                    config={config}
-                                    flavor={flavor}
-                                    qrcodeUrl={napcatBot?.qrcodeUrl ?? null}
-                                    isOnline={napcatBot?.online ?? null}
-                                    invalidationReason={napcatBot?.invalidationReason ?? null}
-                                    napcatBinding={napcatBot?.webui ?? null}
-                                    snowlumaDaemonState={snowluma.daemonState}
-                                    snowlumaInjected={snowlumaBot?.injected ?? false}
-                                    snowlumaUin={snowlumaBot?.uin ?? null}
-                                    snowlumaLoginState={snowlumaBot?.loginState ?? null}
-                                    isBatchMode={batch.isBatchMode}
-                                    isSelected={batch.selectedIds.has(bot.bot_id)}
-                                    onStart={handleStartBot}
-                                    onStop={mutations.stopBot}
-                                    onConfigure={onConfigureBot}
-                                    onViewLogs={onViewLogs}
-                                    onToggleSelect={batch.toggleSelect}
-                                    onOpenWebui={(params) => {
-                                        openWebui(params).catch((err: unknown) => {
-                                            pushInfoBar({
-                                                key: `webui-open:${params.botId}`,
-                                                tone: 'danger',
-                                                title: '打开 WebUI 失败',
-                                                content: String(err),
-                                            });
-                                        });
-                                    }}
-                                />
-                            );
-                        })}
-                    </div>
+                    <BotListGrid
+                        bots={botSnapshots}
+                        flavorByBot={flavorByBot}
+                        configByBot={configByBot}
+                        napcat={napcat}
+                        snowluma={snowluma}
+                        batch={batch}
+                        mutations={mutations}
+                        openWebui={openWebui}
+                        onConfigureBot={onConfigureBot}
+                        onViewLogs={onViewLogs}
+                        onStartBot={handleStartBot}
+                    />
                 )}
             </div>
 
-            {/* 浮动操作组（互斥） */}
-            <FloatingActions
-                hidden={batch.isBatchMode}
-                busy={mutations.isPending}
-                onCreate={() => onConfigureBot(null)}
-                onRefresh={() => refetch()}
-                onEnterBatch={batch.toggleBatch}
-            />
-            {batch.isBatchMode && (
-                <BatchBottomBar
-                    selectedCount={batch.selectedIds.size}
-                    totalCount={botSnapshots.length}
-                    allSelected={allSelected}
-                    onSelectAll={selectAll}
-                    onSelectNone={selectNone}
-                    onBatchStart={onBatchStart}
-                    onBatchStop={onBatchStop}
-                    onBatchDelete={() => setConfirmDeleteOpen(true)}
-                    onExitBatch={batch.toggleBatch}
-                    busy={mutations.isPending}
-                />
-            )}
+            {/* 浮动操作组(互斥):FloatingActions / BatchBottomBar 切换走 AnimatePresence,
+                避免互换瞬变,保持视觉连贯。 */}
+            <AnimatePresence mode="wait" initial={false}>
+                {batch.isBatchMode ? (
+                    <BatchBottomBar
+                        key="batch"
+                        selectedCount={batch.selectedIds.size}
+                        totalCount={botSnapshots.length}
+                        allSelected={allSelected}
+                        onSelectAll={selectAll}
+                        onSelectNone={selectNone}
+                        onBatchStart={onBatchStart}
+                        onBatchStop={onBatchStop}
+                        onBatchDelete={() => setConfirmDeleteOpen(true)}
+                        onExitBatch={batch.toggleBatch}
+                        busy={mutations.isPending}
+                    />
+                ) : (
+                    <FloatingActions
+                        key="floating"
+                        busy={mutations.isPending}
+                        onCreate={() => onConfigureBot(null)}
+                        onRefresh={() => refetch()}
+                        onEnterBatch={batch.toggleBatch}
+                    />
+                )}
+            </AnimatePresence>
 
             {/* 批量删除确认 */}
             <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
@@ -341,5 +322,94 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
                 创建第一个实例
             </Button>
         </div>
+    );
+}
+
+/// Bot 列表带 stagger + 进退场动画。从主组件抽出来,避免在 render 中写一大段
+/// motion 逻辑。stagger 由档位 preset 提供;优雅档 stagger=0 退化为同步进场。
+type GridProps = {
+    bots: ReturnType<typeof useBotSnapshots>['data'] extends infer T
+        ? T extends readonly (infer U)[]
+            ? U[]
+            : never
+        : never;
+    flavorByBot: ReturnType<typeof useBotFlavorMap>;
+    configByBot: ReturnType<typeof useBotConfigsMap>;
+    napcat: ReturnType<typeof useNapcatLogin>;
+    snowluma: ReturnType<typeof useSnowlumaState>;
+    batch: ReturnType<typeof useBotBatchSelection>;
+    mutations: ReturnType<typeof useBotMutations>;
+    openWebui: ReturnType<typeof useOpenWebui>;
+    onConfigureBot: (botId: string | null) => void;
+    onViewLogs: (botId: string) => void;
+    onStartBot: (botId: string) => void;
+};
+
+function BotListGrid({
+    bots,
+    flavorByBot,
+    configByBot,
+    napcat,
+    snowluma,
+    batch,
+    mutations,
+    openWebui,
+    onConfigureBot,
+    onViewLogs,
+    onStartBot,
+}: GridProps) {
+    const m = useMotion();
+    const container = listContainerVariants(m.preset.stagger);
+
+    return (
+        <motion.div
+            className="flex flex-col gap-3"
+            variants={container}
+            initial="initial"
+            animate="animate"
+        >
+            <AnimatePresence initial={false}>
+                {bots.map((bot) => {
+                    const flavor = flavorByBot[bot.bot_id] ?? null;
+                    const config = configByBot[bot.bot_id] ?? null;
+                    const napcatBot = napcat.byBot[bot.bot_id];
+                    const snowlumaBot = snowluma.byBot[bot.bot_id];
+                    return (
+                        <ListItem key={bot.bot_id} layout hoverable>
+                            <BotCard
+                                bot={bot}
+                                config={config}
+                                flavor={flavor}
+                                qrcodeUrl={napcatBot?.qrcodeUrl ?? null}
+                                isOnline={napcatBot?.online ?? null}
+                                invalidationReason={napcatBot?.invalidationReason ?? null}
+                                napcatBinding={napcatBot?.webui ?? null}
+                                snowlumaDaemonState={snowluma.daemonState}
+                                snowlumaInjected={snowlumaBot?.injected ?? false}
+                                snowlumaUin={snowlumaBot?.uin ?? null}
+                                snowlumaLoginState={snowlumaBot?.loginState ?? null}
+                                isBatchMode={batch.isBatchMode}
+                                isSelected={batch.selectedIds.has(bot.bot_id)}
+                                onStart={onStartBot}
+                                onStop={mutations.stopBot}
+                                onConfigure={onConfigureBot}
+                                onViewLogs={onViewLogs}
+                                onToggleSelect={batch.toggleSelect}
+                                onOpenWebui={(params) => {
+                                    openWebui(params).catch((err: unknown) => {
+                                        pushInfoBar({
+                                            key: `webui-open:${params.botId}`,
+                                            tone: 'danger',
+                                            title: '打开 WebUI 失败',
+                                            content: String(err),
+                                        });
+                                    });
+                                }}
+                            />
+                        </ListItem>
+                    );
+                })}
+            </AnimatePresence>
+        </motion.div>
     );
 }

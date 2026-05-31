@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { Save, AlertCircle, Check } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Button, Spinner } from '../../shared/ui';
 import { usePreferences } from '../../hooks/preferences/preferencesStore';
 import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';

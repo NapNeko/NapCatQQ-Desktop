@@ -10,7 +10,11 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Loader2, RefreshCw } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '../../shared/ui';
+import { ListItem } from '../../shared/ui/motion';
+import { useMotion } from '../../hooks/preferences/useMotion';
+import { listContainerVariants } from '../../core/design/motion';
 import { useDocker } from '../../hooks/docker/useDocker';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
@@ -104,6 +108,7 @@ const ContainerList: React.FC<{
     docker: ReturnType<typeof useDocker>;
     onViewLogs: (name: string) => void;
 }> = ({ docker, onViewLogs }) => {
+    const m = useMotion();
     if (docker.isLoadingList) {
         return (
             <div className="flex items-center gap-2 rounded-md bg-inset/40 p-6 text-text-tertiary">
@@ -124,20 +129,26 @@ const ContainerList: React.FC<{
         );
     }
     return (
-        <div
+        <motion.div
             className="grid gap-3"
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))' }}
+            variants={listContainerVariants(m.preset.stagger)}
+            initial="initial"
+            animate="animate"
         >
-            {docker.containers.map((c) => (
-                <ContainerCard
-                    key={c.id}
-                    container={c}
-                    isActing={docker.isActing}
-                    onAction={(action) => docker.containerAction({ name: c.name, action })}
-                    onViewLogs={() => onViewLogs(c.name)}
-                />
-            ))}
-        </div>
+            <AnimatePresence initial={false}>
+                {docker.containers.map((c) => (
+                    <ListItem key={c.id} layout hoverable>
+                        <ContainerCard
+                            container={c}
+                            isActing={docker.isActing}
+                            onAction={(action) => docker.containerAction({ name: c.name, action })}
+                            onViewLogs={() => onViewLogs(c.name)}
+                        />
+                    </ListItem>
+                ))}
+            </AnimatePresence>
+        </motion.div>
     );
 };
 

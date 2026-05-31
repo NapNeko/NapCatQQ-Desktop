@@ -1,11 +1,16 @@
-// 通用 Tab。两类设置混排但语义分明：
-//   - 上半：纯客户端偏好（主题 / 吉祥物 / 关闭行为），切换即时生效。
-//   - 下半：后端持久化设置（Bot 登录检查间隔 / 性能监控），改动进草稿，底部保存条落盘。
+// 通用 Tab。两类设置混排但语义分明:
+//   - 上半:纯客户端偏好(主题 / 吉祥物 / 动画档位与速度 / 关闭行为),切换即时生效。
+//   - 下半:后端持久化设置(Bot 登录检查间隔 / 性能监控),改动进草稿,底部保存条落盘。
 
 import { preferencesStore, type AppPreferences } from '../../../hooks/preferences/preferencesStore';
 import type { BackendSettings } from '../../../core/services/settings.service';
 import { NumberField, Select, Switch } from '../../../shared/ui';
-import { FieldRow, ThemeSegment } from '../_shared';
+import {
+    FieldRow,
+    MotionLevelSegment,
+    MotionSpeedSlider,
+    ThemeSegment,
+} from '../_shared';
 
 interface Props {
     prefs: AppPreferences;
@@ -24,6 +29,38 @@ export function GeneralTab({ prefs, draft, patchDraft }: Props) {
                 <Switch
                     checked={prefs.showMascot}
                     onCheckedChange={preferencesStore.setShowMascot}
+                />
+            </FieldRow>
+
+            <FieldRow
+                label="动画与体感"
+                description="总开关。关闭后所有过渡动画退化为瞬时显示。系统级「减少动画」会自动覆盖此设置。"
+            >
+                <Switch
+                    checked={prefs.motionEnabled}
+                    onCheckedChange={preferencesStore.setMotionEnabled}
+                />
+            </FieldRow>
+
+            <FieldRow
+                label="动画档位"
+                description="优雅 仅淡入淡出 · 标准 含轻 spring · 丰富 按钮弹性 + 卡片浮起 + 状态点呼吸 + 数字滚动"
+            >
+                <MotionLevelSegment
+                    value={prefs.motionLevel}
+                    onChange={preferencesStore.setMotionLevel}
+                    disabled={!prefs.motionEnabled}
+                />
+            </FieldRow>
+
+            <FieldRow
+                label="动画速度"
+                description="0.5x 慢一点更克制；1.5x 快一点更利落。切换档位、滑动按钮都能立即感受到。"
+            >
+                <MotionSpeedSlider
+                    value={prefs.motionSpeed}
+                    onChange={preferencesStore.setMotionSpeed}
+                    disabled={!prefs.motionEnabled}
                 />
             </FieldRow>
 

@@ -249,3 +249,42 @@ React 端用法统一：
 - 多个 hook 各自 `eventStreamService.subscribe` 同一种事件 —— 重复订阅且各自 reducer 状态不一致
 - 把 linger / autoDismiss 计时器写在组件 effect 里 —— 组件卸载时计时器被 cleanup。计时器应该和 state 一起放在 store 模块作用域（`Map<id, Timer>`）
 - `setState({ ...current, foo: 1 })` 每次都新对象 —— 工厂内部已经做引用相等短路，直接传新对象就行；但 reducer 端如果数据没变要返回 `current` 本体让短路生效
+
+## 11. 动画体系（motion）
+
+统一框架 framer-motion + Tailwind v4，三档语义 + 速度滑块 + reduced-motion 兜底。所有过渡走这套，禁止再在业务代码里手写 `transition` / `@keyframes`（Spinner / progress-indeterminate / shimmer-sweep / glow-breath 这几个全局常量除外）。
+
+档位语义（`core/design/motion.ts` 的 `motionPresets`）：
+- `elegant` 优雅：base 160ms，仅 fade，无 spring 弹性，hover/tap 不缩放，列表无 stagger
+- `standard` 标准（默认）：base 200ms，fade + slide-y 4px + 轻 spring，按钮 hover 1.02 / tap 0.96
+- `rich` 丰富：base 240ms，按钮 QQ 弹（spring stiff 600 / damp 14 + 反弹超调 1.04）+ 卡片 hover lift 2px + 状态点呼吸 + 数字 rolling + 角落柔光 8s 呼吸（仅 overview 页）
+
+速度倍率 `motionSpeed`（0.5x ~ 1.5x）在档位 baseline 上再乘一次。`useReducedMotion()` 命中或 `motionEnabled=false` 时强制 `duration: 0` 且禁 spring，双保险。
+
+读偏好统一入口：`hooks/preferences/useMotion.ts`。返回 `{ level, speed, reduced, enabled, transition(kind), preset }`。业务从这里取 `transition('base'|'slow'|'spring'|'bouncy')`，不要自己 `getTransition()` 也不要直接读 store 数值。
+
+motion 原子件目录 `shared/ui/motion/`：
+- `PageTransition` 路由级 fade + slide-y（`AppNext.tsx` 的 RouteOutlet 已接）
+- `ListItem` 列表项进退场 + 可选 hoverable 上抬。父级要包 `<motion.div variants={listContainerVariants(stagger)}>` + `<AnimatePresence>`
+- `MotionCard` 给 `Card` 加 hover lift 的 wrapper（多用于独立卡片；列表里用 `ListItem hoverable` 即可）
+- `StatusDot` running/loading 态呼吸状态点
+- `Counter` rich 档启用的数字 rolling
+- `Shimmer` rich 档 skeleton 扫光（loading 替代 Spinner）
+
+接入约定：
+- 路由切换 ✓ AppNext RouteOutlet
+- 列表 stagger ✓ BotListPage / DockerPage / RemoteHostPanel（用 listContainerVariants + ListItem layout hoverable）
+- 按钮弹性 ✓ 直接改了 `Button.tsx` 内部，所有 Button 自动获得（`flat=true` 关闭）
+- Dialog 进退场 ✓ `Dialog.tsx` 重写为 framer + AnimatePresence。注意：之前用的 `tailwindcss-animate` 类（`animate-in / fade-in-0 / zoom-in-95`）项目从未装这个插件，那些类是失效的。
+- InfoBar 进退场 ✓ `InfoBar.tsx` + `InfoBarStack.tsx` 包 AnimatePresence
+- 角落柔光呼吸 ✓ AppNext 在 rich 档 + overview 路由时加 `is-breathing`
+- 设置接线 ✓ `GeneralTab.tsx` + `MotionPreviewCard` 实时预览
+
+性能红线：
+- 全部走 transform / opacity，禁动 width / height / margin（layout 触发 reflow）
+- 列表 ListItem 必带 `key`，`layout` prop 仅在需要排序滑动时开
+- 角落柔光呼吸只在 overview 路由跑（CSS animation，路由切走 DOM 卸载即停）
+- Dialog 用 forceMount + 自管 open context；不要在 Radix `<Dialog open>` 之外再缠一层条件渲染
+- 多个 motion 嵌套要么共享 layoutId，要么外层不开 transform（否则 GPU 矩阵叠加）
+
+设置页：`prefs.motionEnabled / motionLevel / motionSpeed`（preferencesStore，localStorage 兼容旧值无字段时落默认）。`MotionLevelSegment` + `MotionSpeedSlider` 在 `_shared.tsx`。修改 useMotion 读偏好的内部实现时，记得同步 `MotionPreviewCard` 的预览效果对齐。

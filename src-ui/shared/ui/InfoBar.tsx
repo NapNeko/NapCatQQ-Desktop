@@ -1,24 +1,25 @@
-// 顶层消息条原子件。对齐 legacy qfluentwidgets InfoBar 的语义：
-//   - tone 决定颜色 + 图标（info / success / warning / danger）
-//   - 标题 + 内容（content 可选；只放短句，长字符串自动折行 + 等宽 mono 化）
+// 顶层消息条原子件。对齐 legacy qfluentwidgets InfoBar 的语义:
+//   - tone 决定颜色 + 图标(info / success / warning / danger)
+//   - 标题 + 内容(content 可选;只放短句,长字符串自动折行 + 等宽 mono 化)
 //   - 右上角 close 按钮 + 可选 autoDismissMs 自动消失
-//   - slide-in 动画 + 退场轻淡出（进场是首要的，退场不重）
+//   - 进退场动画走 framer-motion(原 CSS @keyframes infobar-in 已移除)
 //
-// 这一层只管展示，不管"何时该出现"。出现时机由上层 hook 推到
-// InfoBarStack（通常监听 store 终态事件）。
+// 这一层只管展示,不管"何时该出现"。出现时机由上层 hook 推到
+// InfoBarStack(通常监听 store 终态事件)。
 
 import { forwardRef, useEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, Info, X, AlertTriangle } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
+import { useMotion } from '../../hooks/preferences/useMotion';
+import { infoBarVariants as motionInfoBarVariants } from '../../core/design/motion';
 
 const infoBarVariants = cva(
     [
         // 基础布局
         'pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden',
         'rounded-md border px-3.5 py-3 shadow-popover backdrop-blur-sm',
-        // 进场动画：从右侧滑入 + 淡入
-        'animate-[infobar-in_220ms_cubic-bezier(0.2,0.7,0.2,1)_both]',
     ],
     {
         variants: {
@@ -101,6 +102,7 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
         },
         ref,
     ) => {
+        const m = useMotion();
         // autoDismiss 计时器。组件卸载或 props 变化时清。
         const onDismissRef = useRef(onDismiss);
         onDismissRef.current = onDismiss;
@@ -111,13 +113,19 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
         }, [autoDismissMs]);
 
         const Icon = defaultIconFor(tone ?? 'info');
+        const variants = motionInfoBarVariants(m.preset.bouncyOvershoot);
 
         return (
-            <div
+            <motion.div
                 ref={ref}
                 role="alert"
+                variants={variants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={m.transition('base')}
                 className={cn(infoBarVariants({ tone }), className)}
-                {...rest}
+                {...(rest as Parameters<typeof motion.div>[0])}
             >
                 <Icon size={16} strokeWidth={2.2} className={iconVariants({ tone })} />
                 <div className="min-w-0 flex-1">
@@ -144,7 +152,7 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
                         <X size={13} strokeWidth={2.2} />
                     </button>
                 )}
-            </div>
+            </motion.div>
         );
     },
 );

@@ -8,11 +8,20 @@
 //   theme           light / dark / auto
 //   showMascot      true / false
 //   closeAction     close（关闭程序）/ tray（最小化到托盘，留给 Tauri 后续接入）
+//   motionEnabled   动画总开关。系统级 prefers-reduced-motion 命中时也会被强制覆盖
+//   motionLevel     elegant / standard / rich。决定动画风格强度
+//   motionSpeed     0.5 ~ 1.5。在档位 baseline 上再乘一次
 //
 // 这些字段都不依赖后端 IPC，纯客户端偏好。后端可控的偏好（轮询间隔 /
 // GitHub PAT / 邮件 webhook）等扩了 IPC 再开新 store，不混进来。
 
 import { useSyncExternalStore } from 'react';
+import {
+    MOTION_SPEED_DEFAULT,
+    MOTION_SPEED_MAX,
+    MOTION_SPEED_MIN,
+    type MotionLevel,
+} from '../../core/design/motion';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 export type CloseAction = 'close' | 'tray';
@@ -21,6 +30,9 @@ export interface AppPreferences {
     theme: ThemeMode;
     showMascot: boolean;
     closeAction: CloseAction;
+    motionEnabled: boolean;
+    motionLevel: MotionLevel;
+    motionSpeed: number;
 }
 
 const STORAGE_KEY = 'ncd:preferences:v1';
@@ -29,6 +41,9 @@ const defaultPrefs: AppPreferences = {
     theme: 'auto',
     showMascot: true,
     closeAction: 'close',
+    motionEnabled: true,
+    motionLevel: 'standard',
+    motionSpeed: MOTION_SPEED_DEFAULT,
 };
 
 let state: AppPreferences = loadFromStorage();
@@ -44,6 +59,9 @@ function loadFromStorage(): AppPreferences {
             theme: normalizeTheme(parsed.theme),
             showMascot: parsed.showMascot !== false,
             closeAction: parsed.closeAction === 'tray' ? 'tray' : 'close',
+            motionEnabled: parsed.motionEnabled !== false,
+            motionLevel: normalizeMotionLevel(parsed.motionLevel),
+            motionSpeed: normalizeMotionSpeed(parsed.motionSpeed),
         };
     } catch {
         return defaultPrefs;
@@ -61,6 +79,15 @@ function persist() {
 
 function normalizeTheme(raw: unknown): ThemeMode {
     return raw === 'light' || raw === 'dark' || raw === 'auto' ? raw : 'auto';
+}
+
+function normalizeMotionLevel(raw: unknown): MotionLevel {
+    return raw === 'elegant' || raw === 'rich' ? raw : 'standard';
+}
+
+function normalizeMotionSpeed(raw: unknown): number {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return MOTION_SPEED_DEFAULT;
+    return Math.max(MOTION_SPEED_MIN, Math.min(MOTION_SPEED_MAX, raw));
 }
 
 function notify() {
@@ -99,6 +126,15 @@ export const preferencesStore = {
     },
     setCloseAction(action: CloseAction) {
         update({ closeAction: action === 'tray' ? 'tray' : 'close' });
+    },
+    setMotionEnabled(enabled: boolean) {
+        update({ motionEnabled: !!enabled });
+    },
+    setMotionLevel(level: MotionLevel) {
+        update({ motionLevel: normalizeMotionLevel(level) });
+    },
+    setMotionSpeed(speed: number) {
+        update({ motionSpeed: normalizeMotionSpeed(speed) });
     },
     reset() {
         state = { ...defaultPrefs };
