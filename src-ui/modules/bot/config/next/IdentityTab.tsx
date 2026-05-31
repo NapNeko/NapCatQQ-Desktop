@@ -18,8 +18,11 @@ import {
     RadioGroup,
     FormSection,
 } from '../../../../shared/ui';
+import { useServerManager } from '../../../../hooks/remote/useServerManager';
+import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
 import type { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
+import type { DeploymentType } from '../../../../core/ipc/generated/domain/DeploymentType';
 import type { TimeUnit } from '../../../../core/ipc/generated/domain/TimeUnit';
 import type { SnowLumaStartMode } from '../../../../core/ipc/generated/domain/SnowLumaStartMode';
 
@@ -45,6 +48,11 @@ const RUNTIME_ITEMS = [
     { value: 'remote', label: '远程 SSH 主机', hint: '通过 SSH 在远端启动' },
 ];
 
+const DEPLOYMENT_ITEMS = [
+    { value: 'native' as DeploymentType, label: '直接运行', hint: '在主机上直接拉起进程（默认）' },
+    { value: 'docker' as DeploymentType, label: 'Docker 容器', hint: '用 docker compose 起容器，仅 NapCat 底座' },
+];
+
 const TIME_UNIT_ITEMS = [
     { value: 'm' as TimeUnit, label: '分钟' },
     { value: 'h' as TimeUnit, label: '小时' },
@@ -54,6 +62,30 @@ const TIME_UNIT_ITEMS = [
 ];
 
 export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
+    // 远程主机列表（用于"远程"模式下选具体机器）。
+    const { servers } = useServerManager();
+
+    // runtime_target 语义:'local' = 本机;其它字符串 = 具体远程 server_id;
+    // 'remote' 是占位(选了远程但还没选机器),保存时被 validate 挡住。
+    const isRemote = data.runtime_target !== 'local';
+    // 给"本机/远程"RadioGroup 用的值:本机=local,远程=remote(占位或已选机器都算远程)。
+    const runtimeMode = data.runtime_target === 'local' ? 'local' : 'remote';
+
+    const serverItems = useMemo(
+        () => servers.map((s) => ({ value: s.id, label: `${s.name}（${s.host}）` })),
+        [servers],
+    );
+
+    const onRuntimeModeChange = (mode: string) => {
+        if (mode === 'local') {
+            onChange({ runtime_target: 'local' });
+        } else {
+            // 切到远程:只有一台就直接选它,多台/没有给占位 'remote' 让用户在下拉里选。
+            const only = servers.length === 1 ? servers[0].id : 'remote';
+            onChange({ runtime_target: only });
+        }
+    };
+
     // 实例名占位：QQID 改了就更新，避免空白让用户面对"不知道写啥"的反应
     const namePlaceholder = useMemo(() => {
         if (data.QQID > 0) {
@@ -112,16 +144,51 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
             <FormSection
                 title="运行宿主"
-                description="Bot 引擎实际跑在哪台机器上"
+                description="Bot 引擎实际跑在哪台机器上、以什么方式启动"
             >
                 <RadioGroup
                     items={RUNTIME_ITEMS}
-                    value={data.runtime_target}
-                    onValueChange={(v) => onChange({ runtime_target: v })}
+                    value={runtimeMode}
+                    onValueChange={onRuntimeModeChange}
                     orientation="horizontal"
                     name="runtime-target"
                 />
+                {isRemote && (
+                    serverItems.length > 0 ? (
+                        <Select
+                            label="选择远程主机"
+                            items={serverItems}
+                            value={data.runtime_target === 'remote' ? '' : data.runtime_target}
+                            onValueChange={(v) => onChange({ runtime_target: v })}
+                            placeholder="请选择一台已添加的远程主机"
+                            hint="在远端 SSH 主机上启动；主机在「远程主机」页添加"
+                        />
+                    ) : (
+                        <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
+                            还没有可用的远程主机。请先到「远程主机」页添加并连接一台 SSH 主机。
+                        </p>
+                    )
+                )}
+
+                <RadioGroup
+                    items={DEPLOYMENT_ITEMS}
+                    value={data.deploymentType}
+                    onValueChange={(v) => onChange({ deploymentType: v as DeploymentType })}
+                    orientation="horizontal"
+                    name="deployment-type"
+                />
+                {data.deploymentType === 'docker' && data.backend_type !== 'napcat' && (
+                    <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
+                        Docker 启动方式当前仅支持 NapCat 底座。SnowLuma 容器化待后续支持，请改回「直接运行」。
+                    </p>
+                )}
             </FormSection>
+
+            <RuntimeDependencyHint
+                runtimeTarget={data.runtime_target}
+                deploymentType={data.deploymentType}
+                backendType={data.backend_type}
+            />
 
             <FormSection
                 title="附加服务"
@@ -189,6 +256,80 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 )}
             </FormSection>
         </div>
+    );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// 运行时依赖检查 + 引导安装。
+// 选定运行宿主 + 启动方式后,提示这台机器是否就绪:
+//   - Docker 启动:检查该 host 的 docker 是否就绪,没就绪给「去组件页装」入口。
+//   - 直接运行:提示去组件页确认 NodeJs / NapCat 等运行时已装。
+// 探测复用 useDockerHosts(docker 状态),不在这层重造检测逻辑。
+// ────────────────────────────────────────────────────────────────────
+
+function RuntimeDependencyHint({
+    runtimeTarget,
+    deploymentType,
+    backendType,
+}: {
+    runtimeTarget: string;
+    deploymentType: DeploymentType;
+    backendType: BackendType;
+}) {
+    // runtime_target -> host_id:local 直接用,'remote' 占位时还没选机器先不探,
+    // 具体 server_id 拼成 remote:<id>。
+    const hostId =
+        runtimeTarget === 'local'
+            ? 'local'
+            : runtimeTarget === 'remote'
+                ? null
+                : `remote:${runtimeTarget}`;
+
+    const hostIds = useMemo(() => (hostId ? [hostId] : []), [hostId]);
+    const { statusByHost, probingByHost } = useDockerHosts(hostIds);
+
+    // 还没选具体远程机器:不显示依赖块(上面已经有"请选主机"提示)。
+    if (!hostId) return null;
+
+    const isDocker = deploymentType === 'docker';
+
+    if (isDocker) {
+        const status = statusByHost[hostId];
+        const probing = probingByHost[hostId] ?? false;
+        const ready = status?.installed && status?.daemonRunning && status?.composeAvailable;
+        if (probing && !status) {
+            return <DepBox tone="neutral" text="正在检查这台机器的 Docker 状态…" />;
+        }
+        if (ready) {
+            return <DepBox tone="ok" text={`Docker ${status?.version ?? ''} 已就绪，可以用容器方式启动。`} />;
+        }
+        return (
+            <DepBox
+                tone="warn"
+                text="这台机器的 Docker 尚未就绪（未安装 / 守护进程未运行 / 缺 compose）。请到「组件」页选这台机器安装 Docker 后再启动。"
+            />
+        );
+    }
+
+    // 直接运行:运行时(NodeJs/NapCat)的安装状态在组件页管理,这里给一句引导。
+    const name = backendType === 'snowluma' ? 'SnowLuma' : 'NapCat';
+    return (
+        <DepBox
+            tone="neutral"
+            text={`直接运行需要这台机器已安装 ${name} 运行时依赖（NodeJs / ${name} 等）。可到「组件」页选这台机器确认并安装。`}
+        />
+    );
+}
+
+function DepBox({ tone, text }: { tone: 'ok' | 'warn' | 'neutral'; text: string }) {
+    const cls =
+        tone === 'ok'
+            ? 'bg-success-soft text-success'
+            : tone === 'warn'
+                ? 'bg-warning-soft text-warning'
+                : 'bg-inset text-text-tertiary';
+    return (
+        <div className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>{text}</div>
     );
 }
 

@@ -70,6 +70,7 @@ export function buildMockBotConfig(botId: string): BotConfig {
             offlineAutoRestart: false,
             runtime_target: 'local',
             backend_type: 'napcat',
+            deploymentType: 'native',
         },
         connect: {
             httpServers: [
