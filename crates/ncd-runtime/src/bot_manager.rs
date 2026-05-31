@@ -129,6 +129,10 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// SnowLuma 全局 daemon 句柄（可选），用于 `shutdown_all` 关闭 daemon、
     /// `run_snowluma_listener` 监听 daemon Crashed 级联级 actor。
     snowluma_daemon: Option<Arc<crate::snowluma::SnowLumaDaemon>>,
+    /// 把 BotConfig 的 runtime_target 解析成 host（本机 / 远端 SSH）。
+    /// None 时走旧路径（backend 自带的本机 host，行为同历史版本）；生产侧由
+    /// `with_host_resolver` 注入 TauriHostResolver 后,启动时按 target 取 host。
+    host_resolver: Option<Arc<dyn crate::host_resolver::HostResolver>>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -148,6 +152,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             poller_settings: Arc::clone(&self.poller_settings),
             snowluma_backend: self.snowluma_backend.clone(),
             snowluma_daemon: self.snowluma_daemon.clone(),
+            host_resolver: self.host_resolver.clone(),
         }
     }
 }
@@ -179,7 +184,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             poller_settings,
             snowluma_backend: None,
             snowluma_daemon: None,
+            host_resolver: None,
         }
+    }
+
+    /// 注入 HostResolver（wiring 阶段调用），让启动时按 runtime_target 选本机/远端 host。
+    /// 不注入时走旧路径（全本机）。链式 builder 风格。
+    pub fn with_host_resolver(
+        mut self,
+        resolver: Arc<dyn crate::host_resolver::HostResolver>,
+    ) -> Self {
+        self.host_resolver = Some(resolver);
+        self
     }
 
     /// 注入 SnowLuma flavor 路由依赖（ wiring 阶段调用）。
