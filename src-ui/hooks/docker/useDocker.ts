@@ -22,12 +22,22 @@ import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { dockerService } from '../../core/services/docker.service';
+import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { errorText } from '../../core/domain/errors';
 import type {
     ContainerAction,
     ContainerInfo,
     DockerDeploySpec,
     DockerStatus,
 } from '../../core/ipc/types';
+
+/// 容器操作动词。InfoBar 标题用，比裸 action 字面量友好。
+const ACTION_VERB: Record<ContainerAction, string> = {
+    start: '启动',
+    stop: '停止',
+    restart: '重启',
+    remove: '删除',
+};
 
 export function useDocker(hostId: string) {
     const queryClient = useQueryClient();
@@ -63,7 +73,25 @@ export function useDocker(hostId: string) {
     const actionMutation = useMutation({
         mutationFn: (args: { name: string; action: ContainerAction }) =>
             dockerService.containerAction(hostId, args.name, args.action),
-        onSuccess: invalidate,
+        onSuccess: (_void, { name, action }) => {
+            invalidate();
+            const verb = ACTION_VERB[action];
+            pushInfoBar({
+                key: `container-action:${hostId}:${name}`,
+                tone: 'success',
+                title: `容器已${verb}`,
+                content: name,
+                autoDismissMs: 4000,
+            });
+        },
+        onError: (err: unknown, { name, action }) => {
+            pushInfoBar({
+                key: `container-action:${hostId}:${name}`,
+                tone: 'danger',
+                title: `容器${ACTION_VERB[action]}失败`,
+                content: `${name}：${errorText(err)}`,
+            });
+        },
     });
 
     const composeDownMutation = useMutation({
