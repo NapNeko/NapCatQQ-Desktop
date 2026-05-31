@@ -1,13 +1,5 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-    readonly VITE_UI_NEXT?: string;
-}
-
-interface ImportMeta {
-    readonly env: ImportMetaEnv;
-}
-
 declare module '*.svg' {
     const src: string;
     export default src;
