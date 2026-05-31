@@ -33,7 +33,7 @@ export const Showcase: React.FC = () => {
     const [activeTab, setActiveTab] = useState('basic');
 
     return (
-        <div className="flex flex-1 flex-col gap-6">
+        <div className="scrollbar-hide flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pb-8 pr-1">
             <header>
                 <p className="text-2xs uppercase tracking-widest text-text-tertiary">showcase</p>
                 <h1 className="font-display text-xl font-semibold text-text">原子件总览</h1>

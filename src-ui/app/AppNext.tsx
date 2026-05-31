@@ -24,7 +24,10 @@ import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { applySideEffects as applyPreferences } from '../hooks/preferences/preferencesStore';
 
-const SHOW_SHOWCASE = true;
+// Showcase 是 dev-only 的原子件预览页。只在 Vite 开发构建（npm run
+// tauri:dev / dev）显示侧栏入口；正式 build 的 exe 里 import.meta.env.DEV
+// 为 false，入口隐藏。
+const SHOW_SHOWCASE = import.meta.env.DEV;
 
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
