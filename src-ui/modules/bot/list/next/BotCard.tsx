@@ -143,35 +143,34 @@ export function BotCard({
     const isSL = isSnowLumaFlavor(flavor);
     const hasQrcode = !!qrcodeUrl;
 
-    // 状态切换反馈:state 变化时给整张卡跑一次 pop;crashed/last_error 出现时 shake。
-    // 把 ref 挂到外层 div 上,通过 useMotion helper 做反馈。前一次 state/error 用 ref
-    // 保留,在 useEffect 比较拍板。
+    // 状态切换反馈:
+    //   - 关键状态转移(starting→running 等) → 状态徽章 pop,而不是整张卡 pop
+    //     (大卡 pop 会跟 hover lift / shadow 叠加放大成"整张卡突然鼓一下")
+    //   - last_error 首次出现 → 整张卡 shake(shake 是水平摇,不会跟 hover 冲突)
     const m = useMotion();
     const cardRef = useRef<HTMLDivElement | null>(null);
+    const badgeRef = useRef<HTMLSpanElement | null>(null);
     const prevStateRef = useRef<typeof bot.state>(bot.state);
     const prevErrorRef = useRef<string | null | undefined>(bot.last_error);
 
     useEffect(() => {
-        const el = cardRef.current;
+        const el = badgeRef.current;
         if (!el || !m.enabled) {
             prevStateRef.current = bot.state;
             return;
         }
         const prev = prevStateRef.current;
         if (prev !== bot.state) {
-            // 关键状态切换给 pop:starting→running 是"成功落位",running→stopped 是
-            // "正常退场"。两者都用轻 pop;crashed/error 不在这里 pop(下面的 error
-            // 检测会接管,用 shake)。
             const isImpactful =
                 (prev === 'starting' && bot.state === 'running') ||
                 (prev === 'stopping' && bot.state === 'stopped') ||
                 (prev === 'running' && bot.state === 'stopped');
             if (isImpactful && m.preset.feel.popPeak > 1) {
-                m.pop(el, { peak: 1 + (m.preset.feel.popPeak - 1) * 0.4 });
+                m.pop(el);
             }
         }
         prevStateRef.current = bot.state;
-    }, [bot.state, m]);
+    }, [bot.state, m.enabled, m.level, m.speed]);
 
     useEffect(() => {
         const el = cardRef.current;
@@ -185,7 +184,7 @@ export function BotCard({
             m.shake(el);
         }
         prevErrorRef.current = bot.last_error;
-    }, [bot.last_error, m]);
+    }, [bot.last_error, m.enabled, m.level, m.speed]);
 
     const webuiAvailable = isWebuiAvailable({
         flavor,
@@ -386,6 +385,7 @@ export function BotCard({
                                 {displayName}
                             </h3>
                             <Badge
+                                ref={badgeRef}
                                 tone={stateBadgeTone}
                                 appearance="soft"
                                 dot={bot.state === 'running'}

@@ -149,37 +149,24 @@ export function useMotion(): MotionEnv {
     const enabled = prefs.motionEnabled && !reduced;
     const level = prefs.motionLevel;
     const speed = prefs.motionSpeed;
-    const preset = motionPresets[level];
 
-    // 把"当前生效值"装在 ref 里,helper 读 ref 而不是闭包快照,这样 helper
-    // 引用永远稳定,放 useEffect 依赖也不会触发重跑。
-    const envRef = useRef({ enabled, preset, speed });
-    envRef.current = { enabled, preset, speed };
+    // 把"当前生效值"装在 ref 里,helper 读 ref 而不是闭包快照。这样 helper
+    // 工厂在 useMemo([]) 下保持引用稳定,业务把它放 useEffect 依赖也不会因为
+    // useMotion() 重渲染就触发 cleanup+resubscribe。
+    //
+    // !!! 重要 !!! 之前写法每次 render 都新建 duration/stagger 闭包并最终
+    // return 新对象,导致业务 useEffect 写 [..., m] 时每帧重跑(BotCard hover
+    // 监听器反复 add/remove,TextField focus 监听器反复挂,react-query 触发
+    // 列表刷新时叠加放大成卡顿)。修法:整个返回值 useMemo 锁住,依赖只看
+    // primitive(enabled/level/speed),业务依赖也只放这三个 primitive 不要放 m。
+    const envRef = useRef<{ enabled: boolean; speed: number; preset: MotionPreset }>({
+        enabled,
+        speed,
+        preset: motionPresets[level],
+    });
+    envRef.current = { enabled, speed, preset: motionPresets[level] };
 
-    const duration = (kind: DurationKind = 'base'): number => {
-        const env = envRef.current;
-        if (!env.enabled) return 0;
-        const t = env.preset.timing;
-        const base =
-            kind === 'fast' ? t.durationFast : kind === 'slow' ? t.durationSlow : t.durationBase;
-        return scaleDuration(base, env.speed);
-    };
-
-    const stagger = (): number => {
-        const env = envRef.current;
-        if (!env.enabled) return 0;
-        return scaleStagger(env.preset.timing.stagger, env.speed);
-    };
-
-    // ease 七档:直接代理到 preset 当前快照。这里返回新对象,不进 useMemo,因为
-    // 业务一般不会把整个 m.ease 放 useEffect 依赖,而是读单个字段(那等于读
-    // preset.timing.ease.x,本来就稳定除非档位变)。
-    const ease: Record<EaseKind, string> = preset.timing.ease as Record<EaseKind, string>;
-
-    // ============ helper 工厂 ============
-    // 注意:这些函数引用必须每次 render 都一样。useMemo 包一下,空依赖让 hook
-    // 引用恒等。内部读 envRef 拿到最新值,不会因为 prefs 变就闭包过期。
-
+    // helper 工厂:空依赖让函数引用永久稳定。读 envRef.current 拿最新值。
     const helpers = useMemo(() => {
         function resolveTweenVars(
             vars: gsap.TweenVars,
@@ -382,15 +369,32 @@ export function useMotion(): MotionEnv {
         return { tween, fromTo, bindHover, bindPress, pop, shake };
     }, []);
 
-    return {
-        level,
-        speed,
-        reduced,
-        enabled,
-        preset,
-        duration,
-        stagger,
-        ease,
-        ...helpers,
-    };
+    // 整体返回值按 primitive 缓存。档位/速度/总开关变化时才重建,
+    // 同档位下的父级 setState/重渲都拿到同一个 m 引用,业务依赖 [m] 也稳。
+    return useMemo<MotionEnv>(() => {
+        const preset = motionPresets[level];
+        const ease = preset.timing.ease as Record<EaseKind, string>;
+        const duration = (kind: DurationKind = 'base'): number => {
+            if (!enabled) return 0;
+            const t = preset.timing;
+            const base =
+                kind === 'fast' ? t.durationFast : kind === 'slow' ? t.durationSlow : t.durationBase;
+            return scaleDuration(base, speed);
+        };
+        const stagger = (): number => {
+            if (!enabled) return 0;
+            return scaleStagger(preset.timing.stagger, speed);
+        };
+        return {
+            level,
+            speed,
+            reduced,
+            enabled,
+            preset,
+            duration,
+            stagger,
+            ease,
+            ...helpers,
+        };
+    }, [level, speed, enabled, reduced, helpers]);
 }

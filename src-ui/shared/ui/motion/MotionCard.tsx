@@ -1,9 +1,8 @@
-// MotionCard: 给 Card 加 hover lift。GSAP 版,精细化第二轮。
+// MotionCard: 给 Card 加 hover lift。第二轮+精修。
 //
-// 改动:用 m.bindHover 取代手挂 mouseenter/leave + 直接 gsap.to。bindHover 自动:
-//   - 处理 enabled / reduced 短路
-//   - 加 boxShadow + brightness(由 feel.shadowBoost / brightness 控制)
-//   - 退出时走 damped ease 立即归位,不超调
+// 跟 ListItem 同样的取舍:卡片只 lift + shadow,不 scale 不 brightness。
+// 大卡 scale 1.04 在 px-2 容器里被裁切;brightness 叠加 Tailwind hover bg
+// 颜色变化会让卡片"突然变白"。
 
 import { forwardRef, useEffect, useRef } from 'react';
 import { Card, type CardProps } from '../Card';
@@ -28,8 +27,8 @@ export const MotionCard = forwardRef<HTMLDivElement, MotionCardProps>(
         useEffect(() => {
             const el = localRef.current;
             if (!el || flat || !m.enabled || m.preset.feel.cardLift === 0) return;
-            return m.bindHover(el);
-        }, [flat, m.enabled, m.level, m.speed, m.bindHover, m.preset.feel.cardLift]);
+            return m.bindHover(el, { scale: 1, brightness: false });
+        }, [flat, m.enabled, m.level, m.speed]);
 
         return <Card ref={setRef} {...cardProps} />;
     },
