@@ -22,6 +22,8 @@ import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import type { ComponentId } from '../../core/ipc/types';
+import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
+import { errorText } from '../../core/domain/errors';
 
 export const ComponentsPageNext: React.FC = () => {
     const { view, hosts, isLoading, error, refetch } = useComponents();
@@ -101,6 +103,35 @@ export const ComponentsPageNext: React.FC = () => {
 
     const allEmpty = machines.length === 0;
 
+    // Docker 安装链路自带反馈:成功弹绿条,失败/需手动介入弹红条(带主机名)。
+    // 后端把"缺免密 sudo 需手动装"也归到 Err,所以这里 catch 到的就是给用户看的
+    // 人话原因,不能再像以前那样只 console.error 吞掉。
+    const handleInstallDocker = useCallback(
+        async (hostId: string) => {
+            const hostName =
+                machines.find((m) => m.host.host_id === hostId)?.host.display_name ?? hostId;
+            try {
+                const message = await dockerHosts.install(hostId);
+                globalInfoBarStore.push({
+                    key: `docker-install:${hostId}`,
+                    tone: 'success',
+                    title: `Docker · ${hostName}`,
+                    content: message,
+                    autoDismissMs: 8000,
+                });
+            } catch (err) {
+                globalInfoBarStore.push({
+                    key: `docker-install:${hostId}`,
+                    tone: 'danger',
+                    title: `Docker 安装失败 · ${hostName}`,
+                    content: errorText(err, 'Docker 安装失败，请手动安装后重试'),
+                    autoDismissMs: 0,
+                });
+            }
+        },
+        [machines, dockerHosts.install],
+    );
+
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
@@ -143,9 +174,7 @@ export const ComponentsPageNext: React.FC = () => {
                         isDockerProbing={dockerHosts.probingByHost[activeMachine.host.host_id] ?? false}
                         isInstallingDocker={dockerHosts.isInstalling}
                         onInstallDocker={(hostId) => {
-                            void dockerHosts.install(hostId).catch((err) => {
-                                console.error('[ComponentsPage] docker install failed:', err);
-                            });
+                            void handleInstallDocker(hostId);
                         }}
                         onOpenDockerDownload={() => {
                             void dockerHosts.openDownloadPage().catch(() => undefined);

@@ -50,21 +50,23 @@ const HostTab: React.FC<{
             aria-selected={active}
             onClick={onSelect}
             className={cn(
-                'group flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors',
+                'group flex flex-col gap-0.5 rounded-md border px-3 py-2 text-left transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
                 active
                     ? 'border-brand/40 bg-brand-soft'
                     : 'border-border-subtle bg-inset/40 hover:bg-inset/70',
             )}
         >
-            <span
-                aria-hidden
-                className={cn(
-                    'inline-block h-2 w-2 shrink-0 rounded-full',
-                    isRemote ? 'bg-success shadow-glow-success' : 'bg-brand',
-                )}
-            />
-            <span className="flex flex-col">
+            {/* 圆点和主标题放同一 items-center 行,圆点严格对齐名字中线 —— 不再
+                跟"两行文本块"的中点对齐,避免中文字形偏上导致的错位观感。 */}
+            <span className="flex items-center gap-2">
+                <span
+                    aria-hidden
+                    className={cn(
+                        'inline-block h-2 w-2 shrink-0 rounded-full',
+                        isRemote ? 'bg-success shadow-glow-success' : 'bg-brand',
+                    )}
+                />
                 <span
                     className={cn(
                         'text-[13px] font-medium leading-tight',
@@ -73,9 +75,10 @@ const HostTab: React.FC<{
                 >
                     {host.display_name}
                 </span>
-                <span className="text-[10px] uppercase tracking-wider text-text-tertiary">
-                    {host.os} · {isRemote ? '远端' : '本机'} · {installed}/{total}
-                </span>
+            </span>
+            {/* 副标题缩进对齐到主标题左缘(圆点 8px + gap 8px = ml-4)。 */}
+            <span className="ml-4 text-[10px] uppercase leading-tight tracking-wider text-text-tertiary">
+                {host.os} · {isRemote ? '远端' : '本机'} · {installed}/{total}
             </span>
         </button>
     );

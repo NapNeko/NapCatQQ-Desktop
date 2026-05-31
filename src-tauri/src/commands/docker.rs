@@ -40,17 +40,18 @@ pub async fn docker_install(
     let outcome = install_docker(host.as_ref())
         .await
         .map_err(|e| format!("docker 安装失败: {e}"))?;
-    // 把结果塌缩成一句给前端 toast 的人话。
+    // 三种结果分流到 Ok / Err:能用的回 Ok 给前端弹成功条;需要用户手动介入
+    // (Ubuntu 缺免密 sudo 是最常见的一种)回 Err,前端据此弹醒目的失败条,
+    // 不会再被当成"装好了"而悄悄回到原样。
     use ncd_deploy::docker::DockerInstallOutcome::*;
-    let msg = match outcome {
-        AlreadyInstalled { version } => format!("docker 已就绪（{version}）"),
-        Installed => "docker 安装完成".to_string(),
-        ManualRequired { reason, download_url } => match download_url {
-            Some(url) => format!("需要手动安装: {reason}（下载: {url}）"),
-            None => format!("需要手动安装: {reason}"),
-        },
-    };
-    Ok(msg)
+    match outcome {
+        AlreadyInstalled { version } => Ok(format!("Docker 已就绪（{version}）")),
+        Installed => Ok("Docker 安装完成，现在可以部署容器了".to_string()),
+        ManualRequired { reason, download_url } => Err(match download_url {
+            Some(url) => format!("{reason}（下载: {url}）"),
+            None => reason,
+        }),
+    }
 }
 
 #[tauri::command]

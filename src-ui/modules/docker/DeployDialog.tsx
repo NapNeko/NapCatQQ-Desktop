@@ -15,6 +15,7 @@ import {
     NumberField,
 } from '../../shared/ui';
 import { validateDeploySpec, portPurpose } from '../../core/domain/docker/spec';
+import { errorText } from '../../core/domain/errors';
 import type { DockerDeploySpec, DockerFlavor, PortMapping } from '../../core/ipc/types';
 
 interface DeployDialogProps {
@@ -22,7 +23,7 @@ interface DeployDialogProps {
     initialSpec: DockerDeploySpec;
     isDeploying: boolean;
     onClose: () => void;
-    onConfirm: (spec: DockerDeploySpec) => void;
+    onConfirm: (spec: DockerDeploySpec) => void | Promise<void>;
 }
 
 export const DeployDialog: React.FC<DeployDialogProps> = ({
@@ -70,7 +71,7 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
         setPorts((prev) => prev.filter((_, i) => i !== index));
     };
 
-    const handleConfirm = () => {
+    const handleConfirm = async () => {
         const spec: DockerDeploySpec = {
             flavor,
             containerName: name.trim(),
@@ -83,7 +84,14 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
             return;
         }
         setError(null);
-        onConfirm(spec);
+        try {
+            // onConfirm 负责真正下发部署并在成功时关闭对话框。失败时它会 reject,
+            // 这里就地显示后端原因(拉镜像失败 / docker 未就绪 / 端口占用等),
+            // 对话框保持打开让用户改参数重试,而不是默默回到原样。
+            await onConfirm(spec);
+        } catch (e) {
+            setError(errorText(e, '部署失败，请稍后重试'));
+        }
     };
 
     return (
@@ -151,7 +159,7 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
                     <Button variant="ghost" onClick={onClose} disabled={isDeploying}>
                         取消
                     </Button>
-                    <Button onClick={handleConfirm} disabled={isDeploying}>
+                    <Button onClick={() => void handleConfirm()} disabled={isDeploying}>
                         {isDeploying && <Loader2 size={14} className="animate-spin" />}
                         开始部署
                     </Button>
