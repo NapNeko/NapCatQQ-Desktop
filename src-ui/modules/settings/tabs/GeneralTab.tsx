@@ -1,5 +1,5 @@
 // 通用 Tab。两类设置混排但语义分明：
-//   - 上半：纯客户端偏好（主题 / 吉祥物 / 窗口不透明度 / 关闭行为），切换即时生效。
+//   - 上半：纯客户端偏好（主题 / 吉祥物 / 关闭行为），切换即时生效。
 //   - 下半：后端持久化设置（Bot 登录检查间隔 / 性能监控），改动进草稿，底部保存条落盘。
 
 import { preferencesStore, type AppPreferences } from '../../../hooks/preferences/preferencesStore';
@@ -25,24 +25,6 @@ export function GeneralTab({ prefs, draft, patchDraft }: Props) {
                     checked={prefs.showMascot}
                     onCheckedChange={preferencesStore.setShowMascot}
                 />
-            </FieldRow>
-
-            <FieldRow
-                label="窗口不透明度"
-                description="80–100，仅作用于主背景；真窗口透明需 Tauri 配置（待）"
-            >
-                <input
-                    type="range"
-                    min={80}
-                    max={100}
-                    step={1}
-                    value={prefs.windowOpacity}
-                    onChange={(e) => preferencesStore.setWindowOpacity(Number(e.target.value))}
-                    className="h-1 w-32 cursor-pointer accent-brand"
-                />
-                <span className="w-9 text-right font-mono text-[11.5px] tabular-nums text-text-tertiary">
-                    {prefs.windowOpacity}%
-                </span>
             </FieldRow>
 
             <FieldRow
