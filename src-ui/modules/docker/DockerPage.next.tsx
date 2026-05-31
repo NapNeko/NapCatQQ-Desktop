@@ -147,13 +147,13 @@ const DockerContainerGrid: React.FC<{
                 y: 6,
                 scale: 0.985,
                 duration: m.duration('base'),
-                ease: m.preset.enterEase,
-                stagger: m.preset.stagger,
+                ease: m.ease.enter,
+                stagger: m.stagger(),
             });
         },
         {
             scope: containerRef,
-            dependencies: [docker.containers.length, m.enabled, m.preset.enterEase],
+            dependencies: [docker.containers.length, m.enabled, m.level],
         },
     );
 

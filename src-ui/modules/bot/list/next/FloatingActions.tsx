@@ -33,10 +33,10 @@ const enter: EnterFn = (el, env) => {
             x: 0,
             y: 0,
             duration: env.duration('base'),
-            ease: env.preset.enterEase,
+            ease: env.ease.enter,
         },
     );
-    // 三个圆按钮 stagger 进场
+    // 三个圆按钮 stagger 进场,各自带 release 弹性(rich 档余震明显)。
     const buttons = el.querySelectorAll('[data-circle-btn]');
     if (buttons.length > 0) {
         tl.from(
@@ -46,8 +46,8 @@ const enter: EnterFn = (el, env) => {
                 scale: 0.6,
                 y: 8,
                 duration: env.duration('fast'),
-                ease: env.preset.bouncyEase,
-                stagger: env.preset.stagger,
+                ease: env.ease.release,
+                stagger: env.stagger(),
             },
             '<0.05',
         );
@@ -61,7 +61,7 @@ const exit: ExitFn = (el, env) =>
         x: 24,
         y: 24,
         duration: env.duration('fast'),
-        ease: env.preset.exitEase,
+        ease: env.ease.exit,
     });
 
 export function FloatingActions({
@@ -140,48 +140,18 @@ function CircleButton({
     const m = useMotion();
     const ref = useRef<HTMLButtonElement | null>(null);
 
+    // CircleButton 用更夸张的 hoverScale=1.08(默认按钮 1.04 上限),所以这里显式
+    // 传 scale,不走 preset 默认。lift/shadow/brightness 也关掉,FAB 已经有自己的
+    // shadow 层级,不需要 helper 再叠 boxShadow。
     useEffect(() => {
         const el = ref.current;
-        if (!el || !m.enabled) return;
-        const onEnterBtn = () => {
-            gsap.to(el, {
-                scale: 1.08,
-                duration: m.duration('fast'),
-                ease: m.preset.hoverEase,
-            });
-        };
-        const onLeaveBtn = () => {
-            gsap.to(el, {
-                scale: 1,
-                duration: m.duration('fast'),
-                ease: m.preset.hoverEase,
-            });
-        };
-        const onDown = () => {
-            gsap.to(el, {
-                scale: 0.92,
-                duration: m.duration('fast') * 0.6,
-                ease: 'power2.out',
-            });
-        };
-        const onUp = () => {
-            gsap.to(el, {
-                scale: 1.08,
-                duration: m.duration('base'),
-                ease: m.preset.bouncyEase,
-            });
-        };
-        el.addEventListener('mouseenter', onEnterBtn);
-        el.addEventListener('mouseleave', onLeaveBtn);
-        el.addEventListener('mousedown', onDown);
-        el.addEventListener('mouseup', onUp);
-        return () => {
-            el.removeEventListener('mouseenter', onEnterBtn);
-            el.removeEventListener('mouseleave', onLeaveBtn);
-            el.removeEventListener('mousedown', onDown);
-            el.removeEventListener('mouseup', onUp);
-        };
-    }, [m.enabled, m.preset.hoverEase, m.preset.bouncyEase, m.speed]);
+        if (!el || !m.enabled || disabled) return;
+        const cleanups = [
+            m.bindHover(el, { scale: 1.08, lift: null, shadow: false, brightness: false }),
+            m.bindPress(el),
+        ];
+        return () => cleanups.forEach((fn) => fn());
+    }, [m.enabled, m.level, m.speed, m.bindHover, m.bindPress, disabled]);
 
     return (
         <Tooltip>

@@ -230,11 +230,11 @@ function ServerGrid({
                 y: 6,
                 scale: 0.985,
                 duration: m.duration('base'),
-                ease: m.preset.enterEase,
-                stagger: m.preset.stagger,
+                ease: m.ease.enter,
+                stagger: m.stagger(),
             });
         },
-        { scope: containerRef, dependencies: [servers.length, m.enabled, m.preset.enterEase] },
+        { scope: containerRef, dependencies: [servers.length, m.enabled, m.level] },
     );
 
     return (

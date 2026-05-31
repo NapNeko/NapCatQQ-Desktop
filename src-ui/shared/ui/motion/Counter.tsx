@@ -1,7 +1,10 @@
-// Counter: 数字 rolling 切换。GSAP 版。
+// Counter: 数字 rolling 切换。GSAP 版,精细化第二轮。
 //
-// rich 档启用,其它档直接显示新值。实现:value 变化时旧 span 上推消失,新 span
-// 从下方滑入。固定容器高度避免布局跳动。
+// 改动:
+//   - 启用条件改 feel.popPeak > 1(原来是 overshoot)。standard 档现在也启用,
+//     不再 rich 档独占,毕竟"标准"档 popPeak=1.06 的轻反馈对计数变化合适。
+//   - 入场曲线统一走 ease.pop:standard 档 ndf-spring,rich 档 ndf-aftershock(余震)。
+//   - 出场用 ease.exit 而不是把 exitEase 字段透传。
 
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
@@ -14,7 +17,7 @@ interface CounterProps {
 
 export function Counter({ value, className }: CounterProps) {
     const m = useMotion();
-    const enabled = m.enabled && m.preset.overshoot;
+    const enabled = m.enabled && m.preset.feel.popPeak > 1;
     const containerRef = useRef<HTMLSpanElement>(null);
     const prevValueRef = useRef<number>(value);
 
@@ -26,16 +29,12 @@ export function Counter({ value, className }: CounterProps) {
         }
         if (prevValueRef.current === value) return;
 
-        // 上一帧的数字节点上推消失,新数字从下方滑入。我们直接操作 DOM
-        // 避免 React 双 children 的复杂 key 处理:旧节点 clone 一个 absolute,
-        // 让原节点立即变 value,旧 clone 跑动画完了删除。
         const newDigit = container.querySelector<HTMLSpanElement>('[data-digit="current"]');
         if (!newDigit) {
             prevValueRef.current = value;
             return;
         }
 
-        // clone 旧值显示节点
         const oldClone = newDigit.cloneNode(true) as HTMLSpanElement;
         oldClone.textContent = String(prevValueRef.current);
         oldClone.style.position = 'absolute';
@@ -45,15 +44,13 @@ export function Counter({ value, className }: CounterProps) {
         oldClone.dataset.digit = 'old';
         container.appendChild(oldClone);
 
-        // 旧 clone 上推消失
         gsap.to(oldClone, {
             yPercent: -110,
             autoAlpha: 0,
             duration: m.duration('base'),
-            ease: m.preset.exitEase,
+            ease: m.ease.exit,
             onComplete: () => oldClone.remove(),
         });
-        // 新数字从下方滑入
         gsap.fromTo(
             newDigit,
             { yPercent: 110, autoAlpha: 0 },
@@ -61,12 +58,12 @@ export function Counter({ value, className }: CounterProps) {
                 yPercent: 0,
                 autoAlpha: 1,
                 duration: m.duration('base'),
-                ease: m.preset.bouncyEase,
+                ease: m.ease.pop,
             },
         );
 
         prevValueRef.current = value;
-    }, [value, enabled, m.duration, m.preset.exitEase, m.preset.bouncyEase]);
+    }, [value, enabled, m]);
 
     if (!enabled) {
         return <span className={className}>{value}</span>;

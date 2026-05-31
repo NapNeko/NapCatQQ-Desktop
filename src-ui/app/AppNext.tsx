@@ -110,7 +110,7 @@ export const AppNext: React.FC = () => {
                         <div
                             className={
                                 'ndf-canvas-glow' +
-                                (motion.preset.overshoot &&
+                                (motion.preset.feel.overshoot &&
                                     motion.enabled &&
                                     route === 'overview'
                                     ? ' is-breathing'

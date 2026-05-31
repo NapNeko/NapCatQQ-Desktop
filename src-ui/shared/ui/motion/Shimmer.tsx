@@ -1,7 +1,7 @@
-// Shimmer: skeleton 扫光骨架。GSAP 版。
+// Shimmer: skeleton 扫光骨架。GSAP 版,精细化第二轮。
 //
-// rich 档启用,其它档退化为静态浅色块。实现:GSAP 控制 backgroundPosition
-// 循环。其实 CSS @keyframes 也能跑,但走 GSAP 让档位/速度/总开关都生效。
+// 改动:启用条件改 feel.overshoot(标记 rich 档),沿用之前的"仅 rich 档动"。
+// standard/elegant 档静态色块,避免长时间循环动画消耗注意力。
 
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
@@ -15,7 +15,7 @@ interface ShimmerProps {
 
 export function Shimmer({ className, height = 16 }: ShimmerProps) {
     const m = useMotion();
-    const animated = m.enabled && m.preset.overshoot;
+    const animated = m.enabled && m.preset.feel.overshoot;
     const ref = useRef<HTMLSpanElement>(null);
 
     useEffect(() => {

@@ -802,7 +802,7 @@ const iconBtnEnter: EnterFn = (el, env) =>
             autoAlpha: 1,
             scale: 1,
             duration: env.duration('fast'),
-            ease: env.preset.bouncyEase,
+            ease: env.ease.release,
         },
     );
 const iconBtnExit: ExitFn = (el, env) =>
@@ -810,7 +810,7 @@ const iconBtnExit: ExitFn = (el, env) =>
         autoAlpha: 0,
         scale: 0.6,
         duration: env.duration('fast') * 0.7,
-        ease: env.preset.exitEase,
+        ease: env.ease.exit,
     });
 
 const IconButton = forwardRefIcon();
@@ -832,27 +832,9 @@ function forwardRefIcon() {
         useEffect(() => {
             const el = localRef.current;
             if (!el || !m.enabled || disabled) return;
-            const onEnter = () => {
-                gsap.to(el, {
-                    scale: m.preset.hoverScale,
-                    duration: m.duration('fast'),
-                    ease: m.preset.hoverEase,
-                });
-            };
-            const onLeave = () => {
-                gsap.to(el, {
-                    scale: 1,
-                    duration: m.duration('fast'),
-                    ease: m.preset.hoverEase,
-                });
-            };
-            el.addEventListener('mouseenter', onEnter);
-            el.addEventListener('mouseleave', onLeave);
-            return () => {
-                el.removeEventListener('mouseenter', onEnter);
-                el.removeEventListener('mouseleave', onLeave);
-            };
-        }, [m.enabled, disabled, m.preset.hoverScale, m.preset.hoverEase, m.speed]);
+            // IconButton 是密集型按钮,hover lift / shadow / brightness 都关,只动 scale。
+            return m.bindHover(el, { lift: null, shadow: false, brightness: false });
+        }, [m.enabled, m.level, m.speed, m.bindHover, disabled]);
 
         return (
             <Tooltip>

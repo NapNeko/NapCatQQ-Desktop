@@ -1,17 +1,15 @@
-// Dialog 原子件。基于 Radix Dialog,在外面包 GSAP 动画层。
+// Dialog 原子件。基于 Radix Dialog,在外面包 GSAP 动画层。第二轮重写。
 //
 // 视觉决策:
 //   - overlay 半透明黑 + backdrop-blur
 //   - content surface-elevated + shadow-popover
 //   - 关闭按钮右上,Esc 关
 //
-// 动画:进退场走 GSAP + GsapPresence。
-// 实现要点:
-//   - RadixDialog.Root open 是受控的 boolean,DialogContent 在外面挂一个
-//     固定 Portal(forceMount)让 RadixDialog 不抢着卸载内部
-//   - overlay/content 各自由 GsapPresence(visible=open) 控:open=true 就 mount + enter,
-//     open=false 就跑 exit + 完成后真 unmount
-//   - 整个 Portal 永远存在,不存在 Radix 强制立即卸载内部 children 的问题
+// 动画:进退场走 GSAP + GsapPresence。第二轮加入空间锚点:
+//   - 通过 DialogAnchorContext 把"触发点"位置传进来(任意点击 trigger 之前
+//     先通过 useDialogAnchor() 设置),enter 时从锚点缩小起源放大到屏中,exit
+//     时反向收回锚点。standard/rich 档启用,elegant 档退化为单纯缩放。
+//   - 没设置锚点时退化到原来的"中心 fade + scale"。
 
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { X as CloseIcon } from 'lucide-react';
@@ -19,6 +17,7 @@ import gsap from 'gsap';
 import {
     createContext,
     forwardRef,
+    useCallback,
     useContext,
     useState,
     type ComponentPropsWithoutRef,
@@ -30,11 +29,32 @@ import { GsapPresence, type EnterFn, type ExitFn } from './motion/GsapPresence';
 
 const DialogOpenContext = createContext<boolean>(false);
 
+/// 锚点坐标(viewport 视口)。用户点击触发按钮时由调用方写入,Dialog 进退场
+/// 用它做缩放原点 + 起始位移。
+interface DialogAnchor {
+    x: number;
+    y: number;
+}
+const DialogAnchorContext = createContext<DialogAnchor | null>(null);
+
+/// 给业务用:在按钮 onClick 里调用,捕获鼠标点位置后再 setOpen(true)。
+/// 返回的对象 { anchor, setAnchor, captureFromEvent } 可挂到任意按钮事件上。
+export function useDialogAnchor() {
+    const [anchor, setAnchor] = useState<DialogAnchor | null>(null);
+    const captureFromEvent = useCallback((e: React.MouseEvent | MouseEvent) => {
+        setAnchor({ x: e.clientX, y: e.clientY });
+    }, []);
+    return { anchor, setAnchor, captureFromEvent };
+}
+
 interface DialogRootProps {
     open?: boolean;
     defaultOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
     modal?: boolean;
+    /// 锚点(viewport 视口);传入后 Dialog 进退场走"从锚点缩放"。
+    /// 不传则退化到屏幕中心 scale。
+    anchor?: DialogAnchor | null;
     children?: ReactNode;
 }
 
@@ -43,6 +63,7 @@ export function Dialog({
     defaultOpen,
     onOpenChange,
     modal,
+    anchor,
     children,
 }: DialogRootProps) {
     const isControlled = open !== undefined;
@@ -54,13 +75,15 @@ export function Dialog({
     };
     return (
         <DialogOpenContext.Provider value={actualOpen}>
-            <RadixDialog.Root
-                open={actualOpen}
-                onOpenChange={handleChange}
-                modal={modal}
-            >
-                {children}
-            </RadixDialog.Root>
+            <DialogAnchorContext.Provider value={anchor ?? null}>
+                <RadixDialog.Root
+                    open={actualOpen}
+                    onOpenChange={handleChange}
+                    modal={modal}
+                >
+                    {children}
+                </RadixDialog.Root>
+            </DialogAnchorContext.Provider>
         </DialogOpenContext.Provider>
     );
 }
@@ -72,34 +95,58 @@ const overlayEnter: EnterFn = (el, env) =>
     gsap.fromTo(
         el,
         { autoAlpha: 0 },
-        { autoAlpha: 1, duration: env.duration('base'), ease: env.preset.enterEase },
+        { autoAlpha: 1, duration: env.duration('base'), ease: env.ease.enter },
     );
 const overlayExit: ExitFn = (el, env) =>
     gsap.to(el, {
         autoAlpha: 0,
         duration: env.duration('fast'),
-        ease: env.preset.exitEase,
+        ease: env.ease.exit,
     });
 
-const contentEnter: EnterFn = (el, env) =>
-    gsap.fromTo(
-        el,
-        { autoAlpha: 0, scale: 0.96, y: -2 },
-        {
-            autoAlpha: 1,
-            scale: 1,
-            y: 0,
-            duration: env.duration('base'),
-            ease: env.preset.enterEase,
-        },
-    );
+/// 计算锚点相对 content 中心的偏移和缩放原点。anchor 没传时回退到"中心 0,0"。
+function makeContentEnter(anchor: DialogAnchor | null): EnterFn {
+    return (el, env) => {
+        const f = env.preset.feel;
+        const rect = el.getBoundingClientRect();
+        let originX = '50%';
+        let originY = '50%';
+        let dx = 0;
+        let dy = 0;
+        if (anchor && f.cardLift > 0) {
+            // 计算缩放原点(百分比)和起始位移让 content 看起来从 anchor 长出。
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            originX = `${((anchor.x - rect.left) / rect.width) * 100}%`;
+            originY = `${((anchor.y - rect.top) / rect.height) * 100}%`;
+            // 起始位移:让 content 视觉中心稍微偏向 anchor。clamp 在 [-32, 32]
+            // 避免极端锚点导致 dialog 飞太远。
+            dx = Math.max(-32, Math.min(32, (anchor.x - cx) * 0.18));
+            dy = Math.max(-32, Math.min(32, (anchor.y - cy) * 0.18));
+        }
+        gsap.set(el, { transformOrigin: `${originX} ${originY}` });
+        return gsap.fromTo(
+            el,
+            { autoAlpha: 0, scale: 0.92, x: dx, y: dy - 2 },
+            {
+                autoAlpha: 1,
+                scale: 1,
+                x: 0,
+                y: 0,
+                duration: env.duration('base'),
+                ease: env.ease.enter,
+            },
+        );
+    };
+}
+
 const contentExit: ExitFn = (el, env) =>
     gsap.to(el, {
         autoAlpha: 0,
         scale: 0.97,
         y: -2,
         duration: env.duration('fast'),
-        ease: env.preset.exitEase,
+        ease: env.ease.exit,
     });
 
 interface DialogContentProps
@@ -107,13 +154,13 @@ interface DialogContentProps
     hideClose?: boolean;
 }
 
-/// DialogContent:外层固定 Portal,内部两块 GsapPresence 各自管 overlay/content。
-/// 居中用 flex(不依赖 transform),让 GSAP 可以自由动 content 的 scale/y 不互相影响。
 export const DialogContent = forwardRef<
     ElementRef<typeof RadixDialog.Content>,
     DialogContentProps
 >(({ className, children, hideClose, ...props }, _ref) => {
     const open = useContext(DialogOpenContext);
+    const anchor = useContext(DialogAnchorContext);
+    const contentEnter = makeContentEnter(anchor);
     return (
         <RadixDialog.Portal forceMount>
             <GsapPresence visible={open} onEnter={overlayEnter} onExit={overlayExit}>
@@ -121,10 +168,6 @@ export const DialogContent = forwardRef<
                     <OverlayBody />
                 </RadixDialog.Overlay>
             </GsapPresence>
-            {/* 居中容器:不动 transform,只用 flex 居中。pointer-events-none
-                让点击穿透到 overlay,但内部 ContentBody 自己 pointer-events-auto。
-                isolation:isolate 强制创建独立 stacking context,让 content 不被
-                overlay 的 backdrop-filter 计算成"后方内容"误模糊。 */}
             <div
                 style={{ isolation: 'isolate' }}
                 className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -148,9 +191,6 @@ const OverlayBody = forwardRef<HTMLDivElement, { className?: string }>(
             ref={ref}
             style={{ visibility: 'hidden', opacity: 0 }}
             className={cn(
-                // overlay z-40,内容 z-50,留出层级让 backdrop-blur 的"后方区"
-                // 不会误把 content 也算进去(GSAP 给 content 加 transform 会创建
-                // 新 stacking context,跟 overlay 同 z-50 时浏览器计算可能错乱)。
                 'fixed inset-0 z-40 bg-black/35 backdrop-blur-sm',
                 className,
             )}
@@ -167,7 +207,6 @@ const ContentBody = forwardRef<
         ref={ref}
         style={{ visibility: 'hidden', opacity: 0 }}
         className={cn(
-            // 不再 fixed + translate 居中(交给外层 flex 容器);自己只管视觉。
             'pointer-events-auto relative w-full max-w-md',
             'rounded-md bg-elevated p-6 shadow-popover',
             className,
@@ -225,6 +264,4 @@ export const DialogFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
     />
 );
 
-// DialogPortal 仅 re-export 给少数手动用法保持兼容。新代码用 DialogContent 即可,
-// 内部已经包了 Portal。
 export const DialogPortal = RadixDialog.Portal;

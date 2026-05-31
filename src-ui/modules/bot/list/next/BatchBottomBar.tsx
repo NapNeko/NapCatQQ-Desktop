@@ -38,7 +38,7 @@ const enter: EnterFn = (el, env) =>
             y: 0,
             scale: 1,
             duration: env.duration('base'),
-            ease: env.preset.bouncyEase,
+            ease: env.ease.release,
         },
     );
 
@@ -48,7 +48,7 @@ const exit: ExitFn = (el, env) =>
         y: 24,
         scale: 0.94,
         duration: env.duration('fast'),
-        ease: env.preset.exitEase,
+        ease: env.ease.exit,
     });
 
 export function BatchBottomBar({

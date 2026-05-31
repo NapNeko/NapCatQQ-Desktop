@@ -1,14 +1,10 @@
-// 通用按钮原子件。shadcn 模式:cva 定义 variant + size。
+// 通用按钮原子件。第二轮重写。
 //
-// 设计取舍:
-//   - 不用 Radix Slot 的 asChild 模式
-//   - 仅 4 个 variant:primary / secondary / ghost / danger
-//   - icon 通过 children 自由排版
-//   - hover/tap 弹性走 GSAP + useMotion(),由用户档位驱动。优雅档退化为
-//     普通 button(零 GSAP 开销),标准/丰富档挂事件 + gsap.to() 控制 scale。
+// 改动:把手挂事件 + 多份 gsap.to 合并到 m.bindHover + m.bindPress 两条 helper。
+// hover/press 的 ease 现在按七档语义走(release 用 spring/elastic,damped 立即归位
+// 不超调),按钮按下的"啪嗒落位"在 rich 档变得明显。
 
 import { forwardRef, useEffect, useRef, type ButtonHTMLAttributes } from 'react';
-import gsap from 'gsap';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -63,58 +59,27 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
         useEffect(() => {
             const el = localRef.current;
-            if (!el) return;
-            const enabled = m.enabled && !flat && !disabled && m.preset.hoverScale !== 1;
-            if (!enabled) return;
-
-            const onEnter = () => {
-                gsap.to(el, {
-                    scale: m.preset.hoverScale,
-                    duration: m.duration('fast'),
-                    ease: m.preset.hoverEase,
-                });
-            };
-            const onLeave = () => {
-                gsap.to(el, {
-                    scale: 1,
-                    duration: m.duration('fast'),
-                    ease: m.preset.hoverEase,
-                });
-            };
-            const onDown = () => {
-                gsap.to(el, {
-                    scale: m.preset.tapScale,
-                    duration: m.duration('fast') * 0.6,
-                    ease: 'power2.out',
-                });
-            };
-            const onUp = () => {
-                // tap 释放走 bouncy ease,rich 档 elastic 弹回 1。
-                gsap.to(el, {
-                    scale: m.preset.hoverScale,
-                    duration: m.duration('base'),
-                    ease: m.preset.bouncyEase,
-                });
-            };
-            el.addEventListener('mouseenter', onEnter);
-            el.addEventListener('mouseleave', onLeave);
-            el.addEventListener('mousedown', onDown);
-            el.addEventListener('mouseup', onUp);
-            return () => {
-                el.removeEventListener('mouseenter', onEnter);
-                el.removeEventListener('mouseleave', onLeave);
-                el.removeEventListener('mousedown', onDown);
-                el.removeEventListener('mouseup', onUp);
-            };
+            if (!el || flat || disabled || !m.enabled) return;
+            const f = m.preset.feel;
+            // hoverScale=1 时不挂 hover(elegant 档),但 press 仍可挂(tap=1 时 bindPress
+            // 内部也会跳过实际 to 调用)。先简单起见,两个都挂,内部 helper 自己短路。
+            const cleanups = [
+                f.hoverScale !== 1
+                    ? m.bindHover(el, { lift: null, shadow: false, brightness: false })
+                    : () => {},
+                f.tapScale !== 1 ? m.bindPress(el) : () => {},
+            ];
+            return () => cleanups.forEach((fn) => fn());
         }, [
             m.enabled,
+            m.level,
+            m.speed,
+            m.bindHover,
+            m.bindPress,
+            m.preset.feel.hoverScale,
+            m.preset.feel.tapScale,
             flat,
             disabled,
-            m.preset.hoverScale,
-            m.preset.tapScale,
-            m.preset.hoverEase,
-            m.preset.bouncyEase,
-            m.speed,
         ]);
 
         return (

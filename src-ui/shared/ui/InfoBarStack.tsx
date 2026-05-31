@@ -26,7 +26,7 @@ interface InfoBarStackProps {
 }
 
 const enter: EnterFn = (el, env) => {
-    // rich 档进场 elastic 弹入,标准/优雅档 power3。
+    // rich 档进场带 elastic release(余震),standard 走 spring,elegant power3。
     return gsap.fromTo(
         el,
         { autoAlpha: 0, x: 16, scale: 0.985 },
@@ -35,7 +35,7 @@ const enter: EnterFn = (el, env) => {
             x: 0,
             scale: 1,
             duration: env.duration('base'),
-            ease: env.preset.bouncyEase,
+            ease: env.ease.release,
         },
     );
 };
@@ -45,7 +45,7 @@ const exit: ExitFn = (el, env) =>
         autoAlpha: 0,
         x: 12,
         duration: env.duration('fast'),
-        ease: env.preset.exitEase,
+        ease: env.ease.exit,
     });
 
 interface DisplayedItem extends InfoBarStackItem {

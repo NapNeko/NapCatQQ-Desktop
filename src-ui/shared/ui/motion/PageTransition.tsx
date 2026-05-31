@@ -1,9 +1,9 @@
-// PageTransition: 路由级页面过渡。GSAP 版。
+// PageTransition: 路由级页面过渡。GSAP 版,精细化第二轮。
 //
-// 跟 GsapPresence 配合使用,父级控制 visible 切换。本组件只负责描述 enter/exit
-// 动画(autoAlpha + 轻 slide-y + 微缩放),不管 mount/unmount(那个是 GsapPresence 的事)。
-//
-// 风格:rich 档进场用 back.out 让落位带"啪嗒"弹性,标准/优雅档走 power3.out。
+// 改动:
+//   - ease 走 m.ease.enter/exit 七档语义
+//   - 进场叠 brightness 微闪让"刚加载完"有视觉确认(rich 档明显,standard 弱)
+//   - 退场带轻微 blur(rich 档),增强"离场"感
 
 import { forwardRef, type ReactNode } from 'react';
 import gsap from 'gsap';
@@ -19,26 +19,37 @@ interface PageTransitionProps {
 }
 
 const enter: EnterFn = (el, env) => {
+    const f = env.preset.feel;
     return gsap.fromTo(
         el,
-        { autoAlpha: 0, y: 12, scale: 0.985 },
+        {
+            autoAlpha: 0,
+            y: 12,
+            scale: 0.985,
+            // rich 档进场附带 brightness 微闪,新页"亮一下"再恢复。
+            filter: f.brightness > 1.02 ? `brightness(${f.brightness * 1.02})` : 'none',
+        },
         {
             autoAlpha: 1,
             y: 0,
             scale: 1,
+            filter: 'none',
             duration: env.duration('slow'),
-            ease: env.preset.enterEase,
+            ease: env.ease.enter,
         },
     );
 };
 
 const exit: ExitFn = (el, env) => {
+    const f = env.preset.feel;
     return gsap.to(el, {
         autoAlpha: 0,
         y: -8,
         scale: 0.99,
+        // rich 档退场叠 blur 让旧页"淡远",elegant/standard 不动 filter。
+        filter: f.overshoot ? 'blur(2px)' : 'none',
         duration: env.duration('fast'),
-        ease: env.preset.exitEase,
+        ease: env.ease.exit,
     });
 };
 
@@ -60,8 +71,6 @@ export function PageTransition({
     );
 }
 
-/// 内层 forwardRef 节点。GsapPresence 通过 cloneElement 注入 ref。
-/// 默认 autoAlpha:0 让首帧不闪一下白(GSAP autoAlpha=0 = visibility hidden + opacity 0)。
 const PageBody = forwardRef<HTMLDivElement, { children: ReactNode; className?: string }>(
     ({ children, className }, ref) => (
         <div ref={ref} className={className} style={{ visibility: 'hidden', opacity: 0 }}>
