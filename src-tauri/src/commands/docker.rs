@@ -194,7 +194,7 @@ pub async fn docker_deploy(
     }
     emit(ProgressKind::StepEnd { step: 2, ok: true });
 
-    // step 3: 拉镜像（流式，逐行更新 layer 计数）
+    // step 3: 拉镜像（流式，逐行更新 layer 计数；多镜像站 fallback）
     emit(ProgressKind::StepBegin {
         step: 3,
         message: "拉取镜像...".to_string(),
@@ -204,47 +204,80 @@ pub async fn docker_deploy(
         // 的 reader task 里）安全更新状态。实际上 run_streaming 的 on_line 在同一
         // async task 里被调用（channel 收发在同一 future），Mutex 只是满足 Send 约束。
         use std::sync::{Arc, Mutex};
-        let pull_state = Arc::new(Mutex::new(PullProgress::new()));
-        let pull_state_cb = Arc::clone(&pull_state);
         let event_bus_pull = state.event_bus.clone();
         let tid_pull = task_id.clone();
 
-        let on_line = move |src: StreamSource, line: String| {
-            // 原始行作为 Log 发出，方便调试。
-            event_bus_pull.publish(DomainEvent::docker_deploy_progress(
-                tid_pull.clone(),
-                ProgressEvent::new(ProgressKind::Log {
-                    level: ProgressLogLevel::Info,
-                    message: line.clone(),
-                }),
-            ));
-            // stdout 才是 docker pull 进度行；stderr 只记日志不更新计数。
-            if src == StreamSource::Stdout {
-                let mut ps = pull_state_cb.lock().unwrap();
-                ps.update(&line);
-                let (completed, total, msg) = ps.summary();
-                let percent = if total > 0 {
-                    ((completed as u64 * 100) / total as u64) as u8
-                } else {
-                    0
-                };
+        // 镜像候选:国内反代镜像站优先 + 官方直连兜底。compose.yml 写官方名,
+        // pull_with_fallback 成功后会 retag 回官方名命中缓存。
+        let candidates = spec.flavor.pull_candidates();
+        let official = spec.flavor.default_image();
+
+        // 回调工厂:每换一个候选给一份独立 PullProgress(layer 计数不串站),并发
+        // 一条日志告知用户当前在试哪个源。idx>0 说明前面的源失败了,降级提示。
+        let new_line_cb = move |idx: usize, image: &str| {
+            if idx == 0 {
                 event_bus_pull.publish(DomainEvent::docker_deploy_progress(
                     tid_pull.clone(),
-                    ProgressEvent::new(ProgressKind::StepProgress {
-                        step: 3,
-                        percent,
-                        message: msg,
-                        speed_bps: None,
-                        downloaded_bytes: None,
-                        total_bytes: None,
-                        download_stage: None,
+                    ProgressEvent::new(ProgressKind::Log {
+                        level: ProgressLogLevel::Info,
+                        message: format!("拉取镜像: {image}"),
+                    }),
+                ));
+            } else {
+                event_bus_pull.publish(DomainEvent::docker_deploy_progress(
+                    tid_pull.clone(),
+                    ProgressEvent::new(ProgressKind::Log {
+                        level: ProgressLogLevel::Warn,
+                        message: format!("上一个源失败，改用镜像源重试: {image}"),
                     }),
                 ));
             }
+
+            let pull_state = Arc::new(Mutex::new(PullProgress::new()));
+            let pull_state_cb = Arc::clone(&pull_state);
+            let event_bus_line = event_bus_pull.clone();
+            let tid_line = tid_pull.clone();
+
+            move |src: StreamSource, line: String| {
+                // 原始行作为 Log 发出，方便调试。
+                event_bus_line.publish(DomainEvent::docker_deploy_progress(
+                    tid_line.clone(),
+                    ProgressEvent::new(ProgressKind::Log {
+                        level: ProgressLogLevel::Info,
+                        message: line.clone(),
+                    }),
+                ));
+                // stdout 才是 docker pull 进度行；stderr 只记日志不更新计数。
+                if src == StreamSource::Stdout {
+                    let mut ps = pull_state_cb.lock().unwrap();
+                    ps.update(&line);
+                    let (completed, total, msg) = ps.summary();
+                    let percent = if total > 0 {
+                        ((completed as u64 * 100) / total as u64) as u8
+                    } else {
+                        0
+                    };
+                    event_bus_line.publish(DomainEvent::docker_deploy_progress(
+                        tid_line.clone(),
+                        ProgressEvent::new(ProgressKind::StepProgress {
+                            step: 3,
+                            percent,
+                            message: msg,
+                            speed_bps: None,
+                            downloaded_bytes: None,
+                            total_bytes: None,
+                            download_stage: None,
+                        }),
+                    ));
+                }
+            }
         };
 
-        if let Err(e) = cli.pull_streaming(spec.flavor.default_image(), on_line).await {
-            let msg = format!("拉取镜像失败: {e}");
+        if let Err(e) = cli
+            .pull_with_fallback(&candidates, official, new_line_cb)
+            .await
+        {
+            let msg = format!("拉取镜像失败（已尝试 {} 个源）: {e}", candidates.len());
             emit(ProgressKind::Log { level: ProgressLogLevel::Error, message: msg.clone() });
             emit(ProgressKind::Finished { ok: false });
             return Err(msg);

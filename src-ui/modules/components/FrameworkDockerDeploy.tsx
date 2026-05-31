@@ -71,9 +71,12 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
                     taskId={taskId}
                     onClose={handleClose}
                     onConfirm={async (spec) => {
+                        // 部署成功:同时把结果推到外层 banner(关弹窗后仍可查凭据)并
+                        // 回给 DeployDialog——dialog 拿到后切完成态在弹窗内展示,用户
+                        // 点「完成」才走 onClose 关闭。不在这里 handleClose。
                         const result = await onDeploy(hostId, spec, taskId);
                         onDeployed(result);
-                        handleClose();
+                        return result;
                     }}
                 />
             )}

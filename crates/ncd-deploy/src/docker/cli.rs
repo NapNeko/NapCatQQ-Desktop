@@ -301,6 +301,60 @@ impl<'h> DockerCli<'h> {
         }
         Ok(())
     }
+
+    /// 带镜像站 fallback 的拉取:按 `candidates` 顺序逐个 `docker pull`,第一个
+    /// 成功的即采用;若它不是 `official_image`(走了镜像站前缀),再 `docker tag`
+    /// 回官方名,这样后续 `docker compose up`(compose.yml 写的是官方名)能命中
+    /// 本地缓存,不会再去 Docker Hub 直连。全部候选都失败才返回最后一次的错误。
+    ///
+    /// `new_line_cb` 是回调工厂:每开始尝试一个候选就调一次,参数是候选的
+    /// 0-based 序号和镜像引用,返回该次拉取专用的逐行回调。每个候选独立计数,
+    /// 避免上一个站失败的 layer 状态串进下一个站。
+    pub async fn pull_with_fallback<F, L>(
+        &self,
+        candidates: &[String],
+        official_image: &str,
+        mut new_line_cb: F,
+    ) -> Result<String, DockerCliError>
+    where
+        F: FnMut(usize, &str) -> L,
+        L: FnMut(StreamSource, String) + Send + 'static,
+    {
+        let mut last_err: Option<DockerCliError> = None;
+        for (idx, image) in candidates.iter().enumerate() {
+            let on_line = new_line_cb(idx, image);
+            match self.pull_streaming(image, on_line).await {
+                Ok(()) => {
+                    // 走了镜像站前缀就 retag 回官方名。retag 失败不致命:大不了
+                    // compose 用原前缀名拉不到再走它自己的兜底,这里只尽力对齐缓存。
+                    if image != official_image {
+                        let _ = self.retag(image, official_image).await;
+                    }
+                    return Ok(image.clone());
+                }
+                Err(e) => last_err = Some(e),
+            }
+        }
+        Err(last_err.unwrap_or_else(|| DockerCliError::CommandFailed {
+            command: "docker pull".to_string(),
+            exit_code: None,
+            stderr: "没有可用的镜像候选".to_string(),
+        }))
+    }
+
+    /// `docker tag <src> <dst>`。给镜像打一个别名引用,不重新拉取。
+    async fn retag(&self, src: &str, dst: &str) -> Result<(), DockerCliError> {
+        let cmd = self.docker_cmd().arg("tag").arg(src).arg(dst);
+        let out = self.host.run_to_string(cmd).await?;
+        if !out.success() {
+            return Err(DockerCliError::CommandFailed {
+                command: format!("docker tag {src} {dst}"),
+                exit_code: out.exit_code,
+                stderr: out.stderr.trim().to_string(),
+            });
+        }
+        Ok(())
+    }
 }
 
 /// `docker pull` 输出里单个 layer 的阶段。

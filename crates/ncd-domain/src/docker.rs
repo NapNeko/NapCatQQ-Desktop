@@ -126,14 +126,38 @@ impl DockerFlavor {
         }
     }
 
-    /// 官方镜像引用(含 tag)。
+    /// 官方镜像引用(含 tag)。compose.yml 永远写这个标准名;拉取时若走了镜像站
+    /// 前缀,会 retag 回这个名字让 compose 命中本地缓存。
     pub const fn default_image(self) -> &'static str {
         match self {
             Self::NapCat => "mlikiowa/napcat-docker:latest",
             Self::SnowLuma => "motricseven7/snowluma:latest",
         }
     }
+
+    /// 拉镜像时按优先级尝试的镜像引用列表:先逐个走国内反代镜像站
+    /// ([`DOCKER_HUB_MIRRORS`]),最后回退官方直连([`Self::default_image`])。
+    /// 调用方逐个尝试,第一个拉成功的即采用,随后 retag 回 default_image。
+    pub fn pull_candidates(self) -> Vec<String> {
+        let official = self.default_image();
+        let mut refs: Vec<String> = DOCKER_HUB_MIRRORS
+            .iter()
+            .map(|m| format!("{m}/{official}"))
+            .collect();
+        refs.push(official.to_string());
+        refs
+    }
 }
+
+/// Docker Hub 国内反代镜像站前缀(按优先级)。Docker Hub 官方 registry 在国内
+/// 基本不可直连,这些是社区维护的反代,拉取时拼成 `<mirror>/<image>`。这类公共
+/// 站点存活期不稳定(常因流量/备案关停),所以做成多站点 + 官方直连兜底的
+/// fallback 链,任一可达即可。换站只改这里,不动其它逻辑。
+pub const DOCKER_HUB_MIRRORS: &[&str] = &[
+    "docker.1ms.run",
+    "docker.m.daocloud.io",
+    "docker.xuanyuan.me",
+];
 
 /// 一条端口映射:宿主机端口 → 容器端口。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -389,6 +413,19 @@ mod tests {
             DockerFlavor::SnowLuma.default_image(),
             "motricseven7/snowluma:latest"
         );
+    }
+
+    #[test]
+    fn pull_candidates_mirrors_first_official_last() {
+        let cands = DockerFlavor::NapCat.pull_candidates();
+        // 至少有「每个镜像站一条 + 官方一条」。
+        assert_eq!(cands.len(), DOCKER_HUB_MIRRORS.len() + 1);
+        // 镜像站候选拼成 <mirror>/<official>。
+        for (i, mirror) in DOCKER_HUB_MIRRORS.iter().enumerate() {
+            assert_eq!(cands[i], format!("{mirror}/mlikiowa/napcat-docker:latest"));
+        }
+        // 最后一条是官方裸名,作直连兜底。
+        assert_eq!(cands.last().unwrap(), "mlikiowa/napcat-docker:latest");
     }
 
     #[test]

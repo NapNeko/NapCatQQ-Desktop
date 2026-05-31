@@ -1,6 +1,8 @@
 // 部署对话框：容器名 + 端口（默认值可改）+ NapCat 可选 QQ 号。
 // 提交前用 domain 的 validateDeploySpec 做即时校验。
-// 部署进行中时隐藏表单，显示来自 dockerDeployProgressStore 的实时进度。
+// 三态切换：表单 → 部署中进度 → 完成结果卡片。进度态隐藏表单显示来自
+// dockerDeployProgressStore 的实时进度；成功后不立刻关闭，留在弹窗里展示
+// WebUI 地址 + 凭据（凭据仅一次性展示），用户看完点「完成」再关。
 
 import React, { useMemo, useState } from 'react';
 import { Loader2, Plus, X } from 'lucide-react';
@@ -19,7 +21,17 @@ import { validateDeploySpec, portPurpose } from '../../core/domain/docker/spec';
 import { errorText } from '../../core/domain/errors';
 import { useDockerDeployProgress } from '../../hooks/docker/useDockerDeployProgress';
 import { ProgressLine } from '../components/progressView';
-import type { DockerDeploySpec, DockerFlavor, PortMapping } from '../../core/ipc/types';
+import { DeployResultBody } from './DeployResultBanner';
+import type {
+    DeployedContainer,
+    DockerDeploySpec,
+    DockerFlavor,
+    PortMapping,
+} from '../../core/ipc/types';
+
+// docker_deploy 的 5 步固定标题。用步骤号映射,避免把后端 message(拉取阶段是
+// "已完成 X/Y 层")塞进步骤行——那会和下方 ProgressLine 的层数重复。
+const STEP_TITLES = ['探测 Docker', '准备部署目录', '拉取镜像', '启动容器', '读取部署结果'];
 
 interface DeployDialogProps {
     flavor: DockerFlavor;
@@ -27,7 +39,8 @@ interface DeployDialogProps {
     isDeploying: boolean;
     taskId: string;
     onClose: () => void;
-    onConfirm: (spec: DockerDeploySpec) => void | Promise<void>;
+    // 下发部署并返回结果。dialog 拿到结果后切到完成态展示，不立刻关闭。
+    onConfirm: (spec: DockerDeploySpec) => Promise<DeployedContainer>;
 }
 
 export const DeployDialog: React.FC<DeployDialogProps> = ({
@@ -42,6 +55,8 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
     const [ports, setPorts] = useState<PortMapping[]>(initialSpec.ports);
     const [qqId, setQqId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // 部署成功的结果。非 null 时弹窗切到完成态展示 WebUI/凭据。
+    const [deployed, setDeployed] = useState<DeployedContainer | null>(null);
 
     const progress = useDockerDeployProgress(taskId);
 
@@ -92,39 +107,56 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
         }
         setError(null);
         try {
-            // onConfirm 负责真正下发部署并在成功时关闭对话框。失败时它会 reject,
-            // 这里就地显示后端原因(拉镜像失败 / docker 未就绪 / 端口占用等),
-            // 对话框保持打开让用户改参数重试,而不是默默回到原样。
-            await onConfirm(spec);
+            // 成功后切到完成态展示结果(WebUI/凭据),不立刻关闭——凭据只展示一次,
+            // 关早了用户看不到。失败时就地显示后端原因(拉镜像失败 / docker 未就绪 /
+            // 端口占用等),对话框保持打开让用户改参数重试。
+            const result = await onConfirm(spec);
+            setDeployed(result);
         } catch (e) {
             setError(errorText(e, '部署失败，请稍后重试'));
         }
     };
 
-    // 步骤指示文字：有进度时显示"步骤 x/y · 当前消息"，否则显示通用提示。
+    // 步骤指示文字：用固定的步骤标题(探测/准备/拉取/启动/读取),不复用后端
+    // message——后端拉取阶段的 message 是"已完成 X/Y 层",会和下方 ProgressLine
+    // 的层数计数重复。层数只在 ProgressLine 一处显示。
     const stepHint =
         progress && progress.totalSteps > 0
-            ? `步骤 ${progress.currentStep}/${progress.totalSteps} · ${progress.message || '处理中'}`
+            ? `步骤 ${progress.currentStep}/${progress.totalSteps} · ${STEP_TITLES[progress.currentStep - 1] ?? '处理中'}`
             : '正在部署，请稍候…';
 
     // 最近几条 log，取末尾 4 条，docker pull 的 layer 状态行会在这里滚动。
     const recentLogs = progress ? progress.logs.slice(-4) : [];
 
     return (
-        <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-lg">
+        // 部署进行中锁死对话框：点遮罩 / 按 Esc / 关闭按钮都不放行，否则一点外部
+        // 就把对话框连带 taskId 卸载，再开是新 task，进度回不去。部署结束(成功由
+        // 调用方主动关、失败 isDeploying 转 false)后恢复正常关闭。
+        <Dialog open onOpenChange={(o) => { if (!o && !isDeploying) onClose(); }}>
+            <DialogContent
+                className="max-w-lg"
+                hideClose={isDeploying}
+                onInteractOutside={(e) => { if (isDeploying) e.preventDefault(); }}
+                onEscapeKeyDown={(e) => { if (isDeploying) e.preventDefault(); }}
+            >
                 <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>
-                        左侧是宿主机端口（可改），右侧是容器内端口。默认端口已填好，
-                        冲突就改宿主机端口；也可「添加端口」映射自定义服务。WebUI 凭据会自动生成。
-                    </DialogDescription>
+                    <DialogTitle>{deployed ? `${deployed.name} 部署完成` : title}</DialogTitle>
+                    {!deployed && (
+                        <DialogDescription>
+                            左侧是宿主机端口（可改），右侧是容器内端口。默认端口已填好，
+                            冲突就改宿主机端口；也可「添加端口」映射自定义服务。WebUI 凭据会自动生成。
+                        </DialogDescription>
+                    )}
                 </DialogHeader>
 
                 {/* 横向留 px + 负 margin 抵消：让 NumberField 聚焦时向外扩的 ring
                     不被 overflow-y-auto 的滚动裁剪边切掉。 */}
                 <div className="-mx-1 flex max-h-[60vh] flex-col gap-4 overflow-y-auto px-1 py-1">
-                    {isDeploying && progress ? (
+                    {deployed ? (
+                        // 部署完成：在弹窗内展示结果(WebUI/noVNC 地址 + 凭据),凭据仅一次性
+                        // 展示。用户看完点「完成」关闭。
+                        <DeployResultBody result={deployed} />
+                    ) : isDeploying && progress ? (
                         // 部署进行中：隐藏表单，显示进度区。
                         <div className="flex flex-col gap-3 rounded-md bg-inset/40 px-3 py-3">
                             <p className="text-xs text-text-secondary">{stepHint}</p>
@@ -195,13 +227,20 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
                 </div>
 
                 <DialogFooter>
-                    <Button variant="ghost" onClick={onClose} disabled={isDeploying}>
-                        取消
-                    </Button>
-                    <Button onClick={() => void handleConfirm()} disabled={isDeploying}>
-                        {isDeploying && <Loader2 size={14} className="animate-spin" />}
-                        开始部署
-                    </Button>
+                    {deployed ? (
+                        // 完成态:单个「完成」按钮,点了才关闭(让用户有时间记下凭据)。
+                        <Button onClick={onClose}>完成</Button>
+                    ) : (
+                        <>
+                            <Button variant="ghost" onClick={onClose} disabled={isDeploying}>
+                                取消
+                            </Button>
+                            <Button onClick={() => void handleConfirm()} disabled={isDeploying}>
+                                {isDeploying && <Loader2 size={14} className="animate-spin" />}
+                                开始部署
+                            </Button>
+                        </>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>
