@@ -134,7 +134,7 @@ flowchart TB
 - Components 真页：`modules/components/ComponentsPage.next.tsx` + 单机视图（`HostSwitcher` / `HostComponentsView` / `MachineComponentRow` / `DockerRow` / `FrameworkDockerDeploy`）
 - Bot 列表真页（Step 7）：`modules/bot/BotPage.next.tsx`（list/config/log 浅路由壳）+ `modules/bot/list/BotListPage.next.tsx` + `next/{BotCard,FloatingActions,BatchBottomBar,QrCodeDialog}.tsx`。卡片走自适应高度 + 状态文案合到副标题行 + 操作按钮按 bot 状态收缩
 - 字体：3 个 variable font 自托管（`@fontsource-variable/{plus-jakarta-sans, inter, jetbrains-mono}`）单文件 ~30KB woff2 涵盖所有 weight。CJK 不打包，fallback `HarmonyOS Sans SC → MiSans → PingFang SC → Microsoft YaHei UI → Microsoft YaHei`。OpenType feature：body 开 `cv11 / ss01 / ss03`，mono 开 `calt / liga`，全局 `font-variant-numeric: tabular-nums`
-- npm scripts：`dev:next` / `build:next` / `tauri:dev:next` / `tauri:watch:next` / `ts-bindings` / `rust:check` / `rust:test` / `verify`
+- npm scripts：`dev` / `build`（前端）· `tauri:dev` / `tauri:build` / `tauri:watch`（桌面应用，build 出 exe/msi）· `verify` / `ts-bindings` / `typecheck` / `rust:check` / `rust:test`（验证）。Fluent 旧树删除后蓝绿模式退役，`:next` 系列脚本已合并回普通脚本
 
 ## 8. Bot hook 速查表（推倒重写时对照）
 
