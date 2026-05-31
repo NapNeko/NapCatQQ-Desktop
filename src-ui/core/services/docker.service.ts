@@ -15,6 +15,7 @@ import {
     mockDockerStatus,
     mockContainers,
     mockDeployed,
+    mockProgressSequence,
     withMockDelay,
 } from '../ipc/mock/docker.mock';
 
@@ -69,9 +70,16 @@ export const dockerService = {
         return withMockDelay(`mock logs for ${name}\nline 1\nline 2`, 150);
     },
 
-    deploy: async (hostId: string, spec: DockerDeploySpec): Promise<DeployedContainer> => {
-        if (isTauri) return invoke<DeployedContainer>('docker_deploy', { hostId, spec });
-        return withMockDelay(mockDeployed(spec), 600);
+    deploy: async (
+        hostId: string,
+        spec: DockerDeploySpec,
+        taskId: string,
+    ): Promise<DeployedContainer> => {
+        if (isTauri) return invoke<DeployedContainer>('docker_deploy', { hostId, spec, taskId });
+        // mock 分支：模拟几条进度事件，让浏览器预览也能看到进度动画。
+        // 真实后端会通过 docker_deploy_progress 事件推进度，这里用 setTimeout 模拟。
+        mockProgressSequence(taskId);
+        return withMockDelay(mockDeployed(spec), 2000);
     },
 
     composeDown: async (

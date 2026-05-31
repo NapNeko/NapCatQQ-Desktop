@@ -56,6 +56,14 @@ pub enum Locality {
     Remote,
 }
 
+/// 流式命令输出的来源通道。`run_streaming` 回调每行时带上，调用方据此区分
+/// stdout / stderr（docker pull 进度走 stdout，compose 日志走 stderr）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamSource {
+    Stdout,
+    Stderr,
+}
+
 /// 跨平台主机统一接口。
 ///
 /// 调用方使用模式:
@@ -164,6 +172,36 @@ pub trait Host: Send + Sync {
             _ => HostCommand::new("sh").arg("-c").arg(format!("command -v {command}")),
         };
         matches!(self.run_to_string(probe).await, Ok(out) if out.success())
+    }
+
+    /// 运行命令并把 stdout / stderr 逐行流式回调，适合 docker pull / compose up
+    /// 这类「跑得久、要实时进度」的命令。`on_line(source, line)` 每收到完整一行
+    /// （已去掉行尾换行）就被调用一次，调用方在回调里做解析 / 转进度事件。命令
+    /// 结束后返回 [`CommandOutput`]，其中 stdout/stderr 是回调过的全部行重新拼回
+    /// （调用方通常只看 exit_code，行内容已经在回调里处理过）。
+    ///
+    /// 回调收的是 owned `String` 而非 `&str`：trait 走 `#[async_trait]`，`&str`
+    /// 在 `Box<dyn FnMut(..., &str)>` 里会被固定一个生命周期，编译器会认为 box 的
+    /// 析构可能用到它，逼着每行的借用活到函数尾——owned String 没有借用，彻底绕开。
+    /// 行很小，这点 alloc 可忽略。
+    ///
+    /// 默认实装回退到 [`Self::run_to_string`]：一次性跑完，再把 stdout/stderr 按
+    /// 行补发一遍回调。这样没实现流式的 Host（stub / 未来主机）行为正确，只是
+    /// 进度变成「跑完一次性出」。真正的流式由 LocalWindowsHost / RemoteLinuxHost
+    /// override。回调是 `FnMut + Send`，因为调用方常在闭包里改可变状态（layer 表）。
+    async fn run_streaming(
+        &self,
+        cmd: HostCommand,
+        mut on_line: Box<dyn FnMut(StreamSource, String) + Send>,
+    ) -> Result<CommandOutput, HostError> {
+        let out = self.run_to_string(cmd).await?;
+        for line in out.stdout.lines() {
+            on_line(StreamSource::Stdout, line.to_string());
+        }
+        for line in out.stderr.lines() {
+            on_line(StreamSource::Stderr, line.to_string());
+        }
+        Ok(out)
     }
 }
 

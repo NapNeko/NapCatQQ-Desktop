@@ -20,6 +20,7 @@ import { Showcase } from './Showcase';
 import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
 import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
+import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { applySideEffects as applyPreferences } from '../hooks/preferences/preferencesStore';
@@ -47,6 +48,10 @@ export const AppNext: React.FC = () => {
     // 顶层挂一次 component-action 事件桥。路由切换不会断订阅，进度状态留在
     // 模块级 store；切走 Components 页再切回来不会丢已经在跑的安装进度。
     useComponentActionEventBridge();
+
+    // 顶层挂一次 docker 部署进度桥。对话框关闭不会断订阅，后端推来的进度
+    // 事件始终能落到 store，下次打开对话框还能看到历史进度。
+    useDockerDeployProgressBridge();
 
     // 启动即后台预热组件探测：拉服务器列表 + 自动连接远端 + catalog + 逐主机
     // detect，全在 App 根节点常驻跑。用户切到组件页时数据已在 react-query 缓存，

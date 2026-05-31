@@ -1,5 +1,6 @@
 // 部署对话框：容器名 + 端口（默认值可改）+ NapCat 可选 QQ 号。
 // 提交前用 domain 的 validateDeploySpec 做即时校验。
+// 部署进行中时隐藏表单，显示来自 dockerDeployProgressStore 的实时进度。
 
 import React, { useMemo, useState } from 'react';
 import { Loader2, Plus, X } from 'lucide-react';
@@ -16,12 +17,15 @@ import {
 } from '../../shared/ui';
 import { validateDeploySpec, portPurpose } from '../../core/domain/docker/spec';
 import { errorText } from '../../core/domain/errors';
+import { useDockerDeployProgress } from '../../hooks/docker/useDockerDeployProgress';
+import { ProgressLine } from '../components/progressView';
 import type { DockerDeploySpec, DockerFlavor, PortMapping } from '../../core/ipc/types';
 
 interface DeployDialogProps {
     flavor: DockerFlavor;
     initialSpec: DockerDeploySpec;
     isDeploying: boolean;
+    taskId: string;
     onClose: () => void;
     onConfirm: (spec: DockerDeploySpec) => void | Promise<void>;
 }
@@ -30,6 +34,7 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
     flavor,
     initialSpec,
     isDeploying,
+    taskId,
     onClose,
     onConfirm,
 }) => {
@@ -37,6 +42,8 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
     const [ports, setPorts] = useState<PortMapping[]>(initialSpec.ports);
     const [qqId, setQqId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    const progress = useDockerDeployProgress(taskId);
 
     // 预置端口（来自镜像默认）的容器端口锁定，只改宿主机；用户自己加的行两端
     // 都能填、可删。用初始 spec 的容器端口集合区分两者。
@@ -94,6 +101,15 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
         }
     };
 
+    // 步骤指示文字：有进度时显示"步骤 x/y · 当前消息"，否则显示通用提示。
+    const stepHint =
+        progress && progress.totalSteps > 0
+            ? `步骤 ${progress.currentStep}/${progress.totalSteps} · ${progress.message || '处理中'}`
+            : '正在部署，请稍候…';
+
+    // 最近几条 log，取末尾 4 条，docker pull 的 layer 状态行会在这里滚动。
+    const recentLogs = progress ? progress.logs.slice(-4) : [];
+
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="max-w-lg">
@@ -108,48 +124,71 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
                 {/* 横向留 px + 负 margin 抵消：让 NumberField 聚焦时向外扩的 ring
                     不被 overflow-y-auto 的滚动裁剪边切掉。 */}
                 <div className="-mx-1 flex max-h-[60vh] flex-col gap-4 overflow-y-auto px-1 py-1">
-                    <TextField
-                        label="容器名"
-                        required
-                        value={name}
-                        onValueChange={setName}
-                        placeholder={flavor === 'napcat' ? 'napcat' : 'snowluma'}
-                    />
-
-                    <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                            <p className="text-xs font-medium text-text-secondary">端口映射</p>
-                            <Button size="sm" variant="ghost" onClick={addPort}>
-                                <Plus size={13} />
-                                添加端口
-                            </Button>
-                        </div>
-                        <div className="flex flex-col gap-2.5">
-                            {ports.map((p, i) => (
-                                <PortRow
-                                    key={`${p.container}-${i}`}
-                                    mapping={p}
-                                    preset={presetContainerPorts.has(p.container)}
-                                    onHostChange={(v) => setHostPort(i, v)}
-                                    onContainerChange={(v) => setContainerPort(i, v)}
-                                    onRemove={() => removePort(i)}
-                                />
-                            ))}
-                            {ports.length === 0 && (
-                                <p className="rounded-sm bg-inset/40 px-2.5 py-3 text-center text-2xs text-text-tertiary">
-                                    至少保留一个端口映射，否则容器内服务无法从宿主机访问
-                                </p>
+                    {isDeploying && progress ? (
+                        // 部署进行中：隐藏表单，显示进度区。
+                        <div className="flex flex-col gap-3 rounded-md bg-inset/40 px-3 py-3">
+                            <p className="text-xs text-text-secondary">{stepHint}</p>
+                            <ProgressLine progress={progress} />
+                            {recentLogs.length > 0 && (
+                                <div className="flex flex-col gap-0.5 rounded-sm bg-canvas/60 px-2 py-1.5">
+                                    {recentLogs.map((log, i) => (
+                                        <p
+                                            key={i}
+                                            className="truncate font-mono text-[11px] leading-relaxed text-text-tertiary"
+                                        >
+                                            {log.message}
+                                        </p>
+                                    ))}
+                                </div>
                             )}
                         </div>
-                    </div>
+                    ) : (
+                        // 未部署时显示表单。
+                        <>
+                            <TextField
+                                label="容器名"
+                                required
+                                value={name}
+                                onValueChange={setName}
+                                placeholder={flavor === 'napcat' ? 'napcat' : 'snowluma'}
+                            />
 
-                    {flavor === 'napcat' && (
-                        <NumberField
-                            label="预绑 QQ 号（可选）"
-                            hint="填了会作为 ACCOUNT 传入，启动时自动定位该账号"
-                            value={qqId}
-                            onValueChange={setQqId}
-                        />
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-medium text-text-secondary">端口映射</p>
+                                    <Button size="sm" variant="ghost" onClick={addPort}>
+                                        <Plus size={13} />
+                                        添加端口
+                                    </Button>
+                                </div>
+                                <div className="flex flex-col gap-2.5">
+                                    {ports.map((p, i) => (
+                                        <PortRow
+                                            key={`${p.container}-${i}`}
+                                            mapping={p}
+                                            preset={presetContainerPorts.has(p.container)}
+                                            onHostChange={(v) => setHostPort(i, v)}
+                                            onContainerChange={(v) => setContainerPort(i, v)}
+                                            onRemove={() => removePort(i)}
+                                        />
+                                    ))}
+                                    {ports.length === 0 && (
+                                        <p className="rounded-sm bg-inset/40 px-2.5 py-3 text-center text-2xs text-text-tertiary">
+                                            至少保留一个端口映射，否则容器内服务无法从宿主机访问
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {flavor === 'napcat' && (
+                                <NumberField
+                                    label="预绑 QQ 号（可选）"
+                                    hint="填了会作为 ACCOUNT 传入，启动时自动定位该账号"
+                                    value={qqId}
+                                    onValueChange={setQqId}
+                                />
+                            )}
+                        </>
                     )}
 
                     {error && <p className="text-xs text-danger">{error}</p>}

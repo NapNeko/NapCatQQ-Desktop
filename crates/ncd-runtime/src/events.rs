@@ -47,6 +47,10 @@ pub enum DomainEventKind {
     /// 不绑 bot，task_id 由 backend 生成（uuid v4）。
     #[serde(rename = "component_action_progress")]
     ComponentActionProgress,
+    /// Docker 部署任务进度。与 ComponentActionProgress 对称，task_id 由 backend
+    /// 生成，不绑 bot。
+    #[serde(rename = "docker_deploy_progress")]
+    DockerDeployProgress,
 }
 
 /// 描述 NapCat WebUI 登录失效的原因。
@@ -176,6 +180,15 @@ pub enum DomainEvent {
         task_id: String,
         event: ProgressEvent,
     },
+    /// Docker 部署进度。部署是一条 5 步流水（探测 → 写 compose → 拉镜像 →
+    /// 起容器 → 回读地址），`event` 直接复用 `ncd_component::ProgressEvent`，
+    /// 拉镜像步骤填 downloaded_bytes / total_bytes / speed_bps 表达实时进度。
+    /// `task_id` 由前端生成（crypto.randomUUID），后端原样回带，前端按它路由。
+    #[serde(rename = "docker_deploy_progress")]
+    DockerDeployProgress {
+        task_id: String,
+        event: ProgressEvent,
+    },
 }
 
 impl DomainEvent {
@@ -199,6 +212,7 @@ impl DomainEvent {
             Self::SnowLumaPidSetChanged { .. } => DomainEventKind::SnowLumaPidSetChanged,
             Self::SnowLumaDaemonLog { .. } => DomainEventKind::SnowLumaDaemonLog,
             Self::ComponentActionProgress { .. } => DomainEventKind::ComponentActionProgress,
+            Self::DockerDeployProgress { .. } => DomainEventKind::DockerDeployProgress,
         }
     }
 
@@ -222,6 +236,7 @@ impl DomainEvent {
             Self::SnowLumaPidSetChanged { .. } => "snowluma_pid_set_changed",
             Self::SnowLumaDaemonLog { .. } => "snowluma_daemon_log",
             Self::ComponentActionProgress { .. } => "component_action_progress",
+            Self::DockerDeployProgress { .. } => "docker_deploy_progress",
         }
     }
 
@@ -248,6 +263,7 @@ impl DomainEvent {
             Self::SnowLumaDaemonLog { .. } => None,
             // task 级事件，不绑定具体 Bot；前端按 task_id 订阅 / 路由。
             Self::ComponentActionProgress { .. } => None,
+            Self::DockerDeployProgress { .. } => None,
         }
     }
 
@@ -406,6 +422,15 @@ impl DomainEvent {
     /// `event` 由 ncd-component 自身的进度通道吐出，原样转发到前端。
     pub fn component_action_progress(task_id: impl Into<String>, event: ProgressEvent) -> Self {
         Self::ComponentActionProgress {
+            task_id: task_id.into(),
+            event,
+        }
+    }
+
+    /// 构造 `DockerDeployProgress` 事件。`task_id` 由前端生成，后端原样回带；
+    /// `event` 由 docker 部署流水各阶段吐出（复用 ProgressEvent / ProgressKind）。
+    pub fn docker_deploy_progress(task_id: impl Into<String>, event: ProgressEvent) -> Self {
+        Self::DockerDeployProgress {
             task_id: task_id.into(),
             event,
         }
@@ -715,6 +740,13 @@ mod tests {
                     total_steps: 3,
                 }),
             ),
+            // Docker 部署 task 级进度。
+            DomainEvent::docker_deploy_progress(
+                "task-2",
+                ncd_component::ProgressEvent::new(ncd_component::ProgressKind::Started {
+                    total_steps: 5,
+                }),
+            ),
         ];
         for event in &all {
             let name = event.tauri_event_name();
@@ -887,6 +919,48 @@ mod tests {
     #[test]
     fn component_action_progress_event_name_present_in_frontend_events_ts() {
         let name = "component_action_progress";
+        let needle_single = format!("'{name}'");
+        let needle_double = format!("\"{name}\"");
+        assert!(
+            FRONTEND_EVENTS_TS.contains(&needle_single)
+                || FRONTEND_EVENTS_TS.contains(&needle_double),
+            "frontend event-stream.service.ts must contain literal {name:?} \
+ (检查 src-ui/core/services/event-stream.service.ts 的 DOMAIN_EVENT_NAMES)",
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // DockerDeployProgress 稳定性测试（与 ComponentActionProgress 对称）。
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn docker_deploy_progress_round_trips() {
+        let evt = ncd_component::ProgressEvent::new(ncd_component::ProgressKind::StepProgress {
+            step: 3,
+            percent: 68,
+            message: "pulling napcat-docker".to_string(),
+            speed_bps: Some(2_400_000),
+            downloaded_bytes: Some(327_000_000),
+            total_bytes: Some(480_000_000),
+            download_stage: Some("streaming".to_string()),
+        });
+        assert_round_trip(DomainEvent::docker_deploy_progress("task-2", evt));
+    }
+
+    #[test]
+    fn docker_deploy_progress_event_name_literal_is_stable() {
+        let evt = ncd_component::ProgressEvent::new(ncd_component::ProgressKind::Started {
+            total_steps: 5,
+        });
+        let event = DomainEvent::docker_deploy_progress("task-2", evt);
+        assert_eq!(event.tauri_event_name(), "docker_deploy_progress");
+        assert_eq!(event.kind(), DomainEventKind::DockerDeployProgress);
+        assert_eq!(event.bot_id(), None);
+    }
+
+    #[test]
+    fn docker_deploy_progress_event_name_present_in_frontend_events_ts() {
+        let name = "docker_deploy_progress";
         let needle_single = format!("'{name}'");
         let needle_double = format!("\"{name}\"");
         assert!(

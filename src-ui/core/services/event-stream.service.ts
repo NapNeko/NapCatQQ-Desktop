@@ -32,6 +32,7 @@ const DOMAIN_EVENT_NAMES = [
     'snowluma_pid_set_changed',
     'snowluma_daemon_log',
     'component_action_progress',
+    'docker_deploy_progress',
 ] as const;
 
 export const eventStreamService = {

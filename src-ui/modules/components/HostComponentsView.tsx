@@ -46,7 +46,7 @@ interface HostComponentsViewProps {
     onInstallDocker: (hostId: string) => void;
     onOpenDockerDownload: () => void;
     isDeploying: boolean;
-    onDeploy: (hostId: string, spec: DockerDeploySpec) => Promise<DeployedContainer>;
+    onDeploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
 }
 
 export const HostComponentsView: React.FC<HostComponentsViewProps> = ({

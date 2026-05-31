@@ -7,8 +7,10 @@
 //! 解析策略:用 `--format '{{json .}}'` 让 docker 自己吐 JSON,逐行 serde 解析,
 //! 不靠脆弱的列宽切分。
 
+use std::collections::HashMap;
+
 use ncd_domain::{ContainerInfo, ContainerState, DockerStatus};
-use ncd_host::{Host, HostCommand, HostError};
+use ncd_host::{Host, HostCommand, HostError, StreamSource};
 
 /// DockerCli 操作错误。
 #[derive(Debug, thiserror::Error)]
@@ -276,14 +278,20 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
-    /// `docker pull <image>`,部署前显式拉一次让进度有反馈。
-    pub async fn pull(&self, image: &str) -> Result<(), DockerCliError> {
+    /// `docker pull <image>` 流式版本。`on_line` 每收到一行就被调用，调用方
+    /// 可在回调里更新 `PullProgress` 并推进度事件。命令结束后返回 CommandOutput。
+    /// 失败（exit code 非 0）时返回 `DockerCliError::CommandFailed`。
+    pub async fn pull_streaming(
+        &self,
+        image: &str,
+        on_line: impl FnMut(StreamSource, String) + Send + 'static,
+    ) -> Result<(), DockerCliError> {
         let cmd = self
             .docker_cmd()
             .arg("pull")
             .arg(image)
             .timeout(std::time::Duration::from_secs(900));
-        let out = self.host.run_to_string(cmd).await?;
+        let out = self.host.run_streaming(cmd, Box::new(on_line)).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
                 command: format!("docker pull {image}"),
@@ -292,6 +300,94 @@ impl<'h> DockerCli<'h> {
             });
         }
         Ok(())
+    }
+}
+
+/// `docker pull` 输出里单个 layer 的阶段。
+/// docker 在非 TTY 下每行格式：`<layerId>: <phase text>`。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LayerPhase {
+    PullingFsLayer,
+    Waiting,
+    Downloading,
+    VerifyingChecksum,
+    DownloadComplete,
+    Extracting,
+    PullComplete,
+    /// 见过但不认识的 phase 文本，保留原始字符串。
+    Unknown(String),
+}
+
+impl LayerPhase {
+    fn from_text(s: &str) -> Self {
+        match s.trim() {
+            "Pulling fs layer" => Self::PullingFsLayer,
+            "Waiting" => Self::Waiting,
+            "Downloading" => Self::Downloading,
+            "Verifying Checksum" => Self::VerifyingChecksum,
+            "Download complete" => Self::DownloadComplete,
+            "Extracting" => Self::Extracting,
+            "Pull complete" => Self::PullComplete,
+            other => Self::Unknown(other.to_string()),
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        matches!(self, Self::PullComplete)
+    }
+}
+
+/// `docker pull` 进度状态。维护一张 layerId → phase 表，提供 (completed, total)
+/// 计数供调用方换算百分比。
+///
+/// 用法：每收到一行就调 `update(line)`，然后读 `summary()` 拿计数。
+pub struct PullProgress {
+    layers: HashMap<String, LayerPhase>,
+}
+
+impl PullProgress {
+    pub fn new() -> Self {
+        Self {
+            layers: HashMap::new(),
+        }
+    }
+
+    /// 解析一行 docker pull 输出，更新内部状态。
+    /// 格式：`<id>: <phase>`，id 是 12 位以内的 hex 串（实际 12 位，但 docker
+    /// 有时打短 id）。不符合格式的行（Digest: / Status: / 空行）静默忽略。
+    pub fn update(&mut self, line: &str) {
+        // 找第一个 ": " 分隔符
+        let Some(colon_pos) = line.find(": ") else {
+            return;
+        };
+        let id = &line[..colon_pos];
+        // layer id 是纯 hex，长度 1-12。超出范围的行（如 "Status: ..."）跳过。
+        if id.is_empty() || id.len() > 16 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+            return;
+        }
+        let phase_text = &line[colon_pos + 2..];
+        let phase = LayerPhase::from_text(phase_text);
+        self.layers.insert(id.to_string(), phase);
+    }
+
+    /// 返回 (completed_layers, total_layers, last_message)。
+    /// completed = phase 已到 PullComplete 的 layer 数。
+    /// total = 见过的所有 layer 数（含 Waiting / Downloading 等中间态）。
+    pub fn summary(&self) -> (usize, usize, String) {
+        let total = self.layers.len();
+        let completed = self.layers.values().filter(|p| p.is_complete()).count();
+        let msg = if total == 0 {
+            "拉取中...".to_string()
+        } else {
+            format!("已完成 {completed}/{total} 层")
+        };
+        (completed, total, msg)
+    }
+}
+
+impl Default for PullProgress {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -405,5 +501,96 @@ mod tests {
         let parsed = parse_ps_json(line).unwrap();
         assert_eq!(parsed[0].name, "primary");
         assert_eq!(parsed[0].state, ContainerState::Created);
+    }
+
+    // ---- PullProgress 解析器测试 ----
+
+    #[test]
+    fn pull_progress_empty_has_zero_counts() {
+        let p = PullProgress::new();
+        let (completed, total, _) = p.summary();
+        assert_eq!(completed, 0);
+        assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn pull_progress_single_layer_lifecycle() {
+        let mut p = PullProgress::new();
+        p.update("a1b2c3d4e5f6: Pulling fs layer");
+        let (c, t, _) = p.summary();
+        assert_eq!(t, 1);
+        assert_eq!(c, 0);
+
+        p.update("a1b2c3d4e5f6: Downloading");
+        let (c, t, _) = p.summary();
+        assert_eq!(t, 1);
+        assert_eq!(c, 0);
+
+        p.update("a1b2c3d4e5f6: Pull complete");
+        let (c, t, _) = p.summary();
+        assert_eq!(t, 1);
+        assert_eq!(c, 1);
+    }
+
+    #[test]
+    fn pull_progress_multiple_layers_out_of_order() {
+        let mut p = PullProgress::new();
+        // 3 个 layer，乱序到达
+        p.update("aabbccdd1122: Pulling fs layer");
+        p.update("112233445566: Waiting");
+        p.update("deadbeef0000: Pulling fs layer");
+        let (c, t, _) = p.summary();
+        assert_eq!(t, 3);
+        assert_eq!(c, 0);
+
+        p.update("aabbccdd1122: Pull complete");
+        p.update("deadbeef0000: Pull complete");
+        let (c, t, _) = p.summary();
+        assert_eq!(t, 3);
+        assert_eq!(c, 2);
+
+        p.update("112233445566: Pull complete");
+        let (c, t, _) = p.summary();
+        assert_eq!(t, 3);
+        assert_eq!(c, 3);
+    }
+
+    #[test]
+    fn pull_progress_ignores_digest_and_status_lines() {
+        let mut p = PullProgress::new();
+        p.update("Digest: sha256:abc123");
+        p.update("Status: Downloaded newer image for napcat:latest");
+        p.update("");
+        p.update("  ");
+        let (_, t, _) = p.summary();
+        assert_eq!(t, 0);
+    }
+
+    #[test]
+    fn pull_progress_ignores_non_hex_id_lines() {
+        let mut p = PullProgress::new();
+        // "latest: Pulling from ..." 这类行 id 含非 hex 字符，应忽略
+        p.update("latest: Pulling from mlikiowa/napcat-docker");
+        p.update("Status: Image is up to date for napcat:latest");
+        let (_, t, _) = p.summary();
+        assert_eq!(t, 0);
+    }
+
+    #[test]
+    fn pull_progress_summary_message_format() {
+        let mut p = PullProgress::new();
+        p.update("aabbccdd1122: Pull complete");
+        p.update("112233445566: Downloading");
+        let (_, _, msg) = p.summary();
+        assert!(msg.contains("1/2"), "expected '1/2' in '{msg}'");
+    }
+
+    #[test]
+    fn pull_progress_unknown_phase_still_counts_as_layer() {
+        let mut p = PullProgress::new();
+        p.update("aabbccdd1122: Some Future Phase");
+        let (c, t, _) = p.summary();
+        assert_eq!(t, 1);
+        assert_eq!(c, 0);
     }
 }

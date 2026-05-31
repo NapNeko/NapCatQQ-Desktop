@@ -12,12 +12,14 @@
 //! 所有命令走 host_resolve 选主机(local 或 remote:<id>),错误统一转 String。
 //! 业务编排尽量薄;真正的 docker 操作在 ncd_deploy::docker::DockerCli。
 
-use ncd_deploy::docker::{install_docker, render_compose, DockerCli};
+use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
+use ncd_deploy::docker::{install_docker, render_compose, DockerCli, PullProgress};
 use ncd_domain::{
     ContainerAction, ContainerInfo, DeployedContainer, DockerDeploySpec, DockerFlavor,
     DockerInstallReport, DockerInstallStatus, DockerStatus,
 };
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, StreamSource};
+use ncd_runtime::{DomainEvent, EventBus};
 use tauri::State;
 
 use crate::AppState;
@@ -121,53 +123,159 @@ pub async fn docker_logs(
 pub async fn docker_deploy(
     host_id: String,
     spec: DockerDeploySpec,
+    task_id: String,
     state: State<'_, AppState>,
 ) -> Result<DeployedContainer, String> {
     spec.validate().map_err(|e| format!("部署参数非法: {e}"))?;
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let host_ref: &dyn Host = host.as_ref();
 
+    // 小闭包：捕获 event_bus + task_id，减少重复代码。
+    let event_bus = state.event_bus.clone();
+    let tid = task_id.clone();
+    let emit = |kind: ProgressKind| {
+        event_bus.publish(DomainEvent::docker_deploy_progress(
+            tid.clone(),
+            ProgressEvent::new(kind),
+        ));
+    };
+
+    emit(ProgressKind::Started { total_steps: 5 });
+
+    // step 1: 探测 docker
+    emit(ProgressKind::StepBegin {
+        step: 1,
+        message: "探测 docker 状态...".to_string(),
+    });
     let cli = DockerCli::new(host_ref);
     let status = cli.probe().await;
     if !status.ready_to_deploy() {
-        return Err(format!(
+        let msg = format!(
             "docker 未就绪（installed={} daemon={} compose={}），请先安装/启动 docker",
             status.installed, status.daemon_running, status.compose_available
-        ));
+        );
+        emit(ProgressKind::Log {
+            level: ProgressLogLevel::Error,
+            message: msg.clone(),
+        });
+        emit(ProgressKind::Finished { ok: false });
+        return Err(msg);
     }
+    emit(ProgressKind::StepEnd { step: 1, ok: true });
 
-    // 凭据:NapCat 当 WEBUI_TOKEN,SnowLuma 当 VNC_PASSWD。用 uuid v4 去掉横线
-    // 当随机串,够强且无需额外依赖。
+    // step 2: 准备目录 + 写 compose 文件
+    emit(ProgressKind::StepBegin {
+        step: 2,
+        message: "准备部署目录...".to_string(),
+    });
     let secret = uuid::Uuid::new_v4().simple().to_string();
-
-    // compose project 目录:每个容器一个独立子目录,放它的 docker-compose.yml。
-    // 本机走 data_root/docker/<name>;远端走 $HOME/.napcat-docker/<name>。
-    let project_dir = resolve_project_dir(&host_id, host_ref, &state, &spec.container_name).await?;
-    host.create_dir_all(&HostPath::from_posix(&project_dir))
-        .await
-        .map_err(|e| format!("创建部署目录失败: {e}"))?;
-
-    // 渲染并写 compose 文件。uid/gid 在远端 Linux 用 1000 兜底(普通用户),
-    // 本机 Windows 用 0(Docker Desktop 不在意属主)。
+    let project_dir = match resolve_project_dir(&host_id, host_ref, &state, &spec.container_name).await {
+        Ok(d) => d,
+        Err(e) => {
+            emit(ProgressKind::Log { level: ProgressLogLevel::Error, message: e.clone() });
+            emit(ProgressKind::Finished { ok: false });
+            return Err(e);
+        }
+    };
+    if let Err(e) = host.create_dir_all(&HostPath::from_posix(&project_dir)).await {
+        let msg = format!("创建部署目录失败: {e}");
+        emit(ProgressKind::Log { level: ProgressLogLevel::Error, message: msg.clone() });
+        emit(ProgressKind::Finished { ok: false });
+        return Err(msg);
+    }
     let (uid, gid) = default_uid_gid(host_ref);
     let yaml = render_compose(&spec, &secret, uid, gid);
     let compose_path = HostPath::from_posix(format!("{project_dir}/docker-compose.yml"));
-    host.write_file(&compose_path, yaml.as_bytes())
-        .await
-        .map_err(|e| format!("写 compose 文件失败: {e}"))?;
+    if let Err(e) = host.write_file(&compose_path, yaml.as_bytes()).await {
+        let msg = format!("写 compose 文件失败: {e}");
+        emit(ProgressKind::Log { level: ProgressLogLevel::Error, message: msg.clone() });
+        emit(ProgressKind::Finished { ok: false });
+        return Err(msg);
+    }
+    emit(ProgressKind::StepEnd { step: 2, ok: true });
 
-    // 拉镜像 + 起容器。compose_up 自带 --pull missing,这里显式 pull 让首次
-    // 部署的网络耗时更可预期(失败信息也更清楚)。
-    cli.pull(spec.flavor.default_image())
-        .await
-        .map_err(|e| format!("拉取镜像失败: {e}"))?;
-    cli.compose_up(&project_dir)
-        .await
-        .map_err(|e| format!("启动容器失败: {e}"))?;
+    // step 3: 拉镜像（流式，逐行更新 layer 计数）
+    emit(ProgressKind::StepBegin {
+        step: 3,
+        message: "拉取镜像...".to_string(),
+    });
+    {
+        // PullProgress 和 emit 都在主 task 里，用 Mutex 让回调（可能在 tokio spawn
+        // 的 reader task 里）安全更新状态。实际上 run_streaming 的 on_line 在同一
+        // async task 里被调用（channel 收发在同一 future），Mutex 只是满足 Send 约束。
+        use std::sync::{Arc, Mutex};
+        let pull_state = Arc::new(Mutex::new(PullProgress::new()));
+        let pull_state_cb = Arc::clone(&pull_state);
+        let event_bus_pull = state.event_bus.clone();
+        let tid_pull = task_id.clone();
 
-    // 回读:拼 WebUI / noVNC 地址,SnowLuma 的密码尝试从日志 grep。
+        let on_line = move |src: StreamSource, line: String| {
+            // 原始行作为 Log 发出，方便调试。
+            event_bus_pull.publish(DomainEvent::docker_deploy_progress(
+                tid_pull.clone(),
+                ProgressEvent::new(ProgressKind::Log {
+                    level: ProgressLogLevel::Info,
+                    message: line.clone(),
+                }),
+            ));
+            // stdout 才是 docker pull 进度行；stderr 只记日志不更新计数。
+            if src == StreamSource::Stdout {
+                let mut ps = pull_state_cb.lock().unwrap();
+                ps.update(&line);
+                let (completed, total, msg) = ps.summary();
+                let percent = if total > 0 {
+                    ((completed as u64 * 100) / total as u64) as u8
+                } else {
+                    0
+                };
+                event_bus_pull.publish(DomainEvent::docker_deploy_progress(
+                    tid_pull.clone(),
+                    ProgressEvent::new(ProgressKind::StepProgress {
+                        step: 3,
+                        percent,
+                        message: msg,
+                        speed_bps: None,
+                        downloaded_bytes: None,
+                        total_bytes: None,
+                        download_stage: None,
+                    }),
+                ));
+            }
+        };
+
+        if let Err(e) = cli.pull_streaming(spec.flavor.default_image(), on_line).await {
+            let msg = format!("拉取镜像失败: {e}");
+            emit(ProgressKind::Log { level: ProgressLogLevel::Error, message: msg.clone() });
+            emit(ProgressKind::Finished { ok: false });
+            return Err(msg);
+        }
+    }
+    emit(ProgressKind::StepEnd { step: 3, ok: true });
+
+    // step 4: 起容器
+    emit(ProgressKind::StepBegin {
+        step: 4,
+        message: "启动容器...".to_string(),
+    });
+    if let Err(e) = cli.compose_up(&project_dir).await {
+        let msg = format!("启动容器失败: {e}");
+        emit(ProgressKind::Log { level: ProgressLogLevel::Error, message: msg.clone() });
+        emit(ProgressKind::Finished { ok: false });
+        return Err(msg);
+    }
+    emit(ProgressKind::StepEnd { step: 4, ok: true });
+
+    // step 5: 回读地址
+    emit(ProgressKind::StepBegin {
+        step: 5,
+        message: "读取部署结果...".to_string(),
+    });
     let address = host_display_address(&host_id, &state).await;
-    Ok(build_deployed(&spec, &secret, &address, host_ref).await)
+    let deployed = build_deployed(&spec, &secret, &address, host_ref).await;
+    emit(ProgressKind::StepEnd { step: 5, ok: true });
+    emit(ProgressKind::Finished { ok: true });
+
+    Ok(deployed)
 }
 
 #[tauri::command]

@@ -539,6 +539,128 @@ impl Host for RemoteLinuxHost {
         *self.elevation_password.lock().await = password;
     }
 
+    async fn run_streaming(
+        &self,
+        cmd: HostCommand,
+        mut on_line: Box<dyn FnMut(crate::host::StreamSource, String) + Send>,
+    ) -> Result<CommandOutput, HostError> {
+        use crate::host::StreamSource;
+
+        let inner_line = build_remote_command_line(&self.shell, &cmd);
+        let (line, stdin) = if cmd.elevated {
+            let password = self.elevation_password.lock().await.clone();
+            let has_pw = password.is_some();
+            (
+                wrap_with_sudo(&inner_line, &self.shell, has_pw),
+                build_elevated_stdin(password.as_deref(), cmd.stdin),
+            )
+        } else {
+            (inner_line, cmd.stdin)
+        };
+        let timeout = cmd.timeout.unwrap_or(Duration::from_secs(300));
+
+        // channel 开启和 stdin 写入在 timeout 外做（通常很快），主循环套 timeout。
+        let session = self.handle.lock().await;
+        let mut channel = session
+            .channel_open_session()
+            .await
+            .map_err(|e| HostError::remote_disconnected(format!("open channel: {e}")))?;
+        drop(session);
+
+        channel
+            .exec(true, line.as_bytes())
+            .await
+            .map_err(|e| HostError::remote_disconnected(format!("exec: {e}")))?;
+
+        if let Some(data) = stdin {
+            channel
+                .data(&data[..])
+                .await
+                .map_err(|e| HostError::remote_disconnected(format!("stdin write: {e}")))?;
+            channel
+                .eof()
+                .await
+                .map_err(|e| HostError::remote_disconnected(format!("stdin eof: {e}")))?;
+        }
+
+        // russh 是单路复用流，不能像本机那样分两个 pipe reader。
+        // 每收到 Data/ExtendedData 包就按 \n 切行，遇到完整行立即回调。
+        // docker pull 在非 TTY 下每个状态行是独立的一个 Data 包，这个粒度
+        // 足够实时；跨包的行边界（极少见）会在 flush 残行时补发。
+        let mut stdout_buf = Vec::<u8>::new();
+        let mut stderr_buf = Vec::<u8>::new();
+        let mut stdout_lines = Vec::<String>::new();
+        let mut stderr_lines = Vec::<String>::new();
+        let mut exit_code: Option<i32> = None;
+
+        // 内联行切分：把 buf 里已有的完整行（以 \n 结尾）切出来回调，残行留在 buf。
+        // 用宏而非闭包，避免同时借用 buf/lines/on_line 导致生命周期冲突。回调收
+        // owned String（trait 签名如此），clone 进 lines 缓冲，行很小可忽略。
+        macro_rules! flush_lines {
+            ($buf:expr, $lines:expr, $src:expr) => {
+                while let Some(pos) = $buf.iter().position(|&b| b == b'\n') {
+                    let raw: Vec<u8> = $buf.drain(..=pos).collect();
+                    let s = String::from_utf8_lossy(&raw);
+                    let s = s.trim_end_matches('\n').trim_end_matches('\r').to_string();
+                    on_line($src, s.clone());
+                    $lines.push(s);
+                }
+            };
+        }
+
+        // 直接在 async fn 里 loop，不包 async block，避免 coroutine 捕获 on_line
+        // 和 lines 导致生命周期冲突。
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            match tokio::time::timeout_at(deadline, channel.wait()).await {
+                Ok(Some(msg)) => {
+                    match msg {
+                        ChannelMsg::Data { ref data } => {
+                            stdout_buf.extend_from_slice(data);
+                            flush_lines!(stdout_buf, stdout_lines, StreamSource::Stdout);
+                        }
+                        ChannelMsg::ExtendedData { ref data, ext } if ext == 1 => {
+                            stderr_buf.extend_from_slice(data);
+                            flush_lines!(stderr_buf, stderr_lines, StreamSource::Stderr);
+                        }
+                        ChannelMsg::ExitStatus { exit_status } => {
+                            exit_code = Some(exit_status as i32);
+                        }
+                        ChannelMsg::Eof => {}
+                        ChannelMsg::Close => break,
+                        _ => {}
+                    }
+                }
+                Ok(None) => break, // channel 关闭
+                Err(_) => {
+                    return Err(HostError::Timeout {
+                        operation: "remote_run_streaming",
+                    });
+                }
+            }
+        }
+
+        // flush 残行（命令输出末尾没有 \n 的情况）
+        if !stdout_buf.is_empty() {
+            let s = String::from_utf8_lossy(&stdout_buf);
+            let s = s.trim_end_matches('\r').to_string();
+            on_line(StreamSource::Stdout, s.clone());
+            stdout_lines.push(s);
+        }
+        if !stderr_buf.is_empty() {
+            let s = String::from_utf8_lossy(&stderr_buf);
+            let s = s.trim_end_matches('\r').to_string();
+            on_line(StreamSource::Stderr, s.clone());
+            stderr_lines.push(s);
+        }
+
+        Ok(CommandOutput {
+            exit_code,
+            stdout: stdout_lines.join("\n"),
+            stderr: stderr_lines.join("\n"),
+        })
+    }
+
 
     // ===== 文件操作(基于 SFTP)=====
 

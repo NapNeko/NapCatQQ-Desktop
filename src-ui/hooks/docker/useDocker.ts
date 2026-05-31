@@ -25,7 +25,6 @@ import { dockerService } from '../../core/services/docker.service';
 import type {
     ContainerAction,
     ContainerInfo,
-    DeployedContainer,
     DockerDeploySpec,
     DockerStatus,
 } from '../../core/ipc/types';
@@ -56,7 +55,8 @@ export function useDocker(hostId: string) {
     });
 
     const deployMutation = useMutation({
-        mutationFn: (spec: DockerDeploySpec) => dockerService.deploy(hostId, spec),
+        mutationFn: (args: { spec: DockerDeploySpec; taskId?: string }) =>
+            dockerService.deploy(hostId, args.spec, args.taskId ?? crypto.randomUUID()),
         onSuccess: invalidate,
     });
 
@@ -91,7 +91,9 @@ export function useDocker(hostId: string) {
         install: installMutation.mutateAsync,
         isInstalling: installMutation.isPending,
 
-        deploy: deployMutation.mutateAsync as (spec: DockerDeploySpec) => Promise<DeployedContainer>,
+        // deploy 暴露的接口只接受 spec，taskId 内部自动生成（这条路径没有进度 UI）。
+        deploy: (spec: DockerDeploySpec) =>
+            deployMutation.mutateAsync({ spec, taskId: crypto.randomUUID() }),
         isDeploying: deployMutation.isPending,
 
         containerAction: actionMutation.mutate,

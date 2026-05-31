@@ -38,8 +38,8 @@ export interface UseDockerHostsResult {
     installingByHost: Record<string, boolean>;
     /// 打开 Docker Desktop 下载页（Windows / macOS 手动安装引导用）。
     openDownloadPage: () => Promise<void>;
-    /// 在某主机上部署一个容器。
-    deploy: (hostId: string, spec: DockerDeploySpec) => Promise<DeployedContainer>;
+    /// 在某主机上部署一个容器。taskId 由调用方生成并传入，用于订阅进度事件。
+    deploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
     isDeploying: boolean;
 }
 
@@ -104,8 +104,8 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     const isInstalling = Object.keys(installingByHost).length > 0;
 
     const deployMutation = useMutation({
-        mutationFn: (args: { hostId: string; spec: DockerDeploySpec }) =>
-            dockerService.deploy(args.hostId, args.spec),
+        mutationFn: (args: { hostId: string; spec: DockerDeploySpec; taskId: string }) =>
+            dockerService.deploy(args.hostId, args.spec, args.taskId),
         onSuccess: invalidate,
     });
 
@@ -117,7 +117,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         isInstalling,
         installingByHost,
         openDownloadPage: () => openExternalUrl(DOCKER_DESKTOP_URL),
-        deploy: (hostId, spec) => deployMutation.mutateAsync({ hostId, spec }),
+        deploy: (hostId, spec, taskId) => deployMutation.mutateAsync({ hostId, spec, taskId }),
         isDeploying: deployMutation.isPending,
     };
 }

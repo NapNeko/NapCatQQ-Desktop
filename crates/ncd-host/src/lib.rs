@@ -37,7 +37,7 @@ pub mod shell;
 
 pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
-pub use host::{Arch, Host, Locality, Os};
+pub use host::{Arch, Host, Locality, Os, StreamSource};
 pub use package_manager::{PackageInfo, PackageManager, PackageManagerKind};
 pub use path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 pub use process::{ExitStatus, HostProcess, ProcessId};

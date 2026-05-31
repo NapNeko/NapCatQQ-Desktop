@@ -266,4 +266,9 @@ export type DomainEvent =
         kind: 'component_action_progress';
         task_id: string;
         event: ProgressEvent;
+    }
+    | {
+        kind: 'docker_deploy_progress';
+        task_id: string;
+        event: ProgressEvent;
     };

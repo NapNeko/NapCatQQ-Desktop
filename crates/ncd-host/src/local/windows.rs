@@ -22,8 +22,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
+use tokio::sync::mpsc;
 
 use crate::command::{CommandOutput, HostCommand};
 use crate::error::HostError;
@@ -410,6 +411,114 @@ impl Host for LocalWindowsHost {
             exit_code: output.status.code(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+
+    async fn run_streaming(
+        &self,
+        cmd: HostCommand,
+        mut on_line: Box<dyn FnMut(crate::host::StreamSource, String) + Send>,
+    ) -> Result<CommandOutput, HostError> {
+        use crate::host::StreamSource;
+
+        if cmd.elevated {
+            return Err(HostError::ElevationFailed {
+                locality: "local",
+                reason: "elevation via UAC must go through ncd-update::desktop_self".into(),
+            });
+        }
+
+        let mut tokio_cmd = build_tokio_command(&cmd, self)?;
+        tokio_cmd
+            .stdin(if cmd.stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let mut child = tokio_cmd.spawn().map_err(HostError::Io)?;
+
+        if let Some(stdin_data) = &cmd.stdin {
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin.write_all(stdin_data).await?;
+                drop(stdin);
+            }
+        }
+
+        // on_line 是 FnMut，不能跨 task 共享。用 mpsc channel：两个 reader task
+        // 各自发 (StreamSource, String)，主循环收到后调 on_line。
+        let (tx, mut rx) = mpsc::channel::<(StreamSource, String)>(256);
+
+        let stdout_pipe = child.stdout.take();
+        let stderr_pipe = child.stderr.take();
+
+        let tx_out = tx.clone();
+        let stdout_task = tokio::spawn(async move {
+            if let Some(pipe) = stdout_pipe {
+                let mut reader = BufReader::new(pipe).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    if tx_out.send((StreamSource::Stdout, line)).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+
+        let tx_err = tx.clone();
+        let stderr_task = tokio::spawn(async move {
+            if let Some(pipe) = stderr_pipe {
+                let mut reader = BufReader::new(pipe).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    if tx_err.send((StreamSource::Stderr, line)).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+
+        // tx 本体 drop 掉，让 rx 在两个 reader task 都结束后自然关闭。
+        drop(tx);
+
+        let timeout = cmd.timeout.unwrap_or(Duration::from_secs(300));
+        let deadline = tokio::time::Instant::now() + timeout;
+
+        let mut stdout_lines: Vec<String> = Vec::new();
+        let mut stderr_lines: Vec<String> = Vec::new();
+
+        // 收行循环：回调收 owned String（trait 签名如此，避开 async_trait 下
+        // &str 生命周期被 box 固定的问题）。行很小，clone 进缓冲可忽略。
+        loop {
+            match tokio::time::timeout_at(deadline, rx.recv()).await {
+                Ok(Some((src, line))) => match src {
+                    StreamSource::Stdout => {
+                        on_line(StreamSource::Stdout, line.clone());
+                        stdout_lines.push(line);
+                    }
+                    StreamSource::Stderr => {
+                        on_line(StreamSource::Stderr, line.clone());
+                        stderr_lines.push(line);
+                    }
+                },
+                Ok(None) => break, // channel 关闭，两个 reader task 都结束了
+                Err(_) => {
+                    return Err(HostError::Timeout {
+                        operation: "run_streaming",
+                    });
+                }
+            }
+        }
+
+        // reader task 结束后等进程退出拿 exit code。
+        let _ = stdout_task.await;
+        let _ = stderr_task.await;
+        let status = child.wait().await.map_err(HostError::Io)?;
+
+        Ok(CommandOutput {
+            exit_code: status.code(),
+            stdout: stdout_lines.join("\n"),
+            stderr: stderr_lines.join("\n"),
         })
     }
 }

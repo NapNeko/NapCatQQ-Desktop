@@ -13,6 +13,6 @@ pub mod cli;
 pub mod compose;
 pub mod install;
 
-pub use cli::{DockerCli, DockerCliError};
+pub use cli::{DockerCli, DockerCliError, LayerPhase, PullProgress};
 pub use compose::render_compose;
 pub use install::{install_docker, DockerInstallOutcome};
