@@ -1,17 +1,15 @@
 // 新 UI 树根 = AppShell。
 // 布局：TitleBar(透明) ─ [Sidebar | main] ─ StatusBar(极弱)
 //
-// 简单 useState 路由（5 主路由 + 1 dev showcase）。
+// 简单 useState 路由（6 主路由 + 1 dev showcase）。
 
 import React, { useEffect, useState } from 'react';
-import { Activity } from 'lucide-react';
 import './index.css';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
 import { StatusBar } from '../shared/components/next/StatusBar';
 import { InfoBarStack, TooltipProvider } from '../shared/ui';
-import { PagePlaceholder } from '../shared/components/next/PagePlaceholder';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
 import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { DockerPageNext } from '../modules/docker/DockerPage.next';
@@ -131,20 +129,6 @@ const RouteOutlet: React.FC<{ route: AppRoute }> = ({ route }) => {
             return <DockerPageNext />;
         case 'remote':
             return <RemoteHostPanelNext />;
-        case 'events':
-            return (
-                <PagePlaceholder
-                    title="Events"
-                    icon={Activity}
-                    description="17 种 Domain 事件的实时流 + payload 调试器。"
-                    pendingItems={[
-                        '事件流时间线（最近 100 条）',
-                        'kind 过滤下拉',
-                        '单事件 payload JSON viewer',
-                        '可选：常驻右侧抽屉模式',
-                    ]}
-                />
-            );
         case 'settings':
             return <SettingsPageNext />;
         case 'showcase':
