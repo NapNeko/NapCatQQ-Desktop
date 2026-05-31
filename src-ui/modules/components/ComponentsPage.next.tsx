@@ -238,7 +238,7 @@ export const ComponentsPageNext: React.FC = () => {
                         onRetryDetect={() => refetch()}
                         dockerStatus={dockerHosts.statusByHost[activeMachine.host.host_id]}
                         isDockerProbing={dockerHosts.probingByHost[activeMachine.host.host_id] ?? false}
-                        isInstallingDocker={dockerHosts.isInstalling}
+                        isInstallingDocker={dockerHosts.installingByHost[activeMachine.host.host_id] ?? false}
                         onInstallDocker={(hostId) => {
                             void handleInstallDocker(hostId);
                         }}
@@ -255,7 +255,7 @@ export const ComponentsPageNext: React.FC = () => {
                 <SudoPasswordDialog
                     hostName={sudoPrompt.hostName}
                     reason={sudoPrompt.reason}
-                    isSubmitting={dockerHosts.isInstalling}
+                    isSubmitting={dockerHosts.installingByHost[sudoPrompt.hostId] ?? false}
                     onConfirm={handleSudoConfirm}
                     onClose={() => setSudoPrompt(null)}
                 />

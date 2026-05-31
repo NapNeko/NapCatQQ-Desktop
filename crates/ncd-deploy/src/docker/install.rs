@@ -181,7 +181,7 @@ if command -v apt-get >/dev/null 2>&1; then
   . /etc/os-release
   DISTRO="$ID"
   case "$DISTRO" in ubuntu|debian) : ;; *) DISTRO=ubuntu ;; esac
-  curl -fsSL "$ALI/linux/$DISTRO/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  curl -fsSL "$ALI/linux/$DISTRO/gpg" | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
   CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
   ARCH="$(dpkg --print-architecture)"
