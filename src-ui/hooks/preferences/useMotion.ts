@@ -59,9 +59,11 @@ export interface TweenOptions {
 
 /// hover 绑定的可选项。
 export interface HoverOptions {
-    /// 自定义 scale,默认走 preset.feel.hoverScale。
+    /// 自定义 scale,默认走 preset.feel.hoverScale。传 1 = 不缩放(行式大卡片用)。
     scale?: number;
-    /// 是否同步动 boxShadow,默认 true(由 preset.feel.shadowBoost > 0 控制)。
+    /// 是否让 GSAP 接管 boxShadow,默认 false。大部分卡片已经在 Tailwind 写了
+    /// hover:shadow-popover,GSAP 再叠一份会扩散过深。需要 GSAP 控 shadow
+    /// (跟 lift 联动到很重的层级)时显式 true。
     shadow?: boolean;
     /// 是否同步动 brightness,默认 true(rich 档才显著)。
     brightness?: boolean;
@@ -233,9 +235,10 @@ export function useMotion(): MotionEnv {
                 if (targetScale !== 1) vars.scale = targetScale;
                 const liftPx = opts?.lift !== undefined ? opts.lift : -f.cardLift;
                 if (liftPx !== 0 && liftPx !== null) vars.y = liftPx;
-                if ((opts?.shadow ?? true) && f.shadowBoost > 0) {
-                    // 用 GSAP 直接写 boxShadow 字符串。token 里 shadow-popover 大约是
-                    // 0 8px 24px rgba(0,0,0,0.08);hover 时按 shadowBoost 加深。
+                // boxShadow 默认 opt-in:大部分卡片元素已经在 Tailwind 写了
+                // hover:shadow-popover,我们再叠一份 GSAP boxShadow 会糊出"扩散一大圈"
+                // 的视觉。需要 GSAP 接管 shadow 时显式传 { shadow: true }。
+                if (opts?.shadow === true && f.shadowBoost > 0) {
                     const blur = 24 + 16 * f.shadowBoost;
                     const yOff = 8 + 6 * f.shadowBoost;
                     const alpha = (0.08 + 0.06 * f.shadowBoost).toFixed(3);
@@ -251,14 +254,17 @@ export function useMotion(): MotionEnv {
                 if (!env.enabled) return;
                 const t = env.preset.timing;
                 const dur = scaleDuration(t.durationFast, env.speed);
-                gsap.to(el, {
+                // 只清 onEnter 真正可能设过的属性。boxShadow/filter 没开就不动,
+                // 否则一个空字符串覆盖会冲掉 Tailwind 类设的 shadow。
+                const vars: gsap.TweenVars = {
                     scale: 1,
                     y: 0,
-                    boxShadow: '',
-                    filter: '',
                     duration: dur,
                     ease: t.ease.damped,
-                });
+                };
+                if (opts?.shadow === true) vars.boxShadow = '';
+                if ((opts?.brightness ?? true)) vars.filter = '';
+                gsap.to(el, vars);
             };
             const env = envRef.current;
             if (!env.enabled) return () => {};
