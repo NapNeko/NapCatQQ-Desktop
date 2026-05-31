@@ -1,21 +1,12 @@
-// 进度条原子件。
-//
-// 设计目标：
-//   - 安装 / 下载 / 切镜像三种语义共用一个组件，由 indeterminate / tone 区分
-//   - 可选 size，default md (4px 高)，sm (3px) 给紧凑列表
-//   - indeterminate 模式：暖色 thumb 在轨道上来回滑（race / 切镜像阶段，没有可
-//     靠百分比可显）。靠 keyframe 名 `progress-indeterminate` 生成，定义在
-//     app/index.css 的 @theme + @keyframes
-//   - determinate 模式：thumb 宽 = percent%，过渡 250ms ease-out 让数字跳动平滑
-//
-// 不在本组件做的事：
-//   - 数字 / 速度 / ETA 文本：调用方自己用 formatBytes / formatSpeed 拼，因为
-//     不同位置（HostStatusRow 单行、ComponentCard 详情）排版差别大
-//   - aria-* 自动维护：value 和 max 透传给消费者，indeterminate 时 role 给 progressbar 但 不给 valuenow
+// 进度条原子件。第二轮:thumb 宽度过渡接 GSAP,完成时 pulse 反馈;
+// indeterminate 模式仍走 CSS keyframes(那是个无止境循环,GSAP 在 React 卸载/
+// 切档位时容易遗留 timeline,反不如纯 CSS 稳)。
 
-import { forwardRef, type HTMLAttributes } from 'react';
+import { forwardRef, useLayoutEffect, useRef, type HTMLAttributes } from 'react';
+import gsap from 'gsap';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
+import { useMotion } from '../../hooks/preferences/useMotion';
 
 const trackVariants = cva(
     'relative w-full overflow-hidden rounded-pill bg-inset',
@@ -32,7 +23,7 @@ const trackVariants = cva(
 );
 
 const thumbVariants = cva(
-    'absolute inset-y-0 left-0 rounded-pill transition-[width,background-color] duration-300 ease-out',
+    'absolute inset-y-0 left-0 rounded-pill',
     {
         variants: {
             tone: {
@@ -68,16 +59,53 @@ export interface ProgressProps
     value?: number;
     /** 无确定进度。常用于 race / 切镜像阶段。 */
     indeterminate?: boolean;
-    /** 颜色语义。下载 / 安装走 brand；warning 给"切镜像中"用更醒目的态度。 */
+    /** 颜色语义。下载 / 安装走 brand;warning 给"切镜像中"用更醒目的态度。 */
     tone?: 'brand' | 'success' | 'warning' | 'danger';
 }
 
 export const Progress = forwardRef<HTMLDivElement, ProgressProps>(
     ({ className, size, value = 0, indeterminate, tone = 'brand', ...props }, ref) => {
+        const m = useMotion();
         const clamped = Math.max(0, Math.min(100, value));
+        const thumbRef = useRef<HTMLSpanElement | null>(null);
+        const trackRef = useRef<HTMLDivElement | null>(null);
+        const prevValueRef = useRef<number>(clamped);
+        const completedRef = useRef<boolean>(clamped >= 100);
+
+        const setTrackRef = (node: HTMLDivElement | null) => {
+            trackRef.current = node;
+            if (typeof ref === 'function') ref(node);
+            else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+        };
+
+        useLayoutEffect(() => {
+            if (indeterminate) return;
+            const thumb = thumbRef.current;
+            const track = trackRef.current;
+            if (!thumb) return;
+            if (!m.enabled) {
+                gsap.set(thumb, { width: `${clamped}%` });
+                prevValueRef.current = clamped;
+                completedRef.current = clamped >= 100;
+                return;
+            }
+            gsap.to(thumb, {
+                width: `${clamped}%`,
+                duration: m.duration('base'),
+                ease: m.ease.hover,
+            });
+            // 100% 落地时给 track 一个 pulse 反馈(rich/standard 档启用)。
+            const justCompleted = clamped >= 100 && !completedRef.current;
+            if (justCompleted && track && m.preset.feel.popPeak > 1) {
+                m.pop(track, { peak: 1 + (m.preset.feel.popPeak - 1) * 0.4 });
+            }
+            prevValueRef.current = clamped;
+            completedRef.current = clamped >= 100;
+        }, [clamped, indeterminate, m]);
+
         return (
             <div
-                ref={ref}
+                ref={setTrackRef}
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
@@ -89,10 +117,7 @@ export const Progress = forwardRef<HTMLDivElement, ProgressProps>(
                 {indeterminate ? (
                     <span className={indeterminateThumbVariants({ tone })} />
                 ) : (
-                    <span
-                        className={thumbVariants({ tone })}
-                        style={{ width: `${clamped}%` }}
-                    />
+                    <span ref={thumbRef} className={thumbVariants({ tone })} />
                 )}
             </div>
         );

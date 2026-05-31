@@ -1,21 +1,11 @@
-// 左侧导航栏（next）。视觉目标：紧凑、安静、不抢戏。
+// 左侧导航栏(next)。第二轮:active 强调线从"每行各自渲染"改 FLIP 单条滑动。
 //
-//   ┌─────────────────────┐
-//   │ ◆ NapCatQQ-Desktop ⏴ │  ← 48px 高头，logo 与右侧 TitleBar 控制键平齐
-//   ├─────────────────────┤
-//   │ ▦  Overview         │  ← 36px nav item，active 左侧 2px brand 渐变线
-//   │ 🤖  Bots             │
-//   │ 🖥  Remote          │
-//   │ ⏱  Events           │
-//   │ ⚙  Settings         │
-//   │ ─────  dev  ─────   │  ← 居中细线 + 小字
-//   │ ✨  Showcase        │
-//   └─────────────────────┘
+// 视觉:active 切换时左侧 2px brand 渐变线从旧 nav 行平滑滑到新行,跟踪 y 位置 +
+// 高度。standard/rich 档启用 GSAP 滑动,elegant 档退化为静态显示。
 //
-// 折叠态 (56px)：logo 居中 + 整个 logo 即展开按钮（hover 时显示 ChevronsRight 暗示）。
-// 不再保留底部的独立展开按钮，避免"折叠后展开键跑到左下角"这种反人类布局。
+// hover/active 配色保持原样;折叠态展开按钮的 hover swap 也保留 CSS transition。
 
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import {
     Bot,
     ChevronsLeft,
@@ -28,7 +18,9 @@ import {
     Settings,
     Sparkles,
 } from 'lucide-react';
+import gsap from 'gsap';
 import { cn } from '../../utils/cn';
+import { useMotion } from '../../../hooks/preferences/useMotion';
 import logoPng from '../../../assets/logo.png';
 
 export type AppRoute =
@@ -46,8 +38,7 @@ interface SidebarProps {
     collapsed: boolean;
     onToggleCollapse: () => void;
     showShowcase?: boolean;
-    /// 是否显示 Docker 项。没有任何远端服务器时整项隐藏——Docker 只用于管理
-    /// 远端 Linux 容器，本机（Windows）用不上。
+    /// 是否显示 Docker 项。
     showDocker?: boolean;
 }
 
@@ -77,6 +68,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const navItems = showDocker
         ? PRIMARY_NAV
         : PRIMARY_NAV.filter((item) => item.id !== 'docker');
+
+    const m = useMotion();
+    const navRef = useRef<HTMLElement | null>(null);
+    const indicatorRef = useRef<HTMLSpanElement | null>(null);
+
+    // active 变化时把 indicator FLIP 滑到新的 nav 行。读 DOM 找 aria-current="page"
+    // 元素,算 top + height,GSAP tween indicator 的 y / height。
+    useLayoutEffect(() => {
+        const nav = navRef.current;
+        const indicator = indicatorRef.current;
+        if (!nav || !indicator) return;
+        const activeBtn = nav.querySelector<HTMLElement>(
+            'button[aria-current="page"]',
+        );
+        if (!activeBtn) {
+            gsap.set(indicator, { autoAlpha: 0 });
+            return;
+        }
+        const navRect = nav.getBoundingClientRect();
+        const btnRect = activeBtn.getBoundingClientRect();
+        const top = btnRect.top - navRect.top + 6;
+        const height = btnRect.height - 12;
+        if (!m.enabled || !m.preset.feel.cardLift) {
+            gsap.set(indicator, { autoAlpha: 1, y: top, height });
+            return;
+        }
+        gsap.to(indicator, {
+            autoAlpha: 1,
+            y: top,
+            height,
+            duration: m.duration('base'),
+            ease: m.ease.hover,
+        });
+    }, [active, collapsed, showShowcase, showDocker, m]);
+
     return (
         <aside
             className={cn(
@@ -85,10 +111,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 collapsed ? 'w-14' : 'w-52',
             )}
         >
-            {/* Header: logo + brand + collapse 折叠键。
-                整行高 48px（h-12）和右侧 TitleBar 同高，logo 与窗口控制键水平对齐。
-                文字 nowrap 防止 NapCatQQ-Desktop 这种长名字换行。
-                折叠态：整个 header 居中，并且 logo 自身就是展开按钮。 */}
             <div
                 className={cn(
                     'flex h-12 shrink-0 items-center',
@@ -107,7 +129,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
                         )}
                     >
-                        {/* 默认显 logo，hover 时淡出换 ChevronsRight 暗示能展开 */}
                         <img
                             src={logoPng}
                             alt="NapCatQQ-Desktop logo"
@@ -131,10 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span className="whitespace-nowrap font-display text-[13.5px] font-semibold leading-none tracking-tight text-text">
                             NapCatQQ-Desktop
                         </span>
-
-                        {/* spacer + drag region：展开态 sidebar 顶部留白处可拖窗 */}
                         <div className="h-full flex-1" data-tauri-drag-region />
-
                         <button
                             type="button"
                             onClick={onToggleCollapse}
@@ -154,7 +172,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <div className="my-2 h-px bg-border-subtle" />
 
-            <nav className="flex-1 space-y-0.5 px-2">
+            <nav ref={navRef} className="relative flex-1 space-y-0.5 px-2">
+                {/* FLIP indicator:absolute 定位,GSAP 控 y + height。 */}
+                <span
+                    ref={indicatorRef}
+                    aria-hidden
+                    style={{ visibility: 'hidden', opacity: 0 }}
+                    className="pointer-events-none absolute left-2 top-0 w-[2px] rounded-r-pill bg-brand"
+                />
+
                 <ul className="space-y-0.5">
                     {navItems.map((item) => (
                         <NavRow
@@ -181,9 +207,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </>
                 )}
             </nav>
-
-            {/* 折叠态展开入口已经移到顶部 logo（点 logo / 显 ChevronsRight），
-                不再保留底部按钮。 */}
         </aside>
     );
 };
@@ -214,14 +237,6 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) 
                     collapsed && 'justify-center px-0',
                 )}
             >
-                {/* active 强调：左 2px brand 渐变线 + 文字提色 */}
-                {isActive && (
-                    <span
-                        aria-hidden
-                        className="pointer-events-none absolute inset-y-1.5 left-0 w-[2px] rounded-r-pill bg-brand"
-                    />
-                )}
-
                 <Icon
                     size={15}
                     strokeWidth={1.75}

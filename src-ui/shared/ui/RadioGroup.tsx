@@ -1,17 +1,13 @@
-// RadioGroup 原子件。Radix 兜底 a11y / 箭头切换 / role="radiogroup"。
+// RadioGroup 原子件。第二轮:每个 RadioItem 的 indicator 接入 GSAP pop。
 //
-// 用 items 数组 API 简化使用：
-//   <RadioGroup value={mode} onValueChange={setMode}
-//     items={[
-//       { value: 'cold', label: 'COLD：本程序启动新 QQ.exe' },
-//       { value: 'hot', label: 'HOT：附加到已存在的 QQ.exe', hint: '保留人工登录会话' },
-//     ]} />
-//
-// 默认垂直排，要水平排传 orientation="horizontal"。
+// 跟 Checkbox 类似,Radix RadioIndicator 默认 conditional 渲染。我们用 forceMount
+// + 自控 visibility,checked 切换时让 GSAP pop。
 
 import * as RadixRadio from '@radix-ui/react-radio-group';
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, useLayoutEffect, useRef, type ReactNode } from 'react';
+import gsap from 'gsap';
 import { cn } from '../utils/cn';
+import { useMotion } from '../../hooks/preferences/useMotion';
 
 export interface RadioItem<V extends string = string> {
     value: V;
@@ -62,42 +58,105 @@ function RadioGroupInner<V extends string>(
                     orientation === 'vertical' ? 'flex-col gap-2' : 'flex-row flex-wrap gap-4',
                 )}
             >
-                {items.map((item) => {
-                    const itemId = `${name ?? 'rg'}-${item.value}`;
-                    return (
-                        <label
-                            key={item.value}
-                            htmlFor={itemId}
-                            className={cn(
-                                'inline-flex items-start gap-2 cursor-pointer',
-                                (disabled || item.disabled) && 'cursor-not-allowed opacity-60',
-                            )}
-                        >
-                            <RadixRadio.Item
-                                id={itemId}
-                                value={item.value}
-                                disabled={item.disabled}
-                                className={cn(
-                                    'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full',
-                                    'border border-border-strong bg-field transition-colors',
-                                    'data-[state=checked]:border-brand',
-                                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
-                                    'disabled:cursor-not-allowed disabled:opacity-50',
-                                )}
-                            >
-                                <RadixRadio.Indicator className="h-2 w-2 rounded-full bg-brand" />
-                            </RadixRadio.Item>
-                            <span className="flex flex-col gap-0.5 leading-tight">
-                                <span className="text-sm text-text">{item.label}</span>
-                                {item.hint && (
-                                    <span className="text-2xs text-text-tertiary">{item.hint}</span>
-                                )}
-                            </span>
-                        </label>
-                    );
-                })}
+                {items.map((item) => (
+                    <RadioItemView
+                        key={item.value}
+                        item={item}
+                        name={name ?? 'rg'}
+                        groupDisabled={disabled}
+                        isSelected={value === item.value}
+                    />
+                ))}
             </RadixRadio.Root>
         </div>
+    );
+}
+
+interface RadioItemViewProps<V extends string> {
+    item: RadioItem<V>;
+    name: string;
+    groupDisabled?: boolean;
+    isSelected: boolean;
+}
+
+function RadioItemView<V extends string>({
+    item,
+    name,
+    groupDisabled,
+    isSelected,
+}: RadioItemViewProps<V>) {
+    const m = useMotion();
+    const itemId = `${name}-${item.value}`;
+    const dotRef = useRef<HTMLSpanElement | null>(null);
+    const prevSelectedRef = useRef<boolean>(isSelected);
+
+    useLayoutEffect(() => {
+        const dot = dotRef.current;
+        if (!dot) return;
+        if (!m.enabled) {
+            gsap.set(dot, { autoAlpha: isSelected ? 1 : 0, scale: isSelected ? 1 : 0.3 });
+            prevSelectedRef.current = isSelected;
+            return;
+        }
+        if (isSelected) {
+            gsap.fromTo(
+                dot,
+                { autoAlpha: 0, scale: 0.3 },
+                {
+                    autoAlpha: 1,
+                    scale: 1,
+                    duration: m.duration('fast'),
+                    ease: m.ease.pop,
+                },
+            );
+        } else if (prevSelectedRef.current) {
+            gsap.to(dot, {
+                autoAlpha: 0,
+                scale: 0.3,
+                duration: m.duration('fast') * 0.6,
+                ease: m.ease.exit,
+            });
+        } else {
+            gsap.set(dot, { autoAlpha: 0, scale: 0.3 });
+        }
+        prevSelectedRef.current = isSelected;
+    }, [isSelected, m]);
+
+    return (
+        <label
+            htmlFor={itemId}
+            className={cn(
+                'inline-flex items-start gap-2 cursor-pointer',
+                (groupDisabled || item.disabled) && 'cursor-not-allowed opacity-60',
+            )}
+        >
+            <RadixRadio.Item
+                id={itemId}
+                value={item.value}
+                disabled={item.disabled}
+                className={cn(
+                    'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full',
+                    'border border-border-strong bg-field transition-colors duration-200',
+                    'data-[state=checked]:border-brand',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                )}
+            >
+                <RadixRadio.Indicator forceMount asChild>
+                    <span
+                        ref={dotRef}
+                        style={{ visibility: 'hidden', opacity: 0 }}
+                        className="h-2 w-2 rounded-full bg-brand"
+                    />
+                </RadixRadio.Indicator>
+            </RadixRadio.Item>
+            <span className="flex flex-col gap-0.5 leading-tight">
+                <span className="text-sm text-text">{item.label}</span>
+                {item.hint && (
+                    <span className="text-2xs text-text-tertiary">{item.hint}</span>
+                )}
+            </span>
+        </label>
     );
 }
 

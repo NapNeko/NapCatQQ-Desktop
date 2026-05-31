@@ -6,7 +6,9 @@
 import * as RadixSelect from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { forwardRef, type ReactNode } from 'react';
+import gsap from 'gsap';
 import { cn } from '../utils/cn';
+import { useMotion } from '../../hooks/preferences/useMotion';
 
 export interface SelectItem<V extends string = string> {
     value: V;
@@ -49,6 +51,7 @@ function SelectInner<V extends string>(
     const invalid = !!error;
     const fieldId = id ?? name;
     const describedById = fieldId ? `${fieldId}-desc` : undefined;
+    const m = useMotion();
 
     return (
         <div className={cn('flex flex-col gap-1.5', className)}>
@@ -90,15 +93,35 @@ function SelectInner<V extends string>(
                 </RadixSelect.Trigger>
                 <RadixSelect.Portal>
                     <RadixSelect.Content
+                        ref={(node) => {
+                            if (!node) return;
+                            // 进场动画:trigger 方向(data-side)缩放展开。Radix 在 mount
+                            // 时立刻给 data-side。读不到时退化为顶部展开。
+                            if (!m.enabled) return;
+                            const side = node.getAttribute('data-side') ?? 'bottom';
+                            const origin =
+                                side === 'top' ? '50% 100%' : side === 'bottom' ? '50% 0%' : '50% 50%';
+                            gsap.set(node, { transformOrigin: origin });
+                            gsap.fromTo(
+                                node,
+                                { autoAlpha: 0, scale: 0.96, y: side === 'top' ? 4 : -4 },
+                                {
+                                    autoAlpha: 1,
+                                    scale: 1,
+                                    y: 0,
+                                    duration: m.duration('fast'),
+                                    ease: m.ease.enterMicro,
+                                },
+                            );
+                        }}
                         position="popper"
                         sideOffset={4}
                         className={cn(
                             'z-50 overflow-hidden rounded-sm border border-border-subtle',
                             'bg-elevated shadow-popover',
-                            'data-[state=open]:animate-in data-[state=closed]:animate-out',
-                            'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
                             'min-w-[var(--radix-select-trigger-width)]',
                         )}
+                        style={{ visibility: 'hidden', opacity: 0 }}
                     >
                         <RadixSelect.ScrollUpButton className="flex h-6 cursor-default items-center justify-center bg-elevated text-text-tertiary">
                             <ChevronUp size={14} />

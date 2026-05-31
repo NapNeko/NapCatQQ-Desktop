@@ -1,14 +1,23 @@
-// 文本输入字段。Label + Input + hint/error 一体化。
+// 文本输入字段。第二轮:聚焦时给 input 加一次 ring pop 反馈,失焦回静。
 //
-// 参考表单 UX：标签上置、内联校验、必填带 *、错误状态边框变红、focus 状态描边
-// 走 brand。受控形态对外暴露 value / onValueChange，内部把 onChange 翻译成纯字符串
-// 回调，少写样板。
+// CSS focus 状态本身已经是 ring + border 切换,新增 GSAP 在 focus 瞬间做一次
+// scale 1.0 → popPeak → 1.0 的轻 pulse(rich/standard 档),给"光标进来了"一个
+// 视觉确认。elegant 档不动。
 //
-// 不接 leftIcon / rightIcon —— 真要带前缀（http://）走 children slot。
+// 错误态(invalid=true)出现时如果是新出现的错误,触发 m.shake 一次,提示用户
+// 有问题。靠 prevError ref 判断"刚出现"还是"持续中",避免每次 render 都 shake。
 
-import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
+import {
+    forwardRef,
+    useEffect,
+    useImperativeHandle,
+    useRef,
+    type InputHTMLAttributes,
+    type ReactNode,
+} from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
+import { useMotion } from '../../hooks/preferences/useMotion';
 
 const inputVariants = cva(
     [
@@ -33,12 +42,12 @@ export interface TextFieldProps
     extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'size'>,
     VariantProps<typeof inputVariants> {
     label?: ReactNode;
-    /** 字段下灰色辅助说明，被 error 覆盖。 */
+    /** 字段下灰色辅助说明,被 error 覆盖。 */
     hint?: ReactNode;
     /** 校验错误文本。出现时边框变红。 */
     error?: ReactNode;
     required?: boolean;
-    /** 字符串受控回调，避免每个调用方再 e.target.value。 */
+    /** 字符串受控回调。 */
     onValueChange?: (value: string) => void;
 }
 
@@ -50,6 +59,34 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
         const invalid = !!error;
         const fieldId = id ?? rest.name;
         const describedById = fieldId ? `${fieldId}-desc` : undefined;
+        const m = useMotion();
+        const inputRef = useRef<HTMLInputElement | null>(null);
+        useImperativeHandle(ref, () => inputRef.current!, []);
+        const prevErrorRef = useRef<ReactNode>(undefined);
+
+        // 聚焦反馈:focus 时给 input 一次轻 pop。
+        useEffect(() => {
+            const el = inputRef.current;
+            if (!el) return;
+            const onFocus = () => {
+                if (!m.enabled) return;
+                m.pop(el, { peak: 1 + (m.preset.feel.popPeak - 1) * 0.3, ease: 'enterMicro' });
+            };
+            el.addEventListener('focus', onFocus);
+            return () => el.removeEventListener('focus', onFocus);
+        }, [m]);
+
+        // 错误首次出现时 shake。
+        useEffect(() => {
+            const el = inputRef.current;
+            if (!el) return;
+            const hadError = !!prevErrorRef.current;
+            const hasError = !!error;
+            if (!hadError && hasError) {
+                m.shake(el);
+            }
+            prevErrorRef.current = error;
+        }, [error, m]);
 
         return (
             <div className={cn('flex flex-col gap-1.5', className)}>
@@ -63,7 +100,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
                     </label>
                 )}
                 <input
-                    ref={ref}
+                    ref={inputRef}
                     id={fieldId}
                     aria-invalid={invalid || undefined}
                     aria-describedby={describedById}
