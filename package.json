@@ -5,9 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:next": "cross-env VITE_UI_NEXT=1 vite",
     "build": "tsc && vite build",
-    "build:next": "cross-env VITE_UI_NEXT=1 tsc && cross-env VITE_UI_NEXT=1 vite build",
     "typecheck": "tsc --noEmit",
     "rust:check": "cargo check --workspace --all-targets",
     "rust:test": "cargo test --workspace",
@@ -16,13 +14,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:dev:next": "cross-env VITE_UI_NEXT=1 tauri dev",
-    "tauri:watch": "cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\"",
-    "tauri:watch:next": "cross-env VITE_UI_NEXT=1 cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\""
+    "tauri:watch": "cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\""
   },
   "dependencies": {
-    "@fluentui/react-components": "^9.54.0",
-    "@fluentui/react-icons": "^2.0.242",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
