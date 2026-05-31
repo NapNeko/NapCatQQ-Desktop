@@ -59,9 +59,12 @@ pub async fn docker_install(
         .await
         .map_err(|e| format!("Docker 安装失败: {e}"))?;
 
-    // 装成功且用户勾了"记住密码":把本次显式输入的密码存进 keyring。只存用户这次
-    // 亲手输入的(sudo_password),不把 keyring 里已有的回写一遍。
-    if report.status == DockerInstallStatus::Installed && remember_sudo == Some(true) {
+    // 用户勾了"记住密码"就存,只要这次密码被验证有效。判据是 status != NeedSudoPassword:
+    // 能走过提权脚本(没返回 NeedSudoPassword)就说明 sudo 密码是对的——密码有效性
+    // 与 docker daemon 起没起来是两回事。早先用 == Installed 太严:脚本跑通但 daemon
+    // 没立刻就绪会返回 ManualRequired,导致有效密码没被存下,下次安装又弹框。
+    // 只存用户这次亲手输入的(sudo_password),不把 keyring 里已有的回写一遍。
+    if report.status != DockerInstallStatus::NeedSudoPassword && remember_sudo == Some(true) {
         if let (Some(id), Some(pw)) = (server_id, sudo_password.as_deref()) {
             let _ = state.server_manager.remember_sudo_password(id, pw);
         }

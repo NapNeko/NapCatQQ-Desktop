@@ -143,6 +143,17 @@ pub trait Host: Send + Sync {
     /// 启动进程并等待结束,返回完整 [`CommandOutput`]。
     /// 适用于短命令 + 全量 stdout 收集场景。
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError>;
+
+    /// 探测某个外部命令在主机上是否可用(在 PATH 里)。Linux/macOS 走
+    /// `command -v`,Windows 走 `where`。探测本身失败(连接抖动等)按"不存在"
+    /// 保守返回 false,让调用方走"装一下"或报错路径,而不是把探测错误当致命。
+    async fn command_exists(&self, command: &str) -> bool {
+        let probe = match self.os() {
+            Os::Windows => HostCommand::new("where").arg(command),
+            _ => HostCommand::new("sh").arg("-c").arg(format!("command -v {command}")),
+        };
+        matches!(self.run_to_string(probe).await, Ok(out) if out.success())
+    }
 }
 
 #[cfg(test)]

@@ -212,6 +212,127 @@ impl RemoteLinuxHost {
     pub fn server_id(&self) -> &str {
         &self.id
     }
+
+    /// 确保解压工具(unzip / tar)在远端可用,缺了就用包管理器装一次。
+    ///
+    /// 流程:先 command_exists 探,有就直接过(快路径,装好的机器零开销)。没有
+    /// 就探包管理器(apt-get / dnf / yum / apk),用 install_archive_tool 提权装,
+    /// 装完再探一次确认。探不到包管理器、或装完仍不在,就报带人话指引的 ExtractFailed
+    /// (告诉用户手动 apt-get install <tool>),不把人留在 exit 127 现场。
+    async fn ensure_archive_tool(&self, tool: &str) -> Result<(), HostError> {
+        if self.command_exists(tool).await {
+            return Ok(());
+        }
+
+        let Some(pm) = self.detect_package_manager().await else {
+            return Err(HostError::ExtractFailed {
+                archive: HostPath::from_posix(tool),
+                reason: format!(
+                    "远端缺少 {tool} 且未识别到包管理器,请手动安装(如 apt-get install {tool})后重试"
+                ),
+            });
+        };
+
+        // 装包要 root。免密 / root 直接装;需要密码这里拿不到(extract 链路没带密码),
+        // 退回让用户手动装的人话提示,而不是静默挂起。
+        let elevation_ok = matches!(
+            probe_sudo(self).await,
+            SudoAccess::RootAlready | SudoAccess::Passwordless
+        );
+        if !elevation_ok {
+            return Err(HostError::ExtractFailed {
+                archive: HostPath::from_posix(tool),
+                reason: format!(
+                    "远端缺少 {tool},自动安装需要 root 权限但当前无免密 sudo,请手动执行 sudo {} 后重试",
+                    pm.install_hint(tool)
+                ),
+            });
+        }
+
+        let install_line = pm.install_command(tool);
+        let cmd = HostCommand::new("sh")
+            .arg("-c")
+            .arg(&install_line)
+            .elevated()
+            .timeout(Duration::from_secs(180));
+        let _ = self.run_to_string(cmd).await;
+
+        if self.command_exists(tool).await {
+            Ok(())
+        } else {
+            Err(HostError::ExtractFailed {
+                archive: HostPath::from_posix(tool),
+                reason: format!(
+                    "已尝试自动安装 {tool} 但仍不可用,请登录远端手动执行 sudo {} 后重试",
+                    pm.install_hint(tool)
+                ),
+            })
+        }
+    }
+
+    /// 探测远端用哪个包管理器。按常见度顺序探,探到第一个就用。
+    async fn detect_package_manager(&self) -> Option<PackageManagerKindLite> {
+        for pm in PackageManagerKindLite::ALL {
+            if self.command_exists(pm.binary()).await {
+                return Some(*pm);
+            }
+        }
+        None
+    }
+}
+
+/// extract 自动装依赖用的轻量包管理器枚举。不复用 PackageManager trait:那套是
+/// 给"装业务包"的完整抽象,这里只需要"探在不在 + 拼一条非交互装包命令"两件事。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PackageManagerKindLite {
+    Apt,
+    Dnf,
+    Yum,
+    Apk,
+    Pacman,
+}
+
+impl PackageManagerKindLite {
+    const ALL: &'static [PackageManagerKindLite] = &[
+        Self::Apt,
+        Self::Dnf,
+        Self::Yum,
+        Self::Apk,
+        Self::Pacman,
+    ];
+
+    fn binary(self) -> &'static str {
+        match self {
+            Self::Apt => "apt-get",
+            Self::Dnf => "dnf",
+            Self::Yum => "yum",
+            Self::Apk => "apk",
+            Self::Pacman => "pacman",
+        }
+    }
+
+    /// 非交互安装命令(已含自动确认参数)。apt 先 update 一把,否则全新机器
+    /// 可能因没有包索引而找不到包。
+    fn install_command(self, pkg: &str) -> String {
+        match self {
+            Self::Apt => format!("apt-get update && apt-get install -y {pkg}"),
+            Self::Dnf => format!("dnf install -y {pkg}"),
+            Self::Yum => format!("yum install -y {pkg}"),
+            Self::Apk => format!("apk add --no-cache {pkg}"),
+            Self::Pacman => format!("pacman -Sy --noconfirm {pkg}"),
+        }
+    }
+
+    /// 给用户看的手动安装提示(去掉 update 前缀,精简)。
+    fn install_hint(self, pkg: &str) -> String {
+        match self {
+            Self::Apt => format!("apt-get install -y {pkg}"),
+            Self::Dnf => format!("dnf install -y {pkg}"),
+            Self::Yum => format!("yum install -y {pkg}"),
+            Self::Apk => format!("apk add {pkg}"),
+            Self::Pacman => format!("pacman -S {pkg}"),
+        }
+    }
 }
 
 /// 探测某主机的 sudo 能力,供上层决定是否需要向用户索要密码。
@@ -613,7 +734,9 @@ impl Host for RemoteLinuxHost {
         dest: &HostPath,
         kind: ArchiveKind,
     ) -> Result<(), HostError> {
-        // 远端解压走 shell:tar / unzip 都是 Linux 标配
+        // 远端解压走 shell。zip 要 unzip(很多最小化镜像不自带),tar.* 要 tar
+        // (几乎都自带)。解压前先确保对应工具在,缺了就尝试用包管理器装一下,
+        // 省得用户撞上 "unzip: command not found" 的 exit 127 一头雾水。
         let archive_str = self.to_remote(archive);
         let dest_str = self.to_remote(dest);
 
@@ -621,22 +744,31 @@ impl Host for RemoteLinuxHost {
         self.create_dir_all(dest).await?;
 
         let cmd = match kind {
-            ArchiveKind::TarGz => HostCommand::new("tar")
-                .arg("-xzf")
-                .arg(&archive_str)
-                .arg("-C")
-                .arg(&dest_str),
-            ArchiveKind::TarXz => HostCommand::new("tar")
-                .arg("-xJf")
-                .arg(&archive_str)
-                .arg("-C")
-                .arg(&dest_str),
-            ArchiveKind::Zip => HostCommand::new("unzip")
-                .arg("-q")
-                .arg("-o")
-                .arg(&archive_str)
-                .arg("-d")
-                .arg(&dest_str),
+            ArchiveKind::TarGz => {
+                self.ensure_archive_tool("tar").await?;
+                HostCommand::new("tar")
+                    .arg("-xzf")
+                    .arg(&archive_str)
+                    .arg("-C")
+                    .arg(&dest_str)
+            }
+            ArchiveKind::TarXz => {
+                self.ensure_archive_tool("tar").await?;
+                HostCommand::new("tar")
+                    .arg("-xJf")
+                    .arg(&archive_str)
+                    .arg("-C")
+                    .arg(&dest_str)
+            }
+            ArchiveKind::Zip => {
+                self.ensure_archive_tool("unzip").await?;
+                HostCommand::new("unzip")
+                    .arg("-q")
+                    .arg("-o")
+                    .arg(&archive_str)
+                    .arg("-d")
+                    .arg(&dest_str)
+            }
             ArchiveKind::Msi => {
                 return Err(HostError::Unsupported {
                     operation: "extract_msi_on_linux",
@@ -986,5 +1118,34 @@ mod tests {
     #[test]
     fn ensure_newline_keeps_single_when_present() {
         assert_eq!(ensure_trailing_newline(b"hunter2\n"), b"hunter2\n");
+    }
+
+    #[test]
+    fn pkg_install_command_is_noninteractive() {
+        // 自动装依赖必须非交互(带 -y/--noconfirm),否则在 SSH 非交互会话里会挂起等输入。
+        assert_eq!(
+            PackageManagerKindLite::Apt.install_command("unzip"),
+            "apt-get update && apt-get install -y unzip"
+        );
+        assert_eq!(
+            PackageManagerKindLite::Dnf.install_command("tar"),
+            "dnf install -y tar"
+        );
+        assert_eq!(
+            PackageManagerKindLite::Apk.install_command("unzip"),
+            "apk add --no-cache unzip"
+        );
+        assert_eq!(
+            PackageManagerKindLite::Pacman.install_command("tar"),
+            "pacman -Sy --noconfirm tar"
+        );
+    }
+
+    #[test]
+    fn pkg_detection_order_prefers_apt() {
+        // 探测顺序按常见度,apt 在最前(Debian/Ubuntu 占多数)。
+        assert_eq!(PackageManagerKindLite::ALL[0], PackageManagerKindLite::Apt);
+        assert_eq!(PackageManagerKindLite::Apt.binary(), "apt-get");
+        assert_eq!(PackageManagerKindLite::Apk.binary(), "apk");
     }
 }
