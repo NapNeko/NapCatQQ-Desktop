@@ -25,20 +25,32 @@ interface InfoBarStackProps {
     children?: ReactNode;
 }
 
-const enter: EnterFn = (el, env) => {
-    // rich 档进场带 elastic release(余震),standard 走 spring,elegant power3。
-    return gsap.fromTo(
-        el,
-        { autoAlpha: 0, x: 16, scale: 0.985 },
-        {
-            autoAlpha: 1,
-            x: 0,
-            scale: 1,
-            duration: env.duration('base'),
-            ease: env.ease.release,
-        },
-    );
-};
+/// enter 工厂按 tone 分:danger/warning 进场更急(fast 替代 base) + 落位 shake;
+/// success/info 走标准 release。生成函数返回 EnterFn 闭包。
+function makeEnter(tone: InfoBarStackItem['tone']): EnterFn {
+    return (el, env) => {
+        const urgent = tone === 'danger' || tone === 'warning';
+        const tl = gsap.timeline();
+        tl.fromTo(
+            el,
+            { autoAlpha: 0, x: 16, scale: 0.985 },
+            {
+                autoAlpha: 1,
+                x: 0,
+                scale: 1,
+                duration: urgent ? env.duration('fast') : env.duration('base'),
+                ease: env.ease.release,
+            },
+        );
+        // danger 落位 shake;warning/success 不 shake;rich 档 success 给一次轻 pop。
+        if (tone === 'danger' && env.preset.feel.shakeAmplitude > 0) {
+            tl.add(() => env.shake(el));
+        } else if (tone === 'success' && env.preset.feel.popPeak > 1) {
+            tl.add(() => env.pop(el, { peak: 1 + (env.preset.feel.popPeak - 1) * 0.5 }));
+        }
+        return tl;
+    };
+}
 
 const exit: ExitFn = (el, env) =>
     gsap.to(el, {
@@ -114,7 +126,7 @@ export function InfoBarStack({
                 <GsapPresence
                     key={item.id}
                     visible={item.visible}
-                    onEnter={enter}
+                    onEnter={makeEnter(item.tone)}
                     onExit={exit}
                     onExited={() => {
                         setDisplayed((prev) => prev.filter((p) => p.id !== item.id));

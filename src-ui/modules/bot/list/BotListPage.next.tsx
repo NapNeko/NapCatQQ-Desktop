@@ -23,7 +23,7 @@ import {
     DialogTitle,
     Spinner,
 } from '../../../shared/ui';
-import { ListItem } from '../../../shared/ui/motion';
+import { ListItem, Counter } from '../../../shared/ui/motion';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
@@ -183,7 +183,7 @@ export function BotListPageNext({
                     </p>
                 </div>
                 <div className="text-xs text-text-tertiary tabular-nums">
-                    共 <span className="font-semibold text-text">{botSnapshots.length}</span> 个实例
+                    共 <Counter value={botSnapshots.length} className="font-semibold text-text" /> 个实例
                 </div>
             </header>
 

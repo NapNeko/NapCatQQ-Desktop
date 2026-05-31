@@ -31,6 +31,17 @@ import { PageTransition } from '../shared/ui/motion';
 // Showcase 是 dev-only 的原子件预览页。
 const SHOW_SHOWCASE = import.meta.env.DEV;
 
+/// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
+const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
+    'overview',
+    'bots',
+    'components',
+    'docker',
+    'remote',
+    'settings',
+    'showcase',
+];
+
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const [collapsed, setCollapsed] = useState(false);
@@ -73,14 +84,20 @@ export const AppNext: React.FC = () => {
     // 把 displayedRoute 设为新 route + visible=true 跑 enter。
     const [displayedRoute, setDisplayedRoute] = useState<AppRoute>(route);
     const [pageVisible, setPageVisible] = useState<boolean>(true);
+    // 路由切换方向:按 ROUTE_ORDER 索引比较。新索引 > 旧 = 向后翻(右滑入),
+    // < 旧 = 向前回(左滑入),==(首次或同页)= 不带方向。
+    const [direction, setDirection] = useState<-1 | 0 | 1>(0);
 
     useEffect(() => {
         if (route === displayedRoute) {
-            // 已经在这个路由,确保 visible=true(初次或回切)
             if (!pageVisible) setPageVisible(true);
             return;
         }
-        // route 变了:先把当前页跑 exit
+        const oldIdx = ROUTE_ORDER.indexOf(displayedRoute);
+        const newIdx = ROUTE_ORDER.indexOf(route);
+        const dir: -1 | 0 | 1 =
+            oldIdx < 0 || newIdx < 0 ? 0 : newIdx > oldIdx ? 1 : newIdx < oldIdx ? -1 : 0;
+        setDirection(dir);
         setPageVisible(false);
     }, [route, displayedRoute, pageVisible]);
 
@@ -126,6 +143,7 @@ export const AppNext: React.FC = () => {
                                     <PageTransition
                                         visible={pageVisible}
                                         onExited={handlePageExited}
+                                        direction={direction}
                                         className="flex min-h-0 flex-1 flex-col"
                                     >
                                         <RouteContent route={displayedRoute} />

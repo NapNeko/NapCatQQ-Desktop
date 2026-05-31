@@ -143,6 +143,50 @@ export function BotCard({
     const isSL = isSnowLumaFlavor(flavor);
     const hasQrcode = !!qrcodeUrl;
 
+    // 状态切换反馈:state 变化时给整张卡跑一次 pop;crashed/last_error 出现时 shake。
+    // 把 ref 挂到外层 div 上,通过 useMotion helper 做反馈。前一次 state/error 用 ref
+    // 保留,在 useEffect 比较拍板。
+    const m = useMotion();
+    const cardRef = useRef<HTMLDivElement | null>(null);
+    const prevStateRef = useRef<typeof bot.state>(bot.state);
+    const prevErrorRef = useRef<string | null | undefined>(bot.last_error);
+
+    useEffect(() => {
+        const el = cardRef.current;
+        if (!el || !m.enabled) {
+            prevStateRef.current = bot.state;
+            return;
+        }
+        const prev = prevStateRef.current;
+        if (prev !== bot.state) {
+            // 关键状态切换给 pop:starting→running 是"成功落位",running→stopped 是
+            // "正常退场"。两者都用轻 pop;crashed/error 不在这里 pop(下面的 error
+            // 检测会接管,用 shake)。
+            const isImpactful =
+                (prev === 'starting' && bot.state === 'running') ||
+                (prev === 'stopping' && bot.state === 'stopped') ||
+                (prev === 'running' && bot.state === 'stopped');
+            if (isImpactful && m.preset.feel.popPeak > 1) {
+                m.pop(el, { peak: 1 + (m.preset.feel.popPeak - 1) * 0.4 });
+            }
+        }
+        prevStateRef.current = bot.state;
+    }, [bot.state, m]);
+
+    useEffect(() => {
+        const el = cardRef.current;
+        if (!el || !m.enabled) {
+            prevErrorRef.current = bot.last_error;
+            return;
+        }
+        const hadError = !!prevErrorRef.current;
+        const hasError = !!bot.last_error;
+        if (!hadError && hasError) {
+            m.shake(el);
+        }
+        prevErrorRef.current = bot.last_error;
+    }, [bot.last_error, m]);
+
     const webuiAvailable = isWebuiAvailable({
         flavor,
         napcat: napcatBinding ?? null,
@@ -299,6 +343,7 @@ export function BotCard({
     return (
         <>
             <div
+                ref={cardRef}
                 role={isBatchMode ? 'button' : undefined}
                 onClick={handleRowClick}
                 className={cn(
