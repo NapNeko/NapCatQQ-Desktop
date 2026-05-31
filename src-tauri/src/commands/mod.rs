@@ -1,3 +1,4 @@
+pub mod app_settings;
 pub mod bot;
 pub mod components;
 pub mod docker;

@@ -6,7 +6,7 @@ use std::time::Duration;
 use ncd_runtime::{
     BootstrapSnapshot, BotManager, BroadcastEventBus, DispatchRenderer, EventBus,
     EventFilter, LocalBotConfigRepo, LocalConfigStore, NoopOfflineNotifier,
-    ReqwestNapCatWebUiClient, SecretStoreImpl, WebUiPollerSettings,
+    ReqwestNapCatWebUiClient, SecretStoreImpl,
 };
 use tauri::Emitter;
 use tokio::sync::{Mutex, RwLock};
@@ -88,7 +88,10 @@ pub fn run() {
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
     );
     let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = Arc::new(NoopOfflineNotifier);
-    let poller_settings = Arc::new(RwLock::new(WebUiPollerSettings::default()));
+    // 轮询设置启动期从磁盘加载（app-settings.json），不再每次都是 default：
+    // 用户在设置页改的 Bot 登录检查间隔重启后仍生效。文件缺失回落 default。
+    let app_settings = commands::app_settings::read_app_settings(&data_root);
+    let poller_settings = Arc::new(RwLock::new(app_settings.poller.clone()));
     let bot_manager = Arc::new(BotManager::new(
         repo,
         Arc::clone(&store),
@@ -266,6 +269,8 @@ pub fn run() {
             commands::publish_demo_event,
             commands::publish_runtime_status,
             commands::release::get_release_snapshot,
+            commands::app_settings::get_app_settings,
+            commands::app_settings::set_app_settings,
             commands::components::list_components,
             commands::components::detect_component,
             commands::components::run_component_action,

@@ -194,6 +194,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self
     }
 
+    /// 热更新 App 级轮询设置。运行中的 Poller 在下次创建（启动 / 重启）时
+    /// 从 `poller_settings` 读最新值；已在跑的 Poller 不强制重建，避免抖动。
+    /// 设置页 `set_app_settings` 写盘后调用此方法让内存值同步。
+    pub async fn update_poller_settings(&self, settings: WebUiPollerSettings) {
+        *self.poller_settings.write().await = settings;
+    }
+
     /// 按 flavor 选择 backend：`SnowLuma` 时优先用注入的 SL backend，否则
     /// 回落到默认 `backend`（向后兼容：未注入 SL 时与历史行为一致）。
     fn backend_for(&self, flavor: BotFlavor) -> Arc<dyn BotBackend> {
