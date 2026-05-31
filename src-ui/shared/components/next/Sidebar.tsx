@@ -17,7 +17,6 @@
 
 import React from 'react';
 import {
-    Activity,
     Bot,
     ChevronsLeft,
     ChevronsRight,
@@ -38,7 +37,6 @@ export type AppRoute =
     | 'components'
     | 'docker'
     | 'remote'
-    | 'events'
     | 'settings'
     | 'showcase';
 
@@ -65,7 +63,6 @@ const PRIMARY_NAV: NavItem[] = [
     { id: 'components', label: 'Components', icon: Package },
     { id: 'docker', label: 'Docker', icon: Container },
     { id: 'remote', label: 'Remote', icon: Server },
-    { id: 'events', label: 'Events', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
