@@ -1,19 +1,18 @@
-// 顶层消息条原子件。对齐 legacy qfluentwidgets InfoBar 的语义:
+// 顶层消息条原子件。GSAP 版。
 //   - tone 决定颜色 + 图标(info / success / warning / danger)
-//   - 标题 + 内容(content 可选;只放短句,长字符串自动折行 + 等宽 mono 化)
+//   - 标题 + 内容(content 可选)
 //   - 右上角 close 按钮 + 可选 autoDismissMs 自动消失
-//   - 进退场动画走 framer-motion(原 CSS @keyframes infobar-in 已移除)
+//   - 进退场动画走 GSAP,由 InfoBarStack 通过 GsapPresence 管 mount/unmount
 //
 // 这一层只管展示,不管"何时该出现"。出现时机由上层 hook 推到
 // InfoBarStack(通常监听 store 终态事件)。
+//
+// 注意:本组件 forwardRef 把 root div 暴露给外部,GsapPresence 才能拿到节点。
 
 import { forwardRef, useEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
-import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, Info, X, AlertTriangle } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
-import { useMotion } from '../../hooks/preferences/useMotion';
-import { infoBarVariants as motionInfoBarVariants } from '../../core/design/motion';
 
 const infoBarVariants = cva(
     [
@@ -75,15 +74,10 @@ function defaultIconFor(tone: NonNullable<VariantProps<typeof infoBarVariants>['
 export interface InfoBarProps
     extends Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'content'>,
         VariantProps<typeof infoBarVariants> {
-    /** 顶部标题，简短一行，例如 "安装失败"。 */
     title: ReactNode;
-    /** 详细文本。可空；为空时只渲染标题。 */
     content?: ReactNode;
-    /** 自动消失毫秒数。0 / undefined 表示不自动消失（错误条默认行为）。 */
     autoDismissMs?: number;
-    /** 用户点击 close 或自动消失时回调。父级通常拿这个把自身从 stack 移除。 */
     onDismiss?: () => void;
-    /** 是否显示关闭按钮，默认 true。某些场景（如轻提示）可以关掉。 */
     closable?: boolean;
 }
 
@@ -102,8 +96,6 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
         },
         ref,
     ) => {
-        const m = useMotion();
-        // autoDismiss 计时器。组件卸载或 props 变化时清。
         const onDismissRef = useRef(onDismiss);
         onDismissRef.current = onDismiss;
         useEffect(() => {
@@ -113,19 +105,15 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
         }, [autoDismissMs]);
 
         const Icon = defaultIconFor(tone ?? 'info');
-        const variants = motionInfoBarVariants(m.preset.bouncyOvershoot);
 
+        // 默认 visibility:hidden 让 GSAP 的 autoAlpha enter 第一帧不闪。
         return (
-            <motion.div
+            <div
                 ref={ref}
                 role="alert"
-                variants={variants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                transition={m.transition('base')}
+                style={{ visibility: 'hidden', opacity: 0 }}
                 className={cn(infoBarVariants({ tone }), className)}
-                {...(rest as Parameters<typeof motion.div>[0])}
+                {...rest}
             >
                 <Icon size={16} strokeWidth={2.2} className={iconVariants({ tone })} />
                 <div className="min-w-0 flex-1">
@@ -152,7 +140,7 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
                         <X size={13} strokeWidth={2.2} />
                     </button>
                 )}
-            </motion.div>
+            </div>
         );
     },
 );

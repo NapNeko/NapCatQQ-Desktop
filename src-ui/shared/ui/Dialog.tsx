@@ -1,23 +1,21 @@
-// Dialog 原子件。基于 Radix Dialog,在外面包一层让 framer-motion 能正确做退场。
+// Dialog 原子件。基于 Radix Dialog,在外面包 GSAP 动画层。
 //
 // 视觉决策:
-//   - overlay 用半透明暖灰而不是纯黑(bg-canvas/55 + backdrop-blur),匹配整体暖色基调
-//   - content 用 surface-elevated(暖米黄)+ shadow-popover,参考图风格
-//   - 关闭按钮放右上,键盘 Esc 也可关(Radix 自动)
+//   - overlay 半透明黑 + backdrop-blur
+//   - content surface-elevated + shadow-popover
+//   - 关闭按钮右上,Esc 关
 //
-// 动画:进退场走 framer-motion + AnimatePresence,fade + scale 0.96→1。
-// 之前这里用 `animate-in / fade-in-0 / zoom-in-95` 的 tailwindcss-animate 类,
-// 但项目根本没装 tailwindcss-animate 插件——这些类是空的,Dialog 实际是瞬开瞬关。
-// 现在统一接 framer,跟其它 motion 走同一档位/速度偏好。
-//
-// 实现要点:Radix 的 Root 自己控制 Portal mount/unmount,但 framer 需要先看到
-// open=false 才能跑 exit。解法:在 wrapper Dialog 内开个 context 把 open 传下去,
-// 由 DialogContent 用 AnimatePresence 自己判断挂卸,用 Radix 的 forceMount 保留
-// Portal 不让 Radix 抢着卸载。Esc / 点击 overlay 等 a11y 行为仍由 Radix 兜底。
+// 动画:进退场走 GSAP + GsapPresence。
+// 实现要点:
+//   - RadixDialog.Root open 是受控的 boolean,DialogContent 在外面挂一个
+//     固定 Portal(forceMount)让 RadixDialog 不抢着卸载内部
+//   - overlay/content 各自由 GsapPresence(visible=open) 控:open=true 就 mount + enter,
+//     open=false 就跑 exit + 完成后真 unmount
+//   - 整个 Portal 永远存在,不存在 Radix 强制立即卸载内部 children 的问题
 
 import * as RadixDialog from '@radix-ui/react-dialog';
-import { AnimatePresence, motion } from 'framer-motion';
 import { X as CloseIcon } from 'lucide-react';
+import gsap from 'gsap';
 import {
     createContext,
     forwardRef,
@@ -28,11 +26,7 @@ import {
     type ReactNode,
 } from 'react';
 import { cn } from '../utils/cn';
-import { useMotion } from '../../hooks/preferences/useMotion';
-import {
-    dialogContentVariants,
-    dialogOverlayVariants,
-} from '../../core/design/motion';
+import { GsapPresence, type EnterFn, type ExitFn } from './motion/GsapPresence';
 
 const DialogOpenContext = createContext<boolean>(false);
 
@@ -44,8 +38,6 @@ interface DialogRootProps {
     children?: ReactNode;
 }
 
-/// Dialog wrapper:对外接口和 RadixDialog.Root 完全一致,内部多走一层 context
-/// 把 open 传给 DialogContent。受控/非受控两种用法都支持。
 export function Dialog({
     open,
     defaultOpen,
@@ -75,79 +67,124 @@ export function Dialog({
 
 export const DialogTrigger = RadixDialog.Trigger;
 export const DialogClose = RadixDialog.Close;
-export const DialogPortal = RadixDialog.Portal;
 
-export const DialogOverlay = forwardRef<
-    ElementRef<typeof RadixDialog.Overlay>,
-    ComponentPropsWithoutRef<typeof RadixDialog.Overlay>
->(({ className, ...props }, ref) => {
-    const m = useMotion();
-    return (
-        <RadixDialog.Overlay asChild forceMount {...props}>
-            <motion.div
-                ref={ref}
-                variants={dialogOverlayVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                transition={m.transition('base')}
-                className={cn(
-                    'fixed inset-0 z-50 bg-black/35 backdrop-blur-sm',
-                    className,
-                )}
-            />
-        </RadixDialog.Overlay>
+const overlayEnter: EnterFn = (el, env) =>
+    gsap.fromTo(
+        el,
+        { autoAlpha: 0 },
+        { autoAlpha: 1, duration: env.duration('base'), ease: env.preset.enterEase },
     );
-});
-DialogOverlay.displayName = 'DialogOverlay';
+const overlayExit: ExitFn = (el, env) =>
+    gsap.to(el, {
+        autoAlpha: 0,
+        duration: env.duration('fast'),
+        ease: env.preset.exitEase,
+    });
+
+const contentEnter: EnterFn = (el, env) =>
+    gsap.fromTo(
+        el,
+        { autoAlpha: 0, scale: 0.96, y: -2 },
+        {
+            autoAlpha: 1,
+            scale: 1,
+            y: 0,
+            duration: env.duration('base'),
+            ease: env.preset.enterEase,
+        },
+    );
+const contentExit: ExitFn = (el, env) =>
+    gsap.to(el, {
+        autoAlpha: 0,
+        scale: 0.97,
+        y: -2,
+        duration: env.duration('fast'),
+        ease: env.preset.exitEase,
+    });
 
 interface DialogContentProps
     extends Omit<ComponentPropsWithoutRef<typeof RadixDialog.Content>, 'forceMount'> {
     hideClose?: boolean;
 }
 
+/// DialogContent:外层固定 Portal,内部两块 GsapPresence 各自管 overlay/content。
+/// 居中用 flex(不依赖 transform),让 GSAP 可以自由动 content 的 scale/y 不互相影响。
 export const DialogContent = forwardRef<
     ElementRef<typeof RadixDialog.Content>,
     DialogContentProps
->(({ className, children, hideClose, ...props }, ref) => {
+>(({ className, children, hideClose, ...props }, _ref) => {
     const open = useContext(DialogOpenContext);
-    const m = useMotion();
     return (
-        <AnimatePresence>
-            {open && (
-                <RadixDialog.Portal forceMount>
-                    <DialogOverlay />
+        <RadixDialog.Portal forceMount>
+            <GsapPresence visible={open} onEnter={overlayEnter} onExit={overlayExit}>
+                <RadixDialog.Overlay asChild forceMount>
+                    <OverlayBody />
+                </RadixDialog.Overlay>
+            </GsapPresence>
+            {/* 居中容器:不动 transform,只用 flex 居中。pointer-events-none
+                让点击穿透到 overlay,但内部 ContentBody 自己 pointer-events-auto。
+                isolation:isolate 强制创建独立 stacking context,让 content 不被
+                overlay 的 backdrop-filter 计算成"后方内容"误模糊。 */}
+            <div
+                style={{ isolation: 'isolate' }}
+                className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6"
+            >
+                <GsapPresence visible={open} onEnter={contentEnter} onExit={contentExit}>
                     <RadixDialog.Content asChild forceMount {...props}>
-                        <motion.div
-                            ref={ref}
-                            variants={dialogContentVariants}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                            transition={m.transition('base')}
-                            className={cn(
-                                'fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2',
-                                'rounded-md bg-elevated p-6 shadow-popover',
-                                className,
-                            )}
-                        >
+                        <ContentBody className={className} hideClose={hideClose}>
                             {children}
-                            {!hideClose && (
-                                <RadixDialog.Close
-                                    aria-label="关闭"
-                                    className="absolute right-3 top-3 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                                >
-                                    <CloseIcon size={16} />
-                                </RadixDialog.Close>
-                            )}
-                        </motion.div>
+                        </ContentBody>
                     </RadixDialog.Content>
-                </RadixDialog.Portal>
-            )}
-        </AnimatePresence>
+                </GsapPresence>
+            </div>
+        </RadixDialog.Portal>
     );
 });
 DialogContent.displayName = 'DialogContent';
+
+const OverlayBody = forwardRef<HTMLDivElement, { className?: string }>(
+    ({ className }, ref) => (
+        <div
+            ref={ref}
+            style={{ visibility: 'hidden', opacity: 0 }}
+            className={cn(
+                // overlay z-40,内容 z-50,留出层级让 backdrop-blur 的"后方区"
+                // 不会误把 content 也算进去(GSAP 给 content 加 transform 会创建
+                // 新 stacking context,跟 overlay 同 z-50 时浏览器计算可能错乱)。
+                'fixed inset-0 z-40 bg-black/35 backdrop-blur-sm',
+                className,
+            )}
+        />
+    ),
+);
+OverlayBody.displayName = 'OverlayBody';
+
+const ContentBody = forwardRef<
+    HTMLDivElement,
+    { className?: string; hideClose?: boolean; children?: ReactNode }
+>(({ className, hideClose, children }, ref) => (
+    <div
+        ref={ref}
+        style={{ visibility: 'hidden', opacity: 0 }}
+        className={cn(
+            // 不再 fixed + translate 居中(交给外层 flex 容器);自己只管视觉。
+            'pointer-events-auto relative w-full max-w-md',
+            'rounded-md bg-elevated p-6 shadow-popover',
+            className,
+        )}
+    >
+        {children}
+        {!hideClose && (
+            <RadixDialog.Close
+                aria-label="关闭"
+                className="absolute right-3 top-3 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            >
+                <CloseIcon size={16} />
+            </RadixDialog.Close>
+        )}
+    </div>
+));
+ContentBody.displayName = 'ContentBody';
 
 export const DialogHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
     className,
@@ -187,3 +224,7 @@ export const DialogFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
         {...props}
     />
 );
+
+// DialogPortal 仅 re-export 给少数手动用法保持兼容。新代码用 DialogContent 即可,
+// 内部已经包了 Portal。
+export const DialogPortal = RadixDialog.Portal;

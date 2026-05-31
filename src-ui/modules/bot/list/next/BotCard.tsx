@@ -17,8 +17,7 @@
 //
 // 批量模式下整行变 selectable，左侧出复选框。
 
-import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import {
     Activity,
     AlertTriangle,
@@ -39,12 +38,14 @@ import {
     Wifi,
     Zap,
 } from 'lucide-react';
+import gsap from 'gsap';
 import {
     Badge,
     Tooltip,
     TooltipContent,
     TooltipTrigger,
 } from '../../../../shared/ui';
+import { GsapPresence, type EnterFn, type ExitFn } from '../../../../shared/ui/motion';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 import type {
     BotActorSnapshot,
@@ -402,83 +403,99 @@ export function BotCard({
                         </div>
                     </div>
 
-                    {/* 操作区。用 AnimatePresence + layout 让按钮按状态进退场:
-                        - 扫码按钮仅 hasQrcode 时存在
-                        - Play / Square 互换走 mode="popLayout" 同位置切换
-                        - 日志 / WebUI 仅 running / starting 时存在
-                        每个按钮带稳定 key 让 framer 跟踪。 */}
+                    {/* 操作区。每个按钮用 GsapPresence(visible=...) 包,按钮按状态
+                        进退场:scale 0.7 + autoAlpha 0/1。Play 和 Square 互斥(不会
+                        同时存在),日志/WebUI 仅 running/starting 时存在,扫码仅
+                        hasQrcode 时存在。 */}
                     {!isBatchMode && (
-                        <motion.div
+                        <div
                             className="flex shrink-0 items-center gap-1"
                             onClick={(e) => e.stopPropagation()}
-                            layout
                         >
-                            <AnimatePresence mode="popLayout" initial={false}>
-                                {hasQrcode && (
-                                    <IconButton
-                                        key="qr"
-                                        tooltip="扫码登录"
-                                        onClick={() => setQrOpen(true)}
-                                        tone="brand"
-                                    >
-                                        <QrCode size={16} strokeWidth={2.2} />
-                                    </IconButton>
-                                )}
-                                {isBotRunning(bot.state) || isBotStarting(bot.state) ? (
-                                    <IconButton
-                                        key="stop"
-                                        tooltip="停止 Bot"
-                                        onClick={stopAction(() => onStop(bot.bot_id))}
-                                        disabled={!canStopBot(bot.state)}
-                                        tone="danger"
-                                    >
-                                        <Square size={14} strokeWidth={2.6} />
-                                    </IconButton>
-                                ) : (
-                                    <IconButton
-                                        key="start"
-                                        tooltip="启动 Bot"
-                                        onClick={stopAction(() => onStart(bot.bot_id))}
-                                        disabled={!canStartBot(bot.state)}
-                                        tone="success"
-                                    >
-                                        <Play size={14} strokeWidth={2.6} />
-                                    </IconButton>
-                                )}
-                                {(isBotRunning(bot.state) || isBotStarting(bot.state)) && (
-                                    <IconButton
-                                        key="logs"
-                                        tooltip="查看日志"
-                                        onClick={stopAction(() => onViewLogs(bot.bot_id))}
-                                    >
-                                        <FileText size={14} strokeWidth={2.2} />
-                                    </IconButton>
-                                )}
-                                {(isBotRunning(bot.state) || isBotStarting(bot.state)) && (
-                                    <IconButton
-                                        key="webui"
-                                        tooltip={webuiTip}
-                                        disabled={!webuiAvailable}
-                                        onClick={stopAction(() =>
-                                            onOpenWebui({
-                                                botId: bot.bot_id,
-                                                flavor,
-                                                napcat: napcatBinding ?? null,
-                                            }),
-                                        )}
-                                    >
-                                        <Globe size={14} strokeWidth={2.2} />
-                                    </IconButton>
-                                )}
+                            <GsapPresence
+                                visible={hasQrcode}
+                                onEnter={iconBtnEnter}
+                                onExit={iconBtnExit}
+                            >
                                 <IconButton
-                                    key="config"
-                                    tooltip="配置"
-                                    onClick={stopAction(() => onConfigure(bot.bot_id))}
+                                    presence
+                                    tooltip="扫码登录"
+                                    onClick={() => setQrOpen(true)}
+                                    tone="brand"
                                 >
-                                    <Settings size={14} strokeWidth={2.2} />
+                                    <QrCode size={16} strokeWidth={2.2} />
                                 </IconButton>
-                            </AnimatePresence>
-                        </motion.div>
+                            </GsapPresence>
+                            <GsapPresence
+                                visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
+                                onEnter={iconBtnEnter}
+                                onExit={iconBtnExit}
+                            >
+                                <IconButton
+                                    presence
+                                    tooltip="停止 Bot"
+                                    onClick={stopAction(() => onStop(bot.bot_id))}
+                                    disabled={!canStopBot(bot.state)}
+                                    tone="danger"
+                                >
+                                    <Square size={14} strokeWidth={2.6} />
+                                </IconButton>
+                            </GsapPresence>
+                            <GsapPresence
+                                visible={!isBotRunning(bot.state) && !isBotStarting(bot.state)}
+                                onEnter={iconBtnEnter}
+                                onExit={iconBtnExit}
+                            >
+                                <IconButton
+                                    presence
+                                    tooltip="启动 Bot"
+                                    onClick={stopAction(() => onStart(bot.bot_id))}
+                                    disabled={!canStartBot(bot.state)}
+                                    tone="success"
+                                >
+                                    <Play size={14} strokeWidth={2.6} />
+                                </IconButton>
+                            </GsapPresence>
+                            <GsapPresence
+                                visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
+                                onEnter={iconBtnEnter}
+                                onExit={iconBtnExit}
+                            >
+                                <IconButton
+                                    presence
+                                    tooltip="查看日志"
+                                    onClick={stopAction(() => onViewLogs(bot.bot_id))}
+                                >
+                                    <FileText size={14} strokeWidth={2.2} />
+                                </IconButton>
+                            </GsapPresence>
+                            <GsapPresence
+                                visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
+                                onEnter={iconBtnEnter}
+                                onExit={iconBtnExit}
+                            >
+                                <IconButton
+                                    presence
+                                    tooltip={webuiTip}
+                                    disabled={!webuiAvailable}
+                                    onClick={stopAction(() =>
+                                        onOpenWebui({
+                                            botId: bot.bot_id,
+                                            flavor,
+                                            napcat: napcatBinding ?? null,
+                                        }),
+                                    )}
+                                >
+                                    <Globe size={14} strokeWidth={2.2} />
+                                </IconButton>
+                            </GsapPresence>
+                            <IconButton
+                                tooltip="配置"
+                                onClick={stopAction(() => onConfigure(bot.bot_id))}
+                            >
+                                <Settings size={14} strokeWidth={2.2} />
+                            </IconButton>
+                        </div>
                     )}
                 </div>
 
@@ -771,56 +788,99 @@ interface IconButtonProps {
     disabled?: boolean;
     tone?: 'neutral' | 'brand' | 'success' | 'danger';
     children: React.ReactNode;
+    /// 被 GsapPresence 包裹时传 true,首帧 visibility:hidden 让 GSAP 的 enter
+    /// fromTo 接管;常驻按钮(配置)不传,默认显示。
+    presence?: boolean;
 }
 
-function IconButton({
-    tooltip,
-    onClick,
-    disabled,
-    tone = 'neutral',
-    children,
-}: IconButtonProps) {
-    const m = useMotion();
-    // 进退场:scale + opacity 轻弹入,适合按钮"出现消失"的局部场景。
-    // AnimatePresence 通过元素 key 跟踪,这里不需要额外 motionKey prop。
-    const enter = m.enabled
-        ? {
-              initial: { opacity: 0, scale: 0.7 },
-              animate: { opacity: 1, scale: 1 },
-              exit: { opacity: 0, scale: 0.7, transition: { duration: 0.12 } },
-          }
-        : {};
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <motion.button
-                    type="button"
-                    layout
-                    {...enter}
-                    transition={m.transition(
-                        m.preset.bouncyOvershoot > 1 ? 'bouncy' : 'spring',
-                    )}
-                    whileHover={m.enabled ? { scale: m.preset.hoverScale } : undefined}
-                    whileTap={m.enabled ? { scale: m.preset.tapScale } : undefined}
-                    onClick={onClick}
-                    disabled={disabled}
-                    className={cn(
-                        'inline-flex h-8 w-8 items-center justify-center rounded-xs',
-                        'transition-colors duration-100',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                        'disabled:cursor-not-allowed disabled:opacity-40',
-                        tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
-                        tone === 'brand' && 'text-brand hover:bg-brand-soft',
-                        tone === 'success' && 'text-success hover:bg-success-soft',
-                        tone === 'danger' && 'text-danger hover:bg-danger-soft',
-                    )}
-                >
-                    {children}
-                </motion.button>
-            </TooltipTrigger>
-            <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
+/// IconButton enter/exit 工厂:scale 0.7→1 + autoAlpha,作用在外层包裹的 button 节点。
+const iconBtnEnter: EnterFn = (el, env) =>
+    gsap.fromTo(
+        el,
+        { autoAlpha: 0, scale: 0.6 },
+        {
+            autoAlpha: 1,
+            scale: 1,
+            duration: env.duration('fast'),
+            ease: env.preset.bouncyEase,
+        },
     );
+const iconBtnExit: ExitFn = (el, env) =>
+    gsap.to(el, {
+        autoAlpha: 0,
+        scale: 0.6,
+        duration: env.duration('fast') * 0.7,
+        ease: env.preset.exitEase,
+    });
+
+const IconButton = forwardRefIcon();
+
+function forwardRefIcon() {
+    return forwardRef<HTMLButtonElement, IconButtonProps>(function IconButtonImpl(
+        { tooltip, onClick, disabled, tone = 'neutral', children, presence },
+        ref,
+    ) {
+        const m = useMotion();
+        const localRef = useRef<HTMLButtonElement | null>(null);
+        const setRef = (node: HTMLButtonElement | null) => {
+            localRef.current = node;
+            if (typeof ref === 'function') ref(node);
+            else if (ref) (ref as React.MutableRefObject<HTMLButtonElement | null>).current = node;
+        };
+
+        // hover/tap 弹性。GsapPresence 在外层管 enter/exit,这里只管交互反馈。
+        useEffect(() => {
+            const el = localRef.current;
+            if (!el || !m.enabled || disabled) return;
+            const onEnter = () => {
+                gsap.to(el, {
+                    scale: m.preset.hoverScale,
+                    duration: m.duration('fast'),
+                    ease: m.preset.hoverEase,
+                });
+            };
+            const onLeave = () => {
+                gsap.to(el, {
+                    scale: 1,
+                    duration: m.duration('fast'),
+                    ease: m.preset.hoverEase,
+                });
+            };
+            el.addEventListener('mouseenter', onEnter);
+            el.addEventListener('mouseleave', onLeave);
+            return () => {
+                el.removeEventListener('mouseenter', onEnter);
+                el.removeEventListener('mouseleave', onLeave);
+            };
+        }, [m.enabled, disabled, m.preset.hoverScale, m.preset.hoverEase, m.speed]);
+
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <button
+                        ref={setRef}
+                        type="button"
+                        onClick={onClick}
+                        disabled={disabled}
+                        style={presence ? { visibility: 'hidden', opacity: 0 } : undefined}
+                        className={cn(
+                            'inline-flex h-8 w-8 items-center justify-center rounded-xs',
+                            'transition-colors duration-100',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                            'disabled:cursor-not-allowed disabled:opacity-40',
+                            tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
+                            tone === 'brand' && 'text-brand hover:bg-brand-soft',
+                            tone === 'success' && 'text-success hover:bg-success-soft',
+                            tone === 'danger' && 'text-danger hover:bg-danger-soft',
+                        )}
+                    >
+                        {children}
+                    </button>
+                </TooltipTrigger>
+                <TooltipContent>{tooltip}</TooltipContent>
+            </Tooltip>
+        );
+    });
 }
 
 // ============== Helpers ==============

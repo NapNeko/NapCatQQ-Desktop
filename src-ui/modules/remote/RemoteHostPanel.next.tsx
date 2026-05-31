@@ -12,9 +12,10 @@
 //
 // 严守 frontend-layering：仅 import hooks / shared/ui / 自身组件。
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Server, RefreshCw, Plus, Eye, EyeOff } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
 import {
     Dialog,
@@ -26,7 +27,6 @@ import {
 } from '../../shared/ui';
 import { ListItem } from '../../shared/ui/motion';
 import { useMotion } from '../../hooks/preferences/useMotion';
-import { listContainerVariants } from '../../core/design/motion';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { ServerCard } from './ServerCard';
@@ -220,37 +220,50 @@ function ServerGrid({
     deleteServer: (id: string) => void;
 }) {
     const m = useMotion();
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useGSAP(
+        () => {
+            if (!m.enabled || servers.length === 0) return;
+            gsap.from(containerRef.current!.children, {
+                autoAlpha: 0,
+                y: 6,
+                scale: 0.985,
+                duration: m.duration('base'),
+                ease: m.preset.enterEase,
+                stagger: m.preset.stagger,
+            });
+        },
+        { scope: containerRef, dependencies: [servers.length, m.enabled, m.preset.enterEase] },
+    );
+
     return (
-        <motion.div
+        <div
+            ref={containerRef}
             className="grid gap-3"
             style={{
                 gridTemplateColumns:
                     'repeat(auto-fill, minmax(min(360px, 100%), 1fr))',
             }}
-            variants={listContainerVariants(m.preset.stagger)}
-            initial="initial"
-            animate="animate"
         >
-            <AnimatePresence initial={false}>
-                {servers.map((server) => (
-                    <ListItem key={server.id} layout hoverable>
-                        <ServerCard
-                            server={server}
-                            isTesting={isTesting && testingId === server.id}
-                            revealIp={revealIp}
-                            onTest={(pw) => handleTest(server.id, pw)}
-                            onEdit={() => openEdit(server)}
-                            onSetupKey={
-                                server.authMethod === 'password'
-                                    ? () => setKeyAuthTarget(server)
-                                    : undefined
-                            }
-                            onDelete={() => deleteServer(server.id)}
-                        />
-                    </ListItem>
-                ))}
-            </AnimatePresence>
-        </motion.div>
+            {servers.map((server) => (
+                <ListItem key={server.id} hoverable>
+                    <ServerCard
+                        server={server}
+                        isTesting={isTesting && testingId === server.id}
+                        revealIp={revealIp}
+                        onTest={(pw) => handleTest(server.id, pw)}
+                        onEdit={() => openEdit(server)}
+                        onSetupKey={
+                            server.authMethod === 'password'
+                                ? () => setKeyAuthTarget(server)
+                                : undefined
+                        }
+                        onDelete={() => deleteServer(server.id)}
+                    />
+                </ListItem>
+            ))}
+        </div>
     );
 }
 

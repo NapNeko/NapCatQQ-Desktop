@@ -1,9 +1,8 @@
 // design token 的 TS 镜像。仅给"必须在 JS 端取值"的场景使用：
 //   - recharts 折线颜色（不能用 CSS variable 走 prop）
-//   - framer-motion transition 数值
 //   - 计算派生值（CSS color-mix 不够用时）
 // 普通组件应该走 className + tailwind utility / 或直接 var(--xxx)，
-// 不要从这里 import 字面值。
+// 不要从这里 import 字面值。动画 token 在 core/design/motion.ts。
 
 export const tokens = {
     brand: {

@@ -250,41 +250,63 @@ React 端用法统一：
 - 把 linger / autoDismiss 计时器写在组件 effect 里 —— 组件卸载时计时器被 cleanup。计时器应该和 state 一起放在 store 模块作用域（`Map<id, Timer>`）
 - `setState({ ...current, foo: 1 })` 每次都新对象 —— 工厂内部已经做引用相等短路，直接传新对象就行；但 reducer 端如果数据没变要返回 `current` 本体让短路生效
 
-## 11. 动画体系（motion）
+## 11. 动画体系（GSAP + 三档语义）
 
-统一框架 framer-motion + Tailwind v4，三档语义 + 速度滑块 + reduced-motion 兜底。所有过渡走这套，禁止再在业务代码里手写 `transition` / `@keyframes`（Spinner / progress-indeterminate / shimmer-sweep / glow-breath 这几个全局常量除外）。
+统一框架 GSAP 3.15 + @gsap/react 2.1。三档语义 + 速度滑块 + reduced-motion 兜底。所有过渡走这套，禁止再在业务代码里手写 `@keyframes` 或重新接入 framer-motion 等其它动画库。Spinner / progress-indeterminate 这俩遗留 CSS animation 保留即可（跟动画库无关）。
 
 档位语义（`core/design/motion.ts` 的 `motionPresets`）：
-- `elegant` 优雅：base 160ms，仅 fade，无 spring 弹性，hover/tap 不缩放，列表无 stagger
-- `standard` 标准（默认）：base 200ms，fade + slide-y 4px + 轻 spring，按钮 hover 1.02 / tap 0.96
-- `rich` 丰富：base 240ms，按钮 QQ 弹（spring stiff 600 / damp 14 + 反弹超调 1.04）+ 卡片 hover lift 2px + 状态点呼吸 + 数字 rolling + 角落柔光 8s 呼吸（仅 overview 页）
+- `elegant` 优雅：base 160ms，ease `power2.out/in`，无弹性，hover/tap 不缩放，列表无 stagger
+- `standard` 标准（默认）：base 200ms，ease `power3.out`，hover `back.out(1.4)`，scale 1.02/0.96，stagger 35ms
+- `rich` 丰富：base 240ms，enter `back.out(1.7)`，hover `back.out(2)`，tap `elastic.out(1, 0.4)`，scale 1.04/0.92，stagger 45ms，状态点呼吸 + 数字 rolling + 角落柔光呼吸
 
-速度倍率 `motionSpeed`（0.5x ~ 1.5x）在档位 baseline 上再乘一次。`useReducedMotion()` 命中或 `motionEnabled=false` 时强制 `duration: 0` 且禁 spring，双保险。
+速度倍率 `motionSpeed`（0.5x ~ 1.5x）在档位 baseline 上再除一次。系统 `prefers-reduced-motion` 命中或 `motionEnabled=false` 时强制 duration 0，业务调 gsap.to 也只是瞬时跳到终态。
 
-读偏好统一入口：`hooks/preferences/useMotion.ts`。返回 `{ level, speed, reduced, enabled, transition(kind), preset }`。业务从这里取 `transition('base'|'slow'|'spring'|'bouncy')`，不要自己 `getTransition()` 也不要直接读 store 数值。
+读偏好统一入口：`hooks/preferences/useMotion.ts`。返回 `{ level, speed, reduced, enabled, preset, duration(kind) }`。业务从这里取 ease 字符串、scale、stagger 数值，不要自己读 motionPresets。
 
-motion 原子件目录 `shared/ui/motion/`：
-- `PageTransition` 路由级 fade + slide-y（`AppNext.tsx` 的 RouteOutlet 已接）
-- `ListItem` 列表项进退场 + 可选 hoverable 上抬。父级要包 `<motion.div variants={listContainerVariants(stagger)}>` + `<AnimatePresence>`
-- `MotionCard` 给 `Card` 加 hover lift 的 wrapper（多用于独立卡片；列表里用 `ListItem hoverable` 即可）
-- `StatusDot` running/loading 态呼吸状态点
-- `Counter` rich 档启用的数字 rolling
-- `Shimmer` rich 档 skeleton 扫光（loading 替代 Spinner）
+### GsapPresence — 核心新增件
 
-接入约定：
-- 路由切换 ✓ AppNext RouteOutlet
-- 列表 stagger ✓ BotListPage / DockerPage / RemoteHostPanel（用 listContainerVariants + ListItem layout hoverable）
-- 按钮弹性 ✓ 直接改了 `Button.tsx` 内部，所有 Button 自动获得（`flat=true` 关闭）
-- Dialog 进退场 ✓ `Dialog.tsx` 重写为 framer + AnimatePresence。注意：之前用的 `tailwindcss-animate` 类（`animate-in / fade-in-0 / zoom-in-95`）项目从未装这个插件，那些类是失效的。
-- InfoBar 进退场 ✓ `InfoBar.tsx` + `InfoBarStack.tsx` 包 AnimatePresence
-- 角落柔光呼吸 ✓ AppNext 在 rich 档 + overview 路由时加 `is-breathing`
-- 设置接线 ✓ `GeneralTab.tsx` + `MotionPreviewCard` 实时预览
+GSAP 没有 framer 的 `<AnimatePresence>`。`shared/ui/motion/GsapPresence.tsx` 实现等价物：父级控制 visible，本组件根据 visible 切换跑 enter/exit timeline，exit 完成后才真 unmount。Dialog/InfoBar/路由切换/Tabs 内容切换/Bot 卡按钮切换全部基于这个。
 
-性能红线：
-- 全部走 transform / opacity，禁动 width / height / margin（layout 触发 reflow）
-- 列表 ListItem 必带 `key`，`layout` prop 仅在需要排序滑动时开
-- 角落柔光呼吸只在 overview 路由跑（CSS animation，路由切走 DOM 卸载即停）
-- Dialog 用 forceMount + 自管 open context；不要在 Radix `<Dialog open>` 之外再缠一层条件渲染
-- 多个 motion 嵌套要么共享 layoutId，要么外层不开 transform（否则 GPU 矩阵叠加）
+用法（外层固定 mount，内层 GSAP 控制可见）：
 
-设置页：`prefs.motionEnabled / motionLevel / motionSpeed`（preferencesStore，localStorage 兼容旧值无字段时落默认）。`MotionLevelSegment` + `MotionSpeedSlider` 在 `_shared.tsx`。修改 useMotion 读偏好的内部实现时，记得同步 `MotionPreviewCard` 的预览效果对齐。
+    <GsapPresence visible={open} onEnter={enterFn} onExit={exitFn}>
+      <Body />  {/* forwardRef 组件,GsapPresence 自动注入 ref */}
+    </GsapPresence>
+
+children 必须是单个 ReactElement 且能接收 ref（forwardRef 或带 ref 的原生元素）。enter/exit 工厂签名 `(el, env) => gsap.timeline | gsap.tween`，env 是 useMotion 返回值。
+
+Body 一定要在 `style={{ visibility: 'hidden', opacity: 0 }}` 起始态，避免 enter 第一帧闪一下。GSAP 用 `autoAlpha` (= visibility + opacity) 自动接管这两个属性。
+
+### motion 原子件目录 `shared/ui/motion/`
+
+- `GsapPresence` 见上
+- `PageTransition` 路由级 fade + scale + slide-y（AppNext 的路由切换接它）
+- `ListItem` 列表项 wrapper + hoverable hover lift；stagger 由父级 useGSAP 调用
+- `MotionCard` 给 Card 加 hover lift；列表里直接用 `ListItem hoverable` 即可
+- `StatusDot` running/loading 呼吸状态点（GSAP timeline.yoyo.repeat -1）
+- `Counter` rich 档数字 rolling
+- `Shimmer` rich 档 skeleton 扫光
+
+### 接入约定 / 已落地点
+
+- 路由切换 ✓ AppNext 的 `displayedRoute + pageVisible` 双 state pattern：route 变 → pageVisible=false 跑 exit → onExited 切 displayedRoute + 设 visible=true
+- 列表 stagger ✓ BotListPage / DockerPage / RemoteHostPanel 用 `useGSAP(() => gsap.from(containerRef.current.children, { stagger, ... }))` + `dependencies: [items.length, m.enabled, ...]`
+- 按钮弹性 ✓ Button.tsx 内挂 mouseenter/leave/down/up 用 gsap.to 控制 scale；`flat=true` 关闭
+- IconButton（BotCard） ✓ forwardRef 让 GsapPresence 拿 ref；按钮按 visible 进退场（QrCode / Play↔Square / 日志 / WebUI）
+- Dialog 进退场 ✓ Radix forceMount + 两块 GsapPresence 各管 overlay/content
+- InfoBar 进退场 ✓ InfoBarStack 自管 displayed 列表，每条用 GsapPresence + onExited 清理
+- Tabs 内容切换 ✓ TabsContent 读 ActiveValueContext，GsapPresence 控 mount + GSAP fade+slide-x
+- 角落柔光呼吸 ✓ AppNext 在 rich 档 + overview 路由时加 `is-breathing` CSS 类
+- FloatingActions / BatchBottomBar ✓ 互斥两个 GsapPresence(visible=...)，各自跑 fly-in/fly-out
+
+### 性能红线
+
+- 全部走 transform / autoAlpha，禁动 width / height / margin（layout reflow）
+- GSAP camelCase prop（backgroundColor / rotationX），用 transform aliases（x / y / scale）而非 raw `transform` 字符串
+- 列表 useGSAP 必带 `scope: ref` 让选择器限定在容器内（参考 gsap-react skill）
+- useGSAP 自动 cleanup（unmount 时 revert），不需要业务自己 timeline.kill()
+- StatusDot / Shimmer 等长循环 timeline 在 useEffect cleanup 里 kill 掉，避免 hot reload 累积
+
+### 设置页
+
+`prefs.motionEnabled / motionLevel / motionSpeed`（preferencesStore，localStorage 兼容旧值无字段时落默认）。`MotionLevelSegment` + `MotionSpeedSlider` 在 `_shared.tsx`。原版本里有过的"动画预览卡"已经按用户反馈移除——预览不应在设置页。

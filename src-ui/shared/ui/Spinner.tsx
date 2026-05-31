@@ -1,4 +1,4 @@
-// 加载指示器原子件。纯 CSS 实现（无 framer-motion 依赖），尺寸与 Button 高度对齐。
+// 加载指示器原子件。纯 CSS 实现，尺寸与 Button 高度对齐。
 // 主要消费方：Button 加载态（Button 内 children 自由排版，所以不内置 loading prop）；
 // 列表 / 配置页 fetch loading 时居中展示。
 

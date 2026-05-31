@@ -1,10 +1,10 @@
 // 新 UI 树根 = AppShell。
-// 布局：TitleBar(透明) ─ [Sidebar | main] ─ StatusBar(极弱)
+// 布局:TitleBar(透明) ─ [Sidebar | main] ─ StatusBar(极弱)
 //
-// 简单 useState 路由（6 主路由 + 1 dev showcase）。
+// 简单 useState 路由(6 主路由 + 1 dev showcase)。
+// 路由切换走 GsapPresence + PageTransition,旧页跑完 exit 才真 unmount。
 
 import React, { useEffect, useState } from 'react';
-import { AnimatePresence, MotionConfig } from 'framer-motion';
 import './index.css';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
@@ -28,19 +28,13 @@ import { applySideEffects as applyPreferences } from '../hooks/preferences/prefe
 import { useMotion } from '../hooks/preferences/useMotion';
 import { PageTransition } from '../shared/ui/motion';
 
-// Showcase 是 dev-only 的原子件预览页。只在 Vite 开发构建（npm run
-// tauri:dev / dev）显示侧栏入口；正式 build 的 exe 里 import.meta.env.DEV
-// 为 false，入口隐藏。
+// Showcase 是 dev-only 的原子件预览页。
 const SHOW_SHOWCASE = import.meta.env.DEV;
 
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const [collapsed, setCollapsed] = useState(false);
 
-    // useBootstrap 提供 data_root 与连接状态推导：
-    //   - isLoading → 'connecting'
-    //   - 有数据 → 'connected'
-    //   - 出错 → 'disconnected'
     const { bootstrap, isLoading, error } = useBootstrap();
     const connectionState: 'connected' | 'connecting' | 'disconnected' = error
         ? 'disconnected'
@@ -48,34 +42,16 @@ export const AppNext: React.FC = () => {
             ? 'connecting'
             : 'connected';
 
-    // 顶层挂一次 component-action 事件桥。路由切换不会断订阅，进度状态留在
-    // 模块级 store；切走 Components 页再切回来不会丢已经在跑的安装进度。
     useComponentActionEventBridge();
-
-    // 顶层挂一次 docker 部署进度桥。对话框关闭不会断订阅，后端推来的进度
-    // 事件始终能落到 store，下次打开对话框还能看到历史进度。
     useDockerDeployProgressBridge();
-
-    // 启动即后台预热组件探测：拉服务器列表 + 自动连接远端 + catalog + 逐主机
-    // detect，全在 App 根节点常驻跑。用户切到组件页时数据已在 react-query 缓存，
-    // 秒开，不用再从零等一轮 SSH 探测。
     useComponentsWarmup();
 
-    // 启动时 apply 一次客户端偏好（主题 / 窗口透明度等）。preferencesStore
-    // 已经从 localStorage 加载初始值，这里只是把它落到 DOM。后续通过
-    // store update 会自动触发 applySideEffects，不需要重复挂监听。
     useEffect(() => {
         applyPreferences();
     }, []);
 
-    // 全局 InfoBar：所有页面 / hook / service 通过 useGlobalInfoBars().push 或
-    // pushInfoBar() 推条目，这里是整个 App 唯一的渲染处。模块级 store 跟组件
-    // 树解耦，路由切换不会丢 banner。
     const { bars, dismiss } = useGlobalInfoBars();
 
-    // Docker 项门控：只有添加了远端服务器才显示。Docker 只用于管理远端 Linux
-    // 容器，本机（Windows）用不上。当前停在 docker 页时若远端被删光，回落到
-    // overview，避免停在一个已隐藏的空页。
     const { servers } = useServerManager();
     const showDocker = servers.length > 0;
     useEffect(() => {
@@ -84,21 +60,40 @@ export const AppNext: React.FC = () => {
         }
     }, [showDocker, route]);
 
-    // 全局动画环境。MotionConfig 把 reducedMotion 提示和 transition 默认值
-    // 灌到整棵子树,业务里的 motion.* 没显式传 transition 时走这里的默认。
-    // reducedMotion='always' 时 framer 会自动把所有 transform 关键帧替成 opacity,
-    // 我们再叠一层 useMotion().enabled = false 时强制 duration 0,双保险。
+    // 用于 PageTransition 的 visible 控制:每个路由有自己的 PageTransition,
+    // visible=(route===self) 决定 enter/exit。但若同时挂多个 PageTransition,
+    // 切换时旧 visible=false 跑 exit + 新 visible=true 跑 enter,可能短暂
+    // 重叠在同一容器位置。我们用 currentRoute + transitioningRoute 双 state
+    // 实现"严格 wait":先让旧 route 跑完 exit,再切到新 route。
+    // 简化做法:只挂一个 PageTransition,key=route,GsapPresence 会先 exit
+    // 旧节点(visible=false 的瞬间)再 enter 新节点。但 GsapPresence 设计是
+    // 单实例 visible 切换,不是 key 切换 → 需要外层用 sequence pattern。
+    // 直接做:用 displayedRoute 跟踪当前在 DOM 里的路由,route 改变时先把
+    // displayedRoute 对应的 PageTransition 设 visible=false 跑 exit,完成后
+    // 把 displayedRoute 设为新 route + visible=true 跑 enter。
+    const [displayedRoute, setDisplayedRoute] = useState<AppRoute>(route);
+    const [pageVisible, setPageVisible] = useState<boolean>(true);
+
+    useEffect(() => {
+        if (route === displayedRoute) {
+            // 已经在这个路由,确保 visible=true(初次或回切)
+            if (!pageVisible) setPageVisible(true);
+            return;
+        }
+        // route 变了:先把当前页跑 exit
+        setPageVisible(false);
+    }, [route, displayedRoute, pageVisible]);
+
+    const handlePageExited = () => {
+        setDisplayedRoute(route);
+        setPageVisible(true);
+    };
+
     const motion = useMotion();
 
     return (
         <TooltipProvider>
-            <MotionConfig
-                reducedMotion={motion.reduced ? 'always' : 'never'}
-                transition={motion.transition('base')}
-            >
             <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas">
-                {/* 主体行：Sidebar 从 y=0 开始顶到头，
-                    TitleBar 浮在右侧顶端，和 sidebar header 同一水平面 */}
                 <div className="relative flex flex-1 overflow-hidden">
                     <Sidebar
                         active={route}
@@ -110,13 +105,12 @@ export const AppNext: React.FC = () => {
                     />
 
                     <div className="relative flex flex-1 flex-col overflow-hidden">
-                        {/* 角落柔光只覆盖右侧主内容区，不污染 sidebar。
-                            rich 档 + 当前在 overview 时叠 is-breathing 8s 呼吸,
-                            其它页面/档位维持静态以避免常驻 GPU 占用。 */}
+                        {/* 角落柔光只覆盖右侧主内容区,不污染 sidebar。
+                            rich 档 + 当前在 overview 时叠 is-breathing 8s 呼吸。 */}
                         <div
                             className={
                                 'ndf-canvas-glow' +
-                                (motion.preset.bouncyOvershoot > 1 &&
+                                (motion.preset.overshoot &&
                                     motion.enabled &&
                                     route === 'overview'
                                     ? ' is-breathing'
@@ -129,7 +123,13 @@ export const AppNext: React.FC = () => {
                         <main className="relative z-10 flex flex-1 overflow-hidden">
                             <div className="flex w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8 xl:mx-auto xl:max-w-[1280px]">
                                 <div className="flex min-h-0 flex-1 flex-col">
-                                    <RouteOutlet route={route} />
+                                    <PageTransition
+                                        visible={pageVisible}
+                                        onExited={handlePageExited}
+                                        className="flex min-h-0 flex-1 flex-col"
+                                    >
+                                        <RouteContent route={displayedRoute} />
+                                    </PageTransition>
                                 </div>
                             </div>
                         </main>
@@ -141,22 +141,9 @@ export const AppNext: React.FC = () => {
                     dataRoot={bootstrap?.data_root || undefined}
                 />
 
-                {/* 全局 InfoBar 队列：portal 到 body，固定右上角；任何页面调
-                    pushInfoBar / useGlobalInfoBars().push 都汇集到这一处渲染。 */}
                 <InfoBarStack items={bars} onDismiss={dismiss} />
             </div>
-            </MotionConfig>
         </TooltipProvider>
-    );
-};
-
-const RouteOutlet: React.FC<{ route: AppRoute }> = ({ route }) => {
-    return (
-        <AnimatePresence mode="wait" initial={false}>
-            <PageTransition key={route} className="flex min-h-0 flex-1 flex-col">
-                <RouteContent route={route} />
-            </PageTransition>
-        </AnimatePresence>
     );
 };
 

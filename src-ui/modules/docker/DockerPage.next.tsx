@@ -8,13 +8,13 @@
 // 严守 frontend-layering：只 import hooks / shared/ui / 自身组件 + domain
 // 纯函数，不直接调 service / @tauri-apps。
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Container, Loader2, RefreshCw } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import { Button } from '../../shared/ui';
 import { ListItem } from '../../shared/ui/motion';
 import { useMotion } from '../../hooks/preferences/useMotion';
-import { listContainerVariants } from '../../core/design/motion';
 import { useDocker } from '../../hooks/docker/useDocker';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
@@ -108,7 +108,6 @@ const ContainerList: React.FC<{
     docker: ReturnType<typeof useDocker>;
     onViewLogs: (name: string) => void;
 }> = ({ docker, onViewLogs }) => {
-    const m = useMotion();
     if (docker.isLoadingList) {
         return (
             <div className="flex items-center gap-2 rounded-md bg-inset/40 p-6 text-text-tertiary">
@@ -129,26 +128,52 @@ const ContainerList: React.FC<{
         );
     }
     return (
-        <motion.div
+        <DockerContainerGrid docker={docker} onViewLogs={onViewLogs} />
+    );
+};
+
+const DockerContainerGrid: React.FC<{
+    docker: ReturnType<typeof useDocker>;
+    onViewLogs: (name: string) => void;
+}> = ({ docker, onViewLogs }) => {
+    const m = useMotion();
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useGSAP(
+        () => {
+            if (!m.enabled || docker.containers.length === 0) return;
+            gsap.from(containerRef.current!.children, {
+                autoAlpha: 0,
+                y: 6,
+                scale: 0.985,
+                duration: m.duration('base'),
+                ease: m.preset.enterEase,
+                stagger: m.preset.stagger,
+            });
+        },
+        {
+            scope: containerRef,
+            dependencies: [docker.containers.length, m.enabled, m.preset.enterEase],
+        },
+    );
+
+    return (
+        <div
+            ref={containerRef}
             className="grid gap-3"
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))' }}
-            variants={listContainerVariants(m.preset.stagger)}
-            initial="initial"
-            animate="animate"
         >
-            <AnimatePresence initial={false}>
-                {docker.containers.map((c) => (
-                    <ListItem key={c.id} layout hoverable>
-                        <ContainerCard
-                            container={c}
-                            isActing={docker.isActing}
-                            onAction={(action) => docker.containerAction({ name: c.name, action })}
-                            onViewLogs={() => onViewLogs(c.name)}
-                        />
-                    </ListItem>
-                ))}
-            </AnimatePresence>
-        </motion.div>
+            {docker.containers.map((c) => (
+                <ListItem key={c.id} hoverable>
+                    <ContainerCard
+                        container={c}
+                        isActing={docker.isActing}
+                        onAction={(action) => docker.containerAction({ name: c.name, action })}
+                        onViewLogs={() => onViewLogs(c.name)}
+                    />
+                </ListItem>
+            ))}
+        </div>
     );
 };
 

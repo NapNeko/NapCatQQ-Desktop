@@ -1,22 +1,27 @@
-// useMotion: 所有 motion 组件读偏好的统一入口。
+// useMotion: 所有 GSAP 动画读偏好的统一入口。
 //
-// 整合 3 个来源:
-//   1. preferencesStore 用户偏好(level / speed / enabled)
-//   2. framer-motion useReducedMotion() 系统级 prefers-reduced-motion
-//   3. 派生 effective 字段:任一关闭即整体禁用
+// 职责:
+//   1. 整合 preferencesStore + 系统 prefers-reduced-motion
+//   2. 提供 duration(kind) helper 让业务直接拿到秒数
+//   3. 暴露 preset 让需要 ease/scale/stagger 的业务自取
 //
-// 设计取舍:不直接返回 transition 对象,而是返回原始字段 + 几个派生 helper。
-// 业务自己挑要哪一种 transition(base/slow/spring/bouncy),避免一次取多份浪费。
+// 关键差别于 framer 版:
+//   - 没有 transition 对象返回,GSAP 用扁平的 {duration, ease, ...} 配置
+//   - reduced 命中时 duration → 0,业务侧仍可放心调 gsap.to(),只是瞬时跳到终态
+//   - GSAP 对 prefers-reduced-motion 的官方推荐是 gsap.matchMedia(),但那需要
+//     在 effect 内部组织代码,跟 React state 驱动不太搭。我们这层用 React 监听
+//     系统 media query,然后透传给 useGSAP 调用方,让它们自己按 reduced=true
+//     直接 gsap.set() 跳过动画
 
-import { useMemo } from 'react';
-import { useReducedMotion, type Transition } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { usePreferences } from './preferencesStore';
 import {
-    getTransition,
     motionPresets,
-    type MotionKind,
+    scaleDuration,
     type MotionLevel,
 } from '../../core/design/motion';
+
+export type DurationKind = 'fast' | 'base' | 'slow';
 
 export interface MotionEnv {
     /// 用户选的档位。系统 reduced-motion 也不修改本字段(展示用)。
@@ -27,32 +32,48 @@ export interface MotionEnv {
     reduced: boolean;
     /// 综合后真正生效的 enabled:用户开关 && 非 reduced。
     enabled: boolean;
-    /// 取一个 transition。enabled=false 时强制 duration 0 + 退化 spring 为瞬时 tween。
-    /// 业务不要自己再判 enabled,直接调本方法。
-    transition: (kind?: MotionKind) => Transition;
-    /// 派生字段:当前档位 preset(列表 stagger / hover scale 之类的常量)。
+    /// 当前档位 preset(ease/scale/stagger 等)。
     preset: typeof motionPresets[MotionLevel];
+    /// 取一个 duration(秒)。enabled=false 时返回 0,业务直接用即可,不用判 enabled。
+    duration: (kind?: DurationKind) => number;
 }
 
-/// 关闭动画时的"瞬时"transition:duration 0 的 tween。
-/// 用 const 引用让 React shallow compare 短路。
-const ZERO_TRANSITION: Transition = { duration: 0 };
+/// 监听系统 prefers-reduced-motion。useGSAP 也支持 matchMedia,但 React 状态
+/// 驱动的动画(GsapPresence 这种)更适合从 hook 出口拿到布尔值后自己分支。
+function useReducedMotion(): boolean {
+    const [reduced, setReduced] = useState<boolean>(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return false;
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    });
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+        const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+        mql.addEventListener('change', handler);
+        return () => mql.removeEventListener('change', handler);
+    }, []);
+
+    return reduced;
+}
 
 export function useMotion(): MotionEnv {
     const prefs = usePreferences();
-    const reduced = useReducedMotion() ?? false;
+    const reduced = useReducedMotion();
     const enabled = prefs.motionEnabled && !reduced;
+    const level = prefs.motionLevel;
+    const speed = prefs.motionSpeed;
+    const preset = motionPresets[level];
 
-    return useMemo<MotionEnv>(() => {
-        const level = prefs.motionLevel;
-        const speed = prefs.motionSpeed;
-        const preset = motionPresets[level];
+    const duration = (kind: DurationKind = 'base'): number => {
+        if (!enabled) return 0;
+        const base = kind === 'fast'
+            ? preset.durationFast
+            : kind === 'slow'
+                ? preset.durationSlow
+                : preset.durationBase;
+        return scaleDuration(base, speed);
+    };
 
-        const transition = (kind: MotionKind = 'base'): Transition => {
-            if (!enabled) return ZERO_TRANSITION;
-            return getTransition(level, speed, kind);
-        };
-
-        return { level, speed, reduced, enabled, transition, preset };
-    }, [prefs.motionLevel, prefs.motionSpeed, enabled, reduced]);
+    return { level, speed, reduced, enabled, preset, duration };
 }

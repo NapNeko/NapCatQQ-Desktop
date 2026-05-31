@@ -1,18 +1,16 @@
-// 多 InfoBar 堆叠容器。负责 portal 出口 + 排版 + 退出动画时机。
+// 多 InfoBar 堆叠容器。GSAP 版。
 //
-// 使用模式（受控）：父级 hook 维护 banner 列表，每条 banner 唯一 id；
-// stack 渲染 InfoBar，用户点关闭时调 onDismiss(id) 回到 hook 删条目。
+// 退场处理:items 减少时,被移除的 id 仍保留在本地 displayedIds 中(visible=false),
+// 让 GsapPresence 跑完 exit 才真 unmount;真 unmount 后 onExited 回调里把 id
+// 从 displayedIds 移掉。新增 id 也走类似流程。
 //
-// 位置：默认 fixed top-right 贴 TitleBar 下方（top: 64px 让出 48px 窗口控件高度
-// + 一点 buffer），堆叠方向自上而下。可通过 className 覆盖。
-//
-// 退场动画:外层用 AnimatePresence,onDismiss 回调由父级把对应 id 从 list 移除,
-// list 变短 → AnimatePresence 跑 InfoBar 的 exit variant。
+// items 改顺序的场景不处理(目前业务都是只 push 不重排)。
 
 import { createPortal } from 'react-dom';
-import { AnimatePresence } from 'framer-motion';
-import type { ReactNode } from 'react';
+import gsap from 'gsap';
+import { useEffect, useState, type ReactNode } from 'react';
 import { InfoBar, type InfoBarProps } from './InfoBar';
+import { GsapPresence, type EnterFn, type ExitFn } from './motion/GsapPresence';
 import { cn } from '../utils/cn';
 
 export interface InfoBarStackItem extends Omit<InfoBarProps, 'onDismiss'> {
@@ -22,12 +20,37 @@ export interface InfoBarStackItem extends Omit<InfoBarProps, 'onDismiss'> {
 interface InfoBarStackProps {
     items: InfoBarStackItem[];
     onDismiss: (id: string) => void;
-    /** 容器追加 className。默认 fixed top-right 贴 TitleBar 下方。 */
     className?: string;
-    /** 是否走 document.body portal。默认 true，避免被父级 overflow:hidden 切。 */
     portal?: boolean;
-    /** 可选自定义内容附加在 InfoBar 内（极少需要）。 */
     children?: ReactNode;
+}
+
+const enter: EnterFn = (el, env) => {
+    // rich 档进场 elastic 弹入,标准/优雅档 power3。
+    return gsap.fromTo(
+        el,
+        { autoAlpha: 0, x: 16, scale: 0.985 },
+        {
+            autoAlpha: 1,
+            x: 0,
+            scale: 1,
+            duration: env.duration('base'),
+            ease: env.preset.bouncyEase,
+        },
+    );
+};
+
+const exit: ExitFn = (el, env) =>
+    gsap.to(el, {
+        autoAlpha: 0,
+        x: 12,
+        duration: env.duration('fast'),
+        ease: env.preset.exitEase,
+    });
+
+interface DisplayedItem extends InfoBarStackItem {
+    /// false 表示已被父级移除,等 exit 跑完再真 unmount。
+    visible: boolean;
 }
 
 export function InfoBarStack({
@@ -37,25 +60,72 @@ export function InfoBarStack({
     portal = true,
     children,
 }: InfoBarStackProps) {
-    if (items.length === 0 && !children) return null;
+    const [displayed, setDisplayed] = useState<DisplayedItem[]>(() =>
+        items.map((it) => ({ ...it, visible: true })),
+    );
+    // items 任意变更触发 displayed reconciliation:
+    //   - 新 id → 追加 visible=true
+    //   - 已有 id → 更新数据(title/content 可能变了)visible=true
+    //   - 不在 items 但在 displayed → 标 visible=false 跑 exit
+    useEffect(() => {
+        const incomingIds = new Set(items.map((i) => i.id));
+        setDisplayed((prev) => {
+            const next: DisplayedItem[] = [];
+            // 先按 prev 顺序保留(被移除的也留着,visible=false 跑 exit)
+            for (const p of prev) {
+                const incoming = items.find((i) => i.id === p.id);
+                if (incoming) {
+                    next.push({ ...incoming, visible: true });
+                } else if (p.visible) {
+                    // 刚被移除,标 visible=false 跑 exit
+                    next.push({ ...p, visible: false });
+                } else {
+                    // 已经 visible=false,沿用(不应该到这里,因为 exit 完会清掉)
+                    next.push(p);
+                }
+            }
+            // 新 id 追加到末尾
+            for (const i of items) {
+                if (!prev.some((p) => p.id === i.id)) {
+                    next.push({ ...i, visible: true });
+                }
+            }
+            // 防一种边缘:incoming 里有 prev 中已经 visible=false 的 id(被快速 push-pop-push)
+            // 把它们 force 回 true。
+            for (let k = 0; k < next.length; k++) {
+                if (incomingIds.has(next[k].id)) {
+                    next[k] = { ...next[k], visible: true };
+                }
+            }
+            return next;
+        });
+    }, [items]);
+
+    if (displayed.length === 0 && !children) return null;
 
     const node = (
         <div
             className={cn(
-                // fixed 顶层堆叠，不参与父级布局
                 'pointer-events-none fixed right-6 top-[64px] z-50 flex w-[min(420px,calc(100vw-3rem))] flex-col gap-2',
                 className,
             )}
         >
-            <AnimatePresence initial={true}>
-                {items.map((item) => (
-                    <InfoBar
-                        key={item.id}
+            {displayed.map((item) => (
+                <GsapPresence
+                    key={item.id}
+                    visible={item.visible}
+                    onEnter={enter}
+                    onExit={exit}
+                    onExited={() => {
+                        setDisplayed((prev) => prev.filter((p) => p.id !== item.id));
+                    }}
+                >
+                    <InfoBarRow
                         {...item}
                         onDismiss={() => onDismiss(item.id)}
                     />
-                ))}
-            </AnimatePresence>
+                </GsapPresence>
+            ))}
             {children}
         </div>
     );
@@ -63,3 +133,10 @@ export function InfoBarStack({
     if (!portal || typeof document === 'undefined') return node;
     return createPortal(node, document.body);
 }
+
+/// 内层 forwardRef wrapper:把 ref 直接转给 InfoBar(InfoBar 已 forwardRef)。
+import { forwardRef } from 'react';
+const InfoBarRow = forwardRef<HTMLDivElement, InfoBarProps>((props, ref) => (
+    <InfoBar ref={ref} {...props} />
+));
+InfoBarRow.displayName = 'InfoBarRow';

@@ -1,16 +1,11 @@
-// Tabs 原子件。基于 Radix,A11y 由 Radix 兜底(焦点环 / 键盘箭头切换 / aria-selected)。
+// Tabs 原子件。基于 Radix,A11y 由 Radix 兜底。
 //
-// 视觉走暖色控制台风:active tab 不用整块填充,只在底部画 2px brand 线,参考图气质一致。
-// BotConfigPage 三个 tab 是它的主消费者;EventPanel 的 filter group 后续也可以复用。
-//
-// 动画:
-//   - trigger 下划线:scaleX 0→1 渐变,Radix data-state 驱动,无需 layoutId
-//   - content 切换:Tabs Root 包一层 ActiveValueContext,TabsContent 读 context 自己决定
-//     mount,套 AnimatePresence mode="wait" 让旧 tab 退场再进新 tab。这样切换不再是
-//     瞬变,而是横向滑动 + fade。
+// 视觉:active 走暖色 + 底部 2px brand 线 scaleX 渐变。
+// 内容切换:Tabs Root 维护 ActiveValueContext,TabsContent 读 context 决定 visible,
+// 用 GsapPresence 跑 fade + slide-x 进退场。同一时刻只 mount 一个 content。
 
 import * as RadixTabs from '@radix-ui/react-tabs';
-import { AnimatePresence, motion } from 'framer-motion';
+import gsap from 'gsap';
 import {
     createContext,
     forwardRef,
@@ -19,15 +14,13 @@ import {
     type ReactNode,
 } from 'react';
 import { cn } from '../utils/cn';
-import { useMotion } from '../../hooks/preferences/useMotion';
+import { GsapPresence, type EnterFn, type ExitFn } from './motion/GsapPresence';
 
 const ActiveValueContext = createContext<string | undefined>(undefined);
 
 interface TabsProps
     extends React.ComponentPropsWithoutRef<typeof RadixTabs.Root> {}
 
-/// Tabs wrapper:对外接口跟 RadixTabs.Root 完全一致,内部多走一层 context
-/// 把 active value 传给 TabsContent。受控/非受控都支持。
 export const Tabs = forwardRef<
     React.ElementRef<typeof RadixTabs.Root>,
     TabsProps
@@ -81,7 +74,7 @@ export const TabsTrigger = forwardRef<
             'hover:text-text',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
             'data-[state=active]:text-text',
-            // 底部强调线:用伪元素 scaleX 0→1 渐变,避免直接 width 触发 layout。
+            // 底部强调线:scaleX 0→1 渐变。
             'after:absolute after:bottom-[-1px] after:left-3 after:right-3 after:h-0.5 after:rounded-pill after:bg-brand',
             'after:origin-center after:scale-x-0 after:transition-transform after:duration-300 after:ease-out',
             'data-[state=active]:after:scale-x-100',
@@ -93,6 +86,25 @@ export const TabsTrigger = forwardRef<
 ));
 TabsTrigger.displayName = 'TabsTrigger';
 
+const contentEnter: EnterFn = (el, env) =>
+    gsap.fromTo(
+        el,
+        { autoAlpha: 0, x: 12 },
+        {
+            autoAlpha: 1,
+            x: 0,
+            duration: env.duration('base'),
+            ease: env.preset.enterEase,
+        },
+    );
+const contentExit: ExitFn = (el, env) =>
+    gsap.to(el, {
+        autoAlpha: 0,
+        x: -12,
+        duration: env.duration('fast'),
+        ease: env.preset.exitEase,
+    });
+
 interface TabsContentProps
     extends Omit<
         React.ComponentPropsWithoutRef<typeof RadixTabs.Content>,
@@ -101,45 +113,33 @@ interface TabsContentProps
     children?: ReactNode;
 }
 
-/// 自管 mount + framer 进退场。Radix Content 用 forceMount 让我们持有节点,
-/// 外层 AnimatePresence 根据 active value 决定渲染哪个 tab。同一时刻只渲染
-/// 一个,mode="wait" 让旧的退完再进新的,避免左右两个 content 重叠。
 export const TabsContent = forwardRef<
     React.ElementRef<typeof RadixTabs.Content>,
     TabsContentProps
->(({ className, value, children, ...props }, ref) => {
+>(({ className, value, children, ...props }, _ref) => {
     const activeValue = useContext(ActiveValueContext);
-    const m = useMotion();
     const isActive = activeValue === value;
 
     return (
-        <AnimatePresence mode="wait" initial={false}>
-            {isActive && (
-                <RadixTabs.Content
-                    ref={ref}
-                    value={value}
-                    asChild
-                    forceMount
-                    {...props}
-                >
-                    <motion.div
-                        // 横向滑入 + fade。每次 active 切换,key=value 让 framer
-                        // 把旧节点 unmount + 新节点 mount,各自跑 enter/exit。
-                        key={value}
-                        initial={{ opacity: 0, x: 12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -12, transition: { duration: 0.14 } }}
-                        transition={m.transition('base')}
-                        className={cn(
-                            'mt-4 focus-visible:outline-none',
-                            className,
-                        )}
-                    >
-                        {children}
-                    </motion.div>
-                </RadixTabs.Content>
-            )}
-        </AnimatePresence>
+        <GsapPresence visible={isActive} onEnter={contentEnter} onExit={contentExit}>
+            <RadixTabs.Content value={value} asChild forceMount {...props}>
+                <ContentBody className={className}>{children}</ContentBody>
+            </RadixTabs.Content>
+        </GsapPresence>
     );
 });
 TabsContent.displayName = 'TabsContent';
+
+const ContentBody = forwardRef<
+    HTMLDivElement,
+    { className?: string; children?: ReactNode }
+>(({ className, children }, ref) => (
+    <div
+        ref={ref}
+        style={{ visibility: 'hidden', opacity: 0 }}
+        className={cn('mt-4 focus-visible:outline-none', className)}
+    >
+        {children}
+    </div>
+));
+ContentBody.displayName = 'TabsContentBody';

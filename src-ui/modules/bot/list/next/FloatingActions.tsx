@@ -1,80 +1,126 @@
-// 右下角悬浮三圆按钮(新增 / 刷新 / 进入批量模式)。
+// 右下角悬浮三圆按钮(新增 / 刷新 / 进入批量模式)。GSAP 版。
 //
-// 设计沿用旧 Python 版 BotListPage 的 floating action group 习惯:用户最常用
-// 的三个动作贴在屏幕右下角,不占列表行高,鼠标永远能找到。
+// 视觉:暖粉桃色调,新增按钮 brand primary,其它两个 ghost。
+// 互斥:批量模式 visible=false,GsapPresence 跑 fly-out exit,父级 BatchBottomBar
+// 跑 fly-in enter。
 //
-// 视觉走暖粉桃色调:底层 bg-elevated(暖米黄)+ 暗色 ring;hover 时升起
-// shadow-popover;新增按钮用 brand primary 高亮,其它两个走 ghost 调性。
-//
-// 互斥规则:批量模式开启时本组隐藏,由 BatchBottomBar 接管。
-//
-// 动画:整组从右下角斜向滑入(x +24, y +24, opacity 0 → 0,0,1),退场反向。
-// 三个按钮用 stagger 错位 30ms 依次落位。AnimatePresence 在父级 BotListPage 控制。
+// 进退场:整组从右下角斜向滑入(x 24, y 24, autoAlpha 0 → 0/0/1),三个按钮
+// stagger 错位 30ms 依次落位。
 
+import { useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import { Plus, RefreshCw, ListChecks } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../../shared/ui';
+import { GsapPresence, type EnterFn, type ExitFn } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 
 interface FloatingActionsProps {
+    visible: boolean;
     onCreate: () => void;
     onRefresh: () => void;
     onEnterBatch: () => void;
-    /** 后端 mutation 进行中:禁用所有按钮避免重复触发。 */
     busy?: boolean;
 }
 
+const enter: EnterFn = (el, env) => {
+    const tl = gsap.timeline();
+    tl.fromTo(
+        el,
+        { autoAlpha: 0, x: 24, y: 24 },
+        {
+            autoAlpha: 1,
+            x: 0,
+            y: 0,
+            duration: env.duration('base'),
+            ease: env.preset.enterEase,
+        },
+    );
+    // 三个圆按钮 stagger 进场
+    const buttons = el.querySelectorAll('[data-circle-btn]');
+    if (buttons.length > 0) {
+        tl.from(
+            buttons,
+            {
+                autoAlpha: 0,
+                scale: 0.6,
+                y: 8,
+                duration: env.duration('fast'),
+                ease: env.preset.bouncyEase,
+                stagger: env.preset.stagger,
+            },
+            '<0.05',
+        );
+    }
+    return tl;
+};
+
+const exit: ExitFn = (el, env) =>
+    gsap.to(el, {
+        autoAlpha: 0,
+        x: 24,
+        y: 24,
+        duration: env.duration('fast'),
+        ease: env.preset.exitEase,
+    });
+
 export function FloatingActions({
+    visible,
     onCreate,
     onRefresh,
     onEnterBatch,
     busy = false,
 }: FloatingActionsProps) {
-    const m = useMotion();
-    const stagger = m.preset.stagger;
     return (
-        <motion.div
-            className="pointer-events-none fixed bottom-8 right-8 z-30 flex flex-col items-center gap-3"
-            initial={{ opacity: 0, x: 24, y: 24 }}
-            animate={{
-                opacity: 1,
-                x: 0,
-                y: 0,
-                transition: { staggerChildren: stagger, delayChildren: 0.05 },
-            }}
-            exit={{ opacity: 0, x: 24, y: 24, transition: { duration: 0.16 } }}
-            transition={m.transition(
-                m.preset.bouncyOvershoot > 1 ? 'bouncy' : 'spring',
-            )}
-        >
-            <CircleButton
-                tooltip="批量管理"
-                onClick={onEnterBatch}
-                disabled={busy}
-                variant="ghost"
-            >
-                <ListChecks size={18} strokeWidth={2.2} />
-            </CircleButton>
-            <CircleButton
-                tooltip="刷新列表"
-                onClick={onRefresh}
-                disabled={busy}
-                variant="ghost"
-            >
-                <RefreshCw size={18} strokeWidth={2.2} />
-            </CircleButton>
-            <CircleButton
-                tooltip="新增 Bot"
-                onClick={onCreate}
-                disabled={busy}
-                variant="primary"
-            >
-                <Plus size={20} strokeWidth={2.4} />
-            </CircleButton>
-        </motion.div>
+        <GsapPresence visible={visible} onEnter={enter} onExit={exit}>
+            <FloatingActionsBody
+                onCreate={onCreate}
+                onRefresh={onRefresh}
+                onEnterBatch={onEnterBatch}
+                busy={busy}
+            />
+        </GsapPresence>
     );
 }
+
+import { forwardRef } from 'react';
+
+const FloatingActionsBody = forwardRef<
+    HTMLDivElement,
+    Omit<FloatingActionsProps, 'visible'>
+>(({ onCreate, onRefresh, onEnterBatch, busy }, ref) => (
+    <div
+        ref={ref}
+        style={{ visibility: 'hidden', opacity: 0 }}
+        className="pointer-events-none fixed bottom-8 right-8 z-30 flex flex-col items-center gap-3"
+    >
+        <CircleButton
+            tooltip="批量管理"
+            onClick={onEnterBatch}
+            disabled={busy}
+            variant="ghost"
+        >
+            <ListChecks size={18} strokeWidth={2.2} />
+        </CircleButton>
+        <CircleButton
+            tooltip="刷新列表"
+            onClick={onRefresh}
+            disabled={busy}
+            variant="ghost"
+        >
+            <RefreshCw size={18} strokeWidth={2.2} />
+        </CircleButton>
+        <CircleButton
+            tooltip="新增 Bot"
+            onClick={onCreate}
+            disabled={busy}
+            variant="primary"
+        >
+            <Plus size={20} strokeWidth={2.4} />
+        </CircleButton>
+    </div>
+));
+FloatingActionsBody.displayName = 'FloatingActionsBody';
 
 interface CircleButtonProps {
     tooltip: string;
@@ -92,28 +138,61 @@ function CircleButton({
     children,
 }: CircleButtonProps) {
     const m = useMotion();
-    const enabled = m.enabled;
+    const ref = useRef<HTMLButtonElement | null>(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || !m.enabled) return;
+        const onEnterBtn = () => {
+            gsap.to(el, {
+                scale: 1.08,
+                duration: m.duration('fast'),
+                ease: m.preset.hoverEase,
+            });
+        };
+        const onLeaveBtn = () => {
+            gsap.to(el, {
+                scale: 1,
+                duration: m.duration('fast'),
+                ease: m.preset.hoverEase,
+            });
+        };
+        const onDown = () => {
+            gsap.to(el, {
+                scale: 0.92,
+                duration: m.duration('fast') * 0.6,
+                ease: 'power2.out',
+            });
+        };
+        const onUp = () => {
+            gsap.to(el, {
+                scale: 1.08,
+                duration: m.duration('base'),
+                ease: m.preset.bouncyEase,
+            });
+        };
+        el.addEventListener('mouseenter', onEnterBtn);
+        el.addEventListener('mouseleave', onLeaveBtn);
+        el.addEventListener('mousedown', onDown);
+        el.addEventListener('mouseup', onUp);
+        return () => {
+            el.removeEventListener('mouseenter', onEnterBtn);
+            el.removeEventListener('mouseleave', onLeaveBtn);
+            el.removeEventListener('mousedown', onDown);
+            el.removeEventListener('mouseup', onUp);
+        };
+    }, [m.enabled, m.preset.hoverEase, m.preset.bouncyEase, m.speed]);
+
     return (
         <Tooltip>
             <TooltipTrigger asChild>
-                <motion.button
+                <button
+                    ref={ref}
                     type="button"
+                    data-circle-btn
                     onClick={onClick}
                     disabled={disabled}
-                    // 父 stagger 控制每个按钮"接连出现"
-                    variants={{
-                        initial: { opacity: 0, scale: 0.6, y: 8 },
-                        animate: { opacity: 1, scale: 1, y: 0 },
-                    }}
-                    initial="initial"
-                    animate="animate"
-                    whileHover={enabled ? { scale: 1.08 } : undefined}
-                    whileTap={enabled ? { scale: 0.92 } : undefined}
-                    transition={m.transition(
-                        m.preset.bouncyOvershoot > 1 ? 'bouncy' : 'spring',
-                    )}
                     className={cn(
-                        // pointer-events-auto 必须重启,因为父级 fixed 容器禁掉了点击
                         'pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-full',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                         'disabled:cursor-not-allowed disabled:opacity-50',
@@ -123,7 +202,7 @@ function CircleButton({
                     )}
                 >
                     {children}
-                </motion.button>
+                </button>
             </TooltipTrigger>
             <TooltipContent side="left">{tooltip}</TooltipContent>
         </Tooltip>

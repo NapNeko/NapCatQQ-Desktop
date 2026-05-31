@@ -10,9 +10,10 @@
 //   - 浮动菜单拆出 FloatingActions / BatchBottomBar 两个组件，互斥显示。
 //   - 卡片网格用 Tailwind grid auto-fit，按窗口宽度自动 1/2/3 列。
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import {
     Button,
     Dialog,
@@ -24,7 +25,6 @@ import {
 } from '../../../shared/ui';
 import { ListItem } from '../../../shared/ui/motion';
 import { useMotion } from '../../../hooks/preferences/useMotion';
-import { listContainerVariants } from '../../../core/design/motion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
 import { useBotBatchSelection } from '../../../hooks/bot/useBotBatchSelection';
@@ -216,33 +216,28 @@ export function BotListPageNext({
                 )}
             </div>
 
-            {/* 浮动操作组(互斥):FloatingActions / BatchBottomBar 切换走 AnimatePresence,
-                避免互换瞬变,保持视觉连贯。 */}
-            <AnimatePresence mode="wait" initial={false}>
-                {batch.isBatchMode ? (
-                    <BatchBottomBar
-                        key="batch"
-                        selectedCount={batch.selectedIds.size}
-                        totalCount={botSnapshots.length}
-                        allSelected={allSelected}
-                        onSelectAll={selectAll}
-                        onSelectNone={selectNone}
-                        onBatchStart={onBatchStart}
-                        onBatchStop={onBatchStop}
-                        onBatchDelete={() => setConfirmDeleteOpen(true)}
-                        onExitBatch={batch.toggleBatch}
-                        busy={mutations.isPending}
-                    />
-                ) : (
-                    <FloatingActions
-                        key="floating"
-                        busy={mutations.isPending}
-                        onCreate={() => onConfigureBot(null)}
-                        onRefresh={() => refetch()}
-                        onEnterBatch={batch.toggleBatch}
-                    />
-                )}
-            </AnimatePresence>
+            {/* 浮动操作组(互斥):FloatingActions / BatchBottomBar 切换走 GsapPresence,
+                各自跑 enter/exit 不打架。 */}
+            <FloatingActions
+                visible={!batch.isBatchMode}
+                busy={mutations.isPending}
+                onCreate={() => onConfigureBot(null)}
+                onRefresh={() => refetch()}
+                onEnterBatch={batch.toggleBatch}
+            />
+            <BatchBottomBar
+                visible={batch.isBatchMode}
+                selectedCount={batch.selectedIds.size}
+                totalCount={botSnapshots.length}
+                allSelected={allSelected}
+                onSelectAll={selectAll}
+                onSelectNone={selectNone}
+                onBatchStart={onBatchStart}
+                onBatchStop={onBatchStop}
+                onBatchDelete={() => setConfirmDeleteOpen(true)}
+                onExitBatch={batch.toggleBatch}
+                busy={mutations.isPending}
+            />
 
             {/* 批量删除确认 */}
             <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
@@ -359,57 +354,68 @@ function BotListGrid({
     onStartBot,
 }: GridProps) {
     const m = useMotion();
-    const container = listContainerVariants(m.preset.stagger);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // 列表 stagger:每次 bots.length 变化时,把刚出现的 ListItem 子节点
+    // gsap.from 一遍。stagger 由当前档位决定。优雅档 stagger=0 → from 仍跑
+    // 但所有项同时进场,看起来跟"同步"一样。
+    useGSAP(
+        () => {
+            if (!m.enabled || bots.length === 0) return;
+            gsap.from(containerRef.current!.children, {
+                autoAlpha: 0,
+                y: 6,
+                scale: 0.985,
+                duration: m.duration('base'),
+                ease: m.preset.enterEase,
+                stagger: m.preset.stagger,
+            });
+        },
+        { scope: containerRef, dependencies: [bots.length, m.enabled, m.preset.enterEase] },
+    );
 
     return (
-        <motion.div
-            className="flex flex-col gap-3"
-            variants={container}
-            initial="initial"
-            animate="animate"
-        >
-            <AnimatePresence initial={false}>
-                {bots.map((bot) => {
-                    const flavor = flavorByBot[bot.bot_id] ?? null;
-                    const config = configByBot[bot.bot_id] ?? null;
-                    const napcatBot = napcat.byBot[bot.bot_id];
-                    const snowlumaBot = snowluma.byBot[bot.bot_id];
-                    return (
-                        <ListItem key={bot.bot_id} layout hoverable>
-                            <BotCard
-                                bot={bot}
-                                config={config}
-                                flavor={flavor}
-                                qrcodeUrl={napcatBot?.qrcodeUrl ?? null}
-                                isOnline={napcatBot?.online ?? null}
-                                invalidationReason={napcatBot?.invalidationReason ?? null}
-                                napcatBinding={napcatBot?.webui ?? null}
-                                snowlumaDaemonState={snowluma.daemonState}
-                                snowlumaInjected={snowlumaBot?.injected ?? false}
-                                snowlumaUin={snowlumaBot?.uin ?? null}
-                                snowlumaLoginState={snowlumaBot?.loginState ?? null}
-                                isBatchMode={batch.isBatchMode}
-                                isSelected={batch.selectedIds.has(bot.bot_id)}
-                                onStart={onStartBot}
-                                onStop={mutations.stopBot}
-                                onConfigure={onConfigureBot}
-                                onViewLogs={onViewLogs}
-                                onToggleSelect={batch.toggleSelect}
-                                onOpenWebui={(params) => {
-                                    openWebui(params).catch((err: unknown) => {
-                                        pushInfoBar({
-                                            key: `webui-open:${params.botId}`,
-                                            tone: 'danger',
-                                            title: '打开 WebUI 失败',
-                                            content: String(err),
-                                        });
+        <div ref={containerRef} className="flex flex-col gap-3">
+            {bots.map((bot) => {
+                const flavor = flavorByBot[bot.bot_id] ?? null;
+                const config = configByBot[bot.bot_id] ?? null;
+                const napcatBot = napcat.byBot[bot.bot_id];
+                const snowlumaBot = snowluma.byBot[bot.bot_id];
+                return (
+                    <ListItem key={bot.bot_id} hoverable>
+                        <BotCard
+                            bot={bot}
+                            config={config}
+                            flavor={flavor}
+                            qrcodeUrl={napcatBot?.qrcodeUrl ?? null}
+                            isOnline={napcatBot?.online ?? null}
+                            invalidationReason={napcatBot?.invalidationReason ?? null}
+                            napcatBinding={napcatBot?.webui ?? null}
+                            snowlumaDaemonState={snowluma.daemonState}
+                            snowlumaInjected={snowlumaBot?.injected ?? false}
+                            snowlumaUin={snowlumaBot?.uin ?? null}
+                            snowlumaLoginState={snowlumaBot?.loginState ?? null}
+                            isBatchMode={batch.isBatchMode}
+                            isSelected={batch.selectedIds.has(bot.bot_id)}
+                            onStart={onStartBot}
+                            onStop={mutations.stopBot}
+                            onConfigure={onConfigureBot}
+                            onViewLogs={onViewLogs}
+                            onToggleSelect={batch.toggleSelect}
+                            onOpenWebui={(params) => {
+                                openWebui(params).catch((err: unknown) => {
+                                    pushInfoBar({
+                                        key: `webui-open:${params.botId}`,
+                                        tone: 'danger',
+                                        title: '打开 WebUI 失败',
+                                        content: String(err),
                                     });
-                                }}
-                            />
-                        </ListItem>
-                    );
-                })}
-            </AnimatePresence>
-        </motion.div>
+                                });
+                            }}
+                        />
+                    </ListItem>
+                );
+            })}
+        </div>
     );
 }

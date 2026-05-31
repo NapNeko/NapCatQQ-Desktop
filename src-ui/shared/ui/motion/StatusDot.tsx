@@ -1,18 +1,19 @@
-// StatusDot: 带呼吸动画的状态点。
+// StatusDot: 状态点呼吸。GSAP 版。
 //
-// running / loading / pulsing 三态会循环呼吸 opacity;其它态静止。
+// running/loading 用 timeline yoyo repeat -1 跑 opacity 呼吸。其它态静态。
 // 标准/丰富档启用呼吸,优雅档退化为静态。
 
-import { motion } from 'framer-motion';
+import { useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 
 export type StatusDotTone =
-    | 'success'   // 静态绿
-    | 'running'   // 呼吸绿
-    | 'warning'   // 静态橙
-    | 'danger'    // 静态红
-    | 'idle'      // 静态灰
-    | 'loading';  // 呼吸蓝
+    | 'success'
+    | 'running'
+    | 'warning'
+    | 'danger'
+    | 'idle'
+    | 'loading';
 
 interface StatusDotProps {
     tone: StatusDotTone;
@@ -33,24 +34,33 @@ const PULSING_TONES: ReadonlySet<StatusDotTone> = new Set(['running', 'loading']
 
 export function StatusDot({ tone, size = 8, className }: StatusDotProps) {
     const m = useMotion();
+    const ref = useRef<HTMLSpanElement>(null);
     const pulsing = PULSING_TONES.has(tone) && m.enabled && m.preset.cardLift > 0;
-    const cls = `inline-block rounded-full ${TONE_CLASSES[tone]} ${className ?? ''}`;
-    const style = { width: size, height: size };
 
-    if (!pulsing) {
-        return <span className={cls} style={style} />;
-    }
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        if (!pulsing) {
+            gsap.set(el, { opacity: 1 });
+            return;
+        }
+        const dur = m.preset.breathDuration / Math.max(0.5, m.speed);
+        const tl = gsap.timeline({ repeat: -1, yoyo: true });
+        tl.to(el, {
+            opacity: 0.55,
+            duration: dur / 2,
+            ease: 'sine.inOut',
+        });
+        return () => {
+            tl.kill();
+        };
+    }, [pulsing, m.preset.breathDuration, m.speed]);
 
     return (
-        <motion.span
-            className={cls}
-            style={style}
-            animate={{ opacity: [0.55, 1, 0.55] }}
-            transition={{
-                duration: 1.6 / m.speed,
-                repeat: Infinity,
-                ease: 'easeInOut',
-            }}
+        <span
+            ref={ref}
+            className={`inline-block rounded-full ${TONE_CLASSES[tone]} ${className ?? ''}`}
+            style={{ width: size, height: size }}
         />
     );
 }

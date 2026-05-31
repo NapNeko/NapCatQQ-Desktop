@@ -1,20 +1,19 @@
-// 通用按钮原子件。shadcn 模式：cva 定义 variant + size，class-variance-authority 编译时生成稳定类名。
+// 通用按钮原子件。shadcn 模式:cva 定义 variant + size。
 //
-// 设计取舍：
-//   - 不用 Radix Slot 的 asChild 模式（避免后续重写时把 <Button asChild><a>... 这种隐式语义带进来）。
-//   - 仅 4 个 variant：primary / secondary / ghost / danger。NapCat 业务里没必要更多。
-//   - icon 通过 children 自由排版，不像 Fluent 那样接 leftIcon / rightIcon prop，给页面更多控制权。
-//   - hover/tap 弹性走 framer-motion + useMotion(),由用户档位驱动。优雅档退化为
-//     普通 button(零 motion 开销),标准/丰富档走 spring + scale。
+// 设计取舍:
+//   - 不用 Radix Slot 的 asChild 模式
+//   - 仅 4 个 variant:primary / secondary / ghost / danger
+//   - icon 通过 children 自由排版
+//   - hover/tap 弹性走 GSAP + useMotion(),由用户档位驱动。优雅档退化为
+//     普通 button(零 GSAP 开销),标准/丰富档挂事件 + gsap.to() 控制 scale。
 
-import { forwardRef, type ButtonHTMLAttributes } from 'react';
-import { motion, type HTMLMotionProps } from 'framer-motion';
+import { forwardRef, useEffect, useRef, type ButtonHTMLAttributes } from 'react';
+import gsap from 'gsap';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
 
 const buttonVariants = cva(
-    // 基础：所有 variant 共用。focus ring 用 brand 描边而不是 box-shadow，避免和卡片阴影叠加发糊。
     'inline-flex items-center justify-center gap-2 rounded-sm font-medium ' +
     'transition-colors duration-150 ease-out ' +
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ' +
@@ -48,48 +47,83 @@ const buttonVariants = cva(
 export interface ButtonProps
     extends ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
-    /// 关闭弹性动画。极少数场景(比如 BotCard 的高密集卡片内嵌按钮组,
-    /// 怕父级 layoutId 跟弹性冲突)可关。默认开。
+    /// 关闭弹性动画。极少数场景可关。默认开。
     flat?: boolean;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-    ({ className, variant, size, type = 'button', flat, ...props }, ref) => {
+    ({ className, variant, size, type = 'button', flat, disabled, ...props }, ref) => {
         const m = useMotion();
-        const className_ = cn(buttonVariants({ variant, size }), className);
+        const localRef = useRef<HTMLButtonElement | null>(null);
+        const setRef = (node: HTMLButtonElement | null) => {
+            localRef.current = node;
+            if (typeof ref === 'function') ref(node);
+            else if (ref) (ref as React.MutableRefObject<HTMLButtonElement | null>).current = node;
+        };
 
-        // 优雅档 / 关闭动画 / 显式 flat → 直接出 native button,零 motion 开销。
-        if (flat || !m.enabled || m.preset.hoverScale === 1) {
-            return (
-                <button
-                    ref={ref}
-                    type={type}
-                    className={className_}
-                    {...props}
-                />
-            );
-        }
+        useEffect(() => {
+            const el = localRef.current;
+            if (!el) return;
+            const enabled = m.enabled && !flat && !disabled && m.preset.hoverScale !== 1;
+            if (!enabled) return;
 
-        // 标准/丰富档:外层 motion 包一层 transform,不动 className 减少 cva 重新计算。
-        // disabled 时不应该响应 hover/tap,framer 通过判断 disabled 短路。
-        const disabled = props.disabled;
-        const motionProps: HTMLMotionProps<'button'> = disabled
-            ? {}
-            : {
-                whileHover: { scale: m.preset.hoverScale },
-                whileTap: { scale: m.preset.tapScale },
-                transition: m.transition(
-                    m.preset.bouncyOvershoot > 1 ? 'bouncy' : 'spring',
-                ),
+            const onEnter = () => {
+                gsap.to(el, {
+                    scale: m.preset.hoverScale,
+                    duration: m.duration('fast'),
+                    ease: m.preset.hoverEase,
+                });
             };
+            const onLeave = () => {
+                gsap.to(el, {
+                    scale: 1,
+                    duration: m.duration('fast'),
+                    ease: m.preset.hoverEase,
+                });
+            };
+            const onDown = () => {
+                gsap.to(el, {
+                    scale: m.preset.tapScale,
+                    duration: m.duration('fast') * 0.6,
+                    ease: 'power2.out',
+                });
+            };
+            const onUp = () => {
+                // tap 释放走 bouncy ease,rich 档 elastic 弹回 1。
+                gsap.to(el, {
+                    scale: m.preset.hoverScale,
+                    duration: m.duration('base'),
+                    ease: m.preset.bouncyEase,
+                });
+            };
+            el.addEventListener('mouseenter', onEnter);
+            el.addEventListener('mouseleave', onLeave);
+            el.addEventListener('mousedown', onDown);
+            el.addEventListener('mouseup', onUp);
+            return () => {
+                el.removeEventListener('mouseenter', onEnter);
+                el.removeEventListener('mouseleave', onLeave);
+                el.removeEventListener('mousedown', onDown);
+                el.removeEventListener('mouseup', onUp);
+            };
+        }, [
+            m.enabled,
+            flat,
+            disabled,
+            m.preset.hoverScale,
+            m.preset.tapScale,
+            m.preset.hoverEase,
+            m.preset.bouncyEase,
+            m.speed,
+        ]);
 
         return (
-            <motion.button
-                ref={ref}
+            <button
+                ref={setRef}
                 type={type}
-                className={className_}
-                {...motionProps}
-                {...(props as HTMLMotionProps<'button'>)}
+                disabled={disabled}
+                className={cn(buttonVariants({ variant, size }), className)}
+                {...props}
             />
         );
     },

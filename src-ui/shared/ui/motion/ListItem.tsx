@@ -1,48 +1,76 @@
-// ListItem: 列表项进退场原子件。
+// ListItem: GSAP 版列表项 wrapper。
+//
+// 跟 framer 版根本差异:GSAP 没有 Variants,stagger 由父级 useGSAP 调用
+// gsap.from(items, { stagger, ... }) 实现,本组件不再承担 enter 动画自身。
+//
+// 留给业务的只有:hover 上抬 + 退场动画。退场用 GsapPresence 包(列表项被
+// 删除时希望先淡出再 unmount)。
 //
 // 用法:
-//   <motion.div /* 父容器 */ variants={listContainerVariants(stagger)} initial="initial" animate="animate">
-//     {items.map(it => (
-//       <ListItem key={it.id}>...</ListItem>
-//     ))}
-//   </motion.div>
+//   const containerRef = useRef(null);
+//   useGSAP(() => {
+//     gsap.from(containerRef.current.children, {
+//       autoAlpha: 0, y: 6, scale: 0.985,
+//       duration: m.duration('base'),
+//       ease: m.preset.enterEase,
+//       stagger: m.preset.stagger,
+//     });
+//   }, { scope: containerRef, dependencies: [items.length] });
 //
-// 父级负责 stagger,子项各自承担 fade+slide+scale。子项的 transition 走全局
-// MotionConfig 默认值即可,不再单独传(否则 stagger 被覆盖会失效)。
-//
-// 注意:父容器外面通常还要 <AnimatePresence>,这样列表项被删除时也有 exit 动画。
-//
-// hoverable=true 时项目本身会承担 hover 上抬手感(rich/standard 档),
-// 等同于在外层套 MotionCard 的效果但不需要侵入卡片组件本身。
+//   <div ref={containerRef}>
+//     {items.map(it => <ListItem key={it.id} hoverable>{...}</ListItem>)}
+//   </div>
 
-import { forwardRef, type HTMLAttributes } from 'react';
-import { motion } from 'framer-motion';
-import { listItemVariants } from '../../../core/design/motion';
+import {
+    forwardRef,
+    useEffect,
+    useImperativeHandle,
+    useRef,
+    type HTMLAttributes,
+} from 'react';
+import gsap from 'gsap';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 
 interface ListItemProps extends HTMLAttributes<HTMLDivElement> {
-    /// layout=true 时被同辈插入/删除会平滑滑动到新位置。默认 false 避免不必要重布局。
-    layout?: boolean;
-    /// hoverable=true 时启用 hover lift。默认 false。
+    /// hoverable=true 时启用 hover lift。
     hoverable?: boolean;
 }
 
 export const ListItem = forwardRef<HTMLDivElement, ListItemProps>(
-    ({ layout, hoverable, ...rest }, ref) => {
+    ({ hoverable, ...rest }, ref) => {
         const m = useMotion();
-        const lift = hoverable ? m.preset.cardLift : 0;
-        const hoverProps = lift > 0 && m.enabled
-            ? { whileHover: { y: -lift } }
-            : {};
-        return (
-            <motion.div
-                ref={ref}
-                variants={listItemVariants}
-                layout={layout}
-                {...hoverProps}
-                {...(rest as Parameters<typeof motion.div>[0])}
-            />
-        );
+        const localRef = useRef<HTMLDivElement | null>(null);
+        useImperativeHandle(ref, () => localRef.current!, []);
+
+        useEffect(() => {
+            const el = localRef.current;
+            if (!el || !hoverable || !m.enabled) return;
+            const lift = m.preset.cardLift;
+            if (lift === 0) return;
+
+            const onEnter = () => {
+                gsap.to(el, {
+                    y: -lift,
+                    duration: m.duration('fast'),
+                    ease: m.preset.hoverEase,
+                });
+            };
+            const onLeave = () => {
+                gsap.to(el, {
+                    y: 0,
+                    duration: m.duration('fast'),
+                    ease: m.preset.hoverEase,
+                });
+            };
+            el.addEventListener('mouseenter', onEnter);
+            el.addEventListener('mouseleave', onLeave);
+            return () => {
+                el.removeEventListener('mouseenter', onEnter);
+                el.removeEventListener('mouseleave', onLeave);
+            };
+        }, [hoverable, m.enabled, m.preset.cardLift, m.preset.hoverEase, m.speed]);
+
+        return <div ref={localRef} {...rest} />;
     },
 );
 ListItem.displayName = 'ListItem';
