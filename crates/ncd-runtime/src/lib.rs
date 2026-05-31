@@ -28,7 +28,7 @@ pub use ncd_domain::{
     AdvancedConfig, AppError, AppSettings, AppSettingsDto, AutoRestartSchedule, BackendId,
     BackendKind, BackendType, BackupInfo, BootstrapSnapshot, BootstrapStatus, BotBasicConfig,
     BotConfig, BotConfigError, BotFlavor, BotId, BotRuntimeSummary, BypassConfig, ConfigError,
-    ConnectConfig, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LocalVersionSnapshot,
+    ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LocalVersionSnapshot,
     LogLevel, MessagePostFormat, MigrationError, MigrationOutcome, MigrationReport, MigrationSource,
     MigrationStage, MigrationWarning, NetworkBaseFields, O3HookMode, PathError, ReleaseInfo,
     ReleaseSnapshot, RepairAction, RuntimeTarget, SchemaVersion, SecretError, SnowLumaAppConfig,

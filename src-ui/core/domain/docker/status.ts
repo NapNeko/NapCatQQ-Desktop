@@ -1,6 +1,6 @@
 // Docker 容器 / 状态的展示派生纯函数。零 React / 零 tauri 依赖。
 
-import type { ContainerState, DockerStatus } from '../../ipc/types';
+import type { ContainerInfo, ContainerState, DockerFlavor, DockerStatus } from '../../ipc/types';
 
 /// 容器状态徽章:给 UI 一个语义色 + 中文标签。color 用中性语义名,
 /// 具体映射到 Fluent / Tailwind 色由组件层决定(这层不碰样式库)。
@@ -47,6 +47,16 @@ export function dockerStatusSummary(status: DockerStatus): {
 /// 标记"这是我们部署的")。简单按镜像名前缀判断。
 export function isManagedImage(image: string): boolean {
     return image.includes('napcat-docker') || image.includes('snowluma');
+}
+
+/// 判断一个容器是否属于指定 flavor(NapCat / SnowLuma)。按官方镜像 repo 名匹配:
+/// NapCat -> napcat-docker, SnowLuma -> snowluma。框架行「Docker 部署」按钮据此
+/// 判定该 flavor 是否已部署,已部署就禁用按钮避免重复部署撞容器名/端口。
+export function containerMatchesFlavor(container: ContainerInfo, flavor: DockerFlavor): boolean {
+    const image = container.image;
+    if (flavor === 'napcat') return image.includes('napcat-docker');
+    if (flavor === 'snowluma') return image.includes('snowluma');
+    return false;
 }
 
 /// 端口文案去重压缩。

@@ -16,8 +16,10 @@ import { DeployResultBanner } from '../docker/DeployResultBanner';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
+import { containerMatchesFlavor } from '../../core/domain/docker/status';
 import type {
     ComponentId,
+    ContainerInfo,
     DeployedContainer,
     DockerDeploySpec,
     DockerFlavor,
@@ -47,6 +49,8 @@ interface HostComponentsViewProps {
     onOpenDockerDownload: () => void;
     isDeploying: boolean;
     onDeploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
+    // 这台机器已有的容器列表，用于判定某 flavor 是否已部署（部署按钮置「已部署」并禁用）。
+    containers: ContainerInfo[];
 }
 
 export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
@@ -62,6 +66,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     onOpenDockerDownload,
     isDeploying,
     onDeploy,
+    containers,
 }) => {
     const { host } = machine;
     const empty =
@@ -98,11 +103,15 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
         if (!dockerReady) return null;
         const flavor = frameworkFlavor(componentId);
         if (!flavor) return null;
+        // 这台机器上已有同 flavor 的容器就视为已部署，按钮置「已部署」并禁用，
+        // 避免用户重复部署撞容器名 / 端口。
+        const alreadyDeployed = containers.some((c) => containerMatchesFlavor(c, flavor));
         return (
             <FrameworkDockerDeployButton
                 flavor={flavor}
                 hostId={host.host_id}
                 isDeploying={isDeploying}
+                alreadyDeployed={alreadyDeployed}
                 onDeploy={onDeploy}
                 onDeployed={pushResult}
             />

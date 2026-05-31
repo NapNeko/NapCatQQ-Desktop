@@ -13,6 +13,7 @@ import { dockerService, type DockerInstallOptions } from '../../core/services/do
 import { openExternalUrl } from '../../core/ipc/transport';
 import { dockerActionStore } from './dockerActionStore';
 import type {
+    ContainerInfo,
     DeployedContainer,
     DockerDeploySpec,
     DockerInstallReport,
@@ -27,6 +28,9 @@ export interface UseDockerHostsResult {
     statusByHost: Record<string, DockerStatus | undefined>;
     /// host_id → 是否正在探测。
     probingByHost: Record<string, boolean>;
+    /// host_id → 该主机已有的容器列表（daemon 就绪才查，否则空数组）。
+    /// 框架行的「Docker 部署」按钮据此判定同 flavor 是否已部署。
+    containersByHost: Record<string, ContainerInfo[]>;
     /// 刷新所有主机的 docker 探测。
     refetch: () => void;
     /// 在某主机上装 / 起 docker。返回结构化结果,调用方按 status 分流(可能需要
@@ -70,6 +74,25 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         return out;
     }, [hostIds, queries]);
 
+    // 容器列表：仅对 daemon 就绪的主机查（没起 daemon 时列容器必失败，禁用避免反复报错）。
+    // 给框架行「Docker 部署」按钮判定同 flavor 是否已部署用。
+    const containerQueries = useQueries({
+        queries: hostIds.map((hostId) => ({
+            queryKey: ['docker', 'containers', hostId],
+            queryFn: () => dockerService.listContainers(hostId),
+            enabled: statusByHost[hostId]?.daemonRunning ?? false,
+            staleTime: 30 * 1000,
+        })),
+    });
+
+    const containersByHost = useMemo<Record<string, ContainerInfo[]>>(() => {
+        const out: Record<string, ContainerInfo[]> = {};
+        hostIds.forEach((id, i) => {
+            out[id] = containerQueries[i]?.data ?? [];
+        });
+        return out;
+    }, [hostIds, containerQueries]);
+
     const invalidate = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['docker'] });
     }, [queryClient]);
@@ -112,6 +135,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     return {
         statusByHost,
         probingByHost,
+        containersByHost,
         refetch: invalidate,
         install,
         isInstalling,

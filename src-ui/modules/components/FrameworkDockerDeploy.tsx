@@ -24,6 +24,9 @@ interface FrameworkDockerDeployButtonProps {
     flavor: DockerFlavor;
     hostId: string;
     isDeploying: boolean;
+    /// 该 flavor 在这台机器上已有容器。已部署时按钮置「已部署」并禁用，
+    /// 避免重复部署撞容器名 / 端口。
+    alreadyDeployed: boolean;
     onDeploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
     onDeployed: (result: DeployedContainer) => void;
 }
@@ -32,6 +35,7 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
     flavor,
     hostId,
     isDeploying,
+    alreadyDeployed,
     onDeploy,
     onDeployed,
 }) => {
@@ -55,13 +59,19 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
 
     return (
         <>
-            <Button size="sm" variant="ghost" disabled={isDeploying} onClick={handleOpen}>
+            <Button
+                size="sm"
+                variant="ghost"
+                disabled={isDeploying || alreadyDeployed}
+                onClick={handleOpen}
+                title={alreadyDeployed ? '这台机器上已部署该容器，去 Docker 页管理' : undefined}
+            >
                 {isDeploying ? (
                     <Loader2 size={13} className="animate-spin" />
                 ) : (
                     <Container size={13} />
                 )}
-                Docker 部署
+                {alreadyDeployed ? '已部署' : 'Docker 部署'}
             </Button>
             {open && taskId && (
                 <DeployDialog

@@ -26,9 +26,9 @@ pub use app_config::{
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
 pub use bot_config::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
-    BypassConfig, ConnectConfig, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LogLevel,
-    MessagePostFormat, NetworkBaseFields, O3HookMode, TimeUnit, WebsocketClientConfig,
-    WebsocketServerConfig, WsRole,
+    BypassConfig, ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig,
+    HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields, O3HookMode, TimeUnit,
+    WebsocketClientConfig, WebsocketServerConfig, WsRole,
 };
 pub use docker::{
     ContainerAction, ContainerInfo, ContainerState, DeployedContainer, DockerDeploySpec,

@@ -16,6 +16,33 @@ pub enum BackendType {
     SnowLuma,
 }
 
+/// Bot 的启动方式:直接在主机上跑原生进程,还是用 Docker 容器跑。
+///
+/// 与 RuntimeTarget(在哪台主机)正交:Native/Docker 决定"怎么跑",
+/// runtime_target 决定"在哪跑"。两者组合,比如 Server(id)+Docker =
+/// 用 SSH 在远端跑 docker compose。
+///
+/// 默认 Native 保证旧配置(无此字段)反序列化后行为不变。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum DeploymentType {
+    /// 直接在主机上 spawn 原生进程(现有默认路径)。
+    #[default]
+    Native,
+    /// 用 docker compose 起容器。
+    Docker,
+}
+
+impl DeploymentType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Docker => "docker",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum TimeUnit {
@@ -167,6 +194,9 @@ pub struct BotBasicConfig {
     pub runtime_target: RuntimeTarget,
     #[serde(default)]
     pub backend_type: BackendType,
+    #[serde(default, rename = "deploymentType")]
+    #[ts(rename = "deploymentType")]
+    pub deployment_type: DeploymentType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(rename = "snowlumaStartMode")]
     #[ts(optional, rename = "snowlumaStartMode")]
@@ -560,6 +590,7 @@ mod snowluma_start_mode_tests {
             offline_auto_restart: false,
             runtime_target: RuntimeTarget::Local,
             backend_type: BackendType::SnowLuma,
+            deployment_type: DeploymentType::Native,
             snowluma_start_mode: start_mode,
         }
     }
@@ -623,5 +654,37 @@ mod snowluma_start_mode_tests {
 
         let json_again = serde_json::to_string(&decoded).expect("re-serialize HotStart");
         assert_eq!(json.as_bytes(), json_again.as_bytes());
+    }
+
+    /// deployment_type 序列化为 camelCase key + lowercase 值,默认 Native。
+    #[test]
+    fn deployment_type_serializes_camel_lowercase() {
+        let mut config = make_basic_config(None);
+        config.deployment_type = DeploymentType::Docker;
+        let json = serde_json::to_string(&config).expect("serialize");
+        assert!(
+            json.contains(r#""deploymentType":"docker""#),
+            "缺少 deploymentType:docker 字面量,实际: {json}"
+        );
+        let decoded: BotBasicConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(decoded.deployment_type, DeploymentType::Docker);
+    }
+
+    /// 旧配置(无 deploymentType key)反序列化后默认 Native,保证 0 成本升级。
+    #[test]
+    fn deployment_type_absent_defaults_to_native() {
+        // 一份不含 deploymentType 的最小 BotBasicConfig JSON。
+        let legacy = r#"{
+            "name": "old-bot",
+            "QQID": 10001,
+            "musicSignUrl": "",
+            "autoRestartSchedule": {"enable": false, "duration": 1, "time_unit": "h"},
+            "offlineAutoRestart": false,
+            "runtime_target": "local",
+            "backend_type": "napcat"
+        }"#;
+        let decoded: BotBasicConfig =
+            serde_json::from_str(legacy).expect("旧配置应可反序列化");
+        assert_eq!(decoded.deployment_type, DeploymentType::Native);
     }
 }

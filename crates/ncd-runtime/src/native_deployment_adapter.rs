@@ -238,7 +238,7 @@ impl BotBackend for NativeDeploymentBackend {
     }
 }
 
-use ncd_domain::{BackendType, RuntimeTarget};
+use ncd_domain::{BackendType, DeploymentType, RuntimeTarget};
 
 fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
     use ncd_domain::{AdvancedConfig, AutoRestartSchedule, BotBasicConfig, ConnectConfig};
@@ -254,6 +254,7 @@ fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
                 BotFlavor::NapCat => BackendType::NapCat,
                 BotFlavor::SnowLuma => BackendType::SnowLuma,
             },
+            deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
         },
         connect: ConnectConfig::default(),

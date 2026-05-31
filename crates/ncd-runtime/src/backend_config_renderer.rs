@@ -425,6 +425,7 @@ mod tests {
             offline_auto_restart: false,
             runtime_target: RuntimeTarget::Local,
             backend_type: BackendType::NapCat,
+            deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
         }
     }
