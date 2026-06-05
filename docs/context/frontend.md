@@ -97,6 +97,17 @@ flowchart TB
 
 如果第 3 步发现 hook 接口不够用，优先改 hook 不改 component。
 
+### Bot 配置 · 运行宿主（本机 Windows）
+
+- 本机：只显示「本机 / 远程」；不展示 Docker 启动方式、不写「本机不支持 Docker」说明条、不展示 `RuntimeDependencyHint`（组件页运行时 / Docker 引导）。
+- NC / SL 在本机均为直接运行，不引导用户装 Docker 或去组件页装「运行时」。
+- 远程：保留「直接运行 / Docker」与远程 Docker 依赖检查；详见 memory `project_bot_docker_remote_routing`。
+
+### Bot 配置 · 底座类型（GUI 口径）
+
+- **NapCat**：不带 QQ GUI（运行时关闭 QQ 客户端窗口）。
+- **SnowLuma**：带 QQ GUI（保留 QQ 客户端窗口）。`IdentityTab` 的 `BACKEND_ITEMS` 勿写反。
+
 蓝绿模式：不要直接 `fs_write` 覆盖。`BotListPage.tsx` 当前线上用，新风格写在 `BotListPage.next.tsx`。在 `BotPage.tsx` 加 `import.meta.env.VITE_UI_NEXT === '1'` 开关，新版跑通后改成正式名。两个版本之间不共享 component-local state，只通过 hook 共享。
 
 重写期间红线：

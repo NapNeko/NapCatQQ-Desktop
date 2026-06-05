@@ -37,7 +37,11 @@ export function BotPageNext() {
                 />
             )}
             {view === 'config' && (
-                <BotConfigPageNext botId={selectedBotId} onBack={goList} />
+                <BotConfigPageNext
+                    botId={selectedBotId}
+                    onBack={goList}
+                    onSavedStay={(savedBotId) => setSelectedBotId(savedBotId)}
+                />
             )}
             {view === 'log' &&
                 (selectedBotId ? (

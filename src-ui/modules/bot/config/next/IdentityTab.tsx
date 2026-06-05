@@ -39,8 +39,8 @@ interface IdentityTabProps {
 }
 
 const BACKEND_ITEMS = [
-    { value: 'napcat' as BackendType, label: 'NapCat（带 QQ GUI）' },
-    { value: 'snowluma' as BackendType, label: 'SnowLuma（不带 QQ GUI）' },
+    { value: 'napcat' as BackendType, label: 'NapCat（不带 QQ GUI）' },
+    { value: 'snowluma' as BackendType, label: 'SnowLuma（带 QQ GUI）' },
 ];
 
 const RUNTIME_ITEMS = [
@@ -174,7 +174,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
                 {/* 启动方式:本机(Windows)不支持 Docker,只能直接运行,这里直接给说明
                     不让选;远程才给「直接运行 / Docker」二选一。 */}
-                {isRemote ? (
+                {isRemote && (
                     <>
                         <RadioGroup
                             items={DEPLOYMENT_ITEMS}
@@ -189,10 +189,6 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                             </p>
                         )}
                     </>
-                ) : (
-                    <p className="rounded-sm bg-inset px-3 py-2 text-2xs leading-relaxed text-text-tertiary">
-                        本机以「直接运行」方式启动。本机（Windows）暂不支持 Docker 部署，需要容器请改用「远程 SSH 主机」。
-                    </p>
                 )}
             </FormSection>
 
@@ -272,11 +268,10 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 }
 
 // ────────────────────────────────────────────────────────────────────
-// 运行时依赖检查 + 引导安装。
-// 选定运行宿主 + 启动方式后,提示这台机器是否就绪:
-//   - Docker 启动:检查该 host 的 docker 是否就绪,没就绪给「去组件页装」入口。
-//   - 直接运行:提示去组件页确认 NodeJs / NapCat 等运行时已装。
-// 探测复用 useDockerHosts(docker 状态),不在这层重造检测逻辑。
+// 运行时依赖检查（仅远程 SSH 主机）。
+// 本机 Windows：NC/SL 直接运行，不展示 Docker / 组件页运行时引导。
+// 远程 + Docker：检查该 host 的 docker 是否就绪。
+// 远程 + 直接运行：提示去组件页确认 NodeJs / NapCat 等。
 // ────────────────────────────────────────────────────────────────────
 
 function RuntimeDependencyHint({
@@ -288,19 +283,14 @@ function RuntimeDependencyHint({
     deploymentType: DeploymentType;
     backendType: BackendType;
 }) {
-    // runtime_target -> host_id:local 直接用,'remote' 占位时还没选机器先不探,
-    // 具体 server_id 拼成 remote:<id>。
+    if (runtimeTarget === 'local') return null;
+
     const hostId =
-        runtimeTarget === 'local'
-            ? 'local'
-            : runtimeTarget === 'remote'
-                ? null
-                : `remote:${runtimeTarget}`;
+        runtimeTarget === 'remote' ? null : `remote:${runtimeTarget}`;
 
     const hostIds = useMemo(() => (hostId ? [hostId] : []), [hostId]);
     const { statusByHost, probingByHost } = useDockerHosts(hostIds);
 
-    // 还没选具体远程机器:不显示依赖块(上面已经有"请选主机"提示)。
     if (!hostId) return null;
 
     const isDocker = deploymentType === 'docker';

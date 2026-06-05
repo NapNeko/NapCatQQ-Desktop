@@ -14,7 +14,7 @@
 //   - editMode: botId 非 null
 //   - 加载中（仅编辑模式）→ 拉到 → 同步到 formData
 //   - 用户改字段 → setFormData → dirty=true
-//   - 保存成功 → push 全局 success InfoBar → 父级 onBack
+//   - 保存成功 → push 全局 success InfoBar → 留在配置页（同步 pristine / 新建则切到编辑态）
 //   - 删除成功 → 父级 onBack（删除走 dialog 二次确认）
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -58,11 +58,13 @@ import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
 interface BotConfigPageNextProps {
     botId: string | null;
     onBack: () => void;
+    /** 保存成功后留在配置页；新建时由父级把 botId 设为刚写入的 QQ 号。 */
+    onSavedStay?: (savedBotId: string) => void;
 }
 
 type TabValue = 'identity' | 'connections' | 'advanced';
 
-export function BotConfigPageNext({ botId, onBack }: BotConfigPageNextProps) {
+export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageNextProps) {
     const isEditMode = botId !== null;
 
     const [activeTab, setActiveTab] = useState<TabValue>('identity');
@@ -102,9 +104,8 @@ export function BotConfigPageNext({ botId, onBack }: BotConfigPageNextProps) {
                 content: desc.content,
                 autoDismissMs: 3000,
             });
-            // 同步 pristine 让 dirty 重置；500ms 后回列表（让用户看到反馈）
+            onSavedStay?.(savedBotId);
             setPristine(formData);
-            setTimeout(onBack, 500);
         },
         onDeleted: () => {
             setDeleteDialogOpen(false);
@@ -277,7 +278,7 @@ export function BotConfigPageNext({ botId, onBack }: BotConfigPageNextProps) {
             </header>
 
             {/* ────── Tabs + 主体 ────── */}
-            <div className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2">
                 <div className="flex flex-1 flex-col">
                     <Tabs
                         value={activeTab}
