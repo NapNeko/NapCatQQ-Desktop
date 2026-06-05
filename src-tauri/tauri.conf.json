@@ -17,6 +17,7 @@
         "height": 800,
         "decorations": false,
         "transparent": true,
+        "backgroundColor": "#faf8f6",
         "shadow": true,
         "windowEffects": {
           "effects": [
