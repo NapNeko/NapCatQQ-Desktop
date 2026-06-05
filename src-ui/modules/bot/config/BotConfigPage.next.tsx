@@ -44,10 +44,14 @@ import {
 import {
     createDefaultBotConfig,
     validateBotConfig,
+    defaultStatusCommandConfig,
 } from '../../../core/domain/bot/config-defaults';
+import type { StatusCommandConfig } from '../../../core/ipc/generated/domain/StatusCommandConfig';
 import { describeSaveResult } from '../../../core/domain/bot/save-result';
 import { botService } from '../../../core/services/bot.service';
+import { snowlumaAppService } from '../../../core/services/snowlumaApp.service';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
+import type { SnowLumaAppConfig } from '../../../core/ipc/generated/domain/SnowLumaAppConfig';
 import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
 import { IdentityTab } from './next/IdentityTab';
@@ -64,6 +68,11 @@ interface BotConfigPageNextProps {
 
 type TabValue = 'identity' | 'connections' | 'advanced';
 
+const defaultSnowlumaAppConfig = (): SnowLumaAppConfig => ({
+    snowlumaWebuiPasswordOverride: '',
+    snowlumaWebuiPort: 5099,
+});
+
 export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageNextProps) {
     const isEditMode = botId !== null;
 
@@ -71,6 +80,33 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
     const [formData, setFormData] = useState<BotConfig>(createDefaultBotConfig());
     const [pristine, setPristine] = useState<BotConfig>(createDefaultBotConfig());
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+    const [snowlumaApp, setSnowlumaApp] = useState<SnowLumaAppConfig>(defaultSnowlumaAppConfig);
+    const [snowlumaAppPristine, setSnowlumaAppPristine] =
+        useState<SnowLumaAppConfig>(defaultSnowlumaAppConfig);
+    const [snowlumaAppLoading, setSnowlumaAppLoading] = useState(true);
+    const [snowlumaAppLoadError, setSnowlumaAppLoadError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            setSnowlumaAppLoading(true);
+            setSnowlumaAppLoadError(null);
+            try {
+                const loaded = await snowlumaAppService.get();
+                if (cancelled) return;
+                setSnowlumaApp(loaded);
+                setSnowlumaAppPristine(loaded);
+            } catch (e) {
+                if (!cancelled) setSnowlumaAppLoadError(String(e));
+            } finally {
+                if (!cancelled) setSnowlumaAppLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     // 把当前 bot 的 actor 状态拉过来，IdentityTab 需要根据 Running / Starting
     // 锁住 backend_type Select。复用 useBotSnapshots 的 react-query cache，
@@ -131,8 +167,9 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
     // 服务端拉到配置后同步进 form + pristine 基线
     useEffect(() => {
         if (loadedConfig) {
-            setFormData(loadedConfig);
-            setPristine(loadedConfig);
+            const normalized = normalizeLoadedConfig(loadedConfig);
+            setFormData(normalized);
+            setPristine(normalized);
         } else if (!isEditMode) {
             const fresh = createDefaultBotConfig();
             setFormData(fresh);
@@ -140,10 +177,12 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
         }
     }, [loadedConfig, isEditMode]);
 
-    const dirty = useMemo(
-        () => JSON.stringify(formData) !== JSON.stringify(pristine),
-        [formData, pristine],
-    );
+    const dirty = useMemo(() => {
+        const botDirty = JSON.stringify(formData) !== JSON.stringify(pristine);
+        const snowlumaDirty =
+            JSON.stringify(snowlumaApp) !== JSON.stringify(snowlumaAppPristine);
+        return botDirty || snowlumaDirty;
+    }, [formData, pristine, snowlumaApp, snowlumaAppPristine]);
 
     const updateBot = (patch: Partial<BotConfig['bot']>) => {
         setFormData((prev) => ({ ...prev, bot: { ...prev.bot, ...patch } }));
@@ -157,6 +196,29 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
         setFormData((prev) => ({ ...prev, advanced: { ...prev.advanced, ...patch } }));
     };
 
+    const updateStatusCommand = (patch: Partial<StatusCommandConfig>) => {
+        setFormData((prev) => ({
+            ...prev,
+            statusCommand: {
+                ...(prev.statusCommand ?? defaultStatusCommandConfig()),
+                ...patch,
+            },
+        }));
+    };
+
+    const normalizeLoadedConfig = (c: BotConfig): BotConfig => {
+        if (c.bot.backend_type === 'snowluma' && !c.statusCommand) {
+            return { ...c, statusCommand: defaultStatusCommandConfig() };
+        }
+        return c;
+    };
+
+    const commitSnowlumaIfDirty = async (): Promise<void> => {
+        if (JSON.stringify(snowlumaApp) === JSON.stringify(snowlumaAppPristine)) return;
+        await snowlumaAppService.set(snowlumaApp);
+        setSnowlumaAppPristine(snowlumaApp);
+    };
+
     const handleSave = async () => {
         // 实例名为空时用 placeholder 兜底(后端不允许空 name)
         const finalData: BotConfig = {
@@ -165,6 +227,10 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
                 ...formData.bot,
                 name: formData.bot.name.trim() || `Bot-${String(formData.bot.QQID).slice(-4)}`,
             },
+            statusCommand:
+                formData.bot.backend_type === 'snowluma'
+                    ? formData.statusCommand ?? defaultStatusCommandConfig()
+                    : formData.statusCommand,
         };
 
         const validation = validateBotConfig(finalData);
@@ -178,12 +244,23 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
             return;
         }
 
-        // 编辑模式下检测 drift:保存会覆盖派生文件,如果运行时文件里有外部改动
-        // 需要让用户确认是保留外部值还是用我们的覆盖。
+        try {
+            await commitSnowlumaIfDirty();
+        } catch (e) {
+            pushInfoBar({
+                tone: 'danger',
+                title: '保存失败',
+                content: `全局 WebUI 配置写入失败：${String(e)}`,
+                key: 'bot-config-error',
+            });
+            return;
+        }
+
+        // 编辑模式下检测 drift
         if (isEditMode && botId) {
             try {
                 const drift = await botService.detectConfigDrift(botId);
-                if (drift && (!drift.added.every(() => true) || drift.modified.length > 0)) {
+                if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
                     // 有 drift,弹 dialog
                     setPendingSaveData(finalData);
                     setPendingSaveDrift(drift);
@@ -200,12 +277,26 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
     const [pendingSaveDrift, setPendingSaveDrift] = useState<ConfigDrift | null>(null);
     const [pendingSaveData, setPendingSaveData] = useState<BotConfig | null>(null);
 
-    const handleSaveDriftConfirm = useCallback((decisions: DriftDecision[]) => {
-        if (!pendingSaveData) return;
-        setPendingSaveDrift(null);
-        saveWithDecisions(pendingSaveData, decisions);
-        setPendingSaveData(null);
-    }, [pendingSaveData, saveWithDecisions]);
+    const handleSaveDriftConfirm = useCallback(
+        async (decisions: DriftDecision[]) => {
+            if (!pendingSaveData) return;
+            try {
+                await commitSnowlumaIfDirty();
+            } catch (e) {
+                pushInfoBar({
+                    tone: 'danger',
+                    title: '保存失败',
+                    content: `全局 WebUI 配置写入失败：${String(e)}`,
+                    key: 'bot-config-error',
+                });
+                return;
+            }
+            setPendingSaveDrift(null);
+            saveWithDecisions(pendingSaveData, decisions);
+            setPendingSaveData(null);
+        },
+        [pendingSaveData, saveWithDecisions, snowlumaApp, snowlumaAppPristine],
+    );
 
     const handleSaveDriftCancel = useCallback(() => {
         setPendingSaveDrift(null);
@@ -213,8 +304,8 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
     }, []);
 
     const handleCancel = () => {
-        // 回到 pristine，关注当前 tab 不变
         setFormData(pristine);
+        setSnowlumaApp(snowlumaAppPristine);
     };
 
     // ───── 加载中 / 出错 ─────
@@ -322,6 +413,12 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
                                 data={formData.advanced}
                                 onChange={updateAdvanced}
                                 backendType={formData.bot.backend_type}
+                                statusCommand={formData.statusCommand ?? null}
+                                onStatusCommandChange={updateStatusCommand}
+                                snowlumaAppConfig={snowlumaApp}
+                                onSnowlumaAppConfigChange={setSnowlumaApp}
+                                snowlumaAppLoadError={snowlumaAppLoadError}
+                                snowlumaAppLoading={snowlumaAppLoading}
                             />
                         </TabsContent>
                     </Tabs>

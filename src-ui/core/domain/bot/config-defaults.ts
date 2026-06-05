@@ -1,6 +1,13 @@
 // BotConfig 默认值工厂 + 校验，纯函数。
 
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
+import type { StatusCommandConfig } from '../../ipc/generated/domain/StatusCommandConfig';
+
+export const defaultStatusCommandConfig = (): StatusCommandConfig => ({
+    enabled: true,
+    swallow: false,
+    cooldownSeconds: 5,
+});
 
 export function createDefaultBotConfig(): BotConfig {
     return {
@@ -36,6 +43,7 @@ export function createDefaultBotConfig(): BotConfig {
             o3HookMode: 1,
             bypass: { hook: false, window: false, module: false, process: false, container: false, js: false },
         },
+        statusCommand: undefined,
     };
 }
 

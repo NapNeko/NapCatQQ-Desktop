@@ -9,7 +9,7 @@
 //   - 运行宿主 RadioGroup 横排（仅 2 项，没必要立式占 2 行）
 //   - autoRestart duration / unit 一行并排
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import {
     TextField,
     NumberField,
@@ -75,6 +75,15 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         () => servers.map((s) => ({ value: s.id, label: `${s.name}（${s.host}）` })),
         [servers],
     );
+
+    const hasRemoteHosts = servers.length > 0;
+
+    // 无远程档案时不展示「运行宿主」；若历史配置仍指向远程，回落本机以免保存无效组合。
+    useEffect(() => {
+        if (!hasRemoteHosts && data.runtime_target !== 'local') {
+            onChange({ runtime_target: 'local', deploymentType: 'native' });
+        }
+    }, [hasRemoteHosts, data.runtime_target, onChange]);
 
     const onRuntimeModeChange = (mode: string) => {
         if (mode === 'local') {
@@ -144,59 +153,61 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 </FormSection>
             )}
 
-            <FormSection
-                title="运行宿主"
-                description="Bot 引擎实际跑在哪台机器上、以什么方式启动"
-            >
-                <RadioGroup
-                    items={RUNTIME_ITEMS}
-                    value={runtimeMode}
-                    onValueChange={onRuntimeModeChange}
-                    orientation="horizontal"
-                    name="runtime-target"
-                />
-                {isRemote && (
-                    serverItems.length > 0 ? (
-                        <Select
-                            label="选择远程主机"
-                            items={serverItems}
-                            value={data.runtime_target === 'remote' ? '' : data.runtime_target}
-                            onValueChange={(v) => onChange({ runtime_target: v })}
-                            placeholder="请选择一台已添加的远程主机"
-                            hint="在远端 SSH 主机上启动；主机在「远程主机」页添加"
-                        />
-                    ) : (
-                        <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
-                            还没有可用的远程主机。请先到「远程主机」页添加并连接一台 SSH 主机。
-                        </p>
-                    )
-                )}
-
-                {/* 启动方式:本机(Windows)不支持 Docker,只能直接运行,这里直接给说明
-                    不让选;远程才给「直接运行 / Docker」二选一。 */}
-                {isRemote && (
-                    <>
-                        <RadioGroup
-                            items={DEPLOYMENT_ITEMS}
-                            value={data.deploymentType}
-                            onValueChange={(v) => onChange({ deploymentType: v as DeploymentType })}
-                            orientation="horizontal"
-                            name="deployment-type"
-                        />
-                        {data.deploymentType === 'docker' && data.backend_type !== 'napcat' && (
+            {hasRemoteHosts && (
+                <FormSection
+                    title="运行宿主"
+                    description="Bot 引擎实际跑在哪台机器上、以什么方式启动"
+                >
+                    <RadioGroup
+                        items={RUNTIME_ITEMS}
+                        value={runtimeMode}
+                        onValueChange={onRuntimeModeChange}
+                        orientation="horizontal"
+                        name="runtime-target"
+                    />
+                    {isRemote && (
+                        serverItems.length > 0 ? (
+                            <Select
+                                label="选择远程主机"
+                                items={serverItems}
+                                value={data.runtime_target === 'remote' ? '' : data.runtime_target}
+                                onValueChange={(v) => onChange({ runtime_target: v })}
+                                placeholder="请选择一台已添加的远程主机"
+                                hint="在远端 SSH 主机上启动；主机在「远程主机」页添加"
+                            />
+                        ) : (
                             <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
-                                Docker 启动方式当前仅支持 NapCat 底座。SnowLuma 容器化待后续支持，请改回「直接运行」。
+                                还没有可用的远程主机。请先到「远程主机」页添加并连接一台 SSH 主机。
                             </p>
-                        )}
-                    </>
-                )}
-            </FormSection>
+                        )
+                    )}
 
-            <RuntimeDependencyHint
-                runtimeTarget={data.runtime_target}
-                deploymentType={data.deploymentType}
-                backendType={data.backend_type}
-            />
+                    {isRemote && (
+                        <>
+                            <RadioGroup
+                                items={DEPLOYMENT_ITEMS}
+                                value={data.deploymentType}
+                                onValueChange={(v) => onChange({ deploymentType: v as DeploymentType })}
+                                orientation="horizontal"
+                                name="deployment-type"
+                            />
+                            {data.deploymentType === 'docker' && data.backend_type !== 'napcat' && (
+                                <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
+                                    Docker 启动方式当前仅支持 NapCat 底座。SnowLuma 容器化待后续支持，请改回「直接运行」。
+                                </p>
+                            )}
+                        </>
+                    )}
+                </FormSection>
+            )}
+
+            {hasRemoteHosts && (
+                <RuntimeDependencyHint
+                    runtimeTarget={data.runtime_target}
+                    deploymentType={data.deploymentType}
+                    backendType={data.backend_type}
+                />
+            )}
 
             <FormSection
                 title="附加服务"
