@@ -23,6 +23,7 @@ use tokio::sync::{Mutex, Notify, broadcast};
 use ts_rs::TS;
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
+use ncd_host::hide_console_window;
 use crate::snowluma::error::{SnowLumaDaemonError, SnowLumaWebUiError};
 use crate::snowluma::log_sanitize::sanitize_log_line;
 use crate::snowluma::session::render_daemon_globals;
@@ -298,13 +299,15 @@ impl SnowLumaDaemon {
         // entry.js"硬编码一个占位入口，正式落地由 wiring task 修正。
         let node_exe = self.runtime_root.join("node.exe");
         let entry_js = resolve_daemon_entry(&self.runtime_root);
-        let child_result = Command::new(&node_exe)
+        let mut node_cmd = Command::new(&node_exe);
+        node_cmd
             .arg(&entry_js)
             .current_dir(&self.runtime_root)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn();
+            .stderr(Stdio::piped());
+        hide_console_window(&mut node_cmd);
+        let child_result = node_cmd.spawn();
         let mut child = match child_result {
             Ok(c) => c,
             Err(err) => {

@@ -28,6 +28,7 @@ use tokio::sync::mpsc;
 
 use crate::command::{CommandOutput, HostCommand};
 use crate::error::HostError;
+use crate::subprocess::hide_console_window;
 use crate::host::{Arch, Host, Locality, Os};
 use crate::package_manager::PackageManager;
 use crate::path::{ArchiveKind, DirEntry, HostPath, PathStyle};
@@ -547,6 +548,8 @@ fn build_tokio_command(
     for (k, v) in &cmd.environment {
         tokio_cmd.env(k, v);
     }
+
+    hide_console_window(&mut tokio_cmd);
 
     Ok(tokio_cmd)
 }

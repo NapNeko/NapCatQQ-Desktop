@@ -158,6 +158,8 @@ async fn spawn_cold_qq(
 ) -> Result<(u32, tokio::process::Child), BotBackendError> {
     use std::process::Stdio;
 
+    use ncd_host::hide_console_window;
+
     let qq_path = config
         .environment
         .get("SNOWLUMA_QQ_EXE")
@@ -169,10 +171,13 @@ async fn spawn_cold_qq(
         .clone();
     let qq_path = PathBuf::from(qq_path);
 
-    let child = tokio::process::Command::new(&qq_path)
+    let mut qq_cmd = tokio::process::Command::new(&qq_path);
+    qq_cmd
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    hide_console_window(&mut qq_cmd);
+    let child = qq_cmd
         .spawn()
         .map_err(|e| {
             BotBackendError::Io(format!(
@@ -212,11 +217,17 @@ fn enqueue_zombie(zombies: Arc<RwLock<Vec<tokio::process::Child>>>, child: tokio
 #[cfg(windows)]
 async fn kill_process_tree(qq_pid: u32) -> Result<(), BotBackendError> {
     use std::process::Stdio;
-    let _ = tokio::process::Command::new("taskkill")
+
+    use ncd_host::hide_console_window;
+
+    let mut kill_cmd = tokio::process::Command::new("taskkill");
+    kill_cmd
         .args(["/PID", &qq_pid.to_string(), "/T", "/F"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    hide_console_window(&mut kill_cmd);
+    let _ = kill_cmd
         .status()
         .await
         .map_err(|e| BotBackendError::Io(format!("taskkill failed: {e}")))?;

@@ -34,6 +34,7 @@ pub mod path;
 pub mod process;
 pub mod remote;
 pub mod shell;
+pub mod subprocess;
 
 pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
@@ -42,3 +43,4 @@ pub use package_manager::{PackageInfo, PackageManager, PackageManagerKind};
 pub use path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 pub use process::{ExitStatus, HostProcess, ProcessId};
 pub use shell::{HostShell, ShellKind};
+pub use subprocess::hide_console_window;

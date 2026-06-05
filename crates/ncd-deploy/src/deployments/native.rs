@@ -776,6 +776,7 @@ mod tests {
         }
 
         async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
+            use ncd_host::hide_console_window;
             let mut tcmd = tokio::process::Command::new(&cmd.program);
             tcmd.args(&cmd.args)
                 .stdin(Stdio::null())
@@ -784,6 +785,7 @@ mod tests {
             for (k, v) in &cmd.environment {
                 tcmd.env(k, v);
             }
+            hide_console_window(&mut tcmd);
             let child = tcmd.spawn().map_err(HostError::Io)?;
             let pid = child.id().unwrap_or(0);
             Ok(Box::new(FakeProcess {
