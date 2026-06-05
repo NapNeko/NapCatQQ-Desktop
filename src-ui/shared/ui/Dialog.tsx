@@ -10,6 +10,9 @@
 //     先通过 useDialogAnchor() 设置),enter 时从锚点缩小起源放大到屏中,exit
 //     时反向收回锚点。standard/rich 档启用,elegant 档退化为单纯缩放。
 //   - 没设置锚点时退化到原来的"中心 fade + scale"。
+//
+// 关闭策略:outside 默认只在点到遮罩层时关闭。原生 select 下拉在 portal 外，
+// 以及 flex 居中层上的空白点击，不再误关弹窗。
 
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { X as CloseIcon } from 'lucide-react';
@@ -36,6 +39,8 @@ interface DialogAnchor {
     y: number;
 }
 const DialogAnchorContext = createContext<DialogAnchor | null>(null);
+
+const OVERLAY_ATTR = 'data-dialog-overlay';
 
 /// 给业务用:在按钮 onClick 里调用,捕获鼠标点位置后再 setOpen(true)。
 /// 返回的对象 { anchor, setAnchor, captureFromEvent } 可挂到任意按钮事件上。
@@ -114,13 +119,10 @@ function makeContentEnter(anchor: DialogAnchor | null): EnterFn {
         let dx = 0;
         let dy = 0;
         if (anchor && f.cardLift > 0) {
-            // 计算缩放原点(百分比)和起始位移让 content 看起来从 anchor 长出。
             const cx = rect.left + rect.width / 2;
             const cy = rect.top + rect.height / 2;
             originX = `${((anchor.x - rect.left) / rect.width) * 100}%`;
             originY = `${((anchor.y - rect.top) / rect.height) * 100}%`;
-            // 起始位移:让 content 视觉中心稍微偏向 anchor。clamp 在 [-32, 32]
-            // 避免极端锚点导致 dialog 飞太远。
             dx = Math.max(-32, Math.min(32, (anchor.x - cx) * 0.18));
             dy = Math.max(-32, Math.min(32, (anchor.y - cy) * 0.18));
         }
@@ -149,46 +151,99 @@ const contentExit: ExitFn = (el, env) =>
         ease: env.ease.exit,
     });
 
+function applyOutsideDismissGuard(
+    e: { preventDefault: () => void; defaultPrevented: boolean; target: EventTarget | null },
+    dismissOnOutsideClick: boolean,
+) {
+    if (e.defaultPrevented) return;
+    if (!dismissOnOutsideClick) {
+        e.preventDefault();
+        return;
+    }
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) {
+        e.preventDefault();
+        return;
+    }
+    if (!target.closest(`[${OVERLAY_ATTR}]`)) {
+        e.preventDefault();
+    }
+}
+
 interface DialogContentProps
     extends Omit<ComponentPropsWithoutRef<typeof RadixDialog.Content>, 'forceMount'> {
     hideClose?: boolean;
+    /// false = 点遮罩也不关，只能点关闭按钮 / Esc（表单弹窗推荐）。
+    dismissOnOutsideClick?: boolean;
 }
 
 export const DialogContent = forwardRef<
     ElementRef<typeof RadixDialog.Content>,
     DialogContentProps
->(({ className, children, hideClose, ...props }, _ref) => {
-    const open = useContext(DialogOpenContext);
-    const anchor = useContext(DialogAnchorContext);
-    const contentEnter = makeContentEnter(anchor);
-    return (
-        <RadixDialog.Portal forceMount>
-            <GsapPresence visible={open} onEnter={overlayEnter} onExit={overlayExit}>
-                <RadixDialog.Overlay asChild forceMount>
-                    <OverlayBody />
-                </RadixDialog.Overlay>
-            </GsapPresence>
-            <div
-                style={{ isolation: 'isolate' }}
-                className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6"
-            >
-                <GsapPresence visible={open} onEnter={contentEnter} onExit={contentExit}>
-                    <RadixDialog.Content asChild forceMount {...props}>
-                        <ContentBody className={className} hideClose={hideClose}>
-                            {children}
-                        </ContentBody>
-                    </RadixDialog.Content>
+>(
+    (
+        {
+            className,
+            children,
+            hideClose,
+            dismissOnOutsideClick = true,
+            onPointerDownOutside: onPointerDownOutsideProp,
+            onFocusOutside: onFocusOutsideProp,
+            onInteractOutside: onInteractOutsideProp,
+            ...contentProps
+        },
+        _ref,
+    ) => {
+        const open = useContext(DialogOpenContext);
+        const anchor = useContext(DialogAnchorContext);
+        const contentEnter = makeContentEnter(anchor);
+
+        return (
+            <RadixDialog.Portal forceMount>
+                <GsapPresence visible={open} onEnter={overlayEnter} onExit={overlayExit}>
+                    <RadixDialog.Overlay asChild forceMount>
+                        <OverlayBody />
+                    </RadixDialog.Overlay>
                 </GsapPresence>
-            </div>
-        </RadixDialog.Portal>
-    );
-});
+                <div
+                    style={{ isolation: 'isolate' }}
+                    className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6"
+                >
+                    <GsapPresence visible={open} onEnter={contentEnter} onExit={contentExit}>
+                        <RadixDialog.Content
+                            asChild
+                            forceMount
+                            {...contentProps}
+                            onPointerDownOutside={(e) => {
+                                onPointerDownOutsideProp?.(e);
+                                applyOutsideDismissGuard(e, dismissOnOutsideClick);
+                            }}
+                            onFocusOutside={(e) => {
+                                onFocusOutsideProp?.(e);
+                                applyOutsideDismissGuard(e, dismissOnOutsideClick);
+                            }}
+                            onInteractOutside={(e) => {
+                                onInteractOutsideProp?.(e);
+                                applyOutsideDismissGuard(e, dismissOnOutsideClick);
+                            }}
+                        >
+                            <ContentBody className={className} hideClose={hideClose}>
+                                {children}
+                            </ContentBody>
+                        </RadixDialog.Content>
+                    </GsapPresence>
+                </div>
+            </RadixDialog.Portal>
+        );
+    },
+);
 DialogContent.displayName = 'DialogContent';
 
 const OverlayBody = forwardRef<HTMLDivElement, { className?: string }>(
     ({ className }, ref) => (
         <div
             ref={ref}
+            {...{ [OVERLAY_ATTR]: '' }}
             style={{ visibility: 'hidden', opacity: 0 }}
             className={cn(
                 'fixed inset-0 z-40 bg-black/35 backdrop-blur-sm',

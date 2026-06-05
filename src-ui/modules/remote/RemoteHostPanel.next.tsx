@@ -324,7 +324,7 @@ function KeyAuthPasswordDialog({
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-sm">
+            <DialogContent className="max-w-sm" dismissOnOutsideClick={false}>
                 <DialogHeader>
                     <DialogTitle>配置免密登录</DialogTitle>
                     <DialogDescription>

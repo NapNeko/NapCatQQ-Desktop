@@ -122,7 +122,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md" dismissOnOutsideClick={false}>
                 <DialogHeader>
                     <DialogTitle>{isEdit ? '编辑远端服务器' : '添加远端服务器'}</DialogTitle>
                     <DialogDescription>
