@@ -78,12 +78,14 @@ function SelectInner<V extends string>(
                     className={cn(
                         'inline-flex w-full items-center justify-between gap-2 rounded-sm bg-field px-3 py-2',
                         'text-sm text-text border outline-none transition-colors',
-                        'focus:ring-1 focus:ring-brand',
+                        'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
+                        'data-[state=open]:ring-2 data-[state=open]:ring-brand data-[state=open]:ring-offset-2 data-[state=open]:ring-offset-canvas',
+                        'focus:outline-none',
                         'data-[placeholder]:text-text-tertiary',
                         'disabled:cursor-not-allowed disabled:bg-inset disabled:text-text-disabled',
                         invalid
-                            ? 'border-danger focus:border-danger focus:ring-danger'
-                            : 'border-border-subtle focus:border-brand',
+                            ? 'border-danger focus-visible:border-danger focus-visible:ring-danger data-[state=open]:border-danger data-[state=open]:ring-danger'
+                            : 'border-border-subtle focus-visible:border-brand data-[state=open]:border-brand',
                     )}
                 >
                     <RadixSelect.Value placeholder={placeholder} />

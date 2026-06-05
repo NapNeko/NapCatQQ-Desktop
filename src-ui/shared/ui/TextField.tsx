@@ -25,7 +25,7 @@ const inputVariants = cva(
         'border outline-none transition-colors duration-150',
         'placeholder:text-text-tertiary',
         'disabled:cursor-not-allowed disabled:bg-inset disabled:text-text-disabled',
-        'focus:ring-1 focus:ring-brand',
+        'focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-canvas',
     ],
     {
         variants: {

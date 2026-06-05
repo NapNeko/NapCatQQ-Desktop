@@ -138,7 +138,7 @@ function RadioItemView<V extends string>({
                     'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full',
                     'border border-border-strong bg-field transition-colors duration-200',
                     'data-[state=checked]:border-brand',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
+                    'focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-canvas focus-visible:outline-none',
                     'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
             >

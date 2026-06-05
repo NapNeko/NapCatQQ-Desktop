@@ -171,10 +171,15 @@ samp,
     }
 }
 
-/* 暖色低对比 scrollbar */
+/* 全局滚动条：细、低对比，不抢视线（WebKit + Firefox） */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--neutral-900) 12%, transparent) transparent;
+}
+
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -182,15 +187,15 @@ samp,
 }
 
 ::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--neutral-900) 14%, transparent);
+    background: color-mix(in srgb, var(--neutral-900) 10%, transparent);
     border-radius: var(--radius-pill);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in srgb, var(--neutral-900) 24%, transparent);
+    background: color-mix(in srgb, var(--neutral-900) 18%, transparent);
 }
 
-/* scrollbar-hide：隐藏滚动条但保留滚动行为；用于配置页等不需要可见滚动条的场景 */
+/* 仍需要完全隐藏滚动条时用 .scrollbar-hide（少用） */
 .scrollbar-hide {
     scrollbar-width: none;
     /* Firefox */
