@@ -21,6 +21,7 @@ use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 
 use crate::snowluma::error::SnowLumaDaemonError;
+use ncd_domain::SnowLumaAppConfig;
 
 // ============================================================================
 // 公共常量
@@ -57,6 +58,24 @@ pub struct SnowLumaSession {
     pub created_at: String,
     #[serde(rename = "lastRenderedAt")]
     pub last_rendered_at: String,
+}
+
+/// 返回 `<snowluma_data_root>/app-config.json`。
+pub fn app_config_path(snowluma_data_root: &Path) -> PathBuf {
+    snowluma_data_root.join("app-config.json")
+}
+
+/// 读取 Desktop 写入的全局 SnowLuma WebUI 配置；缺失或解析失败时返回默认值。
+pub fn load_snowluma_app_config(snowluma_data_root: &Path) -> SnowLumaAppConfig {
+    let path = app_config_path(snowluma_data_root);
+    if !path.exists() {
+        return SnowLumaAppConfig::default();
+    }
+    let text = match fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(_) => return SnowLumaAppConfig::default(),
+    };
+    serde_json::from_str(&text).unwrap_or_default()
 }
 
 /// 返回 `<snowluma_data_root>/session.json`。

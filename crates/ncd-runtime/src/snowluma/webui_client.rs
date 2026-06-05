@@ -1092,15 +1092,13 @@ mod tests {
 
 use crate::snowluma::daemon::SnowLumaWebUiClientFactory;
 
-/// 默认 `SnowLumaWebUiClientFactory` 实装：用 daemon 给的明文密码构造一个新的
-/// `ReqwestSnowLumaWebUiClient`。
-pub struct ReqwestSnowLumaWebUiClientFactory {
-    pub port: u16,
-}
+/// 默认 `SnowLumaWebUiClientFactory`：`port` 在每次 `create` 时由 daemon 传入
+/// （与 `app-config.json` 的 `snowlumaWebuiPort` 一致），构造时占位端口即可。
+pub struct ReqwestSnowLumaWebUiClientFactory;
 
 impl ReqwestSnowLumaWebUiClientFactory {
-    pub fn new(port: u16) -> Self {
-        Self { port }
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -1109,8 +1107,9 @@ impl SnowLumaWebUiClientFactory for ReqwestSnowLumaWebUiClientFactory {
     async fn create(
         &self,
         password: String,
+        port: u16,
     ) -> Result<std::sync::Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError> {
-        let client = ReqwestSnowLumaWebUiClient::new(self.port, password)?;
+        let client = ReqwestSnowLumaWebUiClient::new(port, password)?;
         Ok(std::sync::Arc::new(client))
     }
 }

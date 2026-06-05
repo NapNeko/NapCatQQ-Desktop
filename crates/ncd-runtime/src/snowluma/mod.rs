@@ -35,7 +35,9 @@ pub use status_poller::{ProcessTreeProbe, SnowLumaLoginState};
 pub use ncd_domain::snowluma_start_mode::SnowLumaStartMode;
 
 // ---- session.rs ----
-pub use session::{SnowLumaSession, load_or_create_session, render_daemon_globals};
+pub use session::{
+    SnowLumaSession, load_or_create_session, load_snowluma_app_config, render_daemon_globals,
+};
 
 // ---- log_sanitize.rs ----
 pub use log_sanitize::sanitize_log_line;

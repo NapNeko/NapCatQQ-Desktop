@@ -26,7 +26,7 @@ use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use ncd_host::hide_console_window;
 use crate::snowluma::error::{SnowLumaDaemonError, SnowLumaWebUiError};
 use crate::snowluma::log_sanitize::sanitize_log_line;
-use crate::snowluma::session::render_daemon_globals;
+use crate::snowluma::session::{load_snowluma_app_config, render_daemon_globals};
 use crate::snowluma::webui_client::SnowLumaWebUiClient;
 
 // ---------------------------------------------------------------------------
@@ -71,13 +71,12 @@ pub enum DaemonState {
 /// `MockSnowLumaWebUiClientFactory`，不依赖真实 reqwest / wiremock。
 #[async_trait]
 pub trait SnowLumaWebUiClientFactory: Send + Sync {
-    /// 用 daemon 当前生效的密码构造一个新的 WebUI client。
-    /// 注意：`password` 来自 `render_daemon_globals` 解析出的有效密码，
-    /// 并非从持久化文件直接读出来——所以本方法签名拿明文 `String` 而不是会
-    /// 触发文件 I/O 的 `&Path`。
+    /// 用 daemon 当前生效的密码与 WebUI 端口构造一个新的 WebUI client。
+    /// `password` / `port` 来自 `render_daemon_globals`（已读 `app-config.json`）。
     async fn create(
         &self,
         password: String,
+        port: u16,
     ) -> Result<Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError>;
 }
 
@@ -153,11 +152,6 @@ const RECENT_LOG_CAPACITY: usize = 1000;
 
 /// `wait_ready` 单轮总超时。
 const WAIT_READY_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// daemon WebUI 默认端口。TODO: 从 `SnowLumaAppConfig.webui_port`
-/// 读取（ wiring 完成后切换），当下硬编码与 legacy / `default_snowluma_port()`
-/// 对齐。
-const DEFAULT_WEBUI_PORT: u16 = 5099;
 
 /// `shutdown` 等子进程退出的总超时。
 const SHUTDOWN_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -279,15 +273,22 @@ impl SnowLumaDaemon {
                 None,
             ));
 
-        // === 2. 渲染全局配置（解析有效密码 + 写 runtime.json + webui.json）===
-        // TODO: 从 `SnowLumaAppConfig.webui_password_override` /
-        // `webui_port` 解析；当前 阶段尚未拉到 app_config 引用，先用
-        // `None` + 默认端口与 legacy 默认值对齐。
+        // === 2. 渲染全局配置（读 app-config.json → runtime.json + webui.json）===
+        let app_cfg = load_snowluma_app_config(&self.snowluma_data_root);
+        let webui_port = app_cfg.webui_port;
+        let pwd_override = {
+            let t = app_cfg.webui_password_override.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t)
+            }
+        };
         let password = match render_daemon_globals(
             &self.snowluma_data_root,
             &self.runtime_root,
-            None,
-            DEFAULT_WEBUI_PORT,
+            pwd_override,
+            webui_port,
         ) {
             Ok(pwd) => pwd,
             Err(err) => return Err(self.rollback_to_stopped(err).await),
@@ -357,7 +358,7 @@ impl SnowLumaDaemon {
         tokio::spawn(watch_exit(weak_for_early));
 
         // === 4. 构造 WebUI client + wait_ready + login ===
-        let client = match self.http.create(password).await {
+        let client = match self.http.create(password, webui_port).await {
             Ok(c) => c,
             Err(err) => {
                 // node 子进程已经 spawn 出来了；rollback 路径会清 inner.node_child
@@ -903,6 +904,7 @@ mod tests {
         async fn create(
             &self,
             _password: String,
+            _port: u16,
         ) -> Result<Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError> {
             Err(SnowLumaWebUiError::Http {
                 endpoint: "<stub>".into(),
@@ -939,7 +941,7 @@ mod tests {
         let factory: Arc<dyn SnowLumaWebUiClientFactory> = Arc::new(StubFactory);
         // 调一次 create 拿到 Result，确认返回类型恰好是 Arc<dyn SnowLumaWebUiClient>。
         let result: Result<Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError> =
-            factory.create("x".into()).await;
+            factory.create("x".into(), 5099).await;
         assert!(result.is_err(), "stub factory always errors");
     }
 
@@ -1182,6 +1184,7 @@ mod tests {
         async fn create(
             &self,
             _password: String,
+            _port: u16,
         ) -> Result<Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError> {
             Ok(Arc::new(MockSnowLumaWebUiClient {
                 behavior: Arc::clone(&self.behavior),

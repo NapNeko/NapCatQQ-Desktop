@@ -129,9 +129,8 @@ pub fn run() {
     // 单独路径，再切到 PathProbe 输出）。
     let snowluma_data_root = data_root.join("snowluma");
     let snowluma_runtime_root = data_root.join("runtime").join("SnowLuma");
-    let snowluma_factory: Arc<dyn ncd_runtime::SnowLumaWebUiClientFactory> = Arc::new(
-        ncd_runtime::ReqwestSnowLumaWebUiClientFactory::new(ncd_runtime::default_snowluma_port()),
-    );
+    let snowluma_factory: Arc<dyn ncd_runtime::SnowLumaWebUiClientFactory> =
+        Arc::new(ncd_runtime::ReqwestSnowLumaWebUiClientFactory::new());
     let snowluma_daemon = ncd_runtime::SnowLumaDaemon::new(
         snowluma_data_root,
         snowluma_runtime_root,
@@ -318,6 +317,8 @@ pub fn run() {
             commands::bot::tail_bot_log,
             commands::snowluma::list_qq_processes,
             commands::snowluma::probe_qq_login_info,
+            commands::snowluma::get_snowluma_app_config,
+            commands::snowluma::set_snowluma_app_config,
             commands::snowluma::set_snowluma_password_override,
             commands::snowluma::open_snowluma_webui,
             commands::servers::list_servers,

@@ -13,6 +13,54 @@ use ts_rs::TS;
 
 use crate::AppState;
 
+fn snowluma_app_config_path(data_root: &std::path::Path) -> std::path::PathBuf {
+    data_root.join("snowluma").join("app-config.json")
+}
+
+fn read_snowluma_app_config(data_root: &std::path::Path) -> ncd_runtime::SnowLumaAppConfig {
+    let path = snowluma_app_config_path(data_root);
+    if !path.exists() {
+        return ncd_runtime::SnowLumaAppConfig::default();
+    }
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(_) => return ncd_runtime::SnowLumaAppConfig::default(),
+    };
+    serde_json::from_str(&text).unwrap_or_default()
+}
+
+fn write_snowluma_app_config(
+    data_root: &std::path::Path,
+    cfg: &ncd_runtime::SnowLumaAppConfig,
+) -> Result<(), String> {
+    let path = snowluma_app_config_path(data_root);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create snowluma dir failed: {e}"))?;
+    }
+    let text = serde_json::to_string_pretty(cfg)
+        .map_err(|e| format!("serialize snowluma app config: {e}"))?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, text.as_bytes())
+        .map_err(|e| format!("write snowluma app config tmp: {e}"))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("rename snowluma app config: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_snowluma_app_config(
+    state: State<'_, AppState>,
+) -> Result<ncd_runtime::SnowLumaAppConfig, String> {
+    Ok(read_snowluma_app_config(&state.data_root))
+}
+
+#[tauri::command]
+pub async fn set_snowluma_app_config(
+    state: State<'_, AppState>,
+    config: ncd_runtime::SnowLumaAppConfig,
+) -> Result<(), String> {
+    write_snowluma_app_config(&state.data_root, &config)
+}
+
 /// 前端用来填 HOT 模式 attach_pid 时的 QQ 进程信息。
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
@@ -103,26 +151,10 @@ pub async fn set_snowluma_password_override(
     password: Option<String>,
 ) -> Result<(), String> {
     use ncd_runtime::SnowLumaAppConfig;
-    let path = state.data_root.join("snowluma").join("app-config.json");
-    let mut cfg: SnowLumaAppConfig = if path.exists() {
-        let text = std::fs::read_to_string(&path)
-            .map_err(|e| format!("read app-config.json failed: {e}"))?;
-        serde_json::from_str(&text).unwrap_or_default()
-    } else {
-        SnowLumaAppConfig::default()
-    };
+    let path = snowluma_app_config_path(&state.data_root);
+    let mut cfg = read_snowluma_app_config(&state.data_root);
     cfg.webui_password_override = password.unwrap_or_default();
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("create snowluma dir failed: {e}"))?;
-    }
-    let text = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("serialize snowluma app config: {e}"))?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text.as_bytes())
-        .map_err(|e| format!("write snowluma app config tmp: {e}"))?;
-    std::fs::rename(&tmp, &path).map_err(|e| format!("rename snowluma app config: {e}"))?;
-    Ok(())
+    write_snowluma_app_config(&state.data_root, &cfg)
 }
 
 /// SnowLuma WebUI 登录端点。
@@ -153,8 +185,7 @@ pub async fn open_snowluma_webui(
 
     let data_root = state.data_root.clone();
 
-    // 端口：先读 SnowLuma 安装目录下 `config/runtime.json` 的 `webuiPort`
-    // （由 daemon `render_runtime_json` 写入）；读不到就回落到 5099。
+    // 端口：daemon 写入的 runtime.json 优先；否则读 app-config.json；再默认 5099。
     let runtime_json_path = data_root
         .join("runtime")
         .join("SnowLuma")
@@ -167,7 +198,9 @@ pub async fn open_snowluma_webui(
             .and_then(|v| v.as_u64())
             .map(|n| n as u16)
     })()
-    .unwrap_or_else(ncd_runtime::default_snowluma_port);
+    .unwrap_or_else(|| {
+        ncd_runtime::load_snowluma_app_config(&data_root.join("snowluma")).webui_port
+    });
 
     // 密码：先看 App-level override，否则读 session.json。
     let app_cfg_path = data_root.join("snowluma").join("app-config.json");

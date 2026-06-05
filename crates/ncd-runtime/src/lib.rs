@@ -84,7 +84,7 @@ pub use snowluma::{
     ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon, SnowLumaDaemonError, SnowLumaLoginState,
     SnowLumaRuntimeBackend, SnowLumaSession, SnowLumaStatusPoller, SnowLumaWebUiClient,
     SnowLumaWebUiClientFactory, SnowLumaWebUiError, SysinfoProcessTreeProbe,
-    load_or_create_session, render_daemon_globals, sanitize_log_line,
+    load_or_create_session, load_snowluma_app_config, render_daemon_globals, sanitize_log_line,
 };
 pub use traits::{
     BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, JsonWrite, MigrationStep,
