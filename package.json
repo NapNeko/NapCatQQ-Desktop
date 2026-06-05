@@ -14,6 +14,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "icons:gen": "python script/generate_app_icons.py",
+    "tauri:icon": "tauri icon src-ui/assets/logo.png",
     "tauri:watch": "cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\""
   },
   "dependencies": {
