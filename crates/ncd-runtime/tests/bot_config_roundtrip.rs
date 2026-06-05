@@ -20,6 +20,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        status_command: None,
     }
 }
 

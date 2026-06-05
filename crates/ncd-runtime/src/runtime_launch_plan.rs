@@ -429,6 +429,7 @@ mod snowluma_plan_tests {
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
+            status_command: None,
         }
     }
 

@@ -261,6 +261,7 @@ fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        status_command: None,
     }
 }
 

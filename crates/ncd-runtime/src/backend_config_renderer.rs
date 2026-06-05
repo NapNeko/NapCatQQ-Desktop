@@ -258,13 +258,21 @@ impl BackendConfigRenderer for NapCatConfigRenderer {
 // ==================== SnowLuma Renderer ====================
 
 /// SnowLuma onebot_<qq>.json 顶层"已知" key 集合。
-const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] = &["networks", "musicSignUrl"];
+const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] = &["networks", "musicSignUrl", "statusCommand"];
 
 fn snowluma_message_format(fmt: MessagePostFormat) -> &'static str {
     match fmt {
         MessagePostFormat::Array => "array",
         MessagePostFormat::String => "string",
     }
+}
+
+fn snowluma_status_command_json(sc: &ncd_domain::bot_config::StatusCommandConfig) -> Value {
+    json!({
+        "enabled": sc.enabled,
+        "swallow": sc.swallow,
+        "cooldownSeconds": sc.cooldown_seconds,
+    })
 }
 
 /// SnowLuma reconnectIntervalMs lower bound (upstream enforces max(1000, value)).
@@ -415,10 +423,19 @@ impl SnowLumaConfigRenderer {
     }
 
     fn build_onebot_payload(config: &BotConfig) -> Value {
-        json!({
-            "networks": Self::build_networks(&config.connect),
-            "musicSignUrl": config.bot.music_sign_url,
-        })
+        let mut obj = serde_json::Map::new();
+        obj.insert(
+            "networks".into(),
+            Self::build_networks(&config.connect),
+        );
+        obj.insert(
+            "musicSignUrl".into(),
+            json!(config.bot.music_sign_url),
+        );
+        if let Some(sc) = &config.status_command {
+            obj.insert("statusCommand".into(), snowluma_status_command_json(sc));
+        }
+        Value::Object(obj)
     }
 
     /// Drift baseline: empty Desktop connect => empty networks (no install-default listeners).
@@ -436,10 +453,20 @@ impl SnowLumaConfigRenderer {
         } else {
             Self::build_networks(connect)
         };
-        json!({
-            "networks": networks,
-            "musicSignUrl": config.bot.music_sign_url,
-        })
+        let mut base = if no_servers {
+            json!({
+                "networks": networks,
+                "musicSignUrl": config.bot.music_sign_url,
+            })
+        } else {
+            Self::build_onebot_payload(config)
+        };
+        if let Value::Object(ref mut o) = base {
+            if let Some(sc) = &config.status_command {
+                o.insert("statusCommand".into(), snowluma_status_command_json(sc));
+            }
+        }
+        base
     }
 }
 
@@ -647,6 +674,7 @@ mod tests {
             bot: make_basic_config(),
             connect: make_connect_with_http_server(),
             advanced: make_advanced_config(),
+            status_command: None,
         }
     }
 
@@ -842,6 +870,7 @@ mod tests {
             bot: make_basic_config(),
             connect: ConnectConfig::default(),
             advanced: make_advanced_config(),
+            status_command: None,
         };
 
         let txn = renderer.render(&bot_id, &config).unwrap();
@@ -898,6 +927,7 @@ mod tests {
                 ..ConnectConfig::default()
             },
             advanced: make_advanced_config(),
+            status_command: None,
         };
 
         let txn = renderer.render(&bot_id, &config).unwrap();
@@ -943,6 +973,7 @@ mod tests {
                 ..ConnectConfig::default()
             },
             advanced: make_advanced_config(),
+            status_command: None,
         };
 
         let txn = renderer.render(&bot_id, &config).unwrap();
@@ -1000,6 +1031,7 @@ mod tests {
                 ..ConnectConfig::default()
             },
             advanced: make_advanced_config(),
+            status_command: None,
         };
 
         let txn = renderer.render(&bot_id, &with_timeout).unwrap();
@@ -1038,6 +1070,7 @@ mod tests {
                 ..ConnectConfig::default()
             },
             advanced: make_advanced_config(),
+            status_command: None,
         };
 
         let txn = renderer.render(&bot_id, &without_timeout).unwrap();
