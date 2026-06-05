@@ -63,7 +63,7 @@ pub async fn detect_drift(
     config: &BotConfig,
     renderer: &dyn BackendConfigRenderer,
 ) -> Result<ConfigDrift, DriftError> {
-    let expected_txn = renderer.render(bot_id, config)?;
+    let expected_txn = renderer.render_for_drift(bot_id, config)?;
     let expected: HashMap<PathBuf, Value> = expected_txn
         .writes.into_iter().map(|w| (w.path, w.payload)).collect();
     let mut added = Vec::new();
@@ -79,7 +79,11 @@ pub async fn detect_drift(
         let file_name = path.file_name()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| path.display().to_string());
-        diff_json(&file_name, "", expected_value, &actual, &mut added, &mut modified);
+        let mut expected_norm = expected_value.clone();
+        let mut actual_norm = actual.clone();
+        normalize_values_for_drift(&mut expected_norm);
+        normalize_values_for_drift(&mut actual_norm);
+        diff_json(&file_name, "", &expected_norm, &actual_norm, &mut added, &mut modified);
     }
     Ok(ConfigDrift {
         bot_id: bot_id.as_str().to_string(),
@@ -152,5 +156,106 @@ fn is_trivially_empty(v: &Value) -> bool {
         Value::String(s) => s.is_empty(),
         Value::Object(obj) => obj.is_empty(),
         _ => false,
+    }
+}
+
+/// Align JSON shapes before diff so WebUI round-trips do not look like user edits.
+fn normalize_values_for_drift(v: &mut Value) {
+    match v {
+        Value::Object(map) => {
+            for val in map.values_mut() {
+                normalize_values_for_drift(val);
+            }
+            sort_network_adapter_arrays(map);
+        }
+        Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                normalize_values_for_drift(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn sort_network_adapter_arrays(map: &mut serde_json::Map<String, Value>) {
+    const NETWORK_KEYS: &[&str] = &[
+        "network",
+        "networks",
+        "httpServers",
+        "httpSseServers",
+        "httpClients",
+        "websocketServers",
+        "websocketClients",
+        "wsServers",
+        "wsClients",
+        "plugins",
+    ];
+    for key in NETWORK_KEYS {
+        if let Some(Value::Array(arr)) = map.get_mut(*key) {
+            sort_adapter_array_by_name(arr);
+        }
+    }
+    if let Some(Value::Object(net)) = map.get_mut("network") {
+        sort_network_adapter_arrays(net);
+    }
+    if let Some(Value::Object(net)) = map.get_mut("networks") {
+        sort_network_adapter_arrays(net);
+    }
+}
+
+fn sort_adapter_array_by_name(arr: &mut Vec<Value>) {
+    for item in arr.iter_mut() {
+        normalize_values_for_drift(item);
+    }
+    arr.sort_by(|a, b| adapter_sort_key(a).cmp(&adapter_sort_key(b)));
+}
+
+fn adapter_sort_key(v: &Value) -> String {
+    v.as_object()
+        .and_then(|o| o.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn diff_ignores_array_order_by_name() {
+        let mut expected = json!({
+            "network": {
+                "httpServers": [
+                    {"name": "B", "port": 2},
+                    {"name": "A", "port": 1}
+                ]
+            }
+        });
+        let mut actual = json!({
+            "network": {
+                "httpServers": [
+                    {"name": "A", "port": 1},
+                    {"name": "B", "port": 2}
+                ]
+            }
+        });
+        let mut added = Vec::new();
+        let mut modified = Vec::new();
+        normalize_values_for_drift(&mut expected);
+        normalize_values_for_drift(&mut actual);
+        diff_json("f.json", "", &expected, &actual, &mut added, &mut modified);
+        assert!(added.is_empty() && modified.is_empty());
+    }
+
+    #[test]
+    fn diff_treats_null_and_empty_array_as_equivalent_at_leaf() {
+        let expected = json!([]);
+        let actual = json!(null);
+        let mut added = Vec::new();
+        let mut modified = Vec::new();
+        diff_json("f.json", "httpClients", &expected, &actual, &mut added, &mut modified);
+        assert!(added.is_empty() && modified.is_empty());
     }
 }

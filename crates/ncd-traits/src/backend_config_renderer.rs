@@ -47,6 +47,19 @@ pub trait BackendConfigRenderer: Send + Sync {
         self.render(bot_id, config)
     }
 
+    /// Baseline JSON for drift detection (may differ from [`Self::render`] on disk write).
+    ///
+    /// Default: same as `render`. SnowLuma overrides to avoid injecting install-default
+    /// listeners when Desktop `connect` is empty — otherwise opening WebUI after first
+    /// boot looks like a false external change.
+    fn render_for_drift(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+    ) -> Result<JsonTransaction, RenderError> {
+        self.render(bot_id, config)
+    }
+
     /// List the paths that would be written/deleted for a given bot.
     /// Used by delete operations to know which derived files to clean up.
     fn output_paths(&self, bot_id: &BotId) -> Vec<PathBuf>;

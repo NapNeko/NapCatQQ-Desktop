@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use crate::bot_config::{
     BackendType, BotConfig, ConnectConfig, HttpClientConfig, HttpServerConfig,
+    HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields,
     WebsocketClientConfig, WebsocketServerConfig,
 };
 use crate::ids::BotId;
@@ -37,6 +38,122 @@ fn merge_unknown_top_level(
         rendered_obj.insert(key.clone(), value.clone());
     }
     Value::Object(rendered_obj)
+}
+
+/// NapCat WebUI / TypeBox 落盘形态：与 BotConfig 直连 serde 的字段集合不同。
+fn napcat_normalize_connect(connect: &ConnectConfig) -> Value {
+    json!({
+        "httpServers": connect.http_servers.iter().map(napcat_http_server).collect::<Vec<_>>(),
+        "httpSseServers": connect.http_sse_servers.iter().map(napcat_http_sse_server).collect::<Vec<_>>(),
+        "httpClients": connect.http_clients.iter().map(napcat_http_client).collect::<Vec<_>>(),
+        "websocketServers": connect.websocket_servers.iter().map(napcat_ws_server).collect::<Vec<_>>(),
+        "websocketClients": connect.websocket_clients.iter().map(napcat_ws_client).collect::<Vec<_>>(),
+        "plugins": connect.plugins,
+    })
+}
+
+fn napcat_http_server(s: &HttpServerConfig) -> Value {
+    let mut o = napcat_base_fields(&s.base);
+    o.insert("host".into(), json!(s.host));
+    o.insert("port".into(), json!(s.port));
+    o.insert("enableCors".into(), json!(s.enable_cors));
+    o.insert("enableWebsocket".into(), json!(s.enable_websocket));
+    if s.path != "/" {
+        o.insert("path".into(), json!(s.path));
+    }
+    Value::Object(o)
+}
+
+fn napcat_http_sse_server(s: &HttpSseServerConfig) -> Value {
+    let mut o = napcat_base_fields(&s.base);
+    o.insert("host".into(), json!(s.host));
+    o.insert("port".into(), json!(s.port));
+    o.insert("enableCors".into(), json!(s.enable_cors));
+    o.insert("enableWebsocket".into(), json!(s.enable_websocket));
+    o.insert("reportSelfMessage".into(), json!(s.report_self_message));
+    Value::Object(o)
+}
+
+fn napcat_http_client(c: &HttpClientConfig) -> Value {
+    let mut o = napcat_base_fields(&c.base);
+    o.insert("url".into(), json!(c.url));
+    o.insert("reportSelfMessage".into(), json!(c.report_self_message));
+    Value::Object(o)
+}
+
+fn napcat_ws_server(s: &WebsocketServerConfig) -> Value {
+    let mut o = napcat_base_fields(&s.base);
+    o.insert("host".into(), json!(s.host));
+    o.insert("port".into(), json!(s.port));
+    o.insert("reportSelfMessage".into(), json!(s.report_self_message));
+    o.insert("enableForcePushEvent".into(), json!(s.enable_force_push_event));
+    o.insert("heartInterval".into(), json!(s.heart_interval));
+    if s.path != "/" {
+        o.insert("path".into(), json!(s.path));
+    }
+    Value::Object(o)
+}
+
+fn napcat_ws_client(c: &WebsocketClientConfig) -> Value {
+    let mut o = napcat_base_fields(&c.base);
+    o.insert("url".into(), json!(c.url));
+    o.insert("reportSelfMessage".into(), json!(c.report_self_message));
+    o.insert("reconnectInterval".into(), json!(c.reconnect_interval));
+    o.insert("heartInterval".into(), json!(c.heart_interval));
+    Value::Object(o)
+}
+
+fn napcat_base_fields(base: &NetworkBaseFields) -> serde_json::Map<String, Value> {
+    use MessagePostFormat;
+    let mut o = serde_json::Map::new();
+    o.insert("name".into(), json!(base.name));
+    o.insert("enable".into(), json!(base.enable));
+    o.insert(
+        "messagePostFormat".into(),
+        json!(match base.message_post_format {
+            MessagePostFormat::Array => "array",
+            MessagePostFormat::String => "string",
+        }),
+    );
+    o.insert("token".into(), json!(base.token));
+    if base.debug {
+        o.insert("debug".into(), json!(true));
+    }
+    o
+}
+
+fn napcat_build_napcat_payload(config: &BotConfig) -> Value {
+    let adv = &config.advanced;
+    let mut o = serde_json::Map::new();
+    if adv.file_log {
+        o.insert("fileLog".into(), json!(true));
+    }
+    if adv.console_log {
+        o.insert("consoleLog".into(), json!(true));
+    }
+    o.insert(
+        "fileLogLevel".into(),
+        json!(match adv.file_log_level {
+            LogLevel::Debug => "debug",
+            LogLevel::Info => "info",
+            LogLevel::Error => "error",
+        }),
+    );
+    o.insert(
+        "consoleLogLevel".into(),
+        json!(match adv.console_log_level {
+            LogLevel::Debug => "debug",
+            LogLevel::Info => "info",
+            LogLevel::Error => "error",
+        }),
+    );
+    o.insert("packetBackend".into(), json!(adv.packet_backend));
+    if !adv.packet_server.is_empty() {
+        o.insert("packetServer".into(), json!(adv.packet_server));
+    }
+    o.insert("o3HookMode".into(), json!(u8::from(adv.o3_hook_mode)));
+    o.insert("bypass".into(), json!(adv.bypass));
+    Value::Object(o)
 }
 
 // ==================== NapCat Renderer ====================
@@ -83,7 +200,7 @@ impl NapCatConfigRenderer {
 
     fn build_onebot_payload(config: &BotConfig) -> Value {
         json!({
-            "network": config.connect,
+            "network": napcat_normalize_connect(&config.connect),
             "musicSignUrl": config.bot.music_sign_url,
             "enableLocalFile2Url": config.advanced.enable_local_file_to_url,
             "parseMultMsg": config.advanced.parse_mult_msg,
@@ -91,16 +208,7 @@ impl NapCatConfigRenderer {
     }
 
     fn build_napcat_payload(config: &BotConfig) -> Value {
-        json!({
-            "fileLog": config.advanced.file_log,
-            "consoleLog": config.advanced.console_log,
-            "fileLogLevel": config.advanced.file_log_level,
-            "consoleLogLevel": config.advanced.console_log_level,
-            "packetBackend": config.advanced.packet_backend,
-            "packetServer": config.advanced.packet_server,
-            "o3HookMode": config.advanced.o3_hook_mode,
-            "bypass": config.advanced.bypass,
-        })
+        napcat_build_napcat_payload(config)
     }
 }
 
@@ -152,6 +260,13 @@ impl BackendConfigRenderer for NapCatConfigRenderer {
 /// SnowLuma onebot_<qq>.json 顶层"已知" key 集合。
 const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] = &["networks", "musicSignUrl"];
 
+fn snowluma_message_format(fmt: MessagePostFormat) -> &'static str {
+    match fmt {
+        MessagePostFormat::Array => "array",
+        MessagePostFormat::String => "string",
+    }
+}
+
 /// SnowLuma reconnectIntervalMs lower bound (upstream enforces max(1000, value)).
 const SNOWLUMA_MIN_RECONNECT_MS: u32 = 1000;
 
@@ -188,7 +303,7 @@ impl SnowLumaConfigRenderer {
         json!({
             "name": server.base.name,
             "enabled": server.base.enable,
-            "messageFormat": server.base.message_post_format,
+            "messageFormat": snowluma_message_format(server.base.message_post_format),
             "accessToken": server.base.token,
             "reportSelfMessage": false,
             "host": server.host,
@@ -201,7 +316,7 @@ impl SnowLumaConfigRenderer {
         let mut payload = json!({
             "name": client.base.name,
             "enabled": client.base.enable,
-            "messageFormat": client.base.message_post_format,
+            "messageFormat": snowluma_message_format(client.base.message_post_format),
             "accessToken": client.base.token,
             "url": client.url,
             "reportSelfMessage": client.report_self_message,
@@ -216,7 +331,7 @@ impl SnowLumaConfigRenderer {
         json!({
             "name": server.base.name,
             "enabled": server.base.enable,
-            "messageFormat": server.base.message_post_format,
+            "messageFormat": snowluma_message_format(server.base.message_post_format),
             "accessToken": server.base.token,
             "reportSelfMessage": server.report_self_message,
             "host": server.host,
@@ -231,7 +346,7 @@ impl SnowLumaConfigRenderer {
         json!({
             "name": client.base.name,
             "enabled": client.base.enable,
-            "messageFormat": client.base.message_post_format,
+            "messageFormat": snowluma_message_format(client.base.message_post_format),
             "accessToken": client.base.token,
             "url": client.url,
             "reportSelfMessage": client.report_self_message,
@@ -305,6 +420,27 @@ impl SnowLumaConfigRenderer {
             "musicSignUrl": config.bot.music_sign_url,
         })
     }
+
+    /// Drift baseline: empty Desktop connect => empty networks (no install-default listeners).
+    fn build_onebot_payload_for_drift(config: &BotConfig) -> Value {
+        let connect = &config.connect;
+        let no_servers =
+            connect.http_servers.is_empty() && connect.websocket_servers.is_empty();
+        let networks = if no_servers {
+            json!({
+                "httpServers": [],
+                "httpClients": connect.http_clients.iter().map(Self::render_http_client).collect::<Vec<_>>(),
+                "wsServers": [],
+                "wsClients": connect.websocket_clients.iter().map(Self::render_ws_client).collect::<Vec<_>>(),
+            })
+        } else {
+            Self::build_networks(connect)
+        };
+        json!({
+            "networks": networks,
+            "musicSignUrl": config.bot.music_sign_url,
+        })
+    }
 }
 
 impl BackendConfigRenderer for SnowLumaConfigRenderer {
@@ -332,6 +468,15 @@ impl BackendConfigRenderer for SnowLumaConfigRenderer {
 
     fn output_paths(&self, bot_id: &BotId) -> Vec<PathBuf> {
         vec![self.onebot_path(bot_id)]
+    }
+
+    fn render_for_drift(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+    ) -> Result<JsonTransaction, RenderError> {
+        let payload = Self::build_onebot_payload_for_drift(config);
+        Ok(JsonTransaction::new().write(self.onebot_path(bot_id), payload))
     }
 }
 
@@ -396,6 +541,17 @@ impl BackendConfigRenderer for DispatchRenderer {
         match config.bot.backend_type {
             BackendType::NapCat => self.napcat.render_with_existing(bot_id, config, existing),
             BackendType::SnowLuma => self.snowluma.render_with_existing(bot_id, config, existing),
+        }
+    }
+
+    fn render_for_drift(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+    ) -> Result<JsonTransaction, RenderError> {
+        match config.bot.backend_type {
+            BackendType::NapCat => self.napcat.render_for_drift(bot_id, config),
+            BackendType::SnowLuma => self.snowluma.render_for_drift(bot_id, config),
         }
     }
 
