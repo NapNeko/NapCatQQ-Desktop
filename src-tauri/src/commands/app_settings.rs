@@ -90,6 +90,18 @@ pub async fn set_app_settings(
     Ok(())
 }
 
+/// 启动期把磁盘上的 closeAction 同步给前端（localStorage 偏好）。
+#[tauri::command]
+pub fn sync_close_action_preference(
+    _app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let store = config_store(&state);
+    let path = store.config_dir().join(APP_SETTINGS_FILE);
+    let settings = load_app_settings_from(&store, &path);
+    Ok(settings.close_action)
+}
+
 /// 从磁盘加载 AppSettings；文件缺失或解析失败一律回落 Default，不抛错。
 /// 供 command 与启动期共用（启动期通过 `read_app_settings` 包装）。
 fn load_app_settings_from(store: &LocalConfigStore, path: &std::path::Path) -> AppSettings {

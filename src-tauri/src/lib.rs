@@ -9,6 +9,7 @@ use ncd_runtime::{
     ReqwestNapCatWebUiClient, SecretStoreImpl,
 };
 use tauri::Emitter;
+use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
@@ -45,7 +46,6 @@ pub fn run() {
     let event_bus = BroadcastEventBus::default();
     let runtime = runtime::AppRuntime::new(&data_root, event_bus.clone());
     let runtime_watcher = runtime.clone();
-    let runtime_shutdown = runtime.clone();
 
     let store = Arc::new(LocalConfigStore::new(&data_root));
     let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
@@ -155,7 +155,6 @@ pub fn run() {
     let bot_manager_listener = Arc::clone(&bot_manager);
     let bot_manager_login_listener = Arc::clone(&bot_manager);
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
-    let bot_manager_shutdown = Arc::clone(&bot_manager);
 
     tauri::Builder::default()
         // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI）
@@ -246,27 +245,35 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 bot_manager_snowluma_listener.run_snowluma_listener().await;
             });
+
+            if let Err(err) = commands::tray::attach_tray(&app.handle()) {
+                eprintln!("[tray] attach failed: {err}");
+            }
+
             Ok(())
         })
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // 阻塞窗口关闭，先做 BotManager + AppRuntime 收尾，再退出。
                 api.prevent_close();
-                let runtime_shutdown = runtime_shutdown.clone();
-                let bot_manager_shutdown = Arc::clone(&bot_manager_shutdown);
-                let window = window.clone();
+                let app = window.app_handle().clone();
+                let close_action = app_settings.close_action.clone();
                 tauri::async_runtime::spawn(async move {
-                    // 先关掉所有运行中的 Bot：递归 kill 进程树，避免 QQ.exe 残留。
-                    let result = bot_manager_shutdown.shutdown_all().await;
+                    if close_action == "tray" {
+                        if let Err(err) = commands::tray::window_hide_to_tray(app) {
+                            eprintln!("[window] hide to tray failed: {err}");
+                        }
+                        return;
+                    }
+                    let state = app.state::<AppState>();
+                    let result = state.bot_manager.shutdown_all().await;
                     if !result.failed.is_empty() {
                         eprintln!(
                             "[bot_manager] shutdown_all: {} bot(s) failed to stop cleanly",
                             result.failed.len()
                         );
                     }
-                    runtime_shutdown.shutdown().await;
-                    // 收尾完成后真正关闭窗口。
-                    let _ = window.destroy();
+                    state.runtime.shutdown().await;
+                    app.exit(0);
                 });
             }
         })
@@ -284,6 +291,7 @@ pub fn run() {
             commands::release::get_release_snapshot,
             commands::app_settings::get_app_settings,
             commands::app_settings::set_app_settings,
+            commands::app_settings::sync_close_action_preference,
             commands::config_transfer::export_config,
             commands::config_transfer::import_config,
             commands::components::list_components,
@@ -326,6 +334,10 @@ pub fn run() {
             commands::docker::docker_logs,
             commands::docker::docker_deploy,
             commands::docker::docker_compose_down,
+            commands::tray::window_show,
+            commands::tray::window_hide_to_tray,
+            commands::tray::count_local_active_bots,
+            commands::tray::request_exit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

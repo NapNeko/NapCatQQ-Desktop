@@ -18,6 +18,7 @@
     "opener:default",
     "opener:allow-open-url",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "core:tray:default"
   ]
 }
