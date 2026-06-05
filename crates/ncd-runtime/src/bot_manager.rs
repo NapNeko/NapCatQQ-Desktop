@@ -1066,6 +1066,23 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .count()
     }
 
+    /// 本机 runtime_target 且处于活跃态的 Bot 数量（退出拦截用）。
+    pub async fn count_local_active_bots(&self) -> Result<usize, BotManagerError> {
+        let configs = self.repo.list().await?;
+        let snapshots = self.list_snapshots().await;
+        Ok(snapshots
+            .iter()
+            .filter(|s| s.state.is_active())
+            .filter(|s| {
+                configs
+                    .iter()
+                    .find(|c| c.bot.qq_id.to_string() == s.bot_id.as_str())
+                    .map(|c| c.bot.runtime_target == RuntimeTarget::Local)
+                    .unwrap_or(false)
+            })
+            .count())
+    }
+
     /// 拉取指定 Bot 的最近 `lines` 行日志快照。
     /// 返回 [`LogSnapshot`]，包含已截尾的日志行 + 总行数。供 UI 在 BotLogPage
     /// 初次开页时一次性加载历史，再叠加 `bot_log_appended` / `snowluma_daemon_log`
