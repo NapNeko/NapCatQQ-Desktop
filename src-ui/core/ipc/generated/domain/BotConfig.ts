@@ -2,5 +2,10 @@
 import type { AdvancedConfig } from "./AdvancedConfig";
 import type { BotBasicConfig } from "./BotBasicConfig";
 import type { ConnectConfig } from "./ConnectConfig";
+import type { StatusCommandConfig } from "./StatusCommandConfig";
 
-export type BotConfig = { bot: BotBasicConfig, connect: ConnectConfig, advanced: AdvancedConfig, };
+export type BotConfig = { bot: BotBasicConfig, connect: ConnectConfig, advanced: AdvancedConfig, 
+/**
+ * SnowLuma `onebot_<uin>.json` 的 statusCommand；NapCat 不序列化。
+ */
+statusCommand?: StatusCommandConfig, };

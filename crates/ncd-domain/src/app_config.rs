@@ -344,6 +344,7 @@ mod tests {
             },
             performance_monitor_enabled: false,
             performance_monitor_interval_ms: 3000,
+            close_action: default_close_action(),
         };
         let json = serde_json::to_string(&cfg).expect("serialize 不应失败");
         let back: AppSettings = serde_json::from_str(&json).expect("反序列化失败");

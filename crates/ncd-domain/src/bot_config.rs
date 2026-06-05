@@ -415,12 +415,46 @@ impl Default for AdvancedConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct StatusCommandConfig {
+    #[serde(default = "default_status_command_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub swallow: bool,
+    #[serde(default = "default_status_command_cooldown")]
+    #[serde(rename = "cooldownSeconds")]
+    pub cooldown_seconds: u32,
+}
+
+impl Default for StatusCommandConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_status_command_enabled(),
+            swallow: false,
+            cooldown_seconds: default_status_command_cooldown(),
+        }
+    }
+}
+
+fn default_status_command_enabled() -> bool {
+    true
+}
+
+fn default_status_command_cooldown() -> u32 {
+    5
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct BotConfig {
     pub bot: BotBasicConfig,
     pub connect: ConnectConfig,
     pub advanced: AdvancedConfig,
+    /// SnowLuma `onebot_<uin>.json` 的 statusCommand；NapCat 不序列化。
+    #[serde(default, rename = "statusCommand", skip_serializing_if = "Option::is_none")]
+    #[ts(optional, rename = "statusCommand")]
+    pub status_command: Option<StatusCommandConfig>,
 }
 
 impl BotConfig {

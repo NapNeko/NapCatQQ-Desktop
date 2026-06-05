@@ -27,7 +27,8 @@ pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
 pub use bot_config::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
     BypassConfig, ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig,
-    HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields, O3HookMode, TimeUnit,
+    HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields, O3HookMode,
+    StatusCommandConfig, TimeUnit,
     WebsocketClientConfig, WebsocketServerConfig, WsRole,
 };
 pub use docker::{
