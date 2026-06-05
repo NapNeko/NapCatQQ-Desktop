@@ -93,6 +93,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_close_action() -> String {
+    "close".to_string()
+}
+
 /// 设置页可读写的 App 级聚合配置。
 ///
 /// 与按子系统拆开的 `WebUiPollerSettings` / `SnowLumaAppConfig` 不同，本结构
@@ -119,6 +123,9 @@ pub struct AppSettings {
         default = "default_perf_monitor_interval"
     )]
     pub performance_monitor_interval_ms: u64,
+    /// 主窗口关闭按钮行为：`close` 退出程序，`tray` 隐藏到托盘。与前端 `preferencesStore.closeAction` 对齐。
+    #[serde(rename = "closeAction", default = "default_close_action")]
+    pub close_action: String,
 }
 
 impl Default for AppSettings {
@@ -127,6 +134,7 @@ impl Default for AppSettings {
             poller: WebUiPollerSettings::default(),
             performance_monitor_enabled: true,
             performance_monitor_interval_ms: default_perf_monitor_interval(),
+            close_action: default_close_action(),
         }
     }
 }
