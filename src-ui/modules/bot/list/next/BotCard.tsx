@@ -879,7 +879,7 @@ function forwardRefIcon() {
             if (!el || !m.enabled || disabled) return;
             // IconButton 是密集型按钮,hover lift / shadow / brightness 都关,只动 scale。
             return m.bindHover(el, { lift: null, shadow: false, brightness: false });
-        }, [m.enabled, m.level, m.speed, m.bindHover, disabled]);
+        }, [m.enabled, m.level, m.speed, disabled]);
 
         return (
             <Tooltip>

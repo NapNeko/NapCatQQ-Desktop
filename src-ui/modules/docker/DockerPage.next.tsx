@@ -10,8 +10,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Container, Loader2, RefreshCw } from 'lucide-react';
-import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
+import { animateListChildrenEnter } from '../../shared/ui/motion/listEnter';
 import { Button } from '../../shared/ui';
 import { ListItem } from '../../shared/ui/motion';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -141,15 +141,9 @@ const DockerContainerGrid: React.FC<{
 
     useGSAP(
         () => {
-            if (!m.enabled || docker.containers.length === 0) return;
-            gsap.from(containerRef.current!.children, {
-                autoAlpha: 0,
-                y: 6,
-                scale: 0.985,
-                duration: m.duration('base'),
-                ease: m.ease.enter,
-                stagger: m.stagger(),
-            });
+            const root = containerRef.current;
+            if (!root) return;
+            animateListChildrenEnter(root, docker.containers.length, m);
         },
         {
             scope: containerRef,

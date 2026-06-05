@@ -1,8 +1,4 @@
-// 自定义标题栏的 React 适配。把 windowControlService 的命令式 API 包成 React-friendly：
-//   - 三个 action 直接暴露
-//   - isMaximized 作为 reactive state 返回，subscribe 在 mount 时挂上
-//
-// 严守 frontend-layering 边界：组件不再 import `@tauri-apps/api/*`，只通过本 hook。
+// 自定义标题栏：窗口控制 + 关闭行为（托盘 / 退出）。
 
 import { useCallback, useEffect, useState } from 'react';
 import { windowControlService } from '../../core/services/desktop.service';

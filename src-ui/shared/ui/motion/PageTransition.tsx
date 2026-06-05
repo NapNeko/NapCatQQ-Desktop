@@ -9,6 +9,7 @@
 
 import { forwardRef, type ReactNode } from 'react';
 import gsap from 'gsap';
+import { useMotion } from '../../../hooks/preferences/useMotion';
 import { GsapPresence, type EnterFn, type ExitFn } from './GsapPresence';
 
 interface PageTransitionProps {
@@ -22,7 +23,6 @@ interface PageTransitionProps {
 
 function makeEnter(dir: number): EnterFn {
     return (el, env) => {
-        const f = env.preset.feel;
         const fromX = dir === 0 ? 0 : dir > 0 ? 20 : -20;
         return gsap.fromTo(
             el,
@@ -31,14 +31,12 @@ function makeEnter(dir: number): EnterFn {
                 y: 12,
                 x: fromX,
                 scale: 0.985,
-                filter: f.brightness > 1.02 ? `brightness(${f.brightness * 1.02})` : 'none',
             },
             {
                 autoAlpha: 1,
                 y: 0,
                 x: 0,
                 scale: 1,
-                filter: 'none',
                 duration: env.duration('slow'),
                 ease: env.ease.enter,
             },
@@ -48,14 +46,12 @@ function makeEnter(dir: number): EnterFn {
 
 function makeExit(dir: number): ExitFn {
     return (el, env) => {
-        const f = env.preset.feel;
         const toX = dir === 0 ? 0 : dir > 0 ? -12 : 12;
         return gsap.to(el, {
             autoAlpha: 0,
             y: -8,
             x: toX,
             scale: 0.99,
-            filter: f.overshoot ? 'blur(2px)' : 'none',
             duration: env.duration('fast'),
             ease: env.ease.exit,
         });
@@ -69,23 +65,35 @@ export function PageTransition({
     onExited,
     direction = 0,
 }: PageTransitionProps) {
+    const { enabled } = useMotion();
     return (
         <GsapPresence
             visible={visible}
-            onEnter={makeEnter(direction)}
-            onExit={makeExit(direction)}
+            onEnter={enabled ? makeEnter(direction) : undefined}
+            onExit={enabled ? makeExit(direction) : undefined}
             onExited={onExited}
         >
-            <PageBody className={className}>{children}</PageBody>
+            <PageBody className={className} hideUntilEnter={enabled}>
+                {children}
+            </PageBody>
         </GsapPresence>
     );
 }
 
-const PageBody = forwardRef<HTMLDivElement, { children: ReactNode; className?: string }>(
-    ({ children, className }, ref) => (
-        <div ref={ref} className={className} style={{ visibility: 'hidden', opacity: 0 }}>
-            {children}
-        </div>
-    ),
-);
+const PageBody = forwardRef<
+    HTMLDivElement,
+    { children: ReactNode; className?: string; hideUntilEnter?: boolean }
+>(({ children, className, hideUntilEnter }, ref) => (
+    <div
+        ref={ref}
+        className={className}
+        style={
+            hideUntilEnter
+                ? { visibility: 'hidden' as const, opacity: 0 }
+                : undefined
+        }
+    >
+        {children}
+    </div>
+));
 PageBody.displayName = 'PageBody';

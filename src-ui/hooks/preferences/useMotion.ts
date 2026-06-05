@@ -224,6 +224,7 @@ export function useMotion(): MotionEnv {
             const onEnter = () => {
                 const env = envRef.current;
                 if (!env.enabled) return;
+                gsap.killTweensOf(el);
                 const f = env.preset.feel;
                 const t = env.preset.timing;
                 const dur = scaleDuration(t.durationFast, env.speed);
@@ -252,6 +253,7 @@ export function useMotion(): MotionEnv {
             const onLeave = () => {
                 const env = envRef.current;
                 if (!env.enabled) return;
+                gsap.killTweensOf(el);
                 const t = env.preset.timing;
                 const dur = scaleDuration(t.durationFast, env.speed);
                 // 只清 onEnter 真正可能设过的属性。boxShadow/filter 没开就不动,

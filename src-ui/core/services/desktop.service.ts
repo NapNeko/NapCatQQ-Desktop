@@ -1,18 +1,16 @@
-// 桌面壳侧 IPC 服务（窗口控制 / 诊断事件 / SnowLuma WebUI 端点）。
-//
-// 这些是"系统级 / 跨业务域"杂项，单独放进来避免其它 service 文件膨胀。
-// 把 `@tauri-apps/api/window` 和 `tauri://resize` 字面量集中到这里，
-// 保持组件层只通过 service 调用（满足 frontend-layering 铁律）。
+// 桌面壳：窗口控制 + 托盘行为（IPC 字符串集中在此 service）。
 
+import type { SnowLumaWebuiEndpoint } from '../ipc/generated/SnowLumaWebuiEndpoint';
+import { preferencesStore } from '../../hooks/preferences/preferencesStore';
 import { invoke, isTauri } from '../ipc/transport';
-
-// ─── 窗口控制 ────────────────────────────────────────────────────────────
 
 type WindowController = {
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
     close: () => Promise<void>;
     isMaximized: () => Promise<boolean>;
+    hide: () => Promise<void>;
+    show: () => Promise<void>;
 };
 
 async function getWindow(): Promise<WindowController | null> {
@@ -47,13 +45,18 @@ export const windowControlService = {
         }
     },
 
+    /** 标题栏关闭：按偏好走「隐藏到托盘」或「退出程序」。 */
     close: async (): Promise<void> => {
-        const w = await getWindow();
-        if (!w) return;
+        if (!isTauri) return;
+        const action = preferencesStore.get().closeAction;
         try {
-            await w.close();
+            if (action === 'tray') {
+                await invoke<void>('window_hide_to_tray');
+            } else {
+                await invoke<void>('request_exit_app');
+            }
         } catch (err) {
-            console.error('窗口关闭失败:', err);
+            console.error('关闭窗口失败:', err);
         }
     },
 
@@ -67,11 +70,9 @@ export const windowControlService = {
         }
     },
 
-    /// 监听 `tauri://resize` 事件并回调最新的最大化状态。
-    /// 浏览器预览模式直接返回 noop。
     onResize: async (cb: (isMaximized: boolean) => void): Promise<() => void> => {
         const w = await getWindow();
-        if (!w) return () => { };
+        if (!w) return () => {};
         try {
             const { listen } = await import('@tauri-apps/api/event');
             const unlisten = await listen('tauri://resize', async () => {
@@ -84,40 +85,29 @@ export const windowControlService = {
             return unlisten;
         } catch (err) {
             console.error('初始化标题栏窗口状态失败:', err);
-            return () => { };
+            return () => {};
         }
     },
 };
 
-// ─── 诊断 / Demo 事件 ────────────────────────────────────────────────────
+export const trayService = {
+    showMainWindow: (): Promise<void> => invoke<void>('window_show'),
+    hideMainWindow: (): Promise<void> => invoke<void>('window_hide_to_tray'),
+    countLocalActiveBots: (): Promise<number> =>
+        invoke<number>('count_local_active_bots'),
+    requestExit: (): Promise<void> => invoke<void>('request_exit_app'),
+    syncCloseActionFromDisk: (): Promise<'close' | 'tray'> =>
+        invoke<string>('sync_close_action_preference').then((v) =>
+            v === 'tray' ? 'tray' : 'close',
+        ),
+};
 
 export const diagnosticsService = {
-    publishRuntimeStatus: async (): Promise<void> => {
-        if (isTauri) return invoke<void>('publish_runtime_status');
-    },
-
-    publishDemoEvent: async (): Promise<void> => {
-        if (isTauri) return invoke<void>('publish_demo_event');
-    },
+    publishDemoEvent: (): Promise<void> => invoke<void>('publish_demo_event'),
+    publishRuntimeStatus: (): Promise<void> => invoke<void>('publish_runtime_status'),
 };
 
-// ─── SnowLuma WebUI 端点 ────────────────────────────────────────────────
-
-export interface SnowLumaWebuiEndpoint {
-    url: string;
-    password: string;
-}
-
 export const snowlumaService = {
-    /// 解析 SnowLuma WebUI 的 url 和登录密码。
-    /// UI 拿到后应：1) 写密码到剪贴板；2) `openExternalUrl(url)`。
-    openWebui: async (botId: string): Promise<SnowLumaWebuiEndpoint> => {
-        if (isTauri) {
-            return invoke<SnowLumaWebuiEndpoint>('open_snowluma_webui', { botId });
-        }
-        return Promise.resolve({
-            url: `http://127.0.0.1:6099/webui?mock=${botId}`,
-            password: 'mock-password-snowluma',
-        });
-    },
+    openWebui: (botId: string): Promise<SnowLumaWebuiEndpoint> =>
+        invoke<SnowLumaWebuiEndpoint>('open_snowluma_webui', { botId }),
 };

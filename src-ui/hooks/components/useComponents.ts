@@ -178,7 +178,11 @@ function useComponentsData(): ComponentsData {
 /// 启动期后台预热：在 App 根节点常驻挂载，程序一起来就开始拉服务器列表、
 /// 自动连接远端、拉 catalog、逐主机 detect。永不卸载，保持缓存新鲜；用户切到
 /// 组件页时 useComponents 直接命中缓存，不再从零等一轮 SSH 探测。
+/// dev 可设 VITE_SKIP_COMPONENTS_WARMUP=1 减少改 UI 时 HMR 后的 IPC 风暴。
 export function useComponentsWarmup(): void {
+    if (import.meta.env.DEV && import.meta.env.VITE_SKIP_COMPONENTS_WARMUP === '1') {
+        return;
+    }
     useComponentsData();
 }
 

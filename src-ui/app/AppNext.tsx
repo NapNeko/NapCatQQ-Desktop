@@ -1,35 +1,28 @@
 // 新 UI 树根 = AppShell。
 // 布局:TitleBar(透明) ─ [Sidebar | main] ─ StatusBar(极弱)
-//
-// 简单 useState 路由(6 主路由 + 1 dev showcase)。
-// 路由切换走 GsapPresence + PageTransition,旧页跑完 exit 才真 unmount。
 
 import React, { useEffect, useState } from 'react';
-import './index.css';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
 import { StatusBar } from '../shared/components/next/StatusBar';
 import { InfoBarStack, TooltipProvider } from '../shared/ui';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
+import { BotPageNext } from '../modules/bot/BotPage.next';
 import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { DockerPageNext } from '../modules/docker/DockerPage.next';
-import { BotPageNext } from '../modules/bot/BotPage.next';
 import { RemoteHostPanelNext } from '../modules/remote/RemoteHostPanel.next';
 import { SettingsPageNext } from '../modules/settings/SettingsPage.next';
-import { Showcase } from './Showcase';
-import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
 import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
-import { applySideEffects as applyPreferences } from '../hooks/preferences/preferencesStore';
+import { useTrayCloseActionSync } from '../hooks/desktop/useTrayCloseActionSync';
+import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { useMotion } from '../hooks/preferences/useMotion';
+import { APP_VERSION_LABEL } from '../core/domain/app-meta';
 import { PageTransition } from '../shared/ui/motion';
-
-// Showcase 是 dev-only 的原子件预览页。
-const SHOW_SHOWCASE = import.meta.env.DEV;
 
 /// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
 const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
@@ -39,27 +32,21 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'docker',
     'remote',
     'settings',
-    'showcase',
 ];
 
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const [collapsed, setCollapsed] = useState(false);
 
-    const { bootstrap, isLoading, error } = useBootstrap();
-    const connectionState: 'connected' | 'connecting' | 'disconnected' = error
-        ? 'disconnected'
-        : isLoading
-            ? 'connecting'
-            : 'connected';
-
     useComponentActionEventBridge();
     useDockerDeployProgressBridge();
     useComponentsWarmup();
 
     useEffect(() => {
-        applyPreferences();
+        applySideEffects();
     }, []);
+
+    useTrayCloseActionSync();
 
     const { bars, dismiss } = useGlobalInfoBars();
 
@@ -71,21 +58,8 @@ export const AppNext: React.FC = () => {
         }
     }, [showDocker, route]);
 
-    // 用于 PageTransition 的 visible 控制:每个路由有自己的 PageTransition,
-    // visible=(route===self) 决定 enter/exit。但若同时挂多个 PageTransition,
-    // 切换时旧 visible=false 跑 exit + 新 visible=true 跑 enter,可能短暂
-    // 重叠在同一容器位置。我们用 currentRoute + transitioningRoute 双 state
-    // 实现"严格 wait":先让旧 route 跑完 exit,再切到新 route。
-    // 简化做法:只挂一个 PageTransition,key=route,GsapPresence 会先 exit
-    // 旧节点(visible=false 的瞬间)再 enter 新节点。但 GsapPresence 设计是
-    // 单实例 visible 切换,不是 key 切换 → 需要外层用 sequence pattern。
-    // 直接做:用 displayedRoute 跟踪当前在 DOM 里的路由,route 改变时先把
-    // displayedRoute 对应的 PageTransition 设 visible=false 跑 exit,完成后
-    // 把 displayedRoute 设为新 route + visible=true 跑 enter。
     const [displayedRoute, setDisplayedRoute] = useState<AppRoute>(route);
     const [pageVisible, setPageVisible] = useState<boolean>(true);
-    // 路由切换方向:按 ROUTE_ORDER 索引比较。新索引 > 旧 = 向后翻(右滑入),
-    // < 旧 = 向前回(左滑入),==(首次或同页)= 不带方向。
     const [direction, setDirection] = useState<-1 | 0 | 1>(0);
 
     useEffect(() => {
@@ -117,19 +91,16 @@ export const AppNext: React.FC = () => {
                         onChange={setRoute}
                         collapsed={collapsed}
                         onToggleCollapse={() => setCollapsed((v) => !v)}
-                        showShowcase={SHOW_SHOWCASE}
                         showDocker={showDocker}
                     />
 
                     <div className="relative flex flex-1 flex-col overflow-hidden">
-                        {/* 角落柔光只覆盖右侧主内容区,不污染 sidebar。
-                            rich 档 + 当前在 overview 时叠 is-breathing 8s 呼吸。 */}
                         <div
                             className={
                                 'ndf-canvas-glow' +
                                 (motion.preset.feel.overshoot &&
-                                    motion.enabled &&
-                                    route === 'overview'
+                                motion.enabled &&
+                                route === 'overview'
                                     ? ' is-breathing'
                                     : '')
                             }
@@ -154,10 +125,7 @@ export const AppNext: React.FC = () => {
                     </div>
                 </div>
 
-                <StatusBar
-                    connectionState={connectionState}
-                    dataRoot={bootstrap?.data_root || undefined}
-                />
+                <StatusBar appVersion={APP_VERSION_LABEL} />
 
                 <InfoBarStack items={bars} onDismiss={dismiss} />
             </div>
@@ -179,8 +147,6 @@ const RouteContent: React.FC<{ route: AppRoute }> = ({ route }) => {
             return <RemoteHostPanelNext />;
         case 'settings':
             return <SettingsPageNext />;
-        case 'showcase':
-            return <Showcase />;
         default: {
             const _exhaustive: never = route;
             void _exhaustive;

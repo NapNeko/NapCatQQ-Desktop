@@ -56,6 +56,7 @@ export function GsapPresence({
 }: GsapPresenceProps) {
     const env = useMotion();
     const ref = useRef<HTMLElement | null>(null);
+    const activeAnimRef = useRef<gsap.core.Tween | gsap.core.Timeline | null>(null);
     // mounted 控 DOM 是否渲染。visible=false 但 exit 进行中时仍 mounted=true。
     const [mounted, setMounted] = useState<boolean>(visible);
 
@@ -73,13 +74,17 @@ export function GsapPresence({
         () => {
             const el = ref.current;
             if (!el) return;
+
+            activeAnimRef.current?.kill();
+            activeAnimRef.current = null;
+
             if (visible) {
                 // ENTER
                 if (!env.enabled || !onEnter) {
                     gsap.set(el, { autoAlpha: 1 });
                     return;
                 }
-                onEnter(el, env);
+                activeAnimRef.current = onEnter(el, env);
             } else {
                 // EXIT
                 if (!mounted) return;
@@ -89,11 +94,17 @@ export function GsapPresence({
                     return;
                 }
                 const anim = onExit(el, env);
+                activeAnimRef.current = anim;
                 anim.eventCallback('onComplete', () => {
                     setMounted(false);
                     onExited?.();
                 });
             }
+
+            return () => {
+                activeAnimRef.current?.kill();
+                activeAnimRef.current = null;
+            };
         },
         // env.enabled 切换也要重跑(用户切档位/速度/总开关时)。
         { dependencies: [visible, mounted, env.enabled] },

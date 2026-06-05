@@ -14,8 +14,8 @@
 
 import React, { useRef, useState } from 'react';
 import { Server, RefreshCw, Plus, Eye, EyeOff } from 'lucide-react';
-import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
+import { animateListChildrenEnter } from '../../shared/ui/motion/listEnter';
 import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
 import {
     Dialog,
@@ -224,15 +224,9 @@ function ServerGrid({
 
     useGSAP(
         () => {
-            if (!m.enabled || servers.length === 0) return;
-            gsap.from(containerRef.current!.children, {
-                autoAlpha: 0,
-                y: 6,
-                scale: 0.985,
-                duration: m.duration('base'),
-                ease: m.ease.enter,
-                stagger: m.stagger(),
-            });
+            const root = containerRef.current;
+            if (!root) return;
+            animateListChildrenEnter(root, servers.length, m);
         },
         { scope: containerRef, dependencies: [servers.length, m.enabled, m.level] },
     );

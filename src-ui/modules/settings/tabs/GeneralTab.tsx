@@ -66,7 +66,7 @@ export function GeneralTab({ prefs, draft, patchDraft }: Props) {
 
             <FieldRow
                 label="点击关闭按钮"
-                description="tray 模式需要 Tauri 系统托盘配套，当前选 tray 暂同 close"
+                description="关闭时隐藏到系统托盘；退出则结束程序（有本机 Bot 运行时会拦截退出）"
             >
                 <Select
                     value={prefs.closeAction}

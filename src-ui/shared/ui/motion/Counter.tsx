@@ -63,7 +63,7 @@ export function Counter({ value, className }: CounterProps) {
         );
 
         prevValueRef.current = value;
-    }, [value, enabled, m]);
+    }, [value, enabled, m.level, m.speed, m.duration, m.ease]);
 
     if (!enabled) {
         return <span className={className}>{value}</span>;

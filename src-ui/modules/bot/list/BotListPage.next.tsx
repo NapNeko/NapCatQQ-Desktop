@@ -12,8 +12,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
-import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
+import { animateListChildrenEnter } from '../../../shared/ui/motion/listEnter';
 import {
     Button,
     Dialog,
@@ -361,15 +361,9 @@ function BotListGrid({
     // 但所有项同时进场,看起来跟"同步"一样。
     useGSAP(
         () => {
-            if (!m.enabled || bots.length === 0) return;
-            gsap.from(containerRef.current!.children, {
-                autoAlpha: 0,
-                y: 6,
-                scale: 0.985,
-                duration: m.duration('base'),
-                ease: m.ease.enter,
-                stagger: m.stagger(),
-            });
+            const root = containerRef.current;
+            if (!root) return;
+            animateListChildrenEnter(root, bots.length, m);
         },
         { scope: containerRef, dependencies: [bots.length, m.enabled, m.level] },
     );

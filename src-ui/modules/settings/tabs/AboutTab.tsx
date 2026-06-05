@@ -13,9 +13,10 @@ import {
     type ReleaseInfoView,
 } from '../../../core/domain/release/normalize';
 import { Button } from '../../../shared/ui';
+import { APP_VERSION_LABEL } from '../../../core/domain/app-meta';
 import { FieldRow } from '../_shared';
 
-const APP_VERSION = '0.1.0-alpha.1';
+const APP_VERSION = APP_VERSION_LABEL.replace(/^v/, '');
 
 interface Props {
     localVersions: LocalVersionSnapshot | null;

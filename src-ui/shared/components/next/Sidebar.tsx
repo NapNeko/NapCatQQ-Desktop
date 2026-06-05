@@ -16,7 +16,6 @@ import {
     Package,
     Server,
     Settings,
-    Sparkles,
 } from 'lucide-react';
 import gsap from 'gsap';
 import { cn } from '../../utils/cn';
@@ -29,15 +28,13 @@ export type AppRoute =
     | 'components'
     | 'docker'
     | 'remote'
-    | 'settings'
-    | 'showcase';
+    | 'settings';
 
 interface SidebarProps {
     active: AppRoute;
     onChange: (route: AppRoute) => void;
     collapsed: boolean;
     onToggleCollapse: () => void;
-    showShowcase?: boolean;
     /// 是否显示 Docker 项。
     showDocker?: boolean;
 }
@@ -62,7 +59,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onChange,
     collapsed,
     onToggleCollapse,
-    showShowcase,
     showDocker = true,
 }) => {
     const navItems = showDocker
@@ -101,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             duration: m.duration('base'),
             ease: m.ease.hover,
         });
-    }, [active, collapsed, showShowcase, showDocker, m]);
+    }, [active, collapsed, showDocker, m]);
 
     return (
         <aside
@@ -192,20 +188,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         />
                     ))}
                 </ul>
-
-                {showShowcase && (
-                    <>
-                        <DevDivider collapsed={collapsed} />
-                        <ul className="space-y-0.5">
-                            <NavRow
-                                item={{ id: 'showcase', label: 'Showcase', icon: Sparkles }}
-                                isActive={active === 'showcase'}
-                                collapsed={collapsed}
-                                onSelect={onChange}
-                            />
-                        </ul>
-                    </>
-                )}
             </nav>
         </aside>
     );
@@ -247,21 +229,5 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) 
         </li>
     );
 };
-
-const DevDivider: React.FC<{ collapsed: boolean }> = ({ collapsed }) => (
-    <div
-        className={cn(
-            'my-3 flex items-center gap-2 px-2 text-text-disabled',
-            collapsed && 'px-0',
-        )}
-        aria-hidden
-    >
-        <span className="h-px flex-1 bg-border-subtle" />
-        {!collapsed && (
-            <span className="text-[10px] font-medium uppercase tracking-widest">dev</span>
-        )}
-        <span className="h-px flex-1 bg-border-subtle" />
-    </div>
-);
 
 export default Sidebar;

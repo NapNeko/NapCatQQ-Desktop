@@ -74,7 +74,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
             };
             el.addEventListener('focus', onFocus);
             return () => el.removeEventListener('focus', onFocus);
-        }, [m]);
+        }, [m.enabled, m.level, m.speed, m.pop]);
 
         // 错误首次出现时 shake。
         useEffect(() => {
@@ -86,7 +86,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
                 m.shake(el);
             }
             prevErrorRef.current = error;
-        }, [error, m]);
+        }, [error, m.enabled, m.level, m.speed, m.shake]);
 
         return (
             <div className={cn('flex flex-col gap-1.5', className)}>
