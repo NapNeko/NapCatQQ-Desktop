@@ -376,18 +376,24 @@ impl ServerManager {
         let comment = format!("napcatqq-desktop@{}", profile.id);
         let pair = crate::ssh_keygen::generate_ed25519(&comment)?;
 
-        // 3. 公钥追加进远端 authorized_keys（幂等：先 grep 去重）。
-        //    用 sh 单行：建 ~/.ssh（700）→ 若公钥不在 authorized_keys 就追加 →
-        //    authorized_keys 设 600。authorized_keys 行用单引号包，避免 shell 解释。
+        // 3. 公钥追加进远端 authorized_keys。公钥从 stdin 传入,避免把 key 文本拼进 shell。
         let pub_line = pair.public_line.trim();
-        let script = format!(
-            "set -e; mkdir -p ~/.ssh && chmod 700 ~/.ssh; \
-             touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys; \
-             grep -qxF '{pub}' ~/.ssh/authorized_keys || echo '{pub}' >> ~/.ssh/authorized_keys",
-            pub = pub_line,
-        );
+        let script = "set -eu\n\
+            umask 077\n\
+            mkdir -p \"$HOME/.ssh\"\n\
+            touch \"$HOME/.ssh/authorized_keys\"\n\
+            chmod 700 \"$HOME/.ssh\"\n\
+            chmod 600 \"$HOME/.ssh/authorized_keys\"\n\
+            IFS= read -r pub_key\n\
+            grep -qxF -- \"$pub_key\" \"$HOME/.ssh/authorized_keys\" || \
+            printf '%s\\n' \"$pub_key\" >> \"$HOME/.ssh/authorized_keys\"\n";
         let out = host
-            .run_to_string(ncd_host::HostCommand::new("sh").arg("-c").arg(script))
+            .run_to_string(
+                ncd_host::HostCommand::new("sh")
+                    .arg("-c")
+                    .arg(script)
+                    .stdin(format!("{pub_line}\n").into_bytes()),
+            )
             .await
             .map_err(|e| format!("写入远端 authorized_keys 失败: {e}"))?;
         if !out.success() {

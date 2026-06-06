@@ -71,6 +71,24 @@ pub enum HostError {
     #[error("remote connection failed: {reason}")]
     RemoteConnection { reason: String },
 
+    /// known_hosts 中没有这台主机的 host key。上层需要让用户确认后再写入。
+    #[error("unknown ssh host key for {host}:{port} ({key_kind} {key_b64})")]
+    HostKeyUnknown {
+        host: String,
+        port: u16,
+        key_kind: String,
+        key_b64: String,
+    },
+
+    /// known_hosts 中已有同主机条目但 key 不一致，必须阻断连接。
+    #[error("ssh host key mismatch for {host}:{port} ({key_kind} {key_b64})")]
+    HostKeyMismatch {
+        host: String,
+        port: u16,
+        key_kind: String,
+        key_b64: String,
+    },
+
     /// 远端会话被中断(网络抖动 / 主机重启 / 用户主动 close)
     #[error("remote session disconnected: {reason}")]
     RemoteDisconnected { reason: String },

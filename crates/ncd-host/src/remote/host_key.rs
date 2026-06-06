@@ -3,8 +3,7 @@
 //! 首次连接未知主机的处理由 `HostKeyPolicy` 控制:
 //! - `Strict { known_hosts_path }`:严格模式,不在 known_hosts 里就拒
 //! - `Insecure`:测试 / 容器 / 同 LAN 受信网络专用,生产禁用
-//! - `AcceptOnFirstUse`:留 stub(需要 UI 回调,后续与 ncd-update / ncd-deploy
-//!   一并搭出)
+//! - `AcceptOnFirstUse`:未知主机先拒绝并返回可确认错误,上层确认后再写入 known_hosts
 
 use std::path::PathBuf;
 use tokio::fs;
@@ -18,11 +17,8 @@ pub enum HostKeyPolicy {
     Strict { known_hosts_path: PathBuf },
     /// 不校验(测试 / 受信网络专用,生产禁用)
     Insecure,
-    /// 首次接受 + 持久化(尚未实装,先 stub)
-    AcceptOnFirstUse {
-        known_hosts_path: PathBuf,
-        // 实际 UI 回调由后续 ncd-deploy / ncd-update 阶段填入
-    },
+    /// 首次接受 + 持久化。未知主机会返回 HostKeyUnknown，等待 UI 确认后写入。
+    AcceptOnFirstUse { known_hosts_path: PathBuf },
 }
 
 impl HostKeyPolicy {
@@ -38,6 +34,20 @@ impl HostKeyPolicy {
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
         }
     }
+    /// TOFU 模式的用户级 known_hosts(`<data_root>/secrets/known_hosts`)。
+    pub fn accept_on_first_use_in(data_root: &std::path::Path) -> Self {
+        Self::AcceptOnFirstUse {
+            known_hosts_path: data_root.join("secrets").join("known_hosts"),
+        }
+    }
+}
+
+/// known_hosts 查询结果。未知与不匹配必须拆开:未知可走 TOFU 确认,不匹配应阻断。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostKeyCheck {
+    Match,
+    Unknown,
+    Mismatch,
 }
 
 /// 解析 OpenSSH 风格 known_hosts 文件。
@@ -54,22 +64,23 @@ impl KnownHostsStore {
         Self { path: path.into() }
     }
 
-    /// 检查 host:port 是否有匹配条目,且公钥的 base64 编码是否一致。
-    /// 文件不存在视作"无任何匹配"(strict 模式下应直接拒)。
-    pub async fn matches(
+    /// 检查 host:port 是否有匹配条目,并区分未知主机与同主机 key 不一致。
+    /// 文件不存在视作未知主机。
+    pub async fn check(
         &self,
         host: &str,
         port: u16,
         key_kind: &str,
         key_b64: &str,
-    ) -> Result<bool, HostError> {
+    ) -> Result<HostKeyCheck, HostError> {
         let content = match fs::read_to_string(&self.path).await {
             Ok(c) => c,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(HostKeyCheck::Unknown),
             Err(e) => return Err(HostError::Io(e)),
         };
 
         let target = format_host(host, port);
+        let mut saw_host = false;
         for raw in content.lines() {
             let line = raw.trim();
             if line.is_empty() || line.starts_with('#') {
@@ -88,10 +99,30 @@ impl KnownHostsStore {
             let host_list: Vec<&str> = hosts.split(',').map(str::trim).collect();
             let host_match = host_list.iter().any(|h| matches_host(h, &target, host));
             if host_match && kind == key_kind && b64 == key_b64 {
-                return Ok(true);
+                return Ok(HostKeyCheck::Match);
             }
+            saw_host |= host_match;
         }
-        Ok(false)
+
+        if saw_host {
+            Ok(HostKeyCheck::Mismatch)
+        } else {
+            Ok(HostKeyCheck::Unknown)
+        }
+    }
+
+    /// 兼容旧调用:只有完全匹配才返回 true。
+    pub async fn matches(
+        &self,
+        host: &str,
+        port: u16,
+        key_kind: &str,
+        key_b64: &str,
+    ) -> Result<bool, HostError> {
+        Ok(matches!(
+            self.check(host, port, key_kind, key_b64).await?,
+            HostKeyCheck::Match
+        ))
     }
 
     /// 把新条目追加到 known_hosts(`AcceptOnFirstUse` 用,实装时调用)。

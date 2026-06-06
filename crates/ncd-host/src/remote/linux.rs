@@ -37,7 +37,7 @@ use crate::shell::{BashShell, HostShell};
 
 use super::connection::ConnectionConfig;
 use super::credentials::{SshCredentials, SshKey};
-use super::host_key::{HostKeyPolicy, KnownHostsStore};
+use super::host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
 use super::tunnel::{TunnelHandle, TunnelSpec};
 
 /// russh client handler:用于 host key 校验。
@@ -45,6 +45,7 @@ struct ClientCallback {
     policy: HostKeyPolicy,
     host: String,
     port: u16,
+    host_key_error: Arc<Mutex<Option<HostError>>>,
 }
 
 #[async_trait]
@@ -57,22 +58,36 @@ impl Handler for ClientCallback {
     ) -> Result<bool, Self::Error> {
         match &self.policy {
             HostKeyPolicy::Insecure => Ok(true),
-            HostKeyPolicy::Strict { known_hosts_path } => {
+            HostKeyPolicy::Strict { known_hosts_path }
+            | HostKeyPolicy::AcceptOnFirstUse { known_hosts_path } => {
                 let store = KnownHostsStore::new(known_hosts_path.clone());
                 let kind = server_public_key.name().to_string();
-                let b64 = server_public_key
-                    .public_key_base64();
-                store
-                    .matches(&self.host, self.port, &kind, &b64)
+                let b64 = server_public_key.public_key_base64();
+                match store
+                    .check(&self.host, self.port, &kind, &b64)
                     .await
-                    .map_err(|_| russh::Error::Inconsistent)
-            }
-            HostKeyPolicy::AcceptOnFirstUse { .. } => {
-                tracing::warn!(
-                    target: "ncd_host::remote",
-                    "AcceptOnFirstUse policy is stub, accepting unconditionally (TODO: implement)"
-                );
-                Ok(true)
+                    .map_err(|_| russh::Error::Inconsistent)?
+                {
+                    HostKeyCheck::Match => Ok(true),
+                    HostKeyCheck::Unknown => {
+                        *self.host_key_error.lock().await = Some(HostError::HostKeyUnknown {
+                            host: self.host.clone(),
+                            port: self.port,
+                            key_kind: kind,
+                            key_b64: b64,
+                        });
+                        Ok(false)
+                    }
+                    HostKeyCheck::Mismatch => {
+                        *self.host_key_error.lock().await = Some(HostError::HostKeyMismatch {
+                            host: self.host.clone(),
+                            port: self.port,
+                            key_kind: kind,
+                            key_b64: b64,
+                        });
+                        Ok(false)
+                    }
+                }
             }
         }
     }
@@ -120,10 +135,12 @@ pub struct RemoteLinuxHost {
 impl RemoteLinuxHost {
     /// 建立 SSH 连接并完成认证。
     pub async fn connect(id: impl Into<String>, config: ConnectionConfig) -> Result<Self, HostError> {
+        let host_key_error = Arc::new(Mutex::new(None));
         let cb = ClientCallback {
             policy: config.host_key_policy.clone(),
             host: config.host.clone(),
             port: config.port,
+            host_key_error: Arc::clone(&host_key_error),
         };
         let mut russh_cfg = client::Config::default();
         russh_cfg.inactivity_timeout = config.keepalive_interval.map(|d| d * 2);
@@ -135,6 +152,11 @@ impl RemoteLinuxHost {
         let mut handle = match tokio::time::timeout(config.connect_timeout, connect_fut).await {
             Ok(Ok(h)) => h,
             Ok(Err(e)) => {
+                if matches!(&e, russh::Error::UnknownKey) {
+                    if let Some(err) = host_key_error.lock().await.take() {
+                        return Err(err);
+                    }
+                }
                 return Err(HostError::RemoteConnection {
                     reason: format!("ssh connect failed: {e}"),
                 });
