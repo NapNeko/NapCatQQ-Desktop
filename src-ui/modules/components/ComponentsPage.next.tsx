@@ -27,6 +27,8 @@ import type { ComponentId, DockerInstallReport } from '../../core/ipc/types';
 import type { DockerInstallOptions } from '../../core/services/docker.service';
 import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
+import { cn } from '../../shared/utils/cn';
+import scrollStyles from './componentsPageScroll.module.css';
 
 export const ComponentsPageNext: React.FC = () => {
     const { view, hosts, isLoading, error, refetch } = useComponents();
@@ -200,7 +202,7 @@ export const ComponentsPageNext: React.FC = () => {
     );
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
                 <div>
                     <p className="text-2xs uppercase tracking-widest text-text-tertiary">
@@ -232,7 +234,12 @@ export const ComponentsPageNext: React.FC = () => {
                 />
             )}
 
-            <div className="-mx-2 mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1 pb-6">
+            <div
+                className={cn(
+                    'mt-3 flex min-h-0 min-w-0 flex-1 flex-col pb-6',
+                    scrollStyles.componentsPageScroll,
+                )}
+            >
                 {isLoading && allEmpty ? (
                     <SectionLoading />
                 ) : activeMachine ? (

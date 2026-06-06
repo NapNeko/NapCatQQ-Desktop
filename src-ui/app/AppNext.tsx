@@ -106,14 +106,14 @@ export const AppNext: React.FC = () => {
 
                         <CustomTitleBar />
 
-                        <main className="relative z-10 flex flex-1 overflow-hidden">
-                            <div className="flex w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8 xl:mx-auto xl:max-w-[1280px]">
-                                <div className="flex min-h-0 flex-1 flex-col">
+                        <main className="relative z-10 flex min-w-0 flex-1 overflow-hidden">
+                            <div className="flex min-w-0 w-full max-w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8 xl:mx-auto xl:max-w-[1280px]">
+                                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                     <PageTransition
                                         visible={pageVisible}
                                         onExited={handlePageExited}
                                         direction={direction}
-                                        className="flex min-h-0 flex-1 flex-col"
+                                        className="flex min-h-0 min-w-0 flex-1 flex-col"
                                     >
                                         <RouteContent route={displayedRoute} onNavigate={setRoute} />
                                     </PageTransition>

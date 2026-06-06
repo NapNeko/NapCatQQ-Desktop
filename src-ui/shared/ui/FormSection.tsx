@@ -1,11 +1,7 @@
-// 表单分组：标题 + 副标题 + 字段内容。
+// 表单分组：与设置页 SettingsSection 同款小节标题（品牌竖条 + 左侧引导线）。
 //
-// 视觉设计哲学：在长表单里不画分组容器，也不画分隔线。段落之间靠固定间距
-// 区分；标题靠字重 + 字号区分。这样整个表单读起来是连贯的长文档，而不是
-// 一堆"卡中卡"或"被 hairline 切碎"的独立块。
-//
-// 父级 (Tab content) 已经决定整体 padding / 大卡背景，FormSection 只管自身
-// 内部排版，不持有自己的边界。
+// 内部仍用 vertical / grid-2 排字段；连接列表等复杂块也包在这一层里。
+// 父级 Tab 决定整体 padding，本组件不画外框卡片。
 
 import { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
 import { cn } from '../utils/cn';
@@ -13,11 +9,10 @@ import { cn } from '../utils/cn';
 export interface FormSectionProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
     title?: ReactNode;
     description?: ReactNode;
-    /** 标题右侧动作位（如计数徽章 / "全选" 按钮）。 */
+    /** 标题行右侧（计数、快捷操作等）。 */
     actions?: ReactNode;
     /**
-     * children 排版方式。default vertical 适合 90% 字段；
-     * 'grid-2' 让两列字段并排（QQID + 实例名）。
+     * children 排版。default vertical；grid-2 两列并排（如 QQ + 实例名）。
      */
     layout?: 'vertical' | 'grid-2' | 'none';
 }
@@ -27,38 +22,42 @@ export const FormSection = forwardRef<HTMLElement, FormSectionProps>(
         { title, description, actions, layout = 'vertical', children, className, ...rest },
         ref,
     ) => (
-        <section
-            ref={ref}
-            className={cn('flex flex-col gap-3', className)}
-            {...rest}
-        >
+        <section ref={ref} className={cn('min-w-0 space-y-4', className)} {...rest}>
             {(title || actions) && (
-                <header className="flex items-baseline justify-between gap-3">
-                    <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="space-y-1.5">
+                    <div className="flex items-center gap-2.5">
+                        <span
+                            className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/45"
+                            aria-hidden
+                        />
                         {title && (
-                            <h3 className="font-display text-sm font-semibold text-text">
+                            <h2 className="min-w-0 flex-1 text-[13.5px] font-semibold leading-none tracking-tight text-text">
                                 {title}
-                            </h3>
+                            </h2>
                         )}
-                        {description && (
-                            <p className="text-2xs text-text-tertiary leading-snug">
-                                {description}
-                            </p>
+                        {!title && actions && <div className="min-w-0 flex-1" />}
+                        {actions && (
+                            <div className="flex shrink-0 items-center gap-2">{actions}</div>
                         )}
                     </div>
-                    {actions && (
-                        <div className="flex shrink-0 items-center gap-2">{actions}</div>
+                    {description && (
+                        <p className="pl-3 text-[12px] leading-relaxed text-text-tertiary">
+                            {description}
+                        </p>
                     )}
-                </header>
+                </div>
             )}
-            <div
-                className={cn(
-                    layout === 'vertical' && 'flex flex-col gap-3',
-                    layout === 'grid-2' && 'grid grid-cols-1 gap-3 sm:grid-cols-2',
-                    layout === 'none' && '',
-                )}
-            >
-                {children}
+            <div className="box-border min-w-0 w-full max-w-full border-l border-border-subtle/80 pl-4 sm:pl-5">
+                <div
+                    className={cn(
+                        layout === 'vertical' && 'flex min-w-0 w-full flex-col gap-3',
+                        layout === 'grid-2' &&
+                            'grid min-w-0 w-full grid-cols-1 gap-3 sm:grid-cols-2',
+                        layout === 'none' && 'min-w-0 w-full max-w-full',
+                    )}
+                >
+                    {children}
+                </div>
             </div>
         </section>
     ),

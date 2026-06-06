@@ -1,5 +1,4 @@
-// 单台主机的组件视图：组件页选中某台机器后，这里直接铺这台机器上能装的
-// 所有组件，按"框架 / 运行时依赖 / 桌面端"分组，组件行用响应式网格排。
+// 单台主机的组件视图：按「框架 / 运行时依赖 / 桌面端」分组；组内 md 起双列网格满宽。
 //
 // Docker 在这里被当成正常的运行时依赖：
 //   - 运行时依赖组里有一行 Docker（状态来自探测，安装走 docker hook）。
@@ -9,7 +8,9 @@
 
 import React, { useState } from 'react';
 import { PackageX } from 'lucide-react';
+import { FormSection } from '../../shared/ui';
 import { MachineComponentRowView } from './MachineComponentRow';
+import { componentCardGridClass } from './ComponentEntityCard';
 import { DockerRow } from './DockerRow';
 import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
 import { DeployResultBanner } from '../docker/DeployResultBanner';
@@ -119,10 +120,11 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     };
 
     return (
-        <div className="flex flex-col gap-5">
-            <section className="flex flex-col gap-2">
+        <div className="flex min-w-0 w-full max-w-full flex-col gap-6">
+            <div className="flex w-full flex-col gap-3">
                 <Group
                     title="框架"
+                    description="Bot 框架本体；Docker 就绪时可在行内部署容器实例"
                     rows={machine.framework}
                     hostId={host.host_id}
                     latestVersionFor={latestVersionFor}
@@ -138,7 +140,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                         onDismiss={() => dismissResult(r.name)}
                     />
                 ))}
-            </section>
+            </div>
 
             <RuntimeDepGroup
                 rows={machine.runtimeDep}
@@ -158,6 +160,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
 
             <Group
                 title="桌面端"
+                description="NapCatQQ Desktop 本体更新与维护"
                 rows={machine.selfApp}
                 hostId={host.host_id}
                 latestVersionFor={latestVersionFor}
@@ -176,14 +179,9 @@ function frameworkFlavor(id: ComponentId): DockerFlavor | null {
     return null;
 }
 
-const gridStyle: React.CSSProperties = {
-    // 两列大卡：每张是有分量的实体卡（实底 + 边框 + 阴影），不再是挤成一团的
-    // 小条。窄屏自动塌成单列。
-    gridTemplateColumns: 'repeat(auto-fill, minmax(min(360px, 100%), 1fr))',
-};
-
 const Group: React.FC<{
     title: string;
+    description?: string;
     rows: MachineComponentRow[];
     hostId: string;
     latestVersionFor: (id: ComponentId) => string | null;
@@ -198,12 +196,21 @@ const Group: React.FC<{
     ) => void;
     onRetryDetect: (hostId: string) => void;
     trailingFor?: (componentId: ComponentId) => React.ReactNode;
-}> = ({ title, rows, hostId, latestVersionFor, getProgress, onAction, onRetryDetect, trailingFor }) => {
+}> = ({
+    title,
+    description,
+    rows,
+    hostId,
+    latestVersionFor,
+    getProgress,
+    onAction,
+    onRetryDetect,
+    trailingFor,
+}) => {
     if (rows.length === 0) return null;
     return (
-        <section className="flex flex-col gap-2">
-            <p className="text-2xs uppercase tracking-widest text-text-tertiary">{title}</p>
-            <div className="grid gap-2" style={gridStyle}>
+        <FormSection title={title} description={description} layout="none">
+            <div className={componentCardGridClass}>
                 {rows.map((row) => (
                     <MachineComponentRowView
                         key={row.info.id}
@@ -217,7 +224,7 @@ const Group: React.FC<{
                     />
                 ))}
             </div>
-        </section>
+        </FormSection>
     );
 };
 
@@ -257,10 +264,16 @@ const RuntimeDepGroup: React.FC<{
     isInstallingDocker,
     onInstallDocker,
     onOpenDockerDownload,
-}) => (
-        <section className="flex flex-col gap-2">
-            <p className="text-2xs uppercase tracking-widest text-text-tertiary">运行时依赖</p>
-            <div className="grid gap-2" style={gridStyle}>
+}) => {
+    const hasRows = rows.length > 0 || showDocker;
+    if (!hasRows) return null;
+    return (
+        <FormSection
+            title="运行时依赖"
+            description="Node.js、QQ 运行时等与框架配套的依赖；远端 Linux 含 Docker"
+            layout="none"
+        >
+            <div className={componentCardGridClass}>
                 {rows.map((row) => (
                     <MachineComponentRowView
                         key={row.info.id}
@@ -283,7 +296,8 @@ const RuntimeDepGroup: React.FC<{
                     />
                 )}
             </div>
-        </section>
+        </FormSection>
     );
+};
 
 export default HostComponentsView;

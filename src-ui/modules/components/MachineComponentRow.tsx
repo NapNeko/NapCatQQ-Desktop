@@ -9,6 +9,7 @@ import { Button } from '../../shared/ui';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from './progressView';
+import { ComponentCardBody, ComponentEntityCard } from './ComponentEntityCard';
 import type { StepKind } from '../../core/ipc/types';
 
 export type RowAction =
@@ -73,13 +74,45 @@ export const MachineComponentRowView: React.FC<Props> = ({
         if (stepKind) onAction({ stepKind });
     };
 
+    const showProgressBar =
+        activeProgress && shouldShowProgressBar(activeProgress.progress);
+
+    const footer = isCancelable ? (
+        <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => handle({ kind: 'cancel', taskId: activeProgress!.taskId })}
+        >
+            <X size={14} strokeWidth={2} />
+            取消
+        </Button>
+    ) : isTerminal ? undefined : (
+        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1.5">
+            {trailingActions}
+            <ActionButtons
+                status={status}
+                latestRemoteVersion={latestRemoteVersion}
+                onAction={handle}
+            />
+        </div>
+    );
+
     return (
-        <div className="group relative flex h-full flex-col gap-2 overflow-hidden rounded-md bg-elevated px-4 py-3 shadow-card ring-1 ring-border-subtle transition-all duration-150 hover:bg-elevated/90 hover:shadow-popover">
-            <div className="flex items-start gap-2.5">
-                <StatusDot status={status} hasUpdate={hasUpdate(status, latestRemoteVersion)} />
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                        <span className="truncate font-display text-md font-semibold leading-tight text-text">
+        <ComponentEntityCard
+            footer={footer}
+            progressOverlay={
+                showProgressBar ? (
+                    <ProgressBarOverlay progress={activeProgress!.progress} />
+                ) : undefined
+            }
+        >
+            <ComponentCardBody
+                statusDot={
+                    <StatusDot status={status} hasUpdate={hasUpdate(status, latestRemoteVersion)} />
+                }
+                titleRow={
+                    <div className="flex min-w-0 items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-display text-md font-semibold leading-tight text-text">
                             {info.display_name}
                         </span>
                         <StatusChip status={status} hasUpdate={hasUpdate(status, latestRemoteVersion)} />
@@ -94,46 +127,17 @@ export const MachineComponentRowView: React.FC<Props> = ({
                             </a>
                         )}
                     </div>
-                    {info.description && (
-                        <p className="mt-1 line-clamp-2 text-xs leading-snug text-text-secondary">
-                            {info.description}
-                        </p>
-                    )}
+                }
+                description={info.description || undefined}
+                statusLine={
                     <StatusLine
                         status={status}
                         latestRemoteVersion={latestRemoteVersion}
                         activeProgress={activeProgress}
                     />
-                </div>
-            </div>
-            <div className="mt-auto flex items-center gap-1.5">
-                {isCancelable ? (
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        className="ml-auto"
-                        onClick={() => handle({ kind: 'cancel', taskId: activeProgress!.taskId })}
-                    >
-                        <X size={14} strokeWidth={2} />
-                        取消
-                    </Button>
-                ) : isTerminal ? null : (
-                    <>
-                        {trailingActions}
-                        <div className="ml-auto flex items-center gap-1.5">
-                            <ActionButtons
-                                status={status}
-                                latestRemoteVersion={latestRemoteVersion}
-                                onAction={handle}
-                            />
-                        </div>
-                    </>
-                )}
-            </div>
-            {activeProgress && shouldShowProgressBar(activeProgress.progress) && (
-                <ProgressBarOverlay progress={activeProgress.progress} />
-            )}
-        </div>
+                }
+            />
+        </ComponentEntityCard>
     );
 };
 

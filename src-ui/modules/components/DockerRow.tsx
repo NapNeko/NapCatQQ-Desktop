@@ -15,6 +15,7 @@ import { Button } from '../../shared/ui';
 import { MotionIcon } from '../../shared/ui/motion';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { DockerStatus, Os } from '../../core/ipc/types';
+import { ComponentCardBody, ComponentEntityCard } from './ComponentEntityCard';
 
 interface DockerRowProps {
     os: Os;
@@ -38,13 +39,29 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     // Linux 才能用脚本自动装；Windows / macOS 需要手动装 Docker Desktop。
     const autoInstallable = os === 'linux';
 
+    const footer =
+        ready || (isProbing && !status)
+            ? undefined
+            : autoInstallable ? (
+                  <Button size="sm" variant="primary" onClick={onInstall} disabled={isInstalling}>
+                      {isInstalling && (
+                          <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={13} />
+                      )}
+                      安装
+                  </Button>
+              ) : (
+                  <Button size="sm" variant="secondary" onClick={onOpenDownload}>
+                      去官网装
+                  </Button>
+              );
+
     return (
-        <div className="group relative flex h-full flex-col gap-2 overflow-hidden rounded-md bg-elevated px-4 py-3 shadow-card ring-1 ring-border-subtle transition-all duration-150 hover:bg-elevated/90 hover:shadow-popover">
-            <div className="flex items-start gap-2.5">
-                <StatusDot ready={ready} probing={isProbing && !status} />
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                        <span className="truncate font-display text-md font-semibold leading-tight text-text">
+        <ComponentEntityCard footer={footer}>
+            <ComponentCardBody
+                statusDot={<StatusDot ready={ready} probing={isProbing && !status} />}
+                titleRow={
+                    <div className="flex min-w-0 items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-display text-md font-semibold leading-tight text-text">
                             Docker
                         </span>
                         <DockerChip ready={ready} probing={isProbing && !status} />
@@ -57,27 +74,13 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                             官网
                         </a>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-xs leading-snug text-text-secondary">
-                        容器运行时，用于以容器方式部署 NapCat / SnowLuma
-                    </p>
+                }
+                description="容器运行时，用于以容器方式部署 NapCat / SnowLuma"
+                statusLine={
                     <StatusLine ready={ready} summary={summary} isProbing={isProbing && !status} />
-                </div>
-            </div>
-            <div className="mt-auto flex items-center justify-end gap-1.5">
-                {ready || (isProbing && !status) ? null : autoInstallable ? (
-                    <Button size="sm" variant="primary" onClick={onInstall} disabled={isInstalling}>
-                        {isInstalling && (
-                            <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={13} />
-                        )}
-                        安装
-                    </Button>
-                ) : (
-                    <Button size="sm" variant="secondary" onClick={onOpenDownload}>
-                        去官网装
-                    </Button>
-                )}
-            </div>
-        </div>
+                }
+            />
+        </ComponentEntityCard>
     );
 };
 
