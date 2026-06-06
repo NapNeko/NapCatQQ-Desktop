@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use ncd_runtime::{
-    ConfigStore, JsonTransaction, LocalConfigStore, MigrationOrchestrator, PathProbe,
-    SchemaVersion,
+    ConfigStore, JsonTransaction, LocalConfigStore, MigrationOrchestrator, PathProbe, SchemaVersion,
 };
 use ncd_test_support::{MockSecretStore, TempWorkspace};
 use serde_json::Value;
@@ -127,7 +126,10 @@ fn orchestrator_prefers_best_candidate_root() {
 
     let snapshot = orchestrator.bootstrap();
     assert_eq!(snapshot.schema_version, SchemaVersion::CURRENT);
-    assert_eq!(snapshot.report.outcome, ncd_runtime::MigrationOutcome::Updated);
+    assert_eq!(
+        snapshot.report.outcome,
+        ncd_runtime::MigrationOutcome::Updated
+    );
     assert_eq!(
         snapshot.report.source.as_ref().unwrap().root,
         legacy_root.path()
@@ -198,11 +200,9 @@ fn orchestrator_migrates_legacy_tree_and_is_idempotent() {
         .read_json(&store.config_dir().join("bot.json"))
         .unwrap();
     assert_eq!(bot_payload["info"]["configVersion"], "v2.1");
-    assert!(
-        bot_payload["bots"][0]["bot"]
-            .get("snowluma_webui_password_override")
-            .is_none()
-    );
+    assert!(bot_payload["bots"][0]["bot"]
+        .get("snowluma_webui_password_override")
+        .is_none());
     assert_eq!(
         bot_payload["bots"][0]["connect"]["httpServers"]
             .as_array()
@@ -223,5 +223,109 @@ fn orchestrator_migrates_legacy_tree_and_is_idempotent() {
     assert_eq!(summary["bot_id"], "10001");
 
     let second = orchestrator.bootstrap();
-    assert_eq!(second.report.outcome, ncd_runtime::MigrationOutcome::NoChange);
+    assert_eq!(
+        second.report.outcome,
+        ncd_runtime::MigrationOutcome::NoChange
+    );
+}
+
+fn write_legacy_bot_config(root: &Path, qq: &str, name: &str) {
+    let config_dir = root.join("runtime/config");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    std::fs::write(
+        config_dir.join("bot.json"),
+        serde_json::to_vec(&serde_json::json!([
+            {
+                "bot": {"QQID": qq, "name": name},
+                "connect": {},
+                "advanced": {}
+            }
+        ]))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn failed_migration_report_does_not_mark_current_and_skip_next_run() {
+    let legacy_root = TempWorkspace::new().unwrap();
+    let target_root = TempWorkspace::new().unwrap();
+    write_legacy_bot_config(legacy_root.path(), "10003", "Recoverable");
+
+    let blocked_root = target_root.path().join("blocked-root");
+    std::fs::write(&blocked_root, b"not a directory").unwrap();
+
+    let blocked_store = LocalConfigStore::new(&blocked_root);
+    let probe = StaticPathProbe {
+        roots: vec![legacy_root.path().to_path_buf()],
+    };
+    let secrets = MockSecretStore::new();
+    let first = MigrationOrchestrator::new(&blocked_store, &probe, &secrets).bootstrap();
+
+    assert_eq!(first.report.stage, ncd_runtime::MigrationStage::Failed);
+    assert!(!blocked_store.migration_report_path().exists());
+
+    std::fs::remove_file(&blocked_root).unwrap();
+    let recovered_store = LocalConfigStore::new(&blocked_root);
+    let second = MigrationOrchestrator::new(&recovered_store, &probe, &secrets).bootstrap();
+
+    assert_eq!(
+        second.report.outcome,
+        ncd_runtime::MigrationOutcome::Updated
+    );
+    assert_eq!(second.schema_version, SchemaVersion::CURRENT);
+    let bot_payload = recovered_store
+        .read_json(&recovered_store.config_dir().join("bot.json"))
+        .unwrap();
+    assert_eq!(bot_payload["bots"][0]["bot"]["name"], "Recoverable");
+}
+
+#[test]
+fn primary_empty_target_migrates_from_legacy_source() {
+    let workspace = TempWorkspace::new().unwrap();
+    let program_data = workspace.path().join("ProgramData");
+    let primary = program_data.join("NapCatQQ Desktop");
+    let legacy = program_data.join("NapCatQQ-Desktop");
+    std::fs::create_dir_all(&primary).unwrap();
+    write_legacy_bot_config(&legacy, "10004", "Legacy Source");
+
+    let store = LocalConfigStore::new(&primary);
+    let probe = StaticPathProbe {
+        roots: vec![legacy.clone()],
+    };
+    let secrets = MockSecretStore::new();
+    let snapshot = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
+
+    assert_eq!(
+        snapshot.report.outcome,
+        ncd_runtime::MigrationOutcome::Updated
+    );
+    assert_eq!(snapshot.report.source.as_ref().unwrap().root, legacy);
+    let bot_payload = store
+        .read_json(&store.config_dir().join("bot.json"))
+        .unwrap();
+    assert_eq!(bot_payload["bots"][0]["bot"]["name"], "Legacy Source");
+}
+
+#[test]
+fn target_write_failure_reports_failed_without_localappdata_fork() {
+    let legacy_root = TempWorkspace::new().unwrap();
+    let target_root = TempWorkspace::new().unwrap();
+    write_legacy_bot_config(legacy_root.path(), "10005", "Write Denied");
+
+    let blocked_root = target_root.path().join("ProgramDataTarget");
+    std::fs::write(&blocked_root, b"not a directory").unwrap();
+    let store = LocalConfigStore::new(&blocked_root);
+    let probe = StaticPathProbe {
+        roots: vec![legacy_root.path().to_path_buf()],
+    };
+    let secrets = MockSecretStore::new();
+    let snapshot = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
+
+    assert_eq!(snapshot.report.stage, ncd_runtime::MigrationStage::Failed);
+    assert_eq!(
+        snapshot.report.outcome,
+        ncd_runtime::MigrationOutcome::NeedsRepair
+    );
+    assert!(!target_root.path().join("LocalAppData").exists());
 }

@@ -6,7 +6,6 @@ use ncd_runtime::{
 };
 
 const APP_DATA_DIR_NAME: &str = "NapCatQQ Desktop";
-const LEGACY_APP_DATA_DIR_NAME: &str = "NapCatQQ-Desktop";
 
 pub(crate) fn resolve_data_root() -> PathBuf {
     #[cfg(windows)]
@@ -22,50 +21,12 @@ pub(crate) fn resolve_data_root_from_candidates(
     local_data: Option<PathBuf>,
 ) -> PathBuf {
     if let Some(program_data) = program_data {
-        return choose_programdata_root(program_data);
+        return program_data.join(APP_DATA_DIR_NAME);
     }
 
     local_data
         .unwrap_or_else(default_base_without_system_dirs)
         .join(APP_DATA_DIR_NAME)
-}
-
-fn choose_programdata_root(program_data: PathBuf) -> PathBuf {
-    let primary = program_data.join(APP_DATA_DIR_NAME);
-    let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
-    let candidates = dedupe_paths(vec![primary.clone(), legacy.clone()]);
-
-    if let Some(path) = candidates.iter().find(|path| has_napcat_runtime(path)) {
-        return path.clone();
-    }
-
-    if primary.exists() {
-        return primary;
-    }
-
-    if legacy.exists() {
-        return legacy;
-    }
-
-    primary
-}
-
-fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
-    let mut deduped = Vec::new();
-    for path in paths {
-        if !deduped.iter().any(|existing| existing == &path) {
-            deduped.push(path);
-        }
-    }
-    deduped
-}
-
-fn has_napcat_runtime(data_root: &Path) -> bool {
-    data_root
-        .join("runtime")
-        .join("NapCatQQ")
-        .join("NapCatWinBootMain.exe")
-        .exists()
 }
 
 fn default_base_without_system_dirs() -> PathBuf {
@@ -151,10 +112,10 @@ mod tests {
     }
 
     #[test]
-    fn data_root_falls_back_to_legacy_programdata_name_when_primary_missing() {
+    fn data_root_uses_primary_programdata_when_legacy_exists() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
-        let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
+        let legacy = program_data.join("NapCatQQ-Desktop");
         std::fs::create_dir_all(&legacy).unwrap();
 
         let resolved = resolve_data_root_from_candidates(
@@ -162,7 +123,7 @@ mod tests {
             Some(temp.path().join("LocalData")),
         );
 
-        assert_eq!(resolved, legacy);
+        assert_eq!(resolved, program_data.join(APP_DATA_DIR_NAME));
     }
 
     #[test]
@@ -170,7 +131,7 @@ mod tests {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let primary = program_data.join(APP_DATA_DIR_NAME);
-        let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
+        let legacy = program_data.join("NapCatQQ-Desktop");
         touch(
             &primary
                 .join("runtime")
@@ -188,11 +149,11 @@ mod tests {
     }
 
     #[test]
-    fn data_root_prefers_programdata_runtime_candidate_even_when_legacy() {
+    fn data_root_uses_primary_programdata_even_when_legacy_has_runtime() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let primary = program_data.join(APP_DATA_DIR_NAME);
-        let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
+        let legacy = program_data.join("NapCatQQ-Desktop");
         std::fs::create_dir_all(&primary).unwrap();
         touch(
             &legacy
@@ -206,7 +167,7 @@ mod tests {
             Some(temp.path().join("LocalData")),
         );
 
-        assert_eq!(resolved, legacy);
+        assert_eq!(resolved, primary);
     }
 
     #[test]
@@ -214,7 +175,7 @@ mod tests {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let program_data = temp.path().join("ProgramData");
         let primary = program_data.join(APP_DATA_DIR_NAME);
-        let legacy = program_data.join(LEGACY_APP_DATA_DIR_NAME);
+        let legacy = program_data.join("NapCatQQ-Desktop");
         std::fs::create_dir_all(&primary).unwrap();
         touch(&legacy.join("runtime").join("config").join("bot.json"));
 
@@ -262,7 +223,7 @@ mod tests {
     fn data_root_falls_back_without_programdata() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let local_data = temp.path().join("LocalData");
-        let legacy = local_data.join(LEGACY_APP_DATA_DIR_NAME);
+        let legacy = local_data.join("NapCatQQ-Desktop");
         std::fs::create_dir_all(&legacy).unwrap();
 
         let resolved = resolve_data_root_from_candidates(None, Some(local_data.clone()));
@@ -296,7 +257,11 @@ mod tests {
     #[test]
     fn local_versions_parses_napcat_when_mjs_exists() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
-        let mjs = temp.path().join("runtime").join("NapCatQQ").join("napcat.mjs");
+        let mjs = temp
+            .path()
+            .join("runtime")
+            .join("NapCatQQ")
+            .join("napcat.mjs");
         std::fs::create_dir_all(mjs.parent().unwrap()).unwrap();
         std::fs::write(
             &mjs,

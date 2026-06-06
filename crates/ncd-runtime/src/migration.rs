@@ -30,12 +30,13 @@ impl<'a> MigrationOrchestrator<'a> {
     }
 
     pub fn bootstrap(&self) -> crate::bootstrap::BootstrapSnapshot {
-        let report = match self.run() {
-            Ok(report) => report,
-            Err(error) => MigrationReport::failed(error.to_string()),
-        };
-        let _ = self.store.save_migration_report(&report);
-        report.into()
+        match self.run() {
+            Ok(report) => {
+                let _ = self.store.save_migration_report(&report);
+                report.into()
+            }
+            Err(error) => MigrationReport::failed(error.to_string()).into(),
+        }
     }
 
     pub fn run(&self) -> Result<MigrationReport, MigrationError> {

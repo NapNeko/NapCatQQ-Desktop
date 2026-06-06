@@ -69,68 +69,92 @@ impl Default for LocalPathProbe {
     }
 }
 
+fn current_dir() -> Option<PathBuf> {
+    env::current_dir().ok()
+}
+
+#[cfg(target_os = "windows")]
+fn program_data_dir() -> Option<PathBuf> {
+    env::var_os("ProgramData").map(PathBuf::from)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn program_data_dir() -> Option<PathBuf> {
+    None
+}
+
+fn probe_candidates(
+    cwd: Option<PathBuf>,
+    program_data: Option<PathBuf>,
+    local_data: Option<PathBuf>,
+    config_dir: Option<PathBuf>,
+    home_dir: Option<PathBuf>,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Some(pd) = program_data {
+        candidates.push(pd.join("NapCatQQ Desktop"));
+        candidates.push(pd.join("NapCatQQ-Desktop"));
+    }
+
+    if let Some(local) = local_data {
+        candidates.push(local.join("NapCatQQ-Desktop"));
+        candidates.push(local.join("NapCatQQ Desktop"));
+    }
+    if let Some(config) = config_dir {
+        candidates.push(config.join("NapCatQQ-Desktop"));
+        candidates.push(config.join("NapCatQQ Desktop"));
+    }
+    if let Some(home) = home_dir {
+        candidates.push(home.join(".config").join("NapCatQQ-Desktop"));
+        candidates.push(home.join(".config").join("NapCatQQ Desktop"));
+    }
+
+    if let Some(cwd) = cwd {
+        candidates.push(cwd.join("runtime"));
+    }
+
+    candidates
+}
+
+fn filter_existing_config_roots(candidates: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut found_paths = Vec::new();
+    for path in candidates {
+        if !path.exists() {
+            continue;
+        }
+
+        let paths_to_check = [
+            path.join("bot.json"),
+            path.join("config.json"),
+            path.join("config").join("bot.json"),
+            path.join("config").join("config.json"),
+            path.join("runtime").join("config").join("bot.json"),
+            path.join("runtime").join("config").join("config.json"),
+        ];
+
+        if paths_to_check.iter().any(|p| p.exists()) {
+            if let Ok(canon) = path.canonicalize() {
+                if !found_paths.contains(&canon) {
+                    found_paths.push(canon);
+                }
+            } else if !found_paths.contains(&path) {
+                found_paths.push(path);
+            }
+        }
+    }
+
+    found_paths
+}
 impl PathProbe for LocalPathProbe {
     fn probe(&self) -> Result<Vec<PathBuf>, PathError> {
-        let mut candidates = Vec::new();
-
-        // 1. Current workspace configuration path (development fallback)
-        if let Ok(cwd) = env::current_dir() {
-            candidates.push(cwd.join("runtime"));
-        }
-
-        // 2. Windows-specific ProgramData
-        #[cfg(target_os = "windows")]
-        {
-            if let Ok(pd) = env::var("ProgramData") {
-                let pd_path = PathBuf::from(pd);
-                candidates.push(pd_path.join("NapCatQQ Desktop"));
-                candidates.push(pd_path.join("NapCatQQ-Desktop"));
-            }
-        }
-
-        // 3. User standard local AppData or config directories
-        if let Some(local) = dirs::data_local_dir() {
-            candidates.push(local.join("NapCatQQ-Desktop"));
-            candidates.push(local.join("NapCatQQ Desktop"));
-        }
-        if let Some(config) = dirs::config_dir() {
-            candidates.push(config.join("NapCatQQ-Desktop"));
-            candidates.push(config.join("NapCatQQ Desktop"));
-        }
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join(".config").join("NapCatQQ-Desktop"));
-            candidates.push(home.join(".config").join("NapCatQQ Desktop"));
-        }
-
-        // Filter directories that actually contain configuration files (bot.json or config.json)
-        let mut found_paths = Vec::new();
-        for path in candidates {
-            if !path.exists() {
-                continue;
-            }
-
-            // A valid legacy path contains config files directly or inside config/ or runtime/config/
-            let paths_to_check = [
-                path.join("bot.json"),
-                path.join("config.json"),
-                path.join("config").join("bot.json"),
-                path.join("config").join("config.json"),
-                path.join("runtime").join("config").join("bot.json"),
-                path.join("runtime").join("config").join("config.json"),
-            ];
-
-            if paths_to_check.iter().any(|p| p.exists()) {
-                if let Ok(canon) = path.canonicalize() {
-                    if !found_paths.contains(&canon) {
-                        found_paths.push(canon);
-                    }
-                } else if !found_paths.contains(&path) {
-                    found_paths.push(path);
-                }
-            }
-        }
-
-        Ok(found_paths)
+        Ok(filter_existing_config_roots(probe_candidates(
+            current_dir(),
+            program_data_dir(),
+            dirs::data_local_dir(),
+            dirs::config_dir(),
+            dirs::home_dir(),
+        )))
     }
 
     fn is_allowed(&self, path: &Path) -> bool {
@@ -191,13 +215,52 @@ mod tests {
         let config_dir = runtime_dir.join("config");
         fs::create_dir_all(&config_dir).unwrap();
 
-        // Write config file
         fs::write(config_dir.join("bot.json"), "{}").unwrap();
 
-        // Test probe manually with injected paths
         let probe = LocalPathProbe::new();
-        // Probe searches standard dirs, since tempdir is not standard it won't find it directly via standard search.
-        // But let's verify that we can allowed-test the tempdir
         assert!(probe.is_allowed(temp.path()));
+    }
+
+    #[test]
+    fn programdata_sources_are_before_cwd_runtime() {
+        let temp = tempdir().unwrap();
+        let cwd = temp.path().join("cwd");
+        let program_data = temp.path().join("ProgramData");
+        let local = temp.path().join("LocalData");
+
+        let candidates = probe_candidates(
+            Some(cwd.clone()),
+            Some(program_data.clone()),
+            Some(local.clone()),
+            None,
+            None,
+        );
+
+        assert_eq!(candidates[0], program_data.join("NapCatQQ Desktop"));
+        assert_eq!(candidates[1], program_data.join("NapCatQQ-Desktop"));
+        assert_eq!(candidates.last().unwrap(), &cwd.join("runtime"));
+    }
+
+    #[test]
+    fn filtered_probe_preserves_programdata_before_cwd_source() {
+        let temp = tempdir().unwrap();
+        let program_data = temp.path().join("ProgramData");
+        let legacy = program_data.join("NapCatQQ-Desktop");
+        let cwd_runtime = temp.path().join("cwd/runtime");
+        fs::create_dir_all(legacy.join("runtime/config")).unwrap();
+        fs::create_dir_all(cwd_runtime.join("config")).unwrap();
+        fs::write(legacy.join("runtime/config/bot.json"), "{}").unwrap();
+        fs::write(cwd_runtime.join("config/bot.json"), "{}").unwrap();
+
+        let found = filter_existing_config_roots(probe_candidates(
+            Some(temp.path().join("cwd")),
+            Some(program_data),
+            None,
+            None,
+            None,
+        ));
+
+        assert_eq!(found[0], legacy.canonicalize().unwrap());
+        assert_eq!(found[1], cwd_runtime.canonicalize().unwrap());
     }
 }
