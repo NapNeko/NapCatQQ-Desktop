@@ -59,7 +59,7 @@ export function useComponentAction(): UseComponentActionResult {
                 hostId,
                 kind,
             );
-            componentActionStore.started(taskId, componentId, hostId);
+            componentActionStore.registerTarget(taskId, componentId, hostId);
             return taskId;
         },
         [],

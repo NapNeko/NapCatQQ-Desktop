@@ -52,6 +52,17 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
     const [remember, setRemember] = useState(true);
     // 密码模式下勾选：添加后用这次密码自动配置免密登录（推荐）。
     const [autoKey, setAutoKey] = useState(true);
+    const formId = React.useId();
+    const nameId = `${formId}-name`;
+    const hostId = `${formId}-host`;
+    const portId = `${formId}-port`;
+    const usernameId = `${formId}-username`;
+    const authMethodId = `${formId}-auth-method`;
+    const passwordId = `${formId}-password`;
+    const autoKeyId = `${formId}-auto-key`;
+    const keyPathSelectId = `${formId}-key-path-select`;
+    const keyPathCustomId = `${formId}-key-path-custom`;
+    const rememberId = `${formId}-remember`;
 
     // 打开弹窗时按模式初始化表单：编辑预填档案字段，新增回到默认值。
     // 密码框永远从空开始——编辑时留空表示不动已存凭据。
@@ -133,16 +144,19 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-                    <Field label="名称">
+                    <Field id={nameId} label="名称" description="留空时使用主机地址作为档案名。">
                         <TextInput
-                            placeholder="例如：生产服务器（留空则使用主机名）"
+                            id={nameId}
+                            ariaDescribedBy={`${nameId}-desc`}
+                            placeholder="例如：生产服务器"
                             value={name}
                             onChange={setName}
                         />
                     </Field>
 
-                    <Field label="主机地址" required>
+                    <Field id={hostId} label="主机地址" required>
                         <TextInput
+                            id={hostId}
                             placeholder="IP 或域名"
                             value={host}
                             onChange={setHost}
@@ -151,15 +165,17 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                     </Field>
 
                     <div className="grid grid-cols-[80px_1fr] gap-2">
-                        <Field label="端口">
+                        <Field id={portId} label="端口">
                             <TextInput
+                                id={portId}
                                 type="number"
                                 value={String(port)}
                                 onChange={(v) => setPort(Number(v) || 22)}
                             />
                         </Field>
-                        <Field label="用户名" required>
+                        <Field id={usernameId} label="用户名" required>
                             <TextInput
+                                id={usernameId}
                                 placeholder="ubuntu / root"
                                 value={username}
                                 onChange={setUsername}
@@ -167,8 +183,9 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         </Field>
                     </div>
 
-                    <Field label="认证方式">
+                    <Field id={authMethodId} label="认证方式">
                         <select
+                            id={authMethodId}
                             className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none focus:ring-1 focus:ring-brand"
                             value={authMethod}
                             onChange={(e) => setAuthMethod(e.target.value as AuthMethod)}
@@ -179,14 +196,16 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                     </Field>
 
                     {authMethod === 'password' && (
-                        <Field label="SSH 密码">
+                        <Field
+                            id={passwordId}
+                            label="SSH 密码"
+                            description={isEdit ? '留空表示不改动已保存的凭据。' : '留空时仅添加档案，下次连接时再填。'}
+                        >
                             <TextInput
+                                id={passwordId}
+                                ariaDescribedBy={`${passwordId}-desc`}
                                 type="password"
-                                placeholder={
-                                    isEdit
-                                        ? '留空表示不改动已保存的凭据'
-                                        : '留空时仅添加档案，下次连接时再填'
-                                }
+                                placeholder="SSH 密码"
                                 value={password}
                                 onChange={setPassword}
                             />
@@ -194,8 +213,9 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                     )}
 
                     {!isEdit && authMethod === 'password' && (
-                        <label className="flex cursor-pointer items-center gap-2 text-xs text-text-secondary">
+                        <label htmlFor={autoKeyId} className="flex cursor-pointer items-center gap-2 text-xs text-text-secondary">
                             <input
+                                id={autoKeyId}
                                 type="checkbox"
                                 className="h-3.5 w-3.5 rounded-sm accent-brand"
                                 checked={autoKey}
@@ -206,10 +226,16 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                     )}
 
                     {authMethod === 'key' && (
-                        <Field label="私钥文件路径">
+                        <Field
+                            id={scannedKeys.length > 0 ? keyPathSelectId : keyPathCustomId}
+                            label="私钥文件路径"
+                            description={scannedKeys.length > 0 ? `已在 ~/.ssh/ 中发现 ${scannedKeys.length} 个标准密钥。` : '~/.ssh/ 下未发现标准命名密钥，请手动填路径。'}
+                        >
                             {scannedKeys.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">
                                     <select
+                                        id={keyPathSelectId}
+                                        aria-describedby={`${keyPathSelectId}-desc`}
                                         className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none focus:ring-1 focus:ring-brand"
                                         value={
                                             scannedKeys.includes(keyPath) ? keyPath : '__custom__'
@@ -231,32 +257,30 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                                     </select>
                                     {!scannedKeys.includes(keyPath) && (
                                         <TextInput
+                                            id={keyPathCustomId}
                                             placeholder="例：~/.ssh/id_ed25519"
                                             value={keyPath}
                                             onChange={setKeyPath}
                                         />
                                     )}
-                                    <p className="text-2xs text-text-tertiary">
-                                        已在 ~/.ssh/ 中发现 {scannedKeys.length} 个标准密钥
-                                    </p>
                                 </div>
                             ) : (
                                 <div className="flex flex-col gap-1">
                                     <TextInput
+                                        id={keyPathCustomId}
+                                        ariaDescribedBy={`${keyPathCustomId}-desc`}
                                         placeholder="例：~/.ssh/id_ed25519"
                                         value={keyPath}
                                         onChange={setKeyPath}
                                     />
-                                    <p className="text-2xs text-text-tertiary">
-                                        ~/.ssh/ 下未发现标准命名密钥，请手动填路径
-                                    </p>
                                 </div>
                             )}
                         </Field>
                     )}
 
-                    <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-text-secondary">
+                    <label htmlFor={rememberId} className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-text-secondary">
                         <input
+                            id={rememberId}
                             type="checkbox"
                             className="h-3.5 w-3.5 rounded-sm accent-brand"
                             checked={remember}
@@ -289,42 +313,55 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
 // ─── Field / TextInput 子件 ──────────────────────────────────────────────
 
 interface FieldProps {
+    id: string;
     label: string;
     required?: boolean;
+    description?: string;
     children: React.ReactNode;
 }
 
-const Field: React.FC<FieldProps> = ({ label, required, children }) => (
+const Field: React.FC<FieldProps> = ({ id, label, required, description, children }) => (
     <div className="flex flex-col gap-1">
-        <span className="text-2xs font-medium text-text-secondary">
+        <label htmlFor={id} className="text-2xs font-medium text-text-secondary">
             {label}
             {required && <span className="ml-0.5 text-danger">*</span>}
-        </span>
+        </label>
         {children}
+        {description && (
+            <p id={`${id}-desc`} className="text-2xs text-text-tertiary">
+                {description}
+            </p>
+        )}
     </div>
 );
 
 interface TextInputProps {
+    id: string;
     value: string;
     onChange: (v: string) => void;
     placeholder?: string;
     type?: 'text' | 'number' | 'password';
     autoFocus?: boolean;
+    ariaDescribedBy?: string;
 }
 
 const TextInput: React.FC<TextInputProps> = ({
+    id,
     value,
     onChange,
     placeholder,
     type = 'text',
     autoFocus,
+    ariaDescribedBy,
 }) => (
     <input
+        id={id}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoFocus={autoFocus}
+        aria-describedby={ariaDescribedBy}
         className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none transition-colors placeholder:text-text-tertiary focus:ring-1 focus:ring-brand"
     />
 );

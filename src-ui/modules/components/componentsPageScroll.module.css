@@ -5,15 +5,6 @@
     min-width: 0;
     scrollbar-gutter: stable;
     /* 与全局 6px 细滚动条配合，右列 ring 不贴视口边 */
-/* 组件页主滚动区：预留滚动条槽位，避免右列卡片右缘被滚动条/子像素裁切。 */
-.componentsPageScroll {
-    overflow-y: auto;
-    overflow-x: visible;
-    min-width: 0;
-    scrollbar-gutter: stable;
-    /* 与全局 6px 细滚动条配合，右列 ring 不贴视口边 */
     padding-inline-end: 4px;
-    box-sizing: border-box;
-}
     box-sizing: border-box;
 }

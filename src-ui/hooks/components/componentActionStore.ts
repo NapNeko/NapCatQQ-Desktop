@@ -68,28 +68,55 @@ function clearActiveForTask(taskId: string): void {
     store.setState({ ...current, activeByTarget: cleanedActive, taskTargets: cleanedTargets });
 }
 
+function isTerminal(progress: ActionProgressView): boolean {
+    return (
+        progress.status === 'success' ||
+        progress.status === 'failed' ||
+        progress.status === 'cancelled'
+    );
+}
+
+function scheduleTerminalCleanup(taskId: string): void {
+    if (lingerTimers.has(taskId)) return;
+    const timer = setTimeout(() => {
+        lingerTimers.delete(taskId);
+        clearActiveForTask(taskId);
+    }, LINGER_AFTER_FINISH);
+    lingerTimers.set(taskId, timer);
+}
+
 export const componentActionStore = {
     /** 当前快照（同步）。useSyncExternalStore 用。 */
     getSnapshot: store.getSnapshot,
 
     subscribe: store.subscribe,
 
-    /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
-    started(taskId: string, componentId: ComponentId, hostId: string): void {
+    /**
+     * 把 task 绑定到组件主机目标。ProgressEvent 可能比 runComponentAction 返回更早到，
+     * 所以这里只补 target 映射，不重置已有进度，尤其不能把终态覆盖回 pending。
+     */
+    registerTarget(taskId: string, componentId: ComponentId, hostId: string): void {
         const current = store.getSnapshot();
         const key = targetKey(componentId, hostId);
         // 同 (component, host) 上一次的 linger 计时器要先清掉，否则新任务起来
         // 几秒后旧计时器到期把新任务的 active 标记给清了。
         const prevTaskId = current.activeByTarget[key];
-        if (prevTaskId && lingerTimers.has(prevTaskId)) {
+        if (prevTaskId && prevTaskId !== taskId && lingerTimers.has(prevTaskId)) {
             clearTimeout(lingerTimers.get(prevTaskId)!);
             lingerTimers.delete(prevTaskId);
         }
+        const progress = current.tasks[taskId] ?? initialActionProgress;
         store.setState({
-            tasks: { ...current.tasks, [taskId]: initialActionProgress },
+            tasks: { ...current.tasks, [taskId]: progress },
             activeByTarget: { ...current.activeByTarget, [key]: taskId },
             taskTargets: { ...current.taskTargets, [taskId]: { componentId, hostId } },
         });
+        if (isTerminal(progress)) scheduleTerminalCleanup(taskId);
+    },
+
+    /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
+    started(taskId: string, componentId: ComponentId, hostId: string): void {
+        this.registerTarget(taskId, componentId, hostId);
     },
 
     /**
@@ -110,17 +137,8 @@ export const componentActionStore = {
             tasks: { ...current.tasks, [taskId]: next },
         });
 
-        const isTerminal =
-            next.status === 'success' ||
-            next.status === 'failed' ||
-            next.status === 'cancelled';
-        if (isTerminal && !lingerTimers.has(taskId)) {
-            const timer = setTimeout(() => {
-                lingerTimers.delete(taskId);
-                clearActiveForTask(taskId);
-            }, LINGER_AFTER_FINISH);
-            lingerTimers.set(taskId, timer);
-        }
+        const isNextTerminal = isTerminal(next);
+        if (isNextTerminal) scheduleTerminalCleanup(taskId);
     },
 
     /** 测试 / dev 重置用。生产代码不要碰。 */

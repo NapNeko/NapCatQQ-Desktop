@@ -333,6 +333,9 @@ function KeyAuthPasswordDialog({
         if (target) setPassword('');
     }, [target]);
 
+    const passwordId = React.useId();
+    const passwordDescId = `${passwordId}-desc`;
+
     if (!target) return null;
 
     return (
@@ -350,15 +353,26 @@ function KeyAuthPasswordDialog({
                         e.preventDefault();
                         if (password) onConfirm(password);
                     }}
+                    className="flex flex-col gap-3"
                 >
-                    <input
-                        type="password"
-                        autoFocus
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="SSH 密码"
-                        className="h-9 w-full rounded-sm bg-inset px-3 text-sm text-text outline-none transition-colors placeholder:text-text-tertiary focus:ring-1 focus:ring-brand"
-                    />
+                    <div className="flex flex-col gap-1.5">
+                        <label htmlFor={passwordId} className="text-xs font-medium text-text-secondary">
+                            当前 SSH 密码
+                        </label>
+                        <input
+                            id={passwordId}
+                            type="password"
+                            autoFocus
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="SSH 密码"
+                            aria-describedby={passwordDescId}
+                            className="h-9 w-full rounded-sm bg-inset px-3 text-sm text-text outline-none transition-colors placeholder:text-text-tertiary focus:ring-1 focus:ring-brand"
+                        />
+                        <p id={passwordDescId} className="text-2xs leading-snug text-text-tertiary">
+                            仅用于本次写入远端 authorized_keys，不会在此处修改档案密码。
+                        </p>
+                    </div>
                     <DialogFooter>
                         <Button size="sm" variant="ghost" type="button" onClick={onClose}>
                             取消

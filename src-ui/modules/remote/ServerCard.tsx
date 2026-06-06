@@ -40,6 +40,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
 }) => {
     const stateMeta = stateBadge(server.state);
     const displayHost = revealIp ? server.host : maskHost(server.host);
+    const serverLabel = server.name || server.host;
     const displayWebui = server.webuiUrl
         ? revealIp
             ? new URL(server.webuiUrl).host
@@ -118,7 +119,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                 type="button"
                                 onClick={onSetupKey}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                                aria-label="配置免密登录"
+                                aria-label={`配置 ${serverLabel} 的免密登录`}
                             >
                                 <ActionMotionIcon icon={KeyRound} size={14} />
                             </button>
@@ -134,7 +135,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                             type="button"
                             onClick={onEdit}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                            aria-label="编辑服务器"
+                            aria-label={`编辑 ${serverLabel}`}
                         >
                             <ActionMotionIcon icon={Pencil} size={14} />
                         </button>
@@ -149,7 +150,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                             type="button"
                             onClick={onDelete}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
-                            aria-label="删除服务器"
+                            aria-label={`删除 ${serverLabel}`}
                         >
                             <ActionMotionIcon icon={Trash2} size={14} />
                         </button>

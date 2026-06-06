@@ -23,12 +23,12 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
     if (progress.status === 'failed' || progress.status === 'cancelled') {
         const isCancelled = progress.status === 'cancelled';
         return (
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-1 flex min-w-0 max-w-full items-center gap-2">
                 <span
                     aria-hidden
                     className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${isCancelled ? 'bg-warning' : 'bg-danger'}`}
                 />
-                <span className={`truncate text-[12px] ${isCancelled ? 'text-warning' : 'text-danger'}`}>
+                <span className={`min-w-0 truncate text-[12px] ${isCancelled ? 'text-warning' : 'text-danger'}`}>
                     {isCancelled ? '已取消' : '失败 · 详见顶部提示'}
                 </span>
             </div>
@@ -36,7 +36,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
     }
     if (progress.status === 'success') {
         return (
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-1 flex min-w-0 max-w-full items-center gap-2">
                 <MotionIcon
                     icon={CheckCircle2}
                     motion="pulse"
@@ -45,7 +45,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
                     size={12}
                     className="shrink-0 text-success"
                 />
-                <span className="truncate text-[12px] text-success">已完成</span>
+                <span className="min-w-0 truncate text-[12px] text-success">已完成</span>
             </div>
         );
     }
@@ -55,7 +55,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
 
     if (!isDownload) {
         return (
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-1 flex min-w-0 max-w-full items-center gap-2">
                 <MotionIcon
                     icon={Loader2}
                     motion="spin"
@@ -63,7 +63,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
                     size={12}
                     className="shrink-0 text-brand"
                 />
-                <span className="truncate text-[12px] text-text-secondary">
+                <span className="min-w-0 truncate text-[12px] text-text-secondary">
                     {progress.message || '处理中…'}
                 </span>
                 <span className="ml-auto shrink-0 font-mono text-[11.5px] tabular-nums text-text-secondary">
@@ -89,11 +89,11 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
               : null;
 
     return (
-        <div className="mt-1 flex items-center gap-2 text-[11.5px]">
+        <div className="mt-1 flex min-w-0 max-w-full items-center gap-2 text-[11.5px]">
             <StageIcon stage={progress.downloadStage} />
-            <span className="truncate text-text-secondary">{stageLabel}</span>
+            <span className="min-w-0 truncate text-text-secondary">{stageLabel}</span>
             {bytesText && (
-                <span className="shrink-0 font-mono tabular-nums text-text-tertiary">{bytesText}</span>
+                <span className="min-w-0 truncate font-mono tabular-nums text-text-tertiary">{bytesText}</span>
             )}
             {trailingMetric && (
                 <span className="shrink-0 font-mono tabular-nums text-brand">{trailingMetric}</span>
