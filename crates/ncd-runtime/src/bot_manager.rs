@@ -266,6 +266,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         )
     }
 
+    /// stop / restart / delete 必须按完整 BotConfig 路由 backend；`backend_for_config`
+    /// 失败时不得静默回落本机 baked backend，否则远端 Docker 会假停/假删。
+    async fn backend_for_lifecycle(
+        &self,
+        config: &BotConfig,
+    ) -> Result<Arc<dyn BotBackend>, BotManagerError> {
+        self.backend_for_config(config).await
+    }
+
     fn get_or_create_docker_webui_token_from_store(
         store: Option<&Arc<dyn SecretStore + Send + Sync>>,
         qq_id: u64,
@@ -496,15 +505,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let stopping = handle.request_stop().await?;
         self.publish_state_change(&stopping, "stop_requested");
 
-        // 按 deployment_type + runtime_target 选 backend(docker bot 要走 docker
-        // 才能停对容器);读不到 config 时回落默认 backend（向后兼容）。
-        let backend = match self.get_required_bot_config(bot_id).await {
-            Ok(cfg) => self
-                .backend_for_config(&cfg)
-                .await
-                .unwrap_or_else(|_| self.backend_for(map_backend_flavor(cfg.bot.backend_type))),
-            Err(_) => self.backend_for(BotFlavor::NapCat),
-        };
+        // 按 deployment_type + runtime_target 选 backend；路由失败必须向上报错。
+        let cfg = self.get_required_bot_config(bot_id).await?;
+        let backend = self.backend_for_lifecycle(&cfg).await?;
 
         let status = backend.status(bot_id.clone()).await?;
         if status.state == BotActorState::Stopped {
@@ -570,12 +573,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             BotActorState::Running | BotActorState::Starting => {
                 let stopping = handle.request_restart().await?;
                 self.publish_state_change(&stopping, "restart_requested");
-                let backend = match &config {
-                    Some(cfg) => self.backend_for_config(cfg).await.unwrap_or_else(|_| {
-                        self.backend_for(map_backend_flavor(cfg.bot.backend_type))
-                    }),
-                    None => self.backend_for(BotFlavor::NapCat),
+                let cfg = match &config {
+                    Some(cfg) => cfg.clone(),
+                    None => self.get_required_bot_config(bot_id).await?,
                 };
+                let backend = self.backend_for_lifecycle(&cfg).await?;
                 backend.stop(bot_id.clone(), StopMode::Force).await?;
                 match handle.confirm_stopped().await {
                     Ok(s) => self.publish_state_change(&s, "restart_stopped"),
@@ -586,11 +588,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 if current.state != BotActorState::Starting {
                     return Ok(current);
                 }
-                let config = match config {
-                    Some(cfg) => cfg,
-                    None => self.get_required_bot_config(bot_id).await?,
-                };
-                self.start_runtime_from_starting(bot_id, &handle, &config)
+                self.start_runtime_from_starting(bot_id, &handle, &cfg)
                     .await
             }
             BotActorState::Stopped | BotActorState::Crashed => self.start_bot(bot_id).await,
@@ -1481,9 +1479,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 let stopping = handle.request_stop().await?;
                 self.publish_state_change(&stopping, "delete_stop_requested");
                 let backend = match &previous_config {
-                    Some(cfg) => self.backend_for_config(cfg).await.unwrap_or_else(|_| {
-                        self.backend_for(map_backend_flavor(cfg.bot.backend_type))
-                    }),
+                    Some(cfg) => self.backend_for_lifecycle(cfg).await?,
                     None => self.backend_for(BotFlavor::NapCat),
                 };
                 if let Err(err) = backend.stop(bot_id.clone(), StopMode::Force).await {

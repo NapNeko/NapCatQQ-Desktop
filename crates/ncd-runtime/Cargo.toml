@@ -43,6 +43,7 @@ encoding_rs = "0.8"
 
 [dev-dependencies]
 tempfile = "3"
+ncd-host = { path = "../ncd-host" }
 ncd-test-support = { path = "../ncd-test-support" }
 wiremock = "0.6"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }

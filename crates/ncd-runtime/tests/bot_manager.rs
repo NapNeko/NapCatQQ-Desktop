@@ -12,7 +12,9 @@ use ncd_runtime::{
     NoopOfflineNotifier, ReqwestNapCatWebUiClient, RuntimeLaunchPlan, RuntimeLaunchPlanError,
     RuntimeLaunchPlanner, SecretStore, SecretStoreImpl, SnowLumaDaemon, SnowLumaWebUiClient,
     SnowLumaWebUiClientFactory, SnowLumaWebUiError, StopMode, TailOpts, WebUiPollerSettings,
+    DeploymentType, HostResolver, LocalOnlyHostResolver,
 };
+use ncd_host::local::LocalWindowsHost;
 
 #[derive(Default)]
 struct FakeBackend {
@@ -257,6 +259,33 @@ fn bot_config_auto_start(qq_id: u64, name: &str) -> BotConfig {
     let mut config = bot_config(qq_id, name);
     config.advanced.auto_start = true;
     config
+}
+
+fn docker_local_blocked_config(qq_id: u64, name: &str) -> BotConfig {
+    let mut config = bot_config(qq_id, name);
+    config.bot.deployment_type = DeploymentType::Docker;
+    config.bot.runtime_target = ncd_runtime::RuntimeTarget::Local;
+    config
+}
+
+fn make_manager_with_local_resolver(
+    root: &std::path::Path,
+) -> (
+    Arc<LocalConfigStore>,
+    Arc<LocalBotConfigRepo<LocalConfigStore>>,
+    Arc<FakeBackend>,
+    BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>,
+) {
+    let (store, repo, backend, manager) = make_manager(root);
+    let local_host: Arc<dyn ncd_host::Host> = Arc::new(LocalWindowsHost::new());
+    let resolver: Arc<dyn HostResolver> = Arc::new(LocalOnlyHostResolver::new(local_host));
+    let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
+        SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
+    );
+    let manager = manager
+        .with_host_resolver(resolver)
+        .with_docker_webui_secret_store(secrets);
+    (store, repo, backend, manager)
 }
 
 /// 默认 wiring：一个本地 `ReqwestNapCatWebUiClient` + `NoopOfflineNotifier`
@@ -1019,6 +1048,44 @@ async fn batch_delete_stops_and_removes_bots() {
     assert!(result.failed.is_empty());
     assert_eq!(manager.bot_count().await, 0);
     assert_eq!(repo.count().await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn lifecycle_stop_does_not_fallback_when_docker_local_blocked() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager_with_local_resolver(temp.path());
+    let bot_id = BotId::new("10120");
+
+    manager
+        .upsert_bot_config(docker_local_blocked_config(10120, "bot"))
+        .await
+        .unwrap();
+
+    let err = manager.stop_bot(&bot_id).await.unwrap_err();
+    assert!(err.to_string().contains("Docker"));
+    assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
+}
+
+#[tokio::test]
+async fn lifecycle_delete_does_not_fallback_when_docker_local_blocked() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo, backend, manager) = make_manager_with_local_resolver(temp.path());
+    let bot_id = BotId::new("10121");
+
+    manager
+        .upsert_bot_config(bot_config(10121, "bot"))
+        .await
+        .unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+    manager
+        .upsert_bot_config(docker_local_blocked_config(10121, "bot"))
+        .await
+        .unwrap();
+
+    let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
+    assert!(err.to_string().contains("Docker"));
+    assert_eq!(backend.stop_count(bot_id).await, 0);
+    assert!(repo.get(10121).await.unwrap().is_some());
 }
 
 #[tokio::test]
