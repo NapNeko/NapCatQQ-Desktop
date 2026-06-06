@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Play, Square, RotateCw, Trash2, ScrollText } from 'lucide-react';
+import { ActionMotionIcon } from '../../shared/ui/motion';
 import { Button } from '../../shared/ui';
 import { containerStateBadge, isManagedImage, compactPorts } from '../../core/domain/docker/status';
 import type { ContainerAction, ContainerInfo } from '../../core/ipc/types';
@@ -99,7 +100,7 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
                         onClick={() => onAction('stop')}
                         disabled={isActing}
                     >
-                        <Square size={13} />
+                        <ActionMotionIcon icon={Square} size={13} />
                         停止
                     </Button>
                 ) : (
@@ -108,7 +109,7 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
                         onClick={() => onAction('start')}
                         disabled={isActing}
                     >
-                        <Play size={13} />
+                        <ActionMotionIcon icon={Play} size={13} />
                         启动
                     </Button>
                 )}
@@ -118,11 +119,11 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
                     onClick={() => onAction('restart')}
                     disabled={isActing}
                 >
-                    <RotateCw size={13} />
+                    <ActionMotionIcon icon={RotateCw} size={13} />
                     重启
                 </Button>
                 <Button size="sm" variant="ghost" onClick={onViewLogs}>
-                    <ScrollText size={13} />
+                    <ActionMotionIcon icon={ScrollText} size={13} />
                     日志
                 </Button>
                 <Button
@@ -132,7 +133,7 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
                     disabled={isActing}
                     className="text-danger hover:bg-danger-soft"
                 >
-                    <Trash2 size={13} />
+                    <ActionMotionIcon icon={Trash2} size={13} />
                     删除
                 </Button>
             </div>

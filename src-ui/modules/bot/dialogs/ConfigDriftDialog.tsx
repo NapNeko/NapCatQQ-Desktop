@@ -4,6 +4,12 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Plus, Pencil, Check, Wifi, WifiOff } from 'lucide-react';
 import {
+    ActionMotionIcon,
+    EMPHASIS_MOTION,
+    LIVE_MOTION,
+    infoToneMotion,
+} from '../../../shared/ui/motion';
+import {
     Button,
     Badge,
     Dialog,
@@ -67,7 +73,12 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
             <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <AlertTriangle size={18} className="text-warning" />
+                        <ActionMotionIcon
+                            icon={AlertTriangle}
+                            size={18}
+                            motion={infoToneMotion('warning')}
+                            className="text-warning"
+                        />
                         配置冲突
                     </DialogTitle>
                     <DialogDescription>
@@ -79,7 +90,14 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
                     {modifiedDisplay.length > 0 && (
                         <section>
                             <SectionHeader
-                                icon={<Pencil size={14} />}
+                                icon={
+                                    <ActionMotionIcon
+                                        icon={Pencil}
+                                        size={14}
+                                        motion={infoToneMotion('warning')}
+                                        className="text-warning"
+                                    />
+                                }
                                 iconClass="text-warning"
                                 title="值冲突"
                                 count={modifiedDisplay.length}
@@ -101,7 +119,14 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
                     {drift.added.length > 0 && (
                         <section>
                             <SectionHeader
-                                icon={<Plus size={14} />}
+                                icon={
+                                    <ActionMotionIcon
+                                        icon={Plus}
+                                        size={14}
+                                        motion={EMPHASIS_MOTION}
+                                        className="text-success"
+                                    />
+                                }
                                 iconClass="text-success"
                                 title="新增字段"
                                 count={drift.added.length}
@@ -255,8 +280,21 @@ function ConnectionList({ items }: { items: ConnectionSummary[] }) {
             {items.map((c, i) => (
                 <div key={i} className="flex items-center gap-2 rounded-xs bg-canvas/50 px-2 py-1">
                     {c.enabled
-                        ? <Wifi size={11} className="text-success shrink-0" />
-                        : <WifiOff size={11} className="text-text-disabled shrink-0" />}
+                        ? (
+                            <ActionMotionIcon
+                                icon={Wifi}
+                                size={11}
+                                motion={LIVE_MOTION}
+                                className="text-success shrink-0"
+                            />
+                        )
+                        : (
+                            <ActionMotionIcon
+                                icon={WifiOff}
+                                size={11}
+                                className="text-text-disabled shrink-0"
+                            />
+                        )}
                     <div className="flex flex-col min-w-0">
                         <span className="text-2xs font-medium text-text truncate">
                             {c.name}

@@ -7,7 +7,13 @@
 // 操作按钮：测试连接（始终可用） / 编辑（改连接信息） / 删除（hover 出红）。
 
 import React from 'react';
-import { Server, Wifi, KeyRound, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Server, Wifi, KeyRound, Pencil, Trash2 } from 'lucide-react';
+import {
+    ActionMotionIcon,
+    LIVE_MOTION,
+    RESOURCE_MOTION,
+    refreshMotion,
+} from '../../shared/ui/motion';
 import { Card, Badge, Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { ServerState } from '../../core/ipc/generated/domain/ServerState';
@@ -45,7 +51,12 @@ export const ServerCard: React.FC<ServerCardProps> = ({
             <header className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                        <Server size={16} className="shrink-0 text-text-tertiary" />
+                        <ActionMotionIcon
+                            icon={Server}
+                            size={16}
+                            motion={RESOURCE_MOTION}
+                            className="text-text-tertiary"
+                        />
                         <h3 className="truncate font-display text-base font-semibold text-text">
                             {server.name || (revealIp ? server.host : '远端服务器')}
                         </h3>
@@ -82,11 +93,17 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                             onClick={() => onTest()}
                             disabled={isTesting}
                         >
-                            {isTesting ? (
-                                <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                                <Wifi size={14} />
-                            )}
+                            <ActionMotionIcon
+                                icon={Wifi}
+                                size={14}
+                                motion={
+                                    isTesting
+                                        ? refreshMotion(true)
+                                        : server.state === 'connected'
+                                          ? LIVE_MOTION
+                                          : 'none'
+                                }
+                            />
                             测试连接
                         </Button>
                     </TooltipTrigger>
@@ -103,7 +120,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                                 aria-label="配置免密登录"
                             >
-                                <KeyRound size={14} />
+                                <ActionMotionIcon icon={KeyRound} size={14} />
                             </button>
                         </TooltipTrigger>
                         <TooltipContent>
@@ -119,7 +136,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                             className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                             aria-label="编辑服务器"
                         >
-                            <Pencil size={14} />
+                            <ActionMotionIcon icon={Pencil} size={14} />
                         </button>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -134,7 +151,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                             className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                             aria-label="删除服务器"
                         >
-                            <Trash2 size={14} />
+                            <ActionMotionIcon icon={Trash2} size={14} />
                         </button>
                     </TooltipTrigger>
                     <TooltipContent>

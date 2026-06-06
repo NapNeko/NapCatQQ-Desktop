@@ -13,6 +13,7 @@ import { forwardRef, useEffect, useRef, type HTMLAttributes, type ReactNode } fr
 import { AlertCircle, CheckCircle2, Info, X, AlertTriangle } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
+import { MotionIcon, infoToneMotion } from './motion';
 
 const infoBarVariants = cva(
     [
@@ -104,7 +105,8 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
             return () => clearTimeout(id);
         }, [autoDismissMs]);
 
-        const Icon = defaultIconFor(tone ?? 'info');
+        const toneKey = tone ?? 'info';
+        const Icon = defaultIconFor(toneKey);
 
         // 默认 visibility:hidden 让 GSAP 的 autoAlpha enter 第一帧不闪。
         return (
@@ -115,7 +117,14 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
                 className={cn(infoBarVariants({ tone }), className)}
                 {...rest}
             >
-                <Icon size={16} strokeWidth={2.2} className={iconVariants({ tone })} />
+                <MotionIcon
+                    icon={Icon}
+                    motion={infoToneMotion(toneKey)}
+                    playEnter={false}
+                    size={18}
+                    strokeWidth={2.2}
+                    className={iconVariants({ tone })}
+                />
                 <div className="min-w-0 flex-1">
                     <div className={titleColorVariants({ tone })}>{title}</div>
                     {content && (

@@ -9,11 +9,16 @@
 // 纯函数，不直接调 service / @tauri-apps。
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Container, Loader2, RefreshCw } from 'lucide-react';
+import { Container, RefreshCw } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnter } from '../../shared/ui/motion/listEnter';
 import { Button } from '../../shared/ui';
-import { ListItem } from '../../shared/ui/motion';
+import {
+    ActionMotionIcon,
+    ListItem,
+    RESOURCE_MOTION,
+    refreshMotion,
+} from '../../shared/ui/motion';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useDocker } from '../../hooks/docker/useDocker';
 import { useServerManager } from '../../hooks/remote/useServerManager';
@@ -66,9 +71,10 @@ export const DockerPageNext: React.FC = () => {
                     onClick={docker.refetch}
                     disabled={docker.isProbing}
                 >
-                    <RefreshCw
+                    <ActionMotionIcon
+                        icon={RefreshCw}
                         size={14}
-                        className={docker.isProbing ? 'animate-spin' : undefined}
+                        motion={refreshMotion(docker.isProbing)}
                     />
                     刷新
                 </Button>
@@ -111,7 +117,7 @@ const ContainerList: React.FC<{
     if (docker.isLoadingList) {
         return (
             <div className="flex items-center gap-2 rounded-md bg-inset/40 p-6 text-text-tertiary">
-                <Loader2 size={16} className="animate-spin" />
+                <ActionMotionIcon icon={RefreshCw} size={16} motion="spin" />
                 <span className="text-sm">加载容器列表…</span>
             </div>
         );
@@ -119,7 +125,12 @@ const ContainerList: React.FC<{
     if (docker.containers.length === 0) {
         return (
             <div className="flex flex-col items-center gap-2 rounded-md bg-inset/30 p-10 text-center">
-                <Container size={28} className="text-text-tertiary" />
+                <ActionMotionIcon
+                    icon={Container}
+                    size={28}
+                    motion={RESOURCE_MOTION}
+                    className="text-text-tertiary"
+                />
                 <p className="text-sm text-text-secondary">这台主机上还没有容器</p>
                 <p className="text-xs text-text-tertiary">
                     去组件页的「Docker 部署」起一个 NapCat / SnowLuma

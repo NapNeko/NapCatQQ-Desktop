@@ -8,3 +8,19 @@ export { MotionCard } from './MotionCard';
 export { StatusDot, type StatusDotTone } from './StatusDot';
 export { Counter } from './Counter';
 export { Shimmer } from './Shimmer';
+export { MotionIcon, type MotionIconPreset } from './MotionIcon';
+export { ActionMotionIcon } from './ActionMotionIcon';
+export { SegmentMotionIcon } from './SegmentMotionIcon';
+export {
+    NAV_ROUTE_MOTION,
+    segmentMotion,
+    refreshMotion,
+    EMPHASIS_MOTION,
+    LIVE_MOTION,
+    RESOURCE_MOTION,
+    SETTINGS_MOTION,
+    FAB_PRIMARY_MOTION,
+    BATCH_MOTION,
+    infoToneMotion,
+} from './motionIconSemantics';
+export { SplashConfetti } from './SplashConfetti';

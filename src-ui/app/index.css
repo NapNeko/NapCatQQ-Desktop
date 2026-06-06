@@ -174,6 +174,66 @@ samp,
     }
 }
 
+/* 开屏粒子：静态样式 + 缓慢漂移（具体位移由 GSAP 进场覆盖） */
+@keyframes splash-particle-drift {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.35;
+    }
+    50% {
+        transform: translate(6px, -10px) scale(1.15);
+        opacity: 0.7;
+    }
+}
+
+.ndf-splash-particle {
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--brand-400) 55%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent-400) 35%, transparent);
+    animation: splash-particle-drift 4.5s ease-in-out infinite;
+}
+
+.ndf-splash-particle--accent {
+    background: color-mix(in srgb, var(--accent-400) 50%, transparent);
+}
+
+.ndf-splash-logo-shine {
+    position: relative;
+    display: inline-block;
+    width: 72px;
+    height: 72px;
+    overflow: hidden;
+    border-radius: 1rem;
+    flex-shrink: 0;
+}
+
+.ndf-splash-shine-stripe {
+    position: absolute;
+    top: -50%;
+    left: -120%;
+    width: 45%;
+    height: 200%;
+    transform: skewX(-18deg);
+    background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, white 55%, transparent),
+        transparent
+    );
+    opacity: 0;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-splash-particle {
+        animation: none;
+        opacity: 0.25;
+    }
+}
+
 /* 全局滚动条：细、低对比，不抢视线（WebKit + Firefox） */
 * {
     scrollbar-width: thin;

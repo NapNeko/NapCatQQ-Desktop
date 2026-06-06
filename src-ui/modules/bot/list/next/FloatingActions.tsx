@@ -11,7 +11,15 @@ import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { Plus, RefreshCw, ListChecks } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../../shared/ui';
-import { GsapPresence, type EnterFn, type ExitFn } from '../../../../shared/ui/motion';
+import {
+    GsapPresence,
+    MotionIcon,
+    FAB_PRIMARY_MOTION,
+    BATCH_MOTION,
+    refreshMotion,
+    type EnterFn,
+    type ExitFn,
+} from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 
@@ -100,7 +108,14 @@ const FloatingActionsBody = forwardRef<
             disabled={busy}
             variant="ghost"
         >
-            <ListChecks size={18} strokeWidth={2.2} />
+            <MotionIcon
+                icon={ListChecks}
+                motion={BATCH_MOTION}
+                size={18}
+                strokeWidth={2.2}
+                playEnter={false}
+                hoverAccent
+            />
         </CircleButton>
         <CircleButton
             tooltip="刷新列表"
@@ -108,7 +123,14 @@ const FloatingActionsBody = forwardRef<
             disabled={busy}
             variant="ghost"
         >
-            <RefreshCw size={18} strokeWidth={2.2} />
+            <MotionIcon
+                icon={RefreshCw}
+                motion={refreshMotion(busy ?? false)}
+                size={18}
+                strokeWidth={2.2}
+                playEnter={false}
+                hoverAccent
+            />
         </CircleButton>
         <CircleButton
             tooltip="新增 Bot"
@@ -116,7 +138,15 @@ const FloatingActionsBody = forwardRef<
             disabled={busy}
             variant="primary"
         >
-            <Plus size={20} strokeWidth={2.4} />
+            <MotionIcon
+                icon={Plus}
+                motion={FAB_PRIMARY_MOTION}
+                playEnter
+                enterKey="fab-plus"
+                size={20}
+                strokeWidth={2.4}
+                hoverAccent
+            />
         </CircleButton>
     </div>
 ));

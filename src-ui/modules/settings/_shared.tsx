@@ -3,8 +3,10 @@
 // PerformanceMonitorIntervalSlider(性能监控采样间隔滑块)+
 // SettingsTabSections / SettingsSection(分组；组间 divide-y，字段平铺)。
 
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
+import type { LucideProps } from 'lucide-react';
 import { Sun, Moon, MonitorCog, Sparkles, Wand2, Feather } from 'lucide-react';
+import { SegmentMotionIcon } from '../../shared/ui/motion';
 import type { ThemeMode } from '../../hooks/preferences/preferencesStore';
 import type { MotionLevel } from '../../core/design/motion';
 import {
@@ -103,11 +105,11 @@ export function ThemeSegment({
     const items: ReadonlyArray<{
         value: ThemeMode;
         label: string;
-        icon: ReactNode;
+        icon: ComponentType<LucideProps>;
     }> = [
-        { value: 'auto', label: '系统', icon: <MonitorCog size={13} /> },
-        { value: 'light', label: '浅色', icon: <Sun size={13} /> },
-        { value: 'dark', label: '暗色', icon: <Moon size={13} /> },
+        { value: 'auto', label: '系统', icon: MonitorCog },
+        { value: 'light', label: '浅色', icon: Sun },
+        { value: 'dark', label: '暗色', icon: Moon },
     ];
     return (
         <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
@@ -123,7 +125,11 @@ export function ThemeSegment({
                             : 'text-text-tertiary hover:text-text')
                     }
                 >
-                    {it.icon}
+                    <SegmentMotionIcon
+                        icon={it.icon}
+                        selected={value === it.value}
+                        segmentKey={`theme-${it.value}`}
+                    />
                     <span>{it.label}</span>
                 </button>
             ))}
@@ -147,11 +153,11 @@ export function MotionLevelSegment({
     const items: ReadonlyArray<{
         value: MotionLevel;
         label: string;
-        icon: ReactNode;
+        icon: ComponentType<LucideProps>;
     }> = [
-        { value: 'elegant', label: '优雅', icon: <Feather size={13} /> },
-        { value: 'standard', label: '标准', icon: <Wand2 size={13} /> },
-        { value: 'rich', label: '丰富', icon: <Sparkles size={13} /> },
+        { value: 'elegant', label: '优雅', icon: Feather },
+        { value: 'standard', label: '标准', icon: Wand2 },
+        { value: 'rich', label: '丰富', icon: Sparkles },
     ];
     return (
         <div
@@ -173,7 +179,11 @@ export function MotionLevelSegment({
                             : 'text-text-tertiary hover:text-text')
                     }
                 >
-                    {it.icon}
+                    <SegmentMotionIcon
+                        icon={it.icon}
+                        selected={value === it.value}
+                        segmentKey={`motion-level-${it.value}`}
+                    />
                     <span>{it.label}</span>
                 </button>
             ))}

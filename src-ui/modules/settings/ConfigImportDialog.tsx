@@ -2,7 +2,7 @@
 
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { PackageCheck, Sparkles, Upload } from 'lucide-react';
+import { PackageCheck, Sparkles, Upload, AlertCircle, Check } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { configTransferService } from '../../core/services/config-transfer.service';
 import type { ConfigImportPreview } from '../../core/ipc/types';
@@ -17,6 +17,7 @@ import {
     DialogTitle,
 } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
+import { MotionIcon, infoToneMotion } from '../../shared/ui/motion';
 import { classifyDroppedPath, useTauriDropTarget } from './useTauriDropTarget';
 
 type Phase = 'pick' | 'scan' | 'review' | 'import' | 'done' | 'error';
@@ -269,14 +270,32 @@ export function ConfigImportDialog({
                 )}
 
                 {phase === 'done' && (
-                    <div className="py-6 text-center">
+                    <div className="flex flex-col items-center gap-2 py-6 text-center">
+                        <MotionIcon
+                            icon={Check}
+                            motion={infoToneMotion('success')}
+                            playEnter
+                            enterKey="import-done"
+                            size={28}
+                            strokeWidth={2.2}
+                            className="text-success"
+                        />
                         <p className="text-[15px] font-medium text-text">导入完成</p>
-                        <p className="mt-2 text-[13px] text-text-tertiary">重启应用后生效</p>
+                        <p className="mt-0 text-[13px] text-text-tertiary">重启应用后生效</p>
                     </div>
                 )}
 
                 {phase === 'error' && (
-                    <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-3">
+                    <div className="flex gap-2.5 rounded-lg border border-danger/30 bg-danger/5 px-3 py-3">
+                        <MotionIcon
+                            icon={AlertCircle}
+                            motion={infoToneMotion('danger')}
+                            playEnter
+                            enterKey={errorMsg ?? 'import-error'}
+                            size={18}
+                            strokeWidth={2.2}
+                            className="mt-0.5 shrink-0 text-danger"
+                        />
                         <p className="text-[13px] text-danger">{errorMsg ?? '导入失败'}</p>
                     </div>
                 )}

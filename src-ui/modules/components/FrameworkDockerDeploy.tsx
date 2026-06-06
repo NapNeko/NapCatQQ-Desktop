@@ -11,6 +11,7 @@
 import React, { useState } from 'react';
 import { Container, Loader2 } from 'lucide-react';
 import { Button } from '../../shared/ui';
+import { MotionIcon } from '../../shared/ui/motion';
 import { defaultDeploySpec } from '../../core/domain/docker/spec';
 import { dockerDeployProgressStore } from '../../hooks/docker/dockerDeployProgressStore';
 import type {
@@ -67,7 +68,7 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
                 title={alreadyDeployed ? '这台机器上已部署该容器，去 Docker 页管理' : undefined}
             >
                 {isDeploying ? (
-                    <Loader2 size={13} className="animate-spin" />
+                    <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={13} />
                 ) : (
                     <Container size={13} />
                 )}

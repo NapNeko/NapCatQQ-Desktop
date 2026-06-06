@@ -12,6 +12,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../shared/ui';
+import { MotionIcon } from '../../shared/ui/motion';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { DockerStatus, Os } from '../../core/ipc/types';
 
@@ -65,7 +66,9 @@ export const DockerRow: React.FC<DockerRowProps> = ({
             <div className="mt-auto flex items-center justify-end gap-1.5">
                 {ready || (isProbing && !status) ? null : autoInstallable ? (
                     <Button size="sm" variant="primary" onClick={onInstall} disabled={isInstalling}>
-                        {isInstalling && <Loader2 size={13} className="animate-spin" />}
+                        {isInstalling && (
+                            <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={13} />
+                        )}
                         安装
                     </Button>
                 ) : (

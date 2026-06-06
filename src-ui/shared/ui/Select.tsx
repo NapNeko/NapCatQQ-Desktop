@@ -9,6 +9,7 @@ import { forwardRef, type ReactNode } from 'react';
 import gsap from 'gsap';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
+import { MotionIcon } from './motion/MotionIcon';
 
 export interface SelectItem<V extends string = string> {
     value: V;
@@ -90,7 +91,13 @@ function SelectInner<V extends string>(
                 >
                     <RadixSelect.Value placeholder={placeholder} />
                     <RadixSelect.Icon asChild>
-                        <ChevronDown size={14} className="text-text-tertiary" />
+                        <MotionIcon
+                            icon={ChevronDown}
+                            motion="none"
+                            playEnter={false}
+                            size={14}
+                            className="text-text-tertiary"
+                        />
                     </RadixSelect.Icon>
                 </RadixSelect.Trigger>
                 <RadixSelect.Portal>

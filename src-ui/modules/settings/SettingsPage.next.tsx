@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Save, AlertCircle, Check } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Button, Spinner } from '../../shared/ui';
+import { MotionIcon, infoToneMotion } from '../../shared/ui/motion';
 import { usePreferences } from '../../hooks/preferences/preferencesStore';
 import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
@@ -119,12 +120,26 @@ function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
             <span className="hidden text-xs sm:inline-flex sm:items-center sm:gap-1.5">
                 {dirty ? (
                     <>
-                        <AlertCircle size={12} strokeWidth={2.4} className="text-warning" />
+                        <MotionIcon
+                            icon={AlertCircle}
+                            motion={infoToneMotion('warning')}
+                            playEnter={false}
+                            size={12}
+                            strokeWidth={2.4}
+                            className="text-warning"
+                        />
                         <span className="text-warning">未保存</span>
                     </>
                 ) : (
                     <>
-                        <Check size={12} strokeWidth={2.4} className="text-text-tertiary" />
+                        <MotionIcon
+                            icon={Check}
+                            motion={infoToneMotion('success')}
+                            playEnter={false}
+                            size={12}
+                            strokeWidth={2.4}
+                            className="text-text-tertiary"
+                        />
                         <span className="text-text-tertiary">已是最新</span>
                     </>
                 )}

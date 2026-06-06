@@ -10,7 +10,12 @@
 
 import React from 'react';
 import * as RadixSelect from '@radix-ui/react-select';
-import { CheckCircle2, AlertTriangle, ChevronDown, Loader2, Server } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, ChevronDown, RefreshCw, Server } from 'lucide-react';
+import {
+    ActionMotionIcon,
+    RESOURCE_MOTION,
+    refreshMotion,
+} from '../../shared/ui/motion';
 import { cn } from '../../shared/utils/cn';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 
@@ -72,10 +77,19 @@ const HostSelect: React.FC<{
                 'hover:bg-inset/40 focus:border-brand focus:ring-1 focus:ring-brand',
             )}
         >
-            <Server size={14} className="shrink-0 text-text-tertiary" />
+            <ActionMotionIcon
+                icon={Server}
+                size={14}
+                motion={RESOURCE_MOTION}
+                className="text-text-tertiary"
+            />
             <RadixSelect.Value />
             <RadixSelect.Icon asChild>
-                <ChevronDown size={14} className="text-text-tertiary" />
+                <ActionMotionIcon
+                    icon={ChevronDown}
+                    size={14}
+                    className="text-text-tertiary"
+                />
             </RadixSelect.Icon>
         </RadixSelect.Trigger>
         <RadixSelect.Portal>
@@ -115,7 +129,11 @@ const StatusPill: React.FC<{
     if (isProbing && !label) {
         return (
             <span className="inline-flex items-center gap-1.5 rounded-md bg-inset/60 px-2.5 py-1.5 text-xs text-text-tertiary">
-                <Loader2 size={13} className="animate-spin" />
+                <ActionMotionIcon
+                    icon={RefreshCw}
+                    size={13}
+                    motion={refreshMotion(isProbing)}
+                />
                 探测 Docker…
             </span>
         );
@@ -123,14 +141,14 @@ const StatusPill: React.FC<{
     if (ready) {
         return (
             <span className="inline-flex items-center gap-1.5 rounded-md bg-success-soft px-2.5 py-1.5 text-xs text-success">
-                <CheckCircle2 size={13} />
+                <ActionMotionIcon icon={CheckCircle2} size={13} />
                 {label ?? 'Docker 就绪'}
             </span>
         );
     }
     return (
         <span className="inline-flex items-center gap-1.5 rounded-md bg-warning-soft px-2.5 py-1.5 text-xs text-warning">
-            <AlertTriangle size={13} />
+            <ActionMotionIcon icon={AlertTriangle} size={13} />
             {label ?? '无法探测 Docker 状态'}
         </span>
     );

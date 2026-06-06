@@ -9,6 +9,10 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Trash2, Pencil, Lock } from 'lucide-react';
 import {
+    ActionMotionIcon,
+    EMPHASIS_MOTION,
+} from '../../../../shared/ui/motion';
+import {
     Button,
     Badge,
     Tooltip,
@@ -248,7 +252,16 @@ function FloatingAddBar({ backendType, onPick }: FloatingAddBarProps) {
                             disabled={!supported}
                             onClick={() => supported && onPick(meta.kind)}
                         >
-                            {supported ? <Plus size={12} strokeWidth={2.4} /> : <Lock size={12} />}
+                            {supported ? (
+                                <ActionMotionIcon
+                                    icon={Plus}
+                                    size={12}
+                                    strokeWidth={2.4}
+                                    motion={EMPHASIS_MOTION}
+                                />
+                            ) : (
+                                <ActionMotionIcon icon={Lock} size={12} />
+                            )}
                             <span>{meta.title}</span>
                         </Button>
                     );
@@ -337,7 +350,7 @@ function ConnectionRow({ kind, item, onStartEdit, onDelete }: ConnectionRowProps
                                 className="h-7 w-7"
                                 onClick={onStartEdit}
                             >
-                                <Pencil size={13} strokeWidth={2.2} />
+                                <ActionMotionIcon icon={Pencil} size={13} strokeWidth={2.2} />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>编辑</TooltipContent>
@@ -350,7 +363,7 @@ function ConnectionRow({ kind, item, onStartEdit, onDelete }: ConnectionRowProps
                                 className="h-7 w-7 text-danger hover:text-danger"
                                 onClick={onDelete}
                             >
-                                <Trash2 size={13} strokeWidth={2.2} />
+                                <ActionMotionIcon icon={Trash2} size={13} strokeWidth={2.2} />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>删除连接</TooltipContent>

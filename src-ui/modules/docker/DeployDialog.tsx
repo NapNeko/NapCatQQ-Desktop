@@ -5,7 +5,8 @@
 // WebUI 地址 + 凭据（凭据仅一次性展示），用户看完点「完成」再关。
 
 import React, { useMemo, useState } from 'react';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Plus, RefreshCw, X } from 'lucide-react';
+import { ActionMotionIcon } from '../../shared/ui/motion';
 import {
     Dialog,
     DialogContent,
@@ -189,7 +190,7 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
                                 <div className="flex items-center justify-between">
                                     <p className="text-xs font-medium text-text-secondary">端口映射</p>
                                     <Button size="sm" variant="ghost" onClick={addPort}>
-                                        <Plus size={13} />
+                                        <ActionMotionIcon icon={Plus} size={13} />
                                         添加端口
                                     </Button>
                                 </div>
@@ -236,7 +237,9 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
                                 取消
                             </Button>
                             <Button onClick={() => void handleConfirm()} disabled={isDeploying}>
-                                {isDeploying && <Loader2 size={14} className="animate-spin" />}
+                                {isDeploying && (
+                                    <ActionMotionIcon icon={RefreshCw} size={14} motion="spin" />
+                                )}
                                 开始部署
                             </Button>
                         </>
@@ -304,7 +307,7 @@ const PortRow: React.FC<{
                         aria-label="删除端口映射"
                         className="shrink-0 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-danger-soft hover:text-danger"
                     >
-                        <X size={14} />
+                        <ActionMotionIcon icon={X} size={14} />
                     </button>
                 )}
             </div>

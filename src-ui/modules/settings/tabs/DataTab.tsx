@@ -5,6 +5,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useConfigTransfer } from '../../../hooks/preferences/useConfigTransfer';
 import { ConfigImportDialog } from '../ConfigImportDialog';
 import { Button, TextField } from '../../../shared/ui';
+import { ActionMotionIcon } from '../../../shared/ui/motion';
 import type { SettingsDraft } from '../settings-draft';
 import { FieldRow, SettingsSection, SettingsTabSections } from '../_shared';
 
@@ -116,7 +117,11 @@ export function DataTab({
                                 className="flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text"
                                 aria-label={revealPat ? '隐藏 token' : '显示 token'}
                             >
-                                {revealPat ? <EyeOff size={15} /> : <Eye size={15} />}
+                                {revealPat ? (
+                                    <ActionMotionIcon icon={EyeOff} size={15} />
+                                ) : (
+                                    <ActionMotionIcon icon={Eye} size={15} />
+                                )}
                             </button>
                         </div>
                     </FieldRow>

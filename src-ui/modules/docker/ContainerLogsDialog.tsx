@@ -2,7 +2,8 @@
 // fetchLogs 是 useDocker 暴露的命令式方法（不走 react-query 缓存，按需取）。
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
+import { ActionMotionIcon, refreshMotion } from '../../shared/ui/motion';
 import {
     Dialog,
     DialogContent,
@@ -55,9 +56,10 @@ export const ContainerLogsDialog: React.FC<ContainerLogsDialogProps> = ({
                             onClick={load}
                             disabled={loading}
                         >
-                            <RefreshCw
+                            <ActionMotionIcon
+                                icon={RefreshCw}
                                 size={13}
-                                className={loading ? 'animate-spin' : undefined}
+                                motion={refreshMotion(loading)}
                             />
                             刷新
                         </Button>
@@ -68,7 +70,7 @@ export const ContainerLogsDialog: React.FC<ContainerLogsDialogProps> = ({
                     <p className="text-sm text-danger">取日志失败：{error}</p>
                 ) : loading && !logs ? (
                     <div className="flex items-center gap-2 py-10 text-text-tertiary">
-                        <Loader2 size={16} className="animate-spin" />
+                        <ActionMotionIcon icon={RefreshCw} size={16} motion="spin" />
                         <span className="text-sm">加载中…</span>
                     </div>
                 ) : (

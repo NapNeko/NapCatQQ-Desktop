@@ -17,7 +17,8 @@
 //
 // 批量模式下整行变 selectable，左侧出复选框。
 
-import { forwardRef, useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState, type ComponentType } from 'react';
+import type { LucideProps } from 'lucide-react';
 import {
     Activity,
     AlertTriangle,
@@ -45,7 +46,14 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from '../../../../shared/ui';
-import { GsapPresence, type EnterFn, type ExitFn } from '../../../../shared/ui/motion';
+import {
+    ActionMotionIcon,
+    GsapPresence,
+    MotionIcon,
+    type EnterFn,
+    type ExitFn,
+    type MotionIconPreset,
+} from '../../../../shared/ui/motion';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 import type {
     BotActorSnapshot,
@@ -229,12 +237,14 @@ export function BotCard({
         webuiAvailable,
     });
 
+    const isActive = isBotRunning(bot.state) || isBotStarting(bot.state);
+
     const chips: React.ReactNode[] = [];
     if (!isSL && enabledChannels !== null) {
         chips.push(
             <InfoChip
                 key="channels"
-                icon={<LinkIcon size={11} strokeWidth={2.4} />}
+                icon={LinkIcon}
                 label="对外"
                 value={
                     enabledChannels.total > 0
@@ -254,7 +264,8 @@ export function BotCard({
         chips.push(
             <InfoChip
                 key="restart"
-                icon={<RefreshCw size={11} strokeWidth={2.4} />}
+                icon={RefreshCw}
+                iconMotion={isActive ? 'breathe' : 'none'}
                 label="自启"
                 value={restartHint}
             />,
@@ -264,7 +275,7 @@ export function BotCard({
         chips.push(
             <InfoChip
                 key="runtime"
-                icon={<Activity size={11} strokeWidth={2.4} />}
+                icon={Activity}
                 label="运行"
                 value={runtimeTarget === 'local' ? '本机' : runtimeTarget}
                 muted={runtimeTarget === 'local'}
@@ -275,7 +286,7 @@ export function BotCard({
         chips.push(
             <InfoChip
                 key="sl-mode"
-                icon={<Power size={11} strokeWidth={2.4} />}
+                icon={Power}
                 label="启动"
                 value={slStartMode.mode === 'cold_start' ? '冷启动' : '热启动'}
             />,
@@ -283,12 +294,11 @@ export function BotCard({
     }
     // SnowLuma 运行时 chip 只在 bot active 时显示。stopped 后这些 domain event
     // 的值残留在 store 里不会主动清掉,但对用户没有参考价值——已经停了就别展示了。
-    const isActive = isBotRunning(bot.state) || isBotStarting(bot.state);
     if (isSL && snowlumaDaemonState && isActive) {
         chips.push(
             <InfoChip
                 key="daemon"
-                icon={<Cpu size={11} strokeWidth={2.4} />}
+                icon={Cpu}
                 label="daemon"
                 value={daemonStateLabel(snowlumaDaemonState)}
                 muted={snowlumaDaemonState !== 'ready'}
@@ -300,7 +310,8 @@ export function BotCard({
         chips.push(
             <InfoChip
                 key="injected"
-                icon={<Zap size={11} strokeWidth={2.4} />}
+                icon={Zap}
+                iconMotion="pulse"
                 label="注入"
                 value="已就绪"
             />,
@@ -310,7 +321,7 @@ export function BotCard({
         chips.push(
             <InfoChip
                 key="uin"
-                icon={<UserCheck size={11} strokeWidth={2.4} />}
+                icon={UserCheck}
                 label="UIN"
                 value={snowlumaUin}
             />,
@@ -320,7 +331,7 @@ export function BotCard({
         chips.push(
             <InfoChip
                 key="webui"
-                icon={<Wifi size={11} strokeWidth={2.4} />}
+                icon={Wifi}
                 label="WebUI"
                 value={`:${napcatBinding.port}`}
             />,
@@ -330,7 +341,7 @@ export function BotCard({
         chips.push(
             <InfoChip
                 key="rev"
-                icon={<Hash size={11} strokeWidth={2.4} />}
+                icon={Hash}
                 label="rev"
                 value={`#${bot.revision}`}
                 muted
@@ -440,7 +451,9 @@ export function BotCard({
                                                 : undefined
                                         }
                                     >
-                                        {statusLine.icon}
+                                        {statusLine.icon ? (
+                                            <StatusLineIcon node={statusLine.icon} tone={statusLine.tone} />
+                                        ) : null}
                                         <span className="truncate">{statusLine.text}</span>
                                     </span>
                                 </>
@@ -468,7 +481,7 @@ export function BotCard({
                                     onClick={() => setQrOpen(true)}
                                     tone="brand"
                                 >
-                                    <QrCode size={16} strokeWidth={2.2} />
+                                    <ToolbarMotionIcon icon={QrCode} size={16} strokeWidth={2.2} hoverAccent />
                                 </IconButton>
                             </GsapPresence>
                             <GsapPresence
@@ -483,7 +496,7 @@ export function BotCard({
                                     disabled={!canStopBot(bot.state)}
                                     tone="danger"
                                 >
-                                    <Square size={14} strokeWidth={2.6} />
+                                    <ActionMotionIcon icon={Square} size={14} strokeWidth={2.6} motion="none" />
                                 </IconButton>
                             </GsapPresence>
                             <GsapPresence
@@ -498,7 +511,7 @@ export function BotCard({
                                     disabled={!canStartBot(bot.state)}
                                     tone="success"
                                 >
-                                    <Play size={14} strokeWidth={2.6} />
+                                    <ToolbarMotionIcon icon={Play} size={14} strokeWidth={2.6} hoverAccent />
                                 </IconButton>
                             </GsapPresence>
                             <GsapPresence
@@ -511,7 +524,7 @@ export function BotCard({
                                     tooltip="查看日志"
                                     onClick={stopAction(() => onViewLogs(bot.bot_id))}
                                 >
-                                    <FileText size={14} strokeWidth={2.2} />
+                                    <ToolbarMotionIcon icon={FileText} size={14} strokeWidth={2.2} hoverAccent />
                                 </IconButton>
                             </GsapPresence>
                             <GsapPresence
@@ -531,14 +544,14 @@ export function BotCard({
                                         }),
                                     )}
                                 >
-                                    <Globe size={14} strokeWidth={2.2} />
+                                    <ToolbarMotionIcon icon={Globe} size={14} strokeWidth={2.2} hoverAccent />
                                 </IconButton>
                             </GsapPresence>
                             <IconButton
                                 tooltip="配置"
                                 onClick={stopAction(() => onConfigure(bot.bot_id))}
                             >
-                                <Settings size={14} strokeWidth={2.2} />
+                                <ToolbarMotionIcon icon={Settings} size={14} strokeWidth={2.2} hoverAccent />
                             </IconButton>
                         </div>
                     )}
@@ -790,14 +803,80 @@ function statusLineTextClass(tone: StatusLine['tone']): string {
 
 // ============== Chip / IconButton ==============
 
+function ToolbarMotionIcon({
+    icon,
+    size,
+    strokeWidth,
+    hoverAccent = true,
+}: {
+    icon: ComponentType<LucideProps>;
+    size: number;
+    strokeWidth: number;
+    hoverAccent?: boolean;
+}) {
+    return (
+        <MotionIcon
+            icon={icon}
+            motion="none"
+            hoverAccent={hoverAccent}
+            size={size}
+            strokeWidth={strokeWidth}
+            playEnter={false}
+        />
+    );
+}
+
+function StatusLineIcon({
+    node,
+    tone,
+}: {
+    node: React.ReactNode;
+    tone: StatusLine['tone'];
+}) {
+    if (tone !== 'danger') return <>{node}</>;
+    const icon = statusLineIconComponent(node);
+    if (!icon) return <>{node}</>;
+    return (
+        <MotionIcon
+            icon={icon}
+            motion="wiggle"
+            size={12}
+            strokeWidth={2.4}
+            playEnter={false}
+            className="shrink-0"
+        />
+    );
+}
+
+function statusLineIconComponent(node: React.ReactNode): ComponentType<LucideProps> | null {
+    if (!node || typeof node !== 'object' || !('type' in node)) return null;
+    const t = (node as React.ReactElement).type;
+    if (typeof t !== 'function' && typeof t !== 'object') return null;
+    const known: Record<string, ComponentType<LucideProps>> = {
+        DoorOpen,
+        AlertTriangle,
+    };
+    const name =
+        typeof t === 'function'
+            ? (t as { displayName?: string; name?: string }).displayName ??
+              (t as { name?: string }).name
+            : undefined;
+    if (name && known[name]) return known[name];
+    if (t === DoorOpen) return DoorOpen;
+    if (t === AlertTriangle) return AlertTriangle;
+    return null;
+}
+
 function InfoChip({
     icon,
+    iconMotion = 'none',
     label,
     value,
     muted,
     tooltip,
 }: {
-    icon: React.ReactNode;
+    icon: ComponentType<LucideProps>;
+    iconMotion?: MotionIconPreset;
     label: string;
     value: React.ReactNode;
     muted?: boolean;
@@ -811,7 +890,15 @@ function InfoChip({
                 muted ? 'text-text-tertiary' : 'text-text-secondary',
             )}
         >
-            <span className="inline-flex text-text-tertiary">{icon}</span>
+            <span className="inline-flex text-text-tertiary">
+                <ActionMotionIcon
+                    icon={icon}
+                    motion={iconMotion}
+                    size={11}
+                    strokeWidth={2.4}
+                    playEnter={false}
+                />
+            </span>
             <span className="text-text-tertiary">{label}</span>
             <span className={cn('font-medium', muted ? 'text-text-tertiary' : 'text-text')}>
                 {value}

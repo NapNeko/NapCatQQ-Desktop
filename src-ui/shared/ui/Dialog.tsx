@@ -29,6 +29,7 @@ import {
 } from 'react';
 import { cn } from '../utils/cn';
 import { GsapPresence, type EnterFn, type ExitFn } from './motion/GsapPresence';
+import { MotionIcon } from './motion/MotionIcon';
 
 const DialogOpenContext = createContext<boolean>(false);
 
@@ -273,7 +274,13 @@ const ContentBody = forwardRef<
                 aria-label="关闭"
                 className="absolute right-3 top-3 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
-                <CloseIcon size={16} />
+                <MotionIcon
+                    icon={CloseIcon}
+                    motion="none"
+                    hoverAccent
+                    playEnter={false}
+                    size={16}
+                />
             </RadixDialog.Close>
         )}
     </div>

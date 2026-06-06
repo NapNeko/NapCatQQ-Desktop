@@ -7,8 +7,12 @@ import {
     ChevronRight,
     Cpu,
     HardDrive,
+    type LucideIcon,
 } from 'lucide-react';
 import { Card, Button } from '../../../shared/ui';
+import { MotionIcon } from '../../../shared/ui/motion';
+import type { ComponentType } from 'react';
+import type { LucideProps } from 'lucide-react';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import type { BotActorSnapshot } from '../../../core/ipc/types';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
@@ -23,6 +27,24 @@ import type { ResourceUsage } from '../../../hooks/diagnostics/useResourceMonito
 export interface OverviewNavigate {
     (route: AppRoute): void;
 }
+
+const overviewStatBob = (Icon: ComponentType<LucideProps>) =>
+    function OverviewStatIcon(props: LucideProps) {
+        return (
+            <MotionIcon
+                icon={Icon}
+                motion="bob"
+                playEnter={false}
+                size={props.size ?? 18}
+                strokeWidth={props.strokeWidth ?? 1.75}
+                className={props.className}
+            />
+        );
+    };
+
+const CpuChartIcon = overviewStatBob(Cpu);
+const RamChartIcon = overviewStatBob(HardDrive);
+const WarmingActivityIcon = overviewStatBob(Activity);
 
 // ─── 监控 OFF ─────────────────────────────────────────────────────────────
 
@@ -80,7 +102,7 @@ function BotCommandCenterCard({
             <div className="mb-3 flex shrink-0 items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
                     <div className="grid h-9 w-9 place-items-center rounded-md bg-brand-soft text-brand">
-                        <Bot size={18} strokeWidth={1.75} />
+                        <MotionIcon icon={Bot} motion="bob" playEnter={false} size={18} />
                     </div>
                     <div>
                         <h3 className="font-display text-[15px] font-semibold text-text">
@@ -95,7 +117,7 @@ function BotCommandCenterCard({
                     className="flex shrink-0 items-center gap-0.5 text-[12px] font-medium text-brand hover:underline"
                 >
                     管理实例
-                    <ChevronRight size={14} />
+                    <MotionIcon icon={ChevronRight} motion="nudge" playEnter={false} size={14} />
                 </button>
             </div>
 
@@ -310,7 +332,7 @@ export function PerformanceChartsSection({
     if (resource.status === 'warming' && resource.history.length < 1) {
         return (
             <Card padding="md" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
-                <Activity size={20} className="animate-pulse text-brand" />
+                <WarmingActivityIcon size={20} className="text-brand" />
                 <p className="text-[13px] text-text-secondary">正在获取首个采样…</p>
             </Card>
         );
@@ -325,7 +347,7 @@ export function PerformanceChartsSection({
         <>
             <OccupancyChart
                 title="CPU"
-                icon={Cpu}
+                icon={CpuChartIcon as LucideIcon}
                 history={resource.history}
                 dataKey="cpu"
                 valueText={cpuText}
@@ -336,7 +358,7 @@ export function PerformanceChartsSection({
             />
             <OccupancyChart
                 title="RAM"
-                icon={HardDrive}
+                icon={RamChartIcon as LucideIcon}
                 history={resource.history}
                 dataKey="ram"
                 valueText={ramText}

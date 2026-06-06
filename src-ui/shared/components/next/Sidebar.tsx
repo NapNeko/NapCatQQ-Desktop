@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 import { cn } from '../../utils/cn';
+import { MotionIcon, NAV_ROUTE_MOTION } from '../../ui/motion';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import logoPng from '../../../assets/logo.png';
 
@@ -141,7 +142,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             className={cn('h-7 w-7 transition-opacity group-hover:opacity-0', LOGO_IMG_CLASS)}
                             draggable={false}
                         />
-                        <ChevronsRight
+                        <MotionIcon
+                            icon={ChevronsRight}
+                            motion="none"
+                            hoverAccent
                             size={16}
                             strokeWidth={1.75}
                             className="absolute text-text-secondary opacity-0 transition-opacity group-hover:opacity-100"
@@ -172,7 +176,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
                             )}
                         >
-                            <ChevronsLeft size={13} strokeWidth={1.75} />
+                            <MotionIcon
+                                icon={ChevronsLeft}
+                                motion="none"
+                                hoverAccent
+                                size={13}
+                                strokeWidth={1.75}
+                            />
                         </button>
                     </>
                 )}
@@ -222,6 +232,8 @@ interface NavRowProps {
 
 const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) => {
     const Icon = item.icon;
+    const iconSize = collapsed ? 20 : 15;
+
     return (
         <li>
             <button
@@ -239,8 +251,12 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) 
                         : 'text-text-tertiary hover:bg-text/5 hover:text-text-secondary',
                 )}
             >
-                <Icon
-                    size={collapsed ? 20 : 15}
+                <MotionIcon
+                    icon={Icon}
+                    motion={isActive ? NAV_ROUTE_MOTION[item.id] : 'none'}
+                    playEnter={isActive}
+                    enterKey={isActive ? item.id : undefined}
+                    size={iconSize}
                     strokeWidth={1.75}
                     className={cn('shrink-0', isActive && 'text-brand')}
                 />

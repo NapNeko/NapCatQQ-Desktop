@@ -14,6 +14,7 @@ import { forwardRef, useLayoutEffect, useRef, type ReactNode } from 'react';
 import gsap from 'gsap';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
+import { MotionIcon } from './motion/MotionIcon';
 
 export interface CheckboxProps
     extends Omit<React.ComponentPropsWithoutRef<typeof RadixCheckbox.Root>, 'onCheckedChange' | 'checked'> {
@@ -97,7 +98,14 @@ export const Checkbox = forwardRef<
                     style={{ visibility: 'hidden', opacity: 0 }}
                     className="flex items-center justify-center text-white"
                 >
-                    <Check size={11} strokeWidth={3} />
+                    <MotionIcon
+                        icon={Check}
+                        motion="none"
+                        playEnter
+                        enterKey={String(checked === true)}
+                        size={11}
+                        strokeWidth={3}
+                    />
                 </span>
             </RadixCheckbox.Indicator>
         </RadixCheckbox.Root>

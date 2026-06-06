@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../../shared/ui';
+import { MotionIcon, refreshMotion } from '../../shared/ui/motion';
 import { useComponents } from '../../hooks/components/useComponents';
 import { useComponentAction } from '../../hooks/components/useComponentAction';
 import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
@@ -211,7 +212,12 @@ export const ComponentsPageNext: React.FC = () => {
                     </p>
                 </div>
                 <Button size="sm" variant="secondary" onClick={refetch} disabled={isLoading}>
-                    <RefreshCw size={14} className={isLoading ? 'animate-spin' : undefined} />
+                    <MotionIcon
+                        icon={RefreshCw}
+                        motion={refreshMotion(isLoading)}
+                        playEnter={false}
+                        size={14}
+                    />
                     刷新
                 </Button>
             </header>
@@ -267,7 +273,7 @@ export const ComponentsPageNext: React.FC = () => {
 
 const SectionLoading: React.FC = () => (
     <div className="flex items-center gap-2 rounded-md bg-inset/40 p-6 text-text-tertiary">
-        <Loader2 size={16} className="animate-spin" />
+        <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={16} />
         <span className="text-sm">加载中…</span>
     </div>
 );

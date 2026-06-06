@@ -13,7 +13,14 @@ import { CheckCheck, Play, Square, Trash2, X } from 'lucide-react';
 import { forwardRef } from 'react';
 import gsap from 'gsap';
 import { Button } from '../../../../shared/ui';
-import { Counter, GsapPresence, type EnterFn, type ExitFn } from '../../../../shared/ui/motion';
+import {
+    ActionMotionIcon,
+    Counter,
+    EMPHASIS_MOTION,
+    GsapPresence,
+    type EnterFn,
+    type ExitFn,
+} from '../../../../shared/ui/motion';
 
 interface BatchBottomBarProps {
     visible: boolean;
@@ -95,7 +102,12 @@ export function BatchBottomBar({
                             onClick={allSelected ? onSelectNone : onSelectAll}
                             disabled={busy || totalCount === 0}
                         >
-                            <CheckCheck size={14} strokeWidth={2.2} />
+                            <ActionMotionIcon
+                                icon={CheckCheck}
+                                motion={EMPHASIS_MOTION}
+                                size={14}
+                                strokeWidth={2.2}
+                            />
                             {allSelected ? '取消全选' : '全选'}
                         </Button>
 
@@ -107,7 +119,12 @@ export function BatchBottomBar({
                             onClick={onBatchStart}
                             disabled={busy || !hasSelection}
                         >
-                            <Play size={14} strokeWidth={2.4} />
+                            <ActionMotionIcon
+                                icon={Play}
+                                motion={busy || !hasSelection ? 'none' : 'nudge'}
+                                size={14}
+                                strokeWidth={2.4}
+                            />
                             启动
                         </Button>
                         <Button
@@ -116,7 +133,12 @@ export function BatchBottomBar({
                             onClick={onBatchStop}
                             disabled={busy || !hasSelection}
                         >
-                            <Square size={14} strokeWidth={2.4} />
+                            <ActionMotionIcon
+                                icon={Square}
+                                motion={busy || !hasSelection ? 'none' : 'nudge'}
+                                size={14}
+                                strokeWidth={2.4}
+                            />
                             停止
                         </Button>
                         <Button
@@ -126,7 +148,12 @@ export function BatchBottomBar({
                             disabled={busy || !hasSelection}
                             className="text-danger hover:bg-danger-soft hover:text-danger"
                         >
-                            <Trash2 size={14} strokeWidth={2.2} />
+                            <ActionMotionIcon
+                                icon={Trash2}
+                                motion="none"
+                                size={14}
+                                strokeWidth={2.2}
+                            />
                             删除
                         </Button>
 
@@ -138,7 +165,12 @@ export function BatchBottomBar({
                             onClick={onExitBatch}
                             disabled={busy}
                         >
-                            <X size={14} strokeWidth={2.2} />
+                            <ActionMotionIcon
+                                icon={X}
+                                motion="none"
+                                size={14}
+                                strokeWidth={2.2}
+                            />
                             退出
                         </Button>
                     </div>

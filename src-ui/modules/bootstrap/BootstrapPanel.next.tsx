@@ -29,6 +29,7 @@ import {
     ThumbsUp,
 } from 'lucide-react';
 import { Card } from '../../shared/ui';
+import { MotionIcon } from '../../shared/ui/motion';
 import { Mascot } from '../../shared/components/next/Mascot';
 import { usePreferences } from '../../hooks/preferences/preferencesStore';
 import logoPng from '../../assets/logo.png';
@@ -138,7 +139,7 @@ const HelloCard: React.FC = () => {
                     欢迎回到主页 NapCatQQ Desktop 帮你高效管理多个 QQ 机器人实例。
                 </p>
                 <div className="mt-4 inline-flex items-center gap-2 text-[13.5px] text-[var(--text-hero-accent)]">
-                    <ThumbsUp size={14} strokeWidth={2} className="shrink-0" />
+                    <MotionIcon icon={ThumbsUp} motion="nudge" playEnter={false} size={14} strokeWidth={2} className="shrink-0" />
                     <span>如果你喜欢，请去 GitHub 给个 Star</span>
                 </div>
             </div>
@@ -179,7 +180,7 @@ const RemoteSummaryCard: React.FC<{ onNavigate?: (route: AppRoute) => void }> = 
         <Card padding="md" hover="lift" className="cursor-pointer" onClick={() => onNavigate?.('remote')}>
             <div className="flex items-center gap-3">
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-info/10 text-info">
-                    <Server size={18} strokeWidth={1.75} />
+                    <MotionIcon icon={Server} motion="breathe" playEnter={false} size={18} />
                 </div>
                 <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-semibold text-text">远端主机集群</p>

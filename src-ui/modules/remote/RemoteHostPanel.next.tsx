@@ -25,7 +25,7 @@ import {
     DialogDescription,
     DialogFooter,
 } from '../../shared/ui';
-import { ListItem } from '../../shared/ui/motion';
+import { ListItem, ActionMotionIcon, RESOURCE_MOTION, refreshMotion } from '../../shared/ui/motion';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
@@ -114,7 +114,10 @@ export const RemoteHostPanelNext: React.FC = () => {
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                                 aria-label={revealIp ? '隐藏 IP 信息' : '显示 IP 信息'}
                             >
-                                {revealIp ? <Eye size={14} /> : <EyeOff size={14} />}
+                                <ActionMotionIcon
+                                    icon={revealIp ? Eye : EyeOff}
+                                    size={14}
+                                />
                             </button>
                         </TooltipTrigger>
                         <TooltipContent>
@@ -127,7 +130,11 @@ export const RemoteHostPanelNext: React.FC = () => {
                         onClick={() => refetch()}
                         disabled={isLoading}
                     >
-                        <RefreshCw size={14} className={isLoading ? 'animate-spin' : undefined} />
+                        <ActionMotionIcon
+                            icon={RefreshCw}
+                            size={14}
+                            motion={refreshMotion(isLoading)}
+                        />
                         刷新
                     </Button>
                 </div>
@@ -264,7 +271,7 @@ function ServerGrid({
 function LoadingState() {
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20 text-text-tertiary">
-            <RefreshCw size={20} className="animate-spin" />
+            <ActionMotionIcon icon={RefreshCw} size={20} motion="spin" />
             <p className="text-sm">正在加载服务器档案…</p>
         </div>
     );
@@ -273,7 +280,13 @@ function LoadingState() {
 function EmptyState({ onCreate }: { onCreate: () => void }) {
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border-subtle bg-elevated/50 py-16 text-center">
-            <Server size={32} strokeWidth={1.6} className="text-text-tertiary" />
+            <ActionMotionIcon
+                icon={Server}
+                size={32}
+                strokeWidth={1.6}
+                motion={RESOURCE_MOTION}
+                className="text-text-tertiary"
+            />
             <div>
                 <p className="font-display text-md font-semibold text-text">
                     还没有远端服务器
@@ -297,7 +310,7 @@ function FloatingAddButton({ onClick }: { onClick: () => void }) {
             className="pointer-events-auto fixed bottom-8 right-8 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-popover transition-all duration-150 hover:scale-105 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             aria-label="添加服务器"
         >
-            <Plus size={20} strokeWidth={2.4} />
+            <ActionMotionIcon icon={Plus} size={20} strokeWidth={2.4} />
         </button>
     );
 }

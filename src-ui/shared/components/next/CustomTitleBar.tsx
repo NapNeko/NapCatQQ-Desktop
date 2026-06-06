@@ -13,6 +13,7 @@ import React from 'react';
 import { Maximize2, Minus, Square, X as CloseIcon } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useWindowControls } from '../../../hooks/desktop/useWindowControls';
+import { MotionIcon } from '../../ui/motion/MotionIcon';
 
 interface CustomTitleBarProps {
   className?: string;
@@ -34,20 +35,20 @@ export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => 
 
       <div className="flex h-full shrink-0 items-stretch">
         <WindowButton onClick={minimize} aria-label="最小化">
-          <Minus size={12} strokeWidth={1.75} />
+          <MotionIcon icon={Minus} motion="none" hoverAccent playEnter={false} size={12} strokeWidth={1.75} />
         </WindowButton>
         <WindowButton
           onClick={toggleMaximize}
           aria-label={isMaximized ? '还原' : '最大化'}
         >
           {isMaximized ? (
-            <Square size={10} strokeWidth={1.75} />
+            <MotionIcon icon={Square} motion="none" hoverAccent playEnter={false} enterKey="max" size={10} strokeWidth={1.75} />
           ) : (
-            <Maximize2 size={10} strokeWidth={1.75} />
+            <MotionIcon icon={Maximize2} motion="none" hoverAccent playEnter={false} enterKey="restore" size={10} strokeWidth={1.75} />
           )}
         </WindowButton>
         <WindowButton onClick={close} aria-label="关闭" tone="danger">
-          <CloseIcon size={12} strokeWidth={1.75} />
+          <MotionIcon icon={CloseIcon} motion="none" hoverAccent playEnter={false} size={12} strokeWidth={1.75} />
         </WindowButton>
       </div>
     </header>

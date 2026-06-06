@@ -19,6 +19,7 @@ import {
     Play,
 } from 'lucide-react';
 import { Badge, Button } from '../../../shared/ui';
+import { ActionMotionIcon, LIVE_MOTION } from '../../../shared/ui/motion';
 import {
     filterLogs,
     serializeLogs,
@@ -137,7 +138,7 @@ function Header({
     return (
         <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回">
-                <ArrowLeft size={16} />
+                <ActionMotionIcon icon={ArrowLeft} size={16} />
             </Button>
             <h2 className="text-[15px] font-semibold leading-none text-text">
                 实例 {botId} 运行日志
@@ -217,7 +218,11 @@ function Toolbar({
                 onClick={onToggleAutoScroll}
                 title={autoScroll ? '已启用自动滚动' : '已暂停自动滚动'}
             >
-                {autoScroll ? <Pause size={13} /> : <Play size={13} />}
+                {autoScroll ? (
+                    <ActionMotionIcon icon={Pause} size={13} motion={LIVE_MOTION} />
+                ) : (
+                    <ActionMotionIcon icon={Play} size={13} />
+                )}
                 <span className="ml-1 text-[11.5px]">
                     {autoScroll ? '滚动中' : '已暂停'}
                 </span>
@@ -230,7 +235,7 @@ function Toolbar({
                 disabled={!hasVisible}
                 title="复制当前可见日志"
             >
-                <Copy size={13} />
+                <ActionMotionIcon icon={Copy} size={13} />
                 <span className="ml-1 text-[11.5px]">复制</span>
             </Button>
             {/* 清空 */}
@@ -241,7 +246,7 @@ function Toolbar({
                 disabled={!hasLogs}
                 title="清空面板（不删磁盘归档）"
             >
-                <Brush size={13} />
+                <ActionMotionIcon icon={Brush} size={13} />
                 <span className="ml-1 text-[11.5px]">清空</span>
             </Button>
         </div>

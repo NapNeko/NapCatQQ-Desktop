@@ -23,7 +23,7 @@ import {
     DialogTitle,
     Spinner,
 } from '../../../shared/ui';
-import { ListItem, Counter } from '../../../shared/ui/motion';
+import { ListItem, Counter, MotionIcon } from '../../../shared/ui/motion';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
@@ -304,7 +304,15 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 function EmptyState({ onCreate }: { onCreate: () => void }) {
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border-subtle bg-elevated/50 py-16 text-center">
-            <Bot size={32} strokeWidth={1.6} className="text-text-tertiary" />
+            <MotionIcon
+                icon={Bot}
+                motion="bob"
+                playEnter
+                enterKey="empty-bot"
+                size={32}
+                strokeWidth={1.6}
+                className="text-text-tertiary"
+            />
             <div>
                 <p className="font-display text-md font-semibold text-text">
                     还没有 Bot 实例

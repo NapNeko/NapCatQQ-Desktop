@@ -4,6 +4,7 @@
 import React from 'react';
 import { CheckCircle2, Loader2, Radio, Repeat } from 'lucide-react';
 import { Progress } from '../../shared/ui';
+import { MotionIcon } from '../../shared/ui/motion';
 import {
     type ActionProgressView,
     deriveEtaSeconds,
@@ -13,6 +14,10 @@ import {
     formatSpeed,
     isIndeterminate,
 } from '../../core/domain/components/progress';
+
+function progressSuccessEnterKey(progress: ActionProgressView): string {
+    return `success-${progress.percent}-${progress.message ?? ''}`;
+}
 
 export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progress }) => {
     if (progress.status === 'failed' || progress.status === 'cancelled') {
@@ -32,7 +37,14 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
     if (progress.status === 'success') {
         return (
             <div className="mt-1 flex items-center gap-2">
-                <CheckCircle2 size={12} className="shrink-0 text-success" />
+                <MotionIcon
+                    icon={CheckCircle2}
+                    motion="pulse"
+                    playEnter
+                    enterKey={progressSuccessEnterKey(progress)}
+                    size={12}
+                    className="shrink-0 text-success"
+                />
                 <span className="truncate text-[12px] text-success">已完成</span>
             </div>
         );
@@ -44,7 +56,13 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
     if (!isDownload) {
         return (
             <div className="mt-1 flex items-center gap-2">
-                <Loader2 size={12} className="shrink-0 animate-spin text-brand" />
+                <MotionIcon
+                    icon={Loader2}
+                    motion="spin"
+                    playEnter={false}
+                    size={12}
+                    className="shrink-0 text-brand"
+                />
                 <span className="truncate text-[12px] text-text-secondary">
                     {progress.message || '处理中…'}
                 </span>
@@ -61,14 +79,14 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
         progress.downloadedBytes != null && progress.totalBytes != null
             ? `${formatBytes(progress.downloadedBytes)} / ${formatBytes(progress.totalBytes)}`
             : progress.downloadedBytes != null
-                ? formatBytes(progress.downloadedBytes)
-                : null;
+              ? formatBytes(progress.downloadedBytes)
+              : null;
     const trailingMetric =
         progress.speedBps != null
             ? formatSpeed(progress.speedBps)
             : eta != null
-                ? `ETA ${formatEta(eta)}`
-                : null;
+              ? `ETA ${formatEta(eta)}`
+              : null;
 
     return (
         <div className="mt-1 flex items-center gap-2 text-[11.5px]">
@@ -111,13 +129,49 @@ export const ProgressBarOverlay: React.FC<{ progress: ActionProgressView }> = ({
 const StageIcon: React.FC<{ stage: ActionProgressView['downloadStage'] }> = ({ stage }) => {
     switch (stage) {
         case 'racing':
-            return <Radio size={12} strokeWidth={2.2} className="shrink-0 animate-pulse text-brand" />;
+            return (
+                <MotionIcon
+                    icon={Radio}
+                    motion="pulse"
+                    playEnter={false}
+                    size={12}
+                    strokeWidth={2.2}
+                    className="shrink-0 text-brand"
+                />
+            );
         case 'switching_mirror':
-            return <Repeat size={12} strokeWidth={2.2} className="shrink-0 animate-pulse text-warning" />;
+            return (
+                <MotionIcon
+                    icon={Repeat}
+                    motion="pulse"
+                    playEnter={false}
+                    size={12}
+                    strokeWidth={2.2}
+                    className="shrink-0 text-warning"
+                />
+            );
         case 'resuming':
-            return <Loader2 size={12} strokeWidth={2.2} className="shrink-0 animate-spin text-info" />;
+            return (
+                <MotionIcon
+                    icon={Loader2}
+                    motion="spin"
+                    playEnter={false}
+                    size={12}
+                    strokeWidth={2.2}
+                    className="shrink-0 text-info"
+                />
+            );
         case 'streaming':
         default:
-            return <Loader2 size={12} strokeWidth={2.2} className="shrink-0 animate-spin text-brand" />;
+            return (
+                <MotionIcon
+                    icon={Loader2}
+                    motion="spin"
+                    playEnter={false}
+                    size={12}
+                    strokeWidth={2.2}
+                    className="shrink-0 text-brand"
+                />
+            );
     }
 };
