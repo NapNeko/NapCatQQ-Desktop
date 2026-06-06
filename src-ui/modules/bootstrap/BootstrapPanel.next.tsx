@@ -27,15 +27,20 @@ import {
     Server,
     Snowflake,
     ThumbsUp,
-    Cpu,
-    HardDrive,
 } from 'lucide-react';
 import { Card } from '../../shared/ui';
 import { Mascot } from '../../shared/components/next/Mascot';
 import { usePreferences } from '../../hooks/preferences/preferencesStore';
 import logoPng from '../../assets/logo.png';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
+import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
+import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
+import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { useResourceMonitor } from '../../hooks/diagnostics/useResourceMonitor';
+import {
+    clampPerformanceMonitorIntervalMs,
+    PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT,
+} from '../../core/domain/performance/performanceSettings';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useEventStream } from '../../hooks/diagnostics/useEventStream';
 import { useServerManager } from '../../hooks/remote/useServerManager';
@@ -44,13 +49,36 @@ import {
     type NoticeItem,
     type NoticeTone,
 } from '../../core/domain/events/notice-aggregator';
-import { OccupancyChart } from './widgets/OccupancyChart';
+import {
+    OverviewCommandColumn,
+    PerformanceChartsSection,
+} from './widgets/OverviewSideColumn';
+import type { AppRoute } from '../../shared/components/next/Sidebar';
 
-export const BootstrapPanelNext: React.FC = () => {
+export interface BootstrapPanelNextProps {
+    onNavigate?: (route: AppRoute) => void;
+}
+
+export const BootstrapPanelNext: React.FC<BootstrapPanelNextProps> = ({ onNavigate }) => {
     const { bootstrap } = useBootstrap();
+    const { settings } = useBackendSettings();
     const { snapshot: releases } = useReleases();
     const { events } = useEventStream();
-    const resource = useResourceMonitor();
+    const { data: snapshots = [] } = useBotSnapshots();
+    const configs = useBotConfigsMap(snapshots);
+
+    const monitorEnabled = settings?.performanceMonitorEnabled ?? false;
+    const monitorInterval = clampPerformanceMonitorIntervalMs(
+        settings?.performanceMonitorIntervalMs ?? PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT,
+    );
+    const resource = useResourceMonitor({
+        enabled: monitorEnabled,
+        intervalMs: monitorInterval,
+    });
+    const motionEnabled = usePreferences().motionEnabled;
+
+    const localVersions = bootstrap?.local_versions ?? { napcat: null, snowluma: null };
+    const navigate = onNavigate ?? (() => {});
 
     const notices = useMemo(
         () =>
@@ -69,7 +97,7 @@ export const BootstrapPanelNext: React.FC = () => {
             {/* ─── 主列：内容区 ≥ 1100px 占 7 列；否则占满 12 列 ─── */}
             <div className="col-span-12 flex min-h-0 flex-col gap-4 [@media(min-width:1100px)]:col-span-7">
                 <HelloCard />
-                <RemoteSummaryCard />
+                <RemoteSummaryCard onNavigate={navigate} />
                 <NoticeTimelineCard notices={notices} className="min-h-0 flex-1" />
             </div>
 
@@ -79,24 +107,22 @@ export const BootstrapPanelNext: React.FC = () => {
                     napcatVersion={bootstrap?.local_versions.napcat ?? null}
                     snowlumaVersion={bootstrap?.local_versions.snowluma ?? null}
                 />
-                <OccupancyChart
-                    title="CPU"
-                    icon={Cpu}
-                    history={resource.history}
-                    dataKey="cpu"
-                    valueText={`${resource.cpu}%`}
-                    accentColor="var(--brand-500)"
-                    className="min-h-0 flex-1"
-                />
-                <OccupancyChart
-                    title="RAM"
-                    icon={HardDrive}
-                    history={resource.history}
-                    dataKey="ram"
-                    valueText={`${resource.ram}%`}
-                    accentColor="var(--accent-500)"
-                    className="min-h-0 flex-1"
-                />
+                {monitorEnabled ? (
+                    <PerformanceChartsSection
+                        resource={resource}
+                        sampleIntervalMs={monitorInterval}
+                        motionEnabled={motionEnabled}
+                    />
+                ) : (
+                    <OverviewCommandColumn
+                        snapshots={snapshots}
+                        configs={configs}
+                        bootstrap={bootstrap}
+                        localVersions={localVersions}
+                        releases={releases}
+                        onNavigate={navigate}
+                    />
+                )}
             </div>
         </div>
     );
@@ -143,7 +169,9 @@ const HelloCard: React.FC = () => {
 // 接 useServerManager 拿到 ServerManager 中已保存的服务器档案数量。
 // react-query 缓存 key 为 ['servers']，与远端页 / useComponents 共享同一份。
 
-const RemoteSummaryCard: React.FC = () => {
+const RemoteSummaryCard: React.FC<{ onNavigate?: (route: AppRoute) => void }> = ({
+    onNavigate,
+}) => {
     const { servers, isLoading } = useServerManager();
     const count = servers.length;
     const description =
@@ -152,7 +180,7 @@ const RemoteSummaryCard: React.FC = () => {
             : `已配置 ${count} 台远端主机，点击进入 Remote 页面管理。`;
 
     return (
-        <Card padding="md" hover="lift" className="cursor-pointer">
+        <Card padding="md" hover="lift" className="cursor-pointer" onClick={() => onNavigate?.('remote')}>
             <div className="flex items-center gap-3">
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-info/10 text-info">
                     <Server size={18} strokeWidth={1.75} />
