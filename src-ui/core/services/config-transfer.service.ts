@@ -1,30 +1,51 @@
 // 配置导入导出 IPC 服务。
-// 唯一持有 export_config / import_config 命令名 + 目录选择的位置（R3）。
-//
-// 流程：先弹原生目录对话框拿路径，再把路径交给后端 command 做实际复制 / 校验写回。
-// 用户取消对话框时返回 null，hook 据此静默收场（不当错误）。
 
-import { invoke, isTauri, pickDirectory } from '../ipc/transport';
-import type { ConfigExportResult, ConfigImportResult } from '../ipc/types';
+import { invoke, isTauri, pickDirectory, pickZipFile, saveZipFile } from '../ipc/transport';
+import type {
+    ConfigExportResult,
+    ConfigImportPreview,
+    ConfigImportResult,
+} from '../ipc/types';
+
+function defaultExportZipName(): string {
+    return `napcat-config-export-${Math.floor(Date.now() / 1000)}.zip`;
+}
 
 export const configTransferService = {
-    /// 弹目录选择 → 导出到该目录。用户取消返回 null。
     export: async (): Promise<ConfigExportResult | null> => {
         if (!isTauri) {
-            return { export_dir: '(浏览器预览不支持导出)', files: [] };
+            return { export_path: '(浏览器预览不支持导出)', files: [] };
         }
-        const dir = await pickDirectory('选择导出目录');
-        if (!dir) return null;
-        return invoke<ConfigExportResult>('export_config', { destDir: dir });
+        let dest = await saveZipFile('导出配置包', defaultExportZipName());
+        if (!dest) return null;
+        if (!dest.toLowerCase().endsWith('.zip')) {
+            dest = `${dest}.zip`;
+        }
+        return invoke<ConfigExportResult>('export_config', { destPath: dest });
     },
 
-    /// 弹目录选择 → 从该目录导入。用户取消返回 null。
-    import: async (): Promise<ConfigImportResult | null> => {
+    preview: async (sourcePath: string): Promise<ConfigImportPreview> => {
+        if (!isTauri) {
+            return {
+                source_path: sourcePath,
+                source_kind: 'directory',
+                files_found: ['应用配置'],
+                warnings: [],
+                can_import: true,
+            };
+        }
+        return invoke<ConfigImportPreview>('preview_config_import', { sourcePath });
+    },
+
+    import: async (sourcePath: string): Promise<ConfigImportResult> => {
         if (!isTauri) {
             return { files: [], skipped: [] };
         }
-        const dir = await pickDirectory('选择配置来源目录');
-        if (!dir) return null;
-        return invoke<ConfigImportResult>('import_config', { srcDir: dir });
+        return invoke<ConfigImportResult>('import_config', { sourcePath });
     },
+
+    pickZipSource: async (): Promise<string | null> => pickZipFile('选择配置 ZIP 包'),
+
+    pickDirectorySource: async (): Promise<string | null> =>
+        pickDirectory('选择配置文件夹'),
 };

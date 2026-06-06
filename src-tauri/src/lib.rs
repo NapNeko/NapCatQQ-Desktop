@@ -294,6 +294,7 @@ pub fn run() {
             commands::system_metrics::get_system_resource_snapshot,
             commands::config_transfer::export_config,
             commands::config_transfer::import_config,
+            commands::config_transfer::preview_config_import,
             commands::components::list_components,
             commands::components::detect_component,
             commands::components::run_component_action,

@@ -56,3 +56,32 @@ export async function pickDirectory(title: string): Promise<string | null> {
     if (Array.isArray(selected)) return selected[0] ?? null;
     return selected;
 }
+
+/// 选择单个 .zip 文件，返回绝对路径；取消返回 null。
+export async function pickZipFile(title: string): Promise<string | null> {
+    const selected = await tauriInvoke<string | string[] | null>('plugin:dialog|open', {
+        options: {
+            directory: false,
+            multiple: false,
+            title,
+            filters: [{ name: 'ZIP', extensions: ['zip'] }],
+        },
+    });
+    if (Array.isArray(selected)) return selected[0] ?? null;
+    return selected;
+}
+
+/// 另存为 ZIP，返回用户选的完整路径；取消返回 null。
+export async function saveZipFile(
+    title: string,
+    defaultFileName: string,
+): Promise<string | null> {
+    const selected = await tauriInvoke<string | null>('plugin:dialog|save', {
+        options: {
+            title,
+            defaultPath: defaultFileName,
+            filters: [{ name: 'ZIP', extensions: ['zip'] }],
+        },
+    });
+    return selected;
+}

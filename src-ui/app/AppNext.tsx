@@ -1,11 +1,10 @@
 // 新 UI 树根 = AppShell。
-// 布局:TitleBar(透明) ─ [Sidebar | main] ─ StatusBar(极弱)
+// 布局:TitleBar(透明) ─ [Sidebar | main]
 
 import React, { useEffect, useState } from 'react';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
-import { StatusBar } from '../shared/components/next/StatusBar';
 import { InfoBarStack, TooltipProvider } from '../shared/ui';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
 import { BotPageNext } from '../modules/bot/BotPage.next';
@@ -21,7 +20,6 @@ import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { useCloseActionBootstrap } from '../hooks/preferences/useCloseActionBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
-import { APP_VERSION_LABEL } from '../core/domain/app-meta';
 import { PageTransition } from '../shared/ui/motion';
 
 /// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
@@ -124,8 +122,6 @@ export const AppNext: React.FC = () => {
                         </main>
                     </div>
                 </div>
-
-                <StatusBar appVersion={APP_VERSION_LABEL} />
 
                 <InfoBarStack items={bars} onDismiss={dismiss} />
             </div>

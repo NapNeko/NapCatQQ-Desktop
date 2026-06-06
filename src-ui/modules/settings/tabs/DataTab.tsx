@@ -1,23 +1,37 @@
-// 数据 Tab。数据根目录打开（已有 IPC）+ 迁移报告导出（已有 IPC）+ 配置导入导出。
-//
-// 配置导入导出走 useConfigTransfer：导出当前配置到用户选的目录、从用户选的目录导入。
-// 文件对话框走 tauri-plugin-dialog（webview 不能用 <input type=file> 拿真实路径）。
+// 数据 Tab：数据根目录、配置导入导出、GitHub Token（即时操作 + PAT 进草稿）。
 
-import { useBootstrap } from '../../../hooks/bootstrap/useBootstrap';
+import { useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useConfigTransfer } from '../../../hooks/preferences/useConfigTransfer';
-import { Button } from '../../../shared/ui';
-import { FieldRow } from '../_shared';
+import { ConfigImportDialog } from '../ConfigImportDialog';
+import { Button, TextField } from '../../../shared/ui';
+import type { SettingsDraft } from '../settings-draft';
+import { FieldRow, SettingsSection, SettingsTabSections } from '../_shared';
 
 interface Props {
     dataRoot: string;
     onOpenDataDir: () => Promise<string>;
     isOpeningDir: boolean;
+    draft: SettingsDraft | null;
+    patchDraft: (patch: Partial<SettingsDraft>) => void;
 }
 
-export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir }: Props) {
-    const { exportMigrationReport, isExporting } = useBootstrap();
-    const { exportConfig, importConfig, isExporting: isExportingCfg, isImporting } =
-        useConfigTransfer();
+export function DataTab({
+    dataRoot,
+    onOpenDataDir,
+    isOpeningDir,
+    draft,
+    patchDraft,
+}: Props) {
+    const [revealPat, setRevealPat] = useState(false);
+    const {
+        exportConfig,
+        openImportWizard,
+        importOpen,
+        setImportOpen,
+        onImported,
+        isExporting: isExportingCfg,
+    } = useConfigTransfer();
 
     const handleOpen = async () => {
         try {
@@ -29,60 +43,85 @@ export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir }: Props) {
     };
 
     return (
-        <>
-            <FieldRow label="数据根目录" description={dataRoot}>
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleOpen}
-                    disabled={isOpeningDir}
-                >
-                    打开
-                </Button>
-            </FieldRow>
+        <SettingsTabSections>
+            <SettingsSection title="存储">
+                <FieldRow label="数据根目录" description={dataRoot} isLast>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleOpen}
+                        disabled={isOpeningDir}
+                    >
+                        打开
+                    </Button>
+                </FieldRow>
+            </SettingsSection>
 
-            <FieldRow
-                label="导出当前配置"
-                description="把应用配置 / Bot 配置 / 远端档案打包到所选目录（不含密码、SSH 私钥、token 等密钥）"
-            >
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => exportConfig()}
-                    disabled={isExportingCfg}
+            <SettingsSection title="配置备份">
+                <FieldRow
+                    label="导出当前配置"
+                    description="保存为 ZIP 包（config.json、bot.json、servers.json 与元数据；不含密钥）"
                 >
-                    {isExportingCfg ? '导出中…' : '导出'}
-                </Button>
-            </FieldRow>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => exportConfig()}
+                        disabled={isExportingCfg}
+                    >
+                        {isExportingCfg ? '导出中…' : '导出 ZIP'}
+                    </Button>
+                </FieldRow>
 
-            <FieldRow
-                label="导入配置"
-                description="从所选目录读取配置包并合并到当前数据根；导入后需重启生效。密钥不随包导入，需重新配置"
-            >
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => importConfig()}
-                    disabled={isImporting}
+                <FieldRow
+                    label="导入配置"
+                    description="从 ZIP 或文件夹恢复；向导内可预览将写入的项"
+                    isLast
                 >
-                    {isImporting ? '导入中…' : '导入'}
-                </Button>
-            </FieldRow>
+                    <Button variant="secondary" size="sm" onClick={openImportWizard}>
+                        打开导入向导
+                    </Button>
+                </FieldRow>
+            </SettingsSection>
 
-            <FieldRow
-                label="导出迁移报告"
-                description="导出上次从旧版 Python 迁移的诊断报告，排查迁移问题时用"
-                isLast
+            <ConfigImportDialog
+                open={importOpen}
+                onOpenChange={setImportOpen}
+                onImported={onImported}
+            />
+
+            <SettingsSection
+                title="GitHub"
+                description="可选；组件页检查 NapCat / SnowLuma 更新时可走认证额度"
             >
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => exportMigrationReport()}
-                    disabled={isExporting}
-                >
-                    {isExporting ? '导出中…' : '导出报告'}
-                </Button>
-            </FieldRow>
-        </>
+                {!draft ? (
+                    <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
+                ) : (
+                    <FieldRow
+                        label="Personal Access Token"
+                        description="仅需 public_repo 或无权限 classic token；保存后写入系统密钥库"
+                        isLast
+                    >
+                        <div className="flex items-center gap-1.5">
+                            <TextField
+                                className="w-72"
+                                type={revealPat ? 'text' : 'password'}
+                                placeholder="ghp_..."
+                                autoComplete="off"
+                                value={draft.githubPat}
+                                onValueChange={(v) => patchDraft({ githubPat: v })}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setRevealPat((r) => !r)}
+                                className="flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text"
+                                aria-label={revealPat ? '隐藏 token' : '显示 token'}
+                            >
+                                {revealPat ? <EyeOff size={15} /> : <Eye size={15} />}
+                            </button>
+                        </div>
+                    </FieldRow>
+                )}
+            </SettingsSection>
+        </SettingsTabSections>
     );
 }

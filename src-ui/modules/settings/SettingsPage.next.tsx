@@ -7,8 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger, Button, Spinner } from '../..
 import { usePreferences } from '../../hooks/preferences/preferencesStore';
 import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
-import { GeneralTab } from './tabs/GeneralTab';
-import { NetworkTab } from './tabs/NetworkTab';
+import { AppearanceTab } from './tabs/AppearanceTab';
+import { RuntimeTab } from './tabs/RuntimeTab';
 import { DataTab } from './tabs/DataTab';
 import { AboutTab } from './tabs/AboutTab';
 import {
@@ -22,7 +22,7 @@ export function SettingsPageNext() {
     const { bootstrap, openDataDir, isOpeningDir } = useBootstrap();
     const { settings, save, isSaving } = useBackendSettings();
 
-    const [tab, setTab] = useState('general');
+    const [tab, setTab] = useState('appearance');
     const [draft, setDraft] = useState<SettingsDraft | null>(null);
 
     useEffect(() => {
@@ -54,7 +54,7 @@ export function SettingsPageNext() {
                     设置
                 </h1>
                 <p className="mt-1.5 text-[13px] text-text-secondary">
-                    修改后请点击右上角保存；数据与关于页为即时操作
+                    外观与运行项修改后请保存；数据页中目录与导入导出可即时操作
                 </p>
             </header>
 
@@ -65,8 +65,8 @@ export function SettingsPageNext() {
             >
                 <div className="sticky top-0 z-[5] flex shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
                     <TabsList className="border-b-0">
-                        <TabsTrigger value="general">通用</TabsTrigger>
-                        <TabsTrigger value="network">网络</TabsTrigger>
+                        <TabsTrigger value="appearance">外观</TabsTrigger>
+                        <TabsTrigger value="runtime">运行</TabsTrigger>
                         <TabsTrigger value="data">数据</TabsTrigger>
                         <TabsTrigger value="about">关于</TabsTrigger>
                     </TabsList>
@@ -78,25 +78,27 @@ export function SettingsPageNext() {
                     />
                 </div>
 
-                <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto pr-1">
-                    <TabsContent value="general" className="space-y-6 pb-8 pt-6">
-                        <GeneralTab draft={draft} patchDraft={patchDraft} />
+                <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-0.5 pr-2">
+                    <TabsContent value="appearance" className="pb-10 pt-7 focus-visible:outline-none">
+                        <AppearanceTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
-                    <TabsContent value="network" className="space-y-6 pb-8 pt-6">
-                        <NetworkTab draft={draft} patchDraft={patchDraft} />
+                    <TabsContent value="runtime" className="pb-10 pt-7 focus-visible:outline-none">
+                        <RuntimeTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
-                    <TabsContent value="data" className="space-y-6 pb-8 pt-6">
+                    <TabsContent value="data" className="pb-10 pt-7 focus-visible:outline-none">
                         <DataTab
                             dataRoot={bootstrap?.data_root ?? '—'}
                             onOpenDataDir={openDataDir}
                             isOpeningDir={isOpeningDir}
+                            draft={draft}
+                            patchDraft={patchDraft}
                         />
                     </TabsContent>
 
-                    <TabsContent value="about" className="space-y-6 pb-8 pt-6">
-                        <AboutTab localVersions={bootstrap?.local_versions ?? null} />
+                    <TabsContent value="about" className="pb-10 pt-7 focus-visible:outline-none">
+                        <AboutTab />
                     </TabsContent>
                 </div>
             </Tabs>
