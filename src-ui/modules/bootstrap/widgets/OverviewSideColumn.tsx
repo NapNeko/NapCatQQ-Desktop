@@ -1,4 +1,4 @@
-// 概览副列：监控关闭时的指挥台 + 一眼三项 + 底注；开启时的双曲线区。
+// 概览副列：监控关闭时的态势摘要 + 实例运行台；开启时的双曲线区。
 
 import {
     Activity,
@@ -6,24 +6,17 @@ import {
     Bot,
     ChevronRight,
     Cpu,
-    Gauge,
     HardDrive,
-    Settings,
 } from 'lucide-react';
 import { Card, Button } from '../../../shared/ui';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import type { BotActorSnapshot } from '../../../core/ipc/types';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
-import type { BootstrapSnapshot } from '../../../core/ipc/types';
-import type { LocalVersionSnapshot } from '../../../core/ipc/types';
 import {
     computeBotFleetStats,
-    glanceSelfCheck,
     listActionableBots,
-    countKernelUpdates,
 } from '../../../core/domain/overview/glance';
 import { botStateBadge } from '../../../core/domain/bot/status';
-import type { ReleaseSnapshotView } from '../../../core/domain/release/normalize';
 import { OccupancyChart } from './OccupancyChart';
 import type { ResourceUsage } from '../../../hooks/diagnostics/useResourceMonitor';
 
@@ -36,16 +29,10 @@ export interface OverviewNavigate {
 export function OverviewCommandColumn({
     snapshots,
     configs,
-    bootstrap,
-    localVersions,
-    releases,
     onNavigate,
 }: {
     snapshots: BotActorSnapshot[];
     configs: Record<string, BotConfig | null>;
-    bootstrap: BootstrapSnapshot | null | undefined;
-    localVersions: LocalVersionSnapshot;
-    releases: ReleaseSnapshotView;
     onNavigate: OverviewNavigate;
 }) {
     const stats = computeBotFleetStats(snapshots);
@@ -54,6 +41,7 @@ export function OverviewCommandColumn({
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <FleetGlanceCard stats={stats} actionableCount={actionable.length} />
             <BotCommandCenterCard
                 stats={stats}
                 actionable={actionable}
@@ -61,13 +49,6 @@ export function OverviewCommandColumn({
                 configs={configs}
                 onNavigate={onNavigate}
             />
-            <HealthGlanceCard
-                stats={stats}
-                bootstrap={bootstrap}
-                localVersions={localVersions}
-                releases={releases}
-            />
-            <MonitoringDisabledFooter onNavigate={onNavigate} />
         </div>
     );
 }
@@ -87,12 +68,12 @@ function BotCommandCenterCard({
 }) {
     const subtitle =
         stats.total === 0
-            ? '尚未创建机器人'
+            ? '暂无已注册实例'
             : stats.crashed > 0 || stats.pendingRestart > 0
-              ? `崩溃 ${stats.crashed} · 待重启 ${stats.pendingRestart}`
+              ? `异常 ${stats.crashed} · 待重启 ${stats.pendingRestart}`
               : stats.running > 0
-                ? `${stats.running} 个运行中`
-                : '全部已停止';
+                ? `${stats.running} 个实例运行中`
+                : '当前无运行中实例';
 
     return (
         <Card padding="md" className="flex min-h-0 flex-1 flex-col">
@@ -103,7 +84,7 @@ function BotCommandCenterCard({
                     </div>
                     <div>
                         <h3 className="font-display text-[15px] font-semibold text-text">
-                            运行指挥
+                            实例运行台
                         </h3>
                         <p className="text-[12px] text-text-tertiary">{subtitle}</p>
                     </div>
@@ -113,7 +94,7 @@ function BotCommandCenterCard({
                     onClick={() => onNavigate('bots')}
                     className="flex shrink-0 items-center gap-0.5 text-[12px] font-medium text-brand hover:underline"
                 >
-                    机器人
+                    管理实例
                     <ChevronRight size={14} />
                 </button>
             </div>
@@ -127,18 +108,18 @@ function BotCommandCenterCard({
                     </span>
                 </p>
                 <p className="sr-only">
-                    {stats.running} 个运行中，共 {stats.total} 个实例
+                    运行中 {stats.running}，已注册 {stats.total}
                 </p>
-                <p className="text-[11.5px] text-text-tertiary">运行中 / 总数</p>
+                <p className="text-[11.5px] text-text-tertiary">运行中 / 已注册</p>
             </div>
 
             {stats.total === 0 ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center">
                     <p className="text-[13px] text-text-secondary">
-                        添加第一个机器人开始管理实例
+                        在实例页创建配置后即可在此查看运行态势
                     </p>
                     <Button variant="primary" size="sm" onClick={() => onNavigate('bots')}>
-                        去机器人页
+                        前往实例页
                     </Button>
                 </div>
             ) : (
@@ -149,7 +130,7 @@ function BotCommandCenterCard({
                                 id="overview-actionable-heading"
                                 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning"
                             >
-                                需处理
+                                待处置
                             </h4>
                             <ul className="space-y-1">
                                 {actionable.map((item) => (
@@ -178,7 +159,7 @@ function BotCommandCenterCard({
                                 id="overview-running-heading"
                                 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary"
                             >
-                                运行中
+                                运行中实例
                             </h4>
                             <ul className="space-y-1">
                                 {runningList.map((snap) => {
@@ -209,30 +190,30 @@ function BotCommandCenterCard({
     );
 }
 
-function HealthGlanceCard({
+function FleetGlanceCard({
     stats,
-    bootstrap,
-    localVersions,
-    releases,
+    actionableCount,
 }: {
     stats: ReturnType<typeof computeBotFleetStats>;
-    bootstrap: BootstrapSnapshot | null | undefined;
-    localVersions: LocalVersionSnapshot;
-    releases: ReleaseSnapshotView;
+    actionableCount: number;
 }) {
-    const updates = countKernelUpdates(localVersions, releases);
-    const selfCheck = glanceSelfCheck(bootstrap);
+    const attentionTone =
+        stats.crashed > 0
+            ? 'danger'
+            : actionableCount > 0
+              ? 'warning'
+              : 'success';
 
     return (
         <Card padding="md" className="shrink-0">
             <h3 className="mb-3 font-display text-[13px] font-semibold text-text">
-                一眼三项
+                实例态势
             </h3>
             <div className="grid grid-cols-3 gap-2">
                 <GlanceCell
-                    label="运行实例"
-                    value={`${stats.running}/${stats.total}`}
-                    srSummary={`${stats.running} 个运行中，共 ${stats.total} 个`}
+                    label="运行中"
+                    value={String(stats.running)}
+                    srSummary={`${stats.running} 个实例正在运行`}
                     tone={
                         stats.crashed > 0
                             ? 'danger'
@@ -242,22 +223,22 @@ function HealthGlanceCard({
                     }
                 />
                 <GlanceCell
-                    label="内核更新"
-                    value={String(updates)}
-                    srSummary={updates === 0 ? '无可用内核更新' : `${updates} 项可更新`}
-                    tone={updates > 0 ? 'warning' : 'success'}
+                    label="已注册"
+                    value={String(stats.total)}
+                    srSummary={`共 ${stats.total} 个已注册实例`}
+                    tone="neutral"
                 />
                 <GlanceCell
-                    label="系统自检"
-                    value={String(selfCheck.issueCount)}
-                    srSummary={selfCheck.label}
-                    tone={selfCheck.tone}
+                    label="待处置"
+                    value={String(actionableCount)}
+                    srSummary={
+                        actionableCount === 0
+                            ? '无异常或待重启项'
+                            : `${actionableCount} 项需进入实例页处理`
+                    }
+                    tone={attentionTone}
                 />
             </div>
-            <p className="mt-2 text-center text-[11px] text-text-disabled">
-                {selfCheck.label}
-                {updates > 0 ? ` · ${updates} 项内核可更新` : ''}
-            </p>
         </Card>
     );
 }
@@ -293,23 +274,6 @@ function GlanceCell({
             </div>
             <p className="font-mono text-xl font-semibold tabular-nums text-text">{value}</p>
             <span className="sr-only">{srSummary}</span>
-        </div>
-    );
-}
-
-function MonitoringDisabledFooter({ onNavigate }: { onNavigate: OverviewNavigate }) {
-    return (
-        <div className="flex shrink-0 flex-wrap items-center justify-center gap-1.5 px-1 py-1 text-center text-[11px] text-text-tertiary">
-            <Gauge size={12} className="shrink-0 opacity-70" aria-hidden />
-            <span>性能监控已关闭，未采集本机 CPU / 内存。</span>
-            <button
-                type="button"
-                onClick={() => onNavigate('settings')}
-                className="inline-flex items-center gap-0.5 font-medium text-brand hover:underline"
-            >
-                <Settings size={11} />
-                去设置开启
-            </button>
         </div>
     );
 }

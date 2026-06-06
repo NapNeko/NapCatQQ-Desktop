@@ -77,7 +77,6 @@ export const BootstrapPanelNext: React.FC<BootstrapPanelNextProps> = ({ onNaviga
     });
     const motionEnabled = usePreferences().motionEnabled;
 
-    const localVersions = bootstrap?.local_versions ?? { napcat: null, snowluma: null };
     const navigate = onNavigate ?? (() => {});
 
     const notices = useMemo(
@@ -117,9 +116,6 @@ export const BootstrapPanelNext: React.FC<BootstrapPanelNextProps> = ({ onNaviga
                     <OverviewCommandColumn
                         snapshots={snapshots}
                         configs={configs}
-                        bootstrap={bootstrap}
-                        localVersions={localVersions}
-                        releases={releases}
                         onNavigate={navigate}
                     />
                 )}
