@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
-import { animateListChildrenEnter } from '../../../shared/ui/motion/listEnter';
+import { animateListChildrenEnterAfterPaint } from '../../../shared/ui/motion/listEnter';
 import {
     Button,
     Dialog,
@@ -363,7 +363,7 @@ function BotListGrid({
         () => {
             const root = containerRef.current;
             if (!root) return;
-            animateListChildrenEnter(root, bots.length, m);
+            return animateListChildrenEnterAfterPaint(root, bots.length, m);
         },
         { scope: containerRef, dependencies: [bots.length, m.enabled, m.level] },
     );
