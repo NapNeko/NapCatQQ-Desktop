@@ -8,4 +8,5 @@ export const mockBackendSettings: BackendSettings = {
     performanceMonitorEnabled: true,
     performanceMonitorIntervalMs: 1200,
     githubPat: '',
+    closeAction: 'close',
 };

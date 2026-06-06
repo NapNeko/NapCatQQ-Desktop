@@ -1,10 +1,13 @@
-// 通用 Tab。两类设置混排但语义分明:
-//   - 上半:纯客户端偏好(主题 / 吉祥物 / 动画档位与速度 / 关闭行为),切换即时生效。
-//   - 下半:后端持久化设置(Bot 登录检查间隔 / 性能监控),改动进草稿,底部保存条落盘。
+// 通用 Tab。所有项改动进入统一草稿，右上角「保存设置」后落盘（后端 + localStorage）。
 
-import { preferencesStore, type AppPreferences } from '../../../hooks/preferences/preferencesStore';
-import type { BackendSettings } from '../../../core/services/settings.service';
+import {
+    clampPerformanceMonitorIntervalMs,
+    PERFORMANCE_MONITOR_INTERVAL_MS_MAX,
+    PERFORMANCE_MONITOR_INTERVAL_MS_MIN,
+} from '../../../core/domain/performance/performanceSettings';
+import type { CloseAction } from '../../../hooks/preferences/preferencesStore';
 import { NumberField, Select, Switch } from '../../../shared/ui';
+import type { SettingsDraft } from '../settings-draft';
 import {
     FieldRow,
     MotionLevelSegment,
@@ -13,54 +16,62 @@ import {
 } from '../_shared';
 
 interface Props {
-    prefs: AppPreferences;
-    draft: BackendSettings | null;
-    patchDraft: (patch: Partial<BackendSettings>) => void;
+    draft: SettingsDraft | null;
+    patchDraft: (patch: Partial<SettingsDraft>) => void;
 }
 
-export function GeneralTab({ prefs, draft, patchDraft }: Props) {
+export function GeneralTab({ draft, patchDraft }: Props) {
+    if (!draft) {
+        return (
+            <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
+        );
+    }
+
     return (
         <>
-            <FieldRow label="主题" description="切换后立即生效，无需重启">
-                <ThemeSegment value={prefs.theme} onChange={preferencesStore.setTheme} />
+            <FieldRow
+                label="主题"
+                description="保存后生效；编辑过程中界面不会预览切换"
+            >
+                <ThemeSegment
+                    value={draft.theme}
+                    onChange={(v) => patchDraft({ theme: v })}
+                />
             </FieldRow>
 
-            <FieldRow label="主页吉祥物" description="概览页右上角的猫娘">
+            <FieldRow label="主页吉祥物" description="保存后更新概览页右上角猫娘">
                 <Switch
-                    checked={prefs.showMascot}
-                    onCheckedChange={preferencesStore.setShowMascot}
+                    checked={draft.showMascot}
+                    onCheckedChange={(v) => patchDraft({ showMascot: v })}
                 />
             </FieldRow>
 
             <FieldRow
                 label="动画与体感"
-                description="总开关。关闭后所有过渡动画退化为瞬时显示。系统级「减少动画」会自动覆盖此设置。"
+                description="总开关。关闭后过渡退化为瞬时。系统「减少动画」仍会覆盖。"
             >
                 <Switch
-                    checked={prefs.motionEnabled}
-                    onCheckedChange={preferencesStore.setMotionEnabled}
+                    checked={draft.motionEnabled}
+                    onCheckedChange={(v) => patchDraft({ motionEnabled: v })}
                 />
             </FieldRow>
 
             <FieldRow
                 label="动画档位"
-                description="优雅 仅淡入淡出 · 标准 含轻 spring · 丰富 按钮弹性 + 卡片浮起 + 状态点呼吸 + 数字滚动"
+                description="优雅 仅淡入淡出 · 标准 含轻 spring · 丰富 按钮弹性 + 卡片浮起等"
             >
                 <MotionLevelSegment
-                    value={prefs.motionLevel}
-                    onChange={preferencesStore.setMotionLevel}
-                    disabled={!prefs.motionEnabled}
+                    value={draft.motionLevel}
+                    onChange={(v) => patchDraft({ motionLevel: v })}
+                    disabled={!draft.motionEnabled}
                 />
             </FieldRow>
 
-            <FieldRow
-                label="动画速度"
-                description="0.5x 慢一点更克制；1.5x 快一点更利落。切换档位、滑动按钮都能立即感受到。"
-            >
+            <FieldRow label="动画速度" description="0.5x 更克制；1.5x 更利落。保存后全局动画生效">
                 <MotionSpeedSlider
-                    value={prefs.motionSpeed}
-                    onChange={preferencesStore.setMotionSpeed}
-                    disabled={!prefs.motionEnabled}
+                    value={draft.motionSpeed}
+                    onChange={(v) => patchDraft({ motionSpeed: v })}
+                    disabled={!draft.motionEnabled}
                 />
             </FieldRow>
 
@@ -69,9 +80,9 @@ export function GeneralTab({ prefs, draft, patchDraft }: Props) {
                 description="关闭时隐藏到系统托盘；退出则结束程序（有本机 Bot 运行时会拦截退出）"
             >
                 <Select
-                    value={prefs.closeAction}
+                    value={draft.closeAction}
                     onValueChange={(v) =>
-                        preferencesStore.setCloseAction(v as 'close' | 'tray')
+                        patchDraft({ closeAction: v as CloseAction })
                     }
                     items={[
                         { value: 'close', label: '关闭程序' },
@@ -80,13 +91,12 @@ export function GeneralTab({ prefs, draft, patchDraft }: Props) {
                 />
             </FieldRow>
 
-            {/* 后端持久化设置：改动进草稿，底部保存条落盘 */}
             <FieldRow
                 label="Bot 登录检查间隔"
-                description="已登录状态下轮询 NapCat WebUI 检查在线态的间隔；未登录时固定 1 秒。范围 1000–60000 毫秒"
+                description="已登录状态下轮询 NapCat WebUI 的间隔；未登录时固定 1 秒。1000–60000 毫秒"
             >
                 <BackendNumber
-                    value={draft?.botLoginCheckIntervalMs ?? null}
+                    value={draft.botLoginCheckIntervalMs}
                     min={1000}
                     max={60000}
                     step={500}
@@ -97,34 +107,37 @@ export function GeneralTab({ prefs, draft, patchDraft }: Props) {
 
             <FieldRow
                 label="主页性能监控"
-                description="关闭后概览页不再显示 CPU / 内存占用曲线"
+                description="关闭并保存后概览不再显示 CPU / 内存曲线；开启后按采样间隔刷新"
             >
                 <Switch
-                    checked={draft?.performanceMonitorEnabled ?? true}
+                    checked={draft.performanceMonitorEnabled}
                     onCheckedChange={(v) => patchDraft({ performanceMonitorEnabled: v })}
                 />
             </FieldRow>
 
             <FieldRow
                 label="性能监控采样间隔"
-                description="概览页 CPU / 内存曲线的刷新间隔。范围 500–10000 毫秒"
+                description={`概览页 CPU / 内存曲线刷新间隔。${PERFORMANCE_MONITOR_INTERVAL_MS_MIN}–${PERFORMANCE_MONITOR_INTERVAL_MS_MAX} 毫秒，步进 100`}
                 isLast
             >
                 <BackendNumber
-                    value={draft?.performanceMonitorIntervalMs ?? null}
-                    min={500}
-                    max={10000}
+                    value={draft.performanceMonitorIntervalMs}
+                    min={PERFORMANCE_MONITOR_INTERVAL_MS_MIN}
+                    max={PERFORMANCE_MONITOR_INTERVAL_MS_MAX}
                     step={100}
-                    onChange={(v) => patchDraft({ performanceMonitorIntervalMs: v })}
+                    onChange={(v) =>
+                        patchDraft({
+                            performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(v),
+                        })
+                    }
                     suffix="ms"
-                    disabled={draft ? !draft.performanceMonitorEnabled : false}
+                    disabled={!draft.performanceMonitorEnabled}
                 />
             </FieldRow>
         </>
     );
 }
 
-/// 设置页统一的数值输入：固定 w，空值回落到 min，clamp 到 [min,max]。
 function BackendNumber({
     value,
     min,
@@ -134,7 +147,7 @@ function BackendNumber({
     disabled,
     onChange,
 }: {
-    value: number | null;
+    value: number;
     min: number;
     max: number;
     step: number;
@@ -152,8 +165,11 @@ function BackendNumber({
                 step={step}
                 disabled={disabled}
                 onValueChange={(n) => {
-                    const next = n ?? min;
-                    onChange(Math.max(min, Math.min(max, Math.round(next))));
+                    if (n === null) return;
+                    onChange(Math.max(min, Math.min(max, Math.round(n))));
+                }}
+                onBlur={() => {
+                    onChange(Math.max(min, Math.min(max, Math.round(value))));
                 }}
             />
             {suffix && (

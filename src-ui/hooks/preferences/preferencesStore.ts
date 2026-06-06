@@ -1,19 +1,15 @@
 // 客户端偏好的模块级 store。纯前端，落盘到 localStorage。
 //
-// 跟 napcatLoginStore / globalInfoBarStore 同一套：模块级 state + listeners +
-// useSyncExternalStore 视图。理由见 FRONTEND_HANDOFF §3.8 教训 1：任何"长期
-// 累积、跨路由保留"的 state 都必须模块级，不能 useReducer 组件级。
+// 设置页不直接改 store：改动进统一草稿，点「保存设置」后由 settings-draft
+// 调用 applySnapshot 一次性写入。其它页面只读（主题 / 动画 / 吉祥物 / 关闭行为）。
 //
 // 当前承载：
 //   theme           light / dark / auto
 //   showMascot      true / false
-//   closeAction     close（关闭程序）/ tray（最小化到托盘，留给 Tauri 后续接入）
+//   closeAction     close（关闭程序）/ tray（最小化到托盘）
 //   motionEnabled   动画总开关。系统级 prefers-reduced-motion 命中时也会被强制覆盖
 //   motionLevel     elegant / standard / rich。决定动画风格强度
 //   motionSpeed     0.5 ~ 1.5。在档位 baseline 上再乘一次
-//
-// 这些字段都不依赖后端 IPC，纯客户端偏好。后端可控的偏好（轮询间隔 /
-// GitHub PAT / 邮件 webhook）等扩了 IPC 再开新 store，不混进来。
 
 import { useSyncExternalStore } from 'react';
 import {
@@ -25,6 +21,10 @@ import {
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 export type CloseAction = 'close' | 'tray';
+
+export function normalizeCloseAction(raw: unknown): CloseAction {
+    return raw === 'tray' ? 'tray' : 'close';
+}
 
 export interface AppPreferences {
     theme: ThemeMode;
@@ -138,6 +138,26 @@ export const preferencesStore = {
     },
     reset() {
         state = { ...defaultPrefs };
+        persist();
+        notify();
+        applySideEffects();
+    },
+    /** 设置页保存成功后写入；不单独对外暴露逐项 setter 以外的批量入口。 */
+    applySnapshot(patch: Partial<AppPreferences>) {
+        state = {
+            theme: normalizeTheme(patch.theme ?? state.theme),
+            showMascot: patch.showMascot !== undefined ? !!patch.showMascot : state.showMascot,
+            closeAction:
+                patch.closeAction !== undefined
+                    ? normalizeCloseAction(patch.closeAction)
+                    : state.closeAction,
+            motionEnabled:
+                patch.motionEnabled !== undefined ? !!patch.motionEnabled : state.motionEnabled,
+            motionLevel: normalizeMotionLevel(patch.motionLevel ?? state.motionLevel),
+            motionSpeed: normalizeMotionSpeed(
+                patch.motionSpeed !== undefined ? patch.motionSpeed : state.motionSpeed,
+            ),
+        };
         persist();
         notify();
         applySideEffects();

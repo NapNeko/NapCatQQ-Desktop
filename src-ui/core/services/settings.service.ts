@@ -5,13 +5,16 @@
 // 且 poller 是嵌套结构。本服务把它压平成一组前端友好的 number 字段（BackendSettings），
 // 设置页 UI 不直接碰 bigint 与嵌套形状。读时 bigint→number，写时 number→bigint。
 //
-// 与 preferencesStore（纯客户端 localStorage 偏好）互补：那边管主题 / 吉祥物 /
-// 窗口不透明度等不落后端的偏好，这边管需要后端持久化的偏好（轮询间隔 / 性能监控 /
-// GitHub PAT）。两者不混在一起。
+// 与 preferencesStore 分工：主题 / 动画 / 吉祥物等本机偏好只在设置页保存时通过
+// settings-draft 写入 localStorage；closeAction 与后端 app-settings.json 同步，保存时
+// 一并落盘。运行时窗口关闭仍读 preferencesStore.closeAction（保存成功后已对齐）。
 
+import { clampPerformanceMonitorIntervalMs } from '../domain/performance/performanceSettings';
 import { invoke, isTauri } from '../ipc/transport';
 import type { AppSettingsDto } from '../ipc/types';
 import { mockBackendSettings } from '../ipc/mock/settings.mock';
+import { normalizeCloseAction } from '../../hooks/preferences/preferencesStore';
+import type { CloseAction } from '../../hooks/preferences/preferencesStore';
 
 /** 设置页消费的扁平后端设置形状（全 number，无 bigint / 嵌套）。 */
 export interface BackendSettings {
@@ -23,6 +26,8 @@ export interface BackendSettings {
     performanceMonitorIntervalMs: number;
     /** GitHub Personal Access Token，空串表示未设置。 */
     githubPat: string;
+    /** 标题栏关闭按钮：`close` 退出，`tray` 隐藏到托盘（落 app-settings.json）。 */
+    closeAction: CloseAction;
 }
 
 /** 后端 DTO → 扁平前端形状。bigint 收窄成 number（间隔值远小于 2^53，安全）。 */
@@ -30,23 +35,45 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
     return {
         botLoginCheckIntervalMs: Number(dto.settings.poller.botLoginCheckInterval),
         performanceMonitorEnabled: dto.settings.performanceMonitorEnabled,
-        performanceMonitorIntervalMs: Number(dto.settings.performanceMonitorInterval),
+        performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(
+            Number(dto.settings.performanceMonitorInterval),
+        ),
         githubPat: dto.githubPat ?? '',
+        closeAction: normalizeCloseAction(dto.settings.closeAction),
     };
 }
 
-/** 扁平前端形状 → 后端 DTO。number → bigint 还原 u64 字段。 */
-function toDto(s: BackendSettings): AppSettingsDto {
+/**
+ * IPC 入参形状。ts-rs 生成的 AppSettings 用 bigint 表示 u64，但 Tauri invoke 会
+ * JSON.stringify 参数，BigInt 会抛错。写命令时 u64 字段用 number 传，Rust serde 可接。
+ */
+type AppSettingsDtoInvoke = {
+    settings: {
+        poller: {
+            botLoginCheckInterval: number;
+            botOfflineWebHookNotice: boolean;
+            botOfflineEmailNotice: boolean;
+        };
+        performanceMonitorEnabled: boolean;
+        performanceMonitorInterval: number;
+        closeAction: string;
+    };
+    githubPat: string;
+};
+
+function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
     return {
         settings: {
             poller: {
-                botLoginCheckInterval: BigInt(Math.round(s.botLoginCheckIntervalMs)),
-                // 离线通知后端为 noop，设置页不暴露；写回 false 保持稳定。
+                botLoginCheckInterval: Math.round(s.botLoginCheckIntervalMs),
                 botOfflineWebHookNotice: false,
                 botOfflineEmailNotice: false,
             },
             performanceMonitorEnabled: s.performanceMonitorEnabled,
-            performanceMonitorInterval: BigInt(Math.round(s.performanceMonitorIntervalMs)),
+            performanceMonitorInterval: clampPerformanceMonitorIntervalMs(
+                s.performanceMonitorIntervalMs,
+            ),
+            closeAction: s.closeAction === 'tray' ? 'tray' : 'close',
         },
         githubPat: s.githubPat.trim(),
     };
@@ -63,7 +90,7 @@ export const settingsService = {
 
     set: async (settings: BackendSettings): Promise<void> => {
         if (isTauri) {
-            await invoke<void>('set_app_settings', { dto: toDto(settings) });
+            await invoke<void>('set_app_settings', { dto: toDtoInvoke(settings) });
             return;
         }
         // 浏览器 mock：写回内存，便于 dev 下手感连续。

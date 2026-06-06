@@ -18,8 +18,8 @@ import { useComponentActionEventBridge } from '../hooks/components/useComponentA
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
-import { useTrayCloseActionSync } from '../hooks/desktop/useTrayCloseActionSync';
 import { applySideEffects } from '../hooks/preferences/preferencesStore';
+import { useCloseActionBootstrap } from '../hooks/preferences/useCloseActionBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { APP_VERSION_LABEL } from '../core/domain/app-meta';
 import { PageTransition } from '../shared/ui/motion';
@@ -46,7 +46,7 @@ export const AppNext: React.FC = () => {
         applySideEffects();
     }, []);
 
-    useTrayCloseActionSync();
+    useCloseActionBootstrap();
 
     const { bars, dismiss } = useGlobalInfoBars();
 
@@ -117,7 +117,7 @@ export const AppNext: React.FC = () => {
                                         direction={direction}
                                         className="flex min-h-0 flex-1 flex-col"
                                     >
-                                        <RouteContent route={displayedRoute} />
+                                        <RouteContent route={displayedRoute} onNavigate={setRoute} />
                                     </PageTransition>
                                 </div>
                             </div>
@@ -133,10 +133,13 @@ export const AppNext: React.FC = () => {
     );
 };
 
-const RouteContent: React.FC<{ route: AppRoute }> = ({ route }) => {
+const RouteContent: React.FC<{
+    route: AppRoute;
+    onNavigate: (route: AppRoute) => void;
+}> = ({ route, onNavigate }) => {
     switch (route) {
         case 'overview':
-            return <BootstrapPanelNext />;
+            return <BootstrapPanelNext onNavigate={onNavigate} />;
         case 'bots':
             return <BotPageNext />;
         case 'components':

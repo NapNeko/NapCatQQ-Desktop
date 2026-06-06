@@ -1,7 +1,7 @@
 // SnowLuma 全局 WebUI（daemon 单例）：受控表单项，由配置页右上角统一保存。
 
 import { NumberField, TextField, FormSection } from '../../../../shared/ui';
-import type { SnowLumaAppConfig } from '../../../core/ipc/generated/domain/SnowLumaAppConfig';
+import type { SnowLumaAppConfig } from '../../../../core/ipc/generated/domain/SnowLumaAppConfig';
 
 export interface SnowLumaGlobalWebuiSectionProps {
     value: SnowLumaAppConfig;

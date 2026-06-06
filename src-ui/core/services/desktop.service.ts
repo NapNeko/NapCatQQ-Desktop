@@ -96,10 +96,6 @@ export const trayService = {
     countLocalActiveBots: (): Promise<number> =>
         invoke<number>('count_local_active_bots'),
     requestExit: (): Promise<void> => invoke<void>('request_exit_app'),
-    syncCloseActionFromDisk: (): Promise<'close' | 'tray'> =>
-        invoke<string>('sync_close_action_preference').then((v) =>
-            v === 'tray' ? 'tray' : 'close',
-        ),
 };
 
 export const diagnosticsService = {
