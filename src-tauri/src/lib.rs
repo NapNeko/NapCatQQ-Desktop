@@ -291,6 +291,7 @@ pub fn run() {
             commands::app_settings::get_app_settings,
             commands::app_settings::set_app_settings,
             commands::app_settings::sync_close_action_preference,
+            commands::system_metrics::get_system_resource_snapshot,
             commands::config_transfer::export_config,
             commands::config_transfer::import_config,
             commands::components::list_components,

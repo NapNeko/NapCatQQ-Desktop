@@ -64,7 +64,9 @@ pub async fn set_app_settings(
     let store = config_store(&state);
     let path = store.config_dir().join(APP_SETTINGS_FILE);
 
-    let payload = serde_json::to_value(&dto.settings)
+    let mut settings = dto.settings;
+    settings.normalize_performance_monitor();
+    let payload = serde_json::to_value(&settings)
         .map_err(|e| format!("序列化 app 设置失败: {e}"))?;
     store
         .write_json_atomic(&path, &payload)
@@ -84,7 +86,7 @@ pub async fn set_app_settings(
     // 热更新内存中的轮询设置，运行中的 Poller 下次 tick 生效。
     state
         .bot_manager
-        .update_poller_settings(dto.settings.poller.clone())
+        .update_poller_settings(settings.poller.clone())
         .await;
 
     Ok(())

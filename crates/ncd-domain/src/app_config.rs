@@ -89,6 +89,14 @@ pub fn default_perf_monitor_interval() -> u64 {
     1200
 }
 
+/// 与前端 `performanceSettings` 一致：500–10000 ms。
+pub const PERF_MONITOR_INTERVAL_MIN_MS: u64 = 500;
+pub const PERF_MONITOR_INTERVAL_MAX_MS: u64 = 10_000;
+
+pub fn clamp_perf_monitor_interval_ms(raw: u64) -> u64 {
+    raw.clamp(PERF_MONITOR_INTERVAL_MIN_MS, PERF_MONITOR_INTERVAL_MAX_MS)
+}
+
 fn default_true() -> bool {
     true
 }
@@ -136,6 +144,14 @@ impl Default for AppSettings {
             performance_monitor_interval_ms: default_perf_monitor_interval(),
             close_action: default_close_action(),
         }
+    }
+}
+
+impl AppSettings {
+    /// 写入前规范化性能监控采样间隔，避免异常配置拖垮 IPC 采样。
+    pub fn normalize_performance_monitor(&mut self) {
+        self.performance_monitor_interval_ms =
+            clamp_perf_monitor_interval_ms(self.performance_monitor_interval_ms);
     }
 }
 

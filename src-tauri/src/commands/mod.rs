@@ -7,6 +7,7 @@ pub mod host_resolve;
 pub mod release;
 pub mod servers;
 pub mod snowluma;
+pub mod system_metrics;
 pub mod tray;
 
 use std::fs;
