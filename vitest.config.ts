@@ -9,7 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src-ui/test/setup.ts'],
     include: ['src-ui/**/*.test.ts', 'src-ui/**/*.test.tsx'],
-    passWithNoTests: true,
+    passWithNoTests: false,
     restoreMocks: true,
     clearMocks: true,
   },

@@ -122,6 +122,20 @@ jobs:
       - name: "校验版本元数据"
         run: npm run check:versions
 
+      - name: "运行综合门禁"
+        run: npm run verify
+
+      - name: "检查生成的 IPC 类型已提交"
+        shell: pwsh
+        run: |
+          git diff --exit-code -- src-ui/core/ipc/generated
+
+      - name: "运行 Rust 测试"
+        run: npm run rust:test
+
+      - name: "运行前端单元测试"
+        run: npm run test:unit
+
       - name: "构建 Tauri MSI"
         run: npm run tauri:build -- --bundles msi
 
