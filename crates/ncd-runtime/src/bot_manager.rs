@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::stream::{FuturesUnordered, StreamExt};
+use rand::RngCore;
 use tokio::sync::RwLock;
 
 use crate::app_config::WebUiPollerSettings;
@@ -17,13 +18,15 @@ use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
+use crate::native_deployment_adapter::DockerDeploymentBackend;
 use crate::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, StopMode,
 };
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
-use crate::native_deployment_adapter::DockerDeploymentBackend;
+use crate::traits::{
+    BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, SecretStore,
+};
 use ncd_domain::{DeploymentType, RuntimeTarget};
-use crate::traits::{BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
 
@@ -135,6 +138,9 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// None 时走旧路径（backend 自带的本机 host，行为同历史版本）；生产侧由
     /// `with_host_resolver` 注入 TauriHostResolver 后,启动时按 target 取 host。
     host_resolver: Option<Arc<dyn crate::host_resolver::HostResolver>>,
+    /// Docker NapCat WebUI token 的凭据存储。DockerDeployment 要求上层显式传入
+    /// token，不能从 QQ 号或容器名派生；这里按 Bot 持久化，保证重启后 token 稳定。
+    docker_webui_secret_store: Option<Arc<dyn SecretStore + Send + Sync>>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -155,6 +161,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             snowluma_backend: self.snowluma_backend.clone(),
             snowluma_daemon: self.snowluma_daemon.clone(),
             host_resolver: self.host_resolver.clone(),
+            docker_webui_secret_store: self.docker_webui_secret_store.clone(),
         }
     }
 }
@@ -187,6 +194,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             snowluma_backend: None,
             snowluma_daemon: None,
             host_resolver: None,
+            docker_webui_secret_store: None,
         }
     }
 
@@ -197,6 +205,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         resolver: Arc<dyn crate::host_resolver::HostResolver>,
     ) -> Self {
         self.host_resolver = Some(resolver);
+        self
+    }
+
+    /// 注入 Docker WebUI token 的 SecretStore。DockerDeployment 不生成生产默认 token，
+    /// runtime 层负责按 Bot 持久化后显式传入 deploy 层。
+    pub fn with_docker_webui_secret_store(
+        mut self,
+        store: Arc<dyn SecretStore + Send + Sync>,
+    ) -> Self {
+        self.docker_webui_secret_store = Some(store);
         self
     }
 
@@ -229,6 +247,47 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 .unwrap_or_else(|| Arc::clone(&self.backend)),
             _ => Arc::clone(&self.backend),
         }
+    }
+
+    fn docker_webui_secret_key(qq_id: u64) -> String {
+        format!("bot:{qq_id}:napcat_docker_webui_token")
+    }
+
+    fn generate_docker_webui_token() -> String {
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        hex::encode(bytes)
+    }
+
+    fn get_or_create_docker_webui_token(&self, qq_id: u64) -> Result<String, BotManagerError> {
+        Self::get_or_create_docker_webui_token_from_store(
+            self.docker_webui_secret_store.as_ref(),
+            qq_id,
+        )
+    }
+
+    fn get_or_create_docker_webui_token_from_store(
+        store: Option<&Arc<dyn SecretStore + Send + Sync>>,
+        qq_id: u64,
+    ) -> Result<String, BotManagerError> {
+        let store = store.ok_or_else(|| {
+            BotManagerError::Render("Docker 部署需要 WebUI token secret store".to_string())
+        })?;
+        let key = Self::docker_webui_secret_key(qq_id);
+        if let Some(existing) = store
+            .get(&key)
+            .map_err(|e| BotManagerError::Render(e.to_string()))?
+        {
+            let trimmed = existing.trim();
+            if !trimmed.is_empty() {
+                return Ok(trimmed.to_string());
+            }
+        }
+        let token = Self::generate_docker_webui_token();
+        store
+            .put(&key, &token)
+            .map_err(|e| BotManagerError::Render(e.to_string()))?;
+        Ok(token)
     }
 
     /// 按 BotConfig 的 deployment_type + runtime_target 选/造 backend。
@@ -274,7 +333,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     .resolve(&config.bot.runtime_target)
                     .await
                     .map_err(BotManagerError::Render)?;
-                let deployment = Arc::new(ncd_deploy::DockerDeployment::new());
+                let token = self.get_or_create_docker_webui_token(config.bot.qq_id)?;
+                let deployment = Arc::new(ncd_deploy::DockerDeployment::with_webui_token(token));
                 let backend_id = BotId::new(format!("docker-{}", config.bot.qq_id));
                 Ok(Arc::new(DockerDeploymentBackend::new(
                     deployment, host, backend_id, flavor,
@@ -371,10 +431,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         use crate::config_drift::DriftDecision;
 
         // 把 AcceptExternal 的决议转成 overrides map
-        let mut overrides: std::collections::HashMap<
-            String,
-            Vec<(String, serde_json::Value)>,
-        > = std::collections::HashMap::new();
+        let mut overrides: std::collections::HashMap<String, Vec<(String, serde_json::Value)>> =
+            std::collections::HashMap::new();
         for d in decisions {
             if let DriftDecision::AcceptExternal { file, path, value } = d {
                 overrides
@@ -403,14 +461,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         let handle = self.get_actor(bot_id).await?;
         let config = self.get_required_bot_config(bot_id).await?;
-        self.render_backend_config(bot_id, &config, &overrides).await?;
+        self.render_backend_config(bot_id, &config, &overrides)
+            .await?;
 
         let (starting, advanced) = handle.request_start_transition().await?;
         if !advanced {
             return Ok(starting);
         }
         self.publish_state_change(&starting, "start_requested");
-        self.start_runtime_from_starting(bot_id, &handle, &config).await
+        self.start_runtime_from_starting(bot_id, &handle, &config)
+            .await
     }
 
     /// 启动指定 Bot（无 drift 决议版本,等价于全部 UseInternal）。
@@ -426,7 +486,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Ok(starting);
         }
         self.publish_state_change(&starting, "start_requested");
-        self.start_runtime_from_starting(bot_id, &handle, &config).await
+        self.start_runtime_from_starting(bot_id, &handle, &config)
+            .await
     }
 
     /// 停止指定 Bot。
@@ -454,7 +515,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             self.publish_state_change(&stopped, "stop_completed");
             if stopped.state == BotActorState::Starting {
                 let config = self.get_required_bot_config(bot_id).await?;
-                return self.start_runtime_from_starting(bot_id, &handle, &config).await;
+                return self
+                    .start_runtime_from_starting(bot_id, &handle, &config)
+                    .await;
             }
             return Ok(stopped);
         }
@@ -468,7 +531,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 self.publish_state_change(&stopped, "stop_completed");
                 if stopped.state == BotActorState::Starting {
                     let config = self.get_required_bot_config(bot_id).await?;
-                    return self.start_runtime_from_starting(bot_id, &handle, &config).await;
+                    return self
+                        .start_runtime_from_starting(bot_id, &handle, &config)
+                        .await;
                 }
                 Ok(stopped)
             }
@@ -525,7 +590,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     Some(cfg) => cfg,
                     None => self.get_required_bot_config(bot_id).await?,
                 };
-                self.start_runtime_from_starting(bot_id, &handle, &config).await
+                self.start_runtime_from_starting(bot_id, &handle, &config)
+                    .await
             }
             BotActorState::Stopped | BotActorState::Crashed => self.start_bot(bot_id).await,
             BotActorState::Stopping => {
@@ -675,7 +741,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         &self,
         config: BotConfig,
     ) -> Result<BotActorSnapshot, BotManagerError> {
-        self.upsert_bot_config_with_overrides(config, &std::collections::HashMap::new()).await
+        self.upsert_bot_config_with_overrides(config, &std::collections::HashMap::new())
+            .await
     }
 
     /// 带 drift overrides 的 upsert。前端保存时如果检测到 drift 并确认了决议,
@@ -718,7 +785,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.repo.upsert(config.clone()).await?;
 
         // 2. 渲染派生配置文件（走 render_backend_config：读 existing + merge unknown + apply overrides）
-        self.render_backend_config(&bot_id, &config, overrides).await?;
+        self.render_backend_config(&bot_id, &config, overrides)
+            .await?;
         // 清理不再需要的旧 backend 派生文件（例如 NapCat→SL 时删除 onebot11/napcat 文件）
         let target_backend = config.bot.backend_type;
         let current_paths =
@@ -768,8 +836,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     let prev_flavor = map_backend_flavor(
                         previous_backend_type.expect("backend_switched => previous Some"),
                     );
-                    let snapshot =
-                        self.restart_bot_with_backend_switch(&bot_id, prev_flavor).await?;
+                    let snapshot = self
+                        .restart_bot_with_backend_switch(&bot_id, prev_flavor)
+                        .await?;
                     self.publish_state_change(&snapshot, "config_hot_reload");
                     Ok(snapshot)
                 } else {
@@ -781,7 +850,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         if let Some(daemon) = &self.snowluma_daemon {
                             if let Ok(client) = daemon.current_client().await {
                                 let uin = config.bot.qq_id.to_string();
-                                let payload = self.renderer.render(&bot_id, &config)
+                                let payload = self
+                                    .renderer
+                                    .render(&bot_id, &config)
                                     .ok()
                                     .and_then(|txn| txn.writes.into_iter().next())
                                     .map(|w| w.payload);
@@ -794,13 +865,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                                                 "config_saved_pending_reload"
                                             };
                                             self.event_bus.publish(DomainEvent::bot_state_changed(
-                                                current.clone(), msg,
+                                                current.clone(),
+                                                msg,
                                             ));
                                         }
                                         Err(_) => {
                                             // 热推送失败,配置已写盘下次重启生效
                                             self.event_bus.publish(DomainEvent::bot_state_changed(
-                                                current.clone(), "config_updated",
+                                                current.clone(),
+                                                "config_updated",
                                             ));
                                         }
                                     }
@@ -814,11 +887,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         // onebot11_{bot}.json 的内容——NapCat WebUI
                         // /api/OB11Config/SetConfig 期望的 schema 与该文件一致。
                         let endpoint = self.napcat_endpoints.snapshot(&bot_id).await;
-                        let onebot_payload = self
-                            .renderer
-                            .render(&bot_id, &config)
-                            .ok()
-                            .and_then(|txn| {
+                        let onebot_payload =
+                            self.renderer.render(&bot_id, &config).ok().and_then(|txn| {
                                 txn.writes
                                     .into_iter()
                                     .find(|w| {
@@ -831,9 +901,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             });
                         match (endpoint, onebot_payload) {
                             (Some(ep), Some(payload)) => {
-                                let reason = self
-                                    .push_napcat_hot_reload(ep, payload)
-                                    .await;
+                                let reason = self.push_napcat_hot_reload(ep, payload).await;
                                 self.event_bus.publish(DomainEvent::bot_state_changed(
                                     current.clone(),
                                     reason,
@@ -931,8 +999,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// key 为 BotId.to_string()（即 QQID 数字字符串）。
     pub async fn list_bot_flavors(
         &self,
-    ) -> Result<std::collections::HashMap<String, ncd_domain::bot_config::BackendType>, BotManagerError>
-    {
+    ) -> Result<
+        std::collections::HashMap<String, ncd_domain::bot_config::BackendType>,
+        BotManagerError,
+    > {
         let configs = self.repo.list().await?;
         let mut out = std::collections::HashMap::with_capacity(configs.len());
         for cfg in configs {
@@ -1067,7 +1137,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
 
         // 2. 渲染（合并 unknown 顶层字段）
-        let mut txn = self.renderer.render_with_existing(bot_id, config, &existing)?;
+        let mut txn = self
+            .renderer
+            .render_with_existing(bot_id, config, &existing)?;
         if txn.is_empty() {
             return Ok(());
         }
@@ -1566,7 +1638,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         };
         // QQ 未登录时 set_ob11_config 会返回 NotLogin；提前查一把可以让
         // 前端拿到更准确的语义（避免把"等扫码"误显示成"推送失败"）。
-        match self.webui_client.check_login_status(port, &credential).await {
+        match self
+            .webui_client
+            .check_login_status(port, &credential)
+            .await
+        {
             Ok(data) if !data.is_login => return "config_saved_pending_login",
             Ok(_) => {}
             Err(err) => {
@@ -1705,5 +1781,60 @@ fn set_value_at_dot_path(root: &mut serde_json::Value, dot_path: &str, value: se
         } else {
             obj.insert(last.to_string(), value);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::SecretStoreImpl;
+
+    fn temp_secret_store() -> (tempfile::TempDir, Arc<dyn SecretStore + Send + Sync>) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(SecretStoreImpl::new_with_force_fallback(dir.path(), true));
+        (dir, store)
+    }
+
+    #[test]
+    fn docker_webui_token_is_stable_and_not_predictable() {
+        let (_dir, store) = temp_secret_store();
+
+        let first = BotManager::<
+            crate::LocalBotConfigRepo<crate::LocalConfigStore>,
+            crate::LocalConfigStore,
+        >::get_or_create_docker_webui_token_from_store(Some(&store), 10001)
+        .unwrap();
+        let second = BotManager::<
+            crate::LocalBotConfigRepo<crate::LocalConfigStore>,
+            crate::LocalConfigStore,
+        >::get_or_create_docker_webui_token_from_store(Some(&store), 10001)
+        .unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 64);
+        assert!(first.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(first, "10001");
+        assert_ne!(first, "ncbot-10001");
+        assert_ne!(first, "ncbot10001");
+        assert_ne!(first, "test-webui-token");
+    }
+
+    #[test]
+    fn docker_webui_token_replaces_blank_secret() {
+        let (_dir, store) = temp_secret_store();
+        let key = BotManager::<
+            crate::LocalBotConfigRepo<crate::LocalConfigStore>,
+            crate::LocalConfigStore,
+        >::docker_webui_secret_key(10002);
+        store.put(&key, "   ").unwrap();
+
+        let token = BotManager::<
+            crate::LocalBotConfigRepo<crate::LocalConfigStore>,
+            crate::LocalConfigStore,
+        >::get_or_create_docker_webui_token_from_store(Some(&store), 10002)
+        .unwrap();
+
+        assert_eq!(store.get(&key).unwrap().as_deref(), Some(token.as_str()));
+        assert_eq!(token.len(), 64);
     }
 }

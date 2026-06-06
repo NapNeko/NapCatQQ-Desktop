@@ -4,9 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ncd_runtime::{
-    BootstrapSnapshot, BotManager, BroadcastEventBus, DispatchRenderer, EventBus,
-    EventFilter, LocalBotConfigRepo, LocalConfigStore, NoopOfflineNotifier,
-    ReqwestNapCatWebUiClient, SecretStoreImpl,
+    BootstrapSnapshot, BotManager, BroadcastEventBus, DispatchRenderer, EventBus, EventFilter,
+    LocalBotConfigRepo, LocalConfigStore, NoopOfflineNotifier, ReqwestNapCatWebUiClient,
+    SecretStoreImpl,
 };
 use tauri::Emitter;
 use tauri::Manager;
@@ -50,7 +50,10 @@ pub fn run() {
     let store = Arc::new(LocalConfigStore::new(&data_root));
     let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
         Arc::new(SecretStoreImpl::new(data_root.join("secrets")));
-    let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
+    let repo = Arc::new(LocalBotConfigRepo::new(
+        Arc::clone(&store),
+        Arc::clone(&secrets),
+    ));
     let renderer = Arc::new(DispatchRenderer::new(
         data_root.join("runtime").join("NapCatQQ").join("config"),
         data_root.join("runtime").join("SnowLuma").join("config"),
@@ -99,12 +102,11 @@ pub fn run() {
         &data_root,
         Arc::new(ncd_runtime::KeyringCredentialStore),
     ));
-    let host_resolver: Arc<dyn ncd_runtime::HostResolver> = Arc::new(
-        bot_host_resolver::TauriHostResolver::new(
+    let host_resolver: Arc<dyn ncd_runtime::HostResolver> =
+        Arc::new(bot_host_resolver::TauriHostResolver::new(
             Arc::clone(&server_manager),
             Arc::clone(&local_host),
-        ),
-    );
+        ));
     let bot_manager = Arc::new(
         BotManager::new(
             repo,
@@ -117,7 +119,8 @@ pub fn run() {
             offline_notifier,
             poller_settings,
         )
-        .with_host_resolver(host_resolver),
+        .with_host_resolver(host_resolver)
+        .with_docker_webui_secret_store(Arc::clone(&secrets)),
     );
 
     // SnowLuma daemon + backend wiring。
