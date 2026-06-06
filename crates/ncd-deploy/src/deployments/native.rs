@@ -22,7 +22,10 @@
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -31,12 +34,12 @@ use ncd_host::{Host, HostCommand, HostError, HostPath, HostProcess, Os};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
+#[cfg(test)]
+use crate::deployment::NativeLaunchCommand;
 use crate::deployment::{
     Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
     NativeLaunchTranslator,
 };
-#[cfg(test)]
-use crate::deployment::NativeLaunchCommand;
 
 /// 原生部署的运行时事件桥接。
 ///
@@ -83,6 +86,8 @@ impl NativeRuntimeEventSink for NullRuntimeEventSink {
 struct ManagedProcess {
     pid: u32,
     started_at: u64,
+    generation: u64,
+    stop_requested: bool,
 }
 
 /// 内存日志环形缓冲，上限 10_000 行。
@@ -124,6 +129,8 @@ pub struct NativeDeployment {
     log_root: Option<PathBuf>,
     /// 当前在跑的进程档案：bot_id -> ManagedProcess。
     processes: Arc<Mutex<HashMap<BotId, ManagedProcess>>>,
+    /// 进程启动代次，避免旧 watcher 清掉新一轮启动。
+    generation: Arc<AtomicU64>,
     /// 内存日志缓冲：bot_id -> RuntimeLogBuffer。
     logs: Arc<Mutex<HashMap<BotId, RuntimeLogBuffer>>>,
 }
@@ -145,6 +152,7 @@ impl NativeDeployment {
             event_sink,
             log_root,
             processes: Arc::new(Mutex::new(HashMap::new())),
+            generation: Arc::new(AtomicU64::new(1)),
             logs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -293,10 +301,7 @@ struct LogReaderCtx {
 
 /// 异步读取子进程的 stdout 或 stderr，按行解码后写内存缓冲、磁盘日志，
 /// 并通过事件 sink 广播 BotLogAppended / NapCatWebuiAvailable。
-fn spawn_log_reader(
-    stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
-    ctx: LogReaderCtx,
-) {
+fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: LogReaderCtx) {
     tokio::spawn(async move {
         let mut reader = BufReader::new(stream);
         let mut buf: Vec<u8> = Vec::with_capacity(1024);
@@ -321,7 +326,10 @@ fn spawn_log_reader(
 
             {
                 let mut guard = ctx.logs.lock().await;
-                guard.entry(ctx.bot_id.clone()).or_default().push_line(&line);
+                guard
+                    .entry(ctx.bot_id.clone())
+                    .or_default()
+                    .push_line(&line);
             }
 
             // 写文件失败不致命。
@@ -355,21 +363,34 @@ fn spawn_log_reader(
 /// 通过 sink 广播 BotProcessExited。
 fn spawn_exit_watcher(
     bot_id: BotId,
+    pid: u32,
+    generation: u64,
     process: Box<dyn HostProcess>,
     processes: Arc<Mutex<HashMap<BotId, ManagedProcess>>>,
     logs: Arc<Mutex<HashMap<BotId, RuntimeLogBuffer>>>,
     event_sink: Arc<dyn NativeRuntimeEventSink>,
 ) {
     tokio::spawn(async move {
-        // try_wait 轮询太忙；wait 消费 self。这里直接 box 走 wait 路径：
-        // 先 take 一次 try_wait 验证健康再 box 自身 wait。但 HostProcess::wait
-        // 收 Box<Self>，需要 process 自己被 Box 持有 —— 上面 spawn 返回的就是
-        // Box<dyn HostProcess>，可以直接调。
         let result = process.wait().await;
-        {
-            let mut guard = processes.lock().await;
-            guard.remove(&bot_id);
+        if matches!(result, Err(HostError::Timeout { .. })) {
+            return;
         }
+
+        let should_publish = {
+            let mut guard = processes.lock().await;
+            match guard.get(&bot_id) {
+                Some(record) if record.pid == pid && record.generation == generation => {
+                    let publish = !record.stop_requested;
+                    guard.remove(&bot_id);
+                    publish
+                }
+                _ => false,
+            }
+        };
+        if !should_publish {
+            return;
+        }
+
         // 进程退出后清内存日志缓冲，避免下一轮启动残留旧行。磁盘 .log 不动，
         // 给用户保留崩溃前归档。
         {
@@ -396,9 +417,7 @@ async fn kill_process_tree(host: &dyn Host, pid: u32) -> Result<(), DeploymentEr
             .arg("/T")
             .arg("/PID")
             .arg(pid.to_string()),
-        Os::Linux | Os::MacOs => HostCommand::new("kill")
-            .arg("-KILL")
-            .arg(format!("-{pid}")),
+        Os::Linux | Os::MacOs => HostCommand::new("kill").arg("-KILL").arg(format!("-{pid}")),
     };
     let output = host
         .run_to_string(cmd)
@@ -413,9 +432,7 @@ async fn kill_process_tree(host: &dyn Host, pid: u32) -> Result<(), DeploymentEr
     }
     // Unix 上若进程组 kill 失败（pid 不是 leader），回退按单 PID 杀一次。
     if matches!(host.os(), Os::Linux | Os::MacOs) {
-        let fallback = HostCommand::new("kill")
-            .arg("-KILL")
-            .arg(pid.to_string());
+        let fallback = HostCommand::new("kill").arg("-KILL").arg(pid.to_string());
         let fb = host
             .run_to_string(fallback)
             .await
@@ -486,7 +503,9 @@ impl Deployment for NativeDeployment {
         if let Some(dir) = plan.working_dir.as_ref() {
             cmd = cmd.working_dir(host_path_from_native(dir, host.os()));
         }
-        cmd = cmd.envs(plan.environment.clone().into_iter());
+        cmd = cmd
+            .envs(plan.environment.clone().into_iter())
+            .long_running();
 
         // 3. 启动新进程前清掉这个 bot 旧的内存日志缓冲。
         {
@@ -504,6 +523,21 @@ impl Deployment for NativeDeployment {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
+        let generation = self.generation.fetch_add(1, Ordering::Relaxed);
+
+        // 先落档再启动 watcher，避免快速退出时 watcher 先 remove，launch 后 insert stale running。
+        {
+            let mut guard = self.processes.lock().await;
+            guard.insert(
+                bot_id.clone(),
+                ManagedProcess {
+                    pid,
+                    started_at,
+                    generation,
+                    stop_requested: false,
+                },
+            );
+        }
 
         if let Some(stdout) = process.take_stdout() {
             spawn_log_reader(
@@ -532,20 +566,13 @@ impl Deployment for NativeDeployment {
 
         spawn_exit_watcher(
             bot_id.clone(),
+            pid,
+            generation,
             process,
             Arc::clone(&self.processes),
             Arc::clone(&self.logs),
             Arc::clone(&self.event_sink),
         );
-
-        // 5. 落档进程档案。
-        {
-            let mut guard = self.processes.lock().await;
-            guard.insert(
-                bot_id.clone(),
-                ManagedProcess { pid, started_at },
-            );
-        }
 
         Ok(DeploymentHandle::Native { pid, started_at })
     }
@@ -569,16 +596,30 @@ impl Deployment for NativeDeployment {
         bot_id: &BotId,
         _mode: StopMode,
     ) -> Result<(), DeploymentError> {
-        // 取出档案并立刻释放锁，避免 kill 等待期间堵其它 observe / launch。
-        let record = {
+        // 标记 stop_requested 后释放锁，避免 kill 等待期间堵其它 observe / launch。
+        let pid = {
             let mut guard = self.processes.lock().await;
-            guard.remove(bot_id)
+            let Some(record) = guard.get_mut(bot_id) else {
+                return Ok(());
+            };
+            record.stop_requested = true;
+            record.pid
         };
-        // 没有档案视为已停止，幂等返回（exit watcher 可能已先一步清理）。
-        let Some(record) = record else {
-            return Ok(());
-        };
-        kill_process_tree(host, record.pid).await
+
+        let result = kill_process_tree(host, pid).await;
+        if result.is_ok() {
+            let mut guard = self.processes.lock().await;
+            if matches!(guard.get(bot_id), Some(record) if record.pid == pid && record.stop_requested)
+            {
+                guard.remove(bot_id);
+            }
+        } else {
+            let mut guard = self.processes.lock().await;
+            if let Some(record) = guard.get_mut(bot_id).filter(|record| record.pid == pid) {
+                record.stop_requested = false;
+            }
+        }
+        result
     }
 
     async fn uninstall(
@@ -667,10 +708,9 @@ pub type NativeEnv = BTreeMap<String, String>;
 mod tests {
     use super::*;
     use bytes::Bytes;
+    use ncd_host::command::HostProcessWaitPolicy;
     use ncd_host::process::{ExitStatus, ProcessId};
-    use ncd_host::{
-        Arch, ArchiveKind, CommandOutput, DirEntry, HostShell, Locality, PackageManager,
-    };
+    use ncd_host::{Arch, ArchiveKind, CommandOutput, DirEntry, HostShell, Locality, PackageManager};
     use std::process::Stdio;
     use std::sync::Mutex as StdMutex;
     use tokio::sync::oneshot;
@@ -704,6 +744,8 @@ mod tests {
     struct FakeHost {
         os: Os,
         kill_calls: Arc<StdMutex<Vec<HostCommand>>>,
+        spawn_calls: Arc<StdMutex<Vec<HostCommand>>>,
+        queued_processes: Arc<StdMutex<VecDeque<Box<dyn HostProcess>>>>,
     }
 
     impl FakeHost {
@@ -711,11 +753,21 @@ mod tests {
             Self {
                 os,
                 kill_calls: Arc::new(StdMutex::new(Vec::new())),
+                spawn_calls: Arc::new(StdMutex::new(Vec::new())),
+                queued_processes: Arc::new(StdMutex::new(VecDeque::new())),
             }
         }
 
         fn kill_calls(&self) -> Vec<HostCommand> {
             self.kill_calls.lock().unwrap().clone()
+        }
+
+        fn spawn_calls(&self) -> Vec<HostCommand> {
+            self.spawn_calls.lock().unwrap().clone()
+        }
+
+        fn push_process(&self, process: Box<dyn HostProcess>) {
+            self.queued_processes.lock().unwrap().push_back(process);
         }
     }
 
@@ -776,6 +828,11 @@ mod tests {
         }
 
         async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
+            self.spawn_calls.lock().unwrap().push(cmd.clone());
+            if let Some(process) = self.queued_processes.lock().unwrap().pop_front() {
+                return Ok(process);
+            }
+
             use ncd_host::hide_console_window;
             let mut tcmd = tokio::process::Command::new(&cmd.program);
             tcmd.args(&cmd.args)
@@ -808,7 +865,6 @@ mod tests {
         }
     }
 
-
     /// FakeProcess：包 tokio::process::Child，实装 take_stdout / take_stderr，
     /// wait 返回正常 exit。
     struct FakeProcess {
@@ -823,9 +879,12 @@ mod tests {
         }
 
         async fn wait(mut self: Box<Self>) -> Result<CommandOutput, HostError> {
-            let child = self.child.take().ok_or_else(|| HostError::InvalidArgument {
-                reason: "child already consumed".into(),
-            })?;
+            let child = self
+                .child
+                .take()
+                .ok_or_else(|| HostError::InvalidArgument {
+                    reason: "child already consumed".into(),
+                })?;
             let output = child.wait_with_output().await.map_err(HostError::Io)?;
             Ok(CommandOutput {
                 exit_code: output.status.code(),
@@ -888,6 +947,71 @@ mod tests {
         }
     }
 
+    struct ControlledProcess {
+        id: ProcessId,
+        wait_rx: StdMutex<Option<oneshot::Receiver<Result<CommandOutput, HostError>>>>,
+    }
+
+    impl ControlledProcess {
+        fn new(
+            pid: u32,
+        ) -> (
+            Box<dyn HostProcess>,
+            oneshot::Sender<Result<CommandOutput, HostError>>,
+        ) {
+            let (tx, rx) = oneshot::channel();
+            (
+                Box::new(Self {
+                    id: ProcessId {
+                        native: pid,
+                        origin: "fake".into(),
+                    },
+                    wait_rx: StdMutex::new(Some(rx)),
+                }),
+                tx,
+            )
+        }
+    }
+
+    #[async_trait]
+    impl HostProcess for ControlledProcess {
+        fn id(&self) -> ProcessId {
+            self.id.clone()
+        }
+
+        async fn wait(self: Box<Self>) -> Result<CommandOutput, HostError> {
+            let rx =
+                self.wait_rx
+                    .lock()
+                    .unwrap()
+                    .take()
+                    .ok_or_else(|| HostError::InvalidArgument {
+                        reason: "controlled wait already consumed".into(),
+                    })?;
+            rx.await.map_err(|_| HostError::InvalidArgument {
+                reason: "controlled wait sender dropped".into(),
+            })?
+        }
+
+        async fn try_wait(&mut self) -> Result<ExitStatus, HostError> {
+            Ok(ExitStatus::Running)
+        }
+
+        async fn kill(&mut self) -> Result<(), HostError> {
+            Ok(())
+        }
+
+        async fn write_stdin(&mut self, _: &[u8]) -> Result<(), HostError> {
+            Err(HostError::Unsupported {
+                operation: "controlled stdin",
+            })
+        }
+
+        async fn close_stdin(&mut self) -> Result<(), HostError> {
+            Ok(())
+        }
+    }
+
     /// FakeTranslator：不真翻译，按测试参数直接返回固定 NativeLaunchCommand。
     struct FakeTranslator {
         plan: NativeLaunchCommand,
@@ -924,10 +1048,11 @@ mod tests {
 
     impl NativeRuntimeEventSink for CapturingEventSink {
         fn publish_log_line(&self, bot_id: &BotId, line: &str, channel: &str) {
-            self.log_lines
-                .lock()
-                .unwrap()
-                .push((bot_id.clone(), line.to_string(), channel.to_string()));
+            self.log_lines.lock().unwrap().push((
+                bot_id.clone(),
+                line.to_string(),
+                channel.to_string(),
+            ));
         }
 
         fn publish_napcat_webui_available(&self, bot_id: &BotId, port: u16, token: String) {
@@ -953,27 +1078,10 @@ mod tests {
         }
     }
 
-
     fn make_bot_config(qq_id: u64) -> BotConfig {
-        use ncd_domain::{
-            AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, ConnectConfig,
-            DeploymentType, RuntimeTarget,
-        };
-        BotConfig {
-            bot: BotBasicConfig {
-                name: "test-bot".into(),
-                qq_id,
-                music_sign_url: String::new(),
-                auto_restart_schedule: AutoRestartSchedule::default(),
-                offline_auto_restart: false,
-                runtime_target: RuntimeTarget::Local,
-                backend_type: BackendType::NapCat,
-                deployment_type: DeploymentType::Native,
-                snowluma_start_mode: None,
-            },
-            connect: ConnectConfig::default(),
-            advanced: AdvancedConfig::default(),
-        }
+        ncd_test_support::BotConfigBuilder::new()
+            .qq_id(qq_id)
+            .build()
     }
 
     #[test]
@@ -1042,12 +1150,12 @@ mod tests {
             environment: BTreeMap::new(),
         };
 
-        let host = FakeHost::new(if cfg!(windows) { Os::Windows } else { Os::Linux });
-        let dep = NativeDeployment::new(
-            Arc::new(FakeTranslator { plan }),
-            sink.clone(),
-            None,
-        );
+        let host = FakeHost::new(if cfg!(windows) {
+            Os::Windows
+        } else {
+            Os::Linux
+        });
+        let dep = NativeDeployment::new(Arc::new(FakeTranslator { plan }), sink.clone(), None);
 
         let config = make_bot_config(10001);
         let handle = dep.launch(&host, &config).await.expect("launch");
@@ -1085,6 +1193,176 @@ mod tests {
         assert_eq!(exited[0].1, Some(0));
     }
 
+    #[tokio::test]
+    async fn launch_marks_host_command_as_long_running() {
+        let host = FakeHost::new(Os::Windows);
+        let (process, wait_tx) = ControlledProcess::new(21001);
+        host.push_process(process);
+        let dep = NativeDeployment::new(
+            Arc::new(FakeTranslator {
+                plan: NativeLaunchCommand {
+                    program: "napcat".into(),
+                    args: vec!["--boot".into()],
+                    working_dir: None,
+                    environment: BTreeMap::new(),
+                },
+            }),
+            Arc::new(NullRuntimeEventSink),
+            None,
+        );
+
+        dep.launch(&host, &make_bot_config(21001))
+            .await
+            .expect("launch");
+        let calls = host.spawn_calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].wait_policy, HostProcessWaitPolicy::NoTimeout);
+
+        let _ = wait_tx.send(Ok(CommandOutput {
+            exit_code: Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+        }));
+    }
+
+    #[tokio::test]
+    async fn fast_exit_watcher_does_not_leave_stale_running_record() {
+        let (exit_tx, exit_rx) = oneshot::channel::<()>();
+        let sink = Arc::new(CapturingEventSink::with_exit_signal(exit_tx));
+        let host = FakeHost::new(Os::Windows);
+        let (process, wait_tx) = ControlledProcess::new(22001);
+        host.push_process(process);
+        let dep = NativeDeployment::new(
+            Arc::new(FakeTranslator {
+                plan: NativeLaunchCommand {
+                    program: "napcat".into(),
+                    args: vec![],
+                    working_dir: None,
+                    environment: BTreeMap::new(),
+                },
+            }),
+            sink,
+            None,
+        );
+
+        dep.launch(&host, &make_bot_config(22001))
+            .await
+            .expect("launch");
+        let _ = wait_tx.send(Ok(CommandOutput {
+            exit_code: Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+        }));
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), exit_rx)
+            .await
+            .expect("exit watcher should publish");
+
+        let state = dep
+            .observe(&host, &BotId::new("22001"))
+            .await
+            .expect("observe");
+        assert_eq!(state, DeploymentState::Stopped);
+    }
+
+    #[tokio::test]
+    async fn old_generation_watcher_does_not_clear_new_generation() {
+        let host = FakeHost::new(Os::Windows);
+        let sink = Arc::new(CapturingEventSink::default());
+        let (first_process, first_wait_tx) = ControlledProcess::new(23001);
+        let (second_process, second_wait_tx) = ControlledProcess::new(23002);
+        host.push_process(first_process);
+        host.push_process(second_process);
+        let dep = NativeDeployment::new(
+            Arc::new(FakeTranslator {
+                plan: NativeLaunchCommand {
+                    program: "napcat".into(),
+                    args: vec![],
+                    working_dir: None,
+                    environment: BTreeMap::new(),
+                },
+            }),
+            sink.clone(),
+            None,
+        );
+        let config = make_bot_config(23000);
+
+        dep.launch(&host, &config).await.expect("first launch");
+        dep.launch(&host, &config).await.expect("second launch");
+
+        let _ = first_wait_tx.send(Ok(CommandOutput {
+            exit_code: Some(1),
+            stdout: String::new(),
+            stderr: String::new(),
+        }));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let state = dep
+            .observe(&host, &BotId::new("23000"))
+            .await
+            .expect("observe");
+        assert_eq!(state, DeploymentState::Running);
+        assert!(sink.exited.lock().unwrap().is_empty());
+
+        let _ = second_wait_tx.send(Ok(CommandOutput {
+            exit_code: Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+        }));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let state = dep
+            .observe(&host, &BotId::new("23000"))
+            .await
+            .expect("observe");
+        assert_eq!(state, DeploymentState::Stopped);
+        assert_eq!(sink.exited.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn stop_requested_suppresses_exit_event_and_wait_timeout_keeps_running() {
+        let host = FakeHost::new(Os::Windows);
+        let sink = Arc::new(CapturingEventSink::default());
+        let (timeout_process, timeout_wait_tx) = ControlledProcess::new(24001);
+        let (stopped_process, stopped_wait_tx) = ControlledProcess::new(24002);
+        host.push_process(timeout_process);
+        host.push_process(stopped_process);
+        let dep = NativeDeployment::new(
+            Arc::new(FakeTranslator {
+                plan: NativeLaunchCommand {
+                    program: "napcat".into(),
+                    args: vec![],
+                    working_dir: None,
+                    environment: BTreeMap::new(),
+                },
+            }),
+            sink.clone(),
+            None,
+        );
+        let config = make_bot_config(24000);
+        let bot_id = BotId::new("24000");
+
+        dep.launch(&host, &config).await.expect("timeout launch");
+        let _ = timeout_wait_tx.send(Err(HostError::Timeout {
+            operation: "process_wait",
+        }));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let state = dep.observe(&host, &bot_id).await.expect("observe");
+        assert_eq!(state, DeploymentState::Running);
+        assert!(sink.exited.lock().unwrap().is_empty());
+
+        dep.launch(&host, &config).await.expect("stop launch");
+        dep.stop(&host, &bot_id, StopMode::Force)
+            .await
+            .expect("stop");
+        let _ = stopped_wait_tx.send(Ok(CommandOutput {
+            exit_code: Some(137),
+            stdout: String::new(),
+            stderr: String::new(),
+        }));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let state = dep.observe(&host, &bot_id).await.expect("observe");
+        assert_eq!(state, DeploymentState::Stopped);
+        assert!(sink.exited.lock().unwrap().is_empty());
+    }
+
     /// stop 对不存在的 bot 应该幂等返回 Ok。
     #[tokio::test]
     async fn stop_is_idempotent_when_not_running() {
@@ -1101,9 +1379,7 @@ mod tests {
             None,
         );
         let host = FakeHost::new(Os::Windows);
-        let result = dep
-            .stop(&host, &BotId::new("ghost"), StopMode::Force)
-            .await;
+        let result = dep.stop(&host, &BotId::new("ghost"), StopMode::Force).await;
         assert!(result.is_ok());
     }
 }

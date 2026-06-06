@@ -27,6 +27,10 @@ pub enum DockerCliError {
         stderr: String,
     },
 
+    /// Docker runtime 未达到部署要求。
+    #[error("docker runtime unavailable: {status:?}")]
+    RuntimeUnavailable { status: DockerStatus },
+
     /// 解析 docker 输出失败(JSON 格式不对等)。
     #[error("failed to parse docker output: {0}")]
     ParseFailed(String),
@@ -86,6 +90,20 @@ impl<'h> DockerCli<'h> {
             version,
             compose_available,
             daemon_running,
+        }
+    }
+
+    /// 确保当前 Host 上 docker + daemon + compose 都可用,并刷新提权决策。
+    ///
+    /// Deployment 的 install / launch / observe / stop 各自会新建 DockerCli。每个
+    /// operation 入口先调用这里,就算上一次 probe 的 elevated 标志没有跨对象保存,
+    /// 本次命令也会重新定夺 sudo 路径。
+    pub async fn ensure_ready(&self) -> Result<DockerStatus, DockerCliError> {
+        let status = self.probe().await;
+        if status.ready_to_deploy() {
+            Ok(status)
+        } else {
+            Err(DockerCliError::RuntimeUnavailable { status })
         }
     }
 
@@ -164,11 +182,7 @@ impl<'h> DockerCli<'h> {
     }
 
     /// 对单个容器执行 start / stop / restart。命令名固定,容器名走 arg 转义。
-    pub async fn lifecycle(
-        &self,
-        action: &str,
-        container: &str,
-    ) -> Result<(), DockerCliError> {
+    pub async fn lifecycle(&self, action: &str, container: &str) -> Result<(), DockerCliError> {
         let cmd = self.docker_cmd().arg(action).arg(container);
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
@@ -183,11 +197,7 @@ impl<'h> DockerCli<'h> {
 
     /// 删除容器。默认带 -f 强制删(运行中也删),避免用户先 stop 再 remove 两步。
     pub async fn remove(&self, container: &str) -> Result<(), DockerCliError> {
-        let cmd = self
-            .docker_cmd()
-            .arg("rm")
-            .arg("-f")
-            .arg(container);
+        let cmd = self.docker_cmd().arg("rm").arg("-f").arg(container);
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {

@@ -2859,6 +2859,7 @@ dependencies = [
  "ncd-component",
  "ncd-domain",
  "ncd-host",
+ "ncd-test-support",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

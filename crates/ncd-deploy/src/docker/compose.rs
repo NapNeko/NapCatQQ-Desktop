@@ -11,12 +11,56 @@
 
 use ncd_domain::{DockerDeploySpec, DockerFlavor};
 
+/// compose 中凭据的来源。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComposeSecret<'a> {
+    /// 直接把调用方提供的值写进 compose 环境变量。
+    Literal(&'a str),
+    /// 通过 compose 的变量替换从同目录 .env 读取。
+    EnvRef { variable: &'a str },
+}
+
+impl<'a> ComposeSecret<'a> {
+    fn napcat_webui_token(&self) -> String {
+        match self {
+            Self::Literal(token) => format!("\"{token}\""),
+            Self::EnvRef { variable } => format!("\"${{{}:?{} is required}}\"", variable, variable),
+        }
+    }
+
+    fn snowluma_vnc_passwd(&self) -> String {
+        match self {
+            Self::Literal(passwd) => format!("\"{passwd}\""),
+            Self::EnvRef { variable } => format!("\"${{{}:?{} is required}}\"", variable, variable),
+        }
+    }
+}
+
 /// 渲染 compose 文件文本。
 ///
 /// `secret` 是调用方生成的凭据:NapCat 当 WEBUI_TOKEN,SnowLuma 当 VNC_PASSWD。
 /// `uid` / `gid` 写进对应的 *_UID / *_GID 环境变量(Linux 文件属主对齐);
 /// 本地 Windows Docker Desktop 传 0 即可。
 pub fn render_compose(spec: &DockerDeploySpec, secret: &str, uid: u32, gid: u32) -> String {
+    render_compose_with_secret(spec, ComposeSecret::Literal(secret), uid, gid)
+}
+
+/// 渲染引用同目录 .env 的 compose 文件文本。
+pub fn render_compose_with_env(
+    spec: &DockerDeploySpec,
+    variable: &str,
+    uid: u32,
+    gid: u32,
+) -> String {
+    render_compose_with_secret(spec, ComposeSecret::EnvRef { variable }, uid, gid)
+}
+
+fn render_compose_with_secret(
+    spec: &DockerDeploySpec,
+    secret: ComposeSecret<'_>,
+    uid: u32,
+    gid: u32,
+) -> String {
     match spec.flavor {
         DockerFlavor::NapCat => render_napcat(spec, secret, uid, gid),
         DockerFlavor::SnowLuma => render_snowluma(spec, secret, uid, gid),
@@ -32,10 +76,11 @@ fn render_ports(spec: &DockerDeploySpec) -> String {
     out
 }
 
-fn render_napcat(spec: &DockerDeploySpec, token: &str, uid: u32, gid: u32) -> String {
+fn render_napcat(spec: &DockerDeploySpec, secret: ComposeSecret<'_>, uid: u32, gid: u32) -> String {
     let name = &spec.container_name;
     let image = DockerFlavor::NapCat.default_image();
     let ports = render_ports(spec);
+    let token = secret.napcat_webui_token();
     // ACCOUNT 仅在用户预绑了 QQ 号时才写,避免空值干扰镜像 entrypoint 分支。
     let account_line = match spec.qq_id {
         Some(qq) if qq != 0 => format!("      ACCOUNT: \"{qq}\"\n"),
@@ -50,7 +95,7 @@ fn render_napcat(spec: &DockerDeploySpec, token: &str, uid: u32, gid: u32) -> St
          \x20   environment:\n\
          \x20     NAPCAT_UID: \"{uid}\"\n\
          \x20     NAPCAT_GID: \"{gid}\"\n\
-         \x20     WEBUI_TOKEN: \"{token}\"\n\
+         \x20     WEBUI_TOKEN: {token}\n\
          {account_line}\
          \x20   ports:\n\
          {ports}\
@@ -60,10 +105,16 @@ fn render_napcat(spec: &DockerDeploySpec, token: &str, uid: u32, gid: u32) -> St
     )
 }
 
-fn render_snowluma(spec: &DockerDeploySpec, vnc_passwd: &str, uid: u32, gid: u32) -> String {
+fn render_snowluma(
+    spec: &DockerDeploySpec,
+    secret: ComposeSecret<'_>,
+    uid: u32,
+    gid: u32,
+) -> String {
     let name = &spec.container_name;
     let image = DockerFlavor::SnowLuma.default_image();
     let ports = render_ports(spec);
+    let vnc_passwd = secret.snowluma_vnc_passwd();
     // SnowLuma 必须的安全选项 + named volume,照官方 docker-compose.yml。
     format!(
         "services:\n\
@@ -79,7 +130,7 @@ fn render_snowluma(spec: &DockerDeploySpec, vnc_passwd: &str, uid: u32, gid: u32
          \x20   environment:\n\
          \x20     SNOWLUMA_UID: \"{uid}\"\n\
          \x20     SNOWLUMA_GID: \"{gid}\"\n\
-         \x20     VNC_PASSWD: \"{vnc_passwd}\"\n\
+         \x20     VNC_PASSWD: {vnc_passwd}\n\
          \x20     SNOWLUMA_WEBUI_PORT: \"5099\"\n\
          \x20     SNOWLUMA_HOOK_AUTOLOAD: \"1\"\n\
          \x20   ports:\n\
@@ -110,6 +161,14 @@ mod tests {
         assert!(yaml.contains("./napcat/config:/app/napcat/config"));
         // 没预绑 QQ 时不写 ACCOUNT。
         assert!(!yaml.contains("ACCOUNT"));
+    }
+
+    #[test]
+    fn napcat_compose_can_reference_env_token() {
+        let spec = DockerDeploySpec::napcat_default();
+        let yaml = render_compose_with_env(&spec, "WEBUI_TOKEN", 1000, 1000);
+        assert!(yaml.contains("WEBUI_TOKEN: \"${WEBUI_TOKEN:?WEBUI_TOKEN is required}\""));
+        assert!(!yaml.contains("ncbot10001"));
     }
 
     #[test]
