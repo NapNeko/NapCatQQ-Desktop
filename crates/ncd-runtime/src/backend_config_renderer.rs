@@ -4,9 +4,8 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 
 use crate::bot_config::{
-    BackendType, BotConfig, ConnectConfig, HttpClientConfig, HttpServerConfig,
-    HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields,
-    WebsocketClientConfig, WebsocketServerConfig,
+    BackendType, BotConfig, ConnectConfig, HttpClientConfig, HttpServerConfig, HttpSseServerConfig,
+    LogLevel, MessagePostFormat, NetworkBaseFields, WebsocketClientConfig, WebsocketServerConfig,
 };
 use crate::ids::BotId;
 use crate::traits::backend_config_renderer::{BackendConfigRenderer, RenderError};
@@ -86,7 +85,10 @@ fn napcat_ws_server(s: &WebsocketServerConfig) -> Value {
     o.insert("host".into(), json!(s.host));
     o.insert("port".into(), json!(s.port));
     o.insert("reportSelfMessage".into(), json!(s.report_self_message));
-    o.insert("enableForcePushEvent".into(), json!(s.enable_force_push_event));
+    o.insert(
+        "enableForcePushEvent".into(),
+        json!(s.enable_force_push_event),
+    );
     o.insert("heartInterval".into(), json!(s.heart_interval));
     if s.path != "/" {
         o.insert("path".into(), json!(s.path));
@@ -161,8 +163,12 @@ fn napcat_build_napcat_payload(config: &BotConfig) -> Value {
 /// onebot11_<qq>.json 顶层"已知" key 集合（renderer 输出范围）。
 /// 用户在派生文件里加这个集合之外的字段（如 `imageDownloadProxy`）会在
 /// `render_with_existing` 里被保留下来，每次启动重新渲染时不会丢。
-const NAPCAT_ONEBOT_KNOWN_KEYS: &[&str] =
-    &["network", "musicSignUrl", "enableLocalFile2Url", "parseMultMsg"];
+const NAPCAT_ONEBOT_KNOWN_KEYS: &[&str] = &[
+    "network",
+    "musicSignUrl",
+    "enableLocalFile2Url",
+    "parseMultMsg",
+];
 
 /// napcat_<qq>.json 顶层"已知" key 集合。
 const NAPCAT_NAPCAT_KNOWN_KEYS: &[&str] = &[
@@ -253,6 +259,47 @@ impl BackendConfigRenderer for NapCatConfigRenderer {
     fn output_paths(&self, bot_id: &BotId) -> Vec<PathBuf> {
         vec![self.onebot_path(bot_id), self.napcat_path(bot_id)]
     }
+}
+
+/// Docker bot 在远端 project_dir/napcat/config 下写入的 NapCat 派生配置。
+/// file_name 不带目录，调用方负责按 Host 的路径语义拼接目标目录。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DockerConfigPayload {
+    pub file_name: String,
+    pub payload: Value,
+}
+
+/// 渲染 Docker NapCat 容器挂载目录需要的配置文件。
+///
+/// existing 的 key 使用文件名（如 onebot11_10001.json），方便远端 Host 调用方
+/// 用 POSIX 目标目录读取后直接合并，不必把远端路径塞进本机 PathBuf。
+pub fn render_napcat_docker_config_payloads(
+    bot_id: &BotId,
+    config: &BotConfig,
+    existing: &HashMap<String, Value>,
+) -> Vec<DockerConfigPayload> {
+    let onebot_file = format!("onebot11_{}.json", bot_id.as_str());
+    let napcat_file = format!("napcat_{}.json", bot_id.as_str());
+    let onebot = merge_unknown_top_level(
+        NapCatConfigRenderer::build_onebot_payload(config),
+        existing.get(&onebot_file),
+        NAPCAT_ONEBOT_KNOWN_KEYS,
+    );
+    let napcat = merge_unknown_top_level(
+        NapCatConfigRenderer::build_napcat_payload(config),
+        existing.get(&napcat_file),
+        NAPCAT_NAPCAT_KNOWN_KEYS,
+    );
+    vec![
+        DockerConfigPayload {
+            file_name: onebot_file,
+            payload: onebot,
+        },
+        DockerConfigPayload {
+            file_name: napcat_file,
+            payload: napcat,
+        },
+    ]
 }
 
 // ==================== SnowLuma Renderer ====================
@@ -424,14 +471,8 @@ impl SnowLumaConfigRenderer {
 
     fn build_onebot_payload(config: &BotConfig) -> Value {
         let mut obj = serde_json::Map::new();
-        obj.insert(
-            "networks".into(),
-            Self::build_networks(&config.connect),
-        );
-        obj.insert(
-            "musicSignUrl".into(),
-            json!(config.bot.music_sign_url),
-        );
+        obj.insert("networks".into(), Self::build_networks(&config.connect));
+        obj.insert("musicSignUrl".into(), json!(config.bot.music_sign_url));
         if let Some(sc) = &config.status_command {
             obj.insert("statusCommand".into(), snowluma_status_command_json(sc));
         }
@@ -441,8 +482,7 @@ impl SnowLumaConfigRenderer {
     /// Drift baseline: empty Desktop connect => empty networks (no install-default listeners).
     fn build_onebot_payload_for_drift(config: &BotConfig) -> Value {
         let connect = &config.connect;
-        let no_servers =
-            connect.http_servers.is_empty() && connect.websocket_servers.is_empty();
+        let no_servers = connect.http_servers.is_empty() && connect.websocket_servers.is_empty();
         let networks = if no_servers {
             json!({
                 "httpServers": [],
@@ -543,7 +583,10 @@ pub struct DispatchRenderer {
 }
 
 impl DispatchRenderer {
-    pub fn new(napcat_config_dir: impl Into<PathBuf>, snowluma_config_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        napcat_config_dir: impl Into<PathBuf>,
+        snowluma_config_dir: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             napcat: NapCatConfigRenderer::new(napcat_config_dir),
             snowluma: SnowLumaConfigRenderer::new(snowluma_config_dir),
@@ -1112,5 +1155,48 @@ mod tests {
         repo_txn.merge(render_txn);
 
         assert_eq!(repo_txn.writes.len(), 3);
+    }
+
+    #[test]
+    fn docker_napcat_payloads_use_file_names_and_preserve_unknown_top_level() {
+        let bot_id = make_bot_id();
+        let config = make_full_config();
+        let mut existing = HashMap::new();
+        existing.insert(
+            "onebot11_10001.json".to_string(),
+            json!({
+                "network": {"old": true},
+                "musicSignUrl": "old",
+                "imageDownloadProxy": "http://proxy.example.com"
+            }),
+        );
+        existing.insert(
+            "napcat_10001.json".to_string(),
+            json!({
+                "fileLog": false,
+                "autoTimeSync": true
+            }),
+        );
+
+        let payloads = render_napcat_docker_config_payloads(&bot_id, &config, &existing);
+
+        assert_eq!(payloads.len(), 2);
+        let onebot = payloads
+            .iter()
+            .find(|item| item.file_name == "onebot11_10001.json")
+            .unwrap();
+        assert_eq!(onebot.payload["musicSignUrl"], "https://sign.example.com");
+        assert_eq!(
+            onebot.payload["imageDownloadProxy"],
+            "http://proxy.example.com"
+        );
+        assert!(onebot.payload["network"].get("old").is_none());
+
+        let napcat = payloads
+            .iter()
+            .find(|item| item.file_name == "napcat_10001.json")
+            .unwrap();
+        assert_eq!(napcat.payload["fileLog"], true);
+        assert_eq!(napcat.payload["autoTimeSync"], true);
     }
 }

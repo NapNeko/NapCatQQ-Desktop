@@ -10,7 +10,8 @@ use ncd_runtime::{
     BotRuntimeConfig, BotStartCtx, BotStatus, BroadcastEventBus, ConfigStore, ConnectConfig,
     DispatchRenderer, EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore,
     NoopOfflineNotifier, ReqwestNapCatWebUiClient, RuntimeLaunchPlan, RuntimeLaunchPlanError,
-    RuntimeLaunchPlanner, SecretStore, SecretStoreImpl, StopMode, TailOpts, WebUiPollerSettings,
+    RuntimeLaunchPlanner, SecretStore, SecretStoreImpl, SnowLumaDaemon, SnowLumaWebUiClient,
+    SnowLumaWebUiClientFactory, SnowLumaWebUiError, StopMode, TailOpts, WebUiPollerSettings,
 };
 
 #[derive(Default)]
@@ -18,6 +19,9 @@ struct FakeBackend {
     running: Mutex<HashSet<BotId>>,
     fail_start: Mutex<HashSet<BotId>>,
     fail_stop: Mutex<HashSet<BotId>>,
+    start_count: Mutex<std::collections::HashMap<BotId, usize>>,
+    stop_count: Mutex<std::collections::HashMap<BotId, usize>>,
+    stop_gate: Mutex<Option<tokio::sync::oneshot::Receiver<()>>>,
     last_config: Mutex<Option<BotRuntimeConfig>>,
 }
 
@@ -28,6 +32,32 @@ impl FakeBackend {
 
     async fn fail_next_stop(&self, bot_id: impl Into<BotId>) {
         self.fail_stop.lock().await.insert(bot_id.into());
+    }
+
+    async fn start_count(&self, bot_id: impl Into<BotId>) -> usize {
+        let bot_id = bot_id.into();
+        self.start_count
+            .lock()
+            .await
+            .get(&bot_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    async fn stop_count(&self, bot_id: impl Into<BotId>) -> usize {
+        let bot_id = bot_id.into();
+        self.stop_count
+            .lock()
+            .await
+            .get(&bot_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    async fn block_next_stop(&self) -> tokio::sync::oneshot::Sender<()> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.stop_gate.lock().await.replace(rx);
+        tx
     }
 }
 
@@ -48,6 +78,12 @@ impl BotBackend for FakeBackend {
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         self.last_config.lock().await.replace(ctx.config.clone());
+        *self
+            .start_count
+            .lock()
+            .await
+            .entry(ctx.config.bot_id.clone())
+            .or_insert(0) += 1;
         assert_ne!(ctx.config.bot_id.as_str(), "19998", "fake backend panic");
         if self.fail_start.lock().await.remove(&ctx.config.bot_id) {
             return Err(BotBackendError::Io("fake start failed".to_string()));
@@ -58,6 +94,15 @@ impl BotBackend for FakeBackend {
 
     async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
         assert_ne!(bot_id.as_str(), "19997", "fake backend panic");
+        *self
+            .stop_count
+            .lock()
+            .await
+            .entry(bot_id.clone())
+            .or_insert(0) += 1;
+        if let Some(rx) = self.stop_gate.lock().await.take() {
+            let _ = rx.await;
+        }
         if self.fail_stop.lock().await.remove(&bot_id) {
             return Err(BotBackendError::Io("fake stop failed".to_string()));
         }
@@ -99,6 +144,46 @@ impl BotBackend for FakeBackend {
 
 #[derive(Debug, Clone)]
 struct TestLaunchPlanner;
+
+#[derive(Debug, Clone)]
+struct TestMultiLaunchPlanner;
+
+#[async_trait]
+impl RuntimeLaunchPlanner for TestMultiLaunchPlanner {
+    async fn build_plan(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+    ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
+        match config.bot.backend_type {
+            BackendType::NapCat => TestLaunchPlanner.build_plan(bot_id, config).await,
+            BackendType::SnowLuma => Ok(RuntimeLaunchPlan::SnowLuma(
+                ncd_runtime::SnowLumaLaunchPlan {
+                    runtime_root: std::path::PathBuf::from("test-runtime/snowluma"),
+                    snowluma_data_root: std::path::PathBuf::from("test-data/snowluma"),
+                    start_mode: ncd_runtime::SnowLumaStartMode::HotStart,
+                    qq_install_path: None,
+                    bot_qq_id: config.bot.qq_id,
+                },
+            )),
+        }
+    }
+}
+
+struct FailingSnowLumaFactory;
+
+#[async_trait]
+impl SnowLumaWebUiClientFactory for FailingSnowLumaFactory {
+    async fn create(
+        &self,
+        _password: String,
+        _port: u16,
+    ) -> Result<Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError> {
+        Err(SnowLumaWebUiError::LoginFailed(
+            "unused in bot_manager tests".to_string(),
+        ))
+    }
+}
 
 #[async_trait]
 impl RuntimeLaunchPlanner for TestLaunchPlanner {
@@ -934,6 +1019,156 @@ async fn batch_delete_stops_and_removes_bots() {
     assert!(result.failed.is_empty());
     assert_eq!(manager.bot_count().await, 0);
     assert_eq!(repo.count().await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn delete_running_bot_calls_backend_stop_before_repo_delete() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10101");
+
+    manager
+        .upsert_bot_config(bot_config(10101, "bot"))
+        .await
+        .unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+    backend.fail_next_stop(bot_id.clone()).await;
+
+    let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
+    assert!(err.to_string().contains("fake stop failed"));
+    assert_eq!(backend.stop_count(bot_id.clone()).await, 1);
+    assert!(repo.get(10101).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn delete_stop_failure_keeps_config_and_actor() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10102");
+
+    manager
+        .upsert_bot_config(bot_config(10102, "bot"))
+        .await
+        .unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+    backend.fail_next_stop(bot_id.clone()).await;
+
+    let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
+    assert!(matches!(
+        err,
+        BotManagerError::Runtime(BotBackendError::Io(_))
+    ));
+    assert!(repo.get(10102).await.unwrap().is_some());
+    assert_eq!(manager.bot_count().await, 1);
+    assert!(manager.get_snapshot(&bot_id).await.is_ok());
+}
+
+#[tokio::test]
+async fn delete_running_bot_stops_backend_then_removes_actor_and_config() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10103");
+
+    manager
+        .upsert_bot_config(bot_config(10103, "bot"))
+        .await
+        .unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+
+    manager.delete_bot_config(&bot_id).await.unwrap();
+
+    assert_eq!(backend.stop_count(bot_id.clone()).await, 1);
+    assert_eq!(repo.get(10103).await.unwrap(), None);
+    assert_eq!(manager.bot_count().await, 0);
+}
+
+#[tokio::test]
+async fn restart_running_docker_or_config_routes_to_config_backend() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, napcat_backend, manager) =
+        make_manager_with_planner(temp.path(), Arc::new(TestMultiLaunchPlanner));
+    let snowluma_backend = Arc::new(FakeBackend::default());
+    let event_bus = Arc::new(BroadcastEventBus::default());
+    let daemon = SnowLumaDaemon::new(
+        temp.path().join("snowluma-data"),
+        temp.path().join("snowluma-runtime"),
+        event_bus,
+        Arc::new(FailingSnowLumaFactory),
+    );
+    let manager = manager.with_snowluma(snowluma_backend.clone(), daemon);
+    let bot_id = BotId::new("10104");
+    let mut config = bot_config(10104, "snowluma");
+    config.bot.backend_type = BackendType::SnowLuma;
+
+    manager.upsert_bot_config(config).await.unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+    manager.restart_bot(&bot_id).await.unwrap();
+
+    assert_eq!(snowluma_backend.stop_count(bot_id.clone()).await, 1);
+    assert_eq!(snowluma_backend.start_count(bot_id.clone()).await, 2);
+    assert_eq!(napcat_backend.stop_count(bot_id).await, 0);
+}
+
+#[tokio::test]
+async fn duplicate_start_does_not_call_backend_twice() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10105");
+
+    manager
+        .upsert_bot_config(bot_config(10105, "bot"))
+        .await
+        .unwrap();
+
+    manager.start_bot(&bot_id).await.unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+    let batch = manager
+        .batch_start(&[bot_id.clone(), bot_id.clone(), bot_id.clone()])
+        .await
+        .unwrap();
+
+    assert_eq!(backend.start_count(bot_id).await, 1);
+    assert_eq!(batch.succeeded.len(), 1);
+    assert!(batch.failed.is_empty());
+}
+
+#[tokio::test]
+async fn stopping_restart_does_not_start_before_stop() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10106");
+
+    manager
+        .upsert_bot_config(bot_config(10106, "bot"))
+        .await
+        .unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+    let release_stop = backend.block_next_stop().await;
+    let stop_manager = manager.clone();
+    let stop_bot_id = bot_id.clone();
+    let stop_task = tokio::spawn(async move { stop_manager.stop_bot(&stop_bot_id).await });
+
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            if backend.stop_count(bot_id.clone()).await == 1
+                && manager.get_snapshot(&bot_id).await.unwrap().state == BotActorState::Stopping
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+
+    let restart_snapshot = manager.restart_bot(&bot_id).await.unwrap();
+    assert_eq!(restart_snapshot.state, BotActorState::Stopping);
+    assert_eq!(backend.start_count(bot_id.clone()).await, 1);
+
+    release_stop.send(()).unwrap();
+    let stopped_then_started = stop_task.await.unwrap().unwrap();
+    assert_eq!(stopped_then_started.state, BotActorState::Running);
+    assert_eq!(backend.start_count(bot_id).await, 2);
 }
 
 // ─── 事件广播 ─────────────────────────────────────────────────────────────────

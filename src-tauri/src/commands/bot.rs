@@ -263,10 +263,9 @@ mod tests {
 
     use async_trait::async_trait;
     use ncd_runtime::{
-        AdvancedConfig, BackendKind, BotActorState, BotBackend, BotBackendError, BotBasicConfig,
-        BotConfig, BotFlavor, BotManager, BotRuntimeConfig, BotStartCtx, BotStatus,
-        BroadcastEventBus, ConfigStore, ConnectConfig, DispatchRenderer, DomainEventKind,
-        EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore, LogSnapshot,
+        BackendKind, BotActorState, BotBackend, BotBackendError, BotConfig, BotFlavor, BotManager,
+        BotRuntimeConfig, BotStartCtx, BotStatus, BroadcastEventBus, ConfigStore, DispatchRenderer,
+        DomainEventKind, EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore, LogSnapshot,
         SecretStoreImpl, StopMode, TailOpts,
     };
     use tempfile::tempdir;
@@ -357,21 +356,10 @@ mod tests {
     }
 
     fn sample_bot_config(qq_id: u64) -> BotConfig {
-        BotConfig {
-            bot: BotBasicConfig {
-                name: format!("bot-{qq_id}"),
-                qq_id,
-                music_sign_url: String::new(),
-                auto_restart_schedule: Default::default(),
-                offline_auto_restart: false,
-                runtime_target: ncd_runtime::RuntimeTarget::Local,
-                backend_type: ncd_runtime::BackendType::NapCat,
-                deployment_type: ncd_runtime::DeploymentType::Native,
-                snowluma_start_mode: None,
-            },
-            connect: ConnectConfig::default(),
-            advanced: AdvancedConfig::default(),
-        }
+        ncd_test_support::BotConfigBuilder::new()
+            .name(format!("bot-{qq_id}"))
+            .qq_id(qq_id)
+            .build()
     }
 
     #[tokio::test]

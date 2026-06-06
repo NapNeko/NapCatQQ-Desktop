@@ -7,23 +7,29 @@
 //! - NativeDeploymentBackend：把 NativeDeployment 包成 BotBackend trait object，
 //!   让 BotManager 无需修改结构体即可切到新实装。后续删 BotBackend 时一起删。
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use ncd_deploy::DockerDeployment;
+use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{
     Deployment, DeploymentError, NativeDeployment, NativeLaunchCommand, NativeLaunchTranslator,
     NativeRuntimeEventSink,
 };
-use ncd_deploy::docker::DockerCli;
-use ncd_deploy::DockerDeployment;
 use ncd_domain::{BotConfig, BotFlavor, BotId, StopMode};
+use ncd_host::{Host, HostError, HostPath};
+use serde_json::{Map, Value, json};
 
+use crate::backend_config_renderer::render_napcat_docker_config_payloads;
+use crate::bot_actor::BotActorState;
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
+use crate::kinds::BackendKind;
 use crate::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, TailOpts,
 };
 use crate::runtime_launch_plan::RuntimeLaunchPlanner;
-use crate::kinds::BackendKind;
 
 // ============================================================
 // RuntimeLaunchPlannerAdapter
@@ -47,10 +53,7 @@ impl RuntimeLaunchPlannerAdapter {
 
 #[async_trait]
 impl NativeLaunchTranslator for RuntimeLaunchPlannerAdapter {
-    async fn translate(
-        &self,
-        config: &BotConfig,
-    ) -> Result<NativeLaunchCommand, DeploymentError> {
+    async fn translate(&self, config: &BotConfig) -> Result<NativeLaunchCommand, DeploymentError> {
         let bot_id = BotId::new(config.bot.qq_id.to_string());
         let plan = self
             .planner
@@ -103,8 +106,11 @@ impl NativeRuntimeEventSink for EventBusSink {
     }
 
     fn publish_napcat_webui_available(&self, bot_id: &BotId, port: u16, token: String) {
-        self.bus
-            .publish(DomainEvent::napcat_webui_available(bot_id.clone(), port, token));
+        self.bus.publish(DomainEvent::napcat_webui_available(
+            bot_id.clone(),
+            port,
+            token,
+        ));
     }
 
     fn publish_bot_process_exited(
@@ -113,8 +119,11 @@ impl NativeRuntimeEventSink for EventBusSink {
         exit_code: Option<i32>,
         reason: Option<String>,
     ) {
-        self.bus
-            .publish(DomainEvent::bot_process_exited(bot_id.clone(), exit_code, reason));
+        self.bus.publish(DomainEvent::bot_process_exited(
+            bot_id.clone(),
+            exit_code,
+            reason,
+        ));
     }
 }
 
@@ -126,8 +135,6 @@ impl NativeRuntimeEventSink for EventBusSink {
 // 这里把前三个转发给 NativeDeployment，后三个保留原来的文件 IO 逻辑。
 // 后续删 BotBackend trait 时整个文件一起扬掉。
 // ============================================================
-
-use ncd_host::Host;
 
 /// 过渡壳：让 NativeDeployment 穿上 BotBackend trait 的外套。
 pub struct NativeDeploymentBackend {
@@ -172,9 +179,7 @@ impl BotBackend for NativeDeploymentBackend {
             return Err(BotBackendError::EmptyLaunchCommand);
         }
 
-        // 构造一个最小 BotConfig 给 deployment.launch 用（BotConfig 的 qq_id 就是 bot_id）。
-        let qq_id: u64 = ctx.config.bot_id.as_str().parse().unwrap_or(0);
-        let bot_config = minimal_bot_config(qq_id, self.flavor);
+        let bot_config = real_bot_config_from_ctx(ctx, self.flavor, false)?;
 
         let handle = self
             .deployment
@@ -183,9 +188,11 @@ impl BotBackend for NativeDeploymentBackend {
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
 
         match handle {
-            ncd_deploy::DeploymentHandle::Native { pid, started_at } => {
-                Ok(BotStatus::running(ctx.config.bot_id.clone(), pid, started_at))
-            }
+            ncd_deploy::DeploymentHandle::Native { pid, started_at } => Ok(BotStatus::running(
+                ctx.config.bot_id.clone(),
+                pid,
+                started_at,
+            )),
             _ => Err(BotBackendError::Io("unexpected handle variant".into())),
         }
     }
@@ -243,7 +250,9 @@ impl BotBackend for NativeDeploymentBackend {
 use ncd_domain::{BackendType, RuntimeTarget};
 
 fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
-    use ncd_domain::{AdvancedConfig, AutoRestartSchedule, BotBasicConfig, ConnectConfig, DeploymentType};
+    use ncd_domain::{
+        AdvancedConfig, AutoRestartSchedule, BotBasicConfig, ConnectConfig, DeploymentType,
+    };
     BotConfig {
         bot: BotBasicConfig {
             name: String::new(),
@@ -262,6 +271,202 @@ fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
         status_command: None,
+    }
+}
+
+fn real_bot_config_from_ctx(
+    ctx: &BotStartCtx,
+    flavor: BotFlavor,
+    require_real: bool,
+) -> Result<BotConfig, BotBackendError> {
+    match load_bot_config_from_runtime_path(&ctx.config.config_path, &ctx.config.bot_id)? {
+        Some(config) => Ok(config),
+        None if require_real => Err(BotBackendError::ConfigNotFound(ctx.config.bot_id.clone())),
+        None => {
+            let qq_id: u64 = ctx.config.bot_id.as_str().parse().unwrap_or(0);
+            Ok(minimal_bot_config(qq_id, flavor))
+        }
+    }
+}
+
+fn load_bot_config_from_runtime_path(
+    runtime_config_path: &Path,
+    bot_id: &BotId,
+) -> Result<Option<BotConfig>, BotBackendError> {
+    let Some(root) = runtime_root_from_config_path(runtime_config_path, bot_id) else {
+        return Ok(None);
+    };
+    let bot_path = root.join("config").join("bot.json");
+    let text = match std::fs::read_to_string(&bot_path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(BotBackendError::Io(error.to_string())),
+    };
+    let payload: Value =
+        serde_json::from_str(&text).map_err(|error| BotBackendError::Json(error.to_string()))?;
+    let qq_id: u64 = bot_id
+        .as_str()
+        .parse()
+        .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
+    let bots = payload
+        .get("bots")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            BotBackendError::InvalidConfig("config/bot.json missing bots array".into())
+        })?;
+    for value in bots {
+        let config: BotConfig = serde_json::from_value(value.clone())
+            .map_err(|error| BotBackendError::Json(error.to_string()))?;
+        if config.bot.qq_id == qq_id {
+            config
+                .validate()
+                .map_err(|error| BotBackendError::InvalidConfig(error.to_string()))?;
+            return Ok(Some(config));
+        }
+    }
+    Ok(None)
+}
+
+fn runtime_root_from_config_path(runtime_config_path: &Path, bot_id: &BotId) -> Option<PathBuf> {
+    let file_name = runtime_config_path.file_name()?.to_string_lossy();
+    if file_name != format!("{}.json", bot_id.as_str()) {
+        return None;
+    }
+    let bots_dir = runtime_config_path.parent()?;
+    if bots_dir.file_name()?.to_string_lossy() != "bots" {
+        return None;
+    }
+    let config_dir = bots_dir.parent()?;
+    if config_dir.file_name()?.to_string_lossy() != "config" {
+        return None;
+    }
+    let runtime_dir = config_dir.parent()?;
+    if runtime_dir.file_name()?.to_string_lossy() != "runtime" {
+        return None;
+    }
+    runtime_dir.parent().map(Path::to_path_buf)
+}
+
+fn docker_container_name(bot_id: &BotId) -> String {
+    format!("ncbot-{}", bot_id.as_str())
+}
+
+async fn docker_project_dir(host: &dyn Host, name: &str) -> Result<String, BotBackendError> {
+    let home = probe_home(host).await?;
+    Ok(format!("{home}/.napcat-bots/{name}"))
+}
+
+async fn probe_home(host: &dyn Host) -> Result<String, BotBackendError> {
+    let cmd = ncd_host::HostCommand::new("sh").arg("-c").arg("echo $HOME");
+    match host.run_to_string(cmd).await {
+        Ok(out) if out.success() => {
+            let home = out.stdout.trim().to_string();
+            if home.is_empty() {
+                Err(BotBackendError::InvalidConfig(
+                    "Docker host HOME is empty; cannot determine deployment project directory".into(),
+                ))
+            } else {
+                Ok(home)
+            }
+        }
+        Ok(out) => Err(BotBackendError::Io(format!(
+            "探测 Docker 主机 HOME 失败: exit={:?}, stderr={}",
+            out.exit_code,
+            out.stderr.trim()
+        ))),
+        Err(error) => Err(BotBackendError::Io(format!(
+            "探测 Docker 主机 HOME 失败: {error}"
+        ))),
+    }
+}
+
+fn docker_config_file_names(bot_id: &BotId) -> [String; 2] {
+    [
+        format!("onebot11_{}.json", bot_id.as_str()),
+        format!("napcat_{}.json", bot_id.as_str()),
+    ]
+}
+
+async fn render_docker_config_on_host(
+    host: &dyn Host,
+    bot_id: &BotId,
+    config: &BotConfig,
+) -> Result<(), BotBackendError> {
+    let project_dir = docker_project_dir(host, &docker_container_name(bot_id)).await?;
+    let config_dir = format!("{project_dir}/napcat/config");
+    let config_dir_path = HostPath::from_posix(&config_dir);
+    host.create_dir_all(&config_dir_path)
+        .await
+        .map_err(|error| BotBackendError::Io(format!("创建 Docker 配置目录失败: {error}")))?;
+
+    let existing = read_existing_docker_config(host, bot_id, &config_dir).await?;
+    for item in render_napcat_docker_config_payloads(bot_id, config, &existing) {
+        let bytes = serde_json::to_vec_pretty(&item.payload)
+            .map_err(|error| BotBackendError::Json(error.to_string()))?;
+        let path = HostPath::from_posix(format!("{config_dir}/{}", item.file_name));
+        host.write_file(&path, &bytes)
+            .await
+            .map_err(|error| BotBackendError::Io(format!("写 Docker 配置文件失败: {error}")))?;
+    }
+    Ok(())
+}
+
+async fn read_existing_docker_config(
+    host: &dyn Host,
+    bot_id: &BotId,
+    config_dir: &str,
+) -> Result<HashMap<String, Value>, BotBackendError> {
+    let mut existing = HashMap::new();
+    for file_name in docker_config_file_names(bot_id) {
+        let path = HostPath::from_posix(format!("{config_dir}/{file_name}"));
+        match host.read_file(&path).await {
+            Ok(bytes) => {
+                if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
+                    existing.insert(file_name, value);
+                }
+            }
+            Err(HostError::PathNotFound { .. }) => {}
+            Err(error) => return Err(BotBackendError::Io(error.to_string())),
+        }
+    }
+    Ok(existing)
+}
+
+fn status_for_deployment_state(bot_id: BotId, state: DeploymentState) -> BotStatus {
+    match state {
+        DeploymentState::Running => BotStatus::running(bot_id, 0, 0),
+        DeploymentState::Stopped => BotStatus::stopped(bot_id),
+        DeploymentState::Starting => {
+            deployment_status(bot_id, BotActorState::Starting, "starting", None)
+        }
+        DeploymentState::Stopping => {
+            deployment_status(bot_id, BotActorState::Stopping, "stopping", None)
+        }
+        DeploymentState::Failed { reason } => {
+            deployment_status(bot_id, BotActorState::Crashed, "failed", Some(reason))
+        }
+    }
+}
+
+fn deployment_status(
+    bot_id: BotId,
+    state: BotActorState,
+    deployment_state: &'static str,
+    reason: Option<String>,
+) -> BotStatus {
+    let mut extra = Map::new();
+    extra.insert("deployment_state".into(), json!(deployment_state));
+    if let Some(reason) = reason {
+        extra.insert("reason".into(), json!(reason));
+    }
+    BotStatus {
+        bot_id,
+        state,
+        pid: None,
+        started_at: None,
+        memory_rss_bytes: None,
+        server_total_memory_bytes: None,
+        extra,
     }
 }
 
@@ -317,8 +522,8 @@ impl BotBackend for DockerDeploymentBackend {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
-        let qq_id: u64 = ctx.config.bot_id.as_str().parse().unwrap_or(0);
-        let bot_config = minimal_bot_config(qq_id, self.flavor);
+        let bot_config = real_bot_config_from_ctx(ctx, self.flavor, true)?;
+        render_docker_config_on_host(self.host.as_ref(), &ctx.config.bot_id, &bot_config).await?;
 
         // install:探 docker + 写 compose + 拉镜像。
         let sink = NullProgressSink;
@@ -356,10 +561,7 @@ impl BotBackend for DockerDeploymentBackend {
             .observe(self.host.as_ref(), &bot_id)
             .await
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
-        match state {
-            DeploymentState::Running => Ok(BotStatus::running(bot_id, 0, 0)),
-            _ => Ok(BotStatus::stopped(bot_id)),
-        }
+        Ok(status_for_deployment_state(bot_id, state))
     }
 
     async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
@@ -392,5 +594,122 @@ impl BotBackend for DockerDeploymentBackend {
             lines,
             total_lines: total,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteWindowsHost, SshCredentials};
+    use serde_json::json;
+    use tempfile::tempdir;
+
+    #[test]
+    fn runtime_root_is_derived_from_real_runtime_bot_config_path() {
+        let bot_id = BotId::new("10001");
+        let path = BotRuntimeConfig::default_path("/data", bot_id.clone()).config_path;
+        assert_eq!(
+            runtime_root_from_config_path(&path, &bot_id),
+            Some(PathBuf::from("/data"))
+        );
+    }
+
+    #[test]
+    fn runtime_root_rejects_unexpected_config_path_shape() {
+        let bot_id = BotId::new("10001");
+        let wrong_file = PathBuf::from("/data/runtime/config/bots/10002.json");
+        let wrong_dir = PathBuf::from("/data/config/bots/10001.json");
+
+        assert_eq!(runtime_root_from_config_path(&wrong_file, &bot_id), None);
+        assert_eq!(runtime_root_from_config_path(&wrong_dir, &bot_id), None);
+    }
+
+    #[test]
+    fn docker_requires_real_config_when_bot_json_is_missing() {
+        let root = tempdir().unwrap();
+        let bot_id = BotId::new("10001");
+        let ctx = BotStartCtx {
+            config: BotRuntimeConfig::default_path(root.path(), bot_id.clone()),
+        };
+
+        let err = real_bot_config_from_ctx(&ctx, BotFlavor::NapCat, true).unwrap_err();
+
+        assert!(matches!(err, BotBackendError::ConfigNotFound(id) if id == bot_id));
+    }
+
+    #[test]
+    fn docker_loads_real_config_from_default_runtime_path() {
+        let root = tempdir().unwrap();
+        let bot_id = BotId::new("10001");
+        let config_dir = root.path().join("config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(
+            config_dir.join("bot.json"),
+            serde_json::to_vec(&json!({
+                "bots": [{
+                    "bot": {
+                        "name": "real-bot",
+                        "QQID": 10001,
+                        "musicSignUrl": "https://sign.example.com",
+                        "autoRestartSchedule": {"enabled": false, "time": "04:00", "unit": "daily"},
+                        "offlineAutoRestart": false,
+                        "runtime_target": "remote_linux",
+                        "backendType": "NapCat",
+                        "deploymentType": "docker"
+                    },
+                    "connect": {},
+                    "advanced": {}
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let ctx = BotStartCtx {
+            config: BotRuntimeConfig::default_path(root.path(), bot_id),
+        };
+
+        let config = real_bot_config_from_ctx(&ctx, BotFlavor::NapCat, true).unwrap();
+
+        assert_eq!(config.bot.name, "real-bot");
+        assert_eq!(config.bot.music_sign_url, "https://sign.example.com");
+    }
+
+    #[tokio::test]
+    async fn docker_project_dir_home_probe_failure_is_hard_error() {
+        let host = RemoteWindowsHost::new_stub(
+            "stub",
+            ConnectionConfig::new(
+                "example.com",
+                22,
+                SshCredentials::password("u", "p"),
+                HostKeyPolicy::Insecure,
+            ),
+        );
+
+        let err = docker_project_dir(&host, "ncbot-10001").await.unwrap_err();
+
+        assert!(matches!(err, BotBackendError::Io(message) if message.contains("HOME")));
+    }
+
+    #[test]
+    fn docker_starting_status_is_not_stopped() {
+        let status = status_for_deployment_state(BotId::new("10001"), DeploymentState::Starting);
+
+        assert_eq!(status.state, BotActorState::Starting);
+        assert_eq!(status.extra["deployment_state"], "starting");
+    }
+
+    #[test]
+    fn docker_failed_status_keeps_reason() {
+        let status = status_for_deployment_state(
+            BotId::new("10001"),
+            DeploymentState::Failed {
+                reason: "docker ps failed".to_string(),
+            },
+        );
+
+        assert_eq!(status.state, BotActorState::Crashed);
+        assert_eq!(status.extra["deployment_state"], "failed");
+        assert_eq!(status.extra["reason"], "docker ps failed");
     }
 }

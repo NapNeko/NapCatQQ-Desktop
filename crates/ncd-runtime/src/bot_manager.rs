@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -405,63 +405,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let config = self.get_required_bot_config(bot_id).await?;
         self.render_backend_config(bot_id, &config, &overrides).await?;
 
-        let starting = handle.request_start().await?;
-        self.publish_state_change(&starting, "start_requested");
-
-        // Docker 部署跳过 native launch planner;Native 仍走计划。
-        let runtime_config = if config.bot.deployment_type == DeploymentType::Docker {
-            self.build_runtime_config(bot_id, &config)
-        } else {
-            let base = self.build_runtime_config(bot_id, &config);
-            match self.launch_planner.build_plan(bot_id, &config).await {
-                Ok(plan) => plan.into_runtime_config(base),
-                Err(err) => {
-                    let message = err.to_string();
-                    let hint = Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string());
-                    let crashed = handle.mark_crashed(message.clone()).await?;
-                    self.publish_state_change(&crashed, "start_failed");
-                    self.event_bus
-                        .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
-                    return Err(BotManagerError::Render(err.to_string()));
-                }
-            }
-        };
-        let backend = match self.backend_for_config(&config).await {
-            Ok(b) => b,
-            Err(err) => {
-                let message = err.to_string();
-                let crashed = handle.mark_crashed(message.clone()).await?;
-                self.publish_state_change(&crashed, "start_failed");
-                self.event_bus
-                    .publish(DomainEvent::bot_error(bot_id.clone(), message, None));
-                return Err(err);
-            }
-        };
-        match backend
-            .start(&BotStartCtx {
-                config: runtime_config,
-            })
-            .await
-        {
-            Ok(status) => {
-                self.event_bus
-                    .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
-                let running = handle.confirm_running().await?;
-                self.publish_state_change(&running, "start_completed");
-                Ok(running)
-            }
-            Err(err) => {
-                let message = err.to_string();
-                let crashed = handle.mark_crashed(message.clone()).await?;
-                self.publish_state_change(&crashed, "start_failed");
-                self.event_bus.publish(DomainEvent::bot_error(
-                    bot_id.clone(),
-                    message,
-                    Some("请在运行时设置中配置 NapCat/SnowLuma 启动命令后重试".to_string()),
-                ));
-                Err(err.into())
-            }
+        let (starting, advanced) = handle.request_start_transition().await?;
+        if !advanced {
+            return Ok(starting);
         }
+        self.publish_state_change(&starting, "start_requested");
+        self.start_runtime_from_starting(bot_id, &handle, &config).await
     }
 
     /// 启动指定 Bot（无 drift 决议版本,等价于全部 UseInternal）。
@@ -472,81 +421,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.render_backend_config(bot_id, &config, &std::collections::HashMap::new())
             .await?;
 
-        let starting = handle.request_start().await?;
-        self.publish_state_change(&starting, "start_requested");
-
-        // Docker 部署不走 native launch planner(那是本机进程的命令/路径规划)。
-        // 容器化由 DockerDeploymentBackend 内部 compose 起,只需带 bot_id 的
-        // runtime_config。Native 仍走 launch_planner 产出启动命令。
-        let runtime_config = if config.bot.deployment_type == DeploymentType::Docker {
-            self.build_runtime_config(bot_id, &config)
-        } else {
-            let base = self.build_runtime_config(bot_id, &config);
-            match self.launch_planner.build_plan(bot_id, &config).await {
-                Ok(plan) => plan.into_runtime_config(base),
-                Err(err) => {
-                    let message = err.to_string();
-                    // 按错误类型给出针对性提示，方便用户定位是哪一种缺失。
-                    let hint = match &err {
-                        RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
-                            "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
-                            path.display()
-                        )),
-                        RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => Some(format!(
-                            "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式。"
-                        )),
-                        RuntimeLaunchPlanError::MissingFile { .. } => {
-                            Some("NapCat 运行时组件缺失，请先在「设置」页安装运行时。".to_string())
-                        }
-                        _ => Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string()),
-                    };
-                    let crashed = handle.mark_crashed(message.clone()).await?;
-                    self.publish_state_change(&crashed, "start_failed");
-                    self.event_bus
-                        .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
-                    return Err(BotManagerError::Render(err.to_string()));
-                }
-            }
-        };
-
-        // 按 deployment_type + runtime_target 选/造 backend。失败(如远端原生不支持)
-        // 直接转 crashed + 报错引导。
-        let backend = match self.backend_for_config(&config).await {
-            Ok(b) => b,
-            Err(err) => {
-                let message = err.to_string();
-                let crashed = handle.mark_crashed(message.clone()).await?;
-                self.publish_state_change(&crashed, "start_failed");
-                self.event_bus
-                    .publish(DomainEvent::bot_error(bot_id.clone(), message, None));
-                return Err(err);
-            }
-        };
-        match backend
-            .start(&BotStartCtx {
-                config: runtime_config,
-            })
-            .await
-        {
-            Ok(status) => {
-                self.event_bus
-                    .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
-                let running = handle.confirm_running().await?;
-                self.publish_state_change(&running, "start_completed");
-                Ok(running)
-            }
-            Err(err) => {
-                let message = err.to_string();
-                let crashed = handle.mark_crashed(message.clone()).await?;
-                self.publish_state_change(&crashed, "start_failed");
-                self.event_bus.publish(DomainEvent::bot_error(
-                    bot_id.clone(),
-                    message,
-                    Some("请在运行时设置中配置 NapCat/SnowLuma 启动命令后重试".to_string()),
-                ));
-                Err(err.into())
-            }
+        let (starting, advanced) = handle.request_start_transition().await?;
+        if !advanced {
+            return Ok(starting);
         }
+        self.publish_state_change(&starting, "start_requested");
+        self.start_runtime_from_starting(bot_id, &handle, &config).await
     }
 
     /// 停止指定 Bot。
@@ -572,6 +452,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 _ => stopping,
             };
             self.publish_state_change(&stopped, "stop_completed");
+            if stopped.state == BotActorState::Starting {
+                let config = self.get_required_bot_config(bot_id).await?;
+                return self.start_runtime_from_starting(bot_id, &handle, &config).await;
+            }
             return Ok(stopped);
         }
 
@@ -582,6 +466,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     .publish(DomainEvent::bot_status_changed(status, "runtime_stop"));
                 let stopped = handle.confirm_stopped().await?;
                 self.publish_state_change(&stopped, "stop_completed");
+                if stopped.state == BotActorState::Starting {
+                    let config = self.get_required_bot_config(bot_id).await?;
+                    return self.start_runtime_from_starting(bot_id, &handle, &config).await;
+                }
                 Ok(stopped)
             }
             Err(err) => {
@@ -611,42 +499,39 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     pub async fn restart_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
         let snap = handle.snapshot();
-
-        // 解析当前 flavor，确保 stop 调用走对应 backend；切换场景由
-        // upsert_bot_config 走 restart_bot_with_backend_switch 单独处理，
-        // 这里只服务"同 backend 重启"。
-        let flavor = match self.get_required_bot_config(bot_id).await {
-            Ok(cfg) => map_backend_flavor(cfg.bot.backend_type),
-            Err(_) => BotFlavor::NapCat,
-        };
+        let config = self.get_required_bot_config(bot_id).await.ok();
 
         match snap.state {
             BotActorState::Running | BotActorState::Starting => {
                 let stopping = handle.request_restart().await?;
                 self.publish_state_change(&stopping, "restart_requested");
-                self.backend_for(flavor)
-                    .stop(bot_id.clone(), StopMode::Force)
-                    .await?;
-                // confirm_stopped 可能跟 exit watcher listener 竞争：listener 先
-                // 一步把 actor 从 Stopping 推到 Starting,我们再调时 actor 已经在
-                // Starting 会 InvalidTransition。这种情况直接跳过——目标已达成。
+                let backend = match &config {
+                    Some(cfg) => self.backend_for_config(cfg).await.unwrap_or_else(|_| {
+                        self.backend_for(map_backend_flavor(cfg.bot.backend_type))
+                    }),
+                    None => self.backend_for(BotFlavor::NapCat),
+                };
+                backend.stop(bot_id.clone(), StopMode::Force).await?;
                 match handle.confirm_stopped().await {
                     Ok(s) => self.publish_state_change(&s, "restart_stopped"),
                     Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
                     Err(e) => return Err(e.into()),
                 }
-                self.start_bot(bot_id).await
+                let current = handle.snapshot();
+                if current.state != BotActorState::Starting {
+                    return Ok(current);
+                }
+                let config = match config {
+                    Some(cfg) => cfg,
+                    None => self.get_required_bot_config(bot_id).await?,
+                };
+                self.start_runtime_from_starting(bot_id, &handle, &config).await
             }
             BotActorState::Stopped | BotActorState::Crashed => self.start_bot(bot_id).await,
             BotActorState::Stopping => {
                 let stopping = handle.request_restart().await?;
                 self.publish_state_change(&stopping, "restart_requested");
-                match handle.confirm_stopped().await {
-                    Ok(s) => self.publish_state_change(&s, "restart_stopped"),
-                    Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
-                    Err(e) => return Err(e.into()),
-                }
-                self.start_bot(bot_id).await
+                Ok(stopping)
             }
             BotActorState::Repairing => Err(BotManagerError::InvalidState {
                 bot_id: bot_id.clone(),
@@ -695,8 +580,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             failed: Vec::new(),
         };
         let mut tasks = FuturesUnordered::new();
+        let mut seen = HashSet::new();
 
         for bot_id in bot_ids {
+            if !seen.insert(bot_id.clone()) {
+                continue;
+            }
             let manager = self.clone();
             let bot_id = bot_id.clone();
             let task_bot_id = bot_id.clone();
@@ -1215,6 +1104,80 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .with_bot_config(config)
     }
 
+    async fn start_runtime_from_starting(
+        &self,
+        bot_id: &BotId,
+        handle: &BotActorHandle,
+        config: &BotConfig,
+    ) -> Result<BotActorSnapshot, BotManagerError> {
+        let runtime_config = if config.bot.deployment_type == DeploymentType::Docker {
+            self.build_runtime_config(bot_id, config)
+        } else {
+            let base = self.build_runtime_config(bot_id, config);
+            match self.launch_planner.build_plan(bot_id, config).await {
+                Ok(plan) => plan.into_runtime_config(base),
+                Err(err) => {
+                    let message = err.to_string();
+                    let hint = match &err {
+                        RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
+                            "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
+                            path.display()
+                        )),
+                        RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => Some(format!(
+                            "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式。"
+                        )),
+                        RuntimeLaunchPlanError::MissingFile { .. } => {
+                            Some("NapCat 运行时组件缺失，请先在「设置」页安装运行时。".to_string())
+                        }
+                        _ => Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string()),
+                    };
+                    let crashed = handle.mark_crashed(message.clone()).await?;
+                    self.publish_state_change(&crashed, "start_failed");
+                    self.event_bus
+                        .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
+                    return Err(BotManagerError::Render(err.to_string()));
+                }
+            }
+        };
+
+        let backend = match self.backend_for_config(config).await {
+            Ok(b) => b,
+            Err(err) => {
+                let message = err.to_string();
+                let crashed = handle.mark_crashed(message.clone()).await?;
+                self.publish_state_change(&crashed, "start_failed");
+                self.event_bus
+                    .publish(DomainEvent::bot_error(bot_id.clone(), message, None));
+                return Err(err);
+            }
+        };
+        match backend
+            .start(&BotStartCtx {
+                config: runtime_config,
+            })
+            .await
+        {
+            Ok(status) => {
+                self.event_bus
+                    .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
+                let running = handle.confirm_running().await?;
+                self.publish_state_change(&running, "start_completed");
+                Ok(running)
+            }
+            Err(err) => {
+                let message = err.to_string();
+                let crashed = handle.mark_crashed(message.clone()).await?;
+                self.publish_state_change(&crashed, "start_failed");
+                self.event_bus.publish(DomainEvent::bot_error(
+                    bot_id.clone(),
+                    message,
+                    Some("请在运行时设置中配置 NapCat/SnowLuma 启动命令后重试".to_string()),
+                ));
+                Err(err.into())
+            }
+        }
+    }
+
     fn publish_state_change(&self, snapshot: &BotActorSnapshot, reason: &str) {
         self.event_bus
             .publish(DomainEvent::bot_state_changed(snapshot.clone(), reason));
@@ -1425,21 +1388,51 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 内部删除流程：持久化删除 → 停止 → shutdown → 移除内存 Actor。
-    /// 策略：先删持久化（source of truth），再清理内存。
-    /// - 如果 repo.delete 失败，Actor 保持不变，可重试。
-    /// - 如果 repo.delete 成功但 shutdown 失败，持久化已删除
-    /// 下次 bootstrap 不会恢复此 Bot，内存态在进程结束时自然清理。
+    /// 内部删除流程：停止旧 runtime → 持久化删除 → shutdown → 移除内存 Actor。
+    /// 停止运行中 Bot 必须发生在 repo.delete 前；否则旧 config/backend identity
+    /// 丢失后只能按新默认路由停进程，远端或 Docker 场景会留下真实 runtime。
     async fn delete_bot_internal(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
-        // 1. 先删持久化配置（source of truth）
         let qq_id: u64 = bot_id
             .as_str()
             .parse()
             .map_err(|_| BotManagerError::BotNotFound(bot_id.clone()))?;
+        let previous_config = self.repo.get(qq_id).await?;
+
+        let maybe_handle = {
+            let actors = self.actors.read().await;
+            actors.get(bot_id).cloned()
+        };
+
+        if let Some(handle) = &maybe_handle {
+            let current = handle.snapshot();
+            if current.state.is_active() {
+                let stopping = handle.request_stop().await?;
+                self.publish_state_change(&stopping, "delete_stop_requested");
+                let backend = match &previous_config {
+                    Some(cfg) => self.backend_for_config(cfg).await.unwrap_or_else(|_| {
+                        self.backend_for(map_backend_flavor(cfg.bot.backend_type))
+                    }),
+                    None => self.backend_for(BotFlavor::NapCat),
+                };
+                if let Err(err) = backend.stop(bot_id.clone(), StopMode::Force).await {
+                    let message = err.to_string();
+                    self.event_bus.publish(DomainEvent::bot_error(
+                        bot_id.clone(),
+                        message,
+                        Some("删除前停止 Bot 失败，配置与 Actor 已保留，可重试删除。".to_string()),
+                    ));
+                    return Err(err.into());
+                }
+                match handle.confirm_stopped().await {
+                    Ok(stopped) => self.publish_state_change(&stopped, "delete_stop_completed"),
+                    Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
+                    Err(err) => return Err(err.into()),
+                }
+            }
+        }
 
         self.repo.delete(qq_id).await?;
 
-        // 2. 再删除派生配置文件（NapCat / SnowLuma 两套路径都清理）
         let mut txn = JsonTransaction::new();
         for path in output_paths_for_backend(BackendType::NapCat, self.store.config_dir(), bot_id) {
             txn = txn.delete(path);
@@ -1456,27 +1449,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 .map_err(|e| BotManagerError::Render(e.to_string()))?;
         }
 
-        // 3. 再停止和 shutdown Actor（持久化已删，失败也不会导致 "复活"）
-        let maybe_handle = {
-            let actors = self.actors.read().await;
-            actors.get(bot_id).cloned()
-        };
-
         if let Some(handle) = maybe_handle {
-            let current = handle.snapshot();
-            if current.state.is_active() {
-                let _ = handle.request_stop().await;
-            }
             let _ = handle.shutdown().await;
         }
 
-        // 4. 移除内存态 Actor
         {
             let mut actors = self.actors.write().await;
             actors.remove(bot_id);
         }
 
-        // 5. dispose 该 Bot 的 NapCatLoginPoller（若存在）。
         self.dispose_poller(bot_id).await;
 
         self.event_bus.publish(DomainEvent::BotStateChanged {

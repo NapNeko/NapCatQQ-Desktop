@@ -108,6 +108,9 @@ enum BotActorCommand {
     RequestStart {
         reply: oneshot::Sender<Result<BotActorSnapshot, BotActorError>>,
     },
+    RequestStartTransition {
+        reply: oneshot::Sender<Result<(BotActorSnapshot, bool), BotActorError>>,
+    },
     ConfirmRunning {
         reply: oneshot::Sender<Result<BotActorSnapshot, BotActorError>>,
     },
@@ -185,6 +188,13 @@ impl BotActorHandle {
             .await
     }
 
+    pub async fn request_start_transition(
+        &self,
+    ) -> Result<(BotActorSnapshot, bool), BotActorError> {
+        self.send_command(|reply| BotActorCommand::RequestStartTransition { reply })
+            .await
+    }
+
     pub async fn confirm_running(&self) -> Result<BotActorSnapshot, BotActorError> {
         self.send_snapshot_command(|reply| BotActorCommand::ConfirmRunning { reply })
             .await
@@ -237,6 +247,13 @@ impl BotActorHandle {
     where
         F: FnOnce(oneshot::Sender<Result<BotActorSnapshot, BotActorError>>) -> BotActorCommand,
     {
+        self.send_command(make).await
+    }
+
+    async fn send_command<T, F>(&self, make: F) -> Result<T, BotActorError>
+    where
+        F: FnOnce(oneshot::Sender<Result<T, BotActorError>>) -> BotActorCommand,
+    {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.inner
             .command_tx
@@ -263,6 +280,13 @@ async fn run_actor(
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
                 let _ = reply.send(result.map(|_| snapshot.clone()));
+            }
+            BotActorCommand::RequestStartTransition { reply } => {
+                let result = request_start(&mut snapshot, &cancellation_token);
+                if result.is_ok() {
+                    let _ = snapshot_tx.send(snapshot.clone());
+                }
+                let _ = reply.send(result.map(|advanced| (snapshot.clone(), advanced)));
             }
             BotActorCommand::ConfirmRunning { reply } => {
                 let result = confirm_running(&mut snapshot);
