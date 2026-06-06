@@ -20,14 +20,14 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use russh::client::{self, Handle as ClientHandle, Handler};
-use russh::keys::{key, PublicKeyBase64};
 use russh::ChannelMsg;
+use russh::client::{self, Handle as ClientHandle, Handler};
+use russh::keys::{PublicKeyBase64, key};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 
-use crate::command::{CommandOutput, HostCommand};
+use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
 use crate::error::HostError;
 use crate::host::{Arch, Host, Locality, Os};
 use crate::package_manager::PackageManager;
@@ -134,7 +134,10 @@ pub struct RemoteLinuxHost {
 
 impl RemoteLinuxHost {
     /// 建立 SSH 连接并完成认证。
-    pub async fn connect(id: impl Into<String>, config: ConnectionConfig) -> Result<Self, HostError> {
+    pub async fn connect(
+        id: impl Into<String>,
+        config: ConnectionConfig,
+    ) -> Result<Self, HostError> {
         let host_key_error = Arc::new(Mutex::new(None));
         let cb = ClientCallback {
             policy: config.host_key_policy.clone(),
@@ -268,10 +271,8 @@ impl RemoteLinuxHost {
         // sudo -S 装。两者都没有才退回让用户手动装的人话提示,而不是静默挂起。
         let access = probe_sudo(self).await;
         let has_password = self.elevation_password.lock().await.is_some();
-        let elevation_ok = matches!(
-            access,
-            SudoAccess::RootAlready | SudoAccess::Passwordless
-        ) || has_password;
+        let elevation_ok =
+            matches!(access, SudoAccess::RootAlready | SudoAccess::Passwordless) || has_password;
         if !elevation_ok {
             return Err(HostError::ExtractFailed {
                 archive: HostPath::from_posix(tool),
@@ -326,13 +327,8 @@ enum PackageManagerKindLite {
 }
 
 impl PackageManagerKindLite {
-    const ALL: &'static [PackageManagerKindLite] = &[
-        Self::Apt,
-        Self::Dnf,
-        Self::Yum,
-        Self::Apk,
-        Self::Pacman,
-    ];
+    const ALL: &'static [PackageManagerKindLite] =
+        &[Self::Apt, Self::Dnf, Self::Yum, Self::Apk, Self::Pacman];
 
     fn binary(self) -> &'static str {
         match self {
@@ -419,7 +415,6 @@ async fn load_key(key: &SshKey) -> Result<key::KeyPair, HostError> {
     }
 }
 
-
 // ============================================================
 // Host trait 实装
 // ============================================================
@@ -473,7 +468,7 @@ impl Host for RemoteLinuxHost {
         } else {
             (inner_line, cmd.stdin)
         };
-        let timeout = cmd.timeout.unwrap_or(Duration::from_secs(300));
+        let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
 
         let handle = self.handle.clone();
         let exec_fut = async move {
@@ -554,6 +549,7 @@ impl Host for RemoteLinuxHost {
                 origin: self.id.clone(),
             },
             timeout: cmd.timeout,
+            wait_policy: cmd.wait_policy,
         }))
     }
 
@@ -579,7 +575,7 @@ impl Host for RemoteLinuxHost {
         } else {
             (inner_line, cmd.stdin)
         };
-        let timeout = cmd.timeout.unwrap_or(Duration::from_secs(300));
+        let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
 
         // channel 开启和 stdin 写入在 timeout 外做（通常很快），主循环套 timeout。
         let session = self.handle.lock().await;
@@ -635,24 +631,22 @@ impl Host for RemoteLinuxHost {
         let deadline = tokio::time::Instant::now() + timeout;
         loop {
             match tokio::time::timeout_at(deadline, channel.wait()).await {
-                Ok(Some(msg)) => {
-                    match msg {
-                        ChannelMsg::Data { ref data } => {
-                            stdout_buf.extend_from_slice(data);
-                            flush_lines!(stdout_buf, stdout_lines, StreamSource::Stdout);
-                        }
-                        ChannelMsg::ExtendedData { ref data, ext } if ext == 1 => {
-                            stderr_buf.extend_from_slice(data);
-                            flush_lines!(stderr_buf, stderr_lines, StreamSource::Stderr);
-                        }
-                        ChannelMsg::ExitStatus { exit_status } => {
-                            exit_code = Some(exit_status as i32);
-                        }
-                        ChannelMsg::Eof => {}
-                        ChannelMsg::Close => break,
-                        _ => {}
+                Ok(Some(msg)) => match msg {
+                    ChannelMsg::Data { ref data } => {
+                        stdout_buf.extend_from_slice(data);
+                        flush_lines!(stdout_buf, stdout_lines, StreamSource::Stdout);
                     }
-                }
+                    ChannelMsg::ExtendedData { ref data, ext } if ext == 1 => {
+                        stderr_buf.extend_from_slice(data);
+                        flush_lines!(stderr_buf, stderr_lines, StreamSource::Stderr);
+                    }
+                    ChannelMsg::ExitStatus { exit_status } => {
+                        exit_code = Some(exit_status as i32);
+                    }
+                    ChannelMsg::Eof => {}
+                    ChannelMsg::Close => break,
+                    _ => {}
+                },
                 Ok(None) => break, // channel 关闭
                 Err(_) => {
                     return Err(HostError::Timeout {
@@ -682,7 +676,6 @@ impl Host for RemoteLinuxHost {
             stderr: stderr_lines.join("\n"),
         })
     }
-
 
     // ===== 文件操作(基于 SFTP)=====
 
@@ -950,7 +943,6 @@ impl Host for RemoteLinuxHost {
     }
 }
 
-
 // ============================================================
 // 辅助:命令拼接 + SFTP 打开 + 错误映射
 // ============================================================
@@ -1097,6 +1089,7 @@ struct RemoteHostProcess {
     channel: Option<russh::Channel<russh::client::Msg>>,
     id: ProcessId,
     timeout: Option<Duration>,
+    wait_policy: HostProcessWaitPolicy,
 }
 
 #[async_trait]
@@ -1106,26 +1099,38 @@ impl HostProcess for RemoteHostProcess {
     }
 
     async fn wait(mut self: Box<Self>) -> Result<CommandOutput, HostError> {
-        let mut channel = self.channel.take().ok_or_else(|| HostError::InvalidArgument {
-            reason: "remote channel already consumed".into(),
-        })?;
-        let timeout = self.timeout.unwrap_or(Duration::from_secs(300));
-        match tokio::time::timeout(timeout, collect_channel_output(&mut channel)).await {
-            Ok(out) => out,
-            Err(_) => Err(HostError::Timeout {
-                operation: "remote_process_wait",
-            }),
+        let mut channel = self
+            .channel
+            .take()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "remote channel already consumed".into(),
+            })?;
+        match self.wait_policy.resolve_timeout(self.timeout) {
+            Some(timeout) => {
+                match tokio::time::timeout(timeout, collect_channel_output(&mut channel)).await {
+                    Ok(out) => out,
+                    Err(_) => Err(HostError::Timeout {
+                        operation: "remote_process_wait",
+                    }),
+                }
+            }
+            None => collect_channel_output(&mut channel).await,
         }
     }
 
     async fn try_wait(&mut self) -> Result<ExitStatus, HostError> {
         // SSH exec 没有"快速 try_wait":没有快速 fd polling。
         // 简化:用 poll 试一次 channel.wait() with 0 timeout(tokio 的 timeout)
-        let channel = self.channel.as_mut().ok_or_else(|| HostError::InvalidArgument {
-            reason: "remote channel already consumed".into(),
-        })?;
+        let channel = self
+            .channel
+            .as_mut()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "remote channel already consumed".into(),
+            })?;
         match tokio::time::timeout(Duration::from_millis(1), channel.wait()).await {
-            Ok(Some(ChannelMsg::ExitStatus { exit_status })) => Ok(ExitStatus::Exited(exit_status as i32)),
+            Ok(Some(ChannelMsg::ExitStatus { exit_status })) => {
+                Ok(ExitStatus::Exited(exit_status as i32))
+            }
             Ok(Some(ChannelMsg::Close)) => Ok(ExitStatus::Killed),
             Ok(Some(_)) => Ok(ExitStatus::Running),
             Ok(None) => Ok(ExitStatus::Running),
@@ -1134,9 +1139,12 @@ impl HostProcess for RemoteHostProcess {
     }
 
     async fn kill(&mut self) -> Result<(), HostError> {
-        let channel = self.channel.as_mut().ok_or_else(|| HostError::InvalidArgument {
-            reason: "remote channel already consumed".into(),
-        })?;
+        let channel = self
+            .channel
+            .as_mut()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "remote channel already consumed".into(),
+            })?;
         // SSH 没有标准 SIGKILL 跨服务器请求,尝试 close channel
         channel
             .close()
@@ -1146,9 +1154,12 @@ impl HostProcess for RemoteHostProcess {
     }
 
     async fn write_stdin(&mut self, data: &[u8]) -> Result<(), HostError> {
-        let channel = self.channel.as_mut().ok_or_else(|| HostError::InvalidArgument {
-            reason: "remote channel already consumed".into(),
-        })?;
+        let channel = self
+            .channel
+            .as_mut()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "remote channel already consumed".into(),
+            })?;
         channel
             .data(data)
             .await
@@ -1157,9 +1168,12 @@ impl HostProcess for RemoteHostProcess {
     }
 
     async fn close_stdin(&mut self) -> Result<(), HostError> {
-        let channel = self.channel.as_mut().ok_or_else(|| HostError::InvalidArgument {
-            reason: "remote channel already consumed".into(),
-        })?;
+        let channel = self
+            .channel
+            .as_mut()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "remote channel already consumed".into(),
+            })?;
         channel
             .eof()
             .await
@@ -1258,7 +1272,10 @@ mod tests {
     #[test]
     fn wrap_with_password_uses_dash_s_and_sh_c() {
         let line = wrap_with_sudo("apt-get install -y docker.io", &BashShell, true);
-        assert!(line.contains("sudo -S -p ''"), "有密码必须用 -S 从 stdin 读: {line}");
+        assert!(
+            line.contains("sudo -S -p ''"),
+            "有密码必须用 -S 从 stdin 读: {line}"
+        );
         assert!(line.contains("sh -c"), "内层要丢给 sh -c 跑: {line}");
     }
 
@@ -1277,8 +1294,14 @@ mod tests {
         let inner = "cd /opt/napcat && apt-get install -y docker";
         let line = wrap_with_sudo(inner, &BashShell, true);
         let escaped = BashShell.escape(inner);
-        assert!(line.ends_with(&escaped), "内层应原样 escape 追加在末尾: {line}");
-        assert!(escaped.starts_with('\''), "含空格的内层必须被单引号包裹: {escaped}");
+        assert!(
+            line.ends_with(&escaped),
+            "内层应原样 escape 追加在末尾: {line}"
+        );
+        assert!(
+            escaped.starts_with('\''),
+            "含空格的内层必须被单引号包裹: {escaped}"
+        );
     }
 
     #[test]
@@ -1286,7 +1309,10 @@ mod tests {
         let inner = "echo hi; rm -rf /tmp/x";
         let line = wrap_with_sudo(inner, &BashShell, false);
         // 分号必须落在单引号内,不能泄漏成外层 sudo 命令行的语句分隔符。
-        assert!(line.contains("'echo hi; rm -rf /tmp/x'"), "分号应被单引号包住: {line}");
+        assert!(
+            line.contains("'echo hi; rm -rf /tmp/x'"),
+            "分号应被单引号包住: {line}"
+        );
     }
 
     #[test]

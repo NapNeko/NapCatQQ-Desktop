@@ -26,14 +26,14 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 
-use crate::command::{CommandOutput, HostCommand};
+use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
 use crate::error::HostError;
-use crate::subprocess::hide_console_window;
 use crate::host::{Arch, Host, Locality, Os};
 use crate::package_manager::PackageManager;
 use crate::path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 use crate::process::{ExitStatus, HostProcess, ProcessId};
 use crate::shell::{HostShell, PowerShellShell};
+use crate::subprocess::hide_console_window;
 
 /// 本地 Windows 主机。
 ///
@@ -83,7 +83,6 @@ impl Default for LocalWindowsHost {
         Self::new()
     }
 }
-
 
 // ============================================================
 // Host trait 实装
@@ -162,7 +161,7 @@ impl Host for LocalWindowsHost {
         let mut rd = match tokio::fs::read_dir(&local).await {
             Ok(rd) => rd,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(HostError::PathNotFound { path: path.clone() })
+                return Err(HostError::PathNotFound { path: path.clone() });
             }
             Err(e) => return Err(HostError::Io(e)),
         };
@@ -240,7 +239,6 @@ impl Host for LocalWindowsHost {
         tokio::fs::copy(&src, local_dst).await?;
         Ok(())
     }
-
 
     async fn extract_archive(
         &self,
@@ -326,7 +324,6 @@ impl Host for LocalWindowsHost {
         }
     }
 
-
     // ===== 进程操作 =====
 
     async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
@@ -366,6 +363,7 @@ impl Host for LocalWindowsHost {
                 origin: self.id.clone(),
             },
             timeout: cmd.timeout,
+            wait_policy: cmd.wait_policy,
         };
         Ok(Box::new(process))
     }
@@ -396,7 +394,7 @@ impl Host for LocalWindowsHost {
             }
         }
 
-        let timeout = cmd.timeout.unwrap_or(Duration::from_secs(300));
+        let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
         let output_future = child.wait_with_output();
         let output = match tokio::time::timeout(timeout, output_future).await {
             Ok(Ok(out)) => out,
@@ -482,7 +480,7 @@ impl Host for LocalWindowsHost {
         // tx 本体 drop 掉，让 rx 在两个 reader task 都结束后自然关闭。
         drop(tx);
 
-        let timeout = cmd.timeout.unwrap_or(Duration::from_secs(300));
+        let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
         let deadline = tokio::time::Instant::now() + timeout;
 
         let mut stdout_lines: Vec<String> = Vec::new();
@@ -528,10 +526,7 @@ impl Host for LocalWindowsHost {
 // build_tokio_command:HostCommand → tokio::process::Command
 // ============================================================
 
-fn build_tokio_command(
-    cmd: &HostCommand,
-    host: &LocalWindowsHost,
-) -> Result<Command, HostError> {
+fn build_tokio_command(cmd: &HostCommand, host: &LocalWindowsHost) -> Result<Command, HostError> {
     if cmd.program.is_empty() {
         return Err(HostError::InvalidArgument {
             reason: "program is empty".into(),
@@ -562,6 +557,7 @@ struct ChildHostProcess {
     child: Option<Child>,
     id: ProcessId,
     timeout: Option<Duration>,
+    wait_policy: HostProcessWaitPolicy,
 }
 
 #[async_trait]
@@ -571,19 +567,25 @@ impl HostProcess for ChildHostProcess {
     }
 
     async fn wait(mut self: Box<Self>) -> Result<CommandOutput, HostError> {
-        let child = self.child.take().ok_or_else(|| HostError::InvalidArgument {
-            reason: "child already consumed".into(),
-        })?;
+        let child = self
+            .child
+            .take()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "child already consumed".into(),
+            })?;
 
-        let timeout = self.timeout.unwrap_or(Duration::from_secs(300));
-        let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
-            Ok(Ok(out)) => out,
-            Ok(Err(e)) => return Err(HostError::Io(e)),
-            Err(_) => {
-                return Err(HostError::Timeout {
-                    operation: "process_wait",
-                });
-            }
+        let output_future = child.wait_with_output();
+        let output = match self.wait_policy.resolve_timeout(self.timeout) {
+            Some(timeout) => match tokio::time::timeout(timeout, output_future).await {
+                Ok(Ok(out)) => out,
+                Ok(Err(e)) => return Err(HostError::Io(e)),
+                Err(_) => {
+                    return Err(HostError::Timeout {
+                        operation: "process_wait",
+                    });
+                }
+            },
+            None => output_future.await.map_err(HostError::Io)?,
         };
 
         Ok(CommandOutput {
@@ -594,9 +596,12 @@ impl HostProcess for ChildHostProcess {
     }
 
     async fn try_wait(&mut self) -> Result<ExitStatus, HostError> {
-        let child = self.child.as_mut().ok_or_else(|| HostError::InvalidArgument {
-            reason: "child already consumed".into(),
-        })?;
+        let child = self
+            .child
+            .as_mut()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "child already consumed".into(),
+            })?;
         match child.try_wait()? {
             None => Ok(ExitStatus::Running),
             Some(status) => match status.code() {
@@ -607,31 +612,37 @@ impl HostProcess for ChildHostProcess {
     }
 
     async fn kill(&mut self) -> Result<(), HostError> {
-        let child = self.child.as_mut().ok_or_else(|| HostError::InvalidArgument {
-            reason: "child already consumed".into(),
-        })?;
+        let child = self
+            .child
+            .as_mut()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "child already consumed".into(),
+            })?;
         child.kill().await?;
         Ok(())
     }
 
     async fn write_stdin(&mut self, data: &[u8]) -> Result<(), HostError> {
-        let child = self.child.as_mut().ok_or_else(|| HostError::InvalidArgument {
-            reason: "child already consumed".into(),
-        })?;
-        let stdin = child
-            .stdin
+        let child = self
+            .child
             .as_mut()
-            .ok_or_else(|| HostError::Unsupported {
-                operation: "stdin pipe not available",
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "child already consumed".into(),
             })?;
+        let stdin = child.stdin.as_mut().ok_or_else(|| HostError::Unsupported {
+            operation: "stdin pipe not available",
+        })?;
         stdin.write_all(data).await?;
         Ok(())
     }
 
     async fn close_stdin(&mut self) -> Result<(), HostError> {
-        let child = self.child.as_mut().ok_or_else(|| HostError::InvalidArgument {
-            reason: "child already consumed".into(),
-        })?;
+        let child = self
+            .child
+            .as_mut()
+            .ok_or_else(|| HostError::InvalidArgument {
+                reason: "child already consumed".into(),
+            })?;
         child.stdin = None;
         Ok(())
     }
@@ -656,7 +667,6 @@ impl HostProcess for ChildHostProcess {
 }
 
 // _Arc 已使用 prelude 引入但 Rust analyzer 可能报 unused —— 这里实际未用,删除即可
-
 
 // ============================================================
 // 同步解压辅助(在 spawn_blocking 内调用)
@@ -747,9 +757,15 @@ mod tests {
     async fn list_dir_lists_files_sorted() {
         let host = LocalWindowsHost::new();
         let ws = tempdir().unwrap();
-        host.write_file(&temp_host_path(&ws, "z.txt"), b"z").await.unwrap();
-        host.write_file(&temp_host_path(&ws, "a.txt"), b"a").await.unwrap();
-        host.write_file(&temp_host_path(&ws, "m.txt"), b"m").await.unwrap();
+        host.write_file(&temp_host_path(&ws, "z.txt"), b"z")
+            .await
+            .unwrap();
+        host.write_file(&temp_host_path(&ws, "a.txt"), b"a")
+            .await
+            .unwrap();
+        host.write_file(&temp_host_path(&ws, "m.txt"), b"m")
+            .await
+            .unwrap();
         let dir = HostPath::from_windows(ws.path().to_str().unwrap());
         let entries = host.list_dir(&dir).await.unwrap();
         let names: Vec<_> = entries.iter().map(|e| e.name.as_str()).collect();
@@ -783,7 +799,10 @@ mod tests {
     async fn run_to_string_captures_stdout() {
         let host = LocalWindowsHost::new();
         // 用 cmd.exe /c echo,Windows 上一定能跑
-        let cmd = HostCommand::new("cmd.exe").arg("/c").arg("echo").arg("hello");
+        let cmd = HostCommand::new("cmd.exe")
+            .arg("/c")
+            .arg("echo")
+            .arg("hello");
         let out = host.run_to_string(cmd).await.unwrap();
         assert!(out.success());
         assert!(out.stdout.contains("hello"));

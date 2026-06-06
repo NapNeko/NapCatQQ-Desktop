@@ -12,6 +12,32 @@ use std::time::Duration;
 
 use crate::path::HostPath;
 
+/// 默认命令等待上限。短命令避免无限挂起,长生命周期进程要显式选择
+/// [`HostProcessWaitPolicy::NoTimeout`]。
+pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// `HostProcess::wait` 的等待策略。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostProcessWaitPolicy {
+    /// 使用命令超时；未设置时使用 [`DEFAULT_COMMAND_TIMEOUT`]。
+    Default,
+    /// `HostProcess::wait` 使用指定上限。
+    Timeout(Duration),
+    /// `HostProcess::wait` 不设置超时,适合 NapCat / SnowLuma 这类长生命周期进程。
+    NoTimeout,
+}
+
+impl HostProcessWaitPolicy {
+    /// 解析成 `tokio::time::timeout` 可消费的上限。
+    pub fn resolve_timeout(self, command_timeout: Option<Duration>) -> Option<Duration> {
+        match self {
+            Self::Default => Some(command_timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT)),
+            Self::Timeout(timeout) => Some(timeout),
+            Self::NoTimeout => None,
+        }
+    }
+}
+
 /// 跨平台命令描述。
 ///
 /// 使用建议:
@@ -32,6 +58,7 @@ pub struct HostCommand {
     pub working_dir: Option<HostPath>,
     pub environment: BTreeMap<String, String>,
     pub timeout: Option<Duration>,
+    pub wait_policy: HostProcessWaitPolicy,
     /// 是否需要提权运行(LocalWindows = UAC,Linux = sudo)
     pub elevated: bool,
     /// stdin 输入(如 `echo "yes" | sudo apt install`)。None = 不传 stdin。
@@ -47,6 +74,7 @@ impl HostCommand {
             working_dir: None,
             environment: BTreeMap::new(),
             timeout: None,
+            wait_policy: HostProcessWaitPolicy::Default,
             elevated: false,
             stdin: None,
         }
@@ -93,10 +121,27 @@ impl HostCommand {
         self
     }
 
-    /// 设置超时(`None` 表示不限时,Host 实装可设默认上限)。
+    /// 设置超时(`None` 表示使用 Host 默认上限)。
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
+    }
+
+    /// 单独设置 `HostProcess::wait` 的超时,不影响 `run_to_string` / `run_streaming`。
+    pub fn wait_timeout(mut self, timeout: Duration) -> Self {
+        self.wait_policy = HostProcessWaitPolicy::Timeout(timeout);
+        self
+    }
+
+    /// 让 `HostProcess::wait` 不设置超时。只应用于 `spawn` 返回的进程句柄。
+    pub fn no_wait_timeout(mut self) -> Self {
+        self.wait_policy = HostProcessWaitPolicy::NoTimeout;
+        self
+    }
+
+    /// 标记为长生命周期进程,等价于 [`Self::no_wait_timeout`]。
+    pub fn long_running(self) -> Self {
+        self.no_wait_timeout()
     }
 
     /// 标记需要提权(具体提权机制由 Host 实装决定)。
@@ -141,7 +186,10 @@ mod tests {
             .arg("--depth=1")
             .arg("https://example.com/repo");
         assert_eq!(cmd.program, "git");
-        assert_eq!(cmd.args, vec!["clone", "--depth=1", "https://example.com/repo"]);
+        assert_eq!(
+            cmd.args,
+            vec!["clone", "--depth=1", "https://example.com/repo"]
+        );
     }
 
     #[test]
@@ -164,9 +212,54 @@ mod tests {
     }
 
     #[test]
+    fn wait_policy_defaults_to_command_timeout_or_host_default() {
+        assert_eq!(
+            HostProcessWaitPolicy::Default.resolve_timeout(Some(Duration::from_secs(2))),
+            Some(Duration::from_secs(2))
+        );
+        assert_eq!(
+            HostProcessWaitPolicy::Default.resolve_timeout(None),
+            Some(DEFAULT_COMMAND_TIMEOUT)
+        );
+    }
+
+    #[test]
+    fn wait_policy_builder_can_override_process_wait_only() {
+        let cmd = HostCommand::new("sleep")
+            .timeout(Duration::from_secs(2))
+            .wait_timeout(Duration::from_secs(30));
+        assert_eq!(cmd.timeout, Some(Duration::from_secs(2)));
+        assert_eq!(
+            cmd.wait_policy.resolve_timeout(cmd.timeout),
+            Some(Duration::from_secs(30))
+        );
+    }
+
+    #[test]
+    fn long_running_process_wait_has_no_timeout() {
+        let cmd = HostCommand::new("napcat")
+            .timeout(Duration::from_secs(2))
+            .long_running();
+        assert_eq!(cmd.timeout, Some(Duration::from_secs(2)));
+        assert_eq!(cmd.wait_policy, HostProcessWaitPolicy::NoTimeout);
+        assert_eq!(cmd.wait_policy.resolve_timeout(cmd.timeout), None);
+    }
+
+    #[test]
+    fn no_wait_timeout_is_long_running_alias() {
+        let cmd = HostCommand::new("snowluma").no_wait_timeout();
+        assert_eq!(cmd.wait_policy, HostProcessWaitPolicy::NoTimeout);
+    }
+
+    #[test]
     fn elevated_flag_off_by_default() {
         assert!(!HostCommand::new("ls").elevated);
-        assert!(HostCommand::new("apt-get").arg("install").elevated().elevated);
+        assert!(
+            HostCommand::new("apt-get")
+                .arg("install")
+                .elevated()
+                .elevated
+        );
     }
 
     #[test]
