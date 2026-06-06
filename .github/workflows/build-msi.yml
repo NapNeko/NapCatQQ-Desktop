@@ -4,8 +4,9 @@ on:
   workflow_call:
     inputs:
       version:
-        description: "版本号，支持 1.7.28 或 v1.7.28"
-        required: true
+        description: "版本号，支持 1.7.28 或 v1.7.28；为空时从 tauri.conf.json / package.json 读取"
+        required: false
+        default: ""
         type: string
       git_ref:
         description: "构建所基于的 Git ref"
@@ -33,7 +34,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "版本号，支持 1.7.28 或 v1.7.28；为空时从 pyproject.toml 读取"
+        description: "版本号，支持 1.7.28 或 v1.7.28；为空时从 tauri.conf.json / package.json 读取"
         required: false
         default: ""
         type: string
@@ -54,45 +55,36 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      PYTHONUTF8: "1"
-      PYTHONIOENCODING: "utf-8"
     outputs:
       version: ${{ steps.resolve_version.outputs.VERSION }}
       version_plain: ${{ steps.resolve_version.outputs.VERSION_PLAIN }}
       artifact_name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
-      msi_file_name: ${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}
+      msi_file_name: ${{ steps.collect_msi.outputs.MSI_FILE_NAME }}
     steps:
       - name: "检出代码"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.git_ref || github.ref }}
           submodules: true
           fetch-depth: 0
 
-      - name: "设置 Python 3.12"
-        uses: actions/setup-python@v6
+      - name: "设置 Node.js"
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
+          node-version: "22"
+          cache: npm
 
-      - name: "安装 uv"
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
+      - name: "设置 Rust"
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
 
-      - name: "设置 .NET SDK"
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: "8.0.x"
+      - name: "缓存 Cargo"
+        uses: Swatinem/rust-cache@v2
 
-      - name: "缓存 .NET / WiX 依赖"
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~\.nuget\packages
-            ~\.dotnet\toolResolverCache
-            ~\.wix
-          key: ${{ runner.os }}-dotnet-wix-${{ hashFiles('.config/dotnet-tools.json', '.github/workflows/build-msi.yml') }}
+      - name: "安装前端依赖"
+        run: npm ci
 
       - name: "解析版本号"
         id: resolve_version
@@ -102,14 +94,20 @@ jobs:
 
           if ($inputVersion) {
             $version = $inputVersion
+          } elseif (Test-Path "src-tauri/tauri.conf.json") {
+            $config = Get-Content "src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+            $version = $config.version
+          } elseif (Test-Path "package.json") {
+            $package = Get-Content "package.json" -Raw | ConvertFrom-Json
+            $version = $package.version
           } else {
-            $content = Get-Content pyproject.toml -Raw
-            if ($content -match 'version\s*=\s*"([^"]+)"') {
-              $version = $matches[1]
-            } else {
-              Write-Error "无法从 pyproject.toml 提取版本号"
-              exit 1
-            }
+            Write-Error "无法从输入、src-tauri/tauri.conf.json 或 package.json 解析版本号"
+            exit 1
+          }
+
+          if (-not $version) {
+            Write-Error "解析出的版本号为空"
+            exit 1
           }
 
           if (-not ($version -like "v*")) {
@@ -121,55 +119,38 @@ jobs:
           "VERSION_PLAIN=$plain" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Resolved version: $version"
 
-      - name: "注入中转代理常量"
+      - name: "校验版本元数据"
+        run: npm run check:versions
+
+      - name: "构建 Tauri MSI"
+        run: npm run tauri:build -- --bundles msi
+
+      - name: "收集 MSI 输出"
+        id: collect_msi
         shell: pwsh
-        env:
-          NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL }}
-          NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
         run: |
-          if (-not $env:NCD_PROXY_SHARED_SECRET) {
-            Write-Error "NCD_PROXY_SHARED_SECRET secret 未配置. 请在仓库 Settings -> Secrets and variables -> Actions 添加."
+          $bundleRoot = "target/release/bundle"
+          $msiFiles = Get-ChildItem -Path $bundleRoot -Filter "*.msi" -File -Recurse -ErrorAction SilentlyContinue
+          if (-not $msiFiles) {
+            Write-Error "未在 $bundleRoot 下找到 MSI 输出"
             exit 1
           }
-          python script/build_scripts/inject_proxy_constants.py
 
-      - name: "构建应用"
-        shell: pwsh
-        run: |
-          foreach ($path in @("build/main", "build/generated_assets", "dist/NapCatQQ-Desktop")) {
-            if (Test-Path $path) {
-              Remove-Item $path -Recurse -Force
-            }
+          $outDir = "release-assets"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          foreach ($file in $msiFiles) {
+            Copy-Item $file.FullName -Destination $outDir -Force
           }
-          uv sync --frozen --no-dev
-          uv run --frozen pyinstaller --clean ./script/build_scripts/main.spec
 
-      - name: "安装 WiX Toolset"
-        shell: pwsh
-        run: |
-          dotnet tool restore
-          dotnet tool run wix extension add -g WixToolset.Util.wixext/5.0.2
-          dotnet tool run wix --version
+          $updaterAssets = Get-ChildItem -Path $bundleRoot -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq "latest.json" -or $_.Extension -eq ".sig" -or $_.Extension -eq ".zip" }
+          foreach ($file in $updaterAssets) {
+            Copy-Item $file.FullName -Destination $outDir -Force
+          }
 
-      - name: "解析 MSI 文件名"
-        id: resolve_msi
-        shell: pwsh
-        run: |
-          $fileName = "NapCatQQ-Desktop-${{ steps.resolve_version.outputs.VERSION_PLAIN }}-x64.msi"
-          "MSI_FILE_NAME=$fileName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: "构建 MSI 安装包"
-        shell: pwsh
-        run: |
-          $sourceDir = (Resolve-Path "dist/NapCatQQ-Desktop").Path
-          $msiPath = "dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}"
-
-          dotnet tool run wix build "script/build_scripts/main.wxs" `
-            -ext WixToolset.Util.wixext `
-            -arch x64 `
-            -d ProductVersion=${{ steps.resolve_version.outputs.VERSION_PLAIN }} `
-            -d SourceDir="$sourceDir" `
-            -o "$msiPath"
+          $primary = $msiFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          "MSI_FILE_NAME=$($primary.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Collected MSI: $($primary.FullName)"
 
       - name: "解析制品名"
         id: resolve_artifact
@@ -181,21 +162,10 @@ jobs:
           }
           "ARTIFACT_NAME=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: "验证 MSI 输出"
-        shell: pwsh
-        run: |
-          $msiPath = "dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}"
-          if (-not (Test-Path $msiPath)) {
-            Write-Error "$msiPath 不存在"
-            exit 1
-          }
-          Write-Host "MSI size:" (Get-Item $msiPath).Length "bytes"
-
       - name: "上传 MSI 制品"
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
           if-no-files-found: error
           retention-days: 7
-          path: |
-            dist/${{ steps.resolve_msi.outputs.MSI_FILE_NAME }}
+          path: release-assets/*

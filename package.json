@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "check:versions": "node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const tauri=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8')); const meta=fs.readFileSync('src-ui/core/domain/app-meta.ts','utf8'); const app=meta.match(/APP_VERSION = '([^']+)'/); const label=meta.match(/APP_VERSION_LABEL = 'v([^']+)'/); const mismatches=[]; if(pkg.version!==tauri.version)mismatches.push('package.json != tauri.conf.json'); if(!app||pkg.version!==app[1])mismatches.push('package.json != APP_VERSION'); if(!label||pkg.version!==label[1])mismatches.push('package.json != APP_VERSION_LABEL'); if(mismatches.length){console.error(mismatches.join('\n')); process.exit(1)} console.log('version metadata is consistent:', pkg.version)\"",
     "typecheck": "tsc --noEmit",
     "verify": "npm run ts-bindings && npm run typecheck && npm run rust:check",
     "ts-bindings": "cargo test -p ncd-runtime --lib export_bindings_ -- --quiet && cargo test -p ncd-domain --lib export_bindings_ -- --quiet && cargo test -p ncd-component --lib export_bindings_ -- --quiet && cargo test -p ncd-deploy --lib export_bindings_ -- --quiet && cargo test -p ncd-host --lib export_bindings_ -- --quiet && cargo test -p ncd-tauri --lib export_bindings_ -- --quiet",
@@ -59,5 +60,6 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.4.5",
     "vite": "^5.2.11"
-  }
+  },
+  "packageManager": "npm@11.15.0"
 }
