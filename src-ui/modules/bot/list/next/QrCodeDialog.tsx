@@ -82,7 +82,7 @@ export function QrCodeDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-sm">
+            <DialogContent size="sm">
                 <DialogTitle>扫码登录 · {botId}</DialogTitle>
                 <DialogDescription>
                     用 QQ 客户端扫描下方二维码完成登录。

@@ -68,7 +68,15 @@ const KIND_BADGE: Record<ConnectionKind, string> = {
 
 export function ConnectionsTab({ data, onChange, backendType }: ConnectionsTabProps) {
     const [editing, setEditing] = useState<EditingKey>(null);
+    /// 退场动画结束后再清，避免 open=false 时立刻卸掉表单导致收起动画闪空。
+    const [editingMount, setEditingMount] = useState<EditingKey>(null);
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+
+    useEffect(() => {
+        if (editing !== null) {
+            setEditingMount(editing);
+        }
+    }, [editing]);
 
     const startCreate = (kind: ConnectionKind) => {
         const draft = createDefaultConnection(kind);
@@ -107,12 +115,6 @@ export function ConnectionsTab({ data, onChange, backendType }: ConnectionsTabPr
     };
 
     const total = totalCount(data);
-
-    // 编辑态下 existingNames 不能含自己，否则保存时会自校验"重名"
-    const existingNamesForEdit =
-        editing?.type === 'edit'
-            ? collectAllNames(data).filter((n) => n !== editing.draft.name)
-            : collectAllNames(data);
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -159,26 +161,32 @@ export function ConnectionsTab({ data, onChange, backendType }: ConnectionsTabPr
                 }}
             >
                 <DialogContent
-                    className="max-w-2xl"
+                    size="lg"
+                    dismissOnOutsideClick={false}
+                    onExited={() => setEditingMount(null)}
                     onEscapeKeyDown={(e) => e.preventDefault()}
                     onPointerDownOutside={(e) => e.preventDefault()}
                 >
-                    {editing && (
+                    {editingMount && (
                         <>
                             <DialogHeader>
                                 <DialogTitle>
-                                    {editing.type === 'create' ? '新增' : '编辑'}
+                                    {editingMount.type === 'create' ? '新增' : '编辑'}
                                     {' '}
-                                    {getKindMeta(editing.kind).title}
+                                    {getKindMeta(editingMount.kind).title}
                                 </DialogTitle>
                                 <DialogDescription>
-                                    {getKindMeta(editing.kind).description}
+                                    {getKindMeta(editingMount.kind).description}
                                 </DialogDescription>
                             </DialogHeader>
                             <ConnectionEditor
-                                kind={editing.kind}
-                                initialData={editing.draft}
-                                existingNames={existingNamesForEdit}
+                                kind={editingMount.kind}
+                                initialData={editingMount.draft}
+                                existingNames={
+                                    editingMount.type === 'edit'
+                                        ? collectAllNames(data).filter((n) => n !== editingMount.draft.name)
+                                        : collectAllNames(data)
+                                }
                                 backendType={backendType}
                                 onSave={saveEdit}
                                 onCancel={cancelEdit}
@@ -190,7 +198,7 @@ export function ConnectionsTab({ data, onChange, backendType }: ConnectionsTabPr
 
             {/* 删除二次确认 */}
             <Dialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-                <DialogContent className="max-w-sm">
+                <DialogContent size="sm">
                     <DialogHeader>
                         <DialogTitle>删除连接？</DialogTitle>
                         <DialogDescription>

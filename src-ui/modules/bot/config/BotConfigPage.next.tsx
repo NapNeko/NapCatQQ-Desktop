@@ -434,7 +434,7 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
 
             {/* ────── 删除二次确认 ────── */}
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                <DialogContent className="max-w-sm">
+                <DialogContent size="sm">
                     <DialogHeader>
                         <DialogTitle>彻底删除该 Bot？</DialogTitle>
                         <DialogDescription>

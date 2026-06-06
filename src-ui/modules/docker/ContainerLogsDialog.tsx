@@ -46,7 +46,7 @@ export const ContainerLogsDialog: React.FC<ContainerLogsDialogProps> = ({
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-3xl">
+            <DialogContent size="xl">
                 <DialogHeader>
                     <div className="flex items-center justify-between pr-6">
                         <DialogTitle>{name} · 日志</DialogTitle>

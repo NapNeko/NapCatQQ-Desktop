@@ -53,7 +53,7 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>需要 sudo 密码</DialogTitle>
                     <DialogDescription>

@@ -135,7 +135,7 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
         // 调用方主动关、失败 isDeploying 转 false)后恢复正常关闭。
         <Dialog open onOpenChange={(o) => { if (!o && !isDeploying) onClose(); }}>
             <DialogContent
-                className="max-w-lg"
+                size="lg"
                 hideClose={isDeploying}
                 onInteractOutside={(e) => { if (isDeploying) e.preventDefault(); }}
                 onEscapeKeyDown={(e) => { if (isDeploying) e.preventDefault(); }}

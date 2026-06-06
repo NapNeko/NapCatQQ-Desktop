@@ -17,7 +17,7 @@ import {
     DialogTitle,
 } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
-import { MotionIcon, infoToneMotion } from '../../shared/ui/motion';
+import { MotionIcon, infoToneMotion, DialogStepTransition } from '../../shared/ui/motion';
 import { classifyDroppedPath, useTauriDropTarget } from './useTauriDropTarget';
 
 type Phase = 'pick' | 'scan' | 'review' | 'import' | 'done' | 'error';
@@ -50,8 +50,11 @@ export function ConfigImportDialog({
     }, []);
 
     const handleOpenChange = (next: boolean) => {
-        if (!next) reset();
-        onOpenChange(next);
+        if (next) {
+            onOpenChange(true);
+            return;
+        }
+        onOpenChange(false);
     };
 
     const runPreview = async (sourcePath: string) => {
@@ -150,7 +153,11 @@ export function ConfigImportDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="max-w-md gap-0 p-5 sm:max-w-lg">
+            <DialogContent
+                size="lg"
+                className="gap-0 p-5"
+                onExited={reset}
+            >
                 <DialogHeader className="mb-2">
                     <DialogTitle className="flex items-center gap-2 font-display">
                         <PackageCheck size={18} className="text-brand" />
@@ -161,6 +168,7 @@ export function ConfigImportDialog({
                     </DialogDescription>
                 </DialogHeader>
 
+                <DialogStepTransition stepKey={phase}>
                 {phase === 'pick' && (
                     <div className="py-1">
                         <div ref={dropZoneRef}>
@@ -331,6 +339,7 @@ export function ConfigImportDialog({
                     )}
                     </DialogFooter>
                 )}
+                </DialogStepTransition>
             </DialogContent>
         </Dialog>
     );

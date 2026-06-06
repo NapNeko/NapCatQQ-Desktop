@@ -28,7 +28,9 @@ export {
     DialogTitle,
     DialogDescription,
     DialogFooter,
+    useDialogAnchor,
 } from './Dialog';
+export { DIALOG_SIZE_CLASS, type DialogSize } from './dialogSizes';
 export { Spinner, type SpinnerProps } from './Spinner';
 export { Progress, type ProgressProps } from './Progress';
 export { InfoBar, type InfoBarProps } from './InfoBar';

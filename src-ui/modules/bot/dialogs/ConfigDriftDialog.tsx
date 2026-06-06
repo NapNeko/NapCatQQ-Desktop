@@ -70,7 +70,7 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-            <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+            <DialogContent size="sheet">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <ActionMotionIcon

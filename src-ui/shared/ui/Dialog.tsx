@@ -1,7 +1,7 @@
 // Dialog 原子件。基于 Radix Dialog,在外面包 GSAP 动画层。第二轮重写。
 //
 // 视觉决策:
-//   - overlay 半透明黑 + backdrop-blur
+//   - overlay 半透明黑(无 backdrop-blur,减轻与弹窗内按钮 hover 叠层时的重影)
 //   - content surface-elevated + shadow-popover
 //   - 关闭按钮右上,Esc 关
 //
@@ -11,8 +11,8 @@
 //     时反向收回锚点。standard/rich 档启用,elegant 档退化为单纯缩放。
 //   - 没设置锚点时退化到原来的"中心 fade + scale"。
 //
-// 关闭策略:outside 默认只在点到遮罩层时关闭。原生 select 下拉在 portal 外，
-// 以及 flex 居中层上的空白点击，不再误关弹窗。
+//   - 打开期间高度:内层 clip 单独做 GSAP height(与进场 scale 不同节点,减轻重影)。
+//   - 多步骤内容可用 DialogStepTransition 做步骤淡入。
 
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { X as CloseIcon } from 'lucide-react';
@@ -22,14 +22,21 @@ import {
     forwardRef,
     useCallback,
     useContext,
+    useEffect,
+    useRef,
     useState,
     type ComponentPropsWithoutRef,
     type ElementRef,
+    type HTMLAttributes,
+    type MutableRefObject,
     type ReactNode,
+    type RefObject,
 } from 'react';
 import { cn } from '../utils/cn';
+import { useMotion } from '../../hooks/preferences/useMotion';
 import { GsapPresence, type EnterFn, type ExitFn } from './motion/GsapPresence';
 import { MotionIcon } from './motion/MotionIcon';
+import { DIALOG_SIZE_CLASS, type DialogSize } from './dialogSizes';
 
 const DialogOpenContext = createContext<boolean>(false);
 
@@ -138,6 +145,9 @@ function makeContentEnter(anchor: DialogAnchor | null): EnterFn {
                 y: 0,
                 duration: env.duration('base'),
                 ease: env.ease.enter,
+                onComplete: () => {
+                    gsap.set(el, { clearProps: 'transform' });
+                },
             },
         );
     };
@@ -150,6 +160,9 @@ const contentExit: ExitFn = (el, env) =>
         y: -2,
         duration: env.duration('fast'),
         ease: env.ease.exit,
+        onComplete: () => {
+            gsap.set(el, { clearProps: 'transform' });
+        },
     });
 
 function applyOutsideDismissGuard(
@@ -174,8 +187,12 @@ function applyOutsideDismissGuard(
 interface DialogContentProps
     extends Omit<ComponentPropsWithoutRef<typeof RadixDialog.Content>, 'forceMount'> {
     hideClose?: boolean;
+    /// 预设宽度；高度在打开期间随内容变化由 GSAP 过渡。
+    size?: DialogSize;
     /// false = 点遮罩也不关，只能点关闭按钮 / Esc（表单弹窗推荐）。
     dismissOnOutsideClick?: boolean;
+    /// 内容区退场动画结束后触发。用于在 open=false 后延迟卸载 children，避免收起动画中途闪空。
+    onExited?: () => void;
 }
 
 export const DialogContent = forwardRef<
@@ -187,7 +204,9 @@ export const DialogContent = forwardRef<
             className,
             children,
             hideClose,
+            size = 'md',
             dismissOnOutsideClick = true,
+            onExited,
             onPointerDownOutside: onPointerDownOutsideProp,
             onFocusOutside: onFocusOutsideProp,
             onInteractOutside: onInteractOutsideProp,
@@ -208,9 +227,15 @@ export const DialogContent = forwardRef<
                 </GsapPresence>
                 <div
                     style={{ isolation: 'isolate' }}
-                    className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6"
+                    className="pointer-events-none fixed inset-0 z-50 overflow-y-auto"
                 >
-                    <GsapPresence visible={open} onEnter={contentEnter} onExit={contentExit}>
+                    <div className="flex min-h-full items-center justify-center p-6">
+                    <GsapPresence
+                        visible={open}
+                        onEnter={contentEnter}
+                        onExit={contentExit}
+                        onExited={onExited}
+                    >
                         <RadixDialog.Content
                             asChild
                             forceMount
@@ -228,11 +253,16 @@ export const DialogContent = forwardRef<
                                 applyOutsideDismissGuard(e, dismissOnOutsideClick);
                             }}
                         >
-                            <ContentBody className={className} hideClose={hideClose}>
+                            <ContentBody
+                                className={cn(DIALOG_SIZE_CLASS[size], className)}
+                                size={size}
+                                hideClose={hideClose}
+                            >
                                 {children}
                             </ContentBody>
                         </RadixDialog.Content>
                     </GsapPresence>
+                    </div>
                 </div>
             </RadixDialog.Portal>
         );
@@ -247,7 +277,7 @@ const OverlayBody = forwardRef<HTMLDivElement, { className?: string }>(
             {...{ [OVERLAY_ATTR]: '' }}
             style={{ visibility: 'hidden', opacity: 0 }}
             className={cn(
-                'fixed inset-0 z-40 bg-black/35 backdrop-blur-sm',
+                'fixed inset-0 z-40 bg-black/40',
                 className,
             )}
         />
@@ -255,39 +285,147 @@ const OverlayBody = forwardRef<HTMLDivElement, { className?: string }>(
 );
 OverlayBody.displayName = 'OverlayBody';
 
+function contentHeightCap(size: DialogSize): number {
+    if (size === 'sheet') return Math.floor(window.innerHeight * 0.85);
+    return Math.floor(window.innerHeight - 48);
+}
+
+function useDialogContentHeight(
+    clipRef: RefObject<HTMLDivElement | null>,
+    innerRef: RefObject<HTMLDivElement | null>,
+    open: boolean,
+    size: DialogSize,
+) {
+    const m = useMotion();
+    const tweenRef = useRef<gsap.core.Tween | null>(null);
+    const primedRef = useRef(false);
+    const enterHoldRef = useRef(false);
+    const prevOpenRef = useRef(open);
+
+    useEffect(() => {
+        if (open && !prevOpenRef.current) {
+            primedRef.current = false;
+            enterHoldRef.current = true;
+            const t = window.setTimeout(() => {
+                enterHoldRef.current = false;
+            }, 420);
+            prevOpenRef.current = open;
+            return () => window.clearTimeout(t);
+        }
+        prevOpenRef.current = open;
+        return undefined;
+    }, [open]);
+
+    useEffect(() => {
+        const clip = clipRef.current;
+        const inner = innerRef.current;
+        if (!clip || !inner) return;
+
+        const apply = () => {
+            const cap = contentHeightCap(size);
+            const raw = inner.scrollHeight;
+            const target = Math.min(raw, cap);
+            const scrollable = raw > cap + 1;
+
+            inner.style.overflowY = scrollable ? 'auto' : '';
+            inner.style.maxHeight = scrollable ? `${cap}px` : '';
+
+            if (!open || !m.enabled) {
+                tweenRef.current?.kill();
+                clip.style.height = scrollable ? `${cap}px` : 'auto';
+                primedRef.current = false;
+                return;
+            }
+
+            if (!primedRef.current || enterHoldRef.current) {
+                tweenRef.current?.kill();
+                clip.style.height = `${target}px`;
+                primedRef.current = true;
+                return;
+            }
+
+            const from = clip.offsetHeight;
+            if (Math.abs(target - from) < 2) return;
+
+            tweenRef.current?.kill();
+            tweenRef.current = gsap.fromTo(
+                clip,
+                { height: from },
+                {
+                    height: target,
+                    duration: m.duration('base'),
+                    ease: m.ease.damped,
+                    overwrite: 'auto',
+                },
+            );
+        };
+
+        const ro = new ResizeObserver(() => requestAnimationFrame(apply));
+        ro.observe(inner);
+        apply();
+
+        return () => {
+            ro.disconnect();
+            tweenRef.current?.kill();
+            tweenRef.current = null;
+        };
+    }, [open, size, m.enabled, m.level, m.speed]);
+}
+
 const ContentBody = forwardRef<
     HTMLDivElement,
-    { className?: string; hideClose?: boolean; children?: ReactNode }
->(({ className, hideClose, children }, ref) => (
-    <div
-        ref={ref}
-        style={{ visibility: 'hidden', opacity: 0 }}
-        className={cn(
-            'pointer-events-auto relative w-full max-w-md',
-            'rounded-md bg-elevated p-6 shadow-popover',
-            className,
-        )}
-    >
-        {children}
-        {!hideClose && (
-            <RadixDialog.Close
-                aria-label="关闭"
-                className="absolute right-3 top-3 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+    { className?: string; size?: DialogSize; hideClose?: boolean; children?: ReactNode }
+>(({ className, size = 'md', hideClose, children }, ref) => {
+    const open = useContext(DialogOpenContext);
+    const clipRef = useRef<HTMLDivElement | null>(null);
+    const innerRef = useRef<HTMLDivElement | null>(null);
+    useDialogContentHeight(clipRef, innerRef, open, size);
+
+    const setOuterRef = (node: HTMLDivElement | null) => {
+        if (typeof ref === 'function') ref(node);
+        else if (ref) (ref as MutableRefObject<HTMLDivElement | null>).current = node;
+    };
+
+    return (
+        <div
+            ref={setOuterRef}
+            style={{ visibility: 'hidden', opacity: 0 }}
+            className={cn(
+                'pointer-events-auto relative w-full',
+                'rounded-md bg-elevated p-6 shadow-popover',
+                size === 'sheet' && 'flex max-h-[85dvh] flex-col',
+                'transition-[max-width] duration-300 ease-out',
+                className,
+            )}
+        >
+            <div
+                ref={clipRef}
+                className={cn('overflow-hidden', size === 'sheet' && 'min-h-0 flex-1')}
             >
-                <MotionIcon
-                    icon={CloseIcon}
-                    motion="none"
-                    hoverAccent
-                    playEnter={false}
-                    size={16}
-                />
-            </RadixDialog.Close>
-        )}
-    </div>
-));
+                <div ref={innerRef} className={cn(size === 'sheet' && 'min-h-0')}>
+                    {children}
+                </div>
+            </div>
+            {!hideClose && (
+                <RadixDialog.Close
+                    aria-label="关闭"
+                    className="absolute right-3 top-3 z-10 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                    <MotionIcon
+                        icon={CloseIcon}
+                        motion="none"
+                        hoverAccent
+                        playEnter={false}
+                        size={16}
+                    />
+                </RadixDialog.Close>
+            )}
+        </div>
+    );
+});
 ContentBody.displayName = 'ContentBody';
 
-export const DialogHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
+export const DialogHeader: React.FC<HTMLAttributes<HTMLDivElement>> = ({
     className,
     ...props
 }) => <div className={cn('mb-3 flex flex-col gap-1', className)} {...props} />;

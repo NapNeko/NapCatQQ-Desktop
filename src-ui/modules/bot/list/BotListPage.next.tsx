@@ -241,7 +241,7 @@ export function BotListPageNext({
 
             {/* 批量删除确认 */}
             <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
-                <DialogContent>
+                <DialogContent size="md">
                     <DialogTitle>确认批量删除选中实例？</DialogTitle>
                     <DialogDescription>
                         即将删除选中的 {batch.selectedIds.size} 个 Bot 实例的配置文件与数据项。
