@@ -9,6 +9,7 @@ pub mod servers;
 pub mod snowluma;
 pub mod system_metrics;
 pub mod tray;
+pub mod window;
 
 use std::fs;
 use std::path::{Path, PathBuf};

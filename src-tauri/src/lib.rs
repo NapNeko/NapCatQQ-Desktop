@@ -245,6 +245,10 @@ pub fn run() {
                 bot_manager_snowluma_listener.run_snowluma_listener().await;
             });
 
+            if let Err(err) = commands::window::apply_main_window_startup_geometry(&app.handle()) {
+                eprintln!("[window] startup geometry failed: {err}");
+            }
+
             if let Err(err) = commands::tray::attach_tray(&app.handle()) {
                 eprintln!("[tray] attach failed: {err}");
             }
