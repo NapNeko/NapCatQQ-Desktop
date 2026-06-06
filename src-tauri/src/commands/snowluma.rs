@@ -150,8 +150,6 @@ pub async fn set_snowluma_password_override(
     state: State<'_, AppState>,
     password: Option<String>,
 ) -> Result<(), String> {
-    use ncd_runtime::SnowLumaAppConfig;
-    let path = snowluma_app_config_path(&state.data_root);
     let mut cfg = read_snowluma_app_config(&state.data_root);
     cfg.webui_password_override = password.unwrap_or_default();
     write_snowluma_app_config(&state.data_root, &cfg)
