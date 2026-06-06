@@ -45,14 +45,22 @@ interface NavItem {
     icon: LucideIcon;
 }
 
-const PRIMARY_NAV: NavItem[] = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'bots', label: 'Bots', icon: Bot },
-    { id: 'components', label: 'Components', icon: Package },
-    { id: 'docker', label: 'Docker', icon: Container },
-    { id: 'remote', label: 'Remote', icon: Server },
-    { id: 'settings', label: 'Settings', icon: Settings },
+const MAIN_NAV: NavItem[] = [
+    { id: 'overview', label: '概览', icon: LayoutDashboard },
+    { id: 'bots', label: '机器人', icon: Bot },
+    { id: 'components', label: '组件', icon: Package },
+    { id: 'docker', label: '容器', icon: Container },
+    { id: 'remote', label: '远端', icon: Server },
 ];
+
+const SETTINGS_NAV: NavItem = {
+    id: 'settings',
+    label: '设置',
+    icon: Settings,
+};
+
+const LOGO_IMG_CLASS =
+    'select-none object-contain [image-rendering:-webkit-optimize-contrast]';
 
 export const Sidebar: React.FC<SidebarProps> = ({
     active,
@@ -61,9 +69,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onToggleCollapse,
     showDocker = true,
 }) => {
-    const navItems = showDocker
-        ? PRIMARY_NAV
-        : PRIMARY_NAV.filter((item) => item.id !== 'docker');
+    const mainNavItems = showDocker
+        ? MAIN_NAV
+        : MAIN_NAV.filter((item) => item.id !== 'docker');
 
     const m = useMotion();
     const navRef = useRef<HTMLElement | null>(null);
@@ -128,7 +136,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <img
                             src={logoPng}
                             alt="NapCatQQ-Desktop logo"
-                            className="h-5 w-5 select-none transition-opacity group-hover:opacity-0"
+                            width={28}
+                            height={28}
+                            className={cn('h-7 w-7 transition-opacity group-hover:opacity-0', LOGO_IMG_CLASS)}
                             draggable={false}
                         />
                         <ChevronsRight
@@ -142,7 +152,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <img
                             src={logoPng}
                             alt="NapCatQQ-Desktop logo"
-                            className="h-[20px] w-[20px] shrink-0 select-none"
+                            width={24}
+                            height={24}
+                            className={cn('h-6 w-6 shrink-0', LOGO_IMG_CLASS)}
                             draggable={false}
                         />
                         <span className="whitespace-nowrap font-display text-[13.5px] font-semibold leading-none tracking-tight text-text">
@@ -168,8 +180,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <div className="my-2 h-px bg-border-subtle" />
 
-            <nav ref={navRef} className="relative flex-1 space-y-0.5 px-2">
-                {/* FLIP indicator:absolute 定位,GSAP 控 y + height。 */}
+            <nav ref={navRef} className="relative flex min-h-0 flex-1 flex-col px-2 pb-3">
                 <span
                     ref={indicatorRef}
                     aria-hidden
@@ -178,7 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 />
 
                 <ul className="space-y-0.5">
-                    {navItems.map((item) => (
+                    {mainNavItems.map((item) => (
                         <NavRow
                             key={item.id}
                             item={item}
@@ -187,6 +198,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             onSelect={onChange}
                         />
                     ))}
+                </ul>
+
+                <ul className="mt-auto space-y-0.5 border-t border-border-subtle pt-2">
+                    <NavRow
+                        item={SETTINGS_NAV}
+                        isActive={active === 'settings'}
+                        collapsed={collapsed}
+                        onSelect={onChange}
+                    />
                 </ul>
             </nav>
         </aside>
@@ -210,17 +230,17 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) 
                 aria-current={isActive ? 'page' : undefined}
                 title={collapsed ? item.label : undefined}
                 className={cn(
-                    'group relative flex h-9 w-full items-center gap-2.5 rounded-sm px-2.5',
+                    'group relative flex w-full items-center gap-2.5 rounded-sm px-2.5',
                     'text-[13.5px] font-medium transition-colors',
                     'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
+                    collapsed ? 'h-10 justify-center px-0' : 'h-9',
                     isActive
                         ? 'text-text'
                         : 'text-text-tertiary hover:bg-text/5 hover:text-text-secondary',
-                    collapsed && 'justify-center px-0',
                 )}
             >
                 <Icon
-                    size={15}
+                    size={collapsed ? 20 : 15}
                     strokeWidth={1.75}
                     className={cn('shrink-0', isActive && 'text-brand')}
                 />

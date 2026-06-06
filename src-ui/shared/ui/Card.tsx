@@ -15,7 +15,7 @@ const cardVariants = cva(
         variants: {
             variant: {
                 default: 'bg-surface shadow-card',
-                hero: 'bg-brand-soft rounded-lg shadow-card',
+                hero: 'rounded-lg shadow-card border border-border-subtle bg-[var(--surface-hero)]',
                 inset: 'bg-inset',
                 outlined: 'bg-surface border border-border-subtle',
                 ghost: 'bg-transparent',

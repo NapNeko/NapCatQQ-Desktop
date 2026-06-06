@@ -67,6 +67,10 @@
    /* 输入框：纯白 70% + 画布 30%，暖白介于纯白和画布之间，不刺眼但仍清楚 */
    --surface-sidebar: color-mix(in srgb, var(--accent-100) 28%, var(--surface-canvas));
    /* 侧栏：极淡桃粉融入画布，不抢戏 */
+   --surface-hero: color-mix(in srgb, var(--surface-canvas) 45%, var(--brand-50) 55%);
+   /* 主页 Hello 大卡底：比纯 brand-100 更贴画布，避免整块 #FFE5C1 感 */
+   --text-hero-title: var(--brand-600);
+   --text-hero-accent: var(--brand-500);
 
    /* semantic: 文字 */
    --text-primary: var(--neutral-900);
@@ -180,6 +184,9 @@
       --surface-inset: #1f150e;
       --surface-muted: #2a1d14;
       --surface-field: #2e2117;
+      --surface-hero: #3d2a1c;
+      --text-hero-title: #f0d4b8;
+      --text-hero-accent: #e8a882;
 
       --text-primary: #f4efe7;
       --text-secondary: #c9bfb6;
@@ -202,6 +209,9 @@
    --surface-inset: #1f150e;
    --surface-muted: #2a1d14;
    --surface-field: #2e2117;
+   --surface-hero: #3d2a1c;
+   --text-hero-title: #f0d4b8;
+   --text-hero-accent: #e8a882;
 
    --text-primary: #f4efe7;
    --text-secondary: #c9bfb6;

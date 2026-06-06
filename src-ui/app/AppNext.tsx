@@ -36,7 +36,7 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
 
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsed, setCollapsed] = useState(true);
 
     useComponentActionEventBridge();
     useDockerDeployProgressBridge();

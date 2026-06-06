@@ -16,6 +16,9 @@
     --color-muted: var(--surface-muted);
     --color-field: var(--surface-field);
     --color-sidebar: var(--surface-sidebar);
+    --color-surface-hero: var(--surface-hero);
+    --color-hero-title: var(--text-hero-title);
+    --color-hero-accent: var(--text-hero-accent);
 
     --color-text: var(--text-primary);
     --color-text-secondary: var(--text-secondary);
@@ -145,17 +148,17 @@ samp,
     font-variant-numeric: tabular-nums;
 }
 
-/* 角落柔光：参考图最有氛围感的细节。
-   两块大宽幅渐变互相叠加：左上桃粉 / 右上冰蓝 / 中下暖橙。 */
+/* 角落柔光：只用 brand / accent 暖色，避免右上冰蓝与标题栏区域抢戏。
+   三层径向：左上桃粉、右上淡暖杏（原 blue 已改）、底部居中轻橙。 */
 .ndf-canvas-glow {
     position: absolute;
     inset: 0;
     pointer-events: none;
     z-index: 0;
     background:
-        radial-gradient(70% 50% at -5% -10%, color-mix(in srgb, var(--accent-300) 38%, transparent), transparent 60%),
-        radial-gradient(70% 50% at 105% -10%, color-mix(in srgb, var(--blue-500) 22%, transparent), transparent 60%),
-        radial-gradient(80% 60% at 50% 110%, color-mix(in srgb, var(--brand-300) 16%, transparent), transparent 60%);
+        radial-gradient(65% 45% at -8% -8%, color-mix(in srgb, var(--accent-300) 28%, transparent), transparent 62%),
+        radial-gradient(55% 40% at 108% -5%, color-mix(in srgb, var(--brand-200) 18%, transparent), transparent 58%),
+        radial-gradient(75% 55% at 50% 108%, color-mix(in srgb, var(--brand-300) 12%, transparent), transparent 65%);
 }
 
 /* rich 档独享:角落柔光呼吸。BootstrapPanel.next mount 时把 is-breathing 类

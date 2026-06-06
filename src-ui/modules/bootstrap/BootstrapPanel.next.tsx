@@ -109,13 +109,13 @@ const HelloCard: React.FC = () => {
     return (
         <Card variant="hero" padding="lg" className="relative overflow-visible">
             <div className="max-w-[300px] pr-2 sm:pr-0">
-                <h1 className="font-display text-[36px] font-extrabold leading-none text-brand">
+                <h1 className="font-display text-[36px] font-extrabold leading-none text-[var(--text-hero-title)]">
                     Hello !!
                 </h1>
                 <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">
                     欢迎回到主页 NapCatQQ Desktop 帮你高效管理多个 QQ 机器人实例。
                 </p>
-                <div className="mt-4 inline-flex items-center gap-2 text-[13.5px] text-brand">
+                <div className="mt-4 inline-flex items-center gap-2 text-[13.5px] text-[var(--text-hero-accent)]">
                     <ThumbsUp size={14} strokeWidth={2} className="shrink-0" />
                     <span>如果你喜欢，请去 GitHub 给个 Star</span>
                 </div>
