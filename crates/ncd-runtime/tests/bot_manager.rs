@@ -21,6 +21,9 @@ struct FakeBackend {
     running: Mutex<HashSet<BotId>>,
     fail_start: Mutex<HashSet<BotId>>,
     fail_stop: Mutex<HashSet<BotId>>,
+    /// start 返回 Ok 但不登记 running,模拟进程 spawn 成功后立即退出:
+    /// 随后的 status() 复查会看到 Stopped。
+    exit_after_start: Mutex<HashSet<BotId>>,
     start_count: Mutex<std::collections::HashMap<BotId, usize>>,
     stop_count: Mutex<std::collections::HashMap<BotId, usize>>,
     stop_gate: Mutex<Option<tokio::sync::oneshot::Receiver<()>>>,
@@ -34,6 +37,10 @@ impl FakeBackend {
 
     async fn fail_next_stop(&self, bot_id: impl Into<BotId>) {
         self.fail_stop.lock().await.insert(bot_id.into());
+    }
+
+    async fn exit_immediately_after_start(&self, bot_id: impl Into<BotId>) {
+        self.exit_after_start.lock().await.insert(bot_id.into());
     }
 
     async fn start_count(&self, bot_id: impl Into<BotId>) -> usize {
@@ -89,6 +96,11 @@ impl BotBackend for FakeBackend {
         assert_ne!(ctx.config.bot_id.as_str(), "19998", "fake backend panic");
         if self.fail_start.lock().await.remove(&ctx.config.bot_id) {
             return Err(BotBackendError::Io("fake start failed".to_string()));
+        }
+        if self.exit_after_start.lock().await.remove(&ctx.config.bot_id) {
+            // 模拟快速退出:start 报告成功,但进程没真正存活,不登记 running,
+            // 让 BotManager 的启动后 status 复查抓到 Stopped。
+            return Ok(BotStatus::running(ctx.config.bot_id.clone(), 42, 1));
         }
         self.running.lock().await.insert(ctx.config.bot_id.clone());
         Ok(BotStatus::running(ctx.config.bot_id.clone(), 42, 1))
@@ -647,6 +659,28 @@ async fn start_backend_failure_marks_crashed() {
         snap.last_error.as_deref(),
         Some("io error: fake start failed")
     );
+}
+
+#[tokio::test]
+async fn start_fast_exit_is_marked_crashed_not_running() {
+    // 进程 spawn 成功(start 返回 Ok)但随即退出。Starting 阶段的退出事件被有意
+    // 忽略,若不做启动后 status 复查,actor 会停在假 Running。这里断言 BotManager
+    // 复查后把它收口为 Crashed 并返回错误。
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10013");
+
+    manager
+        .upsert_bot_config(bot_config(10013, "bot"))
+        .await
+        .unwrap();
+    backend.exit_immediately_after_start(bot_id.clone()).await;
+
+    let err = manager.start_bot(&bot_id).await.unwrap_err();
+    assert!(matches!(err, BotManagerError::Render(_)));
+
+    let snap = manager.get_snapshot(&bot_id).await.unwrap();
+    assert_eq!(snap.state, BotActorState::Crashed);
 }
 
 #[tokio::test]

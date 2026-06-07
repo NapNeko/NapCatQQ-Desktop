@@ -1230,6 +1230,33 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Ok(status) => {
                 self.event_bus
                     .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
+                // 防快速退出竞态:backend.start Ok 只代表 spawn / compose up 成功,
+                // 进程可能在 confirm_running 之前就崩了。Starting 阶段的
+                // BotProcessExited 被 handle_process_exited 有意忽略(无法区分本轮新
+                // 进程退出与 restart fast-path 旧进程退出),所以这里启动后立即复查一次
+                // backend.status:若已落到 Stopped / Crashed,直接按崩溃收口,避免 actor
+                // 与 UI 停在假 Running。复查本身报错时不阻断(查不到不代表没起来)。
+                if let Ok(observed) = backend.status(bot_id.clone()).await {
+                    if matches!(
+                        observed.state,
+                        BotActorState::Stopped | BotActorState::Crashed
+                    ) {
+                        let detail = observed
+                            .extra
+                            .get("reason")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string)
+                            .unwrap_or_else(|| "进程启动后立即退出".to_string());
+                        let crashed = handle.mark_crashed(detail.clone()).await?;
+                        self.publish_state_change(&crashed, "start_failed");
+                        self.event_bus.publish(DomainEvent::bot_error(
+                            bot_id.clone(),
+                            detail.clone(),
+                            Some("Bot 启动后立即退出,请检查启动命令、运行时依赖与日志。".to_string()),
+                        ));
+                        return Err(BotManagerError::Render(detail));
+                    }
+                }
                 let running = handle.confirm_running().await?;
                 self.publish_state_change(&running, "start_completed");
                 Ok(running)
