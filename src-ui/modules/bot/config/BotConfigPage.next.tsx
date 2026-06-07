@@ -248,6 +248,22 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
             return;
         }
 
+        // 先 drift 检测(纯读)。有 drift 就弹 dialog 等用户抉择,这之前绝不写任何
+        // 后端配置——否则用户在 dialog 上点取消,SnowLuma 全局配置却已落盘且无法回滚。
+        if (isEditMode && botId) {
+            try {
+                const drift = await botService.detectConfigDrift(botId);
+                if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
+                    setPendingSaveData(finalData);
+                    setPendingSaveDrift(drift);
+                    return;
+                }
+            } catch {
+                // 检测失败不阻塞保存,继续走无 drift 分支
+            }
+        }
+
+        // 无 drift(或新建模式):此时才提交 SnowLuma 全局配置并保存 Bot。
         try {
             await commitSnowlumaIfDirty();
         } catch (e) {
@@ -258,21 +274,6 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
                 key: 'bot-config-error',
             });
             return;
-        }
-
-        // 编辑模式下检测 drift
-        if (isEditMode && botId) {
-            try {
-                const drift = await botService.detectConfigDrift(botId);
-                if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
-                    // 有 drift,弹 dialog
-                    setPendingSaveData(finalData);
-                    setPendingSaveDrift(drift);
-                    return;
-                }
-            } catch {
-                // 检测失败不阻塞保存,直接走
-            }
         }
         save(finalData);
     };
