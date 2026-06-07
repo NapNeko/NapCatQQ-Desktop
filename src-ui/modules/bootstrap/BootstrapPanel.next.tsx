@@ -45,6 +45,7 @@ import {
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useEventStream } from '../../hooks/diagnostics/useEventStream';
 import { useServerManager } from '../../hooks/remote/useServerManager';
+import { useOpenExternal } from '../../hooks/useOpenExternal';
 import {
     buildNotices,
     type NoticeItem,
@@ -260,6 +261,7 @@ const NoticeTimelineCard: React.FC<NoticeTimelineCardProps> = ({ notices, classN
 );
 
 const NoticeRow: React.FC<{ notice: NoticeItem }> = ({ notice }) => {
+    const openExternal = useOpenExternal();
     const visual = TONE_VISUAL[notice.tone];
     const Icon = visual.icon;
     const dateText = notice.timestamp
@@ -299,9 +301,11 @@ const NoticeRow: React.FC<{ notice: NoticeItem }> = ({ notice }) => {
         <li className="relative">
             <a
                 href={notice.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-sm"
+                onClick={(e) => {
+                    e.preventDefault();
+                    openExternal(notice.url!);
+                }}
+                className="block cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
                 {Inner}
             </a>

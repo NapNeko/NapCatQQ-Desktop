@@ -13,6 +13,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../shared/ui';
 import { MotionIcon } from '../../shared/ui/motion';
+import { useOpenExternal } from '../../hooks/useOpenExternal';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { DockerStatus, Os } from '../../core/ipc/types';
 import { ComponentCardBody, ComponentEntityCard } from './ComponentEntityCard';
@@ -34,6 +35,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     onInstall,
     onOpenDownload,
 }) => {
+    const openExternal = useOpenExternal();
     const summary = status ? dockerStatusSummary(status) : null;
     const ready = summary?.ready ?? false;
     // Linux 才能用脚本自动装；Windows / macOS 需要手动装 Docker Desktop。
@@ -67,9 +69,11 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                         <DockerChip ready={ready} probing={isProbing && !status} />
                         <a
                             href="https://www.docker.com/"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="ml-auto shrink-0 text-2xs text-text-tertiary hover:text-text"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                openExternal('https://www.docker.com/');
+                            }}
+                            className="ml-auto shrink-0 cursor-pointer text-2xs text-text-tertiary hover:text-text"
                         >
                             官网
                         </a>

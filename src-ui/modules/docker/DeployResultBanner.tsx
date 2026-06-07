@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { CheckCircle2, X, ExternalLink } from 'lucide-react';
+import { useOpenExternal } from '../../hooks/useOpenExternal';
 import type { DeployedContainer } from '../../core/ipc/types';
 
 interface DeployResultBannerProps {
@@ -59,17 +60,22 @@ export const DeployResultBody: React.FC<{ result: DeployedContainer }> = ({ resu
     </div>
 );
 
-const LinkRow: React.FC<{ label: string; url: string }> = ({ label, url }) => (
-    <div className="flex items-center gap-2">
-        <span className="w-14 shrink-0 text-text-tertiary">{label}</span>
-        <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-brand hover:underline"
-        >
-            {url}
-            <ExternalLink size={12} />
-        </a>
-    </div>
-);
+const LinkRow: React.FC<{ label: string; url: string }> = ({ label, url }) => {
+    const openExternal = useOpenExternal();
+    return (
+        <div className="flex items-center gap-2">
+            <span className="w-14 shrink-0 text-text-tertiary">{label}</span>
+            <a
+                href={url}
+                onClick={(e) => {
+                    e.preventDefault();
+                    openExternal(url);
+                }}
+                className="inline-flex cursor-pointer items-center gap-1 text-brand hover:underline"
+            >
+                {url}
+                <ExternalLink size={12} />
+            </a>
+        </div>
+    );
+};

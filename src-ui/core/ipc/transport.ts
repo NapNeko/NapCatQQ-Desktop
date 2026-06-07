@@ -40,7 +40,20 @@ export async function listen<T = unknown>(
 
 /// 打开外部 URL（系统默认浏览器）。Tauri webview 不支持 `<a target="_blank">`，
 /// 必须走 `tauri-plugin-opener`，capabilities 已在 src-tauri 配好。
+///
+/// 安全闸:只放行 http/https。把任意 url 丢给系统 opener 等于把危险 scheme
+/// (javascript: / file: / data: 等)交给 OS 执行,这里收口成 scheme 白名单。
+/// 可信域 / localhost 都属于 http/https,无需再单列。
 export async function openExternalUrl(url: string): Promise<void> {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        throw new Error(`拒绝打开非法 URL: ${url}`);
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error(`拒绝打开非 http/https 链接(${parsed.protocol})`);
+    }
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     return openUrl(url);
 }

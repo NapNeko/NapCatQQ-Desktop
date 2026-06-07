@@ -6,6 +6,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../../shared/ui';
+import { useOpenExternal } from '../../hooks/useOpenExternal';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from './progressView';
@@ -53,6 +54,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
     trailingActions,
 }) => {
     const { info, status } = row;
+    const openExternal = useOpenExternal();
 
     const isTerminal =
         activeProgress != null &&
@@ -119,9 +121,11 @@ export const MachineComponentRowView: React.FC<Props> = ({
                         {info.repo_url && (
                             <a
                                 href={info.repo_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="ml-auto shrink-0 text-2xs text-text-tertiary hover:text-text"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    openExternal(info.repo_url!);
+                                }}
+                                className="ml-auto shrink-0 cursor-pointer text-2xs text-text-tertiary hover:text-text"
                             >
                                 仓库
                             </a>
