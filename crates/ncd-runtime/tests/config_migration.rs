@@ -329,3 +329,35 @@ fn target_write_failure_reports_failed_without_localappdata_fork() {
     );
     assert!(!target_root.path().join("LocalAppData").exists());
 }
+
+#[test]
+fn bootstrap_persists_failure_report_to_writable_store() {
+    // run() 在读取坏掉的 bot.json 时报错,但 target store 可写:bootstrap 的 Err
+    // 分支应尽力把失败报告落盘,保留首次失败证据,重启后仍可读。
+    let legacy_root = TempWorkspace::new().unwrap();
+    let target_root = TempWorkspace::new().unwrap();
+
+    let legacy_config = legacy_root.path().join("runtime/config");
+    std::fs::create_dir_all(&legacy_config).unwrap();
+    std::fs::write(
+        legacy_config.join("config.json"),
+        serde_json::to_vec(&serde_json::json!({"Info": {"main_window": true}})).unwrap(),
+    )
+    .unwrap();
+    // 坏 JSON:迁移在 read_source_json 解析阶段失败。
+    std::fs::write(legacy_config.join("bot.json"), b"{ not valid json :::").unwrap();
+
+    let store = LocalConfigStore::new(target_root.path());
+    let probe = StaticPathProbe {
+        roots: vec![legacy_root.path().to_path_buf()],
+    };
+    let secrets = MockSecretStore::new();
+    let snapshot = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
+
+    assert_eq!(snapshot.report.stage, ncd_runtime::MigrationStage::Failed);
+
+    let report_path = store.migration_report_path();
+    assert!(report_path.exists(), "失败迁移报告应落盘保留首次失败证据");
+    let saved = std::fs::read_to_string(&report_path).unwrap();
+    assert!(saved.contains("migration_failed"));
+}

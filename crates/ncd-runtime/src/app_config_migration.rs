@@ -299,6 +299,31 @@ pub fn ensure_object_payload(payload: Value) -> Result<Map<String, Value>, Migra
     }
 }
 
+/// 旧版应用配置 config.json 的已知顶层段。判断"像不像应用配置"用,避免把误选的
+/// 无关 JSON(数组 / 字符串 / 别的程序的 config.json)当应用配置迁移。
+const APP_CONFIG_KNOWN_SECTIONS: &[&str] = &[
+    "Info",
+    "General",
+    "Personalize",
+    "Personalized",
+    "QFluentWidgets",
+    "Home",
+    "HideTips",
+    "Remote",
+];
+
+/// 判断一段 JSON 是否"像"旧版应用配置 config.json。
+///
+/// 要求是非空 JSON 对象,且至少带一个已知配置段(Info / Personalize / ...)。否则
+/// 视作误选的无关文件,迁移层会跳过它而不是强转成空对象写 ConfigVersion 当成功——
+/// 后者会把垃圾 / 数组 / 字符串 config.json 静默"迁移成功"。bot 配置另走强类型路径,
+/// 不受此影响。
+pub fn looks_like_app_config(value: &Value) -> bool {
+    value
+        .as_object()
+        .is_some_and(|obj| APP_CONFIG_KNOWN_SECTIONS.iter().any(|k| obj.contains_key(*k)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,5 +341,17 @@ mod tests {
         assert_eq!(result.payload["Info"]["MainWindow"], true);
         assert!(result.payload["Personalize"].get("BgHomePage").is_none());
         assert!(result.payload["Remote"].get("Password").is_none());
+    }
+
+    #[test]
+    fn looks_like_app_config_accepts_known_sections_rejects_garbage() {
+        assert!(looks_like_app_config(&serde_json::json!({"Info": {"ConfigVersion": "v2.0"}})));
+        assert!(looks_like_app_config(&serde_json::json!({"Personalize": {"ThemeMode": "Dark"}})));
+        // 非对象 / 空对象 / 不含已知段的对象都不算应用配置。
+        assert!(!looks_like_app_config(&serde_json::json!([1, 2, 3])));
+        assert!(!looks_like_app_config(&serde_json::json!("just a string")));
+        assert!(!looks_like_app_config(&serde_json::json!(null)));
+        assert!(!looks_like_app_config(&serde_json::json!({})));
+        assert!(!looks_like_app_config(&serde_json::json!({"unrelated": true})));
     }
 }

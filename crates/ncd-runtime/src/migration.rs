@@ -6,7 +6,7 @@ use crate::app_config_migration::migrate_app_config;
 use crate::bot_config_migration::migrate_bot_config;
 use crate::errors::MigrationError;
 use crate::legacy_discovery::{LegacyDiscovery, LegacySelection};
-use crate::models::MigrationSource;
+use crate::models::{MigrationSource, MigrationWarning};
 use crate::report::MigrationReport;
 use crate::traits::{ConfigStore, JsonTransaction, PathProbe, SecretStore};
 
@@ -35,7 +35,14 @@ impl<'a> MigrationOrchestrator<'a> {
                 let _ = self.store.save_migration_report(&report);
                 report.into()
             }
-            Err(error) => MigrationReport::failed(error.to_string()).into(),
+            Err(error) => {
+                // 失败也尽力把报告落盘:保留首次失败证据,重启后仍能查到原因。否则
+                // 失败信息只在内存,重启即丢,旧用户升级踩坑没有任何排障线索。落盘
+                // 本身再失败就只能放弃(best-effort),不掩盖原始迁移错误。
+                let report = MigrationReport::failed(error.to_string());
+                let _ = self.store.save_migration_report(&report);
+                report.into()
+            }
         }
     }
 
@@ -77,9 +84,22 @@ impl<'a> MigrationOrchestrator<'a> {
         let mut warnings = selection.warnings.clone();
 
         if let Some(app_path) = &selection.app_config {
-            let app = migrate_app_config(self.read_source_json(app_path)?);
-            rules.extend(app.rules_applied);
-            tx = tx.write(self.store.config_dir().join("config.json"), app.payload);
+            let raw = self.read_source_json(app_path)?;
+            if crate::app_config_migration::looks_like_app_config(&raw) {
+                let app = migrate_app_config(raw);
+                rules.extend(app.rules_applied);
+                tx = tx.write(self.store.config_dir().join("config.json"), app.payload);
+            } else {
+                // 误选的无关 / 非对象 config.json:跳过不写,留 warning。绝不强转空对象
+                // 写 Info.ConfigVersion 当"成功迁移",否则垃圾文件会污染生产配置根。
+                warnings.push(MigrationWarning::new(
+                    "app_config_skipped",
+                    format!(
+                        "跳过不像应用配置的 {}(非对象或缺少已知配置段)",
+                        app_path.display()
+                    ),
+                ));
+            }
         }
 
         if let Some(bot_path) = &selection.bot_config {
