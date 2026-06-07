@@ -46,7 +46,7 @@ pub async fn detect_component(
         host.as_ref(),
         probe.home.as_deref(),
         probe.layout,
-    );
+    )?;
     let host_ref: &dyn Host = host.as_ref();
 
     if component.check_target(host_ref).is_err() {
@@ -84,7 +84,7 @@ pub async fn run_component_action(
         host.as_ref(),
         probe.home.as_deref(),
         probe.layout,
-    );
+    )?;
 
     let plan = DeployPlan::builder()
         .step("single", kind, Arc::clone(&component))
@@ -273,7 +273,7 @@ fn build_component_for_host(
     host: &dyn Host,
     remote_home: Option<&str>,
     layout: RemoteLayout,
-) -> Arc<dyn Component> {
+) -> Result<Arc<dyn Component>, String> {
     let data_root_host = data_root_to_host_path(&state.data_root, host.os());
     // 读 release 缓存反查 SHA256：缓存缺失 / 无 digest 时退化到"无 hash"分支，
     // 让安装链路走原有路径（race 仍尝试切 mirror，但失去内容级保护）。
@@ -281,15 +281,19 @@ fn build_component_for_host(
     let snapshot = read_cached_release_snapshot(&state.data_root);
 
     // 远端 NapCat / QQ 共用 install_base_dir：layout 决定 / 还是 $HOME/Napcat。
-    let napcat_base = match layout {
-        RemoteLayout::System => HostPath::from_posix("/"),
-        RemoteLayout::Rootless => match remote_home {
-            Some(h) => HostPath::from_posix(format!("{h}/Napcat")),
-            None => HostPath::from_posix("/root/Napcat"),
-        },
+    // Rootless 但探不到 $HOME 时 fail-fast(不回退 /root):路径落盘红线,宁可报错也不
+    // 把组件装到错误目录(/root 多半无权限或污染 root 家目录)。惰性求值——只有真正
+    // 用到 base 的组件(NapCat/QQ)才校验,home 无关组件(NoVnc/DesktopSelf)不受影响。
+    let resolve_napcat_base = || -> Result<HostPath, String> {
+        Ok(match layout {
+            RemoteLayout::System => HostPath::from_posix("/"),
+            RemoteLayout::Rootless => {
+                HostPath::from_posix(format!("{}/Napcat", require_remote_home(remote_home)?))
+            }
+        })
     };
 
-    match id {
+    let component: Arc<dyn Component> = match id {
         ComponentId::NapCat => {
             if host.os() == ncd_host::Os::Windows {
                 // legacy `PathFunc.napcat_path = data_path/runtime/NapCatQQ`。
@@ -308,7 +312,7 @@ fn build_component_for_host(
                 // System 走 /opt/QQ 必须 sudo（对齐官方 NapCat-Installer.py）；
                 // Rootless 走 $HOME/Napcat 不需要 sudo（对齐 NapCat-TUI-CLI）。
                 Arc::new(
-                    NapCatComponent::new(napcat_base.clone())
+                    NapCatComponent::new(resolve_napcat_base()?)
                         .with_sudo(matches!(layout, RemoteLayout::System)),
                 )
             }
@@ -344,10 +348,10 @@ fn build_component_for_host(
             } else {
                 // 对齐 legacy SnowLumaRemotePaths：装到 $HOME/snowluma-remote/workspace。
                 // SnowLumaComponent::new 内部把 workspace 推出 snowluma 子目录。
-                let workspace = match remote_home {
-                    Some(home) => HostPath::from_posix(format!("{home}/snowluma-remote/workspace")),
-                    None => HostPath::from_posix("/root/snowluma-remote/workspace"),
-                };
+                let workspace = HostPath::from_posix(format!(
+                    "{}/snowluma-remote/workspace",
+                    require_remote_home(remote_home)?
+                ));
                 // 不能写死 latest/download/SnowLuma-linux-x64-lite.tar.gz:真实资产名带
                 // 版本号(SnowLuma-v1.9.3-linux-x64-lite.tar.gz),无版本号的 URL 404,
                 // 镜像代理把 404 页当 200 转发,下载器没 hash 拦就把 HTML 当 tar.gz 上传,
@@ -383,14 +387,14 @@ fn build_component_for_host(
             //     dpkg-deb -x 解包不会调系统包管理器，没法在 /opt 创目录，
             //     用户应该用官方 deb/rpm 自己装，detect 能识别。
             //   Rootless：base="$HOME/Napcat"，QQ 装到 $HOME/Napcat/opt/QQ。
-            Arc::new(QQComponent::default_v3_2_25(napcat_base.clone()))
+            Arc::new(QQComponent::default_v3_2_25(resolve_napcat_base()?))
         }
         ComponentId::NodeJs => {
             // SnowLuma 才需要 Node.js；装到 SnowLuma workspace 下。
-            let install_dir = match remote_home {
-                Some(home) => HostPath::from_posix(format!("{home}/snowluma-remote/workspace/node")),
-                None => HostPath::from_posix("/root/snowluma-remote/workspace/node"),
-            };
+            let install_dir = HostPath::from_posix(format!(
+                "{}/snowluma-remote/workspace/node",
+                require_remote_home(remote_home)?
+            ));
             Arc::new(NodeJsComponent::new("20.10.0", install_dir))
         }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
@@ -403,7 +407,18 @@ fn build_component_for_host(
                     )
                 }),
         ),
-    }
+    };
+    Ok(component)
+}
+
+/// 远端 Rootless 安装必须有可信 $HOME。探不到就 fail-fast,不回退 /root——避免把
+/// NapCat / QQ / SnowLuma / Node.js 装到错误目录(/root 通常无权限或污染 root 家目录)。
+fn require_remote_home(remote_home: Option<&str>) -> Result<&str, String> {
+    remote_home.ok_or_else(|| {
+        "无法探测远端 $HOME,已拒绝回退到 /root 安装(避免组件落到错误目录)。\
+         请确认远端 SSH 用户有正常的家目录后重试。"
+            .to_string()
+    })
 }
 
 /// 在 ReleaseInfo 的 assets 里按文件名反查 sha256，命中且非空才返回。
