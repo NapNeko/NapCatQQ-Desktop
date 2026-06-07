@@ -173,7 +173,8 @@ export type { SnowLumaAppConfig } from './generated/domain/SnowLumaAppConfig';
 import type { DaemonState } from './generated/DaemonState';
 import type { SnowLumaLoginState } from './generated/SnowLumaLoginState';
 
-export type DomainEvent =
+// 按 kind 区分的判别联合(payload body)。统一通过下方 DomainEvent 带上 v envelope。
+type DomainEventBody =
     | {
         kind: 'bot_state_changed';
         snapshot: BotActorSnapshot;
@@ -273,3 +274,8 @@ export type DomainEvent =
         task_id: string;
         event: ProgressEvent;
     };
+
+// 所有发到 webview 的 IPC 事件 payload 都带顶层 v 版本号 envelope(R14:版本化)。
+// 形如 { v: 1, kind: 'bot_log_appended', ... }。v 暂为可选,兼容历史 payload 与
+// mock 事件;按 kind 判别的逻辑不受影响。
+export type DomainEvent = DomainEventBody & { v?: number };

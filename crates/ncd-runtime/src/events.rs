@@ -191,7 +191,27 @@ pub enum DomainEvent {
     },
 }
 
+/// IPC 事件 envelope 版本号(R14:所有发到 webview 的事件 payload 带顶层 v:u32)。
+/// 与 ProgressEvent 自带的 v=1 envelope 同源语义。前端按 v 容忍未来字段演进。
+pub const DOMAIN_EVENT_ENVELOPE_VERSION: u32 = 1;
+
 impl DomainEvent {
+    /// 序列化成带顶层 `v` envelope 的 JSON 字符串,供 Tauri 层 emit 到 webview。
+    ///
+    /// DomainEvent 是内部 tag(`kind`)枚举,序列化成 object 后注入 `v` 字段,得到
+    /// `{"v":1,"kind":"...",...payload}`。前端 listen 解析后即可按 v 分流。绝不在
+    /// IPC 边界发不带版本号的裸事件(R14:版本化)。
+    pub fn to_envelope_json(&self) -> Result<String, serde_json::Error> {
+        let mut value = serde_json::to_value(self)?;
+        if let serde_json::Value::Object(map) = &mut value {
+            map.insert(
+                "v".to_string(),
+                serde_json::Value::from(DOMAIN_EVENT_ENVELOPE_VERSION),
+            );
+        }
+        serde_json::to_string(&value)
+    }
+
     pub fn kind(&self) -> DomainEventKind {
         match self {
             Self::BotStateChanged { .. } => DomainEventKind::BotStateChanged,
@@ -968,6 +988,72 @@ mod tests {
                 || FRONTEND_EVENTS_TS.contains(&needle_double),
             "frontend event-stream.service.ts must contain literal {name:?} \
  (检查 src-ui/core/services/event-stream.service.ts 的 DOMAIN_EVENT_NAMES)",
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // IPC envelope (M2.5) + payload 字段契约 (M2.6)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn domain_event_envelope_carries_version_and_preserves_payload() {
+        let json = DomainEvent::bot_log("10001", "hello")
+            .to_envelope_json()
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["v"], DOMAIN_EVENT_ENVELOPE_VERSION);
+        assert_eq!(value["kind"], "bot_log_appended");
+        assert_eq!(value["bot_id"], "10001");
+        assert_eq!(value["line"], "hello");
+
+        // 内部 tag 枚举所有 variant 都序列化成 object,envelope 一律能注入 v。
+        let status = DomainEvent::bot_status_changed(BotStatus::running("10001", 1, 2), "poll");
+        let sv: serde_json::Value =
+            serde_json::from_str(&status.to_envelope_json().unwrap()).unwrap();
+        assert_eq!(sv["v"], DOMAIN_EVENT_ENVELOPE_VERSION);
+        assert_eq!(sv["kind"], "bot_status_changed");
+        assert!(sv["status"].is_object());
+    }
+
+    /// 锁定关键事件 payload 的 wire 字段名。前端 types.ts 是手写 union,这里在 Rust
+    /// 侧给最常被消费的 payload 上一道契约闸:字段改名 / 增删会让此测试失败,提醒同步
+    /// 前端类型,弥补"手写 TS 无生成保护"的漂移风险。
+    #[test]
+    fn key_event_payloads_lock_wire_field_names() {
+        fn sorted_keys(event: &DomainEvent) -> Vec<String> {
+            let value = serde_json::to_value(event).unwrap();
+            let mut keys: Vec<String> = value
+                .as_object()
+                .expect("DomainEvent 必须序列化成 object")
+                .keys()
+                .cloned()
+                .collect();
+            keys.sort();
+            keys
+        }
+
+        assert_eq!(
+            sorted_keys(&DomainEvent::bot_error("1", "m", Some("h".into()))),
+            vec!["bot_id", "hint", "kind", "message"]
+        );
+        assert_eq!(
+            sorted_keys(&DomainEvent::bot_log("1", "l")),
+            vec!["bot_id", "kind", "line"]
+        );
+        assert_eq!(
+            sorted_keys(&DomainEvent::napcat_webui_available("1", 6099, "t")),
+            vec!["bot_id", "kind", "port", "token"]
+        );
+        assert_eq!(
+            sorted_keys(&DomainEvent::bot_process_exited("1", Some(0), Some("r".into()))),
+            vec!["bot_id", "exit_code", "kind", "reason"]
+        );
+        assert_eq!(
+            sorted_keys(&DomainEvent::napcat_login_invalidated(
+                "1",
+                NapCatLoginInvalidationReason::Kicked
+            )),
+            vec!["bot_id", "kind", "reason"]
         );
     }
 }

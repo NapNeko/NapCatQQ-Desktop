@@ -180,7 +180,8 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = subscription.next().await {
                     let event_name = event.tauri_event_name();
-                    if let Ok(payload) = serde_json::to_string(&event) {
+                    // 带顶层 v envelope 序列化(R14):payload 形如 {"v":1,"kind":...}。
+                    if let Ok(payload) = event.to_envelope_json() {
                         // 诊断日志：确认事件链是否真的把事件发到 webview。
                         // 稳定后可改成 tracing::debug。
                         eprintln!(
