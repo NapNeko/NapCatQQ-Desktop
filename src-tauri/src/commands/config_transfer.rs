@@ -250,6 +250,8 @@ fn normalize_bot_config_import(
     for bot in &bots {
         bot.validate()
             .map_err(|e| format!("bot.json 含非法 Bot 配置,已中止导入: {e}"))?;
+        bot.validate_runtime_matrix()
+            .map_err(|e| format!("bot.json 含当前不支持的运行组合,已中止导入: {e}"))?;
         if !seen.insert(bot.bot.qq_id) {
             return Err(format!("bot.json 含重复 QQ 号 {},已中止导入", bot.bot.qq_id));
         }

@@ -139,6 +139,22 @@ async fn test_validate_failure_blocks_upsert() {
 }
 
 #[tokio::test]
+async fn test_runtime_matrix_blocks_docker_on_local_upsert() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (store, repo) = make_repo(temp.path());
+    let mut config = bot_config(10001, "docker-local");
+    config.bot.deployment_type = DeploymentType::Docker;
+
+    let error = repo.upsert(config).await.unwrap_err();
+
+    assert!(matches!(
+        error,
+        BotConfigError::UnsupportedRuntimeMatrix(_)
+    ));
+    assert!(!store.bot_config_path().exists());
+}
+
+#[tokio::test]
 async fn test_list_rejects_duplicate_qq_ids() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (store, repo) = make_repo(temp.path());
