@@ -336,6 +336,7 @@ pub fn run() {
             commands::servers::setup_server_key_auth,
             commands::servers::delete_server,
             commands::servers::test_server_connection,
+            commands::servers::confirm_server_host_key,
             commands::servers::scan_local_ssh_keys,
             commands::docker::docker_probe,
             commands::docker::docker_install,

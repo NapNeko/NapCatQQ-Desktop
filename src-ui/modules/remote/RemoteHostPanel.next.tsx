@@ -13,7 +13,7 @@
 // 严守 frontend-layering：仅 import hooks / shared/ui / 自身组件。
 
 import React, { useRef, useState } from 'react';
-import { Server, RefreshCw, Plus, Eye, EyeOff } from 'lucide-react';
+import { Server, RefreshCw, Plus, Eye, EyeOff, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnter } from '../../shared/ui/motion/listEnter';
 import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
@@ -32,6 +32,7 @@ import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { ServerCard } from './ServerCard';
 import { AddServerDialog } from './AddServerDialog';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
+import type { HostKeyPrompt } from '../../core/ipc/generated/domain/HostKeyPrompt';
 
 export const RemoteHostPanelNext: React.FC = () => {
     const {
@@ -43,10 +44,11 @@ export const RemoteHostPanelNext: React.FC = () => {
         updateServer,
         isUpdating,
         deleteServer,
-        testConnection,
+        testConnectionAsync,
         isTesting,
         setupKeyAuth,
         isSettingUpKey,
+        confirmHostKey,
     } = useServerManager();
 
     // 表单弹窗：editingProfile=null 走新增，非空走编辑同一弹窗。
@@ -64,13 +66,52 @@ export const RemoteHostPanelNext: React.FC = () => {
         setFormOpen(true);
     };
 
-    const handleTest = (id: string, password?: string) => {
+    // host key 首次确认弹窗:测试连接 / 配免密首连未知主机时弹出指纹,确认后写
+    // known_hosts 再重试原动作。retry 关联触发本次确认的动作(测试或配免密)。
+    const [hostKeyConfirm, setHostKeyConfirm] = useState<{
+        id: string;
+        prompt: HostKeyPrompt;
+        retry: () => void;
+    } | null>(null);
+
+    const handleTest = async (id: string, password?: string) => {
         setTestingId(id);
-        testConnection({ id, password });
+        try {
+            const report = await testConnectionAsync({ id, password });
+            // mismatch / 失败 / 成功的提示由 hook 出条;这里只在"首次未知 host key"
+            // 时弹指纹确认框(report.hostKeyMismatch 为 true 时不弹,走危险阻断)。
+            if (report.hostKeyPrompt && !report.hostKeyMismatch) {
+                setHostKeyConfirm({
+                    id,
+                    prompt: report.hostKeyPrompt,
+                    retry: () => void handleTest(id, password),
+                });
+            }
+        } catch {
+            // IPC 异常已由 hook onError 出红条。
+        }
     };
 
-    // 配置免密：用密码连一次，把公钥写进远端 authorized_keys，档案切到密钥认证。
+    // 配置免密：先用密码测一次连接(验证密码 + 触发 host key TOFU 确认),通过后
+    // 才把公钥写进远端 authorized_keys。绝不在未校验 host key 的通道上写 key。
     const runKeySetup = async (id: string, password: string) => {
+        let report;
+        try {
+            report = await testConnectionAsync({ id, password });
+        } catch {
+            return; // 连接 IPC 异常,hook 已出红条。
+        }
+        if (report.hostKeyMismatch) return; // 疑似中间人,hook 已出危险条,中止配免密。
+        if (report.hostKeyPrompt) {
+            setHostKeyConfirm({
+                id,
+                prompt: report.hostKeyPrompt,
+                retry: () => void runKeySetup(id, password),
+            });
+            return;
+        }
+        if (!report.success) return; // 密码 / 网络问题,hook 已出红条。
+
         try {
             const updated = await setupKeyAuth({ id, password });
             pushInfoBar({
@@ -86,6 +127,28 @@ export const RemoteHostPanelNext: React.FC = () => {
                 content: err instanceof Error ? err.message : String(err),
             });
         }
+    };
+
+    // 用户在指纹确认框点"信任并继续":写 known_hosts 后跑原动作的重试。
+    const onTrustHostKey = async () => {
+        const ctx = hostKeyConfirm;
+        if (!ctx) return;
+        setHostKeyConfirm(null);
+        try {
+            await confirmHostKey({
+                id: ctx.id,
+                keyKind: ctx.prompt.keyKind,
+                keyB64: ctx.prompt.keyB64,
+            });
+        } catch (err) {
+            pushInfoBar({
+                tone: 'danger',
+                title: '信任主机指纹失败',
+                content: err instanceof Error ? err.message : String(err),
+            });
+            return;
+        }
+        ctx.retry();
     };
 
     // 已添加服务器卡片上点"配置免密"时，弹这个小框输入当前密码。
@@ -199,6 +262,12 @@ export const RemoteHostPanelNext: React.FC = () => {
                     setKeyAuthTarget(null);
                     if (target) void runKeySetup(target.id, password);
                 }}
+            />
+
+            <HostKeyConfirmDialog
+                ctx={hostKeyConfirm}
+                onClose={() => setHostKeyConfirm(null)}
+                onTrust={() => void onTrustHostKey()}
             />
         </div>
     );
@@ -387,6 +456,66 @@ function KeyAuthPasswordDialog({
                         </Button>
                     </DialogFooter>
                 </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// 首次连接远端时弹出 host key 指纹让用户核对。这是 TOFU 信任边界:用户应把这里
+// 的 SHA256 指纹与服务器侧 `ssh-keygen -lf /etc/ssh/ssh_host_*.pub` 的输出核对一致
+// 再信任。确认后才写 known_hosts 并继续原动作(测试连接 / 配免密)。
+function HostKeyConfirmDialog({
+    ctx,
+    onClose,
+    onTrust,
+}: {
+    ctx: { id: string; prompt: HostKeyPrompt; retry: () => void } | null;
+    onClose: () => void;
+    onTrust: () => void;
+}) {
+    if (!ctx) return null;
+    const { prompt } = ctx;
+    return (
+        <Dialog open onOpenChange={(o) => !o && onClose()}>
+            <DialogContent size="sm" dismissOnOutsideClick={false}>
+                <DialogHeader>
+                    <DialogTitle>
+                        <span className="inline-flex items-center gap-2">
+                            <ShieldCheck size={16} className="text-brand" />
+                            确认主机指纹
+                        </span>
+                    </DialogTitle>
+                    <DialogDescription>
+                        首次连接 {prompt.host}:{prompt.port}。请核对下方指纹与服务器真实 host key
+                        一致后再信任，避免中间人攻击窃取登录凭据。
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-2">
+                    <div className="rounded-sm bg-inset px-3 py-2">
+                        <p className="text-2xs uppercase tracking-wider text-text-tertiary">
+                            {prompt.keyKind}
+                        </p>
+                        <p className="mt-0.5 break-all font-mono text-xs text-text">
+                            {prompt.fingerprint}
+                        </p>
+                    </div>
+                    <p className="flex items-start gap-1.5 text-2xs leading-snug text-text-tertiary">
+                        <ShieldAlert size={13} className="mt-px shrink-0 text-warning" />
+                        <span>
+                            可在服务器上运行 <span className="font-mono">ssh-keygen -lf
+                            /etc/ssh/ssh_host_{prompt.keyKind.includes('ed25519') ? 'ed25519' : 'rsa'}
+                            _key.pub</span> 核对。信任后该指纹写入 known_hosts，下次变更会触发告警。
+                        </span>
+                    </p>
+                </div>
+                <DialogFooter>
+                    <Button size="sm" variant="ghost" type="button" onClick={onClose}>
+                        取消
+                    </Button>
+                    <Button size="sm" variant="primary" type="button" onClick={onTrust}>
+                        信任并继续
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     );

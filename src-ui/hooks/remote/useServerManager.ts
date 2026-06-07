@@ -110,6 +110,16 @@ export function useServerManager() {
                         : `${label} · ${latency}`,
                     autoDismissMs: 5000,
                 });
+            } else if (report.hostKeyMismatch) {
+                // 已记录的 host key 与本次不一致:疑似中间人。危险红条阻断,不自动信任。
+                pushInfoBar({
+                    key: `server-test:${args.id}`,
+                    tone: 'danger',
+                    title: '主机指纹不一致 · 疑似中间人',
+                    content: `${label}：${report.error ?? '远端 host key 与记录不符,已阻断连接'}`,
+                });
+            } else if (report.hostKeyPrompt) {
+                // 首次连接需确认指纹:不是失败,交给面板弹确认框,这里不出红条。
             } else {
                 pushInfoBar({
                     key: `server-test:${args.id}`,
@@ -139,6 +149,11 @@ export function useServerManager() {
         },
     });
 
+    const confirmHostKeyMutation = useMutation({
+        mutationFn: (args: { id: string; keyKind: string; keyB64: string }) =>
+            serverService.confirmHostKey(args.id, args.keyKind, args.keyB64),
+    });
+
     return {
         servers: serversQuery.data ?? [],
         isLoading: serversQuery.isLoading,
@@ -155,10 +170,14 @@ export function useServerManager() {
         isDeleting: deleteMutation.isPending,
 
         testConnection: testMutation.mutate,
+        testConnectionAsync: testMutation.mutateAsync,
         isTesting: testMutation.isPending,
         testResult: testMutation.data as ProbeReport | undefined,
 
         setupKeyAuth: setupKeyAuthMutation.mutateAsync,
         isSettingUpKey: setupKeyAuthMutation.isPending,
+
+        confirmHostKey: confirmHostKeyMutation.mutateAsync,
+        isConfirmingHostKey: confirmHostKeyMutation.isPending,
     };
 }

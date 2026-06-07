@@ -16,8 +16,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use ts_rs::TS;
 
-use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteLinuxHost, SshCredentials};
-use ncd_host::Host;
+use ncd_host::remote::{
+    ConnectionConfig, HostKeyCheck, HostKeyPolicy, KnownHostsStore, RemoteLinuxHost, SshCredentials,
+};
+use ncd_host::{Host, HostError};
 
 // ============================================================
 // 数据结构
@@ -95,6 +97,31 @@ pub struct ProbeReport {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     pub latency_ms: u64,
+    /// 首次连接遇到未记录的 host key:连接已被阻断,前端应展示指纹让用户确认,
+    /// 确认后调 confirm_host_key 写入 known_hosts 再重试。非 None 不代表认证失败。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_key_prompt: Option<HostKeyPrompt>,
+    /// 该主机已有 known_hosts 记录但本次 key 不一致(疑似中间人)。前端必须按危险
+    /// 提示阻断,不得提供"一键信任",需用户人工核实。
+    #[serde(default)]
+    pub host_key_mismatch: bool,
+}
+
+/// 待用户确认的远端 host key 指纹。host key 校验走 TOFU:首次连接把指纹摆给
+/// 用户,确认后才写入 known_hosts。绝不在未校验的通道上写 authorized_keys 或
+/// 缓存连接,避免首次连接被中间人窃取凭据。
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct HostKeyPrompt {
+    pub host: String,
+    pub port: u16,
+    /// key 算法名,如 ssh-ed25519 / rsa-sha2-512。
+    pub key_kind: String,
+    /// base64 编码的原始公钥(写 known_hosts 用,前端原样回传 confirm_host_key)。
+    pub key_b64: String,
+    /// 供用户核对的指纹,OpenSSH 风格 `SHA256:<base64-no-pad>`。
+    pub fingerprint: String,
 }
 
 fn default_port() -> u16 {
@@ -267,6 +294,9 @@ pub struct ServerManager {
     credentials: Arc<dyn ServerCredentialStore>,
     /// 生成的免密私钥落盘目录：`<data_root>/ssh_keys/`。
     key_dir: PathBuf,
+    /// TOFU host key 数据库路径:`<data_root>/secrets/known_hosts`。生产 SSH 连接
+    /// 用 AcceptOnFirstUse 策略校验 host key,未知主机要用户确认后写到这里。
+    known_hosts_path: PathBuf,
     /// 活跃 SSH 连接缓存：server_id → Arc<dyn Host>。
     hosts: Arc<RwLock<HashMap<String, Arc<dyn Host>>>>,
     /// 每服务器的连接单飞锁：server_id → Mutex。
@@ -287,8 +317,19 @@ impl ServerManager {
             repo: ServerProfileRepo::new(data_root),
             credentials,
             key_dir: data_root.join("ssh_keys"),
+            known_hosts_path: data_root.join("secrets").join("known_hosts"),
             hosts: Arc::new(RwLock::new(HashMap::new())),
             connect_locks: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// 生产 SSH 连接的 host key 策略:TOFU(AcceptOnFirstUse)。首次未知主机返回
+    /// HostKeyUnknown(连接被阻断,等用户确认指纹后写 known_hosts);已记录但 key
+    /// 变了返回 HostKeyMismatch 直接阻断。永不使用 Insecure——那会让首次连接的
+    /// 中间人窃取登录密码、并把攻击者公钥写进远端 authorized_keys。
+    fn host_key_policy(&self) -> HostKeyPolicy {
+        HostKeyPolicy::AcceptOnFirstUse {
+            known_hosts_path: self.known_hosts_path.clone(),
         }
     }
 
@@ -361,16 +402,29 @@ impl ServerManager {
             .clone();
 
         // 1. 用密码连一次（不复用缓存，确保是密码通道）。
+        //    host key 走 TOFU:首次未知主机会被阻断,提示用户先在该服务器点「测试
+        //    连接」确认指纹(写进 known_hosts)后再配免密——绝不在未校验通道上把公钥
+        //    写进远端 authorized_keys,否则首次连接中间人能窃取密码并植入自己的 key。
         let credentials = SshCredentials::password(&profile.username, password);
         let config = ConnectionConfig::new(
             &profile.host,
             profile.port,
             credentials,
-            HostKeyPolicy::Insecure,
+            self.host_key_policy(),
         );
         let host = RemoteLinuxHost::connect(&profile.id, config)
             .await
-            .map_err(|e| format!("密码连接失败: {e}（请检查用户名 / 密码 / 网络）"))?;
+            .map_err(|e| match &e {
+                HostError::HostKeyUnknown { .. } => {
+                    "远端 host key 尚未确认。请先在该服务器上点「测试连接」,核对并信任指纹后再配置免密。"
+                        .to_string()
+                }
+                HostError::HostKeyMismatch { .. } => {
+                    "远端 host key 与已记录的不一致,疑似中间人攻击,已阻断。请人工核实后再试。"
+                        .to_string()
+                }
+                _ => format!("密码连接失败: {e}（请检查用户名 / 密码 / 网络）"),
+            })?;
 
         // 2. 本地生成密钥对。
         let comment = format!("napcatqq-desktop@{}", profile.id);
@@ -500,18 +554,22 @@ impl ServerManager {
             &profile.host,
             profile.port,
             credentials,
-            HostKeyPolicy::Insecure,
+            self.host_key_policy(),
         );
 
         let host = match RemoteLinuxHost::connect(&profile.id, config).await {
             Ok(h) => h,
             Err(err) => {
                 self.update_state(id, ServerState::Failed).await;
+                let latency_ms = start.elapsed().as_millis() as u64;
+                let (error, host_key_prompt, host_key_mismatch) = classify_connect_error(&err);
                 return Ok(ProbeReport {
                     success: false,
                     os_info: None,
-                    error: Some(err.to_string()),
-                    latency_ms: start.elapsed().as_millis() as u64,
+                    error: Some(error),
+                    latency_ms,
+                    host_key_prompt,
+                    host_key_mismatch,
                 });
             }
         };
@@ -542,7 +600,46 @@ impl ServerManager {
             os_info,
             error: None,
             latency_ms,
+            host_key_prompt: None,
+            host_key_mismatch: false,
         })
+    }
+
+    /// 用户在指纹确认弹窗点"信任"后调用:把这条 host key 写进 known_hosts,之后该
+    /// 主机的连接(test / 配免密 / 自动重连)即可通过 TOFU 校验。
+    ///
+    /// 安全约束:只在该主机当前"未知"时才追加。若 known_hosts 里已有同主机但 key
+    /// 不同(mismatch),拒绝写入并报错——这种情况是疑似中间人或服务端换了 key,必须
+    /// 用户人工核实后手动清理 known_hosts,不能在产品里一键覆盖。
+    pub async fn confirm_host_key(
+        &self,
+        id: &str,
+        key_kind: &str,
+        key_b64: &str,
+    ) -> Result<(), String> {
+        let all = self.repo.load().await;
+        let profile = all
+            .iter()
+            .find(|p| p.id == id)
+            .ok_or_else(|| format!("server not found: {id}"))?;
+
+        let store = KnownHostsStore::new(self.known_hosts_path.clone());
+        match store
+            .check(&profile.host, profile.port, key_kind, key_b64)
+            .await
+            .map_err(|e| format!("读取 known_hosts 失败: {e}"))?
+        {
+            HostKeyCheck::Match => Ok(()),
+            HostKeyCheck::Mismatch => Err(
+                "该主机已记录了不同的 host key,疑似中间人或服务端更换密钥。出于安全已拒绝自动信任,\
+                 请人工核实后再手动清理 known_hosts。"
+                    .to_string(),
+            ),
+            HostKeyCheck::Unknown => store
+                .append(&profile.host, profile.port, key_kind, key_b64)
+                .await
+                .map_err(|e| format!("写入 known_hosts 失败: {e}")),
+        }
     }
 
     /// 获取已缓存的 Host 连接（test_connection 成功后可用）。
@@ -661,6 +758,64 @@ fn short_uuid() -> String {
     hex::encode(bytes)
 }
 
+/// 把连接错误分类成 (人话错误, 待确认 host key, 是否 mismatch)。
+/// host key 未知 / 不一致不是认证失败,要让前端走指纹确认 / 中间人告警分支,
+/// 而不是当成普通"连接失败"红条。
+fn classify_connect_error(err: &HostError) -> (String, Option<HostKeyPrompt>, bool) {
+    match err {
+        HostError::HostKeyUnknown {
+            host,
+            port,
+            key_kind,
+            key_b64,
+        } => (
+            "首次连接该主机,请核对 host key 指纹后确认信任。".to_string(),
+            Some(HostKeyPrompt {
+                host: host.clone(),
+                port: *port,
+                key_kind: key_kind.clone(),
+                key_b64: key_b64.clone(),
+                fingerprint: ssh_key_fingerprint(key_b64),
+            }),
+            false,
+        ),
+        HostError::HostKeyMismatch {
+            host,
+            port,
+            key_kind,
+            key_b64,
+        } => (
+            "远端 host key 与已记录的不一致,疑似中间人攻击,连接已阻断。".to_string(),
+            Some(HostKeyPrompt {
+                host: host.clone(),
+                port: *port,
+                key_kind: key_kind.clone(),
+                key_b64: key_b64.clone(),
+                fingerprint: ssh_key_fingerprint(key_b64),
+            }),
+            true,
+        ),
+        other => (other.to_string(), None, false),
+    }
+}
+
+/// 算 OpenSSH 风格公钥指纹 `SHA256:<base64-no-pad(sha256(raw_key))>`。
+/// 入参是 known_hosts 那段 base64 公钥;解码失败退回带原串的占位(仅展示用,不致命)。
+fn ssh_key_fingerprint(key_b64: &str) -> String {
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+    let raw = base64::engine::general_purpose::STANDARD
+        .decode(key_b64)
+        .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(key_b64));
+    let raw = match raw {
+        Ok(bytes) => bytes,
+        Err(_) => return format!("SHA256:(无法解析) {key_b64}"),
+    };
+    let digest = Sha256::digest(&raw);
+    let encoded = base64::engine::general_purpose::STANDARD_NO_PAD.encode(digest);
+    format!("SHA256:{encoded}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -768,9 +923,78 @@ mod tests {
             os_info: Some("Linux 6.1".into()),
             error: None,
             latency_ms: 42,
+            host_key_prompt: None,
+            host_key_mismatch: false,
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("latencyMs"));
         assert!(json.contains("osInfo"));
+        // 无 host key 待确认时 prompt 字段应被 skip,不污染常规报告。
+        assert!(!json.contains("hostKeyPrompt"));
+    }
+
+    #[test]
+    fn production_host_key_policy_is_tofu_not_insecure() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        match mgr.host_key_policy() {
+            HostKeyPolicy::AcceptOnFirstUse { known_hosts_path } => {
+                assert!(known_hosts_path.ends_with("secrets/known_hosts"));
+            }
+            other => panic!("生产 host key 策略不应是 {other:?},必须是 AcceptOnFirstUse TOFU"),
+        }
+    }
+
+    #[tokio::test]
+    async fn confirm_host_key_appends_unknown_then_matches() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        mgr.add_server(make_profile("s1", "A"), None).await.unwrap();
+
+        // 首次确认:未知 -> 追加到 known_hosts。
+        mgr.confirm_host_key("s1", "ssh-ed25519", "AAAAkeyfirst")
+            .await
+            .unwrap();
+        let known = tokio::fs::read_to_string(root.path().join("secrets").join("known_hosts"))
+            .await
+            .unwrap();
+        assert!(known.contains("192.168.1.100 ssh-ed25519 AAAAkeyfirst"));
+
+        // 再确认同一把 key:已 Match,幂等成功。
+        mgr.confirm_host_key("s1", "ssh-ed25519", "AAAAkeyfirst")
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn confirm_host_key_rejects_mismatch_without_overwrite() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        mgr.add_server(make_profile("s1", "A"), None).await.unwrap();
+
+        mgr.confirm_host_key("s1", "ssh-ed25519", "AAAAoriginal")
+            .await
+            .unwrap();
+
+        // 同主机但换了 key:疑似中间人,必须拒绝,且不得覆盖原条目。
+        let err = mgr
+            .confirm_host_key("s1", "ssh-ed25519", "AAAAattacker")
+            .await
+            .unwrap_err();
+        assert!(err.contains("中间人") || err.contains("不同"));
+
+        let known = tokio::fs::read_to_string(root.path().join("secrets").join("known_hosts"))
+            .await
+            .unwrap();
+        assert!(known.contains("AAAAoriginal"));
+        assert!(!known.contains("AAAAattacker"));
+    }
+
+    #[test]
+    fn ssh_key_fingerprint_is_sha256_prefixed() {
+        // base64("hi") = "aGk=";算得出固定的 SHA256 指纹格式。
+        let fp = ssh_key_fingerprint("aGk=");
+        assert!(fp.starts_with("SHA256:"));
+        assert!(!fp.contains('='), "OpenSSH 指纹不带 base64 padding");
     }
 }

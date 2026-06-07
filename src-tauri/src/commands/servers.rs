@@ -23,6 +23,21 @@ pub async fn test_server_connection(
     state.server_manager.test_connection(&id, password).await
 }
 
+/// 用户在 host key 指纹确认弹窗点"信任"后调用:把这把 key 写进 known_hosts,
+/// 之后该主机连接走 TOFU 校验即可通过。已有不同 key 记录(疑似中间人)时拒绝。
+#[tauri::command]
+pub async fn confirm_server_host_key(
+    state: State<'_, AppState>,
+    id: String,
+    key_kind: String,
+    key_b64: String,
+) -> Result<(), String> {
+    state
+        .server_manager
+        .confirm_host_key(&id, &key_kind, &key_b64)
+        .await
+}
+
 #[tauri::command]
 pub async fn add_server(
     state: State<'_, AppState>,

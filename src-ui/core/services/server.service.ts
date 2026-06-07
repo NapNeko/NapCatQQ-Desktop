@@ -28,7 +28,21 @@ export const serverService = {
 
     testConnection: async (id: string, password?: string): Promise<ProbeReport> => {
         if (isTauri) return invoke<ProbeReport>('test_server_connection', { id, password: password ?? null });
-        return { success: false, osInfo: null, error: 'not in Tauri', latencyMs: BigInt(0) };
+        return {
+            success: false,
+            osInfo: null,
+            error: 'not in Tauri',
+            latencyMs: BigInt(0),
+            hostKeyPrompt: null,
+            hostKeyMismatch: false,
+        };
+    },
+
+    /// 用户在指纹确认弹窗点"信任"后调用:把这把 host key 写进 known_hosts。
+    /// 之后该主机的连接(测试 / 配免密 / 自动重连)即可通过 TOFU 校验。
+    confirmHostKey: async (id: string, keyKind: string, keyB64: string): Promise<void> => {
+        if (isTauri) return invoke<void>('confirm_server_host_key', { id, keyKind, keyB64 });
+        throw new Error('not in Tauri');
     },
 
     /// 密码登录 → 自动配置免密：把本地新生成的公钥写进远端 authorized_keys，
