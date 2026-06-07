@@ -8,6 +8,7 @@ venv/
 .codex/
 .nexus-map/
 .kiro/
+.cursor/
 .references/
 legacy-python/
 CLAUDE.md
