@@ -81,8 +81,13 @@ pub async fn docker_list_containers(
     state: State<'_, AppState>,
 ) -> Result<Vec<ContainerInfo>, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    DockerCli::new(host.as_ref())
-        .list_containers()
+    let cli = DockerCli::new(host.as_ref());
+    // 先 probe 定夺提权:远端没进 docker 组时裸 docker 会 permission denied,
+    // ensure_daemon_ready 探一次让后续命令一致地走 sudo。
+    cli.ensure_daemon_ready()
+        .await
+        .map_err(|e| format!("Docker 未就绪: {e}"))?;
+    cli.list_containers()
         .await
         .map_err(|e| format!("列容器失败: {e}"))
 }
@@ -96,6 +101,9 @@ pub async fn docker_container_action(
 ) -> Result<(), String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let cli = DockerCli::new(host.as_ref());
+    cli.ensure_daemon_ready()
+        .await
+        .map_err(|e| format!("Docker 未就绪: {e}"))?;
     let result = match action {
         ContainerAction::Start => cli.lifecycle("start", &name).await,
         ContainerAction::Stop => cli.lifecycle("stop", &name).await,
@@ -113,8 +121,11 @@ pub async fn docker_logs(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    DockerCli::new(host.as_ref())
-        .logs(&name, tail.min(2000))
+    let cli = DockerCli::new(host.as_ref());
+    cli.ensure_daemon_ready()
+        .await
+        .map_err(|e| format!("Docker 未就绪: {e}"))?;
+    cli.logs(&name, tail.min(2000))
         .await
         .map_err(|e| format!("取日志失败: {e}"))
 }
@@ -183,7 +194,7 @@ pub async fn docker_deploy(
         emit(ProgressKind::Finished { ok: false });
         return Err(msg);
     }
-    let (uid, gid) = default_uid_gid(host_ref);
+    let (uid, gid) = probe_uid_gid(host_ref).await;
     let yaml = render_compose(&spec, &secret, uid, gid);
     let compose_path = HostPath::from_posix(format!("{project_dir}/docker-compose.yml"));
     if let Err(e) = host.write_file(&compose_path, yaml.as_bytes()).await {
@@ -321,15 +332,19 @@ pub async fn docker_compose_down(
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let host_ref: &dyn Host = host.as_ref();
     let project_dir = resolve_project_dir(&host_id, host_ref, &state, &name).await?;
-    DockerCli::new(host_ref)
-        .compose_down(&project_dir, remove_volumes)
+    let cli = DockerCli::new(host_ref);
+    // compose down 要用 compose 插件,走 ensure_ready(probe 定夺提权 + 要求 compose)。
+    cli.ensure_ready()
+        .await
+        .map_err(|e| format!("Docker 未就绪: {e}"))?;
+    cli.compose_down(&project_dir, remove_volumes)
         .await
         .map_err(|e| format!("停止部署失败: {e}"))
 }
 
 /// 解析 compose project 目录(放 docker-compose.yml 的地方)。
 /// 本机:<data_root>/docker/<name>(POSIX 化路径,LocalWindowsHost 内部转盘符)。
-/// 远端:<$HOME>/.napcat-docker/<name>;探不到 $HOME 时退回 /root 下。
+/// 远端:<$HOME>/.napcat-docker/<name>;探不到 $HOME 时返回错误(不回退 /root)。
 async fn resolve_project_dir(
     host_id: &str,
     host: &dyn Host,
@@ -341,12 +356,17 @@ async fn resolve_project_dir(
         // HostPath::from_windows 把 C:\... 规范成 /c/...,LocalWindowsHost 能还原。
         return Ok(HostPath::from_windows(&base.to_string_lossy()).as_posix().to_string());
     }
-    // 远端:探 $HOME。
-    let home = probe_remote_home(host).await.unwrap_or_else(|| "/root".to_string());
+    // 远端:探 $HOME。探不到就 fail-fast,不回退 /root——路径落盘红线:宁可报错让
+    // 用户处理,也不把生产数据静默落到错误目录(/root 通常无权限,或污染 root 家目录)。
+    let home = probe_remote_home(host).await.ok_or_else(|| {
+        "无法探测远端 $HOME,已拒绝回退到 /root 部署 Docker(避免把数据落到错误目录)。\
+         请确认远端 SSH 用户有正常的家目录后重试。"
+            .to_string()
+    })?;
     Ok(format!("{home}/.napcat-docker/{name}"))
 }
 
-/// 远端探 $HOME。失败返回 None,调用方兜底 /root。
+/// 远端探 $HOME。失败返回 None;调用方须 fail-fast,不得回退 /root。
 async fn probe_remote_home(host: &dyn Host) -> Option<String> {
     let cmd = HostCommand::new("sh").arg("-c").arg("echo $HOME");
     match host.run_to_string(cmd).await {
@@ -358,13 +378,24 @@ async fn probe_remote_home(host: &dyn Host) -> Option<String> {
     }
 }
 
-/// 默认文件属主。远端 Linux 普通用户一般是 1000;本机 Windows Docker Desktop
-/// 不在意,给 0。
-fn default_uid_gid(host: &dyn Host) -> (u32, u32) {
-    match host.os() {
-        ncd_host::Os::Linux => (1000, 1000),
-        _ => (0, 0),
+/// 探远端文件属主 uid/gid,用于 compose 卷挂载权限。Linux 上跑 `id -u`/`id -g`
+/// 拿登录用户真实值——硬编码 1000 在非默认用户(uid≠1000)的机器上会让挂载目录
+/// 属主错配、容器读写权限异常。探测失败退回 1000(最常见默认)。非 Linux(本机
+/// Windows Docker Desktop)不在意属主,给 (0,0)。
+async fn probe_uid_gid(host: &dyn Host) -> (u32, u32) {
+    if !matches!(host.os(), ncd_host::Os::Linux) {
+        return (0, 0);
     }
+    async fn probe_one(host: &dyn Host, flag: &str) -> Option<u32> {
+        let out = host.run_to_string(HostCommand::new("id").arg(flag)).await.ok()?;
+        if !out.success() {
+            return None;
+        }
+        out.stdout.trim().parse().ok()
+    }
+    let uid = probe_one(host, "-u").await.unwrap_or(1000);
+    let gid = probe_one(host, "-g").await.unwrap_or(1000);
+    (uid, gid)
 }
 
 /// 拼部署结果。NapCat 的 WebUI token 就是我们设的 secret;SnowLuma 的 WebUI

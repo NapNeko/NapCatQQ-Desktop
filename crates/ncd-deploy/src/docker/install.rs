@@ -42,9 +42,13 @@ pub async fn install_docker(
 ) -> Result<DockerInstallReport, DockerCliError> {
     let cli = DockerCli::new(host);
 
-    // 已装且 daemon 在跑就直接返回,幂等。
+    // 已装 + daemon 在跑 + compose v2 插件齐全才算幂等就绪直接返回。只看
+    // installed && daemon_running 会漏掉缺 compose 的机器:那种机器点「安装」会被
+    // 当成"已安装"成功,但部署用 ready_to_deploy() 闸又会被 compose=false 挡住,
+    // 用户无法自助补 compose。缺 compose 时继续往下跑安装脚本(脚本会装
+    // docker-compose-plugin),把 compose 补齐。
     let status = cli.probe().await;
-    if status.installed && status.daemon_running {
+    if status.ready_to_deploy() {
         return Ok(DockerInstallReport::already_installed(&status.version));
     }
 
@@ -142,11 +146,18 @@ async fn install_docker_linux(
         .timeout(std::time::Duration::from_secs(30));
     let _ = host.run_to_string(usermod).await;
 
-    // 复探一次确认 daemon 真起来了。
+    // 复探一次确认 docker + daemon + compose 都真起来了(ready_to_deploy 三者齐全)。
     let cli = DockerCli::new(host);
     let status = cli.probe().await;
-    if status.installed && status.daemon_running {
+    if status.ready_to_deploy() {
         Ok(DockerInstallReport::installed())
+    } else if status.installed && status.daemon_running {
+        // docker + daemon 起来了但 compose 插件没装上(极少数源缺包 / 装了旧 v1)。
+        // 明确提示补 compose v2,而不是报"已就绪"骗用户去部署再失败。
+        Ok(DockerInstallReport::manual_required(
+            "Docker 已安装但缺 compose v2 插件，请在远端执行 sudo apt-get install -y docker-compose-plugin（dnf/yum 同名包）后重试",
+            None,
+        ))
     } else if status.installed {
         Ok(DockerInstallReport::manual_required(
             "Docker 已安装但 daemon 未运行，请在远端执行 sudo systemctl start docker",

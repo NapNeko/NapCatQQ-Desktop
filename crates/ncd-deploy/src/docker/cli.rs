@@ -107,6 +107,21 @@ impl<'h> DockerCli<'h> {
         }
     }
 
+    /// 确保 docker daemon 可用并刷新提权决策,但**不要求 compose 插件**。
+    ///
+    /// 容器管理面(list / start / stop / restart / remove / logs)只需要 daemon,
+    /// 不需要 compose;它们必须先走这里 probe 一次,否则后续裸 docker 命令在"装了
+    /// docker 但当前会话没 socket 权限(没重登 / 没进 docker 组)"的远端会 permission
+    /// denied 而不会自动 sudo。部署 / compose down 仍用 ensure_ready(额外要 compose)。
+    pub async fn ensure_daemon_ready(&self) -> Result<DockerStatus, DockerCliError> {
+        let status = self.probe().await;
+        if status.daemon_running {
+            Ok(status)
+        } else {
+            Err(DockerCliError::RuntimeUnavailable { status })
+        }
+    }
+
     /// `docker version --format '{{.Client.Version}}'`,失败返回 None。
     /// 客户端版本不连 daemon,无需提权,固定裸跑——它是"装没装 docker"的判据。
     async fn docker_client_version(&self) -> Option<String> {
