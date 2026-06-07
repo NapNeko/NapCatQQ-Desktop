@@ -187,18 +187,26 @@ function Toolbar({
                     className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-tertiary"
                 />
                 <input
+                    type="search"
                     value={query}
                     onChange={(e) => onQuery(e.target.value)}
                     placeholder="搜索关键字"
+                    aria-label="搜索日志关键字"
                     className="h-7 w-full rounded-sm bg-transparent pl-7 pr-2 text-[12px] text-text outline-none transition-colors placeholder:text-text-tertiary hover:bg-inset/60 focus:bg-inset"
                 />
             </div>
-            {/* 级别筛选：单一胶囊条 */}
-            <div className="flex h-7 items-center gap-0.5 rounded-md bg-inset/60 p-0.5">
+            {/* 级别筛选：单选胶囊条,语义上是 radiogroup(单选) */}
+            <div
+                role="radiogroup"
+                aria-label="日志级别筛选"
+                className="flex h-7 items-center gap-0.5 rounded-md bg-inset/60 p-0.5"
+            >
                 {LEVEL_FILTERS.map((f) => (
                     <button
                         key={f.value}
                         type="button"
+                        role="radio"
+                        aria-checked={levelFilter === f.value}
                         onClick={() => onLevelFilter(f.value)}
                         className={
                             'h-6 rounded-sm px-2 text-[11.5px] font-medium leading-6 transition-colors ' +
@@ -279,6 +287,9 @@ const LogViewport = forwardRef<
     return (
         <div
             ref={ref}
+            role="log"
+            aria-label="实例运行日志"
+            aria-live="polite"
             className="min-h-0 flex-1 overflow-auto bg-inset font-mono text-[12px] leading-[18px]"
             style={{ fontFamily: 'var(--font-mono)' }}
         >

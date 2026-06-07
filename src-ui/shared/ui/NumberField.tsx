@@ -6,7 +6,7 @@
 //
 // 不画 spinner（默认浏览器 spinner 在等宽窄输入框里太挤），如需步进按钮另写一个组件。
 
-import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
+import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '../utils/cn';
 
 const baseClass = [
@@ -53,7 +53,9 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
         ref,
     ) => {
         const invalid = !!error;
-        const fieldId = id ?? rest.name;
+        // useId fallback:调用方没给 id/name 时也保证 label↔input↔描述能关联。
+        const generatedId = useId();
+        const fieldId = id ?? rest.name ?? generatedId;
         const describedById = fieldId ? `${fieldId}-desc` : undefined;
 
         return (

@@ -286,6 +286,7 @@ const PortRow: React.FC<{
                         <NumberField
                             className="w-20"
                             label={undefined}
+                            aria-label="容器端口"
                             value={mapping.container}
                             onValueChange={onContainerChange}
                         />
@@ -296,6 +297,7 @@ const PortRow: React.FC<{
                 <NumberField
                     className="w-24"
                     label={undefined}
+                    aria-label={`宿主机端口(容器 ${mapping.container})`}
                     value={mapping.host}
                     onValueChange={onHostChange}
                 />

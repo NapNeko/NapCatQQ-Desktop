@@ -10,6 +10,7 @@
 import {
     forwardRef,
     useEffect,
+    useId,
     useImperativeHandle,
     useRef,
     type InputHTMLAttributes,
@@ -57,7 +58,10 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
         ref,
     ) => {
         const invalid = !!error;
-        const fieldId = id ?? rest.name;
+        // useId fallback:调用方没给 id/name 时也保证 label↔input↔描述能关联,
+        // 满足可访问名称要求(屏幕阅读器、自动化测试都依赖这层关联)。
+        const generatedId = useId();
+        const fieldId = id ?? rest.name ?? generatedId;
         const describedById = fieldId ? `${fieldId}-desc` : undefined;
         const m = useMotion();
         const inputRef = useRef<HTMLInputElement | null>(null);
