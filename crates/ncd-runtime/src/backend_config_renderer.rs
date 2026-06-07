@@ -479,35 +479,6 @@ impl SnowLumaConfigRenderer {
         Value::Object(obj)
     }
 
-    /// Drift baseline: empty Desktop connect => empty networks (no install-default listeners).
-    fn build_onebot_payload_for_drift(config: &BotConfig) -> Value {
-        let connect = &config.connect;
-        let no_servers = connect.http_servers.is_empty() && connect.websocket_servers.is_empty();
-        let networks = if no_servers {
-            json!({
-                "httpServers": [],
-                "httpClients": connect.http_clients.iter().map(Self::render_http_client).collect::<Vec<_>>(),
-                "wsServers": [],
-                "wsClients": connect.websocket_clients.iter().map(Self::render_ws_client).collect::<Vec<_>>(),
-            })
-        } else {
-            Self::build_networks(connect)
-        };
-        let mut base = if no_servers {
-            json!({
-                "networks": networks,
-                "musicSignUrl": config.bot.music_sign_url,
-            })
-        } else {
-            Self::build_onebot_payload(config)
-        };
-        if let Value::Object(ref mut o) = base {
-            if let Some(sc) = &config.status_command {
-                o.insert("statusCommand".into(), snowluma_status_command_json(sc));
-            }
-        }
-        base
-    }
 }
 
 impl BackendConfigRenderer for SnowLumaConfigRenderer {
@@ -537,14 +508,9 @@ impl BackendConfigRenderer for SnowLumaConfigRenderer {
         vec![self.onebot_path(bot_id)]
     }
 
-    fn render_for_drift(
-        &self,
-        bot_id: &BotId,
-        config: &BotConfig,
-    ) -> Result<JsonTransaction, RenderError> {
-        let payload = Self::build_onebot_payload_for_drift(config);
-        Ok(JsonTransaction::new().write(self.onebot_path(bot_id), payload))
-    }
+    // render_for_drift 用 trait 默认实现(== render):空连接时 render 注入
+    // http-default/ws-default 兜底 listener,drift 基线必须用同一套,否则 Desktop
+    // 自己写出去的兜底 listener 会被当成外部新增,造成"自写自漂移"反复误报。
 }
 
 // ==================== Factory ====================
@@ -930,6 +896,40 @@ mod tests {
         assert_eq!(ws["name"], "ws-default");
         assert_eq!(ws["port"], 3001);
         assert_eq!(ws["role"], "Universal");
+    }
+
+    #[tokio::test]
+    async fn snowluma_render_output_is_drift_clean_for_empty_connect() {
+        // 自写自漂移回归:空连接时 render 注入 http-default/ws-default 兜底 listener,
+        // 把它写到盘上后立刻跑 drift 检测必须判定 clean。render 与 render_for_drift
+        // 同源(都用 build_onebot_payload)才能保证这点;若 drift 基线退回空数组,这些
+        // 兜底 listener 会被当成外部新增反复误报、打断一键启动。
+        let dir = tempfile::tempdir().unwrap();
+        let renderer = SnowLumaConfigRenderer::new(dir.path());
+        let bot_id = make_bot_id();
+        let config = BotConfig {
+            bot: BotBasicConfig {
+                backend_type: BackendType::SnowLuma,
+                ..make_basic_config()
+            },
+            connect: ConnectConfig::default(),
+            advanced: make_advanced_config(),
+            status_command: None,
+        };
+
+        let txn = renderer.render(&bot_id, &config).unwrap();
+        let write = &txn.writes[0];
+        std::fs::write(&write.path, serde_json::to_vec_pretty(&write.payload).unwrap()).unwrap();
+
+        let drift = crate::config_drift::detect_drift(&bot_id, &config, &renderer)
+            .await
+            .unwrap();
+        assert!(
+            drift.is_clean(),
+            "空连接 render 输出不应自漂移: added={:?} modified={:?}",
+            drift.added,
+            drift.modified
+        );
     }
 
     #[test]

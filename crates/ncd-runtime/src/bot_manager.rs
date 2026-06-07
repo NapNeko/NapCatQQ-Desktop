@@ -1154,7 +1154,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 };
                 if let Some(file_overrides) = overrides.get(&file_name) {
                     for (path, value) in file_overrides {
-                        set_value_at_dot_path(&mut write.payload, path, value.clone());
+                        set_value_at_dot_path(&mut write.payload, path, value.clone())
+                            .map_err(|e| {
+                                BotManagerError::Render(format!(
+                                    "应用 drift 决议到 {file_name} 的 {path} 失败: {e}"
+                                ))
+                            })?;
                     }
                 }
             }
@@ -1781,29 +1786,71 @@ fn map_backend_flavor(backend: BackendType) -> BotFlavor {
 /// 按 dot-path（如 `network.httpServers`）在 JSON Value 树里设值。
 /// 路径不存在的中间节点自动创建为 object。用于应用前端 ConfigDriftDialog
 /// 的 `AcceptExternal` 决议到渲染输出。
-fn set_value_at_dot_path(root: &mut serde_json::Value, dot_path: &str, value: serde_json::Value) {
+/// 把 value 写到 root 的 dot-path 位置;value 为 null 表示删除该位置(DropAdded)。
+///
+/// 支持 object key 与 array index(纯数字段)混合,如 `network.httpClients.0.token`:
+/// ConfigDrift 对连接数组里的字段就是这种路径。中间 object 缺失自动建;遇到数组时
+/// 按下标定位现有元素,越界 / 段非数字 / 落到非容器值上一律返回错误,而不是像旧实现
+/// 那样静默 return——否则用户在 ConfigDriftDialog 里对 token/url 的 AcceptExternal /
+/// DropAdded 决议会"看起来点了却没生效"。
+fn set_value_at_dot_path(
+    root: &mut serde_json::Value,
+    dot_path: &str,
+    value: serde_json::Value,
+) -> Result<(), String> {
     let segments: Vec<&str> = dot_path.split('.').collect();
-    if segments.is_empty() {
-        return;
+    if segments.is_empty() || segments.iter().any(|s| s.is_empty()) {
+        return Err(format!("非法 dot-path: '{dot_path}'"));
     }
+
     let mut cursor = root;
     for seg in &segments[..segments.len() - 1] {
-        if !cursor.is_object() {
-            return;
-        }
-        cursor = cursor
-            .as_object_mut()
-            .unwrap()
-            .entry(seg.to_string())
-            .or_insert_with(|| serde_json::json!({}));
+        cursor = match cursor {
+            serde_json::Value::Object(map) => map
+                .entry((*seg).to_string())
+                .or_insert_with(|| serde_json::json!({})),
+            serde_json::Value::Array(arr) => {
+                let idx: usize = seg
+                    .parse()
+                    .map_err(|_| format!("数组路径段 '{seg}' 不是合法下标"))?;
+                let len = arr.len();
+                arr.get_mut(idx)
+                    .ok_or_else(|| format!("数组下标 {idx} 越界(长度 {len})"))?
+            }
+            _ => return Err(format!("路径段 '{seg}' 落在非容器值上,无法继续")),
+        };
     }
-    if let Some(obj) = cursor.as_object_mut() {
-        let last = segments[segments.len() - 1];
-        if value.is_null() {
-            obj.remove(last);
-        } else {
-            obj.insert(last.to_string(), value);
+
+    let last = segments[segments.len() - 1];
+    match cursor {
+        serde_json::Value::Object(map) => {
+            if value.is_null() {
+                map.remove(last);
+            } else {
+                map.insert(last.to_string(), value);
+            }
+            Ok(())
         }
+        serde_json::Value::Array(arr) => {
+            let idx: usize = last
+                .parse()
+                .map_err(|_| format!("数组路径段 '{last}' 不是合法下标"))?;
+            if value.is_null() {
+                // DropAdded 整个数组元素:越界视作已不存在(已达成),不报错。
+                if idx < arr.len() {
+                    arr.remove(idx);
+                }
+                Ok(())
+            } else {
+                let len = arr.len();
+                let slot = arr
+                    .get_mut(idx)
+                    .ok_or_else(|| format!("数组下标 {idx} 越界(长度 {len})"))?;
+                *slot = value;
+                Ok(())
+            }
+        }
+        _ => Err(format!("路径 '{dot_path}' 的父级不是 object / array")),
     }
 }
 
@@ -1859,5 +1906,53 @@ mod tests {
 
         assert_eq!(store.get(&key).unwrap().as_deref(), Some(token.as_str()));
         assert_eq!(token.len(), 64);
+    }
+
+    #[test]
+    fn dot_path_sets_object_field() {
+        let mut root = serde_json::json!({ "a": { "b": 1 } });
+        set_value_at_dot_path(&mut root, "a.c", serde_json::json!("x")).unwrap();
+        assert_eq!(root["a"]["c"], serde_json::json!("x"));
+    }
+
+    #[test]
+    fn dot_path_sets_field_inside_array_element() {
+        // ConfigDrift 的连接数组路径:network.httpClients.0.token。
+        let mut root = serde_json::json!({
+            "network": { "httpClients": [ { "token": "old" }, { "token": "keep" } ] }
+        });
+        set_value_at_dot_path(&mut root, "network.httpClients.0.token", serde_json::json!("new"))
+            .unwrap();
+        assert_eq!(root["network"]["httpClients"][0]["token"], "new");
+        assert_eq!(root["network"]["httpClients"][1]["token"], "keep");
+    }
+
+    #[test]
+    fn dot_path_null_removes_object_key_in_array_element() {
+        let mut root = serde_json::json!({
+            "network": { "httpClients": [ { "token": "drop", "url": "u" } ] }
+        });
+        set_value_at_dot_path(
+            &mut root,
+            "network.httpClients.0.token",
+            serde_json::Value::Null,
+        )
+        .unwrap();
+        assert!(root["network"]["httpClients"][0].get("token").is_none());
+        assert_eq!(root["network"]["httpClients"][0]["url"], "u");
+    }
+
+    #[test]
+    fn dot_path_array_index_out_of_bounds_errors() {
+        let mut root = serde_json::json!({ "list": [ { "x": 1 } ] });
+        let err = set_value_at_dot_path(&mut root, "list.3.x", serde_json::json!(2)).unwrap_err();
+        assert!(err.contains("越界"));
+    }
+
+    #[test]
+    fn dot_path_non_numeric_array_segment_errors() {
+        let mut root = serde_json::json!({ "list": [ { "x": 1 } ] });
+        let err = set_value_at_dot_path(&mut root, "list.foo.x", serde_json::json!(2)).unwrap_err();
+        assert!(err.contains("不是合法下标"));
     }
 }
