@@ -66,6 +66,7 @@ import {
     botStateBadge,
     canStartBot,
     canStopBot,
+    isBotActive,
     isBotRunning,
     isBotStarting,
 } from '../../../../core/domain/bot/status';
@@ -237,7 +238,7 @@ export function BotCard({
         webuiAvailable,
     });
 
-    const isActive = isBotRunning(bot.state) || isBotStarting(bot.state);
+    const isActive = isBotActive(bot.state);
 
     const chips: React.ReactNode[] = [];
     if (!isSL && enabledChannels !== null) {
@@ -485,7 +486,7 @@ export function BotCard({
                                 </IconButton>
                             </GsapPresence>
                             <GsapPresence
-                                visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
+                                visible={isActive}
                                 onEnter={iconBtnEnter}
                                 onExit={iconBtnExit}
                             >
@@ -500,7 +501,7 @@ export function BotCard({
                                 </IconButton>
                             </GsapPresence>
                             <GsapPresence
-                                visible={!isBotRunning(bot.state) && !isBotStarting(bot.state)}
+                                visible={!isActive && canStartBot(bot.state)}
                                 onEnter={iconBtnEnter}
                                 onExit={iconBtnExit}
                             >
