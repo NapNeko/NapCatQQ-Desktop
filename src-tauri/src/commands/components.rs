@@ -382,12 +382,15 @@ fn build_component_for_host(
             }
         }
         ComponentId::Qq => {
-            // 远端 QQ 跟随 NapCat 的 layout：
-            //   System：base="/"，QQ 装到 /opt/QQ（系统包）—— 但当前实装走
-            //     dpkg-deb -x 解包不会调系统包管理器，没法在 /opt 创目录，
-            //     用户应该用官方 deb/rpm 自己装，detect 能识别。
-            //   Rootless：base="$HOME/Napcat"，QQ 装到 $HOME/Napcat/opt/QQ。
-            Arc::new(QQComponent::default_v3_2_25(resolve_napcat_base()?))
+            if host.os() == ncd_host::Os::Windows {
+                // 本机 Windows：detect/install 走注册表 + pcConfig，不用 Napcat
+                // 远端 layout。install_base_dir 仅 Linux 解包路径会读，这里占位即可。
+                let _unused = data_root_host.join("runtime").join("_qq_win_stub");
+                Arc::new(QQComponent::default_v3_2_25(_unused))
+            } else {
+                // 远端 / Linux 本地 QQ 跟随 NapCat layout（Rootless → $HOME/Napcat/opt/QQ）。
+                Arc::new(QQComponent::default_v3_2_25(resolve_napcat_base()?))
+            }
         }
         ComponentId::NodeJs => {
             // SnowLuma 才需要 Node.js；装到 SnowLuma workspace 下。

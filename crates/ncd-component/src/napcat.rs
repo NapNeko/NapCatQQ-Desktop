@@ -550,6 +550,15 @@ impl NapCatComponent {
     /// 使用纯文本读 + serde_json 改 + 写回(不依赖远端 jq,提升跨发行版兼容性)。
     async fn patch_qq_main(&self, host: &dyn Host) -> Result<(), ActionError> {
         let path = self.qq_package_json();
+        if !host.exists(&path).await? {
+            return Err(ActionError::install_step(
+                "patch_qq_main",
+                format!(
+                    "未找到 QQ 安装 ({})。请先在「运行时依赖」中安装 QQ，再安装 NapCat。",
+                    path.as_posix()
+                ),
+            ));
+        }
         let bytes = host.read_file(&path).await?;
         let mut json: serde_json::Value =
             serde_json::from_slice(&bytes).map_err(|e| {
