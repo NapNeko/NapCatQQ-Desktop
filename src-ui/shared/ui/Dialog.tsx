@@ -400,9 +400,12 @@ const ContentBody = forwardRef<
         >
             <div
                 ref={clipRef}
-                className={cn('overflow-hidden', size === 'sheet' && 'min-h-0 flex-1')}
+                className={cn(
+                    'overflow-x-visible overflow-y-hidden',
+                    size === 'sheet' && 'min-h-0 flex-1',
+                )}
             >
-                <div ref={innerRef} className={cn(size === 'sheet' && 'min-h-0')}>
+                <div ref={innerRef} className={cn('px-0.5', size === 'sheet' && 'min-h-0')}>
                     {children}
                 </div>
             </div>

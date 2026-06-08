@@ -14,7 +14,7 @@ const baseClass = [
     'border outline-none transition-colors duration-150',
     'placeholder:text-text-tertiary',
     'disabled:cursor-not-allowed disabled:bg-inset disabled:text-text-disabled',
-    'focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-canvas',
+    'focus:ring-2 focus:ring-brand focus:ring-inset',
     'tabular-nums',
     // 隐藏浏览器默认 spinner —— 桌面应用里更整洁
     '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',

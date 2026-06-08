@@ -33,6 +33,17 @@ import { ServerCard } from './ServerCard';
 import { AddServerDialog } from './AddServerDialog';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { HostKeyPrompt } from '../../core/ipc/generated/domain/HostKeyPrompt';
+import { CopyCodeBlock } from '../../shared/ui/CopyCodeBlock';
+
+function hostKeyVerifyCommand(prompt: HostKeyPrompt): string {
+    const kind = prompt.keyKind.toLowerCase();
+    const file = kind.includes('ed25519')
+        ? '/etc/ssh/ssh_host_ed25519_key.pub'
+        : kind.includes('rsa')
+          ? '/etc/ssh/ssh_host_rsa_key.pub'
+          : '/etc/ssh/ssh_host_ecdsa_key.pub';
+    return `ssh-keygen -lf ${file}`;
+}
 
 export const RemoteHostPanelNext: React.FC = () => {
     const {
@@ -499,13 +510,13 @@ function HostKeyConfirmDialog({
                             {prompt.fingerprint}
                         </p>
                     </div>
+                    <p className="text-2xs text-text-tertiary">
+                        在服务器上执行下方命令，将输出中的 SHA256 与上方指纹比对一致后再信任。
+                    </p>
+                    <CopyCodeBlock command={hostKeyVerifyCommand(prompt)} />
                     <p className="flex items-start gap-1.5 text-2xs leading-snug text-text-tertiary">
                         <ShieldAlert size={13} className="mt-px shrink-0 text-warning" />
-                        <span>
-                            可在服务器上运行 <span className="font-mono">ssh-keygen -lf
-                            /etc/ssh/ssh_host_{prompt.keyKind.includes('ed25519') ? 'ed25519' : 'rsa'}
-                            _key.pub</span> 核对。信任后该指纹写入 known_hosts，下次变更会触发告警。
-                        </span>
+                        <span>信任后写入 known_hosts；若日后指纹变更会阻断并提示疑似中间人。</span>
                     </p>
                 </div>
                 <DialogFooter>
