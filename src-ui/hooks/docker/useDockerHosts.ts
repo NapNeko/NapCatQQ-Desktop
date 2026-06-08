@@ -20,6 +20,8 @@ import type {
     DockerStatus,
 } from '../../core/ipc/types';
 
+const DOCKER_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
+
 /// Docker Desktop 下载页，Windows / macOS 走手动安装时引导用。
 const DOCKER_DESKTOP_URL = 'https://www.docker.com/products/docker-desktop/';
 
@@ -116,7 +118,19 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         async (hostId: string, options?: DockerInstallOptions): Promise<DockerInstallReport> => {
             dockerActionStore.markInstalling(hostId);
             try {
-                return await installMutation.mutateAsync({ hostId, options });
+                const work = installMutation.mutateAsync({ hostId, options });
+                const timeout = new Promise<never>((_, reject) => {
+                    window.setTimeout(
+                        () =>
+                            reject(
+                                new Error(
+                                    'Docker 安装超时（10 分钟）。请检查 SSH 与远端网络，或在远端手动安装后点刷新。',
+                                ),
+                            ),
+                        DOCKER_INSTALL_TIMEOUT_MS,
+                    );
+                });
+                return await Promise.race([work, timeout]);
             } finally {
                 dockerActionStore.clearInstalling(hostId);
             }
