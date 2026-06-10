@@ -408,6 +408,8 @@ impl NapCatComponent {
     ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 6 }).await;
 
+        self.ensure_linux_qq_installed(host).await?;
+
         // ===== Step 1:下载 NapCat.Shell.zip 到本地 =====
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -543,6 +545,33 @@ impl NapCatComponent {
         ctx.emit(ProgressKind::StepEnd { step: 6, ok: true }).await;
 
         ctx.emit(ProgressKind::Finished { ok: true }).await;
+        Ok(())
+    }
+
+    /// NapCat Linux 注入依赖 QQ 已经解包完成。下载前先 fail-fast，避免用户等完
+    /// NapCat.Shell.zip 才在 patch package.json 阶段看到缺 QQ 的低层错误。
+    async fn ensure_linux_qq_installed(&self, host: &dyn Host) -> Result<(), ActionError> {
+        let pkg_json = self.qq_package_json();
+        if !host.exists(&pkg_json).await? {
+            return Err(ActionError::install_step(
+                "preflight_qq",
+                format!(
+                    "未找到 QQ 安装({})。请先在「运行时依赖」中安装 QQ，再安装 NapCat。",
+                    pkg_json.as_posix()
+                ),
+            ));
+        }
+
+        let qq_bin = self.qq_base_path().join("qq");
+        if !host.exists(&qq_bin).await? {
+            return Err(ActionError::install_step(
+                "preflight_qq",
+                format!(
+                    "QQ 安装不完整，未找到可执行文件({})。请先重新安装 QQ，再安装 NapCat。",
+                    qq_bin.as_posix()
+                ),
+            ));
+        }
         Ok(())
     }
 
