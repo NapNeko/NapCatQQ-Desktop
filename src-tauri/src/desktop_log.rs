@@ -6,7 +6,7 @@ use std::panic;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use ncd_log::facet::{LogSource, LogType};
+use ncd_log::facet::LogType;
 use ncd_log::format_line;
 use ncd_log::log_source_from_target;
 use ncd_log::short_module_from_target;

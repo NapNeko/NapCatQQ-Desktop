@@ -117,7 +117,7 @@ export function SettingsPageNext() {
                         {tab === 'log' ? (
                             <DesktopLogTab
                                 emptyKind={logViewer.emptyKind}
-                                displayText={logViewer.displayText}
+                                entries={logViewer.filtered}
                                 fontSize={logViewer.fontSize}
                                 viewportRef={logViewer.viewportRef}
                                 error={logViewer.error}

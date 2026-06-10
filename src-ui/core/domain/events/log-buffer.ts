@@ -24,6 +24,12 @@ export interface LogEntry {
     channel: LogChannel;
     level: LogLevel;
     timestamp: string;
+    /** Desktop preview：来源 + 模块，如 `[ CORE ] bot_manager` */
+    context?: string;
+    /** Desktop preview：原始等级标签，如 `[INFO]` */
+    levelTag?: string;
+    /** Desktop：完整 preview 行，复制用 */
+    rawLine?: string;
 }
 
 const MAX_LINES = 1000;
@@ -88,16 +94,24 @@ function normalizeLevel(raw: string): LogLevel {
     }
 }
 
-// 桌面会话日志 preview：`26-06-10 19:55:40 | [INFO] | [ CORE ] bot_manager | ...`
+// 桌面会话 preview 四段：`时间 | [INFO] | [ CORE ] bot_manager | 说明`
 const DESKTOP_PREVIEW_LEVEL = /\|\s*\[(EROR|WARN|INFO|DBUG|TRCE|CRIT)\]\s*\|/i;
 
-/// 设置页 Desktop 日志行级别（对齐 legacy EROR/WARN/…）。
-export function parseDesktopLogLevel(line: string): LogLevel {
-    const m = line.match(DESKTOP_PREVIEW_LEVEL);
-    if (!m) {
-        return parseLogLevel(line);
-    }
-    switch (m[1].toUpperCase()) {
+const DESKTOP_PREVIEW_FOUR_PART =
+    /^(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*\|\s*(\[[^\]]+\])\s*\|\s*(.+?)\s*\|\s*(.+)$/;
+
+export interface ParsedDesktopLogLine {
+    timestamp: string;
+    levelTag: string;
+    level: LogLevel;
+    context: string;
+    message: string;
+    raw: string;
+}
+
+function desktopLegacyLevelToLogLevel(tag: string): LogLevel {
+    const inner = tag.replace(/^\[|\]$/g, '').trim().toUpperCase();
+    switch (inner) {
         case 'EROR':
             return 'error';
         case 'WARN':
@@ -115,25 +129,63 @@ export function parseDesktopLogLevel(line: string): LogLevel {
     }
 }
 
+/// 解析设置页 tail 返回的 preview 行；非四段时退化为整行作 message。
+export function parseDesktopLogLine(line: string): ParsedDesktopLogLine {
+    const raw = line.replace(/\r?\n+$/, '').trimEnd();
+    const m = raw.match(DESKTOP_PREVIEW_FOUR_PART);
+    if (m) {
+        const levelTag = m[2].trim();
+        return {
+            timestamp: m[1],
+            levelTag,
+            level: desktopLegacyLevelToLogLevel(levelTag),
+            context: m[3].trim(),
+            message: m[4].trim(),
+            raw,
+        };
+    }
+    const timeMatch = raw.match(/^(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+    return {
+        timestamp: timeMatch?.[1] ?? '',
+        levelTag: '',
+        level: parseDesktopLogLevel(raw),
+        context: '',
+        message: raw,
+        raw,
+    };
+}
+
+/// 设置页 Desktop 日志行级别（对齐 legacy EROR/WARN/…）。
+export function parseDesktopLogLevel(line: string): LogLevel {
+    const m = line.match(DESKTOP_PREVIEW_LEVEL);
+    if (!m) {
+        return parseLogLevel(line);
+    }
+    return desktopLegacyLevelToLogLevel(`[${m[1]}]`);
+}
+
 export function buildDesktopHistoryEntries(lines: string[]): LogEntry[] {
     const out: LogEntry[] = [];
     for (let idx = 0; idx < lines.length; idx++) {
         const raw = lines[idx];
         if (!raw || !raw.trim()) continue;
-        const timeMatch = raw.match(/^(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+        const parsed = parseDesktopLogLine(raw);
         out.push({
             id: `hist-${idx}-${counter++}`,
-            text: raw,
+            text: parsed.message,
             channel: 'unknown' as const,
-            level: parseDesktopLogLevel(raw),
-            timestamp: timeMatch?.[1] ?? '',
+            level: parsed.level,
+            timestamp: parsed.timestamp,
+            context: parsed.context || undefined,
+            levelTag: parsed.levelTag || undefined,
+            rawLine: parsed.raw,
         });
     }
     return out;
 }
 
 export function serializeDesktopLogs(logs: LogEntry[]): string {
-    return logs.map((l) => l.text).join('\n');
+    return logs.map((l) => l.rawLine ?? l.text).join('\n');
 }
 
 export function buildHistoryEntries(
@@ -199,7 +251,8 @@ export function filterLogs(
 ): LogEntry[] {
     const q = query.toLowerCase();
     return logs.filter((log) => {
-        const matchesSearch = !q || log.text.toLowerCase().includes(q);
+        const haystack = [log.text, log.context, log.rawLine].filter(Boolean).join(' ').toLowerCase();
+        const matchesSearch = !q || haystack.includes(q);
         const matchesChannel = channelFilter === 'all' || log.channel === channelFilter;
         const matchesLevel = levelFilter === 'all' || log.level === levelFilter;
         return matchesSearch && matchesChannel && matchesLevel;

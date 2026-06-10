@@ -20,7 +20,10 @@ pub async fn test_server_connection(
     id: String,
     password: Option<String>,
 ) -> Result<ProbeReport, String> {
-    state.server_manager.test_connection(&id, password).await
+    state
+        .server_manager
+        .test_connection(&id, password, true)
+        .await
 }
 
 /// 用户在 host key 指纹确认弹窗点"信任"后调用:把这把 key 写进 known_hosts,

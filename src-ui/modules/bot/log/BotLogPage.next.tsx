@@ -26,8 +26,13 @@ import {
     type ChannelFilter,
     type LevelFilter,
     type LogEntry,
-    type LogLevel,
 } from '../../../core/domain/events/log-buffer';
+import {
+    LOG_LEVEL_SHORT,
+    levelBarColor,
+    levelLabelColor,
+    lineTextColor,
+} from '../../../shared/log/log-level-display';
 import { useBotLogStream } from '../../../hooks/bot/useBotLogStream';
 
 interface BotLogPageNextProps {
@@ -35,16 +40,7 @@ interface BotLogPageNextProps {
     onBack: () => void;
 }
 
-const LEVEL_LABEL: Record<LogLevel, string> = {
-    trace: 'TRC',
-    debug: 'DBG',
-    info: 'INF',
-    success: 'OK',
-    warn: 'WRN',
-    error: 'ERR',
-    fatal: 'FTL',
-    unknown: '·',
-};
+const LEVEL_LABEL = LOG_LEVEL_SHORT;
 
 const LEVEL_FILTERS: { value: LevelFilter; label: string }[] = [
     { value: 'all', label: '全部' },
@@ -327,64 +323,6 @@ function LogLine({ entry }: { entry: LogEntry }) {
             </span>
         </div>
     );
-}
-
-// 暖色调下的 level 颜色映射，与 design tokens 的 state-* 对齐但稍微提亮，
-// 让小字号下也能在浅米色背景上区分。
-function levelBarColor(level: LogLevel): string {
-    switch (level) {
-        case 'fatal':
-        case 'error':
-            return 'var(--state-danger)';
-        case 'warn':
-            return 'var(--state-warning)';
-        case 'success':
-            return 'var(--state-success)';
-        case 'info':
-            return 'var(--state-info)';
-        case 'debug':
-        case 'trace':
-            return 'var(--neutral-300, #d1c4b6)';
-        default:
-            return 'transparent';
-    }
-}
-
-function levelLabelColor(level: LogLevel): string {
-    switch (level) {
-        case 'fatal':
-        case 'error':
-            return 'var(--state-danger)';
-        case 'warn':
-            return 'var(--state-warning)';
-        case 'success':
-            return 'var(--state-success)';
-        case 'info':
-            return 'var(--state-info)';
-        case 'debug':
-        case 'trace':
-            return 'var(--text-tertiary)';
-        default:
-            return 'var(--text-disabled)';
-    }
-}
-
-function lineTextColor(level: LogLevel): string {
-    switch (level) {
-        case 'fatal':
-        case 'error':
-            return 'var(--state-danger)';
-        case 'warn':
-            return 'var(--text-primary)';
-        case 'success':
-            return 'var(--state-success)';
-        case 'info':
-        case 'debug':
-        case 'trace':
-            return 'var(--text-secondary)';
-        default:
-            return 'var(--text-secondary)';
-    }
 }
 
 function EmptyState({

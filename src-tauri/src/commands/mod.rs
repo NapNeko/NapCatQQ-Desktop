@@ -79,7 +79,7 @@ pub async fn connect_remote_host(
     // test_connection 会真正建立 SSH 连接并缓存。
     let _report = state
         .server_manager
-        .test_connection(&request.remote_id, request.password)
+        .test_connection(&request.remote_id, request.password, true)
         .await?;
 
     Ok(RemoteHostConnectionInfo {

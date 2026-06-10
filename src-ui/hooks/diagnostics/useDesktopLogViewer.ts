@@ -20,25 +20,15 @@ export function useDesktopLogViewer(enabled: boolean) {
     const [autoScroll, setAutoScroll] = useState(true);
     const [fontSize, setFontSize] = useState(DEFAULT_FONT);
     const [opening, setOpening] = useState(false);
-    const viewportRef = useRef<HTMLPreElement>(null);
+    const viewportRef = useRef<HTMLDivElement>(null);
 
     const filtered = useMemo(() => filterLogs(logs, query, 'all', 'all'), [logs, query]);
-
-    const displayText = useMemo(
-        () =>
-            filtered.length > 0
-                ? filtered
-                      .map((e) => e.text.replace(/\r?\n+$/, ''))
-                      .join('\n')
-                : '',
-        [filtered],
-    );
 
     useEffect(() => {
         if (!autoScroll || !enabled) return;
         const el = viewportRef.current;
         if (el) el.scrollTop = el.scrollHeight;
-    }, [displayText, autoScroll, enabled]);
+    }, [filtered.length, autoScroll, enabled]);
 
     const onOpenLocation = useCallback(async () => {
         setOpening(true);
@@ -92,7 +82,7 @@ export function useDesktopLogViewer(enabled: boolean) {
         filteredCount: filtered.length,
         copyDisabled: filtered.length === 0,
         emptyKind,
-        displayText,
+        filtered,
         viewportRef,
     };
 }

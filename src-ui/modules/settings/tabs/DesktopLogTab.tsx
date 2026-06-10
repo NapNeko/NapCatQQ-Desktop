@@ -1,18 +1,36 @@
-// 设置 · 日志 Tab：canvas 与 inset 混色平面 + 轻边框，避免整块深灰或过亮 field。
+// 设置 · 日志 Tab：grid 行布局（与 Bot 日志页同一套行高/列宽策略）。
 
+import type { Ref, RefObject } from 'react';
 import { ScrollText } from 'lucide-react';
-import type { DesktopLogViewer } from '../../../hooks/diagnostics/useDesktopLogViewer';
+import type { LogEntry } from '../../../core/domain/events/log-buffer';
+import {
+    LOG_LEVEL_SHORT,
+    levelBarColor,
+    levelLabelColor,
+    lineTextColor,
+} from '../../../shared/log/log-level-display';
 
-/** 比纯 inset 浅、比 field/画布更有阅读区层次（仅本 Tab）。 */
 const LOG_SURFACE =
     'bg-[color-mix(in_srgb,var(--surface-canvas)_76%,var(--surface-inset)_24%)]';
 
-type Props = Pick<
-    DesktopLogViewer,
-    'emptyKind' | 'displayText' | 'fontSize' | 'viewportRef' | 'error'
->;
+/** 列表里只显示时分秒，完整时间在 title；避免宽时间列留白造成「和 INFO 隔很远」。 */
+function displayTime(timestamp: string): string {
+    const t = timestamp.trim();
+    const m = t.match(/(\d{2}:\d{2}:\d{2})\s*$/);
+    return m ? m[1] : t;
+}
 
-export function DesktopLogTab({ emptyKind, displayText, fontSize, viewportRef, error }: Props) {
+type Props = {
+    emptyKind: 'loading' | 'error' | 'empty-file' | 'no-match' | 'has';
+    entries: LogEntry[];
+    fontSize: number;
+    viewportRef: RefObject<HTMLDivElement | null>;
+    error: string | null;
+};
+
+export function DesktopLogTab({ emptyKind, entries, fontSize, viewportRef, error }: Props) {
+    const rowPx = Math.max(20, Math.round(fontSize * 1.5));
+
     return (
         <div
             className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50 ${LOG_SURFACE}`}
@@ -20,23 +38,80 @@ export function DesktopLogTab({ emptyKind, displayText, fontSize, viewportRef, e
             {emptyKind !== 'has' ? (
                 <LogEmptyState kind={emptyKind} message={error ?? undefined} />
             ) : (
-                <pre
-                    ref={viewportRef}
+                <div
+                    ref={viewportRef as Ref<HTMLDivElement>}
                     role="log"
-                    aria-live="polite"
+                    aria-live="off"
                     aria-label="桌面端调试日志"
-                    className="scrollbar-hide m-0 min-h-0 flex-1 overflow-auto whitespace-pre px-4 py-3 font-mono text-text-primary/85"
+                    className="scrollbar-hide min-h-0 flex-1 overflow-auto bg-inset/30 px-4 py-4"
                     style={{
-                        fontSize: `${fontSize}px`,
                         fontFamily: 'var(--font-mono)',
-                        lineHeight: 1.45,
+                        fontSize: `${fontSize}px`,
+                        lineHeight: `${rowPx}px`,
                     }}
                 >
-                    {displayText}
-                </pre>
+                    {entries.map((e) => (
+                        <DesktopLogLine key={e.id} entry={e} rowPx={rowPx} />
+                    ))}
+                </div>
             )}
         </div>
     );
+}
+
+function DesktopLogLine({ entry, rowPx }: { entry: LogEntry; rowPx: number }) {
+    const level = entry.level;
+    const label = desktopLevelLabel(entry);
+    const timeShort = displayTime(entry.timestamp);
+    const timeFull = entry.timestamp || '—';
+
+    return (
+        <div
+            className="group grid items-center gap-x-1.5 px-1 hover:bg-elevated/80"
+            style={{
+                height: rowPx,
+                gridTemplateColumns: '3px 4.5rem 1.75rem minmax(0, 1fr)',
+            }}
+        >
+            <span
+                className="h-3 w-[3px] shrink-0 justify-self-center"
+                style={{ background: levelBarColor(level) }}
+            />
+            <span
+                className="truncate text-text-tertiary"
+                style={{ fontSize: Math.max(10, rowPx - 7) }}
+                title={timeFull}
+            >
+                {timeShort || '—'}
+            </span>
+            <span
+                className="font-semibold uppercase"
+                style={{
+                    fontSize: Math.max(9, rowPx - 8),
+                    color: levelLabelColor(level),
+                }}
+            >
+                {label}
+            </span>
+            <span
+                className="truncate"
+                style={{ color: lineTextColor(level) }}
+                title={entry.text}
+            >
+                {entry.text || ' '}
+            </span>
+        </div>
+    );
+}
+
+function desktopLevelLabel(entry: LogEntry): string {
+    if (entry.levelTag) {
+        const inner = entry.levelTag.replace(/^\[|\]$/g, '').trim().toUpperCase();
+        if (inner === 'INFO') return 'INF';
+        if (inner.length <= 3) return inner;
+        return inner.slice(0, 3);
+    }
+    return LOG_LEVEL_SHORT[entry.level];
 }
 
 function LogEmptyState({

@@ -82,7 +82,6 @@ pub fn read_tail_text(path: &Path, max_bytes: usize) -> std::io::Result<String> 
 
 /// 将 legacy 六段式完整行压成设置页可读 preview（委托 ncd-log）。
 pub fn format_preview_line(line: &str, inherited_level: Option<&str>) -> (Option<String>, String) {
-    let newline = if line.ends_with('\n') { "\n" } else { "" };
     let raw = line.trim_end_matches('\n');
     let parts: Vec<&str> = raw.splitn(6, " | ").collect();
     if parts.len() != 6 {

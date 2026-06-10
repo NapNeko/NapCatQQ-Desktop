@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use ncd_log::facet::{LogSource, LogType};
+use ncd_log::facet::LogType;
 use ncd_log::format_line;
 use ncd_log::{log_source_from_target, short_module_from_target};
 use tracing::field::{Field, Visit};

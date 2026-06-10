@@ -545,10 +545,13 @@ impl ServerManager {
     }
 
     /// 测试 SSH 连接：握手 + 认证 + 执行 `uname -a` 拿 OS 信息。
+    ///
+    /// `log_probe`：为 false 时不写「正在测试 SSH」类 INFO（`ensure_connected` 自动重试用）。
     pub async fn test_connection(
         &self,
         id: &str,
         password: Option<String>,
+        log_probe: bool,
     ) -> Result<ProbeReport, String> {
         let all = self.repo.load().await;
         let profile = all
@@ -558,13 +561,15 @@ impl ServerManager {
             .clone();
 
         let start = std::time::Instant::now();
-        info!(
-            target: "ncd_runtime::server_manager",
-            server_id = %id,
-            host = %profile.host,
-            port = profile.port,
-            "正在测试 SSH 连接"
-        );
+        if log_probe {
+            info!(
+                target: "ncd_runtime::server_manager",
+                server_id = %id,
+                host = %profile.host,
+                port = profile.port,
+                "正在测试 SSH 连接"
+            );
+        }
         let credentials = self.build_credentials(&profile, password.as_deref())?;
         let config = ConnectionConfig::new(
             &profile.host,
@@ -611,13 +616,15 @@ impl ServerManager {
             .insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
 
-        info!(
-            target: "ncd_runtime::server_manager",
-            server_id = %id,
-            latency_ms,
-            os = os_info.as_deref().unwrap_or(""),
-            "SSH 连接测试成功"
-        );
+        if log_probe {
+            info!(
+                target: "ncd_runtime::server_manager",
+                server_id = %id,
+                latency_ms,
+                os = os_info.as_deref().unwrap_or(""),
+                "SSH 连接测试成功"
+            );
+        }
 
         Ok(ProbeReport {
             success: true,
@@ -697,7 +704,7 @@ impl ServerManager {
             return Ok(host);
         }
 
-        match self.test_connection(id, None).await {
+        match self.test_connection(id, None, false).await {
             Ok(report) if report.success => self
                 .get_host(id)
                 .await
