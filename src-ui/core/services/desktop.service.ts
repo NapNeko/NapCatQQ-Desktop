@@ -4,6 +4,11 @@ import type { SnowLumaWebuiEndpoint } from '../ipc/generated/SnowLumaWebuiEndpoi
 import { preferencesStore } from '../../hooks/preferences/preferencesStore';
 import { invoke, isTauri } from '../ipc/transport';
 
+export interface LogSnapshot {
+    lines: string[];
+    total_lines: number;
+}
+
 type WindowController = {
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
@@ -101,6 +106,31 @@ export const trayService = {
 export const diagnosticsService = {
     publishDemoEvent: (): Promise<void> => invoke<void>('publish_demo_event'),
     publishRuntimeStatus: (): Promise<void> => invoke<void>('publish_runtime_status'),
+};
+
+export const desktopLogService = {
+    tailLog: async (
+        lines?: number,
+        levelFilter?: { level?: string },
+    ): Promise<LogSnapshot> => {
+        if (isTauri) {
+            return invoke<LogSnapshot>('tail_desktop_log', {
+                lines: lines ?? 2000,
+                levelFilter: levelFilter ?? null,
+            });
+        }
+        return {
+            lines: [
+                '26-06-10 12:00:00 | [INFO] | [ NONE_TYPE ] | [ CORE ] | [desktop > tracing] | 浏览器预览：Desktop 日志需在 Tauri 中查看\n',
+            ],
+            total_lines: 1,
+        };
+    },
+
+    openLogLocation: async (): Promise<string> => {
+        if (isTauri) return invoke<string>('open_desktop_log_location');
+        return '';
+    },
 };
 
 export const snowlumaService = {

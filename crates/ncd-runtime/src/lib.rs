@@ -6,6 +6,7 @@ pub mod bot_config_repo_impl;
 pub mod bot_manager;
 pub mod config_drift;
 pub mod config_store_impl;
+pub mod desktop_log;
 pub mod events;
 pub mod host_resolver;
 pub mod legacy_discovery;

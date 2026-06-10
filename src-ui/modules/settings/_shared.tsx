@@ -26,39 +26,58 @@ export function SettingsTabSections({ children }: { children: ReactNode }) {
     return <div className="flex w-full flex-col gap-14">{children}</div>;
 }
 
+function SettingsSectionHeader({
+    title,
+    description,
+}: {
+    title: string;
+    description?: ReactNode;
+}) {
+    return (
+        <div className="space-y-1.5">
+            <div className="flex items-center gap-2.5">
+                <span
+                    className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/45"
+                    aria-hidden
+                />
+                <h2 className="text-[13.5px] font-semibold leading-none tracking-tight text-text">
+                    {title}
+                </h2>
+            </div>
+            {description && (
+                <p className="pl-3 text-[12px] leading-relaxed text-text-tertiary">
+                    {description}
+                </p>
+            )}
+        </div>
+    );
+}
+
 /** Tab 内分组：子标题（带轻标记）+ 左侧引导线下的平铺字段。 */
 export function SettingsSection({
     title,
     description,
     children,
+    layout = 'fields',
 }: {
     title: string;
     description?: ReactNode;
     children: ReactNode;
+    /** fields：左引导线 + FieldRow 分隔；panel：全宽内容区（日志/大面板，勿套竖线）。 */
+    layout?: 'fields' | 'panel';
 }) {
     return (
         <section className="space-y-4">
-            <div className="space-y-1.5">
-                <div className="flex items-center gap-2.5">
-                    <span
-                        className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/45"
-                        aria-hidden
-                    />
-                    <h2 className="text-[13.5px] font-semibold leading-none tracking-tight text-text">
-                        {title}
-                    </h2>
+            <SettingsSectionHeader title={title} description={description} />
+            {layout === 'panel' ? (
+                <div className="min-w-0">{children}</div>
+            ) : (
+                <div className="border-l border-border-subtle/80 pl-4 sm:pl-5">
+                    <div className="flex flex-col divide-y divide-border-subtle/70">
+                        {children}
+                    </div>
                 </div>
-                {description && (
-                    <p className="pl-3 text-[12px] leading-relaxed text-text-tertiary">
-                        {description}
-                    </p>
-                )}
-            </div>
-            <div className="border-l border-border-subtle/80 pl-4 sm:pl-5">
-                <div className="flex flex-col divide-y divide-border-subtle/70">
-                    {children}
-                </div>
-            </div>
+            )}
         </section>
     );
 }

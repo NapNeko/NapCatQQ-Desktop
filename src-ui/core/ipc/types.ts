@@ -273,6 +273,10 @@ type DomainEventBody =
         kind: 'docker_deploy_progress';
         task_id: string;
         event: ProgressEvent;
+    }
+    | {
+        kind: 'desktop_log_appended';
+        line: string;
     };
 
 // 所有发到 webview 的 IPC 事件 payload 都带顶层 v 版本号 envelope(R14:版本化)。

@@ -51,6 +51,9 @@ pub enum DomainEventKind {
     /// 生成，不绑 bot。
     #[serde(rename = "docker_deploy_progress")]
     DockerDeployProgress,
+    /// 桌面端会话日志追加（设置页 Desktop 日志 Tab）。
+    #[serde(rename = "desktop_log_appended")]
+    DesktopLogAppended,
 }
 
 /// 描述 NapCat WebUI 登录失效的原因。
@@ -189,6 +192,8 @@ pub enum DomainEvent {
         task_id: String,
         event: ProgressEvent,
     },
+    #[serde(rename = "desktop_log_appended")]
+    DesktopLogAppended { line: String },
 }
 
 /// IPC 事件 envelope 版本号(R14:所有发到 webview 的事件 payload 带顶层 v:u32)。
@@ -233,6 +238,7 @@ impl DomainEvent {
             Self::SnowLumaDaemonLog { .. } => DomainEventKind::SnowLumaDaemonLog,
             Self::ComponentActionProgress { .. } => DomainEventKind::ComponentActionProgress,
             Self::DockerDeployProgress { .. } => DomainEventKind::DockerDeployProgress,
+            Self::DesktopLogAppended { .. } => DomainEventKind::DesktopLogAppended,
         }
     }
 
@@ -257,6 +263,7 @@ impl DomainEvent {
             Self::SnowLumaDaemonLog { .. } => "snowluma_daemon_log",
             Self::ComponentActionProgress { .. } => "component_action_progress",
             Self::DockerDeployProgress { .. } => "docker_deploy_progress",
+            Self::DesktopLogAppended { .. } => "desktop_log_appended",
         }
     }
 
@@ -284,6 +291,7 @@ impl DomainEvent {
             // task 级事件，不绑定具体 Bot；前端按 task_id 订阅 / 路由。
             Self::ComponentActionProgress { .. } => None,
             Self::DockerDeployProgress { .. } => None,
+            Self::DesktopLogAppended { .. } => None,
         }
     }
 
@@ -454,6 +462,10 @@ impl DomainEvent {
             task_id: task_id.into(),
             event,
         }
+    }
+
+    pub fn desktop_log_appended(line: impl Into<String>) -> Self {
+        Self::DesktopLogAppended { line: line.into() }
     }
 }
 
@@ -767,6 +779,7 @@ mod tests {
                     total_steps: 5,
                 }),
             ),
+            DomainEvent::desktop_log_appended("desktop line"),
         ];
         for event in &all {
             let name = event.tauri_event_name();

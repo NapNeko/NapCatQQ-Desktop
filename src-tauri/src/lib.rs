@@ -16,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod commands;
+pub mod desktop_log;
 pub mod runtime;
 
 pub use bootstrap::{build_snapshot, build_snapshot_for_data_root};
@@ -44,6 +45,12 @@ pub fn run() {
     let data_root = bootstrap::resolve_data_root();
     let snapshot = build_snapshot_for_data_root(&data_root);
     let event_bus = BroadcastEventBus::default();
+    desktop_log::init_desktop_logging(&data_root, event_bus.clone());
+    desktop_log::write_session_line(
+        "INFO",
+        "ncd::desktop",
+        &format!("NapCatQQ Desktop 已启动，data_root={}", data_root.display()),
+    );
     let runtime = runtime::AppRuntime::new(&data_root, event_bus.clone());
     let runtime_watcher = runtime.clone();
 
@@ -182,20 +189,20 @@ pub fn run() {
                     let event_name = event.tauri_event_name();
                     // 带顶层 v envelope 序列化(R14):payload 形如 {"v":1,"kind":...}。
                     if let Ok(payload) = event.to_envelope_json() {
-                        // 诊断日志：确认事件链是否真的把事件发到 webview。
-                        // 稳定后可改成 tracing::debug。
-                        eprintln!(
-                            "[event-emit] {} bot={:?} payload_len={}",
-                            event_name,
-                            event.bot_id().map(|b| b.as_str().to_string()),
-                            payload.len()
-                        );
                         let emit_result = handle.emit(event_name, payload);
                         if let Err(err) = emit_result {
-                            eprintln!("[event-emit] FAILED to emit {event_name}: {err}");
+                            desktop_log::write_session_line(
+                                "WARN",
+                                "ncd::event_emit",
+                                &format!("FAILED to emit {event_name}: {err}"),
+                            );
                         }
                     } else {
-                        eprintln!("[event-emit] FAILED to serialize event {event_name}");
+                        desktop_log::write_session_line(
+                            "WARN",
+                            "ncd::event_emit",
+                            &format!("FAILED to serialize event {event_name}"),
+                        );
                     }
                 }
             });
@@ -210,20 +217,32 @@ pub fn run() {
                 match bot_manager_bootstrap.bootstrap().await {
                     Ok(result) => {
                         if !result.skipped.is_empty() {
-                            eprintln!(
-                                "[bot_manager] bootstrap skipped {} bot(s) (over limit)",
-                                result.skipped.len()
+                            desktop_log::write_session_line(
+                                "WARN",
+                                "ncd::bot_manager",
+                                &format!(
+                                    "bootstrap skipped {} bot(s) (over limit)",
+                                    result.skipped.len()
+                                ),
                             );
                         }
                         if !result.started.failed.is_empty() {
-                            eprintln!(
-                                "[bot_manager] bootstrap auto-start failed for {} bot(s)",
-                                result.started.failed.len()
+                            desktop_log::write_session_line(
+                                "WARN",
+                                "ncd::bot_manager",
+                                &format!(
+                                    "bootstrap auto-start failed for {} bot(s)",
+                                    result.started.failed.len()
+                                ),
                             );
                         }
                     }
                     Err(err) => {
-                        eprintln!("[bot_manager] bootstrap failed: {err}");
+                        desktop_log::write_session_line(
+                            "EROR",
+                            "ncd::bot_manager",
+                            &format!("bootstrap failed: {err}"),
+                        );
                     }
                 }
             });
@@ -250,11 +269,19 @@ pub fn run() {
             });
 
             if let Err(err) = commands::window::apply_main_window_startup_geometry(&app.handle()) {
-                eprintln!("[window] startup geometry failed: {err}");
+                desktop_log::write_session_line(
+                    "WARN",
+                    "ncd::window",
+                    &format!("startup geometry failed: {err}"),
+                );
             }
 
             if let Err(err) = commands::tray::attach_tray(&app.handle()) {
-                eprintln!("[tray] attach failed: {err}");
+                desktop_log::write_session_line(
+                    "WARN",
+                    "ncd::tray",
+                    &format!("attach failed: {err}"),
+                );
             }
 
             Ok(())
@@ -293,6 +320,8 @@ pub fn run() {
             commands::get_remote_webui_endpoint,
             commands::list_remote_files,
             commands::open_data_dir,
+            commands::desktop_log::open_desktop_log_location,
+            commands::desktop_log::tail_desktop_log,
             commands::publish_demo_event,
             commands::publish_runtime_status,
             commands::release::get_release_snapshot,

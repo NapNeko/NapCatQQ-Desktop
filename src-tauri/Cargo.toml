@@ -24,6 +24,8 @@ sysinfo = "0.31"
 ts-rs = { version = "12", features = ["serde-compat"] }
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = "0.4"
 base64 = "0.22"
 netstat2 = "0.9"
 async-trait = "0.1"

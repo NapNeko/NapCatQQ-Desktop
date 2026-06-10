@@ -2,6 +2,7 @@ pub mod app_settings;
 pub mod bot;
 pub mod components;
 pub mod config_transfer;
+pub mod desktop_log;
 pub mod docker;
 pub mod host_resolve;
 pub mod release;
