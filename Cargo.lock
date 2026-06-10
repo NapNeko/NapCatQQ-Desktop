@@ -2935,6 +2935,7 @@ dependencies = [
  "ncd-deploy",
  "ncd-domain",
  "ncd-host",
+ "ncd-network",
  "ncd-test-support",
  "ncd-traits",
  "netstat2",

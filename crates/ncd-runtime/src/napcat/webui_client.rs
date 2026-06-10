@@ -231,6 +231,7 @@ impl ReqwestNapCatWebUiClient {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .pool_idle_timeout(Duration::from_secs(30))
+            .no_proxy()
             .build()
             .map_err(NapCatWebUiError::from)?;
         Ok(Self { client })

@@ -17,6 +17,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo, ReleaseSnapshot};
+use ncd_network::{retry_with_backoff, NetworkError, RetryPolicy, shared_client};
 use serde::Deserialize;
 use tracing::warn;
 
@@ -24,7 +25,6 @@ const CACHE_TTL_SECS: u64 = 3600;
 const CACHE_FILE_NAME: &str = "release-snapshot.json";
 const CACHE_DIR_NAME: &str = "cache";
 const HTTP_TIMEOUT_SECS: u64 = 5;
-const USER_AGENT: &str = concat!("NapCatQQ-Desktop/", env!("CARGO_PKG_VERSION"));
 
 const NAPCAT_RELEASES_URL: &str =
     "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest";
@@ -58,14 +58,7 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
         }
     }
 
-    let client = match build_http_client() {
-        Ok(client) => client,
-        Err(err) => {
-            warn!(?err, "release snapshot http client build failed");
-            // 客户端构造失败极罕见（rustls root store），回落到老缓存或 Default。
-            return read_cache(data_root).unwrap_or_default();
-        }
-    };
+    let client = shared_client();
 
     let (napcat, snowluma, desktop) = tokio::join!(
         fetch_one(&client, NAPCAT_RELEASES_URL, token),
@@ -101,14 +94,6 @@ fn current_unix_ts() -> u64 {
         .unwrap_or(0)
 }
 
-fn build_http_client() -> Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-        .pool_idle_timeout(Duration::from_secs(30))
-        .user_agent(USER_AGENT)
-        .build()
-}
-
 /// GitHub releases API 单条记录子集。
 ///
 /// 仅取本模块需要的字段，其它字段（author / draft 等）显式忽略。`assets`
@@ -140,32 +125,45 @@ async fn fetch_one(
     url: &str,
     token: Option<&str>,
 ) -> Option<ReleaseInfo> {
-    let mut request = client.get(url);
+    let policy = RetryPolicy::default();
+    let url_owned = url.to_string();
+    let token_owned = token.map(|s| s.to_string());
+    match retry_with_backoff(&policy, || {
+        let client = client;
+        let url = url_owned.clone();
+        let token = token_owned.as_deref();
+        async move { release_fetch_attempt(client, &url, token).await }
+    })
+    .await
+    {
+        Ok(info) => Some(info),
+        Err(err) => {
+            warn!(url, ?err, "release fetch failed after retries");
+            None
+        }
+    }
+}
+
+async fn release_fetch_attempt(
+    client: &reqwest::Client,
+    url: &str,
+    token: Option<&str>,
+) -> Result<ReleaseInfo, NetworkError> {
+    let mut request = client
+        .get(url)
+        .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS));
     if let Some(token) = token.map(str::trim).filter(|t| !t.is_empty()) {
         request = request.bearer_auth(token);
     }
-    let response = match request.send().await {
-        Ok(r) => r,
-        Err(err) => {
-            warn!(url, ?err, "release fetch failed");
-            return None;
-        }
-    };
+    let response = request.send().await?;
 
     if !response.status().is_success() {
-        warn!(url, status = %response.status(), "release fetch non-2xx");
-        return None;
+        return Err(NetworkError::Status(response.status().as_u16()));
     }
 
-    let dto: GhReleaseDto = match response.json().await {
-        Ok(dto) => dto,
-        Err(err) => {
-            warn!(url, ?err, "release fetch json decode failed");
-            return None;
-        }
-    };
+    let dto: GhReleaseDto = response.json().await.map_err(|e| NetworkError::Http(e.to_string()))?;
 
-    Some(ReleaseInfo {
+    Ok(ReleaseInfo {
         version: strip_v_prefix(&dto.tag_name).to_string(),
         tag: dto.tag_name.clone(),
         published_at: dto

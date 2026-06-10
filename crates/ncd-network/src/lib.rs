@@ -20,12 +20,14 @@ pub mod mirror;
 pub mod progress;
 pub mod range;
 pub mod race;
+pub mod retry;
 pub mod speed;
 
 pub use chunked::{download_smart, ChunkedConfig, CHUNKED_THRESHOLD, DEFAULT_CHUNK_PARTS};
 pub use client::shared_client;
 pub use download::{download_with_resume, AggregatedProgress, DownloadConfig};
 pub use error::NetworkError;
+pub use retry::{is_retryable, retry_with_backoff, RetryPolicy};
 pub use mirror::{build_mirror_urls, DEFAULT_MIRROR_PREFIXES};
 pub use progress::{DownloadProgressSink, DownloadStage, NoopProgressSink, ProgressUpdate};
 pub use race::{download_with_mirror_race, MirrorRaceConfig};
