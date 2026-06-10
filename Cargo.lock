@@ -2910,6 +2910,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ncd-log"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
 name = "ncd-network"
 version = "0.1.0"
 dependencies = [
@@ -2935,6 +2942,7 @@ dependencies = [
  "aes-gcm",
  "async-trait",
  "base64 0.22.1",
+ "chrono",
  "dirs 5.0.1",
  "encoding_rs",
  "futures-util",
@@ -2944,6 +2952,7 @@ dependencies = [
  "ncd-deploy",
  "ncd-domain",
  "ncd-host",
+ "ncd-log",
  "ncd-network",
  "ncd-test-support",
  "ncd-traits",
@@ -2966,6 +2975,7 @@ dependencies = [
  "ts-rs",
  "winreg 0.52.0",
  "wiremock",
+ "zip",
 ]
 
 [[package]]
@@ -2980,6 +2990,7 @@ dependencies = [
  "ncd-deploy",
  "ncd-domain",
  "ncd-host",
+ "ncd-log",
  "ncd-runtime",
  "ncd-test-support",
  "netstat2",

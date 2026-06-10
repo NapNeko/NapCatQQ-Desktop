@@ -1,0 +1,9 @@
+[package]
+name = "ncd-log"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Desktop session log line format (legacy six-field compatible)"
+
+[dependencies]
+chrono = "0.4"
