@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use ncd_component::{ActionCtx, ProgressKind};
+use ncd_component::{ActionCtx, ProgressKind, ProgressLogLevel};
 use ncd_host::Host;
 
 use crate::error::DeployError;
@@ -72,7 +72,11 @@ impl DeployPlan {
                         ok: false,
                     })
                     .await;
-                    ctx.warn(format!("step '{}' failed: {err_str}", step.name)).await;
+                    ctx.log(
+                        ProgressLogLevel::Error,
+                        format!("step '{}' failed: {err_str}", step.name),
+                    )
+                    .await;
 
                     if step.fail_fast {
                         // 触发回滚
