@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use serde_json::Value;
+use tracing::info;
 
 use crate::app_config_migration::migrate_app_config;
 use crate::bot_config_migration::migrate_bot_config;
@@ -48,9 +49,11 @@ impl<'a> MigrationOrchestrator<'a> {
 
     pub fn run(&self) -> Result<MigrationReport, MigrationError> {
         if self.store.load_schema_version()? == crate::kinds::SchemaVersion::CURRENT {
+            info!(target: "ncd_runtime::migration", "schema current, skip migration");
             return Ok(MigrationReport::clean());
         }
 
+        info!(target: "ncd_runtime::migration", "legacy migration run starting");
         let discovery = LegacyDiscovery::new(self.probe);
         let selections = discovery.discover()?;
         let Some(selection) = selections.into_iter().next() else {

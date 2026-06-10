@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
+use tracing::info;
 use ts_rs::TS;
 
 use ncd_host::remote::{
@@ -356,6 +357,13 @@ impl ServerManager {
         }
         all.push(profile.clone());
         self.repo.save(&all).await?;
+        info!(
+            target: "ncd_runtime::server_manager",
+            server_id = %profile.id,
+            host = %profile.host,
+            port = profile.port,
+            "远端主机已加入档案"
+        );
         Ok(profile)
     }
 
@@ -507,6 +515,7 @@ impl ServerManager {
             return Err(format!("server not found: {id}"));
         }
         self.repo.save(&all).await?;
+        info!(target: "ncd_runtime::server_manager", server_id = %id, "远端主机档案已删除");
         let _ = self.credentials.delete_password(id);
         let _ = self.credentials.delete_sudo_password(id);
         self.hosts.write().await.remove(id);
@@ -549,6 +558,13 @@ impl ServerManager {
             .clone();
 
         let start = std::time::Instant::now();
+        info!(
+            target: "ncd_runtime::server_manager",
+            server_id = %id,
+            host = %profile.host,
+            port = profile.port,
+            "正在测试 SSH 连接"
+        );
         let credentials = self.build_credentials(&profile, password.as_deref())?;
         let config = ConnectionConfig::new(
             &profile.host,
@@ -594,6 +610,14 @@ impl ServerManager {
             .await
             .insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
+
+        info!(
+            target: "ncd_runtime::server_manager",
+            server_id = %id,
+            latency_ms,
+            os = os_info.as_deref().unwrap_or(""),
+            "SSH 连接测试成功"
+        );
 
         Ok(ProbeReport {
             success: true,
@@ -660,6 +684,11 @@ impl ServerManager {
             return Ok(host);
         }
 
+        info!(
+            target: "ncd_runtime::server_manager",
+            server_id = %id,
+            "远端未缓存连接，正在自动建立 SSH（组件探测/安装会复用此连接）"
+        );
         let lock = self.connect_lock_for(id).await;
         let _guard = lock.lock().await;
 

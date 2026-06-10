@@ -19,6 +19,7 @@
 use ncd_domain::DockerInstallReport;
 use ncd_host::remote::{probe_sudo, SudoAccess};
 use ncd_host::{Host, HostCommand, Os};
+use tracing::info;
 
 use super::cli::{DockerCli, DockerCliError};
 
@@ -40,6 +41,11 @@ pub async fn install_docker(
     host: &dyn Host,
     sudo_password: Option<&str>,
 ) -> Result<DockerInstallReport, DockerCliError> {
+    info!(
+        target: "ncd_deploy::docker",
+        os = ?host.os(),
+        "install_docker"
+    );
     let cli = DockerCli::new(host);
 
     // 已装 + daemon 在跑 + compose v2 插件齐全才算幂等就绪直接返回。只看

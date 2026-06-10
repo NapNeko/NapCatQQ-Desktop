@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use tracing::info;
+
 use crate::errors::MigrationError;
 use crate::models::MigrationWarning;
 use crate::traits::PathProbe;
@@ -40,6 +42,11 @@ impl<'a> LegacyDiscovery<'a> {
             }
         }
         selections.sort_by(|left, right| selection_score(right).cmp(&selection_score(left)));
+        info!(
+            target: "ncd_runtime::legacy_discovery",
+            candidates = selections.len(),
+            "legacy config roots discovered"
+        );
         Ok(selections)
     }
 

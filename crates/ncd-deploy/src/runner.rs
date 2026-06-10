@@ -4,6 +4,8 @@
 
 use std::time::Instant;
 
+use tracing::info;
+
 use ncd_component::{ActionCtx, ProgressKind, ProgressLogLevel};
 use ncd_host::Host;
 
@@ -22,6 +24,12 @@ impl DeployPlan {
         ctx: &mut ActionCtx,
     ) -> Result<DeployOutcome, DeployError> {
         self.validate()?;
+
+        info!(
+            target: "ncd_deploy::runner",
+            steps = self.steps.len(),
+            "deploy plan run started"
+        );
 
         let total_start = Instant::now();
         let total_steps = self.steps.len() as u32;
@@ -99,6 +107,11 @@ impl DeployPlan {
         }
 
         ctx.emit(ProgressKind::Finished { ok: true }).await;
+        info!(
+            target: "ncd_deploy::runner",
+            elapsed_ms = elapsed_ms(total_start),
+            "deploy plan run finished ok"
+        );
         Ok(DeployOutcome::new(outcomes, elapsed_ms(total_start)))
     }
 }

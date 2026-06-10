@@ -26,6 +26,7 @@ use russh::keys::{PublicKeyBase64, key};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
+use tracing::info;
 
 use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
 use crate::error::HostError;
@@ -202,8 +203,17 @@ impl RemoteLinuxHost {
             }
         }
 
+        let id_str = id.into();
+        info!(
+            target: "ncd_host::remote",
+            host_id = %id_str,
+            host = %config.host,
+            port = config.port,
+            "ssh connect ok"
+        );
+
         Ok(Self {
-            id: id.into(),
+            id: id_str,
             shell: BashShell,
             handle: Arc::new(Mutex::new(handle)),
             sftp: Arc::new(Mutex::new(None)),

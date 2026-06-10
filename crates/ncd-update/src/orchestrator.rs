@@ -14,6 +14,7 @@ use ncd_domain::SchemaVersion;
 use semver::Version;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tracing::info;
 
 use crate::channel::UpdateChannel;
 use crate::error::UpdateError;
@@ -56,6 +57,7 @@ impl UpdateOrchestrator {
 
     /// 检查更新,验签由 provider 完成。
     pub async fn check(&self, channel: UpdateChannel) -> Result<Option<AvailableUpdate>, UpdateError> {
+        info!(target: "ncd_update", ?channel, "check for updates");
         match self.provider.check(channel).await {
             Ok(Some(u)) => {
                 // 拦截"伪更新":server 返回比当前版本还低/相同的版本号

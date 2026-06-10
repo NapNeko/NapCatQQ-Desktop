@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use rand::RngCore;
 use tokio::sync::RwLock;
+use tracing::{error, info, warn};
 
 use crate::app_config::WebUiPollerSettings;
 use crate::backend_config_renderer::output_paths_for_backend;
@@ -366,6 +367,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 返回 `BootstrapResult`，其中 `skipped` 包含超出 4 开上限而未注册的 Bot ID。
     pub async fn bootstrap(&self) -> Result<BootstrapResult, BotManagerError> {
         let configs = self.repo.list().await?;
+        info!(
+            target: "ncd_runtime::bot_manager",
+            bot_configs = configs.len(),
+            "启动恢复：正在加载 Bot 配置并注册 Actor"
+        );
 
         let mut skipped: Vec<BotId> = Vec::new();
 
@@ -401,6 +407,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         } else {
             self.batch_start(&auto_start_ids).await?
         };
+
+        if !skipped.is_empty() {
+            warn!(
+                target: "ncd_runtime::bot_manager",
+                skipped = skipped.len(),
+                "部分 Bot 超过单机 4 开上限，未注册 Actor"
+            );
+        }
+        info!(
+            target: "ncd_runtime::bot_manager",
+            auto_started_ok = started.succeeded.len(),
+            auto_started_fail = started.failed.len(),
+            skipped = skipped.len(),
+            "Bot 启动恢复完成"
+        );
 
         Ok(BootstrapResult { started, skipped })
     }
@@ -485,6 +506,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 启动指定 Bot（无 drift 决议版本,等价于全部 UseInternal）。
     /// 前置条件：Actor 已存在且处于可启动状态（Stopped / Crashed）。
     pub async fn start_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
+        info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到启动 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
         let config = self.get_required_bot_config(bot_id).await?;
         self.render_backend_config(bot_id, &config, &std::collections::HashMap::new())
@@ -501,6 +523,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 停止指定 Bot。
     pub async fn stop_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
+        info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到停止 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
         let stopping = handle.request_stop().await?;
         self.publish_state_change(&stopping, "stop_requested");
@@ -542,6 +565,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
             Err(err) => {
                 let message = err.to_string();
+                error!(
+                    target: "ncd_runtime::bot_manager",
+                    bot_id = %bot_id,
+                    err = %message,
+                    "停止 Bot 失败（后端 stop 报错）"
+                );
                 let crashed = handle.mark_crashed(message.clone()).await?;
                 self.publish_state_change(&crashed, "stop_failed");
                 self.event_bus.publish(DomainEvent::bot_error(
@@ -565,6 +594,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 错误返回给调用方；`RestartHandle::restart_bot` impl 会把
     /// 错误转为 `DomainEvent::bot_error` 发布给前端。
     pub async fn restart_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
+        info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到重启 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
         let snap = handle.snapshot();
         let config = self.get_required_bot_config(bot_id).await.ok();
@@ -755,6 +785,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let actors = self.actors.read().await;
             !actors.contains_key(&bot_id)
         };
+        info!(
+            target: "ncd_runtime::bot_manager",
+            bot_id = %bot_id,
+            qq_id = config.bot.qq_id,
+            is_new,
+            deployment = ?config.bot.deployment_type,
+            "保存 Bot 配置"
+        );
 
         if is_new {
             let current_count = {
@@ -1264,10 +1302,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 }
                 let running = handle.confirm_running().await?;
                 self.publish_state_change(&running, "start_completed");
+                info!(
+                    target: "ncd_runtime::bot_manager",
+                    bot_id = %bot_id,
+                    "Bot 已启动并就绪"
+                );
                 Ok(running)
             }
             Err(err) => {
                 let message = err.to_string();
+                error!(
+                    target: "ncd_runtime::bot_manager",
+                    bot_id = %bot_id,
+                    err = %message,
+                    "启动 Bot 失败（后端 start 报错）"
+                );
                 let crashed = handle.mark_crashed(message.clone()).await?;
                 self.publish_state_change(&crashed, "start_failed");
                 self.event_bus.publish(DomainEvent::bot_error(
@@ -1292,6 +1341,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// - 不论 stop 是否成功，都会 shutdown 对应的 actor 释放邮箱。
     /// - 任何错误只记录到返回值，不会阻塞其它 Bot 的清理。
     pub async fn shutdown_all(&self) -> BatchResult {
+        info!(target: "ncd_runtime::bot_manager", "应用退出：正在停止所有运行中的 Bot");
         let snapshots: Vec<BotActorSnapshot> = {
             let actors = self.actors.read().await;
             actors.values().map(|h| h.snapshot()).collect()
@@ -1494,6 +1544,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 停止运行中 Bot 必须发生在 repo.delete 前；否则旧 config/backend identity
     /// 丢失后只能按新默认路由停进程，远端或 Docker 场景会留下真实 runtime。
     async fn delete_bot_internal(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
+        info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "删除 Bot 配置与 Actor");
         let qq_id: u64 = bot_id
             .as_str()
             .parse()

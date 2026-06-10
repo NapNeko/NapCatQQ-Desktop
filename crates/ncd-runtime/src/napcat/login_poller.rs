@@ -344,7 +344,7 @@ async fn do_auth_refresh(
             tracing::warn!(
                 bot_id = %bot_id,
                 error = ?err,
-                "napcat webui auth refresh failed"
+                "NapCat WebUI 刷新登录凭证失败"
             );
         }
     }
@@ -395,7 +395,7 @@ async fn do_status_poll(
             return;
         }
         Err(err) => {
-            tracing::warn!(?err, %bot_id, "check_login_status failed");
+            tracing::warn!(?err, %bot_id, "NapCat 登录态查询失败（check_login_status）");
         }
     }
 
@@ -405,7 +405,7 @@ async fn do_status_poll(
             let _ = cmd_tx.try_send(PollerCommand::RequestAuthRefresh);
         }
         Err(err) => {
-            tracing::warn!(?err, %bot_id, "check_online_status failed");
+            tracing::warn!(?err, %bot_id, "NapCat 在线状态查询失败（check_online_status）");
         }
     }
 }

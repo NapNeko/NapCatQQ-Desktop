@@ -19,7 +19,7 @@ use std::time::Duration;
 use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo, ReleaseSnapshot};
 use ncd_network::{retry_with_backoff, NetworkError, RetryPolicy, shared_client};
 use serde::Deserialize;
-use tracing::warn;
+use tracing::{info, warn};
 
 const CACHE_TTL_SECS: u64 = 3600;
 const CACHE_FILE_NAME: &str = "release-snapshot.json";
@@ -65,6 +65,25 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
         fetch_one(&client, SNOWLUMA_RELEASES_URL, token),
         fetch_one(&client, DESKTOP_RELEASES_URL, token),
     );
+
+    let failed: Vec<&str> = [
+        (napcat.is_none(), "NapCat"),
+        (snowluma.is_none(), "SnowLuma"),
+        (desktop.is_none(), "Desktop"),
+    ]
+    .into_iter()
+    .filter(|(bad, _)| *bad)
+    .map(|(_, name)| name)
+    .collect();
+    if !failed.is_empty() {
+        warn!(
+            target: "ncd_runtime::release",
+            repos = %failed.join(", "),
+            "GitHub 版本检查失败（将使用缓存或留空），可检查网络或配置 GitHub PAT"
+        );
+    } else {
+        info!(target: "ncd_runtime::release", "GitHub 版本快照已更新");
+    }
 
     let snapshot = ReleaseSnapshot {
         napcat_latest: napcat,
@@ -138,7 +157,7 @@ async fn fetch_one(
     {
         Ok(info) => Some(info),
         Err(err) => {
-            warn!(url, ?err, "release fetch failed after retries");
+            tracing::debug!(url, ?err, "release fetch attempt failed");
             None
         }
     }

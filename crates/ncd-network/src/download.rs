@@ -20,6 +20,7 @@ use reqwest::{Client, Response};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
+use tracing::info;
 
 use crate::client::shared_client;
 use crate::error::NetworkError;
@@ -84,6 +85,13 @@ pub async fn download_with_client(
 
     let mut part = PartFile::open_or_create(dest).await?;
     let resume_offset = part.existing_bytes;
+    info!(
+        target: "ncd_network::download",
+        dest = %dest.display(),
+        resume_offset,
+        stage = ?cfg.stage,
+        "download start"
+    );
 
     let mut req = client.get(url);
     if resume_offset > 0 {

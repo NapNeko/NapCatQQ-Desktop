@@ -20,6 +20,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use tokio::sync::{Mutex, Notify, broadcast};
+use tracing::info;
 use ts_rs::TS;
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
@@ -204,6 +205,7 @@ impl SnowLumaDaemon {
         self: &Arc<Self>,
         timeout: Duration,
     ) -> Result<Arc<dyn SnowLumaWebUiClient>, SnowLumaDaemonError> {
+        info!(target: "ncd_runtime::snowluma_daemon", "正在确保 SnowLuma 守护进程已就绪");
         // === 1. 状态决策 ===
         let role = {
             let mut inner = self.inner.lock().await;
