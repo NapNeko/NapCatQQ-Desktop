@@ -97,6 +97,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
 
     const invalidate = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['docker'] });
+        queryClient.invalidateQueries({ queryKey: ['docker', 'containers'] });
     }, [queryClient]);
 
     const installMutation = useMutation({

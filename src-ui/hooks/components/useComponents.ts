@@ -171,6 +171,7 @@ function useComponentsData(): ComponentsData {
         refetch: () => {
             void queryClient.invalidateQueries({ queryKey: ['servers'] });
             void queryClient.invalidateQueries({ queryKey: ['docker'] });
+            void queryClient.invalidateQueries({ queryKey: ['docker', 'containers'] });
             void catalogQuery.refetch();
             for (const q of detectQueries) void q.refetch();
         },
