@@ -1,41 +1,38 @@
 //! 桌面会话日志：tracing 落盘（对齐 legacy `<data_root>/log/*.log`）。
-//!
-//! 不从 tracing 层 publish 到事件总线（会与 IPC 转发形成正反馈）。
-//! 设置页通过轮询 `tail_desktop_log` 读文件。
 
-use chrono::Local;
-use ncd_runtime::desktop_log;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::panic;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
-use tracing::field::{Field, Visit};
-use tracing::{Event, Level, Subscriber};
+
+use ncd_log::facet::{LogSource, LogType};
+use ncd_log::format_line;
+use ncd_log::log_source_from_target;
+use ncd_log::short_module_from_target;
+use ncd_runtime::crash_bundle::{write_crash_bundle, CrashBundleInput};
+use ncd_runtime::desktop_log;
+use tracing::{Event, Subscriber};
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::layer::{Context, Layer};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Registry;
 
+use crate::desktop_log_format::{
+    format_tracing_event, map_tracing_level, should_capture_tracing,
+};
+
 static SESSION: OnceLock<Arc<DesktopLogSession>> = OnceLock::new();
+static PANIC_CTX: OnceLock<PanicContext> = OnceLock::new();
+
+struct PanicContext {
+    data_root: PathBuf,
+    app_version: String,
+}
 
 struct DesktopLogSession {
     log_path: PathBuf,
     file: Mutex<std::fs::File>,
-}
-
-struct FieldVisitor {
-    message: String,
-}
-
-impl Visit for FieldVisitor {
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        if field.name() == "message" {
-            self.message = format!("{value:?}");
-            if self.message.starts_with('"') && self.message.ends_with('"') && self.message.len() >= 2 {
-                self.message = self.message[1..self.message.len() - 1].to_string();
-            }
-        }
-    }
 }
 
 struct DesktopLogLayer {
@@ -44,51 +41,19 @@ struct DesktopLogLayer {
 
 impl<S: Subscriber> Layer<S> for DesktopLogLayer {
     fn enabled(&self, metadata: &tracing::Metadata<'_>, _ctx: Context<'_, S>) -> bool {
-        should_capture_tracing(metadata)
+        should_capture_tracing(metadata.target(), metadata.level())
     }
 
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
-        if !should_capture_tracing(event.metadata()) {
+        if !should_capture_tracing(event.metadata().target(), event.metadata().level()) {
             return;
         }
-        let mut visitor = FieldVisitor {
-            message: String::new(),
-        };
-        event.record(&mut visitor);
-        if visitor.message.is_empty() {
-            visitor.message = "(no message)".to_string();
-        }
         let level = map_tracing_level(event.metadata().level());
-        let target = event.metadata().target();
-        let time = Local::now().format("%y-%m-%d %H:%M:%S");
-        let line = format!(
-            "{time} | [{level}] | [ NONE_TYPE ] | [ CORE ] | [{target}] | {}\n",
-            visitor.message
-        );
+        let line = format_tracing_event(event, level);
+        if line.is_empty() {
+            return;
+        }
         write_line_to_session(&self.session, &line);
-    }
-}
-
-/// 禁止记录 IPC 事件转发诊断（曾与 publish 形成正反馈）；其余 INFO+ 写入会话文件。
-fn should_capture_tracing(metadata: &tracing::Metadata<'_>) -> bool {
-    let target = metadata.target();
-    if target.contains("event_emit") {
-        return false;
-    }
-    matches!(
-        *metadata.level(),
-        Level::ERROR | Level::WARN | Level::INFO
-    ) || (cfg!(debug_assertions)
-        && matches!(*metadata.level(), Level::DEBUG | Level::TRACE))
-}
-
-fn map_tracing_level(level: &Level) -> &'static str {
-    match *level {
-        Level::ERROR => "EROR",
-        Level::WARN => "WARN",
-        Level::INFO => "INFO",
-        Level::DEBUG => "DBUG",
-        Level::TRACE => "TRCE",
     }
 }
 
@@ -99,23 +64,22 @@ fn write_line_to_session(session: &DesktopLogSession, line: &str) {
     }
 }
 
-/// 直接写一行（无 tracing 订阅时也可用，例如启动横幅）。
-pub fn write_session_line(level: &str, target: &str, message: &str) {
+/// 直接写一行（无 tracing 订阅时也可用，例如启动横幅、panic、CRIT）。
+pub fn write_session_line(level: &str, position: &str, message: &str) {
     let Some(session) = SESSION.get() else {
         return;
     };
-    let time = Local::now().format("%y-%m-%d %H:%M:%S");
-    let line = format!(
-        "{time} | [{level}] | [ NONE_TYPE ] | [ CORE ] | [{target}] | {message}\n"
-    );
+    let source = log_source_from_target(position);
+    let module = short_module_from_target(position);
+    let line = format_line(level, LogType::NoneType, source, &module, message);
     write_line_to_session(session, &line);
 }
 
-fn create_session_log_file(data_root: &std::path::Path) -> std::io::Result<PathBuf> {
+fn create_session_log_file(data_root: &Path) -> std::io::Result<PathBuf> {
     let dir = desktop_log::desktop_log_dir(data_root);
     fs::create_dir_all(&dir)?;
     let _ = desktop_log::purge_stale_logs(data_root, 7);
-    let stamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
+    let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
     let path = dir.join(format!("{stamp}.log"));
     OpenOptions::new()
         .create(true)
@@ -126,18 +90,63 @@ fn create_session_log_file(data_root: &std::path::Path) -> std::io::Result<PathB
 
 fn default_env_filter() -> EnvFilter {
     let spec = if cfg!(debug_assertions) {
-        "info,ncd_runtime=debug,ncd_host=debug,ncd_component=info,ncd_deploy=info,ncd_tauri=info"
+        "info,ncd_runtime=debug,ncd_host=debug,ncd_component=info,ncd_deploy=info,ncd_network=info,ncd_tauri=info"
     } else {
-        "info,ncd_runtime=info,ncd_host=warn,ncd_component=info,ncd_deploy=info,ncd_tauri=info"
+        "info,ncd_runtime=info,ncd_host=warn,ncd_component=info,ncd_deploy=info,ncd_network=warn,ncd_tauri=info"
     };
     EnvFilter::try_new(spec).unwrap_or_else(|_| EnvFilter::new("info"))
 }
 
-/// 启动期调用一次：注册全局 tracing subscriber，并缓存会话供 tail 命令使用。
-pub fn init_desktop_logging(data_root: &std::path::Path, _bus: ncd_runtime::BroadcastEventBus) {
+fn install_panic_hook(data_root: PathBuf, app_version: String) {
+    let _ = PANIC_CTX.set(PanicContext {
+        data_root,
+        app_version,
+    });
+    let default = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_string())
+            .or_else(|| {
+                info.payload()
+                    .downcast_ref::<String>()
+                    .map(|s| s.clone())
+            })
+            .unwrap_or_else(|| "panic without message".to_string());
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".to_string());
+        let summary = format!("panic at {location}: {payload}");
+        write_session_line("CRIT", "ncd::panic", &summary);
+        if let Some(ctx) = PANIC_CTX.get() {
+            let log_path = SESSION.get().map(|s| s.log_path.clone());
+            let tb = format!("{info}\nlocation={location}\n");
+            if let Ok(bundle) = write_crash_bundle(&CrashBundleInput {
+                trigger: "rust.panic".to_string(),
+                exception_summary: summary.clone(),
+                traceback_text: tb,
+                log_path,
+                data_root: ctx.data_root.clone(),
+                app_version: ctx.app_version.clone(),
+            }) {
+                write_session_line(
+                    "INFO",
+                    "ncd::crash_bundle",
+                    &format!("已生成崩溃诊断包: {}", bundle.display()),
+                );
+            }
+        }
+        default(info);
+    }));
+}
+
+pub fn init_desktop_logging(data_root: &Path, _bus: ncd_runtime::BroadcastEventBus) {
     if SESSION.get().is_some() {
         return;
     }
+    let app_version = env!("CARGO_PKG_VERSION").to_string();
     let log_path = match create_session_log_file(data_root) {
         Ok(p) => p,
         Err(err) => {
@@ -170,18 +179,17 @@ pub fn init_desktop_logging(data_root: &std::path::Path, _bus: ncd_runtime::Broa
         .try_init();
     let _ = SESSION.set(session);
 
+    install_panic_hook(data_root.to_path_buf(), app_version);
+
     write_session_line(
         "INFO",
         "ncd::desktop",
-        &format!(
-            "Desktop 日志会话已开始，文件: {}",
-            log_path.display()
-        ),
+        &format!("Desktop 日志会话已开始，文件: {}", log_path.display()),
     );
     write_session_line(
         "INFO",
         "ncd::desktop",
-        "提示: 旧版 Python 全链路 Logger 尚未 1:1 迁完；本文件记录 tracing(INFO+) 与显式 write_session_line。",
+        "行格式：时间 | 等级 | 来源 模块 | 说明。相同说明 2 秒内只记一条。",
     );
 }
 

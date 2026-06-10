@@ -17,6 +17,7 @@ pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod commands;
 pub mod desktop_log;
+pub mod desktop_log_format;
 pub mod runtime;
 
 pub use bootstrap::{build_snapshot, build_snapshot_for_data_root};
@@ -46,6 +47,11 @@ pub fn run() {
     let snapshot = build_snapshot_for_data_root(&data_root);
     let event_bus = BroadcastEventBus::default();
     desktop_log::init_desktop_logging(&data_root, event_bus.clone());
+    tracing::info!(
+        target: "ncd_tauri",
+        data_root = %data_root.display(),
+        "NapCatQQ Desktop 进程已启动"
+    );
     desktop_log::write_session_line(
         "INFO",
         "ncd::desktop",
