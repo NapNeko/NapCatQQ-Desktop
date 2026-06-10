@@ -146,14 +146,27 @@ impl QQComponent {
                 .arg(format!("command -v {binary}"));
             if let Ok(out) = host.run_to_string(cmd).await {
                 if out.success() && !out.stdout.trim().is_empty() {
+                    if *fmt == PackageFormat::Rpm && !self.command_available(host, "cpio").await {
+                        return Err(ActionError::install_step(
+                            "detect_pkg_format",
+                            "已找到 rpm2cpio，但缺少 cpio，无法解包 LinuxQQ rpm。请在远端执行 sudo dnf install -y rpm2cpio cpio（或 yum 同名包）后重试",
+                        ));
+                    }
                     return Ok(*fmt);
                 }
             }
         }
         Err(ActionError::install_step(
             "detect_pkg_format",
-            "neither dpkg-deb nor rpm2cpio found on host",
+            "远端缺少 LinuxQQ 解包工具：既没有 dpkg-deb，也没有 rpm2cpio + cpio。请先安装 dpkg 或执行 sudo dnf install -y rpm2cpio cpio 后重试",
         ))
+    }
+
+    async fn command_available(&self, host: &dyn Host, binary: &str) -> bool {
+        let cmd = HostCommand::new("sh")
+            .arg("-c")
+            .arg(format!("command -v {binary}"));
+        matches!(host.run_to_string(cmd).await, Ok(out) if out.success() && !out.stdout.trim().is_empty())
     }
 
     fn qq_base_path(&self) -> HostPath {
