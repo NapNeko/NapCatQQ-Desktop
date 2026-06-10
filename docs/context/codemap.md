@@ -61,6 +61,13 @@
 - 模型: `ncd-domain/src/bootstrap.rs` + 路径探测 `ncd-runtime/src/path_probe_impl.rs`
 - 前端: `modules/bootstrap/`(BootstrapPanel+OccupancyChart)+ `hooks/bootstrap/useBootstrap.ts` + `hooks/diagnostics/useResourceMonitor.ts`
 
+### Desktop 会话日志(设置页)
+- 写盘: `src-tauri/src/desktop_log.rs`(tracing layer + panic + `write_session_line`)
+- 行格式: `crates/ncd-log/`(六段 legacy 兼容)
+- 读盘/过滤: `ncd-runtime/src/desktop_log.rs` + IPC `src-tauri/src/commands/desktop_log.rs`
+- 崩溃包: `ncd-runtime/src/crash_bundle.rs` → `<data_root>/output/crash_*.zip`
+- 前端: `modules/settings/tabs/DesktopLogTab.tsx` + `hooks/diagnostics/useDesktopLogViewer.ts`(轮询 tail)
+
 ### 网络下载(被组件/snowluma 复用)
 - `ncd-network/src/*`:`client`(共享 reqwest)/`download`(续传)/`chunked`(切片)/`race`(多镜像竞速)/`mirror`(6 GitHub 镜像)/`progress`/`speed`
 

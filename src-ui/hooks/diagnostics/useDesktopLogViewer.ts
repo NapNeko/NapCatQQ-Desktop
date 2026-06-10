@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesktopLogLevelFilterValue } from '../../core/domain/desktop-log';
 import {
     filterLogs,
-    serializeLogs,
+    serializeDesktopLogs,
 } from '../../core/domain/events/log-buffer';
 import { desktopLogService } from '../../core/services/desktop.service';
 import { useDesktopLogStream } from './useDesktopLogStream';
@@ -27,7 +27,9 @@ export function useDesktopLogViewer(enabled: boolean) {
     const displayText = useMemo(
         () =>
             filtered.length > 0
-                ? filtered.map((e) => e.text).join('\n')
+                ? filtered
+                      .map((e) => e.text.replace(/\r?\n+$/, ''))
+                      .join('\n')
                 : '',
         [filtered],
     );
@@ -53,7 +55,7 @@ export function useDesktopLogViewer(enabled: boolean) {
     const onCopy = useCallback(async () => {
         if (filtered.length === 0) return;
         try {
-            await navigator.clipboard.writeText(serializeLogs(filtered));
+            await navigator.clipboard.writeText(serializeDesktopLogs(filtered));
         } catch (err) {
             // eslint-disable-next-line no-console
             console.warn('复制日志失败:', err);

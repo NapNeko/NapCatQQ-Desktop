@@ -68,7 +68,13 @@ export function SettingsPageNext() {
                 onValueChange={setTab}
                 className="flex min-h-0 flex-1 flex-col"
             >
-                <div className="sticky top-0 z-[5] shrink-0 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
+                <div
+                    className={
+                        tab === 'log'
+                            ? 'sticky top-0 z-[5] shrink-0 border-b border-border-subtle/70 bg-canvas/95 backdrop-blur-sm'
+                            : 'sticky top-0 z-[5] shrink-0 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm'
+                    }
+                >
                     <div className="flex items-center gap-2">
                         <TabsList className="shrink-0 border-b-0">
                             <TabsTrigger value="appearance">外观</TabsTrigger>
@@ -92,7 +98,7 @@ export function SettingsPageNext() {
                 <div
                     className={
                         tab === 'log'
-                            ? 'flex min-h-0 flex-1 flex-col px-0.5 pr-2 pb-4'
+                            ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-0 pr-2 pb-3 pt-2'
                             : 'scrollbar-hide min-h-0 flex-1 overflow-y-auto px-0.5 pr-2'
                     }
                 >
@@ -106,7 +112,7 @@ export function SettingsPageNext() {
 
                     <TabsContent
                         value="log"
-                        className="flex min-h-0 flex-1 flex-col pt-0 focus-visible:outline-none"
+                        className="mt-0 flex min-h-0 flex-1 flex-col pt-0 focus-visible:outline-none"
                     >
                         {tab === 'log' ? (
                             <DesktopLogTab

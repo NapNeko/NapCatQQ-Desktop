@@ -59,7 +59,7 @@ export function DesktopLogToolbar(props: Props) {
     } = props;
 
     return (
-        <div className="flex shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-border-subtle/70 px-2.5 py-1.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-border-subtle/45 bg-[color-mix(in_srgb,var(--surface-canvas)_92%,var(--surface-inset)_8%)] px-2.5 py-1.5">
             <div className="relative min-w-0 w-full basis-full sm:w-auto sm:min-w-[180px] sm:flex-1 sm:basis-auto">
                 <Search
                     size={13}

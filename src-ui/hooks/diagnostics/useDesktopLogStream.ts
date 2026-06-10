@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    buildHistoryEntries,
+    buildDesktopHistoryEntries,
     type LogEntry,
 } from '../../core/domain/events/log-buffer';
 import {
@@ -33,7 +33,7 @@ export function useDesktopLogStream(
                     TAIL_LINES,
                     desktopLevelToIpcFilter(levelFilter),
                 );
-                setLogs(buildHistoryEntries(snap.lines));
+                setLogs(buildDesktopHistoryEntries(snap.lines));
                 setError(null);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);

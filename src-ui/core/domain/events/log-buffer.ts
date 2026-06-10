@@ -88,6 +88,54 @@ function normalizeLevel(raw: string): LogLevel {
     }
 }
 
+// 桌面会话日志 preview：`26-06-10 19:55:40 | [INFO] | [ CORE ] bot_manager | ...`
+const DESKTOP_PREVIEW_LEVEL = /\|\s*\[(EROR|WARN|INFO|DBUG|TRCE|CRIT)\]\s*\|/i;
+
+/// 设置页 Desktop 日志行级别（对齐 legacy EROR/WARN/…）。
+export function parseDesktopLogLevel(line: string): LogLevel {
+    const m = line.match(DESKTOP_PREVIEW_LEVEL);
+    if (!m) {
+        return parseLogLevel(line);
+    }
+    switch (m[1].toUpperCase()) {
+        case 'EROR':
+            return 'error';
+        case 'WARN':
+            return 'warn';
+        case 'INFO':
+            return 'info';
+        case 'DBUG':
+            return 'debug';
+        case 'TRCE':
+            return 'trace';
+        case 'CRIT':
+            return 'fatal';
+        default:
+            return 'unknown';
+    }
+}
+
+export function buildDesktopHistoryEntries(lines: string[]): LogEntry[] {
+    const out: LogEntry[] = [];
+    for (let idx = 0; idx < lines.length; idx++) {
+        const raw = lines[idx];
+        if (!raw || !raw.trim()) continue;
+        const timeMatch = raw.match(/^(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+        out.push({
+            id: `hist-${idx}-${counter++}`,
+            text: raw,
+            channel: 'unknown' as const,
+            level: parseDesktopLogLevel(raw),
+            timestamp: timeMatch?.[1] ?? '',
+        });
+    }
+    return out;
+}
+
+export function serializeDesktopLogs(logs: LogEntry[]): string {
+    return logs.map((l) => l.text).join('\n');
+}
+
 export function buildHistoryEntries(
     lines: string[],
     now = new Date().toLocaleTimeString(),
