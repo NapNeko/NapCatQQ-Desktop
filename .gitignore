@@ -10,6 +10,9 @@ venv/
 .kiro/
 .cursor/
 .references/
+docs/plans/
+docs/requirements
+outputs/
 legacy-python/
 CLAUDE.md
 
