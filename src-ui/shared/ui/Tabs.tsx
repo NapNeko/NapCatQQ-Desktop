@@ -10,6 +10,7 @@
 //      错位,看起来"不衔接"。方向感留给 PageTransition,Tab 这种密集切换上不需要)。
 
 import * as RadixTabs from '@radix-ui/react-tabs';
+import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import {
     createContext,
@@ -20,6 +21,8 @@ import {
     useState,
     type ReactNode,
 } from 'react';
+
+gsap.registerPlugin(useGSAP);
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
 
@@ -101,7 +104,7 @@ export const TabsList = forwardRef<
         const activeRect = active.getBoundingClientRect();
         const left = activeRect.left - listRect.left + 12;
         const width = Math.max(activeRect.width - 24, 12);
-        if (!m.enabled || !m.preset.feel.cardLift) {
+        if (!m.enabled) {
             gsap.set(indicator, { autoAlpha: 1, x: left, width });
             return;
         }
@@ -191,7 +194,7 @@ export const TabsContent = forwardRef<
 
     return (
         <RadixTabs.Content value={value} {...props} asChild>
-            <ContentBody m={m} className={className}>
+            <ContentBody contentKey={value} m={m} className={className}>
                 {children}
             </ContentBody>
         </RadixTabs.Content>
@@ -201,34 +204,51 @@ TabsContent.displayName = 'TabsContent';
 
 const ContentBody = forwardRef<
     HTMLDivElement,
-    { className?: string; children?: ReactNode; m: ReturnType<typeof useMotion> }
->(({ className, children, m }, ref) => {
+    {
+        className?: string;
+        children?: ReactNode;
+        contentKey: string;
+        m: ReturnType<typeof useMotion>;
+    }
+>(({ className, children, contentKey, m }, ref) => {
     const localRef = useRef<HTMLDivElement | null>(null);
     const setRef = (node: HTMLDivElement | null) => {
         localRef.current = node;
         if (typeof ref === 'function') ref(node);
         else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
     };
-    // mount 时 fade-in。不动 transform,避免跟内部 sticky/scroll 容器冲突。
-    useLayoutEffect(() => {
-        const el = localRef.current;
-        if (!el) return;
-        if (!m.enabled) {
-            gsap.set(el, { autoAlpha: 1 });
-            return;
-        }
-        gsap.fromTo(
-            el,
-            { autoAlpha: 0 },
-            { autoAlpha: 1, duration: m.duration('fast'), ease: m.ease.enter },
-        );
-    }, [m]);
+
+    // 与 DialogStepTransition 同节奏：淡入 + 轻微上移；不做横向 slide / 双份 mount，
+    // 避免 Settings 长列表切换时高度叠加。
+    useGSAP(
+        () => {
+            const el = localRef.current;
+            if (!el) return;
+            gsap.killTweensOf(el);
+            if (!m.enabled) {
+                gsap.set(el, { autoAlpha: 1, y: 0 });
+                return;
+            }
+            gsap.fromTo(
+                el,
+                { autoAlpha: 0, y: 8 },
+                {
+                    autoAlpha: 1,
+                    y: 0,
+                    duration: m.duration('base'),
+                    ease: m.ease.enter,
+                    clearProps: 'transform',
+                },
+            );
+        },
+        {
+            dependencies: [contentKey, m.enabled, m.level, m.speed],
+            scope: localRef,
+        },
+    );
+
     return (
-        <div
-            ref={setRef}
-            style={{ visibility: 'hidden', opacity: 0 }}
-            className={cn('mt-4 focus-visible:outline-none', className)}
-        >
+        <div ref={setRef} className={cn('mt-4 focus-visible:outline-none', className)}>
             {children}
         </div>
     );
