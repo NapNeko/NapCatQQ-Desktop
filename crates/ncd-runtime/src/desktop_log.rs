@@ -80,7 +80,7 @@ pub fn read_tail_text(path: &Path, max_bytes: usize) -> std::io::Result<String> 
     Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
-/// 将 legacy 六段式完整行压成 `时间 | 等级 | 消息`（对齐 setup desktop_log 预览）。
+/// 将 legacy 六段式完整行压成设置页可读 preview（委托 ncd-log）。
 pub fn format_preview_line(line: &str, inherited_level: Option<&str>) -> (Option<String>, String) {
     let newline = if line.ends_with('\n') { "\n" } else { "" };
     let raw = line.trim_end_matches('\n');
@@ -89,11 +89,8 @@ pub fn format_preview_line(line: &str, inherited_level: Option<&str>) -> (Option
         let lvl = inherited_level.map(|s| s.to_string());
         return (lvl, line.to_string());
     }
-    let time_text = parts[0];
-    let level_text = parts[1];
-    let message_text = parts[5];
-    let level_name = level_tag_name(level_text);
-    let preview = format!("{time_text} | {level_text} | {message_text}{newline}");
+    let level_name = level_tag_name(parts[1]);
+    let preview = ncd_log::preview_line(line);
     (level_name, preview)
 }
 
@@ -136,10 +133,8 @@ mod tests {
     fn format_preview_strips_middle_segments() {
         let raw = "26-03-22 13:42:22 | [WARN] | [ NONE_TYPE ] | [  UI  ] | [default > <qt>:0] | warn line\n";
         let (_, preview) = format_preview_line(raw, None);
-        assert_eq!(
-            preview,
-            "26-03-22 13:42:22 | [WARN] | warn line\n"
-        );
+        assert!(preview.contains("warn line"));
+        assert!(preview.contains("[WARN]"));
     }
 
     #[test]

@@ -6,6 +6,7 @@ pub mod bot_config_repo_impl;
 pub mod bot_manager;
 pub mod config_drift;
 pub mod config_store_impl;
+pub mod crash_bundle;
 pub mod desktop_log;
 pub mod events;
 pub mod host_resolver;
@@ -53,6 +54,7 @@ pub use bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorSta
 pub use bot_config_repo_impl::LocalBotConfigRepo;
 pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError};
 pub use config_store_impl::LocalConfigStore;
+pub use crash_bundle::{desktop_output_dir, write_crash_bundle, CrashBundleInput};
 pub use events::{
     BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter, EventSubscription,
 };
