@@ -50,6 +50,7 @@ interface HostComponentsViewProps {
     onOpenDockerDownload: () => void;
     isDeploying: boolean;
     onDeploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
+    onDeployError?: (hostId: string, flavor: DockerFlavor, error: unknown) => void;
     // 这台机器已有的容器列表，用于判定某 flavor 是否已部署（部署按钮置「已部署」并禁用）。
     containers: ContainerInfo[];
 }
@@ -67,6 +68,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     onOpenDockerDownload,
     isDeploying,
     onDeploy,
+    onDeployError,
     containers,
 }) => {
     const { host } = machine;
@@ -114,6 +116,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 isDeploying={isDeploying}
                 alreadyDeployed={alreadyDeployed}
                 onDeploy={onDeploy}
+                onDeployError={(error) => onDeployError?.(host.host_id, flavor, error)}
                 onDeployed={pushResult}
             />
         );

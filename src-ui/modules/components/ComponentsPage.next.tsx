@@ -70,6 +70,12 @@ export const ComponentsPageNext: React.FC = () => {
         [machines, activeHostId],
     );
 
+    const hostNameOf = useCallback(
+        (hostId: string) =>
+            machines.find((m) => m.host.host_id === hostId)?.host.display_name ?? hostId,
+        [machines],
+    );
+
     const latestVersionFor = useCallback(
         (id: ComponentId): string | null => {
             switch (id) {
@@ -100,10 +106,18 @@ export const ComponentsPageNext: React.FC = () => {
                 const taskId = await startAction(componentId, hostId, payload.stepKind);
                 onTaskTerminal(taskId, () => refetch());
             } catch (err) {
+                const hostName = hostNameOf(hostId);
+                globalInfoBarStore.push({
+                    key: `component-action-start:${componentId}:${hostId}`,
+                    tone: 'danger',
+                    title: `组件操作失败 · ${hostName}`,
+                    content: errorText(err, '组件操作失败，请稍后重试'),
+                    autoDismissMs: 0,
+                });
                 console.error('[ComponentsPage] action failed:', err);
             }
         },
-        [startAction, cancelAction, onTaskTerminal, refetch],
+        [startAction, cancelAction, onTaskTerminal, refetch, hostNameOf],
     );
 
     const allEmpty = machines.length === 0;
@@ -116,12 +130,6 @@ export const ComponentsPageNext: React.FC = () => {
         hostName: string;
         reason?: string;
     } | null>(null);
-
-    const hostNameOf = useCallback(
-        (hostId: string) =>
-            machines.find((m) => m.host.host_id === hostId)?.host.display_name ?? hostId,
-        [machines],
-    );
 
     // 执行一次安装并按 status 分流。返回 report 给调用方(弹框重试时要据此判断
     // 是否仍需密码)。底层 IPC 失败(连接断等)会抛,交给调用方处理。
@@ -180,6 +188,20 @@ export const ComponentsPageNext: React.FC = () => {
             }
         },
         [runInstall, hostNameOf],
+    );
+
+    const handleDockerDeployError = useCallback(
+        (hostId: string, flavor: import('../../core/ipc/types').DockerFlavor, err: unknown) => {
+            const framework = flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
+            globalInfoBarStore.push({
+                key: `docker-deploy:${hostId}:${flavor}`,
+                tone: 'danger',
+                title: `${framework} Docker 部署失败 · ${hostNameOf(hostId)}`,
+                content: errorText(err, 'Docker 部署失败，请检查 Docker 状态、镜像源与端口占用后重试'),
+                autoDismissMs: 0,
+            });
+        },
+        [hostNameOf],
     );
 
     // 弹框确认:带用户输入的密码重试。装成功就关弹框;密码不对(后端再次返回
@@ -260,6 +282,7 @@ export const ComponentsPageNext: React.FC = () => {
                         }}
                         isDeploying={dockerHosts.isDeploying}
                         onDeploy={dockerHosts.deploy}
+                        onDeployError={handleDockerDeployError}
                         containers={dockerHosts.containersByHost[activeMachine.host.host_id] ?? []}
                     />
                 ) : null}

@@ -29,6 +29,7 @@ interface FrameworkDockerDeployButtonProps {
     /// 避免重复部署撞容器名 / 端口。
     alreadyDeployed: boolean;
     onDeploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
+    onDeployError?: (error: unknown) => void;
     onDeployed: (result: DeployedContainer) => void;
 }
 
@@ -38,6 +39,7 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
     isDeploying,
     alreadyDeployed,
     onDeploy,
+    onDeployError,
     onDeployed,
 }) => {
     const [open, setOpen] = useState(false);
@@ -82,12 +84,17 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
                     taskId={taskId}
                     onClose={handleClose}
                     onConfirm={async (spec) => {
-                        // 部署成功:同时把结果推到外层 banner(关弹窗后仍可查凭据)并
-                        // 回给 DeployDialog——dialog 拿到后切完成态在弹窗内展示,用户
-                        // 点「完成」才走 onClose 关闭。不在这里 handleClose。
-                        const result = await onDeploy(hostId, spec, taskId);
-                        onDeployed(result);
-                        return result;
+                        try {
+                            // 部署成功:同时把结果推到外层 banner(关弹窗后仍可查凭据)并
+                            // 回给 DeployDialog——dialog 拿到后切完成态在弹窗内展示,用户
+                            // 点「完成」才走 onClose 关闭。不在这里 handleClose。
+                            const result = await onDeploy(hostId, spec, taskId);
+                            onDeployed(result);
+                            return result;
+                        } catch (error) {
+                            onDeployError?.(error);
+                            throw error;
+                        }
                     }}
                 />
             )}
