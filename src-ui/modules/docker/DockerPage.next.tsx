@@ -62,7 +62,7 @@ export const DockerPageNext: React.FC = () => {
                         容器管理
                     </h1>
                     <p className="mt-1 text-sm text-text-secondary">
-                        管理远端服务器上的 Docker 容器。部署新容器请去组件页对应框架的「Docker 部署」。
+                        管理远端服务器上的 Docker 容器；每张卡片可查看容器运行日志。部署过程摘要见「设置 → 日志」。
                     </p>
                 </div>
                 <Button

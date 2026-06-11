@@ -17,6 +17,7 @@
 use async_trait::async_trait;
 use ncd_domain::{BotConfig, BotFlavor, BotId, DockerDeploySpec, DockerFlavor, StopMode};
 use ncd_host::{Host, HostCommand, HostPath, StreamSource};
+use tracing::{error, info};
 
 use crate::deployment::{
     Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
@@ -154,7 +155,15 @@ impl Deployment for DockerDeployment {
         progress.report("docker", "探测 Docker 状态", 5);
         cli.ensure_ready()
             .await
-            .map_err(|_| DeploymentError::RuntimeUnavailable { kind: "docker" })?;
+            .map_err(|e| {
+                error!(
+                    target: "ncd_deploy::docker_bot",
+                    qq_id = config.bot.qq_id,
+                    err = %e,
+                    "Bot Docker 部署: Docker 未就绪"
+                );
+                DeploymentError::RuntimeUnavailable { kind: "docker" }
+            })?;
 
         let spec = Self::build_spec(config);
         let name = Self::container_name(config);
@@ -189,8 +198,23 @@ impl Deployment for DockerDeployment {
         let new_line_cb = |_idx: usize, _img: &str| move |_src: StreamSource, _line: String| {};
         cli.pull_with_fallback(&candidates, official, new_line_cb)
             .await
-            .map_err(|e| DeploymentError::InstallFailed(format!("拉取镜像失败: {e}")))?;
+            .map_err(|e| {
+                error!(
+                    target: "ncd_deploy::docker_bot",
+                    qq_id = config.bot.qq_id,
+                    container = %name,
+                    err = %e,
+                    "Bot Docker 部署: 拉取镜像失败"
+                );
+                DeploymentError::InstallFailed(format!("拉取镜像失败: {e}"))
+            })?;
         progress.report("pull", "镜像就绪", 90);
+        info!(
+            target: "ncd_deploy::docker_bot",
+            qq_id = config.bot.qq_id,
+            container = %name,
+            "Bot Docker 镜像已就绪"
+        );
         Ok(())
     }
 
@@ -202,18 +226,41 @@ impl Deployment for DockerDeployment {
         let cli = DockerCli::new(host);
         cli.ensure_ready()
             .await
-            .map_err(|_| DeploymentError::RuntimeUnavailable { kind: "docker" })?;
+            .map_err(|e| {
+                error!(
+                    target: "ncd_deploy::docker_bot",
+                    qq_id = config.bot.qq_id,
+                    err = %e,
+                    "Bot Docker 部署: Docker 未就绪"
+                );
+                DeploymentError::RuntimeUnavailable { kind: "docker" }
+            })?;
         let name = Self::container_name(config);
         let project_dir = Self::project_dir(host, &name).await?;
 
         // compose up -d。镜像在 install 阶段已拉好(--pull missing 命中本地缓存)。
         cli.compose_up(&project_dir)
             .await
-            .map_err(|e| DeploymentError::LaunchFailed(format!("启动容器失败: {e}")))?;
+            .map_err(|e| {
+                error!(
+                    target: "ncd_deploy::docker_bot",
+                    qq_id = config.bot.qq_id,
+                    container = %name,
+                    err = %e,
+                    "Bot Docker 部署: 启动容器失败"
+                );
+                DeploymentError::LaunchFailed(format!("启动容器失败: {e}"))
+            })?;
 
         // 回读容器 id + 启动时间。找不到也不致命:容器已起,observe 后续能纠正。
         let started_at = now_secs();
         let container_id = find_container_id(&cli, &name).await.unwrap_or_default();
+        info!(
+            target: "ncd_deploy::docker_bot",
+            qq_id = config.bot.qq_id,
+            container = %name,
+            "Bot Docker 容器已启动"
+        );
         Ok(DeploymentHandle::Docker {
             container_id,
             started_at,
@@ -267,7 +314,23 @@ impl Deployment for DockerDeployment {
         }
         cli.lifecycle("stop", &name)
             .await
-            .map_err(|e| DeploymentError::StopFailed(format!("停止容器失败: {e}")))
+            .map_err(|e| {
+                error!(
+                    target: "ncd_deploy::docker_bot",
+                    bot_id = %bot_id,
+                    container = %name,
+                    err = %e,
+                    "Bot Docker 停止容器失败"
+                );
+                DeploymentError::StopFailed(format!("停止容器失败: {e}"))
+            })?;
+        info!(
+            target: "ncd_deploy::docker_bot",
+            bot_id = %bot_id,
+            container = %name,
+            "Bot Docker 容器已停止"
+        );
+        Ok(())
     }
 
     async fn uninstall(&self, host: &dyn Host, config: &BotConfig) -> Result<(), DeploymentError> {

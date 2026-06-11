@@ -19,7 +19,7 @@
 use ncd_domain::DockerInstallReport;
 use ncd_host::remote::{probe_sudo, SudoAccess};
 use ncd_host::{Host, HostCommand, Os};
-use tracing::info;
+use tracing::{error, info, warn};
 
 use super::cli::{DockerCli, DockerCliError};
 
@@ -122,10 +122,20 @@ async fn install_docker_linux(
     if !out.success() {
         // 提权失败最常见就是密码错。区分出来让前端可以重新弹框,而不是笼统报"失败"。
         if looks_like_bad_sudo_password(&out.stderr) {
+            warn!(
+                target: "ncd_deploy::docker",
+                "Docker 安装脚本: sudo 密码不正确"
+            );
             return Ok(DockerInstallReport::need_sudo_password(
                 "sudo 密码不正确，请重新输入。",
             ));
         }
+        let detail = out.stderr.trim();
+        error!(
+            target: "ncd_deploy::docker",
+            err = %detail,
+            "Docker 安装脚本执行失败"
+        );
         return Ok(DockerInstallReport::manual_required(
             format!(
                 "安装脚本执行失败：{}。可登录远端按阿里云文档手动配置 docker-ce 仓库后重试。",
@@ -161,6 +171,7 @@ async fn install_docker_linux(
     let cli = DockerCli::new(host);
     let status = cli.probe().await;
     if status.ready_to_deploy() {
+        info!(target: "ncd_deploy::docker", "Docker 安装完成且可部署");
         Ok(DockerInstallReport::installed())
     } else if status.installed && status.daemon_running {
         // docker + daemon 起来了但 compose 插件没装上(极少数源缺包 / 装了旧 v1)。

@@ -21,9 +21,114 @@ use ncd_domain::{
 use ncd_host::{Host, HostCommand, HostPath, StreamSource};
 use ncd_runtime::{DomainEvent, EventBus};
 use tauri::State;
+use tracing::{error, info, warn};
 
 use crate::AppState;
 use crate::commands::host_resolve::{host_display_address, resolve_host_with_autoconnect};
+
+/// 部署进度写入 Desktop 会话日志（设置页）。不记录 docker pull 逐行 stdout，避免刷屏。
+fn session_log_deploy_progress(
+    kind: &ProgressKind,
+    host_id: &str,
+    container: &str,
+    flavor: &str,
+) {
+    match kind {
+        ProgressKind::Started { total_steps } => {
+            info!(
+                target: "ncd_tauri::docker",
+                host_id,
+                container,
+                flavor,
+                total_steps,
+                "开始 Docker 一键部署"
+            );
+        }
+        ProgressKind::StepBegin { step, message } => {
+            info!(
+                target: "ncd_tauri::docker",
+                host_id,
+                container,
+                step,
+                message = %message,
+                "Docker 部署步骤"
+            );
+        }
+        ProgressKind::StepEnd { step, ok } => {
+            if *ok {
+                info!(
+                    target: "ncd_tauri::docker",
+                    host_id,
+                    container,
+                    step,
+                    "Docker 部署步骤完成"
+                );
+            } else {
+                warn!(
+                    target: "ncd_tauri::docker",
+                    host_id,
+                    container,
+                    step,
+                    "Docker 部署步骤失败"
+                );
+            }
+        }
+        ProgressKind::Finished { ok } => {
+            if *ok {
+                info!(
+                    target: "ncd_tauri::docker",
+                    host_id,
+                    container,
+                    flavor,
+                    "Docker 一键部署成功"
+                );
+            } else {
+                error!(
+                    target: "ncd_tauri::docker",
+                    host_id,
+                    container,
+                    flavor,
+                    "Docker 一键部署失败"
+                );
+            }
+        }
+        ProgressKind::Log { level, message } => match level {
+            ProgressLogLevel::Error => {
+                error!(
+                    target: "ncd_tauri::docker",
+                    host_id,
+                    container,
+                    msg = %message,
+                    "Docker 部署"
+                );
+            }
+            ProgressLogLevel::Warn => {
+                warn!(
+                    target: "ncd_tauri::docker",
+                    host_id,
+                    container,
+                    msg = %message,
+                    "Docker 部署"
+                );
+            }
+            ProgressLogLevel::Info => {
+                if message.starts_with("拉取镜像:")
+                    || message.starts_with("上一个源失败")
+                {
+                    info!(
+                        target: "ncd_tauri::docker",
+                        host_id,
+                        container,
+                        msg = %message,
+                        "Docker 部署"
+                    );
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
 
 #[tauri::command]
 pub async fn docker_probe(
@@ -60,6 +165,33 @@ pub async fn docker_install(
     let report = install_docker(host.as_ref(), effective_password.as_deref())
         .await
         .map_err(|e| format!("Docker 安装失败: {e}"))?;
+
+    match report.status {
+        DockerInstallStatus::Installed | DockerInstallStatus::AlreadyInstalled => {
+            info!(
+                target: "ncd_tauri::docker",
+                host_id = %host_id,
+                status = ?report.status,
+                "Docker 安装完成"
+            );
+        }
+        DockerInstallStatus::NeedSudoPassword => {
+            warn!(
+                target: "ncd_tauri::docker",
+                host_id = %host_id,
+                msg = %report.message,
+                "Docker 安装需要 sudo 密码"
+            );
+        }
+        DockerInstallStatus::ManualRequired => {
+            warn!(
+                target: "ncd_tauri::docker",
+                host_id = %host_id,
+                msg = %report.message,
+                "Docker 需手动安装或处理"
+            );
+        }
+    }
 
     // 用户勾了"记住密码"就存,只要这次密码被验证有效。判据是 status != NeedSudoPassword:
     // 能走过提权脚本(没返回 NeedSudoPassword)就说明 sudo 密码是对的——密码有效性
@@ -110,7 +242,17 @@ pub async fn docker_container_action(
         ContainerAction::Restart => cli.lifecycle("restart", &name).await,
         ContainerAction::Remove => cli.remove(&name).await,
     };
-    result.map_err(|e| format!("{} 失败: {e}", action.as_str()))
+    result.map_err(|e| {
+        error!(
+            target: "ncd_tauri::docker",
+            host_id = %host_id,
+            container = %name,
+            action = action.as_str(),
+            err = %e,
+            "Docker 容器操作失败"
+        );
+        format!("{} 失败: {e}", action.as_str())
+    })
 }
 
 #[tauri::command]
@@ -141,10 +283,17 @@ pub async fn docker_deploy(
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let host_ref: &dyn Host = host.as_ref();
 
+    let flavor_label = format!("{:?}", spec.flavor);
+    let container_name = spec.container_name.clone();
+
     // 小闭包：捕获 event_bus + task_id，减少重复代码。
     let event_bus = state.event_bus.clone();
     let tid = task_id.clone();
-    let emit = |kind: ProgressKind| {
+    let host_id_log = host_id.clone();
+    let container_log = container_name.clone();
+    let flavor_log = flavor_label.clone();
+    let emit = move |kind: ProgressKind| {
+        session_log_deploy_progress(&kind, &host_id_log, &container_log, &flavor_log);
         event_bus.publish(DomainEvent::docker_deploy_progress(
             tid.clone(),
             ProgressEvent::new(kind),
@@ -339,7 +488,16 @@ pub async fn docker_compose_down(
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
     cli.compose_down(&project_dir, remove_volumes)
         .await
-        .map_err(|e| format!("停止部署失败: {e}"))
+        .map_err(|e| {
+            error!(
+                target: "ncd_tauri::docker",
+                host_id = %host_id,
+                name = %name,
+                err = %e,
+                "Docker compose down 失败"
+            );
+            format!("停止部署失败: {e}")
+        })
 }
 
 /// 解析 compose project 目录(放 docker-compose.yml 的地方)。

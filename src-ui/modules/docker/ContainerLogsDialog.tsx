@@ -49,7 +49,7 @@ export const ContainerLogsDialog: React.FC<ContainerLogsDialogProps> = ({
             <DialogContent size="xl">
                 <DialogHeader>
                     <div className="flex items-center justify-between pr-6">
-                        <DialogTitle>{name} · 日志</DialogTitle>
+                        <DialogTitle>{name} · 容器运行日志</DialogTitle>
                         <Button
                             size="sm"
                             variant="ghost"
