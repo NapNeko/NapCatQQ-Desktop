@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use tracing::info;
+use tracing::{error, info, warn};
 
 use ncd_component::{ActionCtx, ProgressKind, ProgressLogLevel};
 use ncd_host::Host;
@@ -74,6 +74,13 @@ impl DeployPlan {
                 }
                 Err(e) => {
                     let err_str = format!("{e}");
+                    error!(
+                        target: "ncd_deploy::runner",
+                        step = %step.name,
+                        kind = step.kind.as_str(),
+                        err = %err_str,
+                        "部署步骤失败"
+                    );
                     outcomes.push(StepOutcome::failed(&step.name, step.kind, dur, &err_str));
                     ctx.emit(ProgressKind::StepEnd {
                         step: step_idx,
@@ -89,6 +96,12 @@ impl DeployPlan {
                     if step.fail_fast {
                         // 触发回滚
                         if let Err(rb_err) = rollback(host, ctx, &completed_for_rollback).await {
+                            error!(
+                                target: "ncd_deploy::runner",
+                                step = %step.name,
+                                err = %rb_err,
+                                "部署失败后回滚未完全成功"
+                            );
                             ctx.emit(ProgressKind::Finished { ok: false }).await;
                             return Err(DeployError::RollbackFailed {
                                 step: step.name.clone(),
@@ -167,6 +180,11 @@ async fn rollback(
     ctx: &mut ActionCtx,
     completed: &[&DeployStep],
 ) -> Result<(), DeployError> {
+    warn!(
+        target: "ncd_deploy::runner",
+        steps = completed.len(),
+        "部署失败，开始回滚已完成的步骤"
+    );
     for step in completed.iter().rev() {
         if !step.rollback_on_failure {
             continue;

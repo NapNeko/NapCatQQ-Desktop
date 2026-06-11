@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use serde_json::Value;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::app_config_migration::migrate_app_config;
 use crate::bot_config_migration::migrate_bot_config;
@@ -40,6 +40,11 @@ impl<'a> MigrationOrchestrator<'a> {
                 // 失败也尽力把报告落盘:保留首次失败证据,重启后仍能查到原因。否则
                 // 失败信息只在内存,重启即丢,旧用户升级踩坑没有任何排障线索。落盘
                 // 本身再失败就只能放弃(best-effort),不掩盖原始迁移错误。
+                warn!(
+                    target: "ncd_runtime::migration",
+                    err = %error,
+                    "启动迁移失败"
+                );
                 let report = MigrationReport::failed(error.to_string());
                 let _ = self.store.save_migration_report(&report);
                 report.into()
@@ -140,6 +145,12 @@ impl<'a> MigrationOrchestrator<'a> {
         if let Some(backup) = tx_report.backup {
             report = report.with_backup(backup);
         }
+        info!(
+            target: "ncd_runtime::migration",
+            rules = report.rules_applied.len(),
+            warnings = report.warnings.len(),
+            "旧版配置迁移完成"
+        );
         Ok(report)
     }
 

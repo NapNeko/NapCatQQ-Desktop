@@ -55,6 +55,11 @@ pub async fn install_docker(
     // docker-compose-plugin),把 compose 补齐。
     let status = cli.probe().await;
     if status.ready_to_deploy() {
+        info!(
+            target: "ncd_deploy::docker",
+            version = %status.version,
+            "Docker 已就绪，跳过安装"
+        );
         return Ok(DockerInstallReport::already_installed(&status.version));
     }
 

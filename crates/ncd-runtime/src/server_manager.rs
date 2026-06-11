@@ -584,6 +584,15 @@ impl ServerManager {
                 self.update_state(id, ServerState::Failed).await;
                 let latency_ms = start.elapsed().as_millis() as u64;
                 let (error, host_key_prompt, host_key_mismatch) = classify_connect_error(&err);
+                if log_probe {
+                    tracing::warn!(
+                        target: "ncd_runtime::server_manager",
+                        server_id = %id,
+                        host = %profile.host,
+                        err = %error,
+                        "SSH 连接测试失败"
+                    );
+                }
                 return Ok(ProbeReport {
                     success: false,
                     os_info: None,
@@ -711,11 +720,25 @@ impl ServerManager {
                 .ok_or_else(|| format!("自动连接成功但缓存为空: {id}（不应发生）")),
             Ok(report) => {
                 let err = report.error.unwrap_or_else(|| "未知错误".into());
+                tracing::warn!(
+                    target: "ncd_runtime::server_manager",
+                    server_id = %id,
+                    err = %err,
+                    "远端自动连接失败"
+                );
                 Err(format!("自动连接失败: {err}（请去远端页手动测试连接）"))
             }
-            Err(err) => Err(format!(
-                "自动连接被拒绝: {err}（凭据可能未保存，请去远端页手动测试）"
-            )),
+            Err(err) => {
+                tracing::warn!(
+                    target: "ncd_runtime::server_manager",
+                    server_id = %id,
+                    err = %err,
+                    "远端自动连接被拒绝"
+                );
+                Err(format!(
+                    "自动连接被拒绝: {err}（凭据可能未保存，请去远端页手动测试）"
+                ))
+            }
         }
     }
 

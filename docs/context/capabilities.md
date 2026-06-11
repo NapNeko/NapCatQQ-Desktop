@@ -70,6 +70,13 @@ M6.1 大坑（已知架构问题）：`BotManager` 持有 backend-specific 字�
 - 6 个 crate 引用（5 dev-dep + 自己 lib test）
 - `fixtures/legacy/{config,bot,servers}.json` 三件套（当前字段太少，无法覆盖 `tests/config_migration.rs` 30+ 嵌套字段场景，留待补全）
 
+## ncd-log（Desktop 会话行，零 Tauri）
+
+- 六段 legacy 行格式、`format_line` / `log_source_from_target` / `short_module_from_target`
+- Layer 3 写日志：对业务路径用 `tracing::info!(target: "ncd_runtime::bot_manager", bot_id = %id, "…")` 等；`target` 前缀决定模块列与 `EnvFilter` 粒度（见 `src-tauri/src/desktop_log.rs` 的 `default_env_filter`）
+- 非 tracing 场景（panic、CRIT）：仅 `src-tauri::desktop_log::write_session_line`
+- 禁止 tracing 订阅进 EventBus（正反馈）；前端继续轮询 `tail_desktop_log`
+
 ## Tauri 集成
 
 - 已注册插件：`tauri-plugin-opener`（`opener:default` + `opener:allow-open-url`）

@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
@@ -264,18 +265,48 @@ impl BotActorHandle {
     }
 }
 
+fn log_actor_result(
+    bot_id: &BotId,
+    result: &Result<bool, BotActorError>,
+    command: &'static str,
+) {
+    match result {
+        Ok(true) => {
+            // 状态已推进，last_transition 在 snapshot 里；此处只记命令名避免与 manager 重复刷屏。
+            info!(
+                target: "ncd_runtime::bot_actor",
+                bot_id = %bot_id,
+                command,
+                "Bot 状态已推进"
+            );
+        }
+        Ok(false) => {}
+        Err(BotActorError::InvalidTransition { from, command: cmd }) => {
+            warn!(
+                target: "ncd_runtime::bot_actor",
+                bot_id = %bot_id,
+                from = ?from,
+                command = cmd,
+                "Bot 状态转换被拒绝"
+            );
+        }
+        Err(BotActorError::MailboxClosed) => {}
+    }
+}
+
 async fn run_actor(
     bot_id: BotId,
     mut command_rx: mpsc::Receiver<BotActorCommand>,
     snapshot_tx: watch::Sender<BotActorSnapshot>,
     cancellation_token: Arc<Mutex<CancellationToken>>,
 ) {
-    let mut snapshot = BotActorSnapshot::new(bot_id);
+    let mut snapshot = BotActorSnapshot::new(bot_id.clone());
 
     while let Some(command) = command_rx.recv().await {
         match command {
             BotActorCommand::RequestStart { reply } => {
                 let result = request_start(&mut snapshot, &cancellation_token);
+                log_actor_result(&bot_id, &result, "start");
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
@@ -283,6 +314,7 @@ async fn run_actor(
             }
             BotActorCommand::RequestStartTransition { reply } => {
                 let result = request_start(&mut snapshot, &cancellation_token);
+                log_actor_result(&bot_id, &result, "start");
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
@@ -290,6 +322,7 @@ async fn run_actor(
             }
             BotActorCommand::ConfirmRunning { reply } => {
                 let result = confirm_running(&mut snapshot);
+                log_actor_result(&bot_id, &result, "confirm_running");
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
@@ -297,6 +330,7 @@ async fn run_actor(
             }
             BotActorCommand::RequestStop { reply } => {
                 let result = request_stop(&mut snapshot, &cancellation_token);
+                log_actor_result(&bot_id, &result, "stop");
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
@@ -304,6 +338,7 @@ async fn run_actor(
             }
             BotActorCommand::ConfirmStopped { reply } => {
                 let result = confirm_stopped(&mut snapshot, &cancellation_token);
+                log_actor_result(&bot_id, &result, "confirm_stopped");
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
@@ -311,20 +346,41 @@ async fn run_actor(
             }
             BotActorCommand::RequestRestart { reply } => {
                 let result = request_restart(&mut snapshot, &cancellation_token);
+                log_actor_result(&bot_id, &result, "restart");
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
                 let _ = reply.send(result.map(|_| snapshot.clone()));
             }
             BotActorCommand::MarkCrashed { reason, reply } => {
+                let reason_for_log = reason.clone();
                 let result = mark_crashed(&mut snapshot, &cancellation_token, reason);
+                log_actor_result(&bot_id, &result, "mark_crashed");
+                if let Ok(true) = &result {
+                    warn!(
+                        target: "ncd_runtime::bot_actor",
+                        bot_id = %bot_id,
+                        reason = %reason_for_log,
+                        "Bot 运行异常已标记为崩溃"
+                    );
+                }
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
                 let _ = reply.send(result.map(|_| snapshot.clone()));
             }
             BotActorCommand::EnterRepair { reason, reply } => {
+                let reason_for_log = reason.clone();
                 let result = enter_repair(&mut snapshot, &cancellation_token, reason);
+                log_actor_result(&bot_id, &result, "enter_repair");
+                if let Ok(true) = &result {
+                    warn!(
+                        target: "ncd_runtime::bot_actor",
+                        bot_id = %bot_id,
+                        reason = %reason_for_log,
+                        "Bot 进入修复状态"
+                    );
+                }
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
@@ -332,6 +388,7 @@ async fn run_actor(
             }
             BotActorCommand::ResolveRepair { reply } => {
                 let result = resolve_repair(&mut snapshot);
+                log_actor_result(&bot_id, &result, "resolve_repair");
                 if result.is_ok() {
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
@@ -342,6 +399,11 @@ async fn run_actor(
                 snapshot.pending_restart = false;
                 snapshot.clear_error();
                 snapshot.advance(BotActorState::Stopped, "shutdown");
+                info!(
+                    target: "ncd_runtime::bot_actor",
+                    bot_id = %bot_id,
+                    "Bot Actor 已关闭"
+                );
                 let _ = snapshot_tx.send(snapshot.clone());
                 let _ = reply.send(Ok(snapshot.clone()));
                 break;

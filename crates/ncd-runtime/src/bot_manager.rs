@@ -1231,6 +1231,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 Ok(plan) => plan.into_runtime_config(base),
                 Err(err) => {
                     let message = err.to_string();
+                    error!(
+                        target: "ncd_runtime::bot_manager",
+                        bot_id = %bot_id,
+                        err = %message,
+                        "构造 Bot 启动计划失败"
+                    );
                     let hint = match &err {
                         RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
                             "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
