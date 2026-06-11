@@ -171,6 +171,9 @@ pub async fn docker_install(
         "开始安装 Docker（远端 Linux 将执行仓库配置与 apt/dnf 安装，约 3–10 分钟）"
     );
 
+    // 获取包管理器锁，防止同一主机的 apt/dnf 并发冲突
+    let _pkg_lock = state.package_lock.acquire(&host_id).await;
+
     let event_bus = state.event_bus.clone();
     let tid = task_id.clone();
     let emit = std::sync::Arc::new(move |kind: ProgressKind| {

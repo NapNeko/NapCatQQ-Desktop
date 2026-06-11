@@ -50,18 +50,19 @@ export const TaskLogPanel: React.FC<TaskLogPanelProps> = ({ startedAt, enabled, 
     }
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle bg-inset/40">
-            <div className="min-h-0 flex-1 overflow-y-auto p-3 font-sans text-[12px] leading-[1.55] antialiased">
+        <div className="flex h-[240px] flex-col overflow-hidden rounded-md border border-border-subtle bg-inset/40">
+            <div className="h-full overflow-y-auto p-3 font-sans text-[12px] leading-[1.55] antialiased">
                 {lines.map((line, i) => {
                     const p = parseDesktopLogLine(line);
+                    const timeOnly = p.timestamp ? p.timestamp.split(' ')[1] || p.timestamp : '';
                     return (
                         <div
                             key={`${i}-${p.raw.slice(0, 24)}`}
-                            className="grid min-w-0 grid-cols-[4.25rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 py-0.5 text-text-secondary"
+                            className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 py-0.5 text-text-secondary"
                         >
-                            {p.timestamp ? (
+                            {timeOnly ? (
                                 <span className="tabular-nums text-[11px] text-text-tertiary">
-                                    {p.timestamp}
+                                    {timeOnly}
                                 </span>
                             ) : (
                                 <span />

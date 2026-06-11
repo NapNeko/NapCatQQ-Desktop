@@ -91,6 +91,15 @@ pub async fn run_component_action(
         .build();
     plan.validate().map_err(|err| format!("{err}"))?;
 
+    // NoVNC 使用 apt/dnf 安装，需要获取包管理器锁
+    let _pkg_lock = if component_id == ComponentId::NoVnc
+        && (kind == StepKind::EnsureInstalled || kind == StepKind::ForceInstall)
+    {
+        Some(state.package_lock.acquire(&host_id).await)
+    } else {
+        None
+    };
+
     let (mut ctx, mut rx) = ncd_component::ActionCtx::new();
     let cancel_token = ctx.cancel_token();
     let task_id = Uuid::new_v4().to_string();

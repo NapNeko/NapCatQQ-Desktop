@@ -13,6 +13,7 @@ pub mod host_resolver;
 pub mod legacy_discovery;
 pub mod migration;
 pub mod napcat;
+pub mod package_lock;
 pub mod path_probe_impl;
 pub mod release;
 pub mod native_deployment_adapter;

@@ -46,7 +46,7 @@ export interface ActionProgressView {
     logs: ActionLogLine[];
 }
 
-const MAX_LOGS = 50;
+const MAX_LOGS = 200;
 
 export const initialActionProgress: ActionProgressView = {
     status: 'pending',

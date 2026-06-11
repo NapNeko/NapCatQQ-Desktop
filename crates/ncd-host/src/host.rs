@@ -134,6 +134,23 @@ pub trait Host: Send + Sync {
     /// 从主机下载文件到本地(本地 Host 等同于 copy)。
     async fn download(&self, remote: &HostPath, local: &Path) -> Result<(), HostError>;
 
+    /// 在主机上从 URL 下载文件到指定路径。
+    ///
+    /// - 本地主机：委托到本地文件系统下载
+    /// - 远程 Linux：优先使用 wget/curl 直接下载
+    /// - 远程 Windows Stub：返回 Unsupported
+    ///
+    /// 默认实现返回 `Unsupported`，让调用方 fallback 到"本地下载→upload"。
+    async fn download_url(
+        &self,
+        _url: &str,
+        _dest: &HostPath,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported {
+            operation: "download_url",
+        })
+    }
+
     /// 解压归档(zip / tar.gz / tar.xz / msi)。
     async fn extract_archive(
         &self,

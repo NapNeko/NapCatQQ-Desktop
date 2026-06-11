@@ -218,14 +218,9 @@ impl Component for NodeJsComponent {
         ));
 
         let helper = DownloadHelper::new()?;
+        let mirrors = ncd_network::build_mirror_urls(&url, None);
         helper
-            .download_to_file(
-                &url,
-                &local_tmp,
-                self.expected_sha256.as_deref(),
-                ctx,
-                1,
-            )
+            .download_with_mirrors(&mirrors, &local_tmp, self.expected_sha256.as_deref(), ctx, 1)
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 

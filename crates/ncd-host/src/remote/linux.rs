@@ -951,6 +951,49 @@ impl Host for RemoteLinuxHost {
         }
         Ok(())
     }
+
+    async fn download_url(&self, url: &str, dest: &HostPath) -> Result<(), HostError> {
+        // 检测 wget 或 curl
+        let has_wget = self.command_exists("wget").await;
+        let has_curl = !has_wget && self.command_exists("curl").await;
+
+        if !has_wget && !has_curl {
+            return Err(HostError::Unsupported {
+                operation: "download_url (wget/curl not found)",
+            });
+        }
+
+        let dest_str = self.to_remote(dest);
+
+        // 构建下载命令
+        let cmd = if has_wget {
+            HostCommand::new("wget")
+                .arg("--progress=dot:mega")
+                .arg("-O")
+                .arg(&dest_str)
+                .arg(url)
+        } else {
+            HostCommand::new("curl")
+                .arg("--progress-bar")
+                .arg("-fL") // -f: fail on HTTP errors, -L: follow redirects
+                .arg("-o")
+                .arg(&dest_str)
+                .arg(url)
+        };
+
+        // 执行下载（暂不解析进度，先实现基础功能）
+        let out = self.run_to_string(cmd).await?;
+
+        if !out.success() {
+            return Err(HostError::CommandFailed {
+                program: if has_wget { "wget".into() } else { "curl".into() },
+                exit_code: out.exit_code,
+                stderr: out.stderr.lines().take(5).collect::<Vec<_>>().join("\n"),
+            });
+        }
+
+        Ok(())
+    }
 }
 
 // ============================================================

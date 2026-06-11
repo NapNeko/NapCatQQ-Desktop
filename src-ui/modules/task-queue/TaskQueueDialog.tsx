@@ -95,7 +95,6 @@ export const TaskQueueDialog: React.FC<TaskQueueDialogProps> = ({
                             </button>
                             <TaskDetailPanel
                                 item={selected}
-                                logEnabled={open}
                                 onOpenSettingsLog={handleOpenSettingsLog}
                             />
                         </div>

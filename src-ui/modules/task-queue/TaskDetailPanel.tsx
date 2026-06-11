@@ -4,11 +4,9 @@ import React from 'react';
 import { Button } from '../../shared/ui';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
-import { TaskLogPanel } from './TaskLogPanel';
 
 export interface TaskDetailPanelProps {
     item: TaskQueueItem;
-    logEnabled: boolean;
     onOpenSettingsLog: () => void;
 }
 
@@ -44,7 +42,6 @@ function formatElapsed(startedAt: number): string {
 
 export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     item,
-    logEnabled,
     onOpenSettingsLog,
 }) => {
     const progress = item.progress;
@@ -72,26 +69,51 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                             <ProgressBarOverlay progress={progress} />
                         </div>
                     )}
-                    {progress.logs.length > 0 && (
-                        <ul className="mt-2 max-h-36 space-y-0.5 overflow-y-auto text-[12px] leading-snug text-text-secondary">
-                            {progress.logs.slice(-12).map((log, idx) => (
-                                <li key={`${log.timestamp_ms}-${idx}`} className="truncate">
-                                    {log.message}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
                 </div>
             )}
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
                 <div className="flex items-center justify-between gap-2">
-                    <span className="text-[12px] font-medium text-text">会话日志</span>
+                    <span className="text-[12px] font-medium text-text">任务日志</span>
                     <Button size="sm" variant="ghost" onClick={onOpenSettingsLog}>
                         在设置中打开完整日志
                     </Button>
                 </div>
-                <TaskLogPanel startedAt={item.startedAt} enabled={logEnabled} fastPoll />
+                {!progress ? (
+                    <div className="flex h-[240px] items-center justify-center rounded-md border border-border-subtle bg-inset/40">
+                        <p className="text-[12px] text-text-tertiary">等待任务启动…</p>
+                    </div>
+                ) : progress.logs.length > 0 ? (
+                    <div className="flex h-[240px] flex-col overflow-hidden rounded-md border border-border-subtle bg-inset/40">
+                        <div className="h-full overflow-y-auto p-3 font-sans text-[12px] leading-[1.55] antialiased">
+                            {progress.logs.map((log, idx) => {
+                                const time = new Date(log.timestamp_ms).toLocaleTimeString('zh-CN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    hour12: false,
+                                });
+                                return (
+                                    <div
+                                        key={`${log.timestamp_ms}-${idx}`}
+                                        className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 py-0.5 text-text-secondary"
+                                    >
+                                        <span className="tabular-nums text-[11px] text-text-tertiary">
+                                            {time}
+                                        </span>
+                                        <span className="min-w-0 break-words text-text">{log.message}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex h-[240px] items-center justify-center rounded-md border border-border-subtle bg-inset/40">
+                        <p className="text-[12px] text-text-tertiary">
+                            {progress.status === 'running' ? '任务运行中，暂无日志输出' : '暂无日志'}
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
     );

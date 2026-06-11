@@ -16,6 +16,7 @@
 
 pub mod connection;
 pub mod credentials;
+pub mod download_progress;
 pub mod host_key;
 pub mod linux;
 pub mod tunnel;
@@ -23,6 +24,7 @@ pub mod windows_stub;
 
 pub use connection::ConnectionConfig;
 pub use credentials::{SshCredentials, SshKey};
+pub use download_progress::{CurlProgressParser, DownloadProgress, WgetProgressParser};
 pub use host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
 pub use linux::{probe_sudo, RemoteLinuxHost, SudoAccess};
 pub use tunnel::{TunnelHandle, TunnelSpec};

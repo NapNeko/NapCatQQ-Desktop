@@ -31,6 +31,8 @@ pub struct AppState {
     pub(crate) runtime: runtime::AppRuntime,
     pub(crate) bot_manager: Arc<AppBotManager>,
     pub(crate) server_manager: Arc<ncd_runtime::ServerManager>,
+    /// 包管理器全局锁，防止同一主机的 apt/dnf 并发冲突。
+    pub(crate) package_lock: ncd_runtime::package_lock::PackageManagerLock,
     /// Components 页活跃 task 注册表，task_id → CancellationToken。
     /// `run_component_action` 启动时插入；plan 完成 / 取消时移除。
     pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
@@ -184,6 +186,7 @@ pub fn run() {
             runtime,
             bot_manager,
             server_manager,
+            package_lock: ncd_runtime::package_lock::PackageManagerLock::new(),
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
             host_probe_cache: Arc::new(Mutex::new(HashMap::new())),
         })

@@ -387,7 +387,7 @@ async fn finalize_linux_docker_after_install(
     let mut cli = DockerCli::new(host);
     let mut status = cli.probe().await;
 
-    for attempt in 0..4u32 {
+    for attempt in 0..6u32 {
         if status.ready_to_deploy() {
             return Ok(status);
         }
@@ -398,9 +398,9 @@ async fn finalize_linux_docker_after_install(
             emit_log(
                 emit,
                 ProgressLogLevel::Info,
-                format!("等待 Docker 守护进程就绪（{}/4）…", attempt + 1),
+                format!("等待 Docker 守护进程就绪（{}/6）…", attempt + 1),
             );
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             cli = DockerCli::new(host);
             status = cli.probe().await;
             continue;

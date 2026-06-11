@@ -313,7 +313,7 @@ impl QQComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
-        ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
+        ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
 
         // ===== Step 1:探测包格式 =====
         ctx.emit(ProgressKind::StepBegin {
@@ -332,28 +332,8 @@ impl QQComponent {
         })
         .await;
         let url = self.build_download_url(pkg_format, host.arch())?;
-        let local_tmp = std::env::temp_dir().join(format!(
-            "ncd-qq-{}-{}.{}",
-            self.version,
-            std::process::id(),
-            match pkg_format {
-                PackageFormat::Deb => "deb",
-                PackageFormat::Rpm => "rpm",
-            }
-        ));
 
-        let helper = DownloadHelper::new()?;
-        helper
-            .download_to_file(&url, &local_tmp, self.expected_sha256.as_deref(), ctx, 2)
-            .await?;
-        ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
-
-        // ===== Step 3:上传到 host =====
-        ctx.emit(ProgressKind::StepBegin {
-            step: 3,
-            message: "upload package to host".into(),
-        })
-        .await;
+        // 准备远程路径
         host.create_dir_all(&self.tmp_dir).await?;
         let remote_pkg = self.tmp_dir.join(format!(
             "ncd-qq-{}.{}",
@@ -363,13 +343,47 @@ impl QQComponent {
                 PackageFormat::Rpm => "rpm",
             }
         ));
-        host.upload(&local_tmp, &remote_pkg).await?;
-        let _ = tokio::fs::remove_file(&local_tmp).await;
-        ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // ===== Step 4:rootless 解压 =====
+        let mirrors = ncd_network::build_mirror_urls(&url, None);
+        let mut remote_download_ok = false;
+
+        // Layer 1: 尝试远程直接下载
+        if host.locality() == ncd_host::Locality::Remote {
+            for mirror_url in &mirrors {
+                if let Ok(_) = host.download_url(mirror_url, &remote_pkg).await {
+                    ctx.info("远程直接下载成功").await;
+                    remote_download_ok = true;
+                    break;
+                }
+            }
+        }
+
+        // Layer 2: fallback 到本地下载 → 上传
+        if !remote_download_ok {
+            let local_tmp = std::env::temp_dir().join(format!(
+                "ncd-qq-{}-{}.{}",
+                self.version,
+                std::process::id(),
+                match pkg_format {
+                    PackageFormat::Deb => "deb",
+                    PackageFormat::Rpm => "rpm",
+                }
+            ));
+
+            let helper = DownloadHelper::new()?;
+            helper
+                .download_with_mirrors(&mirrors, &local_tmp, self.expected_sha256.as_deref(), ctx, 2)
+                .await?;
+
+            host.upload(&local_tmp, &remote_pkg).await?;
+            let _ = tokio::fs::remove_file(&local_tmp).await;
+        }
+
+        ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
+
+        // ===== Step 3:rootless 解压 =====
         ctx.emit(ProgressKind::StepBegin {
-            step: 4,
+            step: 3,
             message: "extract QQ".into(),
         })
         .await;
@@ -403,7 +417,7 @@ impl QQComponent {
         }
         // 清理远端安装包
         let _ = host.remove_file(&remote_pkg).await;
-        ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
+        ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }
@@ -583,8 +597,9 @@ impl QQComponent {
             std::process::id()
         ));
         let helper = DownloadHelper::new()?;
+        let mirrors = ncd_network::build_mirror_urls(&download_url, None);
         helper
-            .download_to_file(&download_url, &local_exe, None, ctx, 2)
+            .download_with_mirrors(&mirrors, &local_exe, None, ctx, 2)
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 

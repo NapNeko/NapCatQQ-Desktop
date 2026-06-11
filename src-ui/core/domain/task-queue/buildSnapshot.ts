@@ -117,8 +117,8 @@ function collectComponentActionItems(
         const componentId = target?.componentId;
         const hostLabel = hostId ? hostLabelFor(hostId, hostLabels) : '—';
         const title = componentId
-            ? componentActionTitle(componentId, undefined, progress.message)
-            : progress.message || taskId;
+            ? componentActionTitle(componentId, undefined, progress.message || '完成')
+            : progress.message || `任务 ${taskId.slice(0, 8)}`;
         items.push({
             id: taskId,
             kind: 'component_action',
