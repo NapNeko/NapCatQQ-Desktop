@@ -13,7 +13,9 @@
 //! 业务编排尽量薄;真正的 docker 操作在 ncd_deploy::docker::DockerCli。
 
 use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
-use ncd_deploy::docker::{install_docker, render_compose, DockerCli, PullProgress};
+use ncd_deploy::docker::{
+    install_docker_with_progress, progress_event, render_compose, DockerCli, PullProgress,
+};
 use ncd_domain::{
     ContainerAction, ContainerInfo, DeployedContainer, DockerDeploySpec, DockerFlavor,
     DockerInstallReport, DockerInstallStatus, DockerStatus,
@@ -150,21 +152,54 @@ pub async fn docker_probe(
 #[tauri::command]
 pub async fn docker_install(
     host_id: String,
+    task_id: String,
     sudo_password: Option<String>,
     remember_sudo: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<DockerInstallReport, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
 
-    // 密码来源:前端显式传入优先,否则用 keyring 缓存(远端服务器才有 server_id)。
     let server_id = host_id.strip_prefix("remote:");
     let effective_password = sudo_password.clone().or_else(|| {
         server_id.and_then(|id| state.server_manager.sudo_password(id))
     });
 
-    let report = install_docker(host.as_ref(), effective_password.as_deref())
-        .await
-        .map_err(|e| format!("Docker 安装失败: {e}"))?;
+    info!(
+        target: "ncd_tauri::docker",
+        host_id = %host_id,
+        task_id = %task_id,
+        "开始安装 Docker（远端 Linux 将执行仓库配置与 apt/dnf 安装，约 3–10 分钟）"
+    );
+
+    let event_bus = state.event_bus.clone();
+    let tid = task_id.clone();
+    let emit = std::sync::Arc::new(move |kind: ProgressKind| {
+        event_bus.publish(DomainEvent::docker_install_progress(
+            tid.clone(),
+            progress_event(kind),
+        ));
+    });
+
+    let ssh_user = if let Some(id) = server_id {
+        state
+            .server_manager
+            .list_servers()
+            .await
+            .into_iter()
+            .find(|p| p.id == id)
+            .map(|p| p.username)
+    } else {
+        None
+    };
+
+    let report = install_docker_with_progress(
+        host.as_ref(),
+        effective_password.as_deref(),
+        ssh_user.as_deref(),
+        emit,
+    )
+    .await
+    .map_err(|e| format!("Docker 安装失败: {e}"))?;
 
     match report.status {
         DockerInstallStatus::Installed | DockerInstallStatus::AlreadyInstalled => {
@@ -188,7 +223,7 @@ pub async fn docker_install(
                 target: "ncd_tauri::docker",
                 host_id = %host_id,
                 msg = %report.message,
-                "Docker 需手动安装或处理"
+                "Docker 安装未达可部署状态"
             );
         }
     }

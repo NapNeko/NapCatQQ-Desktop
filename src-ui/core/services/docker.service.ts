@@ -34,11 +34,13 @@ export const dockerService = {
 
     install: async (
         hostId: string,
+        taskId: string,
         options: DockerInstallOptions = {},
     ): Promise<DockerInstallReport> => {
         if (isTauri)
             return invoke<DockerInstallReport>('docker_install', {
                 hostId,
+                taskId,
                 sudoPassword: options.sudoPassword ?? null,
                 rememberSudo: options.rememberSudo ?? null,
             });

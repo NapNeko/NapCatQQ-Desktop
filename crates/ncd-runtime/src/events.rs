@@ -51,6 +51,8 @@ pub enum DomainEventKind {
     /// 生成，不绑 bot。
     #[serde(rename = "docker_deploy_progress")]
     DockerDeployProgress,
+    #[serde(rename = "docker_install_progress")]
+    DockerInstallProgress,
     /// 桌面端会话日志追加（设置页 Desktop 日志 Tab）。
     #[serde(rename = "desktop_log_appended")]
     DesktopLogAppended,
@@ -192,6 +194,12 @@ pub enum DomainEvent {
         task_id: String,
         event: ProgressEvent,
     },
+    /// Docker 安装进度（Linux 远端 apt/dnf 脚本 + 起服务 + 探测）。
+    #[serde(rename = "docker_install_progress")]
+    DockerInstallProgress {
+        task_id: String,
+        event: ProgressEvent,
+    },
     #[serde(rename = "desktop_log_appended")]
     DesktopLogAppended { line: String },
 }
@@ -238,6 +246,7 @@ impl DomainEvent {
             Self::SnowLumaDaemonLog { .. } => DomainEventKind::SnowLumaDaemonLog,
             Self::ComponentActionProgress { .. } => DomainEventKind::ComponentActionProgress,
             Self::DockerDeployProgress { .. } => DomainEventKind::DockerDeployProgress,
+            Self::DockerInstallProgress { .. } => DomainEventKind::DockerInstallProgress,
             Self::DesktopLogAppended { .. } => DomainEventKind::DesktopLogAppended,
         }
     }
@@ -263,6 +272,7 @@ impl DomainEvent {
             Self::SnowLumaDaemonLog { .. } => "snowluma_daemon_log",
             Self::ComponentActionProgress { .. } => "component_action_progress",
             Self::DockerDeployProgress { .. } => "docker_deploy_progress",
+            Self::DockerInstallProgress { .. } => "docker_install_progress",
             Self::DesktopLogAppended { .. } => "desktop_log_appended",
         }
     }
@@ -291,6 +301,7 @@ impl DomainEvent {
             // task 级事件，不绑定具体 Bot；前端按 task_id 订阅 / 路由。
             Self::ComponentActionProgress { .. } => None,
             Self::DockerDeployProgress { .. } => None,
+            Self::DockerInstallProgress { .. } => None,
             Self::DesktopLogAppended { .. } => None,
         }
     }
@@ -459,6 +470,13 @@ impl DomainEvent {
     /// `event` 由 docker 部署流水各阶段吐出（复用 ProgressEvent / ProgressKind）。
     pub fn docker_deploy_progress(task_id: impl Into<String>, event: ProgressEvent) -> Self {
         Self::DockerDeployProgress {
+            task_id: task_id.into(),
+            event,
+        }
+    }
+
+    pub fn docker_install_progress(task_id: impl Into<String>, event: ProgressEvent) -> Self {
+        Self::DockerInstallProgress {
             task_id: task_id.into(),
             event,
         }

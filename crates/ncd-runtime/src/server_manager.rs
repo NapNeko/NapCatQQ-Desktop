@@ -307,6 +307,8 @@ pub struct ServerManager {
     /// MaxStartups 很容易拒掉一部分（表现为时好时坏的探测失败）。ensure_connected
     /// 抢这把锁后会二次检查缓存，等锁期间别人连上了就直接复用，真连接只发生一次。
     connect_locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
+    /// 自动连接失败后冷却，避免 detect 轮询刷 SSH 失败日志。
+    auto_connect_cooldown_until: Arc<RwLock<HashMap<String, std::time::Instant>>>,
 }
 
 impl ServerManager {
@@ -321,6 +323,7 @@ impl ServerManager {
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
             hosts: Arc::new(RwLock::new(HashMap::new())),
             connect_locks: Arc::new(RwLock::new(HashMap::new())),
+            auto_connect_cooldown_until: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -700,6 +703,16 @@ impl ServerManager {
             return Ok(host);
         }
 
+        const COOLDOWN: std::time::Duration = std::time::Duration::from_secs(90);
+        if let Some(until) = self.auto_connect_cooldown_until.read().await.get(id).copied() {
+            if until > std::time::Instant::now() {
+                return Err(
+                    "远端尚未连接（请去远端页测试连接）；近期自动连接失败，已暂停自动重试"
+                        .to_string(),
+                );
+            }
+        }
+
         info!(
             target: "ncd_runtime::server_manager",
             server_id = %id,
@@ -714,12 +727,18 @@ impl ServerManager {
         }
 
         match self.test_connection(id, None, false).await {
-            Ok(report) if report.success => self
-                .get_host(id)
-                .await
-                .ok_or_else(|| format!("自动连接成功但缓存为空: {id}（不应发生）")),
+            Ok(report) if report.success => {
+                self.auto_connect_cooldown_until.write().await.remove(id);
+                self.get_host(id)
+                    .await
+                    .ok_or_else(|| format!("自动连接成功但缓存为空: {id}（不应发生）"))
+            }
             Ok(report) => {
                 let err = report.error.unwrap_or_else(|| "未知错误".into());
+                self.auto_connect_cooldown_until
+                    .write()
+                    .await
+                    .insert(id.to_string(), std::time::Instant::now() + COOLDOWN);
                 tracing::warn!(
                     target: "ncd_runtime::server_manager",
                     server_id = %id,
@@ -729,6 +748,10 @@ impl ServerManager {
                 Err(format!("自动连接失败: {err}（请去远端页手动测试连接）"))
             }
             Err(err) => {
+                self.auto_connect_cooldown_until
+                    .write()
+                    .await
+                    .insert(id.to_string(), std::time::Instant::now() + COOLDOWN);
                 tracing::warn!(
                     target: "ncd_runtime::server_manager",
                     server_id = %id,

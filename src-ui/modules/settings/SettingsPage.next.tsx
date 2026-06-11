@@ -15,6 +15,7 @@ import { useDesktopLogViewer } from '../../hooks/diagnostics/useDesktopLogViewer
 import { DesktopLogTab } from './tabs/DesktopLogTab';
 import { DesktopLogToolbar } from './tabs/DesktopLogToolbar';
 import { AboutTab } from './tabs/AboutTab';
+import { consumeSettingsLogTab } from '../../hooks/task-queue/settingsLogNavigation';
 import {
     draftFromBackendAndPrefs,
     isSettingsDirty,
@@ -29,6 +30,12 @@ export function SettingsPageNext() {
     const [tab, setTab] = useState('appearance');
     const [draft, setDraft] = useState<SettingsDraft | null>(null);
     const logViewer = useDesktopLogViewer(tab === 'log');
+
+    useEffect(() => {
+        if (consumeSettingsLogTab()) {
+            setTab('log');
+        }
+    }, []);
 
     useEffect(() => {
         if (settings) {

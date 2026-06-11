@@ -328,16 +328,17 @@ fn build_component_for_host(
                 let latest = snapshot
                     .as_ref()
                     .and_then(|s| s.snowluma_latest.as_ref());
-                let tag = latest
-                    .map(|info| {
-                        if !info.tag.is_empty() {
-                            info.tag.clone()
-                        } else {
-                            format!("v{}", info.version)
-                        }
-                    })
-                    .or_else(|| state.snapshot.local_versions.snowluma.clone())
-                    .unwrap_or_default();
+                let tag = snowluma_github_release_tag(
+                    latest,
+                    state.snapshot.local_versions.snowluma.as_deref(),
+                );
+                if tag.is_empty() {
+                    return Err(
+                        "无法确定 SnowLuma 发布版本（GitHub 版本快照与本机已装版本均不可用）。\
+                         请确认能访问 GitHub 并在概览等待版本检查完成后再安装。"
+                            .to_string(),
+                    );
+                }
                 let mut comp = SnowLumaComponent::for_windows(install, tag.clone());
                 if let Some(sha) = latest.and_then(|info| {
                     asset_sha256(info, &format!("SnowLuma-{tag}-win-x64.zip"))
@@ -360,16 +361,17 @@ fn build_component_for_host(
                 let latest = snapshot
                     .as_ref()
                     .and_then(|s| s.snowluma_latest.as_ref());
-                let tag = latest
-                    .map(|info| {
-                        if !info.tag.is_empty() {
-                            info.tag.clone()
-                        } else {
-                            format!("v{}", info.version)
-                        }
-                    })
-                    .or_else(|| state.snapshot.local_versions.snowluma.clone())
-                    .unwrap_or_default();
+                let tag = snowluma_github_release_tag(
+                    latest,
+                    state.snapshot.local_versions.snowluma.as_deref(),
+                );
+                if tag.is_empty() {
+                    return Err(
+                        "无法确定 SnowLuma 发布版本（GitHub 版本快照与本机已装版本均不可用）。\
+                         请确认能访问 GitHub 并在概览等待版本检查完成后再安装。"
+                            .to_string(),
+                    );
+                }
                 let asset = format!("SnowLuma-{tag}-linux-x64-lite.tar.gz");
                 let url = format!(
                     "https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/{asset}"
@@ -424,6 +426,37 @@ fn require_remote_home(remote_home: Option<&str>) -> Result<&str, String> {
     })
 }
 
+/// GitHub SnowLuma release 路径段必须带 `v` 前缀；`package.json` 的 version 常是 `1.9.5`。
+fn normalize_github_release_tag(raw: &str) -> String {
+    let t = raw.trim();
+    if t.is_empty() {
+        return String::new();
+    }
+    if t.starts_with('v') || t.starts_with('V') {
+        t.to_string()
+    } else {
+        format!("v{t}")
+    }
+}
+
+/// 远端/本机 SnowLuma 安装 URL 用的 tag：优先 release 快照，否则本机已装版本（仅作兜底）。
+fn snowluma_github_release_tag(
+    latest: Option<&ReleaseInfo>,
+    local_version: Option<&str>,
+) -> String {
+    if let Some(info) = latest {
+        if !info.tag.is_empty() {
+            return normalize_github_release_tag(&info.tag);
+        }
+        if !info.version.is_empty() {
+            return normalize_github_release_tag(&info.version);
+        }
+    }
+    local_version
+        .map(normalize_github_release_tag)
+        .unwrap_or_default()
+}
+
 /// 在 ReleaseInfo 的 assets 里按文件名反查 sha256，命中且非空才返回。
 fn asset_sha256(info: &ReleaseInfo, name: &str) -> Option<String> {
     info.assets
@@ -451,6 +484,13 @@ mod tests {
     use super::*;
 
     /// catalog 顺序 + 元素数量必须稳定：前端按数组顺序渲染卡片。
+    #[test]
+    fn normalize_github_release_tag_adds_v_prefix() {
+        assert_eq!(normalize_github_release_tag("1.9.5"), "v1.9.5");
+        assert_eq!(normalize_github_release_tag("v1.9.5"), "v1.9.5");
+        assert_eq!(normalize_github_release_tag(""), "");
+    }
+
     #[test]
     fn catalog_returns_six_items_in_expected_order() {
         let list = catalog();

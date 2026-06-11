@@ -17,180 +17,30 @@
 //! macOS 同理(本工程目前不在 macOS 上跑 docker 部署,留个明确分支)。
 
 use ncd_domain::DockerInstallReport;
-use ncd_host::remote::{probe_sudo, SudoAccess};
-use ncd_host::{Host, HostCommand, Os};
-use tracing::{error, info, warn};
+use ncd_host::Host;
 
-use super::cli::{DockerCli, DockerCliError};
+use super::cli::DockerCliError;
+use super::install_progress::InstallProgressEmit;
 
 /// 兼容旧调用方的别名。结构化结果统一用 [`DockerInstallReport`]。
 pub type DockerInstallOutcome = DockerInstallReport;
 
 /// Docker Desktop for Windows 下载页。
-const DOCKER_DESKTOP_URL: &str = "https://www.docker.com/products/docker-desktop/";
+pub(crate) const DOCKER_DESKTOP_URL: &str = "https://www.docker.com/products/docker-desktop/";
 
 /// 阿里云 docker-ce 镜像根。apt 的 gpg/仓库、dnf 的 .repo 都从这里派生。
 /// 实测国内 HTTP 200,海外也可达;替代被墙的 download.docker.com。
 const ALIYUN_DOCKER_CE: &str = "https://mirrors.aliyun.com/docker-ce";
 
-/// 在 host 上确保 docker 可用,没有就尝试装。
-///
-/// sudo_password:上层从 keyring 取到的登录密码或用户在弹框输入的 sudo 密码。
-/// None 表示这次没有可用密码——只能靠 root / 免密 sudo,不行就返回 NeedSudoPassword。
+/// 在 host 上确保 docker 可用,没有就尝试装（无进度回调，供测试/旧调用方）。
 pub async fn install_docker(
     host: &dyn Host,
     sudo_password: Option<&str>,
 ) -> Result<DockerInstallReport, DockerCliError> {
-    info!(
-        target: "ncd_deploy::docker",
-        os = ?host.os(),
-        "install_docker"
-    );
-    let cli = DockerCli::new(host);
+    use std::sync::Arc;
 
-    // 已装 + daemon 在跑 + compose v2 插件齐全才算幂等就绪直接返回。只看
-    // installed && daemon_running 会漏掉缺 compose 的机器:那种机器点「安装」会被
-    // 当成"已安装"成功,但部署用 ready_to_deploy() 闸又会被 compose=false 挡住,
-    // 用户无法自助补 compose。缺 compose 时继续往下跑安装脚本(脚本会装
-    // docker-compose-plugin),把 compose 补齐。
-    let status = cli.probe().await;
-    if status.ready_to_deploy() {
-        info!(
-            target: "ncd_deploy::docker",
-            version = %status.version,
-            "Docker 已就绪，跳过安装"
-        );
-        return Ok(DockerInstallReport::already_installed(&status.version));
-    }
-
-    match host.os() {
-        Os::Linux => install_docker_linux(host, sudo_password).await,
-        Os::Windows => Ok(DockerInstallReport::manual_required(
-            "Windows 请安装 Docker Desktop 后重试（需要 WSL2 后端）",
-            Some(DOCKER_DESKTOP_URL.to_string()),
-        )),
-        Os::MacOs => Ok(DockerInstallReport::manual_required(
-            "macOS 请安装 Docker Desktop 后重试",
-            Some(DOCKER_DESKTOP_URL.to_string()),
-        )),
-    }
-}
-
-/// 提权可行性:能直接提权(root/免密/已有密码注入 host),还是缺密码得让上层去要。
-enum Elevation {
-    /// root / 免密 sudo / 已把密码注入 host:elevated 命令都能跑。
-    Ready,
-    /// 需要密码但一个都没有:让上层弹框去要。
-    Need,
-}
-
-/// Linux 装 docker:先把提权密码注入 host + 定提权方式,再跑阿里云原生安装脚本
-/// + 起 daemon + 加用户组。所有 elevated 命令的提权细节由 host 层统一处理。
-async fn install_docker_linux(
-    host: &dyn Host,
-    sudo_password: Option<&str>,
-) -> Result<DockerInstallReport, DockerCliError> {
-    // 探主机 sudo 能力。root / 免密直接可提权;否则必须有密码。
-    let elevation = match probe_sudo(host).await {
-        SudoAccess::RootAlready | SudoAccess::Passwordless => Elevation::Ready,
-        SudoAccess::PasswordRequired => match sudo_password {
-            // 有密码:注入 host,之后所有 .elevated() 命令自动走 sudo -S。
-            Some(pw) => {
-                host.set_elevation_password(Some(pw.to_string())).await;
-                Elevation::Ready
-            }
-            // host 可能在连接时已被 ServerManager 注入了 keyring 密码,这里探不到
-            // 也没显式密码,交给上层弹框要(docker command 层会先用 keyring 兜底)。
-            None => Elevation::Need,
-        },
-    };
-    if matches!(elevation, Elevation::Need) {
-        return Ok(DockerInstallReport::need_sudo_password(
-            "这台远端是密钥登录且未保存密码，安装 Docker 需要 sudo 权限。请输入 sudo 密码后重试。",
-        ));
-    }
-
-    // 一段自包含脚本配阿里云仓库 + 装 docker-ce(提权)。识别发行版,全程只打
-    // mirrors.aliyun.com。脚本不含外部用户输入,整体交给 host 层 sudo -S sh -c
-    // 跑(单引号转义保护)。失败时 stderr 给上层拼错误文案。
-    let run_script = HostCommand::new("sh")
-        .arg("-c")
-        .arg(aliyun_install_script())
-        .elevated()
-        .timeout(std::time::Duration::from_secs(600));
-    let out = host.run_to_string(run_script).await?;
-    if !out.success() {
-        // 提权失败最常见就是密码错。区分出来让前端可以重新弹框,而不是笼统报"失败"。
-        if looks_like_bad_sudo_password(&out.stderr) {
-            warn!(
-                target: "ncd_deploy::docker",
-                "Docker 安装脚本: sudo 密码不正确"
-            );
-            return Ok(DockerInstallReport::need_sudo_password(
-                "sudo 密码不正确，请重新输入。",
-            ));
-        }
-        let detail = out.stderr.trim();
-        error!(
-            target: "ncd_deploy::docker",
-            err = %detail,
-            "Docker 安装脚本执行失败"
-        );
-        return Ok(DockerInstallReport::manual_required(
-            format!(
-                "安装脚本执行失败：{}。可登录远端按阿里云文档手动配置 docker-ce 仓库后重试。",
-                out.stderr.trim()
-            ),
-            None,
-        ));
-    }
-
-    // 起 daemon 并设开机自启。失败不致命(部分容器化环境没 systemd),忽略错误,
-    // 末尾用复探判定 daemon 真实状态。
-    let enable = HostCommand::new("systemctl")
-        .arg("enable")
-        .arg("--now")
-        .arg("docker")
-        .elevated()
-        .timeout(std::time::Duration::from_secs(60));
-    let _ = host.run_to_string(enable).await;
-
-    // 把真实登录用户加进 docker 组,之后该用户重连就能免 sudo 跑 docker。
-    // 不能用 $USER:这条经 sudo -S sh -c 跑,$USER 在 sudo 上下文里是 root,会把
-    // root 加进组而漏掉真正的登录用户。用 $SUDO_USER(sudo 记录的原始调用者,正是
-    // SSH 登录用户)优先,免密/root 直连无 SUDO_USER 时 fallback logname。加进组要
-    // 重新登录才生效,所以本次会话的探测仍走 sudo 兜底(probe 已处理),不致命。
-    let usermod = HostCommand::new("sh")
-        .arg("-c")
-        .arg("usermod -aG docker \"${SUDO_USER:-$(logname 2>/dev/null)}\"")
-        .elevated()
-        .timeout(std::time::Duration::from_secs(30));
-    let _ = host.run_to_string(usermod).await;
-
-    // 复探一次确认 docker + daemon + compose 都真起来了(ready_to_deploy 三者齐全)。
-    let cli = DockerCli::new(host);
-    let status = cli.probe().await;
-    if status.ready_to_deploy() {
-        info!(target: "ncd_deploy::docker", "Docker 安装完成且可部署");
-        Ok(DockerInstallReport::installed())
-    } else if status.installed && status.daemon_running {
-        // docker + daemon 起来了但 compose 插件没装上(极少数源缺包 / 装了旧 v1)。
-        // 明确提示补 compose v2,而不是报"已就绪"骗用户去部署再失败。
-        Ok(DockerInstallReport::manual_required(
-            "Docker 已安装但缺 compose v2 插件，请在远端执行 sudo apt-get install -y docker-compose-plugin（dnf/yum 同名包）后重试",
-            None,
-        ))
-    } else if status.installed {
-        Ok(DockerInstallReport::manual_required(
-            "Docker 已安装但 daemon 未运行，请在远端执行 sudo systemctl start docker",
-            None,
-        ))
-    } else {
-        Ok(DockerInstallReport::manual_required(
-            "安装脚本执行完毕但仍探测不到 Docker，请登录远端手动检查",
-            None,
-        ))
-    }
+    let noop: InstallProgressEmit = Arc::new(|_| {});
+    super::install_progress::install_docker_with_progress(host, sudo_password, None, noop).await
 }
 
 /// 生成在远端以 root 跑的阿里云原生安装脚本(POSIX sh)。按包管理器分流:
@@ -199,7 +49,7 @@ async fn install_docker_linux(
 ///
 /// 全程只下载 mirrors.aliyun.com,不碰被墙的 download.docker.com。脚本内无
 /// 外部用户输入,$() 命令替换(架构 / codename)在远端展开。
-fn aliyun_install_script() -> String {
+pub(crate) fn aliyun_install_script() -> String {
     // apt 用 $ID 区分 ubuntu / debian 子路径(阿里云两套独立目录),codename 取
     // 自 /etc/os-release。dnf/yum 统一用阿里云 centos 的 docker-ce.repo,再把里头的
     // download.docker.com 就地换成阿里云(repo 文件默认指向官方域名,不换照样被墙)。
@@ -243,7 +93,7 @@ fi
 /// 从 sudo/stderr 粗判是不是密码错误。sudo 各发行版的提示不完全统一,匹配几个
 /// 常见关键片段:英文 "incorrect password" / "Sorry, try again",中文 locale 下的
 /// "密码不正确",以及 "a password is required"(密码为空或没读到)。
-fn looks_like_bad_sudo_password(stderr: &str) -> bool {
+pub(crate) fn looks_like_bad_sudo_password(stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
     s.contains("incorrect password")
         || s.contains("sorry, try again")

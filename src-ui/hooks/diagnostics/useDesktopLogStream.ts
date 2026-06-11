@@ -11,12 +11,14 @@ import {
 } from '../../core/domain/desktop-log';
 import { desktopLogService } from '../../core/services/desktop.service';
 
-const POLL_MS = 1500;
+export const DESKTOP_LOG_POLL_MS = 1500;
+export const DESKTOP_LOG_POLL_MS_FAST = 500;
 const TAIL_LINES = 800;
 
 export function useDesktopLogStream(
     levelFilter: DesktopLogLevelFilterValue,
     enabled: boolean,
+    options?: { pollIntervalMs?: number },
 ) {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -46,6 +48,8 @@ export function useDesktopLogStream(
         [levelFilter, enabled],
     );
 
+    const pollMs = options?.pollIntervalMs ?? DESKTOP_LOG_POLL_MS;
+
     useEffect(() => {
         if (!enabled) {
             setLoading(false);
@@ -57,9 +61,9 @@ export function useDesktopLogStream(
 
         const id = window.setInterval(() => {
             void reload({ showSpinner: false });
-        }, POLL_MS);
+        }, pollMs);
         return () => window.clearInterval(id);
-    }, [enabled, reload]);
+    }, [enabled, reload, pollMs]);
 
     const manualReload = useCallback(() => reload({ showSpinner: true }), [reload]);
 

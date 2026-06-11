@@ -275,6 +275,11 @@ type DomainEventBody =
         event: ProgressEvent;
     }
     | {
+        kind: 'docker_install_progress';
+        task_id: string;
+        event: ProgressEvent;
+    }
+    | {
         kind: 'desktop_log_appended';
         line: string;
     };

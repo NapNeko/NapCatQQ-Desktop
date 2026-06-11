@@ -12,7 +12,9 @@
 pub mod cli;
 pub mod compose;
 pub mod install;
+pub mod install_progress;
 
 pub use cli::{DockerCli, DockerCliError, LayerPhase, PullProgress};
 pub use compose::render_compose;
 pub use install::{install_docker, DockerInstallOutcome};
+pub use install_progress::{install_docker_with_progress, progress_event, InstallProgressEmit, INSTALL_TOTAL_STEPS};

@@ -12,6 +12,8 @@ import {
     ChevronsRight,
     Container,
     LayoutDashboard,
+    ListTodo,
+    Loader2,
     type LucideIcon,
     Package,
     Server,
@@ -38,6 +40,8 @@ interface SidebarProps {
     onToggleCollapse: () => void;
     /// 是否显示 Docker 项。
     showDocker?: boolean;
+    taskQueueActiveCount?: number;
+    onOpenTaskQueue?: () => void;
 }
 
 interface NavItem {
@@ -69,6 +73,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     collapsed,
     onToggleCollapse,
     showDocker = true,
+    taskQueueActiveCount = 0,
+    onOpenTaskQueue,
 }) => {
     const mainNavItems = showDocker
         ? MAIN_NAV
@@ -211,6 +217,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </ul>
 
                 <ul className="mt-auto space-y-0.5 border-t border-border-subtle pt-2">
+                    {onOpenTaskQueue && (
+                        <TaskQueueNavRow
+                            activeCount={taskQueueActiveCount}
+                            collapsed={collapsed}
+                            onOpen={onOpenTaskQueue}
+                        />
+                    )}
                     <NavRow
                         item={SETTINGS_NAV}
                         isActive={active === 'settings'}
@@ -261,6 +274,76 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) 
                     className={cn('shrink-0', isActive && 'text-brand')}
                 />
                 {!collapsed && <span className="truncate">{item.label}</span>}
+            </button>
+        </li>
+    );
+};
+
+interface TaskQueueNavRowProps {
+    activeCount: number;
+    collapsed: boolean;
+    onOpen: () => void;
+}
+
+const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
+    activeCount,
+    collapsed,
+    onOpen,
+}) => {
+    const busy = activeCount > 0;
+    const iconSize = collapsed ? 20 : 15;
+    const label = busy ? `任务 (${activeCount})` : '任务';
+
+    return (
+        <li>
+            <button
+                type="button"
+                onClick={onOpen}
+                title={collapsed ? label : undefined}
+                aria-label={busy ? `任务队列，${activeCount} 个进行中` : '任务队列'}
+                className={cn(
+                    'group relative flex w-full items-center gap-2.5 rounded-sm px-2.5',
+                    'text-[13.5px] font-medium transition-colors',
+                    'text-text-tertiary hover:bg-text/5 hover:text-text-secondary',
+                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
+                    collapsed ? 'h-10 justify-center px-0' : 'h-9',
+                )}
+            >
+                <span className="relative inline-flex shrink-0">
+                    {busy ? (
+                        <MotionIcon
+                            icon={Loader2}
+                            motion="spin"
+                            playEnter={false}
+                            size={iconSize}
+                            strokeWidth={1.75}
+                            className="text-brand"
+                        />
+                    ) : (
+                        <MotionIcon
+                            icon={ListTodo}
+                            motion="none"
+                            hoverAccent
+                            playEnter={false}
+                            size={iconSize}
+                            strokeWidth={1.75}
+                        />
+                    )}
+                    {busy && (
+                        <span
+                            className={cn(
+                                'absolute flex items-center justify-center rounded-pill bg-brand font-medium leading-none text-white',
+                                collapsed
+                                    ? '-right-1 -top-1 h-3.5 min-w-3.5 px-0.5 text-[9px]'
+                                    : '-right-1.5 -top-1 h-4 min-w-4 px-1 text-[10px]',
+                            )}
+                            aria-hidden
+                        >
+                            {activeCount > 9 ? '9+' : activeCount}
+                        </span>
+                    )}
+                </span>
+                {!collapsed && <span className="truncate">{label}</span>}
             </button>
         </li>
     );

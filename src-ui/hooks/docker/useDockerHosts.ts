@@ -12,6 +12,7 @@ import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { dockerService, type DockerInstallOptions } from '../../core/services/docker.service';
 import { openExternalUrl } from '../../core/ipc/transport';
 import { dockerActionStore } from './dockerActionStore';
+import { dockerInstallProgressStore } from './dockerInstallProgressStore';
 import type {
     ContainerInfo,
     DeployedContainer,
@@ -42,6 +43,8 @@ export interface UseDockerHostsResult {
     isInstalling: boolean;
     /// host_id → 该主机是否正在装 docker。状态存模块级 store,切页面不丢。
     installingByHost: Record<string, boolean>;
+    /// 安装中时 Docker 行展示的说明（无逐步进度，引导看设置→日志）。
+    installHintByHost: Record<string, string>;
     /// 打开 Docker Desktop 下载页（Windows / macOS 手动安装引导用）。
     openDownloadPage: () => Promise<void>;
     /// 在某主机上部署一个容器。taskId 由调用方生成并传入，用于订阅进度事件。
@@ -101,9 +104,14 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     }, [queryClient]);
 
     const installMutation = useMutation({
-        mutationFn: (args: { hostId: string; options?: DockerInstallOptions }) =>
-            dockerService.install(args.hostId, args.options),
-        onSuccess: invalidate,
+        mutationFn: (args: { hostId: string; taskId: string; options?: DockerInstallOptions }) =>
+            dockerService.install(args.hostId, args.taskId, args.options),
+        onSuccess: (report, args) => {
+            if (report.probedStatus) {
+                queryClient.setQueryData(['docker', 'status', args.hostId], report.probedStatus);
+            }
+            invalidate();
+        },
     });
 
     // 订阅模块级 docker 安装状态(切页面不丢)。useMutation.isPending 绑在 hook 上,
@@ -112,14 +120,20 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         dockerActionStore.subscribe,
         () => dockerActionStore.getSnapshot().installingByHost,
     );
+    const installHintByHost = useSyncExternalStore(
+        dockerActionStore.subscribe,
+        () => dockerActionStore.getSnapshot().installHintByHost,
+    );
 
     // install 包一层:进 store 标记 installing,promise 落定(成败都算)清标记。
     // 这样切页面再切回,spinner / 禁用态从 store 恢复,而不是凭空消失。
     const install = useCallback(
         async (hostId: string, options?: DockerInstallOptions): Promise<DockerInstallReport> => {
-            dockerActionStore.markInstalling(hostId);
+            const taskId = crypto.randomUUID();
+            dockerInstallProgressStore.started(taskId, hostId);
+            dockerActionStore.markInstalling(hostId, taskId);
             try {
-                const work = installMutation.mutateAsync({ hostId, options });
+                const work = installMutation.mutateAsync({ hostId, taskId, options });
                 const timeout = new Promise<never>((_, reject) => {
                     window.setTimeout(
                         () =>
@@ -155,6 +169,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         install,
         isInstalling,
         installingByHost,
+        installHintByHost,
         openDownloadPage: () => openExternalUrl(DOCKER_DESKTOP_URL),
         deploy: (hostId, spec, taskId) => deployMutation.mutateAsync({ hostId, spec, taskId }),
         isDeploying: deployMutation.isPending,

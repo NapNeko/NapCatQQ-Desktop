@@ -105,10 +105,15 @@ interface ComponentsData {
     refetch: () => void;
 }
 
-// 自动连接去重表（模块级，跨所有 useComponentsData 实例共享）。
-// 预热 hook 与组件页同时挂载时，靠它保证同一台远端只触发一次自动连接，
-// 避免并发 testConnection 把远端 SSH 握手打爆。
+// 自动连接去重 + 失败冷却（避免 SSH 不可达时每秒重试刷日志）。
 const autoConnectInFlight = new Set<string>();
+const AUTO_CONNECT_COOLDOWN_MS = 90_000;
+const autoConnectCooldownUntil = new Map<string, number>();
+
+function autoConnectBlocked(serverId: string): boolean {
+    const until = autoConnectCooldownUntil.get(serverId) ?? 0;
+    return Date.now() < until;
+}
 
 function useComponentsData(): ComponentsData {
     const { hosts, servers } = useKnownHosts();
@@ -124,19 +129,32 @@ function useComponentsData(): ComponentsData {
         if (!isTauri) return;
         for (const profile of servers) {
             if (profile.state === 'connected' || profile.state === 'connecting') continue;
+            // 已失败的主机不自动重试，避免公钥/密码错误时刷 SSH 日志；用户去远端页手动测。
+            if (profile.state === 'failed') continue;
+            if (autoConnectBlocked(profile.id)) continue;
             if (autoConnectInFlight.has(profile.id)) continue;
             autoConnectInFlight.add(profile.id);
             serverService
                 .testConnection(profile.id)
                 .then((report) => {
                     if (report.success) {
+                        autoConnectCooldownUntil.delete(profile.id);
                         queryClient.invalidateQueries({ queryKey: ['componentDetect'] });
                         queryClient.invalidateQueries({ queryKey: ['servers'] });
                     } else {
-                        autoConnectInFlight.delete(profile.id);
+                        autoConnectCooldownUntil.set(
+                            profile.id,
+                            Date.now() + AUTO_CONNECT_COOLDOWN_MS,
+                        );
                     }
                 })
                 .catch(() => {
+                    autoConnectCooldownUntil.set(
+                        profile.id,
+                        Date.now() + AUTO_CONNECT_COOLDOWN_MS,
+                    );
+                })
+                .finally(() => {
                     autoConnectInFlight.delete(profile.id);
                 });
         }

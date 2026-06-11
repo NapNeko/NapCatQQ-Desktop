@@ -15,7 +15,9 @@ import { Button } from '../../shared/ui';
 import { MotionIcon } from '../../shared/ui/motion';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
+import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { DockerStatus, Os } from '../../core/ipc/types';
+import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from './progressView';
 import { ComponentCardBody, ComponentEntityCard } from './ComponentEntityCard';
 
 interface DockerRowProps {
@@ -23,6 +25,8 @@ interface DockerRowProps {
     status: DockerStatus | undefined;
     isProbing: boolean;
     isInstalling: boolean;
+    installHint?: string;
+    installProgress?: ActionProgressView | null;
     onInstall: () => void;
     onOpenDownload: () => void;
 }
@@ -32,6 +36,8 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     status,
     isProbing,
     isInstalling,
+    installHint,
+    installProgress,
     onInstall,
     onOpenDownload,
 }) => {
@@ -81,7 +87,14 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                 }
                 description="容器运行时，用于以容器方式部署 NapCat / SnowLuma"
                 statusLine={
-                    <StatusLine ready={ready} summary={summary} isProbing={isProbing && !status} />
+                    <StatusLine
+                        ready={ready}
+                        summary={summary}
+                        isProbing={isProbing && !status}
+                        isInstalling={isInstalling}
+                        installHint={installHint}
+                        installProgress={installProgress}
+                    />
                 }
             />
         </ComponentEntityCard>
@@ -114,7 +127,27 @@ const StatusLine: React.FC<{
     ready: boolean;
     summary: { ready: boolean; label: string } | null;
     isProbing: boolean;
-}> = ({ ready, summary, isProbing }) => {
+    isInstalling?: boolean;
+    installHint?: string;
+    installProgress?: ActionProgressView | null;
+}> = ({ ready, summary, isProbing, isInstalling, installHint, installProgress }) => {
+    if (isInstalling && installProgress) {
+        return (
+            <div className="mt-1 min-w-0">
+                <ProgressLine progress={installProgress} />
+                {shouldShowProgressBar(installProgress) && (
+                    <ProgressBarOverlay progress={installProgress} />
+                )}
+            </div>
+        );
+    }
+    if (isInstalling) {
+        return (
+            <p className="mt-1 truncate text-xs text-warning">
+                {installHint ?? '正在安装…'}
+            </p>
+        );
+    }
     if (isProbing) {
         return <p className="mt-1 truncate text-xs text-text-tertiary">正在探测</p>;
     }

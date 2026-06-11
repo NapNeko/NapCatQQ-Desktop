@@ -327,6 +327,9 @@ pub struct DockerInstallReport {
     /// 可选下载入口(Windows/macOS 不能静默装时给 Docker Desktop 链接)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub download_url: Option<String>,
+    /// 安装流程结束时的探测快照，供前端立刻刷新 Docker 行，无需等下一轮 probe 或重启应用。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probed_status: Option<DockerStatus>,
 }
 
 /// docker_install 的结果分类。
@@ -351,6 +354,7 @@ impl DockerInstallReport {
             status: DockerInstallStatus::AlreadyInstalled,
             message: format!("Docker 已就绪（{version}）"),
             download_url: None,
+            probed_status: None,
         }
     }
 
@@ -359,6 +363,7 @@ impl DockerInstallReport {
             status: DockerInstallStatus::Installed,
             message: "Docker 安装完成，现在可以部署容器了".to_string(),
             download_url: None,
+            probed_status: None,
         }
     }
 
@@ -367,6 +372,7 @@ impl DockerInstallReport {
             status: DockerInstallStatus::NeedSudoPassword,
             message: message.into(),
             download_url: None,
+            probed_status: None,
         }
     }
 
@@ -375,7 +381,13 @@ impl DockerInstallReport {
             status: DockerInstallStatus::ManualRequired,
             message: message.into(),
             download_url,
+            probed_status: None,
         }
+    }
+
+    pub fn with_probed_status(mut self, status: DockerStatus) -> Self {
+        self.probed_status = Some(status);
+        self
     }
 }
 

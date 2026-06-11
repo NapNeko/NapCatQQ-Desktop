@@ -287,6 +287,7 @@ OverlayBody.displayName = 'OverlayBody';
 
 function contentHeightCap(size: DialogSize): number {
     if (size === 'sheet') return Math.floor(window.innerHeight * 0.85);
+    if (size === 'taskQueue') return Math.floor(window.innerHeight * 0.96);
     return Math.floor(window.innerHeight - 48);
 }
 
@@ -323,6 +324,21 @@ function useDialogContentHeight(
 
         const apply = () => {
             const cap = contentHeightCap(size);
+
+            if (size === 'taskQueue') {
+                tweenRef.current?.kill();
+                clip.style.height = '';
+                clip.style.flex = '1 1 0%';
+                clip.style.minHeight = '0';
+                inner.style.overflowY = 'hidden';
+                inner.style.maxHeight = 'none';
+                inner.style.height = '100%';
+                inner.style.minHeight = '0';
+                inner.style.flex = '1 1 0%';
+                primedRef.current = true;
+                return;
+            }
+
             const raw = inner.scrollHeight;
             const target = Math.min(raw, cap);
             const scrollable = raw > cap + 1;
@@ -394,6 +410,7 @@ const ContentBody = forwardRef<
                 'pointer-events-auto relative w-full',
                 'rounded-md bg-elevated p-6 shadow-popover',
                 size === 'sheet' && 'flex max-h-[85dvh] flex-col',
+                size === 'taskQueue' && 'flex h-[min(92dvh,900px)] min-h-[min(52dvh,480px)] max-h-[min(92dvh,900px)] flex-col p-0',
                 'transition-[max-width] duration-300 ease-out',
                 className,
             )}
@@ -403,9 +420,14 @@ const ContentBody = forwardRef<
                 className={cn(
                     'overflow-x-visible overflow-y-hidden',
                     size === 'sheet' && 'min-h-0 flex-1',
+                    size === 'taskQueue' && 'min-h-0 flex-1',
                 )}
             >
-                <div ref={innerRef} className={cn('px-0.5', size === 'sheet' && 'min-h-0')}>
+                <div ref={innerRef} className={cn(
+                    'px-0.5',
+                    size === 'sheet' && 'flex min-h-0 flex-1 flex-col',
+                    size === 'taskQueue' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
+                )}>
                     {children}
                 </div>
             </div>

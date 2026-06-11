@@ -1,7 +1,7 @@
 // 新 UI 树根 = AppShell。
 // 布局:TitleBar(透明) ─ [Sidebar | main]
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
@@ -12,14 +12,18 @@ import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { DockerPageNext } from '../modules/docker/DockerPage.next';
 import { RemoteHostPanelNext } from '../modules/remote/RemoteHostPanel.next';
 import { SettingsPageNext } from '../modules/settings/SettingsPage.next';
+import { TaskQueueDialog } from '../modules/task-queue/TaskQueueDialog';
 import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
+import { useDockerInstallProgressBridge } from '../hooks/docker/useDockerInstallProgressBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { useCloseActionBootstrap } from '../hooks/preferences/useCloseActionBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
+import { useTaskQueue } from '../hooks/task-queue/useTaskQueue';
+import { requestSettingsLogTab } from '../hooks/task-queue/settingsLogNavigation';
 import { PageTransition } from '../shared/ui/motion';
 
 /// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
@@ -35,10 +39,23 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const [collapsed, setCollapsed] = useState(true);
+    const [taskQueueOpen, setTaskQueueOpen] = useState(false);
 
     useComponentActionEventBridge();
     useDockerDeployProgressBridge();
+    useDockerInstallProgressBridge();
     useComponentsWarmup();
+
+    const { servers } = useServerManager();
+    const hostLabels = useMemo(() => {
+        const map: Record<string, string> = { local: '本机' };
+        for (const p of servers) {
+            map[`remote:${p.id}`] = p.name?.trim() || p.host?.trim() || p.id;
+        }
+        return map;
+    }, [servers]);
+
+    const taskQueue = useTaskQueue({ hostLabels });
 
     useEffect(() => {
         applySideEffects();
@@ -48,7 +65,6 @@ export const AppNext: React.FC = () => {
 
     const { bars, dismiss } = useGlobalInfoBars();
 
-    const { servers } = useServerManager();
     const showDocker = servers.length > 0;
     useEffect(() => {
         if (!showDocker && route === 'docker') {
@@ -90,6 +106,8 @@ export const AppNext: React.FC = () => {
                         collapsed={collapsed}
                         onToggleCollapse={() => setCollapsed((v) => !v)}
                         showDocker={showDocker}
+                        taskQueueActiveCount={taskQueue.activeCount}
+                        onOpenTaskQueue={() => setTaskQueueOpen(true)}
                     />
 
                     <div className="relative flex flex-1 flex-col overflow-hidden">
@@ -124,6 +142,16 @@ export const AppNext: React.FC = () => {
                 </div>
 
                 <InfoBarStack items={bars} onDismiss={dismiss} />
+
+                <TaskQueueDialog
+                    open={taskQueueOpen}
+                    onOpenChange={setTaskQueueOpen}
+                    items={taskQueue.items}
+                    onOpenSettingsLog={() => {
+                        requestSettingsLogTab();
+                        setRoute('settings');
+                    }}
+                />
             </div>
         </TooltipProvider>
     );

@@ -19,6 +19,7 @@ import { useComponentAction } from '../../hooks/components/useComponentAction';
 import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
+import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallProgress';
 import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
@@ -69,6 +70,8 @@ export const ComponentsPageNext: React.FC = () => {
         () => machines.find((m) => m.host.host_id === activeHostId) ?? machines[0] ?? null,
         [machines, activeHostId],
     );
+
+    const dockerInstallProgress = useDockerInstallProgress(activeMachine?.host.host_id ?? '');
 
     const hostNameOf = useCallback(
         (hostId: string) =>
@@ -152,10 +155,8 @@ export const ComponentsPageNext: React.FC = () => {
                     globalInfoBarStore.push({
                         key: `docker-install:${hostId}`,
                         tone: 'danger',
-                        title: `Docker 安装失败 · ${hostName}`,
-                        content: report.downloadUrl
-                            ? `${report.message}（下载: ${report.downloadUrl}）`
-                            : report.message,
+                        title: `Docker 未就绪 · ${hostName}`,
+                        content: report.message,
                         autoDismissMs: 0,
                     });
                     break;
@@ -274,6 +275,10 @@ export const ComponentsPageNext: React.FC = () => {
                         dockerStatus={dockerHosts.statusByHost[activeMachine.host.host_id]}
                         isDockerProbing={dockerHosts.probingByHost[activeMachine.host.host_id] ?? false}
                         isInstallingDocker={dockerHosts.installingByHost[activeMachine.host.host_id] ?? false}
+                        dockerInstallHint={
+                            dockerHosts.installHintByHost[activeMachine.host.host_id]
+                        }
+                        dockerInstallProgress={dockerInstallProgress}
                         onInstallDocker={(hostId) => {
                             void handleInstallDocker(hostId);
                         }}

@@ -22,6 +22,8 @@ import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { dockerService } from '../../core/services/docker.service';
+import { dockerActionStore } from './dockerActionStore';
+import { dockerInstallProgressStore } from './dockerInstallProgressStore';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
 import type {
@@ -60,8 +62,14 @@ export function useDocker(hostId: string) {
     }, [queryClient, hostId]);
 
     const installMutation = useMutation({
-        mutationFn: () => dockerService.install(hostId),
+        mutationFn: async () => {
+            const taskId = crypto.randomUUID();
+            dockerInstallProgressStore.started(taskId, hostId);
+            dockerActionStore.markInstalling(hostId, taskId);
+            return dockerService.install(hostId, taskId);
+        },
         onSuccess: invalidate,
+        onSettled: () => dockerActionStore.clearInstalling(hostId),
     });
 
     const deployMutation = useMutation({

@@ -30,7 +30,6 @@ export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => 
         className,
       )}
     >
-      {/* 整条都是 drag region；右侧三个按钮通过 stopPropagation 避免拖动 */}
       <div className="h-full flex-1" data-tauri-drag-region />
 
       <div className="flex h-full shrink-0 items-stretch">

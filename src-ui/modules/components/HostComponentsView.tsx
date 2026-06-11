@@ -46,6 +46,8 @@ interface HostComponentsViewProps {
     dockerStatus: DockerStatus | undefined;
     isDockerProbing: boolean;
     isInstallingDocker: boolean;
+    dockerInstallHint?: string;
+    dockerInstallProgress?: ActionProgressView | null;
     onInstallDocker: (hostId: string) => void;
     onOpenDockerDownload: () => void;
     isDeploying: boolean;
@@ -64,6 +66,8 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     dockerStatus,
     isDockerProbing,
     isInstallingDocker,
+    dockerInstallHint,
+    dockerInstallProgress,
     onInstallDocker,
     onOpenDockerDownload,
     isDeploying,
@@ -113,6 +117,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
             <FrameworkDockerDeployButton
                 flavor={flavor}
                 hostId={host.host_id}
+                hostLabel={host.display_name}
                 isDeploying={isDeploying}
                 alreadyDeployed={alreadyDeployed}
                 onDeploy={onDeploy}
@@ -157,6 +162,8 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 dockerStatus={dockerStatus}
                 isDockerProbing={isDockerProbing}
                 isInstallingDocker={isInstallingDocker}
+                dockerInstallHint={dockerInstallHint}
+                dockerInstallProgress={dockerInstallProgress}
                 onInstallDocker={() => onInstallDocker(host.host_id)}
                 onOpenDockerDownload={onOpenDockerDownload}
             />
@@ -251,6 +258,8 @@ const RuntimeDepGroup: React.FC<{
     dockerStatus: DockerStatus | undefined;
     isDockerProbing: boolean;
     isInstallingDocker: boolean;
+    dockerInstallHint?: string;
+    dockerInstallProgress?: ActionProgressView | null;
     onInstallDocker: () => void;
     onOpenDockerDownload: () => void;
 }> = ({
@@ -265,6 +274,8 @@ const RuntimeDepGroup: React.FC<{
     dockerStatus,
     isDockerProbing,
     isInstallingDocker,
+    dockerInstallHint,
+    dockerInstallProgress,
     onInstallDocker,
     onOpenDockerDownload,
 }) => {
@@ -294,6 +305,8 @@ const RuntimeDepGroup: React.FC<{
                         status={dockerStatus}
                         isProbing={isDockerProbing}
                         isInstalling={isInstallingDocker}
+                        installHint={dockerInstallHint}
+                        installProgress={dockerInstallProgress}
                         onInstall={onInstallDocker}
                         onOpenDownload={onOpenDockerDownload}
                     />

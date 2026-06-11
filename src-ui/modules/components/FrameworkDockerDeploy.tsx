@@ -14,6 +14,7 @@ import { Button } from '../../shared/ui';
 import { MotionIcon } from '../../shared/ui/motion';
 import { defaultDeploySpec } from '../../core/domain/docker/spec';
 import { dockerDeployProgressStore } from '../../hooks/docker/dockerDeployProgressStore';
+import { taskQueueMetaStore } from '../../hooks/task-queue/taskQueueMetaStore';
 import type {
     DeployedContainer,
     DockerDeploySpec,
@@ -24,6 +25,7 @@ import { DeployDialog } from '../docker/DeployDialog';
 interface FrameworkDockerDeployButtonProps {
     flavor: DockerFlavor;
     hostId: string;
+    hostLabel?: string;
     isDeploying: boolean;
     /// 该 flavor 在这台机器上已有容器。已部署时按钮置「已部署」并禁用，
     /// 避免重复部署撞容器名 / 端口。
@@ -36,6 +38,7 @@ interface FrameworkDockerDeployButtonProps {
 export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonProps> = ({
     flavor,
     hostId,
+    hostLabel,
     isDeploying,
     alreadyDeployed,
     onDeploy,
@@ -49,8 +52,14 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
 
     const handleOpen = () => {
         const id = crypto.randomUUID();
-        // 提前注册到 store，让 DeployDialog 订阅时能拿到 pending 初始状态。
+        const spec = defaultDeploySpec(flavor);
         dockerDeployProgressStore.started(id);
+        taskQueueMetaStore.registerDockerDeploy(id, {
+            hostId,
+            hostLabel,
+            container: spec.containerName,
+            flavor,
+        });
         setTaskId(id);
         setOpen(true);
     };
