@@ -54,9 +54,10 @@ function statusChip(item: TaskQueueItem): string {
     }
 }
 
-function formatElapsed(startedAt: number): string {
+function formatElapsed(startedAt: number, endedAt?: number): string {
     if (startedAt <= 0) return '';
-    const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    const endTime = endedAt || Date.now();
+    const sec = Math.max(0, Math.floor((endTime - startedAt) / 1000));
     if (sec < 3600) {
         const m = Math.floor(sec / 60);
         const s = sec % 60;
@@ -65,6 +66,16 @@ function formatElapsed(startedAt: number): string {
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
     return `${h}h${m}m`;
+}
+
+function getEndedAt(progress: TaskQueueItem['progress']): number | undefined {
+    if (!progress) return undefined;
+    if (progress.status === 'success' || progress.status === 'failed' || progress.status === 'cancelled') {
+        if (progress.logs.length > 0) {
+            return progress.logs[progress.logs.length - 1].timestamp_ms;
+        }
+    }
+    return undefined;
 }
 
 export interface TaskQueueListItemProps {
@@ -90,7 +101,7 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({ item, sele
                 <div className="truncate text-[13px] font-medium text-text">{item.title}</div>
                 <div className="mt-0.5 truncate text-[11px] text-text-tertiary">
                     {item.hostLabel}
-                    {item.startedAt > 0 ? ` · ${formatElapsed(item.startedAt)}` : ''}
+                    {item.startedAt > 0 ? ` · ${formatElapsed(item.startedAt, getEndedAt(item.progress))}` : ''}
                 </div>
             </div>
             <Badge tone={statusTone(item)} appearance="soft" className="shrink-0">

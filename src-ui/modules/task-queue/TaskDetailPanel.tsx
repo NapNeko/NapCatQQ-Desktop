@@ -31,13 +31,25 @@ function statusLabel(item: TaskQueueItem): string {
     }
 }
 
-function formatElapsed(startedAt: number): string {
+function formatElapsed(startedAt: number, endedAt?: number): string {
     if (startedAt <= 0) return '—';
-    const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    const endTime = endedAt || Date.now();
+    const sec = Math.max(0, Math.floor((endTime - startedAt) / 1000));
     if (sec < 60) return `${sec} 秒`;
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分`;
+}
+
+function getEndedAt(progress: TaskQueueItem['progress']): number | undefined {
+    if (!progress) return undefined;
+    if (progress.status === 'success' || progress.status === 'failed' || progress.status === 'cancelled') {
+        // 找到最后一条日志的时间戳
+        if (progress.logs.length > 0) {
+            return progress.logs[progress.logs.length - 1].timestamp_ms;
+        }
+    }
+    return undefined;
 }
 
 export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
@@ -51,7 +63,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             <div className="shrink-0">
                 <h3 className="font-display text-base font-semibold text-text">{item.title}</h3>
                 <p className="mt-1 text-[12px] text-text-secondary">
-                    {item.hostLabel} · {statusLabel(item)} · 已用 {formatElapsed(item.startedAt)}
+                    {item.hostLabel} · {statusLabel(item)} · 已用 {formatElapsed(item.startedAt, getEndedAt(item.progress))}
                 </p>
             </div>
 
