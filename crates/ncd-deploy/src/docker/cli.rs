@@ -146,14 +146,20 @@ impl<'h> DockerCli<'h> {
     /// 说明 daemon 就绪只是缺组权限,置 elevated=true 让后续命令都走 sudo。
     async fn probe_daemon_with_elevation(&self) -> bool {
         use std::sync::atomic::Ordering;
-        if self.docker_info_once(false).await {
-            self.elevated.store(false, Ordering::Relaxed);
-            return true;
-        }
+
+        // 优先尝试 sudo（针对刚安装完的情况：用户已加入 docker 组，
+        // 但当前 SSH 会话的组信息未刷新，需要重登才生效）
         if self.docker_info_once(true).await {
             self.elevated.store(true, Ordering::Relaxed);
             return true;
         }
+
+        // fallback 到无 sudo（用户已在 docker 组且会话已刷新）
+        if self.docker_info_once(false).await {
+            self.elevated.store(false, Ordering::Relaxed);
+            return true;
+        }
+
         false
     }
 
