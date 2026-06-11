@@ -50,7 +50,7 @@
 
 可前往 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 下载最新版本的 **MSI 安装包**。
 
-> 系统要求：Windows 10 / Windows Server 2016 及以上版本
+> 系统要求：Windows 10 / Windows Server 2019 及以上版本
 
 ## 从旧版本升级
 
