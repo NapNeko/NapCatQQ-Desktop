@@ -157,8 +157,7 @@ pub async fn docker_install(
     remember_sudo: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<DockerInstallReport, String> {
-    let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-
+    // 检查主机类型（本地不支持 Docker 安装，由前端过滤）
     let server_id = host_id.strip_prefix("remote:");
     let effective_password = sudo_password.clone().or_else(|| {
         server_id.and_then(|id| state.server_manager.sudo_password(id))
@@ -195,14 +194,36 @@ pub async fn docker_install(
         None
     };
 
-    let report = install_docker_with_progress(
-        host.as_ref(),
-        effective_password.as_deref(),
-        ssh_user.as_deref(),
-        emit,
-    )
-    .await
-    .map_err(|e| format!("Docker 安装失败: {e}"))?;
+    // Docker 安装是长操作，使用隔离连接避免污染缓存连接
+    let report = if let Some(id) = server_id {
+        let effective_password_clone = effective_password.clone();
+        let ssh_user_clone = ssh_user.clone();
+        let emit_clone = emit.clone();
+
+        state.server_manager.with_isolated_connection(id, move |host| {
+            Box::pin(async move {
+                install_docker_with_progress(
+                    host.as_ref(),
+                    effective_password_clone.as_deref(),
+                    ssh_user_clone.as_deref(),
+                    emit_clone,
+                )
+                .await
+                .map_err(|e| format!("Docker 安装失败: {e}"))
+            })
+        }).await?
+    } else {
+        // 本地主机用普通连接
+        let host = resolve_host_with_autoconnect(&host_id, &state).await?;
+        install_docker_with_progress(
+            host.as_ref(),
+            effective_password.as_deref(),
+            ssh_user.as_deref(),
+            emit,
+        )
+        .await
+        .map_err(|e| format!("Docker 安装失败: {e}"))?
+    };
 
     match report.status {
         DockerInstallStatus::Installed | DockerInstallStatus::AlreadyInstalled => {

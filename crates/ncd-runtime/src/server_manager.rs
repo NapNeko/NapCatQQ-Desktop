@@ -525,6 +525,55 @@ impl ServerManager {
         Ok(())
     }
 
+    /// 为长操作（Docker 安装、组件安装等）创建隔离的 SSH 连接。
+    ///
+    /// 银弹设计：长操作可能污染 SSH 会话环境（sudo 缓存、环境变量、shell 状态），
+    /// 用独立连接隔离，操作完成后连接自动丢弃，不影响缓存池。
+    ///
+    /// 短操作（探测、列文件）仍使用 ensure_connected 的缓存连接，保持性能。
+    pub async fn with_isolated_connection<F, T>(&self, id: &str, f: F) -> Result<T, String>
+    where
+        F: FnOnce(Arc<dyn Host>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, String>> + Send>>,
+    {
+        info!(
+            target: "ncd_runtime::server_manager",
+            server_id = %id,
+            "为长操作建立隔离 SSH 连接"
+        );
+
+        let all = self.repo.load().await;
+        let profile = all
+            .iter()
+            .find(|p| p.id == id)
+            .ok_or_else(|| format!("server not found: {id}"))?
+            .clone();
+
+        let credentials = self.build_credentials(&profile, None)?;
+        let config = ConnectionConfig::new(
+            &profile.host,
+            profile.port,
+            credentials,
+            self.host_key_policy(),
+        );
+
+        let host = RemoteLinuxHost::connect(&profile.id, config)
+            .await
+            .map_err(|e| format!("隔离连接建立失败: {e}"))?;
+
+        let host: Arc<dyn Host> = Arc::new(host);
+        self.inject_elevation_password(id, host.as_ref()).await;
+
+        let result = f(host.clone()).await;
+
+        info!(
+            target: "ncd_runtime::server_manager",
+            server_id = %id,
+            "隔离连接已关闭"
+        );
+
+        result
+    }
+
     /// 取某服务器可用于 sudo 提权的密码,给 docker 安装等提权操作用。
     /// 优先专门的 sudo 槽(密钥登录机器在这);没有就退回 SSH 登录密码(密码
     /// 登录机器 sudo 密码通常与登录密码相同)。两个都没有返回 None。
@@ -618,17 +667,14 @@ impl ServerManager {
 
         let latency_ms = start.elapsed().as_millis() as u64;
 
-        // 银弹设计：不缓存连接，避免状态污染。
-        // 每次都建立新连接，虽然有 SSH 握手开销，但保证环境干净。
+        // 缓存连接,并把 keyring 里的提权密码注入这条 host:之后任何 elevated 操作
+        // (装 unzip、写 /opt/QQ、apt 装包、装 docker)都自动用上,不必每条命令各传。
         let host: Arc<dyn Host> = Arc::new(host);
         self.inject_elevation_password(id, host.as_ref()).await;
-
-        // 临时插入缓存，仅供本次 ensure_connected 返回后立即取出。
-        // 不持久化，下次调用重新建立连接。
         self.hosts
             .write()
             .await
-            .insert(profile.id.clone(), host.clone());
+            .insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
 
         if log_probe {
@@ -693,17 +739,19 @@ impl ServerManager {
         self.hosts.read().await.get(id).cloned()
     }
 
-    /// 确保某服务器已连接，返回新建的 Host（不缓存）。
+    /// 确保某服务器已连接，返回缓存的 Host。
     ///
-    /// 银弹设计：每次都建立新连接，避免连接缓存导致的状态污染问题。
-    /// SSH 会话可能被长时间运行的操作（Docker 安装、sudo 等）污染环境变量、
-    /// sudo 缓存等状态，复用会导致后续命令执行异常。
-    ///
-    /// 单飞语义：同一服务器的并发请求共享一次连接建立（避免 MaxStartups 限制），
-    /// 但连接建立后不缓存，每个请求拿到独立的 Arc<dyn Host>。
+    /// 单飞语义：先查缓存命中直接返回；未命中时抢该服务器的连接锁，再查一次
+    /// 缓存（等锁期间别的并发请求可能已经连上），仍没有才用 keyring 缓存凭据
+    /// 真连一次。这样组件页并发触发的 N 个 detect 只会产生一次实际 SSH 握手，
+    /// 其余复用同一条连接，避免把远端 SSH 的 MaxStartups 打爆。
     ///
     /// 失败返回人话错误，调用方把它显示在对应 host 那行。
     pub async fn ensure_connected(&self, id: &str) -> Result<Arc<dyn Host>, String> {
+        if let Some(host) = self.get_host(id).await {
+            return Ok(host);
+        }
+
         const COOLDOWN: std::time::Duration = std::time::Duration::from_secs(90);
         if let Some(until) = self.auto_connect_cooldown_until.read().await.get(id).copied() {
             if until > std::time::Instant::now() {
@@ -717,18 +765,22 @@ impl ServerManager {
         info!(
             target: "ncd_runtime::server_manager",
             server_id = %id,
-            "正在建立 SSH 连接"
+            "远端未缓存连接，正在自动建立 SSH（组件探测/安装会复用此连接）"
         );
         let lock = self.connect_lock_for(id).await;
         let _guard = lock.lock().await;
 
+        // 二次检查：等锁期间可能已有并发请求把连接建好并缓存。
+        if let Some(host) = self.get_host(id).await {
+            return Ok(host);
+        }
+
         match self.test_connection(id, None, false).await {
             Ok(report) if report.success => {
                 self.auto_connect_cooldown_until.write().await.remove(id);
-                // 从临时缓存取出连接后，立即清除缓存（银弹：不保留连接）
-                let host = self.hosts.write().await.remove(id)
-                    .ok_or_else(|| format!("连接建立成功但未找到 Host: {id}"))?;
-                Ok(host)
+                self.get_host(id)
+                    .await
+                    .ok_or_else(|| format!("自动连接成功但缓存为空: {id}（不应发生）"))
             }
             Ok(report) => {
                 let err = report.error.unwrap_or_else(|| "未知错误".into());
