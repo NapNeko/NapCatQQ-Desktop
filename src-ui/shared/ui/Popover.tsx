@@ -136,6 +136,9 @@ export const PopoverContent = forwardRef<
                 const el = elRef.current;
                 if (!el) return;
 
+                // 进场前确保 display 可见（退场动画完成时会设 display:none 解除遮挡）
+                gsap.set(el, { display: '' });
+
                 if (open) {
                     // ENTER — 容器 scale+fade 从 trigger 侧弹入
                     gsap.killTweensOf(el);
@@ -188,11 +191,11 @@ export const PopoverContent = forwardRef<
                         );
                     }
                 } else {
-                    // EXIT — 收敛更快,scale 0.95 + fade
+                    // EXIT — 收敛更快,scale 0.95 + fade，完成后设 display:none 解除 pointer 遮挡
                     gsap.killTweensOf(el);
                     gsap.killTweensOf(el.children);
                     if (!m.enabled) {
-                        gsap.set(el, { autoAlpha: 0 });
+                        gsap.set(el, { autoAlpha: 0, display: 'none' });
                         return;
                     }
                     gsap.to(el, {
@@ -200,6 +203,9 @@ export const PopoverContent = forwardRef<
                         scale: 0.95,
                         duration: m.duration('fast') * 0.6,
                         ease: m.ease.exit,
+                        onComplete: () => {
+                            gsap.set(el, { display: 'none' });
+                        },
                     });
                 }
             },
