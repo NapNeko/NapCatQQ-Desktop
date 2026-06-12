@@ -1,6 +1,7 @@
 // 设置页统一草稿：后端 app-settings + 仅客户端偏好，全部经右上角「保存设置」落盘。
 
 import type { MotionLevel } from '../../core/design/motion';
+import type { RadiusStyle } from '../../core/design/radius';
 import { clampPerformanceMonitorIntervalMs } from '../../core/domain/performance/performanceSettings';
 import type { BackendSettings } from '../../core/services/settings.service';
 import {
@@ -17,6 +18,7 @@ export type SettingsDraft = BackendSettings & {
     motionEnabled: boolean;
     motionLevel: MotionLevel;
     motionSpeed: number;
+    radiusStyle: RadiusStyle;
 };
 
 export function draftFromBackendAndPrefs(
@@ -30,6 +32,7 @@ export function draftFromBackendAndPrefs(
         motionEnabled: prefs.motionEnabled,
         motionLevel: prefs.motionLevel,
         motionSpeed: prefs.motionSpeed,
+        radiusStyle: prefs.radiusStyle,
     };
 }
 
@@ -61,7 +64,8 @@ export function isSettingsDirty(
         draft.showMascot !== baseline.showMascot ||
         draft.motionEnabled !== baseline.motionEnabled ||
         draft.motionLevel !== baseline.motionLevel ||
-        draft.motionSpeed !== baseline.motionSpeed
+        draft.motionSpeed !== baseline.motionSpeed ||
+        draft.radiusStyle !== baseline.radiusStyle
     );
 }
 
@@ -73,6 +77,7 @@ export function applyClientPrefsFromDraft(draft: SettingsDraft): void {
         motionEnabled: draft.motionEnabled,
         motionLevel: draft.motionLevel,
         motionSpeed: draft.motionSpeed,
+        radiusStyle: draft.radiusStyle,
     });
 }
 

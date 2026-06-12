@@ -10,6 +10,7 @@
 //   motionEnabled   动画总开关。系统级 prefers-reduced-motion 命中时也会被强制覆盖
 //   motionLevel     elegant / standard / rich。决定动画风格强度
 //   motionSpeed     0.5 ~ 1.5。在档位 baseline 上再乘一次
+//   radiusStyle     square / standard / round。全局圆角风格（统一系数缩放）
 
 import { useSyncExternalStore } from 'react';
 import {
@@ -18,6 +19,12 @@ import {
     MOTION_SPEED_MIN,
     type MotionLevel,
 } from '../../core/design/motion';
+import {
+    RADIUS_STYLE_DEFAULT,
+    type RadiusStyle,
+    normalizeRadiusStyle,
+    applyRadiusStyle,
+} from '../../core/design/radius';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 export type CloseAction = 'close' | 'tray';
@@ -33,6 +40,7 @@ export interface AppPreferences {
     motionEnabled: boolean;
     motionLevel: MotionLevel;
     motionSpeed: number;
+    radiusStyle: RadiusStyle;
 }
 
 const STORAGE_KEY = 'ncd:preferences:v1';
@@ -44,6 +52,7 @@ const defaultPrefs: AppPreferences = {
     motionEnabled: true,
     motionLevel: 'standard',
     motionSpeed: MOTION_SPEED_DEFAULT,
+    radiusStyle: RADIUS_STYLE_DEFAULT,
 };
 
 let state: AppPreferences = loadFromStorage();
@@ -62,6 +71,7 @@ function loadFromStorage(): AppPreferences {
             motionEnabled: parsed.motionEnabled !== false,
             motionLevel: normalizeMotionLevel(parsed.motionLevel),
             motionSpeed: normalizeMotionSpeed(parsed.motionSpeed),
+            radiusStyle: normalizeRadiusStyle(parsed.radiusStyle),
         };
     } catch {
         return defaultPrefs;
@@ -112,6 +122,8 @@ export function applySideEffects() {
     } else {
         root.setAttribute('data-theme', state.theme);
     }
+    // 圆角风格：覆盖 :root 上的 --radius-* CSS 变量。
+    applyRadiusStyle(state.radiusStyle);
 }
 
 export const preferencesStore = {
@@ -136,6 +148,9 @@ export const preferencesStore = {
     setMotionSpeed(speed: number) {
         update({ motionSpeed: normalizeMotionSpeed(speed) });
     },
+    setRadiusStyle(style: RadiusStyle) {
+        update({ radiusStyle: normalizeRadiusStyle(style) });
+    },
     reset() {
         state = { ...defaultPrefs };
         persist();
@@ -156,6 +171,9 @@ export const preferencesStore = {
             motionLevel: normalizeMotionLevel(patch.motionLevel ?? state.motionLevel),
             motionSpeed: normalizeMotionSpeed(
                 patch.motionSpeed !== undefined ? patch.motionSpeed : state.motionSpeed,
+            ),
+            radiusStyle: normalizeRadiusStyle(
+                patch.radiusStyle ?? state.radiusStyle,
             ),
         };
         persist();

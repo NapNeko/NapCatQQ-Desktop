@@ -7,6 +7,7 @@ import {
     FieldRow,
     MotionLevelSegment,
     MotionSpeedSlider,
+    RadiusStyleSegment,
     SettingsSection,
     SettingsTabSections,
     ThemeSegment,
@@ -34,6 +35,16 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
                     <ThemeSegment
                         value={draft.theme}
                         onChange={(v) => patchDraft({ theme: v })}
+                    />
+                </FieldRow>
+
+                <FieldRow
+                    label="圆角风格"
+                    description="方正克制 · 标准平衡 · 圆润饱满，全局统一缩放"
+                >
+                    <RadiusStyleSegment
+                        value={draft.radiusStyle}
+                        onChange={(v) => patchDraft({ radiusStyle: v })}
                     />
                 </FieldRow>
 

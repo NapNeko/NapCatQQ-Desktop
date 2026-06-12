@@ -5,10 +5,14 @@
 
 import type { ComponentType, ReactNode } from 'react';
 import type { LucideProps } from 'lucide-react';
-import { Sun, Moon, MonitorCog, Sparkles, Wand2, Feather } from 'lucide-react';
+import { Sun, Moon, MonitorCog, Sparkles, Wand2, Feather, Square, Circle, RectangleHorizontal } from 'lucide-react';
 import { SegmentMotionIcon } from '../../shared/ui/motion';
 import type { ThemeMode } from '../../hooks/preferences/preferencesStore';
 import type { MotionLevel } from '../../core/design/motion';
+import type { RadiusStyle } from '../../core/design/radius';
+import {
+    RADIUS_LABELS,
+} from '../../core/design/radius';
 import {
     MOTION_SPEED_DEFAULT,
     MOTION_SPEED_MAX,
@@ -126,10 +130,10 @@ export function ThemeSegment({
         label: string;
         icon: ComponentType<LucideProps>;
     }> = [
-        { value: 'auto', label: '系统', icon: MonitorCog },
-        { value: 'light', label: '浅色', icon: Sun },
-        { value: 'dark', label: '暗色', icon: Moon },
-    ];
+            { value: 'auto', label: '系统', icon: MonitorCog },
+            { value: 'light', label: '浅色', icon: Sun },
+            { value: 'dark', label: '暗色', icon: Moon },
+        ];
     return (
         <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
             {items.map((it) => (
@@ -174,10 +178,10 @@ export function MotionLevelSegment({
         label: string;
         icon: ComponentType<LucideProps>;
     }> = [
-        { value: 'elegant', label: '优雅', icon: Feather },
-        { value: 'standard', label: '标准', icon: Wand2 },
-        { value: 'rich', label: '丰富', icon: Sparkles },
-    ];
+            { value: 'elegant', label: '优雅', icon: Feather },
+            { value: 'standard', label: '标准', icon: Wand2 },
+            { value: 'rich', label: '丰富', icon: Sparkles },
+        ];
     return (
         <div
             className={
@@ -302,6 +306,52 @@ export function PerformanceMonitorIntervalSlider({
             >
                 重置
             </button>
+        </div>
+    );
+}
+
+/// 圆角风格三选段。三档语义见 core/design/radius.ts:
+///   方正 square  — 0.5× 克制直角
+///   标准 standard — 1.0× 默认平衡
+///   圆润 round   — 1.5× 饱满圆角
+export function RadiusStyleSegment({
+    value,
+    onChange,
+}: {
+    value: RadiusStyle;
+    onChange: (next: RadiusStyle) => void;
+}) {
+    const items: ReadonlyArray<{
+        value: RadiusStyle;
+        label: string;
+        icon: ComponentType<LucideProps>;
+    }> = [
+            { value: 'square', label: RADIUS_LABELS.square, icon: Square },
+            { value: 'standard', label: RADIUS_LABELS.standard, icon: RectangleHorizontal },
+            { value: 'round', label: RADIUS_LABELS.round, icon: Circle },
+        ];
+    return (
+        <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
+            {items.map((it) => (
+                <button
+                    key={it.value}
+                    type="button"
+                    onClick={() => onChange(it.value)}
+                    className={
+                        'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-colors ' +
+                        (value === it.value
+                            ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
+                            : 'text-text-tertiary hover:text-text')
+                    }
+                >
+                    <SegmentMotionIcon
+                        icon={it.icon}
+                        selected={value === it.value}
+                        segmentKey={`radius-${it.value}`}
+                    />
+                    <span>{it.label}</span>
+                </button>
+            ))}
         </div>
     );
 }
