@@ -125,11 +125,27 @@ impl<'h> DockerCli<'h> {
     /// `docker version --format '{{.Client.Version}}'`,失败返回 None。
     /// 客户端版本不连 daemon,无需提权,固定裸跑——它是"装没装 docker"的判据。
     async fn docker_client_version(&self) -> Option<String> {
+        // 先尝试普通命令
         let cmd = HostCommand::new("docker")
             .arg("version")
             .arg("--format")
             .arg("{{.Client.Version}}");
-        let out = self.host.run_to_string(cmd).await.ok()?;
+        if let Ok(out) = self.host.run_to_string(cmd).await {
+            if out.success() {
+                let v = out.stdout.trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+
+        // fallback: 尝试 sudo（刚安装完 PATH 可能未刷新）
+        let cmd_sudo = HostCommand::new("docker")
+            .arg("version")
+            .arg("--format")
+            .arg("{{.Client.Version}}")
+            .elevated();
+        let out = self.host.run_to_string(cmd_sudo).await.ok()?;
         if !out.success() {
             return None;
         }
