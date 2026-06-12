@@ -30,6 +30,8 @@ export interface UseComponentActionResult {
         componentId: ComponentId,
         hostId: string,
     ) => { taskId: string; progress: ActionProgressView } | null;
+    /** 检查某 (component, host) 是否有进行中的任务。 */
+    isInstalling: (componentId: ComponentId, hostId: string) => boolean;
     /**
      * 当指定 task 进入终态（success / failed / cancelled）时回调一次。
      * 返回 unsubscribe；如果 task 已经在终态会立刻 fire 一次。
@@ -80,6 +82,17 @@ export function useComponentAction(): UseComponentActionResult {
         [state],
     );
 
+    const isInstalling = useCallback(
+        (componentId: ComponentId, hostId: string) => {
+            const taskId = state.activeByTarget[targetKey(componentId, hostId)];
+            if (!taskId) return false;
+            const progress = state.tasks[taskId];
+            if (!progress) return false;
+            return progress.status === 'running' || progress.status === 'pending';
+        },
+        [state],
+    );
+
     const onTaskTerminal = useCallback(
         (
             taskId: string,
@@ -111,5 +124,5 @@ export function useComponentAction(): UseComponentActionResult {
         [],
     );
 
-    return { startAction, cancelAction, getProgressFor, onTaskTerminal };
+    return { startAction, cancelAction, getProgressFor, isInstalling, onTaskTerminal };
 }

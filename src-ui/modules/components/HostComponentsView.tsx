@@ -36,6 +36,7 @@ interface HostComponentsViewProps {
         componentId: ComponentId,
         hostId: string,
     ) => { taskId: string; progress: ActionProgressView } | null;
+    isInstalling: (componentId: ComponentId, hostId: string) => boolean;
     onAction: (
         componentId: ComponentId,
         hostId: string,
@@ -61,6 +62,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     machine,
     latestVersionFor,
     getProgress,
+    isInstalling,
     onAction,
     onRetryDetect,
     dockerStatus,
@@ -78,6 +80,10 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     const { host } = machine;
     const empty =
         machine.framework.length + machine.runtimeDep.length + machine.selfApp.length === 0;
+
+    // 检查当前主机是否有任何组件正在安装
+    const allComponents = [...machine.framework, ...machine.runtimeDep, ...machine.selfApp];
+    const isAnyInstalling = allComponents.some((row) => isInstalling(row.info.id, host.host_id));
 
     // Docker 只用于远端 Linux：本机（Windows）不显示 Docker 行，也不在框架行
     // 给「Docker 部署」按钮。
@@ -135,6 +141,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     description="Bot 框架本体；Docker 就绪时可在行内部署容器实例"
                     rows={machine.framework}
                     hostId={host.host_id}
+                    isAnyInstalling={isAnyInstalling}
                     latestVersionFor={latestVersionFor}
                     getProgress={getProgress}
                     onAction={onAction}
@@ -155,6 +162,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 hostId={host.host_id}
                 os={host.os}
                 showDocker={dockerApplicable}
+                isAnyInstalling={isAnyInstalling}
                 latestVersionFor={latestVersionFor}
                 getProgress={getProgress}
                 onAction={onAction}
@@ -173,6 +181,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 description="NapCatQQ Desktop 本体更新与维护"
                 rows={machine.selfApp}
                 hostId={host.host_id}
+                isAnyInstalling={isAnyInstalling}
                 latestVersionFor={latestVersionFor}
                 getProgress={getProgress}
                 onAction={onAction}
@@ -194,6 +203,7 @@ const Group: React.FC<{
     description?: string;
     rows: MachineComponentRow[];
     hostId: string;
+    isAnyInstalling: boolean;
     latestVersionFor: (id: ComponentId) => string | null;
     getProgress: (
         componentId: ComponentId,
@@ -211,6 +221,7 @@ const Group: React.FC<{
     description,
     rows,
     hostId,
+    isAnyInstalling,
     latestVersionFor,
     getProgress,
     onAction,
@@ -228,6 +239,7 @@ const Group: React.FC<{
                         hostId={hostId}
                         latestRemoteVersion={latestVersionFor(row.info.id)}
                         activeProgress={getProgress(row.info.id, hostId)}
+                        isAnyInstalling={isAnyInstalling}
                         onAction={(action) => onAction(row.info.id, hostId, action)}
                         onRetryDetect={() => onRetryDetect(hostId)}
                         trailingActions={trailingFor?.(row.info.id)}
@@ -244,6 +256,7 @@ const RuntimeDepGroup: React.FC<{
     hostId: string;
     os: Os;
     showDocker: boolean;
+    isAnyInstalling: boolean;
     latestVersionFor: (id: ComponentId) => string | null;
     getProgress: (
         componentId: ComponentId,
@@ -267,6 +280,7 @@ const RuntimeDepGroup: React.FC<{
     hostId,
     os,
     showDocker,
+    isAnyInstalling,
     latestVersionFor,
     getProgress,
     onAction,
@@ -295,6 +309,7 @@ const RuntimeDepGroup: React.FC<{
                         hostId={hostId}
                         latestRemoteVersion={latestVersionFor(row.info.id)}
                         activeProgress={getProgress(row.info.id, hostId)}
+                        isAnyInstalling={isAnyInstalling}
                         onAction={(action) => onAction(row.info.id, hostId, action)}
                         onRetryDetect={() => onRetryDetect(hostId)}
                     />

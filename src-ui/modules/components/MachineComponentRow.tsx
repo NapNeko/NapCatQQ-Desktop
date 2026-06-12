@@ -38,6 +38,7 @@ interface Props {
     hostId: string;
     latestRemoteVersion: string | null;
     activeProgress: { taskId: string; progress: ActionProgressView } | null;
+    isAnyInstalling: boolean;
     onAction: (action: { stepKind: StepKind } | { cancelTaskId: string }) => void;
     onRetryDetect: () => void;
     /// 可选尾随动作（如框架行的「Docker 部署」按钮）。与常规安装/卸载按钮并排，
@@ -49,6 +50,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
     row,
     latestRemoteVersion,
     activeProgress,
+    isAnyInstalling,
     onAction,
     onRetryDetect,
     trailingActions,
@@ -94,6 +96,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
             <ActionButtons
                 status={status}
                 latestRemoteVersion={latestRemoteVersion}
+                disabled={isAnyInstalling}
                 onAction={handle}
             />
         </div>
@@ -256,8 +259,9 @@ const StatusLine: React.FC<{
 const ActionButtons: React.FC<{
     status: MachineComponentRow['status'];
     latestRemoteVersion: string | null;
+    disabled?: boolean;
     onAction: (a: RowAction) => void;
-}> = ({ status, latestRemoteVersion, onAction }) => {
+}> = ({ status, latestRemoteVersion, disabled, onAction }) => {
     switch (status.state) {
         case 'installed': {
             const updatable =
@@ -265,11 +269,11 @@ const ActionButtons: React.FC<{
             return (
                 <>
                     {updatable && (
-                        <Button size="sm" variant="primary" onClick={() => onAction({ kind: 'update' })}>
+                        <Button size="sm" variant="primary" disabled={disabled} onClick={() => onAction({ kind: 'update' })}>
                             更新
                         </Button>
                     )}
-                    <Button size="sm" variant="ghost" onClick={() => onAction({ kind: 'uninstall' })}>
+                    <Button size="sm" variant="ghost" disabled={disabled} onClick={() => onAction({ kind: 'uninstall' })}>
                         卸载
                     </Button>
                 </>
@@ -277,7 +281,7 @@ const ActionButtons: React.FC<{
         }
         case 'not_installed':
             return (
-                <Button size="sm" variant="primary" onClick={() => onAction({ kind: 'install' })}>
+                <Button size="sm" variant="primary" disabled={disabled} onClick={() => onAction({ kind: 'install' })}>
                     安装
                 </Button>
             );
@@ -285,7 +289,7 @@ const ActionButtons: React.FC<{
             return null;
         case 'unknown':
             return (
-                <Button size="sm" variant="secondary" onClick={() => onAction({ kind: 'retry_detect' })}>
+                <Button size="sm" variant="secondary" disabled={disabled} onClick={() => onAction({ kind: 'retry_detect' })}>
                     重试
                 </Button>
             );
