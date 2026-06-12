@@ -24,27 +24,33 @@ let running = false;
 export function playThemeTransition(
     changeTheme: () => void,
     opts: ThemeTransitionOptions,
-): void {
+): Promise<void> {
     if (!opts.enabled || running) {
         changeTheme();
-        return;
+        return Promise.resolve();
     }
     running = true;
-    const done = () => { running = false; };
 
     if (opts.level === 'elegant') {
         changeTheme();
-        done();
-        return;
+        running = false;
+        return Promise.resolve();
     }
 
-    // ① 截取旧主题页面截图
-    toPng(document.body, {
-        cacheBust: true,
-        style: { overflow: 'hidden' },
-    })
-        .then((dataUrl) => runWaveTransition(changeTheme, opts, dataUrl, done))
-        .catch(() => runWaveTransition(changeTheme, opts, null, done));
+    return new Promise<void>((resolve) => {
+        const done = () => { running = false; resolve(); };
+
+        // ① 截取旧主题页面截图（skipFonts + pixelRatio:1 + quality:0.85 兼顾速度与色彩保真）
+        toPng(document.body, {
+            cacheBust: false,
+            skipFonts: true,
+            pixelRatio: 1,
+            quality: 0.85,
+            style: { overflow: 'hidden' },
+        })
+            .then((dataUrl) => runWaveTransition(changeTheme, opts, dataUrl, done))
+            .catch(() => runWaveTransition(changeTheme, opts, null, done));
+    });
 }
 
 /** 创建覆盖层并播放水波动画。 */
@@ -84,21 +90,30 @@ function runWaveTransition(
     overlay.style.cssText = styles.join(';');
     document.body.appendChild(overlay);
 
-    // ─── 在覆盖层下方切换主题 ──────────────────────────────────────
+    // 覆盖层瞬间出现（不做淡入，避免半透明期间露出新主题导致白屏闪烁）
+    // 在覆盖层遮挡下切换主题，用户看不到 DOM 变化
     changeTheme();
+
+    // 亮度脉冲：短暂的 brightness 提升作为过场效果，比纯硬切更自然
+    gsap.fromTo(document.body,
+        { filter: 'brightness(1.06)' },
+        { filter: 'brightness(1)', duration: 0.2, ease: 'power2.out', clearProps: 'filter' },
+    );
 
     // ─── 波形参数 ──────────────────────────────────────────────────
     const amp = Math.max(18, vh * 0.03);   // 波幅
     const waves = 2.5;                       // 波数（非整数 → 边缘不对称，更自然）
-    const samples = 48;                      // 采样点
+    const samples = 32;                      // 采样点（32 足够平滑，减少计算量）
 
     // ─── GSAP 驱动水波动画 ─────────────────────────────────────────
     // yBase 从顶部向底部移动：覆盖层从上方开始消失，新主题从上往下出现
     const state = { yBase: -amp - 50, phase: 0 };
     const dur = opts.duration;
 
+    // 预分配数组避免每帧 GC
+    const pts: string[] = new Array(samples + 3);
+
     const updateClip = () => {
-        const pts: string[] = [];
         for (let i = 0; i <= samples; i++) {
             const t = i / samples;
             const x = t * vw;
@@ -106,17 +121,21 @@ function runWaveTransition(
             const y = state.yBase
                 + amp * Math.sin(t * Math.PI * 2 * waves + state.phase)
                 + amp * 0.3 * Math.sin(t * Math.PI * 2 * waves * 1.7 + state.phase * 1.3);
-            pts.push(`${x.toFixed(1)}px ${y.toFixed(1)}px`);
+            pts[i] = `${x.toFixed(1)}px ${y.toFixed(1)}px`;
         }
-        pts.push(`${vw}px ${vh + 200}px`, `0px ${vh + 200}px`);
+        pts[samples + 1] = `${vw}px ${vh + 200}px`;
+        pts[samples + 2] = `0px ${vh + 200}px`;
         overlay.style.clipPath = `polygon(${pts.join(',')})`;
     };
 
-    gsap.ticker.add(updateClip);
+    // 提示浏览器提前优化 clip-path 合成层
+    overlay.style.willChange = 'clip-path';
 
+    // 使用 timeline onUpdate 替代 ticker：只在 tween 值实际变化时才重绘，避免空帧
     const tl = gsap.timeline({
+        onUpdate: updateClip,
         onComplete: () => {
-            gsap.ticker.remove(updateClip);
+            overlay.style.willChange = 'auto';
             overlay.remove();
             done();
         },
@@ -136,7 +155,7 @@ function runWaveTransition(
         ease: 'power1.inOut',
     }, 0);
 
-    // rich 档：body 亮度脉冲
+    // rich 档：额外加强亮度脉冲
     if (opts.level === 'rich') {
         tl.fromTo(document.body,
             { filter: 'brightness(1.04)' },
@@ -149,7 +168,7 @@ function runWaveTransition(
     setTimeout(() => {
         if (tl.isActive()) {
             tl.kill();
-            gsap.ticker.remove(updateClip);
+            overlay.style.willChange = 'auto';
             overlay.remove();
             done();
         }
