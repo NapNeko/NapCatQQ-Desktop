@@ -104,7 +104,7 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
                 'group flex min-w-0 max-w-full flex-col gap-0.5 rounded-md border px-3 py-2 text-left transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
                 active
-                    ? 'border-brand/40 bg-brand-soft'
+                    ? 'border-brand/40 bg-brand/15'
                     : 'border-border-subtle bg-inset/40 hover:bg-inset/70',
             )}
         >
