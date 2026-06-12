@@ -162,10 +162,22 @@ export function ConnectionsTab({ data, onChange, backendType }: ConnectionsTabPr
             >
                 <DialogContent
                     size="lg"
-                    dismissOnOutsideClick={false}
+                    dismissOnOutsideClick={true}
                     onExited={() => setEditingMount(null)}
-                    onEscapeKeyDown={(e) => e.preventDefault()}
-                    onPointerDownOutside={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => {
+                        // 只阻止点击遮罩层（data-dialog-overlay），
+                        // 允许点击其他 Portal 元素（Select 下拉等）
+                        const target = e.target as HTMLElement;
+                        if (target.hasAttribute('data-dialog-overlay')) {
+                            e.preventDefault();
+                        }
+                    }}
+                    onInteractOutside={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (target.hasAttribute('data-dialog-overlay')) {
+                            e.preventDefault();
+                        }
+                    }}
                 >
                     {editingMount && (
                         <>
@@ -332,7 +344,7 @@ function ConnectionRow({ kind, item, onStartEdit, onDelete }: ConnectionRowProps
                     onClick={onStartEdit}
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
-                    <Badge tone="brand" appearance="soft" className="font-mono">
+                    <Badge tone="info" appearance="soft" className="font-mono">
                         {KIND_BADGE[kind]}
                     </Badge>
                     <span className="truncate text-sm font-medium text-text">{item.name}</span>

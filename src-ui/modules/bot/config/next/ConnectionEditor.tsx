@@ -16,7 +16,6 @@ import {
     Switch,
     Select,
     Checkbox,
-    InfoBar,
 } from '../../../../shared/ui';
 import {
     type ConnectionKind,
@@ -31,6 +30,7 @@ import type { WebsocketServerConfig } from '../../../../core/ipc/generated/domai
 import type { WebsocketClientConfig } from '../../../../core/ipc/generated/domain/WebsocketClientConfig';
 import type { MessagePostFormat } from '../../../../core/ipc/generated/domain/MessagePostFormat';
 import type { WsRole } from '../../../../core/ipc/generated/domain/WsRole';
+import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 
 const MSG_FORMAT_ITEMS = [
     { value: 'array' as MessagePostFormat, label: 'Array（结构化数组，推荐）' },
@@ -90,6 +90,13 @@ export function ConnectionEditor({
         const result = validateConnection(kind, finalData, existingNames);
         if (!result.ok) {
             setError(result.reason);
+            // 推送到全局 InfoBar
+            pushInfoBar({
+                tone: 'danger',
+                title: '连接配置有误',
+                content: result.reason,
+                autoDismissMs: 4000,
+            });
             return;
         }
         onSave(finalData);
@@ -99,16 +106,6 @@ export function ConnectionEditor({
 
     return (
         <div className="flex flex-col gap-3">
-            {error && (
-                <InfoBar
-                    tone="danger"
-                    title="保存失败"
-                    content={error}
-                    closable
-                    onDismiss={() => setError(null)}
-                />
-            )}
-
             {/* 公共字段 */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <TextField
@@ -117,6 +114,7 @@ export function ConnectionEditor({
                     value={data.name}
                     onValueChange={(v) => patch('name', v)}
                     placeholder="例如：koishi-http"
+                    error={error?.includes('名称') ? error : undefined}
                 />
                 <Select
                     label="消息上报格式"
@@ -126,7 +124,7 @@ export function ConnectionEditor({
                 />
             </div>
 
-            <KindSpecificFields kind={kind} data={data} patch={patch} isSnowLuma={isSnowLuma} />
+            <KindSpecificFields kind={kind} data={data} patch={patch} isSnowLuma={isSnowLuma} error={error} />
 
             {/* token + debug 放尾部，频次低 */}
             <TextField
@@ -167,20 +165,21 @@ interface KindSpecificFieldsProps {
     data: ConnectionConfig;
     patch: <K extends keyof ConnectionConfig>(field: K, value: ConnectionConfig[K]) => void;
     isSnowLuma: boolean;
+    error: string | null;
 }
 
-function KindSpecificFields({ kind, data, patch, isSnowLuma }: KindSpecificFieldsProps) {
+function KindSpecificFields({ kind, data, patch, isSnowLuma, error }: KindSpecificFieldsProps) {
     switch (kind) {
         case 'httpServer':
-            return <HttpServerFields data={data as HttpServerConfig} patch={patch} isSnowLuma={isSnowLuma} />;
+            return <HttpServerFields data={data as HttpServerConfig} patch={patch} isSnowLuma={isSnowLuma} error={error} />;
         case 'httpSseServer':
-            return <HttpSseServerFields data={data as HttpSseServerConfig} patch={patch} />;
+            return <HttpSseServerFields data={data as HttpSseServerConfig} patch={patch} error={error} />;
         case 'httpClient':
-            return <HttpClientFields data={data as HttpClientConfig} patch={patch} isSnowLuma={isSnowLuma} />;
+            return <HttpClientFields data={data as HttpClientConfig} patch={patch} isSnowLuma={isSnowLuma} error={error} />;
         case 'websocketServer':
-            return <WebsocketServerFields data={data as WebsocketServerConfig} patch={patch} />;
+            return <WebsocketServerFields data={data as WebsocketServerConfig} patch={patch} error={error} />;
         case 'websocketClient':
-            return <WebsocketClientFields data={data as WebsocketClientConfig} patch={patch} />;
+            return <WebsocketClientFields data={data as WebsocketClientConfig} patch={patch} error={error} />;
     }
 }
 
@@ -193,10 +192,12 @@ function HttpServerFields({
     data,
     patch,
     isSnowLuma,
+    error,
 }: {
     data: HttpServerConfig;
     patch: Patch;
     isSnowLuma: boolean;
+    error: string | null;
 }) {
     return (
         <>
@@ -217,6 +218,7 @@ function HttpServerFields({
                     placeholder="3000"
                     min={1}
                     max={65535}
+                    error={error?.includes('端口') ? error : undefined}
                 />
             </div>
             <TextField
@@ -244,7 +246,7 @@ function HttpServerFields({
     );
 }
 
-function HttpSseServerFields({ data, patch }: { data: HttpSseServerConfig; patch: Patch }) {
+function HttpSseServerFields({ data, patch, error }: { data: HttpSseServerConfig; patch: Patch; error: string | null }) {
     return (
         <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -264,6 +266,7 @@ function HttpSseServerFields({ data, patch }: { data: HttpSseServerConfig; patch
                     placeholder="3001"
                     min={1}
                     max={65535}
+                    error={error?.includes('端口') ? error : undefined}
                 />
             </div>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
@@ -291,10 +294,12 @@ function HttpClientFields({
     data,
     patch,
     isSnowLuma,
+    error,
 }: {
     data: HttpClientConfig;
     patch: Patch;
     isSnowLuma: boolean;
+    error: string | null;
 }) {
     return (
         <>
@@ -305,6 +310,7 @@ function HttpClientFields({
                 onValueChange={(v) => patch('url' as keyof ConnectionConfig, v as never)}
                 placeholder="http://127.0.0.1:8080/webhook"
                 hint="必须以 http:// 或 https:// 开头"
+                error={error?.includes('Webhook URL') || error?.includes('URL') ? error : undefined}
             />
             <Checkbox
                 label="上报 Bot 自身发出的消息"
@@ -329,9 +335,11 @@ function HttpClientFields({
 function WebsocketServerFields({
     data,
     patch,
+    error,
 }: {
     data: WebsocketServerConfig;
     patch: Patch;
+    error: string | null;
 }) {
     return (
         <>
@@ -352,6 +360,7 @@ function WebsocketServerFields({
                     placeholder="3001"
                     min={1}
                     max={65535}
+                    error={error?.includes('端口') ? error : undefined}
                 />
             </div>
             <TextField
@@ -401,9 +410,11 @@ function WebsocketServerFields({
 function WebsocketClientFields({
     data,
     patch,
+    error,
 }: {
     data: WebsocketClientConfig;
     patch: Patch;
+    error: string | null;
 }) {
     return (
         <>
@@ -414,6 +425,7 @@ function WebsocketClientFields({
                 onValueChange={(v) => patch('url' as keyof ConnectionConfig, v as never)}
                 placeholder="ws://127.0.0.1:8080/onebot/v11"
                 hint="必须以 ws:// 或 wss:// 开头"
+                error={error?.includes('WebSocket URL') || error?.includes('URL') ? error : undefined}
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Select

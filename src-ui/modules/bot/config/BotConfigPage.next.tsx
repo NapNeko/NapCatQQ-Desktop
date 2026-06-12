@@ -479,7 +479,7 @@ function countConnections(c: BotConfig): number {
 function ConnectionCountBadge({ count }: { count: number }) {
     if (count === 0) return null;
     return (
-        <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-pill bg-brand-soft px-1 text-2xs font-medium text-brand">
+        <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-pill bg-info-soft px-1 text-2xs font-medium text-info">
             {count}
         </span>
     );
@@ -502,10 +502,10 @@ function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
                             icon={AlertCircle}
                             size={12}
                             strokeWidth={2.4}
-                            motion={infoToneMotion('warning')}
-                            className="text-warning"
+                            motion={infoToneMotion('info')}
+                            className="text-info"
                         />
-                        <span className="text-warning">未保存</span>
+                        <span className="text-info">未保存</span>
                     </>
                 ) : (
                     <>

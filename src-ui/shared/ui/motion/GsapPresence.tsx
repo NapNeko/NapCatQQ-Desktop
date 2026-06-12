@@ -110,7 +110,7 @@ export function GsapPresence({
         { dependencies: [visible, mounted, env.enabled] },
     );
 
-    if (!mounted) return null;
+    if (!visible && !mounted) return null;
 
     if (!isValidElement(children)) return children;
     return cloneElement(children as ReactElement<{ ref?: Ref<HTMLElement> }>, {

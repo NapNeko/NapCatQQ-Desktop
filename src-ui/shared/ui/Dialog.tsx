@@ -30,7 +30,6 @@ import {
     type HTMLAttributes,
     type MutableRefObject,
     type ReactNode,
-    type RefObject,
 } from 'react';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -230,38 +229,38 @@ export const DialogContent = forwardRef<
                     className="pointer-events-none fixed inset-0 z-50 overflow-y-auto"
                 >
                     <div className="flex min-h-full items-center justify-center p-6">
-                    <GsapPresence
-                        visible={open}
-                        onEnter={contentEnter}
-                        onExit={contentExit}
-                        onExited={onExited}
-                    >
-                        <RadixDialog.Content
-                            asChild
-                            forceMount
-                            {...contentProps}
-                            onPointerDownOutside={(e) => {
-                                onPointerDownOutsideProp?.(e);
-                                applyOutsideDismissGuard(e, dismissOnOutsideClick);
-                            }}
-                            onFocusOutside={(e) => {
-                                onFocusOutsideProp?.(e);
-                                applyOutsideDismissGuard(e, dismissOnOutsideClick);
-                            }}
-                            onInteractOutside={(e) => {
-                                onInteractOutsideProp?.(e);
-                                applyOutsideDismissGuard(e, dismissOnOutsideClick);
-                            }}
+                        <GsapPresence
+                            visible={open}
+                            onEnter={contentEnter}
+                            onExit={contentExit}
+                            onExited={onExited}
                         >
-                            <ContentBody
-                                className={cn(DIALOG_SIZE_CLASS[size], className)}
-                                size={size}
-                                hideClose={hideClose}
+                            <RadixDialog.Content
+                                asChild
+                                forceMount
+                                {...contentProps}
+                                onPointerDownOutside={(e) => {
+                                    onPointerDownOutsideProp?.(e);
+                                    applyOutsideDismissGuard(e, dismissOnOutsideClick);
+                                }}
+                                onFocusOutside={(e) => {
+                                    onFocusOutsideProp?.(e);
+                                    applyOutsideDismissGuard(e, dismissOnOutsideClick);
+                                }}
+                                onInteractOutside={(e) => {
+                                    onInteractOutsideProp?.(e);
+                                    applyOutsideDismissGuard(e, dismissOnOutsideClick);
+                                }}
                             >
-                                {children}
-                            </ContentBody>
-                        </RadixDialog.Content>
-                    </GsapPresence>
+                                <ContentBody
+                                    className={cn(DIALOG_SIZE_CLASS[size], className)}
+                                    size={size}
+                                    hideClose={hideClose}
+                                >
+                                    {children}
+                                </ContentBody>
+                            </RadixDialog.Content>
+                        </GsapPresence>
                     </div>
                 </div>
             </RadixDialog.Portal>
@@ -292,17 +291,77 @@ function contentHeightCap(size: DialogSize): number {
 }
 
 function useDialogContentHeight(
-    clipRef: RefObject<HTMLDivElement | null>,
-    innerRef: RefObject<HTMLDivElement | null>,
     open: boolean,
     size: DialogSize,
+    contentReady: boolean,
 ) {
     const m = useMotion();
     const tweenRef = useRef<gsap.core.Tween | null>(null);
     const primedRef = useRef(false);
     const enterHoldRef = useRef(false);
     const prevOpenRef = useRef(open);
+    const clipRef = useRef<HTMLDivElement | null>(null);
+    const innerRef = useRef<HTMLDivElement | null>(null);
 
+    const apply = useCallback(() => {
+        const clip = clipRef.current;
+        const inner = innerRef.current;
+        if (!clip || !inner) return;
+
+        const cap = contentHeightCap(size);
+
+        if (size === 'taskQueue') {
+            tweenRef.current?.kill();
+            clip.style.height = '';
+            clip.style.flex = '1 1 0%';
+            clip.style.minHeight = '0';
+            inner.style.overflowY = 'hidden';
+            inner.style.maxHeight = 'none';
+            inner.style.height = '100%';
+            inner.style.minHeight = '0';
+            inner.style.flex = '1 1 0%';
+            primedRef.current = true;
+            return;
+        }
+
+        const raw = inner.scrollHeight;
+        const target = Math.min(raw, cap);
+        const scrollable = raw > cap + 1;
+
+        inner.style.overflowY = scrollable ? 'auto' : '';
+        inner.style.maxHeight = scrollable ? `${cap}px` : '';
+
+        if (!open || !m.enabled) {
+            tweenRef.current?.kill();
+            clip.style.height = scrollable ? `${cap}px` : 'auto';
+            primedRef.current = false;
+            return;
+        }
+
+        if (!primedRef.current || enterHoldRef.current) {
+            tweenRef.current?.kill();
+            clip.style.height = `${target}px`;
+            primedRef.current = true;
+            return;
+        }
+
+        const from = clip.offsetHeight;
+        if (Math.abs(target - from) < 2) return;
+
+        tweenRef.current?.kill();
+        tweenRef.current = gsap.fromTo(
+            clip,
+            { height: from },
+            {
+                height: target,
+                duration: m.duration('base'),
+                ease: m.ease.damped,
+                overwrite: 'auto',
+            },
+        );
+    }, [open, size, m.enabled, m.level, m.speed]);
+
+    // open 变化时重置状态
     useEffect(() => {
         if (open && !prevOpenRef.current) {
             primedRef.current = false;
@@ -317,64 +376,12 @@ function useDialogContentHeight(
         return undefined;
     }, [open]);
 
+    // contentReady 作为依赖: GsapPresence 二次渲染后 contentReady=true
+    // 触发 effect 重新运行,此时 refs 已就绪。
     useEffect(() => {
         const clip = clipRef.current;
         const inner = innerRef.current;
         if (!clip || !inner) return;
-
-        const apply = () => {
-            const cap = contentHeightCap(size);
-
-            if (size === 'taskQueue') {
-                tweenRef.current?.kill();
-                clip.style.height = '';
-                clip.style.flex = '1 1 0%';
-                clip.style.minHeight = '0';
-                inner.style.overflowY = 'hidden';
-                inner.style.maxHeight = 'none';
-                inner.style.height = '100%';
-                inner.style.minHeight = '0';
-                inner.style.flex = '1 1 0%';
-                primedRef.current = true;
-                return;
-            }
-
-            const raw = inner.scrollHeight;
-            const target = Math.min(raw, cap);
-            const scrollable = raw > cap + 1;
-
-            inner.style.overflowY = scrollable ? 'auto' : '';
-            inner.style.maxHeight = scrollable ? `${cap}px` : '';
-
-            if (!open || !m.enabled) {
-                tweenRef.current?.kill();
-                clip.style.height = scrollable ? `${cap}px` : 'auto';
-                primedRef.current = false;
-                return;
-            }
-
-            if (!primedRef.current || enterHoldRef.current) {
-                tweenRef.current?.kill();
-                clip.style.height = `${target}px`;
-                primedRef.current = true;
-                return;
-            }
-
-            const from = clip.offsetHeight;
-            if (Math.abs(target - from) < 2) return;
-
-            tweenRef.current?.kill();
-            tweenRef.current = gsap.fromTo(
-                clip,
-                { height: from },
-                {
-                    height: target,
-                    duration: m.duration('base'),
-                    ease: m.ease.damped,
-                    overwrite: 'auto',
-                },
-            );
-        };
 
         const ro = new ResizeObserver(() => requestAnimationFrame(apply));
         ro.observe(inner);
@@ -385,7 +392,17 @@ function useDialogContentHeight(
             tweenRef.current?.kill();
             tweenRef.current = null;
         };
-    }, [open, size, m.enabled, m.level, m.speed]);
+    }, [open, size, m.enabled, m.level, m.speed, contentReady, apply]);
+
+    const setClipRef = useCallback((node: HTMLDivElement | null) => {
+        clipRef.current = node;
+    }, []);
+
+    const setInnerRef = useCallback((node: HTMLDivElement | null) => {
+        innerRef.current = node;
+    }, []);
+
+    return { setClipRef, setInnerRef };
 }
 
 const ContentBody = forwardRef<
@@ -393,9 +410,14 @@ const ContentBody = forwardRef<
     { className?: string; size?: DialogSize; hideClose?: boolean; children?: ReactNode }
 >(({ className, size = 'md', hideClose, children }, ref) => {
     const open = useContext(DialogOpenContext);
-    const clipRef = useRef<HTMLDivElement | null>(null);
-    const innerRef = useRef<HTMLDivElement | null>(null);
-    useDialogContentHeight(clipRef, innerRef, open, size);
+    // GsapPresence 用 useState 控制渲染,内容可能在二次渲染后才出现。
+    // contentReady 在 mount 后设为 true,触发 useDialogContentHeight 重新测量。
+    const [contentReady, setContentReady] = useState(false);
+    useEffect(() => {
+        if (open) setContentReady(true);
+        else setContentReady(false);
+    }, [open]);
+    const { setClipRef, setInnerRef } = useDialogContentHeight(open, size, contentReady);
 
     const setOuterRef = (node: HTMLDivElement | null) => {
         if (typeof ref === 'function') ref(node);
@@ -416,15 +438,15 @@ const ContentBody = forwardRef<
             )}
         >
             <div
-                ref={clipRef}
+                ref={setClipRef}
                 className={cn(
-                    'overflow-x-visible overflow-y-hidden',
+                    'overflow-x-clip overflow-y-hidden',
                     size === 'sheet' && 'min-h-0 flex-1',
                     size === 'taskQueue' && 'min-h-0 flex-1',
                 )}
             >
-                <div ref={innerRef} className={cn(
-                    'px-0.5',
+                <div ref={setInnerRef} className={cn(
+                    'px-1',
                     size === 'sheet' && 'flex min-h-0 flex-1 flex-col',
                     size === 'taskQueue' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
                 )}>

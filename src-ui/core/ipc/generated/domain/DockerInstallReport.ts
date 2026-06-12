@@ -21,8 +21,8 @@ message: string,
 /**
  * 可选下载入口(Windows/macOS 不能静默装时给 Docker Desktop 链接)。
  */
-downloadUrl?: string | null,
+downloadUrl?: string | null, 
 /**
- * 安装结束时的探测快照，前端可立刻刷新 Docker 行。
+ * 安装流程结束时的探测快照，供前端立刻刷新 Docker 行，无需等下一轮 probe 或重启应用。
  */
 probedStatus?: DockerStatus | null, };
