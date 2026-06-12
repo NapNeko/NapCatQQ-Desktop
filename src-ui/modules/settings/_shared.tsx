@@ -1,11 +1,12 @@
-// 设置页各 Tab 共用的小件:FieldRow(左标题右控件行)+ ThemeSegment(主题三选段控件)+
+// 设置页各 Tab 共用的小件:FieldRow(左标题右控件行)+ ThemePicker(主题卡片网格)+
 // MotionLevelSegment(动画档位三选段)+ MotionSpeedSlider(动画速度滑块)+
 // PerformanceMonitorIntervalSlider(性能监控采样间隔滑块)+
 // SettingsTabSections / SettingsSection(分组；组间 divide-y，字段平铺)。
 
-import type { ComponentType, ReactNode } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
+import { Popover, PopoverTrigger, PopoverContent } from '../../shared/ui';
 import type { LucideProps } from 'lucide-react';
-import { Sun, Moon, MonitorCog, Sparkles, Wand2, Feather, Square, Circle, RectangleHorizontal } from 'lucide-react';
+import { Sparkles, Wand2, Feather, Square, Circle, RectangleHorizontal, ChevronDown } from 'lucide-react';
 import { SegmentMotionIcon } from '../../shared/ui/motion';
 import type { ThemeMode } from '../../hooks/preferences/preferencesStore';
 import type { MotionLevel } from '../../core/design/motion';
@@ -87,18 +88,39 @@ export function SettingsSection({
 }
 
 /// 标准设置行。组内行间分隔由 SettingsSection 内 divide-y 统一处理，勿再叠 border-b。
+/// layout="inline"（默认）：左标签右控件；layout="stacked"：标签在上、内容全宽在下。
 export function FieldRow({
     label,
     description,
     isLast: _isLast,
+    layout = 'inline',
     children,
 }: {
     label: string;
     description?: ReactNode;
     /** 保留以兼容调用方；组内最后一行由 divide-y 自然收尾，无需再传。 */
     isLast?: boolean;
+    /** inline: 左标签右控件（默认）；stacked: 标签在上、内容全宽在下。 */
+    layout?: 'inline' | 'stacked';
     children?: ReactNode;
 }) {
+    if (layout === 'stacked') {
+        return (
+            <div className="flex flex-col gap-2 py-5 first:pt-1 last:pb-1">
+                <div className="space-y-1">
+                    <label className="block text-[13px] font-medium leading-snug text-text">
+                        {label}
+                    </label>
+                    {description && (
+                        <p className="text-[12px] leading-relaxed text-text-tertiary">
+                            {description}
+                        </p>
+                    )}
+                </div>
+                {children && <div>{children}</div>}
+            </div>
+        );
+    }
     return (
         <div className="flex items-center justify-between gap-6 py-5 first:pt-1 last:pb-1">
             <div className="min-w-0 flex-1 space-y-1">
@@ -118,45 +140,200 @@ export function FieldRow({
     );
 }
 
-export function ThemeSegment({
+/** 单个主题的预览色值。 */
+interface ThemeItem {
+    value: ThemeMode;
+    label: string;
+    canvas: string;
+    sidebar: string;
+    text: string;
+    subtext: string;
+    brand: string;
+    accent: string;
+}
+
+/** 主题分组：组名 + 子项列表。未来新增主题或自定义主题只需追加 ThemeGroup。 */
+interface ThemeGroup {
+    label: string;
+    items: ReadonlyArray<ThemeItem>;
+}
+
+const THEME_GROUPS: ReadonlyArray<ThemeGroup> = [
+    {
+        label: '基础',
+        items: [
+            {
+                value: 'auto', label: '系统',
+                canvas: '#faf7f2', sidebar: '#ffe3ee',
+                text: '#2c1f18', subtext: '#8a7d76', brand: '#ff6b3d', accent: '#f58fb6',
+            },
+            {
+                value: 'light', label: '浅色',
+                canvas: '#faf7f2', sidebar: '#ffe3ee',
+                text: '#2c1f18', subtext: '#8a7d76', brand: '#ff6b3d', accent: '#f58fb6',
+            },
+            {
+                value: 'dark', label: '暗色',
+                canvas: '#211f1d', sidebar: '#292725',
+                text: '#f5f1ed', subtext: '#9e9890', brand: '#ff8a57', accent: '#f58fb6',
+            },
+        ],
+    },
+    {
+        label: 'Catppuccin',
+        items: [
+            {
+                value: 'latte', label: 'Latte',
+                canvas: '#eff1f5', sidebar: '#e6e9ef',
+                text: '#4c4f69', subtext: '#6c6f85', brand: '#8839ef', accent: '#1e66f5',
+            },
+            {
+                value: 'frappe', label: 'Frappé',
+                canvas: '#303446', sidebar: '#292c3c',
+                text: '#c6d0f5', subtext: '#949cbb', brand: '#ca9ee6', accent: '#8caaee',
+            },
+            {
+                value: 'macchiato', label: 'Macchiato',
+                canvas: '#24273a', sidebar: '#1e2030',
+                text: '#cad3f5', subtext: '#939ab7', brand: '#c6a0f6', accent: '#8aadf4',
+            },
+            {
+                value: 'mocha', label: 'Mocha',
+                canvas: '#1e1e2e', sidebar: '#181825',
+                text: '#cdd6f4', subtext: '#9399b2', brand: '#cba6f7', accent: '#89b4fa',
+            },
+        ],
+    },
+];
+
+/** 从 THEME_GROUPS 中查找指定主题的元数据。 */
+function findThemeItem(value: ThemeMode): ThemeItem | undefined {
+    for (const group of THEME_GROUPS) {
+        const found = group.items.find((it) => it.value === value);
+        if (found) return found;
+    }
+    return undefined;
+}
+
+/**
+ * 主题选择器弹窗组件。
+ * FieldRow 中展示紧凑触发按钮（色块 + 当前主题名），点击弹出 Popover，
+ * 弹窗内展示分组主题卡片网格（原始 h-9 预览比例，grid-cols-7）。
+ * 未来扩展只需往 THEME_GROUPS 追加 ThemeGroup。
+ */
+export function ThemePicker({
     value,
     onChange,
 }: {
     value: ThemeMode;
     onChange: (next: ThemeMode) => void;
 }) {
-    const items: ReadonlyArray<{
-        value: ThemeMode;
-        label: string;
-        icon: ComponentType<LucideProps>;
-    }> = [
-            { value: 'auto', label: '系统', icon: MonitorCog },
-            { value: 'light', label: '浅色', icon: Sun },
-            { value: 'dark', label: '暗色', icon: Moon },
-        ];
+    const [open, setOpen] = useState(false);
+    const current = findThemeItem(value);
+
     return (
-        <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
-            {items.map((it) => (
+        <Popover open={open} onOpenChange={setOpen}>
+            {/* 触发按钮 */}
+            <PopoverTrigger asChild>
                 <button
-                    key={it.value}
                     type="button"
-                    onClick={() => onChange(it.value)}
-                    className={
-                        'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-colors ' +
-                        (value === it.value
-                            ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
-                            : 'text-text-tertiary hover:text-text')
-                    }
+                    className="flex h-7 items-center gap-2 rounded-md bg-inset px-2.5 text-[12px] font-medium text-text transition-colors hover:bg-muted/50"
                 >
-                    <SegmentMotionIcon
-                        icon={it.icon}
-                        selected={value === it.value}
-                        segmentKey={`theme-${it.value}`}
-                    />
-                    <span>{it.label}</span>
+                    {current && (
+                        <span
+                            className="h-3.5 w-3.5 shrink-0 rounded-sm"
+                            style={{
+                                background: current.brand,
+                                boxShadow: 'inset 0 0 0 0.5px rgba(128,128,128,0.15)',
+                            }}
+                        />
+                    )}
+                    <span>{current?.label ?? value}</span>
+                    <ChevronDown className="h-3 w-3 text-text-tertiary" />
                 </button>
-            ))}
-        </div>
+            </PopoverTrigger>
+
+            {/* 弹窗内容 */}
+            <PopoverContent
+                side="bottom"
+                align="start"
+                sideOffset={6}
+            >
+                <div className="flex flex-col gap-3">
+                    {THEME_GROUPS.map((group) => (
+                        <div key={group.label} className="space-y-1.5">
+                            {/* 分组标签 */}
+                            <span className="text-[11px] font-medium tracking-wide text-text-tertiary">
+                                {group.label}
+                            </span>
+                            {/* 卡片网格：4 列基准，最多 4 个主题一组 */}
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {group.items.map((item) => {
+                                    const selected = value === item.value;
+                                    return (
+                                        <button
+                                            key={item.value}
+                                            type="button"
+                                            onClick={() => {
+                                                onChange(item.value);
+                                                setOpen(false);
+                                            }}
+                                            className={
+                                                'relative flex flex-col items-stretch gap-1 rounded-md p-1 transition-colors ' +
+                                                (selected
+                                                    ? 'bg-surface'
+                                                    : 'hover:bg-muted/40')
+                                            }
+                                            style={
+                                                selected
+                                                    ? { boxShadow: `inset 0 0 0 1px ${item.brand}44` }
+                                                    : undefined
+                                            }
+                                        >
+                                            {/* 缩略窗口预览 */}
+                                            <div
+                                                className="relative h-9 w-full overflow-hidden rounded-[3px]"
+                                                style={{
+                                                    background: item.canvas,
+                                                    boxShadow: 'inset 0 0 0 0.5px rgba(128,128,128,0.1)',
+                                                }}
+                                            >
+                                                <div
+                                                    className="absolute inset-y-0 left-0 w-[30%]"
+                                                    style={{ background: item.sidebar }}
+                                                />
+                                                <div className="absolute inset-y-0 right-0 left-[30%] flex flex-col justify-center gap-[3px] px-1.5">
+                                                    <div className="h-[2.5px] w-[60%] rounded-full" style={{ background: item.text, opacity: 0.5 }} />
+                                                    <div className="h-[2.5px] w-[40%] rounded-full" style={{ background: item.subtext, opacity: 0.4 }} />
+                                                    <div
+                                                        className="mt-[1px] h-[4px] w-[32%] rounded-full"
+                                                        style={{ background: item.brand }}
+                                                    />
+                                                </div>
+                                                <div
+                                                    className="absolute right-1 top-1 h-[4px] w-[4px] rounded-full"
+                                                    style={{ background: item.accent }}
+                                                />
+                                            </div>
+
+                                            {/* 标签 */}
+                                            <span
+                                                className={
+                                                    'text-center text-[11px] leading-tight ' +
+                                                    (selected ? 'font-semibold text-text' : 'font-medium text-text-tertiary')
+                                                }
+                                            >
+                                                {item.label}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </PopoverContent>
+        </Popover>
     );
 }
 

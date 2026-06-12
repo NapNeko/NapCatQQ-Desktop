@@ -10,7 +10,7 @@ import {
     RadiusStyleSegment,
     SettingsSection,
     SettingsTabSections,
-    ThemeSegment,
+    ThemePicker,
 } from '../_shared';
 
 interface Props {
@@ -30,9 +30,9 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
             <SettingsSection title="界面" description="保存后生效；编辑过程中不会预览主题切换">
                 <FieldRow
                     label="主题"
-                    description="跟随系统、浅色或暗色"
+                    description="系统跟随 / 浅色 / 暗色 / Catppuccin 风味"
                 >
-                    <ThemeSegment
+                    <ThemePicker
                         value={draft.theme}
                         onChange={(v) => patchDraft({ theme: v })}
                     />
