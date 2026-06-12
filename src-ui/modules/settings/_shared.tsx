@@ -336,11 +336,11 @@ export function ThemePicker({
                                                 />
                                             </div>
 
-                                            {/* 标签 */}
+                                            {/* 标签 — 字重固定避免选中时 font-semibold 撑宽 grid */}
                                             <span
                                                 className={
-                                                    'text-center text-[11px] leading-tight ' +
-                                                    (selected ? 'font-semibold text-text' : 'font-medium text-text-tertiary')
+                                                    'text-center text-[11px] font-semibold leading-tight ' +
+                                                    (selected ? 'text-text' : 'text-text-tertiary')
                                                 }
                                             >
                                                 {item.label}
