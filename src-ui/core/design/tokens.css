@@ -315,11 +315,13 @@
    --border-strong: rgba(76, 79, 105, 0.22);
 
    /* brand → mauve */
+   --brand-100: #ede4ff;
    --brand-400: #a060f5;
    --brand-500: #8839ef;
    --brand-600: #7020d0;
 
    /* accent → pink */
+   --accent-100: #fce6f2;
    --accent-500: #ea76cb;
 
    /* state */
@@ -390,11 +392,13 @@
    --border-strong: rgba(198, 208, 245, 0.24);
 
    /* brand → mauve */
+   --brand-100: #f5eeff;
    --brand-400: #d4b0ec;
    --brand-500: #ca9ee6;
    --brand-600: #b07fd4;
 
    /* accent → pink */
+   --accent-100: #fdf4fa;
    --accent-500: #f4b8e4;
 
    /* state */
@@ -465,11 +469,13 @@
    --border-strong: rgba(202, 211, 245, 0.24);
 
    /* brand → mauve */
+   --brand-100: #f4edfe;
    --brand-400: #d2aef8;
    --brand-500: #c6a0f6;
    --brand-600: #ab82e0;
 
    /* accent → pink */
+   --accent-100: #fdf3f9;
    --accent-500: #f5bde6;
 
    /* state */
@@ -540,11 +546,13 @@
    --border-strong: rgba(205, 214, 244, 0.24);
 
    /* brand → mauve */
+   --brand-100: #f5edfe;
    --brand-400: #d6b4f9;
    --brand-500: #cba6f7;
    --brand-600: #b085e0;
 
    /* accent → pink */
+   --accent-100: #fdf4f9;
    --accent-500: #f5c2e7;
 
    /* state */
