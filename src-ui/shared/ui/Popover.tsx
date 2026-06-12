@@ -131,6 +131,10 @@ export const PopoverContent = forwardRef<
         const m = useMotion();
         const elRef = useRef<HTMLDivElement | null>(null);
 
+        // 首次打开后才挂载 Portal，彻底避免冷启动 forceMount DOM 遮挡下层点击
+        const [hasBeenOpened, setHasBeenOpened] = useState(false);
+        if (open && !hasBeenOpened) setHasBeenOpened(true);
+
         useGSAP(
             () => {
                 const el = elRef.current;
@@ -209,37 +213,45 @@ export const PopoverContent = forwardRef<
                     });
                 }
             },
-            { dependencies: [open, m.enabled, side] },
+            { dependencies: [open, m.enabled, side, hasBeenOpened] },
         );
 
+        // 冷启动：Portal 始终渲染（让 Radix 正常工作），但 Content 延迟到首次打开后才挂载
         return (
             <RadixPopover.Portal forceMount>
-                <RadixPopover.Content
-                    ref={(node) => {
-                        elRef.current = node;
-                        if (typeof _ref === 'function') _ref(node);
-                        else if (_ref)
-                            (_ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
-                    }}
-                    side={side}
-                    sideOffset={sideOffset}
-                    align={align}
-                    collisionPadding={12}
-                    forceMount
-                    style={{ visibility: 'hidden', opacity: 0 }}
-                    className={cn(
-                        'z-50 rounded-lg border border-border-subtle bg-elevated p-3 shadow-popover',
-                        className,
-                    )}
-                    {...contentProps}
-                >
-                    {children}
-                    <RadixPopover.Arrow
-                        className="fill-elevated drop-shadow-[0_0.5px_0_var(--color-border-subtle)]"
-                        width={10}
-                        height={5}
-                    />
-                </RadixPopover.Content>
+                {(open || hasBeenOpened) && (
+                    <RadixPopover.Content
+                        ref={(node) => {
+                            elRef.current = node;
+                            if (typeof _ref === 'function') _ref(node);
+                            else if (_ref)
+                                (_ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+                        }}
+                        side={side}
+                        sideOffset={sideOffset}
+                        align={align}
+                        collisionPadding={12}
+                        forceMount
+                        style={{
+                            visibility: 'hidden',
+                            opacity: 0,
+                            // 关闭时禁用指针（安全兜底），打开时由 GSAP autoAlpha 管理
+                            ...(!open && { pointerEvents: 'none' as const }),
+                        }}
+                        className={cn(
+                            'z-50 rounded-lg border border-border-subtle bg-elevated p-3 shadow-popover',
+                            className,
+                        )}
+                        {...contentProps}
+                    >
+                        {children}
+                        <RadixPopover.Arrow
+                            className="fill-elevated drop-shadow-[0_0.5px_0_var(--color-border-subtle)]"
+                            width={10}
+                            height={5}
+                        />
+                    </RadixPopover.Content>
+                )}
             </RadixPopover.Portal>
         );
     },
