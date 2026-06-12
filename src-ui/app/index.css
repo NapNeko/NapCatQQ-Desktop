@@ -100,6 +100,7 @@
     0% {
         background-position: 200% 0;
     }
+
     100% {
         background-position: -200% 0;
     }
@@ -108,9 +109,12 @@
 /* 角落柔光呼吸:rich 档启用,通过 .ndf-canvas-glow.is-breathing 类启用。
    只在 BootstrapPanel mount 时附加这个类,避免全 App 常驻渲染。 */
 @keyframes glow-breath {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 0.85;
     }
+
     50% {
         opacity: 1;
     }
@@ -174,13 +178,32 @@ samp,
     }
 }
 
+/* 暗色角落柔光：降低渐变强度，深底上不刺眼 */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .ndf-canvas-glow {
+        background:
+            radial-gradient(65% 45% at -8% -8%, color-mix(in srgb, var(--accent-500) 8%, transparent), transparent 62%),
+            radial-gradient(55% 40% at 108% -5%, color-mix(in srgb, var(--brand-500) 6%, transparent), transparent 58%),
+            radial-gradient(75% 55% at 50% 108%, color-mix(in srgb, var(--brand-500) 4%, transparent), transparent 65%);
+    }
+}
+
+:root[data-theme="dark"] .ndf-canvas-glow {
+    background:
+        radial-gradient(65% 45% at -8% -8%, color-mix(in srgb, var(--accent-500) 8%, transparent), transparent 62%),
+        radial-gradient(55% 40% at 108% -5%, color-mix(in srgb, var(--brand-500) 6%, transparent), transparent 58%),
+        radial-gradient(75% 55% at 50% 108%, color-mix(in srgb, var(--brand-500) 4%, transparent), transparent 65%);
+}
+
 /* 开屏粒子：静态样式 + 缓慢漂移（具体位移由 GSAP 进场覆盖） */
 @keyframes splash-particle-drift {
+
     0%,
     100% {
         transform: translate(0, 0) scale(1);
         opacity: 0.35;
     }
+
     50% {
         transform: translate(6px, -10px) scale(1.15);
         opacity: 0.7;
@@ -217,12 +240,10 @@ samp,
     width: 45%;
     height: 200%;
     transform: skewX(-18deg);
-    background: linear-gradient(
-        90deg,
-        transparent,
-        color-mix(in srgb, white 55%, transparent),
-        transparent
-    );
+    background: linear-gradient(90deg,
+            transparent,
+            color-mix(in srgb, white 55%, transparent),
+            transparent);
     opacity: 0;
     pointer-events: none;
 }
@@ -234,10 +255,11 @@ samp,
     }
 }
 
-/* 全局滚动条：细、低对比，不抢视线（WebKit + Firefox） */
+/* 全局滚动条：细、低对比，不抢视线（WebKit + Firefox）。
+   暗色模式通过 --scrollbar-thumb / --scrollbar-thumb-hover 覆写。 */
 * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--neutral-900) 12%, transparent) transparent;
+    scrollbar-color: var(--scrollbar-thumb, color-mix(in srgb, var(--neutral-900) 12%, transparent)) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -250,12 +272,12 @@ samp,
 }
 
 ::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--neutral-900) 10%, transparent);
+    background: var(--scrollbar-thumb, color-mix(in srgb, var(--neutral-900) 10%, transparent));
     border-radius: var(--radius-pill);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in srgb, var(--neutral-900) 18%, transparent);
+    background: var(--scrollbar-thumb-hover, color-mix(in srgb, var(--neutral-900) 18%, transparent));
 }
 
 /* 仍需要完全隐藏滚动条时用 .scrollbar-hide（少用） */

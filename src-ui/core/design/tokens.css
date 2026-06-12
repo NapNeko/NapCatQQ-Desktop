@@ -178,24 +178,44 @@
 
 @media (prefers-color-scheme: dark) {
    :root:not([data-theme="light"]) {
-      --surface-canvas: #1a120d;
-      --surface-card: #261b13;
-      --surface-elevated: #322319;
-      --surface-inset: #1f150e;
-      --surface-muted: #2a1d14;
-      --surface-field: #2e2117;
-      --surface-hero: #3d2a1c;
-      --text-hero-title: #f0d4b8;
-      --text-hero-accent: #e8a882;
+      /* surface: 中性暖灰阶梯，明亮深底保证可读性 */
+      --surface-canvas: #211f1d;
+      --surface-card: #2e2b28;
+      --surface-elevated: #3a3734;
+      --surface-inset: #282523;
+      --surface-muted: #33302d;
+      --surface-field: #373431;
+      --surface-sidebar: #292725;
+      --surface-hero: #35322f;
+      --text-hero-title: #f5d8b5;
+      --text-hero-accent: #ffad75;
 
-      --text-primary: #f4efe7;
-      --text-secondary: #c9bfb6;
-      --text-tertiary: #9a8e84;
-      --text-disabled: #5c534b;
+      /* text: 高对比度，主 > 7:1 */
+      --text-primary: #f5f1ed;
+      --text-secondary: #c4bdb5;
+      --text-tertiary: #968e86;
+      --text-disabled: #5e5852;
 
-      --border-subtle: rgba(255, 240, 220, 0.08);
-      --border-default: rgba(255, 240, 220, 0.14);
-      --border-strong: rgba(255, 240, 220, 0.22);
+      /* border: 暗色下更明显，帮助区分层级 */
+      --border-subtle: rgba(255, 245, 235, 0.08);
+      --border-default: rgba(255, 245, 235, 0.15);
+      --border-strong: rgba(255, 245, 235, 0.25);
+
+      /* shadow: 深底投影 + 极细亮边 */
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 245, 235, 0.05);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 245, 235, 0.07);
+      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 245, 235, 0.09);
+      --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 25%, transparent);
+      --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+
+      /* brand 柔化：提亮 + 降饱和 */
+      --brand-400: #ff9a6b;
+      --brand-500: #ff8a57;
+      --brand-600: #e87040;
+
+      /* scrollbar */
+      --scrollbar-thumb: rgba(255, 245, 235, 0.15);
+      --scrollbar-thumb-hover: rgba(255, 245, 235, 0.28);
 
       --qr-foreground: var(--neutral-900);
       --qr-background: var(--surface-elevated);
@@ -203,24 +223,44 @@
 }
 
 :root[data-theme="dark"] {
-   --surface-canvas: #1a120d;
-   --surface-card: #261b13;
-   --surface-elevated: #322319;
-   --surface-inset: #1f150e;
-   --surface-muted: #2a1d14;
-   --surface-field: #2e2117;
-   --surface-hero: #3d2a1c;
-   --text-hero-title: #f0d4b8;
-   --text-hero-accent: #e8a882;
+   /* surface: 中性暖灰阶梯，明亮深底保证可读性 */
+   --surface-canvas: #211f1d;
+   --surface-card: #2e2b28;
+   --surface-elevated: #3a3734;
+   --surface-inset: #282523;
+   --surface-muted: #33302d;
+   --surface-field: #373431;
+   --surface-sidebar: #292725;
+   --surface-hero: #35322f;
+   --text-hero-title: #f5d8b5;
+   --text-hero-accent: #ffad75;
 
-   --text-primary: #f4efe7;
-   --text-secondary: #c9bfb6;
-   --text-tertiary: #9a8e84;
-   --text-disabled: #5c534b;
+   /* text: 高对比度，主 > 7:1 */
+   --text-primary: #f5f1ed;
+   --text-secondary: #c4bdb5;
+   --text-tertiary: #968e86;
+   --text-disabled: #5e5852;
 
-   --border-subtle: rgba(255, 240, 220, 0.08);
-   --border-default: rgba(255, 240, 220, 0.14);
-   --border-strong: rgba(255, 240, 220, 0.22);
+   /* border: 暗色下更明显，帮助区分层级 */
+   --border-subtle: rgba(255, 245, 235, 0.08);
+   --border-default: rgba(255, 245, 235, 0.15);
+   --border-strong: rgba(255, 245, 235, 0.25);
+
+   /* shadow: 深底投影 + 极细亮边 */
+   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 245, 235, 0.05);
+   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 245, 235, 0.07);
+   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 245, 235, 0.09);
+   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 25%, transparent);
+   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+
+   /* brand 柔化：提亮 + 降饱和 */
+   --brand-400: #ff9a6b;
+   --brand-500: #ff8a57;
+   --brand-600: #e87040;
+
+   /* scrollbar */
+   --scrollbar-thumb: rgba(255, 245, 235, 0.15);
+   --scrollbar-thumb-hover: rgba(255, 245, 235, 0.28);
 
    --qr-foreground: var(--neutral-900);
    --qr-background: var(--surface-elevated);
