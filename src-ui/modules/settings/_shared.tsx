@@ -3,8 +3,9 @@
 // PerformanceMonitorIntervalSlider(性能监控采样间隔滑块)+
 // SettingsTabSections / SettingsSection(分组；组间 divide-y，字段平铺)。
 
-import { useState, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Popover, PopoverTrigger, PopoverContent } from '../../shared/ui';
+import { useMotion } from '../../hooks/preferences/useMotion';
 import type { LucideProps } from 'lucide-react';
 import { Sparkles, Wand2, Feather, Square, Circle, RectangleHorizontal, ChevronDown } from 'lucide-react';
 import { SegmentMotionIcon } from '../../shared/ui/motion';
@@ -230,6 +231,27 @@ export function ThemePicker({
 }) {
     const [open, setOpen] = useState(false);
     const current = findThemeItem(value);
+    const m = useMotion();
+
+    // 卡片按钮 ref 映射，给 bindHover/bindPress 挂事件监听
+    const cardRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+    const setCardRef = useCallback(
+        (val: string) => (el: HTMLButtonElement | null) => {
+            if (el) cardRefs.current.set(val, el);
+            else cardRefs.current.delete(val);
+        },
+        [],
+    );
+
+    // 卡片 hover/press 交互
+    useEffect(() => {
+        const cleanups: Array<() => void> = [];
+        cardRefs.current.forEach((el) => {
+            cleanups.push(m.bindHover(el));
+            cleanups.push(m.bindPress(el));
+        });
+        return () => cleanups.forEach((fn) => fn());
+    }, [m.bindHover, m.bindPress, open]);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -253,7 +275,7 @@ export function ThemePicker({
                 </button>
             </PopoverTrigger>
 
-            {/* 弹窗内容 */}
+            {/* 弹窗内容 — 用户通过点击外部 / Escape / 再点触发器关闭 */}
             <PopoverContent
                 side="bottom"
                 align="start"
@@ -273,11 +295,9 @@ export function ThemePicker({
                                     return (
                                         <button
                                             key={item.value}
+                                            ref={setCardRef(item.value)}
                                             type="button"
-                                            onClick={() => {
-                                                onChange(item.value);
-                                                setOpen(false);
-                                            }}
+                                            onClick={() => onChange(item.value)}
                                             className={
                                                 'relative flex flex-col items-stretch gap-1 rounded-md p-1 transition-colors ' +
                                                 (selected

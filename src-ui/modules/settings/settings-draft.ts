@@ -1,6 +1,7 @@
 // 设置页统一草稿：后端 app-settings + 仅客户端偏好，全部经右上角「保存设置」落盘。
 
 import type { MotionLevel } from '../../core/design/motion';
+import { scaleDuration } from '../../core/design/motion';
 import type { RadiusStyle } from '../../core/design/radius';
 import { clampPerformanceMonitorIntervalMs } from '../../core/domain/performance/performanceSettings';
 import type { BackendSettings } from '../../core/services/settings.service';
@@ -10,6 +11,7 @@ import {
     type ThemeMode,
     normalizeCloseAction,
 } from '../../hooks/preferences/preferencesStore';
+import { playThemeTransition } from '../../core/design/themeTransition';
 
 /** 设置页可编辑项的完整草稿（通用 / 网络 Tab + 本机偏好）。 */
 export type SettingsDraft = BackendSettings & {
@@ -70,15 +72,57 @@ export function isSettingsDirty(
 }
 
 export function applyClientPrefsFromDraft(draft: SettingsDraft): void {
-    preferencesStore.applySnapshot({
-        theme: draft.theme,
-        showMascot: draft.showMascot,
-        closeAction: draft.closeAction,
-        motionEnabled: draft.motionEnabled,
-        motionLevel: draft.motionLevel,
-        motionSpeed: draft.motionSpeed,
-        radiusStyle: draft.radiusStyle,
-    });
+    const oldTheme = preferencesStore.get().theme;
+    const themeChanged = draft.theme !== oldTheme;
+
+    if (themeChanged) {
+        // 读取 motion 设置（用 draft 值，用户刚保存的就是他们想要的）
+        const enabled = draft.motionEnabled;
+        const level = draft.motionLevel;
+        const speed = draft.motionSpeed;
+
+        let duration: number;
+        let easing: string;
+        if (!enabled) {
+            duration = 0;
+            easing = 'linear';
+        } else if (level === 'elegant') {
+            // elegant 档不播放动画
+            duration = 0;
+            easing = 'ease-in-out';
+        } else if (level === 'standard') {
+            duration = scaleDuration(1.8, speed);
+            easing = 'ease-in-out';
+        } else {
+            duration = scaleDuration(2.8, speed);
+            easing = 'ease-in-out';
+        }
+
+        playThemeTransition(
+            () => {
+                preferencesStore.applySnapshot({
+                    theme: draft.theme,
+                    showMascot: draft.showMascot,
+                    closeAction: draft.closeAction,
+                    motionEnabled: draft.motionEnabled,
+                    motionLevel: draft.motionLevel,
+                    motionSpeed: draft.motionSpeed,
+                    radiusStyle: draft.radiusStyle,
+                });
+            },
+            { enabled, level, duration, easing },
+        );
+    } else {
+        preferencesStore.applySnapshot({
+            theme: draft.theme,
+            showMascot: draft.showMascot,
+            closeAction: draft.closeAction,
+            motionEnabled: draft.motionEnabled,
+            motionLevel: draft.motionLevel,
+            motionSpeed: draft.motionSpeed,
+            radiusStyle: draft.radiusStyle,
+        });
+    }
 }
 
 export { normalizeCloseAction };
