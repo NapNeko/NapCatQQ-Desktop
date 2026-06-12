@@ -125,8 +125,9 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         () => dockerActionStore.getSnapshot().installHintByHost,
     );
 
-    // install 包一层:进 store 标记 installing,promise 落定(成败都算)清标记。
-    // 这样切页面再切回,spinner / 禁用态从 store 恢复,而不是凭空消失。
+    // install 包一层:进 store 标记 installing。清理由 useDockerInstallProgressBridge
+    // 监听终态事件统一处理，这样状态与进度事件严格同步。
+    // 异常情况（超时、网络错误）需手动清理。
     const install = useCallback(
         async (hostId: string, options?: DockerInstallOptions): Promise<DockerInstallReport> => {
             const taskId = crypto.randomUUID();
@@ -146,8 +147,10 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
                     );
                 });
                 return await Promise.race([work, timeout]);
-            } finally {
+            } catch (err) {
+                // 超时或网络异常：后端未发送终态事件，需手动清理
                 dockerActionStore.clearInstalling(hostId);
+                throw err;
             }
         },
         [installMutation],
