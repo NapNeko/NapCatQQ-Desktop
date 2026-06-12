@@ -525,6 +525,13 @@ impl ServerManager {
         Ok(())
     }
 
+    /// 主动断开并清除某服务器的 SSH 连接缓存。下次使用时会重新建立连接。
+    /// 用于 Docker 安装等可能污染 SSH 会话环境的操作后，强制重建干净连接。
+    pub async fn disconnect(&self, id: &str) {
+        self.hosts.write().await.remove(id);
+        info!(target: "ncd_runtime::server_manager", server_id = %id, "已主动断开 SSH 连接");
+    }
+
     /// 取某服务器可用于 sudo 提权的密码,给 docker 安装等提权操作用。
     /// 优先专门的 sudo 槽(密钥登录机器在这);没有就退回 SSH 登录密码(密码
     /// 登录机器 sudo 密码通常与登录密码相同)。两个都没有返回 None。

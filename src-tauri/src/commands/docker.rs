@@ -231,6 +231,12 @@ pub async fn docker_install(
         }
     }
 
+    // Docker 安装可能污染 SSH 会话环境（sudo 缓存、shell 状态等），
+    // 主动断开连接，让下次使用时重新建立干净的 SSH 会话。
+    if let Some(id) = server_id {
+        state.server_manager.disconnect(id).await;
+    }
+
     // 用户勾了"记住密码"就存,只要这次密码被验证有效。判据是 status != NeedSudoPassword:
     // 能走过提权脚本(没返回 NeedSudoPassword)就说明 sudo 密码是对的——密码有效性
     // 与 docker daemon 起没起来是两回事。早先用 == Installed 太严:脚本跑通但 daemon
