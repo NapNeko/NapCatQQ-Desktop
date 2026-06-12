@@ -195,6 +195,11 @@ samp,
         radial-gradient(75% 55% at 50% 108%, color-mix(in srgb, var(--brand-500) 4%, transparent), transparent 65%);
 }
 
+/* Catppuccin 规范：纯色平面背景，禁用角落柔光渐变。 */
+:root:is([data-theme="latte"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-canvas-glow {
+    background: none;
+}
+
 /* 开屏粒子：静态样式 + 缓慢漂移（具体位移由 GSAP 进场覆盖） */
 @keyframes splash-particle-drift {
 
