@@ -30,7 +30,8 @@ export function useBackendSettings(cb: Callbacks = {}) {
         mutationFn: async (draft: SettingsDraft) => {
             const savedBackend = backendSlice(draft);
             await settingsService.set(savedBackend);
-            applyClientPrefsFromDraft(draft);
+            // 等待主题切换动画完成（如果有），再推 InfoBar，避免动画期间弹出
+            await applyClientPrefsFromDraft(draft);
             return savedBackend;
         },
         onSuccess: (savedBackend) => {

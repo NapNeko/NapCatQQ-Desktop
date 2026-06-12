@@ -71,7 +71,7 @@ export function isSettingsDirty(
     );
 }
 
-export function applyClientPrefsFromDraft(draft: SettingsDraft): void {
+export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<void> {
     const oldTheme = preferencesStore.get().theme;
     const themeChanged = draft.theme !== oldTheme;
 
@@ -98,7 +98,7 @@ export function applyClientPrefsFromDraft(draft: SettingsDraft): void {
             easing = 'ease-in-out';
         }
 
-        playThemeTransition(
+        await playThemeTransition(
             () => {
                 preferencesStore.applySnapshot({
                     theme: draft.theme,
