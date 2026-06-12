@@ -23,7 +23,7 @@ import {
 import type { ComponentId, ProgressEvent } from '../../core/ipc/types';
 
 /// 终态保留时长。3 秒足够用户读完 "已完成 / 失败" 提示，又不会卡到下次操作。
-const LINGER_AFTER_FINISH = 3000;
+const LINGER_AFTER_FINISH = 600_000; // 10分钟
 
 export interface ComponentActionStoreState {
     /** task_id → 进度视图 */
@@ -60,12 +60,22 @@ function clearActiveForTask(taskId: string): void {
     for (const [k, v] of Object.entries(current.activeByTarget)) {
         if (v !== taskId) cleanedActive[k] = v;
     }
-    // 同步从 taskTargets 移除：banner 已经显示完了，没人再需要这条映射。
+    // taskTargets 保留，让任务队列能显示完整标题。
+    // 会在后续清理 tasks 时一并删除。
+    const cleanedTasks: Record<string, ActionProgressView> = {};
     const cleanedTargets: Record<string, { componentId: ComponentId; hostId: string }> = {};
-    for (const [k, v] of Object.entries(current.taskTargets)) {
-        if (k !== taskId) cleanedTargets[k] = v;
+    for (const [k, v] of Object.entries(current.tasks)) {
+        if (k !== taskId) {
+            cleanedTasks[k] = v;
+            if (current.taskTargets[k]) cleanedTargets[k] = current.taskTargets[k];
+        }
     }
-    store.setState({ ...current, activeByTarget: cleanedActive, taskTargets: cleanedTargets });
+    store.setState({
+        ...current,
+        activeByTarget: cleanedActive,
+        tasks: cleanedTasks,
+        taskTargets: cleanedTargets
+    });
 }
 
 function isTerminal(progress: ActionProgressView): boolean {

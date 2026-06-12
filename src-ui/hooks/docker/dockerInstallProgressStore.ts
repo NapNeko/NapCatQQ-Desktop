@@ -8,7 +8,7 @@ import {
 } from '../../core/domain/components/progress';
 import type { ProgressEvent } from '../../core/ipc/types';
 
-const LINGER_AFTER_FINISH = 30_000;
+const LINGER_AFTER_FINISH = 600_000; // 10分钟
 
 export interface DockerInstallProgressStoreState {
     tasks: Record<string, ActionProgressView>;
