@@ -29,15 +29,18 @@ export function componentActionTitle(
     const name = componentDisplayName(componentId);
     const step = stepKind ? STEP_KIND_LABEL[stepKind] : undefined;
     if (step) return `${name} · ${step}`;
-    if (message.trim()) return `${name} · ${message.trim()}`;
-    return name;
+    const msg = message?.trim();
+    if (msg) return `${name} · ${msg}`;
+    return `${name} · 完成`;
 }
 
 export function dockerInstallTitle(hostLabel: string): string {
-    return `Docker · ${hostLabel}`;
+    const label = hostLabel?.trim() || '远程主机';
+    return `Docker · ${label}`;
 }
 
 export function dockerDeployTitle(hostLabel: string, container?: string): string {
-    if (container?.trim()) return `Docker 部署 · ${container} · ${hostLabel}`;
-    return `Docker 部署 · ${hostLabel}`;
+    const label = hostLabel?.trim() || '远程主机';
+    if (container?.trim()) return `Docker 部署 · ${container} · ${label}`;
+    return `Docker 部署 · ${label}`;
 }
