@@ -42,3 +42,10 @@ export { Switch, type SwitchProps } from './Switch';
 export { Select, type SelectProps, type SelectItem } from './Select';
 export { RadioGroup, type RadioGroupProps, type RadioItem } from './RadioGroup';
 export { FormSection, type FormSectionProps } from './FormSection';
+export {
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    PopoverClose,
+    PopoverAnchor,
+} from './Popover';
