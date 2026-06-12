@@ -265,3 +265,309 @@
    --qr-foreground: var(--neutral-900);
    --qr-background: var(--surface-elevated);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Catppuccin 主题覆写
+   来源：https://github.com/catppuccin/catppuccin
+   每个 flavor 覆写 surface / text / border / brand / accent / state / shadow。
+   primitive 层的 brand-50~900 等完整阶梯保持不变（Catppuccin 只覆写 400/500/600）。
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Latte（浅色 flavor）────────────────────────────────────────────────────── */
+:root[data-theme="latte"] {
+   /* surface */
+   --surface-canvas: #eff1f5;
+   /* base   */
+   --surface-card: #e6e9ef;
+   /* mantle */
+   --surface-elevated: #dce0e8;
+   /* crust  */
+   --surface-inset: #e6e9ef;
+   /* mantle */
+   --surface-muted: #ccd0da;
+   /* surface0 */
+   --surface-field: #e6e9ef;
+   /* mantle */
+   --surface-sidebar: #e6e9ef;
+   /* mantle */
+   --surface-hero: #ccd0da;
+   /* surface0 */
+
+   /* text */
+   --text-primary: #4c4f69;
+   /* text     */
+   --text-secondary: #5c5f77;
+   /* subtext1 */
+   --text-tertiary: #6c6f85;
+   /* subtext0 */
+   --text-disabled: #9ca0b0;
+   /* overlay0 */
+   --text-on-brand: #ffffff;
+   --text-on-accent: #ffffff;
+   --text-hero-title: #8839ef;
+   /* mauve */
+   --text-hero-accent: #ea76cb;
+   /* pink  */
+
+   /* border */
+   --border-subtle: rgba(76, 79, 105, 0.06);
+   --border-default: rgba(76, 79, 105, 0.12);
+   --border-strong: rgba(76, 79, 105, 0.22);
+
+   /* brand → mauve */
+   --brand-400: #a060f5;
+   --brand-500: #8839ef;
+   --brand-600: #7020d0;
+
+   /* accent → pink */
+   --accent-500: #ea76cb;
+
+   /* state */
+   --state-success: #40a02b;
+   --state-success-bg: color-mix(in srgb, #40a02b 12%, transparent);
+   --state-warning: #df8e1d;
+   --state-warning-bg: color-mix(in srgb, #df8e1d 14%, transparent);
+   --state-danger: #d20f39;
+   --state-danger-bg: color-mix(in srgb, #d20f39 12%, transparent);
+   --state-info: #1e66f5;
+   --state-info-bg: color-mix(in srgb, #1e66f5 12%, transparent);
+
+   /* shadow */
+   --shadow-sm: 0 1px 2px rgba(76, 79, 105, 0.05);
+   --shadow-md: 0 4px 12px rgba(76, 79, 105, 0.07), 0 1px 2px rgba(76, 79, 105, 0.04);
+   --shadow-lg: 0 12px 32px rgba(76, 79, 105, 0.09), 0 2px 6px rgba(76, 79, 105, 0.05);
+   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 35%, transparent);
+   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 30%, transparent);
+
+   /* scrollbar */
+   --scrollbar-thumb: rgba(76, 79, 105, 0.15);
+   --scrollbar-thumb-hover: rgba(76, 79, 105, 0.28);
+
+   --qr-foreground: #4c4f69;
+   --qr-background: #e6e9ef;
+}
+
+/* ── Frappé（中暗 flavor）───────────────────────────────────────────────────── */
+:root[data-theme="frappe"] {
+   /* surface */
+   --surface-canvas: #303446;
+   /* base   */
+   --surface-card: #292c3c;
+   /* mantle */
+   --surface-elevated: #414559;
+   /* surface0 */
+   --surface-inset: #292c3c;
+   /* mantle */
+   --surface-muted: #414559;
+   /* surface0 */
+   --surface-field: #292c3c;
+   /* mantle */
+   --surface-sidebar: #292c3c;
+   /* mantle */
+   --surface-hero: #414559;
+   /* surface0 */
+
+   /* text */
+   --text-primary: #c6d0f5;
+   /* text     */
+   --text-secondary: #b5bfe2;
+   /* subtext1 */
+   --text-tertiary: #a5adce;
+   /* subtext0 */
+   --text-disabled: #737994;
+   /* overlay0 */
+   --text-on-brand: #ffffff;
+   /* crust — dark text on peach */
+   --text-on-accent: #232634;
+   --text-hero-title: #ca9ee6;
+   /* peach */
+   --text-hero-accent: #f4b8e4;
+   /* pink  */
+
+   /* border */
+   --border-subtle: rgba(198, 208, 245, 0.08);
+   --border-default: rgba(198, 208, 245, 0.14);
+   --border-strong: rgba(198, 208, 245, 0.24);
+
+   /* brand → mauve */
+   --brand-400: #d4b0ec;
+   --brand-500: #ca9ee6;
+   --brand-600: #b07fd4;
+
+   /* accent → pink */
+   --accent-500: #f4b8e4;
+
+   /* state */
+   --state-success: #a6d189;
+   --state-success-bg: color-mix(in srgb, #a6d189 14%, transparent);
+   --state-warning: #e5c890;
+   --state-warning-bg: color-mix(in srgb, #e5c890 14%, transparent);
+   --state-danger: #e78284;
+   --state-danger-bg: color-mix(in srgb, #e78284 14%, transparent);
+   --state-info: #8caaee;
+   --state-info-bg: color-mix(in srgb, #8caaee 14%, transparent);
+
+   /* shadow */
+   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(198, 208, 245, 0.05);
+   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(198, 208, 245, 0.07);
+   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(198, 208, 245, 0.09);
+   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
+   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+
+   /* scrollbar */
+   --scrollbar-thumb: rgba(198, 208, 245, 0.14);
+   --scrollbar-thumb-hover: rgba(198, 208, 245, 0.26);
+
+   --qr-foreground: #292c3c;
+   --qr-background: #414559;
+}
+
+/* ── Macchiato（深暗 flavor）────────────────────────────────────────────────── */
+:root[data-theme="macchiato"] {
+   /* surface */
+   --surface-canvas: #24273a;
+   /* base   */
+   --surface-card: #1e2030;
+   /* mantle */
+   --surface-elevated: #363a4f;
+   /* surface0 */
+   --surface-inset: #1e2030;
+   /* mantle */
+   --surface-muted: #363a4f;
+   /* surface0 */
+   --surface-field: #1e2030;
+   /* mantle */
+   --surface-sidebar: #1e2030;
+   /* mantle */
+   --surface-hero: #363a4f;
+   /* surface0 */
+
+   /* text */
+   --text-primary: #cad3f5;
+   /* text     */
+   --text-secondary: #b8c0e0;
+   /* subtext1 */
+   --text-tertiary: #a5adcb;
+   /* subtext0 */
+   --text-disabled: #6e738d;
+   /* overlay0 */
+   --text-on-brand: #ffffff;
+   /* crust — dark text on peach */
+   --text-on-accent: #181926;
+   --text-hero-title: #c6a0f6;
+   /* peach */
+   --text-hero-accent: #f5bde6;
+   /* pink  */
+
+   /* border */
+   --border-subtle: rgba(202, 211, 245, 0.08);
+   --border-default: rgba(202, 211, 245, 0.14);
+   --border-strong: rgba(202, 211, 245, 0.24);
+
+   /* brand → mauve */
+   --brand-400: #d2aef8;
+   --brand-500: #c6a0f6;
+   --brand-600: #ab82e0;
+
+   /* accent → pink */
+   --accent-500: #f5bde6;
+
+   /* state */
+   --state-success: #a6da95;
+   --state-success-bg: color-mix(in srgb, #a6da95 14%, transparent);
+   --state-warning: #eed49f;
+   --state-warning-bg: color-mix(in srgb, #eed49f 14%, transparent);
+   --state-danger: #ed8796;
+   --state-danger-bg: color-mix(in srgb, #ed8796 14%, transparent);
+   --state-info: #8aadf4;
+   --state-info-bg: color-mix(in srgb, #8aadf4 14%, transparent);
+
+   /* shadow */
+   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(202, 211, 245, 0.05);
+   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(202, 211, 245, 0.07);
+   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(202, 211, 245, 0.09);
+   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
+   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+
+   /* scrollbar */
+   --scrollbar-thumb: rgba(202, 211, 245, 0.13);
+   --scrollbar-thumb-hover: rgba(202, 211, 245, 0.25);
+
+   --qr-foreground: #1e2030;
+   --qr-background: #363a4f;
+}
+
+/* ── Mocha（最深 flavor，高对比）───────────────────────────────────────────── */
+:root[data-theme="mocha"] {
+   /* surface */
+   --surface-canvas: #1e1e2e;
+   /* base   */
+   --surface-card: #181825;
+   /* mantle */
+   --surface-elevated: #313244;
+   /* surface0 */
+   --surface-inset: #181825;
+   /* mantle */
+   --surface-muted: #313244;
+   /* surface0 */
+   --surface-field: #181825;
+   /* mantle */
+   --surface-sidebar: #181825;
+   /* mantle */
+   --surface-hero: #313244;
+   /* surface0 */
+
+   /* text */
+   --text-primary: #cdd6f4;
+   /* text     */
+   --text-secondary: #bac2de;
+   /* subtext1 */
+   --text-tertiary: #a6adc8;
+   /* subtext0 */
+   --text-disabled: #6c7086;
+   /* overlay0 */
+   --text-on-brand: #ffffff;
+   /* crust — dark text on peach */
+   --text-on-accent: #11111b;
+   --text-hero-title: #cba6f7;
+   /* peach */
+   --text-hero-accent: #f5c2e7;
+   /* pink  */
+
+   /* border */
+   --border-subtle: rgba(205, 214, 244, 0.08);
+   --border-default: rgba(205, 214, 244, 0.14);
+   --border-strong: rgba(205, 214, 244, 0.24);
+
+   /* brand → mauve */
+   --brand-400: #d6b4f9;
+   --brand-500: #cba6f7;
+   --brand-600: #b085e0;
+
+   /* accent → pink */
+   --accent-500: #f5c2e7;
+
+   /* state */
+   --state-success: #a6e3a1;
+   --state-success-bg: color-mix(in srgb, #a6e3a1 14%, transparent);
+   --state-warning: #f9e2af;
+   --state-warning-bg: color-mix(in srgb, #f9e2af 14%, transparent);
+   --state-danger: #f38ba8;
+   --state-danger-bg: color-mix(in srgb, #f38ba8 14%, transparent);
+   --state-info: #89b4fa;
+   --state-info-bg: color-mix(in srgb, #89b4fa 14%, transparent);
+
+   /* shadow */
+   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(205, 214, 244, 0.05);
+   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(205, 214, 244, 0.07);
+   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(205, 214, 244, 0.09);
+   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
+   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+
+   /* scrollbar */
+   --scrollbar-thumb: rgba(205, 214, 244, 0.13);
+   --scrollbar-thumb-hover: rgba(205, 214, 244, 0.25);
+
+   --qr-foreground: #181825;
+   --qr-background: #313244;
+}

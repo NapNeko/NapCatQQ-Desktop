@@ -26,7 +26,7 @@ import {
     applyRadiusStyle,
 } from '../../core/design/radius';
 
-export type ThemeMode = 'light' | 'dark' | 'auto';
+export type ThemeMode = 'light' | 'dark' | 'auto' | 'latte' | 'frappe' | 'macchiato' | 'mocha';
 export type CloseAction = 'close' | 'tray';
 
 export function normalizeCloseAction(raw: unknown): CloseAction {
@@ -87,8 +87,14 @@ function persist() {
     }
 }
 
+const VALID_THEMES: ReadonlySet<ThemeMode> = new Set<ThemeMode>([
+    'auto', 'light', 'dark', 'latte', 'frappe', 'macchiato', 'mocha',
+]);
+
 function normalizeTheme(raw: unknown): ThemeMode {
-    return raw === 'light' || raw === 'dark' || raw === 'auto' ? raw : 'auto';
+    return typeof raw === 'string' && VALID_THEMES.has(raw as ThemeMode)
+        ? (raw as ThemeMode)
+        : 'auto';
 }
 
 function normalizeMotionLevel(raw: unknown): MotionLevel {
@@ -116,7 +122,8 @@ function update(patch: Partial<AppPreferences>) {
 export function applySideEffects() {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    // 主题：只设 light/dark；auto 时 attribute 留空让 CSS 走 prefers-color-scheme。
+    // 主题：auto 时 attribute 留空让 CSS 走 prefers-color-scheme；
+    // 其它值（light / dark / latte / frappe / macchiato / mocha）直接写入。
     if (state.theme === 'auto') {
         root.removeAttribute('data-theme');
     } else {
