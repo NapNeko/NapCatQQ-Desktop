@@ -10,7 +10,7 @@
 //   - 浮动菜单拆出 FloatingActions / BatchBottomBar 两个组件，互斥显示。
 //   - 卡片网格用 Tailwind grid auto-fit，按窗口宽度自动 1/2/3 列。
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnterAfterPaint } from '../../../shared/ui/motion/listEnter';
@@ -35,6 +35,8 @@ import { useNapcatLogin } from '../../../hooks/webui/useNapcatLogin';
 import { useSnowlumaState } from '../../../hooks/webui/useSnowlumaState';
 import { useOpenWebui } from '../../../hooks/webui/useOpenWebui';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { useBotSnapshotAlerts } from '../../../hooks/bot/useBotSnapshotAlerts';
+import { isSnowLumaFlavor } from '../../../core/domain/bot/flavor';
 import { botService } from '../../../core/services/bot.service';
 import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
@@ -198,7 +200,7 @@ export function BotListPageNext({
                 {isLoading ? (
                     <LoadingState />
                 ) : error ? (
-                    <ErrorState message={error.message} onRetry={() => refetch()} />
+                    <ErrorState onRetry={() => refetch()} />
                 ) : botSnapshots.length === 0 ? (
                     <EmptyState onCreate={() => onConfigureBot(null)} />
                 ) : (
@@ -291,15 +293,16 @@ function LoadingState() {
     );
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorState({ onRetry }: { onRetry: () => void }) {
     return (
-        <div className="rounded-md bg-danger-soft p-5 ring-1 ring-danger/20">
-            <p className="font-display text-md font-semibold text-danger">加载失败</p>
-            <p className="mt-1 text-sm text-text-secondary">{message}</p>
-            <Button size="sm" variant="ghost" onClick={onRetry} className="mt-3">
+        <PagePlaceholder className="gap-3">
+            <p className="text-sm text-text-secondary">
+                Bot 列表加载失败，详情见顶部提示条。
+            </p>
+            <Button size="sm" variant="primary" onClick={onRetry}>
                 重试
             </Button>
-        </div>
+        </PagePlaceholder>
     );
 }
 
@@ -365,6 +368,26 @@ function BotListGrid({
 }: GridProps) {
     const m = useMotion();
     const containerRef = useRef<HTMLDivElement>(null);
+
+    const alertRows = useMemo(
+        () =>
+            bots.map((bot) => {
+                const config = configByBot[bot.bot_id] ?? null;
+                const flavor = flavorByBot[bot.bot_id] ?? null;
+                const name = config?.bot.name?.trim();
+                return {
+                    bot,
+                    displayName: name && name.length > 0 ? name : bot.bot_id,
+                    invalidationReason:
+                        napcat.byBot[bot.bot_id]?.invalidationReason ?? null,
+                    isSnowLuma: isSnowLumaFlavor(flavor),
+                    snowlumaDaemonState: snowluma.daemonState,
+                    offlineAutoRestart: !!config?.bot.offlineAutoRestart,
+                };
+            }),
+        [bots, configByBot, flavorByBot, napcat.byBot, snowluma.daemonState],
+    );
+    useBotSnapshotAlerts(alertRows);
 
     // 列表 stagger:每次 bots.length 变化时,把刚出现的 ListItem 子节点
     // gsap.from 一遍。stagger 由当前档位决定。优雅档 stagger=0 → from 仍跑

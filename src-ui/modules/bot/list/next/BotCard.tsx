@@ -3,11 +3,10 @@
 // 单卡内部布局：
 //   1. Header 行：[复选框] [Avatar] [身份块（标题 + 徽章 / QQ ID · flavor · 时间 · 状态）] [操作区]
 //   2. Chip 行：对外 / 自启 / 运行位置 / daemon / 注入 / UIN / 启动模式 / WebUI 端口 / rev
-//   3. （可选）错误行 / 踢线 toast：仅高 priority 状态独立显示
+//   3. meta 行：仅运行态提示（登录中、待扫码等）；报错 / 踢线 / last_error 走
+//      列表页 useBotSnapshotAlerts → 全局 InfoBar，不在卡片上重复。
 //
-// 卡片走内容自适应高度（不再固定 h-[120px]）：固定高度遇到只有一两个 chip 时
-// 下方会出现大块留白看着稀疏。普通状态文案（"运行中" / "已登录"）合并到副标题
-// 行，不单独占一整行；只有错误 / 被踢这类高 priority 的红色标签会撑出独立行。
+// 卡片走内容自适应高度：meta 固定槽位内展示中性运行提示，不展示后端错误全文。
 //
 // 操作区按钮按状态收缩：日志 / WebUI 只在 running / starting 时显示（停止状态
 // 这俩按了也没意义）；启停 / 配置永远显示。
@@ -21,10 +20,8 @@ import { forwardRef, useEffect, useRef, useState, type ComponentType } from 'rea
 import type { LucideProps } from 'lucide-react';
 import {
     Activity,
-    AlertTriangle,
     Check,
     Cpu,
-    DoorOpen,
     FileText,
     Globe,
     Hash,
@@ -131,34 +128,16 @@ export function BotCard({
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
 
-    const [showKickedToast, setShowKickedToast] = useState(false);
-    useEffect(() => {
-        if (invalidationReason === 'kicked') {
-            setShowKickedToast(true);
-            // 自动重启场景下后端会很快触发 restart，状态会自然刷新，3s 足够；
-            // 手动重启场景下 toast 是用户行动指引，给 15s 让用户来得及反应。
-            // 真踢线 → 重启过程 isOnline 跳 true 后这个 toast 已经被父组件
-            // 通过 invalidationReason=null 清掉，没必要担心残留。
-            const dismissMs = config?.bot.offlineAutoRestart ? 3000 : 15000;
-            const timer = setTimeout(() => setShowKickedToast(false), dismissMs);
-            return () => clearTimeout(timer);
-        }
-        setShowKickedToast(false);
-        return undefined;
-    }, [invalidationReason, config?.bot.offlineAutoRestart]);
-
     const isSL = isSnowLumaFlavor(flavor);
     const hasQrcode = !!qrcodeUrl;
 
     // 状态切换反馈:
     //   - 关键状态转移(starting→running 等) → 状态徽章 pop,而不是整张卡 pop
     //     (大卡 pop 会跟 hover lift / shadow 叠加放大成"整张卡突然鼓一下")
-    //   - last_error 首次出现 → 整张卡 shake(shake 是水平摇,不会跟 hover 冲突)
     const m = useMotion();
     const cardRef = useRef<HTMLDivElement | null>(null);
     const badgeRef = useRef<HTMLSpanElement>(null);
     const prevStateRef = useRef<typeof bot.state>(bot.state);
-    const prevErrorRef = useRef<string | null | undefined>(bot.last_error);
 
     useEffect(() => {
         const el = badgeRef.current;
@@ -178,20 +157,6 @@ export function BotCard({
         }
         prevStateRef.current = bot.state;
     }, [bot.state, m.enabled, m.level, m.speed]);
-
-    useEffect(() => {
-        const el = cardRef.current;
-        if (!el || !m.enabled) {
-            prevErrorRef.current = bot.last_error;
-            return;
-        }
-        const hadError = !!prevErrorRef.current;
-        const hasError = !!bot.last_error;
-        if (!hadError && hasError) {
-            m.shake(el);
-        }
-        prevErrorRef.current = bot.last_error;
-    }, [bot.last_error, m.enabled, m.level, m.speed]);
 
     const webuiAvailable = isWebuiAvailable({
         flavor,
@@ -225,8 +190,6 @@ export function BotCard({
     const statusLine = computeStatusLine({
         bot,
         isSL,
-        showKickedToast,
-        offlineAutoRestart: !!config?.bot.offlineAutoRestart,
         snowlumaDaemonState,
         snowlumaLoginState,
         snowlumaInjected,
@@ -244,11 +207,8 @@ export function BotCard({
         }),
     ];
 
-    const cardAccent = showKickedToast || bot.last_error
-        ? 'danger'
-        : isBotStarting(bot.state) || bot.state === 'repairing'
-          ? 'brand'
-          : 'none';
+    const cardAccent =
+        isBotStarting(bot.state) || bot.state === 'repairing' ? 'brand' : 'none';
 
     const isActive = isBotActive(bot.state);
 
@@ -436,15 +396,7 @@ export function BotCard({
                                     'flex min-w-0 items-center gap-1 truncate text-xs',
                                     statusLineTextClass(statusLine.tone),
                                 )}
-                                title={
-                                    statusLine.tone === 'danger' && bot.last_error
-                                        ? bot.last_error
-                                        : undefined
-                                }
                             >
-                                {statusLine.icon ? (
-                                    <StatusLineIcon node={statusLine.icon} tone={statusLine.tone} />
-                                ) : null}
                                 <span className="truncate">{statusLine.text}</span>
                             </p>
                         ) : (
@@ -597,15 +549,6 @@ export function BotCard({
                 }}
                 onKicked={() => {
                     setQrOpen(false);
-                    pushInfoBar({
-                        tone: 'warning',
-                        title: '账号已被踢',
-                        // 文案区分恢复路径，与卡片内的踢线 toast 对齐。
-                        content: config?.bot.offlineAutoRestart
-                            ? `Bot ${bot.bot_id} 被踢，正在自动重启`
-                            : `Bot ${bot.bot_id} 被踢，请手动重启`,
-                        autoDismissMs: 5000,
-                    });
                 }}
             />
         </>
@@ -684,16 +627,12 @@ function pickAvatarPalette(seed: string): string {
 
 interface StatusLine {
     text: string;
-    tone: 'success' | 'warning' | 'danger' | 'brand' | 'neutral';
-    icon?: React.ReactNode;
+    tone: 'success' | 'warning' | 'brand' | 'neutral';
 }
 
 function computeStatusLine(args: {
     bot: BotActorSnapshot;
     isSL: boolean;
-    showKickedToast: boolean;
-    /** 被踢后恢复路径文案的判断依据（开了自动重启就显示"自动重启中"，否则提示手动重启）。 */
-    offlineAutoRestart: boolean;
     snowlumaDaemonState: DaemonState | null | undefined;
     snowlumaLoginState: SnowLumaLoginState | null | undefined;
     snowlumaInjected: boolean | undefined;
@@ -705,8 +644,6 @@ function computeStatusLine(args: {
     const {
         bot,
         isSL,
-        showKickedToast,
-        offlineAutoRestart,
         snowlumaDaemonState,
         snowlumaLoginState,
         snowlumaInjected,
@@ -716,40 +653,17 @@ function computeStatusLine(args: {
         webuiAvailable,
     } = args;
 
-    // 踢线提示视觉权重最高，先判断；保留 DoorOpen 图标做语义区分。
-    if (showKickedToast) {
-        return {
-            text: offlineAutoRestart
-                ? '账号被踢，自动重启中…'
-                : '账号被踢，请手动重启',
-            tone: 'danger',
-            icon: <DoorOpen size={12} strokeWidth={2.4} />,
-        };
+    // 崩溃 / last_error / 踢线 / daemon 崩溃：底栏生命周期徽章 + 全局 InfoBar，
+    // meta 不再重复报错文案。
+    if (
+        bot.state === 'crashed' ||
+        bot.state === 'stopped' ||
+        (bot.last_error && bot.last_error.trim().length > 0)
+    ) {
+        return null;
     }
-
-    // last_error 同样合并进副标题行；完整错误信息靠悬停 tooltip 看，避免独立
-    // 一行红字撑高卡片。
-    if (bot.last_error) {
-        return {
-            text: bot.last_error,
-            tone: 'danger',
-            icon: <AlertTriangle size={12} strokeWidth={2.4} />,
-        };
-    }
-
-    // stopped 状态：徽章已经讲清楚，状态行就别再画蛇添足；并且后端事件链可能
-    // 滞后清理 isOnline / loginState，这里短路掉避免出现"徽章说停了，状态行
-    // 说在线"的矛盾画面。
-    if (bot.state === 'stopped') return null;
 
     if (isSL) {
-        if (snowlumaDaemonState === 'crashed') {
-            return {
-                text: 'daemon 已崩溃',
-                tone: 'danger',
-                icon: <AlertTriangle size={12} strokeWidth={2.4} />,
-            };
-        }
         if (snowlumaDaemonState === 'starting') {
             return { text: 'daemon 启动中', tone: 'brand' };
         }
@@ -790,13 +704,6 @@ function computeStatusLine(args: {
     if (bot.state === 'stopping') return { text: '正在停止…', tone: 'warning' };
     if (bot.state === 'repairing') return { text: '正在修复…', tone: 'warning' };
     if (bot.state === 'running') return { text: '运行中', tone: 'success' };
-    if (bot.state === 'crashed') {
-        return {
-            text: 'Bot 已崩溃',
-            tone: 'danger',
-            icon: <AlertTriangle size={12} strokeWidth={2.4} />,
-        };
-    }
     return null;
 }
 
@@ -806,8 +713,6 @@ function statusLineTextClass(tone: StatusLine['tone']): string {
             return 'text-success';
         case 'warning':
             return 'text-warning';
-        case 'danger':
-            return 'text-danger';
         case 'brand':
             return 'text-brand';
         case 'neutral':
@@ -839,47 +744,6 @@ function ToolbarMotionIcon({
             playEnter={false}
         />
     );
-}
-
-function StatusLineIcon({
-    node,
-    tone,
-}: {
-    node: React.ReactNode;
-    tone: StatusLine['tone'];
-}) {
-    if (tone !== 'danger') return <>{node}</>;
-    const icon = statusLineIconComponent(node);
-    if (!icon) return <>{node}</>;
-    return (
-        <MotionIcon
-            icon={icon}
-            motion="wiggle"
-            size={12}
-            strokeWidth={2.4}
-            playEnter={false}
-            className="shrink-0"
-        />
-    );
-}
-
-function statusLineIconComponent(node: React.ReactNode): ComponentType<LucideProps> | null {
-    if (!node || typeof node !== 'object' || !('type' in node)) return null;
-    const t = (node as React.ReactElement).type;
-    if (typeof t !== 'function' && typeof t !== 'object') return null;
-    const known: Record<string, ComponentType<LucideProps>> = {
-        DoorOpen,
-        AlertTriangle,
-    };
-    const name =
-        typeof t === 'function'
-            ? (t as { displayName?: string; name?: string }).displayName ??
-              (t as { name?: string }).name
-            : undefined;
-    if (name && known[name]) return known[name];
-    if (t === DoorOpen) return DoorOpen;
-    if (t === AlertTriangle) return AlertTriangle;
-    return null;
 }
 
 function InfoChip({
