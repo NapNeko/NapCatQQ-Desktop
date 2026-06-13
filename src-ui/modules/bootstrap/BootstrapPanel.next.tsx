@@ -177,19 +177,33 @@ const RemoteSummaryCard: React.FC<{ onNavigate?: (route: AppRoute) => void }> = 
             ? '尚未配置远端主机，点击进入 Remote 页面添加。'
             : `已配置 ${count} 台远端主机，点击进入 Remote 页面管理。`;
 
+    const countLabel = isLoading ? '…' : `${count} 台`;
+
     return (
-        <Card padding="md" hover="lift" className="cursor-pointer" onClick={() => onNavigate?.('remote')}>
-            <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-info/10 text-info">
-                    <MotionIcon icon={Server} motion="breathe" playEnter={false} size={18} />
+        <Card
+            padding="md"
+            hover="lift"
+            className="cursor-pointer transition-shadow hover:shadow-popover"
+            onClick={() => onNavigate?.('remote')}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-info/10 text-info">
+                        <MotionIcon icon={Server} motion="breathe" playEnter={false} size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="font-display text-[15px] font-semibold text-text">远端主机</p>
+                        <p className="mt-0.5 text-[12px] leading-snug text-text-tertiary">
+                            {description}
+                        </p>
+                    </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-semibold text-text">远端主机集群</p>
-                    <p className="mt-0.5 text-[12.5px] text-text-tertiary">{description}</p>
+                <div className="shrink-0 text-right">
+                    <p className="font-mono text-2xl font-semibold tabular-nums text-text">
+                        {countLabel}
+                    </p>
+                    <p className="text-[11px] text-text-tertiary">已配置</p>
                 </div>
-                <span className="shrink-0 rounded-pill bg-inset px-2.5 py-0.5 text-[11.5px] font-medium text-text-secondary tabular-nums">
-                    {isLoading ? '…' : `${count} hosts`}
-                </span>
             </div>
         </Card>
     );
