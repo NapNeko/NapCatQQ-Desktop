@@ -75,6 +75,21 @@ export function statusTone(
     }
 }
 
+export function kindBadgeTone(
+    kind: TaskQueueItem['kind'],
+): 'brand' | 'success' | 'danger' | 'warning' | 'neutral' | 'info' {
+    switch (kind) {
+        case 'component_action':
+            return 'brand';
+        case 'docker_install':
+            return 'info';
+        case 'docker_deploy':
+            return 'warning';
+        default:
+            return 'neutral';
+    }
+}
+
 export function kindLabel(kind: TaskQueueItem['kind']): string {
     switch (kind) {
         case 'component_action':

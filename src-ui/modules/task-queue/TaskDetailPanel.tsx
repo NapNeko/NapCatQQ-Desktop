@@ -8,6 +8,7 @@ import {
     failureHint,
     formatElapsedLong,
     getTaskEndedAt,
+    kindBadgeTone,
     kindLabel,
     statusLabel,
     statusTone,
@@ -88,7 +89,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                             <h2 className="font-display text-lg font-semibold leading-tight text-text">
                                 {item.title}
                             </h2>
-                            <Badge tone="neutral" appearance="soft" className="text-[11px]">
+                            <Badge tone={kindBadgeTone(item.kind)} appearance="soft" className="text-[11px]">
                                 {kindLabel(item.kind)}
                             </Badge>
                             <Badge tone={statusTone(item.status)} appearance="soft" className="text-[11px]">

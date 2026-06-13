@@ -1,10 +1,9 @@
 // 任务队列列表行（左侧任务轨）。
 
 import React from 'react';
-import { Box, Container, Download } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import { Badge } from '../../shared/ui';
-import { ActionMotionIcon, LIVE_MOTION, RESOURCE_MOTION, type MotionIconPreset } from '../../shared/ui/motion';
+import { ActionMotionIcon, LIVE_MOTION, RESOURCE_MOTION } from '../../shared/ui/motion';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 import {
     formatElapsedCompact,
@@ -14,33 +13,12 @@ import {
     statusShort,
     statusTone,
 } from '../../core/domain/task-queue/display';
+import { TASK_KIND_VISUAL, taskKindIconClasses } from './taskQueueKindVisual';
 
-type KindMeta = {
-    Icon: typeof Box;
-    motion: MotionIconPreset;
-    tileSelected: string;
-    iconSelected: string;
-};
-
-const KIND_META: Record<TaskQueueItem['kind'], KindMeta> = {
-    component_action: {
-        Icon: Box,
-        motion: RESOURCE_MOTION,
-        tileSelected: 'bg-brand-soft/70',
-        iconSelected: 'text-brand',
-    },
-    docker_install: {
-        Icon: Download,
-        motion: LIVE_MOTION,
-        tileSelected: 'bg-info-soft/80',
-        iconSelected: 'text-info',
-    },
-    docker_deploy: {
-        Icon: Container,
-        motion: RESOURCE_MOTION,
-        tileSelected: 'bg-accent-soft/80',
-        iconSelected: 'text-accent',
-    },
+const KIND_MOTION: Record<TaskQueueItem['kind'], typeof RESOURCE_MOTION> = {
+    component_action: RESOURCE_MOTION,
+    docker_install: LIVE_MOTION,
+    docker_deploy: RESOURCE_MOTION,
 };
 
 function KindIcon({
@@ -52,14 +30,15 @@ function KindIcon({
     selected: boolean;
     busy: boolean;
 }) {
-    const { Icon, motion, iconSelected } = KIND_META[kind];
+    const { Icon } = TASK_KIND_VISUAL[kind];
+    const { glyph } = taskKindIconClasses(kind, selected);
     return (
         <ActionMotionIcon
             icon={Icon}
-            size={15}
-            strokeWidth={1.75}
-            motion={busy ? motion : 'none'}
-            className={cn('shrink-0', selected ? iconSelected : 'text-text-tertiary')}
+            size={16}
+            strokeWidth={selected ? 2.1 : 1.85}
+            motion={busy ? KIND_MOTION[kind] : 'none'}
+            className={cn('shrink-0', glyph)}
         />
     );
 }
@@ -79,7 +58,7 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
     const elapsed =
         item.startedAt > 0 ? formatElapsedCompact(item.startedAt, endedAt) : '';
     const busy = isActiveTaskStatus(item.status);
-    const kindMeta = KIND_META[item.kind];
+    const { tile } = taskKindIconClasses(item.kind, selected);
 
     return (
         <button
@@ -89,22 +68,22 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
             className={cn(
                 'group relative flex w-full items-start gap-2.5 rounded-md px-2.5 py-2.5 text-left transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
-                selected
-                    ? 'bg-elevated/50'
-                    : 'hover:bg-elevated/25',
+                selected ? 'bg-elevated/50' : 'hover:bg-elevated/25',
             )}
         >
             <span
                 aria-hidden
                 className={cn(
                     'absolute bottom-2 left-0 top-2 w-[2px] rounded-r-pill transition-opacity',
-                    selected ? 'bg-brand opacity-100' : 'bg-border-default opacity-0 group-hover:opacity-50',
+                    selected
+                        ? 'bg-brand opacity-100'
+                        : 'bg-border-default opacity-0 group-hover:opacity-50',
                 )}
             />
             <span
                 className={cn(
-                    'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
-                    selected ? kindMeta.tileSelected : 'bg-inset/50',
+                    'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors',
+                    tile,
                 )}
             >
                 <KindIcon kind={item.kind} selected={selected} busy={busy} />

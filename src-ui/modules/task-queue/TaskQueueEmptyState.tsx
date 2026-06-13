@@ -1,11 +1,12 @@
 // 任务队列空状态。
 
 import React from 'react';
-import { Box, Container, ListTodo } from 'lucide-react';
+import { ListTodo } from 'lucide-react';
 import { Button } from '../../shared/ui';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MotionIcon } from '../../shared/ui/motion';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
+import { TASK_KIND_VISUAL } from './taskQueueKindVisual';
 
 export interface TaskQueueEmptyStateProps {
     variant: 'no-tasks' | 'no-filter-match';
@@ -42,11 +43,11 @@ export const TaskQueueEmptyState: React.FC<TaskQueueEmptyStateProps> = ({
             {isGlobal && onNavigate && (
                 <div className="flex flex-wrap items-center justify-center gap-2">
                     <Button size="sm" variant="secondary" onClick={() => onNavigate('components')}>
-                        <MotionIcon icon={Box} motion="none" playEnter={false} size={14} className="mr-1.5" />
+                        <EmptyNavIcon kind="component_action" />
                         前往组件
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => onNavigate('docker')}>
-                        <MotionIcon icon={Container} motion="none" playEnter={false} size={14} className="mr-1.5" />
+                        <EmptyNavIcon kind="docker_deploy" />
                         容器管理
                     </Button>
                 </div>
@@ -54,3 +55,17 @@ export const TaskQueueEmptyState: React.FC<TaskQueueEmptyStateProps> = ({
         </PagePlaceholder>
     );
 };
+
+function EmptyNavIcon({ kind }: { kind: keyof typeof TASK_KIND_VISUAL }) {
+    const v = TASK_KIND_VISUAL[kind];
+    return (
+        <MotionIcon
+            icon={v.Icon}
+            motion="none"
+            playEnter={false}
+            size={14}
+            strokeWidth={2}
+            className={`mr-1.5 ${v.glyphSelected}`}
+        />
+    );
+}
