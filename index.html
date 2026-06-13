@@ -4,12 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NapCatQQ Desktop</title>
-    <!-- 在 JS/CSS 到达前避免 WebView 纯白闪屏（与 tokens --surface-canvas 一致） -->
+    <!-- JS/CSS 到达前避免 WebView 闪屏；暗色系统用深底，与 tokens surface-canvas 对齐 -->
     <style>
       html, body, #root {
         height: 100%;
         margin: 0;
-        background: #faf8f6;
+        background: #faf7f2;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]):not([data-theme="latte"]),
+        html:not([data-theme="light"]):not([data-theme="latte"]) body,
+        html:not([data-theme="light"]):not([data-theme="latte"]) #root {
+          background: #211f1d;
+        }
+      }
+      html[data-theme="dark"],
+      html[data-theme="frappe"],
+      html[data-theme="macchiato"] {
+        background: #211f1d;
+      }
+      html[data-theme="mocha"] {
+        background: #1e1e2e;
       }
     </style>
   </head>

@@ -1,4 +1,4 @@
-// 首屏闸门：StartupSplash 后再挂载 AppNext（同步路由，无 lazy）。
+// 首屏闸门：磁盘 UI 偏好就绪 → StartupSplash → AppNext。
 
 import React, { useCallback, useEffect, useState } from 'react';
 import './index.css';
@@ -6,18 +6,31 @@ import { StartupSplash } from './StartupSplash';
 import { AppNext } from './AppNext';
 import { SplashConfetti } from '../shared/ui/motion';
 import { useMotion } from '../hooks/preferences/useMotion';
+import { hydrateAppUiPreferencesFromDisk } from '../hooks/preferences/useAppUiPreferencesBootstrap';
+import { applySideEffects } from '../hooks/preferences/preferencesStore';
+import { syncRootChromeBackground } from '../core/design/surfaceCanvas';
 
 export const AppBootGate: React.FC = () => {
+    const [prefsReady, setPrefsReady] = useState(false);
     const [shellReady, setShellReady] = useState(false);
     const [showApp, setShowApp] = useState(false);
     const [confetti, setConfetti] = useState(false);
     const { enabled, level } = useMotion();
 
-    // 给 Splash 至少一帧绘制；主包已在入口同步拉齐。
     useEffect(() => {
+        applySideEffects();
+        syncRootChromeBackground();
+        void hydrateAppUiPreferencesFromDisk().finally(() => {
+            syncRootChromeBackground();
+            setPrefsReady(true);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!prefsReady) return;
         const id = requestAnimationFrame(() => setShellReady(true));
         return () => cancelAnimationFrame(id);
-    }, []);
+    }, [prefsReady]);
 
     const handleSplashFinished = useCallback(() => {
         setShowApp(true);
@@ -27,16 +40,31 @@ export const AppBootGate: React.FC = () => {
         document.getElementById('root')?.removeAttribute('aria-busy');
     }, [enabled, level]);
 
+    if (!prefsReady) {
+        return (
+            <div
+                className="fixed inset-0 z-[200] bg-canvas"
+                role="status"
+                aria-busy="true"
+                aria-label="正在加载设置"
+            />
+        );
+    }
+
     return (
-        <>
-            {!showApp && (
+        <div className="relative h-full min-h-0 w-full">
+            {showApp ? (
+                <div className="relative z-0 h-full min-h-0 w-full">
+                    <AppNext />
+                </div>
+            ) : null}
+            {!showApp ? (
                 <StartupSplash shellReady={shellReady} onFinished={handleSplashFinished} />
-            )}
-            {showApp && <AppNext />}
-            {confetti && (
+            ) : null}
+            {confetti ? (
                 <SplashConfetti onDone={() => setConfetti(false)} />
-            )}
-        </>
+            ) : null}
+        </div>
     );
 };
 

@@ -17,6 +17,7 @@ import {
     cloneElement,
     isValidElement,
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
     type ReactElement,
@@ -57,8 +58,14 @@ export function GsapPresence({
     const env = useMotion();
     const ref = useRef<HTMLElement | null>(null);
     const activeAnimRef = useRef<gsap.core.Tween | gsap.core.Timeline | null>(null);
-    // mounted 控 DOM 是否渲染。visible=false 但 exit 进行中时仍 mounted=true。
     const [mounted, setMounted] = useState<boolean>(visible);
+    /** ref 挂上 DOM 后再触发 useGSAP，避免首屏 PageTransition 一直 visibility:hidden */
+    const [refReady, setRefReady] = useState(0);
+
+    useLayoutEffect(() => {
+        if (!mounted) return;
+        setRefReady((n) => n + 1);
+    }, [mounted, visible]);
 
     // visible→true:立即 mount。后面 useGSAP 会跑 enter。
     // visible→false:不立即 unmount,留给 useGSAP 跑 exit + 完成时 setMounted(false)。
@@ -79,9 +86,8 @@ export function GsapPresence({
             activeAnimRef.current = null;
 
             if (visible) {
-                // ENTER
                 if (!env.enabled || !onEnter) {
-                    gsap.set(el, { autoAlpha: 1 });
+                    gsap.set(el, { autoAlpha: 1, visibility: 'visible' });
                     return;
                 }
                 activeAnimRef.current = onEnter(el, env);
@@ -107,7 +113,7 @@ export function GsapPresence({
             };
         },
         // env.enabled 切换也要重跑(用户切档位/速度/总开关时)。
-        { dependencies: [visible, mounted, env.enabled] },
+        { dependencies: [visible, mounted, env.enabled, refReady] },
     );
 
     if (!visible && !mounted) return null;

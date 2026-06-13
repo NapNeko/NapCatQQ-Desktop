@@ -245,12 +245,23 @@ samp,
     width: 45%;
     height: 200%;
     transform: skewX(-18deg);
-    background: linear-gradient(90deg,
-            transparent,
-            color-mix(in srgb, white 55%, transparent),
-            transparent);
+    background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--text-primary) 18%, transparent),
+        transparent
+    );
     opacity: 0;
     pointer-events: none;
+}
+
+.ndf-splash-bar-shine {
+    background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--text-primary) 22%, transparent),
+        transparent
+    );
 }
 
 @media (prefers-reduced-motion: reduce) {

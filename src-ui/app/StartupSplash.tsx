@@ -267,6 +267,7 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
         const logoWrap = logoWrapRef.current;
         const halo = haloRef.current;
         const shine = shineRef.current;
+        const barShine = barShineRef.current;
         if (!motion.enabled || exiting || !enterDone) return;
 
         const floatTween =
@@ -303,28 +304,29 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
                   })
                 : null;
 
+        const barShineLoop =
+            barShine && motion.level !== 'elegant'
+                ? gsap.fromTo(
+                      barShine,
+                      { xPercent: -120, autoAlpha: 0.35 },
+                      {
+                          xPercent: 220,
+                          autoAlpha: 0.75,
+                          duration: 1.4 / Math.max(0.5, motion.speed),
+                          ease: 'power1.inOut',
+                          repeat: -1,
+                          repeatDelay: 0.35 / Math.max(0.5, motion.speed),
+                      },
+                  )
+                : null;
+
         return () => {
             floatTween?.kill();
             haloTween?.kill();
             shineLoop?.kill();
+            barShineLoop?.kill();
         };
-    }, [motion.enabled, motion.speed, exiting, enterDone, isRich]);
-
-    useEffect(() => {
-        const bar = barRef.current;
-        if (!bar || !motion.enabled || exiting || !enterDone) return;
-        const tween = gsap.to(bar, {
-            scaleX: isRich ? 0.42 : 0.35,
-            duration: 0.9 / Math.max(0.5, motion.speed),
-            ease: 'power1.inOut',
-            yoyo: true,
-            repeat: -1,
-            transformOrigin: 'left center',
-        });
-        return () => {
-            tween.kill();
-        };
-    }, [motion.enabled, motion.speed, exiting, enterDone, isRich]);
+    }, [motion.enabled, motion.speed, motion.level, exiting, enterDone, isRich]);
 
     useEffect(() => {
         if (!shellReady || !enterDone || exiting || finishedRef.current) return;
@@ -375,26 +377,15 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
         );
 
         const exitTl = gsap.timeline({ onComplete: finish });
-        exitTl
-            .to([logo, title, sub, bar, version].filter(Boolean), {
-                autoAlpha: 0,
-                y: -8,
-                scale: 0.98,
-                duration: exitDur,
-                ease: t.ease.exit,
-                stagger: 0.045 / Math.max(0.5, motion.speed),
-            })
-            .to(
-                root,
-                {
-                    autoAlpha: 0,
-                    scale: 1.02,
-                    filter: isRich ? 'blur(6px)' : 'blur(0px)',
-                    duration: exitDur * 0.95,
-                    ease: t.ease.exit,
-                },
-                '-=0.08',
-            );
+        exitTl.to([logo, title, sub, bar, version].filter(Boolean), {
+            autoAlpha: 0,
+            y: -8,
+            scale: 0.98,
+            duration: exitDur,
+            ease: t.ease.exit,
+            stagger: 0.045 / Math.max(0.5, motion.speed),
+        });
+        // 根层保持画布不透明，避免退场时透出 WebView 浅底闪白；结束后再卸载 Splash。
         if (glow) exitTl.to(glow, { autoAlpha: 0, scale: 1.08, duration: exitDur, ease: t.ease.exit }, 0);
         if (halo) exitTl.to(halo, { autoAlpha: 0, duration: exitDur * 0.8, ease: t.ease.exit }, 0);
         if (brandPulse) exitTl.to(brandPulse, { autoAlpha: 0, scale: 1.25, duration: exitDur, ease: t.ease.exit }, 0);
@@ -500,7 +491,7 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
                     <div ref={barRef} className="h-full w-full origin-left rounded-full bg-brand" />
                     <div
                         ref={barShineRef}
-                        className="pointer-events-none absolute inset-y-0 left-0 w-1/3 rounded-full bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-0"
+                        className="ndf-splash-bar-shine pointer-events-none absolute inset-y-0 left-0 w-1/3 rounded-full opacity-0"
                     />
                 </div>
                 <p ref={versionRef} className="text-xs text-text-tertiary tabular-nums">

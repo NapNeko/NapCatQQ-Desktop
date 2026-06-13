@@ -10,6 +10,7 @@
 
 import { gsap } from 'gsap';
 import { toPng } from 'html-to-image';
+import { isDarkSurfaceCanvas, readSurfaceCanvasColor } from './surfaceCanvas';
 
 /** 主题过渡的动画配置。 */
 export interface ThemeTransitionOptions {
@@ -60,14 +61,12 @@ function runWaveTransition(
     screenshot: string | null,
     done: () => void,
 ): void {
-    const root = document.documentElement;
     const vh = innerHeight;
     const vw = innerWidth;
 
     // ─── 创建覆盖层 ────────────────────────────────────────────────
     const overlay = document.createElement('div');
-    const bgColor = getComputedStyle(root)
-        .getPropertyValue('--bg-base').trim() || '#1e1e2e';
+    const bgColor = readSurfaceCanvasColor();
 
     const styles: string[] = [
         'position:fixed',
@@ -94,11 +93,14 @@ function runWaveTransition(
     // 在覆盖层遮挡下切换主题，用户看不到 DOM 变化
     changeTheme();
 
-    // 亮度脉冲：短暂的 brightness 提升作为过场效果，比纯硬切更自然
-    gsap.fromTo(document.body,
-        { filter: 'brightness(1.06)' },
-        { filter: 'brightness(1)', duration: 0.2, ease: 'power2.out', clearProps: 'filter' },
-    );
+    // 暗色底上不做全页提亮，否则透明窗口会闪白
+    if (!isDarkSurfaceCanvas()) {
+        gsap.fromTo(
+            document.body,
+            { filter: 'brightness(1.06)' },
+            { filter: 'brightness(1)', duration: 0.2, ease: 'power2.out', clearProps: 'filter' },
+        );
+    }
 
     // ─── 波形参数 ──────────────────────────────────────────────────
     const amp = Math.max(18, vh * 0.03);   // 波幅
@@ -156,8 +158,9 @@ function runWaveTransition(
     }, 0);
 
     // rich 档：额外加强亮度脉冲
-    if (opts.level === 'rich') {
-        tl.fromTo(document.body,
+    if (opts.level === 'rich' && !isDarkSurfaceCanvas()) {
+        tl.fromTo(
+            document.body,
             { filter: 'brightness(1.04)' },
             { filter: 'brightness(1)', duration: dur * 0.35, ease: 'power2.out' },
             dur * 0.4,
