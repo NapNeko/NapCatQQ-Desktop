@@ -1,6 +1,6 @@
 // 任务队列展示用纯函数（列表 / 详情 / 页头共用）。
 
-import type { TaskQueueItem, TaskQueueStatus } from '../../core/domain/task-queue/types';
+import type { TaskQueueItem, TaskQueueStatus } from './types';
 
 export function isActiveTaskStatus(status: TaskQueueStatus): boolean {
     return (
@@ -83,6 +83,8 @@ export function kindLabel(kind: TaskQueueItem['kind']): string {
             return 'Docker 安装';
         case 'docker_deploy':
             return 'Docker 部署';
+        default:
+            return kind;
     }
 }
 
