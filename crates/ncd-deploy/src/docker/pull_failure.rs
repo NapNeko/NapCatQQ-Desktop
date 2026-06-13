@@ -31,6 +31,23 @@ impl PullFailureKind {
 
 fn classify_text_blob(blob: &str) -> Option<PullFailureKind> {
     let b = blob.to_ascii_lowercase();
+    if b.contains("http status: 500")
+        || b.contains("500 internal server error")
+        || (b.contains("unexpected http status") && b.contains("500"))
+    {
+        return Some(PullFailureKind::MirrorUnreachable);
+    }
+    if b.contains("403 forbidden") || b.contains("status: 403") {
+        return Some(PullFailureKind::AuthOrDenied);
+    }
+    if b.contains("429 too many requests") || b.contains("status: 429") {
+        return Some(PullFailureKind::MirrorUnreachable);
+    }
+    if b.contains("unknown flag")
+        && (b.contains("progress") || b.contains("--progress"))
+    {
+        return Some(PullFailureKind::Other);
+    }
     if b.contains("i/o timeout")
         || b.contains("context deadline exceeded")
         || b.contains("timed out")

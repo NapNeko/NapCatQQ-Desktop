@@ -454,6 +454,7 @@ pub async fn docker_deploy(
 
         let candidates = spec.flavor.pull_candidates();
         let official = spec.flavor.default_image();
+        let candidate_count = candidates.len();
 
         let last_activity_ms = Arc::new(AtomicU64::new(now_epoch_ms()));
         let heartbeat_stop = Arc::new(AtomicBool::new(false));
@@ -485,18 +486,20 @@ pub async fn docker_deploy(
         });
 
         let activity_for_cb = Arc::clone(&last_activity_ms);
+        let bus_for_lines = event_bus_pull.clone();
+        let tid_for_lines = tid_pull.clone();
         let new_line_cb = move |idx: usize, image: &str| {
             if idx == 0 {
-                event_bus_pull.publish(DomainEvent::docker_deploy_progress(
-                    tid_pull.clone(),
+                bus_for_lines.publish(DomainEvent::docker_deploy_progress(
+                    tid_for_lines.clone(),
                     ProgressEvent::new(ProgressKind::Log {
                         level: ProgressLogLevel::Info,
                         message: format!("拉取镜像: {image}"),
                     }),
                 ));
             } else {
-                event_bus_pull.publish(DomainEvent::docker_deploy_progress(
-                    tid_pull.clone(),
+                bus_for_lines.publish(DomainEvent::docker_deploy_progress(
+                    tid_for_lines.clone(),
                     ProgressEvent::new(ProgressKind::Log {
                         level: ProgressLogLevel::Warn,
                         message: format!("上一个源失败，改用镜像源重试: {image}"),
@@ -506,8 +509,8 @@ pub async fn docker_deploy(
 
             let pull_state = Arc::new(Mutex::new(PullProgress::new()));
             let pull_state_cb = Arc::clone(&pull_state);
-            let event_bus_line = event_bus_pull.clone();
-            let tid_line = tid_pull.clone();
+            let event_bus_line = bus_for_lines.clone();
+            let tid_line = tid_for_lines.clone();
             let activity_line = Arc::clone(&activity_for_cb);
 
             move |src: StreamSource, line: String| {
@@ -534,8 +537,32 @@ pub async fn docker_deploy(
             }
         };
 
+        let event_bus_fail = event_bus_pull;
+        let tid_fail = tid_pull;
+        let on_mirror_fail = move |idx: usize, image: &str, err: &ncd_deploy::docker::DockerCliError| {
+            let (_kind, detail) = classify_pull_failure(err);
+            let line = if detail.len() > 220 {
+                format!("{}…", &detail[..220])
+            } else {
+                detail
+            };
+            event_bus_fail.publish(DomainEvent::docker_deploy_progress(
+                tid_fail.clone(),
+                ProgressEvent::new(ProgressKind::Log {
+                    level: ProgressLogLevel::Warn,
+                    message: format!(
+                        "源 {}/{} 失败（{}）：{}",
+                        idx + 1,
+                        candidate_count,
+                        image,
+                        line
+                    ),
+                }),
+            ));
+        };
+
         let pull_result = cli
-            .pull_with_fallback(&candidates, official, new_line_cb)
+            .pull_with_fallback(&candidates, official, new_line_cb, Some(on_mirror_fail))
             .await;
 
         heartbeat_stop.store(true, Ordering::Relaxed);
@@ -546,7 +573,7 @@ pub async fn docker_deploy(
             let msg = format!(
                 "{}（已尝试 {} 个镜像源）",
                 user_msg,
-                candidates.len()
+                candidate_count
             );
             emit(ProgressKind::Log {
                 level: ProgressLogLevel::Error,

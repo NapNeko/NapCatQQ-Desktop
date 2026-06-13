@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use ncd_domain::{ContainerInfo, ContainerState, DockerPullLayerSnapshot, DockerStatus, ImageInfo};
 use ncd_host::{Host, HostCommand, HostError, StreamSource};
+use tracing::warn;
 
 /// DockerCli 操作错误。
 #[derive(Debug, thiserror::Error)]
@@ -364,6 +365,9 @@ impl<'h> DockerCli<'h> {
     /// `docker pull <image>` 流式版本。`on_line` 每收到一行就被调用，调用方
     /// 可在回调里更新 `PullProgress` 并推进度事件。命令结束后返回 CommandOutput。
     /// 失败（exit code 非 0）时返回 `DockerCliError::CommandFailed`。
+    ///
+    /// 不加 `--progress=plain`：部分远端（apt 装的老版 docker/cli）会直接 exit 125
+    /// unknown flag。非 TTY 下 pull 仍会按行输出 layer 进度，PullProgress 可解析。
     pub async fn pull_streaming(
         &self,
         image: &str,
@@ -372,7 +376,6 @@ impl<'h> DockerCli<'h> {
         let cmd = self
             .docker_cmd()
             .arg("pull")
-            .arg("--progress=plain")
             .arg(image)
             .timeout(std::time::Duration::from_secs(900));
         let out = self.host.run_streaming(cmd, Box::new(on_line)).await?;
@@ -394,15 +397,17 @@ impl<'h> DockerCli<'h> {
     /// `new_line_cb` 是回调工厂:每开始尝试一个候选就调一次,参数是候选的
     /// 0-based 序号和镜像引用,返回该次拉取专用的逐行回调。每个候选独立计数,
     /// 避免上一个站失败的 layer 状态串进下一个站。
-    pub async fn pull_with_fallback<F, L>(
+    pub async fn pull_with_fallback<F, L, M>(
         &self,
         candidates: &[String],
         official_image: &str,
         mut new_line_cb: F,
+        mut on_mirror_fail: Option<M>,
     ) -> Result<String, DockerCliError>
     where
         F: FnMut(usize, &str) -> L,
         L: FnMut(StreamSource, String) + Send + 'static,
+        M: FnMut(usize, &str, &DockerCliError),
     {
         let mut last_err: Option<DockerCliError> = None;
         for (idx, image) in candidates.iter().enumerate() {
@@ -416,7 +421,20 @@ impl<'h> DockerCli<'h> {
                     }
                     return Ok(image.clone());
                 }
-                Err(e) => last_err = Some(e),
+                Err(e) => {
+                    warn!(
+                        target: "ncd_deploy::docker",
+                        index = idx,
+                        total = candidates.len(),
+                        image = %image,
+                        err = %e,
+                        "docker pull 候选失败，尝试下一个"
+                    );
+                    if let Some(ref mut cb) = on_mirror_fail {
+                        cb(idx, image, &e);
+                    }
+                    last_err = Some(e);
+                }
             }
         }
         Err(last_err.unwrap_or_else(|| DockerCliError::CommandFailed {

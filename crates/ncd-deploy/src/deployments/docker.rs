@@ -196,7 +196,7 @@ impl Deployment for DockerDeployment {
         // 'static 回调,所以这里只做空回调(install 阶段日志细节非关键),百分比
         // 由外层粗粒度报。后续要逐行日志可改走事件总线注入。
         let new_line_cb = |_idx: usize, _img: &str| move |_src: StreamSource, _line: String| {};
-        cli.pull_with_fallback(&candidates, official, new_line_cb)
+        cli.pull_with_fallback(&candidates, official, new_line_cb, None::<fn(usize, &str, &crate::docker::DockerCliError)>)
             .await
             .map_err(|e| {
                 error!(
