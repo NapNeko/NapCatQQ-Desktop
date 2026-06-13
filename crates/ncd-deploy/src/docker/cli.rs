@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use ncd_domain::{ContainerInfo, ContainerState, DockerStatus};
+use ncd_domain::{ContainerInfo, ContainerState, DockerPullLayerSnapshot, DockerStatus, ImageInfo};
 use ncd_host::{Host, HostCommand, HostError, StreamSource};
 
 /// DockerCli 操作错误。
@@ -218,6 +218,42 @@ impl<'h> DockerCli<'h> {
         parse_ps_json(&out.stdout)
     }
 
+    /// 列本地镜像(含悬空)。`docker images --format '{{json .}}'` 逐行 JSON。
+    pub async fn list_images(&self) -> Result<Vec<ImageInfo>, DockerCliError> {
+        let cmd = self
+            .docker_cmd()
+            .arg("images")
+            .arg("--format")
+            .arg("{{json .}}");
+        let out = self.host.run_to_string(cmd).await?;
+        if !out.success() {
+            return Err(DockerCliError::CommandFailed {
+                command: "docker images".to_string(),
+                exit_code: out.exit_code,
+                stderr: out.stderr.trim().to_string(),
+            });
+        }
+        parse_images_json(&out.stdout)
+    }
+
+    /// 删除本地镜像。`image_ref` 可为 repo:tag 或 id;`force` 时加 `-f`。
+    pub async fn remove_image(&self, image_ref: &str, force: bool) -> Result<(), DockerCliError> {
+        let mut cmd = self.docker_cmd().arg("rmi");
+        if force {
+            cmd = cmd.arg("-f");
+        }
+        let cmd = cmd.arg(image_ref);
+        let out = self.host.run_to_string(cmd).await?;
+        if !out.success() {
+            return Err(DockerCliError::CommandFailed {
+                command: format!("docker rmi{} {image_ref}", if force { " -f" } else { "" }),
+                exit_code: out.exit_code,
+                stderr: out.stderr.trim().to_string(),
+            });
+        }
+        Ok(())
+    }
+
     /// 对单个容器执行 start / stop / restart。命令名固定,容器名走 arg 转义。
     pub async fn lifecycle(&self, action: &str, container: &str) -> Result<(), DockerCliError> {
         let cmd = self.docker_cmd().arg(action).arg(container);
@@ -336,6 +372,7 @@ impl<'h> DockerCli<'h> {
         let cmd = self
             .docker_cmd()
             .arg("pull")
+            .arg("--progress=plain")
             .arg(image)
             .timeout(std::time::Duration::from_secs(900));
         let out = self.host.run_streaming(cmd, Box::new(on_line)).await?;
@@ -389,6 +426,17 @@ impl<'h> DockerCli<'h> {
         }))
     }
 
+    /// 本地是否已有指定镜像引用(`docker image inspect` 成功即视为存在)。
+    pub async fn image_exists(&self, image_ref: &str) -> Result<bool, DockerCliError> {
+        let cmd = self
+            .docker_cmd()
+            .arg("image")
+            .arg("inspect")
+            .arg(image_ref);
+        let out = self.host.run_to_string(cmd).await?;
+        Ok(out.success())
+    }
+
     /// `docker tag <src> <dst>`。给镜像打一个别名引用,不重新拉取。
     async fn retag(&self, src: &str, dst: &str) -> Result<(), DockerCliError> {
         let cmd = self.docker_cmd().arg("tag").arg(src).arg(dst);
@@ -421,29 +469,91 @@ pub enum LayerPhase {
 
 impl LayerPhase {
     fn from_text(s: &str) -> Self {
-        match s.trim() {
+        let t = s.trim();
+        if t.starts_with("Downloading") {
+            return Self::Downloading;
+        }
+        if t.starts_with("Extracting") {
+            return Self::Extracting;
+        }
+        if t.starts_with("Verifying Checksum") {
+            return Self::VerifyingChecksum;
+        }
+        match t {
             "Pulling fs layer" => Self::PullingFsLayer,
             "Waiting" => Self::Waiting,
-            "Downloading" => Self::Downloading,
-            "Verifying Checksum" => Self::VerifyingChecksum,
             "Download complete" => Self::DownloadComplete,
-            "Extracting" => Self::Extracting,
             "Pull complete" => Self::PullComplete,
             other => Self::Unknown(other.to_string()),
         }
     }
 
-    fn is_complete(&self) -> bool {
-        matches!(self, Self::PullComplete)
+    /// 用于进度条：下载完或整层拉完都算「完成」，避免 UI 长期 0/N。
+    fn counts_toward_progress_complete(&self) -> bool {
+        matches!(
+            self,
+            Self::DownloadComplete | Self::PullComplete | Self::Extracting
+        )
+    }
+
+    fn user_label(&self) -> String {
+        match self {
+            Self::PullingFsLayer => "准备层".into(),
+            Self::Waiting => "等待".into(),
+            Self::Downloading => "下载中".into(),
+            Self::VerifyingChecksum => "校验".into(),
+            Self::DownloadComplete => "下载完成".into(),
+            Self::Extracting => "解压中".into(),
+            Self::PullComplete => "完成".into(),
+            Self::Unknown(s) => {
+                let t = s.trim();
+                if t.is_empty() {
+                    "处理中".into()
+                } else {
+                    t.chars().take(48).collect()
+                }
+            }
+        }
+    }
+
+    /// 下载/解压行上的进度后缀,供 UI 展示 `[====] 12MB/50MB`。
+    fn detail_from_line(phase: &Self, phase_text: &str) -> Option<String> {
+        match phase {
+            Self::Downloading => phase_text
+                .strip_prefix("Downloading")
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from),
+            Self::Extracting => phase_text
+                .strip_prefix("Extracting")
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from),
+            _ => None,
+        }
+    }
+
+    /// 加权进度 0–100,下载中也会前进,不会长期停在 0%。
+    fn weight_percent(&self) -> u8 {
+        match self {
+            Self::PullComplete => 100,
+            Self::DownloadComplete => 92,
+            Self::Extracting => 88,
+            Self::VerifyingChecksum => 75,
+            Self::Downloading => 45,
+            Self::PullingFsLayer => 8,
+            Self::Waiting => 4,
+            Self::Unknown(_) => 15,
+        }
     }
 }
 
 /// `docker pull` 进度状态。维护一张 layerId → phase 表，提供 (completed, total)
 /// 计数供调用方换算百分比。
 ///
-/// 用法：每收到一行就调 `update(line)`，然后读 `summary()` 拿计数。
+/// 用法：每收到一行就调 `update(line)`，然后读 `summary()` / `layer_snapshots()`。
 pub struct PullProgress {
-    layers: HashMap<String, LayerPhase>,
+    layers: HashMap<String, (LayerPhase, Option<String>)>,
 }
 
 impl PullProgress {
@@ -454,36 +564,99 @@ impl PullProgress {
     }
 
     /// 解析一行 docker pull 输出，更新内部状态。
-    /// 格式：`<id>: <phase>`，id 是 12 位以内的 hex 串（实际 12 位，但 docker
-    /// 有时打短 id）。不符合格式的行（Digest: / Status: / 空行）静默忽略。
+    /// 支持短 id / sha256: 前缀、以及带进度后缀的 Downloading 行。
     pub fn update(&mut self, line: &str) {
-        // 找第一个 ": " 分隔符
+        let line = line.trim();
+        if line.is_empty() {
+            return;
+        }
         let Some(colon_pos) = line.find(": ") else {
             return;
         };
-        let id = &line[..colon_pos];
-        // layer id 是纯 hex，长度 1-12。超出范围的行（如 "Status: ..."）跳过。
-        if id.is_empty() || id.len() > 16 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+        let id_raw = line[..colon_pos].trim();
+        if id_raw.eq_ignore_ascii_case("status")
+            || id_raw.eq_ignore_ascii_case("digest")
+            || id_raw.eq_ignore_ascii_case("latest")
+        {
             return;
         }
-        let phase_text = &line[colon_pos + 2..];
+        let id = normalize_pull_layer_id(id_raw);
+        if id.is_empty() {
+            return;
+        }
+        let phase_text = line[colon_pos + 2..].trim();
         let phase = LayerPhase::from_text(phase_text);
-        self.layers.insert(id.to_string(), phase);
+        let detail = LayerPhase::detail_from_line(&phase, phase_text);
+        self.layers.insert(id, (phase, detail));
     }
 
-    /// 返回 (completed_layers, total_layers, last_message)。
-    /// completed = phase 已到 PullComplete 的 layer 数。
-    /// total = 见过的所有 layer 数（含 Waiting / Downloading 等中间态）。
-    pub fn summary(&self) -> (usize, usize, String) {
+    /// 返回 (completed_layers, total_layers, last_message, percent_0_100)。
+    pub fn summary(&self) -> (usize, usize, String, u8) {
         let total = self.layers.len();
-        let completed = self.layers.values().filter(|p| p.is_complete()).count();
+        let completed = self
+            .layers
+            .values()
+            .filter(|(p, _)| p.counts_toward_progress_complete())
+            .count();
+        let percent = self.weighted_percent();
         let msg = if total == 0 {
-            "拉取中...".to_string()
+            "拉取中…".to_string()
         } else {
-            format!("已完成 {completed}/{total} 层")
+            format!("镜像层 {completed}/{total} · {percent}%")
         };
-        (completed, total, msg)
+        (completed, total, msg, percent)
     }
+
+    fn weighted_percent(&self) -> u8 {
+        let total = self.layers.len();
+        if total == 0 {
+            return 0;
+        }
+        let sum: u32 = self
+            .layers
+            .values()
+            .map(|(p, _)| u32::from(p.weight_percent()))
+            .sum();
+        ((sum / total as u32).min(100)) as u8
+    }
+
+    /// 按层 id 排序的稳定快照,供 IPC 推到前端。
+    pub fn layer_snapshots(&self) -> Vec<DockerPullLayerSnapshot> {
+        let mut ids: Vec<&String> = self.layers.keys().collect();
+        ids.sort();
+        ids.into_iter()
+            .map(|id| {
+                let (phase, detail) = self.layers.get(id).expect("layer key");
+                DockerPullLayerSnapshot {
+                    id: id.clone(),
+                    phase: phase.user_label(),
+                    detail: detail.clone(),
+                    done: phase.counts_toward_progress_complete(),
+                }
+            })
+            .collect()
+    }
+
+    /// 兼容旧调用: (completed, total, message)。
+    pub fn summary_legacy(&self) -> (usize, usize, String) {
+        let (c, t, m, _) = self.summary();
+        (c, t, m)
+    }
+}
+
+fn normalize_pull_layer_id(id_raw: &str) -> String {
+    let s = id_raw.trim();
+    if let Some(rest) = s.strip_prefix("sha256:") {
+        let hex: String = rest.chars().take(64).filter(|c| c.is_ascii_hexdigit()).collect();
+        if hex.len() >= 6 {
+            return hex.chars().take(12).collect();
+        }
+        return hex;
+    }
+    if s.chars().all(|c| c.is_ascii_hexdigit()) && !s.is_empty() && s.len() <= 64 {
+        return s.chars().take(12).collect();
+    }
+    String::new()
 }
 
 impl Default for PullProgress {
@@ -554,9 +727,59 @@ impl PsLine {
     }
 }
 
+/// 解析 `docker images --format '{{json .}}'` 的多行 JSON 输出。
+fn parse_images_json(stdout: &str) -> Result<Vec<ImageInfo>, DockerCliError> {
+    let mut out = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let raw: ImagesLine = serde_json::from_str(line)
+            .map_err(|e| DockerCliError::ParseFailed(format!("{e}: {line}")))?;
+        out.push(raw.into_info());
+    }
+    Ok(out)
+}
+
+#[derive(serde::Deserialize)]
+struct ImagesLine {
+    #[serde(rename = "ID")]
+    id: String,
+    #[serde(rename = "Repository")]
+    repository: String,
+    #[serde(rename = "Tag")]
+    tag: String,
+    #[serde(rename = "Size")]
+    size: String,
+    #[serde(rename = "CreatedSince")]
+    created_since: String,
+}
+
+impl ImagesLine {
+    fn into_info(self) -> ImageInfo {
+        ImageInfo {
+            id: self.id,
+            repository: self.repository,
+            tag: self.tag,
+            size: self.size,
+            created_since: self.created_since,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_images_json_single_line() {
+        let line = r#"{"ID":"abc123","Repository":"nginx","Tag":"latest","Size":"192MB","CreatedSince":"2 weeks ago"}"#;
+        let parsed = parse_images_json(line).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].repository, "nginx");
+        assert_eq!(parsed[0].tag, "latest");
+    }
 
     #[test]
     fn parse_ps_json_single_running_container() {
@@ -609,7 +832,7 @@ mod tests {
     #[test]
     fn pull_progress_empty_has_zero_counts() {
         let p = PullProgress::new();
-        let (completed, total, _) = p.summary();
+        let (completed, total, _, _) = p.summary();
         assert_eq!(completed, 0);
         assert_eq!(total, 0);
     }
@@ -618,17 +841,17 @@ mod tests {
     fn pull_progress_single_layer_lifecycle() {
         let mut p = PullProgress::new();
         p.update("a1b2c3d4e5f6: Pulling fs layer");
-        let (c, t, _) = p.summary();
+        let (c, t, _, _) = p.summary();
         assert_eq!(t, 1);
         assert_eq!(c, 0);
 
         p.update("a1b2c3d4e5f6: Downloading");
-        let (c, t, _) = p.summary();
+        let (c, t, _, _) = p.summary();
         assert_eq!(t, 1);
         assert_eq!(c, 0);
 
         p.update("a1b2c3d4e5f6: Pull complete");
-        let (c, t, _) = p.summary();
+        let (c, t, _, _) = p.summary();
         assert_eq!(t, 1);
         assert_eq!(c, 1);
     }
@@ -640,18 +863,18 @@ mod tests {
         p.update("aabbccdd1122: Pulling fs layer");
         p.update("112233445566: Waiting");
         p.update("deadbeef0000: Pulling fs layer");
-        let (c, t, _) = p.summary();
+        let (c, t, _, _) = p.summary();
         assert_eq!(t, 3);
         assert_eq!(c, 0);
 
         p.update("aabbccdd1122: Pull complete");
         p.update("deadbeef0000: Pull complete");
-        let (c, t, _) = p.summary();
+        let (c, t, _, _) = p.summary();
         assert_eq!(t, 3);
         assert_eq!(c, 2);
 
         p.update("112233445566: Pull complete");
-        let (c, t, _) = p.summary();
+        let (c, t, _, _) = p.summary();
         assert_eq!(t, 3);
         assert_eq!(c, 3);
     }
@@ -663,7 +886,7 @@ mod tests {
         p.update("Status: Downloaded newer image for napcat:latest");
         p.update("");
         p.update("  ");
-        let (_, t, _) = p.summary();
+        let (_, t, _, _) = p.summary();
         assert_eq!(t, 0);
     }
 
@@ -673,8 +896,39 @@ mod tests {
         // "latest: Pulling from ..." 这类行 id 含非 hex 字符，应忽略
         p.update("latest: Pulling from mlikiowa/napcat-docker");
         p.update("Status: Image is up to date for napcat:latest");
-        let (_, t, _) = p.summary();
+        let (_, t, _, _) = p.summary();
         assert_eq!(t, 0);
+    }
+
+    #[test]
+    fn pull_progress_download_complete_counts_as_done() {
+        let mut p = PullProgress::new();
+        p.update("a1b2c3d4e5f6: Pulling fs layer");
+        p.update("a1b2c3d4e5f6: Download complete");
+        let (c, t, _, _) = p.summary();
+        assert_eq!(t, 1);
+        assert_eq!(c, 1);
+    }
+
+    #[test]
+    fn pull_progress_downloading_with_suffix_parses_layer() {
+        let mut p = PullProgress::new();
+        p.update("deadbeefcafe: Downloading [====>    ] 12.5MB/50MB");
+        let (c, t, _, _) = p.summary();
+        assert_eq!(t, 1);
+        assert_eq!(c, 0);
+        p.update("deadbeefcafe: Download complete");
+        let (c, t, _, _) = p.summary();
+        assert_eq!(c, 1);
+    }
+
+    #[test]
+    fn pull_progress_sha256_prefix_id() {
+        let mut p = PullProgress::new();
+        p.update("sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789: Download complete");
+        let (c, t, _, _) = p.summary();
+        assert_eq!(t, 1);
+        assert_eq!(c, 1);
     }
 
     #[test]
@@ -682,7 +936,7 @@ mod tests {
         let mut p = PullProgress::new();
         p.update("aabbccdd1122: Pull complete");
         p.update("112233445566: Downloading");
-        let (_, _, msg) = p.summary();
+        let (_, _, msg, _) = p.summary();
         assert!(msg.contains("1/2"), "expected '1/2' in '{msg}'");
     }
 
@@ -690,7 +944,7 @@ mod tests {
     fn pull_progress_unknown_phase_still_counts_as_layer() {
         let mut p = PullProgress::new();
         p.update("aabbccdd1122: Some Future Phase");
-        let (c, t, _) = p.summary();
+        let (c, t, _, _) = p.summary();
         assert_eq!(t, 1);
         assert_eq!(c, 0);
     }

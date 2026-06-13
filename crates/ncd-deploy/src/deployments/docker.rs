@@ -1,8 +1,8 @@
 //! Docker 部署：用 docker compose 在某台 Host（本机 Docker Desktop / 远端 SSH）
 //! 上把 bot 跑成容器。
 //!
-//! 与"Docker 管理面一键部署"(commands/docker.rs)的关系:那条链路是用户在组件页
-//! 手动起一个 napcat/snowluma 容器,对象是容器本身;这里是 bot 生命周期的一种
+//! 与组件页「拉镜像」(commands/docker.rs docker_deploy)的关系:组件页只预拉
+//! NapCat/SnowLuma 官方镜像,不创建 napcat/snowluma 演示容器;这里是 bot 生命周期
 //! 部署形态(deployment_type=docker),由 BotManager 在 start_bot 时按 bot 配置驱动,
 //! 容器纳入 bot 状态机。两者共用底层 DockerCli + compose 渲染,但入口和归属不同。
 //!
