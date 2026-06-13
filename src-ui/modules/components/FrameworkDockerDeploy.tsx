@@ -1,20 +1,17 @@
 // 框架行（NapCat / SnowLuma）上的「Docker 部署」尾随按钮。
 //
-// 把"用 Docker 部署这个框架"挂到对应框架自己的行上（而不是页面底部单开一块），
-// 符合"在对应卡片上操作"的直觉。仅当这台机器 docker 就绪时才渲染按钮；点了开
-// 部署对话框，部署成功的 WebUI/noVNC 地址 + 凭据用结果横幅展示在框架组下方。
-//
-// taskId 在这里生成：点「Docker 部署」按钮时就生成，传给 DeployDialog 用于
-// 订阅进度，同时在 onConfirm 时一并传给 onDeploy。这样对话框打开即可订阅，
-// 不需要等 deploy 调用返回。
+// 点开后仅用于填写部署参数；确认后立即关弹窗，任务进任务队列跟踪进度。
+// 成功 / 失败走全局 InfoBar，不再锁死对话框或依赖页面内结果横幅。
 
 import React, { useState } from 'react';
 import { Container, Loader2 } from 'lucide-react';
 import { Button } from '../../shared/ui';
 import { MotionIcon } from '../../shared/ui/motion';
 import { defaultDeploySpec } from '../../core/domain/docker/spec';
+import { formatDockerDeploySuccessContent } from '../../core/domain/docker/deployInfoBar';
 import { dockerDeployProgressStore } from '../../hooks/docker/dockerDeployProgressStore';
 import { taskQueueMetaStore } from '../../hooks/task-queue/taskQueueMetaStore';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import type {
     DeployedContainer,
     DockerDeploySpec,
@@ -27,12 +24,10 @@ interface FrameworkDockerDeployButtonProps {
     hostId: string;
     hostLabel?: string;
     isDeploying: boolean;
-    /// 该 flavor 在这台机器上已有容器。已部署时按钮置「已部署」并禁用，
-    /// 避免重复部署撞容器名 / 端口。
     alreadyDeployed: boolean;
     onDeploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
     onDeployError?: (error: unknown) => void;
-    onDeployed: (result: DeployedContainer) => void;
+    onDeployed?: (result: DeployedContainer) => void;
 }
 
 export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonProps> = ({
@@ -46,9 +41,10 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
     onDeployed,
 }) => {
     const [open, setOpen] = useState(false);
-    // taskId 在打开对话框时生成，整个部署生命周期内不变。
-    // 关闭对话框后清空，下次打开重新生成。
     const [taskId, setTaskId] = useState<string | null>(null);
+
+    const frameworkLabel = flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
+    const hostCtx = hostLabel?.trim() ? ` · ${hostLabel.trim()}` : '';
 
     const handleOpen = () => {
         const id = crypto.randomUUID();
@@ -67,6 +63,33 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
     const handleClose = () => {
         setOpen(false);
         setTaskId(null);
+    };
+
+    const handleConfirm = (spec: DockerDeploySpec) => {
+        const id = taskId;
+        if (!id) return;
+        handleClose();
+        pushInfoBar({
+            key: `docker-deploy-start:${id}`,
+            tone: 'info',
+            title: `${frameworkLabel} 容器部署已提交${hostCtx}`,
+            content: '正在后台部署，可在「任务队列」查看进度与日志。',
+            autoDismissMs: 6000,
+        });
+        void onDeploy(hostId, spec, id)
+            .then((result) => {
+                onDeployed?.(result);
+                pushInfoBar({
+                    key: `docker-deploy-ok:${id}`,
+                    tone: 'success',
+                    title: `${result.name} 部署完成${hostCtx}`,
+                    content: formatDockerDeploySuccessContent(result),
+                    autoDismissMs: 0,
+                });
+            })
+            .catch((error) => {
+                onDeployError?.(error);
+            });
     };
 
     return (
@@ -89,22 +112,10 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
                 <DeployDialog
                     flavor={flavor}
                     initialSpec={defaultDeploySpec(flavor)}
-                    isDeploying={isDeploying}
+                    isDeploying={false}
                     taskId={taskId}
                     onClose={handleClose}
-                    onConfirm={async (spec) => {
-                        try {
-                            // 部署成功:同时把结果推到外层 banner(关弹窗后仍可查凭据)并
-                            // 回给 DeployDialog——dialog 拿到后切完成态在弹窗内展示,用户
-                            // 点「完成」才走 onClose 关闭。不在这里 handleClose。
-                            const result = await onDeploy(hostId, spec, taskId);
-                            onDeployed(result);
-                            return result;
-                        } catch (error) {
-                            onDeployError?.(error);
-                            throw error;
-                        }
-                    }}
+                    onConfirm={handleConfirm}
                 />
             )}
         </>
