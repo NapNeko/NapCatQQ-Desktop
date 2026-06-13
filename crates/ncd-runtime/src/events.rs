@@ -994,6 +994,7 @@ mod tests {
             downloaded_bytes: Some(327_000_000),
             total_bytes: Some(480_000_000),
             download_stage: Some("streaming".to_string()),
+            docker_layers: None,
         });
         assert_round_trip(DomainEvent::docker_deploy_progress("task-2", evt));
     }

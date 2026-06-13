@@ -1,15 +1,6 @@
 // 身份 Tab：QQ 账号 + 实例名 + 底座选择 + SnowLuma 启动模式 + 运行宿主 + 自愈策略。
-//
-// vs 旧版 BotBasicTab 的关键差异：
-//   - QQ ID + 实例名一行并排（grid-2），实例名 placeholder 自动跟随 QQID
-//   - 底座 NapCat / SnowLuma 用 Select；Bot 处于 Running / Starting 时禁用
-//     切换（运行中改 backend 没有有效语义，等同重新部署）
-//   - SnowLuma 只暴露 cold / hot 两选项；HotStart 不再让用户选 PID，
-//     backend 启动时按 qq_id 自动扫一遍登录状态匹配
-//   - 运行宿主 RadioGroup 横排（仅 2 项，没必要立式占 2 行）
-//   - autoRestart duration / unit 一行并排
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, type ReactNode } from 'react';
 import {
     TextField,
     NumberField,
@@ -20,6 +11,8 @@ import {
 } from '../../../../shared/ui';
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
+import { useRemoteHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
+import { formatMissingDirectRunNotice } from '../../../../core/domain/bot/remote-direct-run-deps';
 import type { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 import type { DeploymentType } from '../../../../core/ipc/generated/domain/DeploymentType';
@@ -29,12 +22,7 @@ import type { SnowLumaStartMode } from '../../../../core/ipc/generated/domain/Sn
 interface IdentityTabProps {
     data: BotBasicConfig;
     onChange: (patch: Partial<BotBasicConfig>) => void;
-    /** 编辑模式下 QQ ID 不可改。 */
     isEditMode: boolean;
-    /**
-     * Bot 当前是否在运行（Running / Starting / Stopping）。
-     * 运行中禁止切换底座类型——这等同于"重新部署"，必须先停止再切。
-     */
     isRunning: boolean;
 }
 
@@ -44,13 +32,13 @@ const BACKEND_ITEMS = [
 ];
 
 const RUNTIME_ITEMS = [
-    { value: 'local', label: '本机', hint: '在当前电脑上启动' },
-    { value: 'remote', label: '远程 SSH 主机', hint: '通过 SSH 在远端启动' },
+    { value: 'local', label: '本机' },
+    { value: 'remote', label: '远程主机' },
 ];
 
 const DEPLOYMENT_ITEMS = [
-    { value: 'native' as DeploymentType, label: '直接运行', hint: '在主机上直接拉起进程（默认）' },
-    { value: 'docker' as DeploymentType, label: 'Docker 容器', hint: '用 docker compose 起容器，仅远程 SSH 主机 + NapCat 底座' },
+    { value: 'native' as DeploymentType, label: '直接运行' },
+    { value: 'docker' as DeploymentType, label: 'Docker' },
 ];
 
 const TIME_UNIT_ITEMS = [
@@ -62,23 +50,54 @@ const TIME_UNIT_ITEMS = [
 ];
 
 export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
-    // 远程主机列表（用于"远程"模式下选具体机器）。
     const { servers } = useServerManager();
 
-    // runtime_target 语义:'local' = 本机;其它字符串 = 具体远程 server_id;
-    // 'remote' 是占位(选了远程但还没选机器),保存时被 validate 挡住。
     const isRemote = data.runtime_target !== 'local';
-    // 给"本机/远程"RadioGroup 用的值:本机=local,远程=remote(占位或已选机器都算远程)。
     const runtimeMode = data.runtime_target === 'local' ? 'local' : 'remote';
 
     const serverItems = useMemo(
-        () => servers.map((s) => ({ value: s.id, label: `${s.name}（${s.host}）` })),
+        () => servers.map((s) => ({ value: s.id, label: `${s.name} · ${s.host}` })),
         [servers],
     );
 
     const hasRemoteHosts = servers.length > 0;
 
-    // 无远程档案时不展示「运行宿主」；若历史配置仍指向远程，回落本机以免保存无效组合。
+    const deploymentType: DeploymentType =
+        data.deploymentType === 'docker' ? 'docker' : 'native';
+
+    const remoteHostId = useMemo(() => {
+        if (!isRemote || data.runtime_target === 'remote') return null;
+        return `remote:${data.runtime_target}`;
+    }, [isRemote, data.runtime_target]);
+
+    const dockerHostIds = useMemo(
+        () => (remoteHostId ? [remoteHostId] : []),
+        [remoteHostId],
+    );
+    const { statusByHost, probingByHost, imageReadyByHost } =
+        useDockerHosts(dockerHostIds);
+
+    const componentInstalled = useRemoteHostComponentInstalled(
+        remoteHostId,
+        data.backend_type,
+    );
+
+    const missingDirectRunNotice = useMemo(() => {
+        if (!isRemote || deploymentType !== 'native' || !remoteHostId) {
+            return null;
+        }
+        return formatMissingDirectRunNotice(
+            data.backend_type,
+            componentInstalled,
+        );
+    }, [
+        isRemote,
+        deploymentType,
+        remoteHostId,
+        data.backend_type,
+        componentInstalled,
+    ]);
+
     useEffect(() => {
         if (!hasRemoteHosts && data.runtime_target !== 'local') {
             onChange({ runtime_target: 'local', deploymentType: 'native' });
@@ -87,17 +106,13 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
     const onRuntimeModeChange = (mode: string) => {
         if (mode === 'local') {
-            // 本机(Windows)不支持 Docker(Docker Desktop 安装链路太麻烦),切回本机时
-            // 强制把启动方式落回直接运行,避免残留 docker 选择导致保存被挡。
             onChange({ runtime_target: 'local', deploymentType: 'native' });
         } else {
-            // 切到远程:只有一台就直接选它,多台/没有给占位 'remote' 让用户在下拉里选。
             const only = servers.length === 1 ? servers[0].id : 'remote';
             onChange({ runtime_target: only });
         }
     };
 
-    // 实例名占位：QQID 改了就更新，避免空白让用户面对"不知道写啥"的反应
     const namePlaceholder = useMemo(() => {
         if (data.QQID > 0) {
             const tail = String(data.QQID).slice(-4);
@@ -105,6 +120,18 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         }
         return '例如：Bot-01';
     }, [data.QQID]);
+
+    const remoteHostSelectValue: string | undefined =
+        data.runtime_target === 'remote' ? undefined : data.runtime_target;
+
+    const showDockerBlock =
+        isRemote &&
+        deploymentType === 'docker' &&
+        (data.backend_type === 'napcat' || data.backend_type === 'snowluma') &&
+        remoteHostId != null;
+
+    const dockerFlavorLabel =
+        data.backend_type === 'snowluma' ? 'SnowLuma' : 'NapCat';
 
     return (
         <div className="flex flex-col gap-8">
@@ -120,14 +147,13 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         onValueChange={(v) => onChange({ QQID: v ?? 0 })}
                         placeholder="例如：10001"
                         disabled={isEditMode}
-                        hint={isEditMode ? '编辑模式下不可修改 QQ 账号' : '托管目标的纯数字 QQ 号'}
+                        hint={isEditMode ? '编辑模式下不可修改' : undefined}
                     />
                     <TextField
                         label="实例名称"
                         value={data.name}
                         onValueChange={(v) => onChange({ name: v })}
                         placeholder={namePlaceholder}
-                        hint="用于在控制台中识别此 Bot"
                     />
                 </div>
                 <Select
@@ -138,75 +164,119 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                     disabled={isRunning}
                     hint={
                         isRunning
-                            ? 'Bot 运行中无法切换底座，请先停止此实例再修改'
-                            : '切换底座会改变可用的连接类型与高级特性'
+                            ? '运行中请先停止再切换底座'
+                            : undefined
                     }
                 />
             </FormSection>
 
-            {data.backend_type === 'snowluma' && (
+            {data.backend_type === 'snowluma' && deploymentType !== 'docker' && (
                 <FormSection
                     title="SnowLuma 启动模式"
-                    description="决定 SnowLuma 是自己启动 QQ.exe，还是附加到一个已登录此账号的 QQ 进程"
+                    description="冷启动由桌面端拉起 QQ；热启动附加到已登录此号的 QQ 进程"
                 >
                     <SnowLumaStartModeBlock data={data} onChange={onChange} />
+                </FormSection>
+            )}
+
+            {data.backend_type === 'snowluma' && deploymentType === 'docker' && (
+                <FormSection
+                    title="SnowLuma Docker"
+                    description="容器内自带 QQ 图形环境，扫码请用远程主机 noVNC（默认端口 6081）"
+                    layout="none"
+                >
+                    <InlineNotice tone="neutral">
+                        Docker 模式下不使用本机冷/热启动；登录在容器内完成。VNC 密码由桌面端生成并写入
+                        compose；SnowLuma WebUI 临时密码见容器日志（5099）。
+                    </InlineNotice>
                 </FormSection>
             )}
 
             {hasRemoteHosts && (
                 <FormSection
                     title="运行宿主"
-                    description="Bot 引擎实际跑在哪台机器上、以什么方式启动"
+                    description="仅远程 Linux 支持 Docker；本机固定为直接运行"
+                    layout="none"
                 >
-                    <RadioGroup
-                        items={RUNTIME_ITEMS}
-                        value={runtimeMode}
-                        onValueChange={onRuntimeModeChange}
-                        orientation="horizontal"
-                        name="runtime-target"
-                    />
-                    {isRemote && (
-                        serverItems.length > 0 ? (
-                            <Select
-                                label="选择远程主机"
-                                items={serverItems}
-                                value={data.runtime_target === 'remote' ? '' : data.runtime_target}
-                                onValueChange={(v) => onChange({ runtime_target: v })}
-                                placeholder="请选择一台已添加的远程主机"
-                                hint="在远端 SSH 主机上启动；主机在「远程主机」页添加"
-                            />
-                        ) : (
-                            <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
-                                还没有可用的远程主机。请先到「远程主机」页添加并连接一台 SSH 主机。
-                            </p>
-                        )
-                    )}
+                    <div className="flex flex-col gap-4">
+                        <RadioGroup
+                            items={RUNTIME_ITEMS}
+                            value={runtimeMode}
+                            onValueChange={onRuntimeModeChange}
+                            orientation="horizontal"
+                            name="runtime-target"
+                        />
 
-                    {isRemote && (
-                        <>
-                            <RadioGroup
-                                items={DEPLOYMENT_ITEMS}
-                                value={data.deploymentType}
-                                onValueChange={(v) => onChange({ deploymentType: v as DeploymentType })}
-                                orientation="horizontal"
-                                name="deployment-type"
-                            />
-                            {data.deploymentType === 'docker' && data.backend_type !== 'napcat' && (
-                                <p className="rounded-sm bg-warning-soft px-3 py-2 text-2xs leading-relaxed text-warning">
-                                    Docker 启动方式当前仅支持 NapCat 底座。SnowLuma 容器化待后续支持，请改回「直接运行」。
-                                </p>
-                            )}
-                        </>
-                    )}
+                        {isRemote && (
+                            <div className="flex flex-col gap-3 sm:max-w-md">
+                                {serverItems.length > 0 ? (
+                                    <Select
+                                        label="远程主机"
+                                        items={serverItems}
+                                        value={remoteHostSelectValue}
+                                        onValueChange={(v) =>
+                                            onChange({ runtime_target: v })
+                                        }
+                                        placeholder="选择主机"
+                                    />
+                                ) : (
+                                    <InlineNotice tone="warn">
+                                        请先在「远程主机」页添加 SSH 主机
+                                    </InlineNotice>
+                                )}
+
+                                <div className="space-y-2">
+                                    <span className="text-xs font-medium text-text-secondary">
+                                        启动方式
+                                    </span>
+                                    <RadioGroup
+                                        items={DEPLOYMENT_ITEMS}
+                                        value={deploymentType}
+                                        onValueChange={(v) =>
+                                            onChange({
+                                                deploymentType:
+                                                    v as DeploymentType,
+                                            })
+                                        }
+                                        orientation="horizontal"
+                                        name="deployment-type"
+                                    />
+                                </div>
+
+                                {deploymentType === 'docker' &&
+                                    data.backend_type === 'snowluma' && (
+                                        <InlineNotice tone="neutral">
+                                            SnowLuma 镜像体积较大（约 900MB+），首次启动可能较久；可到「组件」页预拉镜像
+                                        </InlineNotice>
+                                    )}
+
+                                {showDockerBlock && remoteHostId && (
+                                    <DockerReadinessLine
+                                        flavorLabel={dockerFlavorLabel}
+                                        status={statusByHost[remoteHostId]}
+                                        probing={
+                                            probingByHost[remoteHostId] ?? false
+                                        }
+                                        imageReady={
+                                            imageReadyByHost[remoteHostId]?.[
+                                                data.backend_type === 'snowluma'
+                                                    ? 'snowluma'
+                                                    : 'napcat'
+                                            ]
+                                        }
+                                    />
+                                )}
+
+                                {isRemote && deploymentType === 'native' &&
+                                    missingDirectRunNotice && (
+                                        <InlineNotice tone="warn">
+                                            {missingDirectRunNotice}
+                                        </InlineNotice>
+                                    )}
+                            </div>
+                        )}
+                    </div>
                 </FormSection>
-            )}
-
-            {hasRemoteHosts && (
-                <RuntimeDependencyHint
-                    runtimeTarget={data.runtime_target}
-                    deploymentType={data.deploymentType}
-                    backendType={data.backend_type}
-                />
             )}
 
             <FormSection
@@ -218,28 +288,27 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                     value={data.musicSignUrl}
                     onValueChange={(v) => onChange({ musicSignUrl: v })}
                     placeholder="http://127.0.0.1:8081/sign"
-                    hint="发送网易云 / QQ 音乐卡片时所需的签名服务器，留空跳过"
                 />
             </FormSection>
 
-
             <FormSection
                 title="自愈与定时重启"
-                description="掉线自动恢复，避免长时间无人值守时静默故障"
+                description="掉线自动恢复与周期重启"
             >
                 <Switch
                     label="掉线自动重启"
-                    hint="检测到 Bot 离线时尝试自动拉起"
                     checked={data.offlineAutoRestart}
                     onCheckedChange={(v) => onChange({ offlineAutoRestart: v })}
                 />
                 <Switch
                     label="定时自动重启"
-                    hint="按固定周期重启 Bot，定期清理累积状态"
                     checked={data.autoRestartSchedule.enable}
                     onCheckedChange={(v) =>
                         onChange({
-                            autoRestartSchedule: { ...data.autoRestartSchedule, enable: v },
+                            autoRestartSchedule: {
+                                ...data.autoRestartSchedule,
+                                enable: v,
+                            },
                         })
                     }
                 />
@@ -278,79 +347,78 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     );
 }
 
-// ────────────────────────────────────────────────────────────────────
-// 运行时依赖检查（仅远程 SSH 主机）。
-// 本机 Windows：NC/SL 直接运行，不展示 Docker / 组件页运行时引导。
-// 远程 + Docker：检查该 host 的 docker 是否就绪。
-// 远程 + 直接运行：提示去组件页确认 NodeJs / NapCat 等。
-// ────────────────────────────────────────────────────────────────────
-
-function RuntimeDependencyHint({
-    runtimeTarget,
-    deploymentType,
-    backendType,
+function InlineNotice({
+    tone,
+    children,
 }: {
-    runtimeTarget: string;
-    deploymentType: DeploymentType;
-    backendType: BackendType;
+    tone: 'ok' | 'warn' | 'neutral';
+    children: ReactNode;
 }) {
-    if (runtimeTarget === 'local') return null;
-
-    const hostId =
-        runtimeTarget === 'remote' ? null : `remote:${runtimeTarget}`;
-
-    const hostIds = useMemo(() => (hostId ? [hostId] : []), [hostId]);
-    const { statusByHost, probingByHost } = useDockerHosts(hostIds);
-
-    if (!hostId) return null;
-
-    const isDocker = deploymentType === 'docker';
-
-    if (isDocker) {
-        const status = statusByHost[hostId];
-        const probing = probingByHost[hostId] ?? false;
-        const ready = status?.installed && status?.daemonRunning && status?.composeAvailable;
-        if (probing && !status) {
-            return <DepBox tone="neutral" text="正在检查这台机器的 Docker 状态…" />;
-        }
-        if (ready) {
-            return <DepBox tone="ok" text={`Docker ${status?.version ?? ''} 已就绪，可以用容器方式启动。`} />;
-        }
-        return (
-            <DepBox
-                tone="warn"
-                text="这台机器的 Docker 尚未就绪（未安装 / 守护进程未运行 / 缺 compose）。请到「组件」页选这台机器安装 Docker 后再启动。"
-            />
-        );
-    }
-
-    // 直接运行:运行时(NodeJs/NapCat)的安装状态在组件页管理,这里给一句引导。
-    const name = backendType === 'snowluma' ? 'SnowLuma' : 'NapCat';
-    return (
-        <DepBox
-            tone="neutral"
-            text={`直接运行需要这台机器已安装 ${name} 运行时依赖（NodeJs / ${name} 等）。可到「组件」页选这台机器确认并安装。`}
-        />
-    );
-}
-
-function DepBox({ tone, text }: { tone: 'ok' | 'warn' | 'neutral'; text: string }) {
     const cls =
         tone === 'ok'
             ? 'bg-success-soft text-success'
             : tone === 'warn'
-                ? 'bg-warning-soft text-warning'
-                : 'bg-inset text-text-tertiary';
+              ? 'bg-warning-soft text-warning'
+              : 'bg-inset text-text-tertiary';
     return (
-        <div className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>{text}</div>
+        <p className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>
+            {children}
+        </p>
     );
 }
 
-// ────────────────────────────────────────────────────────────────────
-// SnowLuma 启动模式块。COLD / HOT 两选项；HotStart 不再让用户选 PID，
-// backend 启动时按 qq_id 自动扫描登录状态匹配。这一层 UI 只决定一个 enum
-// variant，落盘后由 BotConfigPage 顶层统一保存。
-// ────────────────────────────────────────────────────────────────────
+function DockerReadinessLine({
+    flavorLabel,
+    status,
+    probing,
+    imageReady,
+}: {
+    flavorLabel: string;
+    status: import('../../../../core/ipc/types').DockerStatus | undefined;
+    probing: boolean;
+    imageReady: boolean | undefined;
+}) {
+    if (probing && !status) {
+        return <InlineNotice tone="neutral">正在检查 Docker…</InlineNotice>;
+    }
+
+    const dockerOk =
+        status?.installed &&
+        status.daemonRunning &&
+        status.composeAvailable;
+
+    if (!dockerOk) {
+        return (
+            <InlineNotice tone="warn">
+                此主机 Docker 未就绪，请到「组件」页安装并启动 Docker
+            </InlineNotice>
+        );
+    }
+
+    if (imageReady === false) {
+        return (
+            <InlineNotice tone="warn">
+                {flavorLabel} 镜像未在本地；启动时会自动拉取（较久），或到「组件」页预拉镜像
+            </InlineNotice>
+        );
+    }
+
+    if (imageReady === true) {
+        const ver = status.version?.trim();
+        return (
+            <InlineNotice tone="ok">
+                {ver ? `Docker ${ver} · ` : ''}
+                {flavorLabel} 镜像已就绪，可启动
+            </InlineNotice>
+        );
+    }
+
+    return (
+        <InlineNotice tone="neutral">
+            Docker 已就绪，正在确认 {flavorLabel} 镜像…
+        </InlineNotice>
+    );
+}
 
 function SnowLumaStartModeBlock({
     data,
@@ -372,29 +440,19 @@ function SnowLumaStartModeBlock({
         <>
             <RadioGroup
                 items={[
-                    {
-                        value: 'cold_start',
-                        label: 'COLD - 自动启动新的 QQ.exe（推荐）',
-                        hint: '由 NapCatQQ-Desktop 全权管理 QQ 进程的生命周期',
-                    },
-                    {
-                        value: 'hot_start',
-                        label: 'HOT - 附加到已登录此账号的 QQ.exe',
-                        hint: '保留你已经手动登录的会话，启动时按 QQ 号自动定位 PID 注入；stop 时不会杀掉这个 QQ',
-                    },
+                    { value: 'cold_start', label: '冷启动（推荐）' },
+                    { value: 'hot_start', label: '热启动' },
                 ]}
                 value={mode}
                 onValueChange={setMode}
                 name="snowluma-mode"
             />
             {mode === 'hot_start' && (
-                <p className="rounded-sm bg-inset px-3 py-2 text-2xs leading-relaxed text-text-tertiary">
-                    启动时会扫描当前所有 QQ.exe 进程，找到登录账号 ==
-                    {' '}
-                    <span className="font-mono">{data.QQID || '未填写'}</span>
-                    {' '}
-                    的那个进程并注入。请在 Bot 启动前先在 QQ 客户端登录此账号；找不到时启动会失败并给出提示。
-                </p>
+                <InlineNotice tone="neutral">
+                    启动前请在此 QQ 号（
+                    <span className="font-mono">{data.QQID || '未填'}</span>
+                    ）下登录 QQ；找不到匹配进程时启动会失败
+                </InlineNotice>
             )}
         </>
     );

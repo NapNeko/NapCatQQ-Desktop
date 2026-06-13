@@ -302,6 +302,24 @@ pub fn render_napcat_docker_config_payloads(
     ]
 }
 
+/// SnowLuma 容器 named volume `/app/snowluma-data/config` 下的 onebot 配置。
+pub fn render_snowluma_docker_config_payloads(
+    bot_id: &BotId,
+    config: &BotConfig,
+    existing: &HashMap<String, Value>,
+) -> Vec<DockerConfigPayload> {
+    let onebot_file = format!("onebot_{}.json", bot_id.as_str());
+    let onebot = merge_unknown_top_level(
+        SnowLumaConfigRenderer::build_onebot_payload(config),
+        existing.get(&onebot_file),
+        SNOWLUMA_ONEBOT_KNOWN_KEYS,
+    );
+    vec![DockerConfigPayload {
+        file_name: onebot_file,
+        payload: onebot,
+    }]
+}
+
 // ==================== SnowLuma Renderer ====================
 
 /// SnowLuma onebot_<qq>.json 顶层"已知" key 集合。
@@ -469,7 +487,8 @@ impl SnowLumaConfigRenderer {
         }
     }
 
-    fn build_onebot_payload(config: &BotConfig) -> Value {
+    /// 供 Docker SnowLuma 卷内 config 写入复用。
+    pub fn build_onebot_payload(config: &BotConfig) -> Value {
         let mut obj = serde_json::Map::new();
         obj.insert("networks".into(), Self::build_networks(&config.connect));
         obj.insert("musicSignUrl".into(), json!(config.bot.music_sign_url));

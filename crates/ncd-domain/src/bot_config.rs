@@ -505,23 +505,16 @@ impl BotConfig {
     /// 启动阶段才报错。不放进 validate() 是因为有些链路(如生命周期路由健壮性测试)
     /// 需要存下"会被运行期拒绝"的配置。当前矩阵限制:
     /// - Docker + 本机:不支持(Docker Desktop 安装链路太麻烦,本机只走直接运行)
-    /// - Docker + SnowLuma:不支持(Docker 容器化目前仅 NapCat)
     /// - 直接运行 + 远端:不支持(远端原生启动需 runtime 路径规划,请改 Docker)
     pub fn validate_runtime_matrix(&self) -> Result<(), BotConfigError> {
         let is_docker = matches!(self.bot.deployment_type, DeploymentType::Docker);
         let is_native = matches!(self.bot.deployment_type, DeploymentType::Native);
-        let is_snowluma = matches!(self.bot.backend_type, BackendType::SnowLuma);
         let is_local = self.bot.runtime_target.is_local();
 
         if is_docker && is_local {
             return Err(BotConfigError::UnsupportedRuntimeMatrix(
                 "本机暂不支持 Docker 部署,请改为「直接运行」或把运行宿主切换为远程 SSH 主机"
                     .to_string(),
-            ));
-        }
-        if is_docker && is_snowluma {
-            return Err(BotConfigError::UnsupportedRuntimeMatrix(
-                "Docker 部署当前仅支持 NapCat 底座,SnowLuma 容器化待后续支持".to_string(),
             ));
         }
         if is_native && !is_local {
@@ -804,6 +797,14 @@ mod runtime_matrix_tests {
         )
         .validate_runtime_matrix()
         .unwrap();
+        // Docker + 远端 + SnowLuma。
+        cfg(
+            BackendType::SnowLuma,
+            DeploymentType::Docker,
+            RuntimeTarget::server("remote-a"),
+        )
+        .validate_runtime_matrix()
+        .unwrap();
     }
 
     #[test]
@@ -815,15 +816,14 @@ mod runtime_matrix_tests {
     }
 
     #[test]
-    fn docker_with_snowluma_is_rejected() {
-        let err = cfg(
+    fn docker_with_snowluma_on_remote_is_allowed() {
+        cfg(
             BackendType::SnowLuma,
             DeploymentType::Docker,
             RuntimeTarget::server("remote-a"),
         )
         .validate_runtime_matrix()
-        .unwrap_err();
-        assert!(matches!(err, BotConfigError::UnsupportedRuntimeMatrix(_)));
+        .unwrap();
     }
 
     #[test]

@@ -18,11 +18,13 @@ use ncd_deploy::{
     Deployment, DeploymentError, NativeDeployment, NativeLaunchCommand, NativeLaunchTranslator,
     NativeRuntimeEventSink,
 };
-use ncd_domain::{BotConfig, BotFlavor, BotId, StopMode};
+use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, StopMode};
 use ncd_host::{Host, HostError, HostPath};
 use serde_json::{Map, Value, json};
 
-use crate::backend_config_renderer::render_napcat_docker_config_payloads;
+use crate::backend_config_renderer::{
+    render_napcat_docker_config_payloads, render_snowluma_docker_config_payloads,
+};
 use crate::bot_actor::BotActorState;
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::kinds::BackendKind;
@@ -247,7 +249,7 @@ impl BotBackend for NativeDeploymentBackend {
     }
 }
 
-use ncd_domain::{BackendType, RuntimeTarget};
+use ncd_domain::RuntimeTarget;
 
 fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
     use ncd_domain::{
@@ -406,26 +408,48 @@ async fn render_docker_config_on_host(
     bot_id: &BotId,
     config: &BotConfig,
 ) -> Result<(), BotBackendError> {
-    let project_dir = docker_project_dir(host, &docker_container_name(bot_id)).await?;
-    let config_dir = format!("{project_dir}/napcat/config");
-    let config_dir_path = HostPath::from_posix(&config_dir);
-    host.create_dir_all(&config_dir_path)
-        .await
-        .map_err(|error| BotBackendError::Io(format!("创建 Docker 配置目录失败: {error}")))?;
+    let name = docker_container_name(bot_id);
+    let project_dir = docker_project_dir(host, &name).await?;
+    match config.bot.backend_type {
+        BackendType::NapCat => {
+            let config_dir = format!("{project_dir}/napcat/config");
+            let config_dir_path = HostPath::from_posix(&config_dir);
+            host.create_dir_all(&config_dir_path)
+                .await
+                .map_err(|error| BotBackendError::Io(format!("创建 Docker 配置目录失败: {error}")))?;
 
-    let existing = read_existing_docker_config(host, bot_id, &config_dir).await?;
-    for item in render_napcat_docker_config_payloads(bot_id, config, &existing) {
-        let bytes = serde_json::to_vec_pretty(&item.payload)
-            .map_err(|error| BotBackendError::Json(error.to_string()))?;
-        let path = HostPath::from_posix(format!("{config_dir}/{}", item.file_name));
-        host.write_file(&path, &bytes)
-            .await
-            .map_err(|error| BotBackendError::Io(format!("写 Docker 配置文件失败: {error}")))?;
+            let existing = read_existing_docker_napcat_config(host, bot_id, &config_dir).await?;
+            for item in render_napcat_docker_config_payloads(bot_id, config, &existing) {
+                let bytes = serde_json::to_vec_pretty(&item.payload)
+                    .map_err(|error| BotBackendError::Json(error.to_string()))?;
+                let path = HostPath::from_posix(format!("{config_dir}/{}", item.file_name));
+                host.write_file(&path, &bytes)
+                    .await
+                    .map_err(|error| BotBackendError::Io(format!("写 Docker 配置文件失败: {error}")))?;
+            }
+        }
+        BackendType::SnowLuma => {
+            let config_dir = format!("{project_dir}/snowluma-data/config");
+            let config_dir_path = HostPath::from_posix(&config_dir);
+            host.create_dir_all(&config_dir_path)
+                .await
+                .map_err(|error| BotBackendError::Io(format!("创建 Docker 配置目录失败: {error}")))?;
+
+            let existing = read_existing_docker_snowluma_config(host, bot_id, &config_dir).await?;
+            for item in render_snowluma_docker_config_payloads(bot_id, config, &existing) {
+                let bytes = serde_json::to_vec_pretty(&item.payload)
+                    .map_err(|error| BotBackendError::Json(error.to_string()))?;
+                let path = HostPath::from_posix(format!("{config_dir}/{}", item.file_name));
+                host.write_file(&path, &bytes)
+                    .await
+                    .map_err(|error| BotBackendError::Io(format!("写 Docker 配置文件失败: {error}")))?;
+            }
+        }
     }
     Ok(())
 }
 
-async fn read_existing_docker_config(
+async fn read_existing_docker_napcat_config(
     host: &dyn Host,
     bot_id: &BotId,
     config_dir: &str,
@@ -442,6 +466,26 @@ async fn read_existing_docker_config(
             Err(HostError::PathNotFound { .. }) => {}
             Err(error) => return Err(BotBackendError::Io(error.to_string())),
         }
+    }
+    Ok(existing)
+}
+
+async fn read_existing_docker_snowluma_config(
+    host: &dyn Host,
+    bot_id: &BotId,
+    config_dir: &str,
+) -> Result<HashMap<String, Value>, BotBackendError> {
+    let mut existing = HashMap::new();
+    let file_name = format!("onebot_{}.json", bot_id.as_str());
+    let path = HostPath::from_posix(format!("{config_dir}/{file_name}"));
+    match host.read_file(&path).await {
+        Ok(bytes) => {
+            if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
+                existing.insert(file_name, value);
+            }
+        }
+        Err(HostError::PathNotFound { .. }) => {}
+        Err(error) => return Err(BotBackendError::Io(error.to_string())),
     }
     Ok(existing)
 }

@@ -10,12 +10,12 @@
 //! compose 项目目录:远端 $HOME/.napcat-bots/<name>。探不到 HOME 直接失败,
 //! 避免把生产数据静默落到 /tmp。
 //!
-//! 当前实装范围:NapCat flavor。SnowLuma 容器化涉及 noVNC/daemon 差异,留待后续。
-//! 容器内 OneBot 网络配置由用户在 NapCat WebUI 中配置(与手动部署一致),本层只
-//! 负责把容器拉起来 + 映射端口 + 注入 WebUI token。
+//! NapCat / SnowLuma 均走官方 compose 语义(见 docker/compose.rs 与 SnowLuma.Docker.Framework)。
+//! NapCat 可预写 onebot/napcat 到 bind 目录; SnowLuma 写 onebot_<qq>.json 到 named volume。
+//! SnowLuma 扫码登录走容器 noVNC(6081),不由 Desktop 注入 QQ 进程。
 
 use async_trait::async_trait;
-use ncd_domain::{BotConfig, BotFlavor, BotId, DockerDeploySpec, DockerFlavor, StopMode};
+use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, DockerDeploySpec, DockerFlavor, StopMode};
 use ncd_host::{Host, HostCommand, HostPath, StreamSource};
 use tracing::{error, info};
 
@@ -28,7 +28,8 @@ use crate::docker::{DockerCli, compose::render_compose_with_env};
 pub struct DockerDeployment {
     id: &'static str,
     flavors: &'static [BotFlavor],
-    webui_token: Option<String>,
+    /// NapCat: WEBUI_TOKEN; SnowLuma: VNC_PASSWD(compose 环境变量)。
+    compose_secret: Option<String>,
     allow_test_default_token: bool,
 }
 
@@ -36,17 +37,24 @@ impl DockerDeployment {
     pub fn new() -> Self {
         Self {
             id: "docker",
-            // 当前只做 NapCat 容器化;SnowLuma 容器涉及 noVNC/daemon 差异,后续接入。
-            flavors: &[BotFlavor::NapCat],
-            webui_token: None,
+            flavors: &[BotFlavor::NapCat, BotFlavor::SnowLuma],
+            compose_secret: None,
             allow_test_default_token: false,
         }
     }
 
-    /// 上层必须显式传入 WebUI token。ncd-deploy 不从 QQ 号派生凭据。
+    /// NapCat Docker: WEBUI_TOKEN。ncd-deploy 不从 QQ 号派生凭据。
     pub fn with_webui_token(token: impl Into<String>) -> Self {
         Self {
-            webui_token: Some(token.into()),
+            compose_secret: Some(token.into()),
+            ..Self::new()
+        }
+    }
+
+    /// SnowLuma Docker: VNC_PASSWD(noVNC 入口密码)。
+    pub fn with_vnc_passwd(passwd: impl Into<String>) -> Self {
+        Self {
+            compose_secret: Some(passwd.into()),
             ..Self::new()
         }
     }
@@ -74,29 +82,44 @@ impl DockerDeployment {
         Ok(format!("{home}/.napcat-bots/{name}"))
     }
 
-    fn webui_token(&self) -> Result<String, DeploymentError> {
-        if let Some(token) = self
-            .webui_token
+    fn compose_secret_for(&self, backend: BackendType) -> Result<String, DeploymentError> {
+        if let Some(secret) = self
+            .compose_secret
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            return Ok(token.to_string());
+            return Ok(secret.to_string());
         }
         if self.allow_test_default_token {
-            return Ok("test-webui-token".to_string());
+            return Ok(match backend {
+                BackendType::SnowLuma => "test-vnc-passwd".to_string(),
+                BackendType::NapCat => "test-webui-token".to_string(),
+            });
         }
-        Err(DeploymentError::ConfigInvalid(
-            "DockerDeployment 需要上层显式传入 WebUI token".into(),
-        ))
+        Err(DeploymentError::ConfigInvalid(match backend {
+            BackendType::SnowLuma => {
+                "DockerDeployment 需要上层显式传入 VNC 密码 (SnowLuma)".into()
+            }
+            BackendType::NapCat => "DockerDeployment 需要上层显式传入 WebUI token".into(),
+        }))
     }
 
-    /// 从 BotConfig 构造 NapCat DockerDeploySpec:容器名 ncbot-<qq>,端口走默认,
-    /// qq_id 预绑。
+    fn compose_env_var(backend: BackendType) -> &'static str {
+        match backend {
+            BackendType::SnowLuma => "VNC_PASSWD",
+            BackendType::NapCat => "WEBUI_TOKEN",
+        }
+    }
+
+    /// 从 BotConfig 构造 DockerDeploySpec:容器名 ncbot-<qq>,端口走口味默认。
     fn build_spec(config: &BotConfig) -> DockerDeploySpec {
-        let mut spec = DockerDeploySpec::napcat_default();
+        let mut spec = match config.bot.backend_type {
+            BackendType::SnowLuma => DockerDeploySpec::snowluma_default(),
+            BackendType::NapCat => DockerDeploySpec::napcat_default(),
+        };
         spec.container_name = Self::container_name(config);
-        if config.bot.qq_id != 0 {
+        if config.bot.backend_type == BackendType::NapCat && config.bot.qq_id != 0 {
             spec.qq_id = Some(config.bot.qq_id);
         }
         spec
@@ -145,9 +168,10 @@ impl Deployment for DockerDeployment {
         config: &BotConfig,
         progress: &dyn DeploymentProgressSink,
     ) -> Result<(), DeploymentError> {
-        if config.bot.backend_type != ncd_domain::BackendType::NapCat {
+        let backend = config.bot.backend_type;
+        if !matches!(backend, BackendType::NapCat | BackendType::SnowLuma) {
             return Err(DeploymentError::UnsupportedFlavor {
-                flavor: format!("{:?} docker 部署暂未实装", config.bot.backend_type),
+                flavor: format!("{:?} docker 部署暂未实装", backend),
             });
         }
 
@@ -169,32 +193,32 @@ impl Deployment for DockerDeployment {
         let name = Self::container_name(config);
         let project_dir = Self::project_dir(host, &name).await?;
 
-        // 准备目录 + 写 compose。
         progress.report("compose", "准备部署目录", 15);
         host.create_dir_all(&HostPath::from_posix(&project_dir))
             .await
             .map_err(|e| DeploymentError::InstallFailed(format!("创建部署目录失败: {e}")))?;
 
-        let token = self.webui_token()?;
+        let secret = self.compose_secret_for(backend)?;
+        let env_var = Self::compose_env_var(backend);
         let env_path = HostPath::from_posix(format!("{project_dir}/.env"));
-        host.write_file(&env_path, format!("WEBUI_TOKEN={token}\n").as_bytes())
+        host.write_file(&env_path, format!("{env_var}={secret}\n").as_bytes())
             .await
             .map_err(|e| DeploymentError::InstallFailed(format!("写 Docker .env 失败: {e}")))?;
 
         let (uid, gid) = default_uid_gid(host);
-        let yaml = render_compose_with_env(&spec, "WEBUI_TOKEN", uid, gid);
+        let yaml = render_compose_with_env(&spec, env_var, uid, gid);
         let compose_path = HostPath::from_posix(format!("{project_dir}/docker-compose.yml"));
         host.write_file(&compose_path, yaml.as_bytes())
             .await
             .map_err(|e| DeploymentError::InstallFailed(format!("写 compose 文件失败: {e}")))?;
 
-        // 拉镜像(走镜像站 fallback)。逐行日志透传到 sink。
         progress.report("pull", "拉取镜像", 30);
-        let candidates = DockerFlavor::NapCat.pull_candidates();
-        let official = DockerFlavor::NapCat.default_image();
-        // 回调工厂:每个候选给一份独立逐行回调。progress 是 &dyn 借用,不能进
-        // 'static 回调,所以这里只做空回调(install 阶段日志细节非关键),百分比
-        // 由外层粗粒度报。后续要逐行日志可改走事件总线注入。
+        let docker_flavor = match backend {
+            BackendType::SnowLuma => DockerFlavor::SnowLuma,
+            BackendType::NapCat => DockerFlavor::NapCat,
+        };
+        let candidates = docker_flavor.pull_candidates();
+        let official = docker_flavor.default_image();
         let new_line_cb = |_idx: usize, _img: &str| move |_src: StreamSource, _line: String| {};
         cli.pull_with_fallback(&candidates, official, new_line_cb, None::<fn(usize, &str, &crate::docker::DockerCliError)>)
             .await
@@ -607,9 +631,12 @@ mod tests {
     }
 
     #[test]
-    fn only_supports_napcat_flavor() {
+    fn supports_napcat_and_snowluma_flavors() {
         let dep = DockerDeployment::new();
-        assert_eq!(dep.supported_flavors(), &[BotFlavor::NapCat]);
+        assert_eq!(
+            dep.supported_flavors(),
+            &[BotFlavor::NapCat, BotFlavor::SnowLuma]
+        );
     }
 
     #[test]
@@ -708,7 +735,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn production_install_requires_explicit_token() {
+    async fn production_install_requires_explicit_secret() {
         let host = MockHost::new();
         let err = DockerDeployment::new()
             .install(&host, &bot_config(), &crate::deployment::NullProgressSink)
@@ -760,13 +787,19 @@ mod tests {
     }
 
     #[test]
-    fn test_only_default_token_is_not_production_default() {
-        assert!(DockerDeployment::new().webui_token().is_err());
+    fn test_only_default_secret_is_not_production_default() {
+        assert!(DockerDeployment::new().compose_secret_for(BackendType::NapCat).is_err());
         assert_eq!(
             DockerDeployment::with_test_default_token()
-                .webui_token()
+                .compose_secret_for(BackendType::NapCat)
                 .unwrap(),
             "test-webui-token"
+        );
+        assert_eq!(
+            DockerDeployment::with_test_default_token()
+                .compose_secret_for(BackendType::SnowLuma)
+                .unwrap(),
+            "test-vnc-passwd"
         );
     }
 }

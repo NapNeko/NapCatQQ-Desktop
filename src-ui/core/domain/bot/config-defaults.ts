@@ -70,10 +70,6 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
     if (config.bot.deploymentType === 'docker' && config.bot.runtime_target === 'local') {
         return { ok: false, reason: '本机暂不支持 Docker 部署，请改用「直接运行」，或把运行宿主切换为远程 SSH 主机。' };
     }
-    // Docker 启动方式当前仅支持 NapCat 底座。
-    if (config.bot.deploymentType === 'docker' && config.bot.backend_type !== 'napcat') {
-        return { ok: false, reason: 'Docker 启动方式当前仅支持 NapCat 底座，SnowLuma 容器化待后续支持。' };
-    }
     // SnowLuma HotStart 不再持久化 attach_pid，PID 由 backend 启动时自动按 qq_id 匹配。
     // 如果 qq_id 缺失上面已挡掉；这里不再有额外校验。
     return { ok: true };
