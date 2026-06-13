@@ -30,10 +30,33 @@ impl<'a> ComposeSecret<'a> {
 
     fn snowluma_vnc_passwd(&self) -> String {
         match self {
-            Self::Literal(passwd) => format!("\"{passwd}\""),
-            Self::EnvRef { variable } => format!("\"${{{}:?{} is required}}\"", variable, variable),
+            Self::Literal(passwd) => format!("\"{}\"", escape_yaml_double_quoted(passwd)),
+            Self::EnvRef { variable } => format!("\"${{{variable}}}\"")
         }
     }
+
+    fn snowluma_webui_bootstrap(&self) -> String {
+        match self {
+            Self::Literal(passwd) => format!("\"{}\"", escape_yaml_double_quoted(passwd)),
+            Self::EnvRef { variable } => format!("\"${{{variable}}}\"")
+        }
+    }
+}
+
+/// 写入 YAML 双引号字符串内的字面量（非 compose 插值）。
+fn escape_yaml_double_quoted(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// 渲染 compose 文件文本。
@@ -42,7 +65,7 @@ impl<'a> ComposeSecret<'a> {
 /// `uid` / `gid` 写进对应的 *_UID / *_GID 环境变量(Linux 文件属主对齐);
 /// 本地 Windows Docker Desktop 传 0 即可。
 pub fn render_compose(spec: &DockerDeploySpec, secret: &str, uid: u32, gid: u32) -> String {
-    render_compose_with_secret(spec, ComposeSecret::Literal(secret), uid, gid)
+    render_compose_with_secret(spec, ComposeSecret::Literal(secret), uid, gid, None)
 }
 
 /// 渲染引用同目录 .env 的 compose 文件文本。
@@ -52,7 +75,26 @@ pub fn render_compose_with_env(
     uid: u32,
     gid: u32,
 ) -> String {
-    render_compose_with_secret(spec, ComposeSecret::EnvRef { variable }, uid, gid)
+    render_compose_with_secret(spec, ComposeSecret::EnvRef { variable }, uid, gid, None)
+}
+
+/// SnowLuma：VNC 与 WebUI bootstrap 分别来自 .env 中两个变量。
+pub fn render_snowluma_compose_with_env(
+    spec: &DockerDeploySpec,
+    vnc_var: &str,
+    webui_bootstrap_var: &str,
+    uid: u32,
+    gid: u32,
+) -> String {
+    render_compose_with_secret(
+        spec,
+        ComposeSecret::EnvRef { variable: vnc_var },
+        uid,
+        gid,
+        Some(ComposeSecret::EnvRef {
+            variable: webui_bootstrap_var,
+        }),
+    )
 }
 
 fn render_compose_with_secret(
@@ -60,10 +102,11 @@ fn render_compose_with_secret(
     secret: ComposeSecret<'_>,
     uid: u32,
     gid: u32,
+    snowluma_webui_bootstrap: Option<ComposeSecret<'_>>,
 ) -> String {
     match spec.flavor {
         DockerFlavor::NapCat => render_napcat(spec, secret, uid, gid),
-        DockerFlavor::SnowLuma => render_snowluma(spec, secret, uid, gid),
+        DockerFlavor::SnowLuma => render_snowluma(spec, secret, snowluma_webui_bootstrap, uid, gid),
     }
 }
 
@@ -107,30 +150,35 @@ fn render_napcat(spec: &DockerDeploySpec, secret: ComposeSecret<'_>, uid: u32, g
 
 fn render_snowluma(
     spec: &DockerDeploySpec,
-    secret: ComposeSecret<'_>,
+    vnc_secret: ComposeSecret<'_>,
+    webui_bootstrap: Option<ComposeSecret<'_>>,
     uid: u32,
     gid: u32,
 ) -> String {
     let name = &spec.container_name;
     let image = DockerFlavor::SnowLuma.default_image();
     let ports = render_ports(spec);
-    let vnc_passwd = secret.snowluma_vnc_passwd();
+    let vnc_passwd = vnc_secret.snowluma_vnc_passwd();
+    let webui_env = webui_bootstrap
+        .map(|s| format!("      SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: {}\n", s.snowluma_webui_bootstrap()))
+        .unwrap_or_default();
     // SnowLuma 必须的安全选项 + named volume,照官方 docker-compose.yml。
     format!(
         "services:\n\
          \x20 snowluma:\n\
-         \x20   image: {image}\n\
+         \x20   image: \"{image}\"\n\
          \x20   container_name: {name}\n\
          \x20   restart: unless-stopped\n\
          \x20   shm_size: 1gb\n\
          \x20   cap_add:\n\
          \x20     - SYS_PTRACE\n\
          \x20   security_opt:\n\
-         \x20     - seccomp=unconfined\n\
+         \x20     - \"seccomp=unconfined\"\n\
          \x20   environment:\n\
          \x20     SNOWLUMA_UID: \"{uid}\"\n\
          \x20     SNOWLUMA_GID: \"{gid}\"\n\
          \x20     VNC_PASSWD: {vnc_passwd}\n\
+         {webui_env}\
          \x20     SNOWLUMA_WEBUI_PORT: \"5099\"\n\
          \x20     SNOWLUMA_HOOK_AUTOLOAD: \"1\"\n\
          \x20   ports:\n\
@@ -185,6 +233,83 @@ mod tests {
         spec.qq_id = Some(0);
         let yaml = render_compose(&spec, "t", 0, 0);
         assert!(!yaml.contains("ACCOUNT"));
+    }
+
+    #[test]
+    fn snowluma_compose_is_valid_yaml() {
+        let mut spec = DockerDeploySpec::snowluma_default();
+        spec.container_name = "slbot-572381217".to_string();
+        let yaml = render_snowluma_compose_with_env(
+            &spec,
+            "VNC_PASSWD",
+            "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD",
+            1000,
+            1000,
+        );
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap_or_else(|e| {
+            eprintln!("--- compose yaml ---\n{yaml}\n--- end ---");
+            panic!("snowluma compose must parse as YAML: {e}");
+        });
+        assert!(parsed.get("services").is_some());
+        for (lineno, line) in yaml.lines().enumerate() {
+            if lineno == 14 {
+                // 0-based line 14 = file line 15
+                assert!(
+                    !line.contains("mapping values"),
+                    "line 15 should be valid: {line:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn snowluma_compose_yaml_environment_block_parses() {
+        let spec = DockerDeploySpec::snowluma_default();
+        let yaml = render_snowluma_compose_with_env(
+            &spec,
+            "VNC_PASSWD",
+            "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD",
+            1000,
+            1000,
+        );
+        for (i, line) in yaml.lines().enumerate() {
+            if line.contains("environment:") {
+                // 下一行起每个 env 键应同为 6 空格缩进（services 下 environment 子项）
+                for env_line in yaml.lines().skip(i + 1) {
+                    if env_line.trim_start().starts_with("SNOWLUMA_")
+                        || env_line.trim_start().starts_with("VNC_PASSWD")
+                    {
+                        assert!(
+                            env_line.starts_with("      "),
+                            "bad indent at line {}: {:?}",
+                            i + 1,
+                            env_line
+                        );
+                    }
+                    if env_line.trim_start().starts_with("ports:") {
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        assert!(yaml.contains("SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: \"${SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD}\""));
+    }
+
+    #[test]
+    fn snowluma_compose_can_reference_env_webui_bootstrap() {
+        let spec = DockerDeploySpec::snowluma_default();
+        let yaml = render_snowluma_compose_with_env(
+            &spec,
+            "VNC_PASSWD",
+            "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD",
+            1000,
+            1000,
+        );
+        assert!(yaml.contains("VNC_PASSWD: \"${VNC_PASSWD}\""));
+        assert!(yaml.contains(
+            "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: \"${SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD}\""
+        ));
     }
 
     #[test]

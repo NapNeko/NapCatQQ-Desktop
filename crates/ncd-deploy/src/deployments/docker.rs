@@ -25,7 +25,10 @@ use tracing::{error, info};
 use crate::deployment::{
     Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
 };
-use crate::docker::{DockerCli, compose::render_compose_with_env};
+use crate::docker::{
+    DockerCli,
+    compose::{render_compose_with_env, render_snowluma_compose_with_env},
+};
 
 /// Docker 部署实装。
 pub struct DockerDeployment {
@@ -33,6 +36,8 @@ pub struct DockerDeployment {
     flavors: &'static [BotFlavor],
     /// NapCat: WEBUI_TOKEN; SnowLuma: VNC_PASSWD(compose 环境变量)。
     compose_secret: Option<String>,
+    /// SnowLuma: 写入 SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD（WebUI 登录，非 VNC）。
+    sl_webui_bootstrap: Option<String>,
     allow_test_default_token: bool,
 }
 
@@ -42,6 +47,7 @@ impl DockerDeployment {
             id: "docker",
             flavors: &[BotFlavor::NapCat, BotFlavor::SnowLuma],
             compose_secret: None,
+            sl_webui_bootstrap: None,
             allow_test_default_token: false,
         }
     }
@@ -50,6 +56,15 @@ impl DockerDeployment {
     pub fn with_webui_token(token: impl Into<String>) -> Self {
         Self {
             compose_secret: Some(token.into()),
+            ..Self::new()
+        }
+    }
+
+    /// SnowLuma Docker: VNC_PASSWD + SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD。
+    pub fn with_sl_secrets(vnc_passwd: impl Into<String>, webui_bootstrap: impl Into<String>) -> Self {
+        Self {
+            compose_secret: Some(vnc_passwd.into()),
+            sl_webui_bootstrap: Some(webui_bootstrap.into()),
             ..Self::new()
         }
     }
@@ -137,6 +152,30 @@ impl Default for DockerDeployment {
     }
 }
 
+/// docker compose `.env` 行：含空格、`#`、`:` 等时加双引号并转义。
+fn dotenv_value(raw: &str) -> String {
+    let needs_quote = raw.is_empty()
+        || raw.bytes().any(|b| b.is_ascii_whitespace())
+        || raw.contains('#')
+        || raw.contains('"')
+        || raw.contains('\'');
+    if !needs_quote {
+        return raw.to_string();
+    }
+    let mut out = String::from('"');
+    for c in raw.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// 远端探 $HOME。失败返回 None。
 async fn probe_home(host: &dyn Host) -> Option<String> {
     let cmd = HostCommand::new("sh").arg("-c").arg("echo $HOME");
@@ -206,12 +245,39 @@ impl Deployment for DockerDeployment {
         let secret = self.compose_secret_for(backend)?;
         let env_var = Self::compose_env_var(backend);
         let env_path = HostPath::from_posix(format!("{project_dir}/.env"));
-        host.write_file(&env_path, format!("{env_var}={secret}\n").as_bytes())
+        let mut env_body = format!("{env_var}={}\n", dotenv_value(&secret));
+        if backend == BackendType::SnowLuma {
+            let webui = self
+                .sl_webui_bootstrap
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| {
+                    DeploymentError::ConfigInvalid(
+                        "SnowLuma Docker 需要 SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD".into(),
+                    )
+                })?;
+            env_body.push_str(&format!(
+                "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD={}\n",
+                dotenv_value(webui)
+            ));
+        }
+        host.write_file(&env_path, env_body.as_bytes())
             .await
             .map_err(|e| DeploymentError::InstallFailed(format!("写 Docker .env 失败: {e}")))?;
 
         let (uid, gid) = default_uid_gid(host);
-        let yaml = render_compose_with_env(&spec, env_var, uid, gid);
+        let yaml = if backend == BackendType::SnowLuma {
+            render_snowluma_compose_with_env(
+                &spec,
+                "VNC_PASSWD",
+                "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD",
+                uid,
+                gid,
+            )
+        } else {
+            render_compose_with_env(&spec, env_var, uid, gid)
+        };
         let compose_path = HostPath::from_posix(format!("{project_dir}/docker-compose.yml"));
         host.write_file(&compose_path, yaml.as_bytes())
             .await
