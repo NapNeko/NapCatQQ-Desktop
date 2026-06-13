@@ -27,7 +27,15 @@ performanceMonitorEnabled: boolean,
 /**
  * 主页性能监控采样间隔（毫秒）。对齐 legacy `Performance.MonitorInterval`。
  */
-performanceMonitorInterval: bigint, 
+performanceMonitorInterval: bigint,
+/**
+ * 任务队列是否在终态后自动从列表移除。
+ */
+taskQueueCleanupEnabled: boolean,
+/**
+ * 终态后保留时长（毫秒）；关闭自动清理时落盘为 0。
+ */
+taskQueueCleanupLingerMs: bigint,
 /**
  * 主窗口关闭按钮行为：`close` 退出程序，`tray` 隐藏到托盘。与前端 `preferencesStore.closeAction` 对齐。
  */

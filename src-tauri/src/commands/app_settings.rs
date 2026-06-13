@@ -66,6 +66,7 @@ pub async fn set_app_settings(
 
     let mut settings = dto.settings;
     settings.normalize_performance_monitor();
+    settings.normalize_task_queue_cleanup();
     let payload = serde_json::to_value(&settings)
         .map_err(|e| format!("序列化 app 设置失败: {e}"))?;
     store

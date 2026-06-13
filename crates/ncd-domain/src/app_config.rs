@@ -133,6 +133,14 @@ fn default_infobar_dismiss_warning_ms() -> u64 {
     6000
 }
 
+fn default_task_queue_cleanup_enabled() -> bool {
+    true
+}
+
+fn default_task_queue_cleanup_linger_ms() -> u64 {
+    600_000
+}
+
 /// InfoBar 非 danger 自动关闭时长上限（毫秒）。0 = 不自动关。
 pub const INFOBAR_DISMISS_MS_MAX: u64 = 60_000;
 
@@ -141,6 +149,18 @@ pub fn clamp_infobar_dismiss_ms(raw: u64) -> u64 {
         return 0;
     }
     raw.clamp(1000, INFOBAR_DISMISS_MS_MAX)
+}
+
+/// 任务队列终态条目保留时长下限（毫秒）。0 = 关闭自动清理。
+pub const TASK_QUEUE_CLEANUP_LINGER_MIN_MS: u64 = 3_000;
+/// 任务队列终态条目保留时长上限（毫秒）。
+pub const TASK_QUEUE_CLEANUP_LINGER_MAX_MS: u64 = 3_600_000;
+
+pub fn clamp_task_queue_cleanup_linger_ms(raw: u64) -> u64 {
+    if raw == 0 {
+        return 0;
+    }
+    raw.clamp(TASK_QUEUE_CLEANUP_LINGER_MIN_MS, TASK_QUEUE_CLEANUP_LINGER_MAX_MS)
 }
 
 /// 设置页「外观」Tab 的客户端偏好，与前端 `preferencesStore` / `SettingsDraft` 对齐。
@@ -222,6 +242,15 @@ pub struct AppSettings {
         default = "default_perf_monitor_interval"
     )]
     pub performance_monitor_interval_ms: u64,
+    /// 任务队列是否在终态后自动从列表移除。
+    #[serde(rename = "taskQueueCleanupEnabled", default = "default_task_queue_cleanup_enabled")]
+    pub task_queue_cleanup_enabled: bool,
+    /// 终态后保留时长（毫秒）；`task_queue_cleanup_enabled == false` 时落盘为 0。
+    #[serde(
+        rename = "taskQueueCleanupLingerMs",
+        default = "default_task_queue_cleanup_linger_ms"
+    )]
+    pub task_queue_cleanup_linger_ms: u64,
     /// 主窗口关闭按钮行为：`close` 退出程序，`tray` 隐藏到托盘。与前端 `preferencesStore.closeAction` 对齐。
     #[serde(rename = "closeAction", default = "default_close_action")]
     pub close_action: String,
@@ -236,6 +265,8 @@ impl Default for AppSettings {
             poller: WebUiPollerSettings::default(),
             performance_monitor_enabled: true,
             performance_monitor_interval_ms: default_perf_monitor_interval(),
+            task_queue_cleanup_enabled: default_task_queue_cleanup_enabled(),
+            task_queue_cleanup_linger_ms: default_task_queue_cleanup_linger_ms(),
             close_action: default_close_action(),
             ui_preferences: AppUiPreferences::default(),
         }
@@ -247,6 +278,19 @@ impl AppSettings {
     pub fn normalize_performance_monitor(&mut self) {
         self.performance_monitor_interval_ms =
             clamp_perf_monitor_interval_ms(self.performance_monitor_interval_ms);
+    }
+
+    /// 写入前规范化任务队列自动清理偏好。
+    pub fn normalize_task_queue_cleanup(&mut self) {
+        if !self.task_queue_cleanup_enabled {
+            self.task_queue_cleanup_linger_ms = 0;
+        } else {
+            self.task_queue_cleanup_linger_ms =
+                clamp_task_queue_cleanup_linger_ms(self.task_queue_cleanup_linger_ms);
+            if self.task_queue_cleanup_linger_ms == 0 {
+                self.task_queue_cleanup_linger_ms = default_task_queue_cleanup_linger_ms();
+            }
+        }
     }
 }
 
@@ -455,6 +499,8 @@ mod tests {
             },
             performance_monitor_enabled: false,
             performance_monitor_interval_ms: 3000,
+            task_queue_cleanup_enabled: default_task_queue_cleanup_enabled(),
+            task_queue_cleanup_linger_ms: default_task_queue_cleanup_linger_ms(),
             close_action: default_close_action(),
             ui_preferences: AppUiPreferences::default(),
         };
