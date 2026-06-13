@@ -1,4 +1,4 @@
-/* Bot 列表双列：与组件页 componentCardGrid 同规则。 */
+/* Bot 列表双列：按内容自然高度，避免 1fr 行高把停止态卡片撑空。 */
 .botCardGrid {
     display: grid;
     width: 100%;
@@ -6,15 +6,14 @@
     min-width: 0;
     box-sizing: border-box;
     grid-template-columns: minmax(0, 1fr);
-    grid-auto-rows: 1fr;
-    align-items: stretch;
-    gap: 0.625rem;
+    align-items: start;
+    gap: 0.75rem;
 }
 
 @media (min-width: 768px) {
     .botCardGrid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.625rem 0.75rem;
+        gap: 0.75rem 0.875rem;
     }
 }
 
@@ -22,8 +21,5 @@
     min-width: 0;
     max-width: 100%;
     width: 100%;
-    height: 100%;
     box-sizing: border-box;
-    justify-self: stretch;
-    align-self: stretch;
 }

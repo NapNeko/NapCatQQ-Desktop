@@ -419,7 +419,6 @@ function BotListGrid({
                             invalidationReason={napcatBot?.invalidationReason ?? null}
                             napcatBinding={napcatBot?.webui ?? null}
                             snowlumaDaemonState={snowluma.daemonState}
-                            snowlumaInjected={snowlumaBot?.injected ?? false}
                             snowlumaUin={snowlumaBot?.uin ?? null}
                             snowlumaLoginState={snowlumaBot?.loginState ?? null}
                             isBatchMode={batch.isBatchMode}

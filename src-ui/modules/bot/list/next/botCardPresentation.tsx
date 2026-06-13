@@ -55,3 +55,18 @@ export function botAlertBadges(args: {
     }
     return out;
 }
+
+/** 列表卡最多 2 枚徽章：生命周期 + 至多一个告警，避免与 meta 叠字。 */
+export function buildCardBadges(args: {
+    state: BotActorState;
+    pendingRestart: boolean;
+    needsQrLogin: boolean;
+}): BotBadgeSpec[] {
+    const lifecycle = botLifecycleBadge(args.state);
+    const alerts = botAlertBadges({
+        pendingRestart: args.pendingRestart,
+        needsQrLogin: args.needsQrLogin,
+    });
+    if (alerts.length === 0) return [lifecycle];
+    return [lifecycle, alerts[0]!];
+}

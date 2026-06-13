@@ -1,12 +1,11 @@
-// 列表行式 BotCard（new tree）。
+// 列表 BotCard（new tree）。
 //
-// 单卡内部布局：
-//   1. Header 行：[复选框] [Avatar] [身份块（标题 + 徽章 / QQ ID · flavor · 时间 · 状态）] [操作区]
-//   2. Chip 行：对外 / 自启 / 运行位置 / daemon / 注入 / UIN / 启动模式 / WebUI 端口 / rev
-//   3. meta 行：仅运行态提示（登录中、待扫码等）；报错 / 踢线 / last_error 走
-//      列表页 useBotSnapshotAlerts → 全局 InfoBar，不在卡片上重复。
-//
-// 卡片走内容自适应高度：meta 固定槽位内展示中性运行提示，不展示后端错误全文。
+// 单卡布局（BotManageCard）：
+//   1. Header：[复选框] [Avatar] [名称 + QQ · flavor · 相对时间]
+//   2. 状态徽章行（生命周期 + 待重启 / 待扫码）
+//   3. meta：仅补一句副标题（不与徽章重复）；错误走 InfoBar
+//   4. Chip：配置摘要（有则显示，无则不占位）
+//   5. 底栏：工具按钮
 //
 // 操作区按钮按状态收缩：日志 / WebUI 只在 running / starting 时显示（停止状态
 // 这俩按了也没意义）；启停 / 配置永远显示。
@@ -21,10 +20,8 @@ import type { LucideProps } from 'lucide-react';
 import {
     Activity,
     Check,
-    Cpu,
     FileText,
     Globe,
-    Hash,
     LinkIcon,
     Play,
     Power,
@@ -32,9 +29,7 @@ import {
     RefreshCw,
     Settings,
     Square,
-    UserCheck,
     Wifi,
-    Zap,
 } from 'lucide-react';
 import gsap from 'gsap';
 import {
@@ -75,7 +70,7 @@ import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { QrCodeDialog } from './QrCodeDialog';
 import { BotManageCard } from './BotManageCard';
-import { botAlertBadges, botLifecycleBadge } from './botCardPresentation';
+import { buildCardBadges } from './botCardPresentation';
 
 interface BotCardProps {
     bot: BotActorSnapshot;
@@ -85,8 +80,8 @@ interface BotCardProps {
     isOnline?: boolean | null;
     invalidationReason?: NapCatLoginInvalidationReason | null;
     napcatBinding?: NapcatWebuiBinding | null;
+    /** 仅用于 WebUI 可用性判断，不在卡片上展示 */
     snowlumaDaemonState?: DaemonState | null;
-    snowlumaInjected?: boolean;
     snowlumaUin?: string | null;
     snowlumaLoginState?: SnowLumaLoginState | null;
 
@@ -114,7 +109,6 @@ export function BotCard({
     invalidationReason,
     napcatBinding,
     snowlumaDaemonState,
-    snowlumaInjected,
     snowlumaUin,
     snowlumaLoginState,
     isBatchMode,
@@ -135,7 +129,6 @@ export function BotCard({
     //   - 关键状态转移(starting→running 等) → 状态徽章 pop,而不是整张卡 pop
     //     (大卡 pop 会跟 hover lift / shadow 叠加放大成"整张卡突然鼓一下")
     const m = useMotion();
-    const cardRef = useRef<HTMLDivElement | null>(null);
     const badgeRef = useRef<HTMLSpanElement>(null);
     const prevStateRef = useRef<typeof bot.state>(bot.state);
 
@@ -187,25 +180,22 @@ export function BotCard({
         ? formatRelativeTime(bot.last_transition)
         : null;
 
+    const needsQrLogin = hasQrcode && isOnline === false;
+
     const statusLine = computeStatusLine({
         bot,
         isSL,
-        snowlumaDaemonState,
         snowlumaLoginState,
-        snowlumaInjected,
         snowlumaUin,
         isOnline,
-        hasQrcode,
-        webuiAvailable,
+        needsQrLogin,
     });
 
-    const cardBadges = [
-        botLifecycleBadge(bot.state),
-        ...botAlertBadges({
-            pendingRestart: !!bot.pending_restart,
-            needsQrLogin: hasQrcode && isOnline === false,
-        }),
-    ];
+    const cardBadges = buildCardBadges({
+        state: bot.state,
+        pendingRestart: !!bot.pending_restart,
+        needsQrLogin,
+    });
 
     const cardAccent =
         isBotStarting(bot.state) || bot.state === 'repairing' ? 'brand' : 'none';
@@ -244,14 +234,13 @@ export function BotCard({
             />,
         );
     }
-    if (runtimeTarget) {
+    if (runtimeTarget && runtimeTarget !== 'local') {
         chips.push(
             <InfoChip
                 key="runtime"
                 icon={Activity}
                 label="运行"
-                value={runtimeTarget === 'local' ? '本机' : runtimeTarget}
-                muted={runtimeTarget === 'local'}
+                value={runtimeTarget}
             />,
         );
     }
@@ -265,42 +254,8 @@ export function BotCard({
             />,
         );
     }
-    // SnowLuma 运行时 chip 只在 bot active 时显示。stopped 后这些 domain event
-    // 的值残留在 store 里不会主动清掉,但对用户没有参考价值——已经停了就别展示了。
-    if (isSL && snowlumaDaemonState && isActive) {
-        chips.push(
-            <InfoChip
-                key="daemon"
-                icon={Cpu}
-                label="daemon"
-                value={daemonStateLabel(snowlumaDaemonState)}
-                muted={snowlumaDaemonState !== 'ready'}
-                tooltip="SnowLuma daemon 是全局单例，所有 SL Bot 共享"
-            />,
-        );
-    }
-    if (isSL && snowlumaInjected && isActive) {
-        chips.push(
-            <InfoChip
-                key="injected"
-                icon={Zap}
-                iconMotion="pulse"
-                label="注入"
-                value="已就绪"
-            />,
-        );
-    }
-    if (isSL && snowlumaUin && isActive) {
-        chips.push(
-            <InfoChip
-                key="uin"
-                icon={UserCheck}
-                label="UIN"
-                value={snowlumaUin}
-            />,
-        );
-    }
-    if (napcatBinding?.port && isActive) {
+    // 运行期技术 chip 收敛：daemon / 注入 / UIN / rev 不进列表，避免和徽章、meta 叠三层。
+    if (napcatBinding?.port && isBotRunning(bot.state)) {
         chips.push(
             <InfoChip
                 key="webui"
@@ -310,23 +265,11 @@ export function BotCard({
             />,
         );
     }
-    if (bot.revision > 0) {
-        chips.push(
-            <InfoChip
-                key="rev"
-                icon={Hash}
-                label="rev"
-                value={`#${bot.revision}`}
-                muted
-                tooltip={`状态机第 ${bot.revision} 次状态变更 · token 代数 ${bot.token_generation}`}
-            />,
-        );
-    }
+    const visibleChips = chips.slice(0, 4);
 
     return (
         <>
-            <div ref={cardRef}>
-                <BotManageCard
+            <BotManageCard
                     badges={cardBadges}
                     selected={isSelected}
                     batchMode={isBatchMode}
@@ -393,19 +336,15 @@ export function BotCard({
                         statusLine ? (
                             <p
                                 className={cn(
-                                    'flex min-w-0 items-center gap-1 truncate text-xs',
+                                    'flex min-w-0 items-center gap-1 truncate text-xs leading-snug',
                                     statusLineTextClass(statusLine.tone),
                                 )}
                             >
                                 <span className="truncate">{statusLine.text}</span>
                             </p>
-                        ) : (
-                            <p className="truncate text-xs text-transparent select-none" aria-hidden>
-                                —
-                            </p>
-                        )
+                        ) : null
                     }
-                    chips={chips.length > 0 ? chips : undefined}
+                    chips={visibleChips.length > 0 ? visibleChips : undefined}
                     footerActions={
                         isBatchMode ? (
                             <span className="text-2xs text-text-tertiary">点击卡片选择</span>
@@ -528,7 +467,6 @@ export function BotCard({
                         )
                     }
                 />
-            </div>
 
             <QrCodeDialog
                 open={qrOpen}
@@ -573,7 +511,7 @@ function BotAvatar({
     const palette = pickAvatarPalette(qqid);
 
     return (
-        <div className="relative h-12 w-12 shrink-0">
+        <div className="relative h-11 w-11 shrink-0">
             <div
                 className={cn(
                     'h-full w-full overflow-hidden rounded-md ring-1 ring-border-subtle',
@@ -630,80 +568,44 @@ interface StatusLine {
     tone: 'success' | 'warning' | 'brand' | 'neutral';
 }
 
+/// 副标题只补徽章说不清的一点，不与生命周期徽章重复。
 function computeStatusLine(args: {
     bot: BotActorSnapshot;
     isSL: boolean;
-    snowlumaDaemonState: DaemonState | null | undefined;
     snowlumaLoginState: SnowLumaLoginState | null | undefined;
-    snowlumaInjected: boolean | undefined;
     snowlumaUin: string | null | undefined;
     isOnline: boolean | null | undefined;
-    hasQrcode: boolean;
-    webuiAvailable: boolean;
+    needsQrLogin: boolean;
 }): StatusLine | null {
-    const {
-        bot,
-        isSL,
-        snowlumaDaemonState,
-        snowlumaLoginState,
-        snowlumaInjected,
-        snowlumaUin,
-        isOnline,
-        hasQrcode,
-        webuiAvailable,
-    } = args;
+    const { bot, isSL, snowlumaLoginState, snowlumaUin, isOnline, needsQrLogin } =
+        args;
 
-    // 崩溃 / last_error / 踢线 / daemon 崩溃：底栏生命周期徽章 + 全局 InfoBar，
-    // meta 不再重复报错文案。
     if (
         bot.state === 'crashed' ||
         bot.state === 'stopped' ||
-        (bot.last_error && bot.last_error.trim().length > 0)
+        bot.state === 'starting' ||
+        bot.state === 'stopping' ||
+        bot.state === 'repairing' ||
+        (bot.last_error && bot.last_error.trim().length > 0) ||
+        needsQrLogin
     ) {
         return null;
     }
 
     if (isSL) {
-        if (snowlumaDaemonState === 'starting') {
-            return { text: 'daemon 启动中', tone: 'brand' };
-        }
-        if (snowlumaLoginState === 'logged_in') {
-            return {
-                text: snowlumaUin ? `已登录 · ${snowlumaUin}` : '已登录',
-                tone: 'success',
-            };
-        }
-        if (snowlumaLoginState === 'waiting_for_qr_scan') {
-            return { text: '等待扫码 — 打开 WebUI', tone: 'warning' };
-        }
-        if (snowlumaLoginState === 'starting') {
-            return { text: '正在连接 QQ', tone: 'brand' };
+        if (snowlumaLoginState === 'logged_in' && snowlumaUin) {
+            return { text: `账号 ${snowlumaUin}`, tone: 'neutral' };
         }
         if (snowlumaLoginState === 'disconnected') {
-            return { text: '已断开 — 重启可恢复', tone: 'neutral' };
+            return { text: '连接已断开', tone: 'neutral' };
         }
-        if (snowlumaInjected) {
-            return { text: '已注入，等待登录', tone: 'neutral' };
-        }
-    } else {
-        if (isOnline === true) {
-            return { text: 'Bot 在线 · 接收 OneBot 事件', tone: 'success' };
-        }
-        if (hasQrcode) {
-            return { text: '新二维码，点 QR 扫码', tone: 'warning' };
-        }
-        if (isOnline === false) {
-            return { text: 'Bot 已离线', tone: 'neutral' };
-        }
-        if ((isOnline === null || isOnline === undefined) && webuiAvailable) {
-            return { text: '等待登录态首次推送', tone: 'neutral' };
-        }
+        return null;
     }
 
-    if (bot.state === 'starting') return { text: '正在启动…', tone: 'brand' };
-    if (bot.state === 'stopping') return { text: '正在停止…', tone: 'warning' };
-    if (bot.state === 'repairing') return { text: '正在修复…', tone: 'warning' };
-    if (bot.state === 'running') return { text: '运行中', tone: 'success' };
+    if (bot.state === 'running' && isOnline === false) {
+        return { text: 'QQ 未登录', tone: 'warning' };
+    }
+
     return null;
 }
 
@@ -764,7 +666,8 @@ function InfoChip({
     const node = (
         <span
             className={cn(
-                'inline-flex items-center gap-1 rounded-pill bg-inset px-2 py-0.5 text-2xs',
+                'inline-flex max-w-full items-center gap-1 rounded-pill border border-border-subtle/80',
+                'bg-inset/80 px-2 py-0.5 text-2xs',
                 muted ? 'text-text-tertiary' : 'text-text-secondary',
             )}
         >
@@ -940,23 +843,6 @@ function formatTimeUnit(unit: BotConfig['bot']['autoRestartSchedule']['time_unit
             return '年';
         default:
             return String(unit);
-    }
-}
-
-function daemonStateLabel(state: DaemonState): string {
-    switch (state) {
-        case 'ready':
-            return '就绪';
-        case 'starting':
-            return '启动中';
-        case 'stopping':
-            return '停止中';
-        case 'crashed':
-            return '已崩溃';
-        case 'stopped':
-            return '已停止';
-        default:
-            return String(state);
     }
 }
 

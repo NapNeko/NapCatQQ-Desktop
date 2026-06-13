@@ -1,4 +1,4 @@
-// Bot 列表卡壳：与 ComponentManageCard 同层次（surface + 底栏徽标 + 操作区）。
+// Bot 列表卡壳：与 ComponentManageCard 同层次（surface + 状态 + 底栏操作）。
 
 import type { ReactNode, RefObject } from 'react';
 import { cn } from '../../../../shared/utils/cn';
@@ -6,9 +6,9 @@ import { Badge } from '../../../../shared/ui';
 import type { BotBadgeSpec } from './botCardPresentation';
 
 const SHELL =
-    'group relative isolate flex h-full w-full min-w-0 flex-col overflow-hidden ' +
+    'group relative isolate flex w-full min-w-0 flex-col overflow-hidden ' +
     'rounded-md border border-border-subtle bg-surface shadow-card ' +
-    'transition-[box-shadow] duration-200 hover:shadow-popover';
+    'transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-popover';
 
 export function BotManageCard({
     badges,
@@ -27,7 +27,7 @@ export function BotManageCard({
     selected?: boolean;
     batchMode?: boolean;
     accent?: 'brand' | 'danger' | 'none';
-    /** 远端主机等信息较少的卡：不保留 meta/chips 固定槽位 */
+    /** 远端主机等信息较少的卡：单行 meta，无 chip 区 */
     compact?: boolean;
     onRowClick?: () => void;
     header: ReactNode;
@@ -36,6 +36,9 @@ export function BotManageCard({
     footerActions: ReactNode;
     lifecycleBadgeRef?: RefObject<HTMLSpanElement>;
 }) {
+    const showMeta = meta != null && meta !== false;
+    const hasChips = chips != null && chips !== false;
+
     return (
         <article
             role={batchMode ? 'button' : undefined}
@@ -43,63 +46,68 @@ export function BotManageCard({
             className={cn(
                 SHELL,
                 batchMode && 'cursor-pointer',
-                selected && 'ring-2 ring-brand bg-brand-soft/25',
-                accent === 'brand' && 'ring-1 ring-inset ring-brand/20',
+                selected && 'border-brand/40 ring-2 ring-brand/35 bg-brand-soft/20',
+                accent === 'brand' && 'ring-1 ring-inset ring-brand/25',
                 accent === 'danger' && 'ring-1 ring-inset ring-danger/25',
             )}
         >
-            {compact ? (
-                <div className="flex min-h-0 flex-1 flex-col gap-1 px-3.5 pb-1.5 pt-2.5">
-                    <div className="flex items-start gap-3">{header}</div>
-                    <div className="min-w-0">{meta}</div>
-                    {chips ? (
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
-                            {chips}
-                        </div>
-                    ) : null}
-                </div>
-            ) : (
-                <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pb-2 pt-3">
-                    <div className="flex items-start gap-3">{header}</div>
-                    <div className="flex min-h-[2.25rem] min-w-0 flex-col justify-end">
-                        {meta}
+            {accent === 'brand' ? (
+                <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 w-0.5 bg-brand"
+                />
+            ) : null}
+            {accent === 'danger' ? (
+                <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 w-0.5 bg-danger"
+                />
+            ) : null}
+
+            <div
+                className={cn(
+                    'flex flex-col gap-2',
+                    compact ? 'px-3.5 pb-1.5 pt-2.5' : 'px-3.5 pb-2.5 pt-3',
+                )}
+            >
+                <div className="flex items-start gap-3">{header}</div>
+
+                {badges.length > 0 ? (
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        {badges.map((b, i) => (
+                            <Badge
+                                key={`${b.label}-${i}`}
+                                ref={i === 0 ? lifecycleBadgeRef : undefined}
+                                tone={b.tone}
+                                appearance="soft"
+                                dot={b.dot}
+                                className="shrink-0"
+                            >
+                                {b.label}
+                            </Badge>
+                        ))}
                     </div>
-                    {chips ? (
-                        <div className="flex min-h-[3.25rem] max-h-[3.25rem] flex-wrap content-end items-end gap-1.5 overflow-hidden">
-                            {chips}
-                        </div>
-                    ) : (
-                        <div className="min-h-[3.25rem] shrink-0" aria-hidden />
-                    )}
-                </div>
-            )}
+                ) : null}
+
+                {showMeta ? (
+                    <div className="min-w-0">{meta}</div>
+                ) : null}
+
+                {hasChips ? (
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        {chips}
+                    </div>
+                ) : null}
+            </div>
 
             <footer
                 className={cn(
-                    'flex shrink-0 items-center justify-between gap-2 border-t border-border-subtle bg-inset/40 px-3',
-                    compact ? 'min-h-[2.5rem] py-1.5' : 'min-h-[2.75rem] py-2',
+                    'flex shrink-0 items-center justify-end gap-1 border-t border-border-subtle bg-inset/35',
+                    compact ? 'min-h-[2.5rem] px-3 py-1.5' : 'min-h-[2.625rem] px-2.5 py-1.5',
                 )}
+                onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                    {badges.map((b, i) => (
-                        <Badge
-                            key={b.label}
-                            ref={i === 0 ? lifecycleBadgeRef : undefined}
-                            tone={b.tone}
-                            appearance="soft"
-                            dot={b.dot}
-                            className="shrink-0"
-                        >
-                            {b.label}
-                        </Badge>
-                    ))}
-                </div>
-                <div
-                    className="flex shrink-0 items-center gap-1"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {footerActions}
-                </div>
+                {footerActions}
             </footer>
         </article>
     );
