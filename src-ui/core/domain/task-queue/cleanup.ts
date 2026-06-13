@@ -10,6 +10,12 @@ export const TASK_QUEUE_CLEANUP_SLIDER_STEP = 1_000;
 /** 默认：开启自动清理，保留 10 分钟（与历史 Docker 部署 / 安装 store 一致）。 */
 export const DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS = 600_000;
 
+/**
+ * 关闭「任务队列自动清理」时，终态任务在 WebView2 堆中可无限增长；
+ * 硬顶只删终态条目，不碰 pending/running。
+ */
+export const TASK_QUEUE_TERMINAL_RETENTION_MAX_WHEN_AUTO_OFF = 200;
+
 export type TaskQueueCleanupPrefs = {
     taskQueueCleanupEnabled: boolean;
     taskQueueCleanupLingerMs: number;
@@ -114,4 +120,40 @@ export function taskQueueTerminalLingerMs(
 ): number | null {
     if (!prefs.taskQueueCleanupEnabled) return null;
     return clampTaskQueueCleanupSliderMs(prefs.taskQueueCleanupLingerMs);
+}
+
+export type TrimTerminalTasksResult<T> = {
+    tasks: Record<string, T>;
+    removedIds: string[];
+};
+
+/** 终态条数超过 maxTerminal 时，按 taskId 字典序删最旧（近似 FIFO）。 */
+export function trimTerminalTasksInRecord<T>(
+    tasks: Record<string, T>,
+    isTerminal: (task: T) => boolean,
+    maxTerminal: number,
+): TrimTerminalTasksResult<T> {
+    if (maxTerminal <= 0) {
+        const removedIds = Object.keys(tasks).filter((id) =>
+            isTerminal(tasks[id]),
+        );
+        if (removedIds.length === 0) {
+            return { tasks, removedIds: [] };
+        }
+        const next = { ...tasks };
+        for (const id of removedIds) delete next[id];
+        return { tasks: next, removedIds };
+    }
+
+    const terminalIds = Object.keys(tasks)
+        .filter((id) => isTerminal(tasks[id]))
+        .sort();
+    const excess = terminalIds.length - maxTerminal;
+    if (excess <= 0) {
+        return { tasks, removedIds: [] };
+    }
+    const removedIds = terminalIds.slice(0, excess);
+    const next = { ...tasks };
+    for (const id of removedIds) delete next[id];
+    return { tasks: next, removedIds };
 }

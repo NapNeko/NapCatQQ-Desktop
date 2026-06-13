@@ -2,7 +2,10 @@
 
 import {
     shouldScheduleTaskQueueTerminalCleanup,
+    TASK_QUEUE_TERMINAL_RETENTION_MAX_WHEN_AUTO_OFF,
     taskQueueTerminalLingerMs,
+    trimTerminalTasksInRecord,
+    type TrimTerminalTasksResult,
 } from '../../core/domain/task-queue/cleanup';
 import { taskQueueCleanupPrefsStore } from './taskQueueCleanupPrefsStore';
 
@@ -25,4 +28,18 @@ export function scheduleTaskQueueTerminalCleanup(
         onExpire(taskId);
     }, ms);
     lingerTimers.set(taskId, timer);
+}
+
+export function trimTerminalTasksWhenAutoCleanupOff<T>(
+    tasks: Record<string, T>,
+    isTerminal: (task: T) => boolean,
+): TrimTerminalTasksResult<T> {
+    if (getTaskQueueTerminalLingerMs() !== null) {
+        return { tasks, removedIds: [] };
+    }
+    return trimTerminalTasksInRecord(
+        tasks,
+        isTerminal,
+        TASK_QUEUE_TERMINAL_RETENTION_MAX_WHEN_AUTO_OFF,
+    );
 }

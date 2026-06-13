@@ -6,12 +6,19 @@ import {
     taskQueueCleanupFromAppSettings,
     type TaskQueueCleanupPrefs,
 } from '../../core/domain/task-queue/cleanup';
+import { trimAllProgressStoresWhenAutoCleanupOff } from './trimProgressStoresWhenAutoCleanupOff';
 
 let prefs: TaskQueueCleanupPrefs = { ...DEFAULT_TASK_QUEUE_CLEANUP };
 const listeners = new Set<() => void>();
 
 function notify() {
     for (const fn of listeners) fn();
+}
+
+function afterPrefsApplied(): void {
+    if (!prefs.taskQueueCleanupEnabled) {
+        trimAllProgressStoresWhenAutoCleanupOff();
+    }
 }
 
 export const taskQueueCleanupPrefsStore = {
@@ -27,6 +34,7 @@ export const taskQueueCleanupPrefsStore = {
         taskQueueCleanupLingerMs?: bigint | number;
     }): void {
         prefs = taskQueueCleanupFromAppSettings(slice);
+        afterPrefsApplied();
         notify();
     },
     applyPrefs(next: TaskQueueCleanupPrefs): void {
@@ -34,6 +42,7 @@ export const taskQueueCleanupPrefsStore = {
             taskQueueCleanupEnabled: next.taskQueueCleanupEnabled,
             taskQueueCleanupLingerMs: next.taskQueueCleanupLingerMs,
         };
+        afterPrefsApplied();
         notify();
     },
     _reset(): void {

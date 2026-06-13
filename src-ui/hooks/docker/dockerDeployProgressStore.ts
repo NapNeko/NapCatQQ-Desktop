@@ -16,7 +16,7 @@ import {
     type ActionProgressView,
 } from '../../core/domain/components/progress';
 import type { ProgressEvent } from '../../core/ipc/types';
-import { scheduleTaskQueueTerminalCleanup } from '../task-queue/taskQueueTerminalLinger';
+import { scheduleTaskQueueTerminalCleanup, trimTerminalTasksWhenAutoCleanupOff } from '../task-queue/taskQueueTerminalLinger';
 
 export interface DockerDeployProgressStoreState {
     tasks: Record<string, ActionProgressView>;
@@ -30,10 +30,41 @@ const store = createStore<DockerDeployProgressStoreState>(initialState);
 
 const lingerTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+function isTerminalStatus(status: ActionProgressView['status']): boolean {
+    return status === 'success' || status === 'failed' || status === 'cancelled';
+}
+
+function applyTrimWhenAutoCleanupOff(): void {
+    const { tasks: trimmed, removedIds } = trimTerminalTasksWhenAutoCleanupOff(
+        store.getSnapshot().tasks,
+        (t) => isTerminalStatus(t.status),
+    );
+    if (removedIds.length === 0) return;
+    for (const id of removedIds) {
+        if (lingerTimers.has(id)) {
+            clearTimeout(lingerTimers.get(id)!);
+            lingerTimers.delete(id);
+        }
+    }
+    store.setState({ tasks: trimmed });
+}
+
+function onDeployTerminal(taskId: string): void {
+    scheduleTaskQueueTerminalCleanup(taskId, lingerTimers, (id) => {
+        const s = store.getSnapshot();
+        const cleaned = { ...s.tasks };
+        delete cleaned[id];
+        store.setState({ tasks: cleaned });
+    });
+    applyTrimWhenAutoCleanupOff();
+}
+
 export const dockerDeployProgressStore = {
     getSnapshot: store.getSnapshot,
 
     subscribe: store.subscribe,
+
+    trimTerminalTasksWhenAutoCleanupOff: applyTrimWhenAutoCleanupOff,
 
     // 部署开始前调用，初始化该 task 的进度为 pending 状态。
     // 若同一 taskId 已存在（理论上不会，但防御一下），直接覆盖。
@@ -59,17 +90,9 @@ export const dockerDeployProgressStore = {
             tasks: { ...current.tasks, [taskId]: next },
         });
 
-        const isTerminal =
-            next.status === 'success' ||
-            next.status === 'failed' ||
-            next.status === 'cancelled';
+        const isTerminal = isTerminalStatus(next.status);
         if (isTerminal) {
-            scheduleTaskQueueTerminalCleanup(taskId, lingerTimers, (id) => {
-                const s = store.getSnapshot();
-                const cleaned = { ...s.tasks };
-                delete cleaned[id];
-                store.setState({ tasks: cleaned });
-            });
+            onDeployTerminal(taskId);
         }
     },
 

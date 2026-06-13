@@ -20,7 +20,7 @@ import {
     type ActionProgressView,
 } from '../../core/domain/components/progress';
 import type { ComponentId, ProgressEvent } from '../../core/ipc/types';
-import { scheduleTaskQueueTerminalCleanup } from '../task-queue/taskQueueTerminalLinger';
+import { scheduleTaskQueueTerminalCleanup, trimTerminalTasksWhenAutoCleanupOff } from '../task-queue/taskQueueTerminalLinger';
 
 export interface ComponentActionStoreState {
     /** task_id → 进度视图 */
@@ -87,11 +87,47 @@ function scheduleTerminalCleanup(taskId: string): void {
     scheduleTaskQueueTerminalCleanup(taskId, lingerTimers, clearActiveForTask);
 }
 
+function maybeTrimTerminalTasksWhenAutoOff(): void {
+    const current = store.getSnapshot();
+    const { tasks: trimmedTasks, removedIds } = trimTerminalTasksWhenAutoCleanupOff(
+        current.tasks,
+        isTerminal,
+    );
+    if (removedIds.length === 0) return;
+    for (const id of removedIds) {
+        if (lingerTimers.has(id)) {
+            clearTimeout(lingerTimers.get(id)!);
+            lingerTimers.delete(id);
+        }
+    }
+    const cleanedTargets = { ...current.taskTargets };
+    const cleanedActive = { ...current.activeByTarget };
+    for (const id of removedIds) {
+        delete cleanedTargets[id];
+        for (const [k, v] of Object.entries(cleanedActive)) {
+            if (v === id) delete cleanedActive[k];
+        }
+    }
+    store.setState({
+        ...current,
+        tasks: trimmedTasks,
+        taskTargets: cleanedTargets,
+        activeByTarget: cleanedActive,
+    });
+}
+
+function onTaskReachedTerminal(taskId: string): void {
+    scheduleTerminalCleanup(taskId);
+    maybeTrimTerminalTasksWhenAutoOff();
+}
+
 export const componentActionStore = {
     /** 当前快照（同步）。useSyncExternalStore 用。 */
     getSnapshot: store.getSnapshot,
 
     subscribe: store.subscribe,
+
+    trimTerminalTasksWhenAutoCleanupOff: maybeTrimTerminalTasksWhenAutoOff,
 
     /**
      * 把 task 绑定到组件主机目标。ProgressEvent 可能比 runComponentAction 返回更早到，
@@ -113,7 +149,7 @@ export const componentActionStore = {
             activeByTarget: { ...current.activeByTarget, [key]: taskId },
             taskTargets: { ...current.taskTargets, [taskId]: { componentId, hostId } },
         });
-        if (isTerminal(progress)) scheduleTerminalCleanup(taskId);
+        if (isTerminal(progress)) onTaskReachedTerminal(taskId);
     },
 
     /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
@@ -163,7 +199,7 @@ export const componentActionStore = {
             ...current,
             tasks: { ...current.tasks, [taskId]: next },
         });
-        scheduleTerminalCleanup(taskId);
+        onTaskReachedTerminal(taskId);
     },
 
     /**
@@ -184,7 +220,7 @@ export const componentActionStore = {
         });
 
         const isNextTerminal = isTerminal(next);
-        if (isNextTerminal) scheduleTerminalCleanup(taskId);
+        if (isNextTerminal) onTaskReachedTerminal(taskId);
     },
 
     /** 测试 / dev 重置用。生产代码不要碰。 */
