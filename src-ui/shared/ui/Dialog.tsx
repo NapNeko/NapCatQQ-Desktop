@@ -310,6 +310,13 @@ function useDialogContentHeight(
 
         const cap = contentHeightCap(size);
 
+        if (!open) {
+            tweenRef.current?.kill();
+            tweenRef.current = null;
+            // 关闭阶段保持 clip 当前高度，勿改成 auto，否则与 contentExit 缩放叠在一起会上下「挤压」。
+            return;
+        }
+
         if (size === 'taskQueue') {
             tweenRef.current?.kill();
             clip.style.height = '';
@@ -331,7 +338,7 @@ function useDialogContentHeight(
         inner.style.overflowY = scrollable ? 'auto' : '';
         inner.style.maxHeight = scrollable ? `${cap}px` : '';
 
-        if (!open || !m.enabled) {
+        if (!m.enabled) {
             tweenRef.current?.kill();
             clip.style.height = scrollable ? `${cap}px` : 'auto';
             primedRef.current = false;
@@ -373,6 +380,12 @@ function useDialogContentHeight(
             return () => window.clearTimeout(t);
         }
         prevOpenRef.current = open;
+        if (!open) {
+            primedRef.current = false;
+            enterHoldRef.current = false;
+            tweenRef.current?.kill();
+            tweenRef.current = null;
+        }
         return undefined;
     }, [open]);
 
