@@ -1,8 +1,7 @@
 // Tauri 事件流订阅服务。
 //
 // 唯一持有所有 Tauri event name 字符串的位置。
-// 上层 hooks 通过 `eventStreamService.subscribe(callback)` 拿到一份合并流，
-// 不需要关心是 Tauri 真事件还是浏览器 mock。
+// 业务侧应经 `domain-event-hub` / `useDomainEvents` 订阅，勿多处直接 subscribe（避免 22×N listen）。
 
 import { isTauri, listen } from '../ipc/transport';
 import type { DomainEvent } from '../ipc/types';

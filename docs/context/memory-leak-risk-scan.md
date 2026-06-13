@@ -39,9 +39,9 @@ flowchart TB
     PROC[processes HashMap]
   end
   subgraph fe [WebView 前端]
-    ESS[eventStreamService 22x listen]
+    ESS[eventStreamService 1x listen via domain-event-hub]
     STORES[module stores tasks/linger]
-    HOOKS[useDomainEvents 单例订阅/App级]
+    HOOKS[useDomainEvents -> hub]
   end
   BM --> EB
   SP1 --> EB
@@ -269,9 +269,9 @@ flowchart TB
 
 ## 7. 优先级修复清单
 
-1. **P1** `ServerManager::delete_server` 同步清理 `connect_locks`、`auto_connect_cooldown_until`；`ensure_connected` 入口 prune 过期冷却。**已落地**（2026-06-13，plan `memory-leak-small-fixes` Phase A）。独立改 server id API 不存在，未臆造迁移。
+1. **P1** `ServerManager::delete_server` 同步清理 `connect_locks`、`auto_connect_cooldown_until`；`ensure_connected` 入口 prune 过期冷却。**已落地**（2026-06-13，`a8c1cd6`）。独立改 server id API 不存在，未臆造迁移。
 2. **P1/P2** `BroadcastEventBus` 容量与日志旁路。**已做**：默认 1024 + Lagged `warn`；旁路仍待产品设计。
-3. **P2** 「任务队列不自动清理」下 store 终态上限。**已落地**（2026-06-13，plan `memory-leak-small-fixes` Phase B）：硬顶 200 + 关闭自动清理时全量 trim。
+3. **P2** 「任务队列不自动清理」下 store 终态上限。**已落地**（2026-06-13，`22b71b0`）：硬顶 200 + 关闭自动清理时全量 trim。
 4. **P2** 远端 SSH：删 server / 长时间 Disconnected 时显式 `disconnect_cached_host` 策略复核。（未做，策略项）
 
 ---
