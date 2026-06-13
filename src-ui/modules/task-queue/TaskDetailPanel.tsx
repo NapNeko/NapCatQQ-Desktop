@@ -42,7 +42,7 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
         );
     }
     return (
-        <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-3 py-3 font-sans text-[12px] leading-[1.55] antialiased">
+        <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-3 py-3 font-mono text-[12px] leading-[1.55] antialiased">
             {progress.logs.map((log, idx) => {
                 const time = new Date(log.timestamp_ms).toLocaleTimeString('zh-CN', {
                     hour: '2-digit',

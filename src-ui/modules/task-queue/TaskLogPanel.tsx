@@ -69,7 +69,7 @@ export const TaskLogPanel: React.FC<TaskLogPanelProps> = ({
 
     return (
         <div className={boxClass}>
-            <div className="h-full overflow-y-auto p-3 font-sans text-[12px] leading-[1.55] antialiased">
+            <div className="h-full overflow-y-auto p-3 font-mono text-[12px] leading-[1.55] antialiased">
                 {lines.map((line, i) => {
                     const p = parseDesktopLogLine(line);
                     const timeOnly = p.timestamp ? p.timestamp.split(' ')[1] || p.timestamp : '';

@@ -287,7 +287,6 @@ const LogViewport = forwardRef<
             aria-label="实例运行日志"
             aria-live="polite"
             className="min-h-0 flex-1 overflow-auto bg-inset font-mono text-[12px] leading-[18px]"
-            style={{ fontFamily: 'var(--font-mono)' }}
         >
             <div className="py-1">
                 {entries.map((e) => (

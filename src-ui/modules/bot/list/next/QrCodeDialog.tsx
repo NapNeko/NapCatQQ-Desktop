@@ -193,9 +193,7 @@ function ElapsedHint({ seconds }: { seconds: number }) {
     // 60s 内只显示秒数；超过 60s 拼成"分:秒"，避免出现"已等待 137s"这种
     // 一眼读不出来的数字。
     //
-    // 不用 font-mono：Mono 字体只覆盖 latin / 数字字形，CJK 部分会 fallback
-    // 到系统等宽 CJK，Windows 上常见命中点阵 SimHei，整串就花了。数字对齐
-    // 已经在父级用 tabular-nums 解决，足够稳。
+    // 等待文案用正文栈；数字对齐靠 tabular-nums（见 tokens --font-mono）。
     const text =
         seconds < 60
             ? `已等待 ${seconds}s`

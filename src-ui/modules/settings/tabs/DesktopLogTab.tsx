@@ -43,9 +43,8 @@ export function DesktopLogTab({ emptyKind, entries, fontSize, viewportRef, error
                     role="log"
                     aria-live="off"
                     aria-label="桌面端调试日志"
-                    className="scrollbar-hide min-h-0 flex-1 overflow-auto bg-inset/30 px-4 py-4"
+                    className="scrollbar-hide min-h-0 flex-1 overflow-auto bg-inset/30 px-4 py-4 font-mono"
                     style={{
-                        fontFamily: 'var(--font-mono)',
                         fontSize: `${fontSize}px`,
                         lineHeight: `${rowPx}px`,
                     }}
