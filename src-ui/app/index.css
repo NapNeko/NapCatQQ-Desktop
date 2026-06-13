@@ -64,6 +64,7 @@
     --font-display: var(--font-display);
     --font-sans: var(--font-body);
     --font-mono: var(--font-mono);
+    --font-mono-strict: var(--font-mono-strict);
 
     /* font size: text-* utilities */
     --text-2xs: var(--text-2xs);
@@ -142,12 +143,30 @@ body {
     font-feature-settings: "cv11", "ss01", "ss03";
 }
 
-/* mono 字体保证连字 + 等宽数字 */
+button,
+input,
+textarea,
+select,
+optgroup {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+/* UI 等宽：拉丁 JetBrains + tabular-nums；CJK 走 --font-mono 栈内雅黑/苹方 */
 code,
 kbd,
 pre,
 samp,
 .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "calt", "liga";
+    font-variant-numeric: tabular-nums;
+}
+
+/* 纯 ASCII 片段（JSON/路径），可接受泛族 monospace 收尾 */
+.font-mono-strict {
+    font-family: var(--font-mono-strict);
     font-feature-settings: "calt", "liga";
     font-variant-numeric: tabular-nums;
 }

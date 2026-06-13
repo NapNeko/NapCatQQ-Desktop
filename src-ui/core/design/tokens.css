@@ -148,17 +148,17 @@
    --qr-foreground: var(--neutral-900);
    --qr-background: var(--surface-elevated);
 
-   /* type scale: 12 / 14 / 16 / 20 / 24 / 32 (Material 桌面适配) */
-   /* Display：标题、Hello!! 大字、卡片标题。圆润几何，比 Inter 友好。
-       自托管：@fontsource-variable/plus-jakarta-sans。
-       CJK fallback：用户装了华为 / 小米字体优先用，否则雅黑。 */
-   --font-display: "Plus Jakarta Sans Variable", "HarmonyOS Sans SC", "MiSans VF", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+   /* typography — 银弹约定（未发布可一次定死，勿再单页 font-sans 补丁）：
+      1) 西文自托管（fonts.css）不含 CJK，unicode-range 仅 Latin 等。
+      2) 所有缺字回退只走 --font-cjk-sans，禁止落到泛族 monospace（Win 会宋体/点阵黑体）。
+      3) --font-mono 给 UI/日志/混排；--font-mono-strict 仅纯 ASCII 代码块。 */
+   --font-cjk-sans: "HarmonyOS Sans SC", "MiSans VF", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei";
 
-   /* Body：正文、按钮、菜单、所有非显眼大字。Inter 工业事实标准。 */
-   --font-body: "Inter Variable", "HarmonyOS Sans SC", "MiSans VF", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+   --font-display: "Plus Jakarta Sans Variable", var(--font-cjk-sans), system-ui, sans-serif;
+   --font-body: "Inter Variable", var(--font-cjk-sans), system-ui, sans-serif;
 
-   /* Mono：QID、端口、时间戳、版本号、错误日志。等宽科技感。 */
-   --font-mono: "JetBrains Mono Variable", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+   --font-mono: "JetBrains Mono Variable", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", var(--font-cjk-sans), system-ui, sans-serif;
+   --font-mono-strict: "JetBrains Mono Variable", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
 
    --text-2xs: 11px;
    --text-xs: 12px;
