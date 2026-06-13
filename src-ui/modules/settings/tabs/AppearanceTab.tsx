@@ -81,7 +81,7 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
 
                 <FieldRow
                     label="动画速度"
-                    description="0.5x 更克制；1.5x 更利落"
+                    description="1.00× 为默认体感；更快可拉到 3.00×"
                     isLast
                 >
                     <MotionSpeedSlider

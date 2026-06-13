@@ -208,10 +208,16 @@ export const motionPresets: Record<MotionLevel, PresetEntry> = {
     },
 };
 
-/// 速度滑块上下界。1.0 = 默认,>1 越快,<1 越慢。
+/// 速度滑块上下界。`MOTION_SPEED_BASELINE`（0.5）= 体感上的 1× 标准速度。
+export const MOTION_SPEED_BASELINE = 0.5;
 export const MOTION_SPEED_MIN = 0.5;
 export const MOTION_SPEED_MAX = 1.5;
-export const MOTION_SPEED_DEFAULT = 1.0;
+export const MOTION_SPEED_DEFAULT = MOTION_SPEED_BASELINE;
+
+/** 设置页展示倍率：默认档显示 1.00×，更快档 >1。 */
+export function motionSpeedDisplayMultiplier(speed: number): number {
+    return clampSpeed(speed) / MOTION_SPEED_BASELINE;
+}
 
 export function clampSpeed(speed: number): number {
     if (!Number.isFinite(speed)) return MOTION_SPEED_DEFAULT;

@@ -19,6 +19,7 @@ import {
     MOTION_SPEED_DEFAULT,
     MOTION_SPEED_MAX,
     MOTION_SPEED_MIN,
+    motionSpeedDisplayMultiplier,
 } from '../../core/design/motion';
 import {
     clampPerformanceMonitorIntervalMs,
@@ -411,7 +412,7 @@ export function MotionLevelSegment({
     );
 }
 
-/// 动画速度滑块。范围 [0.5, 1.5],步长 0.05,显示当前倍率。
+/// 动画速度滑块。内部 [0.5, 1.5]；展示倍率以 0.5 为 1.00× 基准。
 /// 不引入 Radix Slider(避免增加依赖),用原生 input[type=range] + Tailwind 美化。
 export function MotionSpeedSlider({
     value,
@@ -439,7 +440,7 @@ export function MotionSpeedSlider({
                 }
             />
             <span className="w-10 text-right font-mono text-[11.5px] tabular-nums text-text-tertiary">
-                {value.toFixed(2)}x
+                {motionSpeedDisplayMultiplier(value).toFixed(2)}x
             </span>
             <button
                 type="button"
