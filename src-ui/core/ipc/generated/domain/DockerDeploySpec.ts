@@ -3,11 +3,7 @@ import type { DockerFlavor } from "./DockerFlavor";
 import type { PortMapping } from "./PortMapping";
 
 /**
- * 一键部署 NapCat / SnowLuma 容器的输入参数。
- *
- * 前端填好端口(给默认值即可)和容器名提交,后端据此渲染 compose.yml 并起容器。
- * 凭据(WebUI token / VNC 密码)不在这里——由后端部署时随机生成,避免前端硬编码
- * 或明文回传。
+ * Bot 启动 / compose 渲染用的完整部署参数(容器名、端口、可选 QQ)。
  */
 export type DockerDeploySpec = { 
 /**
