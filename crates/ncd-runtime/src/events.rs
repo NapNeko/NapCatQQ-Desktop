@@ -545,7 +545,14 @@ impl EventSubscription {
             match self.receiver.recv().await {
                 Ok(event) if self.filter.matches(&event) => return Some(event),
                 Ok(_) => continue,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                    tracing::warn!(
+                        target: "ncd::event_bus",
+                        skipped,
+                        "broadcast receiver lagged; events were dropped"
+                    );
+                    continue;
+                }
                 Err(broadcast::error::RecvError::Closed) => return None,
             }
         }
@@ -556,6 +563,9 @@ pub trait EventBus: Send + Sync {
     fn publish(&self, event: DomainEvent);
     fn subscribe(&self, filter: EventFilter) -> EventSubscription;
 }
+
+/// 默认 broadcast 槽位。128 在日志洪峰时易 Lagged；1024 仍是有界背压。
+pub const DEFAULT_BROADCAST_CAPACITY: usize = 1024;
 
 #[derive(Debug, Clone)]
 pub struct BroadcastEventBus {
@@ -572,7 +582,7 @@ impl BroadcastEventBus {
 
 impl Default for BroadcastEventBus {
     fn default() -> Self {
-        Self::new(128)
+        Self::new(DEFAULT_BROADCAST_CAPACITY)
     }
 }
 
