@@ -554,7 +554,8 @@ impl ServerManager {
             profile.port,
             credentials,
             self.host_key_policy(),
-        );
+        )
+        .with_keepalive(Some(std::time::Duration::from_secs(15)));
 
         let host = RemoteLinuxHost::connect(&profile.id, config)
             .await
@@ -737,6 +738,19 @@ impl ServerManager {
     /// 获取已缓存的 Host 连接（test_connection 成功后可用）。
     pub async fn get_host(&self, id: &str) -> Option<Arc<dyn Host>> {
         self.hosts.read().await.get(id).cloned()
+    }
+
+    /// 丢弃缓存中的 SSH 连接（会话已断或不可信时调用）。
+    /// 下次 `ensure_connected` 会重新握手，避免继续复用死连接。
+    pub async fn disconnect_cached_host(&self, id: &str) {
+        if self.hosts.write().await.remove(id).is_some() {
+            self.update_state(id, ServerState::Disconnected).await;
+            info!(
+                target: "ncd_runtime::server_manager",
+                server_id = %id,
+                "已清除失效的远端 SSH 缓存连接"
+            );
+        }
     }
 
     /// 确保某服务器已连接，返回缓存的 Host。
