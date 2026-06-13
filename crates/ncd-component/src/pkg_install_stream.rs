@@ -2,7 +2,10 @@
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use ncd_host::{parse_pkg_mgr_line, truncate_pkg_line, CommandOutput, Host, HostCommand, StreamSource};
+use ncd_host::{
+    host_command_wrap_dpkg_wait_for_apt, output_indicates_dpkg_lock_hold, parse_pkg_mgr_line,
+    truncate_pkg_line, CommandOutput, Host, HostCommand, StreamSource,
+};
 use tokio::sync::mpsc;
 
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
@@ -58,6 +61,7 @@ pub async fn run_pkg_command_with_progress(
                                 downloaded_bytes: None,
                                 total_bytes: None,
                                 download_stage: None,
+                                docker_layers: None,
                             })
                             .await;
                     }
@@ -74,6 +78,7 @@ pub async fn run_pkg_command_with_progress(
         downloaded_bytes: None,
         total_bytes: None,
         download_stage: None,
+        docker_layers: None,
     })
     .await;
 
@@ -81,6 +86,8 @@ pub async fn run_pkg_command_with_progress(
     let last_cb = last_pct.clone();
     let floor = percent_floor;
     let cap = percent_cap;
+
+    let cmd = host_command_wrap_dpkg_wait_for_apt(cmd);
 
     let out = host
         .run_streaming(cmd, {
@@ -143,10 +150,17 @@ pub async fn run_pkg_command_with_progress(
             truncate_pkg_line(&detail, 240),
         )
         .await;
-        return Err(ActionError::install_step(
-            "pkg_install",
-            truncate_pkg_line(&detail, 400),
-        ));
+        let hint = if output_indicates_dpkg_lock_hold(&out) {
+            "apt 被系统占用（常见 unattended-upgr）。请稍后在组件页重试，或远端执行: sudo systemctl stop unattended-upgrades"
+        } else {
+            ""
+        };
+        let msg = if hint.is_empty() {
+            truncate_pkg_line(&detail, 400)
+        } else {
+            format!("{}\n{}", truncate_pkg_line(&detail, 280), hint)
+        };
+        return Err(ActionError::install_step("pkg_install", msg));
     }
 
     let final_pct = last_pct.load(Ordering::Relaxed).max(percent_floor);
@@ -158,6 +172,7 @@ pub async fn run_pkg_command_with_progress(
         downloaded_bytes: None,
         total_bytes: None,
         download_stage: None,
+        docker_layers: None,
     })
     .await;
 

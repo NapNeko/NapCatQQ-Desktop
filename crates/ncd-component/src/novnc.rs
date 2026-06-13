@@ -108,7 +108,7 @@ impl NoVncComponent {
     fn build_refresh_command(&self, mgr: PkgMgr) -> HostCommand {
         let cmd = match mgr {
             PkgMgr::Apt => self.maybe_elevated(
-                HostCommand::new("sh").arg("-c").arg("apt-get update -qq"),
+                HostCommand::new("sh").arg("-c").arg("apt-get update"),
             ),
             PkgMgr::Dnf => HostCommand::new("sh").arg("-c").arg("true"),
         };
