@@ -24,6 +24,7 @@ import {
     Spinner,
 } from '../../../shared/ui';
 import { ListItem, Counter, MotionIcon } from '../../../shared/ui/motion';
+import { PagePlaceholder } from '../../../shared/ui/PagePlaceholder';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
@@ -303,7 +304,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
     return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border-subtle bg-elevated/50 py-16 text-center">
+        <PagePlaceholder className="gap-4">
             <MotionIcon
                 icon={Bot}
                 motion="bob"
@@ -324,7 +325,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
             <Button size="sm" variant="primary" onClick={onCreate}>
                 创建第一个实例
             </Button>
-        </div>
+        </PagePlaceholder>
     );
 }
 

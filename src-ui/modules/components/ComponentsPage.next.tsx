@@ -29,6 +29,7 @@ import type { DockerInstallOptions } from '../../core/services/docker.service';
 import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
 import { cn } from '../../shared/utils/cn';
+import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import scrollStyles from './componentsPageScroll.module.css';
 
 export const ComponentsPageNext: React.FC = () => {
@@ -265,6 +266,12 @@ export const ComponentsPageNext: React.FC = () => {
             >
                 {isLoading && allEmpty ? (
                     <SectionLoading />
+                ) : allEmpty ? (
+                    <PagePlaceholder className="gap-2">
+                        <MotionIcon icon={Box} motion="none" playEnter={false} size={28} className="text-text-tertiary" />
+                        <p className="text-sm text-text-secondary">没有可管理的组件</p>
+                        <p className="text-xs text-text-tertiary">请检查远端连接或刷新组件清单</p>
+                    </PagePlaceholder>
                 ) : activeMachine ? (
                     <HostComponentsView
                         machine={activeMachine}
@@ -308,10 +315,10 @@ export const ComponentsPageNext: React.FC = () => {
 };
 
 const SectionLoading: React.FC = () => (
-    <div className="flex items-center gap-2 rounded-md bg-inset/40 p-6 text-text-tertiary">
-        <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={16} />
-        <span className="text-sm">加载中…</span>
-    </div>
+    <PagePlaceholder className="gap-2 py-12">
+        <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={16} className="text-text-tertiary" />
+        <span className="text-sm text-text-tertiary">加载中…</span>
+    </PagePlaceholder>
 );
 
 const ErrorBanner: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (

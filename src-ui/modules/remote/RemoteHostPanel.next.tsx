@@ -34,6 +34,7 @@ import { AddServerDialog } from './AddServerDialog';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { HostKeyPrompt } from '../../core/ipc/generated/domain/HostKeyPrompt';
 import { CopyCodeBlock } from '../../shared/ui/CopyCodeBlock';
+import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 
 function hostKeyVerifyCommand(prompt: HostKeyPrompt): string {
     const kind = prompt.keyKind.toLowerCase();
@@ -359,7 +360,7 @@ function LoadingState() {
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
     return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border-subtle bg-elevated/50 py-16 text-center">
+        <PagePlaceholder className="gap-4">
             <ActionMotionIcon
                 icon={Server}
                 size={32}
@@ -378,7 +379,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
             <Button size="sm" variant="primary" onClick={onCreate}>
                 添加第一台服务器
             </Button>
-        </div>
+        </PagePlaceholder>
     );
 }
 

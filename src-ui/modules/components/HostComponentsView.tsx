@@ -9,6 +9,7 @@
 import React, { useState } from 'react';
 import { PackageX } from 'lucide-react';
 import { FormSection } from '../../shared/ui';
+import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MachineComponentRowView } from './MachineComponentRow';
 import { componentCardGridClass } from './ComponentEntityCard';
 import { DockerRow } from './DockerRow';
@@ -101,13 +102,13 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
 
     if (empty) {
         return (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-md bg-inset/30 px-6 py-12 text-center">
-                <PackageX size={28} className="text-text-tertiary" />
+            <PagePlaceholder className="gap-2">
+                <PackageX size={28} className="text-text-tertiary" strokeWidth={1.5} />
                 <p className="text-sm text-text-secondary">这台机器上没有可管理的组件</p>
                 <p className="text-xs text-text-tertiary">
                     {host.os} · {host.locality === 'remote' ? '远端' : '本机'} 不支持任何已知组件
                 </p>
-            </div>
+            </PagePlaceholder>
         );
     }
 

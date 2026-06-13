@@ -26,6 +26,7 @@ import { dockerStatusSummary } from '../../core/domain/docker/status';
 import { DockerToolbar } from './DockerToolbar';
 import { ContainerCard } from './ContainerCard';
 import { ContainerLogsDialog } from './ContainerLogsDialog';
+import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 
 export const DockerPageNext: React.FC = () => {
     const { servers } = useServerManager();
@@ -116,15 +117,15 @@ const ContainerList: React.FC<{
 }> = ({ docker, onViewLogs }) => {
     if (docker.isLoadingList) {
         return (
-            <div className="flex items-center gap-2 rounded-md bg-inset/40 p-6 text-text-tertiary">
+            <PagePlaceholder className="gap-2 py-12">
                 <ActionMotionIcon icon={RefreshCw} size={16} motion="spin" />
-                <span className="text-sm">加载容器列表…</span>
-            </div>
+                <span className="text-sm text-text-tertiary">加载容器列表…</span>
+            </PagePlaceholder>
         );
     }
     if (docker.containers.length === 0) {
         return (
-            <div className="flex flex-col items-center gap-2 rounded-md bg-inset/30 p-10 text-center">
+            <PagePlaceholder className="gap-2">
                 <ActionMotionIcon
                     icon={Container}
                     size={28}
@@ -135,7 +136,7 @@ const ContainerList: React.FC<{
                 <p className="text-xs text-text-tertiary">
                     去组件页的「Docker 部署」起一个 NapCat / SnowLuma
                 </p>
-            </div>
+            </PagePlaceholder>
         );
     }
     return (
