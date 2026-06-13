@@ -16,13 +16,16 @@ import {
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useDocker } from '../../hooks/docker/useDocker';
 import { useServerManager } from '../../hooks/remote/useServerManager';
-import { dockerStatusSummary } from '../../core/domain/docker/status';
+import { dockerStatusSummary, imageRemoveRef } from '../../core/domain/docker/status';
 import { cn } from '../../shared/utils/cn';
 import { DockerToolbar } from './DockerToolbar';
 import { ContainerCard } from './ContainerCard';
 import { ImageCard } from './ImageCard';
+import { ImageRemoveDialog } from './ImageRemoveDialog';
 import { ContainerLogsDialog } from './ContainerLogsDialog';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
+
+import type { ImageInfo } from '../../core/ipc/types';
 
 type DockerTab = 'containers' | 'images';
 
@@ -48,6 +51,9 @@ export const DockerPageNext: React.FC = () => {
     const ready = summary?.ready ?? false;
 
     const [logsContainer, setLogsContainer] = useState<string | null>(null);
+    const [imagePendingRemove, setImagePendingRemove] = useState<ImageInfo | null>(null);
+
+    const pendingRemoveRef = imagePendingRemove ? imageRemoveRef(imagePendingRemove) : null;
 
     const resourceCount =
         tab === 'containers' ? (ready ? docker.containers.length : null) : ready ? docker.images.length : null;
@@ -86,7 +92,9 @@ export const DockerPageNext: React.FC = () => {
                 {ready && tab === 'containers' && (
                     <ContainerList docker={docker} onViewLogs={setLogsContainer} />
                 )}
-                {ready && tab === 'images' && <ImageList docker={docker} />}
+                {ready && tab === 'images' && (
+                    <ImageList docker={docker} onRequestRemoveImage={setImagePendingRemove} />
+                )}
             </div>
 
             {logsContainer && (
@@ -96,6 +104,13 @@ export const DockerPageNext: React.FC = () => {
                     onClose={() => setLogsContainer(null)}
                 />
             )}
+
+            <ImageRemoveDialog
+                image={imagePendingRemove}
+                isRemoving={pendingRemoveRef != null && docker.removingImageRef === pendingRemoveRef}
+                onDismiss={() => setImagePendingRemove(null)}
+                onConfirm={(req) => docker.removeImageAsync(req)}
+            />
         </div>
     );
 };
@@ -163,7 +178,10 @@ const ContainerList: React.FC<{
     return <DockerContainerGrid docker={docker} onViewLogs={onViewLogs} />;
 };
 
-const ImageList: React.FC<{ docker: ReturnType<typeof useDocker> }> = ({ docker }) => {
+const ImageList: React.FC<{
+    docker: ReturnType<typeof useDocker>;
+    onRequestRemoveImage: (image: ImageInfo) => void;
+}> = ({ docker, onRequestRemoveImage }) => {
     if (docker.isLoadingImages) {
         return (
             <PagePlaceholder className="gap-2 py-12">
@@ -181,7 +199,7 @@ const ImageList: React.FC<{ docker: ReturnType<typeof useDocker> }> = ({ docker 
             </PagePlaceholder>
         );
     }
-    return <DockerImageGrid docker={docker} />;
+    return <DockerImageGrid docker={docker} onRequestRemoveImage={onRequestRemoveImage} />;
 };
 
 const DockerContainerGrid: React.FC<{
@@ -220,7 +238,10 @@ const DockerContainerGrid: React.FC<{
     );
 };
 
-const DockerImageGrid: React.FC<{ docker: ReturnType<typeof useDocker> }> = ({ docker }) => {
+const DockerImageGrid: React.FC<{
+    docker: ReturnType<typeof useDocker>;
+    onRequestRemoveImage: (image: ImageInfo) => void;
+}> = ({ docker, onRequestRemoveImage }) => {
     const m = useMotion();
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -239,15 +260,18 @@ const DockerImageGrid: React.FC<{ docker: ReturnType<typeof useDocker> }> = ({ d
             className="grid gap-3"
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))' }}
         >
-            {docker.images.map((img) => (
-                <ListItem key={`${img.id}-${img.repository}-${img.tag}`} hoverable>
-                    <ImageCard
-                        image={img}
-                        isRemoving={docker.isRemovingImage}
-                        onRemove={(imageRef) => docker.removeImage({ imageRef })}
-                    />
-                </ListItem>
-            ))}
+            {docker.images.map((img) => {
+                const ref = imageRemoveRef(img);
+                return (
+                    <ListItem key={`${img.id}-${img.repository}-${img.tag}`} hoverable>
+                        <ImageCard
+                            image={img}
+                            isRemoving={docker.removingImageRef === ref}
+                            onRequestRemove={() => onRequestRemoveImage(img)}
+                        />
+                    </ListItem>
+                );
+            })}
         </div>
     );
 };

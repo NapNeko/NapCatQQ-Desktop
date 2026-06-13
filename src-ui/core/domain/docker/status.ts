@@ -79,6 +79,23 @@ export function imageRemoveRef(image: ImageInfo): string {
     return ref;
 }
 
+/// 删除镜像失败时是否属于「仍有容器引用，需 -f」类错误。
+export function imageRemoveConflictNeedsForce(message: string): boolean {
+    const m = message.toLowerCase();
+    return m.includes('must be forced') || m.includes('conflict: unable to delete');
+}
+
+/// 给用户看的删除失败文案(冲突时补操作指引)。
+export function imageRemoveFailureHint(raw: string): string {
+    if (!imageRemoveConflictNeedsForce(raw)) {
+        return raw;
+    }
+    return (
+        `${raw}\n\n该镜像仍被容器引用。可勾选「强制删除」再试（` +
+        `docker rmi -f，不保证能删掉仍被占用的层），或到「容器」页先删/停相关容器。`
+    );
+}
+
 /// 判断镜像仓库是否为本工程 NapCat / SnowLuma 官方镜像。
 export function isManagedImageRef(repository: string): boolean {
     return repository.includes('napcat-docker') || repository.includes('snowluma');

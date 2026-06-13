@@ -1,6 +1,6 @@
-// 单个镜像卡片：引用 + 大小 + 创建时间 + 删除（需二次确认）。
+// 单个镜像卡片：引用 + 大小 + 创建时间；删除走父级弹窗，footer 与容器卡同高。
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Disc3, Trash2 } from 'lucide-react';
 import { ActionMotionIcon, RESOURCE_MOTION } from '../../shared/ui/motion';
 import { Badge, Button } from '../../shared/ui';
@@ -9,30 +9,24 @@ import {
     imageDisplayRef,
     isDanglingImage,
     isManagedImageRef,
-    imageRemoveRef,
 } from '../../core/domain/docker/status';
 import type { ImageInfo } from '../../core/ipc/types';
+
+export interface ImageRemoveRequest {
+    imageRef: string;
+    force?: boolean;
+}
 
 interface ImageCardProps {
     image: ImageInfo;
     isRemoving: boolean;
-    onRemove: (imageRef: string) => void;
+    onRequestRemove: () => void;
 }
 
-export const ImageCard: React.FC<ImageCardProps> = ({ image, isRemoving, onRemove }) => {
-    const [confirming, setConfirming] = useState(false);
+export const ImageCard: React.FC<ImageCardProps> = ({ image, isRemoving, onRequestRemove }) => {
     const displayRef = imageDisplayRef(image);
     const dangling = isDanglingImage(image);
     const managed = isManagedImageRef(image.repository);
-
-    const handleDeleteClick = () => {
-        if (!confirming) {
-            setConfirming(true);
-            return;
-        }
-        onRemove(imageRemoveRef(image));
-        setConfirming(false);
-    };
 
     return (
         <article
@@ -78,38 +72,16 @@ export const ImageCard: React.FC<ImageCardProps> = ({ image, isRemoving, onRemov
             </div>
 
             <footer className="flex min-h-[2.75rem] shrink-0 flex-wrap items-center justify-end gap-1.5 border-t border-border-subtle bg-inset/40 px-3 py-2">
-                {confirming ? (
-                    <>
-                        <span className="mr-auto text-2xs text-danger">确认删除此镜像？</span>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setConfirming(false)}
-                            disabled={isRemoving}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={handleDeleteClick}
-                            disabled={isRemoving}
-                        >
-                            确认删除
-                        </Button>
-                    </>
-                ) : (
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={handleDeleteClick}
-                        disabled={isRemoving}
-                        className="text-danger hover:bg-danger-soft"
-                    >
-                        <ActionMotionIcon icon={Trash2} size={13} />
-                        删除
-                    </Button>
-                )}
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={onRequestRemove}
+                    disabled={isRemoving}
+                    className="text-danger hover:bg-danger-soft"
+                >
+                    <ActionMotionIcon icon={Trash2} size={13} />
+                    删除
+                </Button>
             </footer>
         </article>
     );

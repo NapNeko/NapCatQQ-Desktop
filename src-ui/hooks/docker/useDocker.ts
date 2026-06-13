@@ -30,6 +30,7 @@ import { dockerActionStore } from './dockerActionStore';
 import { dockerInstallProgressStore } from './dockerInstallProgressStore';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
+import { imageRemoveFailureHint } from '../../core/domain/docker/status';
 import type {
     ContainerAction,
     ContainerInfo,
@@ -121,11 +122,12 @@ export function useDocker(hostId: string, activeTab: 'containers' | 'images' = '
             });
         },
         onError: (err: unknown, { imageRef }) => {
+            const raw = errorText(err);
             pushInfoBar({
                 key: `image-remove:${hostId}:${imageRef}`,
                 tone: 'danger',
                 title: '删除镜像失败',
-                content: `${imageRef}：${errorText(err)}`,
+                content: `${imageRef}：${imageRemoveFailureHint(raw)}`,
             });
         },
     });
@@ -162,7 +164,11 @@ export function useDocker(hostId: string, activeTab: 'containers' | 'images' = '
         isActing: actionMutation.isPending,
 
         removeImage: removeImageMutation.mutate,
+        removeImageAsync: removeImageMutation.mutateAsync,
         isRemovingImage: removeImageMutation.isPending,
+        removingImageRef: removeImageMutation.isPending
+            ? removeImageMutation.variables?.imageRef ?? null
+            : null,
 
         composeDown: composeDownMutation.mutate,
         isComposingDown: composeDownMutation.isPending,
