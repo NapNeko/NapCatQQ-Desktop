@@ -66,8 +66,13 @@ export function MotionIcon({
         if (preset === 'none') {
             setEnterSettled(true);
             lastEnterKeyRef.current = null;
+            return;
         }
-    }, [preset]);
+        // 无进场动画时直接允许循环动效（如 Loader2 spin），否则 enterSettled 会一直为 false
+        if (!playEnter) {
+            setEnterSettled(true);
+        }
+    }, [preset, playEnter]);
 
     // 选中瞬间：轻弹入 + 描边绘制
     useEffect(() => {
@@ -131,17 +136,11 @@ export function MotionIcon({
     // 选中态持续动效（进场结束后再开，避免和弹入打架）
     useEffect(() => {
         const el = wrapRef.current;
-        if (!el || !active || !enterSettled) {
+        const waitEnter = playEnter && enterKey != null && enterKey !== '';
+        if (!el || !active || (waitEnter && !enterSettled)) {
             if (el && !active) {
-                gsap.to(el, {
-                    scale: 1,
-                    rotation: 0,
-                    y: 0,
-                    opacity: 1,
-                    duration: m.duration('fast'),
-                    ease: m.preset.timing.ease.damped,
-                    overwrite: true,
-                });
+                gsap.killTweensOf(el);
+                gsap.set(el, { rotation: 0, scale: 1, y: 0, opacity: 1 });
             }
             return;
         }
@@ -221,10 +220,16 @@ export function MotionIcon({
 
         return () => {
             tl?.kill();
+            // 同一 DOM 在 spin → 静止图标间复用时，必须清零 rotation，否则会「歪着」停住
+            if (el) {
+                gsap.set(el, { rotation: 0 });
+            }
         };
     }, [
         active,
         enterSettled,
+        playEnter,
+        enterKey,
         preset,
         m.enabled,
         m.speed,
