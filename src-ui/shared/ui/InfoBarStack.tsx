@@ -15,6 +15,8 @@ import { cn } from '../utils/cn';
 
 export interface InfoBarStackItem extends Omit<InfoBarProps, 'onDismiss'> {
     id: string;
+    /** 用户点关闭时由 globalInfoBarStore.dismiss 调用，不传给 InfoBar DOM。 */
+    onUserDismiss?: () => void;
 }
 
 interface InfoBarStackProps {
@@ -118,11 +120,13 @@ export function InfoBarStack({
     const node = (
         <div
             className={cn(
-                'pointer-events-none fixed right-6 top-[64px] z-50 flex w-[min(420px,calc(100vw-3rem))] flex-col gap-2',
+                'pointer-events-none fixed right-6 top-[calc(var(--titlebar-height)+1.5rem)] z-50 flex w-[min(420px,calc(100vw-3rem))] flex-col gap-4',
                 className,
             )}
         >
-            {displayed.map((item) => (
+            {displayed.map((item) => {
+                const { onUserDismiss: _omit, ...barProps } = item;
+                return (
                 <GsapPresence
                     key={item.id}
                     visible={item.visible}
@@ -133,11 +137,12 @@ export function InfoBarStack({
                     }}
                 >
                     <InfoBarRow
-                        {...item}
+                        {...barProps}
                         onDismiss={() => onDismiss(item.id)}
                     />
                 </GsapPresence>
-            ))}
+                );
+            })}
             {children}
         </div>
     );

@@ -1,13 +1,21 @@
 // Bot 列表页：把快照里的失败/踢线/崩溃从卡片 meta 挪到全局 InfoBar。
-// 用边沿检测，同一 bot 同 key 顶替，避免 react-query 轮询反复弹。
+// 边沿检测 + 模块级 prev（切页不丢）；用户关闭持久态条目前写入抑制，状态恢复后再弹。
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type {
     BotActorSnapshot,
     DaemonState,
     NapCatLoginInvalidationReason,
 } from '../../core/ipc/types';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import {
+    clearBotSnapshotAlertSuppression,
+    getBotSnapshotPrev,
+    isBotSnapshotAlertSuppressed,
+    pruneBotSnapshotPrev,
+    setBotSnapshotPrev,
+    suppressBotSnapshotAlert,
+} from './botSnapshotAlertState';
 
 export type BotSnapshotAlertRow = {
     bot: BotActorSnapshot;
@@ -18,23 +26,25 @@ export type BotSnapshotAlertRow = {
     offlineAutoRestart: boolean;
 };
 
-type PrevRow = {
-    lastError: string | null;
-    kicked: boolean;
-    crashed: boolean;
-    daemonCrashed: boolean;
-};
-
 function normError(v: string | null | undefined): string | null {
     const t = v?.trim();
     return t && t.length > 0 ? t : null;
 }
 
-export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
-    const prevRef = useRef<Map<string, PrevRow>>(new Map());
+function pushIfNotSuppressed(
+    alertKey: string,
+    opts: Parameters<typeof pushInfoBar>[0],
+): void {
+    if (isBotSnapshotAlertSuppressed(alertKey)) return;
+    pushInfoBar({
+        ...opts,
+        key: alertKey,
+        onUserDismiss: () => suppressBotSnapshotAlert(alertKey),
+    });
+}
 
+export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
     useEffect(() => {
-        const prevMap = prevRef.current;
         const nextIds = new Set<string>();
 
         for (const row of rows) {
@@ -46,18 +56,21 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             const daemonCrashed =
                 row.isSnowLuma && row.snowlumaDaemonState === 'crashed';
 
-            const prev = prevMap.get(id) ?? {
-                lastError: null,
-                kicked: false,
-                crashed: false,
-                daemonCrashed: false,
-            };
-
+            const prev = getBotSnapshotPrev(id);
             const label = row.displayName;
 
+            const keyLastError = `bot-last-error:${id}`;
+            const keyKicked = `bot-kicked:${id}`;
+            const keyCrashed = `bot-crashed:${id}`;
+            const keyDaemon = `bot-daemon-crashed:${id}`;
+
+            if (!lastError) clearBotSnapshotAlertSuppression(keyLastError);
+            if (!kicked) clearBotSnapshotAlertSuppression(keyKicked);
+            if (!crashed) clearBotSnapshotAlertSuppression(keyCrashed);
+            if (!daemonCrashed) clearBotSnapshotAlertSuppression(keyDaemon);
+
             if (lastError && lastError !== prev.lastError) {
-                pushInfoBar({
-                    key: `bot-last-error:${id}`,
+                pushIfNotSuppressed(keyLastError, {
                     tone: 'danger',
                     title: `Bot 异常 · ${label}`,
                     content: lastError,
@@ -65,20 +78,18 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             }
 
             if (kicked && !prev.kicked) {
-                pushInfoBar({
-                    key: `bot-kicked:${id}`,
+                pushIfNotSuppressed(keyKicked, {
                     tone: 'warning',
                     title: '账号已被踢',
                     content: row.offlineAutoRestart
                         ? `${label} 被踢，正在自动重启`
                         : `${label} 被踢，请手动重启`,
-                    autoDismissMs: row.offlineAutoRestart ? 5000 : 0,
+                    autoDismissMs: row.offlineAutoRestart ? undefined : 0,
                 });
             }
 
             if (crashed && !prev.crashed) {
-                pushInfoBar({
-                    key: `bot-crashed:${id}`,
+                pushIfNotSuppressed(keyCrashed, {
                     tone: 'danger',
                     title: `Bot 已崩溃 · ${label}`,
                     content: lastError ?? '进程异常退出，请查看日志',
@@ -86,15 +97,14 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             }
 
             if (daemonCrashed && !prev.daemonCrashed) {
-                pushInfoBar({
-                    key: `bot-daemon-crashed:${id}`,
+                pushIfNotSuppressed(keyDaemon, {
                     tone: 'danger',
                     title: `SnowLuma daemon 崩溃 · ${label}`,
                     content: '请查看日志或重启相关 Bot',
                 });
             }
 
-            prevMap.set(id, {
+            setBotSnapshotPrev(id, {
                 lastError,
                 kicked,
                 crashed,
@@ -102,8 +112,6 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             });
         }
 
-        for (const key of Array.from(prevMap.keys())) {
-            if (!nextIds.has(key)) prevMap.delete(key);
-        }
+        pruneBotSnapshotPrev(nextIds);
     }, [rows]);
 }

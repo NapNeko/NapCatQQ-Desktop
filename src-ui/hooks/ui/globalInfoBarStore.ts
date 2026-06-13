@@ -9,11 +9,19 @@
 //   - 本 store 记"屏幕上要显示哪几条 banner"，是显示队列
 //   - 旧 useComponentActionErrors 把状态机的终态扫描出来 push 进显示队列
 //
+// 行为对齐 Fluent InfoBarManager：
+//   - 默认右上角堆叠（见 InfoBarStack），margin / spacing 在容器上配置
+//   - 同 key 顶替时保持原队列下标，避免反复重试时整条 banner 上下跳动
+//   - dismiss / clear 幂等；id 为 key:${key} 或 bar-${n}
+//
 // 渲染入口：AppNext.tsx 顶层挂一次 <InfoBarStack items={bars} onDismiss={...} />
 // 全应用唯一渲染处。跨路由切换 banner 不丢，因为 state 在模块级、跟组件树解耦。
 
 import { createStore } from '../utils/createStore';
 import type { InfoBarStackItem } from '../../shared/ui';
+import type { InfoBarTone } from '../../shared/ui/InfoBar';
+import { resolveInfoBarAutoDismissMs } from '../../core/domain/ui/infoBarDismiss';
+import { infoBarDismissPrefsStore } from '../preferences/infoBarDismissPrefsStore';
 
 /// push 接口：与 InfoBarStackItem 一致，但 id 由 store 自己生成或走 key 顶替；
 /// 同时加 key 字段做"同一来源去重"——同 key 再 push 时，旧条目被新条目替换，
@@ -52,9 +60,17 @@ export const globalInfoBarStore = {
      * - 没传 `key`：append 到队列末尾，新 id。
      */
     push(opts: PushInfoBarOptions): string {
-        const { key, ...rest } = opts;
+        const { key, onUserDismiss, tone, autoDismissMs, ...rest } = opts;
+        const resolvedDismiss = resolveInfoBarAutoDismissMs(
+            (tone ?? 'info') as InfoBarTone,
+            autoDismissMs,
+            infoBarDismissPrefsStore.getSnapshot(),
+        );
         const item: InfoBarStackItem = {
             ...rest,
+            tone,
+            autoDismissMs: resolvedDismiss,
+            onUserDismiss,
             id: key ? `key:${key}` : genId('bar'),
         };
         const current = store.getSnapshot();
@@ -76,9 +92,11 @@ export const globalInfoBarStore = {
     /** 主动消除一条 banner。多次调用幂等。 */
     dismiss(id: string): void {
         const current = store.getSnapshot();
+        const bar = current.bars.find((b) => b.id === id);
         const next = current.bars.filter((b) => b.id !== id);
         if (next.length === current.bars.length) return;
         store.setState({ bars: next });
+        bar?.onUserDismiss?.();
     },
 
     /** 清空（极少用，主要给测试 / 极端 reset 场景）。 */
