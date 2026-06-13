@@ -79,13 +79,7 @@ fn session_log_deploy_progress(
         }
         ProgressKind::Finished { ok } => {
             if *ok {
-                info!(
-                    target: "ncd_tauri::docker",
-                    host_id,
-                    container,
-                    flavor,
-                    "Docker 框架镜像拉取成功"
-                );
+                // 成功详情见同次拉取末尾的「镜像拉取完成」日志（含实际源与耗时）
             } else {
                 error!(
                     target: "ncd_tauri::docker",
@@ -118,6 +112,7 @@ fn session_log_deploy_progress(
             ProgressLogLevel::Info => {
                 if message.starts_with("拉取镜像:")
                     || message.starts_with("上一个源失败")
+                    || message.starts_with("镜像拉取完成")
                 {
                     info!(
                         target: "ncd_tauri::docker",
@@ -443,11 +438,21 @@ pub async fn docker_deploy(
 
     emit(ProgressKind::StepBegin {
         step: 2,
-        message: "拉取镜像（按层显示进度）...".to_string(),
+        message: if spec.flavor == ncd_domain::DockerFlavor::SnowLuma {
+            format!(
+                "拉取镜像（按层显示进度，压缩包约 {} MB）…",
+                ncd_domain::DockerFlavor::SNOWLUMA_COMPRESSED_MB_APPROX
+            )
+        } else {
+            "拉取镜像（按层显示进度）...".to_string()
+        },
     });
     {
         use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
         use std::sync::{Arc, Mutex};
+        use std::time::Instant;
+
+        let pull_wall_start = Instant::now();
 
         let event_bus_pull = state.event_bus.clone();
         let tid_pull = task_id.clone();
@@ -568,19 +573,40 @@ pub async fn docker_deploy(
         heartbeat_stop.store(true, Ordering::Relaxed);
         let _ = heartbeat.await;
 
-        if let Err(e) = pull_result {
-            let (_kind, user_msg) = classify_pull_failure(&e);
-            let msg = format!(
-                "{}（已尝试 {} 个镜像源）",
-                user_msg,
-                candidate_count
-            );
-            emit(ProgressKind::Log {
-                level: ProgressLogLevel::Error,
-                message: msg.clone(),
-            });
-            emit(ProgressKind::Finished { ok: false });
-            return Err(msg);
+        match pull_result {
+            Ok(pulled_ref) => {
+                let secs = pull_wall_start.elapsed().as_secs();
+                let done_msg = format!(
+                    "镜像拉取完成：{pulled_ref}（耗时 {secs} 秒；已 tag 为 {official}）"
+                );
+                emit(ProgressKind::Log {
+                    level: ProgressLogLevel::Info,
+                    message: done_msg.clone(),
+                });
+                info!(
+                    target: "ncd_tauri::docker",
+                    host_id = %host_id,
+                    flavor = %flavor_label,
+                    pulled = %pulled_ref,
+                    official = %official,
+                    elapsed_secs = secs,
+                    "Docker 框架镜像拉取成功"
+                );
+            }
+            Err(e) => {
+                let (_kind, user_msg) = classify_pull_failure(&e);
+                let msg = format!(
+                    "{}（已尝试 {} 个镜像源）",
+                    user_msg,
+                    candidate_count
+                );
+                emit(ProgressKind::Log {
+                    level: ProgressLogLevel::Error,
+                    message: msg.clone(),
+                });
+                emit(ProgressKind::Finished { ok: false });
+                return Err(msg);
+            }
         }
     }
     emit(ProgressKind::StepEnd { step: 2, ok: true });
