@@ -37,7 +37,7 @@ function KindIcon({
             icon={Icon}
             size={16}
             strokeWidth={selected ? 2.1 : 1.85}
-            motion={busy ? KIND_MOTION[kind] : 'none'}
+            motion={busy && !selected ? KIND_MOTION[kind] : 'none'}
             className={cn('shrink-0', glyph)}
         />
     );

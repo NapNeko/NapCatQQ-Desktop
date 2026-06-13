@@ -330,6 +330,7 @@ const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
                 <span className="relative inline-flex shrink-0">
                     {busy ? (
                         <MotionIcon
+                            key="tasks-busy"
                             icon={Loader2}
                             motion="spin"
                             playEnter={false}
@@ -339,6 +340,7 @@ const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
                         />
                     ) : (
                         <MotionIcon
+                            key="tasks-idle"
                             icon={Icon}
                             motion={isActive ? NAV_ROUTE_MOTION[item.id] : 'none'}
                             playEnter={isActive}
