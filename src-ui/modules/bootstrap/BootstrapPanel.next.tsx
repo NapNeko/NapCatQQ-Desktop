@@ -174,10 +174,28 @@ const RemoteSummaryCard: React.FC<{ onNavigate?: (route: AppRoute) => void }> = 
     const count = servers.length;
     const description =
         count === 0
-            ? '尚未配置远端主机，点击进入 Remote 页面添加。'
-            : `已配置 ${count} 台远端主机，点击进入 Remote 页面管理。`;
+            ? '添加 SSH 档案后，可在组件页向远端部署 NapCat。'
+            : count === 1
+              ? '点击进入管理连接与免密配置。'
+              : '点击进入管理各台主机的连接与免密配置。';
 
-    const countLabel = isLoading ? '…' : `${count} 台`;
+    const countBadge = isLoading ? (
+        <span className="inline-flex h-5 min-w-[2.5rem] items-center justify-center rounded-full bg-inset/80 px-2 text-[11px] text-text-tertiary">
+            …
+        </span>
+    ) : count === 0 ? (
+        <span className="inline-flex h-5 items-center rounded-full bg-inset/80 px-2 text-[11px] font-medium text-text-tertiary">
+            未配置
+        </span>
+    ) : (
+        <span
+            className="inline-flex h-5 items-center gap-1 rounded-full bg-info/10 px-2 text-[11px] font-medium tabular-nums text-info"
+            aria-label={`已配置 ${count} 台远端主机`}
+        >
+            <span className="font-mono">{count}</span>
+            <span className="text-info/80">台</span>
+        </span>
+    );
 
     return (
         <Card
@@ -186,23 +204,16 @@ const RemoteSummaryCard: React.FC<{ onNavigate?: (route: AppRoute) => void }> = 
             className="cursor-pointer transition-shadow hover:shadow-popover"
             onClick={() => onNavigate?.('remote')}
         >
-            <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-1 items-start gap-3">
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-info/10 text-info">
-                        <MotionIcon icon={Server} motion="breathe" playEnter={false} size={18} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <p className="font-display text-[15px] font-semibold text-text">远端主机</p>
-                        <p className="mt-0.5 text-[12px] leading-snug text-text-tertiary">
-                            {description}
-                        </p>
-                    </div>
+            <div className="flex items-start gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-info/10 text-info">
+                    <MotionIcon icon={Server} motion="breathe" playEnter={false} size={18} />
                 </div>
-                <div className="shrink-0 text-right">
-                    <p className="font-mono text-2xl font-semibold tabular-nums text-text">
-                        {countLabel}
-                    </p>
-                    <p className="text-[11px] text-text-tertiary">已配置</p>
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <p className="font-display text-[15px] font-semibold text-text">远端主机</p>
+                        {countBadge}
+                    </div>
+                    <p className="mt-1 text-[12px] leading-snug text-text-tertiary">{description}</p>
                 </div>
             </div>
         </Card>
