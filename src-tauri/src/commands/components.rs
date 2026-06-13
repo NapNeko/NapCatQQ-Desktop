@@ -74,6 +74,7 @@ pub async fn run_component_action(
     component_id: ComponentId,
     host_id: String,
     kind: StepKind,
+    task_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
@@ -91,18 +92,18 @@ pub async fn run_component_action(
         .build();
     plan.validate().map_err(|err| format!("{err}"))?;
 
-    // NoVNC 使用 apt/dnf 安装，需要获取包管理器锁
-    let _pkg_lock = if component_id == ComponentId::NoVnc
-        && (kind == StepKind::EnsureInstalled || kind == StepKind::ForceInstall)
-    {
-        Some(state.package_lock.acquire(&host_id).await)
-    } else {
-        None
-    };
+    let needs_pkg_lock = component_id == ComponentId::NoVnc
+        && (kind == StepKind::EnsureInstalled || kind == StepKind::ForceInstall);
+
+    let server_id = host_id.strip_prefix("remote:").map(str::to_string);
+    let remote_long_install = server_id.is_some()
+        && (kind == StepKind::EnsureInstalled || kind == StepKind::ForceInstall);
 
     let (mut ctx, mut rx) = ncd_component::ActionCtx::new();
     let cancel_token = ctx.cancel_token();
-    let task_id = Uuid::new_v4().to_string();
+    let task_id = task_id
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
 
     state
         .active_tasks
@@ -129,19 +130,67 @@ pub async fn run_component_action(
         }
     });
 
-    // plan 执行：完成 / 失败 / 取消都走同一回收路径
+    // 立即返回 task_id；包管理器锁在后台获取，避免 Docker 等 apt 任务占用锁时
+    // 前端 invoke 一直挂起、任务队列无任何条目。
     let task_id_for_runner = task_id.clone();
+    let package_lock = state.package_lock.clone();
+    let host_id_for_lock = host_id.clone();
+    let server_manager = Arc::clone(&state.server_manager);
     tauri::async_runtime::spawn(async move {
-        let outcome = plan.run(host.as_ref(), &mut ctx).await;
-        // 任意 case 都要清理 active_tasks 注册条目，避免长期内存泄漏。
+        if needs_pkg_lock {
+            let wait_msg = "等待包管理器锁（可能正在安装 Docker 或其它 apt 组件）…";
+            event_bus.publish(DomainEvent::component_action_progress(
+                task_id_for_runner.clone(),
+                ncd_component::ProgressEvent::new(ProgressKind::Log {
+                    level: ncd_component::ProgressLogLevel::Info,
+                    message: wait_msg.to_string(),
+                }),
+            ));
+            let _pkg_lock = package_lock.acquire(&host_id_for_lock).await;
+        }
+
+        if cancel_token.is_cancelled() {
+            active_tasks.lock().await.remove(&task_id_for_runner);
+            let finished =
+                ncd_component::ProgressEvent::new(ProgressKind::Finished { ok: false });
+            event_bus.publish(DomainEvent::component_action_progress(
+                task_id_for_runner.clone(),
+                finished,
+            ));
+            return;
+        }
+
+        // 远端安装走隔离 SSH（与 docker_install 一致），避免长 apt/等锁占满缓存会话，
+        // 也减少与 docker pull 等同机并发操作互相掐连接。
+        let outcome: Result<ncd_deploy::DeployOutcome, String> =
+            if remote_long_install {
+                let Some(id) = server_id.clone() else {
+                    return;
+                };
+                server_manager
+                    .with_isolated_connection(&id, move |iso_host| {
+                        Box::pin(async move {
+                            plan.run(iso_host.as_ref(), &mut ctx)
+                                .await
+                                .map_err(|e| format!("{e}"))
+                        })
+                    })
+                    .await
+            } else {
+                plan.run(host.as_ref(), &mut ctx)
+                    .await
+                    .map_err(|e| format!("{e}"))
+            };
+
+        if outcome.is_err() {
+            if let Some(ref id) = server_id {
+                server_manager.disconnect_cached_host(id).await;
+            }
+        }
+
         active_tasks.lock().await.remove(&task_id_for_runner);
-        // 布局可能已变，丢弃该主机缓存。
         host_probe_cache.lock().await.remove(&probe_cache_key);
 
-        // plan.run 内部会 emit Finished 事件，但若它本身返回 Err
-        // （比如 InvalidPlan / RollbackFailed），forward 通道就拿不到。
-        // 这种情况下补发一个 Finished{ok:false} + 一条 Log 描述错误，
-        // 保证前端 ActionProgressView 一定能终结。
         if let Err(err) = outcome {
             let progress_event = ncd_component::ProgressEvent::new(ProgressKind::Log {
                 level: ncd_component::ProgressLogLevel::Error,
