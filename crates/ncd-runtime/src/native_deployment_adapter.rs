@@ -179,7 +179,7 @@ impl BotBackend for NativeDeploymentBackend {
             return Err(BotBackendError::EmptyLaunchCommand);
         }
 
-        let bot_config = real_bot_config_from_ctx(ctx, self.flavor, false)?;
+        let bot_config = bot_config_for_start(ctx, self.flavor, false)?;
 
         let handle = self
             .deployment
@@ -274,6 +274,17 @@ fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
     }
 }
 
+fn bot_config_for_start(
+    ctx: &BotStartCtx,
+    flavor: BotFlavor,
+    require_real: bool,
+) -> Result<BotConfig, BotBackendError> {
+    if let Some(ref cfg) = ctx.bot_config {
+        return Ok(cfg.clone());
+    }
+    real_bot_config_from_ctx(ctx, flavor, require_real)
+}
+
 fn real_bot_config_from_ctx(
     ctx: &BotStartCtx,
     flavor: BotFlavor,
@@ -296,7 +307,10 @@ fn load_bot_config_from_runtime_path(
     let Some(root) = runtime_root_from_config_path(runtime_config_path, bot_id) else {
         return Ok(None);
     };
-    let bot_path = root.join("config").join("bot.json");
+    let bot_path = root
+        .join("runtime")
+        .join("config")
+        .join("bot.json");
     let text = match std::fs::read_to_string(&bot_path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -522,7 +536,7 @@ impl BotBackend for DockerDeploymentBackend {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
-        let bot_config = real_bot_config_from_ctx(ctx, self.flavor, true)?;
+        let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
         render_docker_config_on_host(self.host.as_ref(), &ctx.config.bot_id, &bot_config).await?;
 
         // install:探 docker + 写 compose + 拉镜像。
@@ -630,6 +644,7 @@ mod tests {
         let bot_id = BotId::new("10001");
         let ctx = BotStartCtx {
             config: BotRuntimeConfig::default_path(root.path(), bot_id.clone()),
+            bot_config: None,
         };
 
         let err = real_bot_config_from_ctx(&ctx, BotFlavor::NapCat, true).unwrap_err();
@@ -641,7 +656,7 @@ mod tests {
     fn docker_loads_real_config_from_default_runtime_path() {
         let root = tempdir().unwrap();
         let bot_id = BotId::new("10001");
-        let config_dir = root.path().join("config");
+        let config_dir = root.path().join("runtime").join("config");
         std::fs::create_dir_all(&config_dir).unwrap();
         std::fs::write(
             config_dir.join("bot.json"),
@@ -666,6 +681,7 @@ mod tests {
         .unwrap();
         let ctx = BotStartCtx {
             config: BotRuntimeConfig::default_path(root.path(), bot_id),
+            bot_config: None,
         };
 
         let config = real_bot_config_from_ctx(&ctx, BotFlavor::NapCat, true).unwrap();

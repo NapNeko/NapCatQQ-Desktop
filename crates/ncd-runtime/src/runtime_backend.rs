@@ -21,9 +21,14 @@ pub struct ProcessHandle {
     pub pid: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BotStartCtx {
     pub config: BotRuntimeConfig,
+    /// BotManager 已从 repo 加载的完整配置。Docker 启动必须带此字段，避免再从
+    /// `config_path` 反推 data_root 去读 `config/bot.json`（路径不一致时会误报
+    /// ConfigNotFound）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bot_config: Option<BotConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

@@ -1273,6 +1273,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         match backend
             .start(&BotStartCtx {
                 config: runtime_config,
+                bot_config: Some(config.clone()),
             })
             .await
         {
