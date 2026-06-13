@@ -41,7 +41,6 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 import {
-    Badge,
     Tooltip,
     TooltipContent,
     TooltipTrigger,
@@ -63,7 +62,6 @@ import type {
 } from '../../../../core/ipc/types';
 import type { BotConfig } from '../../../../core/ipc/generated/domain/BotConfig';
 import {
-    botStateBadge,
     canStartBot,
     canStopBot,
     isBotActive,
@@ -79,6 +77,8 @@ import { isSnowLumaFlavor, type Flavor } from '../../../../core/domain/bot/flavo
 import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { QrCodeDialog } from './QrCodeDialog';
+import { BotManageCard } from './BotManageCard';
+import { botAlertBadges, botLifecycleBadge } from './botCardPresentation';
 
 interface BotCardProps {
     bot: BotActorSnapshot;
@@ -147,8 +147,6 @@ export function BotCard({
         return undefined;
     }, [invalidationReason, config?.bot.offlineAutoRestart]);
 
-    const stateBadge = botStateBadge(bot.state);
-    const stateBadgeTone = mapStateBadgeTone(stateBadge.color);
     const isSL = isSnowLumaFlavor(flavor);
     const hasQrcode = !!qrcodeUrl;
 
@@ -158,7 +156,7 @@ export function BotCard({
     //   - last_error 首次出现 → 整张卡 shake(shake 是水平摇,不会跟 hover 冲突)
     const m = useMotion();
     const cardRef = useRef<HTMLDivElement | null>(null);
-    const badgeRef = useRef<HTMLSpanElement | null>(null);
+    const badgeRef = useRef<HTMLSpanElement>(null);
     const prevStateRef = useRef<typeof bot.state>(bot.state);
     const prevErrorRef = useRef<string | null | undefined>(bot.last_error);
 
@@ -237,6 +235,20 @@ export function BotCard({
         hasQrcode,
         webuiAvailable,
     });
+
+    const cardBadges = [
+        botLifecycleBadge(bot.state),
+        ...botAlertBadges({
+            pendingRestart: !!bot.pending_restart,
+            needsQrLogin: hasQrcode && isOnline === false,
+        }),
+    ];
+
+    const cardAccent = showKickedToast || bot.last_error
+        ? 'danger'
+        : isBotStarting(bot.state) || bot.state === 'repairing'
+          ? 'brand'
+          : 'none';
 
     const isActive = isBotActive(bot.state);
 
@@ -353,215 +365,217 @@ export function BotCard({
 
     return (
         <>
-            <div
-                ref={cardRef}
-                role={isBatchMode ? 'button' : undefined}
-                onClick={handleRowClick}
-                className={cn(
-                    'group relative flex flex-col gap-2 rounded-md bg-elevated px-4 py-3',
-                    'ring-1 ring-border-subtle shadow-card transition-all duration-150',
-                    'hover:shadow-popover hover:bg-elevated/90',
-                    isBatchMode && 'cursor-pointer',
-                    isSelected && 'ring-2 ring-brand bg-brand-soft/30',
-                )}
-            >
-                {/* Header 行：复选框 + 头像 + 身份块 + 操作区 */}
-                <div className="flex items-center gap-3">
-                    {isBatchMode && (
-                        <span
-                            aria-hidden
-                            className={cn(
-                                'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border',
-                                isSelected
-                                    ? 'border-brand bg-brand text-white'
-                                    : 'border-border bg-canvas',
-                            )}
-                        >
-                            {isSelected && <Check size={10} strokeWidth={3} />}
-                        </span>
-                    )}
-
-                    <BotAvatar
-                        qqid={bot.bot_id}
-                        displayName={displayName}
-                        flavorTone={isSL ? 'info' : 'brand'}
-                    />
-
-                    {/* 身份块（占满剩余空间，可压缩） */}
-                    <div className="flex min-w-0 flex-1 flex-col">
-                        <div className="flex min-w-0 items-center gap-2">
-                            <h3
-                                className="truncate font-display text-md font-semibold leading-tight text-text"
-                                title={displayName}
-                            >
-                                {displayName}
-                            </h3>
-                            <Badge
-                                ref={badgeRef}
-                                tone={stateBadgeTone}
-                                appearance="soft"
-                                dot={bot.state === 'running'}
-                            >
-                                {stateBadge.label}
-                            </Badge>
-                            {bot.pending_restart && (
-                                <Badge tone="warning" appearance="outline">
-                                    待重启
-                                </Badge>
-                            )}
-                        </div>
-                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-text-tertiary">
-                            <span className="font-mono tabular-nums">
-                                QQ {bot.bot_id}
-                            </span>
-                            {flavor && (
-                                <>
-                                    <span aria-hidden className="text-border">·</span>
-                                    <span
-                                        className={cn(
-                                            'font-medium',
-                                            isSL ? 'text-info' : 'text-brand',
-                                        )}
-                                    >
-                                        {flavor}
-                                    </span>
-                                </>
-                            )}
-                            {lastTransitionRel && (
-                                <>
-                                    <span aria-hidden className="text-border">·</span>
-                                    <span className="tabular-nums">{lastTransitionRel}</span>
-                                </>
-                            )}
-                            {/* 状态文案：跟着副标题走，避免单独占一整行造成稀疏空白。
-                                被踢 / 错误这类高 priority 事件也合并进这里（红 tone +
-                                完整文本悬停 tooltip），不再单独占一行撑高卡片。 */}
-                            {statusLine && (
-                                <>
-                                    <span aria-hidden className="text-border">·</span>
-                                    <span
-                                        className={cn(
-                                            'inline-flex min-w-0 items-center gap-1 truncate',
-                                            statusLineTextClass(statusLine.tone),
-                                        )}
-                                        title={
-                                            // 错误类长文案截断后用原生 tooltip 露出全文，
-                                            // 踢线 / 普通状态的文案本身就短，不需要 title。
-                                            statusLine.tone === 'danger' && bot.last_error
-                                                ? bot.last_error
-                                                : undefined
-                                        }
-                                    >
-                                        {statusLine.icon ? (
-                                            <StatusLineIcon node={statusLine.icon} tone={statusLine.tone} />
-                                        ) : null}
-                                        <span className="truncate">{statusLine.text}</span>
-                                    </span>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 操作区。每个按钮用 GsapPresence(visible=...) 包,按钮按状态
-                        进退场:scale 0.7 + autoAlpha 0/1。Play 和 Square 互斥(不会
-                        同时存在),日志/WebUI 仅 running/starting 时存在,扫码仅
-                        hasQrcode 时存在。 */}
-                    {!isBatchMode && (
-                        <div
-                            className="flex shrink-0 items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <GsapPresence
-                                visible={hasQrcode}
-                                onEnter={iconBtnEnter}
-                                onExit={iconBtnExit}
-                            >
-                                <IconButton
-                                    presence
-                                    tooltip="扫码登录"
-                                    onClick={() => setQrOpen(true)}
-                                    tone="brand"
-                                >
-                                    <ToolbarMotionIcon icon={QrCode} size={16} strokeWidth={2.2} hoverAccent />
-                                </IconButton>
-                            </GsapPresence>
-                            <GsapPresence
-                                visible={isActive}
-                                onEnter={iconBtnEnter}
-                                onExit={iconBtnExit}
-                            >
-                                <IconButton
-                                    presence
-                                    tooltip="停止 Bot"
-                                    onClick={stopAction(() => onStop(bot.bot_id))}
-                                    disabled={!canStopBot(bot.state)}
-                                    tone="danger"
-                                >
-                                    <ActionMotionIcon icon={Square} size={14} strokeWidth={2.6} motion="none" />
-                                </IconButton>
-                            </GsapPresence>
-                            <GsapPresence
-                                visible={!isActive && canStartBot(bot.state)}
-                                onEnter={iconBtnEnter}
-                                onExit={iconBtnExit}
-                            >
-                                <IconButton
-                                    presence
-                                    tooltip="启动 Bot"
-                                    onClick={stopAction(() => onStart(bot.bot_id))}
-                                    disabled={!canStartBot(bot.state)}
-                                    tone="success"
-                                >
-                                    <ToolbarMotionIcon icon={Play} size={14} strokeWidth={2.6} hoverAccent />
-                                </IconButton>
-                            </GsapPresence>
-                            <GsapPresence
-                                visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
-                                onEnter={iconBtnEnter}
-                                onExit={iconBtnExit}
-                            >
-                                <IconButton
-                                    presence
-                                    tooltip="查看日志"
-                                    onClick={stopAction(() => onViewLogs(bot.bot_id))}
-                                >
-                                    <ToolbarMotionIcon icon={FileText} size={14} strokeWidth={2.2} hoverAccent />
-                                </IconButton>
-                            </GsapPresence>
-                            <GsapPresence
-                                visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
-                                onEnter={iconBtnEnter}
-                                onExit={iconBtnExit}
-                            >
-                                <IconButton
-                                    presence
-                                    tooltip={webuiTip}
-                                    disabled={!webuiAvailable}
-                                    onClick={stopAction(() =>
-                                        onOpenWebui({
-                                            botId: bot.bot_id,
-                                            flavor,
-                                            napcat: napcatBinding ?? null,
-                                        }),
+            <div ref={cardRef}>
+                <BotManageCard
+                    badges={cardBadges}
+                    selected={isSelected}
+                    batchMode={isBatchMode}
+                    accent={cardAccent}
+                    onRowClick={isBatchMode ? handleRowClick : undefined}
+                    lifecycleBadgeRef={badgeRef}
+                    header={
+                        <>
+                            {isBatchMode && (
+                                <span
+                                    aria-hidden
+                                    className={cn(
+                                        'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border',
+                                        isSelected
+                                            ? 'border-brand bg-brand text-white'
+                                            : 'border-border bg-canvas',
                                     )}
                                 >
-                                    <ToolbarMotionIcon icon={Globe} size={14} strokeWidth={2.2} hoverAccent />
-                                </IconButton>
-                            </GsapPresence>
-                            <IconButton
-                                tooltip="配置"
-                                onClick={stopAction(() => onConfigure(bot.bot_id))}
+                                    {isSelected && <Check size={10} strokeWidth={3} />}
+                                </span>
+                            )}
+                            <BotAvatar
+                                qqid={bot.bot_id}
+                                displayName={displayName}
+                                flavorTone={isSL ? 'info' : 'brand'}
+                            />
+                            <div className="min-w-0 flex-1">
+                                <h3
+                                    className="truncate font-display text-base font-semibold leading-snug text-text"
+                                    title={displayName}
+                                >
+                                    {displayName}
+                                </h3>
+                                <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0 text-2xs text-text-tertiary">
+                                    <span className="font-mono tabular-nums">QQ {bot.bot_id}</span>
+                                    {flavor && (
+                                        <>
+                                            <span aria-hidden className="text-border">
+                                                ·
+                                            </span>
+                                            <span
+                                                className={cn(
+                                                    'font-medium',
+                                                    isSL ? 'text-info' : 'text-brand',
+                                                )}
+                                            >
+                                                {flavor}
+                                            </span>
+                                        </>
+                                    )}
+                                    {lastTransitionRel && (
+                                        <>
+                                            <span aria-hidden className="text-border">
+                                                ·
+                                            </span>
+                                            <span className="tabular-nums">{lastTransitionRel}</span>
+                                        </>
+                                    )}
+                                </p>
+                            </div>
+                        </>
+                    }
+                    meta={
+                        statusLine ? (
+                            <p
+                                className={cn(
+                                    'flex min-w-0 items-center gap-1 truncate text-xs',
+                                    statusLineTextClass(statusLine.tone),
+                                )}
+                                title={
+                                    statusLine.tone === 'danger' && bot.last_error
+                                        ? bot.last_error
+                                        : undefined
+                                }
                             >
-                                <ToolbarMotionIcon icon={Settings} size={14} strokeWidth={2.2} hoverAccent />
-                            </IconButton>
-                        </div>
-                    )}
-                </div>
-
-                {/* Chip 行 */}
-                {chips.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">{chips}</div>
-                )}
+                                {statusLine.icon ? (
+                                    <StatusLineIcon node={statusLine.icon} tone={statusLine.tone} />
+                                ) : null}
+                                <span className="truncate">{statusLine.text}</span>
+                            </p>
+                        ) : (
+                            <p className="truncate text-xs text-transparent select-none" aria-hidden>
+                                —
+                            </p>
+                        )
+                    }
+                    chips={chips.length > 0 ? chips : undefined}
+                    footerActions={
+                        isBatchMode ? (
+                            <span className="text-2xs text-text-tertiary">点击卡片选择</span>
+                        ) : (
+                            <>
+                                <GsapPresence
+                                    visible={hasQrcode}
+                                    onEnter={iconBtnEnter}
+                                    onExit={iconBtnExit}
+                                >
+                                    <IconButton
+                                        presence
+                                        tooltip="扫码登录"
+                                        onClick={() => setQrOpen(true)}
+                                        tone="brand"
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={QrCode}
+                                            size={16}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                </GsapPresence>
+                                <GsapPresence
+                                    visible={isActive}
+                                    onEnter={iconBtnEnter}
+                                    onExit={iconBtnExit}
+                                >
+                                    <IconButton
+                                        presence
+                                        tooltip="停止 Bot"
+                                        onClick={stopAction(() => onStop(bot.bot_id))}
+                                        disabled={!canStopBot(bot.state)}
+                                        tone="danger"
+                                    >
+                                        <ActionMotionIcon
+                                            icon={Square}
+                                            size={14}
+                                            strokeWidth={2.6}
+                                            motion="none"
+                                        />
+                                    </IconButton>
+                                </GsapPresence>
+                                <GsapPresence
+                                    visible={!isActive && canStartBot(bot.state)}
+                                    onEnter={iconBtnEnter}
+                                    onExit={iconBtnExit}
+                                >
+                                    <IconButton
+                                        presence
+                                        tooltip="启动 Bot"
+                                        onClick={stopAction(() => onStart(bot.bot_id))}
+                                        disabled={!canStartBot(bot.state)}
+                                        tone="success"
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={Play}
+                                            size={14}
+                                            strokeWidth={2.6}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                </GsapPresence>
+                                <GsapPresence
+                                    visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
+                                    onEnter={iconBtnEnter}
+                                    onExit={iconBtnExit}
+                                >
+                                    <IconButton
+                                        presence
+                                        tooltip="查看日志"
+                                        onClick={stopAction(() => onViewLogs(bot.bot_id))}
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={FileText}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                </GsapPresence>
+                                <GsapPresence
+                                    visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
+                                    onEnter={iconBtnEnter}
+                                    onExit={iconBtnExit}
+                                >
+                                    <IconButton
+                                        presence
+                                        tooltip={webuiTip}
+                                        disabled={!webuiAvailable}
+                                        onClick={stopAction(() =>
+                                            onOpenWebui({
+                                                botId: bot.bot_id,
+                                                flavor,
+                                                napcat: napcatBinding ?? null,
+                                            }),
+                                        )}
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={Globe}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                </GsapPresence>
+                                <IconButton
+                                    tooltip="配置"
+                                    onClick={stopAction(() => onConfigure(bot.bot_id))}
+                                >
+                                    <ToolbarMotionIcon
+                                        icon={Settings}
+                                        size={14}
+                                        strokeWidth={2.2}
+                                        hoverAccent
+                                    />
+                                </IconButton>
+                            </>
+                        )
+                    }
+                />
             </div>
 
             <QrCodeDialog
@@ -886,8 +900,7 @@ function InfoChip({
     const node = (
         <span
             className={cn(
-                'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-2xs',
-                'border-border-subtle/80 bg-canvas/60',
+                'inline-flex items-center gap-1 rounded-pill bg-inset px-2 py-0.5 text-2xs',
                 muted ? 'text-text-tertiary' : 'text-text-secondary',
             )}
         >
@@ -999,31 +1012,6 @@ function forwardRefIcon() {
 }
 
 // ============== Helpers ==============
-
-function mapStateBadgeTone(
-    color: ReturnType<typeof botStateBadge>['color'],
-): 'brand' | 'success' | 'warning' | 'danger' | 'neutral' | 'info' {
-    switch (color) {
-        case 'success':
-            return 'success';
-        case 'warning':
-            return 'warning';
-        case 'danger':
-            return 'danger';
-        case 'brand':
-            return 'brand';
-        case 'informative':
-            return 'info';
-        case 'severe':
-        case 'important':
-            return 'danger';
-        case 'tiny':
-        case 'subtle':
-        case 'neutral':
-        default:
-            return 'neutral';
-    }
-}
 
 interface ChannelCount {
     httpServer: number;

@@ -42,6 +42,7 @@ import { BotCard } from './next/BotCard';
 import { FloatingActions } from './next/FloatingActions';
 import { BatchBottomBar } from './next/BatchBottomBar';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
+import gridStyles from './next/botCardGrid.module.css';
 
 interface BotListPageNextProps {
     onConfigureBot: (botId: string | null) => void;
@@ -378,7 +379,7 @@ function BotListGrid({
     );
 
     return (
-        <div ref={containerRef} className="flex flex-col gap-3">
+        <div ref={containerRef} className={gridStyles.botCardGrid}>
             {bots.map((bot) => {
                 const flavor = flavorByBot[bot.bot_id] ?? null;
                 const config = configByBot[bot.bot_id] ?? null;
