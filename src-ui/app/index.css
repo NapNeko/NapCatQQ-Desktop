@@ -91,6 +91,51 @@
     }
 }
 
+/* InfoBar：不透明分色调面板（Fluent 式可读性，无 backdrop-blur） */
+.ndf-infobar {
+    border-radius: var(--radius-sm);
+    border-width: 1px;
+    border-style: solid;
+    box-shadow: var(--shadow-md);
+}
+.ndf-infobar--info {
+    background: var(--infobar-info-bg);
+    border-color: var(--infobar-info-border);
+}
+.ndf-infobar--success {
+    background: var(--infobar-success-bg);
+    border-color: var(--infobar-success-border);
+}
+.ndf-infobar--warning {
+    background: var(--infobar-warning-bg);
+    border-color: var(--infobar-warning-border);
+}
+.ndf-infobar--danger {
+    background: var(--infobar-danger-bg);
+    border-color: var(--infobar-danger-border);
+}
+.ndf-infobar-icon-well {
+    display: flex;
+    height: 2.25rem;
+    width: 2.25rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+}
+.ndf-infobar-icon-well--info {
+    background: var(--infobar-icon-well-info);
+}
+.ndf-infobar-icon-well--success {
+    background: var(--infobar-icon-well-success);
+}
+.ndf-infobar-icon-well--warning {
+    background: var(--infobar-icon-well-warning);
+}
+.ndf-infobar-icon-well--danger {
+    background: var(--infobar-icon-well-danger);
+}
+
 /* InfoBar 进场动画已迁移到 framer-motion + useMotion(),原 @keyframes infobar-in
    不再使用,删除避免误用。
    TabsContent 切换也已迁移到 framer + AnimatePresence,原 tabcontent-fade 也已移除。 */

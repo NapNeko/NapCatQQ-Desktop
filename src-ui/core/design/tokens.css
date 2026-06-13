@@ -99,6 +99,20 @@
    --state-info-bg: color-mix(in srgb, var(--blue-500) 12%, transparent);
    --state-neutral: var(--neutral-500);
 
+   /* component: InfoBar 不透明面板（对齐 Fluent info_bar.qss，不用毛玻璃） */
+   --infobar-info-bg: var(--neutral-100);
+   --infobar-success-bg: color-mix(in srgb, var(--green-500) 16%, var(--neutral-0));
+   --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 22%, var(--neutral-50));
+   --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 14%, var(--neutral-0));
+   --infobar-info-border: var(--border-default);
+   --infobar-success-border: color-mix(in srgb, var(--green-600) 28%, var(--border-default));
+   --infobar-warning-border: color-mix(in srgb, var(--amber-600) 32%, var(--border-default));
+   --infobar-danger-border: color-mix(in srgb, var(--rose-600) 30%, var(--border-default));
+   --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 18%, var(--neutral-100));
+   --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 22%, var(--neutral-0));
+   --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 26%, var(--neutral-0));
+   --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 20%, var(--neutral-0));
+
    /* semantic: 主交互色 */
    --action-primary: var(--brand-500);
    --action-primary-hover: var(--brand-600);
@@ -225,6 +239,19 @@
 
       --qr-foreground: var(--neutral-900);
       --qr-background: var(--surface-elevated);
+
+      --infobar-info-bg: var(--surface-elevated);
+      --infobar-success-bg: color-mix(in srgb, var(--green-500) 24%, var(--surface-card));
+      --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 26%, var(--surface-card));
+      --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 22%, var(--surface-card));
+      --infobar-info-border: var(--border-default);
+      --infobar-success-border: color-mix(in srgb, var(--green-500) 35%, var(--border-subtle));
+      --infobar-warning-border: color-mix(in srgb, var(--amber-500) 38%, var(--border-subtle));
+      --infobar-danger-border: color-mix(in srgb, var(--rose-500) 36%, var(--border-subtle));
+      --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 28%, var(--surface-inset));
+      --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 32%, var(--surface-inset));
+      --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 34%, var(--surface-inset));
+      --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 30%, var(--surface-inset));
    }
 }
 
@@ -271,6 +298,19 @@
 
    --qr-foreground: var(--neutral-900);
    --qr-background: var(--surface-elevated);
+
+   --infobar-info-bg: var(--surface-elevated);
+   --infobar-success-bg: color-mix(in srgb, var(--green-500) 24%, var(--surface-card));
+   --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 26%, var(--surface-card));
+   --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 22%, var(--surface-card));
+   --infobar-info-border: var(--border-default);
+   --infobar-success-border: color-mix(in srgb, var(--green-500) 35%, var(--border-subtle));
+   --infobar-warning-border: color-mix(in srgb, var(--amber-500) 38%, var(--border-subtle));
+   --infobar-danger-border: color-mix(in srgb, var(--rose-500) 36%, var(--border-subtle));
+   --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 28%, var(--surface-inset));
+   --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 32%, var(--surface-inset));
+   --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 34%, var(--surface-inset));
+   --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 30%, var(--surface-inset));
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
