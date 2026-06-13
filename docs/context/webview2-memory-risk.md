@@ -215,7 +215,7 @@ WebView2 **不直接**读 `C:\ProgramData\NapCatQQ Desktop` 目录；该路径�
 ## 10. 后续若要做工程化（本文档不实施）
 
 - 集中式 **单例 EventBus**（全应用共享 1 套 listen，按 kind 分发），降低 22×N 乘数。**已落地**（2026-06-13）：`domain-event-hub.ts` + `useDomainEvents` 改走 hub。
-- 任务 store **终态上限**或与「自动清理」开关联动默认上限。
+- 任务 store **终态上限**或与「自动清理」开关联动默认上限。**已落地**（2026-06-13）：`TASK_QUEUE_TERMINAL_RETENTION_MAX_WHEN_AUTO_OFF` + `trimProgressStoresWhenAutoCleanupOff`（plan `memory-leak-small-fixes` Phase B）。
 - Bot 日志页 **虚拟滚动**（1000 行 DOM 上限仍偏大）。**已落地**（2026-06-13）：`BotLogPage.next.tsx` + `@tanstack/react-virtual`。
 - 主题过渡：降分辨率、复用单 overlay 池、禁止动画重入。
 - 发布构建显式关闭 devtools / 评估 WebView2 环境变量（需查 Tauri 2 官方 Windows 配置）。
@@ -228,6 +228,7 @@ WebView2 **不直接**读 `C:\ProgramData\NapCatQQ Desktop` 目录；该路径�
 |------|------|
 | 事件名清单 | `src-ui/core/services/event-stream.service.ts` |
 | 订阅生命周期 | `src-ui/hooks/events/useDomainEvents.ts` |
+| 单例枢纽 | `src-ui/core/services/domain-event-hub.ts` |
 | App 级桥 | `src-ui/app/AppNext.tsx` |
 | 任务 store | `src-ui/hooks/components/componentActionStore.ts` |
 | Docker store | `src-ui/hooks/docker/dockerDeployProgressStore.ts` |

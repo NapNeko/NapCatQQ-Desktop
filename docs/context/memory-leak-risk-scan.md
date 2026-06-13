@@ -267,12 +267,12 @@ flowchart TB
 
 ---
 
-## 7. 优先级修复清单（仅建议，本次未改代码）
+## 7. 优先级修复清单
 
-1. **P1** `ServerManager::delete_server`（及 profile id 变更路径）同步清理 `connect_locks`、`auto_connect_cooldown_until`。
-2. **P1/P2** 评估 `BroadcastEventBus` 容量与「日志类事件」是否应旁路 bus（仅 UI 轮询 / 专用 channel），降低 Lagged 丢事件。**已做**：默认容量 1024 + Lagged 可观测日志；旁路仍待产品设计。
-3. **P2** 文档化或限制「任务队列不自动清理」下的 store 上限（例如最多保留 N 条终态）。
-4. **P2** 远端 SSH：删 server / 长时间 Disconnected 时显式 `disconnect_cached_host` 策略复核。
+1. **P1** `ServerManager::delete_server` 同步清理 `connect_locks`、`auto_connect_cooldown_until`；`ensure_connected` 入口 prune 过期冷却。**已落地**（2026-06-13，plan `memory-leak-small-fixes` Phase A）。独立改 server id API 不存在，未臆造迁移。
+2. **P1/P2** `BroadcastEventBus` 容量与日志旁路。**已做**：默认 1024 + Lagged `warn`；旁路仍待产品设计。
+3. **P2** 「任务队列不自动清理」下 store 终态上限。**已落地**（2026-06-13，plan `memory-leak-small-fixes` Phase B）：硬顶 200 + 关闭自动清理时全量 trim。
+4. **P2** 远端 SSH：删 server / 长时间 Disconnected 时显式 `disconnect_cached_host` 策略复核。（未做，策略项）
 
 ---
 
@@ -281,7 +281,8 @@ flowchart TB
 | 路径 | 主题 |
 |------|------|
 | `crates/ncd-runtime/src/server_manager.rs` | SSH 缓存、connect_locks |
-| `crates/ncd-runtime/src/events.rs` | broadcast 128、Lagged |
+| `crates/ncd-runtime/src/events.rs` | broadcast 1024、Lagged warn |
+| `src-ui/core/services/domain-event-hub.ts` | 单例 22 listen |
 | `crates/ncd-runtime/src/bot_manager.rs` | actors、pollers、delete 路径 |
 | `crates/ncd-deploy/src/deployments/native.rs` | 10k log ring |
 | `crates/ncd-runtime/src/snowluma/daemon.rs` | daemon 缓冲 |
