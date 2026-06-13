@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { settingsService, clientPrefsFromBackend } from '../../core/services/settings.service';
 import { applySideEffects, preferencesStore } from './preferencesStore';
+import { infoBarDismissPrefsStore } from './infoBarDismissPrefsStore';
 
 let hydratedFromDisk = false;
 
@@ -12,6 +13,7 @@ export async function hydrateAppUiPreferencesFromDisk(): Promise<void> {
     try {
         const backend = await settingsService.get();
         preferencesStore.applySnapshot(clientPrefsFromBackend(backend));
+        infoBarDismissPrefsStore.applyFromUiPreferences(backend.uiPreferences);
         hydratedFromDisk = true;
     } catch {
         applySideEffects();

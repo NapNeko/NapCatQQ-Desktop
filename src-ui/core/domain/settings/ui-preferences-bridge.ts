@@ -2,6 +2,12 @@
 
 import type { AppUiPreferences } from '../../ipc/generated/domain/AppUiPreferences';
 import {
+    DEFAULT_INFOBAR_DISMISS,
+    infoBarDismissPrefsFromDraft,
+    type InfoBarDismissDraftSlice,
+    type InfoBarDismissPrefs,
+} from '../ui/infoBarDismiss';
+import {
     MOTION_SPEED_DEFAULT,
     MOTION_SPEED_MAX,
     MOTION_SPEED_MIN,
@@ -49,7 +55,10 @@ export function appUiPreferencesToAppPreferences(
     };
 }
 
-export function appPreferencesToAppUiPreferences(prefs: AppPreferences): AppUiPreferences {
+export function appPreferencesToAppUiPreferences(
+    prefs: AppPreferences,
+    dismiss: InfoBarDismissPrefs = DEFAULT_INFOBAR_DISMISS,
+): AppUiPreferences {
     return {
         theme: prefs.theme,
         showMascot: prefs.showMascot,
@@ -57,12 +66,21 @@ export function appPreferencesToAppUiPreferences(prefs: AppPreferences): AppUiPr
         motionLevel: prefs.motionLevel,
         motionSpeed: prefs.motionSpeed,
         radiusStyle: prefs.radiusStyle,
-    };
+        infoBarDismissInfoMs: dismiss.infoBarDismissInfoMs,
+        infoBarDismissSuccessMs: dismiss.infoBarDismissSuccessMs,
+        infoBarDismissWarningMs: dismiss.infoBarDismissWarningMs,
+    } as unknown as AppUiPreferences;
+}
+
+export function infoBarDismissPrefsFromDraftFields(
+    draft: InfoBarDismissDraftSlice,
+): InfoBarDismissPrefs {
+    return infoBarDismissPrefsFromDraft(draft);
 }
 
 /** 磁盘缺 uiPreferences（旧版 app-settings.json）时用当前 localStorage 偏好回填。 */
 export function defaultAppUiPreferencesFromPrefs(prefs: AppPreferences): AppUiPreferences {
-    return appPreferencesToAppUiPreferences(prefs);
+    return appPreferencesToAppUiPreferences(prefs, DEFAULT_INFOBAR_DISMISS);
 }
 
 export function closeActionFromDto(raw: unknown): CloseAction {

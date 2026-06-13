@@ -77,6 +77,17 @@ type AppSettingsDtoInvoke = {
     githubPat: string;
 };
 
+function uiPreferencesForInvoke(ui: AppUiPreferences): AppUiPreferences {
+    const n = (v: bigint | number) =>
+        typeof v === 'bigint' ? Number(v) : v;
+    return {
+        ...ui,
+        infoBarDismissInfoMs: n(ui.infoBarDismissInfoMs) as unknown as bigint,
+        infoBarDismissSuccessMs: n(ui.infoBarDismissSuccessMs) as unknown as bigint,
+        infoBarDismissWarningMs: n(ui.infoBarDismissWarningMs) as unknown as bigint,
+    };
+}
+
 function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
     return {
         settings: {
@@ -90,7 +101,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
                 s.performanceMonitorIntervalMs,
             ),
             closeAction: s.closeAction === 'tray' ? 'tray' : 'close',
-            uiPreferences: s.uiPreferences,
+            uiPreferences: uiPreferencesForInvoke(s.uiPreferences),
         },
         githubPat: s.githubPat.trim(),
     };

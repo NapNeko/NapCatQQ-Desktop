@@ -4,4 +4,16 @@
  * 设置页「外观」Tab 的客户端偏好，与前端 `preferencesStore` / `SettingsDraft` 对齐。
  * 落盘在 app-settings.json 的 `uiPreferences` 字段，避免仅依赖 WebView localStorage。
  */
-export type AppUiPreferences = { theme: string, showMascot: boolean, motionEnabled: boolean, motionLevel: string, motionSpeed: number, radiusStyle: string, };
+export type AppUiPreferences = { theme: string, showMascot: boolean, motionEnabled: boolean, motionLevel: string, motionSpeed: number, radiusStyle: string, 
+/**
+ * 顶部 InfoBar：`info`  tone 自动关闭毫秒；0 = 不自动关。
+ */
+infoBarDismissInfoMs: bigint, 
+/**
+ * `success` tone 自动关闭毫秒；0 = 不自动关。
+ */
+infoBarDismissSuccessMs: bigint, 
+/**
+ * `warning` tone 自动关闭毫秒；`danger` 始终不自动关（前端强制）。
+ */
+infoBarDismissWarningMs: bigint, };

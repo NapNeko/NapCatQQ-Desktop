@@ -93,9 +93,8 @@ export function useComponentActionErrors(rows: ComponentRow[]): void {
                 tone: isCancelled ? 'warning' : 'danger',
                 title: `${heading} · ${isCancelled ? '已取消' : '失败'}`,
                 content: pickErrorMessage(progress),
-                // 错误条不自动消失，让用户读完再关。取消条 8 秒淡出（属于
-                // 用户主动行为，不需要长期占屏）。
-                autoDismissMs: isCancelled ? 8000 : 0,
+                // 取消条时长由设置页「警告类」控制；失败条 danger 不自动关。
+                autoDismissMs: isCancelled ? undefined : 0,
             });
         }
     }, [state]);

@@ -121,6 +121,28 @@ fn default_ui_motion_speed() -> f64 {
     0.5
 }
 
+fn default_infobar_dismiss_info_ms() -> u64 {
+    5000
+}
+
+fn default_infobar_dismiss_success_ms() -> u64 {
+    4000
+}
+
+fn default_infobar_dismiss_warning_ms() -> u64 {
+    6000
+}
+
+/// InfoBar 非 danger 自动关闭时长上限（毫秒）。0 = 不自动关。
+pub const INFOBAR_DISMISS_MS_MAX: u64 = 60_000;
+
+pub fn clamp_infobar_dismiss_ms(raw: u64) -> u64 {
+    if raw == 0 {
+        return 0;
+    }
+    raw.clamp(1000, INFOBAR_DISMISS_MS_MAX)
+}
+
 /// 设置页「外观」Tab 的客户端偏好，与前端 `preferencesStore` / `SettingsDraft` 对齐。
 /// 落盘在 app-settings.json 的 `uiPreferences` 字段，避免仅依赖 WebView localStorage。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -138,6 +160,24 @@ pub struct AppUiPreferences {
     pub motion_speed: f64,
     #[serde(rename = "radiusStyle", default = "default_ui_radius_style")]
     pub radius_style: String,
+    /// 顶部 InfoBar：`info`  tone 自动关闭毫秒；0 = 不自动关。
+    #[serde(
+        rename = "infoBarDismissInfoMs",
+        default = "default_infobar_dismiss_info_ms"
+    )]
+    pub info_bar_dismiss_info_ms: u64,
+    /// `success` tone 自动关闭毫秒；0 = 不自动关。
+    #[serde(
+        rename = "infoBarDismissSuccessMs",
+        default = "default_infobar_dismiss_success_ms"
+    )]
+    pub info_bar_dismiss_success_ms: u64,
+    /// `warning` tone 自动关闭毫秒；`danger` 始终不自动关（前端强制）。
+    #[serde(
+        rename = "infoBarDismissWarningMs",
+        default = "default_infobar_dismiss_warning_ms"
+    )]
+    pub info_bar_dismiss_warning_ms: u64,
 }
 
 impl Default for AppUiPreferences {
@@ -149,6 +189,9 @@ impl Default for AppUiPreferences {
             motion_level: default_ui_motion_level(),
             motion_speed: default_ui_motion_speed(),
             radius_style: default_ui_radius_style(),
+            info_bar_dismiss_info_ms: default_infobar_dismiss_info_ms(),
+            info_bar_dismiss_success_ms: default_infobar_dismiss_success_ms(),
+            info_bar_dismiss_warning_ms: default_infobar_dismiss_warning_ms(),
         }
     }
 }

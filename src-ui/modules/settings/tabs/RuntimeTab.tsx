@@ -5,10 +5,13 @@ import {
     PERFORMANCE_MONITOR_INTERVAL_MS_MAX,
     PERFORMANCE_MONITOR_INTERVAL_MS_MIN,
 } from '../../../core/domain/performance/performanceSettings';
+import { DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED } from '../../../core/domain/ui/infoBarDismiss';
 import { NumberField, Switch } from '../../../shared/ui';
 import type { SettingsDraft } from '../settings-draft';
 import {
     FieldRow,
+    InfoBarDismissSliderPresence,
+    InfoBarDismissDurationSlider,
     PerformanceMonitorIntervalSlider,
     SettingsSection,
     SettingsTabSections,
@@ -72,6 +75,75 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                             })
                         }
                         disabled={!draft.performanceMonitorEnabled}
+                    />
+                </FieldRow>
+            </SettingsSection>
+
+            <SettingsSection
+                title="顶部提示条"
+                description="错误类（红色）始终需手动关闭。以下开关控制说明 / 成功 / 警告是否自动消失。"
+            >
+                <FieldRow label="说明类" description="info 蓝色提示">
+                    <InfoBarDismissSliderPresence
+                        visible={draft.infoBarDismissInfoEnabled}
+                    >
+                        <InfoBarDismissDurationSlider
+                            value={draft.infoBarDismissInfoMs}
+                            defaultMs={
+                                DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissInfoMs
+                            }
+                            onChange={(v) =>
+                                patchDraft({ infoBarDismissInfoMs: v })
+                            }
+                        />
+                    </InfoBarDismissSliderPresence>
+                    <Switch
+                        checked={draft.infoBarDismissInfoEnabled}
+                        onCheckedChange={(v) =>
+                            patchDraft({ infoBarDismissInfoEnabled: v })
+                        }
+                    />
+                </FieldRow>
+                <FieldRow label="成功类" description="操作成功等">
+                    <InfoBarDismissSliderPresence
+                        visible={draft.infoBarDismissSuccessEnabled}
+                    >
+                        <InfoBarDismissDurationSlider
+                            value={draft.infoBarDismissSuccessMs}
+                            defaultMs={
+                                DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissSuccessMs
+                            }
+                            onChange={(v) =>
+                                patchDraft({ infoBarDismissSuccessMs: v })
+                            }
+                        />
+                    </InfoBarDismissSliderPresence>
+                    <Switch
+                        checked={draft.infoBarDismissSuccessEnabled}
+                        onCheckedChange={(v) =>
+                            patchDraft({ infoBarDismissSuccessEnabled: v })
+                        }
+                    />
+                </FieldRow>
+                <FieldRow label="警告类" description="被踢、取消等" isLast>
+                    <InfoBarDismissSliderPresence
+                        visible={draft.infoBarDismissWarningEnabled}
+                    >
+                        <InfoBarDismissDurationSlider
+                            value={draft.infoBarDismissWarningMs}
+                            defaultMs={
+                                DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissWarningMs
+                            }
+                            onChange={(v) =>
+                                patchDraft({ infoBarDismissWarningMs: v })
+                            }
+                        />
+                    </InfoBarDismissSliderPresence>
+                    <Switch
+                        checked={draft.infoBarDismissWarningEnabled}
+                        onCheckedChange={(v) =>
+                            patchDraft({ infoBarDismissWarningEnabled: v })
+                        }
                     />
                 </FieldRow>
             </SettingsSection>

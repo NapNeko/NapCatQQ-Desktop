@@ -74,7 +74,7 @@ export function BotListPageNext({
             tone: msg.type === 'success' ? 'success' : 'danger',
             title: msg.type === 'success' ? '操作完成' : '操作失败',
             content: msg.text,
-            autoDismissMs: msg.type === 'success' ? 4000 : 0,
+            autoDismissMs: msg.type === 'success' ? undefined : 0,
         });
         // 批量动作完成后退出批量模式（对齐旧版交互）。
         if (msg.text.startsWith('批量')) batch.exitBatch();
