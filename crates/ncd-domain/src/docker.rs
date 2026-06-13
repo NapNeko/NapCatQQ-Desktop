@@ -162,16 +162,29 @@ impl DockerFlavor {
         }
     }
 
-    /// 拉镜像时按优先级尝试的镜像引用列表:先逐个走国内反代镜像站
-    /// ([`DOCKER_HUB_MIRRORS`]),最后回退官方直连([`Self::default_image`])。
-    /// 调用方逐个尝试,第一个拉成功的即采用,随后 retag 回 default_image。
+    /// 拉镜像时按优先级尝试的镜像引用列表。
+    ///
+    /// 安装 Docker 时会在远端写入 `registry-mirrors`（见 install 流程），因此优先
+    /// [`Self::default_image`] 让 daemon 走已配置的加速；仍失败再逐个尝试显式前缀
+    /// 的国内反代（[`DOCKER_HUB_MIRRORS`]）。SnowLuma 另含 GHCR 官方源与加速前缀
+    ///（Hub 500 / 镜像站不支持第三方命名空间时常见）。
     pub fn pull_candidates(self) -> Vec<String> {
         let official = self.default_image();
-        let mut refs: Vec<String> = DOCKER_HUB_MIRRORS
-            .iter()
-            .map(|m| format!("{m}/{official}"))
-            .collect();
-        refs.push(official.to_string());
+        let mut refs = vec![official.to_string()];
+        match self {
+            Self::SnowLuma => {
+                refs.push("ghcr.io/snowluma/snowluma:latest".to_string());
+                for prefix in GHCR_MIRROR_PREFIXES {
+                    refs.push(format!("{prefix}/snowluma/snowluma:latest"));
+                }
+            }
+            Self::NapCat => {}
+        }
+        refs.extend(
+            DOCKER_HUB_MIRRORS
+                .iter()
+                .map(|m| format!("{m}/{official}")),
+        );
         refs
     }
 }
@@ -190,6 +203,10 @@ pub const DOCKER_HUB_MIRRORS: &[&str] = &[
     "docker.m.daocloud.io",
     "dockerproxy.net",
 ];
+
+/// GHCR 国内加速前缀（拼在 `ghcr.io/...` 路径前，见各站 ghcr 文档）。
+/// 仅 SnowLuma 拉取候选使用；NapCat 镜像在 Docker Hub。
+pub const GHCR_MIRROR_PREFIXES: &[&str] = &["ghcr.1ms.run", "ghcr.m.daocloud.io"];
 
 /// 一条端口映射:宿主机端口 → 容器端口。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -471,16 +488,33 @@ mod tests {
     }
 
     #[test]
-    fn pull_candidates_mirrors_first_official_last() {
+    fn pull_candidates_official_first_then_mirrors() {
         let cands = DockerFlavor::NapCat.pull_candidates();
-        // 至少有「每个镜像站一条 + 官方一条」。
         assert_eq!(cands.len(), DOCKER_HUB_MIRRORS.len() + 1);
-        // 镜像站候选拼成 <mirror>/<official>。
+        assert_eq!(cands[0], "mlikiowa/napcat-docker:latest");
         for (i, mirror) in DOCKER_HUB_MIRRORS.iter().enumerate() {
-            assert_eq!(cands[i], format!("{mirror}/mlikiowa/napcat-docker:latest"));
+            assert_eq!(
+                cands[i + 1],
+                format!("{mirror}/mlikiowa/napcat-docker:latest")
+            );
         }
-        // 最后一条是官方裸名,作直连兜底。
-        assert_eq!(cands.last().unwrap(), "mlikiowa/napcat-docker:latest");
+    }
+
+    #[test]
+    fn snowluma_pull_candidates_include_ghcr_before_hub_mirrors() {
+        let cands = DockerFlavor::SnowLuma.pull_candidates();
+        assert_eq!(cands[0], "motricseven7/snowluma:latest");
+        assert_eq!(cands[1], "ghcr.io/snowluma/snowluma:latest");
+        let ghcr_end = 2 + GHCR_MIRROR_PREFIXES.len();
+        assert_eq!(cands[2], "ghcr.1ms.run/snowluma/snowluma:latest");
+        assert_eq!(
+            cands[ghcr_end],
+            format!("docker.1ms.run/motricseven7/snowluma:latest")
+        );
+        assert_eq!(
+            cands.len(),
+            1 + 1 + GHCR_MIRROR_PREFIXES.len() + DOCKER_HUB_MIRRORS.len()
+        );
     }
 
     #[test]
