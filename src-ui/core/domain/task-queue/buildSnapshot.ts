@@ -189,11 +189,20 @@ function collectDockerDeployItems(
     hostLabels?: Record<string, string>,
 ): TaskQueueItem[] {
     const items: TaskQueueItem[] = [];
+    const seenTarget = new Set<string>();
     for (const [taskId, progress] of Object.entries(snap.tasks)) {
         const deployMeta = meta.dockerDeployByTaskId[taskId];
         const hostId = deployMeta?.hostId ?? '';
+        const flavor = deployMeta?.flavor;
+        if (hostId && flavor) {
+            const targetKey = `${hostId}::${flavor}`;
+            if (isActiveStatus(progressStatusToQueue(progress.status))) {
+                if (seenTarget.has(targetKey)) continue;
+                seenTarget.add(targetKey);
+            }
+        }
         const hostLabel = hostId ? hostLabelFor(hostId, hostLabels) : '—';
-        const title = dockerDeployTitle(hostLabel, deployMeta?.container);
+        const title = dockerDeployTitle(hostLabel, deployMeta?.flavor);
         items.push({
             id: taskId,
             kind: 'docker_deploy',

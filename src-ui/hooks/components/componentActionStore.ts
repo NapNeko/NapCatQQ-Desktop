@@ -11,8 +11,7 @@
 // 不会断流。Components 页里的 useComponentAction 只是个 selector + dispatcher。
 //
 // 终态保留：success / failed / cancelled 收到时不立刻清 activeByTarget，
-// 让 UI 多显示 LINGER_AFTER_FINISH 毫秒。否则后端报错时进度条"咻"地消失，
-// 用户只看到状态回到点击前，没有任何错误反馈。
+// 保留时长由设置页「任务队列自动清理」配置；关闭自动清理则终态条目一直保留。
 
 import { createStore } from '../utils/createStore';
 import {
@@ -21,9 +20,7 @@ import {
     type ActionProgressView,
 } from '../../core/domain/components/progress';
 import type { ComponentId, ProgressEvent } from '../../core/ipc/types';
-
-/// 终态保留时长。3 秒足够用户读完 "已完成 / 失败" 提示，又不会卡到下次操作。
-const LINGER_AFTER_FINISH = 3_000;
+import { scheduleTaskQueueTerminalCleanup } from '../task-queue/taskQueueTerminalLinger';
 
 export interface ComponentActionStoreState {
     /** task_id → 进度视图 */
@@ -87,12 +84,7 @@ function isTerminal(progress: ActionProgressView): boolean {
 }
 
 function scheduleTerminalCleanup(taskId: string): void {
-    if (lingerTimers.has(taskId)) return;
-    const timer = setTimeout(() => {
-        lingerTimers.delete(taskId);
-        clearActiveForTask(taskId);
-    }, LINGER_AFTER_FINISH);
-    lingerTimers.set(taskId, timer);
+    scheduleTaskQueueTerminalCleanup(taskId, lingerTimers, clearActiveForTask);
 }
 
 export const componentActionStore = {
@@ -125,8 +117,53 @@ export const componentActionStore = {
     },
 
     /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
-    started(taskId: string, componentId: ComponentId, hostId: string): void {
+    started(
+        taskId: string,
+        componentId: ComponentId,
+        hostId: string,
+        queueMessage?: string,
+    ): void {
         this.registerTarget(taskId, componentId, hostId);
+        if (!queueMessage?.trim()) return;
+        const current = store.getSnapshot();
+        const prev = current.tasks[taskId] ?? initialActionProgress;
+        store.setState({
+            ...current,
+            tasks: {
+                ...current.tasks,
+                [taskId]: { ...prev, message: queueMessage.trim() },
+            },
+        });
+    },
+
+    /** invoke 失败时把任务标为 failed，避免队列里一直 pending。 */
+    failTask(taskId: string, err: unknown): void {
+        const msg =
+            err instanceof Error
+                ? err.message
+                : typeof err === 'string'
+                  ? err
+                  : '组件操作启动失败';
+        const current = store.getSnapshot();
+        const prev = current.tasks[taskId] ?? initialActionProgress;
+        const next: ActionProgressView = {
+            ...prev,
+            status: 'failed',
+            message: msg,
+            logs: [
+                ...prev.logs,
+                {
+                    level: 'error',
+                    message: msg,
+                    timestamp_ms: Date.now(),
+                },
+            ],
+        };
+        store.setState({
+            ...current,
+            tasks: { ...current.tasks, [taskId]: next },
+        });
+        scheduleTerminalCleanup(taskId);
     },
 
     /**
@@ -135,8 +172,7 @@ export const componentActionStore = {
      * 自动给 task_id 创建一条空记录，让进度照样累计；这种"孤立 task"只更
      * tasks，不更 activeByTarget（因为不知道属于哪个 (component, host)）。
      *
-     * 终态：保留 LINGER_AFTER_FINISH 毫秒后再从 activeByTarget 移除，让 UI
-     * 有时间显示"已完成 / 失败"反馈。
+     * 终态：按设置保留一段时间后从 activeByTarget / tasks 移除；关闭自动清理则不移除。
      */
     applyProgress(taskId: string, event: ProgressEvent): void {
         const current = store.getSnapshot();

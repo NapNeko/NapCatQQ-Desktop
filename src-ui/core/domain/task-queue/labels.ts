@@ -39,8 +39,10 @@ export function dockerInstallTitle(hostLabel: string): string {
     return `Docker · ${label}`;
 }
 
-export function dockerDeployTitle(hostLabel: string, container?: string): string {
+export function dockerDeployTitle(hostLabel: string, flavor?: string): string {
     const label = hostLabel?.trim() || '远程主机';
-    if (container?.trim()) return `Docker 部署 · ${container} · ${label}`;
-    return `Docker 部署 · ${label}`;
+    const fw =
+        flavor === 'napcat' ? 'NapCat' : flavor === 'snowluma' ? 'SnowLuma' : flavor?.trim();
+    if (fw) return `拉取镜像 · ${fw} · ${label}`;
+    return `拉取镜像 · ${label}`;
 }

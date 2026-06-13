@@ -16,6 +16,12 @@ import {
 } from '../../core/domain/task-queue/display';
 import { useNowMs } from '../../hooks/ui/useNowMs';
 import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
+import { DockerPullLayersPanel } from '../components/DockerPullLayersPanel';
+import type { ActionProgressView } from '../../core/domain/components/progress';
+
+function DockerPullLayerList({ progress }: { progress: ActionProgressView }) {
+    return <DockerPullLayersPanel progress={progress} />;
+}
 
 export interface TaskDetailPanelProps {
     item: TaskQueueItem;
@@ -117,9 +123,13 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                         <ProgressLine progress={progress} />
                         {shouldShowProgressBar(progress) && (
                             <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-pill bg-inset/60">
-                                <ProgressBarOverlay progress={progress} />
+                                <ProgressBarOverlay
+                                    progress={progress}
+                                    determinate={progress.dockerLayers.length > 0}
+                                />
                             </div>
                         )}
+                        <DockerPullLayerList progress={progress} />
                     </div>
                 )}
             </div>
