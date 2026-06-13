@@ -24,7 +24,10 @@ use crate::native_deployment_adapter::EventBusSink;
 pub struct SnowLumaDockerEndpoints {
     pub webui_local_port: u16,
     pub novnc_local_port: u16,
+    /// noVNC / VNC（compose `VNC_PASSWD`）
     pub vnc_password: String,
+    /// SnowLuma WebUI 登录（`SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD`）
+    pub webui_password: String,
 }
 
 struct SessionInner {
@@ -112,6 +115,7 @@ impl DockerBotSessionRegistry {
         bus: Arc<BroadcastEventBus>,
         napcat_webui_token: Option<String>,
         snowluma_vnc_passwd: Option<String>,
+        snowluma_webui_bootstrap: Option<String>,
     ) {
         if config.bot.deployment_type != DeploymentType::Docker {
             return;
@@ -154,7 +158,8 @@ impl DockerBotSessionRegistry {
             BackendType::SnowLuma => {
                 let remote_webui = spec.host_port_for_container(5099).unwrap_or(5099);
                 let remote_novnc = spec.host_port_for_container(6081).unwrap_or(6081);
-                let passwd = snowluma_vnc_passwd.unwrap_or_default();
+                let vnc = snowluma_vnc_passwd.unwrap_or_default();
+                let webui = snowluma_webui_bootstrap.unwrap_or_default();
                 match (
                     open_loopback_tunnel(host.as_ref(), remote_webui).await,
                     open_loopback_tunnel(host.as_ref(), remote_novnc).await,
@@ -163,7 +168,8 @@ impl DockerBotSessionRegistry {
                         snowluma_eps = Some(SnowLumaDockerEndpoints {
                             webui_local_port: w.local_port(),
                             novnc_local_port: n.local_port(),
-                            vnc_password: passwd,
+                            vnc_password: vnc.clone(),
+                            webui_password: webui,
                         });
                         tunnels.push(w);
                         tunnels.push(n);

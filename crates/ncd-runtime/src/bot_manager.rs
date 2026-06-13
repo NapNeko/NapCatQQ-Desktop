@@ -262,6 +262,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         format!("bot:{qq_id}:snowluma_docker_vnc_passwd")
     }
 
+    fn docker_sl_webui_bootstrap_key(qq_id: u64) -> String {
+        format!("bot:{qq_id}:snowluma_docker_webui_bootstrap")
+    }
+
     fn generate_docker_webui_token() -> String {
         let mut bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut bytes);
@@ -273,6 +277,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             self.docker_webui_secret_store.as_ref(),
             qq_id,
             Self::docker_webui_secret_key,
+            Self::generate_docker_webui_token,
         )
     }
 
@@ -281,7 +286,29 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             self.docker_webui_secret_store.as_ref(),
             qq_id,
             Self::docker_vnc_secret_key,
+            Self::generate_docker_vnc_passwd,
         )
+    }
+
+    fn get_or_create_docker_sl_webui_bootstrap(
+        &self,
+        qq_id: u64,
+    ) -> Result<String, BotManagerError> {
+        Self::get_or_create_docker_secret_from_store(
+            self.docker_webui_secret_store.as_ref(),
+            qq_id,
+            Self::docker_sl_webui_bootstrap_key,
+            Self::generate_docker_sl_webui_bootstrap_password,
+        )
+    }
+
+    fn generate_docker_vnc_passwd() -> String {
+        crate::snowluma::session::generate_strong_password(16)
+    }
+
+    /// SnowLuma WebUI 首启 bootstrap（对齐 auth.ts envBootstrapPassword，≥8 位）。
+    fn generate_docker_sl_webui_bootstrap_password() -> String {
+        crate::snowluma::session::generate_strong_password(16)
     }
 
     /// stop / restart / delete 必须按完整 BotConfig 路由 backend；`backend_for_config`
@@ -297,6 +324,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         store: Option<&Arc<dyn SecretStore + Send + Sync>>,
         qq_id: u64,
         key_fn: fn(u64) -> String,
+        generate: fn() -> String,
     ) -> Result<String, BotManagerError> {
         let store = store.ok_or_else(|| {
             BotManagerError::Render("Docker 部署需要凭据 secret store".to_string())
@@ -311,11 +339,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 return Ok(trimmed.to_string());
             }
         }
-        let token = Self::generate_docker_webui_token();
+        let value = generate();
         store
-            .put(&key, &token)
+            .put(&key, &value)
             .map_err(|e| BotManagerError::Render(e.to_string()))?;
-        Ok(token)
+        Ok(value)
     }
 
     #[allow(dead_code)]
@@ -323,7 +351,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         store: Option<&Arc<dyn SecretStore + Send + Sync>>,
         qq_id: u64,
     ) -> Result<String, BotManagerError> {
-        Self::get_or_create_docker_secret_from_store(store, qq_id, Self::docker_webui_secret_key)
+        Self::get_or_create_docker_secret_from_store(
+            store,
+            qq_id,
+            Self::docker_webui_secret_key,
+            Self::generate_docker_webui_token,
+        )
     }
 
     /// 按 BotConfig 的 deployment_type + runtime_target 选/造 backend。
@@ -364,8 +397,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 let backend_id = BotId::new(format!("docker-{}", config.bot.qq_id));
                 let deployment: Arc<ncd_deploy::DockerDeployment> = match flavor {
                     BotFlavor::SnowLuma => {
-                        let passwd = self.get_or_create_docker_vnc_passwd(config.bot.qq_id)?;
-                        Arc::new(ncd_deploy::DockerDeployment::with_vnc_passwd(passwd))
+                        let vnc = self.get_or_create_docker_vnc_passwd(config.bot.qq_id)?;
+                        let webui =
+                            self.get_or_create_docker_sl_webui_bootstrap(config.bot.qq_id)?;
+                        Arc::new(ncd_deploy::DockerDeployment::with_sl_secrets(vnc, webui))
                     }
                     BotFlavor::NapCat => {
                         let token = self.get_or_create_docker_webui_token(config.bot.qq_id)?;
@@ -1357,6 +1392,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                                 .transpose()
                                 .ok()
                                 .flatten();
+                            let sl_webui = (config.bot.backend_type == BackendType::SnowLuma)
+                                .then(|| {
+                                    self.get_or_create_docker_sl_webui_bootstrap(config.bot.qq_id)
+                                })
+                                .transpose()
+                                .ok()
+                                .flatten();
                             self.docker_sessions
                                 .start_session(
                                     bot_id.clone(),
@@ -1365,6 +1407,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                                     Arc::clone(&self.event_bus),
                                     napcat_token,
                                     vnc_pass,
+                                    sl_webui,
                                 )
                                 .await;
                         }
