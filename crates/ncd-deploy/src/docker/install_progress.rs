@@ -1,17 +1,24 @@
 //! Docker 安装进度：复用 [`ncd_component::ProgressKind`]，经 Tauri 推到前端。
+//!
+//! Step 3 按 [`super::install::docker_install_phases`] 分段执行，每段走
+//! [`super::pkg_install_emit::run_pkg_with_emit`]（与组件装包同源 apt/dnf 解析 + 静默心跳）。
 
 use std::sync::Arc;
 
 use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_domain::DockerInstallReport;
 use ncd_host::remote::{probe_sudo, SudoAccess};
-use ncd_host::{parse_pkg_mgr_line, Host, HostCommand, Os};
+use ncd_host::{host_command_wrap_dpkg_wait_for_apt, truncate_pkg_line, Host, HostCommand, Os};
 use tracing::{error, info, warn};
 
 use super::cli::{DockerCli, DockerCliError};
-use super::install::{aliyun_install_script, looks_like_bad_sudo_password, DOCKER_DESKTOP_URL};
+use super::install::{
+    docker_install_phases, looks_like_bad_sudo_password, write_registry_mirrors_script,
+    DOCKER_DESKTOP_URL,
+};
+use super::pkg_install_emit::run_pkg_with_emit;
 
-pub const INSTALL_TOTAL_STEPS: u32 = 6;
+pub const INSTALL_TOTAL_STEPS: u32 = 7;
 
 pub type InstallProgressEmit = Arc<dyn Fn(ProgressKind) + Send + Sync>;
 
@@ -42,6 +49,7 @@ fn emit_step_progress(emit: &InstallProgressEmit, step: u32, percent: u8, messag
         downloaded_bytes: None,
         total_bytes: None,
         download_stage: None,
+        docker_layers: None,
     });
 }
 
@@ -50,7 +58,6 @@ fn finish_install(emit: &InstallProgressEmit, ok: bool) {
 }
 
 /// 带进度回调的安装入口。`emit` 由 Tauri 层接到 EventBus。
-/// `ssh_linux_username`：远端 SSH 登录名，用于 usermod 进 docker 组（比 SUDO_USER 更可靠）。
 pub async fn install_docker_with_progress(
     host: &dyn Host,
     sudo_password: Option<&str>,
@@ -116,6 +123,60 @@ pub async fn install_docker_with_progress(
     }
 }
 
+struct PhaseSpec {
+    idle: &'static str,
+    floor: u8,
+    cap: u8,
+    timeout_secs: u64,
+}
+
+fn phase_spec(name: &str) -> PhaseSpec {
+    match name {
+        "apt_prep" => PhaseSpec {
+            idle: "更新软件源并安装 curl、gnupg…",
+            floor: 5,
+            cap: 24,
+            timeout_secs: 300,
+        },
+        "apt_repo" => PhaseSpec {
+            idle: "配置 Docker CE 阿里云源…",
+            floor: 24,
+            cap: 38,
+            timeout_secs: 120,
+        },
+        "apt_install" => PhaseSpec {
+            idle: "安装 docker-ce 与 compose 插件（可能较久）…",
+            floor: 38,
+            cap: 86,
+            timeout_secs: 480,
+        },
+        "dnf_install" => PhaseSpec {
+            idle: "dnf 安装 Docker CE…",
+            floor: 8,
+            cap: 88,
+            timeout_secs: 600,
+        },
+        "yum_install" => PhaseSpec {
+            idle: "yum 安装 Docker CE…",
+            floor: 8,
+            cap: 88,
+            timeout_secs: 600,
+        },
+        "pkgmgr_check" => PhaseSpec {
+            idle: "检查包管理器…",
+            floor: 2,
+            cap: 5,
+            timeout_secs: 30,
+        },
+        _ => PhaseSpec {
+            idle: "执行安装…",
+            floor: 5,
+            cap: 80,
+            timeout_secs: 300,
+        },
+    }
+}
+
 async fn install_docker_linux_with_progress(
     host: &dyn Host,
     sudo_password: Option<&str>,
@@ -158,128 +219,78 @@ async fn install_docker_linux_with_progress(
         ));
     }
 
-    emit_step_begin(&emit, 3, "执行安装脚本（阿里云源，约 3–10 分钟）…");
-    emit_step_progress(&emit, 3, 2, "正在连接远端并启动 apt/dnf…");
+    emit_step_begin(&emit, 3, "安装 Docker（阿里云源，分步显示 apt/dnf 进度）…");
     info!(
         target: "ncd_deploy::docker",
-        "正在远端执行 docker-ce 安装脚本（阿里云源，最长约 10 分钟，请稍候）"
+        "分阶段安装 docker-ce（阿里云源）"
     );
 
-    let run_script = HostCommand::new("sh")
-        .arg("-c")
-        .arg(aliyun_install_script())
-        .elevated()
-        .timeout(std::time::Duration::from_secs(600));
+    for (phase_name, script) in docker_install_phases() {
+        let spec = phase_spec(phase_name);
+        emit_log(
+            &emit,
+            ProgressLogLevel::Info,
+            format!("→ {}", spec.idle),
+        );
 
-    let emit_stream = emit.clone();
-    let mut line_no: u32 = 0;
-    let mut last_emit_percent: u8 = 2;
-    let out = host
-        .run_streaming(
-            run_script,
-            Box::new(move |_source, line| {
-                let t = line.trim();
-                if t.is_empty() {
-                    return;
-                }
-                line_no += 1;
+        let cmd = HostCommand::new("sh")
+            .arg("-c")
+            .arg(script)
+            .elevated()
+            .timeout(std::time::Duration::from_secs(spec.timeout_secs));
 
-                let parsed = parse_pkg_mgr_line(t);
-                let (notable, level, summary, suggest) = if let Some(p) = parsed {
-                    let lvl = if matches!(p.phase, ncd_host::PkgPhase::Error) {
-                        ProgressLogLevel::Warn
-                    } else {
-                        ProgressLogLevel::Info
-                    };
-                    (true, lvl, p.summary, p.suggest_percent)
-                } else if t.starts_with("Get:")
-                    || t.starts_with("Ign:")
-                    || t.starts_with("Fetched")
-                    || t.contains("Setting up")
-                    || t.contains("Unpacking")
-                    || t.contains("docker-ce")
-                    || t.contains("E:")
-                    || t.to_ascii_lowercase().contains("error")
-                {
-                    let level = if t.contains("E:") || t.to_ascii_lowercase().contains("error") {
-                        ProgressLogLevel::Warn
-                    } else {
-                        ProgressLogLevel::Info
-                    };
-                    (
-                        true,
-                        level,
-                        truncate_line(t, 240),
-                        Some(script_line_to_percent(line_no, t)),
-                    )
-                } else {
-                    (false, ProgressLogLevel::Info, String::new(), None)
-                };
-
-                if notable {
-                    emit_stream(ProgressKind::Log {
-                        level,
-                        message: summary.clone(),
-                    });
-                    let pct = suggest.unwrap_or_else(|| script_line_to_percent(line_no, t));
-                    if pct > last_emit_percent {
-                        last_emit_percent = pct;
-                        emit_stream(ProgressKind::StepProgress {
-                            step: 3,
-                            percent: pct.min(88),
-                            message: truncate_line(&summary, 120),
-                            speed_bps: None,
-                            downloaded_bytes: None,
-                            total_bytes: None,
-                            download_stage: None,
-                        });
-                    }
-                }
-            }),
+        let out = run_pkg_with_emit(
+            host,
+            &emit,
+            cmd,
+            3,
+            spec.floor,
+            spec.cap,
+            spec.idle,
         )
         .await?;
 
-    if !out.success() {
-        emit_step_end(&emit, 3, false);
-        if looks_like_bad_sudo_password(&out.stderr) {
-            emit_log(&emit, ProgressLogLevel::Error, "sudo 密码不正确");
-            finish_install(&emit, false);
-            warn!(
+        if !out.success() {
+            emit_step_end(&emit, 3, false);
+            let detail = if !out.stderr.trim().is_empty() {
+                out.stderr.trim().to_string()
+            } else {
+                out.stdout.trim().to_string()
+            };
+            if looks_like_bad_sudo_password(&detail) {
+                emit_log(&emit, ProgressLogLevel::Error, "sudo 密码不正确");
+                finish_install(&emit, false);
+                return Ok(DockerInstallReport::need_sudo_password(
+                    "sudo 密码不正确，请重新输入。",
+                ));
+            }
+            error!(
                 target: "ncd_deploy::docker",
-                "Docker 安装脚本: sudo 密码不正确"
+                phase = phase_name,
+                err = %detail,
+                "Docker 安装阶段失败"
             );
-            return Ok(DockerInstallReport::need_sudo_password(
-                "sudo 密码不正确，请重新输入。",
+            emit_log(
+                &emit,
+                ProgressLogLevel::Error,
+                truncate_pkg_line(&detail, 200),
+            );
+            finish_install(&emit, false);
+            return Ok(DockerInstallReport::manual_required(
+                format!(
+                    "安装阶段「{}」失败：{}。可登录远端按阿里云文档手动配置 docker-ce 后重试。",
+                    spec.idle,
+                    truncate_pkg_line(&detail, 120)
+                ),
+                None,
             ));
         }
-        let detail = out.stderr.trim();
-        error!(
-            target: "ncd_deploy::docker",
-            err = %detail,
-            "Docker 安装脚本执行失败"
-        );
-        emit_log(
-            &emit,
-            ProgressLogLevel::Error,
-            truncate_line(detail, 200),
-        );
-        finish_install(&emit, false);
-        return Ok(DockerInstallReport::manual_required(
-            format!(
-                "安装脚本执行失败：{}。可登录远端按阿里云文档手动配置 docker-ce 仓库后重试。",
-                out.stderr.trim()
-            ),
-            None,
-        ));
     }
-    emit_step_progress(&emit, 3, 90, "安装脚本已完成");
+
+    emit_step_progress(&emit, 3, 90, "包管理器安装阶段已完成");
     emit_step_end(&emit, 3, true);
 
     emit_step_begin(&emit, 4, "启动 Docker 服务…");
-    info!(
-        target: "ncd_deploy::docker",
-        "安装脚本已完成，正在启动 docker 服务并配置用户组"
-    );
     let enable = HostCommand::new("systemctl")
         .arg("enable")
         .arg("--now")
@@ -337,27 +348,60 @@ async fn install_docker_linux_with_progress(
         ),
     );
 
-    if status.ready_to_deploy() {
-        emit_step_end(&emit, 6, true);
-        emit_step_progress(&emit, 6, 100, "Docker 可部署");
-        finish_install(&emit, true);
-        info!(target: "ncd_deploy::docker", "Docker 安装完成且可部署");
-        return Ok(DockerInstallReport::installed().with_probed_status(status));
+    if !status.ready_to_deploy() {
+        emit_step_end(&emit, 6, false);
+        let msg = if status.installed && status.daemon_running {
+            "Docker 已安装但缺 compose v2 插件，请在远端执行 sudo apt-get install -y docker-compose-plugin（dnf/yum 同名包）后重试".to_string()
+        } else if status.installed {
+            "Docker 已安装但 daemon 未运行，请在远端执行 sudo systemctl start docker".to_string()
+        } else {
+            "安装脚本执行完毕但仍探测不到 Docker，请登录远端手动检查".to_string()
+        };
+        emit_log(&emit, ProgressLogLevel::Warn, &msg);
+        finish_install(&emit, false);
+        return Ok(
+            DockerInstallReport::manual_required(msg, None).with_probed_status(status),
+        );
     }
 
-    emit_step_end(&emit, 6, false);
-    let msg = if status.installed && status.daemon_running {
-        "Docker 已安装但缺 compose v2 插件，请在远端执行 sudo apt-get install -y docker-compose-plugin（dnf/yum 同名包）后重试".to_string()
-    } else if status.installed {
-        "Docker 已安装但 daemon 未运行，请在远端执行 sudo systemctl start docker".to_string()
-    } else {
-        "安装脚本执行完毕但仍探测不到 Docker，请登录远端手动检查".to_string()
-    };
-    emit_log(&emit, ProgressLogLevel::Warn, &msg);
-    finish_install(&emit, false);
-    Ok(
-        DockerInstallReport::manual_required(msg, None).with_probed_status(status),
-    )
+    emit_step_end(&emit, 6, true);
+
+    emit_step_begin(&emit, 7, "配置 Docker 镜像加速…");
+    let mirror_cmd = HostCommand::new("sh")
+        .arg("-c")
+        .arg(write_registry_mirrors_script())
+        .elevated()
+        .timeout(std::time::Duration::from_secs(60));
+    match host.run_to_string(mirror_cmd).await {
+        Ok(m) if m.success() => {
+            emit_log(&emit, ProgressLogLevel::Info, "已写入 registry-mirrors");
+            emit_step_end(&emit, 7, true);
+        }
+        Ok(m) => {
+            emit_log(
+                &emit,
+                ProgressLogLevel::Warn,
+                format!(
+                    "镜像加速未写入（可稍后在远端手动配置）：{}",
+                    truncate_pkg_line(m.stderr.trim(), 80)
+                ),
+            );
+            emit_step_end(&emit, 7, true);
+        }
+        Err(e) => {
+            emit_log(
+                &emit,
+                ProgressLogLevel::Warn,
+                format!("镜像加速跳过：{e}"),
+            );
+            emit_step_end(&emit, 7, true);
+        }
+    }
+
+    emit_step_progress(&emit, 7, 100, "Docker 可部署");
+    finish_install(&emit, true);
+    info!(target: "ncd_deploy::docker", "Docker 安装完成且可部署");
+    Ok(DockerInstallReport::installed().with_probed_status(status))
 }
 
 fn docker_usermod_script(ssh_linux_username: Option<&str>) -> String {
@@ -372,8 +416,8 @@ async fn try_install_compose_plugin(host: &dyn Host) -> Result<(), DockerCliErro
     let script = r#"set -e
 if command -v apt-get >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq
-  apt-get install -y -qq docker-compose-plugin
+  apt-get update
+  apt-get install -y docker-compose-plugin
 elif command -v dnf >/dev/null 2>&1; then
   dnf install -y docker-compose-plugin
 elif command -v yum >/dev/null 2>&1; then
@@ -381,11 +425,13 @@ elif command -v yum >/dev/null 2>&1; then
 else
   exit 1
 fi"#;
-    let cmd = HostCommand::new("sh")
-        .arg("-c")
-        .arg(script)
-        .elevated()
-        .timeout(std::time::Duration::from_secs(300));
+    let cmd = host_command_wrap_dpkg_wait_for_apt(
+        HostCommand::new("sh")
+            .arg("-c")
+            .arg(script)
+            .elevated()
+            .timeout(std::time::Duration::from_secs(300)),
+    );
     let out = host.run_to_string(cmd).await?;
     if out.success() {
         Ok(())
@@ -445,31 +491,6 @@ async fn finalize_linux_docker_after_install(
         break;
     }
     Ok(status)
-}
-
-fn truncate_line(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        return s.to_string();
-    }
-    let mut out: String = s.chars().take(max).collect();
-    out.push('…');
-    out
-}
-
-fn script_line_to_percent(line_no: u32, line: &str) -> u8 {
-    if line.contains("Setting up") || line.contains("Unpacking docker") {
-        return 75;
-    }
-    if line.contains("docker-ce") || line.contains("docker-compose-plugin") {
-        return 60;
-    }
-    if line.starts_with("Fetched") {
-        return 45;
-    }
-    if line.starts_with("Get:") {
-        return 20 + (line_no % 20) as u8;
-    }
-    10 + (line_no % 70).min(30) as u8
 }
 
 /// Tauri 层用：把 ProgressKind 包装成 ProgressEvent（时间戳由 ProgressEvent::new 填充）。
