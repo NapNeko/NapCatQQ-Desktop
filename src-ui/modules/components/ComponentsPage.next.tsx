@@ -17,6 +17,7 @@ import { MotionIcon, refreshMotion } from '../../shared/ui/motion';
 import { useComponents } from '../../hooks/components/useComponents';
 import { useComponentAction } from '../../hooks/components/useComponentAction';
 import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
+import { useComponentPageAlerts } from '../../hooks/components/useComponentPageAlerts';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
 import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallProgress';
@@ -52,9 +53,6 @@ export const ComponentsPageNext: React.FC = () => {
         );
     }, [allRows, hosts]);
 
-    // 终态错误 push 进全局 InfoBar（顶层 InfoBarStack 渲染）。
-    useComponentActionErrors(allRows);
-
     // 选中的主机：默认停在第一台（本机）。机器列表变动后若当前选中项消失，
     // 回落到第一台，避免选中一台已被移除的远端导致空白。
     const [activeHostId, setActiveHostId] = useState<string | null>(null);
@@ -71,6 +69,10 @@ export const ComponentsPageNext: React.FC = () => {
         () => machines.find((m) => m.host.host_id === activeHostId) ?? machines[0] ?? null,
         [machines, activeHostId],
     );
+
+    // 清单 / 探测 / 组件操作终态 → 全局 InfoBar（顶层 InfoBarStack 渲染）。
+    useComponentPageAlerts(allRows, error, activeHostId);
+    useComponentActionErrors(allRows);
 
     const dockerInstallProgress = useDockerInstallProgress(activeMachine?.host.host_id ?? '');
 
@@ -248,8 +250,6 @@ export const ComponentsPageNext: React.FC = () => {
                 </Button>
             </header>
 
-            {error && <ErrorBanner message={error.message} onRetry={refetch} />}
-
             {machines.length > 1 && activeHostId && (
                 <HostSwitcher
                     machines={machines}
@@ -319,18 +319,6 @@ const SectionLoading: React.FC = () => (
         <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={16} className="text-text-tertiary" />
         <span className="text-sm text-text-tertiary">加载中…</span>
     </PagePlaceholder>
-);
-
-const ErrorBanner: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
-    <div className="mb-3 flex shrink-0 items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-4 py-3">
-        <div className="flex items-center gap-2">
-            <Box size={16} className="text-danger" />
-            <span className="text-sm text-text">加载组件清单失败：{message}</span>
-        </div>
-        <Button size="sm" variant="ghost" onClick={onRetry}>
-            重试
-        </Button>
-    </div>
 );
 
 export default ComponentsPageNext;

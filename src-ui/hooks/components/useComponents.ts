@@ -12,10 +12,8 @@
 //   - 浏览器预览：用 mockHosts 全集（local + 2 remote），便于演示多主机 UI。
 //
 // 错误分层：
-//   - catalogQuery 失败 = 整页爆，往外抛 error，UI 顶部 banner 显示
-//   - 单个 detectQuery 失败 = 那一行 host 的事，下沉到 row.status.unknown.reason
-//     让用户在那一行看到真错误（"remote host registry not implemented"），而不
-//     是误以为"整个清单都没拉到"
+//   - catalogQuery 失败 = 整页爆，由 useComponentPageAlerts 推全局 InfoBar
+//   - 单个 detectQuery 失败 = 该行 unknown，由 useComponentPageAlerts 推 InfoBar（当前主机）
 //
 // frontend-layering：本 hook 唯一允许调 service 的位置。
 
@@ -258,7 +256,7 @@ export function useComponents(): UseComponentsResult {
         return splitByCategory(rows);
     }, [components, hosts, detectQueries]);
 
-    // catalog 失败 = 整页爆。detect 单点失败下沉到 row 不往外抛。
+    // catalog 失败 = 整页爆。detect 单点失败下沉到 row，由页面 hook 转 InfoBar。
     // catalogError 同样可能是裸字符串，正规化成带 message 的 Error，
     // 让顶部 banner（读 error.message）能显示真因。
     const error = catalogError ? new Error(errorText(catalogError, '加载组件清单失败')) : null;
