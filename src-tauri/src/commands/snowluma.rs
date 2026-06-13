@@ -188,7 +188,7 @@ pub async fn open_snowluma_webui(
             if let Some(ep) = state.bot_manager.snowluma_docker_endpoints(&bid).await {
                 return Ok(SnowLumaWebuiEndpoint {
                     url: format!("http://127.0.0.1:{}/", ep.webui_local_port),
-                    password: ep.vnc_password,
+                    password: ep.webui_password,
                 });
             }
             return Err(
@@ -251,6 +251,48 @@ pub async fn open_snowluma_webui(
     Ok(SnowLumaWebuiEndpoint {
         url: format!("http://127.0.0.1:{port}/"),
         password,
+    })
+}
+
+/// 打开 SnowLuma Docker noVNC 扫码页（对齐 legacy `build_snowluma_novnc_url`）。
+#[tauri::command]
+pub async fn open_snowluma_novnc(
+    state: State<'_, AppState>,
+    bot_id: String,
+) -> Result<SnowLumaWebuiEndpoint, String> {
+    use ncd_domain::DeploymentType;
+    use ncd_runtime::BotId;
+
+    let bid = BotId::new(bot_id);
+    let cfg = state
+        .bot_manager
+        .get_bot_config(&bid)
+        .await
+        .map_err(|e| e.to_string())?
+        .filter(|c| c.bot.deployment_type == DeploymentType::Docker)
+        .ok_or_else(|| "仅远端 SnowLuma Docker Bot 支持 noVNC 扫码".to_string())?;
+
+    if cfg.bot.backend_type != ncd_domain::BackendType::SnowLuma {
+        return Err("当前 Bot 不是 SnowLuma".into());
+    }
+
+    let ep = state
+        .bot_manager
+        .snowluma_docker_endpoints(&bid)
+        .await
+        .ok_or_else(|| "noVNC 隧道未就绪，请确认 Bot 已启动".to_string())?;
+
+    let pwd_enc = urlencoding::encode(&ep.vnc_password);
+    let query = format!(
+        "autoconnect=1&resize=scale&password={pwd_enc}&view_only=0&reconnect=1&reconnect_delay=3000"
+    );
+
+    Ok(SnowLumaWebuiEndpoint {
+        url: format!(
+            "http://127.0.0.1:{}/vnc.html?{query}",
+            ep.novnc_local_port
+        ),
+        password: ep.vnc_password,
     })
 }
 

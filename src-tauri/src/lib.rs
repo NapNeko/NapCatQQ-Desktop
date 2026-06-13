@@ -369,6 +369,7 @@ pub fn run() {
             commands::snowluma::set_snowluma_app_config,
             commands::snowluma::set_snowluma_password_override,
             commands::snowluma::open_snowluma_webui,
+            commands::snowluma::open_snowluma_novnc,
             commands::servers::list_servers,
             commands::servers::add_server,
             commands::servers::update_server,
