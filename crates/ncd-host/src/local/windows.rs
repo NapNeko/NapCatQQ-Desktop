@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 
@@ -455,25 +455,53 @@ impl Host for LocalWindowsHost {
 
         let tx_out = tx.clone();
         let stdout_task = tokio::spawn(async move {
-            if let Some(pipe) = stdout_pipe {
-                let mut reader = BufReader::new(pipe).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    if tx_out.send((StreamSource::Stdout, line)).await.is_err() {
-                        break;
+            if let Some(mut pipe) = stdout_pipe {
+                let mut chunk = [0u8; 4096];
+                let mut buf = Vec::new();
+                loop {
+                    match pipe.read(&mut chunk).await {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            crate::stream_chunk::feed_stream_chunk(
+                                &mut buf,
+                                &chunk[..n],
+                                |s| {
+                                    let _ = tx_out.try_send((StreamSource::Stdout, s));
+                                },
+                            );
+                        }
+                        Err(_) => break,
                     }
                 }
+                crate::stream_chunk::flush_stream_remainder(&mut buf, |s| {
+                    let _ = tx_out.try_send((StreamSource::Stdout, s));
+                });
             }
         });
 
         let tx_err = tx.clone();
         let stderr_task = tokio::spawn(async move {
-            if let Some(pipe) = stderr_pipe {
-                let mut reader = BufReader::new(pipe).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    if tx_err.send((StreamSource::Stderr, line)).await.is_err() {
-                        break;
+            if let Some(mut pipe) = stderr_pipe {
+                let mut chunk = [0u8; 4096];
+                let mut buf = Vec::new();
+                loop {
+                    match pipe.read(&mut chunk).await {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            crate::stream_chunk::feed_stream_chunk(
+                                &mut buf,
+                                &chunk[..n],
+                                |s| {
+                                    let _ = tx_err.try_send((StreamSource::Stderr, s));
+                                },
+                            );
+                        }
+                        Err(_) => break,
                     }
                 }
+                crate::stream_chunk::flush_stream_remainder(&mut buf, |s| {
+                    let _ = tx_err.try_send((StreamSource::Stderr, s));
+                });
             }
         });
 

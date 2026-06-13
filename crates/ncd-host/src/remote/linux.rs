@@ -147,7 +147,13 @@ impl RemoteLinuxHost {
             host_key_error: Arc::clone(&host_key_error),
         };
         let mut russh_cfg = client::Config::default();
-        russh_cfg.inactivity_timeout = config.keepalive_interval.map(|d| d * 2);
+        // 长任务（apt 等锁、流式安装）需要更长的会话空闲上限；仅靠 keepalive 时
+        // 默认 inactivity=2×keepalive 在部分 sshd/中间设备上仍可能被掐断。
+        russh_cfg.inactivity_timeout = match config.keepalive_interval {
+            Some(d) if d <= Duration::from_secs(20) => Some(Duration::from_secs(900)),
+            Some(d) => Some(d.saturating_mul(4)),
+            None => None,
+        };
         russh_cfg.keepalive_interval = config.keepalive_interval;
         let russh_cfg = Arc::new(russh_cfg);
 
@@ -611,44 +617,36 @@ impl Host for RemoteLinuxHost {
                 .map_err(|e| HostError::remote_disconnected(format!("stdin eof: {e}")))?;
         }
 
-        // russh 是单路复用流，不能像本机那样分两个 pipe reader。
-        // 每收到 Data/ExtendedData 包就按 \n 切行，遇到完整行立即回调。
-        // docker pull 在非 TTY 下每个状态行是独立的一个 Data 包，这个粒度
-        // 足够实时；跨包的行边界（极少见）会在 flush 残行时补发。
+        // russh 单路复用流：\n 与 \r 都切逻辑行，docker pull 的 \r 进度才能实时回调。
         let mut stdout_buf = Vec::<u8>::new();
         let mut stderr_buf = Vec::<u8>::new();
         let mut stdout_lines = Vec::<String>::new();
         let mut stderr_lines = Vec::<String>::new();
         let mut exit_code: Option<i32> = None;
 
-        // 内联行切分：把 buf 里已有的完整行（以 \n 结尾）切出来回调，残行留在 buf。
-        // 用宏而非闭包，避免同时借用 buf/lines/on_line 导致生命周期冲突。回调收
-        // owned String（trait 签名如此），clone 进 lines 缓冲，行很小可忽略。
-        macro_rules! flush_lines {
-            ($buf:expr, $lines:expr, $src:expr) => {
-                while let Some(pos) = $buf.iter().position(|&b| b == b'\n') {
-                    let raw: Vec<u8> = $buf.drain(..=pos).collect();
-                    let s = String::from_utf8_lossy(&raw);
-                    let s = s.trim_end_matches('\n').trim_end_matches('\r').to_string();
-                    on_line($src, s.clone());
-                    $lines.push(s);
-                }
-            };
-        }
-
-        // 直接在 async fn 里 loop，不包 async block，避免 coroutine 捕获 on_line
-        // 和 lines 导致生命周期冲突。
         let deadline = tokio::time::Instant::now() + timeout;
         loop {
             match tokio::time::timeout_at(deadline, channel.wait()).await {
                 Ok(Some(msg)) => match msg {
                     ChannelMsg::Data { ref data } => {
-                        stdout_buf.extend_from_slice(data);
-                        flush_lines!(stdout_buf, stdout_lines, StreamSource::Stdout);
+                        crate::stream_chunk::feed_stream_chunk(
+                            &mut stdout_buf,
+                            data,
+                            |s| {
+                                on_line(StreamSource::Stdout, s.clone());
+                                stdout_lines.push(s);
+                            },
+                        );
                     }
                     ChannelMsg::ExtendedData { ref data, ext } if ext == 1 => {
-                        stderr_buf.extend_from_slice(data);
-                        flush_lines!(stderr_buf, stderr_lines, StreamSource::Stderr);
+                        crate::stream_chunk::feed_stream_chunk(
+                            &mut stderr_buf,
+                            data,
+                            |s| {
+                                on_line(StreamSource::Stderr, s.clone());
+                                stderr_lines.push(s);
+                            },
+                        );
                     }
                     ChannelMsg::ExitStatus { exit_status } => {
                         exit_code = Some(exit_status as i32);
@@ -657,7 +655,7 @@ impl Host for RemoteLinuxHost {
                     ChannelMsg::Close => break,
                     _ => {}
                 },
-                Ok(None) => break, // channel 关闭
+                Ok(None) => break,
                 Err(_) => {
                     return Err(HostError::Timeout {
                         operation: "remote_run_streaming",
@@ -666,19 +664,14 @@ impl Host for RemoteLinuxHost {
             }
         }
 
-        // flush 残行（命令输出末尾没有 \n 的情况）
-        if !stdout_buf.is_empty() {
-            let s = String::from_utf8_lossy(&stdout_buf);
-            let s = s.trim_end_matches('\r').to_string();
+        crate::stream_chunk::flush_stream_remainder(&mut stdout_buf, |s| {
             on_line(StreamSource::Stdout, s.clone());
             stdout_lines.push(s);
-        }
-        if !stderr_buf.is_empty() {
-            let s = String::from_utf8_lossy(&stderr_buf);
-            let s = s.trim_end_matches('\r').to_string();
+        });
+        crate::stream_chunk::flush_stream_remainder(&mut stderr_buf, |s| {
             on_line(StreamSource::Stderr, s.clone());
             stderr_lines.push(s);
-        }
+        });
 
         Ok(CommandOutput {
             exit_code,
