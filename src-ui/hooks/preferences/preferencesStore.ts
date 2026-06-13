@@ -9,7 +9,7 @@
 //   closeAction     close（关闭程序）/ tray（最小化到托盘）
 //   motionEnabled   动画总开关。系统级 prefers-reduced-motion 命中时也会被强制覆盖
 //   motionLevel     elegant / standard / rich。决定动画风格强度
-//   motionSpeed     0.5 ~ 1.5。在档位 baseline 上再乘一次
+//   motionSpeed     0.5 ~ 1.5（内部值）。0.5 = 体感 1× 基准，越大越快
 //   radiusStyle     square / standard / round。全局圆角风格（统一系数缩放）
 
 import { useSyncExternalStore } from 'react';
@@ -25,6 +25,7 @@ import {
     normalizeRadiusStyle,
     applyRadiusStyle,
 } from '../../core/design/radius';
+import { syncRootChromeBackground } from '../../core/design/surfaceCanvas';
 
 export type ThemeMode = 'light' | 'dark' | 'auto' | 'latte' | 'frappe' | 'macchiato' | 'mocha';
 export type CloseAction = 'close' | 'tray';
@@ -131,6 +132,7 @@ export function applySideEffects() {
     }
     // 圆角风格：覆盖 :root 上的 --radius-* CSS 变量。
     applyRadiusStyle(state.radiusStyle);
+    syncRootChromeBackground();
 }
 
 export const preferencesStore = {

@@ -19,8 +19,7 @@ import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployPr
 import { useDockerInstallProgressBridge } from '../hooks/docker/useDockerInstallProgressBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
-import { applySideEffects } from '../hooks/preferences/preferencesStore';
-import { useCloseActionBootstrap } from '../hooks/preferences/useCloseActionBootstrap';
+import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue } from '../hooks/task-queue/useTaskQueue';
 import type { TaskQueueSnapshot } from '../core/domain/task-queue/types';
@@ -57,11 +56,7 @@ export const AppNext: React.FC = () => {
 
     const taskQueue = useTaskQueue({ hostLabels });
 
-    useEffect(() => {
-        applySideEffects();
-    }, []);
-
-    useCloseActionBootstrap();
+    useAppUiPreferencesBootstrap();
 
     const { bars, dismiss } = useGlobalInfoBars();
 

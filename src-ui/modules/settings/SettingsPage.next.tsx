@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { Save, AlertCircle, Check } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Button, Spinner } from '../../shared/ui';
 import { MotionIcon, infoToneMotion } from '../../shared/ui/motion';
-import { usePreferences } from '../../hooks/preferences/preferencesStore';
 import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { AppearanceTab } from './tabs/AppearanceTab';
@@ -23,7 +22,6 @@ import {
 } from './settings-draft';
 
 export function SettingsPageNext() {
-    const prefs = usePreferences();
     const { bootstrap, openDataDir, isOpeningDir } = useBootstrap();
     const { settings, save, isSaving } = useBackendSettings();
 
@@ -39,14 +37,14 @@ export function SettingsPageNext() {
 
     useEffect(() => {
         if (settings) {
-            setDraft(draftFromBackendAndPrefs(settings, prefs));
+            setDraft(draftFromBackendAndPrefs(settings));
         }
         // 仅在后端设置从 IPC 到达或保存回写时同步草稿，不把 prefs 列入依赖以免编辑中被覆盖。
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [settings]);
 
     const dirty =
-        draft !== null && settings !== null && isSettingsDirty(draft, settings, prefs);
+        draft !== null && settings !== null && isSettingsDirty(draft, settings);
 
     const patchDraft = (patch: Partial<SettingsDraft>) =>
         setDraft((cur) => (cur ? { ...cur, ...patch } : cur));
@@ -56,7 +54,7 @@ export function SettingsPageNext() {
     };
 
     const handleCancel = () => {
-        if (settings) setDraft(draftFromBackendAndPrefs(settings, prefs));
+        if (settings) setDraft(draftFromBackendAndPrefs(settings));
     };
 
     return (

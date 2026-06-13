@@ -1,7 +1,8 @@
 // 浏览器 dev 模式下的后端设置 mock。
-// 可变单例：settingsService.set 在非 Tauri 环境写回这里，让 dev 下改设置有连续手感。
 
 import type { BackendSettings } from '../../services/settings.service';
+import { defaultAppUiPreferencesFromPrefs } from '../../domain/settings/ui-preferences-bridge';
+import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
 
 export const mockBackendSettings: BackendSettings = {
     botLoginCheckIntervalMs: 5000,
@@ -9,4 +10,5 @@ export const mockBackendSettings: BackendSettings = {
     performanceMonitorIntervalMs: 1200,
     githubPat: '',
     closeAction: 'close',
+    uiPreferences: defaultAppUiPreferencesFromPrefs(preferencesStore.get()),
 };

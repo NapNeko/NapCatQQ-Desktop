@@ -4,7 +4,11 @@ import type { MotionLevel } from '../../core/design/motion';
 import { scaleDuration } from '../../core/design/motion';
 import type { RadiusStyle } from '../../core/design/radius';
 import { clampPerformanceMonitorIntervalMs } from '../../core/domain/performance/performanceSettings';
-import type { BackendSettings } from '../../core/services/settings.service';
+import {
+    clientPrefsFromBackend,
+    type BackendSettings,
+} from '../../core/services/settings.service';
+import { appPreferencesToAppUiPreferences } from '../../core/domain/settings/ui-preferences-bridge';
 import {
     preferencesStore,
     type AppPreferences,
@@ -25,16 +29,22 @@ export type SettingsDraft = BackendSettings & {
 
 export function draftFromBackendAndPrefs(
     backend: BackendSettings,
-    prefs: AppPreferences,
+    _prefs?: AppPreferences,
 ): SettingsDraft {
+    const client = clientPrefsFromBackend(backend);
     return {
-        ...backend,
-        theme: prefs.theme,
-        showMascot: prefs.showMascot,
-        motionEnabled: prefs.motionEnabled,
-        motionLevel: prefs.motionLevel,
-        motionSpeed: prefs.motionSpeed,
-        radiusStyle: prefs.radiusStyle,
+        botLoginCheckIntervalMs: backend.botLoginCheckIntervalMs,
+        performanceMonitorEnabled: backend.performanceMonitorEnabled,
+        performanceMonitorIntervalMs: backend.performanceMonitorIntervalMs,
+        githubPat: backend.githubPat,
+        closeAction: backend.closeAction,
+        uiPreferences: backend.uiPreferences,
+        theme: client.theme,
+        showMascot: client.showMascot,
+        motionEnabled: client.motionEnabled,
+        motionLevel: client.motionLevel,
+        motionSpeed: client.motionSpeed,
+        radiusStyle: client.radiusStyle,
     };
 }
 
@@ -47,15 +57,23 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         ),
         githubPat: draft.githubPat,
         closeAction: draft.closeAction,
+        uiPreferences: appPreferencesToAppUiPreferences({
+            theme: draft.theme,
+            showMascot: draft.showMascot,
+            closeAction: draft.closeAction,
+            motionEnabled: draft.motionEnabled,
+            motionLevel: draft.motionLevel,
+            motionSpeed: draft.motionSpeed,
+            radiusStyle: draft.radiusStyle,
+        }),
     };
 }
 
 export function isSettingsDirty(
     draft: SettingsDraft,
     backend: BackendSettings,
-    prefs: AppPreferences,
 ): boolean {
-    const baseline = draftFromBackendAndPrefs(backend, prefs);
+    const baseline = draftFromBackendAndPrefs(backend);
     return (
         draft.botLoginCheckIntervalMs !== baseline.botLoginCheckIntervalMs ||
         draft.performanceMonitorEnabled !== baseline.performanceMonitorEnabled ||
@@ -76,7 +94,6 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
     const themeChanged = draft.theme !== oldTheme;
 
     if (themeChanged) {
-        // 读取 motion 设置（用 draft 值，用户刚保存的就是他们想要的）
         const enabled = draft.motionEnabled;
         const level = draft.motionLevel;
         const speed = draft.motionSpeed;
@@ -87,7 +104,6 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
             duration = 0;
             easing = 'linear';
         } else if (level === 'elegant') {
-            // elegant 档不播放动画
             duration = 0;
             easing = 'ease-in-out';
         } else if (level === 'standard') {
