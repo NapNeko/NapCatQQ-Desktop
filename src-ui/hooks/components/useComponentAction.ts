@@ -56,13 +56,26 @@ export function useComponentAction(): UseComponentActionResult {
 
     const startAction = useCallback(
         async (componentId: ComponentId, hostId: string, kind: StepKind) => {
-            const taskId = await componentService.runComponentAction(
-                componentId,
-                hostId,
-                kind,
-            );
-            componentActionStore.registerTarget(taskId, componentId, hostId);
-            return taskId;
+            const taskId = crypto.randomUUID();
+            const needsPkgQueue =
+                componentId === 'novnc' &&
+                (kind === 'ensure_installed' || kind === 'force_install');
+            const queueHint = needsPkgQueue
+                ? '排队等待包管理器（Docker 等 apt 任务完成后自动开始）…'
+                : undefined;
+            componentActionStore.started(taskId, componentId, hostId, queueHint);
+            try {
+                const backendTaskId = await componentService.runComponentAction(
+                    componentId,
+                    hostId,
+                    kind,
+                    taskId,
+                );
+                return backendTaskId;
+            } catch (err) {
+                componentActionStore.failTask(taskId, err);
+                throw err;
+            }
         },
         [],
     );

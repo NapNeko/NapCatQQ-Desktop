@@ -293,9 +293,12 @@ export const ComponentsPageNext: React.FC = () => {
                         onOpenDockerDownload={() => {
                             void dockerHosts.openDownloadPage().catch(() => undefined);
                         }}
-                        isDeploying={dockerHosts.isDeploying}
-                        onDeploy={dockerHosts.deploy}
-                        onDeployError={handleDockerDeployError}
+                        isPullingImage={dockerHosts.isPullingFrameworkImage}
+                        onPullImage={dockerHosts.pullFrameworkImage}
+                        onPullImageError={handleDockerDeployError}
+                        imageReadyByFlavor={
+                            dockerHosts.imageReadyByHost[activeMachine.host.host_id] ?? {}
+                        }
                         containers={dockerHosts.containersByHost[activeMachine.host.host_id] ?? []}
                     />
                 ) : null}

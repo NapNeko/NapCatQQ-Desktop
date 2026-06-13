@@ -5,7 +5,7 @@
 // 这些字段只在 step_progress 事件里有，且要在 step_end / finished 时清零。
 // 不直接解析 message 字符串：所有数字字段从后端结构化字段拿。
 
-import type { ProgressEvent, ProgressLogLevel } from '../../ipc/types';
+import type { DockerPullLayerSnapshot, ProgressEvent, ProgressLogLevel } from '../../ipc/types';
 
 export type ActionStatus = 'pending' | 'running' | 'paused' | 'success' | 'failed' | 'cancelled';
 
@@ -42,6 +42,8 @@ export interface ActionProgressView {
     totalBytes: number | null;
     /// 下载阶段，仅下载步骤为非 null
     downloadStage: DownloadStage | null;
+    /// docker pull 各层进度；仅拉镜像步骤有值
+    dockerLayers: DockerPullLayerSnapshot[];
     /// 累计 log（最多保留 50 条）
     logs: ActionLogLine[];
 }
@@ -58,6 +60,7 @@ export const initialActionProgress: ActionProgressView = {
     downloadedBytes: null,
     totalBytes: null,
     downloadStage: null,
+    dockerLayers: [],
     logs: [],
 };
 
@@ -68,6 +71,7 @@ function clearDownloadFields<T extends ActionProgressView>(v: T): T {
         downloadedBytes: null,
         totalBytes: null,
         downloadStage: null,
+        dockerLayers: [],
     };
 }
 
@@ -122,6 +126,7 @@ export function reduceActionProgress(
                 downloadedBytes: toNumberOrNull(event.downloaded_bytes),
                 totalBytes: toNumberOrNull(event.total_bytes),
                 downloadStage: toDownloadStage(event.download_stage),
+                dockerLayers: event.docker_layers ?? [],
             };
         case 'step_end':
             return clearDownloadFields({ ...prev, percent: 100 });
@@ -175,6 +180,9 @@ export function deriveEtaSeconds(view: ActionProgressView): number | null {
 export function isIndeterminate(view: ActionProgressView): boolean {
     if (view.downloadStage === 'racing' || view.downloadStage === 'switching_mirror') {
         return true;
+    }
+    if (view.dockerLayers.length > 0) {
+        return false;
     }
     if (view.percent <= 0 && view.status === 'running') return true;
     return false;

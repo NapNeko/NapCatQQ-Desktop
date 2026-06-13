@@ -43,12 +43,14 @@ export const componentService = {
         componentId: ComponentId,
         hostId: string,
         kind: StepKind,
+        taskId?: string,
     ): Promise<string> => {
         if (isTauri) {
             return invoke<string>('run_component_action', {
                 componentId,
                 hostId,
                 kind,
+                taskId: taskId ?? null,
             });
         }
         return withMockDelay(mockRunAction(componentId, hostId, kind), 50);

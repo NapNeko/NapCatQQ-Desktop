@@ -84,7 +84,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
             footer={footer}
             progressOverlay={
                 isInstalling && installProgress && shouldShowProgressBar(installProgress) ? (
-                    <ProgressBarOverlay progress={installProgress} />
+                    <ProgressBarOverlay progress={installProgress} determinate />
                 ) : undefined
             }
         />
@@ -100,7 +100,21 @@ const DockerMeta: React.FC<{
     installProgress?: ActionProgressView | null;
 }> = ({ ready, summary, probing, isInstalling, installHint, installProgress }) => {
     if (isInstalling && installProgress) {
-        return <ProgressLine progress={installProgress} className="mt-0" />;
+        const step =
+            installProgress.totalSteps > 0 && installProgress.currentStep > 0
+                ? `${installProgress.currentStep}/${installProgress.totalSteps} · `
+                : '';
+        return (
+            <div className="mt-0 min-w-0">
+                {step ? (
+                    <p className="mb-0.5 truncate text-2xs text-text-tertiary">
+                        {step}
+                        {installProgress.message || '安装中…'}
+                    </p>
+                ) : null}
+                <ProgressLine progress={installProgress} className="mt-0" />
+            </div>
+        );
     }
     if (isInstalling) {
         return (

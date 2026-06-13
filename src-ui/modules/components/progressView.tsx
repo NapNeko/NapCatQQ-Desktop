@@ -15,6 +15,7 @@ import {
     formatSpeed,
     isIndeterminate,
 } from '../../core/domain/components/progress';
+import { DockerPullLayersPanel } from './DockerPullLayersPanel';
 
 function progressSuccessEnterKey(progress: ActionProgressView): string {
     return `success-${progress.percent}-${progress.message ?? ''}`;
@@ -60,8 +61,33 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
 
     const isDownload = progress.downloadStage != null;
     const indeterminate = isIndeterminate(progress);
+    const showDockerLayers =
+        progress.dockerLayers.length > 0 ||
+        (progress.status === 'running' && progress.currentStep >= 2 && progress.totalSteps > 0);
 
     if (!isDownload) {
+        if (showDockerLayers) {
+            return (
+                <div className={cn('mt-1 min-w-0 max-w-full', className)}>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <MotionIcon
+                            icon={Loader2}
+                            motion="spin"
+                            playEnter={false}
+                            size={12}
+                            className="shrink-0 text-brand"
+                        />
+                        <span className="min-w-0 truncate text-[12px] text-text-secondary">
+                            {progress.message || '拉取镜像…'}
+                        </span>
+                        <span className="ml-auto shrink-0 font-mono text-[11.5px] tabular-nums text-text-secondary">
+                            {progress.percent}%
+                        </span>
+                    </div>
+                    <DockerPullLayersPanel progress={progress} />
+                </div>
+            );
+        }
         return row(
             <>
                 <MotionIcon
@@ -119,16 +145,21 @@ export function shouldShowProgressBar(progress: ActionProgressView): boolean {
     return true;
 }
 
-export const ProgressBarOverlay: React.FC<{ progress: ActionProgressView }> = ({ progress }) => {
+export const ProgressBarOverlay: React.FC<{
+    progress: ActionProgressView;
+    /** Docker/包管理器安装等有明确 percent 时用确定进度条 */
+    determinate?: boolean;
+}> = ({ progress, determinate = false }) => {
     const indeterminate = isIndeterminate(progress);
     const tone = progress.downloadStage === 'switching_mirror' ? 'warning' : 'brand';
     const isDownload = progress.downloadStage != null;
+    const barIndeterminate = determinate ? indeterminate : indeterminate || !isDownload;
     return (
         <Progress
             size="sm"
             tone={tone}
             value={progress.percent}
-            indeterminate={indeterminate || !isDownload}
+            indeterminate={barIndeterminate}
             className="absolute inset-x-0 bottom-0 h-[2px] rounded-none bg-transparent"
         />
     );

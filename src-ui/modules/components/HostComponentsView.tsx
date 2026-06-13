@@ -2,9 +2,8 @@
 //
 // Docker 在这里被当成正常的运行时依赖：
 //   - 运行时依赖组里有一行 Docker（状态来自探测，安装走 docker hook）。
-//   - 框架行（NapCat / SnowLuma）在 docker 就绪时各带一个「Docker 部署」按钮，
-//     点了开部署对话框 —— 部署形态归到对应框架自己的行上，不再是页面底部
-//     单开一块。
+//   - 框架行（NapCat / SnowLuma）在 docker 就绪时各带一个「拉镜像」按钮，
+//     仅预拉框架镜像；Bot 容器在 Bot 页启动时创建。
 
 import React from 'react';
 import { PackageX } from 'lucide-react';
@@ -17,12 +16,10 @@ import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
-import { containerMatchesFlavor } from '../../core/domain/docker/status';
 import type {
     ComponentId,
     ContainerInfo,
     DeployedContainer,
-    DockerDeploySpec,
     DockerFlavor,
     DockerStatus,
     Os,
@@ -51,10 +48,12 @@ interface HostComponentsViewProps {
     dockerInstallProgress?: ActionProgressView | null;
     onInstallDocker: (hostId: string) => void;
     onOpenDockerDownload: () => void;
-    isDeploying: boolean;
-    onDeploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
-    onDeployError?: (hostId: string, flavor: DockerFlavor, error: unknown) => void;
-    // 这台机器已有的容器列表，用于判定某 flavor 是否已部署（部署按钮置「已部署」并禁用）。
+    isPullingImage: (hostId: string, flavor: DockerFlavor) => boolean;
+    onPullImage: (hostId: string, flavor: DockerFlavor, taskId: string) => Promise<DeployedContainer>;
+    onPullImageError?: (hostId: string, flavor: DockerFlavor, error: unknown) => void;
+    // 这台主机各 flavor 官方镜像是否已拉取（不创建 napcat/snowluma 演示容器）。
+    imageReadyByFlavor: Partial<Record<DockerFlavor, boolean | undefined>>;
+    // 容器列表（Docker 管理页等；框架按钮不再据此判定）。
     containers: ContainerInfo[];
 }
 
@@ -72,10 +71,11 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     dockerInstallProgress,
     onInstallDocker,
     onOpenDockerDownload,
-    isDeploying,
-    onDeploy,
-    onDeployError,
-    containers,
+    isPullingImage,
+    onPullImage,
+    onPullImageError,
+    imageReadyByFlavor,
+    containers: _containers,
 }) => {
     const { host } = machine;
     const empty =
@@ -109,18 +109,18 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
         if (!dockerReady) return null;
         const flavor = frameworkFlavor(componentId);
         if (!flavor) return null;
-        // 这台机器上已有同 flavor 的容器就视为已部署，按钮置「已部署」并禁用，
-        // 避免用户重复部署撞容器名 / 端口。
-        const alreadyDeployed = containers.some((c) => containerMatchesFlavor(c, flavor));
+        // 本地已有官方镜像则禁用重复拉取。
+        const alreadyDeployed = imageReadyByFlavor[flavor] === true;
+        const pulling = isPullingImage(host.host_id, flavor);
         return (
             <FrameworkDockerDeployButton
                 flavor={flavor}
                 hostId={host.host_id}
                 hostLabel={host.display_name}
-                isDeploying={isDeploying}
+                isDeploying={pulling}
                 alreadyDeployed={alreadyDeployed}
-                onDeploy={onDeploy}
-                onDeployError={(error) => onDeployError?.(host.host_id, flavor, error)}
+                onPullImage={onPullImage}
+                onPullError={(error) => onPullImageError?.(host.host_id, flavor, error)}
             />
         );
     };
@@ -130,7 +130,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
             <div className="flex w-full flex-col gap-3">
                 <Group
                     title="框架"
-                    description="Bot 框架本体；Docker 就绪时可在行内部署容器实例"
+                    description="Bot 框架本体；Docker 就绪时可预拉框架镜像，Bot 启动时再创建容器"
                     rows={machine.framework}
                     hostId={host.host_id}
                     isAnyInstalling={isAnyInstalling}
