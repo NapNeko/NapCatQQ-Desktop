@@ -25,6 +25,7 @@
 //! - 各 OS 差异由 [`Host::os`] / [`Host::pkg_manager`] / [`Host::shell`] 暴露,
 //!   Component 内部 `match host.os() { ... }` 决策
 
+pub mod apt_lock;
 pub mod command;
 pub mod error;
 pub mod host;
@@ -35,8 +36,13 @@ pub mod path;
 pub mod process;
 pub mod remote;
 pub mod shell;
+pub mod stream_chunk;
 pub mod subprocess;
 
+pub use apt_lock::{
+    dpkg_lock_wait_preamble_sh, host_command_wrap_dpkg_wait_for_apt,
+    output_indicates_dpkg_lock_hold, wrap_sh_script_with_dpkg_wait,
+};
 pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
 pub use host::{Arch, Host, Locality, Os, StreamSource};

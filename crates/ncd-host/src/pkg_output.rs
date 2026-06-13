@@ -53,6 +53,16 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     let lower = t.to_ascii_lowercase();
 
+    if t.starts_with("NCD:") {
+        let msg = t.strip_prefix("NCD:").unwrap_or(t).trim();
+        return Some(PkgLineParse {
+            family: PkgMgrFamily::Apt,
+            phase: PkgPhase::Other,
+            summary: truncate_pkg_line(msg, 160),
+            suggest_percent: None,
+        });
+    }
+
     if t.starts_with("E:") || t.starts_with("Err:") {
         return Some(PkgLineParse {
             family: PkgMgrFamily::Apt,
