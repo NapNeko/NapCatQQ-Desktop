@@ -25,10 +25,13 @@
 
 use async_trait::async_trait;
 
+use std::time::Duration;
+
 use ncd_host::{Host, HostCommand, Locality, Os};
 
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::error::ActionError;
+use crate::pkg_install_stream::run_pkg_command_with_progress;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -98,18 +101,18 @@ impl NoVncComponent {
         };
 
         self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(cmd_str))
+            .timeout(Duration::from_secs(600))
     }
 
     /// 拼接 apt update / dnf check-update 刷新索引的命令。
     fn build_refresh_command(&self, mgr: PkgMgr) -> HostCommand {
-        match mgr {
+        let cmd = match mgr {
             PkgMgr::Apt => self.maybe_elevated(
                 HostCommand::new("sh").arg("-c").arg("apt-get update -qq"),
             ),
-            // dnf 不需要单独 update;装包时会自动检查;legacy 在 dnf 模式下也跳过。
-            // 返回 true 命令充当 noop(不提权,普通命令)。
             PkgMgr::Dnf => HostCommand::new("sh").arg("-c").arg("true"),
-        }
+        };
+        cmd.timeout(Duration::from_secs(300))
     }
 
     /// use_sudo 时给命令打 `.elevated()` 标(提权细节由 Host 注入的密码决定),否则
@@ -204,17 +207,29 @@ impl Component for NoVncComponent {
         })
         .await;
         let refresh_cmd = self.build_refresh_command(mgr);
-        let out = host.run_to_string(refresh_cmd).await?;
-        if !out.success() && mgr == PkgMgr::Apt {
-            // apt update 失败要中断(容易因网络断开造成下一步全失败)
-            return Err(ActionError::install_step(
-                "apt_update",
-                format!(
-                    "exit={:?} stderr={}",
-                    out.exit_code,
-                    out.stderr.trim()
-                ),
-            ));
+        if mgr == PkgMgr::Apt {
+            run_pkg_command_with_progress(
+                host,
+                ctx,
+                refresh_cmd,
+                2,
+                5,
+                25,
+                "apt-get update…",
+            )
+            .await?;
+        } else {
+            let out = host.run_to_string(refresh_cmd).await?;
+            if !out.success() {
+                return Err(ActionError::install_step(
+                    "apt_update",
+                    format!(
+                        "exit={:?} stderr={}",
+                        out.exit_code,
+                        out.stderr.trim()
+                    ),
+                ));
+            }
         }
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -225,17 +240,16 @@ impl Component for NoVncComponent {
         })
         .await;
         let install_cmd = self.build_install_command(mgr);
-        let out = host.run_to_string(install_cmd).await?;
-        if !out.success() {
-            return Err(ActionError::install_step(
-                "install_graphics_stack",
-                format!(
-                    "exit={:?} stderr={}",
-                    out.exit_code,
-                    out.stderr.trim()
-                ),
-            ));
-        }
+        run_pkg_command_with_progress(
+            host,
+            ctx,
+            install_cmd,
+            3,
+            28,
+            95,
+            "apt/dnf install 图形栈…",
+        )
+        .await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())

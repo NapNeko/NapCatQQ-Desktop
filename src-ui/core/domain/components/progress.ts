@@ -142,7 +142,15 @@ export function reduceActionProgress(
                 },
             ];
             if (next.length > MAX_LOGS) next.splice(0, next.length - MAX_LOGS);
-            return { ...prev, logs: next };
+            const hint =
+                event.level === 'error' || event.level === 'warn'
+                    ? event.message
+                    : event.message.trim();
+            const messagePatch =
+                prev.status === 'running' && hint.length > 0
+                    ? { message: hint }
+                    : {};
+            return { ...prev, logs: next, ...messagePatch };
         }
         default:
             return prev;

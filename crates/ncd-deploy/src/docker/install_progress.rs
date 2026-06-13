@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_domain::DockerInstallReport;
 use ncd_host::remote::{probe_sudo, SudoAccess};
-use ncd_host::{Host, HostCommand, Os};
+use ncd_host::{parse_pkg_mgr_line, Host, HostCommand, Os};
 use tracing::{error, info, warn};
 
 use super::cli::{DockerCli, DockerCliError};
@@ -183,33 +183,51 @@ async fn install_docker_linux_with_progress(
                     return;
                 }
                 line_no += 1;
-                let notable = t.starts_with("Get:")
+
+                let parsed = parse_pkg_mgr_line(t);
+                let (notable, level, summary, suggest) = if let Some(p) = parsed {
+                    let lvl = if matches!(p.phase, ncd_host::PkgPhase::Error) {
+                        ProgressLogLevel::Warn
+                    } else {
+                        ProgressLogLevel::Info
+                    };
+                    (true, lvl, p.summary, p.suggest_percent)
+                } else if t.starts_with("Get:")
                     || t.starts_with("Ign:")
                     || t.starts_with("Fetched")
                     || t.contains("Setting up")
                     || t.contains("Unpacking")
                     || t.contains("docker-ce")
                     || t.contains("E:")
-                    || t.contains("error")
-                    || t.contains("Error");
-
-                if notable {
+                    || t.to_ascii_lowercase().contains("error")
+                {
                     let level = if t.contains("E:") || t.to_ascii_lowercase().contains("error") {
                         ProgressLogLevel::Warn
                     } else {
                         ProgressLogLevel::Info
                     };
+                    (
+                        true,
+                        level,
+                        truncate_line(t, 240),
+                        Some(script_line_to_percent(line_no, t)),
+                    )
+                } else {
+                    (false, ProgressLogLevel::Info, String::new(), None)
+                };
+
+                if notable {
                     emit_stream(ProgressKind::Log {
                         level,
-                        message: truncate_line(t, 240),
+                        message: summary.clone(),
                     });
-                    let pct = script_line_to_percent(line_no, t);
+                    let pct = suggest.unwrap_or_else(|| script_line_to_percent(line_no, t));
                     if pct > last_emit_percent {
                         last_emit_percent = pct;
                         emit_stream(ProgressKind::StepProgress {
                             step: 3,
                             percent: pct.min(88),
-                            message: truncate_line(t, 120),
+                            message: truncate_line(&summary, 120),
                             speed_bps: None,
                             downloaded_bytes: None,
                             total_bytes: None,

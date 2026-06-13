@@ -30,6 +30,7 @@ pub mod error;
 pub mod host;
 pub mod local;
 pub mod package_manager;
+pub mod pkg_output;
 pub mod path;
 pub mod process;
 pub mod remote;
@@ -40,6 +41,10 @@ pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
 pub use host::{Arch, Host, Locality, Os, StreamSource};
 pub use package_manager::{PackageInfo, PackageManager, PackageManagerKind};
+pub use pkg_output::{
+    fallback_percent_from_line_no, parse_pkg_mgr_line, truncate_pkg_line, PkgLineParse,
+    PkgMgrFamily, PkgPhase,
+};
 pub use path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 pub use process::{ExitStatus, HostProcess, ProcessId};
 pub use shell::{HostShell, ShellKind};
