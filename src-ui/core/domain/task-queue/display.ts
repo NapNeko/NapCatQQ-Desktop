@@ -118,9 +118,9 @@ export function getTaskEndedAt(progress: TaskQueueItem['progress']): number | un
 }
 
 /** 详情区：中文可读时长 */
-export function formatElapsedLong(startedAt: number, endedAt?: number): string {
+export function formatElapsedLong(startedAt: number, endedAt?: number, now = Date.now()): string {
     if (startedAt <= 0) return '—';
-    const endTime = endedAt || Date.now();
+    const endTime = endedAt ?? now;
     const sec = Math.max(0, Math.floor((endTime - startedAt) / 1000));
     if (sec < 60) return `${sec} 秒`;
     const m = Math.floor(sec / 60);
@@ -129,9 +129,9 @@ export function formatElapsedLong(startedAt: number, endedAt?: number): string {
 }
 
 /** 列表行：紧凑 mm:ss */
-export function formatElapsedCompact(startedAt: number, endedAt?: number): string {
+export function formatElapsedCompact(startedAt: number, endedAt?: number, now = Date.now()): string {
     if (startedAt <= 0) return '';
-    const endTime = endedAt || Date.now();
+    const endTime = endedAt ?? now;
     const sec = Math.max(0, Math.floor((endTime - startedAt) / 1000));
     if (sec < 3600) {
         const m = Math.floor(sec / 60);

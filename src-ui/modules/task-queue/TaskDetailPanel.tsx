@@ -8,11 +8,13 @@ import {
     failureHint,
     formatElapsedLong,
     getTaskEndedAt,
+    isActiveTaskStatus,
     kindBadgeTone,
     kindLabel,
     statusLabel,
     statusTone,
 } from '../../core/domain/task-queue/display';
+import { useNowMs } from '../../hooks/ui/useNowMs';
 import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
 
 export interface TaskDetailPanelProps {
@@ -63,6 +65,8 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     const progress = item.progress;
     const failure = failureHint(item);
     const endedAt = getTaskEndedAt(progress);
+    const ticking = isActiveTaskStatus(item.status) && endedAt === undefined;
+    const nowMs = useNowMs(ticking);
 
     return (
         <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -85,7 +89,13 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                             <span className="font-medium text-text">{item.hostLabel}</span>
                             <span className="mx-2 text-text-disabled">|</span>
                             <span className="text-text-tertiary">耗时</span>{' '}
-                            <span className="tabular-nums">{formatElapsedLong(item.startedAt, endedAt)}</span>
+                            <span className="tabular-nums">
+                                {formatElapsedLong(
+                                    item.startedAt,
+                                    endedAt,
+                                    endedAt === undefined ? nowMs : undefined,
+                                )}
+                            </span>
                         </p>
                     </div>
                 </div>

@@ -13,6 +13,7 @@ import {
     statusShort,
     statusTone,
 } from '../../core/domain/task-queue/display';
+import { useNowMs } from '../../hooks/ui/useNowMs';
 import { TASK_KIND_VISUAL, taskKindIconClasses } from './taskQueueKindVisual';
 
 const KIND_MOTION: Record<TaskQueueItem['kind'], typeof RESOURCE_MOTION> = {
@@ -55,9 +56,12 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
     onSelect,
 }) => {
     const endedAt = getTaskEndedAt(item.progress);
-    const elapsed =
-        item.startedAt > 0 ? formatElapsedCompact(item.startedAt, endedAt) : '';
     const busy = isActiveTaskStatus(item.status);
+    const nowMs = useNowMs(busy && endedAt === undefined);
+    const elapsed =
+        item.startedAt > 0
+            ? formatElapsedCompact(item.startedAt, endedAt, endedAt === undefined ? nowMs : undefined)
+            : '';
     const { tile } = taskKindIconClasses(item.kind, selected);
 
     return (
