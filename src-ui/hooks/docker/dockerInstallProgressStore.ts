@@ -7,8 +7,7 @@ import {
     type ActionProgressView,
 } from '../../core/domain/components/progress';
 import type { ProgressEvent } from '../../core/ipc/types';
-
-const LINGER_AFTER_FINISH = 600_000; // 10分钟
+import { scheduleTaskQueueTerminalCleanup } from '../task-queue/taskQueueTerminalLinger';
 
 export interface DockerInstallProgressStoreState {
     tasks: Record<string, ActionProgressView>;
@@ -53,17 +52,15 @@ export const dockerInstallProgressStore = {
             next.status === 'success' ||
             next.status === 'failed' ||
             next.status === 'cancelled';
-        if (isTerminal && !lingerTimers.has(taskId)) {
-            const timer = setTimeout(() => {
-                lingerTimers.delete(taskId);
+        if (isTerminal) {
+            scheduleTaskQueueTerminalCleanup(taskId, lingerTimers, (id) => {
                 const s = store.getSnapshot();
                 const cleanedTasks = { ...s.tasks };
                 const cleanedHosts = { ...s.hostByTaskId };
-                delete cleanedTasks[taskId];
-                delete cleanedHosts[taskId];
+                delete cleanedTasks[id];
+                delete cleanedHosts[id];
                 store.setState({ tasks: cleanedTasks, hostByTaskId: cleanedHosts });
-            }, LINGER_AFTER_FINISH);
-            lingerTimers.set(taskId, timer);
+            });
         }
     },
 

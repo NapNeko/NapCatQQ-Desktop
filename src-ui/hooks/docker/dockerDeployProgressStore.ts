@@ -4,8 +4,7 @@
 // 但后端事件流不管对话框开没开，只要 task 在跑就会推事件。提到模块级后，
 // 事件不会因为对话框关闭而丢失，下次打开同一 task 的对话框还能看到历史进度。
 //
-// 终态保留：success / failed 后保留 LINGER_AFTER_FINISH 毫秒再清，
-// 让对话框有时间显示最终状态，而不是"咻"地消失。
+// 终态保留时长由设置页「任务队列自动清理」配置。
 //
 // 相比 componentActionStore 简化了 activeByTarget 映射，docker 部署不需要
 // 按 (component, host) 查活跃 task，调用方直接持有 taskId。
@@ -17,8 +16,7 @@ import {
     type ActionProgressView,
 } from '../../core/domain/components/progress';
 import type { ProgressEvent } from '../../core/ipc/types';
-
-const LINGER_AFTER_FINISH = 600_000; // 10分钟
+import { scheduleTaskQueueTerminalCleanup } from '../task-queue/taskQueueTerminalLinger';
 
 export interface DockerDeployProgressStoreState {
     tasks: Record<string, ActionProgressView>;
@@ -65,15 +63,13 @@ export const dockerDeployProgressStore = {
             next.status === 'success' ||
             next.status === 'failed' ||
             next.status === 'cancelled';
-        if (isTerminal && !lingerTimers.has(taskId)) {
-            const timer = setTimeout(() => {
-                lingerTimers.delete(taskId);
+        if (isTerminal) {
+            scheduleTaskQueueTerminalCleanup(taskId, lingerTimers, (id) => {
                 const s = store.getSnapshot();
                 const cleaned = { ...s.tasks };
-                delete cleaned[taskId];
+                delete cleaned[id];
                 store.setState({ tasks: cleaned });
-            }, LINGER_AFTER_FINISH);
-            lingerTimers.set(taskId, timer);
+            });
         }
     },
 
