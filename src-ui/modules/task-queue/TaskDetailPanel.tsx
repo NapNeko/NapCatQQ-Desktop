@@ -15,12 +15,75 @@ import {
     statusTone,
 } from '../../core/domain/task-queue/display';
 import { useNowMs } from '../../hooks/ui/useNowMs';
+import { Loader2 } from 'lucide-react';
+import { MotionIcon } from '../../shared/ui/motion';
 import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
 import { DockerPullLayersPanel } from '../components/DockerPullLayersPanel';
+import { shouldShowDockerPullLayersInTaskDetail, shouldShowStepLogsInTaskDetail } from '../../core/domain/components/dockerPullProgress';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 
-function DockerPullLayerList({ progress }: { progress: ActionProgressView }) {
-    return <DockerPullLayersPanel progress={progress} />;
+function DockerDeployProgressBlock({
+    item,
+    progress,
+    expanded = false,
+}: {
+    item: TaskQueueItem;
+    progress: ActionProgressView;
+    /** 无步骤日志时占满详情下半区 */
+    expanded?: boolean;
+}) {
+    const showLayers = shouldShowDockerPullLayersInTaskDetail(item.kind, progress);
+
+    if (progress.status === 'failed' || progress.status === 'cancelled') {
+        return (
+            <p className="text-[12px] text-text-tertiary">
+                {progress.status === 'cancelled' ? '已取消' : '失败 · 见上方失败原因'}
+            </p>
+        );
+    }
+    if (progress.status === 'success') {
+        return <p className="text-[12px] text-success">镜像已就绪</p>;
+    }
+
+    const rootClass = expanded
+        ? 'flex min-h-0 flex-1 flex-col'
+        : undefined;
+
+    return (
+        <div className={rootClass}>
+            <div className="flex shrink-0 min-w-0 items-center gap-2">
+                <MotionIcon
+                    icon={Loader2}
+                    motion="spin"
+                    playEnter={false}
+                    size={12}
+                    className="shrink-0 text-brand"
+                />
+                <span className="min-w-0 truncate text-[12px] text-text-secondary">
+                    {progress.message || '拉取镜像…'}
+                </span>
+                <span className="ml-auto shrink-0 font-mono text-[11.5px] tabular-nums text-text-secondary">
+                    {progress.percent}%
+                </span>
+            </div>
+            {shouldShowProgressBar(progress) && (
+                <div className="relative mt-2 h-1.5 w-full shrink-0 overflow-hidden rounded-pill bg-inset/60">
+                    <ProgressBarOverlay progress={progress} determinate={progress.dockerLayers.length > 0} />
+                </div>
+            )}
+            {showLayers && (
+                <DockerPullLayersPanel
+                    progress={progress}
+                    fillHeight={expanded}
+                    showWaitingPlaceholder={
+                        progress.dockerLayers.length === 0 &&
+                        progress.status === 'running' &&
+                        progress.currentStep === 2
+                    }
+                />
+            )}
+        </div>
+    );
 }
 
 export interface TaskDetailPanelProps {
@@ -73,6 +136,8 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     const endedAt = getTaskEndedAt(progress);
     const ticking = isActiveTaskStatus(item.status) && endedAt === undefined;
     const nowMs = useNowMs(ticking);
+    const showStepLogs = shouldShowStepLogsInTaskDetail(item.kind);
+    const dockerPullExpanded = item.kind === 'docker_deploy' && !showStepLogs;
 
     return (
         <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -118,40 +183,57 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                     </div>
                 )}
 
-                {progress && (
+                {progress && !dockerPullExpanded && (
                     <div className="mt-3 overflow-hidden rounded-md border border-border-subtle/80 bg-surface/60 px-3 pb-3 pt-2">
-                        <ProgressLine progress={progress} />
-                        {shouldShowProgressBar(progress) && (
-                            <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-pill bg-inset/60">
-                                <ProgressBarOverlay
-                                    progress={progress}
-                                    determinate={progress.dockerLayers.length > 0}
-                                />
-                            </div>
+                        {item.kind === 'docker_deploy' ? (
+                            <DockerDeployProgressBlock item={item} progress={progress} />
+                        ) : (
+                            <>
+                                <ProgressLine progress={progress} />
+                                {shouldShowProgressBar(progress) && (
+                                    <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-pill bg-inset/60">
+                                        <ProgressBarOverlay progress={progress} determinate />
+                                    </div>
+                                )}
+                            </>
                         )}
-                        <DockerPullLayerList progress={progress} />
                     </div>
                 )}
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
-                <div className="flex shrink-0 pb-2">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
-                        步骤日志
-                    </span>
-                </div>
-
-                <div
-                    className={cn(
-                        'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50',
-                        LOG_SURFACE,
-                    )}
-                >
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <StepLogBody item={item} />
+            {dockerPullExpanded && progress && (
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
+                    <div
+                        className={cn(
+                            'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50 px-3 pb-3 pt-2.5',
+                            LOG_SURFACE,
+                        )}
+                    >
+                        <DockerDeployProgressBlock item={item} progress={progress} expanded />
                     </div>
                 </div>
-            </div>
+            )}
+
+            {showStepLogs && (
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
+                    <div className="flex shrink-0 pb-2">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
+                            步骤日志
+                        </span>
+                    </div>
+
+                    <div
+                        className={cn(
+                            'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50',
+                            LOG_SURFACE,
+                        )}
+                    >
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                            <StepLogBody item={item} />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -19,15 +19,27 @@ function layerBarPercent(layer: ActionProgressView['dockerLayers'][number]): num
 export function DockerPullLayersPanel({
     progress,
     className,
+    showWaitingPlaceholder = false,
+    fillHeight = false,
 }: {
     progress: ActionProgressView;
     className?: string;
+    /** 仅 docker_deploy 任务详情在 step2 尚无层时可开启 */
+    showWaitingPlaceholder?: boolean;
+    /** 任务详情无步骤日志时，层列表占满剩余高度并内部滚动 */
+    fillHeight?: boolean;
 }) {
     const layers = progress.dockerLayers;
     if (layers.length === 0) {
-        if (progress.status === 'running' && progress.currentStep >= 2) {
+        if (showWaitingPlaceholder) {
             return (
-                <p className={cn('mt-2 text-[11px] text-text-tertiary', className)}>
+                <p
+                    className={cn(
+                        'text-[11px] text-text-tertiary',
+                        fillHeight ? 'flex flex-1 items-center justify-center py-6' : 'mt-2',
+                        className,
+                    )}
+                >
                     等待镜像层输出…（连接镜像站或解析 manifest 时可能稍久）
                 </p>
             );
@@ -38,14 +50,26 @@ export function DockerPullLayersPanel({
     const doneCount = layers.filter((l) => l.done).length;
 
     return (
-        <div className={cn('mt-2.5 space-y-2 border-t border-border-subtle/60 pt-2.5', className)}>
-            <div className="flex items-center justify-between gap-2 text-[11px] text-text-tertiary">
+        <div
+            className={cn(
+                fillHeight
+                    ? 'flex min-h-0 flex-1 flex-col gap-2 border-t border-border-subtle/60 pt-2.5'
+                    : 'mt-2.5 space-y-2 border-t border-border-subtle/60 pt-2.5',
+                className,
+            )}
+        >
+            <div className="flex shrink-0 items-center justify-between gap-2 text-[11px] text-text-tertiary">
                 <span>镜像层</span>
                 <span className="font-mono tabular-nums text-text-secondary">
                     {doneCount}/{layers.length} · {progress.percent}%
                 </span>
             </div>
-            <ul className="max-h-52 space-y-2 overflow-y-auto pr-0.5">
+            <ul
+                className={cn(
+                    'space-y-2 overflow-y-auto pr-0.5',
+                    fillHeight ? 'min-h-0 flex-1' : 'max-h-52',
+                )}
+            >
                 {layers.map((layer) => {
                     const active = !layer.done && layer.phase !== '等待';
                     const bar = layerBarPercent(layer);
