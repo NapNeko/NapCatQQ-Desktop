@@ -264,6 +264,7 @@ async fn emit_step(
         downloaded_bytes: None,
         total_bytes: None,
         download_stage: None,
+        docker_layers: None,
     })
     .await;
 }
@@ -370,6 +371,7 @@ impl DownloadProgressSink for CtxSink {
                 downloaded_bytes: Some(update.downloaded),
                 total_bytes: update.total,
                 download_stage: Some(stage_id.to_string()),
+                docker_layers: None,
             })
             .await;
     }
