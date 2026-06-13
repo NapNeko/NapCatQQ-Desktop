@@ -6,14 +6,18 @@
 //     status            DockerStatus | undefined   当前主机的 docker 探测结果
 //     isProbing         boolean                    probe 是否进行中
 //     containers        ContainerInfo[]            容器列表（含已停止）
+//     images            ImageInfo[]                本地镜像列表
 //     isLoadingList     boolean
+//     isLoadingImages   boolean
 //     refetch()                                    手动刷新 probe + 列表
 //     install()         → Promise<string>          帮装 docker，返回结果文案
 //     isInstalling      boolean
 //     deploy(spec)      → Promise<DeployedContainer>一键部署 NapCat/SnowLuma
 //     isDeploying       boolean
 //     containerAction({name, action})              start/stop/restart/remove
+//     removeImage({imageRef, force?})              删除本地镜像
 //     isActing          boolean
+//     isRemovingImage   boolean
 //     composeDown({name, removeVolumes})           停并清理一个部署
 //     isComposingDown   boolean
 //     fetchLogs(name, tail?) → Promise<string>     取容器日志（命令式调用）
@@ -29,8 +33,8 @@ import { errorText } from '../../core/domain/errors';
 import type {
     ContainerAction,
     ContainerInfo,
-    DockerDeploySpec,
     DockerStatus,
+    ImageInfo,
 } from '../../core/ipc/types';
 
 /// 容器操作动词。InfoBar 标题用，比裸 action 字面量友好。
@@ -41,7 +45,7 @@ const ACTION_VERB: Record<ContainerAction, string> = {
     remove: '删除',
 };
 
-export function useDocker(hostId: string) {
+export function useDocker(hostId: string, activeTab: 'containers' | 'images' = 'containers') {
     const queryClient = useQueryClient();
 
     const statusQuery = useQuery({
@@ -53,12 +57,19 @@ export function useDocker(hostId: string) {
         queryKey: ['docker', 'containers', hostId],
         queryFn: () => dockerService.listContainers(hostId),
         // daemon 没起时列容器会失败，禁用查询避免反复报错。
-        enabled: statusQuery.data?.daemonRunning ?? false,
+        enabled: (statusQuery.data?.daemonRunning ?? false) && activeTab === 'containers',
+    });
+
+    const imagesQuery = useQuery({
+        queryKey: ['docker', 'images', hostId],
+        queryFn: () => dockerService.listImages(hostId),
+        enabled: (statusQuery.data?.daemonRunning ?? false) && activeTab === 'images',
     });
 
     const invalidate = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['docker', 'status', hostId] });
         queryClient.invalidateQueries({ queryKey: ['docker', 'containers', hostId] });
+        queryClient.invalidateQueries({ queryKey: ['docker', 'images', hostId] });
     }, [queryClient, hostId]);
 
     const installMutation = useMutation({
@@ -70,12 +81,6 @@ export function useDocker(hostId: string) {
         },
         onSuccess: invalidate,
         onSettled: () => dockerActionStore.clearInstalling(hostId),
-    });
-
-    const deployMutation = useMutation({
-        mutationFn: (args: { spec: DockerDeploySpec; taskId?: string }) =>
-            dockerService.deploy(hostId, args.spec, args.taskId ?? crypto.randomUUID()),
-        onSuccess: invalidate,
     });
 
     const actionMutation = useMutation({
@@ -102,6 +107,29 @@ export function useDocker(hostId: string) {
         },
     });
 
+    const removeImageMutation = useMutation({
+        mutationFn: (args: { imageRef: string; force?: boolean }) =>
+            dockerService.removeImage(hostId, args.imageRef, args.force),
+        onSuccess: (_void, { imageRef }) => {
+            invalidate();
+            pushInfoBar({
+                key: `image-remove:${hostId}:${imageRef}`,
+                tone: 'success',
+                title: '镜像已删除',
+                content: imageRef,
+                autoDismissMs: 4000,
+            });
+        },
+        onError: (err: unknown, { imageRef }) => {
+            pushInfoBar({
+                key: `image-remove:${hostId}:${imageRef}`,
+                tone: 'danger',
+                title: '删除镜像失败',
+                content: `${imageRef}：${errorText(err)}`,
+            });
+        },
+    });
+
     const composeDownMutation = useMutation({
         mutationFn: (args: { name: string; removeVolumes: boolean }) =>
             dockerService.composeDown(hostId, args.name, args.removeVolumes),
@@ -120,6 +148,9 @@ export function useDocker(hostId: string) {
         containers: (containersQuery.data ?? []) as ContainerInfo[],
         isLoadingList: containersQuery.isLoading,
 
+        images: (imagesQuery.data ?? []) as ImageInfo[],
+        isLoadingImages: imagesQuery.isLoading,
+
         refetch: () => {
             invalidate();
         },
@@ -127,13 +158,11 @@ export function useDocker(hostId: string) {
         install: installMutation.mutateAsync,
         isInstalling: installMutation.isPending,
 
-        // deploy 暴露的接口只接受 spec，taskId 内部自动生成（这条路径没有进度 UI）。
-        deploy: (spec: DockerDeploySpec) =>
-            deployMutation.mutateAsync({ spec, taskId: crypto.randomUUID() }),
-        isDeploying: deployMutation.isPending,
-
         containerAction: actionMutation.mutate,
         isActing: actionMutation.isPending,
+
+        removeImage: removeImageMutation.mutate,
+        isRemovingImage: removeImageMutation.isPending,
 
         composeDown: composeDownMutation.mutate,
         isComposingDown: composeDownMutation.isPending,

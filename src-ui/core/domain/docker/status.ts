@@ -1,6 +1,6 @@
 // Docker 容器 / 状态的展示派生纯函数。零 React / 零 tauri 依赖。
 
-import type { ContainerInfo, ContainerState, DockerFlavor, DockerStatus } from '../../ipc/types';
+import type { ContainerInfo, ContainerState, DockerFlavor, DockerStatus, ImageInfo } from '../../ipc/types';
 
 /// 容器状态徽章:给 UI 一个语义色 + 中文标签。color 用中性语义名,
 /// 具体映射到 Fluent / Tailwind 色由组件层决定(这层不碰样式库)。
@@ -47,6 +47,41 @@ export function dockerStatusSummary(status: DockerStatus): {
 /// 标记"这是我们部署的")。简单按镜像名前缀判断。
 export function isManagedImage(image: string): boolean {
     return image.includes('napcat-docker') || image.includes('snowluma');
+}
+
+/// 展示用镜像引用:repo:tag;`<none>:<none>` 时退回短 id。
+export function imageDisplayRef(image: ImageInfo): string {
+    const repo = image.repository.trim();
+    const tag = image.tag.trim();
+    const none = (s: string) => s === '' || s === '<none>';
+    if (!none(repo) && !none(tag)) {
+        return `${repo}:${tag}`;
+    }
+    if (!none(repo) && none(tag)) {
+        return repo;
+    }
+    return image.id;
+}
+
+/// 是否悬空镜像(dangling)。
+export function isDanglingImage(image: ImageInfo): boolean {
+    const repo = image.repository.trim();
+    const tag = image.tag.trim();
+    return (repo === '<none>' || repo === '') && (tag === '<none>' || tag === '');
+}
+
+/// 传给 `docker rmi` 的引用(优先 repo:tag,否则 id)。
+export function imageRemoveRef(image: ImageInfo): string {
+    const ref = imageDisplayRef(image);
+    if (ref === image.id) {
+        return image.id;
+    }
+    return ref;
+}
+
+/// 判断镜像仓库是否为本工程 NapCat / SnowLuma 官方镜像。
+export function isManagedImageRef(repository: string): boolean {
+    return repository.includes('napcat-docker') || repository.includes('snowluma');
 }
 
 /// 判断一个容器是否属于指定 flavor(NapCat / SnowLuma)。按官方镜像 repo 名匹配:

@@ -3,10 +3,14 @@
 
 import { useDomainEvents } from '../events/useDomainEvents';
 import { dockerDeployProgressStore } from './dockerDeployProgressStore';
+import { dockerActionStore } from './dockerActionStore';
 
 export function useDockerDeployProgressBridge(): void {
     useDomainEvents((event) => {
         if (event.kind !== 'docker_deploy_progress') return;
         dockerDeployProgressStore.applyProgress(event.task_id, event.event);
+        if (event.event.kind === 'finished') {
+            dockerActionStore.clearPullingByTaskId(event.task_id);
+        }
     });
 }

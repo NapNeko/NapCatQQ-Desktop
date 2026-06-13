@@ -11,12 +11,12 @@ import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 
 import { dockerService, type DockerInstallOptions } from '../../core/services/docker.service';
 import { openExternalUrl } from '../../core/ipc/transport';
-import { dockerActionStore } from './dockerActionStore';
+import { dockerActionStore, dockerPullTargetKey } from './dockerActionStore';
 import { dockerInstallProgressStore } from './dockerInstallProgressStore';
 import type {
     ContainerInfo,
     DeployedContainer,
-    DockerDeploySpec,
+    DockerFlavor,
     DockerInstallReport,
     DockerStatus,
 } from '../../core/ipc/types';
@@ -31,10 +31,10 @@ export interface UseDockerHostsResult {
     statusByHost: Record<string, DockerStatus | undefined>;
     /// host_id → 是否正在探测。
     probingByHost: Record<string, boolean>;
-    /// host_id → 该主机已有的容器列表（daemon 就绪才查，否则空数组）。
-    /// 框架行的「Docker 部署」按钮据此判定同 flavor 是否已部署。
+    /// host_id → 该主机 NapCat/SnowLuma 官方镜像是否已在本地（组件页「已拉取」判定）。
+    imageReadyByHost: Record<string, Partial<Record<DockerFlavor, boolean | undefined>>>;
+    /// host_id → 容器列表（Docker 管理页等）。
     containersByHost: Record<string, ContainerInfo[]>;
-    /// 刷新所有主机的 docker 探测。
     refetch: () => void;
     /// 在某主机上装 / 起 docker。返回结构化结果,调用方按 status 分流(可能需要
     /// 弹框要 sudo 密码后带 options 重试)。
@@ -43,12 +43,18 @@ export interface UseDockerHostsResult {
     isInstalling: boolean;
     /// host_id → 该主机是否正在装 docker。状态存模块级 store,切页面不丢。
     installingByHost: Record<string, boolean>;
-    /// 安装中时 Docker 行展示的说明（无逐步进度，引导看设置→日志）。
+    /// 安装中时 Docker 行展示的说明（无事件订阅时的兜底文案）。
     installHintByHost: Record<string, string>;
     /// 打开 Docker Desktop 下载页（Windows / macOS 手动安装引导用）。
     openDownloadPage: () => Promise<void>;
-    /// 在某主机上部署一个容器。taskId 由调用方生成并传入，用于订阅进度事件。
-    deploy: (hostId: string, spec: DockerDeploySpec, taskId: string) => Promise<DeployedContainer>;
+    /// 在远端拉取 NapCat/SnowLuma 框架镜像（不创建容器）。
+    pullFrameworkImage: (
+        hostId: string,
+        flavor: DockerFlavor,
+        taskId: string,
+    ) => Promise<DeployedContainer>;
+    /** 该主机该口味是否正在拉镜像（模块级 store，切页不丢） */
+    isPullingFrameworkImage: (hostId: string, flavor: DockerFlavor) => boolean;
     isDeploying: boolean;
 }
 
@@ -79,8 +85,38 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         return out;
     }, [hostIds, queries]);
 
-    // 容器列表：仅对 daemon 就绪的主机查（没起 daemon 时列容器必失败，禁用避免反复报错）。
-    // 给框架行「Docker 部署」按钮判定同 flavor 是否已部署用。
+    const imageReadyNapcatQueries = useQueries({
+        queries: hostIds.map((hostId) => ({
+            queryKey: ['docker', 'imageReady', hostId, 'napcat'],
+            queryFn: () => dockerService.imageReadyForFlavor(hostId, 'napcat'),
+            enabled: statusByHost[hostId]?.daemonRunning ?? false,
+            staleTime: 30 * 1000,
+        })),
+    });
+
+    const imageReadySnowlumaQueries = useQueries({
+        queries: hostIds.map((hostId) => ({
+            queryKey: ['docker', 'imageReady', hostId, 'snowluma'],
+            queryFn: () => dockerService.imageReadyForFlavor(hostId, 'snowluma'),
+            enabled: statusByHost[hostId]?.daemonRunning ?? false,
+            staleTime: 30 * 1000,
+        })),
+    });
+
+    const imageReadyByHost = useMemo<
+        Record<string, Partial<Record<DockerFlavor, boolean | undefined>>>
+    >(() => {
+        const out: Record<string, Partial<Record<DockerFlavor, boolean | undefined>>> = {};
+        hostIds.forEach((id, i) => {
+            out[id] = {
+                napcat: imageReadyNapcatQueries[i]?.data,
+                snowluma: imageReadySnowlumaQueries[i]?.data,
+            };
+        });
+        return out;
+    }, [hostIds, imageReadyNapcatQueries, imageReadySnowlumaQueries]);
+
+    // 容器列表：Docker 管理页等仍需要；框架「拉镜像」不再依赖容器是否存在。
     const containerQueries = useQueries({
         queries: hostIds.map((hostId) => ({
             queryKey: ['docker', 'containers', hostId],
@@ -101,6 +137,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     const invalidate = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['docker'] });
         queryClient.invalidateQueries({ queryKey: ['docker', 'containers'] });
+        queryClient.invalidateQueries({ queryKey: ['docker', 'imageReady'] });
     }, [queryClient]);
 
     const installMutation = useMutation({
@@ -123,6 +160,11 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     const installHintByHost = useSyncExternalStore(
         dockerActionStore.subscribe,
         () => dockerActionStore.getSnapshot().installHintByHost,
+    );
+
+    const pullingByTarget = useSyncExternalStore(
+        dockerActionStore.subscribe,
+        () => dockerActionStore.getSnapshot().pullingByTarget,
     );
 
     // install 包一层:进 store 标记 installing。清理由 useDockerInstallProgressBridge
@@ -158,15 +200,53 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
 
     const isInstalling = Object.keys(installingByHost).length > 0;
 
-    const deployMutation = useMutation({
-        mutationFn: (args: { hostId: string; spec: DockerDeploySpec; taskId: string }) =>
-            dockerService.deploy(args.hostId, args.spec, args.taskId),
-        onSuccess: invalidate,
+    const pullMutation = useMutation({
+        mutationFn: (args: { hostId: string; flavor: DockerFlavor; taskId: string }) =>
+            dockerService.pullFrameworkImage(args.hostId, args.flavor, args.taskId),
+        onSuccess: (_result, args) => {
+            queryClient.setQueryData(
+                ['docker', 'imageReady', args.hostId, args.flavor],
+                true,
+            );
+            invalidate();
+        },
     });
+
+    const pullFrameworkImage = useCallback(
+        async (
+            hostId: string,
+            flavor: DockerFlavor,
+            taskId: string,
+        ): Promise<DeployedContainer> => {
+            const key = dockerPullTargetKey(hostId, flavor);
+            const snap = dockerActionStore.getSnapshot();
+            const activeTask = snap.pullTaskIdByTarget[key];
+            if (activeTask && activeTask !== taskId) {
+                throw new Error('该主机正在拉取此框架镜像，请在任务队列查看进度');
+            }
+            if (!activeTask) {
+                dockerActionStore.markPulling(hostId, flavor, taskId);
+            }
+            try {
+                return await pullMutation.mutateAsync({ hostId, flavor, taskId });
+            } catch (err) {
+                dockerActionStore.clearPulling(hostId, flavor);
+                throw err;
+            }
+        },
+        [pullMutation],
+    );
+
+    const isPullingFrameworkImage = useCallback(
+        (hostId: string, flavor: DockerFlavor) =>
+            !!pullingByTarget[dockerPullTargetKey(hostId, flavor)],
+        [pullingByTarget],
+    );
 
     return {
         statusByHost,
         probingByHost,
+        imageReadyByHost,
         containersByHost,
         refetch: invalidate,
         install,
@@ -174,7 +254,8 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         installingByHost,
         installHintByHost,
         openDownloadPage: () => openExternalUrl(DOCKER_DESKTOP_URL),
-        deploy: (hostId, spec, taskId) => deployMutation.mutateAsync({ hostId, spec, taskId }),
-        isDeploying: deployMutation.isPending,
+        pullFrameworkImage,
+        isPullingFrameworkImage,
+        isDeploying: pullMutation.isPending,
     };
 }

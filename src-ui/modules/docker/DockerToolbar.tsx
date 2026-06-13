@@ -1,4 +1,4 @@
-// Docker 页工具条：把"选主机 + Docker 状态 + 容器数"收成一行。
+// Docker 页工具条：把"选主机 + Docker 状态 + 列表计数"收成一行。
 //
 // 原来这三件事是三层全宽大块（带边框的大选择器 + 整条状态横幅 + 容器数标题），
 // 进容器列表前要竖着穿过去，挤占主内容。改成一行紧凑工具条：左边主机选择器，
@@ -25,7 +25,8 @@ interface DockerToolbarProps {
     onChangeHost: (hostId: string) => void;
     summary: { ready: boolean; label: string } | null;
     isProbing: boolean;
-    containerCount: number | null;
+    resourceCount: number | null;
+    resourceLabel: '容器' | '镜像';
 }
 
 export const DockerToolbar: React.FC<DockerToolbarProps> = ({
@@ -34,7 +35,8 @@ export const DockerToolbar: React.FC<DockerToolbarProps> = ({
     onChangeHost,
     summary,
     isProbing,
-    containerCount,
+    resourceCount,
+    resourceLabel,
 }) => {
     const items = servers.map((s) => ({
         value: `remote:${s.id}`,
@@ -47,9 +49,9 @@ export const DockerToolbar: React.FC<DockerToolbarProps> = ({
             <div className="flex flex-wrap items-center gap-3">
                 <HostSelect items={items} value={hostId ?? undefined} onChange={onChangeHost} />
                 <StatusPill ready={ready} label={summary?.label ?? null} isProbing={isProbing} />
-                {ready && containerCount != null && (
+                {ready && resourceCount != null && (
                     <span className="ml-auto text-xs text-text-tertiary">
-                        共 {containerCount} 个容器
+                        共 {resourceCount} 个{resourceLabel}
                     </span>
                 )}
             </div>

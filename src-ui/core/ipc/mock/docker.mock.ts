@@ -6,6 +6,7 @@ import type {
     DeployedContainer,
     DockerDeploySpec,
     DockerStatus,
+    ImageInfo,
     ProgressEvent,
 } from '../types';
 import { emitMockEvent } from './events.mock';
@@ -38,26 +39,37 @@ export const mockContainers: ContainerInfo[] = [
     },
 ];
 
-/// 部署 mock：按 spec 拼一个看起来合理的回读结果。
-export function mockDeployed(spec: DockerDeploySpec): DeployedContainer {
-    const port = (container: number, fallback: number) =>
-        spec.ports.find((p) => p.container === container)?.host ?? fallback;
-    if (spec.flavor === 'napcat') {
-        return {
-            name: spec.containerName,
-            flavor: 'napcat',
-            webuiUrl: `http://127.0.0.1:${port(6099, 6099)}/webui`,
-            novncUrl: null,
-            webuiSecret: 'mock-token-abc123',
-        };
-    }
-    return {
-        name: spec.containerName,
-        flavor: 'snowluma',
-        webuiUrl: `http://127.0.0.1:${port(5099, 5099)}/`,
-        novncUrl: `http://127.0.0.1:${port(6081, 6081)}/`,
-        webuiSecret: 'mock-vnc-pass',
-    };
+export const mockImages: ImageInfo[] = [
+    {
+        id: 'deadbeefcafe',
+        repository: 'mlikiowa/napcat-docker',
+        tag: 'latest',
+        size: '1.2GB',
+        createdSince: '2 weeks ago',
+    },
+    {
+        id: 'aabbccdd1122',
+        repository: 'nginx',
+        tag: 'alpine',
+        size: '52MB',
+        createdSince: '3 months ago',
+    },
+    {
+        id: '112233445566',
+        repository: '<none>',
+        tag: '<none>',
+        size: '128MB',
+        createdSince: '5 days ago',
+    },
+];
+
+/// 拉镜像 mock：返回官方镜像名。
+export function mockDeployed(flavor: DockerDeploySpec['flavor']): DeployedContainer {
+    const image =
+        flavor === 'napcat'
+            ? 'mlikiowa/napcat-docker:latest'
+            : 'motricseven7/snowluma:latest';
+    return { flavor, image };
 }
 
 // 模拟一组 docker pull 进度事件，让浏览器预览能看到进度动画。
@@ -71,16 +83,21 @@ export function mockProgressSequence(taskId: string): void {
         ({ v: 1, timestamp_ms: ts(), ...raw } as unknown as ProgressEvent);
 
     const steps: Array<[number, object]> = [
-        [0,    { kind: 'started', total_steps: 3 }],
-        [100,  { kind: 'step_begin', step: 1, message: '拉取镜像' }],
-        [400,  { kind: 'step_progress', step: 1, percent: 30, message: '拉取镜像层', speed_bps: BigInt(1572864), downloaded_bytes: BigInt(30 * 1024 * 1024), total_bytes: BigInt(100 * 1024 * 1024), download_stage: 'streaming' }],
-        [900,  { kind: 'step_progress', step: 1, percent: 70, message: '拉取镜像层', speed_bps: BigInt(2 * 1024 * 1024), downloaded_bytes: BigInt(70 * 1024 * 1024), total_bytes: BigInt(100 * 1024 * 1024), download_stage: 'streaming' }],
-        [1300, { kind: 'step_end', step: 1, ok: true }],
-        [1400, { kind: 'step_begin', step: 2, message: '创建容器' }],
-        [1600, { kind: 'step_progress', step: 2, percent: 50, message: '配置网络', download_stage: null }],
+        [0,    { kind: 'started', total_steps: 2 }],
+        [100,  { kind: 'step_begin', step: 1, message: '探测 docker 状态' }],
+        [200,  { kind: 'step_end', step: 1, ok: true }],
+        [300,  { kind: 'step_begin', step: 2, message: '拉取镜像' }],
+        [600,  { kind: 'step_progress', step: 2, percent: 12, message: '镜像层 1/3 · 12%', docker_layers: [
+            { id: 'aabbccdd1122', phase: '下载中', detail: '[=>       ] 5MB/40MB', done: false },
+            { id: '112233445566', phase: '等待', detail: null, done: false },
+            { id: 'deadbeefcafe', phase: '完成', detail: null, done: true },
+        ]}],
+        [1200, { kind: 'step_progress', step: 2, percent: 55, message: '镜像层 2/3 · 55%', docker_layers: [
+            { id: 'aabbccdd1122', phase: '解压中', detail: null, done: true },
+            { id: '112233445566', phase: '下载中', detail: '[====>    ] 20MB/30MB', done: false },
+            { id: 'deadbeefcafe', phase: '完成', detail: null, done: true },
+        ]}],
         [1800, { kind: 'step_end', step: 2, ok: true }],
-        [1850, { kind: 'step_begin', step: 3, message: '启动容器' }],
-        [1950, { kind: 'step_end', step: 3, ok: true }],
         [2000, { kind: 'finished', ok: true }],
     ];
     for (const [delay, raw] of steps) {

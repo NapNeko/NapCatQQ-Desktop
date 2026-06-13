@@ -7,14 +7,16 @@ import type {
     ContainerAction,
     ContainerInfo,
     DeployedContainer,
-    DockerDeploySpec,
+    DockerFlavor,
     DockerInstallReport,
     DockerStatus,
+    ImageInfo,
 } from '../ipc/types';
 import {
     mockDockerStatus,
     mockContainers,
     mockDeployed,
+    mockImages,
     mockProgressSequence,
     withMockDelay,
 } from '../ipc/mock/docker.mock';
@@ -58,6 +60,21 @@ export const dockerService = {
         return withMockDelay(mockContainers, 200);
     },
 
+    listImages: async (hostId: string): Promise<ImageInfo[]> => {
+        if (isTauri) return invoke<ImageInfo[]>('docker_list_images', { hostId });
+        return withMockDelay(mockImages, 200);
+    },
+
+    removeImage: async (hostId: string, imageRef: string, force?: boolean): Promise<void> => {
+        if (isTauri)
+            return invoke<void>('docker_remove_image', {
+                hostId,
+                imageRef,
+                force: force ?? null,
+            });
+        return withMockDelay(undefined, 150);
+    },
+
     containerAction: async (
         hostId: string,
         name: string,
@@ -72,16 +89,21 @@ export const dockerService = {
         return withMockDelay(`mock logs for ${name}\nline 1\nline 2`, 150);
     },
 
-    deploy: async (
+    imageReadyForFlavor: async (hostId: string, flavor: DockerFlavor): Promise<boolean> => {
+        if (isTauri)
+            return invoke<boolean>('docker_image_ready_for_flavor', { hostId, flavor });
+        return withMockDelay(true, 100);
+    },
+
+    pullFrameworkImage: async (
         hostId: string,
-        spec: DockerDeploySpec,
+        flavor: DockerFlavor,
         taskId: string,
     ): Promise<DeployedContainer> => {
+        const spec = { flavor };
         if (isTauri) return invoke<DeployedContainer>('docker_deploy', { hostId, spec, taskId });
-        // mock 分支：模拟几条进度事件，让浏览器预览也能看到进度动画。
-        // 真实后端会通过 docker_deploy_progress 事件推进度，这里用 setTimeout 模拟。
         mockProgressSequence(taskId);
-        return withMockDelay(mockDeployed(spec), 2000);
+        return withMockDelay(mockDeployed(flavor), 2000);
     },
 
     composeDown: async (
