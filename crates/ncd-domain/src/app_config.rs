@@ -105,6 +105,54 @@ fn default_close_action() -> String {
     "close".to_string()
 }
 
+fn default_ui_theme() -> String {
+    "auto".to_string()
+}
+
+fn default_ui_motion_level() -> String {
+    "standard".to_string()
+}
+
+fn default_ui_radius_style() -> String {
+    "standard".to_string()
+}
+
+fn default_ui_motion_speed() -> f64 {
+    0.5
+}
+
+/// 设置页「外观」Tab 的客户端偏好，与前端 `preferencesStore` / `SettingsDraft` 对齐。
+/// 落盘在 app-settings.json 的 `uiPreferences` 字段，避免仅依赖 WebView localStorage。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppUiPreferences {
+    #[serde(rename = "theme", default = "default_ui_theme")]
+    pub theme: String,
+    #[serde(rename = "showMascot", default = "default_true")]
+    pub show_mascot: bool,
+    #[serde(rename = "motionEnabled", default = "default_true")]
+    pub motion_enabled: bool,
+    #[serde(rename = "motionLevel", default = "default_ui_motion_level")]
+    pub motion_level: String,
+    #[serde(rename = "motionSpeed", default = "default_ui_motion_speed")]
+    pub motion_speed: f64,
+    #[serde(rename = "radiusStyle", default = "default_ui_radius_style")]
+    pub radius_style: String,
+}
+
+impl Default for AppUiPreferences {
+    fn default() -> Self {
+        Self {
+            theme: default_ui_theme(),
+            show_mascot: true,
+            motion_enabled: true,
+            motion_level: default_ui_motion_level(),
+            motion_speed: default_ui_motion_speed(),
+            radius_style: default_ui_radius_style(),
+        }
+    }
+}
+
 /// 设置页可读写的 App 级聚合配置。
 ///
 /// 与按子系统拆开的 `WebUiPollerSettings` / `SnowLumaAppConfig` 不同，本结构
@@ -116,7 +164,7 @@ fn default_close_action() -> String {
 /// `bot_login_check_interval_ms` 是后端登录轮询真正消费的字段，启动时由
 /// `set_app_settings` 写回的值会在下次 Poller 创建时生效。两个离线通知开关
 /// 当前后端为 noop 实现，设置页不暴露，保留字段仅为 round-trip 兼容。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppSettings {
     /// WebUI 登录轮询设置（含 Bot 登录检查间隔）。
@@ -134,6 +182,9 @@ pub struct AppSettings {
     /// 主窗口关闭按钮行为：`close` 退出程序，`tray` 隐藏到托盘。与前端 `preferencesStore.closeAction` 对齐。
     #[serde(rename = "closeAction", default = "default_close_action")]
     pub close_action: String,
+    /// 外观 / 动画 / 圆角等 UI 偏好（与 localStorage 双写，启动以磁盘为准）。
+    #[serde(rename = "uiPreferences", default)]
+    pub ui_preferences: AppUiPreferences,
 }
 
 impl Default for AppSettings {
@@ -143,6 +194,7 @@ impl Default for AppSettings {
             performance_monitor_enabled: true,
             performance_monitor_interval_ms: default_perf_monitor_interval(),
             close_action: default_close_action(),
+            ui_preferences: AppUiPreferences::default(),
         }
     }
 }
@@ -164,7 +216,7 @@ impl AppSettings {
 /// 定义在 domain（与 `AppSettings` 同 crate、同 ts-rs export 路径），让派生的
 /// TypeScript import 相对路径正确；放 tauri 层会因跨 crate export_to 深度不同
 /// 拼出畸形相对路径。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppSettingsDto {
     pub settings: AppSettings,
@@ -361,6 +413,7 @@ mod tests {
             performance_monitor_enabled: false,
             performance_monitor_interval_ms: 3000,
             close_action: default_close_action(),
+            ui_preferences: AppUiPreferences::default(),
         };
         let json = serde_json::to_string(&cfg).expect("serialize 不应失败");
         let back: AppSettings = serde_json::from_str(&json).expect("反序列化失败");
