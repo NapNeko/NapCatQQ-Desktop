@@ -9,6 +9,7 @@
 // 历史与增量数据来自 useBotLogStream，不直接调 service。
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
     ArrowLeft,
     Brush,
@@ -258,6 +259,8 @@ function Toolbar({
 }
 
 
+const LOG_ROW_HEIGHT_PX = 20;
+
 const LogViewport = forwardRef<
     HTMLDivElement,
     { entries: LogEntry[]; emptyKind: 'no-logs' | 'no-match' | 'has' }
@@ -281,21 +284,76 @@ const LogViewport = forwardRef<
         );
     }
     return (
-        <div
+        <VirtualLogList
             ref={ref}
+            entries={entries}
+            rowHeight={LOG_ROW_HEIGHT_PX}
+        />
+    );
+});
+
+function VirtualLogList({
+    entries,
+    rowHeight,
+    ref: forwardedRef,
+}: {
+    entries: LogEntry[];
+    rowHeight: number;
+    ref: React.ForwardedRef<HTMLDivElement>;
+}) {
+    const parentRef = useRef<HTMLDivElement | null>(null);
+
+    const setRefs = (el: HTMLDivElement | null) => {
+        parentRef.current = el;
+        if (typeof forwardedRef === 'function') {
+            forwardedRef(el);
+        } else if (forwardedRef) {
+            forwardedRef.current = el;
+        }
+    };
+
+    const virtualizer = useVirtualizer({
+        count: entries.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => rowHeight,
+        overscan: 12,
+    });
+
+    const items = virtualizer.getVirtualItems();
+    const totalSize = virtualizer.getTotalSize();
+
+    return (
+        <div
+            ref={setRefs}
             role="log"
             aria-label="实例运行日志"
             aria-live="polite"
             className="min-h-0 flex-1 overflow-auto bg-inset font-mono text-[12px] leading-[18px]"
         >
-            <div className="py-1">
-                {entries.map((e) => (
-                    <LogLine key={e.id} entry={e} />
-                ))}
+            <div
+                className="relative w-full py-1"
+                style={{ height: totalSize }}
+            >
+                {items.map((virtualRow) => {
+                    const entry = entries[virtualRow.index];
+                    if (!entry) return null;
+                    return (
+                        <div
+                            key={entry.id}
+                            className="absolute left-0 top-0 w-full"
+                            style={{
+                                height: virtualRow.size,
+                                transform: `translateY(${virtualRow.start}px)`,
+                            }}
+                        >
+                            <LogLine entry={entry} />
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
-});
+}
 
 function LogLine({ entry }: { entry: LogEntry }) {
     return (
