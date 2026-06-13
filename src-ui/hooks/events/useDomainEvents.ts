@@ -3,7 +3,7 @@
 // 锁定避免重订阅风暴。
 
 import { useEffect, useRef } from 'react';
-import { eventStreamService } from '../../core/services/event-stream.service';
+import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
 import type { DomainEvent } from '../../core/ipc/types';
 
 export type DomainEventHandler = (event: DomainEvent) => void;
@@ -13,25 +13,8 @@ export function useDomainEvents(handler: DomainEventHandler): void {
     handlerRef.current = handler;
 
     useEffect(() => {
-        let unsubscribe: (() => void) | undefined;
-        let cancelled = false;
-
-        eventStreamService
-            .subscribe((event) => {
-                if (cancelled) return;
-                handlerRef.current(event);
-            })
-            .then((unsub) => {
-                if (cancelled) {
-                    unsub();
-                } else {
-                    unsubscribe = unsub;
-                }
-            });
-
-        return () => {
-            cancelled = true;
-            if (unsubscribe) unsubscribe();
-        };
+        return subscribeDomainEvents((event) => {
+            handlerRef.current(event);
+        });
     }, []);
 }
