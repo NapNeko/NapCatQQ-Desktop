@@ -12,7 +12,7 @@ import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { DockerPageNext } from '../modules/docker/DockerPage.next';
 import { RemoteHostPanelNext } from '../modules/remote/RemoteHostPanel.next';
 import { SettingsPageNext } from '../modules/settings/SettingsPage.next';
-import { TaskQueueDialog } from '../modules/task-queue/TaskQueueDialog';
+import { TaskQueuePageNext } from '../modules/task-queue/TaskQueuePage.next';
 import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
@@ -23,7 +23,7 @@ import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { useCloseActionBootstrap } from '../hooks/preferences/useCloseActionBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue } from '../hooks/task-queue/useTaskQueue';
-import { requestSettingsLogTab } from '../hooks/task-queue/settingsLogNavigation';
+import type { TaskQueueSnapshot } from '../core/domain/task-queue/types';
 import { PageTransition } from '../shared/ui/motion';
 
 /// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
@@ -33,13 +33,13 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'components',
     'docker',
     'remote',
+    'tasks',
     'settings',
 ];
 
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const [collapsed, setCollapsed] = useState(true);
-    const [taskQueueOpen, setTaskQueueOpen] = useState(false);
 
     useComponentActionEventBridge();
     useDockerDeployProgressBridge();
@@ -107,7 +107,6 @@ export const AppNext: React.FC = () => {
                         onToggleCollapse={() => setCollapsed((v) => !v)}
                         showDocker={showDocker}
                         taskQueueActiveCount={taskQueue.activeCount}
-                        onOpenTaskQueue={() => setTaskQueueOpen(true)}
                     />
 
                     <div className="relative flex flex-1 flex-col overflow-hidden">
@@ -133,7 +132,11 @@ export const AppNext: React.FC = () => {
                                         direction={direction}
                                         className="flex min-h-0 min-w-0 flex-1 flex-col"
                                     >
-                                        <RouteContent route={displayedRoute} onNavigate={setRoute} />
+                                        <RouteContent
+                                            route={displayedRoute}
+                                            onNavigate={setRoute}
+                                            taskQueue={taskQueue}
+                                        />
                                     </PageTransition>
                                 </div>
                             </div>
@@ -142,16 +145,6 @@ export const AppNext: React.FC = () => {
                 </div>
 
                 <InfoBarStack items={bars} onDismiss={dismiss} />
-
-                <TaskQueueDialog
-                    open={taskQueueOpen}
-                    onOpenChange={setTaskQueueOpen}
-                    items={taskQueue.items}
-                    onOpenSettingsLog={() => {
-                        requestSettingsLogTab();
-                        setRoute('settings');
-                    }}
-                />
             </div>
         </TooltipProvider>
     );
@@ -160,7 +153,8 @@ export const AppNext: React.FC = () => {
 const RouteContent: React.FC<{
     route: AppRoute;
     onNavigate: (route: AppRoute) => void;
-}> = ({ route, onNavigate }) => {
+    taskQueue: TaskQueueSnapshot;
+}> = ({ route, onNavigate, taskQueue }) => {
     switch (route) {
         case 'overview':
             return <BootstrapPanelNext onNavigate={onNavigate} />;
@@ -172,6 +166,14 @@ const RouteContent: React.FC<{
             return <DockerPageNext />;
         case 'remote':
             return <RemoteHostPanelNext />;
+        case 'tasks':
+            return (
+                <TaskQueuePageNext
+                    items={taskQueue.items}
+                    activeCount={taskQueue.activeCount}
+                    onNavigate={onNavigate}
+                />
+            );
         case 'settings':
             return <SettingsPageNext />;
         default: {

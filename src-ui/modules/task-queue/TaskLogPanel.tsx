@@ -13,9 +13,16 @@ export interface TaskLogPanelProps {
     enabled: boolean;
     /** 任务队列详情打开时用更短轮询间隔 */
     fastPoll?: boolean;
+    /** 占满父级剩余高度（任务队列独立页） */
+    fillHeight?: boolean;
 }
 
-export const TaskLogPanel: React.FC<TaskLogPanelProps> = ({ startedAt, enabled, fastPoll }) => {
+export const TaskLogPanel: React.FC<TaskLogPanelProps> = ({
+    startedAt,
+    enabled,
+    fastPoll,
+    fillHeight = false,
+}) => {
     const { logs, loading, error } = useDesktopLogStream('ALL_', enabled, {
         pollIntervalMs: fastPoll ? DESKTOP_LOG_POLL_MS_FAST : undefined,
     });
@@ -26,7 +33,18 @@ export const TaskLogPanel: React.FC<TaskLogPanelProps> = ({ startedAt, enabled, 
         return filtered.slice(-MAX_LINES);
     }, [logs, startedAt]);
 
-    if (!enabled) return null;
+    const boxClass = fillHeight
+        ? 'flex min-h-[140px] flex-1 flex-col overflow-hidden rounded-md border border-border-subtle bg-inset/40'
+        : 'flex h-[240px] flex-col overflow-hidden rounded-md border border-border-subtle bg-inset/40';
+
+    if (!enabled) {
+        if (!fillHeight) return null;
+        return (
+            <p className="flex flex-1 items-center justify-center px-4 py-8 text-center text-[12px] text-text-tertiary">
+                本区域在任务队列页会按任务开始时间过滤 Desktop 会话日志。
+            </p>
+        );
+    }
 
     if (loading && lines.length === 0) {
         return (
@@ -44,13 +62,13 @@ export const TaskLogPanel: React.FC<TaskLogPanelProps> = ({ startedAt, enabled, 
     if (lines.length === 0) {
         return (
             <p className="py-2 text-[12px] text-text-secondary">
-                暂无匹配日志。安装类任务阶段说明见上方；完整日志可在设置中查看。
+                暂无匹配日志。安装类任务阶段说明见上方步骤日志；完整日志可在设置中查看。
             </p>
         );
     }
 
     return (
-        <div className="flex h-[240px] flex-col overflow-hidden rounded-md border border-border-subtle bg-inset/40">
+        <div className={boxClass}>
             <div className="h-full overflow-y-auto p-3 font-sans text-[12px] leading-[1.55] antialiased">
                 {lines.map((line, i) => {
                     const p = parseDesktopLogLine(line);

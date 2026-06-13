@@ -31,6 +31,7 @@ export type AppRoute =
     | 'components'
     | 'docker'
     | 'remote'
+    | 'tasks'
     | 'settings';
 
 interface SidebarProps {
@@ -41,7 +42,6 @@ interface SidebarProps {
     /// 是否显示 Docker 项。
     showDocker?: boolean;
     taskQueueActiveCount?: number;
-    onOpenTaskQueue?: () => void;
 }
 
 interface NavItem {
@@ -64,6 +64,12 @@ const SETTINGS_NAV: NavItem = {
     icon: Settings,
 };
 
+const TASKS_NAV: NavItem = {
+    id: 'tasks',
+    label: '任务',
+    icon: ListTodo,
+};
+
 const LOGO_IMG_CLASS =
     'select-none object-contain [image-rendering:-webkit-optimize-contrast]';
 
@@ -74,7 +80,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onToggleCollapse,
     showDocker = true,
     taskQueueActiveCount = 0,
-    onOpenTaskQueue,
 }) => {
     const mainNavItems = showDocker
         ? MAIN_NAV
@@ -217,13 +222,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </ul>
 
                 <ul className="mt-auto space-y-0.5 border-t border-border-subtle pt-2">
-                    {onOpenTaskQueue && (
-                        <TaskQueueNavRow
-                            activeCount={taskQueueActiveCount}
-                            collapsed={collapsed}
-                            onOpen={onOpenTaskQueue}
-                        />
-                    )}
+                    <TaskQueueNavRow
+                        item={TASKS_NAV}
+                        isActive={active === 'tasks'}
+                        collapsed={collapsed}
+                        activeCount={taskQueueActiveCount}
+                        onSelect={onChange}
+                    />
                     <NavRow
                         item={SETTINGS_NAV}
                         isActive={active === 'settings'}
@@ -280,33 +285,46 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) 
 };
 
 interface TaskQueueNavRowProps {
-    activeCount: number;
+    item: NavItem;
+    isActive: boolean;
     collapsed: boolean;
-    onOpen: () => void;
+    activeCount: number;
+    onSelect: (id: AppRoute) => void;
 }
 
 const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
-    activeCount,
+    item,
+    isActive,
     collapsed,
-    onOpen,
+    activeCount,
+    onSelect,
 }) => {
-    const busy = activeCount > 0;
+    const busy = activeCount > 0 && !isActive;
     const iconSize = collapsed ? 20 : 15;
-    const label = busy ? `任务 (${activeCount})` : '任务';
+    const label =
+        activeCount > 0 && !collapsed ? `任务 (${activeCount})` : item.label;
+    const Icon = item.icon;
 
     return (
         <li>
             <button
                 type="button"
-                onClick={onOpen}
-                title={collapsed ? label : undefined}
-                aria-label={busy ? `任务队列，${activeCount} 个进行中` : '任务队列'}
+                onClick={() => onSelect(item.id)}
+                aria-current={isActive ? 'page' : undefined}
+                title={collapsed ? (activeCount > 0 ? `任务 (${activeCount})` : item.label) : undefined}
+                aria-label={
+                    activeCount > 0
+                        ? `任务队列，${activeCount} 个进行中`
+                        : '任务队列'
+                }
                 className={cn(
                     'group relative flex w-full items-center gap-2.5 rounded-sm px-2.5',
                     'text-[13.5px] font-medium transition-colors',
-                    'text-text-tertiary hover:bg-text/5 hover:text-text-secondary',
                     'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
                     collapsed ? 'h-10 justify-center px-0' : 'h-9',
+                    isActive
+                        ? 'text-text'
+                        : 'text-text-tertiary hover:bg-text/5 hover:text-text-secondary',
                 )}
             >
                 <span className="relative inline-flex shrink-0">
@@ -321,15 +339,16 @@ const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
                         />
                     ) : (
                         <MotionIcon
-                            icon={ListTodo}
-                            motion="none"
-                            hoverAccent
-                            playEnter={false}
+                            icon={Icon}
+                            motion={isActive ? NAV_ROUTE_MOTION[item.id] : 'none'}
+                            playEnter={isActive}
+                            enterKey={isActive ? item.id : undefined}
                             size={iconSize}
                             strokeWidth={1.75}
+                            className={cn('shrink-0', isActive && 'text-brand')}
                         />
                     )}
-                    {busy && (
+                    {activeCount > 0 && (
                         <span
                             className={cn(
                                 'absolute flex items-center justify-center rounded-pill bg-brand font-medium leading-none text-white',

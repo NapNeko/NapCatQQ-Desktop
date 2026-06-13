@@ -8,6 +8,7 @@ type NavRouteId =
     | 'components'
     | 'docker'
     | 'remote'
+    | 'tasks'
     | 'settings';
 
 /** 侧栏当前路由持续动效（与 Sidebar NAV_ACTIVE_MOTION 一致）。 */
@@ -17,6 +18,7 @@ export const NAV_ROUTE_MOTION: Record<NavRouteId, MotionIconPreset> = {
     components: 'nudge',
     docker: 'breathe',
     remote: 'breathe',
+    tasks: 'nudge',
     settings: 'spin-slow',
 };
 
