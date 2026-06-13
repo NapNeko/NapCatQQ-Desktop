@@ -1,4 +1,4 @@
-/* 组件卡双列：repeat(2, minmax(0,1fr)) + 子项钉在列宽内。 */
+/* 组件卡双列：repeat(2, minmax(0,1fr)) + 同行等高，避免安装态撑高抖动。 */
 .componentCardGrid {
     display: grid;
     width: 100%;
@@ -6,13 +6,15 @@
     min-width: 0;
     box-sizing: border-box;
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.5rem;
+    grid-auto-rows: 1fr;
+    align-items: stretch;
+    gap: 0.625rem;
 }
 
 @media (min-width: 768px) {
     .componentCardGrid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.5rem 0.625rem;
+        gap: 0.625rem 0.75rem;
     }
 }
 
@@ -20,6 +22,8 @@
     min-width: 0;
     max-width: 100%;
     width: 100%;
+    height: 100%;
     box-sizing: border-box;
     justify-self: stretch;
+    align-self: stretch;
 }

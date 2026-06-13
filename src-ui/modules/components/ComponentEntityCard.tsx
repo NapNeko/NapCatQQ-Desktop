@@ -1,67 +1,97 @@
-// 组件管理页实体卡：紧凑排版；双列网格见 componentCardGrid.module.css。
+// 组件管理页实体卡：对齐 ServerCard / ContainerCard 的层次（徽章 + 标题 + 元信息 + 底栏操作）。
 
 import type { ReactNode } from 'react';
 import { cn } from '../../shared/utils/cn';
+import { Badge } from '../../shared/ui';
 import gridStyles from './componentCardGrid.module.css';
-
-interface ComponentEntityCardProps {
-    children: ReactNode;
-    footer?: ReactNode;
-    progressOverlay?: ReactNode;
-}
-
-const CARD_SHELL =
-    'group relative isolate box-border flex h-full w-full max-w-full min-w-0 flex-col gap-1.5 rounded-md ' +
-    'bg-elevated px-3 py-2.5 shadow-card ring-1 ring-inset ring-border-subtle ' +
-    'transition-all duration-150 hover:bg-elevated/90 hover:shadow-popover';
+import type { StatusBadgeSpec } from './componentStatusPresentation';
 
 export const componentCardGridClass = gridStyles.componentCardGrid;
 
-export function ComponentEntityCard({
-    children,
-    footer,
-    progressOverlay,
-}: ComponentEntityCardProps) {
-    const hasFooter = footer != null && footer !== false;
-    return (
-        <div className={cn(CARD_SHELL, progressOverlay && 'overflow-hidden')}>
-            {children}
-            {hasFooter ? (
-                <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5 pt-0.5">
-                    {footer}
-                </div>
-            ) : null}
-            {progressOverlay}
-        </div>
-    );
+export interface ComponentManageCardProps {
+    statusBadge: StatusBadgeSpec;
+    title: string;
+    titleAside?: ReactNode;
+    description?: string;
+    meta: ReactNode;
+    footer: ReactNode;
+    progressOverlay?: ReactNode;
+    accent?: 'brand' | 'none';
 }
 
-export function ComponentCardBody({
-    statusDot,
-    titleRow,
+const SHELL =
+    'relative isolate flex h-full w-full max-w-full min-w-0 flex-col overflow-hidden ' +
+    'rounded-md border border-border-subtle bg-surface shadow-card ' +
+    'transition-[box-shadow] duration-200 hover:shadow-popover';
+
+export function ComponentManageCard({
+    statusBadge,
+    title,
+    titleAside,
     description,
-    statusLine,
-}: {
-    statusDot: ReactNode;
-    titleRow: ReactNode;
-    description?: ReactNode;
-    statusLine: ReactNode;
-}) {
-    const hasDesc =
-        description != null && description !== false && String(description).trim() !== '';
+    meta,
+    footer,
+    progressOverlay,
+    accent = 'none',
+}: ComponentManageCardProps) {
+    const desc =
+        description != null && description.trim() !== '' ? description.trim() : null;
 
     return (
-        <div className="flex min-w-0 gap-2">
-            {statusDot}
-            <div className="min-w-0 flex-1 space-y-0.5">
-                {titleRow}
-                {hasDesc ? (
-                    <p className="line-clamp-1 text-2xs leading-snug text-text-secondary">
-                        {description}
+        <article
+            className={cn(
+                SHELL,
+                accent === 'brand' && 'ring-1 ring-inset ring-brand/25',
+            )}
+        >
+            {accent === 'brand' ? (
+                <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 w-0.5 bg-brand"
+                />
+            ) : null}
+
+            <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pb-2 pt-3">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                    <h3 className="min-w-0 flex-1 truncate font-display text-base font-semibold leading-snug text-text">
+                        {title}
+                    </h3>
+                    {titleAside ? (
+                        <div className="shrink-0">{titleAside}</div>
+                    ) : null}
+                </div>
+
+                <div className="min-w-0 space-y-1">
+                    <p
+                        className={cn(
+                            'line-clamp-2 min-h-[2.25rem] text-xs leading-snug',
+                            desc ? 'text-text-secondary' : 'text-transparent select-none',
+                        )}
+                        aria-hidden={!desc}
+                        title={desc ?? undefined}
+                    >
+                        {desc ?? '占位'}
                     </p>
-                ) : null}
-                <div className={cn('min-w-0', hasDesc ? '' : 'pt-0.5')}>{statusLine}</div>
+                </div>
+
+                <div className="min-h-[1.375rem] min-w-0">{meta}</div>
             </div>
-        </div>
+
+            <footer className="flex min-h-[2.75rem] shrink-0 items-center justify-between gap-2 border-t border-border-subtle bg-inset/40 px-3 py-2">
+                <Badge
+                    tone={statusBadge.tone}
+                    appearance="soft"
+                    dot={statusBadge.dot}
+                    className="shrink-0 max-w-[50%] truncate"
+                >
+                    {statusBadge.label}
+                </Badge>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5">
+                    {footer}
+                </div>
+            </footer>
+
+            {progressOverlay}
+        </article>
     );
 }

@@ -6,7 +6,7 @@
 //     点了开部署对话框 —— 部署形态归到对应框架自己的行上，不再是页面底部
 //     单开一块。
 
-import React, { useState } from 'react';
+import React from 'react';
 import { PackageX } from 'lucide-react';
 import { FormSection } from '../../shared/ui';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
@@ -14,7 +14,6 @@ import { MachineComponentRowView } from './MachineComponentRow';
 import { componentCardGridClass } from './ComponentEntityCard';
 import { DockerRow } from './DockerRow';
 import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
-import { DeployResultBanner } from '../docker/DeployResultBanner';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
@@ -90,13 +89,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     // 给「Docker 部署」按钮。
     const dockerApplicable = host.locality === 'remote';
 
-    // 部署结果横幅（WebUI/noVNC 地址 + 凭据）。部署完挂在框架组下方，用户手动关。
-    const [deployResults, setDeployResults] = useState<DeployedContainer[]>([]);
-    const pushResult = (r: DeployedContainer) =>
-        setDeployResults((prev) => [...prev.filter((x) => x.name !== r.name), r]);
-    const dismissResult = (name: string) =>
-        setDeployResults((prev) => prev.filter((x) => x.name !== name));
-
     const dockerReady =
         dockerApplicable && dockerStatus ? dockerStatusSummary(dockerStatus).ready : false;
 
@@ -129,7 +121,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 alreadyDeployed={alreadyDeployed}
                 onDeploy={onDeploy}
                 onDeployError={(error) => onDeployError?.(host.host_id, flavor, error)}
-                onDeployed={pushResult}
             />
         );
     };
@@ -149,13 +140,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     onRetryDetect={onRetryDetect}
                     trailingFor={deployButtonFor}
                 />
-                {deployResults.map((r) => (
-                    <DeployResultBanner
-                        key={r.name}
-                        result={r}
-                        onDismiss={() => dismissResult(r.name)}
-                    />
-                ))}
             </div>
 
             <RuntimeDepGroup

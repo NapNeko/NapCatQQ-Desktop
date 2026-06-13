@@ -23,7 +23,7 @@ import {
 import type { ComponentId, ProgressEvent } from '../../core/ipc/types';
 
 /// 终态保留时长。3 秒足够用户读完 "已完成 / 失败" 提示，又不会卡到下次操作。
-const LINGER_AFTER_FINISH = 600_000; // 10分钟
+const LINGER_AFTER_FINISH = 3_000;
 
 export interface ComponentActionStoreState {
     /** task_id → 进度视图 */
