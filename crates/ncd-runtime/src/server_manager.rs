@@ -521,8 +521,24 @@ impl ServerManager {
         info!(target: "ncd_runtime::server_manager", server_id = %id, "远端主机档案已删除");
         let _ = self.credentials.delete_password(id);
         let _ = self.credentials.delete_sudo_password(id);
-        self.hosts.write().await.remove(id);
+        self.purge_server_runtime_maps(id).await;
         Ok(())
+    }
+
+    /// 档案删除时清 SSH 缓存、单飞锁与自动连冷却表，避免 Map 只增不减。
+    async fn purge_server_runtime_maps(&self, id: &str) {
+        self.hosts.write().await.remove(id);
+        self.connect_locks.write().await.remove(id);
+        self.auto_connect_cooldown_until.write().await.remove(id);
+    }
+
+    /// 冷却条目到期后仍留在 HashMap 里会造成慢泄漏；读路径顺手删掉已过期的键。
+    async fn prune_expired_auto_connect_cooldowns(&self) {
+        let now = std::time::Instant::now();
+        self.auto_connect_cooldown_until
+            .write()
+            .await
+            .retain(|_, until| *until > now);
     }
 
     /// 为长操作（Docker 安装、组件安装等）创建隔离的 SSH 连接。
@@ -766,6 +782,8 @@ impl ServerManager {
             return Ok(host);
         }
 
+        self.prune_expired_auto_connect_cooldowns().await;
+
         const COOLDOWN: std::time::Duration = std::time::Duration::from_secs(90);
         if let Some(until) = self.auto_connect_cooldown_until.read().await.get(id).copied() {
             if until > std::time::Instant::now() {
@@ -987,6 +1005,43 @@ mod tests {
         (mgr, creds)
     }
 
+    #[cfg(test)]
+    impl ServerManager {
+        async fn test_has_connect_lock(&self, id: &str) -> bool {
+            self.connect_locks.read().await.contains_key(id)
+        }
+
+        async fn test_has_auto_connect_cooldown(&self, id: &str) -> bool {
+            self.auto_connect_cooldown_until.read().await.contains_key(id)
+        }
+
+        async fn test_seed_auto_connect_cooldown(&self, id: &str) {
+            self.auto_connect_cooldown_until.write().await.insert(
+                id.to_string(),
+                std::time::Instant::now() + std::time::Duration::from_secs(300),
+            );
+        }
+
+        async fn test_touch_connect_lock(&self, id: &str) {
+            let _ = self.connect_lock_for(id).await;
+        }
+
+        async fn test_cooldown_map_len(&self) -> usize {
+            self.auto_connect_cooldown_until.read().await.len()
+        }
+
+        async fn test_set_cooldown_until(&self, id: &str, until: std::time::Instant) {
+            self.auto_connect_cooldown_until
+                .write()
+                .await
+                .insert(id.to_string(), until);
+        }
+
+        async fn test_prune_expired_cooldowns(&self) {
+            self.prune_expired_auto_connect_cooldowns().await;
+        }
+    }
+
     #[tokio::test]
     async fn add_and_list_servers() {
         let root = tempdir().unwrap();
@@ -1043,6 +1098,45 @@ mod tests {
         mgr.delete_server("s1").await.unwrap();
         assert!(mgr.list_servers().await.is_empty());
         assert!(creds.get_password("s1").is_none());
+    }
+
+    #[tokio::test]
+    async fn delete_server_clears_connect_locks_and_cooldown_maps() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+
+        mgr.add_server(make_profile("s1", "A"), None).await.unwrap();
+        mgr.test_touch_connect_lock("s1").await;
+        mgr.test_seed_auto_connect_cooldown("s1").await;
+        assert!(mgr.test_has_connect_lock("s1").await);
+        assert!(mgr.test_has_auto_connect_cooldown("s1").await);
+
+        mgr.delete_server("s1").await.unwrap();
+        assert!(!mgr.test_has_connect_lock("s1").await);
+        assert!(!mgr.test_has_auto_connect_cooldown("s1").await);
+    }
+
+    #[tokio::test]
+    async fn prune_expired_auto_connect_cooldowns_drops_stale_entries() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+
+        mgr.test_set_cooldown_until(
+            "expired",
+            std::time::Instant::now() - std::time::Duration::from_secs(1),
+        )
+        .await;
+        mgr.test_set_cooldown_until(
+            "fresh",
+            std::time::Instant::now() + std::time::Duration::from_secs(60),
+        )
+        .await;
+        assert_eq!(mgr.test_cooldown_map_len().await, 2);
+
+        mgr.test_prune_expired_cooldowns().await;
+        assert_eq!(mgr.test_cooldown_map_len().await, 1);
+        assert!(mgr.test_has_auto_connect_cooldown("fresh").await);
+        assert!(!mgr.test_has_auto_connect_cooldown("expired").await);
     }
 
     #[tokio::test]
