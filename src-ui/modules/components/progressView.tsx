@@ -5,6 +5,7 @@ import React from 'react';
 import { CheckCircle2, Loader2, Radio, Repeat } from 'lucide-react';
 import { Progress } from '../../shared/ui';
 import { MotionIcon } from '../../shared/ui/motion';
+import { cn } from '../../shared/utils/cn';
 import {
     type ActionProgressView,
     deriveEtaSeconds,
@@ -19,11 +20,18 @@ function progressSuccessEnterKey(progress: ActionProgressView): string {
     return `success-${progress.percent}-${progress.message ?? ''}`;
 }
 
-export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progress }) => {
+export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: string }> = ({
+    progress,
+    className,
+}) => {
+    const row = (inner: React.ReactNode) => (
+        <div className={cn('mt-1 flex min-w-0 max-w-full items-center gap-2', className)}>{inner}</div>
+    );
+
     if (progress.status === 'failed' || progress.status === 'cancelled') {
         const isCancelled = progress.status === 'cancelled';
-        return (
-            <div className="mt-1 flex min-w-0 max-w-full items-center gap-2">
+        return row(
+            <>
                 <span
                     aria-hidden
                     className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${isCancelled ? 'bg-warning' : 'bg-danger'}`}
@@ -31,12 +39,12 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
                 <span className={`min-w-0 truncate text-[12px] ${isCancelled ? 'text-warning' : 'text-danger'}`}>
                     {isCancelled ? '已取消' : '失败 · 详见顶部提示'}
                 </span>
-            </div>
+            </>,
         );
     }
     if (progress.status === 'success') {
-        return (
-            <div className="mt-1 flex min-w-0 max-w-full items-center gap-2">
+        return row(
+            <>
                 <MotionIcon
                     icon={CheckCircle2}
                     motion="pulse"
@@ -46,7 +54,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
                     className="shrink-0 text-success"
                 />
                 <span className="min-w-0 truncate text-[12px] text-success">已完成</span>
-            </div>
+            </>,
         );
     }
 
@@ -54,8 +62,8 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
     const indeterminate = isIndeterminate(progress);
 
     if (!isDownload) {
-        return (
-            <div className="mt-1 flex min-w-0 max-w-full items-center gap-2">
+        return row(
+            <>
                 <MotionIcon
                     icon={Loader2}
                     motion="spin"
@@ -69,7 +77,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
                 <span className="ml-auto shrink-0 font-mono text-[11.5px] tabular-nums text-text-secondary">
                     {progress.percent}%
                 </span>
-            </div>
+            </>,
         );
     }
 
@@ -89,7 +97,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView }> = ({ progr
               : null;
 
     return (
-        <div className="mt-1 flex min-w-0 max-w-full items-center gap-2 text-[11.5px]">
+        <div className={cn('mt-1 flex min-w-0 max-w-full items-center gap-2 text-[11.5px]', className)}>
             <StageIcon stage={progress.downloadStage} />
             <span className="min-w-0 truncate text-text-secondary">{stageLabel}</span>
             {bytesText && (

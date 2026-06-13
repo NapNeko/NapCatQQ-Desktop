@@ -44,11 +44,12 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     const openExternal = useOpenExternal();
     const summary = status ? dockerStatusSummary(status) : null;
     const ready = summary?.ready ?? false;
-    // Linux 才能用脚本自动装；Windows / macOS 需要手动装 Docker Desktop。
     const autoInstallable = os === 'linux';
+    const probing = isProbing && !status;
+    const inFlight = isInstalling || (isProbing && !status);
 
     const footer =
-        ready || (isProbing && !status)
+        ready || probing
             ? undefined
             : autoInstallable ? (
                   <Button size="sm" variant="primary" onClick={onInstall} disabled={isInstalling}>
@@ -64,15 +65,21 @@ export const DockerRow: React.FC<DockerRowProps> = ({
               );
 
     return (
-        <ComponentEntityCard footer={footer}>
+        <ComponentEntityCard
+            footer={footer}
+            progressOverlay={
+                isInstalling && installProgress && shouldShowProgressBar(installProgress) ? (
+                    <ProgressBarOverlay progress={installProgress} />
+                ) : undefined
+            }
+        >
             <ComponentCardBody
-                statusDot={<StatusDot ready={ready} probing={isProbing && !status} />}
+                statusDot={<StatusDot ready={ready} probing={probing} inFlight={inFlight} />}
                 titleRow={
                     <div className="flex min-w-0 items-center gap-2">
                         <span className="min-w-0 flex-1 truncate font-display text-md font-semibold leading-tight text-text">
                             Docker
                         </span>
-                        <DockerChip ready={ready} probing={isProbing && !status} />
                         <a
                             href="https://www.docker.com/"
                             onClick={(e) => {
@@ -90,7 +97,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                     <StatusLine
                         ready={ready}
                         summary={summary}
-                        isProbing={isProbing && !status}
+                        isProbing={probing}
                         isInstalling={isInstalling}
                         installHint={installHint}
                         installProgress={installProgress}
@@ -101,26 +108,19 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     );
 };
 
-const StatusDot: React.FC<{ ready: boolean; probing: boolean }> = ({ ready, probing }) => {
-    const cls = probing
-        ? 'bg-warning'
-        : ready
+const StatusDot: React.FC<{ ready: boolean; probing: boolean; inFlight: boolean }> = ({
+    ready,
+    probing,
+    inFlight,
+}) => {
+    const cls = inFlight
+        ? 'bg-brand shadow-glow-brand'
+        : probing
+          ? 'bg-warning'
+          : ready
             ? 'bg-success shadow-glow-success'
             : 'bg-text-disabled';
     return <span aria-hidden className={`mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${cls}`} />;
-};
-
-const DockerChip: React.FC<{ ready: boolean; probing: boolean }> = ({ ready, probing }) => {
-    const chip = probing
-        ? { label: '探测中', cls: 'bg-inset text-text-tertiary' }
-        : ready
-            ? { label: '就绪', cls: 'bg-success-soft text-success' }
-            : { label: '未就绪', cls: 'bg-inset text-text-tertiary' };
-    return (
-        <span className={`shrink-0 rounded-xs px-1.5 py-0.5 text-2xs font-medium ${chip.cls}`}>
-            {chip.label}
-        </span>
-    );
 };
 
 const StatusLine: React.FC<{
@@ -133,34 +133,30 @@ const StatusLine: React.FC<{
 }> = ({ ready, summary, isProbing, isInstalling, installHint, installProgress }) => {
     if (isInstalling && installProgress) {
         return (
-            <div className="mt-1 min-w-0">
-                <ProgressLine progress={installProgress} />
-                {shouldShowProgressBar(installProgress) && (
-                    <ProgressBarOverlay progress={installProgress} />
-                )}
+            <div className="mt-0 min-w-0">
+                <ProgressLine progress={installProgress} className="mt-0" />
             </div>
         );
     }
     if (isInstalling) {
         return (
-            <p className="mt-1 truncate text-xs text-warning">
+            <p className="mt-0 truncate text-[12px] text-text-secondary">
                 {installHint ?? '正在安装…'}
             </p>
         );
     }
     if (isProbing) {
-        return <p className="mt-1 truncate text-xs text-text-tertiary">正在探测</p>;
+        return <p className="mt-0 truncate text-[12px] text-text-tertiary">正在探测</p>;
     }
     if (ready) {
         return (
-            <p className="mt-1 truncate font-mono text-xs tabular-nums text-text-tertiary">
+            <p className="mt-0 truncate font-mono text-xs tabular-nums text-text-tertiary">
                 {summary?.label ?? 'Docker 就绪'}
             </p>
         );
     }
-    // 未就绪：可能是没装、daemon 没起、缺 compose。summary.label 已经写清楚。
     return (
-        <p className="mt-1 line-clamp-2 text-xs text-text-tertiary">
+        <p className="mt-0 line-clamp-2 text-xs text-text-tertiary">
             {summary?.label ?? '未安装'}
         </p>
     );

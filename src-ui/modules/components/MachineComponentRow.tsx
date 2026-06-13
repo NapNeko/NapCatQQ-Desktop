@@ -81,6 +81,12 @@ export const MachineComponentRowView: React.FC<Props> = ({
     const showProgressBar =
         activeProgress && shouldShowProgressBar(activeProgress.progress);
 
+    const inFlight =
+        activeProgress != null &&
+        activeProgress.progress.status !== 'success' &&
+        activeProgress.progress.status !== 'failed' &&
+        activeProgress.progress.status !== 'cancelled';
+
     const footer = isCancelable ? (
         <Button
             size="sm"
@@ -113,14 +119,17 @@ export const MachineComponentRowView: React.FC<Props> = ({
         >
             <ComponentCardBody
                 statusDot={
-                    <StatusDot status={status} hasUpdate={hasUpdate(status, latestRemoteVersion)} />
+                    <StatusDot
+                        status={status}
+                        hasUpdate={hasUpdate(status, latestRemoteVersion)}
+                        inFlight={inFlight}
+                    />
                 }
                 titleRow={
                     <div className="flex min-w-0 items-center gap-2">
                         <span className="min-w-0 flex-1 truncate font-display text-md font-semibold leading-tight text-text">
                             {info.display_name}
                         </span>
-                        <StatusChip status={status} hasUpdate={hasUpdate(status, latestRemoteVersion)} />
                         {info.repo_url && (
                             <a
                                 href={info.repo_url}
@@ -156,7 +165,16 @@ function hasUpdate(status: MachineComponentRow['status'], latest: string | null)
 const StatusDot: React.FC<{
     status: MachineComponentRow['status'];
     hasUpdate: boolean;
-}> = ({ status, hasUpdate }) => {
+    inFlight: boolean;
+}> = ({ status, hasUpdate, inFlight }) => {
+    if (inFlight) {
+        return (
+            <span
+                aria-hidden
+                className="mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-brand shadow-glow-brand"
+            />
+        );
+    }
     const cls = (() => {
         switch (status.state) {
             case 'installed':
@@ -172,73 +190,40 @@ const StatusDot: React.FC<{
     return <span aria-hidden className={`mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${cls}`} />;
 };
 
-// 状态徽章：卡片标题旁的一小块语义色标签，让"已装/可更新/未装"一眼可辨。
-const StatusChip: React.FC<{
-    status: MachineComponentRow['status'];
-    hasUpdate: boolean;
-}> = ({ status, hasUpdate }) => {
-    const chip = (() => {
-        switch (status.state) {
-            case 'installed':
-                return hasUpdate
-                    ? { label: '可更新', cls: 'bg-warning-soft text-warning' }
-                    : { label: '已安装', cls: 'bg-success-soft text-success' };
-            case 'not_installed':
-                return { label: '未安装', cls: 'bg-inset text-text-tertiary' };
-            case 'unsupported':
-                return { label: '不支持', cls: 'bg-inset text-text-disabled' };
-            case 'unknown':
-                return status.reason === '正在探测'
-                    ? { label: '探测中', cls: 'bg-inset text-text-tertiary' }
-                    : { label: '异常', cls: 'bg-warning-soft text-warning' };
-        }
-    })();
-    return (
-        <span className={`shrink-0 rounded-xs px-1.5 py-0.5 text-2xs font-medium ${chip.cls}`}>
-            {chip.label}
-        </span>
-    );
-};
-
 const StatusLine: React.FC<{
     status: MachineComponentRow['status'];
     latestRemoteVersion: string | null;
     activeProgress: { taskId: string; progress: ActionProgressView } | null;
 }> = ({ status, latestRemoteVersion, activeProgress }) => {
     if (activeProgress) {
-        return <ProgressLine progress={activeProgress.progress} />;
+        return <ProgressLine progress={activeProgress.progress} className="mt-0" />;
     }
     switch (status.state) {
         case 'installed': {
             const local = status.detected.version;
             const updatable = latestRemoteVersion && local !== latestRemoteVersion;
             return (
-                <p className="mt-1 truncate font-mono text-xs tabular-nums text-text-tertiary">
+                <p className="mt-0 truncate font-mono text-xs tabular-nums text-text-tertiary">
                     {local}
                     {updatable && <span className="ml-2 text-warning">→ {latestRemoteVersion}</span>}
                 </p>
             );
         }
         case 'not_installed':
-            return (
-                <p className="mt-1 truncate text-xs text-text-tertiary">
-                    未安装
-                    {latestRemoteVersion && (
-                        <span className="ml-2 font-mono tabular-nums">{latestRemoteVersion}</span>
-                    )}
+            return latestRemoteVersion ? (
+                <p className="mt-0 truncate font-mono text-xs tabular-nums text-text-tertiary">
+                    {latestRemoteVersion}
                 </p>
-            );
+            ) : null;
         case 'unsupported':
             return (
-                <p className="mt-1 truncate text-xs text-text-disabled">不支持当前平台</p>
+                <p className="mt-0 truncate text-xs text-text-disabled">不支持当前平台</p>
             );
         case 'unknown': {
             const isLoading = status.reason === '正在探测';
             if (isLoading) {
                 return (
-                    <p className="mt-1 truncate text-xs text-text-tertiary">
-                        {status.reason}
-                    </p>
+                    <p className="mt-0 truncate text-[12px] text-text-tertiary">正在探测</p>
                 );
             }
             // 探测失败：原因可能是后端拼的长句（"自动连接被拒绝…请去远端页手动
@@ -247,7 +232,7 @@ const StatusLine: React.FC<{
             return (
                 <p
                     title={status.reason}
-                    className="mt-1 line-clamp-2 text-xs text-warning"
+                    className="mt-0 line-clamp-2 text-xs text-warning"
                 >
                     探测异常 · {status.reason}
                 </p>
