@@ -24,17 +24,23 @@ import {
     normalizeCloseAction,
 } from '../../hooks/preferences/preferencesStore';
 import { infoBarDismissPrefsStore } from '../../hooks/preferences/infoBarDismissPrefsStore';
+import {
+    taskQueueCleanupDraftFromStored,
+    type TaskQueueCleanupDraftSlice,
+} from '../../core/domain/task-queue/cleanup';
+import { taskQueueCleanupPrefsStore } from '../../hooks/task-queue/taskQueueCleanupPrefsStore';
 import { playThemeTransition } from '../../core/design/themeTransition';
 
 /** 设置页可编辑项的完整草稿（通用 / 网络 Tab + 本机偏好）。 */
-export type SettingsDraft = BackendSettings & {
+export type SettingsDraft = Omit<BackendSettings, 'taskQueueCleanup'> & {
     theme: ThemeMode;
     showMascot: boolean;
     motionEnabled: boolean;
     motionLevel: MotionLevel;
     motionSpeed: number;
     radiusStyle: RadiusStyle;
-} & InfoBarDismissDraftSlice;
+} & InfoBarDismissDraftSlice &
+    TaskQueueCleanupDraftSlice;
 
 function infoBarDismissDraftFromSettingsDraft(
     draft: SettingsDraft,
@@ -56,6 +62,7 @@ export function draftFromBackendAndPrefs(
     const client = clientPrefsFromBackend(backend);
     const dismiss = infoBarDismissFromUiPreferences(backend.uiPreferences);
     const ibDraft = infoBarDismissDraftFromStored(dismiss);
+    const tqDraft = taskQueueCleanupDraftFromStored(backend.taskQueueCleanup);
     return {
         botLoginCheckIntervalMs: backend.botLoginCheckIntervalMs,
         performanceMonitorEnabled: backend.performanceMonitorEnabled,
@@ -70,6 +77,7 @@ export function draftFromBackendAndPrefs(
         motionSpeed: client.motionSpeed,
         radiusStyle: client.radiusStyle,
         ...ibDraft,
+        ...tqDraft,
     };
 }
 
@@ -83,6 +91,10 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(
             draft.performanceMonitorIntervalMs,
         ),
+        taskQueueCleanup: {
+            taskQueueCleanupEnabled: draft.taskQueueCleanupEnabled,
+            taskQueueCleanupLingerMs: draft.taskQueueCleanupLingerMs,
+        },
         githubPat: draft.githubPat,
         closeAction: draft.closeAction,
         uiPreferences: appPreferencesToAppUiPreferences(
@@ -122,7 +134,9 @@ export function isSettingsDirty(
         draft.infoBarDismissSuccessEnabled !== baseline.infoBarDismissSuccessEnabled ||
         draft.infoBarDismissSuccessMs !== baseline.infoBarDismissSuccessMs ||
         draft.infoBarDismissWarningEnabled !== baseline.infoBarDismissWarningEnabled ||
-        draft.infoBarDismissWarningMs !== baseline.infoBarDismissWarningMs
+        draft.infoBarDismissWarningMs !== baseline.infoBarDismissWarningMs ||
+        draft.taskQueueCleanupEnabled !== baseline.taskQueueCleanupEnabled ||
+        draft.taskQueueCleanupLingerMs !== baseline.taskQueueCleanupLingerMs
     );
 }
 
@@ -192,6 +206,10 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
             ),
         ),
     );
+    taskQueueCleanupPrefsStore.applyPrefs({
+        taskQueueCleanupEnabled: draft.taskQueueCleanupEnabled,
+        taskQueueCleanupLingerMs: draft.taskQueueCleanupLingerMs,
+    });
 }
 
 export { normalizeCloseAction };

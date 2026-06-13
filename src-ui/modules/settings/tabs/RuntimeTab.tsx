@@ -6,6 +6,7 @@ import {
     PERFORMANCE_MONITOR_INTERVAL_MS_MIN,
 } from '../../../core/domain/performance/performanceSettings';
 import { DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED } from '../../../core/domain/ui/infoBarDismiss';
+import { DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS } from '../../../core/domain/task-queue/cleanup';
 import { NumberField, Switch } from '../../../shared/ui';
 import type { SettingsDraft } from '../settings-draft';
 import {
@@ -13,6 +14,7 @@ import {
     InfoBarDismissSliderPresence,
     InfoBarDismissDurationSlider,
     PerformanceMonitorIntervalSlider,
+    TaskQueueCleanupDurationSlider,
     SettingsSection,
     SettingsTabSections,
 } from '../_shared';
@@ -75,6 +77,34 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                             })
                         }
                         disabled={!draft.performanceMonitorEnabled}
+                    />
+                </FieldRow>
+            </SettingsSection>
+
+            <SettingsSection
+                title="任务队列"
+                description="已完成、失败或已取消的条目在列表中的保留时间；关闭自动清理则一直保留，直至重启应用。"
+            >
+                <FieldRow
+                    label="自动清理"
+                    description="开启后，终态任务在下方时长过后从任务队列移除"
+                >
+                    <InfoBarDismissSliderPresence
+                        visible={draft.taskQueueCleanupEnabled}
+                    >
+                        <TaskQueueCleanupDurationSlider
+                            value={draft.taskQueueCleanupLingerMs}
+                            defaultMs={DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS}
+                            onChange={(v) =>
+                                patchDraft({ taskQueueCleanupLingerMs: v })
+                            }
+                        />
+                    </InfoBarDismissSliderPresence>
+                    <Switch
+                        checked={draft.taskQueueCleanupEnabled}
+                        onCheckedChange={(v) =>
+                            patchDraft({ taskQueueCleanupEnabled: v })
+                        }
                     />
                 </FieldRow>
             </SettingsSection>

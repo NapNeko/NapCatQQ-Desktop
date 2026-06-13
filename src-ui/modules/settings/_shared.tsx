@@ -34,6 +34,12 @@ import {
     PERFORMANCE_MONITOR_INTERVAL_MS_MIN,
 } from '../../core/domain/performance/performanceSettings';
 import {
+    clampTaskQueueCleanupSliderMs,
+    TASK_QUEUE_CLEANUP_SLIDER_MAX,
+    TASK_QUEUE_CLEANUP_SLIDER_MIN,
+    TASK_QUEUE_CLEANUP_SLIDER_STEP,
+} from '../../core/domain/task-queue/cleanup';
+import {
     clampInfoBarDismissSliderMs,
     INFOBAR_DISMISS_SLIDER_MAX,
     INFOBAR_DISMISS_SLIDER_MIN,
@@ -594,6 +600,67 @@ export function InfoBarDismissDurationSlider({
             />
             <span className="w-14 text-right font-mono text-[11.5px] tabular-nums text-text-tertiary">
                 {clamped} ms
+            </span>
+            <button
+                type="button"
+                onClick={() => onChange(def)}
+                disabled={disabled || clamped === def}
+                className={
+                    'rounded-sm px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors ' +
+                    'hover:bg-inset hover:text-text disabled:pointer-events-none disabled:opacity-40'
+                }
+            >
+                重置
+            </button>
+        </div>
+    );
+}
+
+function formatTaskQueueCleanupMs(ms: number): string {
+    if (ms >= 60_000 && ms % 60_000 === 0) {
+        const m = ms / 60_000;
+        return `${m} 分钟`;
+    }
+    if (ms >= 1000 && ms % 1000 === 0) {
+        return `${ms / 1000} 秒`;
+    }
+    return `${ms} ms`;
+}
+
+/** 任务队列终态条目保留时长（3 秒–1 小时，步进 1 秒）。 */
+export function TaskQueueCleanupDurationSlider({
+    value,
+    onChange,
+    defaultMs,
+    disabled,
+}: {
+    value: number;
+    onChange: (next: number) => void;
+    defaultMs: number;
+    disabled?: boolean;
+}) {
+    const clamped = clampTaskQueueCleanupSliderMs(value);
+    const def = clampTaskQueueCleanupSliderMs(defaultMs);
+    return (
+        <div className="flex items-center gap-2">
+            <input
+                type="range"
+                min={TASK_QUEUE_CLEANUP_SLIDER_MIN}
+                max={TASK_QUEUE_CLEANUP_SLIDER_MAX}
+                step={TASK_QUEUE_CLEANUP_SLIDER_STEP}
+                value={clamped}
+                disabled={disabled}
+                onChange={(e) =>
+                    onChange(clampTaskQueueCleanupSliderMs(Number(e.target.value)))
+                }
+                className={
+                    'h-1.5 w-36 cursor-pointer appearance-none rounded-pill bg-inset outline-none ' +
+                    'accent-brand ' +
+                    'disabled:pointer-events-none disabled:opacity-50'
+                }
+            />
+            <span className="w-16 text-right font-mono text-[11.5px] tabular-nums text-text-tertiary">
+                {formatTaskQueueCleanupMs(clamped)}
             </span>
             <button
                 type="button"

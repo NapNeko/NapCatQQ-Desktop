@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { settingsService, clientPrefsFromBackend } from '../../core/services/settings.service';
 import { applySideEffects, preferencesStore } from './preferencesStore';
 import { infoBarDismissPrefsStore } from './infoBarDismissPrefsStore';
+import { taskQueueCleanupPrefsStore } from '../task-queue/taskQueueCleanupPrefsStore';
 
 let hydratedFromDisk = false;
 
@@ -14,6 +15,7 @@ export async function hydrateAppUiPreferencesFromDisk(): Promise<void> {
         const backend = await settingsService.get();
         preferencesStore.applySnapshot(clientPrefsFromBackend(backend));
         infoBarDismissPrefsStore.applyFromUiPreferences(backend.uiPreferences);
+        taskQueueCleanupPrefsStore.applyPrefs(backend.taskQueueCleanup);
         hydratedFromDisk = true;
     } catch {
         applySideEffects();

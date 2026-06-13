@@ -6,6 +6,11 @@
 
 import { clampPerformanceMonitorIntervalMs } from '../domain/performance/performanceSettings';
 import {
+    taskQueueCleanupFromAppSettings,
+    taskQueueCleanupToStoredFields,
+    type TaskQueueCleanupPrefs,
+} from '../domain/task-queue/cleanup';
+import {
     appPreferencesToAppUiPreferences,
     appUiPreferencesToAppPreferences,
     closeActionFromDto,
@@ -26,6 +31,7 @@ export interface BackendSettings {
     botLoginCheckIntervalMs: number;
     performanceMonitorEnabled: boolean;
     performanceMonitorIntervalMs: number;
+    taskQueueCleanup: TaskQueueCleanupPrefs;
     githubPat: string;
     closeAction: CloseAction;
     uiPreferences: AppUiPreferences;
@@ -52,6 +58,10 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
         performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(
             Number(dto.settings.performanceMonitorInterval),
         ),
+        taskQueueCleanup: taskQueueCleanupFromAppSettings({
+            taskQueueCleanupEnabled: dto.settings.taskQueueCleanupEnabled,
+            taskQueueCleanupLingerMs: dto.settings.taskQueueCleanupLingerMs,
+        }),
         githubPat: dto.githubPat ?? '',
         closeAction,
         uiPreferences: ui,
@@ -71,6 +81,8 @@ type AppSettingsDtoInvoke = {
         };
         performanceMonitorEnabled: boolean;
         performanceMonitorInterval: number;
+        taskQueueCleanupEnabled: boolean;
+        taskQueueCleanupLingerMs: number;
         closeAction: string;
         uiPreferences: AppUiPreferences;
     };
@@ -89,6 +101,7 @@ function uiPreferencesForInvoke(ui: AppUiPreferences): AppUiPreferences {
 }
 
 function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
+    const tq = taskQueueCleanupToStoredFields(s.taskQueueCleanup);
     return {
         settings: {
             poller: {
@@ -100,6 +113,8 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             performanceMonitorInterval: clampPerformanceMonitorIntervalMs(
                 s.performanceMonitorIntervalMs,
             ),
+            taskQueueCleanupEnabled: tq.taskQueueCleanupEnabled,
+            taskQueueCleanupLingerMs: tq.taskQueueCleanupLingerMs,
             closeAction: s.closeAction === 'tray' ? 'tray' : 'close',
             uiPreferences: uiPreferencesForInvoke(s.uiPreferences),
         },
