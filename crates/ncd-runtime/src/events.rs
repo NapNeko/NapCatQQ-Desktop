@@ -43,6 +43,8 @@ pub enum DomainEventKind {
     SnowLumaPidSetChanged,
     #[serde(rename = "snowluma_daemon_log")]
     SnowLumaDaemonLog,
+    #[serde(rename = "snowluma_docker_endpoints_ready")]
+    SnowLumaDockerEndpointsReady,
     /// Components 页 install / update / uninstall 等任务进度。
     /// 不绑 bot，task_id 由 backend 生成（uuid v4）。
     #[serde(rename = "component_action_progress")]
@@ -177,6 +179,8 @@ pub enum DomainEvent {
     /// 携带 `bot_id`，订阅方根据需要广播给所有 SL flavor BotLogPage。
     #[serde(rename = "snowluma_daemon_log")]
     SnowLumaDaemonLog { line: String },
+    #[serde(rename = "snowluma_docker_endpoints_ready")]
+    SnowLumaDockerEndpointsReady { bot_id: BotId },
     /// Components 页：组件 install / update / uninstall / verify 任务进度。
     /// `task_id` 由 backend 生成（uuid v4），`event` 直接复用
     /// `ncd_component::ProgressEvent`，不再发明 progress 类型。
@@ -244,6 +248,7 @@ impl DomainEvent {
             Self::SnowLumaLoginStateChanged { .. } => DomainEventKind::SnowLumaLoginStateChanged,
             Self::SnowLumaPidSetChanged { .. } => DomainEventKind::SnowLumaPidSetChanged,
             Self::SnowLumaDaemonLog { .. } => DomainEventKind::SnowLumaDaemonLog,
+            Self::SnowLumaDockerEndpointsReady { .. } => DomainEventKind::SnowLumaDockerEndpointsReady,
             Self::ComponentActionProgress { .. } => DomainEventKind::ComponentActionProgress,
             Self::DockerDeployProgress { .. } => DomainEventKind::DockerDeployProgress,
             Self::DockerInstallProgress { .. } => DomainEventKind::DockerInstallProgress,
@@ -270,6 +275,7 @@ impl DomainEvent {
             Self::SnowLumaLoginStateChanged { .. } => "snowluma_login_state_changed",
             Self::SnowLumaPidSetChanged { .. } => "snowluma_pid_set_changed",
             Self::SnowLumaDaemonLog { .. } => "snowluma_daemon_log",
+            Self::SnowLumaDockerEndpointsReady { .. } => "snowluma_docker_endpoints_ready",
             Self::ComponentActionProgress { .. } => "component_action_progress",
             Self::DockerDeployProgress { .. } => "docker_deploy_progress",
             Self::DockerInstallProgress { .. } => "docker_install_progress",
@@ -298,6 +304,7 @@ impl DomainEvent {
             Self::SnowLumaLoginStateChanged { bot_id, .. } => Some(bot_id),
             Self::SnowLumaPidSetChanged { bot_id, .. } => Some(bot_id),
             Self::SnowLumaDaemonLog { .. } => None,
+            Self::SnowLumaDockerEndpointsReady { bot_id, .. } => Some(bot_id),
             // task 级事件，不绑定具体 Bot；前端按 task_id 订阅 / 路由。
             Self::ComponentActionProgress { .. } => None,
             Self::DockerDeployProgress { .. } => None,

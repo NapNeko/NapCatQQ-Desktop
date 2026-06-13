@@ -220,6 +220,16 @@ pub trait Host: Send + Sync {
         }
         Ok(out)
     }
+
+    /// 把远端 loopback 端口转发到本机。仅远端 Linux SSH 实装；其它 Host 返回 Unsupported。
+    async fn open_tunnel(
+        &self,
+        _spec: crate::remote::TunnelSpec,
+    ) -> Result<crate::remote::TunnelHandle, HostError> {
+        Err(HostError::Unsupported {
+            operation: "open_tunnel",
+        })
+    }
 }
 
 #[cfg(test)]

@@ -7,6 +7,10 @@ pub mod bot_manager;
 pub mod config_drift;
 pub mod config_store_impl;
 pub mod crash_bundle;
+pub mod docker_bot_session;
+pub use docker_bot_session::{
+    DockerBotSessionRegistry, SnowLumaDockerEndpoints, is_remote_docker_config,
+};
 pub mod desktop_log;
 pub mod events;
 pub mod host_resolver;

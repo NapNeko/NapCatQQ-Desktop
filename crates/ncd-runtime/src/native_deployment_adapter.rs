@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ncd_deploy::DockerDeployment;
+use ncd_deploy::{DockerDeployment, bot_docker_container_name};
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{
     Deployment, DeploymentError, NativeDeployment, NativeLaunchCommand, NativeLaunchTranslator,
@@ -639,8 +639,11 @@ impl BotBackend for DockerDeploymentBackend {
         bot_id: BotId,
         opts: TailOpts,
     ) -> Result<LogSnapshot, BotBackendError> {
-        // docker logs <ncbot-qq>。容器名约定与 DockerDeployment 一致。
-        let name = format!("ncbot-{}", bot_id.as_str());
+        let backend = match self.flavor {
+            BotFlavor::SnowLuma => BackendType::SnowLuma,
+            BotFlavor::NapCat => BackendType::NapCat,
+        };
+        let name = bot_docker_container_name(backend, bot_id.as_str().parse().unwrap_or(0));
         let cli = DockerCli::new(self.host.as_ref());
         let logs = cli
             .logs(&name, opts.lines as u32)

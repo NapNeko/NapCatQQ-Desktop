@@ -20,11 +20,13 @@ export function buildNapcatWebuiUrl(binding: NapcatWebuiBinding): string {
     return `http://127.0.0.1:${binding.port}/webui?token=${encodeURIComponent(binding.token)}`;
 }
 
-/// SnowLuma：daemon Ready 才允许打开 WebUI。
-export function isSnowlumaWebuiAvailable(
-    daemonState: DaemonState | null | undefined,
-): boolean {
-    return daemonState === 'ready';
+/// SnowLuma：daemon Ready 或远端 Docker 隧道就绪时允许打开 WebUI。
+export function isSnowlumaWebuiAvailable(args: {
+    daemonState: DaemonState | null | undefined;
+    dockerEndpointsReady?: boolean;
+}): boolean {
+    if (args.dockerEndpointsReady) return true;
+    return args.daemonState === 'ready';
 }
 
 /// 综合判断：根据 flavor 选 NapCat / SnowLuma 的可用性策略。
@@ -32,9 +34,13 @@ export function isWebuiAvailable(args: {
     flavor: Flavor | null | undefined;
     napcat?: NapcatWebuiBinding | null;
     snowlumaDaemonState?: DaemonState | null;
+    snowlumaDockerEndpointsReady?: boolean;
 }): boolean {
     if (args.flavor === 'snowluma') {
-        return isSnowlumaWebuiAvailable(args.snowlumaDaemonState);
+        return isSnowlumaWebuiAvailable({
+            daemonState: args.snowlumaDaemonState,
+            dockerEndpointsReady: args.snowlumaDockerEndpointsReady,
+        });
     }
     return isNapcatWebuiAvailable(args.napcat);
 }

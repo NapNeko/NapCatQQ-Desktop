@@ -31,6 +31,7 @@ const DOMAIN_EVENT_NAMES = [
     'snowluma_login_state_changed',
     'snowluma_pid_set_changed',
     'snowluma_daemon_log',
+    'snowluma_docker_endpoints_ready',
     'component_action_progress',
     'docker_deploy_progress',
     'docker_install_progress',

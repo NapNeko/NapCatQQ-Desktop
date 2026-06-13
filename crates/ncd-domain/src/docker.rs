@@ -271,6 +271,24 @@ impl DockerDeploySpec {
         }
     }
 
+    /// 同一远端多 Bot 时给宿主机端口加偏移，避免 compose 绑定冲突。
+    /// 用 qq_id 取模，偏移量落在 [0, 499]。
+    pub fn host_port_offset_for_qq(qq_id: u64) -> u16 {
+        (qq_id % 500) as u16
+    }
+
+    /// 把默认 spec 的宿主机侧端口整体加上 per-bot 偏移；容器内端口不变。
+    pub fn with_host_port_offset(mut self, qq_id: u64) -> Self {
+        let off = Self::host_port_offset_for_qq(qq_id);
+        if off == 0 {
+            return self;
+        }
+        for p in &mut self.ports {
+            p.host = p.host.saturating_add(off);
+        }
+        self
+    }
+
     /// SnowLuma 默认 spec:端口 5900/6081/5099/3000/3001,容器名 snowluma。
     pub fn snowluma_default() -> Self {
         Self {
@@ -285,6 +303,14 @@ impl DockerDeploySpec {
             ],
             qq_id: None,
         }
+    }
+
+    /// 查 compose 里某容器端口对应的宿主机绑定端口。
+    pub fn host_port_for_container(&self, container_port: u16) -> Option<u16> {
+        self.ports
+            .iter()
+            .find(|p| p.container == container_port)
+            .map(|p| p.host)
     }
 
     /// 容器名合法性校验。docker 要求首字符是字母数字,其余可含 _.- 。

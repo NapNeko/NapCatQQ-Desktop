@@ -82,6 +82,7 @@ interface BotCardProps {
     napcatBinding?: NapcatWebuiBinding | null;
     /** 仅用于 WebUI 可用性判断，不在卡片上展示 */
     snowlumaDaemonState?: DaemonState | null;
+    snowlumaDockerEndpointsReady?: boolean;
     snowlumaUin?: string | null;
     snowlumaLoginState?: SnowLumaLoginState | null;
 
@@ -109,6 +110,7 @@ export function BotCard({
     invalidationReason,
     napcatBinding,
     snowlumaDaemonState,
+    snowlumaDockerEndpointsReady,
     snowlumaUin,
     snowlumaLoginState,
     isBatchMode,
@@ -155,6 +157,7 @@ export function BotCard({
         flavor,
         napcat: napcatBinding ?? null,
         snowlumaDaemonState: snowlumaDaemonState ?? null,
+        snowlumaDockerEndpointsReady: snowlumaDockerEndpointsReady ?? false,
     });
     const webuiTip = webuiTooltip({ flavor, available: webuiAvailable });
 

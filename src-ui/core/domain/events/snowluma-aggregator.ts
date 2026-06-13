@@ -18,6 +18,8 @@ export interface SnowlumaBotState {
     injected: boolean;
     uin: string | null;
     loginState: SnowLumaLoginState | null;
+    /** 远端 Docker 隧道就绪后可开 WebUI */
+    dockerEndpointsReady: boolean;
 }
 
 export interface SnowlumaState {
@@ -30,7 +32,12 @@ export const initialSnowlumaState: SnowlumaState = {
     byBot: {},
 };
 
-const emptyBot: SnowlumaBotState = { injected: false, uin: null, loginState: null };
+const emptyBot: SnowlumaBotState = {
+    injected: false,
+    uin: null,
+    loginState: null,
+    dockerEndpointsReady: false,
+};
 
 function ensureBot(s: SnowlumaState, id: string): SnowlumaBotState {
     return s.byBot[id] ?? emptyBot;
@@ -74,6 +81,18 @@ export function reduceSnowluma(s: SnowlumaState, event: DomainEvent): SnowlumaSt
                 byBot: {
                     ...s.byBot,
                     [event.bot_id]: { ...ensureBot(s, event.bot_id), loginState: event.state },
+                },
+            };
+
+        case 'snowluma_docker_endpoints_ready':
+            return {
+                ...s,
+                byBot: {
+                    ...s.byBot,
+                    [event.bot_id]: {
+                        ...ensureBot(s, event.bot_id),
+                        dockerEndpointsReady: true,
+                    },
                 },
             };
 

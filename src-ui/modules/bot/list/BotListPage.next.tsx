@@ -31,6 +31,7 @@ import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMu
 import { useBotBatchSelection } from '../../../hooks/bot/useBotBatchSelection';
 import { useBotFlavorMap } from '../../../hooks/bot/useBotFlavorMap';
 import { useBotConfigsMap } from '../../../hooks/bot/useBotConfigsMap';
+import { useBotDockerStartGate } from '../../../hooks/bot/useBotDockerStartGate';
 import { useNapcatLogin } from '../../../hooks/webui/useNapcatLogin';
 import { useSnowlumaState } from '../../../hooks/webui/useSnowlumaState';
 import { useOpenWebui } from '../../../hooks/webui/useOpenWebui';
@@ -58,6 +59,7 @@ export function BotListPageNext({
     const { data: botSnapshots = [], isLoading, error, refetch } = useBotSnapshots();
     const flavorByBot = useBotFlavorMap(botSnapshots);
     const configByBot = useBotConfigsMap(botSnapshots);
+    const { startBlock: dockerStartGate } = useBotDockerStartGate(configByBot);
     const napcat = useNapcatLogin();
     const snowluma = useSnowlumaState();
     const batch = useBotBatchSelection();
@@ -87,6 +89,16 @@ export function BotListPageNext({
     const [driftBotId, setDriftBotId] = useState<string | null>(null);
 
     const handleStartBot = useCallback(async (botId: string) => {
+        const gate = dockerStartGate(botId);
+        if (gate) {
+            pushInfoBar({
+                tone: 'danger',
+                title: '无法启动',
+                content: gate,
+                key: `bot-start-gate:${botId}`,
+            });
+            return;
+        }
         try {
             const drift = await botService.detectConfigDrift(botId);
             if (drift && !drift.added.length && !drift.modified.length) {
@@ -106,10 +118,22 @@ export function BotListPageNext({
             // detection failed, fallback to direct start
             mutations.startBot(botId);
         }
-    }, [mutations]);
+    }, [mutations, dockerStartGate]);
 
     const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
         if (!driftBotId) return;
+        const gate = dockerStartGate(driftBotId);
+        if (gate) {
+            setPendingDrift(null);
+            pushInfoBar({
+                tone: 'danger',
+                title: '无法启动',
+                content: gate,
+                key: `bot-start-gate:${driftBotId}`,
+            });
+            setDriftBotId(null);
+            return;
+        }
         setPendingDrift(null);
         try {
             const snap = await botService.startWithDecisions(driftBotId, decisions);
@@ -127,7 +151,7 @@ export function BotListPageNext({
             });
         }
         setDriftBotId(null);
-    }, [driftBotId]);
+    }, [driftBotId, dockerStartGate]);
 
     const handleDriftCancel = useCallback(() => {
         setPendingDrift(null);
@@ -419,6 +443,9 @@ function BotListGrid({
                             invalidationReason={napcatBot?.invalidationReason ?? null}
                             napcatBinding={napcatBot?.webui ?? null}
                             snowlumaDaemonState={snowluma.daemonState}
+                            snowlumaDockerEndpointsReady={
+                                snowlumaBot?.dockerEndpointsReady ?? false
+                            }
                             snowlumaUin={snowlumaBot?.uin ?? null}
                             snowlumaLoginState={snowlumaBot?.loginState ?? null}
                             isBatchMode={batch.isBatchMode}

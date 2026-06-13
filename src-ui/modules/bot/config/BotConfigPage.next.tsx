@@ -17,7 +17,7 @@
 //   - 保存成功 → push 全局 success InfoBar → 留在配置页（同步 pristine / 新建则切到编辑态）
 //   - 删除成功 → 父级 onBack（删除走 dialog 二次确认）
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Trash2, Save, AlertCircle, Check } from 'lucide-react';
 import {
     Button,
@@ -46,8 +46,10 @@ import {
     validateBotConfig,
     defaultStatusCommandConfig,
 } from '../../../core/domain/bot/config-defaults';
+import { normalizeRuntimeTargetFromDisk } from '../../../core/domain/bot/runtime-target';
 import type { StatusCommandConfig } from '../../../core/ipc/generated/domain/StatusCommandConfig';
 import { describeSaveResult } from '../../../core/domain/bot/save-result';
+import { useBotDockerStartGate } from '../../../hooks/bot/useBotDockerStartGate';
 import { botService } from '../../../core/services/bot.service';
 import { snowlumaAppService } from '../../../core/services/snowlumaApp.service';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
@@ -79,9 +81,15 @@ const defaultSnowlumaAppConfig = (): SnowLumaAppConfig => ({
 
 export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageNextProps) {
     const isEditMode = botId !== null;
+    const formHydratedForBotRef = useRef<string | null>(null);
 
     const [activeTab, setActiveTab] = useState<TabValue>('identity');
     const [formData, setFormData] = useState<BotConfig>(createDefaultBotConfig());
+    const dockerGateMap = useMemo(
+        () => ({ __form__: formData }),
+        [formData],
+    );
+    const { saveBlock: dockerSaveBlock } = useBotDockerStartGate(dockerGateMap);
     const [pristine, setPristine] = useState<BotConfig>(createDefaultBotConfig());
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -146,6 +154,7 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
             });
             onSavedStay?.(savedBotId);
             setPristine(formData);
+            formHydratedForBotRef.current = savedBotId;
         },
         onDeleted: () => {
             setDeleteDialogOpen(false);
@@ -168,18 +177,22 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
         },
     });
 
-    // 服务端拉到配置后同步进 form + pristine 基线
+    // 编辑态：每个 botId 只从服务端灌一次表单，避免 invalidate 后把用户未保存的改动盖掉。
     useEffect(() => {
-        if (loadedConfig) {
-            const normalized = normalizeLoadedConfig(loadedConfig);
-            setFormData(normalized);
-            setPristine(normalized);
-        } else if (!isEditMode) {
+        if (!isEditMode) {
+            formHydratedForBotRef.current = null;
             const fresh = createDefaultBotConfig();
             setFormData(fresh);
             setPristine(fresh);
+            return;
         }
-    }, [loadedConfig, isEditMode]);
+        if (!loadedConfig || botId == null) return;
+        if (formHydratedForBotRef.current === botId) return;
+        const normalized = normalizeLoadedConfig(loadedConfig);
+        setFormData(normalized);
+        setPristine(normalized);
+        formHydratedForBotRef.current = botId;
+    }, [loadedConfig, isEditMode, botId]);
 
     const dirty = useMemo(() => {
         const botDirty = JSON.stringify(formData) !== JSON.stringify(pristine);
@@ -211,10 +224,15 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
     };
 
     const normalizeLoadedConfig = (c: BotConfig): BotConfig => {
+        let next = c;
         if (c.bot.backend_type === 'snowluma' && !c.statusCommand) {
-            return { ...c, statusCommand: defaultStatusCommandConfig() };
+            next = { ...c, statusCommand: defaultStatusCommandConfig() };
         }
-        return c;
+        const rt = normalizeRuntimeTargetFromDisk(next.bot.runtime_target);
+        if (rt !== next.bot.runtime_target) {
+            next = { ...next, bot: { ...next.bot, runtime_target: rt } };
+        }
+        return next;
     };
 
     const commitSnowlumaIfDirty = async (): Promise<void> => {
@@ -244,6 +262,17 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
                 title: '配置不通过',
                 content: validation.reason,
                 key: 'bot-config-error',
+            });
+            return;
+        }
+
+        const dockerBlock = dockerSaveBlock(finalData);
+        if (dockerBlock) {
+            pushInfoBar({
+                tone: 'danger',
+                title: '无法保存',
+                content: dockerBlock,
+                key: 'bot-config-docker-gate',
             });
             return;
         }
@@ -285,6 +314,18 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
     const handleSaveDriftConfirm = useCallback(
         async (decisions: DriftDecision[]) => {
             if (!pendingSaveData) return;
+            const dockerBlock = dockerSaveBlock(pendingSaveData);
+            if (dockerBlock) {
+                setPendingSaveDrift(null);
+                setPendingSaveData(null);
+                pushInfoBar({
+                    tone: 'danger',
+                    title: '无法保存',
+                    content: dockerBlock,
+                    key: 'bot-config-docker-gate',
+                });
+                return;
+            }
             try {
                 await commitSnowlumaIfDirty();
             } catch (e) {
@@ -300,7 +341,7 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
             saveWithDecisions(pendingSaveData, decisions);
             setPendingSaveData(null);
         },
-        [pendingSaveData, saveWithDecisions, snowlumaApp, snowlumaAppPristine],
+        [pendingSaveData, saveWithDecisions, snowlumaApp, snowlumaAppPristine, dockerSaveBlock],
     );
 
     const handleSaveDriftCancel = useCallback(() => {

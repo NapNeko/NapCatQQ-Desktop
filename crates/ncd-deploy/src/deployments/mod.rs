@@ -9,6 +9,6 @@ pub mod docker;
 pub mod external;
 pub mod native;
 
-pub use docker::DockerDeployment;
+pub use docker::{DockerDeployment, bot_docker_container_name};
 pub use external::ExternalDeployment;
 pub use native::{NativeDeployment, NativeLogSnapshot, NativeRuntimeEventSink, NullRuntimeEventSink};

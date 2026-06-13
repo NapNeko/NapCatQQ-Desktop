@@ -309,6 +309,37 @@ impl<'h> DockerCli<'h> {
         }
         Ok(combined)
     }
+
+    /// 跟随容器日志直到命令结束（容器停或 SSH 断）。每行回调一次。
+    pub async fn logs_follow<F>(
+        &self,
+        container: &str,
+        on_line: F,
+    ) -> Result<(), DockerCliError>
+    where
+        F: FnMut(StreamSource, String) + Send + 'static,
+    {
+        let cmd = self
+            .docker_cmd()
+            .arg("logs")
+            .arg("-f")
+            .arg("--since")
+            .arg("0")
+            .arg(container);
+        let out = self
+            .host
+            .run_streaming(cmd, Box::new(on_line))
+            .await
+            .map_err(DockerCliError::Host)?;
+        if !out.success() {
+            return Err(DockerCliError::CommandFailed {
+                command: format!("docker logs -f {container}"),
+                exit_code: out.exit_code,
+                stderr: out.stderr.trim().to_string(),
+            });
+        }
+        Ok(())
+    }
 }
 
 impl<'h> DockerCli<'h> {
@@ -321,6 +352,7 @@ impl<'h> DockerCli<'h> {
             .arg("compose")
             .arg("up")
             .arg("-d")
+            .arg("--remove-orphans")
             .arg("--pull")
             .arg("missing")
             .working_dir(ncd_host::HostPath::from_posix(project_dir))

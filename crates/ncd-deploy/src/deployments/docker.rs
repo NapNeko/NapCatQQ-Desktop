@@ -6,17 +6,20 @@
 //! 部署形态(deployment_type=docker),由 BotManager 在 start_bot 时按 bot 配置驱动,
 //! 容器纳入 bot 状态机。两者共用底层 DockerCli + compose 渲染,但入口和归属不同。
 //!
-//! 容器命名:`ncbot-<qq_id>`,前缀区别于手动部署的 `napcat`/`snowluma`,避免撞名。
+//! 容器命名:`ncbot-<qq>` / `slbot-<qq>`（按口味），区别于组件页 `napcat`/`snowluma` 演示容器。
 //! compose 项目目录:远端 $HOME/.napcat-bots/<name>。探不到 HOME 直接失败,
 //! 避免把生产数据静默落到 /tmp。
 //!
+//! 镜像须在「组件」页预拉；Bot 启动 install 只检查本地是否存在官方镜像,不现场 pull。
+//!
 //! NapCat / SnowLuma 均走官方 compose 语义(见 docker/compose.rs 与 SnowLuma.Docker.Framework)。
 //! NapCat 可预写 onebot/napcat 到 bind 目录; SnowLuma 写 onebot_<qq>.json 到 named volume。
-//! SnowLuma 扫码登录走容器 noVNC(6081),不由 Desktop 注入 QQ 进程。
+//! 容器命名：NapCat `ncbot-<qq>`，SnowLuma `slbot-<qq>`。
+//! compose 项目目录:远端 $HOME/.napcat-bots/<name>。
 
 use async_trait::async_trait;
 use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, DockerDeploySpec, DockerFlavor, StopMode};
-use ncd_host::{Host, HostCommand, HostPath, StreamSource};
+use ncd_host::{Host, HostCommand, HostPath};
 use tracing::{error, info};
 
 use crate::deployment::{
@@ -67,9 +70,9 @@ impl DockerDeployment {
         }
     }
 
-    /// bot 容器名:ncbot-<qq_id>。
-    fn container_name(config: &BotConfig) -> String {
-        format!("ncbot-{}", config.bot.qq_id)
+    /// bot 容器名：NapCat `ncbot-<qq>`，SnowLuma `slbot-<qq>`。
+    pub fn container_name(config: &BotConfig) -> String {
+        bot_docker_container_name(config.bot.backend_type, config.bot.qq_id)
     }
 
     /// compose 项目目录(host 侧 POSIX 路径)。远端 HOME 探测失败时 hard fail。
@@ -112,15 +115,17 @@ impl DockerDeployment {
         }
     }
 
-    /// 从 BotConfig 构造 DockerDeploySpec:容器名 ncbot-<qq>,端口走口味默认。
-    fn build_spec(config: &BotConfig) -> DockerDeploySpec {
+    /// 从 BotConfig 构造 DockerDeploySpec:容器名按口味,端口默认 + per-qq 宿主机偏移。
+    pub fn build_spec(config: &BotConfig) -> DockerDeploySpec {
+        let qq = config.bot.qq_id;
         let mut spec = match config.bot.backend_type {
             BackendType::SnowLuma => DockerDeploySpec::snowluma_default(),
             BackendType::NapCat => DockerDeploySpec::napcat_default(),
-        };
+        }
+        .with_host_port_offset(qq);
         spec.container_name = Self::container_name(config);
-        if config.bot.backend_type == BackendType::NapCat && config.bot.qq_id != 0 {
-            spec.qq_id = Some(config.bot.qq_id);
+        if config.bot.backend_type == BackendType::NapCat && qq != 0 {
+            spec.qq_id = Some(qq);
         }
         spec
     }
@@ -212,32 +217,31 @@ impl Deployment for DockerDeployment {
             .await
             .map_err(|e| DeploymentError::InstallFailed(format!("写 compose 文件失败: {e}")))?;
 
-        progress.report("pull", "拉取镜像", 30);
         let docker_flavor = match backend {
             BackendType::SnowLuma => DockerFlavor::SnowLuma,
             BackendType::NapCat => DockerFlavor::NapCat,
         };
-        let candidates = docker_flavor.pull_candidates();
         let official = docker_flavor.default_image();
-        let new_line_cb = |_idx: usize, _img: &str| move |_src: StreamSource, _line: String| {};
-        cli.pull_with_fallback(&candidates, official, new_line_cb, None::<fn(usize, &str, &crate::docker::DockerCliError)>)
+        let image_present = cli
+            .image_exists(official)
             .await
-            .map_err(|e| {
-                error!(
-                    target: "ncd_deploy::docker_bot",
-                    qq_id = config.bot.qq_id,
-                    container = %name,
-                    err = %e,
-                    "Bot Docker 部署: 拉取镜像失败"
-                );
-                DeploymentError::InstallFailed(format!("拉取镜像失败: {e}"))
-            })?;
+            .map_err(|e| DeploymentError::InstallFailed(format!("探测镜像失败: {e}")))?;
+        if !image_present {
+            let label = match backend {
+                BackendType::SnowLuma => "SnowLuma",
+                BackendType::NapCat => "NapCat",
+            };
+            return Err(DeploymentError::InstallFailed(format!(
+                "{label} 镜像未拉取，请到「组件」页拉取镜像后再启动"
+            )));
+        }
         progress.report("pull", "镜像就绪", 90);
         info!(
             target: "ncd_deploy::docker_bot",
             qq_id = config.bot.qq_id,
             container = %name,
-            "Bot Docker 镜像已就绪"
+            image = %official,
+            "Bot Docker 使用本地已拉取镜像"
         );
         Ok(())
     }
@@ -262,7 +266,17 @@ impl Deployment for DockerDeployment {
         let name = Self::container_name(config);
         let project_dir = Self::project_dir(host, &name).await?;
 
-        // compose up -d。镜像在 install 阶段已拉好(--pull missing 命中本地缓存)。
+        // 上次失败/改口味可能留下同名容器；compose orphan 也可能是旧服务名。
+        let _ = cli.remove(&name).await;
+        let legacy_nc = format!("ncbot-{}", config.bot.qq_id);
+        let legacy_sl = format!("slbot-{}", config.bot.qq_id);
+        if legacy_nc != name {
+            let _ = cli.remove(&legacy_nc).await;
+        }
+        if legacy_sl != name {
+            let _ = cli.remove(&legacy_sl).await;
+        }
+
         cli.compose_up(&project_dir)
             .await
             .map_err(|e| {
@@ -302,8 +316,9 @@ impl Deployment for DockerDeployment {
                 reason: format!("Docker 未就绪: {e}"),
             });
         }
-        let name = format!("ncbot-{}", bot_id.as_str());
-        // observe 高频轮询,不该因一次 docker 命令失败就 hard error。失败时
+        let name = resolve_bot_container_name(&cli, bot_id).await.unwrap_or_else(|_| {
+            format!("ncbot-{}", bot_id.as_str())
+        });
         // 归到 Failed 状态(带原因)让上层显示,而不是抛错中断轮询。
         match cli.list_containers().await {
             Ok(containers) => Ok(containers
@@ -327,8 +342,12 @@ impl Deployment for DockerDeployment {
         cli.ensure_ready()
             .await
             .map_err(|e| DeploymentError::StopFailed(format!("Docker 未就绪: {e}")))?;
-        let name = format!("ncbot-{}", bot_id.as_str());
-        // 容器不存在时 stop 报错,先查一遍,幂等。
+        let name = match resolve_bot_container_name(&cli, bot_id).await {
+            Ok(n) => n,
+            Err(e) => {
+                return Err(DeploymentError::StopFailed(format!("查询容器失败: {e}")));
+            }
+        };
         let containers = cli
             .list_containers()
             .await
@@ -370,6 +389,33 @@ impl Deployment for DockerDeployment {
             .await;
         Ok(())
     }
+}
+
+/// NapCat `ncbot-<qq>`，SnowLuma `slbot-<qq>`。
+pub fn bot_docker_container_name(backend: BackendType, qq_id: u64) -> String {
+    match backend {
+        BackendType::SnowLuma => format!("slbot-{qq_id}"),
+        BackendType::NapCat => format!("ncbot-{qq_id}"),
+    }
+}
+
+/// 按 qq 在远端查找实际在跑的 bot 容器名（兼容历史 ncbot 命名跑 SL 的残留）。
+async fn resolve_bot_container_name(
+    cli: &DockerCli<'_>,
+    bot_id: &BotId,
+) -> Result<String, DeploymentError> {
+    let qq = bot_id.as_str();
+    let candidates = [format!("slbot-{qq}"), format!("ncbot-{qq}")];
+    let containers = cli
+        .list_containers()
+        .await
+        .map_err(|e| DeploymentError::LaunchFailed(format!("查询容器失败: {e}")))?;
+    for name in &candidates {
+        if containers.iter().any(|c| c.name == *name) {
+            return Ok(name.clone());
+        }
+    }
+    Ok(candidates[0].clone())
 }
 
 /// 容器 state 字符串 -> DeploymentState。

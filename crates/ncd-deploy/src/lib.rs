@@ -24,7 +24,7 @@ pub use deployment::{
 };
 pub use deployments::{
     DockerDeployment, ExternalDeployment, NativeDeployment, NativeLogSnapshot,
-    NativeRuntimeEventSink, NullRuntimeEventSink,
+    NativeRuntimeEventSink, NullRuntimeEventSink, bot_docker_container_name,
 };
 pub use docker::{
     install_docker, render_compose, DockerCli, DockerCliError, DockerInstallOutcome,

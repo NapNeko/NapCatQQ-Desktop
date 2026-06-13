@@ -2,6 +2,7 @@
 
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { StatusCommandConfig } from '../../ipc/generated/domain/StatusCommandConfig';
+import { RUNTIME_TARGET_REMOTE_PLACEHOLDER } from './runtime-target';
 
 export const defaultStatusCommandConfig = (): StatusCommandConfig => ({
     enabled: true,
@@ -62,7 +63,7 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
     }
     // 运行宿主选了"远程"但还没选具体机器：runtime_target 仍是占位 'remote'
     // （真实值应是 server_id）。挡住,否则后端解析 host 会失败。
-    if (config.bot.runtime_target === 'remote') {
+    if (config.bot.runtime_target === RUNTIME_TARGET_REMOTE_PLACEHOLDER) {
         return { ok: false, reason: '请选择一台具体的远程主机！' };
     }
     // 本机(Windows)不支持 Docker:Docker Desktop 安装链路太麻烦,本机只走直接运行。

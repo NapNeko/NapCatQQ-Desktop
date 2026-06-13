@@ -19,6 +19,7 @@ use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
+use crate::docker_bot_session::{DockerBotSessionRegistry, is_remote_docker_config};
 use crate::native_deployment_adapter::DockerDeploymentBackend;
 use crate::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, StopMode,
@@ -142,6 +143,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// Docker NapCat WebUI token 的凭据存储。DockerDeployment 要求上层显式传入
     /// token，不能从 QQ 号或容器名派生；这里按 Bot 持久化，保证重启后 token 稳定。
     docker_webui_secret_store: Option<Arc<dyn SecretStore + Send + Sync>>,
+    docker_sessions: Arc<DockerBotSessionRegistry>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -163,6 +165,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             snowluma_daemon: self.snowluma_daemon.clone(),
             host_resolver: self.host_resolver.clone(),
             docker_webui_secret_store: self.docker_webui_secret_store.clone(),
+            docker_sessions: Arc::clone(&self.docker_sessions),
         }
     }
 }
@@ -196,6 +199,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             snowluma_daemon: None,
             host_resolver: None,
             docker_webui_secret_store: None,
+            docker_sessions: Arc::new(DockerBotSessionRegistry::new()),
         }
     }
 
@@ -546,6 +550,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 停止指定 Bot。
     pub async fn stop_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到停止 Bot 请求");
+        self.docker_sessions.stop_expected(bot_id).await;
         let handle = self.get_actor(bot_id).await?;
         let stopping = handle.request_stop().await?;
         self.publish_state_change(&stopping, "stop_requested");
@@ -560,6 +565,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 BotActorState::Stopping => handle.confirm_stopped().await?,
                 _ => stopping,
             };
+            self.docker_sessions.shutdown_bot(bot_id).await;
             self.publish_state_change(&stopped, "stop_completed");
             if stopped.state == BotActorState::Starting {
                 let config = self.get_required_bot_config(bot_id).await?;
@@ -576,6 +582,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 self.event_bus
                     .publish(DomainEvent::bot_status_changed(status, "runtime_stop"));
                 let stopped = handle.confirm_stopped().await?;
+                self.docker_sessions.shutdown_bot(bot_id).await;
                 self.publish_state_change(&stopped, "stop_completed");
                 if stopped.state == BotActorState::Starting {
                     let config = self.get_required_bot_config(bot_id).await?;
@@ -1121,17 +1128,23 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 total_lines: 0,
             });
         }
-        // 按 bot 当前 backend 选 backend；读不到 config 时退回默认 NapCat backend。
-        let qq_id: u64 = bot_id.as_str().parse().unwrap_or(0);
-        let flavor = match self.repo.get(qq_id).await {
-            Ok(Some(cfg)) => map_backend_flavor(cfg.bot.backend_type),
-            _ => BotFlavor::NapCat,
-        };
         let opts = crate::runtime_backend::TailOpts { lines };
-        self.backend_for(flavor)
-            .tail_log(bot_id.clone(), opts)
-            .await
-            .map_err(BotManagerError::from)
+        match self.get_bot_config(bot_id).await? {
+            Some(cfg) => {
+                let backend = self.backend_for_lifecycle(&cfg).await?;
+                backend
+                    .tail_log(bot_id.clone(), opts)
+                    .await
+                    .map_err(BotManagerError::from)
+            }
+            None => {
+                let flavor = BotFlavor::NapCat;
+                self.backend_for(flavor)
+                    .tail_log(bot_id.clone(), opts)
+                    .await
+                    .map_err(BotManagerError::from)
+            }
+        }
     }
 
     // ─── 内部方法 ─────────────────────────────────────────────────────────
@@ -1331,6 +1344,32 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 }
                 let running = handle.confirm_running().await?;
                 self.publish_state_change(&running, "start_completed");
+                if is_remote_docker_config(config) {
+                    if let Some(resolver) = &self.host_resolver {
+                        if let Ok(host) = resolver.resolve(&config.bot.runtime_target).await {
+                            let napcat_token = (config.bot.backend_type == BackendType::NapCat)
+                                .then(|| self.get_or_create_docker_webui_token(config.bot.qq_id))
+                                .transpose()
+                                .ok()
+                                .flatten();
+                            let vnc_pass = (config.bot.backend_type == BackendType::SnowLuma)
+                                .then(|| self.get_or_create_docker_vnc_passwd(config.bot.qq_id))
+                                .transpose()
+                                .ok()
+                                .flatten();
+                            self.docker_sessions
+                                .start_session(
+                                    bot_id.clone(),
+                                    config.clone(),
+                                    host,
+                                    Arc::clone(&self.event_bus),
+                                    napcat_token,
+                                    vnc_pass,
+                                )
+                                .await;
+                        }
+                    }
+                }
                 info!(
                     target: "ncd_runtime::bot_manager",
                     bot_id = %bot_id,
@@ -1420,7 +1459,17 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             daemon.shutdown().await;
         }
 
+        self.docker_sessions.shutdown_all().await;
+
         result
+    }
+
+    /// 远端 SnowLuma Docker 隧道端口（供 Tauri open_snowluma_webui）。
+    pub async fn snowluma_docker_endpoints(
+        &self,
+        bot_id: &BotId,
+    ) -> Option<crate::docker_bot_session::SnowLumaDockerEndpoints> {
+        self.docker_sessions.snowluma_endpoints(bot_id).await
     }
 
     /// 长任务：监听 `SnowLumaDaemonStateChanged` 事件，daemon 转 `Crashed` 时
@@ -1639,6 +1688,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
 
         self.dispose_poller(bot_id).await;
+        self.docker_sessions.shutdown_bot(bot_id).await;
 
         self.event_bus.publish(DomainEvent::BotStateChanged {
             snapshot: BotActorSnapshot::new(bot_id.clone()),
@@ -1827,6 +1877,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             ev = exit_sub.next() => match ev {
             Some(DomainEvent::BotProcessExited { bot_id, .. }) => {
             self.dispose_poller(&bot_id).await;
+            self.docker_sessions.shutdown_bot(&bot_id).await;
             }
             Some(_) => continue,
             None => break,

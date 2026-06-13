@@ -1,6 +1,6 @@
 // 身份 Tab：QQ 账号 + 实例名 + 底座选择 + SnowLuma 启动模式 + 运行宿主 + 自愈策略。
 
-import { useMemo, useEffect, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import {
     TextField,
     NumberField,
@@ -13,6 +13,14 @@ import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
 import { useRemoteHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
 import { formatMissingDirectRunNotice } from '../../../../core/domain/bot/remote-direct-run-deps';
+import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';
+import {
+    RUNTIME_TARGET_REMOTE_PLACEHOLDER,
+    isRuntimeTargetLocal,
+    runtimeModeForTarget,
+    remoteHostIdFromRuntimeTarget,
+    serverProfileIdFromRuntimeTarget,
+} from '../../../../core/domain/bot/runtime-target';
 import type { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 import type { DeploymentType } from '../../../../core/ipc/generated/domain/DeploymentType';
@@ -50,10 +58,10 @@ const TIME_UNIT_ITEMS = [
 ];
 
 export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
-    const { servers } = useServerManager();
+    const { servers, isLoading: serversLoading } = useServerManager();
 
-    const isRemote = data.runtime_target !== 'local';
-    const runtimeMode = data.runtime_target === 'local' ? 'local' : 'remote';
+    const isRemote = !isRuntimeTargetLocal(data.runtime_target);
+    const runtimeMode = runtimeModeForTarget(data.runtime_target);
 
     const serverItems = useMemo(
         () => servers.map((s) => ({ value: s.id, label: `${s.name} · ${s.host}` })),
@@ -65,10 +73,13 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     const deploymentType: DeploymentType =
         data.deploymentType === 'docker' ? 'docker' : 'native';
 
-    const remoteHostId = useMemo(() => {
-        if (!isRemote || data.runtime_target === 'remote') return null;
-        return `remote:${data.runtime_target}`;
-    }, [isRemote, data.runtime_target]);
+    const remoteHostId = useMemo(
+        () =>
+            isRemote
+                ? remoteHostIdFromRuntimeTarget(data.runtime_target)
+                : null,
+        [isRemote, data.runtime_target],
+    );
 
     const dockerHostIds = useMemo(
         () => (remoteHostId ? [remoteHostId] : []),
@@ -98,17 +109,14 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         componentInstalled,
     ]);
 
-    useEffect(() => {
-        if (!hasRemoteHosts && data.runtime_target !== 'local') {
-            onChange({ runtime_target: 'local', deploymentType: 'native' });
-        }
-    }, [hasRemoteHosts, data.runtime_target, onChange]);
-
     const onRuntimeModeChange = (mode: string) => {
         if (mode === 'local') {
             onChange({ runtime_target: 'local', deploymentType: 'native' });
         } else {
-            const only = servers.length === 1 ? servers[0].id : 'remote';
+            const only =
+                servers.length === 1
+                    ? servers[0].id
+                    : RUNTIME_TARGET_REMOTE_PLACEHOLDER;
             onChange({ runtime_target: only });
         }
     };
@@ -121,8 +129,12 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         return '例如：Bot-01';
     }, [data.QQID]);
 
-    const remoteHostSelectValue: string | undefined =
-        data.runtime_target === 'remote' ? undefined : data.runtime_target;
+    const remoteHostSelectValue: string | undefined = (() => {
+        const profileId = serverProfileIdFromRuntimeTarget(data.runtime_target);
+        if (!profileId) return undefined;
+        if (servers.some((s) => s.id === profileId)) return profileId;
+        return undefined;
+    })();
 
     const showDockerBlock =
         isRemote &&
@@ -192,38 +204,43 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 </FormSection>
             )}
 
-            {hasRemoteHosts && (
-                <FormSection
-                    title="运行宿主"
-                    description="仅远程 Linux 支持 Docker；本机固定为直接运行"
-                    layout="none"
-                >
-                    <div className="flex flex-col gap-4">
-                        <RadioGroup
-                            items={RUNTIME_ITEMS}
-                            value={runtimeMode}
-                            onValueChange={onRuntimeModeChange}
-                            orientation="horizontal"
-                            name="runtime-target"
-                        />
+            <FormSection
+                title="运行宿主"
+                description="仅远程 Linux 支持 Docker；本机固定为直接运行"
+                layout="none"
+            >
+                <div className="flex flex-col gap-4">
+                    <RadioGroup
+                        key={`runtime-mode-${runtimeMode}`}
+                        items={RUNTIME_ITEMS}
+                        value={runtimeMode}
+                        onValueChange={onRuntimeModeChange}
+                        orientation="horizontal"
+                        name="runtime-target"
+                    />
 
-                        {isRemote && (
-                            <div className="flex flex-col gap-3 sm:max-w-md">
-                                {serverItems.length > 0 ? (
-                                    <Select
-                                        label="远程主机"
-                                        items={serverItems}
-                                        value={remoteHostSelectValue}
-                                        onValueChange={(v) =>
-                                            onChange({ runtime_target: v })
-                                        }
-                                        placeholder="选择主机"
-                                    />
-                                ) : (
-                                    <InlineNotice tone="warn">
-                                        请先在「远程主机」页添加 SSH 主机
-                                    </InlineNotice>
-                                )}
+                    {isRemote && (
+                        <div className="flex flex-col gap-3 sm:max-w-md">
+                            {!hasRemoteHosts && !serversLoading && (
+                                <InlineNotice tone="warn">
+                                    请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
+                                </InlineNotice>
+                            )}
+                            {hasRemoteHosts && serverItems.length > 0 ? (
+                                <Select
+                                    label="远程主机"
+                                    items={serverItems}
+                                    value={remoteHostSelectValue}
+                                    onValueChange={(v) =>
+                                        onChange({ runtime_target: v })
+                                    }
+                                    placeholder="选择主机"
+                                />
+                            ) : isRemote && hasRemoteHosts ? (
+                                <InlineNotice tone="warn">
+                                    请先在「远程主机」页添加 SSH 主机
+                                </InlineNotice>
+                            ) : null}
 
                                 <div className="space-y-2">
                                     <span className="text-xs font-medium text-text-secondary">
@@ -242,13 +259,6 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                         name="deployment-type"
                                     />
                                 </div>
-
-                                {deploymentType === 'docker' &&
-                                    data.backend_type === 'snowluma' && (
-                                        <InlineNotice tone="neutral">
-                                            SnowLuma 镜像体积较大（约 900MB+），首次启动可能较久；可到「组件」页预拉镜像
-                                        </InlineNotice>
-                                    )}
 
                                 {showDockerBlock && remoteHostId && (
                                     <DockerReadinessLine
@@ -277,7 +287,6 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         )}
                     </div>
                 </FormSection>
-            )}
 
             <FormSection
                 title="附加服务"
@@ -378,46 +387,14 @@ function DockerReadinessLine({
     probing: boolean;
     imageReady: boolean | undefined;
 }) {
-    if (probing && !status) {
-        return <InlineNotice tone="neutral">正在检查 Docker…</InlineNotice>;
-    }
-
-    const dockerOk =
-        status?.installed &&
-        status.daemonRunning &&
-        status.composeAvailable;
-
-    if (!dockerOk) {
-        return (
-            <InlineNotice tone="warn">
-                此主机 Docker 未就绪，请到「组件」页安装并启动 Docker
-            </InlineNotice>
-        );
-    }
-
-    if (imageReady === false) {
-        return (
-            <InlineNotice tone="warn">
-                {flavorLabel} 镜像未在本地；启动时会自动拉取（较久），或到「组件」页预拉镜像
-            </InlineNotice>
-        );
-    }
-
-    if (imageReady === true) {
-        const ver = status.version?.trim();
-        return (
-            <InlineNotice tone="ok">
-                {ver ? `Docker ${ver} · ` : ''}
-                {flavorLabel} 镜像已就绪，可启动
-            </InlineNotice>
-        );
-    }
-
-    return (
-        <InlineNotice tone="neutral">
-            Docker 已就绪，正在确认 {flavorLabel} 镜像…
-        </InlineNotice>
-    );
+    const notice = dockerReadinessNotice({
+        flavorLabel,
+        status,
+        probing,
+        imageReady,
+    });
+    if (!notice) return null;
+    return <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>;
 }
 
 function SnowLumaStartModeBlock({

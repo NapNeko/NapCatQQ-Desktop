@@ -680,6 +680,10 @@ impl Host for RemoteLinuxHost {
         })
     }
 
+    async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
+        RemoteLinuxHost::open_tunnel(self, spec).await
+    }
+
     // ===== 文件操作(基于 SFTP)=====
 
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {

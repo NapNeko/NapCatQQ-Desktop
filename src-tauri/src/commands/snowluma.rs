@@ -177,9 +177,25 @@ pub struct SnowLumaWebuiEndpoint {
 #[tauri::command]
 pub async fn open_snowluma_webui(
     state: State<'_, AppState>,
-    _bot_id: String,
+    bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_runtime::SnowLumaAppConfig;
+    use ncd_domain::DeploymentType;
+    use ncd_runtime::{BotId, SnowLumaAppConfig};
+
+    let bid = BotId::new(bot_id.clone());
+    if let Ok(Some(cfg)) = state.bot_manager.get_bot_config(&bid).await {
+        if cfg.bot.deployment_type == DeploymentType::Docker {
+            if let Some(ep) = state.bot_manager.snowluma_docker_endpoints(&bid).await {
+                return Ok(SnowLumaWebuiEndpoint {
+                    url: format!("http://127.0.0.1:{}/", ep.webui_local_port),
+                    password: ep.vnc_password,
+                });
+            }
+            return Err(
+                "SnowLuma Docker 隧道未就绪，请确认 Bot 已启动且运行宿主为远端 SSH".into(),
+            );
+        }
+    }
 
     let data_root = state.data_root.clone();
 

@@ -53,6 +53,8 @@ function SelectInner<V extends string>(
     const fieldId = id ?? name;
     const describedById = fieldId ? `${fieldId}-desc` : undefined;
     const m = useMotion();
+    // Radix Select：空字符串会抛错，统一当未选。
+    const radixValue = value === '' || value === undefined ? undefined : value;
 
     return (
         <div className={cn('flex flex-col gap-1.5', className)}>
@@ -66,7 +68,7 @@ function SelectInner<V extends string>(
                 </label>
             )}
             <RadixSelect.Root
-                value={value}
+                value={radixValue}
                 onValueChange={(v) => onValueChange(v as V)}
                 disabled={disabled}
                 name={name}

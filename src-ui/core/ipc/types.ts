@@ -269,6 +269,10 @@ type DomainEventBody =
         line: string;
     }
     | {
+        kind: 'snowluma_docker_endpoints_ready';
+        bot_id: string;
+    }
+    | {
         kind: 'component_action_progress';
         task_id: string;
         event: ProgressEvent;

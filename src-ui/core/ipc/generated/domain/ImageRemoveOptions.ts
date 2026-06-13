@@ -3,9 +3,8 @@
 /**
  * 删除本地镜像时的可选参数。
  */
-export type ImageRemoveOptions = {
-    /**
-     * 为 true 时加 `docker rmi -f`,用于仍有容器引用时强制删。
-     */
-    force?: boolean;
-};
+export type ImageRemoveOptions = { 
+/**
+ * 为 true 时加 `docker rmi -f`,用于仍有容器引用时强制删。
+ */
+force: boolean, };
