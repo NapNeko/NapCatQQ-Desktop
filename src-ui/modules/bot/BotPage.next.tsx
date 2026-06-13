@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../shared/ui';
 import { PageTransition } from '../../shared/ui/motion';
+import { RouteErrorBoundary } from '../../shared/ui/RouteErrorBoundary';
 import { BotListPageNext } from './list/BotListPage.next';
 import { BotConfigPageNext } from './config/BotConfigPage.next';
 import { BotLogPageNext } from './log/BotLogPage.next';
@@ -95,10 +96,12 @@ function BotViewContent({
     switch (view) {
         case 'list':
             return (
-                <BotListPageNext
-                    onConfigureBot={onConfigureBot}
-                    onViewLogs={onViewLogs}
-                />
+                <RouteErrorBoundary title="Bot 列表加载失败">
+                    <BotListPageNext
+                        onConfigureBot={onConfigureBot}
+                        onViewLogs={onViewLogs}
+                    />
+                </RouteErrorBoundary>
             );
         case 'config':
             return (

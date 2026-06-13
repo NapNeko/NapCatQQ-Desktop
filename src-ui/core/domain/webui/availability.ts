@@ -55,6 +55,6 @@ export function webuiTooltip(args: {
             : '在浏览器中打开 NapCat WebUI';
     }
     return args.flavor === 'snowluma'
-        ? 'WebUI 链接将在 SnowLuma daemon 就绪后可用'
+        ? 'WebUI 链接将在 SnowLuma daemon 或远端 Docker 隧道就绪后可用'
         : 'WebUI 链接将在 Bot 启动后可用';
 }

@@ -23,6 +23,7 @@ import {
     FileText,
     Globe,
     LinkIcon,
+    Monitor,
     Play,
     Power,
     QrCode,
@@ -99,6 +100,9 @@ interface BotCardProps {
         flavor: Flavor | null;
         napcat: NapcatWebuiBinding | null;
     }) => void;
+    /** 远端 SnowLuma Docker：打开 noVNC 扫码页 */
+    isSnowlumaDocker?: boolean;
+    onOpenNovnc?: (botId: string) => void;
 }
 
 export function BotCard({
@@ -121,6 +125,8 @@ export function BotCard({
     onViewLogs,
     onToggleSelect,
     onOpenWebui,
+    isSnowlumaDocker = false,
+    onOpenNovnc,
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
 
@@ -204,6 +210,11 @@ export function BotCard({
         isBotStarting(bot.state) || bot.state === 'repairing' ? 'brand' : 'none';
 
     const isActive = isBotActive(bot.state);
+
+    const novncAvailable =
+        isSnowlumaDocker &&
+        (snowlumaDockerEndpointsReady ?? false) &&
+        isActive;
 
     const chips: React.ReactNode[] = [];
     if (!isSL && enabledChannels !== null) {
@@ -424,6 +435,24 @@ export function BotCard({
                                     >
                                         <ToolbarMotionIcon
                                             icon={FileText}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                </GsapPresence>
+                                <GsapPresence
+                                    visible={novncAvailable}
+                                    onEnter={iconBtnEnter}
+                                    onExit={iconBtnExit}
+                                >
+                                    <IconButton
+                                        presence
+                                        tooltip="打开 noVNC 扫码页（容器内 QQ 图形界面）"
+                                        onClick={stopAction(() => onOpenNovnc?.(bot.bot_id))}
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={Monitor}
                                             size={14}
                                             strokeWidth={2.2}
                                             hoverAccent
@@ -795,12 +824,23 @@ interface ChannelCount {
 
 function countEnabledChannels(config: BotConfig): ChannelCount {
     const c = config.connect;
-    const httpServer = c.httpServers.filter((x) => x.enable).length;
-    const httpSse = c.httpSseServers.filter((x) => x.enable).length;
-    const httpClient = c.httpClients.filter((x) => x.enable).length;
-    const wsServer = c.websocketServers.filter((x) => x.enable).length;
-    const wsClient = c.websocketClients.filter((x) => x.enable).length;
-    const plugins = c.plugins.length;
+    if (!c) {
+        return {
+            httpServer: 0,
+            httpSse: 0,
+            httpClient: 0,
+            wsServer: 0,
+            wsClient: 0,
+            plugins: 0,
+            total: 0,
+        };
+    }
+    const httpServer = (c.httpServers ?? []).filter((x) => x.enable).length;
+    const httpSse = (c.httpSseServers ?? []).filter((x) => x.enable).length;
+    const httpClient = (c.httpClients ?? []).filter((x) => x.enable).length;
+    const wsServer = (c.websocketServers ?? []).filter((x) => x.enable).length;
+    const wsClient = (c.websocketClients ?? []).filter((x) => x.enable).length;
+    const plugins = (c.plugins ?? []).length;
     return {
         httpServer,
         httpSse,

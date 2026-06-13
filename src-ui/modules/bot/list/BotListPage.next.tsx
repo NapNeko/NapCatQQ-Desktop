@@ -35,6 +35,7 @@ import { useBotDockerStartGate } from '../../../hooks/bot/useBotDockerStartGate'
 import { useNapcatLogin } from '../../../hooks/webui/useNapcatLogin';
 import { useSnowlumaState } from '../../../hooks/webui/useSnowlumaState';
 import { useOpenWebui } from '../../../hooks/webui/useOpenWebui';
+import { useOpenSnowlumaNovnc } from '../../../hooks/webui/useOpenSnowlumaNovnc';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { useBotSnapshotAlerts } from '../../../hooks/bot/useBotSnapshotAlerts';
 import { isSnowLumaFlavor } from '../../../core/domain/bot/flavor';
@@ -64,6 +65,7 @@ export function BotListPageNext({
     const snowluma = useSnowlumaState();
     const batch = useBotBatchSelection();
     const openWebui = useOpenWebui();
+    const openSnowlumaNovnc = useOpenSnowlumaNovnc();
 
     // 批量删除二次确认
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -237,6 +239,7 @@ export function BotListPageNext({
                         batch={batch}
                         mutations={mutations}
                         openWebui={openWebui}
+                        openSnowlumaNovnc={openSnowlumaNovnc}
                         onConfigureBot={onConfigureBot}
                         onViewLogs={onViewLogs}
                         onStartBot={handleStartBot}
@@ -372,6 +375,7 @@ type GridProps = {
     batch: ReturnType<typeof useBotBatchSelection>;
     mutations: ReturnType<typeof useBotMutations>;
     openWebui: ReturnType<typeof useOpenWebui>;
+    openSnowlumaNovnc: ReturnType<typeof useOpenSnowlumaNovnc>;
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
     onStartBot: (botId: string) => void;
@@ -386,6 +390,7 @@ function BotListGrid({
     batch,
     mutations,
     openWebui,
+    openSnowlumaNovnc,
     onConfigureBot,
     onViewLogs,
     onStartBot,
@@ -432,6 +437,9 @@ function BotListGrid({
                 const config = configByBot[bot.bot_id] ?? null;
                 const napcatBot = napcat.byBot[bot.bot_id];
                 const snowlumaBot = snowluma.byBot[bot.bot_id];
+                const isSnowlumaDocker =
+                    isSnowLumaFlavor(flavor) &&
+                    config?.bot.deploymentType === 'docker';
                 return (
                     <ListItem key={bot.bot_id} hoverable>
                         <BotCard
@@ -461,6 +469,17 @@ function BotListGrid({
                                         key: `webui-open:${params.botId}`,
                                         tone: 'danger',
                                         title: '打开 WebUI 失败',
+                                        content: String(err),
+                                    });
+                                });
+                            }}
+                            isSnowlumaDocker={isSnowlumaDocker}
+                            onOpenNovnc={(id) => {
+                                openSnowlumaNovnc(id).catch((err: unknown) => {
+                                    pushInfoBar({
+                                        key: `novnc-open:${id}`,
+                                        tone: 'danger',
+                                        title: '打开 noVNC 失败',
                                         content: String(err),
                                     });
                                 });

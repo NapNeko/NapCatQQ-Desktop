@@ -198,8 +198,9 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                     layout="none"
                 >
                     <InlineNotice tone="neutral">
-                        Docker 模式下不使用本机冷/热启动；登录在容器内完成。VNC 密码由桌面端生成并写入
-                        compose；SnowLuma WebUI 临时密码见容器日志（5099）。
+                        Docker 模式下不使用本机冷/热启动；登录在容器内完成。VNC 与 SnowLuma
+                        WebUI 密码由桌面端生成并写入 compose（分别对应 noVNC 与 5099 登录）。
+                        列表卡片在隧道就绪后可打开 noVNC 扫码页与 WebUI。
                     </InlineNotice>
                 </FormSection>
             )}

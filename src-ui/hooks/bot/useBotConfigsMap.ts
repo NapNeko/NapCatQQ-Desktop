@@ -7,6 +7,7 @@
 // 看到的元数据不必紧跟。upsertBotConfig / deleteBotConfig mutation 已经
 // 通过 botSnapshotsKey 同步刷新列表，需要时手动 invalidate 这里即可。
 
+import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { botService } from '../../core/services/bot.service';
 import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
@@ -30,11 +31,24 @@ export function useBotConfigsMap(
         })),
     });
 
-    const out: Record<string, BotConfig | null> = {};
-    queries.forEach((q, i) => {
-        const id = snapshots[i]?.bot_id;
-        if (!id) return;
-        if (q.data !== undefined) out[id] = q.data;
-    });
-    return out;
+    const dataSignature = useMemo(
+        () =>
+            queries
+                .map((q, i) => {
+                    const id = snapshots[i]?.bot_id ?? '';
+                    return `${id}:${q.status}:${q.dataUpdatedAt ?? 0}`;
+                })
+                .join('|'),
+        [queries, snapshots],
+    );
+
+    return useMemo(() => {
+        const out: Record<string, BotConfig | null> = {};
+        queries.forEach((q, i) => {
+            const id = snapshots[i]?.bot_id;
+            if (!id) return;
+            if (q.data !== undefined) out[id] = q.data;
+        });
+        return out;
+    }, [dataSignature, queries, snapshots]);
 }

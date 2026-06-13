@@ -136,4 +136,6 @@ export const desktopLogService = {
 export const snowlumaService = {
     openWebui: (botId: string): Promise<SnowLumaWebuiEndpoint> =>
         invoke<SnowLumaWebuiEndpoint>('open_snowluma_webui', { botId }),
+    openNovnc: (botId: string): Promise<SnowLumaWebuiEndpoint> =>
+        invoke<SnowLumaWebuiEndpoint>('open_snowluma_novnc', { botId }),
 };
