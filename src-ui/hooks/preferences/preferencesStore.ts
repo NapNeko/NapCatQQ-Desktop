@@ -133,6 +133,9 @@ export function applySideEffects() {
     // 圆角风格：覆盖 :root 上的 --radius-* CSS 变量。
     applyRadiusStyle(state.radiusStyle);
     syncRootChromeBackground();
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('theme-changed'));
+    }
 }
 
 export const preferencesStore = {

@@ -271,16 +271,20 @@ samp,
     }
 }
 
-/* 全局滚动条：细、低对比，不抢视线（WebKit + Firefox）。
-   暗色模式通过 --scrollbar-thumb / --scrollbar-thumb-hover 覆写。 */
+/* 全局滚动条：默认隐藏，悬停滚动区域时纤细显现，拖拽拇指时加深。
+   WebKit 用 thumb 透明 + 祖先 :hover；Firefox 用 scrollbar-color 两档。 */
 * {
     scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb, color-mix(in srgb, var(--neutral-900) 12%, transparent)) transparent;
+    scrollbar-color: transparent transparent;
+}
+
+*:hover {
+    scrollbar-color: var(--scrollbar-thumb-rest) transparent;
 }
 
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: var(--scrollbar-size, 5px);
+    height: var(--scrollbar-size, 5px);
 }
 
 ::-webkit-scrollbar-track {
@@ -288,12 +292,27 @@ samp,
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb, color-mix(in srgb, var(--neutral-900) 10%, transparent));
+    background: transparent;
     border-radius: var(--radius-pill);
+    transition: background 0.18s ease;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb-rest);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover, color-mix(in srgb, var(--neutral-900) 18%, transparent));
+    background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-thumb:active {
+    background: var(--scrollbar-thumb-active);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    ::-webkit-scrollbar-thumb {
+        transition: none;
+    }
 }
 
 /* 仍需要完全隐藏滚动条时用 .scrollbar-hide（少用） */

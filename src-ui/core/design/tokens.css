@@ -67,7 +67,6 @@
    /* 输入框：纯白 70% + 画布 30%，暖白介于纯白和画布之间，不刺眼但仍清楚 */
    --surface-sidebar: color-mix(in srgb, var(--accent-100) 28%, var(--surface-canvas));
    /* 侧栏：极淡桃粉融入画布，不抢戏 */
-   --surface-hero: color-mix(in srgb, var(--surface-canvas) 45%, var(--brand-50) 55%);
    /* 主页 Hello 大卡底：比纯 brand-100 更贴画布，避免整块 #FFE5C1 感 */
    --text-hero-title: var(--brand-600);
    --text-hero-accent: var(--brand-500);
@@ -116,6 +115,12 @@
    /* hero / hello 卡 */
    --radius-xl: 28px;
    --radius-pill: 9999px;
+
+   /* semantic: 滚动条（全局 index.css；各主题块覆写 thumb 三档） */
+   --scrollbar-size: 5px;
+   --scrollbar-thumb-rest: color-mix(in srgb, var(--neutral-900) 7%, transparent);
+   --scrollbar-thumb-hover: color-mix(in srgb, var(--neutral-900) 14%, transparent);
+   --scrollbar-thumb-active: color-mix(in srgb, var(--neutral-900) 22%, transparent);
 
    /* semantic: 阴影（暖色低饱和柔光，不用纯黑投影） */
    --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.04);
@@ -186,7 +191,7 @@
       --surface-muted: #33302d;
       --surface-field: #373431;
       --surface-sidebar: #292725;
-      --surface-hero: #35322f;
+      --surface-hero: color-mix(in srgb, var(--surface-elevated) 90%, var(--brand-500) 10%);
       --text-hero-title: #f5d8b5;
       --text-hero-accent: #ffad75;
 
@@ -214,8 +219,9 @@
       --brand-600: #e87040;
 
       /* scrollbar */
-      --scrollbar-thumb: rgba(255, 245, 235, 0.15);
-      --scrollbar-thumb-hover: rgba(255, 245, 235, 0.28);
+      --scrollbar-thumb-rest: rgba(255, 245, 235, 0.12);
+      --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
+      --scrollbar-thumb-active: rgba(255, 245, 235, 0.36);
 
       --qr-foreground: var(--neutral-900);
       --qr-background: var(--surface-elevated);
@@ -231,7 +237,7 @@
    --surface-muted: #33302d;
    --surface-field: #373431;
    --surface-sidebar: #292725;
-   --surface-hero: #35322f;
+   --surface-hero: color-mix(in srgb, var(--surface-elevated) 90%, var(--brand-500) 10%);
    --text-hero-title: #f5d8b5;
    --text-hero-accent: #ffad75;
 
@@ -259,8 +265,9 @@
    --brand-600: #e87040;
 
    /* scrollbar */
-   --scrollbar-thumb: rgba(255, 245, 235, 0.15);
-   --scrollbar-thumb-hover: rgba(255, 245, 235, 0.28);
+   --scrollbar-thumb-rest: rgba(255, 245, 235, 0.12);
+   --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
+   --scrollbar-thumb-active: rgba(255, 245, 235, 0.36);
 
    --qr-foreground: var(--neutral-900);
    --qr-background: var(--surface-elevated);
@@ -314,15 +321,34 @@
    --border-default: rgba(76, 79, 105, 0.12);
    --border-strong: rgba(76, 79, 105, 0.22);
 
-   /* brand → mauve */
+      /* brand → mauve */
+   --brand-50: #f6f0ff;
    --brand-100: #ede4ff;
+   --brand-200: #dcc8ff;
+   --brand-300: #b888f8;
    --brand-400: #a060f5;
    --brand-500: #8839ef;
    --brand-600: #7020d0;
+   --brand-700: #5c18b0;
 
    /* accent → pink */
+   --accent-50: #fef5fb;
    --accent-100: #fce6f2;
+   --accent-200: #f9d0e8;
+   --accent-300: #f3b0db;
+   --accent-400: #ee93cf;
    --accent-500: #ea76cb;
+   --accent-600: #d45eb5;
+   --accent-700: #b8489a;
+
+   --action-primary: var(--brand-500);
+   --action-primary-hover: var(--brand-600);
+   --action-primary-active: var(--brand-700);
+   --action-secondary: var(--accent-500);
+   --action-secondary-hover: var(--accent-600);
+   --border-focus: var(--brand-500);
+   --surface-sidebar: color-mix(in srgb, var(--accent-100) 22%, var(--surface-canvas));
+   --surface-hero: color-mix(in srgb, var(--surface-canvas) 42%, var(--brand-50) 58%);
 
    /* state */
    --state-success: #40a02b;
@@ -342,8 +368,9 @@
    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 30%, transparent);
 
    /* scrollbar */
-   --scrollbar-thumb: rgba(76, 79, 105, 0.15);
-   --scrollbar-thumb-hover: rgba(76, 79, 105, 0.28);
+   --scrollbar-thumb-rest: rgba(76, 79, 105, 0.12);
+   --scrollbar-thumb-hover: rgba(76, 79, 105, 0.24);
+   --scrollbar-thumb-active: rgba(76, 79, 105, 0.36);
 
    --qr-foreground: #4c4f69;
    --qr-background: #e6e9ef;
@@ -366,7 +393,7 @@
    /* mantle */
    --surface-sidebar: #292c3c;
    /* mantle */
-   --surface-hero: #414559;
+   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
    /* surface0 */
 
    /* text */
@@ -379,10 +406,10 @@
    --text-disabled: #737994;
    /* overlay0 */
    --text-on-brand: #ffffff;
-   /* crust — dark text on peach */
+   /* on brand */
    --text-on-accent: #232634;
    --text-hero-title: #ca9ee6;
-   /* peach */
+   /* mauve */
    --text-hero-accent: #f4b8e4;
    /* pink  */
 
@@ -391,15 +418,34 @@
    --border-default: rgba(198, 208, 245, 0.14);
    --border-strong: rgba(198, 208, 245, 0.24);
 
-   /* brand → mauve */
+      /* brand → mauve */
+   --brand-50: #f8f2ff;
    --brand-100: #f5eeff;
+   --brand-200: #e8dcfc;
+   --brand-300: #dcc8f8;
    --brand-400: #d4b0ec;
    --brand-500: #ca9ee6;
    --brand-600: #b07fd4;
+   --brand-700: #9668bc;
 
    /* accent → pink */
+   --accent-50: #fef7fc;
    --accent-100: #fdf4fa;
+   --accent-200: #fae8f4;
+   --accent-300: #f6d4ec;
+   --accent-400: #f8c6e8;
    --accent-500: #f4b8e4;
+   --accent-600: #e0a0d0;
+   --accent-700: #c888ba;
+
+   --action-primary: var(--brand-500);
+   --action-primary-hover: var(--brand-600);
+   --action-primary-active: var(--brand-700);
+   --action-secondary: var(--accent-500);
+   --action-secondary-hover: var(--accent-600);
+   --border-focus: var(--brand-500);
+   --surface-sidebar: color-mix(in srgb, var(--accent-100) 16%, var(--surface-canvas));
+      --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
    /* state */
    --state-success: #a6d189;
@@ -419,8 +465,9 @@
    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
 
    /* scrollbar */
-   --scrollbar-thumb: rgba(198, 208, 245, 0.14);
-   --scrollbar-thumb-hover: rgba(198, 208, 245, 0.26);
+   --scrollbar-thumb-rest: rgba(198, 208, 245, 0.11);
+   --scrollbar-thumb-hover: rgba(198, 208, 245, 0.22);
+   --scrollbar-thumb-active: rgba(198, 208, 245, 0.34);
 
    --qr-foreground: #292c3c;
    --qr-background: #414559;
@@ -443,7 +490,7 @@
    /* mantle */
    --surface-sidebar: #1e2030;
    /* mantle */
-   --surface-hero: #363a4f;
+   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
    /* surface0 */
 
    /* text */
@@ -456,10 +503,10 @@
    --text-disabled: #6e738d;
    /* overlay0 */
    --text-on-brand: #ffffff;
-   /* crust — dark text on peach */
+   /* on brand */
    --text-on-accent: #181926;
    --text-hero-title: #c6a0f6;
-   /* peach */
+   /* mauve */
    --text-hero-accent: #f5bde6;
    /* pink  */
 
@@ -468,15 +515,34 @@
    --border-default: rgba(202, 211, 245, 0.14);
    --border-strong: rgba(202, 211, 245, 0.24);
 
-   /* brand → mauve */
+      /* brand → mauve */
+   --brand-50: #f5f0fe;
    --brand-100: #f4edfe;
+   --brand-200: #e8dcfc;
+   --brand-300: #dcc4f8;
    --brand-400: #d2aef8;
    --brand-500: #c6a0f6;
    --brand-600: #ab82e0;
+   --brand-700: #9368c8;
 
    /* accent → pink */
+   --accent-50: #fef6fb;
    --accent-100: #fdf3f9;
+   --accent-200: #fae8f4;
+   --accent-300: #f6d4ec;
+   --accent-400: #f8c8e8;
    --accent-500: #f5bde6;
+   --accent-600: #e0a5d0;
+   --accent-700: #c88eb8;
+
+   --action-primary: var(--brand-500);
+   --action-primary-hover: var(--brand-600);
+   --action-primary-active: var(--brand-700);
+   --action-secondary: var(--accent-500);
+   --action-secondary-hover: var(--accent-600);
+   --border-focus: var(--brand-500);
+   --surface-sidebar: color-mix(in srgb, var(--accent-100) 14%, var(--surface-canvas));
+      --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
    /* state */
    --state-success: #a6da95;
@@ -496,8 +562,9 @@
    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
 
    /* scrollbar */
-   --scrollbar-thumb: rgba(202, 211, 245, 0.13);
-   --scrollbar-thumb-hover: rgba(202, 211, 245, 0.25);
+   --scrollbar-thumb-rest: rgba(202, 211, 245, 0.1);
+   --scrollbar-thumb-hover: rgba(202, 211, 245, 0.21);
+   --scrollbar-thumb-active: rgba(202, 211, 245, 0.33);
 
    --qr-foreground: #1e2030;
    --qr-background: #363a4f;
@@ -520,7 +587,7 @@
    /* mantle */
    --surface-sidebar: #181825;
    /* mantle */
-   --surface-hero: #313244;
+   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
    /* surface0 */
 
    /* text */
@@ -533,10 +600,10 @@
    --text-disabled: #6c7086;
    /* overlay0 */
    --text-on-brand: #ffffff;
-   /* crust — dark text on peach */
+   /* on brand */
    --text-on-accent: #11111b;
    --text-hero-title: #cba6f7;
-   /* peach */
+   /* mauve */
    --text-hero-accent: #f5c2e7;
    /* pink  */
 
@@ -545,15 +612,34 @@
    --border-default: rgba(205, 214, 244, 0.14);
    --border-strong: rgba(205, 214, 244, 0.24);
 
-   /* brand → mauve */
+      /* brand → mauve */
+   --brand-50: #f8f2ff;
    --brand-100: #f5edfe;
+   --brand-200: #e8dcfc;
+   --brand-300: #dcc8f8;
    --brand-400: #d6b4f9;
    --brand-500: #cba6f7;
    --brand-600: #b085e0;
+   --brand-700: #9668c8;
 
    /* accent → pink */
+   --accent-50: #fef7fc;
    --accent-100: #fdf4f9;
+   --accent-200: #fae8f4;
+   --accent-300: #f6d4ec;
+   --accent-400: #f8c8e8;
    --accent-500: #f5c2e7;
+   --accent-600: #e0a8d0;
+   --accent-700: #c890b8;
+
+   --action-primary: var(--brand-500);
+   --action-primary-hover: var(--brand-600);
+   --action-primary-active: var(--brand-700);
+   --action-secondary: var(--accent-500);
+   --action-secondary-hover: var(--accent-600);
+   --border-focus: var(--brand-500);
+   --surface-sidebar: color-mix(in srgb, var(--accent-100) 14%, var(--surface-canvas));
+      --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
    /* state */
    --state-success: #a6e3a1;
@@ -573,8 +659,9 @@
    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
 
    /* scrollbar */
-   --scrollbar-thumb: rgba(205, 214, 244, 0.13);
-   --scrollbar-thumb-hover: rgba(205, 214, 244, 0.25);
+   --scrollbar-thumb-rest: rgba(205, 214, 244, 0.1);
+   --scrollbar-thumb-hover: rgba(205, 214, 244, 0.21);
+   --scrollbar-thumb-active: rgba(205, 214, 244, 0.33);
 
    --qr-foreground: #181825;
    --qr-background: #313244;
