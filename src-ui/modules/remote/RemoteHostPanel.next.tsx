@@ -6,7 +6,7 @@
 // 视觉语言对齐 ComponentsPage / BotListPage：
 //   - 头部：2xs uppercase 小标题 + display 大标题 + 副描述
 //   - design token：text-text / text-text-secondary / text-text-tertiary / bg-elevated / bg-inset
-//   - Section 模式（暂无分组，单 section）+ auto-fill 网格
+//   - 双列卡片网格（≥768px 两列，与 Bot 列表 botCardGrid 同规则）
 //   - EmptyState 虚线边框卡 + Bot icon
 //   - 添加按钮走右下角悬浮（同 Bot 列表 FloatingActions），添加表单走 Radix Dialog
 //
@@ -29,7 +29,7 @@ import { ListItem, ActionMotionIcon, RESOURCE_MOTION, refreshMotion } from '../.
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
-import { ServerCard } from './ServerCard';
+import { ServerCard, serverCardGridClass } from './ServerCard';
 import { AddServerDialog } from './AddServerDialog';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { HostKeyPrompt } from '../../core/ipc/generated/domain/HostKeyPrompt';
@@ -90,17 +90,29 @@ export const RemoteHostPanelNext: React.FC = () => {
         setTestingId(id);
         try {
             const report = await testConnectionAsync({ id, password });
-            // mismatch / 失败 / 成功的提示由 hook 出条;这里只在"首次未知 host key"
-            // 时弹指纹确认框(report.hostKeyMismatch 为 true 时不弹,走危险阻断)。
-            if (report.hostKeyPrompt && !report.hostKeyMismatch) {
+            // 测试结果通过 InfoBar 通知
+            if (report.success) {
+                pushInfoBar({
+                    tone: 'success',
+                    title: '连接成功',
+                    content: '服务器在线，可以部署组件',
+                    autoDismissMs: 3000,
+                });
+            } else if (report.hostKeyMismatch) {
+                // host key 不匹配的危险提示已由 hook 发出
+            } else if (report.hostKeyPrompt && !report.hostKeyMismatch) {
                 setHostKeyConfirm({
                     id,
                     prompt: report.hostKeyPrompt,
                     retry: () => void handleTest(id, password),
                 });
+            } else {
+                // 连接失败已由 hook 发出红条
             }
         } catch {
-            // IPC 异常已由 hook onError 出红条。
+            // IPC 异常已由 hook onError 出红条
+        } finally {
+            setTestingId(null);
         }
     };
 
@@ -320,14 +332,7 @@ function ServerGrid({
     );
 
     return (
-        <div
-            ref={containerRef}
-            className="grid gap-3"
-            style={{
-                gridTemplateColumns:
-                    'repeat(auto-fill, minmax(min(360px, 100%), 1fr))',
-            }}
-        >
+        <div ref={containerRef} className={serverCardGridClass}>
             {servers.map((server) => (
                 <ListItem key={server.id} hoverable>
                     <ServerCard

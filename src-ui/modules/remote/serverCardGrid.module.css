@@ -1,0 +1,29 @@
+/* 远端主机列表双列：与 Bot 列表 botCardGrid 同规则。 */
+.serverCardGrid {
+    display: grid;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: 1fr;
+    align-items: stretch;
+    gap: 0.625rem;
+}
+
+@media (min-width: 768px) {
+    .serverCardGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.625rem 0.75rem;
+    }
+}
+
+.serverCardGrid > * {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    justify-self: stretch;
+    align-self: stretch;
+}

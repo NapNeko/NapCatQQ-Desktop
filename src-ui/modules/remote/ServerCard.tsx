@@ -1,22 +1,29 @@
-// 单台服务器卡片。承载 ServerProfile 的连接信息 + 测试 / 删除操作。
-//
-// 视觉对齐 ComponentCard：Card padding="md" + header 行 + 副信息行 + 操作区。
-// 状态徽章用 Badge tone 映射：connected=success / failed=danger /
-// connecting=warning / disconnected=neutral。
-//
-// 操作按钮：测试连接（始终可用） / 编辑（改连接信息） / 删除（hover 出红）。
+// 单台服务器卡片：品牌 Server 图标 + 紧凑信息区 + 底栏操作。
 
 import React from 'react';
-import { Server, Wifi, KeyRound, Pencil, Trash2 } from 'lucide-react';
+import {
+    Globe,
+    KeyRound,
+    Pencil,
+    Server,
+    Shield,
+    Trash2,
+    Wifi,
+} from 'lucide-react';
 import {
     ActionMotionIcon,
     LIVE_MOTION,
     RESOURCE_MOTION,
     refreshMotion,
 } from '../../shared/ui/motion';
-import { Card, Badge, Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
+import { Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
+import { cn } from '../../shared/utils/cn';
+import { BotManageCard } from '../bot/list/next/BotManageCard';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { ServerState } from '../../core/ipc/generated/domain/ServerState';
+import { serverLifecycleBadge } from './serverCardPresentation';
+
+export { serverCardGridClass } from './serverCardGrid';
 
 interface ServerCardProps {
     server: ServerProfile;
@@ -24,7 +31,6 @@ interface ServerCardProps {
     revealIp: boolean;
     onTest: (password?: string) => void;
     onEdit: () => void;
-    /// 配置免密登录。仅密码认证的档案给这个入口；密钥认证的传 undefined。
     onSetupKey?: () => void;
     onDelete: () => void;
 }
@@ -38,154 +44,228 @@ export const ServerCard: React.FC<ServerCardProps> = ({
     onSetupKey,
     onDelete,
 }) => {
-    const stateMeta = stateBadge(server.state);
     const displayHost = revealIp ? server.host : maskHost(server.host);
     const serverLabel = server.name || server.host;
-    const displayWebui = server.webuiUrl
-        ? revealIp
-            ? new URL(server.webuiUrl).host
-            : maskHost(new URL(server.webuiUrl).host)
-        : null;
+    const displayName =
+        server.name.trim().length > 0
+            ? server.name.trim()
+            : revealIp
+              ? server.host
+              : '远端服务器';
+
+    const accent = cardAccent(server.state);
+    const sshEndpoint = `${server.username}@${displayHost}:${server.port}`;
+
+    let webuiLine: string | null = null;
+    let webuiFull: string | null = null;
+    if (server.webuiUrl) {
+        try {
+            const u = new URL(server.webuiUrl);
+            webuiLine = revealIp ? u.host : maskHost(u.host);
+            webuiFull = server.webuiUrl;
+        } catch {
+            webuiLine = revealIp ? server.webuiUrl : 'WebUI';
+            webuiFull = server.webuiUrl;
+        }
+    }
+
+    const authLabel = server.authMethod === 'key' ? 'SSH 密钥' : '密码登录';
+
+    const stop = (fn: () => void) => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        fn();
+    };
 
     return (
-        <Card padding="md" className="flex flex-col gap-3">
-            <header className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                        <ActionMotionIcon
-                            icon={Server}
-                            size={16}
-                            motion={RESOURCE_MOTION}
-                            className="text-text-tertiary"
-                        />
-                        <h3 className="truncate font-display text-base font-semibold text-text">
-                            {server.name || (revealIp ? server.host : '远端服务器')}
-                        </h3>
-                        <Badge tone={stateMeta.tone} appearance="soft" dot={server.state === 'connected'}>
-                            {stateMeta.label}
-                        </Badge>
+        <BotManageCard
+            compact
+            badges={[serverLifecycleBadge(server.state)]}
+            accent={accent}
+            header={
+                <>
+                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand-soft text-brand">
+                        <ActionMotionIcon icon={Server} size={18} motion={RESOURCE_MOTION} />
                     </div>
-                    <p className="mt-1 truncate font-mono text-[12.5px] text-text-tertiary tabular-nums">
-                        {server.username}@{displayHost}:{server.port}
+                    <div className="min-w-0 flex-1">
+                        <h3
+                            className="truncate font-display text-base font-semibold leading-snug text-text"
+                            title={serverLabel}
+                        >
+                            {displayName}
+                        </h3>
+                        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-text-tertiary">
+                            <span className="font-medium text-info">远端</span>
+                            <span aria-hidden className="text-border">
+                                ·
+                            </span>
+                            <span className="truncate font-mono tabular-nums">
+                                {server.username}
+                            </span>
+                        </p>
+                    </div>
+                </>
+            }
+            meta={
+                isTesting ? (
+                    <p className="truncate text-xs text-brand">正在测试连接…</p>
+                ) : (
+                    <p
+                        className="truncate font-mono text-xs text-text-secondary"
+                        title={
+                            revealIp
+                                ? `${server.username}@${server.host}:${server.port}`
+                                : undefined
+                        }
+                    >
+                        {sshEndpoint}
                     </p>
-                </div>
-            </header>
-
-            <div className="flex flex-wrap items-center gap-2 text-2xs text-text-tertiary">
-                <span className="rounded-pill bg-inset px-2 py-0.5">
-                    {server.authMethod === 'key' ? '密钥认证' : '密码认证'}
-                </span>
-                {server.rememberCredential && (
-                    <span className="rounded-pill bg-inset px-2 py-0.5">已保存凭据</span>
-                )}
-                {displayWebui && (
-                    <span className="rounded-pill bg-inset px-2 py-0.5">
-                        WebUI {displayWebui}
-                    </span>
-                )}
-            </div>
-
-            <div className="flex items-center justify-end gap-1">
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => onTest()}
-                            disabled={isTesting}
+                )
+            }
+            chips={
+                <ServerDetailStrip
+                    revealIp={revealIp}
+                    webuiLine={webuiLine}
+                    webuiFull={webuiFull}
+                    authLabel={authLabel}
+                    credentialSaved={server.rememberCredential}
+                />
+            }
+            footerActions={
+                <>
+                    <ServerIconButton
+                        tooltip="测试连接"
+                        onClick={stop(() => onTest())}
+                        disabled={isTesting}
+                        tone={server.state === 'connected' ? 'success' : 'neutral'}
+                    >
+                        <ActionMotionIcon
+                            icon={Wifi}
+                            size={16}
+                            strokeWidth={2.2}
+                            motion={
+                                isTesting
+                                    ? refreshMotion(true)
+                                    : server.state === 'connected'
+                                      ? LIVE_MOTION
+                                      : 'none'
+                            }
+                        />
+                    </ServerIconButton>
+                    {onSetupKey ? (
+                        <ServerIconButton
+                            tooltip="配置免密登录"
+                            onClick={stop(onSetupKey)}
                         >
-                            <ActionMotionIcon
-                                icon={Wifi}
-                                size={14}
-                                motion={
-                                    isTesting
-                                        ? refreshMotion(true)
-                                        : server.state === 'connected'
-                                          ? LIVE_MOTION
-                                          : 'none'
-                                }
-                            />
-                            测试连接
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        建立 SSH 连接并探测远端 OS
-                    </TooltipContent>
-                </Tooltip>
-                {onSetupKey && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button
-                                type="button"
-                                onClick={onSetupKey}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                                aria-label={`配置 ${serverLabel} 的免密登录`}
-                            >
-                                <ActionMotionIcon icon={KeyRound} size={14} />
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            配置免密登录（用密码推送密钥到远端）
-                        </TooltipContent>
-                    </Tooltip>
-                )}
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <button
-                            type="button"
-                            onClick={onEdit}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                            aria-label={`编辑 ${serverLabel}`}
-                        >
-                            <ActionMotionIcon icon={Pencil} size={14} />
-                        </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        编辑连接信息
-                    </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <button
-                            type="button"
-                            onClick={onDelete}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
-                            aria-label={`删除 ${serverLabel}`}
-                        >
-                            <ActionMotionIcon icon={Trash2} size={14} />
-                        </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        删除档案（同时清除已保存的凭据）
-                    </TooltipContent>
-                </Tooltip>
-            </div>
-        </Card>
+                            <ActionMotionIcon icon={KeyRound} size={16} strokeWidth={2} />
+                        </ServerIconButton>
+                    ) : null}
+                    <ServerIconButton tooltip="编辑" onClick={stop(onEdit)}>
+                        <ActionMotionIcon icon={Pencil} size={16} strokeWidth={2} />
+                    </ServerIconButton>
+                    <ServerIconButton
+                        tooltip="删除"
+                        onClick={stop(onDelete)}
+                        tone="danger"
+                    >
+                        <ActionMotionIcon icon={Trash2} size={16} strokeWidth={2.2} />
+                    </ServerIconButton>
+                </>
+            }
+        />
     );
 };
 
-function stateBadge(state: ServerState): {
-    tone: 'success' | 'danger' | 'warning' | 'neutral';
-    label: string;
-} {
-    switch (state) {
-        case 'connected':
-            return { tone: 'success', label: '已连接' };
-        case 'connecting':
-            return { tone: 'warning', label: '连接中' };
-        case 'failed':
-            return { tone: 'danger', label: '失败' };
-        case 'disconnected':
-        default:
-            return { tone: 'neutral', label: '未连接' };
-    }
+function ServerDetailStrip({
+    revealIp,
+    webuiLine,
+    webuiFull,
+    authLabel,
+    credentialSaved,
+}: {
+    revealIp: boolean;
+    webuiLine: string | null;
+    webuiFull: string | null;
+    authLabel: string;
+    credentialSaved: boolean;
+}) {
+    return (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-2xs text-text-secondary">
+            <span className="inline-flex items-center gap-1">
+                <KeyRound size={11} strokeWidth={2.4} className="text-text-tertiary" />
+                {authLabel}
+            </span>
+            {credentialSaved ? (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex cursor-default items-center gap-1 text-success">
+                            <Shield size={11} strokeWidth={2.4} />
+                            凭据已保存
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>登录凭据已安全存储在本机</TooltipContent>
+                </Tooltip>
+            ) : null}
+            {webuiLine ? (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex min-w-0 max-w-full cursor-default items-center gap-1">
+                            <Globe size={11} strokeWidth={2.4} className="shrink-0 text-text-tertiary" />
+                            <span className="truncate font-mono">{webuiLine}</span>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        {revealIp && webuiFull ? webuiFull : '显示 IP 后可查看完整 WebUI 地址'}
+                    </TooltipContent>
+                </Tooltip>
+            ) : null}
+        </span>
+    );
 }
 
-/// 把主机名 / IP 转成视觉脱敏形式：保留首尾字符，中间换 ····。
-/// 例：
-///   192.168.1.100 → 1·········0
-///   prod.example.com → p··············m
-/// 长度 < 4 时直接返回 ····。
+function ServerIconButton({
+    tooltip,
+    onClick,
+    disabled,
+    tone = 'neutral',
+    children,
+}: {
+    tooltip: string;
+    onClick: (e: React.MouseEvent) => void;
+    disabled?: boolean;
+    tone?: 'neutral' | 'success' | 'danger';
+    children: React.ReactNode;
+}) {
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <button
+                    type="button"
+                    onClick={onClick}
+                    disabled={disabled}
+                    className={cn(
+                        'inline-flex h-9 w-9 items-center justify-center rounded-sm transition-colors duration-100',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                        'disabled:cursor-not-allowed disabled:opacity-40',
+                        tone === 'neutral' &&
+                            'text-text-secondary hover:bg-inset hover:text-text',
+                        tone === 'success' && 'text-success hover:bg-success-soft',
+                        tone === 'danger' && 'text-danger hover:bg-danger-soft',
+                    )}
+                >
+                    {children}
+                </button>
+            </TooltipTrigger>
+            <TooltipContent>{tooltip}</TooltipContent>
+        </Tooltip>
+    );
+}
+
+function cardAccent(state: ServerState): 'brand' | 'danger' | 'none' {
+    if (state === 'failed') return 'danger';
+    if (state === 'connected') return 'brand';
+    return 'none';
+}
+
 function maskHost(host: string): string {
     if (host.length < 4) return '····';
     return `${host[0]}${'·'.repeat(Math.min(host.length - 2, 12))}${host[host.length - 1]}`;
