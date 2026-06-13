@@ -109,6 +109,33 @@ pub struct ContainerInfo {
     pub ports: Vec<String>,
 }
 
+/// 本地镜像概要。来自 `docker images --format '{{json .}}'` 逐行解析。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct ImageInfo {
+    /// 镜像 id 短码(12 位)。
+    pub id: String,
+    /// 仓库名;`<none>` 表示悬空层。
+    pub repository: String,
+    /// 标签;`<none>` 常见于悬空镜像。
+    pub tag: String,
+    /// 人类可读大小(如 `1.2GB`),与 docker CLI 一致。
+    pub size: String,
+    /// 创建时间文案(如 `2 weeks ago`)。
+    pub created_since: String,
+}
+
+/// 删除本地镜像时的可选参数。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct ImageRemoveOptions {
+    /// 为 true 时加 `docker rmi -f`,用于仍有容器引用时强制删。
+    #[serde(default)]
+    pub force: bool,
+}
+
 /// Desktop 认识的 Docker 部署口味。只有 NapCat / SnowLuma 两种有官方镜像。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
@@ -149,14 +176,19 @@ impl DockerFlavor {
     }
 }
 
-/// Docker Hub 国内反代镜像站前缀(按优先级)。Docker Hub 官方 registry 在国内
-/// 基本不可直连,这些是社区维护的反代,拉取时拼成 `<mirror>/<image>`。这类公共
-/// 站点存活期不稳定(常因流量/备案关停),所以做成多站点 + 官方直连兜底的
-/// fallback 链,任一可达即可。换站只改这里,不动其它逻辑。
+/// Docker Hub 国内反代镜像站主机名(按优先级)。拉取时拼成 `<host>/<官方镜像路径>`,
+/// 无需改远端 daemon.json。公共站存活期不稳定,故多站 + 官方直连兜底;换站只改这里。
+///
+/// 含社区常用站与用户提供的 2026 可用源(毫秒/轩辕/渡渡鸟等)。`1ms.run` 与
+/// `docker.1ms.run` 同属毫秒镜像,文档写法不一,两条都试。
 pub const DOCKER_HUB_MIRRORS: &[&str] = &[
     "docker.1ms.run",
-    "docker.m.daocloud.io",
+    "1ms.run",
+    "xuanyuan.cloud",
     "docker.xuanyuan.me",
+    "docker.aityp.com",
+    "docker.m.daocloud.io",
+    "dockerproxy.net",
 ];
 
 /// 一条端口映射:宿主机端口 → 容器端口。
@@ -176,11 +208,15 @@ impl PortMapping {
     }
 }
 
-/// 一键部署 NapCat / SnowLuma 容器的输入参数。
-///
-/// 前端填好端口(给默认值即可)和容器名提交,后端据此渲染 compose.yml 并起容器。
-/// 凭据(WebUI token / VNC 密码)不在这里——由后端部署时随机生成,避免前端硬编码
-/// 或明文回传。
+/// 组件页「拉镜像」请求。只选框架口味;不创建容器,端口与容器名由 Bot 启动时决定。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct DockerPullSpec {
+    pub flavor: DockerFlavor,
+}
+
+/// Bot 启动 / compose 渲染用的完整部署参数(容器名、端口、可选 QQ)。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -266,27 +302,34 @@ pub enum DockerSpecError {
     NoPorts,
 }
 
-/// 部署完成后回读的结果,给前端展示"去哪登录 + 凭据是什么"。
-///
-/// webui_url / novnc_url 是拼好的可点链接(已带宿主机 ip / 端口)。token / vnc
-/// 密码是后端生成的明文,只在这一次部署响应里返回给前端展示一次,不落
-/// servers.json。
+/// 组件页「拉镜像」完成后的回读结果。不创建容器;Bot 启动时再按配置起 `ncbot-<qq>`。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub struct DeployedContainer {
-    /// 容器名。
-    pub name: String,
+pub struct DockerImageReady {
     /// 部署口味。
     pub flavor: DockerFlavor,
-    /// WebUI 完整地址(NapCat: http://host:6099/webui;SnowLuma: http://host:5099/)。
-    pub webui_url: String,
-    /// noVNC 地址(仅 SnowLuma 有;NapCat 为 None)。
+    /// 已就绪的镜像引用(与 compose 使用的官方名一致,如 mlikiowa/napcat-docker:latest)。
+    pub image: String,
+}
+
+/// 历史 IPC 名保留别名,语义同 [`DockerImageReady`]。
+pub type DeployedContainer = DockerImageReady;
+
+/// `docker pull` 单层进度快照,随 StepProgress 推到前端任务队列。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct DockerPullLayerSnapshot {
+    /// 层 id 短码(与 docker 输出一致,通常 12 位 hex)。
+    pub id: String,
+    /// 阶段文案:等待 / 下载中 / 校验 / 解压中 / 完成 等。
+    pub phase: String,
+    /// 下载进度后缀,如 `[====>    ] 12.5MB/50MB`;无则 None。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub novnc_url: Option<String>,
-    /// WebUI 登录凭据(NapCat 是 token,SnowLuma 是首启随机密码)。拿不到时 None。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub webui_secret: Option<String>,
+    pub detail: Option<String>,
+    /// 该层是否已计入整体 completed 计数。
+    pub done: bool,
 }
 
 /// 容器生命周期操作。
