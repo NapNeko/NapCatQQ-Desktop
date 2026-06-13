@@ -160,11 +160,7 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
 
                         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                             {selected ? (
-                                <TaskDetailPanel
-                                    item={selected}
-                                    logPanelEnabled
-                                    logPanelFastPoll
-                                />
+                                <TaskDetailPanel item={selected} />
                             ) : (
                                 <div className="flex flex-1 items-center justify-center p-8 text-[13px] text-text-secondary">
                                     从左侧选择一条任务查看详情

@@ -1,6 +1,6 @@
-// 任务详情：状态摘要 + 进度 + 日志工作台（步骤 / Desktop）。
+// 任务详情：状态摘要 + 进度 + 步骤日志。
 
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import { cn } from '../../shared/utils/cn';
 import { Badge } from '../../shared/ui';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
@@ -14,15 +14,10 @@ import {
     statusTone,
 } from '../../core/domain/task-queue/display';
 import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
-import { TaskLogPanel } from './TaskLogPanel';
 
 export interface TaskDetailPanelProps {
     item: TaskQueueItem;
-    logPanelEnabled?: boolean;
-    logPanelFastPoll?: boolean;
 }
-
-type LogTab = 'steps' | 'desktop';
 
 const LOG_SURFACE =
     'bg-[color-mix(in_srgb,var(--surface-canvas)_76%,var(--surface-inset)_24%)]';
@@ -64,21 +59,10 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
     );
 }
 
-export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
-    item,
-    logPanelEnabled = false,
-    logPanelFastPoll = false,
-}) => {
-    const [logTab, setLogTab] = useState<LogTab>('steps');
+export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     const progress = item.progress;
     const failure = failureHint(item);
     const endedAt = getTaskEndedAt(progress);
-
-    const logStartedAt = useMemo(() => {
-        if (item.startedAt > 0) return item.startedAt;
-        if (progress?.logs[0]?.timestamp_ms) return progress.logs[0].timestamp_ms;
-        return Date.now() - 60_000;
-    }, [item.startedAt, progress?.logs]);
 
     return (
         <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -131,58 +115,21 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
-                <div className="flex shrink-0 border-b border-border-subtle/60 pb-2">
-                    <div
-                        className="inline-flex gap-0.5 rounded-md bg-inset p-0.5"
-                        role="tablist"
-                        aria-label="日志视图"
-                    >
-                        {(
-                            [
-                                { id: 'steps' as const, label: '步骤日志' },
-                                { id: 'desktop' as const, label: 'Desktop 日志' },
-                            ] as const
-                        ).map((t) => (
-                            <button
-                                key={t.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={logTab === t.id}
-                                onClick={() => setLogTab(t.id)}
-                                className={cn(
-                                    'rounded-sm px-2.5 py-1 text-[12px] font-medium transition-colors',
-                                    logTab === t.id
-                                        ? 'bg-elevated text-text shadow-sm ring-1 ring-border-subtle'
-                                        : 'text-text-tertiary hover:bg-elevated/35 hover:text-text',
-                                )}
-                            >
-                                {t.label}
-                            </button>
-                        ))}
-                    </div>
+                <div className="flex shrink-0 pb-2">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
+                        步骤日志
+                    </span>
                 </div>
 
                 <div
                     className={cn(
-                        'mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50',
+                        'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50',
                         LOG_SURFACE,
                     )}
-                    role="tabpanel"
                 >
-                    {logTab === 'steps' ? (
-                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                            <StepLogBody item={item} />
-                        </div>
-                    ) : (
-                        <div className="flex min-h-0 flex-1 flex-col p-1">
-                            <TaskLogPanel
-                                startedAt={logStartedAt}
-                                enabled={logPanelEnabled}
-                                fastPoll={logPanelFastPoll}
-                                fillHeight
-                            />
-                        </div>
-                    )}
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <StepLogBody item={item} />
+                    </div>
                 </div>
             </div>
         </div>
