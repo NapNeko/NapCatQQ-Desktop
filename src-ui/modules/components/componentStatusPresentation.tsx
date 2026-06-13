@@ -27,7 +27,7 @@ export function hostComponentStatusBadge(
             if (status.reason === '正在探测') {
                 return { tone: 'warning', label: '探测中' };
             }
-            return { tone: 'warning', label: '需关注' };
+            return { tone: 'danger', label: '探测失败' };
     }
 }
 

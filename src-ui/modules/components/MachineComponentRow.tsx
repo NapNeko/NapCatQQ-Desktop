@@ -184,9 +184,7 @@ const StatusMeta: React.FC<{
                 return <p className="truncate text-xs text-text-tertiary">正在探测安装状态…</p>;
             }
             return (
-                <p title={status.reason} className="truncate text-xs text-warning">
-                    {status.reason}
-                </p>
+                <p className="truncate text-xs text-text-tertiary">探测未成功，详见顶部提示</p>
             );
         }
     }

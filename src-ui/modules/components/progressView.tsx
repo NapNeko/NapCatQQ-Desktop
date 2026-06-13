@@ -36,7 +36,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
                     aria-hidden
                     className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${isCancelled ? 'bg-warning' : 'bg-danger'}`}
                 />
-                <span className={`min-w-0 truncate text-[12px] ${isCancelled ? 'text-warning' : 'text-danger'}`}>
+                <span className={`min-w-0 truncate text-[12px] text-text-tertiary`}>
                     {isCancelled ? '已取消' : '失败 · 详见顶部提示'}
                 </span>
             </>,
