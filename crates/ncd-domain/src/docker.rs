@@ -162,29 +162,35 @@ impl DockerFlavor {
         }
     }
 
+    /// SnowLuma 镜像在 Hub 上的压缩体积约值（MB），用于任务提示；与 Hub tags 页一致。
+    pub const SNOWLUMA_COMPRESSED_MB_APPROX: u32 = 933;
+
     /// 拉镜像时按优先级尝试的镜像引用列表。
     ///
-    /// 安装 Docker 时会在远端写入 `registry-mirrors`（见 install 流程），因此优先
-    /// [`Self::default_image`] 让 daemon 走已配置的加速；仍失败再逐个尝试显式前缀
-    /// 的国内反代（[`DOCKER_HUB_MIRRORS`]）。SnowLuma 另含 GHCR 官方源与加速前缀
-    ///（Hub 500 / 镜像站不支持第三方命名空间时常见）。
+    /// Hub 官方名优先（走 daemon registry-mirrors）；SnowLuma 在 Hub 500 时尽早试
+    /// `docker.1ms.run`（用户实测可拉满 ~933MB），再 GHCR，其余 Hub 反代；不试 GHCR
+    /// 加速前缀（not found/403 居多）。
     pub fn pull_candidates(self) -> Vec<String> {
         let official = self.default_image();
         let mut refs = vec![official.to_string()];
         match self {
-            Self::SnowLuma => {
-                refs.push("ghcr.io/snowluma/snowluma:latest".to_string());
-                for prefix in GHCR_MIRROR_PREFIXES {
-                    refs.push(format!("{prefix}/snowluma/snowluma:latest"));
-                }
+            Self::NapCat => {
+                refs.extend(
+                    DOCKER_HUB_MIRRORS
+                        .iter()
+                        .map(|m| format!("{m}/{official}")),
+                );
             }
-            Self::NapCat => {}
+            Self::SnowLuma => {
+                refs.push(format!("docker.1ms.run/{official}"));
+                refs.push("ghcr.io/snowluma/snowluma:latest".to_string());
+                refs.extend(
+                    DOCKER_HUB_MIRRORS[1..]
+                        .iter()
+                        .map(|m| format!("{m}/{official}")),
+                );
+            }
         }
-        refs.extend(
-            DOCKER_HUB_MIRRORS
-                .iter()
-                .map(|m| format!("{m}/{official}")),
-        );
         refs
     }
 }
@@ -501,19 +507,18 @@ mod tests {
     }
 
     #[test]
-    fn snowluma_pull_candidates_include_ghcr_before_hub_mirrors() {
+    fn snowluma_pull_candidates_hub_mirrors_before_ghcr() {
         let cands = DockerFlavor::SnowLuma.pull_candidates();
         assert_eq!(cands[0], "motricseven7/snowluma:latest");
-        assert_eq!(cands[1], "ghcr.io/snowluma/snowluma:latest");
-        let ghcr_end = 2 + GHCR_MIRROR_PREFIXES.len();
-        assert_eq!(cands[2], "ghcr.1ms.run/snowluma/snowluma:latest");
         assert_eq!(
-            cands[ghcr_end],
-            format!("docker.1ms.run/motricseven7/snowluma:latest")
+            cands[1],
+            "docker.1ms.run/motricseven7/snowluma:latest"
         );
+        assert_eq!(cands[2], "ghcr.io/snowluma/snowluma:latest");
+        assert_eq!(cands[3], "1ms.run/motricseven7/snowluma:latest");
         assert_eq!(
             cands.len(),
-            1 + 1 + GHCR_MIRROR_PREFIXES.len() + DOCKER_HUB_MIRRORS.len()
+            1 + 1 + 1 + (DOCKER_HUB_MIRRORS.len() - 1)
         );
     }
 

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use ncd_domain::{ContainerInfo, ContainerState, DockerPullLayerSnapshot, DockerStatus, ImageInfo};
 use ncd_host::{Host, HostCommand, HostError, StreamSource};
-use tracing::warn;
+use tracing::{info, warn};
 
 /// DockerCli 操作错误。
 #[derive(Debug, thiserror::Error)]
@@ -414,11 +414,17 @@ impl<'h> DockerCli<'h> {
             let on_line = new_line_cb(idx, image);
             match self.pull_streaming(image, on_line).await {
                 Ok(()) => {
-                    // 走了镜像站前缀就 retag 回官方名。retag 失败不致命:大不了
-                    // compose 用原前缀名拉不到再走它自己的兜底,这里只尽力对齐缓存。
                     if image != official_image {
                         let _ = self.retag(image, official_image).await;
                     }
+                    info!(
+                        target: "ncd_deploy::docker",
+                        index = idx,
+                        total = candidates.len(),
+                        pulled = %image,
+                        official = %official_image,
+                        "docker pull 成功"
+                    );
                     return Ok(image.clone());
                 }
                 Err(e) => {
