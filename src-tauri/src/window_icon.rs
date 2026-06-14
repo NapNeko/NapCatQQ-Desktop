@@ -29,20 +29,25 @@ fn load_png(name: &str, app: &AppHandle) -> Option<Image<'static>> {
 
 fn embed(name: &str) -> Option<Image<'static>> {
     let bytes: &[u8] = match name {
-        "32x32.png" => include_bytes!("../icons/32x32.png").as_ref(),
+        "256x256.png" => include_bytes!("../icons/256x256.png").as_ref(),
+        "128x128.png" => include_bytes!("../icons/128x128.png").as_ref(),
         "64x64.png" => include_bytes!("../icons/64x64.png").as_ref(),
+        "32x32.png" => include_bytes!("../icons/32x32.png").as_ref(),
         _ => return None,
     };
     Image::from_bytes(bytes).ok().map(|i| i.to_owned())
 }
 
-/// 供主窗口与轻量模式重建窗口使用；优先 32 逻辑像素，兼顾高 DPI。
+/// 供主窗口与轻量模式重建窗口使用；优先高分辨率图标，避免高 DPI 显示器模糊。
 pub fn main_window_icon(app: &AppHandle) -> Result<Image<'static>, String> {
-    load_png("32x32.png", app)
-        .or_else(|| load_png("64x64.png", app))
+    load_png("256x256.png", app)
         .or_else(|| load_png("128x128.png", app))
-        .or_else(|| embed("32x32.png"))
+        .or_else(|| load_png("64x64.png", app))
+        .or_else(|| load_png("32x32.png", app))
+        .or_else(|| embed("256x256.png"))
+        .or_else(|| embed("128x128.png"))
         .or_else(|| embed("64x64.png"))
+        .or_else(|| embed("32x32.png"))
         .ok_or_else(|| "窗口图标缺失：请执行 python script/generate_app_icons.py".to_string())
 }
 

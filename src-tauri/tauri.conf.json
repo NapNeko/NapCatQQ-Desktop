@@ -35,6 +35,6 @@
   },
   "bundle": {
     "icon": ["icons/icon.ico"],
-    "resources": ["icons/tray/*"]
+    "resources": ["icons/tray/*", "icons/*.png"]
   }
 }
