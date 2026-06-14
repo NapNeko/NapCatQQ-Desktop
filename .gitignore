@@ -36,6 +36,8 @@ src-tauri/target/
 src-tauri/gen/
 **/*.rs.bk
 *.rlib
+# build.rs 生成的编译期常量（模板 proxy_constants.template.rs 入库）
+crates/ncd-network/src/proxy_constants.rs
 
 ### Node / 前端 ###
 node_modules/

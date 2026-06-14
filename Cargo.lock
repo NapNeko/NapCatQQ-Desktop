@@ -2968,6 +2968,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "hex",
+ "hmac",
  "reqwest 0.12.28",
  "serde",
  "sha2",

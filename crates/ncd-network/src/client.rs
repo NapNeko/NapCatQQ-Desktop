@@ -7,6 +7,10 @@
 //! - `pool_idle_timeout(60s)`：连接池保活 1 分钟，多镜像 race 后续请求免握手
 //! - `gzip(true)`：API 端点（GitHub releases）默认压缩
 //! - `rustls-tls`：不依赖系统 OpenSSL，Tauri 包体可控
+//! - **系统代理默认开启**：reqwest `default-features = false` 下 `Client::builder()`
+//!   仍会读 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 环境变量（仅显式 `.no_proxy()`
+//!   才禁用）。国内用户设 `HTTPS_PROXY=http://127.0.0.1:7890` 即可让 GitHub API
+//!   请求走代理。注意：Windows 系统级代理（IE/注册表）reqwest 不读，只读环境变量。
 //!
 //! 调用方：除 WebUI 客户端（127.0.0.1，不复用此 client）外，所有外网下载 /
 //! GitHub API 调用都应走本 client，避免每次构造新 client 浪费连接池。

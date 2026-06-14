@@ -9,8 +9,9 @@
 //!
 //! 不做的事：
 //! - WebUI 客户端（127.0.0.1，不需要 mirror / race / 续传）
-//! - GitHub API 中转代理 / HMAC 签名（v2 再做）
 //! - 解压 / 校验 SHA256（解压在 ncd-host，校验在 caller）
+//!
+//! GitHub API 中转代理 / HMAC 签名：见 [`proxy`] 模块（迁移自 legacy Python）。
 
 pub mod chunked;
 pub mod client;
@@ -18,6 +19,8 @@ pub mod download;
 pub mod error;
 pub mod mirror;
 pub mod progress;
+pub mod proxy;
+pub mod proxy_constants;
 pub mod range;
 pub mod race;
 pub mod retry;
@@ -27,6 +30,9 @@ pub use chunked::{download_smart, ChunkedConfig, CHUNKED_THRESHOLD, DEFAULT_CHUN
 pub use client::shared_client;
 pub use download::{download_with_resume, AggregatedProgress, DownloadConfig};
 pub use error::NetworkError;
+pub use proxy::{
+    is_proxy_configured, proxy_release_url, proxy_signer, ProxySigner, ReleaseAlias,
+};
 pub use retry::{is_retryable, retry_with_backoff, RetryPolicy};
 pub use mirror::{build_mirror_urls, DEFAULT_MIRROR_PREFIXES};
 pub use progress::{DownloadProgressSink, DownloadStage, NoopProgressSink, ProgressUpdate};

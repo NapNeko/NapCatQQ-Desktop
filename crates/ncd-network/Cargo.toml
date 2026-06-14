@@ -3,6 +3,7 @@ name = "ncd-network"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+build = "build.rs"
 
 [lib]
 path = "src/lib.rs"
@@ -19,6 +20,7 @@ futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls", "gzip"] }
 sha2 = "0.10"
 hex = "0.4"
+hmac = "0.12"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
