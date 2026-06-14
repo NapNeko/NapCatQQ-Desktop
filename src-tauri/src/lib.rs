@@ -439,6 +439,7 @@ pub fn run() {
             commands::tray::count_local_active_bots,
             commands::exit::prepare_exit_desktop,
             commands::exit::request_exit_app,
+            commands::window::show_main_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

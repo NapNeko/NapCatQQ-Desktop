@@ -9,6 +9,7 @@ import { useMotion } from '../hooks/preferences/useMotion';
 import { hydrateAppUiPreferencesFromDisk } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { syncRootChromeBackground } from '../core/design/surfaceCanvas';
+import { invoke } from '@tauri-apps/api/core';
 
 export const AppBootGate: React.FC = () => {
     const [prefsReady, setPrefsReady] = useState(false);
@@ -38,6 +39,11 @@ export const AppBootGate: React.FC = () => {
             setConfetti(true);
         }
         document.getElementById('root')?.removeAttribute('aria-busy');
+
+        // 显示主窗口（避免透明窗口启动闪烁）
+        void invoke('show_main_window').catch((err) => {
+            console.error('[AppBootGate] 显示主窗口失败:', err);
+        });
     }, [enabled, level]);
 
     if (!prefsReady) {

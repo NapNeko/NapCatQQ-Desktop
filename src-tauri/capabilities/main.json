@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "core:window:default",
+    "core:window:allow-show",
     "core:window:allow-minimize",
     "core:window:allow-unminimize",
     "core:window:allow-maximize",
