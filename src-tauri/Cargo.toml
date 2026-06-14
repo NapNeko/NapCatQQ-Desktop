@@ -15,11 +15,13 @@ ncd-domain = { path = "../crates/ncd-domain" }
 dirs = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tokio = { version = "1", features = ["fs", "process", "sync", "io-util", "rt", "macros", "time", "net"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tauri-plugin-opener = "2.5.4"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = { version = "2", default-features = false }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 sysinfo = "0.31"
 ts-rs = { version = "12", features = ["serde-compat"] }
@@ -28,8 +30,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = "0.4"
 base64 = "0.22"
+urlencoding = "2"
 netstat2 = "0.9"
 async-trait = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_UI_Shell"] }
+tauri-winrt-notification = "0.7"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

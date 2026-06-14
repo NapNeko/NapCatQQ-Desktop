@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ncd_runtime::{
-    BootstrapSnapshot, BotManager, BroadcastEventBus, DispatchRenderer, EventBus, EventFilter,
-    LocalBotConfigRepo, LocalConfigStore, NoopOfflineNotifier, ReqwestNapCatWebUiClient,
+    BootstrapSnapshot, BotManager, BroadcastEventBus, DesktopNotifySettings, DispatchRenderer,
+    EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore, ReqwestNapCatWebUiClient,
     SecretStoreImpl,
 };
 use tauri::Emitter;
@@ -17,6 +17,14 @@ pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod commands;
 pub mod desktop_log;
+pub mod desktop_notify;
+pub mod lightweight;
+pub mod lightweight_scheduler;
+pub mod single_instance;
+pub mod tray_summary;
+pub mod tray_icon;
+pub mod tray_menu;
+pub mod windows_toast;
 pub mod desktop_log_format;
 pub mod runtime;
 
@@ -41,6 +49,9 @@ pub struct AppState {
     /// 5 个并发组件 detect 只探一次，不再各跑一遍 `echo $HOME` + layout 检查。
     /// run_component_action 会清掉对应条目，因为安装可能改变布局。
     pub(crate) host_probe_cache: Arc<Mutex<HashMap<String, commands::components::RemoteHostProbe>>>,
+    pub(crate) desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
+    pub(crate) app_settings: Arc<RwLock<ncd_domain::AppSettings>>,
+    pub(crate) lightweight_scheduler: Arc<lightweight_scheduler::LightweightScheduler>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -106,11 +117,16 @@ pub fn run() {
         ReqwestNapCatWebUiClient::new()
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
     );
-    let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = Arc::new(NoopOfflineNotifier);
-    // 轮询设置启动期从磁盘加载（app-settings.json），不再每次都是 default：
-    // 用户在设置页改的 Bot 登录检查间隔重启后仍生效。文件缺失回落 default。
     let app_settings = commands::app_settings::read_app_settings(&data_root);
+    let app_settings_shared = Arc::new(RwLock::new(app_settings.clone()));
+    let lightweight_scheduler = Arc::new(lightweight_scheduler::LightweightScheduler::new(
+        Arc::clone(&app_settings_shared),
+    ));
+    let startup_tray_only = app_settings.ui_mode_on_startup == "tray_only";
     let poller_settings = Arc::new(RwLock::new(app_settings.poller.clone()));
+    let desktop_notify = Arc::new(RwLock::new(app_settings.desktop_notify_flags()));
+    let tauri_notifier = desktop_notify::TauriOfflineNotifier::new();
+    let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = tauri_notifier.clone();
     // ServerManager 提前构造,既给下面 AppState 用,也给 HostResolver 用(让
     // BotManager 能按 runtime_target 把 bot 启到本机 / 远端)。
     let server_manager = Arc::new(ncd_runtime::ServerManager::new(
@@ -133,6 +149,7 @@ pub fn run() {
             webui_client,
             offline_notifier,
             poller_settings,
+            Arc::clone(&desktop_notify),
         )
         .with_host_resolver(host_resolver)
         .with_docker_webui_secret_store(Arc::clone(&secrets)),
@@ -173,12 +190,18 @@ pub fn run() {
     let bot_manager_login_listener = Arc::clone(&bot_manager);
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(single_instance::plugin());
+    }
+    builder
         // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI）
         // webview 自身不支持 target=_blank。
         .plugin(tauri_plugin_opener::init())
         // 配置导入导出用原生文件 / 目录选择对话框（webview 无法拿真实文件系统路径）。
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState {
             data_root,
             snapshot,
@@ -189,8 +212,28 @@ pub fn run() {
             package_lock: ncd_runtime::package_lock::PackageManagerLock::new(),
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
             host_probe_cache: Arc::new(Mutex::new(HashMap::new())),
+            desktop_notify: Arc::clone(&desktop_notify),
+            app_settings: Arc::clone(&app_settings_shared),
+            lightweight_scheduler: Arc::clone(&lightweight_scheduler),
         })
         .setup(move |app| {
+            if startup_tray_only {
+                if let Err(err) = lightweight::enter_lightweight_mode(app.handle()) {
+                    desktop_log::write_session_line(
+                        "WARN",
+                        "ncd::lightweight",
+                        &format!("startup tray_only failed: {err}"),
+                    );
+                }
+            }
+
+            windows_toast::prepare_windows_toast_identity(app.handle());
+            tauri_notifier.bind_app(app.handle().clone());
+            desktop_notify::spawn_desktop_notify_listener(
+                app.handle().clone(),
+                event_bus.clone(),
+                Arc::clone(&desktop_notify),
+            );
             let handle = app.handle().clone();
             let mut subscription = event_bus.subscribe(EventFilter::all());
             tauri::async_runtime::spawn(async move {
@@ -295,28 +338,22 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(move |window, event| {
+        .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let app = window.app_handle().clone();
-                let close_action = app_settings.close_action.clone();
                 tauri::async_runtime::spawn(async move {
+                    let state = app.state::<AppState>();
+                    let close_action = state.app_settings.read().await.close_action.clone();
                     if close_action == "tray" {
-                        if let Err(err) = commands::tray::window_hide_to_tray(app) {
+                        if let Err(err) =
+                            commands::tray::hide_main_window_to_tray(app.clone()).await
+                        {
                             eprintln!("[window] hide to tray failed: {err}");
                         }
                         return;
                     }
-                    let state = app.state::<AppState>();
-                    let result = state.bot_manager.shutdown_all().await;
-                    if !result.failed.is_empty() {
-                        eprintln!(
-                            "[bot_manager] shutdown_all: {} bot(s) failed to stop cleanly",
-                            result.failed.len()
-                        );
-                    }
-                    state.runtime.shutdown().await;
-                    app.exit(0);
+                    let _ = app.emit("desktop-request-close", ());
                 });
             }
         })
@@ -391,8 +428,16 @@ pub fn run() {
             commands::tray::window_show,
             commands::tray::window_hide_to_tray,
             commands::tray::count_local_active_bots,
-            commands::tray::request_exit_app,
+            commands::exit::prepare_exit_desktop,
+            commands::exit::request_exit_app,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                if lightweight::should_prevent_exit(app) {
+                    api.prevent_exit();
+                }
+            }
+        });
 }

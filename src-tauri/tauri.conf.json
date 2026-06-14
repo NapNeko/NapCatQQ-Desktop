@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "NapCatQQ Desktop",
         "width": 1280,
         "height": 800,
@@ -32,6 +33,7 @@
     ]
   },
   "bundle": {
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "resources": ["icons/tray/*"]
   }
 }
