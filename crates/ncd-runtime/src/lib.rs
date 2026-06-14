@@ -27,6 +27,7 @@ pub mod remote_native_launch;
 pub mod remote_native_napcat_session;
 pub mod remote_snowluma;
 pub mod remote_snowluma_layout;
+pub mod remote_snowluma_log;
 pub mod remote_snowluma_orchestrator;
 pub mod remote_snowluma_stack;
 pub mod remote_snowluma_tunnel;

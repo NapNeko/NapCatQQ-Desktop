@@ -12,5 +12,12 @@ export const mockBackendSettings: BackendSettings = {
     taskQueueCleanup: { ...DEFAULT_TASK_QUEUE_CLEANUP },
     githubPat: '',
     closeAction: 'close',
+    afterCloseUiBehavior: 'delayed_lightweight',
+    enterLightweightDelaySecs: 300,
+    uiModeOnStartup: 'normal',
+    minimizeToTrayCountsAsHidden: true,
+    notifyOnOffline: true,
+    notifyOnBotCrashed: true,
+    notifyOnLoginKicked: true,
     uiPreferences: defaultAppUiPreferencesFromPrefs(preferencesStore.get()),
 };

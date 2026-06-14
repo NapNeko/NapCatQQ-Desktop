@@ -273,6 +273,7 @@ impl SnowLumaDaemon {
                 DaemonState::Starting,
                 1,
                 None,
+                Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
             ));
 
         // === 2. 渲染全局配置（读 app-config.json → runtime.json + webui.json）===
@@ -407,6 +408,7 @@ impl SnowLumaDaemon {
                 DaemonState::Ready,
                 ref_snapshot,
                 None,
+                Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
             ));
         self.ready_notify.notify_waiters();
 
@@ -529,6 +531,7 @@ impl SnowLumaDaemon {
                 DaemonState::Stopped,
                 0,
                 Some(reason),
+                Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
             ));
         self.ready_notify.notify_waiters();
         err
@@ -589,6 +592,7 @@ impl SnowLumaDaemon {
                 DaemonState::Stopped,
                 0,
                 None,
+                Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
             ));
         self.ready_notify.notify_waiters();
     }
@@ -827,6 +831,7 @@ async fn watch_exit(daemon: Weak<SnowLumaDaemon>) {
             state_snapshot,
             ref_snapshot,
             reason_snapshot,
+            Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
         ));
     daemon.ready_notify.notify_waiters();
 }
@@ -1266,6 +1271,7 @@ mod tests {
                 state,
                 ref_count,
                 reason,
+                ..
             } => {
                 assert_eq!(state, DaemonState::Stopped);
                 assert_eq!(ref_count, 0);

@@ -216,7 +216,7 @@ fn decode_log_line(raw: &[u8]) -> String {
 
 /// 移除字符串中的 ANSI 转义序列（CSI、OSC、单字符 ESC 命令）。
 /// 实现走 byte 级状态机，不引入 regex 依赖。
-fn strip_ansi_escapes(input: &str) -> String {
+pub fn strip_ansi_escapes(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -270,7 +270,16 @@ fn strip_ansi_escapes(input: &str) -> String {
 }
 
 /// 从一行 NapCat stdout 解析出 WebUI 登录入口的 (port, token)。
-fn parse_napcat_webui_line(line: &str) -> Option<(u16, String)> {
+/// 远端 nohup 日志可能带 ANSI、或仅含 `/webui?token=` 片段（对齐 legacy launcher grep）。
+pub fn parse_napcat_webui_line(line: &str) -> Option<(u16, String)> {
+    let cleaned = strip_ansi_escapes(line);
+    if let Some(p) = parse_napcat_webui_line_strict(&cleaned) {
+        return Some(p);
+    }
+    parse_napcat_webui_line_loose(&cleaned)
+}
+
+fn parse_napcat_webui_line_strict(line: &str) -> Option<(u16, String)> {
     let needle = "[info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:";
     let idx = line.find(needle)?;
     let rest = &line[idx + needle.len()..];
@@ -279,6 +288,25 @@ fn parse_napcat_webui_line(line: &str) -> Option<(u16, String)> {
     let token: String = after_port
         .chars()
         .take_while(|c| !c.is_whitespace())
+        .collect();
+    if token.is_empty() {
+        return None;
+    }
+    Some((port, token))
+}
+
+/// 日志行未带完整 `[info] [NapCat]` 前缀时，按 `/webui?token=` 宽松解析（远端文件 tail 常见）。
+fn parse_napcat_webui_line_loose(line: &str) -> Option<(u16, String)> {
+    let marker = "/webui?token=";
+    let idx = line.find(marker)?;
+    let before = &line[..idx];
+    let port: u16 = before
+        .rsplit_once(':')
+        .and_then(|(_, p)| p.trim().parse().ok())?;
+    let after = &line[idx + marker.len()..];
+    let token: String = after
+        .chars()
+        .take_while(|c| !c.is_whitespace() && *c != '"' && *c != '\'' && *c != '&')
         .collect();
     if token.is_empty() {
         return None;
@@ -1108,6 +1136,14 @@ mod tests {
     fn strip_ansi_escapes_removes_color_csi_sequences() {
         let input = "\x1b[32m[info]\x1b[0m hello";
         assert_eq!(strip_ansi_escapes(input), "[info] hello");
+    }
+
+    #[test]
+    fn parse_napcat_webui_line_loose_from_remote_nohup_log() {
+        let line = "something http://127.0.0.1:6099/webui?token=hexdeadbeef";
+        let parsed = parse_napcat_webui_line(line).expect("parse");
+        assert_eq!(parsed.0, 6099);
+        assert_eq!(parsed.1, "hexdeadbeef");
     }
 
     #[test]

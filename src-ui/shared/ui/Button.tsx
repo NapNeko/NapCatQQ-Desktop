@@ -74,6 +74,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             m.enabled,
             m.level,
             m.speed,
+            flat,
+            disabled,
             m.bindHover,
             m.bindPress,
             m.preset.feel.hoverScale,

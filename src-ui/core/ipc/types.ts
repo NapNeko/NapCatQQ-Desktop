@@ -243,6 +243,8 @@ type DomainEventBody =
         state: DaemonState;
         ref_count: number;
         reason?: string | null;
+        /** `local` = 本机 daemon；远端为 SSH server_id */
+        server_id?: string | null;
     }
     | {
         kind: 'snowluma_bot_injected';

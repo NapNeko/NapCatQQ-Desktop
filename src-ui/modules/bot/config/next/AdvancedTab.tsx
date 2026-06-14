@@ -97,7 +97,7 @@ export function AdvancedTab({
                 {!isSnowLuma && (
                     <Switch
                         label="掉线时下发桌面通知"
-                        hint="检测到 Bot 离线时弹一条系统通知（仅 NapCat 登录轮询链路有效）"
+                        hint="仅 NapCat 登录轮询检测到离线时弹 Toast；与设置里「异常退出 / 被踢下线」无关"
                         checked={data.offlineNotice}
                         onCheckedChange={(v) => onChange({ offlineNotice: v })}
                     />

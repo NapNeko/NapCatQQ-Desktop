@@ -179,7 +179,7 @@ pub async fn open_snowluma_webui(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_domain::DeploymentType;
+    use ncd_domain::{DeploymentType, RuntimeTarget};
     use ncd_runtime::{BotId, SnowLumaAppConfig};
 
     let bid = BotId::new(bot_id.clone());
@@ -194,6 +194,25 @@ pub async fn open_snowluma_webui(
             return Err(
                 "SnowLuma Docker 隧道未就绪，请确认 Bot 已启动且运行宿主为远端 SSH".into(),
             );
+        }
+        if cfg.bot.backend_type == ncd_domain::BackendType::SnowLuma
+            && cfg.bot.deployment_type == DeploymentType::Native
+        {
+            if let RuntimeTarget::Server(server_id) = &cfg.bot.runtime_target {
+                if let Some(ep) = state
+                    .bot_manager
+                    .snowluma_native_endpoints_for_server(server_id)
+                    .await
+                {
+                    return Ok(SnowLumaWebuiEndpoint {
+                        url: format!("http://127.0.0.1:{}/", ep.webui_local_port),
+                        password: ep.webui_password,
+                    });
+                }
+                return Err(
+                    "SnowLuma 远端 Native 隧道未就绪，请确认 Bot 已启动或重开软件后 reconcile 成功".into(),
+                );
+            }
         }
     }
 
@@ -260,7 +279,7 @@ pub async fn open_snowluma_novnc(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_domain::DeploymentType;
+    use ncd_domain::{DeploymentType, RuntimeTarget};
     use ncd_runtime::BotId;
 
     let bid = BotId::new(bot_id);
@@ -269,31 +288,55 @@ pub async fn open_snowluma_novnc(
         .get_bot_config(&bid)
         .await
         .map_err(|e| e.to_string())?
-        .filter(|c| c.bot.deployment_type == DeploymentType::Docker)
-        .ok_or_else(|| "仅远端 SnowLuma Docker Bot 支持 noVNC 扫码".to_string())?;
+        .ok_or_else(|| "Bot 配置不存在".to_string())?;
 
     if cfg.bot.backend_type != ncd_domain::BackendType::SnowLuma {
         return Err("当前 Bot 不是 SnowLuma".into());
     }
 
-    let ep = state
-        .bot_manager
-        .snowluma_docker_endpoints(&bid)
-        .await
-        .ok_or_else(|| "noVNC 隧道未就绪，请确认 Bot 已启动".to_string())?;
+    if cfg.bot.deployment_type == DeploymentType::Docker {
+        let ep = state
+            .bot_manager
+            .snowluma_docker_endpoints(&bid)
+            .await
+            .ok_or_else(|| "noVNC 隧道未就绪，请确认 Bot 已启动".to_string())?;
 
-    let pwd_enc = urlencoding::encode(&ep.vnc_password);
-    let query = format!(
-        "autoconnect=1&resize=scale&password={pwd_enc}&view_only=0&reconnect=1&reconnect_delay=3000"
-    );
+        let pwd_enc = urlencoding::encode(&ep.vnc_password);
+        let query = format!(
+            "autoconnect=1&resize=scale&password={pwd_enc}&view_only=0&reconnect=1&reconnect_delay=3000"
+        );
 
-    Ok(SnowLumaWebuiEndpoint {
-        url: format!(
-            "http://127.0.0.1:{}/vnc.html?{query}",
-            ep.novnc_local_port
-        ),
-        password: ep.vnc_password,
-    })
+        return Ok(SnowLumaWebuiEndpoint {
+            url: format!(
+                "http://127.0.0.1:{}/vnc.html?{query}",
+                ep.novnc_local_port
+            ),
+            password: ep.vnc_password,
+        });
+    }
+
+    if cfg.bot.deployment_type == DeploymentType::Native {
+        if let RuntimeTarget::Server(server_id) = &cfg.bot.runtime_target {
+            let ep = state
+                .bot_manager
+                .snowluma_native_endpoints_for_server(server_id)
+                .await
+                .ok_or_else(|| "远端 Native noVNC 隧道未就绪".to_string())?;
+            let pwd_enc = urlencoding::encode(&ep.vnc_password);
+            let query = format!(
+                "autoconnect=1&resize=scale&password={pwd_enc}&view_only=0&reconnect=1&reconnect_delay=3000"
+            );
+            return Ok(SnowLumaWebuiEndpoint {
+                url: format!(
+                    "http://127.0.0.1:{}/vnc.html?{query}",
+                    ep.novnc_local_port
+                ),
+                password: ep.vnc_password,
+            });
+        }
+    }
+
+    Err("仅远端 SnowLuma（Docker 或 Native）支持 noVNC 扫码".to_string())
 }
 
 

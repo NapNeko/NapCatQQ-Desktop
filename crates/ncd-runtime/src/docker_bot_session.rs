@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use ncd_deploy::DockerDeployment;
 use ncd_deploy::docker::DockerCli;
 use ncd_domain::{BackendType, BotConfig, DeploymentType};
+use crate::kinds::RuntimeTarget;
 use ncd_deploy::{Deployment, NativeRuntimeEventSink};
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostError, StreamSource};
@@ -16,7 +17,6 @@ use tracing::warn;
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::ids::BotId;
-use crate::kinds::RuntimeTarget;
 use crate::native_deployment_adapter::EventBusSink;
 
 /// SnowLuma Docker：本机隧道上的 WebUI / noVNC 端口。
@@ -259,5 +259,12 @@ async fn open_loopback_tunnel(host: &dyn Host, remote_port: u16) -> Result<Tunne
 
 pub fn is_remote_docker_config(config: &BotConfig) -> bool {
     config.bot.deployment_type == DeploymentType::Docker
+        && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
+}
+
+/// 远端 SSH +「直接运行」+ NapCat（非 Docker、非本机 SnowLuma daemon）。
+pub fn is_remote_native_napcat_config(config: &BotConfig) -> bool {
+    config.bot.deployment_type == DeploymentType::Native
+        && config.bot.backend_type == BackendType::NapCat
         && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
 }

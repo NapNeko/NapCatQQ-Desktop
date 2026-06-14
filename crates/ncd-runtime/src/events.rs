@@ -155,6 +155,9 @@ pub enum DomainEvent {
         ref_count: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
+        /// `local` = 本机 node daemon；远端为 SSH `server_id`。级联崩溃只影响同作用域 Bot。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        server_id: Option<String>,
     },
     /// `/api/processes/:pid/load` 注入成功后发布（物理就绪）。
     /// 不等同于 QQ 已登录在线（业务就绪由 `SnowLumaLoginStateChanged` 表达）。
@@ -417,15 +420,20 @@ impl DomainEvent {
     // SnowLuma 系列 helper 构造器
     // ------------------------------------------------------------------
 
+    /// 本机 SnowLuma daemon 事件作用域（与远端 `server_id` 区分，避免级联误伤）。
+    pub const SNOWLUMA_DAEMON_SCOPE_LOCAL: &str = "local";
+
     pub fn snowluma_daemon_state_changed(
         state: DaemonState,
         ref_count: u32,
         reason: Option<String>,
+        server_id: Option<String>,
     ) -> Self {
         Self::SnowLumaDaemonStateChanged {
             state,
             ref_count,
             reason,
+            server_id,
         }
     }
 
@@ -794,7 +802,12 @@ mod tests {
             DomainEvent::napcat_login_invalidated("10001", NapCatLoginInvalidationReason::Kicked),
             // SnowLuma 系列 6 个 variant
             // ，与前端 event-stream.service.ts DOMAIN_EVENT_NAMES 一一对应。
-            DomainEvent::snowluma_daemon_state_changed(DaemonState::Ready, 1, None),
+            DomainEvent::snowluma_daemon_state_changed(
+                DaemonState::Ready,
+                1,
+                None,
+                Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
+            ),
             DomainEvent::snowluma_bot_injected("10001", 12345),
             DomainEvent::snowluma_uin_detected("10001", "100200"),
             DomainEvent::snowluma_login_state_changed("10001", SnowLumaLoginState::LoggedIn),
@@ -848,11 +861,13 @@ mod tests {
             DaemonState::Ready,
             1,
             None,
+            Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
         ));
         assert_round_trip(DomainEvent::snowluma_daemon_state_changed(
             DaemonState::Crashed,
             0,
             Some("node child exited unexpectedly".into()),
+            Some("srv-test".into()),
         ));
     }
 
@@ -899,7 +914,12 @@ mod tests {
     fn snowluma_event_name_literals_are_stable() {
         let cases: [(DomainEvent, &str); 6] = [
             (
-                DomainEvent::snowluma_daemon_state_changed(DaemonState::Ready, 1, None),
+                DomainEvent::snowluma_daemon_state_changed(
+                DaemonState::Ready,
+                1,
+                None,
+                Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
+            ),
                 "snowluma_daemon_state_changed",
             ),
             (

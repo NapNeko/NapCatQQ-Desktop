@@ -1,6 +1,6 @@
 // Bot 日志流 hook：开页拉一次历史快照 + 增量订阅。
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { botService } from '../../core/services/bot.service';
 import { useDomainEvents } from '../events/useDomainEvents';
 import {
@@ -13,6 +13,19 @@ import {
 
 export function useBotLogStream(botId: string) {
     const [logs, setLogs] = useState<LogEntry[]>([]);
+    const backendRef = useRef<'napcat' | 'snowluma' | null>(null);
+
+    useEffect(() => {
+        setLogs([]);
+        backendRef.current = null;
+        botService
+            .getConfig(botId)
+            .then((cfg) => {
+                if (!cfg) return;
+                backendRef.current = cfg.bot.backend_type;
+            })
+            .catch(() => {});
+    }, [botId]);
 
     // 1) 历史快照（开页一次）。
     useEffect(() => {
@@ -37,24 +50,25 @@ export function useBotLogStream(botId: string) {
     // 2) 增量事件。
     useDomainEvents((event) => {
         if (event.kind === 'bot_log_appended' && event.bot_id === botId) {
+            if (
+                backendRef.current === 'snowluma' &&
+                event.line.includes('[NapCat]')
+            ) {
+                return;
+            }
             const channel = normalizeChannel(event.channel);
             setLogs((prev) => appendLine(prev, event.line, channel));
             return;
         }
 
-        // SnowLuma daemon 是单例，每个 SL bot 的 LogPage 都接收同一份 stdout 行。
-        // 不按 bot_id 过滤，按 `[stderr]` 前缀分流到对应 channel。
         if (event.kind === 'snowluma_daemon_log') {
+            if (backendRef.current !== 'snowluma') {
+                return;
+            }
             setLogs((prev) => appendLine(prev, event.line, snowlumaLineChannel(event.line)));
             return;
         }
 
-        // bot 进程退出时清空前端日志。两个场景必须清：
-        //   1) 用户手动停止 → 紧接着切换 backend (NC ↔ SL) 再启动，旧后端的
-        //      行不应该跟新后端混排
-        //   2) bot crash 后用户原地重启
-        // 后端 spawn_exit_watcher 也会清内存 buffer，但前端 state 是独立的副本，
-        // 必须在事件流里同步清掉。tail_log 的历史快照已经在 useEffect 重新拉。
         if (event.kind === 'bot_process_exited' && event.bot_id === botId) {
             setLogs([]);
         }

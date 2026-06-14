@@ -1,6 +1,10 @@
 // 外观 Tab：主题、吉祥物、动画、窗口关闭行为。
 
 import type { CloseAction } from '../../../hooks/preferences/preferencesStore';
+import type {
+    AfterCloseUiBehavior,
+    UiModeOnStartup,
+} from '../../../core/services/settings.service';
 import { Select, Switch } from '../../../shared/ui';
 import type { SettingsDraft } from '../settings-draft';
 import {
@@ -96,7 +100,6 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
                 <FieldRow
                     label="点击关闭按钮"
                     description="最小化到托盘，或退出程序（有本机 Bot 运行时会拦截退出）"
-                    isLast
                 >
                     <Select
                         value={draft.closeAction}
@@ -107,6 +110,108 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
                             { value: 'close', label: '关闭程序' },
                             { value: 'tray', label: '最小化到托盘' },
                         ]}
+                    />
+                </FieldRow>
+
+                {draft.closeAction === 'tray' && (
+                    <>
+                        <FieldRow
+                            label="关窗后界面"
+                            description="最小化到托盘后，是否在一段时间不用后自动释放界面内存"
+                        >
+                            <Select
+                                value={draft.afterCloseUiBehavior}
+                                onValueChange={(v) =>
+                                    patchDraft({
+                                        afterCloseUiBehavior:
+                                            v as AfterCloseUiBehavior,
+                                    })
+                                }
+                                items={[
+                                    {
+                                        value: 'hide',
+                                        label: '保持隐藏（占内存）',
+                                    },
+                                    {
+                                        value: 'delayed_lightweight',
+                                        label: '一段时间不用后释放（推荐）',
+                                    },
+                                    {
+                                        value: 'immediate_lightweight',
+                                        label: '立即释放界面内存',
+                                    },
+                                ]}
+                            />
+                        </FieldRow>
+                        {draft.afterCloseUiBehavior ===
+                            'delayed_lightweight' && (
+                            <FieldRow
+                                label="释放前等待"
+                                description="主窗口不可见累计多久后释放 WebView"
+                            >
+                                <Select
+                                    value={String(
+                                        draft.enterLightweightDelaySecs,
+                                    )}
+                                    onValueChange={(v) =>
+                                        patchDraft({
+                                            enterLightweightDelaySecs: Number(
+                                                v,
+                                            ),
+                                        })
+                                    }
+                                    items={[
+                                        { value: '60', label: '1 分钟' },
+                                        { value: '180', label: '3 分钟' },
+                                        { value: '300', label: '5 分钟' },
+                                        { value: '900', label: '15 分钟' },
+                                        { value: '1800', label: '30 分钟' },
+                                    ]}
+                                />
+                            </FieldRow>
+                        )}
+                    </>
+                )}
+
+                <FieldRow
+                    label="启动时"
+                    description="仅托盘：无界面直接托管 Bot，需从托盘打开主界面"
+                >
+                    <Select
+                        value={draft.uiModeOnStartup}
+                        onValueChange={(v) =>
+                            patchDraft({
+                                uiModeOnStartup: v as UiModeOnStartup,
+                            })
+                        }
+                        items={[
+                            { value: 'normal', label: '显示主界面' },
+                            { value: 'tray_only', label: '仅托盘' },
+                        ]}
+                    />
+                </FieldRow>
+
+                <FieldRow
+                    label="Bot 异常退出时通知"
+                    description="进程非正常结束（全局，与 Bot 配置无关）"
+                >
+                    <Switch
+                        checked={draft.notifyOnBotCrashed}
+                        onCheckedChange={(v) =>
+                            patchDraft({ notifyOnBotCrashed: v })
+                        }
+                    />
+                </FieldRow>
+                <FieldRow
+                    label="被踢下线时通知"
+                    description="QQ 被踢或登录失效（全局）；「掉线」类通知请在各 Bot 高级里开启"
+                    isLast
+                >
+                    <Switch
+                        checked={draft.notifyOnLoginKicked}
+                        onCheckedChange={(v) =>
+                            patchDraft({ notifyOnLoginKicked: v })
+                        }
                     />
                 </FieldRow>
             </SettingsSection>

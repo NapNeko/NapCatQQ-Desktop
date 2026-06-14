@@ -11,4 +11,7 @@ pub mod native;
 
 pub use docker::{DockerDeployment, bot_docker_container_name};
 pub use external::ExternalDeployment;
-pub use native::{NativeDeployment, NativeLogSnapshot, NativeRuntimeEventSink, NullRuntimeEventSink};
+pub use native::{
+    NativeDeployment, NativeLogSnapshot, NativeRuntimeEventSink, NullRuntimeEventSink,
+    parse_napcat_webui_line, strip_ansi_escapes,
+};

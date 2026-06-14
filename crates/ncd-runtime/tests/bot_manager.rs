@@ -12,7 +12,7 @@ use ncd_runtime::{
     NoopOfflineNotifier, ReqwestNapCatWebUiClient, RuntimeLaunchPlan, RuntimeLaunchPlanError,
     RuntimeLaunchPlanner, SecretStore, SecretStoreImpl, SnowLumaDaemon, SnowLumaWebUiClient,
     SnowLumaWebUiClientFactory, SnowLumaWebUiError, StopMode, TailOpts, WebUiPollerSettings,
-    DeploymentType, HostResolver, LocalOnlyHostResolver, JsonTransaction,
+    DeploymentType, DesktopNotifySettings, HostResolver, LocalOnlyHostResolver, JsonTransaction,
 };
 use ncd_host::local::LocalWindowsHost;
 
@@ -315,6 +315,10 @@ fn default_poller_settings() -> Arc<tokio::sync::RwLock<WebUiPollerSettings>> {
     Arc::new(tokio::sync::RwLock::new(WebUiPollerSettings::default()))
 }
 
+fn default_desktop_notify() -> Arc<tokio::sync::RwLock<DesktopNotifySettings>> {
+    Arc::new(tokio::sync::RwLock::new(DesktopNotifySettings::default()))
+}
+
 fn make_manager(
     root: &std::path::Path,
 ) -> (
@@ -342,6 +346,7 @@ fn make_manager(
         default_webui_client(),
         default_offline_notifier(),
         default_poller_settings(),
+        default_desktop_notify(),
     );
     (store, repo, backend, manager)
 }
@@ -373,6 +378,7 @@ fn make_manager_with_planner(
         default_webui_client(),
         default_offline_notifier(),
         default_poller_settings(),
+        default_desktop_notify(),
     );
     (store, repo, backend, manager)
 }
@@ -1311,6 +1317,7 @@ async fn start_bot_publishes_state_change_event() {
         default_webui_client(),
         default_offline_notifier(),
         default_poller_settings(),
+        default_desktop_notify(),
     );
 
     manager
@@ -1326,6 +1333,138 @@ async fn start_bot_publishes_state_change_event() {
     // 验证事件属于正确的 bot
     assert_eq!(event1.bot_id().unwrap().as_str(), "10001");
     assert_eq!(event2.bot_id().unwrap().as_str(), "10001");
+}
+
+// ─── 桌面退出闸门（本机 active / exit_desktop）────────────────────────────────
+
+fn bot_config_remote_docker_server(qq_id: u64, name: &str) -> BotConfig {
+    let mut config = bot_config(qq_id, name);
+    config.bot.runtime_target = ncd_runtime::RuntimeTarget::server("srv-1");
+    config.bot.deployment_type = DeploymentType::Docker;
+    config
+}
+
+fn bot_config_remote_native_server(qq_id: u64, name: &str) -> BotConfig {
+    let mut config = bot_config(qq_id, name);
+    config.bot.runtime_target = ncd_runtime::RuntimeTarget::server("srv-1");
+    config.bot.deployment_type = DeploymentType::Native;
+    config
+}
+
+#[tokio::test]
+async fn upsert_remote_native_server_passes_runtime_matrix() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, _, manager) = make_manager_with_local_resolver(temp.path());
+    manager
+        .upsert_bot_config(bot_config_remote_native_server(10003, "remote-native"))
+        .await
+        .unwrap();
+    assert_eq!(manager.bot_count().await, 1);
+}
+
+#[tokio::test]
+async fn count_local_active_bots_ignores_remote_runtime_target() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+
+    let local_id = BotId::new("10001");
+    manager
+        .upsert_bot_config(bot_config(10001, "local"))
+        .await
+        .unwrap();
+    manager.start_bot(&local_id).await.unwrap();
+
+    let remote_id = BotId::new("10002");
+    manager
+        .upsert_bot_config(bot_config_remote_docker_server(10002, "remote-docker"))
+        .await
+        .unwrap();
+    manager
+        .test_confirm_actor_running(&remote_id)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        manager.count_local_active_bots().await.unwrap(),
+        1,
+        "仅本机 runtime_target 计入 local_active"
+    );
+    assert_eq!(
+        manager.count_remote_active_bots().await.unwrap(),
+        1,
+        "远端 runtime_target 计入 remote_active"
+    );
+}
+
+#[tokio::test]
+async fn exit_desktop_stops_only_local_active_bots() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+
+    let local_id = BotId::new("10001");
+    manager
+        .upsert_bot_config(bot_config(10001, "local"))
+        .await
+        .unwrap();
+    manager.start_bot(&local_id).await.unwrap();
+
+    let remote_id = BotId::new("10002");
+    manager
+        .upsert_bot_config(bot_config_remote_docker_server(10002, "remote-docker"))
+        .await
+        .unwrap();
+    manager
+        .test_confirm_actor_running(&remote_id)
+        .await
+        .unwrap();
+
+    let result = manager.exit_desktop().await;
+    assert_eq!(result.succeeded.len(), 1);
+    assert_eq!(result.succeeded[0], local_id);
+    assert!(result.failed.is_empty());
+
+    assert_eq!(backend.stop_count(local_id.clone()).await, 1);
+    assert_eq!(backend.stop_count(remote_id.clone()).await, 0);
+
+    assert_eq!(
+        manager.get_snapshot(&local_id).await.unwrap().state,
+        BotActorState::Stopped
+    );
+    assert_eq!(
+        manager.get_snapshot(&remote_id).await.unwrap().state,
+        BotActorState::Running
+    );
+}
+
+#[tokio::test]
+async fn exit_desktop_leaves_remote_native_running() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager_with_local_resolver(temp.path());
+
+    let local_id = BotId::new("10001");
+    manager
+        .upsert_bot_config(bot_config(10001, "local"))
+        .await
+        .unwrap();
+    manager.start_bot(&local_id).await.unwrap();
+
+    let remote_native_id = BotId::new("10003");
+    manager
+        .upsert_bot_config(bot_config_remote_native_server(10003, "remote-native"))
+        .await
+        .unwrap();
+    manager
+        .test_confirm_actor_running(&remote_native_id)
+        .await
+        .unwrap();
+
+    let result = manager.exit_desktop().await;
+    assert_eq!(result.succeeded, vec![local_id.clone()]);
+    assert_eq!(backend.stop_count(remote_native_id.clone()).await, 0);
+    assert_eq!(
+        manager.get_snapshot(&remote_native_id).await.unwrap().state,
+        BotActorState::Running
+    );
 }
 
 // ─── list_snapshots ───────────────────────────────────────────────────────────
@@ -1494,6 +1633,7 @@ async fn process_exit_event_transitions_running_actor_to_crashed() {
         default_webui_client(),
         default_offline_notifier(),
         default_poller_settings(),
+        default_desktop_notify(),
     );
     prepare_napcat_runtime(temp.path());
 

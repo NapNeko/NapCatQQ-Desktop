@@ -39,6 +39,10 @@ import { useOpenSnowlumaNovnc } from '../../../hooks/webui/useOpenSnowlumaNovnc'
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { useBotSnapshotAlerts } from '../../../hooks/bot/useBotSnapshotAlerts';
 import { isSnowLumaFlavor } from '../../../core/domain/bot/flavor';
+import {
+    isSnowlumaRemoteDockerConfig,
+    isSnowlumaRemoteNativeConfig,
+} from '../../../core/domain/bot/snowluma-remote-ui';
 import { botService } from '../../../core/services/bot.service';
 import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
@@ -421,13 +425,14 @@ function BotListGrid({
     // 列表 stagger:每次 bots.length 变化时,把刚出现的 ListItem 子节点
     // gsap.from 一遍。stagger 由当前档位决定。优雅档 stagger=0 → from 仍跑
     // 但所有项同时进场,看起来跟"同步"一样。
+    // 增加 enabled 依赖，避免在禁用动画时仍执行 DOM 查询。
     useGSAP(
         () => {
             const root = containerRef.current;
-            if (!root) return;
+            if (!root || !m.enabled) return;
             return animateListChildrenEnterAfterPaint(root, bots.length, m);
         },
-        { scope: containerRef, dependencies: [bots.length, m.enabled, m.level] },
+        { scope: containerRef, dependencies: [bots.length, m.enabled, m.level, m.speed, m.stagger] },
     );
 
     return (
@@ -437,9 +442,10 @@ function BotListGrid({
                 const config = configByBot[bot.bot_id] ?? null;
                 const napcatBot = napcat.byBot[bot.bot_id];
                 const snowlumaBot = snowluma.byBot[bot.bot_id];
-                const isSnowlumaDocker =
+                const isSnowlumaRemoteTunnelUi =
                     isSnowLumaFlavor(flavor) &&
-                    config?.bot.deploymentType === 'docker';
+                    (isSnowlumaRemoteDockerConfig(config) ||
+                        isSnowlumaRemoteNativeConfig(config));
                 return (
                     <ListItem key={bot.bot_id} hoverable>
                         <BotCard
@@ -473,7 +479,7 @@ function BotListGrid({
                                     });
                                 });
                             }}
-                            isSnowlumaDocker={isSnowlumaDocker}
+                            isSnowlumaRemoteTunnelUi={isSnowlumaRemoteTunnelUi}
                             onOpenNovnc={(id) => {
                                 openSnowlumaNovnc(id).catch((err: unknown) => {
                                     pushInfoBar({

@@ -33,7 +33,7 @@ export const ListItem = forwardRef<HTMLDivElement, ListItemProps>(
             if (!el || !hoverable || !m.enabled || m.preset.feel.cardLift === 0) return;
             // 行式大卡:不 scale、不 brightness、保留 lift + shadow,避免大尺寸放大裁切。
             return m.bindHover(el, { scale: 1, brightness: false });
-        }, [hoverable, m.enabled, m.level, m.speed]);
+        }, [hoverable, m.enabled, m.level, m.speed, m.bindHover, m.preset.feel.cardLift]);
 
         return <div ref={localRef} {...rest} />;
     },

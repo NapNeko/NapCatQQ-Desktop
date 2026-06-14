@@ -18,8 +18,8 @@ use crate::remote_snowluma_layout::{
     probe_remote_snowluma_layout,
 };
 use crate::remote_snowluma_orchestrator::{
-    bot_cold_start, bot_stop, daemon_start, daemon_stop, resolve_remote_bash, wait_webui_tcp,
-    write_status_daemon_json,
+    bot_cold_start, bot_stop, daemon_start, daemon_stop, remote_daemon_already_ready,
+    resolve_remote_bash, wait_webui_tcp, write_status_daemon_json,
 };
 use crate::remote_snowluma_tunnel::{
     RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry,
@@ -242,6 +242,8 @@ pub struct RemoteSnowLumaDaemon {
     layout: RemoteSnowLumaLayout,
     server_id: String,
     refcount: Mutex<u32>,
+    /// 同一 SSH 主机上多 Bot 并发 start 时，整段启栈（Xvfb/x11vnc/node）单飞，避免抢 5900 等端口。
+    stack_bootstrap: Mutex<()>,
     tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     event_bus: Arc<BroadcastEventBus>,
     tunnel_eps: Mutex<Option<RemoteSnowLumaTunnelEndpoints>>,
@@ -260,6 +262,7 @@ impl RemoteSnowLumaDaemon {
             layout,
             server_id,
             refcount: Mutex::new(0),
+            stack_bootstrap: Mutex::new(()),
             tunnels,
             event_bus,
             tunnel_eps: Mutex::new(None),
@@ -283,10 +286,13 @@ impl RemoteSnowLumaDaemon {
     }
 
     pub async fn ensure_running(&self) -> Result<(), BotBackendError> {
+        let _stack_guard = self.stack_bootstrap.lock().await;
+
         self.event_bus.publish(DomainEvent::snowluma_daemon_state_changed(
             DaemonState::Starting,
             0,
             None,
+            Some(self.server_id.clone()),
         ));
 
         ensure_remote_daemon_prereqs(
@@ -296,13 +302,23 @@ impl RemoteSnowLumaDaemon {
         )
         .await?;
 
-        daemon_start(self.host.as_ref(), &self.layout).await?;
-        wait_webui_tcp(
-            self.host.as_ref(),
-            DEFAULT_WEBUI_PORT,
-            Duration::from_secs(90),
-        )
-        .await?;
+        let stack_up = remote_daemon_already_ready(self.host.as_ref(), &self.layout.paths).await?;
+        if !stack_up {
+            daemon_start(self.host.as_ref(), &self.layout).await?;
+            wait_webui_tcp(
+                self.host.as_ref(),
+                DEFAULT_WEBUI_PORT,
+                Duration::from_secs(90),
+            )
+            .await?;
+        } else {
+            wait_webui_tcp(
+                self.host.as_ref(),
+                DEFAULT_WEBUI_PORT,
+                Duration::from_secs(30),
+            )
+            .await?;
+        }
         write_status_daemon_json(self.host.as_ref(), &self.layout.paths, true, true).await?;
 
         let webui_plain =
@@ -336,6 +352,7 @@ impl RemoteSnowLumaDaemon {
             DaemonState::Ready,
             rc,
             None,
+            Some(self.server_id.clone()),
         ));
         Ok(())
     }
@@ -359,6 +376,7 @@ impl RemoteSnowLumaDaemon {
                 DaemonState::Stopped,
                 0,
                 None,
+                Some(self.server_id.clone()),
             ));
         }
     }
@@ -427,6 +445,7 @@ impl RemoteSnowLumaDaemon {
             DaemonState::Ready,
             *self.refcount.lock().await,
             None,
+            Some(self.server_id.clone()),
         ));
         Ok(())
     }

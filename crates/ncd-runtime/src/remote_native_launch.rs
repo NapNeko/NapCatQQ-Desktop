@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ncd_component::{Component, LaunchArgs, NapCatComponent};
+use ncd_component::{Component, LaunchArgs, NapCatComponent, QQ_MAIN_NAPCAT_INJECT, set_remote_qq_package_main};
 use ncd_deploy::{DeploymentError, NativeLaunchCommand, NativeLaunchTranslator};
 use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId};
 use ncd_host::{Host, HostCommand, HostPath};
@@ -240,6 +240,13 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
                 )
                 .await
                 .map_err(|e| DeploymentError::LaunchFailed(e.to_string()))?;
+                set_remote_qq_package_main(
+                    self.host.as_ref(),
+                    &install_base,
+                    QQ_MAIN_NAPCAT_INJECT,
+                )
+                .await
+                .map_err(DeploymentError::LaunchFailed)?;
                 build_napcat_remote_launch(self.host.as_ref(), config, &install_base).await
             }
             BotFlavor::SnowLuma => Err(DeploymentError::LaunchFailed(

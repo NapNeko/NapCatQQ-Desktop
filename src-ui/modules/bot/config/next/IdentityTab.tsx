@@ -13,6 +13,7 @@ import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
 import { useRemoteHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
 import { formatMissingDirectRunNotice } from '../../../../core/domain/bot/remote-direct-run-deps';
+import { isRuntimeTargetConcreteRemote } from '../../../../core/domain/bot/runtime-target';
 import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';
 import {
     RUNTIME_TARGET_REMOTE_PLACEHOLDER,
@@ -181,6 +182,40 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                     }
                 />
             </FormSection>
+
+            {data.backend_type === 'napcat' &&
+                deploymentType === 'native' &&
+                isRemote &&
+                isRuntimeTargetConcreteRemote(data.runtime_target) && (
+                    <FormSection
+                        title="NapCat 远端直接运行"
+                        description="WebUI 在 SSH 主机本机 6099；桌面经隧道打开并轮询登录态"
+                        layout="none"
+                    >
+                        <InlineNotice tone="neutral">
+                            Bot 启动后桌面会建立 SSH 转发并解析远端 NapCat 日志中的 WebUI
+                            地址；列表 WebUI 可用后可在浏览器打开（带 token）。日志尚未打出 WebUI
+                            行时，会暂用与 Docker 相同的持久化 token 尝试登录轮询。
+                        </InlineNotice>
+                    </FormSection>
+                )}
+
+            {data.backend_type === 'snowluma' &&
+                deploymentType === 'native' &&
+                isRemote &&
+                isRuntimeTargetConcreteRemote(data.runtime_target) && (
+                    <FormSection
+                        title="SnowLuma 远端直接运行"
+                        description="图形栈在 SSH 主机上；桌面端经隧道打开 WebUI 与 noVNC"
+                        layout="none"
+                    >
+                        <InlineNotice tone="neutral">
+                            启动后桌面会把远端 5099 / 6081 转发到本机回环地址，列表可打开 WebUI
+                            与 noVNC 扫码。登录密码来自远端 secret 文件，打开时会复制到剪贴板。冷/热启动
+                            仍由下方「启动模式」决定。
+                        </InlineNotice>
+                    </FormSection>
+                )}
 
             {data.backend_type === 'snowluma' && deploymentType !== 'docker' && (
                 <FormSection

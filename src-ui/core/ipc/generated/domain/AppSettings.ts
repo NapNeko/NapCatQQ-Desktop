@@ -27,19 +27,35 @@ performanceMonitorEnabled: boolean,
 /**
  * 主页性能监控采样间隔（毫秒）。对齐 legacy `Performance.MonitorInterval`。
  */
-performanceMonitorInterval: bigint,
+performanceMonitorInterval: bigint, 
 /**
  * 任务队列是否在终态后自动从列表移除。
  */
-taskQueueCleanupEnabled: boolean,
+taskQueueCleanupEnabled: boolean, 
 /**
- * 终态后保留时长（毫秒）；关闭自动清理时落盘为 0。
+ * 终态后保留时长（毫秒）；`task_queue_cleanup_enabled == false` 时落盘为 0。
  */
-taskQueueCleanupLingerMs: bigint,
+taskQueueCleanupLingerMs: bigint, 
 /**
  * 主窗口关闭按钮行为：`close` 退出程序，`tray` 隐藏到托盘。与前端 `preferencesStore.closeAction` 对齐。
  */
 closeAction: string, 
+/**
+ * 关窗且 close_action=tray 时：hide | delayed_lightweight | immediate_lightweight
+ */
+afterCloseUiBehavior: string, enterLightweightDelaySecs: number, uiModeOnStartup: string, minimizeToTrayCountsAsHidden: boolean, 
+/**
+ * 桌面 Toast：NapCat 登录态离线（Poller 路径）。
+ */
+notifyOnOffline: boolean, 
+/**
+ * 桌面 Toast：Bot 进程异常退出。
+ */
+notifyOnBotCrashed: boolean, 
+/**
+ * 桌面 Toast：QQ 被踢下线等登录失效。
+ */
+notifyOnLoginKicked: boolean, 
 /**
  * 外观 / 动画 / 圆角等 UI 偏好（与 localStorage 双写，启动以磁盘为准）。
  */

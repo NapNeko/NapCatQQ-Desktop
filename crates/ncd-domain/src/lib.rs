@@ -21,8 +21,9 @@ pub mod version_snapshot;
 // ===== 顶层 re-export(对齐旧 ncd-core API,方便下游 crate 引用) =====
 
 pub use app_config::{
-    AppSettings, AppSettingsDto, SnowLumaAppConfig, WebUiPollerSettings, default_login_interval,
-    default_perf_monitor_interval, default_snowluma_port,
+    AppSettings, AppSettingsDto, DesktopNotifySettings, SnowLumaAppConfig, WebUiPollerSettings,
+    clamp_lightweight_delay_secs, default_login_interval, default_perf_monitor_interval,
+    default_snowluma_port,
 };
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, RepairAction};
 pub use bot_config::{

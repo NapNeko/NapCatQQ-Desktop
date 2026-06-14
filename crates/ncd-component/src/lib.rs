@@ -19,6 +19,7 @@ pub mod download;
 pub mod error;
 pub mod pkg_install_stream;
 pub mod qq;
+pub mod remote_qq_entry;
 pub mod napcat;
 pub mod nodejs;
 pub mod novnc;
@@ -27,6 +28,7 @@ pub mod traits;
 pub mod types;
 
 pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
+pub use remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, set_remote_qq_package_main};
 pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;

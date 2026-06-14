@@ -105,6 +105,29 @@ fn default_close_action() -> String {
     "close".to_string()
 }
 
+fn default_after_close_ui_behavior() -> String {
+    "delayed_lightweight".to_string()
+}
+
+fn default_ui_mode_on_startup() -> String {
+    "normal".to_string()
+}
+
+fn default_enter_lightweight_delay_secs() -> u32 {
+    300
+}
+
+/// 延迟轻量：60s～1800s；0 在 delayed 模式下视为立即。
+pub const LIGHTWEIGHT_DELAY_MIN_SECS: u32 = 60;
+pub const LIGHTWEIGHT_DELAY_MAX_SECS: u32 = 1800;
+
+pub fn clamp_lightweight_delay_secs(raw: u32) -> u32 {
+    if raw == 0 {
+        return 0;
+    }
+    raw.clamp(LIGHTWEIGHT_DELAY_MIN_SECS, LIGHTWEIGHT_DELAY_MAX_SECS)
+}
+
 fn default_ui_theme() -> String {
     "auto".to_string()
 }
@@ -254,9 +277,52 @@ pub struct AppSettings {
     /// 主窗口关闭按钮行为：`close` 退出程序，`tray` 隐藏到托盘。与前端 `preferencesStore.closeAction` 对齐。
     #[serde(rename = "closeAction", default = "default_close_action")]
     pub close_action: String,
+    /// 关窗且 close_action=tray 时：hide | delayed_lightweight | immediate_lightweight
+    #[serde(rename = "afterCloseUiBehavior", default = "default_after_close_ui_behavior")]
+    pub after_close_ui_behavior: String,
+    #[serde(
+        rename = "enterLightweightDelaySecs",
+        default = "default_enter_lightweight_delay_secs"
+    )]
+    pub enter_lightweight_delay_secs: u32,
+    #[serde(rename = "uiModeOnStartup", default = "default_ui_mode_on_startup")]
+    pub ui_mode_on_startup: String,
+    #[serde(rename = "minimizeToTrayCountsAsHidden", default = "default_true")]
+    pub minimize_to_tray_counts_as_hidden: bool,
+    /// 桌面 Toast：NapCat 登录态离线（Poller 路径）。
+    #[serde(rename = "notifyOnOffline", default = "default_true")]
+    pub notify_on_offline: bool,
+    /// 桌面 Toast：Bot 进程异常退出。
+    #[serde(rename = "notifyOnBotCrashed", default = "default_true")]
+    pub notify_on_bot_crashed: bool,
+    /// 桌面 Toast：QQ 被踢下线等登录失效。
+    #[serde(rename = "notifyOnLoginKicked", default = "default_true")]
+    pub notify_on_login_kicked: bool,
     /// 外观 / 动画 / 圆角等 UI 偏好（与 localStorage 双写，启动以磁盘为准）。
     #[serde(rename = "uiPreferences", default)]
     pub ui_preferences: AppUiPreferences,
+}
+
+/// 桌面 Toast 开关（从 `AppSettings` 拆出，便于 BotManager 热更新）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct DesktopNotifySettings {
+    #[serde(rename = "notifyOnOffline", default = "default_true")]
+    pub notify_on_offline: bool,
+    #[serde(rename = "notifyOnBotCrashed", default = "default_true")]
+    pub notify_on_bot_crashed: bool,
+    #[serde(rename = "notifyOnLoginKicked", default = "default_true")]
+    pub notify_on_login_kicked: bool,
+}
+
+impl Default for DesktopNotifySettings {
+    fn default() -> Self {
+        Self {
+            notify_on_offline: true,
+            notify_on_bot_crashed: true,
+            notify_on_login_kicked: true,
+        }
+    }
 }
 
 impl Default for AppSettings {
@@ -268,6 +334,13 @@ impl Default for AppSettings {
             task_queue_cleanup_enabled: default_task_queue_cleanup_enabled(),
             task_queue_cleanup_linger_ms: default_task_queue_cleanup_linger_ms(),
             close_action: default_close_action(),
+            after_close_ui_behavior: default_after_close_ui_behavior(),
+            enter_lightweight_delay_secs: default_enter_lightweight_delay_secs(),
+            ui_mode_on_startup: default_ui_mode_on_startup(),
+            minimize_to_tray_counts_as_hidden: true,
+            notify_on_offline: true,
+            notify_on_bot_crashed: true,
+            notify_on_login_kicked: true,
             ui_preferences: AppUiPreferences::default(),
         }
     }
@@ -278,6 +351,31 @@ impl AppSettings {
     pub fn normalize_performance_monitor(&mut self) {
         self.performance_monitor_interval_ms =
             clamp_perf_monitor_interval_ms(self.performance_monitor_interval_ms);
+    }
+
+    pub fn desktop_notify_flags(&self) -> DesktopNotifySettings {
+        DesktopNotifySettings {
+            notify_on_offline: self.notify_on_offline,
+            notify_on_bot_crashed: self.notify_on_bot_crashed,
+            notify_on_login_kicked: self.notify_on_login_kicked,
+        }
+    }
+
+    pub fn normalize_lightweight_prefs(&mut self) {
+        const BEHAVIORS: &[&str] = &["hide", "delayed_lightweight", "immediate_lightweight"];
+        if !BEHAVIORS.contains(&self.after_close_ui_behavior.as_str()) {
+            self.after_close_ui_behavior = default_after_close_ui_behavior();
+        }
+        if self.after_close_ui_behavior == "delayed_lightweight" {
+            self.enter_lightweight_delay_secs =
+                clamp_lightweight_delay_secs(self.enter_lightweight_delay_secs);
+            if self.enter_lightweight_delay_secs == 0 {
+                self.enter_lightweight_delay_secs = default_enter_lightweight_delay_secs();
+            }
+        }
+        if self.ui_mode_on_startup != "tray_only" {
+            self.ui_mode_on_startup = default_ui_mode_on_startup();
+        }
     }
 
     /// 写入前规范化任务队列自动清理偏好。
@@ -502,6 +600,13 @@ mod tests {
             task_queue_cleanup_enabled: default_task_queue_cleanup_enabled(),
             task_queue_cleanup_linger_ms: default_task_queue_cleanup_linger_ms(),
             close_action: default_close_action(),
+            after_close_ui_behavior: default_after_close_ui_behavior(),
+            enter_lightweight_delay_secs: default_enter_lightweight_delay_secs(),
+            ui_mode_on_startup: default_ui_mode_on_startup(),
+            minimize_to_tray_counts_as_hidden: true,
+            notify_on_offline: true,
+            notify_on_bot_crashed: true,
+            notify_on_login_kicked: true,
             ui_preferences: AppUiPreferences::default(),
         };
         let json = serde_json::to_string(&cfg).expect("serialize 不应失败");

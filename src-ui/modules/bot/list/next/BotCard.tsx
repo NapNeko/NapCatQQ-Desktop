@@ -160,7 +160,7 @@ export function BotCard({
             }
         }
         prevStateRef.current = bot.state;
-    }, [bot.state, m.enabled, m.level, m.speed]);
+    }, [bot.state, m.enabled, m.level, m.speed, m.pop, m.preset.feel.popPeak]);
 
     const webuiAvailable = isWebuiAvailable({
         flavor,
@@ -718,7 +718,7 @@ function forwardRefIcon() {
             if (!el || !m.enabled || disabled || presence) return;
             // presence 钮由 GsapPresence 管显隐；再绑 scale hover 会与 autoAlpha 抢帧。
             return m.bindHover(el, { lift: null, shadow: false, brightness: false });
-        }, [m.enabled, m.level, m.speed, disabled, presence]);
+        }, [m.enabled, m.level, m.speed, m.bindHover, disabled, presence]);
 
         return (
             <Tooltip>

@@ -24,6 +24,7 @@ import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue } from '../hooks/task-queue/useTaskQueue';
 import type { TaskQueueSnapshot } from '../core/domain/task-queue/types';
 import { PageTransition } from '../shared/ui/motion';
+import { DesktopExitGate } from './DesktopExitGate';
 
 /// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
 const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
@@ -140,6 +141,7 @@ export const AppNext: React.FC = () => {
                 </div>
 
                 <InfoBarStack items={bars} onDismiss={dismiss} />
+                <DesktopExitGate />
             </div>
         </TooltipProvider>
     );

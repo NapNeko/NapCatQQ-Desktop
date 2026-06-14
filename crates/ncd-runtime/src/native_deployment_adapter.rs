@@ -33,6 +33,11 @@ use crate::runtime_backend::{
 };
 use crate::runtime_launch_plan::RuntimeLaunchPlanner;
 
+use crate::remote_native_launch::{
+    napcat_remote_log_path, probe_remote_napcat_layout, remote_napcat_running_pid,
+    stop_remote_napcat_on_host, RemoteNapcatLayout,
+};
+
 // ============================================================
 // RuntimeLaunchPlannerAdapter
 // ============================================================
@@ -177,10 +182,6 @@ impl BotBackend for NativeDeploymentBackend {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
-        if ctx.config.launch_command.is_empty() {
-            return Err(BotBackendError::EmptyLaunchCommand);
-        }
-
         let bot_config = bot_config_for_start(ctx, self.flavor, false)?;
 
         let handle = self
@@ -246,6 +247,159 @@ impl BotBackend for NativeDeploymentBackend {
             lines: snap.lines,
             total_lines: snap.total_lines,
         })
+    }
+}
+
+// ============================================================
+// RemoteNativeDeploymentBackend：远端 SSH + NativeDeployment
+// ============================================================
+
+/// 远端「直接运行」：每 Bot 绑定一台 Host + 独立 NativeDeployment（translator 写远端路径）。
+pub struct RemoteNativeDeploymentBackend {
+    deployment: Arc<NativeDeployment>,
+    host: Arc<dyn Host>,
+    backend_id: BotId,
+    flavor: BotFlavor,
+}
+
+impl RemoteNativeDeploymentBackend {
+    pub fn new(
+        deployment: Arc<NativeDeployment>,
+        host: Arc<dyn Host>,
+        backend_id: impl Into<BotId>,
+        flavor: BotFlavor,
+    ) -> Self {
+        Self {
+            deployment,
+            host,
+            backend_id: backend_id.into(),
+            flavor,
+        }
+    }
+
+    async fn napcat_install_base(&self) -> Result<HostPath, BotBackendError> {
+        let (home, layout) = probe_remote_napcat_layout(self.host.as_ref())
+            .await
+            .map_err(|e| BotBackendError::Io(e))?;
+        match layout {
+            RemoteNapcatLayout::System => Ok(HostPath::from_posix("/")),
+            RemoteNapcatLayout::Rootless => Ok(HostPath::from_posix(format!("{home}/Napcat"))),
+        }
+    }
+}
+
+#[async_trait]
+impl BotBackend for RemoteNativeDeploymentBackend {
+    fn id(&self) -> &BotId {
+        &self.backend_id
+    }
+
+    fn kind(&self) -> BackendKind {
+        BackendKind::RemoteSsh
+    }
+
+    fn flavor(&self) -> BotFlavor {
+        self.flavor
+    }
+
+    async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
+        let handle = self
+            .deployment
+            .launch(self.host.as_ref(), &bot_config)
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        match handle {
+            ncd_deploy::DeploymentHandle::Native { pid, started_at } => Ok(BotStatus::running(
+                ctx.config.bot_id.clone(),
+                pid,
+                started_at,
+            )),
+            _ => Err(BotBackendError::Io("unexpected handle variant".into())),
+        }
+    }
+
+    async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+        if self.flavor == BotFlavor::NapCat {
+            let qq_id: u64 = bot_id
+                .as_str()
+                .parse()
+                .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
+            stop_remote_napcat_on_host(self.host.as_ref(), qq_id).await?;
+        }
+        self.deployment
+            .stop(self.host.as_ref(), &bot_id, _mode)
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))
+    }
+
+    async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
+        if self.flavor == BotFlavor::NapCat {
+            let qq_id: u64 = bot_id
+                .as_str()
+                .parse()
+                .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
+            if let Some(pid) = remote_napcat_running_pid(self.host.as_ref(), qq_id).await? {
+                return Ok(BotStatus::running(bot_id, pid, 0));
+            }
+            return Ok(BotStatus::stopped(bot_id));
+        }
+        let state = self
+            .deployment
+            .observe(self.host.as_ref(), &bot_id)
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        Ok(status_for_deployment_state(bot_id, state))
+    }
+
+    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
+        Err(BotBackendError::ConfigNotFound(bot_id))
+    }
+
+    async fn write_config(
+        &self,
+        _bot_id: BotId,
+        _cfg: &BotRuntimeConfig,
+    ) -> Result<(), BotBackendError> {
+        Ok(())
+    }
+
+    async fn tail_log(
+        &self,
+        bot_id: BotId,
+        opts: TailOpts,
+    ) -> Result<LogSnapshot, BotBackendError> {
+        if self.flavor != BotFlavor::NapCat {
+            let snap = self.deployment.tail_log(&bot_id, opts.lines).await;
+            return Ok(LogSnapshot {
+                lines: snap.lines,
+                total_lines: snap.total_lines,
+            });
+        }
+        let qq_id: u64 = bot_id
+            .as_str()
+            .parse()
+            .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
+        let install_base = self.napcat_install_base().await?;
+        let log_path = napcat_remote_log_path(&install_base, qq_id);
+        let path = HostPath::from_posix(&log_path);
+        let bytes = match self.host.read_file(&path).await {
+            Ok(bytes) => bytes,
+            Err(HostError::PathNotFound { .. }) => {
+                return Ok(LogSnapshot {
+                    lines: Vec::new(),
+                    total_lines: 0,
+                });
+            }
+            Err(error) => return Err(BotBackendError::Io(error.to_string())),
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let total_lines = lines.len();
+        if opts.lines > 0 && lines.len() > opts.lines {
+            lines = lines.split_off(lines.len() - opts.lines);
+        }
+        Ok(LogSnapshot { lines, total_lines })
     }
 }
 

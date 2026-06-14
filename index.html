@@ -15,7 +15,7 @@
         html:not([data-theme="light"]):not([data-theme="latte"]),
         html:not([data-theme="light"]):not([data-theme="latte"]) body,
         html:not([data-theme="light"]):not([data-theme="latte"]) #root {
-          background: #211f1d;
+          background: #211f1d !important;
         }
       }
       html[data-theme="dark"],
@@ -23,13 +23,25 @@
       html[data-theme="macchiato"] {
         background: #211f1d;
       }
+      html[data-theme="dark"] body,
+      html[data-theme="frappe"] body,
+      html[data-theme="macchiato"] body,
+      html[data-theme="dark"] #root,
+      html[data-theme="frappe"] #root,
+      html[data-theme="macchiato"] #root {
+        background: #211f1d !important;
+      }
       html[data-theme="mocha"] {
         background: #1e1e2e;
+      }
+      html[data-theme="mocha"] body,
+      html[data-theme="mocha"] #root {
+        background: #1e1e2e !important;
       }
     </style>
   </head>
   <body>
-    <div id="root" aria-busy="true"></div>
+    <div id="root" aria-busy="true" style="background-color: #faf7f2;"></div>
     <script type="module" src="/src-ui/main.tsx"></script>
   </body>
 </html>

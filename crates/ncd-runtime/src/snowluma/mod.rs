@@ -5,6 +5,7 @@
 pub mod daemon;
 pub mod error;
 pub mod log_sanitize;
+pub mod linux_proc_probe;
 pub mod proc_tree;
 pub mod qq_login_probe;
 pub mod runtime_backend;
@@ -46,6 +47,7 @@ pub use log_sanitize::sanitize_log_line;
 //
 // `MockProcessTreeProbe` 为单元测试 helper，但被声明为 `pub` 以便 ncd-runtime
 // 之外的下游 crate（譬如 ncd-tauri 集成测试）复用。
+pub use linux_proc_probe::LinuxSinglePidProbe;
 pub use proc_tree::{MockProcessTreeProbe, SysinfoProcessTreeProbe};
 
 // ---- runtime_backend.rs ----

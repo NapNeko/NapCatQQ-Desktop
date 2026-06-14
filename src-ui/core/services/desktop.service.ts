@@ -50,16 +50,17 @@ export const windowControlService = {
         }
     },
 
-    /** 标题栏关闭：按偏好走「隐藏到托盘」或「退出程序」。 */
+    /** 标题栏关闭：按偏好走「隐藏到托盘」或「退出程序」（经退出闸门对话框）。 */
     close: async (): Promise<void> => {
         if (!isTauri) return;
         const action = preferencesStore.get().closeAction;
         try {
             if (action === 'tray') {
                 await invoke<void>('window_hide_to_tray');
-            } else {
-                await invoke<void>('request_exit_app');
+                return;
             }
+            const { emit } = await import('@tauri-apps/api/event');
+            await emit('desktop-request-close');
         } catch (err) {
             console.error('关闭窗口失败:', err);
         }

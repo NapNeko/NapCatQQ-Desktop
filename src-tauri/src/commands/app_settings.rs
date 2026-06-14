@@ -67,6 +67,7 @@ pub async fn set_app_settings(
     let mut settings = dto.settings;
     settings.normalize_performance_monitor();
     settings.normalize_task_queue_cleanup();
+    settings.normalize_lightweight_prefs();
     let payload = serde_json::to_value(&settings)
         .map_err(|e| format!("序列化 app 设置失败: {e}"))?;
     store
@@ -89,6 +90,12 @@ pub async fn set_app_settings(
         .bot_manager
         .update_poller_settings(settings.poller.clone())
         .await;
+    state
+        .bot_manager
+        .update_desktop_notify_settings(settings.desktop_notify_flags())
+        .await;
+    *state.desktop_notify.write().await = settings.desktop_notify_flags();
+    *state.app_settings.write().await = settings;
 
     Ok(())
 }

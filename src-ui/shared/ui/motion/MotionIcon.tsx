@@ -234,8 +234,9 @@ export function MotionIcon({
         m.enabled,
         m.speed,
         m.level,
-        m.preset.feel,
-        m.preset.timing.ease,
+        m.preset.feel.overshoot,
+        m.preset.feel.breathDuration,
+        m.preset.timing.ease.hover,
     ]);
 
     useEffect(() => {

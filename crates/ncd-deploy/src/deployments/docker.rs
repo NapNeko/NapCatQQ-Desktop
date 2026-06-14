@@ -330,6 +330,26 @@ impl Deployment for DockerDeployment {
                 DeploymentError::RuntimeUnavailable { kind: "docker" }
             })?;
         let name = Self::container_name(config);
+        let bot_id = BotId::new(config.bot.qq_id.to_string());
+
+        if matches!(
+            self.observe(host, &bot_id).await?,
+            DeploymentState::Running
+        ) {
+            let started_at = now_secs();
+            let container_id = find_container_id(&cli, &name).await.unwrap_or_default();
+            info!(
+                target: "ncd_deploy::docker_bot",
+                qq_id = config.bot.qq_id,
+                container = %name,
+                "Bot Docker 容器已在运行，跳过 compose up"
+            );
+            return Ok(DeploymentHandle::Docker {
+                container_id,
+                started_at,
+            });
+        }
+
         let project_dir = Self::project_dir(host, &name).await?;
 
         // 上次失败/改口味可能留下同名容器；compose orphan 也可能是旧服务名。
@@ -563,6 +583,8 @@ mod tests {
     struct MockHost {
         home: Option<String>,
         require_elevated: bool,
+        /// launch 幂等测试：`docker ps` 在 compose up 之前返回空，之后返回 running 容器。
+        compose_up_done: Arc<Mutex<bool>>,
         commands: Arc<Mutex<Vec<HostCommand>>>,
         writes: Arc<Mutex<Vec<RecordedWrite>>>,
         created_dirs: Arc<Mutex<Vec<String>>>,
@@ -573,10 +595,17 @@ mod tests {
             Self {
                 home: Some("/home/napcat".into()),
                 require_elevated: false,
+                compose_up_done: Arc::new(Mutex::new(false)),
                 commands: Arc::new(Mutex::new(Vec::new())),
                 writes: Arc::new(Mutex::new(Vec::new())),
                 created_dirs: Arc::new(Mutex::new(Vec::new())),
             }
+        }
+
+        fn with_running_container() -> Self {
+            let h = Self::new();
+            *h.compose_up_done.lock().unwrap() = true;
+            h
         }
 
         fn without_home() -> Self {
@@ -692,10 +721,23 @@ mod tests {
             match cmd.args.first().map(String::as_str) {
                 Some("version") => Ok(output(0, "27.3.1\n", "")),
                 Some("info") => Ok(output(0, "27.3.1\n", "")),
-                Some("compose") => Ok(output(0, "ok\n", "")),
+                Some("compose") => {
+                    if cmd.args.get(1).map(String::as_str) == Some("up") {
+                        *self.compose_up_done.lock().unwrap() = true;
+                    }
+                    Ok(output(0, "ok\n", ""))
+                }
                 Some("pull") => Ok(output(0, "layer: Pull complete\n", "")),
                 Some("tag") => Ok(output(0, "", "")),
-                Some("ps") => Ok(output(0, ps_json(), "")),
+                Some("ps") => {
+                    let show = *self.compose_up_done.lock().unwrap();
+                    if show {
+                        Ok(output(0, ps_json(), ""))
+                    } else {
+                        Ok(output(0, "", ""))
+                    }
+                }
+                Some("rm") => Ok(output(0, "", "")),
                 Some("stop") => Ok(output(0, "ncbot-10001\n", "")),
                 _ => Ok(output(0, "", "")),
             }
@@ -855,6 +897,36 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, DeploymentError::ConfigInvalid(_)));
         assert!(host.writes().is_empty());
+    }
+
+    #[tokio::test]
+    async fn launch_when_container_already_running_skips_compose_up_and_remove() {
+        let host = MockHost::with_running_container();
+        let dep = DockerDeployment::with_test_default_token();
+        let config = bot_config();
+        dep.install(&host, &config, &crate::deployment::NullProgressSink)
+            .await
+            .unwrap();
+        dep.launch(&host, &config).await.unwrap();
+
+        let docker_args: Vec<Vec<String>> =
+            host.docker_commands().into_iter().map(|c| c.args).collect();
+        assert!(
+            !docker_args.iter().any(|a| a.first().map(String::as_str) == Some("rm")),
+            "Running 时 launch 不应 docker rm: {docker_args:?}"
+        );
+        assert!(
+            !docker_args
+                .iter()
+                .any(|a| a == &["compose", "up", "-d", "--pull", "missing"]),
+            "Running 时 launch 不应 compose up: {docker_args:?}"
+        );
+        assert!(
+            docker_args
+                .iter()
+                .any(|a| a == &["ps", "-a", "--format", "{{json .}}"]),
+            "observe 应至少一次 docker ps: {docker_args:?}"
+        );
     }
 
     #[tokio::test]

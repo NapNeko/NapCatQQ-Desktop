@@ -69,6 +69,13 @@ export function draftFromBackendAndPrefs(
         performanceMonitorIntervalMs: backend.performanceMonitorIntervalMs,
         githubPat: backend.githubPat,
         closeAction: backend.closeAction,
+        afterCloseUiBehavior: backend.afterCloseUiBehavior,
+        enterLightweightDelaySecs: backend.enterLightweightDelaySecs,
+        uiModeOnStartup: backend.uiModeOnStartup,
+        minimizeToTrayCountsAsHidden: backend.minimizeToTrayCountsAsHidden,
+        notifyOnOffline: backend.notifyOnOffline,
+        notifyOnBotCrashed: backend.notifyOnBotCrashed,
+        notifyOnLoginKicked: backend.notifyOnLoginKicked,
         uiPreferences: backend.uiPreferences,
         theme: client.theme,
         showMascot: client.showMascot,
@@ -97,6 +104,13 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         },
         githubPat: draft.githubPat,
         closeAction: draft.closeAction,
+        afterCloseUiBehavior: draft.afterCloseUiBehavior,
+        enterLightweightDelaySecs: draft.enterLightweightDelaySecs,
+        uiModeOnStartup: draft.uiModeOnStartup,
+        minimizeToTrayCountsAsHidden: draft.minimizeToTrayCountsAsHidden,
+        notifyOnOffline: draft.notifyOnOffline,
+        notifyOnBotCrashed: draft.notifyOnBotCrashed,
+        notifyOnLoginKicked: draft.notifyOnLoginKicked,
         uiPreferences: appPreferencesToAppUiPreferences(
             {
                 theme: draft.theme,
@@ -123,6 +137,14 @@ export function isSettingsDirty(
         draft.performanceMonitorIntervalMs !== baseline.performanceMonitorIntervalMs ||
         draft.githubPat !== baseline.githubPat ||
         draft.closeAction !== baseline.closeAction ||
+        draft.afterCloseUiBehavior !== baseline.afterCloseUiBehavior ||
+        draft.enterLightweightDelaySecs !== baseline.enterLightweightDelaySecs ||
+        draft.uiModeOnStartup !== baseline.uiModeOnStartup ||
+        draft.minimizeToTrayCountsAsHidden !==
+            baseline.minimizeToTrayCountsAsHidden ||
+        draft.notifyOnOffline !== baseline.notifyOnOffline ||
+        draft.notifyOnBotCrashed !== baseline.notifyOnBotCrashed ||
+        draft.notifyOnLoginKicked !== baseline.notifyOnLoginKicked ||
         draft.theme !== baseline.theme ||
         draft.showMascot !== baseline.showMascot ||
         draft.motionEnabled !== baseline.motionEnabled ||

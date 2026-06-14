@@ -26,6 +26,12 @@ import {
     type CloseAction,
 } from '../../hooks/preferences/preferencesStore';
 
+export type AfterCloseUiBehavior =
+    | 'hide'
+    | 'delayed_lightweight'
+    | 'immediate_lightweight';
+export type UiModeOnStartup = 'normal' | 'tray_only';
+
 /** 设置页消费的扁平后端设置形状（全 number，无 bigint / 嵌套）。 */
 export interface BackendSettings {
     botLoginCheckIntervalMs: number;
@@ -34,12 +40,30 @@ export interface BackendSettings {
     taskQueueCleanup: TaskQueueCleanupPrefs;
     githubPat: string;
     closeAction: CloseAction;
+    afterCloseUiBehavior: AfterCloseUiBehavior;
+    enterLightweightDelaySecs: number;
+    uiModeOnStartup: UiModeOnStartup;
+    minimizeToTrayCountsAsHidden: boolean;
+    notifyOnOffline: boolean;
+    notifyOnBotCrashed: boolean;
+    notifyOnLoginKicked: boolean;
     uiPreferences: AppUiPreferences;
 }
 
 /** 由 BackendSettings 派生的客户端偏好（与 preferencesStore 一致）。 */
 export function clientPrefsFromBackend(backend: BackendSettings): AppPreferences {
     return appUiPreferencesToAppPreferences(backend.uiPreferences, backend.closeAction);
+}
+
+function normalizeAfterClose(raw: string | undefined): AfterCloseUiBehavior {
+    if (
+        raw === 'hide' ||
+        raw === 'delayed_lightweight' ||
+        raw === 'immediate_lightweight'
+    ) {
+        return raw;
+    }
+    return 'delayed_lightweight';
 }
 
 function fromDto(dto: AppSettingsDto): BackendSettings {
@@ -64,6 +88,21 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
         }),
         githubPat: dto.githubPat ?? '',
         closeAction,
+        afterCloseUiBehavior: normalizeAfterClose(
+            dto.settings.afterCloseUiBehavior,
+        ),
+        enterLightweightDelaySecs: Number(
+            dto.settings.enterLightweightDelaySecs ?? 300,
+        ),
+        uiModeOnStartup:
+            dto.settings.uiModeOnStartup === 'tray_only'
+                ? 'tray_only'
+                : 'normal',
+        minimizeToTrayCountsAsHidden:
+            dto.settings.minimizeToTrayCountsAsHidden ?? true,
+        notifyOnOffline: dto.settings.notifyOnOffline ?? true,
+        notifyOnBotCrashed: dto.settings.notifyOnBotCrashed ?? true,
+        notifyOnLoginKicked: dto.settings.notifyOnLoginKicked ?? true,
         uiPreferences: ui,
     };
 }
@@ -84,6 +123,13 @@ type AppSettingsDtoInvoke = {
         taskQueueCleanupEnabled: boolean;
         taskQueueCleanupLingerMs: number;
         closeAction: string;
+        afterCloseUiBehavior: string;
+        enterLightweightDelaySecs: number;
+        uiModeOnStartup: string;
+        minimizeToTrayCountsAsHidden: boolean;
+        notifyOnOffline: boolean;
+        notifyOnBotCrashed: boolean;
+        notifyOnLoginKicked: boolean;
         uiPreferences: AppUiPreferences;
     };
     githubPat: string;
@@ -116,6 +162,13 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             taskQueueCleanupEnabled: tq.taskQueueCleanupEnabled,
             taskQueueCleanupLingerMs: tq.taskQueueCleanupLingerMs,
             closeAction: s.closeAction === 'tray' ? 'tray' : 'close',
+            afterCloseUiBehavior: s.afterCloseUiBehavior,
+            enterLightweightDelaySecs: s.enterLightweightDelaySecs,
+            uiModeOnStartup: s.uiModeOnStartup,
+            minimizeToTrayCountsAsHidden: s.minimizeToTrayCountsAsHidden,
+            notifyOnOffline: s.notifyOnOffline,
+            notifyOnBotCrashed: s.notifyOnBotCrashed,
+            notifyOnLoginKicked: s.notifyOnLoginKicked,
             uiPreferences: uiPreferencesForInvoke(s.uiPreferences),
         },
         githubPat: s.githubPat.trim(),

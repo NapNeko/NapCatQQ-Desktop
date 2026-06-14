@@ -38,9 +38,9 @@ export function SnowLumaGlobalWebuiSection({
             description="本机 SnowLuma 守护进程共用一个 WebUI；与上方 Bot 字段一并由右上角「保存」写入"
         >
             <p className="rounded-sm border border-border-subtle bg-canvas/60 px-3 py-2.5 text-2xs leading-relaxed text-text-secondary">
-                密码留空时，每次启动 SnowLuma 守护进程会自动生成新的 WebUI 登录密码，并写入本机
-                session（打开 WebUI 时会复制到剪贴板）。若填写自定义密码，则下次启动时用你设置的值覆盖
-                （不会每次随机更换）。
+                仅作用于本机 SnowLuma 守护进程。远端 SSH「直接运行」的 WebUI 密码由远端主机上的
+                secret 管理，在 Bot 列表打开 WebUI 时复制到剪贴板。本机密码留空时，每次启动守护进程会
+                自动生成并写入 session；若填写自定义密码，则下次启动时用你设置的值覆盖。
             </p>
             <NumberField
                 label="WebUI 监听端口"

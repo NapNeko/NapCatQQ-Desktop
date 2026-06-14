@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use ncd_component::{Component, LaunchArgs, QQComponent};
+use ncd_component::{Component, LaunchArgs, QQComponent, QQ_MAIN_NATIVE, set_remote_qq_package_main};
 use ncd_host::{Host, HostPath};
 use serde_json::json;
 
@@ -112,6 +112,10 @@ if [ -f {log} ]; then mv -f {log} "{log}.prev" 2>/dev/null || true; fi
     run_remote_bash(host, &rotate).await?;
 
     let install_base = HostPath::from_posix(format!("{}/Napcat", layout.home));
+    set_remote_qq_package_main(host, &install_base, QQ_MAIN_NATIVE)
+        .await
+        .map_err(|e| BotBackendError::InvalidConfig(format!("SnowLuma 启动前切换 QQ 入口失败: {e}")))?;
+
     let qq = QQComponent::default_v3_2_25(install_base);
     let mut launch_args = LaunchArgs::default();
     launch_args.extra_args = vec![
@@ -144,9 +148,11 @@ if [ -f {log} ]; then mv -f {log} "{log}.prev" 2>/dev/null || true; fi
         .as_ref()
         .map(|p| format!("LD_PRELOAD={} ", shell_single_quote(p)))
         .unwrap_or_default();
+    let dbus = shell_single_quote(&paths.dbus_env);
     let script = format!(
         r#"umask 077
 mkdir -p {rt} {log_dir}
+if [ -f {dbus} ]; then . {dbus}; fi
 DISPLAY="{display}" nohup env {ld_fragment}{qq_invoke} > {log} 2>&1 </dev/null &
 echo $! > {pidfile}
 sleep 0.5
