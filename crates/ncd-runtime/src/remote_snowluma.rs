@@ -19,7 +19,7 @@ use crate::remote_snowluma_layout::{
 };
 use crate::remote_snowluma_orchestrator::{
     bot_cold_start, bot_stop, daemon_start, daemon_stop, remote_daemon_already_ready,
-    resolve_remote_bash, wait_webui_tcp, write_status_daemon_json,
+    resolve_remote_bash, wait_webui_ready, write_status_daemon_json,
 };
 use crate::remote_snowluma_tunnel::{
     RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry,
@@ -194,6 +194,16 @@ pub fn is_remote_native_snowluma_config(config: &BotConfig) -> bool {
 }
 
 /// 远端是否已有匹配 qq_id 的 qq 进程（热启动 attach / bootstrap reconcile 用）。
+pub async fn remote_pid_alive(host: &dyn Host, pid: u32) -> Result<bool, BotBackendError> {
+    let script = format!("kill -0 {pid} 2>/dev/null");
+    let cmd = HostCommand::new("sh").arg("-c").arg(script);
+    let out = host
+        .run_to_string(cmd)
+        .await
+        .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    Ok(out.success())
+}
+
 pub async fn remote_qq_running_pid(host: &dyn Host, qq_id: u64) -> Result<Option<u32>, BotBackendError> {
     let script = format!(
         r#"pgrep -f "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1"#
@@ -302,20 +312,23 @@ impl RemoteSnowLumaDaemon {
         )
         .await?;
 
-        let stack_up = remote_daemon_already_ready(self.host.as_ref(), &self.layout.paths).await?;
+        let paths = &self.layout.paths;
+        let stack_up = remote_daemon_already_ready(self.host.as_ref(), paths).await?;
         if !stack_up {
             daemon_start(self.host.as_ref(), &self.layout).await?;
-            wait_webui_tcp(
+            wait_webui_ready(
                 self.host.as_ref(),
+                paths,
                 DEFAULT_WEBUI_PORT,
-                Duration::from_secs(90),
+                Duration::from_secs(120),
             )
             .await?;
         } else {
-            wait_webui_tcp(
+            wait_webui_ready(
                 self.host.as_ref(),
+                paths,
                 DEFAULT_WEBUI_PORT,
-                Duration::from_secs(30),
+                Duration::from_secs(45),
             )
             .await?;
         }
@@ -367,9 +380,8 @@ impl RemoteSnowLumaDaemon {
         let stop_daemon = rc == 0;
         drop(guard);
 
-        self.tunnels.release(&self.server_id).await;
-
         if stop_daemon {
+            self.tunnels.release(&self.server_id).await;
             let _ = daemon_stop(self.host.as_ref(), &self.layout.paths).await;
             *self.tunnel_eps.lock().await = None;
             self.event_bus.publish(DomainEvent::snowluma_daemon_state_changed(
@@ -385,10 +397,9 @@ impl RemoteSnowLumaDaemon {
         self.tunnel_eps.lock().await.clone()
     }
 
-    /// 桌面退出：只拆掉本机 SSH 隧道，不 stop 远端 daemon / QQ。
+    /// 桌面退出：仅清空本机缓存的隧道端点；隧道 refcount 随 daemon `release` 在最后一台 Bot 停用时再减。
     pub async fn detach_local_sessions(&self) {
         *self.tunnel_eps.lock().await = None;
-        self.tunnels.release(&self.server_id).await;
     }
 
     /// 冷启动 reconcile：远端进程已在跑时只补隧道与状态文件，不重复 daemon start shell。
@@ -620,6 +631,14 @@ impl BotBackend for RemoteSnowLumaBackend {
             .publish(DomainEvent::SnowLumaDockerEndpointsReady {
                 bot_id: bot_id.clone(),
             });
+
+        if !remote_pid_alive(host, pid).await? {
+            self.daemon.release().await;
+            return Err(BotBackendError::Io(format!(
+                "SnowLuma 注入后远端 QQ 进程 {pid} 已退出，请查看远端日志: {}",
+                paths.log_bot_path(&qq_id_str)
+            )));
+        }
 
         Ok(BotStatus::running(bot_id, pid, 0))
     }

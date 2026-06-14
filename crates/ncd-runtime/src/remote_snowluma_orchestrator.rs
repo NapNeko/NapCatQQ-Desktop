@@ -16,7 +16,7 @@ use crate::remote_snowluma_layout::{
 };
 use crate::remote_snowluma_stack::{
     ensure_stack_running, is_stack_ready, run_remote_bash, stack_stop,
-    wait_webui_tcp as wait_webui_tcp_on_host,
+    wait_webui_ready as wait_webui_ready_on_host, wait_webui_tcp as wait_webui_tcp_on_host,
 };
 
 fn display_str(num: i32) -> String {
@@ -40,6 +40,15 @@ pub async fn daemon_stop(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result
 
 pub async fn wait_webui_tcp(host: &dyn Host, port: i32, timeout: Duration) -> Result<(), BotBackendError> {
     wait_webui_tcp_on_host(host, port, timeout).await
+}
+
+pub async fn wait_webui_ready(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+    port: i32,
+    timeout: Duration,
+) -> Result<(), BotBackendError> {
+    wait_webui_ready_on_host(host, port, timeout, Some(&paths.log_daemon)).await
 }
 
 async fn prepare_bot_launch_env(host: &dyn Host) -> Result<Option<String>, BotBackendError> {

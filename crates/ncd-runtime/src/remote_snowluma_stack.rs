@@ -108,6 +108,85 @@ async fn read_pid_file(host: &dyn Host, path: &str) -> Result<Option<u32>, BotBa
     }
 }
 
+/// 等待 X display 可连（xdpyinfo 或 /tmp/.X11-unix 套接字），避免 x11vnc 抢在 Xvfb 就绪前启动。
+pub async fn wait_x_display_ready(
+    host: &dyn Host,
+    display_num: i32,
+    timeout: Duration,
+) -> Result<(), BotBackendError> {
+    let display = display_str(display_num);
+    let secs = timeout.as_secs().max(1);
+    let script = format!(
+        r#"display="{display}"
+deadline=$(( $(date +%s) + {secs} ))
+while [ $(date +%s) -lt $deadline ]; do
+  if command -v xdpyinfo >/dev/null 2>&1; then
+    if DISPLAY="$display" xdpyinfo >/dev/null 2>&1; then exit 0; fi
+  elif [ -S "/tmp/.X11-unix/X{display_num}" ]; then
+    exit 0
+  fi
+  sleep 0.2
+done
+echo "X display $display 在 {secs}s 内未就绪" >&2
+exit 2
+"#
+    );
+    run_remote_bash(host, &script).await.map_err(|e| {
+        BotBackendError::Io(format!(
+            "等待 X display {display} 就绪失败: {e}（请检查 Xvfb 日志）"
+        ))
+    })?;
+    Ok(())
+}
+
+async fn tail_remote_log(host: &dyn Host, path: &str, lines: u32) -> String {
+    let p = shell_single_quote(path);
+    let script = format!(r#"test -f {p} && tail -n {lines} {p} 2>/dev/null || true"#);
+    run_sh_dash(host, &script).await.unwrap_or_default()
+}
+
+/// 清理可能占用 VNC 端口的残留 x11vnc（半残留栈场景）。
+async fn cleanup_stale_x11vnc(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
+    let paths = &layout.paths;
+    let vnc = DEFAULT_VNC_PORT;
+    let pid_path = shell_single_quote(&pid_file(paths, "x11vnc"));
+    let script = format!(
+        r#"if [ -f {pid_path} ]; then
+  old=$(cat {pid_path} 2>/dev/null || echo "")
+  if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then kill "$old" 2>/dev/null || true; sleep 0.3; fi
+  rm -f {pid_path}
+fi
+pids=$(pgrep -f "x11vnc.*-rfbport {vnc}" 2>/dev/null || true)
+if [ -n "$pids" ]; then kill $pids 2>/dev/null || true; sleep 0.3; fi
+"#
+    );
+    let _ = run_sh_dash(host, &script).await;
+    Ok(())
+}
+
+/// 清理可能占用 noVNC 端口的残留 websockify（半残留栈场景）。
+///
+/// 与 `cleanup_stale_x11vnc` 对称：上次启动若在 websockify 之后失败（如 node 未就绪、
+/// WebUI 超时），`pid_daemon` 尚未落盘而 websockify 已 `--daemon` detach 成后台进程占着
+/// 6081，重试 `start_websockify` 会 `Address already in use`（exit 4）。
+async fn cleanup_stale_websockify(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
+    let paths = &layout.paths;
+    let novnc = DEFAULT_NOVNC_PORT;
+    let pid_path = shell_single_quote(&pid_file(paths, "websockify"));
+    let script = format!(
+        r#"if [ -f {pid_path} ]; then
+  old=$(cat {pid_path} 2>/dev/null || echo "")
+  if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then kill "$old" 2>/dev/null || true; sleep 0.3; fi
+  rm -f {pid_path}
+fi
+pids=$(pgrep -f "websockify.*{novnc}" 2>/dev/null || true)
+if [ -n "$pids" ]; then kill $pids 2>/dev/null || true; sleep 0.3; fi
+"#
+    );
+    let _ = run_sh_dash(host, &script).await;
+    Ok(())
+}
+
 async fn kill_pid_graceful(host: &dyn Host, pid: u32) -> Result<(), BotBackendError> {
     let script = format!(
         r#"pid={pid}
@@ -184,7 +263,8 @@ pub async fn start_x11vnc(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Res
     let paths = &layout.paths;
     let display = display_str(DEFAULT_DISPLAY_NUM);
     let vnc = DEFAULT_VNC_PORT;
-    let log = shell_single_quote(&format!("{}/x11vnc.log", paths.log_dir));
+    let log_path = format!("{}/x11vnc.log", paths.log_dir);
+    let log = shell_single_quote(&log_path);
     let vnc_sec = shell_single_quote(&paths.vnc_secret);
     let pid_path = shell_single_quote(&pid_file(paths, "x11vnc"));
     let script = format!(
@@ -196,8 +276,18 @@ pgrep -nf "x11vnc.*-rfbport {vnc}" > {pid_path} || {{ echo "x11vnc pid 抓取失
 cat {pid_path}
 "#
     );
-    let out = run_remote_bash(host, &script).await?;
-    parse_last_u32(&out, "x11vnc")
+    match run_remote_bash(host, &script).await {
+        Ok(out) => parse_last_u32(&out, "x11vnc"),
+        Err(e) => {
+            let tail = tail_remote_log(host, &log_path, 30).await;
+            let detail = if tail.trim().is_empty() {
+                e.to_string()
+            } else {
+                format!("{e}\n--- x11vnc.log (tail) ---\n{}", tail.trim())
+            };
+            Err(BotBackendError::Io(detail))
+        }
+    }
 }
 
 pub async fn start_websockify(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<u32, BotBackendError> {
@@ -252,7 +342,7 @@ fn parse_last_u32(out: &str, label: &str) -> Result<u32, BotBackendError> {
     })
 }
 
-/// WebUI 端口就绪（bash /dev/tcp，短脚本）。
+/// WebUI 端口 TCP 就绪（bash /dev/tcp，快速路径）。
 pub async fn wait_webui_tcp(host: &dyn Host, port: i32, timeout: Duration) -> Result<(), BotBackendError> {
     let secs = timeout.as_secs().max(1);
     let script = format!(
@@ -267,20 +357,77 @@ exit 1
     );
     run_remote_bash(host, &script)
         .await
-        .map_err(|_| BotBackendError::Io(format!("SnowLuma WebUI 端口 {port} 在时限内未就绪")))?;
+        .map_err(|_| BotBackendError::Io(format!("SnowLuma WebUI 端口 {port} TCP 在时限内未就绪")))?;
     Ok(())
 }
 
-/// daemon 是否已在远端就绪（pid + WebUI），dash-safe 探测。
+/// WebUI HTTP 就绪：任意 `/api/status` 响应视为服务已监听。
+pub async fn wait_webui_http(host: &dyn Host, port: i32, timeout: Duration) -> Result<(), BotBackendError> {
+    let secs = timeout.as_secs().max(1);
+    let script = format!(
+        r#"port={port}
+url="http://127.0.0.1:$port/api/status"
+deadline=$(( $(date +%s) + {secs} ))
+while [ $(date +%s) -lt $deadline ]; do
+  if command -v curl >/dev/null 2>&1; then
+    if curl -sS -m 3 -o /dev/null "$url" 2>/dev/null; then exit 0; fi
+  elif command -v wget >/dev/null 2>&1; then
+    if wget -q -T 3 -O /dev/null "$url" 2>/dev/null; then exit 0; fi
+  else
+    if (: > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then exit 0; fi
+  fi
+  sleep 0.5
+done
+exit 1
+"#
+    );
+    run_remote_bash(host, &script)
+        .await
+        .map_err(|_| BotBackendError::Io(format!("SnowLuma WebUI HTTP {port}/api/status 在时限内未就绪")))?;
+    Ok(())
+}
+
+/// 先 TCP 快速探测，再 HTTP 探活；失败时附带 daemon 日志尾部。
+pub async fn wait_webui_ready(
+    host: &dyn Host,
+    port: i32,
+    timeout: Duration,
+    log_daemon_path: Option<&str>,
+) -> Result<(), BotBackendError> {
+    let tcp_budget = Duration::from_secs(std::cmp::min(15, timeout.as_secs().max(1) / 4));
+    let _ = wait_webui_tcp(host, port, tcp_budget).await;
+    let http_timeout = timeout.saturating_sub(tcp_budget);
+    let http_timeout = if http_timeout.as_secs() < 5 {
+        timeout
+    } else {
+        http_timeout
+    };
+    if let Err(e) = wait_webui_http(host, port, http_timeout).await {
+        let mut msg = e.to_string();
+        if let Some(log_path) = log_daemon_path {
+            let tail = tail_remote_log(host, log_path, 40).await;
+            if !tail.trim().is_empty() {
+                msg.push_str(&format!("\n--- daemon log (tail) ---\n{}", tail.trim()));
+            }
+        }
+        return Err(BotBackendError::Io(msg));
+    }
+    Ok(())
+}
+
+/// daemon 是否已在远端就绪（pid 存活 + WebUI HTTP 可连）。
 pub async fn is_stack_ready(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<bool, BotBackendError> {
     let pid_path = shell_single_quote(&paths.pid_daemon);
     let port = DEFAULT_WEBUI_PORT;
     let script = format!(
         r#"PID_PATH={pid_path}
 port={port}
+url="http://127.0.0.1:$port/api/status"
 if [ -f "$PID_PATH" ]; then
   pid=$(cat "$PID_PATH" 2>/dev/null || echo "")
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    if command -v curl >/dev/null 2>&1 && curl -sS -m 2 -o /dev/null "$url" 2>/dev/null; then exit 0; fi
+    if command -v wget >/dev/null 2>&1 && wget -q -T 2 -O /dev/null "$url" 2>/dev/null; then exit 0; fi
     if command -v bash >/dev/null 2>&1 && bash -c "(: > /dev/tcp/127.0.0.1/$port) 2>/dev/null"; then exit 0; fi
     if command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 "$port" 2>/dev/null; then exit 0; fi
   fi
@@ -347,12 +494,20 @@ fi
 
     ensure_dbus_env(host, paths).await?;
     start_xvfb(host, layout).await?;
+    wait_x_display_ready(host, DEFAULT_DISPLAY_NUM, Duration::from_secs(15)).await?;
     start_wm(host, layout).await?;
-    // 给 WM 一点时间再抓屏，减轻 noVNC 全黑（QQ 尚未启动时属正常，冷启 QQ 后应能看到界面）。
-    tokio::time::sleep(Duration::from_millis(800)).await;
+    wait_x_display_ready(host, DEFAULT_DISPLAY_NUM, Duration::from_secs(10)).await?;
+    cleanup_stale_x11vnc(host, layout).await?;
     start_x11vnc(host, layout).await?;
+    cleanup_stale_websockify(host, layout).await?;
     start_websockify(host, layout).await?;
     start_node(host, layout).await?;
-    wait_webui_tcp(host, DEFAULT_WEBUI_PORT, Duration::from_secs(30)).await?;
+    wait_webui_ready(
+        host,
+        DEFAULT_WEBUI_PORT,
+        Duration::from_secs(120),
+        Some(&paths.log_daemon),
+    )
+    .await?;
     Ok(())
 }
