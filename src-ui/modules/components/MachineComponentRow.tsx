@@ -1,6 +1,6 @@
 // 机器卡里的一行：一个组件在这台机器上的状态 + 操作。
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ExternalLink, X } from 'lucide-react';
 import { Button } from '../../shared/ui';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
@@ -146,12 +146,56 @@ function hasUpdate(status: MachineComponentRow['status'], latest: string | null)
     return status.detected.version !== latest;
 }
 
+const TERMINAL_DISMISS_MS = 3500;
+
+function isTerminalStatus(status: ActionProgressView['status']): boolean {
+    return status === 'success' || status === 'failed' || status === 'cancelled';
+}
+
+/**
+ * 终态进度行短留后自动让位给本地版本号。
+ *
+ * 终态（success/failed/cancelled）保留 {@link TERMINAL_DISMISS_MS} 让用户看清
+ * 「已完成」反馈，到点后回退到本地版本分支。进行中状态始终显示进度行。
+ *
+ * 用 taskId + status 做 key：换任务或同一任务从进行中切到终态时重置计时器，
+ * 确保终态反馈恰好显示固定时长。
+ */
+function useTerminalDismiss(
+    activeProgress: { taskId: string; progress: ActionProgressView } | null,
+): boolean {
+    const [dismissed, setDismissed] = useState(false);
+
+    const terminal =
+        activeProgress != null && isTerminalStatus(activeProgress.progress.status);
+    // 终态的稳定性 key：task + status 都不变才视为「同一个终态」，重置会触发计时器重启。
+    const terminalKey =
+        activeProgress != null && terminal
+            ? `${activeProgress.taskId}::${activeProgress.progress.status}`
+            : null;
+
+    useEffect(() => {
+        // 进行中（含 null）重置 dismissed，让下一次终态重新计时。
+        if (!terminal) {
+            setDismissed(false);
+            return;
+        }
+        setDismissed(false);
+        const timer = setTimeout(() => setDismissed(true), TERMINAL_DISMISS_MS);
+        return () => clearTimeout(timer);
+    }, [terminal, terminalKey]);
+
+    // 只在「终态且已过 dismissed 计时」时不显示进度行；其它情况（进行中 / 终态短留窗口内）都显示。
+    return terminal && dismissed;
+}
+
 const StatusMeta: React.FC<{
     status: MachineComponentRow['status'];
     latestRemoteVersion: string | null;
     activeProgress: { taskId: string; progress: ActionProgressView } | null;
 }> = ({ status, latestRemoteVersion, activeProgress }) => {
-    if (activeProgress) {
+    const dismissProgress = useTerminalDismiss(activeProgress);
+    if (activeProgress && !dismissProgress) {
         return <ProgressLine progress={activeProgress.progress} className="mt-0" />;
     }
     switch (status.state) {
