@@ -5,6 +5,11 @@
 // （和后端缓存对齐）。
 //
 // 返回 ReleaseSnapshotView：bigint 已转 number，UI 层直接可用。
+//
+// retry：全局默认 retry:false（AppProvidersNext），但 release 查询网络抖动
+// 常见且代价低，这里单独开启 2 次重试（指数退避）。注意：后端命令永远返回 Ok
+// （失败时字段为 None），所以 retry 只覆盖 IPC 层错误（连接断 / 反序列化失败），
+// 不覆盖"成功但全 None"——后者由后端缓存 TTL + 用户手动刷新兜底。
 
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
@@ -33,6 +38,7 @@ export function useReleases(): UseReleasesResult {
         queryFn: releaseService.getSnapshot,
         staleTime: FIVE_MINUTES,
         gcTime: ONE_HOUR,
+        retry: 2,
     });
 
     const snapshot = useMemo(

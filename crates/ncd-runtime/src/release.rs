@@ -10,43 +10,50 @@
 //! 本模块只做 IO + JSON 解析，不参与 UI 派生（"是否需要更新"由前端
 //! 比对本地版本和远端版本派生）。
 //!
-//! 仓库 URL 是 latest release 的 GitHub API 端点。Desktop 仓库 URL 当前
-//! 为本仓库占位，后续仓库正式上线后由维护者确认（见 TODO(repo-url)）。
+//! 拉取源（迁移自 legacy Python `versioning/service.py`）：
+//! 1. 优先走自建 HMAC 签名中转代理（国内可达、自带 PAT 限速保护）；
+//!    中转返回 403 时读响应头 `X-Server-Time` 校正本地时钟，重试一次
+//! 2. 中转失败 / 未配置 → fallback 直连 GitHub 官方 API（可带用户 PAT）
+//! 3. 任何 IO / 网络错误一律降级到 None 字段或老缓存，不向 caller 抛错
 
 use std::path::Path;
 use std::time::Duration;
 
 use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo, ReleaseSnapshot};
-use ncd_network::{retry_with_backoff, NetworkError, RetryPolicy, shared_client};
+use ncd_network::{
+    is_proxy_configured, proxy_release_url, proxy_signer, retry_with_backoff, NetworkError,
+    ReleaseAlias, RetryPolicy, shared_client,
+};
 use serde::Deserialize;
 use tracing::{info, warn};
 
 const CACHE_TTL_SECS: u64 = 3600;
 const CACHE_FILE_NAME: &str = "release-snapshot.json";
 const CACHE_DIR_NAME: &str = "cache";
-const HTTP_TIMEOUT_SECS: u64 = 5;
+/// 单次 HTTP 请求超时。中转代理国内通常 <2s，GitHub 直连兜底需要更宽裕的余量
+/// （DNS + TLS + 收完整 JSON）。legacy Python 各调用点为 5/10/15/20s，取中位偏上。
+const HTTP_TIMEOUT_SECS: u64 = 15;
 
 const NAPCAT_RELEASES_URL: &str =
     "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest";
-// TODO(repo-url): SnowLuma 仓库 URL 需要后端 / 项目维护者确认上游 owner/name。
-// 当前用 placeholder 让 desktop / napcat 端到端可拉，SnowLuma 端拿到 404
-// 走 None 回落，不会影响整体 snapshot 返回。
+// SnowLuma 上游 owner/repo（用户确认）。仓库尚未正式 release 时返回 404 走 None
+// 回落，不影响整体 snapshot 返回。
 const SNOWLUMA_RELEASES_URL: &str =
     "https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest";
-// TODO(repo-url): 本仓库 release 端点；上线后由维护者确认。
 const DESKTOP_RELEASES_URL: &str =
     "https://api.github.com/repos/NapNeko/NapCatQQ-Desktop/releases/latest";
 
 /// 拉取一次远端 releases 快照。
 ///
-/// `token`：可选 GitHub PAT。非 None 时给请求加 `Authorization: Bearer <token>`，
-/// 把匿名速率限制（60 次/小时/IP）提升到认证额度（5000 次/小时）。token 不参与
-/// 缓存 key——缓存只按 TTL，认证与否拿到的 release 数据一致。
+/// `token`：可选 GitHub PAT。非 None 时给直连 GitHub 的 fallback 请求加
+/// `Authorization: Bearer <token>`，把匿名速率限制（60 次/小时/IP）提升到
+/// 认证额度（5000 次/小时）。token 不参与缓存 key——缓存只按 TTL，认证与否
+/// 拿到的 release 数据一致。中转代理请求不带 PAT（中转用自己的 HMAC 签名）。
 ///
 /// 流程：
 /// 1. 尝试读 `<data_root>/cache/release-snapshot.json`；如果缓存还在 TTL 内
 ///    直接返回；
-/// 2. 并发拉三个仓库的 latest release；
+/// 2. 并发拉三个仓库的 latest release（每个先中转后 fallback GitHub）；
 /// 3. 写缓存（失败仅 warn，不阻断返回）；
 /// 4. 返回新快照。
 ///
@@ -54,16 +61,38 @@ const DESKTOP_RELEASES_URL: &str =
 pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> ReleaseSnapshot {
     if let Some(cached) = read_cache(data_root) {
         if !is_stale(&cached) {
+            tracing::debug!(
+                target: "ncd_runtime::release",
+                fetched_at = cached.fetched_at,
+                "缓存未过 TTL，跳过远端拉取"
+            );
             return cached;
         }
+        tracing::debug!(target: "ncd_runtime::release", "缓存已过 TTL，开始远端拉取");
+    } else {
+        tracing::debug!(target: "ncd_runtime::release", "无缓存文件，首次远端拉取");
     }
 
     let client = shared_client();
+    // ProxySigner 单例：offset 持久化到 data_root/runtime/config（与 LocalConfigStore 一致）。
+    let config_dir = data_root.join("runtime").join("config");
+    // 触发单例初始化（首次拿取时从磁盘加载 offset）。即使中转未配置也初始化，
+    // 保持与 Python ProxySigner.instance() 一致的「always init + 日志诊断」语义。
+    let _ = proxy_signer(Some(config_dir));
+
+    let proxy_configured = is_proxy_configured();
+    let has_token = token.map(|t| !t.trim().is_empty()).unwrap_or(false);
+    info!(
+        target: "ncd_runtime::release",
+        proxy_configured,
+        has_github_pat = has_token,
+        "开始拉取远端版本快照（proxy_configured={proxy_configured}, pat={has_token}）"
+    );
 
     let (napcat, snowluma, desktop) = tokio::join!(
-        fetch_one(&client, NAPCAT_RELEASES_URL, token),
-        fetch_one(&client, SNOWLUMA_RELEASES_URL, token),
-        fetch_one(&client, DESKTOP_RELEASES_URL, token),
+        fetch_one(&client, ReleaseAlias::Napcat, NAPCAT_RELEASES_URL, token),
+        fetch_one(&client, ReleaseAlias::Snowluma, SNOWLUMA_RELEASES_URL, token),
+        fetch_one(&client, ReleaseAlias::Ncd, DESKTOP_RELEASES_URL, token),
     );
 
     let failed: Vec<&str> = [
@@ -76,10 +105,12 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
     .map(|(_, name)| name)
     .collect();
     if !failed.is_empty() {
+        let via_proxy = is_proxy_configured();
         warn!(
             target: "ncd_runtime::release",
             repos = %failed.join(", "),
-            "GitHub 版本检查失败（将使用缓存或留空），可检查网络或配置 GitHub PAT"
+            via_proxy,
+            "GitHub 版本检查失败（将使用缓存或留空）；可检查网络、设置 HTTPS_PROXY 环境变量或配置 GitHub PAT"
         );
     } else {
         info!(target: "ncd_runtime::release", "GitHub 版本快照已更新");
@@ -141,48 +172,257 @@ struct GhAssetDto {
 
 async fn fetch_one(
     client: &reqwest::Client,
-    url: &str,
+    alias: ReleaseAlias,
+    github_url: &str,
     token: Option<&str>,
 ) -> Option<ReleaseInfo> {
-    let policy = RetryPolicy::default();
-    let url_owned = url.to_string();
-    let token_owned = token.map(|s| s.to_string());
-    match retry_with_backoff(&policy, || {
-        let client = client;
-        let url = url_owned.clone();
-        let token = token_owned.as_deref();
-        async move { release_fetch_attempt(client, &url, token).await }
-    })
-    .await
-    {
-        Ok(info) => Some(info),
+    // 1. 中转代理优先（已配置时）
+    if is_proxy_configured() {
+        if let Some(proxy_url) = proxy_release_url(alias) {
+            info!(
+                target: "ncd_runtime::release",
+                alias = alias.as_str(),
+                proxy_url = %proxy_url,
+                "尝试中转代理拉取"
+            );
+            match try_proxy(client, &proxy_url, alias).await {
+                ProxyOutcome::Ok(info) => {
+                    info!(
+                        target: "ncd_runtime::release",
+                        alias = alias.as_str(),
+                        version = %info.version,
+                        "中转代理拉取成功"
+                    );
+                    return Some(info);
+                }
+                ProxyOutcome::Failed(err) => {
+                    warn!(
+                        target: "ncd_runtime::release",
+                        alias = alias.as_str(),
+                        ?err,
+                        "中转代理拉取失败，回退 GitHub 直连"
+                    );
+                }
+            }
+        }
+    } else {
+        tracing::debug!(
+            target: "ncd_runtime::release",
+            alias = alias.as_str(),
+            "中转代理未配置，直接走 GitHub 直连"
+        );
+    }
+
+    // 2. GitHub 直连 fallback
+    info!(
+        target: "ncd_runtime::release",
+        alias = alias.as_str(),
+        url = github_url,
+        "尝试 GitHub 直连拉取"
+    );
+    match try_github(client, github_url, token).await {
+        Ok(info) => {
+            info!(
+                target: "ncd_runtime::release",
+                alias = alias.as_str(),
+                version = %info.version,
+                "GitHub 直连拉取成功"
+            );
+            Some(info)
+        }
         Err(err) => {
-            tracing::debug!(url, ?err, "release fetch attempt failed");
+            // GitHub 匿名限流返 403（不是 429）；这里只记日志，不再重试（限流时重试无意义）。
+            let hint = match &err {
+                NetworkError::Status(403) => "（可能是 GitHub 匿名限流，建议配置 PAT）",
+                NetworkError::Status(404) => "（仓库尚未发布 release 或 owner/repo 错误）",
+                NetworkError::Http(msg) if msg.to_lowercase().contains("timeout") => {
+                    "（请求超时，可检查网络或设置 HTTPS_PROXY）"
+                }
+                _ => "",
+            };
+            warn!(
+                target: "ncd_runtime::release",
+                alias = alias.as_str(),
+                url = github_url,
+                ?err,
+                hint,
+                "GitHub 直连拉取失败"
+            );
             None
         }
     }
 }
 
-async fn release_fetch_attempt(
+/// 中转拉取结果。
+enum ProxyOutcome {
+    /// 成功。
+    Ok(ReleaseInfo),
+    /// 失败（含校时重试后仍失败）。错误已含具体类型。
+    Failed(NetworkError),
+}
+
+/// 中转代理拉取：带 HMAC 签名，403 时读响应头校时后重试一次。
+///
+/// 返回的 JSON 与 GitHub releases/latest 同结构（中转透传），复用 GhReleaseDto 解析。
+async fn try_proxy(
+    client: &reqwest::Client,
+    proxy_url: &str,
+    alias: ReleaseAlias,
+) -> ProxyOutcome {
+    let signer = proxy_signer(None);
+    let path = alias.path();
+
+    // 首次尝试。
+    match proxy_fetch_attempt(client, proxy_url, signer.sign_headers(&path)).await {
+        Ok(info) => return ProxyOutcome::Ok(info),
+        Err((err, resp_headers)) => {
+            // 403：读 X-Server-Time 校正时钟后重试一次（对齐 legacy Python）。
+            if matches!(err, NetworkError::Status(403)) {
+                info!(
+                    target: "ncd_runtime::release",
+                    alias = alias.as_str(),
+                    "中转返回 403，尝试读 X-Server-Time 校时"
+                );
+                if let Some(headers) = resp_headers {
+                    if signer.update_offset_from_response(&headers) {
+                        info!(
+                            target: "ncd_runtime::release",
+                            alias = alias.as_str(),
+                            "校时成功，重签后重试一次中转"
+                        );
+                        match proxy_fetch_attempt(
+                            client,
+                            proxy_url,
+                            signer.sign_headers(&path),
+                        )
+                        .await
+                        {
+                            Ok(info) => return ProxyOutcome::Ok(info),
+                            Err((err2, _)) => {
+                                warn!(
+                                    target: "ncd_runtime::release",
+                                    alias = alias.as_str(),
+                                    ?err2,
+                                    "校时后重试中转仍失败"
+                                );
+                                return ProxyOutcome::Failed(err2);
+                            }
+                        }
+                    } else {
+                        tracing::debug!(
+                            target: "ncd_runtime::release",
+                            alias = alias.as_str(),
+                            "403 响应无 X-Server-Time 或偏差过小，不重试"
+                        );
+                    }
+                }
+            }
+            return ProxyOutcome::Failed(err);
+        }
+    }
+}
+
+/// 中转单次请求。返回 (结果, 可选的响应头)——失败时把响应头带回给上层做校时。
+async fn proxy_fetch_attempt(
+    client: &reqwest::Client,
+    url: &str,
+    headers: std::collections::HashMap<&'static str, String>,
+) -> Result<ReleaseInfo, (NetworkError, Option<reqwest::header::HeaderMap>)> {
+    tracing::debug!(
+        target: "ncd_runtime::release",
+        url,
+        ts = headers.get("X-Timestamp").map(String::as_str).unwrap_or("-"),
+        "proxy_fetch_attempt: 发起中转请求"
+    );
+    let mut req = client.get(url).timeout(Duration::from_secs(HTTP_TIMEOUT_SECS));
+    for (k, v) in headers {
+        // sign_headers 只产出 ASCII 安全的 header 名/值（X-Timestamp / X-Signature / User-Agent）。
+        let name = reqwest::header::HeaderName::from_bytes(k.as_bytes())
+            .map_err(|e| (NetworkError::InvalidArgument(e.to_string()), None))?;
+        let value = reqwest::header::HeaderValue::from_str(&v)
+            .map_err(|e| (NetworkError::InvalidArgument(e.to_string()), None))?;
+        req = req.header(name, value);
+    }
+
+    let response = req.send().await.map_err(|e| {
+        let err: NetworkError = e.into();
+        warn!(target: "ncd_runtime::release", url, ?err, "proxy_fetch_attempt: 网络请求失败");
+        (err, None)
+    })?;
+
+    let status = response.status().as_u16();
+    tracing::debug!(target: "ncd_runtime::release", url, status, "proxy_fetch_attempt: 收到响应");
+
+    if !response.status().is_success() {
+        // 失败响应也带 headers 回去（可能含 X-Server-Time 供校时）。
+        let headers = response.headers().clone();
+        return Err((NetworkError::Status(status), Some(headers)));
+    }
+
+    let headers = response.headers().clone();
+    let dto: GhReleaseDto = response
+        .json()
+        .await
+        .map_err(|e| (NetworkError::Http(e.to_string()), Some(headers)))?;
+    Ok(dto_to_release_info(dto))
+}
+
+/// GitHub 官方 API 直连（可带 PAT）。带有限重试（瞬时网络错误）。
+async fn try_github(
     client: &reqwest::Client,
     url: &str,
     token: Option<&str>,
 ) -> Result<ReleaseInfo, NetworkError> {
+    let policy = RetryPolicy::default();
+    let url_owned = url.to_string();
+    let token_owned = token.map(|s| s.to_string());
+    retry_with_backoff(&policy, || {
+        let client = client;
+        let url = url_owned.clone();
+        let token = token_owned.as_deref();
+        async move { github_fetch_attempt(client, &url, token).await }
+    })
+    .await
+}
+
+async fn github_fetch_attempt(
+    client: &reqwest::Client,
+    url: &str,
+    token: Option<&str>,
+) -> Result<ReleaseInfo, NetworkError> {
+    let has_token = token.map(|t| !t.trim().is_empty()).unwrap_or(false);
+    tracing::debug!(
+        target: "ncd_runtime::release",
+        url,
+        has_token,
+        "github_fetch_attempt: 发起 GitHub 直连请求"
+    );
     let mut request = client
         .get(url)
         .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS));
     if let Some(token) = token.map(str::trim).filter(|t| !t.is_empty()) {
         request = request.bearer_auth(token);
     }
-    let response = request.send().await?;
+    let response = request.send().await.map_err(|e| {
+        let err: NetworkError = e.into();
+        warn!(target: "ncd_runtime::release", url, ?err, "github_fetch_attempt: 网络请求失败");
+        err
+    })?;
+
+    let status = response.status().as_u16();
+    tracing::debug!(target: "ncd_runtime::release", url, status, "github_fetch_attempt: 收到响应");
 
     if !response.status().is_success() {
-        return Err(NetworkError::Status(response.status().as_u16()));
+        return Err(NetworkError::Status(status));
     }
 
     let dto: GhReleaseDto = response.json().await.map_err(|e| NetworkError::Http(e.to_string()))?;
+    Ok(dto_to_release_info(dto))
+}
 
-    Ok(ReleaseInfo {
+/// 把 GitHub releases DTO 转成 domain ReleaseInfo。
+fn dto_to_release_info(dto: GhReleaseDto) -> ReleaseInfo {
+    ReleaseInfo {
         version: strip_v_prefix(&dto.tag_name).to_string(),
         tag: dto.tag_name.clone(),
         published_at: dto
@@ -207,7 +447,7 @@ async fn release_fetch_attempt(
                 }
             })
             .collect(),
-    })
+    }
 }
 
 /// 从 GitHub digest 字段（`"sha256:<64-hex>"`）抽出 64-hex SHA256。
