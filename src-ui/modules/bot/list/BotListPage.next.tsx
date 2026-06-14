@@ -423,13 +423,15 @@ function BotListGrid({
     useBotSnapshotAlerts(alertRows);
 
     // 列表 stagger:每次 bots.length 变化时,把刚出现的 ListItem 子节点
-    // gsap.from 一遍。stagger 由当前档位决定。优雅档 stagger=0 → from 仍跑
-    // 但所有项同时进场,看起来跟"同步"一样。
-    // 增加 enabled 依赖，避免在禁用动画时仍执行 DOM 查询。
+    // gsap.from 一遍。路由切换时清除 data-motion-entered 标记，确保重新播放进场动画。
     useGSAP(
         () => {
             const root = containerRef.current;
             if (!root || !m.enabled) return;
+            // 清除所有标记，让路由切换时重新播放动画
+            Array.from(root.children).forEach((el) => {
+                (el as HTMLElement).removeAttribute('data-motion-entered');
+            });
             return animateListChildrenEnterAfterPaint(root, bots.length, m);
         },
         { scope: containerRef, dependencies: [bots.length, m.enabled, m.level, m.speed, m.stagger] },

@@ -53,28 +53,18 @@ export function animateListChildrenEnter(
 }
 
 /// 等当前帧 + 下一帧再跑列表进场，避免与 PageTransition 的 enter 抢同一 reflow。
-/// 增加 200ms 防抖，连续 bots.length 变化（轮询/事件）时只跑最后一次。
 export function animateListChildrenEnterAfterPaint(
     container: HTMLElement,
     listLength: number,
     m: MotionEnv,
 ): () => void {
-    let outerId = 0;
     let innerId = 0;
-    let debounceTimer = 0;
-
-    const execute = () => {
-        outerId = requestAnimationFrame(() => {
-            innerId = requestAnimationFrame(() => {
-                animateListChildrenEnter(container, listLength, m);
-            });
+    const outerId = requestAnimationFrame(() => {
+        innerId = requestAnimationFrame(() => {
+            animateListChildrenEnter(container, listLength, m);
         });
-    };
-
-    debounceTimer = window.setTimeout(execute, 200);
-
+    });
     return () => {
-        clearTimeout(debounceTimer);
         cancelAnimationFrame(outerId);
         if (innerId) cancelAnimationFrame(innerId);
     };

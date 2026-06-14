@@ -634,12 +634,12 @@ interface IconButtonProps {
     disabled?: boolean;
     tone?: 'neutral' | 'brand' | 'success' | 'danger';
     children: React.ReactNode;
-    /// 显隐状态：false 时用 opacity + pointer-events 隐藏，避免 mount/unmount。
+    /// 显隐状态：false 时不渲染（return null），完全移除 DOM。
     visible?: boolean;
 }
 
-// 底栏工具钮：改用 opacity 隐藏而非 GsapPresence mount/unmount，减少状态切换时的
-// tween kill 开销。elegant/standard 档用 CSS transition，rich 档保留 GSAP bindHover。
+// 底栏工具钮：visible=false 时完全不渲染，避免占位。
+// elegant/standard 档用 CSS transition，rich 档保留 GSAP bindHover。
 const IconButton = forwardRefIcon();
 
 function forwardRefIcon() {
@@ -662,6 +662,8 @@ function forwardRefIcon() {
             return m.bindHover(el, { lift: null, shadow: false, brightness: false });
         }, [m.enabled, m.level, m.speed, m.bindHover, disabled, visible]);
 
+        if (!visible) return null;
+
         return (
             <Tooltip>
                 <TooltipTrigger asChild>
@@ -675,8 +677,7 @@ function forwardRefIcon() {
                             'transition-all duration-150',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                             'disabled:cursor-not-allowed disabled:opacity-40',
-                            !visible && 'invisible opacity-0',
-                            visible && m.level !== 'rich' && 'hover:scale-[1.04]',
+                            m.level !== 'rich' && 'hover:scale-[1.04]',
                             tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
                             tone === 'brand' && 'text-brand hover:bg-brand-soft',
                             tone === 'success' && 'text-success hover:bg-success-soft',
