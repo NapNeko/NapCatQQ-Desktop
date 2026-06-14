@@ -20,6 +20,18 @@ pub fn apply_main_window_startup_geometry(app: &AppHandle) -> Result<(), String>
     Ok(())
 }
 
+/// 前端就绪后调用：显示主窗口（避免透明窗口启动闪烁）。
+#[tauri::command]
+pub fn show_main_window(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口未找到".to_string())?;
+
+    window.show().map_err(|e| e.to_string())?;
+    let _ = window.set_focus();
+    Ok(())
+}
+
 fn center_on_work_area(window: &tauri::WebviewWindow) -> Result<(), String> {
     let monitor = match window.current_monitor().map_err(|e| e.to_string())? {
         Some(m) => m,

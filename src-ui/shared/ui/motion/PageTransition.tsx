@@ -89,8 +89,8 @@ const PageBody = forwardRef<
         className={className}
         style={
             hideUntilEnter
-                ? { visibility: 'hidden' as const, opacity: 0 }
-                : undefined
+                ? { visibility: 'hidden' as const, opacity: 0, willChange: 'opacity, transform' }
+                : { willChange: 'opacity, transform' }
         }
     >
         {children}

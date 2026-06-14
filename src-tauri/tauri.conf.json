@@ -19,6 +19,7 @@
         "minWidth": 1148,
         "minHeight": 720,
         "center": true,
+        "visible": false,
         "decorations": false,
         "transparent": true,
         "backgroundColor": "#211f1d",

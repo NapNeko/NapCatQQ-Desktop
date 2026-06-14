@@ -447,7 +447,7 @@ export function BotCard({
                                     />
                                 </IconButton>
                                 <IconButton
-                                    visible
+                                    visible={true}
                                     tooltip="配置"
                                     onClick={stopAction(() => onConfigure(bot.bot_id))}
                                 >
@@ -675,7 +675,7 @@ function forwardRefIcon() {
                             'transition-all duration-150',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                             'disabled:cursor-not-allowed disabled:opacity-40',
-                            !visible && 'pointer-events-none opacity-0',
+                            !visible && 'invisible opacity-0',
                             visible && m.level !== 'rich' && 'hover:scale-[1.04]',
                             tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
                             tone === 'brand' && 'text-brand hover:bg-brand-soft',
