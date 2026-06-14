@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { APP_VERSION_LABEL } from '../core/domain/app-meta';
-import logoPng from '../assets/logo.png';
+import logoSplash from '../assets/logo-72.png';
 
 /// 壳已就绪后至少再展示这么久；实际退场还要等进场时间轴播完。
 const MIN_VISIBLE_MS = 880;
@@ -462,7 +462,7 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
                     <div className="ndf-splash-logo-shine">
                         <img
                             ref={logoRef}
-                            src={logoPng}
+                            src={logoSplash}
                             alt=""
                             width={72}
                             height={72}

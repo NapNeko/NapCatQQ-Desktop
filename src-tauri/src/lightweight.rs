@@ -73,6 +73,9 @@ pub fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     apply_main_window_startup_geometry(app)?;
+    if let Ok(icon) = crate::window_icon::main_window_icon(app) {
+        let _ = window.set_icon(icon);
+    }
     window.show().map_err(|e| e.to_string())?;
     let _ = window.set_focus();
 

@@ -23,7 +23,8 @@ import gsap from 'gsap';
 import { cn } from '../../utils/cn';
 import { MotionIcon, NAV_ROUTE_MOTION } from '../../ui/motion';
 import { useMotion } from '../../../hooks/preferences/useMotion';
-import logoPng from '../../../assets/logo.png';
+import logoSidebar from '../../../assets/logo-32.png';
+import logoSidebarCollapsed from '../../../assets/logo-48.png';
 
 export type AppRoute =
     | 'overview'
@@ -146,7 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         )}
                     >
                         <img
-                            src={logoPng}
+                            src={logoSidebarCollapsed}
                             alt="NapCatQQ-Desktop logo"
                             width={28}
                             height={28}
@@ -165,7 +166,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ) : (
                     <>
                         <img
-                            src={logoPng}
+                            src={logoSidebar}
                             alt="NapCatQQ-Desktop logo"
                             width={24}
                             height={24}

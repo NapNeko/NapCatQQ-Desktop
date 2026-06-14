@@ -24,6 +24,7 @@ pub mod single_instance;
 pub mod tray_summary;
 pub mod tray_icon;
 pub mod tray_menu;
+pub mod window_icon;
 pub mod windows_toast;
 pub mod desktop_log_format;
 pub mod runtime;
@@ -325,6 +326,14 @@ pub fn run() {
                     "WARN",
                     "ncd::window",
                     &format!("startup geometry failed: {err}"),
+                );
+            }
+
+            if let Err(err) = window_icon::apply_main_window_icon(&app.handle()) {
+                desktop_log::write_session_line(
+                    "WARN",
+                    "ncd::window",
+                    &format!("set window icon failed: {err}"),
                 );
             }
 
