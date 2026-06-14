@@ -10,6 +10,7 @@ pub mod crash_bundle;
 pub mod docker_bot_session;
 pub use docker_bot_session::{
     DockerBotSessionRegistry, SnowLumaDockerEndpoints, is_remote_docker_config,
+    is_remote_native_napcat_config,
 };
 pub mod desktop_log;
 pub mod events;
@@ -21,6 +22,14 @@ pub mod package_lock;
 pub mod path_probe_impl;
 pub mod release;
 pub mod native_deployment_adapter;
+pub mod remote_bot_log_follow;
+pub mod remote_native_launch;
+pub mod remote_native_napcat_session;
+pub mod remote_snowluma;
+pub mod remote_snowluma_layout;
+pub mod remote_snowluma_orchestrator;
+pub mod remote_snowluma_stack;
+pub mod remote_snowluma_tunnel;
 pub mod runtime_backend;
 pub mod runtime_launch_plan;
 pub mod secret_store_impl;
@@ -42,6 +51,7 @@ pub use ncd_domain::{
     ReleaseSnapshot, RepairAction, RuntimeTarget, SchemaVersion, SecretError, SnowLumaAppConfig,
     SnowLumaStartMode, TimeUnit, WebUiPollerSettings, WebsocketClientConfig, WebsocketServerConfig,
     WsRole, default_login_interval, default_perf_monitor_interval, default_snowluma_port,
+    DesktopNotifySettings,
 };
 // StopMode 也来自 ncd-domain 但在 runtime_backend pub use 链已 re-export，
 // 这里就不再重复导出避免 ambiguity。
@@ -79,7 +89,15 @@ pub use runtime_launch_plan::{
     RuntimeLaunchPlanner, SnowLumaLaunchPlan, build_napcat_launch_plan_with_qq_install_path,
 };
 pub use native_deployment_adapter::{
-    DockerDeploymentBackend, EventBusSink, NativeDeploymentBackend, RuntimeLaunchPlannerAdapter,
+    DockerDeploymentBackend, EventBusSink, NativeDeploymentBackend, RemoteNativeDeploymentBackend,
+    RuntimeLaunchPlannerAdapter,
+};
+pub use remote_bot_log_follow::RemoteBotLogFollowRegistry;
+pub use remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
+pub use remote_native_launch::RemoteNativeLaunchTranslator;
+pub use remote_snowluma::{RemoteSnowLumaBackend, RemoteSnowLumaDaemon};
+pub use remote_snowluma_tunnel::{
+    RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry,
 };
 pub use secret_store_impl::SecretStoreImpl;
 pub use server_manager::{
