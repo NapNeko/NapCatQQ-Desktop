@@ -30,7 +30,6 @@ import {
     Settings,
     Square,
 } from 'lucide-react';
-import gsap from 'gsap';
 import {
     Tooltip,
     TooltipContent,
@@ -38,10 +37,7 @@ import {
 } from '../../../../shared/ui';
 import {
     ActionMotionIcon,
-    GsapPresence,
     MotionIcon,
-    type EnterFn,
-    type ExitFn,
     type MotionIconPreset,
 } from '../../../../shared/ui/motion';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
@@ -362,131 +358,96 @@ export function BotCard({
                             <span className="text-2xs text-text-tertiary">点击卡片选择</span>
                         ) : (
                             <>
-                                <GsapPresence
-                                    visible={hasQrcode}
-                                    onEnter={iconBtnEnter}
-                                    onExit={iconBtnExit}
-                                >
-                                    <IconButton
-                                        presence
-                                        tooltip="扫码登录"
-                                        onClick={() => setQrOpen(true)}
-                                        tone="brand"
-                                    >
-                                        <ToolbarMotionIcon
-                                            icon={QrCode}
-                                            size={16}
-                                            strokeWidth={2.2}
-                                            hoverAccent
-                                        />
-                                    </IconButton>
-                                </GsapPresence>
-                                <GsapPresence
-                                    visible={isActive}
-                                    onEnter={iconBtnEnter}
-                                    onExit={iconBtnExit}
-                                >
-                                    <IconButton
-                                        presence
-                                        tooltip="停止 Bot"
-                                        onClick={stopAction(() => onStop(bot.bot_id))}
-                                        disabled={!canStopBot(bot.state)}
-                                        tone="danger"
-                                    >
-                                        <ActionMotionIcon
-                                            icon={Square}
-                                            size={14}
-                                            strokeWidth={2.6}
-                                            motion="none"
-                                        />
-                                    </IconButton>
-                                </GsapPresence>
-                                <GsapPresence
-                                    visible={!isActive && canStartBot(bot.state)}
-                                    onEnter={iconBtnEnter}
-                                    onExit={iconBtnExit}
-                                >
-                                    <IconButton
-                                        presence
-                                        tooltip="启动 Bot"
-                                        onClick={stopAction(() => onStart(bot.bot_id))}
-                                        disabled={!canStartBot(bot.state)}
-                                        tone="success"
-                                    >
-                                        <ToolbarMotionIcon
-                                            icon={Play}
-                                            size={14}
-                                            strokeWidth={2.6}
-                                            hoverAccent
-                                        />
-                                    </IconButton>
-                                </GsapPresence>
-                                <GsapPresence
-                                    visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
-                                    onEnter={iconBtnEnter}
-                                    onExit={iconBtnExit}
-                                >
-                                    <IconButton
-                                        presence
-                                        tooltip="查看日志"
-                                        onClick={stopAction(() => onViewLogs(bot.bot_id))}
-                                    >
-                                        <ToolbarMotionIcon
-                                            icon={FileText}
-                                            size={14}
-                                            strokeWidth={2.2}
-                                            hoverAccent
-                                        />
-                                    </IconButton>
-                                </GsapPresence>
-                                <GsapPresence
-                                    visible={novncAvailable}
-                                    onEnter={iconBtnEnter}
-                                    onExit={iconBtnExit}
-                                >
-                                    <IconButton
-                                        presence
-                                        tooltip={
-                                            isSnowlumaRemoteNativeConfig(config ?? null)
-                                                ? '打开远端 noVNC 扫码页（SSH 隧道至主机 6081）'
-                                                : '打开 noVNC 扫码页（容器内 QQ 图形界面）'
-                                        }
-                                        onClick={stopAction(() => onOpenNovnc?.(bot.bot_id))}
-                                    >
-                                        <ToolbarMotionIcon
-                                            icon={Monitor}
-                                            size={14}
-                                            strokeWidth={2.2}
-                                            hoverAccent
-                                        />
-                                    </IconButton>
-                                </GsapPresence>
-                                <GsapPresence
-                                    visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
-                                    onEnter={iconBtnEnter}
-                                    onExit={iconBtnExit}
-                                >
-                                    <IconButton
-                                        presence
-                                        tooltip={webuiTip}
-                                        disabled={!webuiAvailable}
-                                        onClick={stopAction(() =>
-                                            onOpenWebui({
-                                                botId: bot.bot_id,
-                                                flavor,
-                                                napcat: napcatBinding ?? null,
-                                            }),
-                                        )}
-                                    >
-                                        <ToolbarMotionIcon
-                                            icon={Globe}
-                                            size={14}
-                                            strokeWidth={2.2}
-                                            hoverAccent
-                                        />
-                                    </IconButton>
-                                </GsapPresence>
                                 <IconButton
+                                    visible={hasQrcode}
+                                    tooltip="扫码登录"
+                                    onClick={() => setQrOpen(true)}
+                                    tone="brand"
+                                >
+                                    <ToolbarMotionIcon
+                                        icon={QrCode}
+                                        size={16}
+                                        strokeWidth={2.2}
+                                        hoverAccent
+                                    />
+                                </IconButton>
+                                <IconButton
+                                    visible={isActive}
+                                    tooltip="停止 Bot"
+                                    onClick={stopAction(() => onStop(bot.bot_id))}
+                                    disabled={!canStopBot(bot.state)}
+                                    tone="danger"
+                                >
+                                    <ActionMotionIcon
+                                        icon={Square}
+                                        size={14}
+                                        strokeWidth={2.6}
+                                        motion="none"
+                                    />
+                                </IconButton>
+                                <IconButton
+                                    visible={!isActive && canStartBot(bot.state)}
+                                    tooltip="启动 Bot"
+                                    onClick={stopAction(() => onStart(bot.bot_id))}
+                                    disabled={!canStartBot(bot.state)}
+                                    tone="success"
+                                >
+                                    <ToolbarMotionIcon
+                                        icon={Play}
+                                        size={14}
+                                        strokeWidth={2.6}
+                                        hoverAccent
+                                    />
+                                </IconButton>
+                                <IconButton
+                                    visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
+                                    tooltip="查看日志"
+                                    onClick={stopAction(() => onViewLogs(bot.bot_id))}
+                                >
+                                    <ToolbarMotionIcon
+                                        icon={FileText}
+                                        size={14}
+                                        strokeWidth={2.2}
+                                        hoverAccent
+                                    />
+                                </IconButton>
+                                <IconButton
+                                    visible={novncAvailable}
+                                    tooltip={
+                                        isSnowlumaRemoteNativeConfig(config ?? null)
+                                            ? '打开远端 noVNC 扫码页（SSH 隧道至主机 6081）'
+                                            : '打开 noVNC 扫码页（容器内 QQ 图形界面）'
+                                    }
+                                    onClick={stopAction(() => onOpenNovnc?.(bot.bot_id))}
+                                >
+                                    <ToolbarMotionIcon
+                                        icon={Monitor}
+                                        size={14}
+                                        strokeWidth={2.2}
+                                        hoverAccent
+                                    />
+                                </IconButton>
+                                <IconButton
+                                    visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
+                                    tooltip={webuiTip}
+                                    disabled={!webuiAvailable}
+                                    onClick={stopAction(() =>
+                                        onOpenWebui({
+                                            botId: bot.bot_id,
+                                            flavor,
+                                            napcat: napcatBinding ?? null,
+                                        }),
+                                    )}
+                                >
+                                    <ToolbarMotionIcon
+                                        icon={Globe}
+                                        size={14}
+                                        strokeWidth={2.2}
+                                        hoverAccent
+                                    />
+                                </IconButton>
+                                <IconButton
+                                    visible
                                     tooltip="配置"
                                     onClick={stopAction(() => onConfigure(bot.bot_id))}
                                 >
@@ -673,35 +634,17 @@ interface IconButtonProps {
     disabled?: boolean;
     tone?: 'neutral' | 'brand' | 'success' | 'danger';
     children: React.ReactNode;
-    /// 被 GsapPresence 包裹时传 true,首帧 visibility:hidden 让 GSAP 的 enter
-    /// fromTo 接管;常驻按钮(配置)不传,默认显示。
-    presence?: boolean;
+    /// 显隐状态：false 时用 opacity + pointer-events 隐藏，避免 mount/unmount。
+    visible?: boolean;
 }
 
-// 底栏工具钮：只用 autoAlpha，避免 scale 与 bindHover 抢 transform 导致卡顿；
-// 时长略短，多张卡同时进退场时 GPU 压力更小。
-const iconBtnEnter: EnterFn = (el, env) =>
-    gsap.fromTo(
-        el,
-        { autoAlpha: 0, visibility: 'visible' },
-        {
-            autoAlpha: 1,
-            duration: env.duration('fast') * 0.85,
-            ease: env.ease.enterMicro,
-        },
-    );
-const iconBtnExit: ExitFn = (el, env) =>
-    gsap.to(el, {
-        autoAlpha: 0,
-        duration: env.duration('fast') * 0.55,
-        ease: env.ease.exit,
-    });
-
+// 底栏工具钮：改用 opacity 隐藏而非 GsapPresence mount/unmount，减少状态切换时的
+// tween kill 开销。elegant/standard 档用 CSS transition，rich 档保留 GSAP bindHover。
 const IconButton = forwardRefIcon();
 
 function forwardRefIcon() {
     return forwardRef<HTMLButtonElement, IconButtonProps>(function IconButtonImpl(
-        { tooltip, onClick, disabled, tone = 'neutral', children, presence },
+        { tooltip, onClick, disabled, tone = 'neutral', children, visible = true },
         ref,
     ) {
         const m = useMotion();
@@ -712,13 +655,12 @@ function forwardRefIcon() {
             else if (ref) (ref as React.MutableRefObject<HTMLButtonElement | null>).current = node;
         };
 
-        // hover/tap 弹性。GsapPresence 在外层管 enter/exit,这里只管交互反馈。
+        // hover 弹性：rich 档用 GSAP bindHover，elegant/standard 档用 CSS transition。
         useEffect(() => {
             const el = localRef.current;
-            if (!el || !m.enabled || disabled || presence) return;
-            // presence 钮由 GsapPresence 管显隐；再绑 scale hover 会与 autoAlpha 抢帧。
+            if (!el || disabled || !visible || !m.enabled || m.level !== 'rich') return;
             return m.bindHover(el, { lift: null, shadow: false, brightness: false });
-        }, [m.enabled, m.level, m.speed, m.bindHover, disabled, presence]);
+        }, [m.enabled, m.level, m.speed, m.bindHover, disabled, visible]);
 
         return (
             <Tooltip>
@@ -728,12 +670,13 @@ function forwardRefIcon() {
                         type="button"
                         onClick={onClick}
                         disabled={disabled}
-                        style={presence ? { visibility: 'hidden', opacity: 0 } : undefined}
                         className={cn(
                             'inline-flex h-8 w-8 items-center justify-center rounded-xs',
-                            'transition-colors duration-100',
+                            'transition-all duration-150',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                             'disabled:cursor-not-allowed disabled:opacity-40',
+                            !visible && 'pointer-events-none opacity-0',
+                            visible && m.level !== 'rich' && 'hover:scale-[1.04]',
                             tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
                             tone === 'brand' && 'text-brand hover:bg-brand-soft',
                             tone === 'success' && 'text-success hover:bg-success-soft',
