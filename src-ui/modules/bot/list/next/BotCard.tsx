@@ -2,10 +2,9 @@
 //
 // 单卡布局（BotManageCard）：
 //   1. Header：[复选框] [Avatar] [名称 + QQ · flavor · 相对时间]
-//   2. 状态徽章行（生命周期 + 待重启 / 待扫码）
-//   3. meta：仅补一句副标题（不与徽章重复）；错误走 InfoBar
-//   4. Chip：配置摘要（有则显示，无则不占位）
-//   5. 底栏：工具按钮
+//   2. meta：补一句副标题（不与底栏状态徽章重复）；错误走 InfoBar
+//   3. Chip：配置摘要单行槽（空也占位）
+//   4. 底栏：进程 + 账号 + 告警（最多 3 枚短徽章），右工具按钮
 //
 // 操作区按钮按状态收缩：日志 / WebUI 只在 running / starting 时显示（停止状态
 // 这俩按了也没意义）；启停 / 配置永远显示。
@@ -30,7 +29,6 @@ import {
     RefreshCw,
     Settings,
     Square,
-    Wifi,
 } from 'lucide-react';
 import gsap from 'gsap';
 import {
@@ -67,11 +65,15 @@ import {
     type NapcatWebuiBinding,
 } from '../../../../core/domain/webui/availability';
 import { isSnowLumaFlavor, type Flavor } from '../../../../core/domain/bot/flavor';
+import {
+    isSnowlumaRemoteNativeConfig,
+    isSnowlumaTunnelReady,
+} from '../../../../core/domain/bot/snowluma-remote-ui';
 import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { QrCodeDialog } from './QrCodeDialog';
 import { BotManageCard } from './BotManageCard';
-import { buildCardBadges } from './botCardPresentation';
+import { buildBotListCardStatus, botListCardMetaLine } from './botCardPresentation';
 
 interface BotCardProps {
     bot: BotActorSnapshot;
@@ -83,6 +85,7 @@ interface BotCardProps {
     napcatBinding?: NapcatWebuiBinding | null;
     /** 仅用于 WebUI 可用性判断，不在卡片上展示 */
     snowlumaDaemonState?: DaemonState | null;
+    /** 远端 SnowLuma Docker：隧道就绪（Native 远端用 daemon + 同套 IPC） */
     snowlumaDockerEndpointsReady?: boolean;
     snowlumaUin?: string | null;
     snowlumaLoginState?: SnowLumaLoginState | null;
@@ -100,8 +103,8 @@ interface BotCardProps {
         flavor: Flavor | null;
         napcat: NapcatWebuiBinding | null;
     }) => void;
-    /** 远端 SnowLuma Docker：打开 noVNC 扫码页 */
-    isSnowlumaDocker?: boolean;
+    /** 远端 SnowLuma：Docker 或 Native 下展示 noVNC（扫码） */
+    isSnowlumaRemoteTunnelUi?: boolean;
     onOpenNovnc?: (botId: string) => void;
 }
 
@@ -125,7 +128,7 @@ export function BotCard({
     onViewLogs,
     onToggleSelect,
     onOpenWebui,
-    isSnowlumaDocker = false,
+    isSnowlumaRemoteTunnelUi = false,
     onOpenNovnc,
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
@@ -164,6 +167,9 @@ export function BotCard({
         napcat: napcatBinding ?? null,
         snowlumaDaemonState: snowlumaDaemonState ?? null,
         snowlumaDockerEndpointsReady: snowlumaDockerEndpointsReady ?? false,
+        snowlumaRemoteNativeTunnelReady:
+            isSnowlumaRemoteNativeConfig(config ?? null) &&
+            snowlumaDaemonState === 'ready',
     });
     const webuiTip = webuiTooltip({ flavor, available: webuiAvailable });
 
@@ -191,19 +197,21 @@ export function BotCard({
 
     const needsQrLogin = hasQrcode && isOnline === false;
 
-    const statusLine = computeStatusLine({
-        bot,
-        isSL,
-        snowlumaLoginState,
-        snowlumaUin,
-        isOnline,
-        needsQrLogin,
-    });
-
-    const cardBadges = buildCardBadges({
+    const cardStatus = buildBotListCardStatus({
         state: bot.state,
+        flavor: flavor ?? null,
         pendingRestart: !!bot.pending_restart,
         needsQrLogin,
+        isOnline,
+        snowlumaLoginState,
+        snowlumaDaemonState,
+    });
+
+    const metaText = botListCardMetaLine({
+        flavor: flavor ?? null,
+        state: bot.state,
+        snowlumaLoginState,
+        snowlumaUin,
     });
 
     const cardAccent =
@@ -211,9 +219,15 @@ export function BotCard({
 
     const isActive = isBotActive(bot.state);
 
+    const snowlumaTunnelReady = isSnowlumaTunnelReady({
+        config: config ?? null,
+        dockerEndpointsReady: snowlumaDockerEndpointsReady ?? false,
+        daemonState: snowlumaDaemonState ?? null,
+    });
+
     const novncAvailable =
-        isSnowlumaDocker &&
-        (snowlumaDockerEndpointsReady ?? false) &&
+        isSnowlumaRemoteTunnelUi &&
+        snowlumaTunnelReady &&
         isActive;
 
     const chips: React.ReactNode[] = [];
@@ -268,28 +282,17 @@ export function BotCard({
             />,
         );
     }
-    // 运行期技术 chip 收敛：daemon / 注入 / UIN / rev 不进列表，避免和徽章、meta 叠三层。
-    if (napcatBinding?.port && isBotRunning(bot.state)) {
-        chips.push(
-            <InfoChip
-                key="webui"
-                icon={Wifi}
-                label="WebUI"
-                value={`:${napcatBinding.port}`}
-            />,
-        );
-    }
-    const visibleChips = chips.slice(0, 4);
+    const visibleChips = chips.slice(0, 3);
 
     return (
         <>
             <BotManageCard
-                    badges={cardBadges}
+                    status={cardStatus}
                     selected={isSelected}
                     batchMode={isBatchMode}
                     accent={cardAccent}
                     onRowClick={isBatchMode ? handleRowClick : undefined}
-                    lifecycleBadgeRef={badgeRef}
+                    processBadgeRef={badgeRef}
                     header={
                         <>
                             {isBatchMode && (
@@ -347,14 +350,9 @@ export function BotCard({
                         </>
                     }
                     meta={
-                        statusLine ? (
-                            <p
-                                className={cn(
-                                    'flex min-w-0 items-center gap-1 truncate text-xs leading-snug',
-                                    statusLineTextClass(statusLine.tone),
-                                )}
-                            >
-                                <span className="truncate">{statusLine.text}</span>
+                        metaText ? (
+                            <p className="truncate font-mono text-xs text-text-secondary tabular-nums">
+                                {metaText}
                             </p>
                         ) : null
                     }
@@ -448,7 +446,11 @@ export function BotCard({
                                 >
                                     <IconButton
                                         presence
-                                        tooltip="打开 noVNC 扫码页（容器内 QQ 图形界面）"
+                                        tooltip={
+                                            isSnowlumaRemoteNativeConfig(config ?? null)
+                                                ? '打开远端 noVNC 扫码页（SSH 隧道至主机 6081）'
+                                                : '打开 noVNC 扫码页（容器内 QQ 图形界面）'
+                                        }
                                         onClick={stopAction(() => onOpenNovnc?.(bot.bot_id))}
                                     >
                                         <ToolbarMotionIcon
@@ -593,68 +595,6 @@ function pickAvatarPalette(seed: string): string {
     return PALETTES[Math.abs(h) % PALETTES.length] ?? PALETTES[0];
 }
 
-// ============== Status line（替代 Callout） ==============
-
-interface StatusLine {
-    text: string;
-    tone: 'success' | 'warning' | 'brand' | 'neutral';
-}
-
-/// 副标题只补徽章说不清的一点，不与生命周期徽章重复。
-function computeStatusLine(args: {
-    bot: BotActorSnapshot;
-    isSL: boolean;
-    snowlumaLoginState: SnowLumaLoginState | null | undefined;
-    snowlumaUin: string | null | undefined;
-    isOnline: boolean | null | undefined;
-    needsQrLogin: boolean;
-}): StatusLine | null {
-    const { bot, isSL, snowlumaLoginState, snowlumaUin, isOnline, needsQrLogin } =
-        args;
-
-    if (
-        bot.state === 'crashed' ||
-        bot.state === 'stopped' ||
-        bot.state === 'starting' ||
-        bot.state === 'stopping' ||
-        bot.state === 'repairing' ||
-        (bot.last_error && bot.last_error.trim().length > 0) ||
-        needsQrLogin
-    ) {
-        return null;
-    }
-
-    if (isSL) {
-        if (snowlumaLoginState === 'logged_in' && snowlumaUin) {
-            return { text: `账号 ${snowlumaUin}`, tone: 'neutral' };
-        }
-        if (snowlumaLoginState === 'disconnected') {
-            return { text: '连接已断开', tone: 'neutral' };
-        }
-        return null;
-    }
-
-    if (bot.state === 'running' && isOnline === false) {
-        return { text: 'QQ 未登录', tone: 'warning' };
-    }
-
-    return null;
-}
-
-function statusLineTextClass(tone: StatusLine['tone']): string {
-    switch (tone) {
-        case 'success':
-            return 'text-success';
-        case 'warning':
-            return 'text-warning';
-        case 'brand':
-            return 'text-brand';
-        case 'neutral':
-        default:
-            return 'text-text-secondary';
-    }
-}
-
 // ============== Chip / IconButton ==============
 
 function ToolbarMotionIcon({
@@ -738,23 +678,22 @@ interface IconButtonProps {
     presence?: boolean;
 }
 
-/// IconButton enter/exit 工厂:scale 0.7→1 + autoAlpha,作用在外层包裹的 button 节点。
+// 底栏工具钮：只用 autoAlpha，避免 scale 与 bindHover 抢 transform 导致卡顿；
+// 时长略短，多张卡同时进退场时 GPU 压力更小。
 const iconBtnEnter: EnterFn = (el, env) =>
     gsap.fromTo(
         el,
-        { autoAlpha: 0, scale: 0.6 },
+        { autoAlpha: 0, visibility: 'visible' },
         {
             autoAlpha: 1,
-            scale: 1,
-            duration: env.duration('fast'),
-            ease: env.ease.release,
+            duration: env.duration('fast') * 0.85,
+            ease: env.ease.enterMicro,
         },
     );
 const iconBtnExit: ExitFn = (el, env) =>
     gsap.to(el, {
         autoAlpha: 0,
-        scale: 0.6,
-        duration: env.duration('fast') * 0.7,
+        duration: env.duration('fast') * 0.55,
         ease: env.ease.exit,
     });
 
@@ -776,10 +715,10 @@ function forwardRefIcon() {
         // hover/tap 弹性。GsapPresence 在外层管 enter/exit,这里只管交互反馈。
         useEffect(() => {
             const el = localRef.current;
-            if (!el || !m.enabled || disabled) return;
-            // IconButton 是密集型按钮,hover lift / shadow / brightness 都关,只动 scale。
+            if (!el || !m.enabled || disabled || presence) return;
+            // presence 钮由 GsapPresence 管显隐；再绑 scale hover 会与 autoAlpha 抢帧。
             return m.bindHover(el, { lift: null, shadow: false, brightness: false });
-        }, [m.enabled, m.level, m.speed, disabled]);
+        }, [m.enabled, m.level, m.speed, disabled, presence]);
 
         return (
             <Tooltip>

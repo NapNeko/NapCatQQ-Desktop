@@ -75,44 +75,59 @@ export function GsapPresence({
         }
     }, [visible, mounted]);
 
-    // 关键:useGSAP 监听 visible 变化。每次 visible 反向变化时跑相应 timeline。
-    // mounted 的依赖让 enter 在 DOM 真正挂上后才跑。
+    // 退场必须落到终态再 unmount：exit 被 kill（依赖抖动、快速连点状态）时若只
+    // kill 不设 visibility，按钮会卡在半透明仍占位（日志/WebUI/VNC 不消失）。
     useGSAP(
         () => {
             const el = ref.current;
             if (!el) return;
+
+            const finishExit = () => {
+                gsap.set(el, {
+                    autoAlpha: 0,
+                    opacity: 0,
+                    visibility: 'hidden',
+                });
+                setMounted(false);
+                onExited?.();
+            };
 
             activeAnimRef.current?.kill();
             activeAnimRef.current = null;
 
             if (visible) {
                 if (!env.enabled || !onEnter) {
-                    gsap.set(el, { autoAlpha: 1, visibility: 'visible' });
+                    gsap.set(el, { autoAlpha: 1, opacity: 1, visibility: 'visible' });
                     return;
                 }
-                activeAnimRef.current = onEnter(el, env);
+                const anim = onEnter(el, env);
+                activeAnimRef.current = anim;
+                anim.eventCallback('onInterrupt', () => {
+                    gsap.set(el, { autoAlpha: 1, opacity: 1, visibility: 'visible' });
+                });
             } else {
-                // EXIT
                 if (!mounted) return;
                 if (!env.enabled || !onExit) {
-                    setMounted(false);
-                    onExited?.();
+                    finishExit();
                     return;
                 }
                 const anim = onExit(el, env);
                 activeAnimRef.current = anim;
-                anim.eventCallback('onComplete', () => {
-                    setMounted(false);
-                    onExited?.();
-                });
+                anim.eventCallback('onComplete', finishExit);
+                anim.eventCallback('onInterrupt', finishExit);
             }
 
             return () => {
-                activeAnimRef.current?.kill();
-                activeAnimRef.current = null;
+                const anim = activeAnimRef.current;
+                if (anim) {
+                    anim.kill();
+                    activeAnimRef.current = null;
+                    if (!visible && mounted) {
+                        finishExit();
+                    }
+                }
             };
         },
-        // env.enabled 切换也要重跑(用户切档位/速度/总开关时)。
         { dependencies: [visible, mounted, env.enabled, refReady] },
     );
 
