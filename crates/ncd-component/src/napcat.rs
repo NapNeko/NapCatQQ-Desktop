@@ -1,4 +1,4 @@
-//! `NapCatComponent`:NapCat.Shell 注入式组件。
+﻿//! `NapCatComponent`:NapCat.Shell 注入式组件。
 //!
 //! 对齐 NapCat-Installer-main 官方一键脚本(install.sh L456-L770)。
 //!
@@ -198,49 +198,103 @@ impl NapCatComponent {
 }
 
 
-/// 从 `napcat.mjs` 内容 grep 版本号字符串。
-///
-/// 真实 napcat.mjs 中的形态(legacy `_NAPCAT_VERSION_PATTERN` 实测验证):
-/// ```text
-/// const napCatVersion = typeof (__vite_import_meta_env__) !== "undefined" && "4.18.1" || "1.0.0-dev";
-/// ```
-///
-/// 关键点:等号到目标版本之间隔了 `"undefined"` 字符串字面量,必须用非贪婪匹配。
-/// 使用纯字符串扫描(不依赖 regex crate),避免引入新依赖。
+/// 从 `napcat.mjs` 内容提取版本号。兼容新旧两种产物格式。
 pub fn parse_napcat_version(content: &str) -> Option<String> {
-    // 找到 `napCatVersion` 关键字
-    let key_idx = content.find("napCatVersion")?;
-    let after_key = &content[key_idx + "napCatVersion".len()..];
-
-    // 限制扫描范围在 200 字符内,防止 mjs 文件混入其他 napCatVersion 字面量
-    let scan = &after_key[..after_key.len().min(500)];
-
-    // 找到第一个 `=` 之后第一个不是 `=`(为了跳过 `===` / `==`)
-    let eq_idx = scan.find('=')?;
-    let mut after_eq = &scan[eq_idx + 1..];
-    while after_eq.starts_with('=') {
-        after_eq = &after_eq[1..];
+    if let Some(v) = parse_version_minified(content) {
+        return Some(v);
     }
+    parse_version_legacy(content)
+}
 
-    // 现在 after_eq 类似 ` typeof (__vite_import_meta_env__) !== "undefined" && "4.18.1" || ...`
-    // 跳过第一个 `"undefined"` 字面量(如果存在),拿下一个字面量
-    // 简化:扫所有 "x.y.z" 形式的字面量,取第一个看起来是版本号的
-    let mut search = after_eq;
-    while let Some(start) = search.find('"') {
-        let after_quote = &search[start + 1..];
-        let end = after_quote.find('"')?;
-        let candidate = &after_quote[..end];
-        // 排除 "undefined" / "object" / 空串等,要求形如 X.Y.Z[-+suffix]
-        if candidate.len() >= 5
-            && candidate.chars().next().is_some_and(|c| c.is_ascii_digit())
-            && candidate.contains('.')
-            && !candidate.starts_with("0.0.")  // dev fallback
-        {
-            return Some(candidate.to_string());
+fn version_looks_valid(s: &str) -> bool {
+    s.len() >= 5
+        && s.chars().next().is_some_and(|c| c.is_ascii_digit())
+        && s.contains('.')
+        && !s.starts_with("0.0.")
+        && !s.starts_with("1.0.0-dev")
+}
+
+fn scan_first_version(text: &str) -> Option<String> {
+    let mut s = text;
+    while let Some(i) = s.find('"') {
+        let after = &s[i + 1..];
+        let end = after.find('"')?;
+        let c = &after[..end];
+        if version_looks_valid(c) {
+            return Some(c.to_string());
         }
-        search = &after_quote[end + 1..];
+        s = &after[end + 1..];
     }
     None
+}
+
+fn is_js_ident_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+fn parse_version_minified(content: &str) -> Option<String> {
+    let mut from = 0usize;
+    loop {
+        let rel = content[from..].find("NapCatVersion:")?;
+        let idx = from + rel + "NapCatVersion:".len();
+        let rest = &content[idx..];
+        let trimmed = rest.trim_start();
+        let ws = rest.len() - trimmed.len();
+        let var: String = trimmed.chars().take_while(|c| is_js_ident_char(*c)).collect();
+        if var.is_empty() {
+            from = idx + 1;
+            continue;
+        }
+        let tail = &content[idx + ws + var.len()..];
+        let t = tail.trim_start();
+        if !t.starts_with(',') && !t.starts_with('}') {
+            from = idx + 1;
+            continue;
+        }
+        if let Some(v) = find_var_assignment_version(content, &var) {
+            return Some(v);
+        }
+        from = idx + 1;
+    }
+}
+
+fn find_var_assignment_version(content: &str, var: &str) -> Option<String> {
+    let mut from = 0usize;
+    loop {
+        let rel = content[from..].find(var)?;
+        let pos = from + rel;
+        from = pos + var.len();
+        let after = &content[from..];
+        let t = after.trim_start();
+        if !t.starts_with('=') {
+            continue;
+        }
+        let mut eq = 0usize;
+        let mut p = t;
+        while p.starts_with('=') {
+            eq += 1;
+            p = &p[1..];
+        }
+        if eq != 1 {
+            continue;
+        }
+        let w = &p[..p.len().min(500)];
+        if let Some(v) = scan_first_version(w) {
+            return Some(v);
+        }
+    }
+}
+
+fn parse_version_legacy(content: &str) -> Option<String> {
+    let i = content.find("napCatVersion")?;
+    let after = &content[i + "napCatVersion".len()..];
+    let scan = &after[..after.len().min(500)];
+    let eq = scan.find('=')?;
+    let mut s = &scan[eq + 1..];
+    while s.starts_with('=') {
+        s = &s[1..];
+    }
+    scan_first_version(s)
 }
 
 #[async_trait]
