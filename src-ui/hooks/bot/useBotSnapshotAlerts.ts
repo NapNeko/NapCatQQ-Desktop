@@ -31,6 +31,24 @@ function normError(v: string | null | undefined): string | null {
     return t && t.length > 0 ? t : null;
 }
 
+/** InfoBar 展示用：截取首行摘要，避免 Python traceback 等长文本撑爆横幅。 */
+function briefError(raw: string): string {
+    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return raw;
+    const first = lines[0];
+    // 从尾部找 Python/shell 报出的最终错误行（如 OSError: ...）
+    let lastMeaningful: string | undefined;
+    for (let i = lines.length - 1; i >= 0; i--) {
+        if (/^[A-Z]\w*(Error|Exception|Failure):/i.test(lines[i]) || lines[i].startsWith('OSError:')) {
+            lastMeaningful = lines[i];
+            break;
+        }
+    }
+    const summary = lastMeaningful ?? first;
+    if (summary.length <= 120) return summary;
+    return summary.slice(0, 117) + '...';
+}
+
 function pushIfNotSuppressed(
     alertKey: string,
     opts: Parameters<typeof pushInfoBar>[0],
@@ -73,7 +91,7 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
                 pushIfNotSuppressed(keyLastError, {
                     tone: 'danger',
                     title: `Bot 异常 · ${label}`,
-                    content: lastError,
+                    content: briefError(lastError),
                 });
             }
 
@@ -92,7 +110,7 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
                 pushIfNotSuppressed(keyCrashed, {
                     tone: 'danger',
                     title: `Bot 已崩溃 · ${label}`,
-                    content: lastError ?? '进程异常退出，请查看日志',
+                    content: lastError ? briefError(lastError) : '进程异常退出，请查看日志',
                 });
             }
 

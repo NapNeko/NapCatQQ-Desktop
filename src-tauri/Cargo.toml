@@ -50,5 +50,5 @@ ncd-test-support = { path = "../crates/ncd-test-support" }
 path = "src/lib.rs"
 
 [[bin]]
-name = "ncd-tauri"
+name = "NapCatQQ-Desktop"
 path = "src/main.rs"

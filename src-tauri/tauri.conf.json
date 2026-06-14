@@ -34,7 +34,13 @@
     ]
   },
   "bundle": {
+    "publisher": "Qiao",
     "icon": ["icons/icon.ico"],
-    "resources": ["icons/tray/*", "icons/*.png"]
+    "resources": ["icons/tray/*", "icons/*.png"],
+    "windows": {
+      "wix": {
+        "upgradeCode": "5EBD6A58-1B0A-4700-B16F-7E3D7D62949D"
+      }
+    }
   }
 }

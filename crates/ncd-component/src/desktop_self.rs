@@ -160,7 +160,7 @@ mod tests {
     fn comp() -> DesktopSelfComponent {
         DesktopSelfComponent::new(
             "0.1.0",
-            HostPath::from_windows(r"C:\Program Files\NapCatQQ Desktop\ncd-tauri.exe"),
+            HostPath::from_windows(r"C:\Program Files\NapCatQQ Desktop\NapCatQQ-Desktop.exe"),
         )
     }
 
