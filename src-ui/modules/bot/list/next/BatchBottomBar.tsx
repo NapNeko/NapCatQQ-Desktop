@@ -13,6 +13,7 @@ import { CheckCheck, Play, Square, Trash2, X } from 'lucide-react';
 import { forwardRef } from 'react';
 import gsap from 'gsap';
 import { Button } from '../../../../shared/ui';
+import { BodyPortal } from '../../../../shared/ui/BodyPortal';
 import {
     ActionMotionIcon,
     Counter,
@@ -76,7 +77,8 @@ export function BatchBottomBar({
     // 双层容器:外层 fixed + 居中(GSAP 不动这层 transform),
     // 内层 GsapPresence 自由动 x/y/scale 不影响居中。
     return (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-30 -translate-x-1/2">
+        <BodyPortal>
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
             <GsapPresence visible={visible} onEnter={enter} onExit={exit}>
                 <BarBody>
                     <div
@@ -177,6 +179,7 @@ export function BatchBottomBar({
                 </BarBody>
             </GsapPresence>
         </div>
+        </BodyPortal>
     );
 }
 
