@@ -14,6 +14,7 @@ skills-lock.json
 .ace-tool/
 .nexus-map/
 .kiro/
+.codesearch.db/
 CLAUDE.md
 AGENTS.md
 
