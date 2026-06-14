@@ -422,16 +422,12 @@ function BotListGrid({
     );
     useBotSnapshotAlerts(alertRows);
 
-    // 列表 stagger:每次 bots.length 变化时,把刚出现的 ListItem 子节点
-    // gsap.from 一遍。路由切换时清除 data-motion-entered 标记，确保重新播放进场动画。
+    // 列表 stagger: 只对新出现的子节点播放动画。
+    // 路由切换时组件 mount，所有子节点都是"新的"，会自动播放。
     useGSAP(
         () => {
             const root = containerRef.current;
             if (!root || !m.enabled) return;
-            // 清除所有标记，让路由切换时重新播放动画
-            Array.from(root.children).forEach((el) => {
-                (el as HTMLElement).removeAttribute('data-motion-entered');
-            });
             return animateListChildrenEnterAfterPaint(root, bots.length, m);
         },
         { scope: containerRef, dependencies: [bots.length, m.enabled, m.level, m.speed, m.stagger] },
