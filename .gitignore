@@ -2,19 +2,32 @@
 .venv/
 venv/
 .idea/
-.vscode/
+
+### AI / 助手本地产物（不进版本库，可本机重装 skills）###
+.agents/
+skills-lock.json
 .claude/
 .ccg/
 .codex/
+.cursor/
+.qoder/
+.ace-tool/
 .nexus-map/
 .kiro/
-.cursor/
-.references/
-docs/plans/
-docs/requirements
-outputs/
-legacy-python/
 CLAUDE.md
+AGENTS.md
+
+### 编辑器（可选共享：若需团队统一 VS Code 设置再单独 un-ignore）###
+.vscode/
+
+### 参考克隆与旧 Python（体积大，仅本地对照）###
+.references/
+legacy-python/
+
+### Vibe / 临时需求与计划（本地迭代，见 memory「vibe-docs-gitignored」）###
+docs/plans/
+docs/requirements/
+outputs/
 
 ### Rust / Tauri ###
 target/
@@ -31,13 +44,14 @@ build/
 .next/
 coverage/
 
-### 迁移计划文档 ###
+### 迁移与归档文档（本地蓝图，非交付物）###
 docs/rust_migration_blueprint_local.md
 docs/tauri_reference_projects.md
 docs/archive/v3-planning/
+docs/archive/rust_migration_blueprint_v1_2026-05-20.md
 
 ### 日志和临时文件 ###
-# 仅忽略运行时 / 根级日志目录，避免误伤 src-ui/modules/bot/log/ 这种源码目录。
+# 仅忽略运行时 / 根级日志目录，避免误伤 src-ui/modules/bot/log/ 等源码目录。
 /log/
 /logs/
 **/runtime/log/
@@ -46,6 +60,7 @@ docs/archive/v3-planning/
 tmp/
 *.tmp
 *.temp
+.cache/
 .DS_Store
 Thumbs.db
 ehthumbs*.db
@@ -55,10 +70,8 @@ ehthumbs*.db
 ### 本地配置和敏感文件 ###
 .env
 .env.*
+!.env.example
 *.local
 /config/
 /runtime/config/snowluma-session.json
 ssh/
-.ace-tool/
-docs/archive/rust_migration_blueprint_v1_2026-05-20.md
-.qoder/
