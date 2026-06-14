@@ -1,7 +1,8 @@
 # Codemap:功能域 → 代码落点
 
-> agent 接手任务时先查这张表,锁定功能域涉及的目录/文件,再用 Glob/Grep 在范围内精确定位。
+> agent 接手任务时先查这张表,锁定功能域涉及的目录/文件,再按 `.claude/code-search-workflow.md`（codesearch → 闭包内 Grep/Glob → Read）精确定位。
 > 粒度只到文件级(目录结构稳定),不写行号/符号(高频变动易过期)。新增功能域随手补一行。
+> 本地语义索引（codesearch）流程见 `.claude/code-search-workflow.md`、`.claude/codesearch-setup.md`。
 > 后端能力细节看 capabilities.md,前端分层看 frontend.md。
 
 分层速记:Tauri command(src-tauri 薄壳) → Manager/Service(ncd-runtime 编排) → Trait(ncd-traits) → Domain(ncd-domain 模型)。前端:modules 页面 → hooks 适配 → core/services IPC壳 + core/domain 纯逻辑。
@@ -11,6 +12,7 @@
 ## 核心功能域(跨层全链路)
 
 ### Bot 生命周期(启停/状态/配置)
+- **运行语义(AI)**: `.claude/kb/`（`backend_for_config` 矩阵、NC/SL WebUI 差异；slash `/load-runtime-kb`）
 - IPC: `src-tauri/src/commands/bot.rs`(start_bot/stop_bot/upsert_bot_config/batch_* 等)
 - 编排: `ncd-runtime/src/bot_manager.rs`(多 Bot 管理,最多 4)+ `bot_actor.rs`(6 状态机+级联取消)
 - 配置: `ncd-runtime/src/{bot_config_repo_impl,backend_config_renderer,config_drift}.rs`
@@ -42,6 +44,7 @@
 ### SnowLuma 后端(daemon/状态轮询)
 - IPC: `src-tauri/src/commands/snowluma.rs`(list_qq_processes/open_snowluma_webui/probe_qq_login_info)
 - 子系统: `ncd-runtime/src/snowluma/{daemon,status_poller,webui_client,proc_tree,session,qq_login_probe,runtime_backend}.rs`
+- 远端 Native（无 launcher 脚本、无内联 mega-shell）: `ncd-runtime/src/{remote_snowluma.rs,remote_snowluma_stack.rs,remote_snowluma_orchestrator.rs,remote_snowluma_layout.rs,remote_snowluma_tunnel.rs}`（stack 分步 detach + `QQComponent` 冷启 + SSH 隧道 47099/47609）
 - 前端: `hooks/webui/{useSnowlumaState,snowlumaStore}.ts`
 
 ### 事件流(后端推 → 前端聚合)
@@ -67,6 +70,13 @@
 - 读盘/过滤: `ncd-runtime/src/desktop_log.rs` + IPC `src-tauri/src/commands/desktop_log.rs`
 - 崩溃包: `ncd-runtime/src/crash_bundle.rs` → `<data_root>/output/crash_*.zip`
 - 前端: `modules/settings/tabs/DesktopLogTab.tsx` + `hooks/diagnostics/useDesktopLogViewer.ts`(轮询 tail)
+
+### 退出 / 轻量模式 / 托盘
+- 退出门控 UI: `src-ui/app/DesktopExitGate.tsx` + `core/services/exit.service.ts`（挂于 `app/AppNext.tsx`）
+- IPC: `src-tauri/src/commands/exit.rs` + `commands/tray.rs`
+- 轻量: `src-tauri/src/lightweight.rs` + `lightweight_scheduler.rs`；设置 `modules/settings/tabs/AppearanceTab.tsx`
+- 通知: `src-tauri/src/desktop_notify.rs` + `windows_toast.rs`；托盘摘要 `tray_summary.rs`
+- 编排: `ncd-runtime/src/bot_manager.rs`（退出前停 Bot 等，见活 plan `remote-bot-detach-and-reconcile.md`）
 
 ### 网络下载(被组件/snowluma 复用)
 - `ncd-network/src/*`:`client`(共享 reqwest)/`download`(续传)/`chunked`(切片)/`race`(多镜像竞速)/`mirror`(6 GitHub 镜像)/`progress`/`speed`
