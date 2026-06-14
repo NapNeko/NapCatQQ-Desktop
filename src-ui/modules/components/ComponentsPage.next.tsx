@@ -110,7 +110,12 @@ export const ComponentsPageNext: React.FC = () => {
                     return;
                 }
                 const taskId = await startAction(componentId, hostId, payload.stepKind);
-                onTaskTerminal(taskId, () => refetch());
+                onTaskTerminal(taskId, (status) => {
+                    // 只在成功时刷新状态；失败/取消时不刷新，避免部分删除导致探测返回 None 误显示"未安装"。
+                    if (status === 'success') {
+                        refetch();
+                    }
+                });
             } catch (err) {
                 const hostName = hostNameOf(hostId);
                 globalInfoBarStore.push({
