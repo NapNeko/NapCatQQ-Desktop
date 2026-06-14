@@ -1,17 +1,39 @@
-// Bot 列表卡壳：与 ComponentManageCard 同层次（surface + 状态 + 底栏操作）。
+// Bot 列表卡壳：底栏状态组（进程 + 账号 + 告警），对齐全站 StatusBadgeSpec。
 
 import type { ReactNode, RefObject } from 'react';
 import { cn } from '../../../../shared/utils/cn';
 import { Badge } from '../../../../shared/ui';
-import type { BotBadgeSpec } from './botCardPresentation';
+import type { BotListCardStatus } from './botCardPresentation';
+import type { StatusBadgeSpec } from '../../../../core/domain/bot/bot-status-presentation';
 
 const SHELL =
-    'group relative isolate flex w-full min-w-0 flex-col overflow-hidden ' +
+    'group relative isolate flex h-full w-full min-w-0 flex-col overflow-hidden ' +
     'rounded-md border border-border-subtle bg-surface shadow-card ' +
     'transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-popover';
 
+function StatusBadgePill({
+    spec,
+    badgeRef,
+}: {
+    spec: StatusBadgeSpec;
+    badgeRef?: RefObject<HTMLSpanElement>;
+}) {
+    return (
+        <Badge
+            ref={badgeRef}
+            tone={spec.tone}
+            appearance="soft"
+            dot={spec.dot}
+            className="max-w-[9.5rem] shrink-0 truncate"
+            title={spec.label}
+        >
+            {spec.label}
+        </Badge>
+    );
+}
+
 export function BotManageCard({
-    badges,
+    status,
     selected,
     batchMode,
     accent,
@@ -21,20 +43,20 @@ export function BotManageCard({
     meta,
     chips,
     footerActions,
-    lifecycleBadgeRef,
+    processBadgeRef,
 }: {
-    badges: BotBadgeSpec[];
+    status: BotListCardStatus;
     selected?: boolean;
     batchMode?: boolean;
     accent?: 'brand' | 'danger' | 'none';
-    /** 远端主机等信息较少的卡：单行 meta，无 chip 区 */
     compact?: boolean;
     onRowClick?: () => void;
     header: ReactNode;
     meta: ReactNode;
     chips?: ReactNode;
     footerActions: ReactNode;
-    lifecycleBadgeRef?: RefObject<HTMLSpanElement>;
+    /** 进程徽章动效锚点（状态切换 pop） */
+    processBadgeRef?: RefObject<HTMLSpanElement>;
 }) {
     const showMeta = meta != null && meta !== false;
     const hasChips = chips != null && chips !== false;
@@ -66,48 +88,61 @@ export function BotManageCard({
 
             <div
                 className={cn(
-                    'flex flex-col gap-2',
-                    compact ? 'px-3.5 pb-1.5 pt-2.5' : 'px-3.5 pb-2.5 pt-3',
+                    'flex min-h-0 flex-1 flex-col gap-2',
+                    compact ? 'px-3.5 pb-1.5 pt-2.5' : 'px-3.5 pb-2 pt-3',
                 )}
             >
                 <div className="flex items-start gap-3">{header}</div>
 
-                {badges.length > 0 ? (
-                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                        {badges.map((b, i) => (
-                            <Badge
-                                key={`${b.label}-${i}`}
-                                ref={i === 0 ? lifecycleBadgeRef : undefined}
-                                tone={b.tone}
-                                appearance="soft"
-                                dot={b.dot}
-                                className="shrink-0"
-                            >
-                                {b.label}
-                            </Badge>
-                        ))}
-                    </div>
-                ) : null}
+                <div
+                    className={cn(
+                        'min-h-[1.25rem] min-w-0 text-xs leading-snug',
+                        !showMeta && 'select-none',
+                    )}
+                    aria-hidden={!showMeta}
+                >
+                    {showMeta ? (
+                        meta
+                    ) : (
+                        <p className="truncate text-transparent" aria-hidden>
+                            —
+                        </p>
+                    )}
+                </div>
 
-                {showMeta ? (
-                    <div className="min-w-0">{meta}</div>
-                ) : null}
-
-                {hasChips ? (
-                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                        {chips}
-                    </div>
-                ) : null}
+                <div className="min-h-[1.625rem] min-w-0">
+                    {hasChips ? (
+                        <div className="flex max-h-[1.625rem] min-w-0 flex-wrap items-center gap-1.5 overflow-hidden">
+                            {chips}
+                        </div>
+                    ) : (
+                        <div className="h-[1.625rem]" aria-hidden />
+                    )}
+                </div>
             </div>
 
             <footer
                 className={cn(
-                    'flex shrink-0 items-center justify-end gap-1 border-t border-border-subtle bg-inset/35',
-                    compact ? 'min-h-[2.5rem] px-3 py-1.5' : 'min-h-[2.625rem] px-2.5 py-1.5',
+                    'flex shrink-0 items-center gap-2 border-t border-border-subtle bg-inset/35',
+                    compact ? 'min-h-[2.5rem] px-3 py-1.5' : 'min-h-[2.75rem] px-3 py-2',
                 )}
                 onClick={(e) => e.stopPropagation()}
             >
-                {footerActions}
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                    <StatusBadgePill spec={status.lifecycle} badgeRef={processBadgeRef} />
+                    {status.session ? (
+                        <StatusBadgePill spec={status.session} />
+                    ) : (
+                        <span
+                            className="inline-flex h-5 min-w-[4.5rem] shrink-0 rounded-pill border border-transparent px-2 py-0.5"
+                            aria-hidden
+                        />
+                    )}
+                    {status.alert ? <StatusBadgePill spec={status.alert} /> : null}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                    {footerActions}
+                </div>
             </footer>
         </article>
     );

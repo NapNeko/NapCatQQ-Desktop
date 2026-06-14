@@ -20,7 +20,7 @@ import {
     computeBotFleetStats,
     listActionableBots,
 } from '../../../core/domain/overview/glance';
-import { botStateBadge } from '../../../core/domain/bot/status';
+import { botProcessBadge } from '../../../core/domain/bot/bot-status-presentation';
 import { OccupancyChart } from './OccupancyChart';
 import type { ResourceUsage } from '../../../hooks/diagnostics/useResourceMonitor';
 
@@ -185,7 +185,7 @@ function BotCommandCenterCard({
                             </h4>
                             <ul className="space-y-1">
                                 {runningList.map((snap) => {
-                                    const badge = botStateBadge(snap.state);
+                                    const badge = botProcessBadge(snap.state);
                                     return (
                                         <li key={snap.bot_id}>
                                             <button

@@ -79,7 +79,11 @@ export const ServerCard: React.FC<ServerCardProps> = ({
     return (
         <BotManageCard
             compact
-            badges={[serverLifecycleBadge(server.state)]}
+            status={{
+                lifecycle: serverLifecycleBadge(server.state),
+                session: null,
+                alert: null,
+            }}
             accent={accent}
             header={
                 <>

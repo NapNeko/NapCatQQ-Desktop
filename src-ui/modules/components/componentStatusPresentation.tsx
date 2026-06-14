@@ -1,12 +1,9 @@
 // 组件管理卡状态文案与 Badge 语义（MachineComponentRow / DockerRow 共用）。
 
 import type { HostComponentStatus } from '../../core/domain/components/types';
+import type { StatusBadgeSpec } from '../../core/domain/bot/bot-status-presentation';
 
-export type StatusBadgeSpec = {
-    tone: 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
-    label: string;
-    dot?: boolean;
-};
+export type { StatusBadgeSpec as StatusBadgeSpec };
 
 export function hostComponentStatusBadge(
     status: HostComponentStatus,

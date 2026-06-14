@@ -1,6 +1,5 @@
-// 状态徽章原子件。NapCat 业务里同一张 BotCard 经常并排挂 3-5 个徽章
-// （bot state + flavor + pending_restart + login_state），所以 Badge 必须紧凑、
-// 高度 20px、字号 11-12px，不能用 Fluent 那种偏胖的默认尺寸。
+// 状态徽章原子件。列表卡底栏采用「进程 + 账号 + 告警」多枚短 Badge；
+// 单枚高度约 20px、字号 2xs，避免 Fluent 默认偏胖尺寸。
 //
 // 设计规则：
 //   - tone: 决定颜色语义（neutral / brand / success / warning / danger / info）
