@@ -6,14 +6,15 @@
 //     仅预拉框架镜像；Bot 容器在 Bot 页启动时创建。
 
 import React from 'react';
-import { PackageX } from 'lucide-react';
-import { FormSection } from '../../shared/ui';
+import { PackageX, WifiOff } from 'lucide-react';
+import { Button, FormSection } from '../../shared/ui';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MachineComponentRowView } from './MachineComponentRow';
 import { componentCardGridClass } from './ComponentEntityCard';
 import { DockerRow } from './DockerRow';
 import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
+import { isHostConnectivityFailureReason } from '../../core/domain/components/types';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type {
@@ -101,6 +102,37 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     {host.os} · {host.locality === 'remote' ? '远端' : '本机'} 不支持任何已知组件
                 </p>
             </PagePlaceholder>
+        );
+    }
+
+    // 主机级连接失败占位：远端且所有行都是 unknown + 原因指向连接失败时，
+    // 直接在内容区给清晰提示 + 快捷操作，避免用户只看到一堆“探测失败，请看顶部”。
+    // 仅展示一个「重试探测」动作；“去远端页测试连接”是静态指引（用户可从侧边栏切换到远端页）。
+    const allUnknown = allComponents.every((r) => r.status.state === 'unknown');
+    const anyConnectivityFail = allComponents.some(
+        (r) => r.status.state === 'unknown' && isHostConnectivityFailureReason((r.status as { state: 'unknown'; reason: string }).reason),
+    );
+    const hostConnectFailed = host.locality === 'remote' && allUnknown && anyConnectivityFail;
+
+    if (hostConnectFailed) {
+        const found = allComponents.find(
+            (r) => r.status.state === 'unknown' && isHostConnectivityFailureReason((r.status as { state: 'unknown'; reason: string }).reason),
+        );
+        const sample = found?.status.state === 'unknown' ? found.status.reason : '连接失败';
+        return (
+            <div className="flex min-w-0 w-full max-w-full flex-col gap-6">
+                <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-md border border-border-subtle bg-surface/40 px-6 py-10 text-center">
+                    <WifiOff size={28} className="text-text-tertiary" strokeWidth={1.5} />
+                    <p className="text-sm text-text-secondary">{host.display_name} 连接失败</p>
+                    <p className="max-w-[48ch] text-xs text-text-tertiary break-words">{sample}</p>
+                    <p className="text-2xs text-text-tertiary">请在「远端」页手动测试连接，或检查网络/防火墙/SSH 配置。</p>
+                    <div className="mt-1">
+                        <Button size="sm" variant="primary" onClick={() => onRetryDetect(host.host_id)}>
+                            重试探测
+                        </Button>
+                    </div>
+                </div>
+            </div>
         );
     }
 

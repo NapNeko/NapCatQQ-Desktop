@@ -466,7 +466,7 @@ fn build_component_for_host(
                 .unwrap_or_else(|_| {
                     DesktopSelfComponent::new(
                         env!("CARGO_PKG_VERSION"),
-                        HostPath::from_posix("ncd-tauri"),
+                        HostPath::from_posix("NapCatQQ-Desktop"),
                     )
                 }),
         ),

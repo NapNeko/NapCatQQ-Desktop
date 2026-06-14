@@ -87,6 +87,9 @@ pub enum BotManagerError {
 
     #[error("task join failed: {0}")]
     TaskJoinFailed(String),
+
+    #[error("start cancelled (bot stopped before completion)")]
+    Cancelled,
 }
 
 impl From<crate::traits::RenderError> for BotManagerError {
@@ -1918,7 +1921,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     fn skip_post_start_status_recheck(config: &BotConfig) -> bool {
-        config.bot.backend_type == BackendType::SnowLuma
+        config.bot.backend_type == BackendType::SnowLuma && config.bot.runtime_target.is_local()
     }
 
     async fn start_runtime_from_starting(
@@ -1927,6 +1930,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         handle: &BotActorHandle,
         config: &BotConfig,
     ) -> Result<BotActorSnapshot, BotManagerError> {
+        // 取消令牌：stop_bot 在 Starting 阶段会 cancel，检测到后静默退出，避免重复报错。
+        let cancel = handle.cancellation_token();
+
         let runtime_config = if config.bot.deployment_type == DeploymentType::Docker
             || !config.bot.runtime_target.is_local()
         {
@@ -1968,6 +1974,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let backend = match self.backend_for_config(config).await {
             Ok(b) => b,
             Err(err) => {
+                if cancel.is_cancelled() {
+                    return Err(BotManagerError::Cancelled);
+                }
                 let message = err.to_string();
                 let crashed = handle.mark_crashed(message.clone()).await?;
                 self.publish_state_change(&crashed, "start_failed");
@@ -1976,6 +1985,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 return Err(err);
             }
         };
+        if cancel.is_cancelled() {
+            return Err(BotManagerError::Cancelled);
+        }
         match backend
             .start(&BotStartCtx {
                 config: runtime_config,
@@ -1994,17 +2006,29 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 // 与 UI 停在假 Running。复查本身报错时不阻断(查不到不代表没起来)。
                 // 远端 SL / 本机 SL：启动后立刻 status 复查易误判（远端 status 文件、本机 processes 写入竞态）。
                 if !Self::skip_post_start_status_recheck(config) {
-                    if let Ok(observed) = backend.status(bot_id.clone()).await {
-                        if matches!(
-                            observed.state,
-                            BotActorState::Stopped | BotActorState::Crashed
-                        ) {
-                        let detail = observed
-                            .extra
-                            .get("reason")
-                            .and_then(|v| v.as_str())
-                            .map(str::to_string)
-                            .unwrap_or_else(|| "进程启动后立即退出".to_string());
+                    let mut fail_detail = None;
+                    for pass in 0..2u8 {
+                        if pass == 1 {
+                            tokio::time::sleep(Duration::from_millis(400)).await;
+                        }
+                        if let Ok(observed) = backend.status(bot_id.clone()).await {
+                            if matches!(
+                                observed.state,
+                                BotActorState::Stopped | BotActorState::Crashed
+                            ) {
+                                fail_detail = Some(
+                                    observed
+                                        .extra
+                                        .get("reason")
+                                        .and_then(|v| v.as_str())
+                                        .map(str::to_string)
+                                        .unwrap_or_else(|| "进程启动后立即退出".to_string()),
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    if let Some(detail) = fail_detail {
                         let crashed = handle.mark_crashed(detail.clone()).await?;
                         self.publish_state_change(&crashed, "start_failed");
                         self.event_bus.publish(DomainEvent::bot_error(
@@ -2013,7 +2037,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             Some("Bot 启动后立即退出,请检查启动命令、运行时依赖与日志。".to_string()),
                         ));
                         return Err(BotManagerError::Render(detail));
-                        }
                     }
                 }
                 let running = handle.confirm_running().await?;
@@ -2064,6 +2087,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 Ok(running)
             }
             Err(err) => {
+                if cancel.is_cancelled() {
+                    return Err(BotManagerError::Cancelled);
+                }
                 let message = err.to_string();
                 error!(
                     target: "ncd_runtime::bot_manager",

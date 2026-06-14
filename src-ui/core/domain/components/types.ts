@@ -184,3 +184,26 @@ const CATEGORY_LABEL: Record<ComponentCategory, string> = {
 export function categoryLabel(c: ComponentCategory): string {
     return CATEGORY_LABEL[c];
 }
+
+// ─── 主机连接失败判断 ─────────────────────────────────────────────────
+// 探测 reason 如果包含 SSH 超时 / 连接拒绝 / 自动连接失败等关键词，
+// 视为整机连通性问题（而非单个组件探测逻辑失败）。
+
+const CONNECTIVITY_PATTERNS = [
+    '连接失败',
+    '自动连接失败',
+    'ssh connect failed',
+    'os error 10060',
+    'connection timed out',
+    'connection refused',
+    '没有反应',
+    '不可达',
+    'network is unreachable',
+    'no route to host',
+];
+
+export function isHostConnectivityFailureReason(reason: string | undefined | null): boolean {
+    if (!reason) return false;
+    const lower = reason.toLowerCase();
+    return CONNECTIVITY_PATTERNS.some((p) => lower.includes(p));
+}
