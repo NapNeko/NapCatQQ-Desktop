@@ -78,8 +78,14 @@ impl QqDependencyInstaller {
     async fn check_sudo_access(&self, host: &dyn Host) -> Result<bool, ActionError> {
         let cmd = HostCommand::new("sudo").arg("-n").arg("true");
         match host.run_to_string(cmd).await {
-            Ok(out) if out.success() => Ok(false), // 免密或 root
-            _ => Ok(true),                          // 需要密码
+            Ok(output) if output.success() => Ok(false), // 无需密码
+            Ok(_) | Err(_) => {
+                // sudo 需要密码或不可用
+                Err(ActionError::install_step(
+                    "check_sudo",
+                    "sudo 需要密码。请先在「远端」页配置 SSH 连接时提供 sudo 密码，或在远端执行 `sudo visudo` 配置 NOPASSWD。".to_string(),
+                ))
+            }
         }
     }
 
