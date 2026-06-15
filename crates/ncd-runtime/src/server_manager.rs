@@ -386,9 +386,12 @@ impl ServerManager {
         let changed_slot = if let Some(pw) = &password {
             if profile.remember_credential {
                 self.sync.credentials().set_password(&profile.id, pw)?;
+                // 关键修复：同时更新 sudo 槽，确保提权操作可用
+                let _ = self.sync.credentials().set_sudo_password(&profile.id, pw);
                 Some(PasswordSlot::Ssh)
             } else {
                 let _ = self.sync.credentials().delete_password(&profile.id);
+                let _ = self.sync.credentials().delete_sudo_password(&profile.id);
                 None
             }
         } else {
