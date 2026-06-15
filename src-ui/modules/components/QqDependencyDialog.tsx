@@ -14,7 +14,6 @@ import {
     DialogFooter,
 } from '../../shared/ui';
 import { componentService } from '../../core/services/component.service';
-import { SudoPasswordDialog } from './SudoPasswordDialog';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { InstallDependenciesResult } from '../../core/ipc/generated/qq/InstallDependenciesResult';
 import type { PackageStatus } from '../../core/ipc/generated/qq/PackageStatus';
@@ -28,7 +27,7 @@ interface QqDependencyDialogProps {
     onInstalled?: (result: InstallDependenciesResult) => void;
 }
 
-type Phase = 'review' | 'installing' | 'done' | 'error' | 'need-password';
+type Phase = 'review' | 'installing' | 'done' | 'error';
 
 export function QqDependencyDialog({
     open,
@@ -40,7 +39,6 @@ export function QqDependencyDialog({
     const [phase, setPhase] = useState<Phase>('review');
     const [result, setResult] = useState<InstallDependenciesResult | null>(null);
     const [errorMsg, setErrorMsg] = useState<string>('');
-    const [showSudoDialog, setShowSudoDialog] = useState(false);
 
     const missing = report?.missing ?? [];
     const satisfied = report?.satisfied ?? [];
@@ -48,41 +46,6 @@ export function QqDependencyDialog({
 
     const handleInstall = async () => {
         if (!report || missing.length === 0) return;
-        setPhase('installing');
-        try {
-            const pkgs = missing.map((p: PackageStatus) => p.name);
-            const res = await componentService.installQqDependencies(hostId, pkgs);
-
-            // 关键改进：检测 elevation_required 标志
-            if (res.elevation_required) {
-                setPhase('need-password');
-                setShowSudoDialog(true);
-                return;
-            }
-
-            setResult(res);
-            setPhase(res.success ? 'done' : 'error');
-            onInstalled?.(res);
-        } catch (e) {
-            setErrorMsg(String(e));
-            setPhase('error');
-        }
-    };
-
-    const handleSudoPasswordSubmit = async (password: string, remember: boolean) => {
-        setShowSudoDialog(false);
-
-        // 保存密码到 keyring（如果勾选"记住密码"）
-        if (remember) {
-            const serverId = hostId.replace('remote:', '');
-            try {
-                await componentService.rememberSudoPassword(serverId, password);
-            } catch (e) {
-                console.error('Failed to save sudo password:', e);
-            }
-        }
-
-        // 重新尝试安装
         setPhase('installing');
         try {
             const pkgs = missing.map((p: PackageStatus) => p.name);
@@ -106,60 +69,46 @@ export function QqDependencyDialog({
         setPhase('review');
         setResult(null);
         setErrorMsg('');
-        setShowSudoDialog(false);
         onClose();
     };
 
     return (
-        <>
-            <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) handleClose(); }}>
-                <DialogContent size="sheet">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <PackageCheck size={18} className="text-accent" />
-                            QQ 系统依赖
-                        </DialogTitle>
-                        <DialogDescription>
-                            {report?.distroInfo
-                                ? `检测到 ${report.distroInfo.name} ${report.distroInfo.version}`
-                                : '检测 QQ 运行所需的系统库'}
-                        </DialogDescription>
-                    </DialogHeader>
+        <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) handleClose(); }}>
+            <DialogContent size="sheet">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <PackageCheck size={18} className="text-accent" />
+                        QQ 系统依赖
+                    </DialogTitle>
+                    <DialogDescription>
+                        {report?.distroInfo
+                            ? `检测到 ${report.distroInfo.name} ${report.distroInfo.version}`
+                            : '检测 QQ 运行所需的系统库'}
+                    </DialogDescription>
+                </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto space-y-4 py-3 scrollbar-hide">
-                        <QqDependencyBody
-                            phase={phase}
-                            missing={missing}
-                            satisfied={satisfied}
-                            result={result}
-                            errorMsg={errorMsg}
-                            installCommand={installCommand}
-                            onCopy={handleCopy}
-                        />
-                    </div>
+                <div className="flex-1 overflow-y-auto space-y-4 py-3 scrollbar-hide">
+                    <QqDependencyBody
+                        phase={phase}
+                        missing={missing}
+                        satisfied={satisfied}
+                        result={result}
+                        errorMsg={errorMsg}
+                        installCommand={installCommand}
+                        onCopy={handleCopy}
+                    />
+                </div>
 
-                    <DialogFooter>
-                        <QqDependencyFooter
-                            phase={phase}
-                            missingCount={missing.length}
-                            onClose={handleClose}
-                            onInstall={handleInstall}
-                        />
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <SudoPasswordDialog
-                open={showSudoDialog}
-                onClose={() => {
-                    setShowSudoDialog(false);
-                    setPhase('review');
-                }}
-                onSubmit={handleSudoPasswordSubmit}
-                title="需要 sudo 密码"
-                description="安装系统依赖包需要 sudo 权限，请输入密码"
-            />
-        </>
+                <DialogFooter>
+                    <QqDependencyFooter
+                        phase={phase}
+                        missingCount={missing.length}
+                        onClose={handleClose}
+                        onInstall={handleInstall}
+                    />
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
