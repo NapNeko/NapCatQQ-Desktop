@@ -9,6 +9,14 @@ use ncd_host::remote::SudoAccess;
 use crate::context::ActionCtx;
 use crate::error::ActionError;
 
+/// 包管理器类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PackageManagerType {
+    Apt,
+    Dnf,
+    Unknown,
+}
+
 /// QQ 依赖安装器。
 pub struct QqDependencyInstaller;
 
@@ -44,8 +52,11 @@ impl QqDependencyInstaller {
             });
         }
 
+        // 关键改进：一次性探测包管理器类型，避免重复探测
+        let pkg_mgr = self.detect_package_manager(host).await;
+
         // 刷新包索引
-        if let Err(e) = self.refresh_package_index(host).await {
+        if let Err(e) = self.refresh_package_index(host, pkg_mgr).await {
             tracing::warn!("refresh package index failed: {e}");
         }
 
@@ -66,7 +77,7 @@ impl QqDependencyInstaller {
             })
             .await;
 
-            match self.install_package_with_retry(host, pkg, ctx).await {
+            match self.install_package_with_retry(host, pkg, pkg_mgr, ctx).await {
                 Ok(_) => installed.push(pkg.clone()),
                 Err(e) => {
                     failed.push(FailedPackage {
@@ -90,18 +101,38 @@ impl QqDependencyInstaller {
         Ok(ncd_host::remote::probe_sudo(host).await)
     }
 
-    /// 刷新包索引。
-    async fn refresh_package_index(&self, host: &dyn Host) -> Result<(), HostError> {
-        // 检测包管理器类型
+    /// 探测包管理器类型（一次性探测，避免重复）。
+    async fn detect_package_manager(&self, host: &dyn Host) -> PackageManagerType {
         let cmd_check_apt = HostCommand::new("command").arg("-v").arg("apt-get");
-        if host.run_to_string(cmd_check_apt).await?.success() {
-            let cmd = HostCommand::new("sudo").arg("apt-get").arg("update").arg("-y").arg("-qq");
-            host.run_to_string(cmd).await?;
-        } else {
-            let cmd_check_dnf = HostCommand::new("command").arg("-v").arg("dnf");
-            if host.run_to_string(cmd_check_dnf).await?.success() {
+        if host.run_to_string(cmd_check_apt).await.map_or(false, |o| o.success()) {
+            return PackageManagerType::Apt;
+        }
+
+        let cmd_check_dnf = HostCommand::new("command").arg("-v").arg("dnf");
+        if host.run_to_string(cmd_check_dnf).await.map_or(false, |o| o.success()) {
+            return PackageManagerType::Dnf;
+        }
+
+        PackageManagerType::Unknown
+    }
+
+    /// 刷新包索引。
+    async fn refresh_package_index(&self, host: &dyn Host, pkg_mgr: PackageManagerType) -> Result<(), HostError> {
+        match pkg_mgr {
+            PackageManagerType::Apt => {
+                let cmd = HostCommand::new("sudo").arg("apt-get").arg("update").arg("-y").arg("-qq");
+                host.run_to_string(cmd).await?;
+            }
+            PackageManagerType::Dnf => {
                 let cmd = HostCommand::new("sudo").arg("dnf").arg("makecache").arg("--refresh");
                 host.run_to_string(cmd).await?;
+            }
+            PackageManagerType::Unknown => {
+                return Err(HostError::CommandFailed {
+                    program: "package_manager".to_string(),
+                    exit_code: None,
+                    stderr: "未知的包管理器".to_string(),
+                });
             }
         }
         Ok(())
@@ -112,13 +143,14 @@ impl QqDependencyInstaller {
         &self,
         host: &dyn Host,
         package: &str,
+        pkg_mgr: PackageManagerType,
         ctx: &mut ActionCtx,
     ) -> Result<(), HostError> {
         const MAX_RETRIES: u32 = 3;
         let mut last_err = None;
 
         for attempt in 0..MAX_RETRIES {
-            match self.install_package(host, package).await {
+            match self.install_package(host, package, pkg_mgr).await {
                 Ok(_) => return Ok(()),
                 Err(e) => {
                     let is_network = is_network_error(&e);
@@ -148,27 +180,25 @@ impl QqDependencyInstaller {
     }
 
     /// 安装单个包。
-    async fn install_package(&self, host: &dyn Host, package: &str) -> Result<(), HostError> {
-        // 检测包管理器类型
-        let cmd_check_apt = HostCommand::new("command").arg("-v").arg("apt-get");
-        if host.run_to_string(cmd_check_apt).await?.success() {
-            let cmd = HostCommand::new("sudo")
-                .arg("apt-get")
-                .arg("install")
-                .arg("-y")
-                .arg("-qq")
-                .arg(package);
-            let output = host.run_to_string(cmd).await?;
-            if !output.success() {
-                return Err(HostError::CommandFailed {
-                    program: "apt-get".to_string(),
-                    exit_code: output.exit_code,
-                    stderr: output.stderr,
-                });
+    async fn install_package(&self, host: &dyn Host, package: &str, pkg_mgr: PackageManagerType) -> Result<(), HostError> {
+        match pkg_mgr {
+            PackageManagerType::Apt => {
+                let cmd = HostCommand::new("sudo")
+                    .arg("apt-get")
+                    .arg("install")
+                    .arg("-y")
+                    .arg("-qq")
+                    .arg(package);
+                let output = host.run_to_string(cmd).await?;
+                if !output.success() {
+                    return Err(HostError::CommandFailed {
+                        program: "apt-get".to_string(),
+                        exit_code: output.exit_code,
+                        stderr: output.stderr,
+                    });
+                }
             }
-        } else {
-            let cmd_check_dnf = HostCommand::new("command").arg("-v").arg("dnf");
-            if host.run_to_string(cmd_check_dnf).await?.success() {
+            PackageManagerType::Dnf => {
                 let cmd = HostCommand::new("sudo")
                     .arg("dnf")
                     .arg("install")
@@ -182,6 +212,13 @@ impl QqDependencyInstaller {
                         stderr: output.stderr,
                     });
                 }
+            }
+            PackageManagerType::Unknown => {
+                return Err(HostError::CommandFailed {
+                    program: "package_manager".to_string(),
+                    exit_code: None,
+                    stderr: "未知的包管理器，无法安装依赖".to_string(),
+                });
             }
         }
         Ok(())

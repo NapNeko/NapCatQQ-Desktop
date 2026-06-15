@@ -613,15 +613,6 @@ impl ServerManager {
 
         let result = f(host.clone()).await;
 
-        // 关键改进：操作完成后更新缓存（如果密码在隔离连接中被验证有效）
-        if result.is_ok() {
-            let mut hosts_guard = self.hosts.write().await;
-            if !hosts_guard.contains_key(id) {
-                hosts_guard.insert(id.to_string(), host.clone());
-                self.update_state(id, ServerState::Connected).await;
-            }
-        }
-
         info!(
             target: "ncd_runtime::server_manager",
             server_id = %id,
@@ -727,7 +718,14 @@ impl ServerManager {
         let host: Arc<dyn Host> = Arc::new(host);
 
         // 关键改进：自动同步 ssh 密码到 sudo 槽（setup_key_auth 之前的平滑迁移）
-        self.sync.migrate_ssh_to_sudo(id).ok();
+        if let Err(e) = self.sync.migrate_ssh_to_sudo(id) {
+            tracing::warn!(
+                target: "ncd_runtime::server_manager",
+                server_id = %id,
+                err = %e,
+                "SSH 密码迁移到 sudo 槽失败，后续提权操作可能需要重新输入密码"
+            );
+        }
 
         self.inject_elevation_password(id, host.as_ref()).await;
         self.hosts
