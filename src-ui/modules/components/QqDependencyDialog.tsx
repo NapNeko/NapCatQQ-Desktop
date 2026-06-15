@@ -174,7 +174,21 @@ function QqDependencyBody({
                     <X size={18} className="text-danger" />
                     <span className="text-sm font-medium text-danger">安装失败</span>
                 </div>
-                <p className="text-xs text-text-secondary">{errorMsg}</p>
+                <pre className="text-xs text-text-secondary whitespace-pre-wrap break-words max-h-[200px] overflow-y-auto">
+                    {errorMsg}
+                </pre>
+                {result && result.failed.length > 0 && (
+                    <div className="space-y-2 mt-2">
+                        <p className="text-sm font-medium text-warning">
+                            {result.failed.length} 个包安装失败：
+                        </p>
+                        {result.failed.map((f: FailedPackage) => (
+                            <div key={f.name} className="p-2 rounded bg-surface-secondary text-xs">
+                                <span className="font-medium">{f.name}</span>: {f.reason}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     }
