@@ -272,7 +272,7 @@ pub async fn start_node(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Resul
     let pid_daemon = shell_single_quote(&paths.pid_daemon);
     let script = format!(
         r#"cd {sl}
-DISPLAY="{display}" nohup setsid {node} index.mjs >> {log_daemon} 2>&1 </dev/null &
+DISPLAY="{display}" nohup setsid {node} --experimental-sqlite index.mjs >> {log_daemon} 2>&1 </dev/null &
 node_pid=$!
 echo "$node_pid" > {pid_node}
 echo "$node_pid" > {pid_daemon}
