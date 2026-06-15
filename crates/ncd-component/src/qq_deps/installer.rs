@@ -4,6 +4,7 @@
 
 use ncd_domain::{FailedPackage, InstallDependenciesResult};
 use ncd_host::{Host, HostCommand, HostError};
+use ncd_host::remote::SudoAccess;
 
 use crate::context::ActionCtx;
 use crate::error::ActionError;
@@ -14,7 +15,7 @@ pub struct QqDependencyInstaller;
 impl QqDependencyInstaller {
     /// 自动安装缺失依赖。
     ///
-    /// 会检查 sudo 权限，需要密码时会通过 ActionCtx 上报。
+    /// 会检查 sudo 权限，需要密码时通过 elevation_required 标志通知上层。
     pub async fn install(
         &self,
         host: &dyn Host,
@@ -30,8 +31,18 @@ impl QqDependencyInstaller {
             });
         }
 
-        // 检查提权能力
-        let elevation_required = self.check_sudo_access(host).await?;
+        // 检查提权能力（返回 SudoAccess，不再直接报错）
+        let sudo_access = self.check_sudo_access(host).await?;
+
+        // 如果需要密码，返回 elevation_required=true，让上层弹窗
+        if matches!(sudo_access, SudoAccess::PasswordRequired) {
+            return Ok(InstallDependenciesResult {
+                success: false,
+                installed: vec![],
+                failed: vec![],
+                elevation_required: true,
+            });
+        }
 
         // 刷新包索引
         if let Err(e) = self.refresh_package_index(host).await {
@@ -70,23 +81,13 @@ impl QqDependencyInstaller {
             success: failed.is_empty(),
             installed,
             failed,
-            elevation_required,
+            elevation_required: false,
         })
     }
 
-    /// 检查 sudo 访问（运行 sudo -n true）。
-    async fn check_sudo_access(&self, host: &dyn Host) -> Result<bool, ActionError> {
-        let cmd = HostCommand::new("sudo").arg("-n").arg("true");
-        match host.run_to_string(cmd).await {
-            Ok(output) if output.success() => Ok(false), // 无需密码
-            Ok(_) | Err(_) => {
-                // sudo 需要密码或不可用
-                Err(ActionError::install_step(
-                    "check_sudo",
-                    "sudo 需要密码。请先在「远端」页配置 SSH 连接时提供 sudo 密码，或在远端执行 `sudo visudo` 配置 NOPASSWD。".to_string(),
-                ))
-            }
-        }
+    /// 检查 sudo 访问（使用 ncd_host 的 probe_sudo）。
+    async fn check_sudo_access(&self, host: &dyn Host) -> Result<SudoAccess, ActionError> {
+        Ok(ncd_host::remote::probe_sudo(host).await)
     }
 
     /// 刷新包索引。
