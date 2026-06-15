@@ -162,6 +162,52 @@ impl QQComponent {
         ))
     }
 
+    /// 确保 Linux QQ 系统依赖已安装（仅 Linux）。
+    async fn ensure_dependencies(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
+        if host.os() != Os::Linux {
+            return Ok(()); // Windows 不需要
+        }
+
+        let manifest = crate::qq_deps::qq_qqnt_dependencies_v3_2_25();
+        let detector = crate::qq_deps::QqDependencyDetector::new(manifest);
+        let report = detector.detect(host, None).await?;
+
+        if report.missing.is_empty() {
+            ctx.info("系统依赖已满足").await;
+            return Ok(());
+        }
+
+        ctx.info(format!(
+            "发现 {} 个缺失依赖，开始安装",
+            report.missing.len()
+        ))
+        .await;
+
+        let installer = crate::qq_deps::QqDependencyInstaller;
+        let missing_names: Vec<String> = report.missing.iter().map(|p| p.name.clone()).collect();
+        let result = installer.install(host, missing_names, ctx).await?;
+
+        if !result.success {
+            let failed_list: Vec<String> = result
+                .failed
+                .iter()
+                .map(|f| format!("{}: {}", f.name, f.reason))
+                .collect();
+            return Err(ActionError::install_step(
+                "install_dependencies",
+                format!("部分依赖安装失败：{}", failed_list.join(", ")),
+            ));
+        }
+
+        ctx.info(format!("成功安装 {} 个依赖", result.installed.len()))
+            .await;
+        Ok(())
+    }
+
     async fn command_available(&self, host: &dyn Host, binary: &str) -> bool {
         let cmd = HostCommand::new("sh")
             .arg("-c")
@@ -313,21 +359,30 @@ impl QQComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
-        ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
+        ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
-        // ===== Step 1:探测包格式 =====
+        // ===== Step 1: 检测并安装系统依赖 =====
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
+            message: "check system dependencies".into(),
+        })
+        .await;
+        self.ensure_dependencies(host, ctx).await?;
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+
+        // ===== Step 2:探测包格式 =====
+        ctx.emit(ProgressKind::StepBegin {
+            step: 2,
             message: "detect package format".into(),
         })
         .await;
         let pkg_format = self.detect_package_format(host).await?;
         ctx.info(format!("package format: {pkg_format:?}")).await;
-        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+        ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 2:下载 QQ 包到本地 =====
+        // ===== Step 3:下载 QQ 包到本地 =====
         ctx.emit(ProgressKind::StepBegin {
-            step: 2,
+            step: 3,
             message: "download QQ package".into(),
         })
         .await;
@@ -379,11 +434,11 @@ impl QQComponent {
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }
 
-        ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
+        ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // ===== Step 3:rootless 解压 =====
+        // ===== Step 4:rootless 解压 =====
         ctx.emit(ProgressKind::StepBegin {
-            step: 3,
+            step: 4,
             message: "extract QQ".into(),
         })
         .await;
@@ -417,7 +472,7 @@ impl QQComponent {
         }
         // 清理远端安装包
         let _ = host.remove_file(&remote_pkg).await;
-        ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
+        ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }

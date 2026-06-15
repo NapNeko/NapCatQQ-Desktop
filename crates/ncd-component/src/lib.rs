@@ -19,6 +19,7 @@ pub mod download;
 pub mod error;
 pub mod pkg_install_stream;
 pub mod qq;
+pub mod qq_deps;
 pub mod remote_qq_entry;
 pub mod napcat;
 pub mod nodejs;

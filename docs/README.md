@@ -12,7 +12,7 @@ docs/
 │
 └── dev/               # 开发文档（不进 git，内部使用）
     ├── troubleshooting/   # 问题排查记录
-    ├── architecture/      # 架构设计文档
+    ├── architecture/      # 架构设计文档（重大功能设计方案）
     └── workflow/          # 开发流程文档
 ```
 

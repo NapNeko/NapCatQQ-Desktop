@@ -12,6 +12,7 @@ pub mod errors;
 pub mod ids;
 pub mod kinds;
 pub mod models;
+pub mod qq_dependency;
 pub mod release_snapshot;
 pub mod report;
 pub mod snowluma_start_mode;
@@ -45,6 +46,11 @@ pub use kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion, StopMode};
 pub use models::{
     BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationSource, MigrationStage,
     MigrationWarning,
+};
+pub use qq_dependency::{
+    DependencyCategory, DependencyInstallError, DistroFamily, DistroInfo, FailedPackage,
+    InstallDependenciesResult, PackageStatus, QqDependencyReport, SystemDependency,
+    DetectionMethod,
 };
 pub use release_snapshot::{ReleaseInfo, ReleaseSnapshot};
 pub use report::MigrationReport;

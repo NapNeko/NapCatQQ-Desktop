@@ -389,6 +389,8 @@ pub fn run() {
             commands::config_transfer::preview_config_import,
             commands::components::list_components,
             commands::components::detect_component,
+            commands::components::detect_qq_dependencies,
+            commands::components::install_qq_dependencies,
             commands::components::run_component_action,
             commands::components::cancel_component_action,
             commands::bot::bootstrap_bot_manager,

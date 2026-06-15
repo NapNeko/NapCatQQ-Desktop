@@ -18,6 +18,7 @@ use ncd_component::{
     NapCatComponent, NoVncComponent, NodeJsComponent, ProgressKind, QQComponent,
     SnowLumaComponent,
 };
+use ncd_domain::{InstallDependenciesResult, QqDependencyReport};
 use ncd_deploy::{DeployPlan, StepKind};
 use ncd_host::{Host, HostPath};
 use ncd_runtime::{release::read_cached_release_snapshot, DomainEvent, EventBus, ReleaseInfo};
@@ -602,4 +603,51 @@ mod tests {
         let result = catalog();
         assert_eq!(result.len(), 6);
     }
+}
+
+/// 检测 QQ 系统依赖（仅 Linux 远端）。
+#[tauri::command]
+pub async fn detect_qq_dependencies(
+    host_id: String,
+    state: State<'_, AppState>,
+) -> Result<QqDependencyReport, String> {
+    let host = resolve_host_with_autoconnect(&host_id, &state).await?;
+
+    if host.os() != ncd_host::Os::Linux {
+        return Err("QQ dependencies check is only supported on Linux".to_string());
+    }
+
+    let manifest = ncd_component::qq_deps::qq_qqnt_dependencies_v3_2_25();
+    let detector = ncd_component::qq_deps::QqDependencyDetector::new(manifest);
+
+    let report = detector
+        .detect(host.as_ref(), None)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(report)
+}
+
+/// 安装 QQ 系统依赖（仅 Linux 远端）。
+#[tauri::command]
+pub async fn install_qq_dependencies(
+    host_id: String,
+    packages: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<InstallDependenciesResult, String> {
+    let host = resolve_host_with_autoconnect(&host_id, &state).await?;
+
+    if host.os() != ncd_host::Os::Linux {
+        return Err("QQ dependencies installation is only supported on Linux".to_string());
+    }
+
+    let (mut ctx, _rx) = ncd_component::ActionCtx::new();
+    let installer = ncd_component::qq_deps::QqDependencyInstaller;
+
+    let result = installer
+        .install(host.as_ref(), packages, &mut ctx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(result)
 }
