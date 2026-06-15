@@ -458,7 +458,7 @@ fn build_component_for_host(
                 "{}/snowluma-remote/workspace/node",
                 require_remote_home(remote_home)?
             ));
-            Arc::new(NodeJsComponent::new("20.10.0", install_dir))
+            Arc::new(NodeJsComponent::new("22.12.0", install_dir))
         }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::DesktopSelf => Arc::new(
@@ -576,7 +576,7 @@ mod tests {
                 SnowLumaComponent::info(),
                 Arc::new(SnowLumaComponent::new(HostPath::from_posix("/x"), "https://example.com/x.tar.gz")),
             ),
-            (NodeJsComponent::info(), Arc::new(NodeJsComponent::new("20.10.0", HostPath::from_posix("/x")))),
+            (NodeJsComponent::info(), Arc::new(NodeJsComponent::new("22.12.0", HostPath::from_posix("/x")))),
             (QQComponent::info(), Arc::new(QQComponent::default_v3_2_25(HostPath::from_posix("/x")))),
             (NoVncComponent::info(), Arc::new(NoVncComponent::new())),
         ];
