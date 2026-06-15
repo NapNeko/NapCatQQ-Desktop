@@ -14,6 +14,7 @@ import {
     DialogFooter,
 } from '../../shared/ui';
 import { componentService } from '../../core/services/component.service';
+import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { InstallDependenciesResult } from '../../core/ipc/generated/qq/InstallDependenciesResult';
 import type { PackageStatus } from '../../core/ipc/generated/qq/PackageStatus';
@@ -39,10 +40,13 @@ export function QqDependencyDialog({
     const [phase, setPhase] = useState<Phase>('review');
     const [result, setResult] = useState<InstallDependenciesResult | null>(null);
     const [errorMsg, setErrorMsg] = useState<string>('');
+    const [showSudoDialog, setShowSudoDialog] = useState(false);
+    const [isSubmittingSudo, setIsSubmittingSudo] = useState(false);
 
     const missing = report?.missing ?? [];
     const satisfied = report?.satisfied ?? [];
     const installCommand = report?.installCommand ?? null;
+    const hostName = report?.distroInfo?.name ?? '远端服务器';
 
     const handleInstall = async () => {
         if (!report || missing.length === 0) return;
@@ -50,12 +54,42 @@ export function QqDependencyDialog({
         try {
             const pkgs = missing.map((p: PackageStatus) => p.name);
             const res = await componentService.installQqDependencies(hostId, pkgs);
+
+            // 检测需要 sudo 密码
+            if (res.elevation_required) {
+                setPhase('review');
+                setShowSudoDialog(true);
+                return;
+            }
+
             setResult(res);
             setPhase(res.success ? 'done' : 'error');
             onInstalled?.(res);
         } catch (e) {
             setErrorMsg(String(e));
             setPhase('error');
+        }
+    };
+
+    const handleSudoConfirm = async (password: string, remember: boolean) => {
+        setIsSubmittingSudo(true);
+        try {
+            // 保存密码到 keyring
+            if (remember) {
+                const serverId = hostId.replace('remote:', '');
+                await componentService.rememberSudoPassword(serverId, password);
+            }
+
+            // 重新尝试安装
+            const pkgs = missing.map((p: PackageStatus) => p.name);
+            const res = await componentService.installQqDependencies(hostId, pkgs);
+
+            setResult(res);
+            setPhase(res.success ? 'done' : 'error');
+            onInstalled?.(res);
+            setShowSudoDialog(false);
+        } finally {
+            setIsSubmittingSudo(false);
         }
     };
 
@@ -73,42 +107,54 @@ export function QqDependencyDialog({
     };
 
     return (
-        <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) handleClose(); }}>
-            <DialogContent size="sheet">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <PackageCheck size={18} className="text-accent" />
-                        QQ 系统依赖
-                    </DialogTitle>
-                    <DialogDescription>
-                        {report?.distroInfo
-                            ? `检测到 ${report.distroInfo.name} ${report.distroInfo.version}`
-                            : '检测 QQ 运行所需的系统库'}
-                    </DialogDescription>
-                </DialogHeader>
+        <>
+            <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) handleClose(); }}>
+                <DialogContent size="sheet">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <PackageCheck size={18} className="text-accent" />
+                            QQ 系统依赖
+                        </DialogTitle>
+                        <DialogDescription>
+                            {report?.distroInfo
+                                ? `检测到 ${report.distroInfo.name} ${report.distroInfo.version}`
+                                : '检测 QQ 运行所需的系统库'}
+                        </DialogDescription>
+                    </DialogHeader>
 
-                <div className="flex-1 overflow-y-auto space-y-4 py-3 scrollbar-hide">
-                    <QqDependencyBody
-                        phase={phase}
-                        missing={missing}
-                        satisfied={satisfied}
-                        result={result}
-                        errorMsg={errorMsg}
-                        installCommand={installCommand}
-                        onCopy={handleCopy}
-                    />
-                </div>
+                    <div className="flex-1 overflow-y-auto space-y-4 py-3 scrollbar-hide">
+                        <QqDependencyBody
+                            phase={phase}
+                            missing={missing}
+                            satisfied={satisfied}
+                            result={result}
+                            errorMsg={errorMsg}
+                            installCommand={installCommand}
+                            onCopy={handleCopy}
+                        />
+                    </div>
 
-                <DialogFooter>
-                    <QqDependencyFooter
-                        phase={phase}
-                        missingCount={missing.length}
-                        onClose={handleClose}
-                        onInstall={handleInstall}
-                    />
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                    <DialogFooter>
+                        <QqDependencyFooter
+                            phase={phase}
+                            missingCount={missing.length}
+                            onClose={handleClose}
+                            onInstall={handleInstall}
+                        />
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {showSudoDialog && (
+                <SudoPasswordDialog
+                    hostName={hostName}
+                    reason="安装 QQ 系统依赖包需要 sudo 权限"
+                    isSubmitting={isSubmittingSudo}
+                    onConfirm={handleSudoConfirm}
+                    onClose={() => setShowSudoDialog(false)}
+                />
+            )}
+        </>
     );
 }
 

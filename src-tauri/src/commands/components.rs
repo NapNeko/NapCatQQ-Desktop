@@ -649,14 +649,18 @@ pub async fn install_qq_dependencies(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 如果需要 sudo 密码，返回友好的错误信息
-    if result.elevation_required {
-        let server_id = host_id.strip_prefix("remote:").unwrap_or(&host_id);
-        return Err(format!(
-            "需要 sudo 密码才能安装依赖包。\n\n请前往「远端」页面，编辑服务器「{}」，重新输入 SSH 密码并勾选「记住密码」。\n\n或者在远端服务器上执行以下命令配置免密 sudo：\nsudo visudo\n# 添加一行：your_username ALL=(ALL) NOPASSWD: ALL",
-            server_id
-        ));
-    }
-
     Ok(result)
+}
+
+/// 记住远端服务器的 sudo 密码（用于提权操作）。
+#[tauri::command]
+pub async fn remember_sudo_password(
+    server_id: String,
+    password: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .server_manager
+        .remember_sudo_password(&server_id, &password)?;
+    Ok(())
 }
