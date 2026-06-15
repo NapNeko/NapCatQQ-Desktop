@@ -177,19 +177,32 @@ impl Component for NodeJsComponent {
             }
         }
 
-        // 优先级 2:回退 PATH 中的 node
+        // 优先级 2:回退 PATH 中的 node，但必须 >= v22.5.0（支持 node:sqlite）
         let path_cmd = HostCommand::new("node").arg("--version");
         match host.run_to_string(path_cmd).await {
             Ok(out) if out.success() => {
-                let ver = out.stdout.trim().trim_start_matches('v').to_string();
-                if ver.is_empty() {
-                    Ok(None)
-                } else {
-                    Ok(Some(DetectedVersion {
-                        version: ver,
-                        source: "$PATH/node".into(),
-                    }))
+                let ver_str = out.stdout.trim().trim_start_matches('v');
+                if ver_str.is_empty() {
+                    return Ok(None);
                 }
+
+                // 解析版本号，检查是否 >= 22.5.0
+                if let Some((major, _)) = ver_str.split_once('.') {
+                    if let Ok(major_num) = major.parse::<u32>() {
+                        if major_num >= 22 {
+                            // 系统 node >= 22，可以使用
+                            return Ok(Some(DetectedVersion {
+                                version: ver_str.to_string(),
+                                source: "$PATH/node".into(),
+                            }));
+                        }
+                        // 系统 node < 22，视为未安装（需要安装到指定目录）
+                        return Ok(None);
+                    }
+                }
+
+                // 无法解析版本号，保守处理视为未安装
+                Ok(None)
             }
             // 找不到 node 命令视作未安装,不算 detect 失败
             Ok(_) => Ok(None),
