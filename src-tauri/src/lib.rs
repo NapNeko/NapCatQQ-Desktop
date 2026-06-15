@@ -391,6 +391,7 @@ pub fn run() {
             commands::components::detect_component,
             commands::components::detect_qq_dependencies,
             commands::components::install_qq_dependencies,
+            commands::components::remember_sudo_password,
             commands::components::run_component_action,
             commands::components::cancel_component_action,
             commands::bot::bootstrap_bot_manager,

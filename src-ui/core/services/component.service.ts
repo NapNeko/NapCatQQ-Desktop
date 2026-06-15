@@ -82,4 +82,15 @@ export const componentService = {
             packages,
         });
     },
+
+    // 记住远端服务器的 sudo 密码（用于提权操作）。
+    rememberSudoPassword: async (
+        serverId: string,
+        password: string,
+    ): Promise<void> => {
+        return invoke<void>('remember_sudo_password', {
+            serverId,
+            password,
+        });
+    },
 };
