@@ -127,23 +127,62 @@ impl QqDependencyDetector {
     /// 方案 B：包管理器批量查询（未装 QQ 时预检）。
     async fn detect_via_package_manager(
         &self,
-        _host: &dyn Host,
+        host: &dyn Host,
         distro: &DistroInfo,
     ) -> Result<(Vec<PackageStatus>, Vec<PackageStatus>), ActionError> {
         let packages = self.get_package_list(distro);
-        let satisfied = Vec::new();
+        let mut satisfied = Vec::new();
         let mut missing = Vec::new();
 
-        // 简化实现：假设所有包都缺失（完整实现需要包管理器查询）
+        // 根据发行版选择查询命令
         for pkg in packages {
-            missing.push(PackageStatus {
-                name: pkg,
-                installed_version: None,
-                detection_method: DetectionMethod::PackageManager,
-            });
+            let installed = match distro.family {
+                DistroFamily::Debian => self.check_deb_package(host, &pkg).await,
+                DistroFamily::Rhel => self.check_rpm_package(host, &pkg).await,
+                _ => false,
+            };
+
+            if installed {
+                satisfied.push(PackageStatus {
+                    name: pkg,
+                    installed_version: None,
+                    detection_method: DetectionMethod::PackageManager,
+                });
+            } else {
+                missing.push(PackageStatus {
+                    name: pkg,
+                    installed_version: None,
+                    detection_method: DetectionMethod::PackageManager,
+                });
+            }
         }
 
         Ok((satisfied, missing))
+    }
+
+    /// 检查 Debian/Ubuntu 包是否已安装。
+    async fn check_deb_package(&self, host: &dyn Host, package: &str) -> bool {
+        let cmd = HostCommand::new("dpkg-query")
+            .arg("-W")
+            .arg("-f=${Status}")
+            .arg(package);
+
+        if let Ok(output) = host.run_to_string(cmd).await {
+            output.success() && output.stdout.contains("install ok installed")
+        } else {
+            false
+        }
+    }
+
+    /// 检查 RHEL/CentOS 包是否已安装。
+    async fn check_rpm_package(&self, host: &dyn Host, package: &str) -> bool {
+        let cmd = HostCommand::new("rpm").arg("-q").arg(package);
+
+        if let Ok(output) = host.run_to_string(cmd).await {
+            output.success()
+        } else {
+            false
+        }
     }
 
     /// 根据发行版获取包名清单。

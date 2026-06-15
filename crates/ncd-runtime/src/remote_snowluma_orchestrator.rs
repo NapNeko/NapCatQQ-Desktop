@@ -149,6 +149,7 @@ if [ -f {log} ]; then mv -f {log} "{log}.prev" 2>/dev/null || true; fi
         .map(|p| format!("LD_PRELOAD={} ", shell_single_quote(p)))
         .unwrap_or_default();
     let dbus = shell_single_quote(&paths.dbus_env);
+    let qq_bin = shell_single_quote(&cmd.program);
     let script = format!(
         r#"umask 077
 mkdir -p {rt} {log_dir}
@@ -159,6 +160,13 @@ sleep 0.5
 pid=$(cat {pidfile})
 if ! kill -0 "$pid" 2>/dev/null; then
   echo "bot 启动后立即退出" >&2
+  missing_libs=$(ldd {qq_bin} 2>/dev/null | grep 'not found' | awk '{{print $1}}' | tr '\n' ' ')
+  if [ -n "$missing_libs" ]; then
+    echo "缺少系统依赖库: $missing_libs" >&2
+    echo "请在组件页点击「补全 QQ 依赖」，或手动安装后重试" >&2
+  fi
+  echo "--- 启动日志末尾 ---" >&2
+  tail -n 20 {log} >&2 2>/dev/null || true
   exit 3
 fi
 echo "$pid"

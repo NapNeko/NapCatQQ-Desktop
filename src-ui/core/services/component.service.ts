@@ -12,6 +12,8 @@ import type {
     ComponentInfo,
     StepKind,
 } from '../ipc/types';
+import type { QqDependencyReport } from '../ipc/generated/qq/QqDependencyReport';
+import type { InstallDependenciesResult } from '../ipc/generated/qq/InstallDependenciesResult';
 import {
     mockCancelAction,
     mockComponentCatalog,
@@ -61,5 +63,23 @@ export const componentService = {
             return invoke<void>('cancel_component_action', { taskId });
         }
         mockCancelAction(taskId);
+    },
+
+    // QQ 系统依赖检测（仅 Linux 远端）。
+    detectQqDependencies: async (
+        hostId: string,
+    ): Promise<QqDependencyReport> => {
+        return invoke<QqDependencyReport>('detect_qq_dependencies', { hostId });
+    },
+
+    // QQ 系统依赖安装（仅 Linux 远端）。
+    installQqDependencies: async (
+        hostId: string,
+        packages: string[],
+    ): Promise<InstallDependenciesResult> => {
+        return invoke<InstallDependenciesResult>('install_qq_dependencies', {
+            hostId,
+            packages,
+        });
     },
 };

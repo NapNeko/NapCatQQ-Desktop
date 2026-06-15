@@ -55,7 +55,7 @@ impl QqDependencyInstaller {
             })
             .await;
 
-            match self.install_package(host, pkg).await {
+            match self.install_package_with_retry(host, pkg, ctx).await {
                 Ok(_) => installed.push(pkg.clone()),
                 Err(e) => {
                     failed.push(FailedPackage {
@@ -100,6 +100,46 @@ impl QqDependencyInstaller {
         Ok(())
     }
 
+    /// 安装单个包（带网络重试，指数退避 5s → 10s → 20s）。
+    async fn install_package_with_retry(
+        &self,
+        host: &dyn Host,
+        package: &str,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), HostError> {
+        const MAX_RETRIES: u32 = 3;
+        let mut last_err = None;
+
+        for attempt in 0..MAX_RETRIES {
+            match self.install_package(host, package).await {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    let is_network = is_network_error(&e);
+                    last_err = Some(e);
+
+                    // 只对网络错误重试，其他错误立即返回
+                    if !is_network || attempt == MAX_RETRIES - 1 {
+                        break;
+                    }
+
+                    let wait_secs = 5u64 * 2u64.pow(attempt);
+                    ctx.warn(format!(
+                        "{package} 安装失败（网络），{wait_secs}s 后重试 ({}/{MAX_RETRIES})",
+                        attempt + 2
+                    ))
+                    .await;
+                    tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| HostError::CommandFailed {
+            program: "install".to_string(),
+            exit_code: None,
+            stderr: "unknown install error".to_string(),
+        }))
+    }
+
     /// 安装单个包。
     async fn install_package(&self, host: &dyn Host, package: &str) -> Result<(), HostError> {
         // 检测包管理器类型
@@ -139,4 +179,17 @@ impl QqDependencyInstaller {
         }
         Ok(())
     }
+}
+
+/// 判断错误是否为网络相关（用于决定是否重试）。
+fn is_network_error(err: &HostError) -> bool {
+    let msg = err.to_string().to_lowercase();
+    msg.contains("could not resolve")
+        || msg.contains("connection")
+        || msg.contains("timed out")
+        || msg.contains("timeout")
+        || msg.contains("temporary failure")
+        || msg.contains("network")
+        || msg.contains("unable to fetch")
+        || msg.contains("failed to fetch")
 }
