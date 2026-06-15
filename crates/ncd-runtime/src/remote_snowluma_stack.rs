@@ -108,6 +108,44 @@ async fn read_pid_file(host: &dyn Host, path: &str) -> Result<Option<u32>, BotBa
     }
 }
 
+/// 清理可能占用 VNC 端口的残留 x11vnc（半残留栈场景）。
+async fn cleanup_stale_x11vnc(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
+    let paths = &layout.paths;
+    let vnc = DEFAULT_VNC_PORT;
+    let pid_path = shell_single_quote(&pid_file(paths, "x11vnc"));
+    let script = format!(
+        r#"if [ -f {pid_path} ]; then
+  old=$(cat {pid_path} 2>/dev/null || echo "")
+  if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then kill "$old" 2>/dev/null || true; sleep 0.3; fi
+  rm -f {pid_path}
+fi
+pids=$(pgrep -f "x11vnc.*-rfbport {vnc}" 2>/dev/null || true)
+if [ -n "$pids" ]; then kill $pids 2>/dev/null || true; sleep 0.3; fi
+"#
+    );
+    let _ = run_sh_dash(host, &script).await;
+    Ok(())
+}
+
+/// 清理可能占用 noVNC 端口的残留 websockify（半残留栈场景）。
+async fn cleanup_stale_websockify(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
+    let paths = &layout.paths;
+    let novnc = DEFAULT_NOVNC_PORT;
+    let pid_path = shell_single_quote(&pid_file(paths, "websockify"));
+    let script = format!(
+        r#"if [ -f {pid_path} ]; then
+  old=$(cat {pid_path} 2>/dev/null || echo "")
+  if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then kill "$old" 2>/dev/null || true; sleep 0.3; fi
+  rm -f {pid_path}
+fi
+pids=$(pgrep -f "websockify.*{novnc}" 2>/dev/null || true)
+if [ -n "$pids" ]; then kill $pids 2>/dev/null || true; sleep 0.3; fi
+"#
+    );
+    let _ = run_sh_dash(host, &script).await;
+    Ok(())
+}
+
 async fn kill_pid_graceful(host: &dyn Host, pid: u32) -> Result<(), BotBackendError> {
     let script = format!(
         r#"pid={pid}
@@ -350,9 +388,11 @@ fi
     start_wm(host, layout).await?;
     // 给 WM 一点时间再抓屏，减轻 noVNC 全黑（QQ 尚未启动时属正常，冷启 QQ 后应能看到界面）。
     tokio::time::sleep(Duration::from_millis(800)).await;
+    cleanup_stale_x11vnc(host, layout).await?;
     start_x11vnc(host, layout).await?;
+    cleanup_stale_websockify(host, layout).await?;
     start_websockify(host, layout).await?;
     start_node(host, layout).await?;
-    wait_webui_tcp(host, DEFAULT_WEBUI_PORT, Duration::from_secs(30)).await?;
+    wait_webui_tcp(host, DEFAULT_WEBUI_PORT, Duration::from_secs(60)).await?;
     Ok(())
 }
