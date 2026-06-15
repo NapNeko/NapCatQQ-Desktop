@@ -12,11 +12,12 @@ import {
     DialogTitle,
     DialogDescription,
     DialogFooter,
-} from '../../../shared/ui';
-import { cn } from '../../../shared/utils/cn';
-import { componentService } from '../../../core/services/component.service';
-import type { QqDependencyReport } from '../../../core/ipc/generated/qq/QqDependencyReport';
-import type { InstallDependenciesResult } from '../../../core/ipc/generated/qq/InstallDependenciesResult';
+} from '../../shared/ui';
+import { componentService } from '../../core/services/component.service';
+import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
+import type { InstallDependenciesResult } from '../../core/ipc/generated/qq/InstallDependenciesResult';
+import type { PackageStatus } from '../../core/ipc/generated/qq/PackageStatus';
+import type { FailedPackage } from '../../core/ipc/generated/qq/FailedPackage';
 
 interface QqDependencyDialogProps {
     open: boolean;
@@ -47,7 +48,7 @@ export function QqDependencyDialog({
         if (!report || missing.length === 0) return;
         setPhase('installing');
         try {
-            const pkgs = missing.map((p) => p.name);
+            const pkgs = missing.map((p: PackageStatus) => p.name);
             const res = await componentService.installQqDependencies(hostId, pkgs);
             setResult(res);
             setPhase(res.success ? 'done' : 'error');
@@ -72,7 +73,7 @@ export function QqDependencyDialog({
     };
 
     return (
-        <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+        <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) handleClose(); }}>
             <DialogContent size="sheet">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -123,8 +124,8 @@ function QqDependencyBody({
     onCopy,
 }: {
     phase: Phase;
-    missing: Array<{ name: string }>;
-    satisfied: Array<{ name: string }>;
+    missing: PackageStatus[];
+    satisfied: PackageStatus[];
     result: InstallDependenciesResult | null;
     errorMsg: string;
     installCommand: string | null;
@@ -155,7 +156,7 @@ function QqDependencyBody({
                         <p className="text-sm font-medium text-warning">
                             {result.failed.length} 个包安装失败：
                         </p>
-                        {result.failed.map((f) => (
+                        {result.failed.map((f: FailedPackage) => (
                             <div key={f.name} className="p-2 rounded bg-surface-secondary text-xs">
                                 <span className="font-medium">{f.name}</span>: {f.reason}
                             </div>

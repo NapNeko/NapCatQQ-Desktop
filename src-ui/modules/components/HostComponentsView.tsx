@@ -6,13 +6,15 @@
 //     仅预拉框架镜像；Bot 容器在 Bot 页启动时创建。
 
 import React from 'react';
-import { PackageX, WifiOff } from 'lucide-react';
+import { PackageX, WifiOff, PackageCheck } from 'lucide-react';
 import { Button, FormSection } from '../../shared/ui';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MachineComponentRowView } from './MachineComponentRow';
 import { componentCardGridClass } from './ComponentEntityCard';
 import { DockerRow } from './DockerRow';
 import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
+import { QqDependencyDialog } from './QqDependencyDialog';
+import { componentService } from '../../core/services/component.service';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import { isHostConnectivityFailureReason } from '../../core/domain/components/types';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
@@ -26,6 +28,7 @@ import type {
     Os,
     StepKind,
 } from '../../core/ipc/types';
+import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 
 interface HostComponentsViewProps {
     machine: MachineView;
@@ -79,6 +82,9 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     containers: _containers,
 }) => {
     const { host } = machine;
+    const [qqDepReport, setQqDepReport] = React.useState<QqDependencyReport | null>(null);
+    const [showQqDepDialog, setShowQqDepDialog] = React.useState(false);
+
     const empty =
         machine.framework.length + machine.runtimeDep.length + machine.selfApp.length === 0;
 
@@ -92,6 +98,24 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
 
     const dockerReady =
         dockerApplicable && dockerStatus ? dockerStatusSummary(dockerStatus).ready : false;
+
+    // QQ 依赖补全按钮（仅 Linux 远端 + QQ 组件）
+    const handleOpenQqDep = async () => {
+        try {
+            const report = await componentService.detectQqDependencies(host.host_id);
+            setQqDepReport(report);
+            setShowQqDepDialog(true);
+        } catch (e) {
+            console.error('检测 QQ 依赖失败:', e);
+        }
+    };
+
+    const qqDepButton = host.os === 'linux' && host.locality === 'remote' ? (
+        <Button size="sm" variant="ghost" onClick={handleOpenQqDep}>
+            <PackageCheck size={14} />
+            补全依赖
+        </Button>
+    ) : null;
 
     if (empty) {
         return (
@@ -191,6 +215,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 dockerInstallProgress={dockerInstallProgress}
                 onInstallDocker={() => onInstallDocker(host.host_id)}
                 onOpenDockerDownload={onOpenDockerDownload}
+                qqDepButton={qqDepButton}
             />
 
             <Group
@@ -203,6 +228,17 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 getProgress={getProgress}
                 onAction={onAction}
                 onRetryDetect={onRetryDetect}
+            />
+
+            <QqDependencyDialog
+                open={showQqDepDialog}
+                hostId={host.host_id}
+                report={qqDepReport}
+                onClose={() => setShowQqDepDialog(false)}
+                onInstalled={() => {
+                    // 安装完成后刷新组件状态
+                    onRetryDetect(host.host_id);
+                }}
             />
         </div>
     );
@@ -292,6 +328,7 @@ const RuntimeDepGroup: React.FC<{
     dockerInstallProgress?: ActionProgressView | null;
     onInstallDocker: () => void;
     onOpenDockerDownload: () => void;
+    qqDepButton: React.ReactNode;
 }> = ({
     rows,
     hostId,
@@ -309,6 +346,7 @@ const RuntimeDepGroup: React.FC<{
     dockerInstallProgress,
     onInstallDocker,
     onOpenDockerDownload,
+    qqDepButton,
 }) => {
     const hasRows = rows.length > 0 || showDocker;
     if (!hasRows) return null;
@@ -329,6 +367,7 @@ const RuntimeDepGroup: React.FC<{
                         isAnyInstalling={isAnyInstalling}
                         onAction={(action) => onAction(row.info.id, hostId, action)}
                         onRetryDetect={() => onRetryDetect(hostId)}
+                        trailingActions={row.info.id === 'qq' ? qqDepButton : undefined}
                     />
                 ))}
                 {showDocker && (
