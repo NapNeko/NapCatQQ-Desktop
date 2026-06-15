@@ -22,6 +22,8 @@ use ncd_host::remote::{
 };
 use ncd_host::{Host, HostError};
 
+use crate::credential_sync::{CredentialSyncLayer, PasswordSlot};
+
 // ============================================================
 // 数据结构
 // ============================================================
@@ -292,7 +294,7 @@ impl ServerProfileRepo {
 
 pub struct ServerManager {
     repo: ServerProfileRepo,
-    credentials: Arc<dyn ServerCredentialStore>,
+    sync: CredentialSyncLayer,
     /// 生成的免密私钥落盘目录：`<data_root>/ssh_keys/`。
     key_dir: PathBuf,
     /// TOFU host key 数据库路径:`<data_root>/secrets/known_hosts`。生产 SSH 连接
@@ -318,7 +320,7 @@ impl ServerManager {
     ) -> Self {
         Self {
             repo: ServerProfileRepo::new(data_root),
-            credentials,
+            sync: CredentialSyncLayer::new(credentials),
             key_dir: data_root.join("ssh_keys"),
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
             hosts: Arc::new(RwLock::new(HashMap::new())),
@@ -351,7 +353,7 @@ impl ServerManager {
         }
         if let Some(pw) = &password {
             if profile.remember_credential {
-                self.credentials.set_password(&profile.id, pw)?;
+                self.sync.credentials().set_password(&profile.id, pw)?;
             }
         }
         let mut all = self.repo.load().await;
@@ -380,19 +382,44 @@ impl ServerManager {
             .iter()
             .position(|p| p.id == profile.id)
             .ok_or_else(|| format!("server not found: {}", profile.id))?;
-        if let Some(pw) = &password {
+
+        let changed_slot = if let Some(pw) = &password {
             if profile.remember_credential {
-                self.credentials.set_password(&profile.id, pw)?;
+                self.sync.credentials().set_password(&profile.id, pw)?;
+                Some(PasswordSlot::Ssh)
             } else {
-                let _ = self.credentials.delete_password(&profile.id);
+                let _ = self.sync.credentials().delete_password(&profile.id);
+                None
             }
-        }
+        } else {
+            None
+        };
+
         all[pos] = profile.clone();
         self.repo.save(&all).await?;
-        // 连接信息可能已改（host/port/认证），丢弃缓存的旧连接，下次访问用新档案
-        // 重新连。否则编辑完仍走旧 SSH 会话，改了地址也不生效。
-        self.hosts.write().await.remove(&profile.id);
-        self.update_state(&profile.id, ServerState::Disconnected).await;
+
+        // 关键改进：SSH 密码变了必须清缓存，sudo 密码变了可以热更新
+        if let Some(slot) = changed_slot {
+            if self.sync.on_password_changed(&profile.id, slot) {
+                self.hosts.write().await.remove(&profile.id);
+                self.update_state(&profile.id, ServerState::Disconnected).await;
+
+                // 立即尝试静默重连（利用新凭据）
+                if profile.remember_credential {
+                    let _ = self.ensure_connected(&profile.id).await;
+                }
+            } else {
+                // sudo 密码变更：热更新缓存连接
+                if let Some(cached) = self.hosts.read().await.get(&profile.id) {
+                    self.sync.sync_elevation_to_host(&profile.id, cached.as_ref()).await;
+                }
+            }
+        } else {
+            // 连接信息可能已改（host/port/认证），丢弃缓存的旧连接
+            self.hosts.write().await.remove(&profile.id);
+            self.update_state(&profile.id, ServerState::Disconnected).await;
+        }
+
         Ok(profile)
     }
 
@@ -487,8 +514,10 @@ impl ServerManager {
         let mut updated = profile.clone();
         updated.auth_method = AuthMethod::Key;
         updated.private_key_path = Some(key_path_str);
-        let _ = self.credentials.set_sudo_password(&profile.id, password);
-        let _ = self.credentials.delete_password(&profile.id);
+
+        // 关键改进：使用 sync 层的迁移方法（显式语义）
+        self.sync.migrate_ssh_to_sudo(&profile.id)?;
+        let _ = self.sync.credentials().delete_password(&profile.id);
 
         let mut persisted = self.repo.load().await;
         if let Some(slot) = persisted.iter_mut().find(|p| p.id == id) {
@@ -519,8 +548,8 @@ impl ServerManager {
         }
         self.repo.save(&all).await?;
         info!(target: "ncd_runtime::server_manager", server_id = %id, "远端主机档案已删除");
-        let _ = self.credentials.delete_password(id);
-        let _ = self.credentials.delete_sudo_password(id);
+        let _ = self.sync.credentials().delete_password(id);
+        let _ = self.sync.credentials().delete_sudo_password(id);
         self.purge_server_runtime_maps(id).await;
         Ok(())
     }
@@ -578,9 +607,20 @@ impl ServerManager {
             .map_err(|e| format!("隔离连接建立失败: {e}"))?;
 
         let host: Arc<dyn Host> = Arc::new(host);
-        self.inject_elevation_password(id, host.as_ref()).await;
+
+        // 关键改进：立即同步最新密码（解决缓存过期问题）
+        self.sync.sync_elevation_to_host(id, host.as_ref()).await;
 
         let result = f(host.clone()).await;
+
+        // 关键改进：操作完成后更新缓存（如果密码在隔离连接中被验证有效）
+        if result.is_ok() {
+            let mut hosts_guard = self.hosts.write().await;
+            if !hosts_guard.contains_key(id) {
+                hosts_guard.insert(id.to_string(), host.clone());
+                self.update_state(id, ServerState::Connected).await;
+            }
+        }
 
         info!(
             target: "ncd_runtime::server_manager",
@@ -595,22 +635,20 @@ impl ServerManager {
     /// 优先专门的 sudo 槽(密钥登录机器在这);没有就退回 SSH 登录密码(密码
     /// 登录机器 sudo 密码通常与登录密码相同)。两个都没有返回 None。
     pub fn sudo_password(&self, id: &str) -> Option<String> {
-        self.credentials
-            .get_sudo_password(id)
-            .or_else(|| self.credentials.get_password(id))
+        self.sync.elevation_password(id)
     }
 
     /// 记住某服务器的 sudo 密码(用户在弹框勾了"记住密码"时调用)。下次该服务器
     /// 连接(或重连)时 inject_elevation_password 会把它注入 host。
     pub fn remember_sudo_password(&self, id: &str, password: &str) -> Result<(), String> {
-        self.credentials.set_sudo_password(id, password)
+        self.sync.remember_sudo(id, password)
     }
 
     /// 把 keyring 里这台服务器的提权密码注入一条已建立的 host 连接。没有任何缓存
     /// 密码时注入 None(host 退回 sudo -n,免密/root 仍能跑)。test_connection
     /// 缓存连接后调用,让这条 host 后续所有 elevated 操作自动带上密码。
     async fn inject_elevation_password(&self, id: &str, host: &dyn Host) {
-        host.set_elevation_password(self.sudo_password(id)).await;
+        self.sync.sync_elevation_to_host(id, host).await;
     }
 
     /// 测试 SSH 连接：握手 + 认证 + 执行 `uname -a` 拿 OS 信息。
@@ -687,6 +725,10 @@ impl ServerManager {
         // 缓存连接,并把 keyring 里的提权密码注入这条 host:之后任何 elevated 操作
         // (装 unzip、写 /opt/QQ、apt 装包、装 docker)都自动用上,不必每条命令各传。
         let host: Arc<dyn Host> = Arc::new(host);
+
+        // 关键改进：自动同步 ssh 密码到 sudo 槽（setup_key_auth 之前的平滑迁移）
+        self.sync.migrate_ssh_to_sudo(id).ok();
+
         self.inject_elevation_password(id, host.as_ref()).await;
         self.hosts
             .write()
@@ -866,7 +908,7 @@ impl ServerManager {
             AuthMethod::Password => {
                 let pw = password
                     .map(|s| s.to_string())
-                    .or_else(|| self.credentials.get_password(&profile.id))
+                    .or_else(|| self.sync.credentials().get_password(&profile.id))
                     .ok_or_else(|| "密码未提供且 keyring 中无缓存".to_string())?;
                 Ok(SshCredentials::password(&profile.username, &pw))
             }
@@ -877,7 +919,7 @@ impl ServerManager {
                     .ok_or_else(|| "私钥路径未配置".to_string())?;
                 let passphrase = password
                     .map(|s| s.to_string())
-                    .or_else(|| self.credentials.get_password(&profile.id));
+                    .or_else(|| self.sync.credentials().get_password(&profile.id));
                 Ok(SshCredentials::key_file(
                     &profile.username,
                     PathBuf::from(key_path),
