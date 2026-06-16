@@ -255,9 +255,17 @@ impl BotBackend for NativeDeploymentBackend {
 // ============================================================
 
 /// 远端「直接运行」：每 Bot 绑定一台 Host + 独立 NativeDeployment（translator 写远端路径）。
+///
+/// 按远程 SSH 稳定性计划（P0-6）：不再常驻一个固定的 host 引用，而是持有 resolver + target，
+/// 在 start/status/stop/tail_log 等边界按需通过 resolver 取“当前应活”的 host，并在检测到
+/// 传输层断连错误时触发 resolver.refresh 后重试一次。持久失败时不在此层把 bot 标 Crashed
+/// （由上层 BotManager 区分 transport_error 后决定是否仅发 bot_error 事件）。
 pub struct RemoteNativeDeploymentBackend {
     deployment: Arc<NativeDeployment>,
-    host: Arc<dyn Host>,
+    /// 用于在操作边界按需获取/刷新远端 host。ServerManager 通过 TauriHostResolver 注入。
+    resolver: Arc<dyn crate::HostResolver>,
+    /// 目标运行宿主（应为 RuntimeTarget::Server(...)）。
+    target: RuntimeTarget,
     backend_id: BotId,
     flavor: BotFlavor,
 }
@@ -265,20 +273,65 @@ pub struct RemoteNativeDeploymentBackend {
 impl RemoteNativeDeploymentBackend {
     pub fn new(
         deployment: Arc<NativeDeployment>,
-        host: Arc<dyn Host>,
+        resolver: Arc<dyn crate::HostResolver>,
+        target: RuntimeTarget,
         backend_id: impl Into<BotId>,
         flavor: BotFlavor,
     ) -> Self {
         Self {
             deployment,
-            host,
+            resolver,
+            target,
             backend_id: backend_id.into(),
             flavor,
         }
     }
 
+    /// 便捷方法：通过 resolver 取得当前应活的 host（不触发自愈刷新）。
+    async fn current_host(&self) -> Result<Arc<dyn Host>, BotBackendError> {
+        self.resolver
+            .resolve(&self.target)
+            .await
+            .map_err(|e| BotBackendError::RemoteHostTransport(e))
+    }
+
+    /// 通过 resolver 取得一个“新鲜”host（会触发底层刷新/重连）。
+    async fn refreshed_host(&self) -> Result<Arc<dyn Host>, BotBackendError> {
+        self.resolver
+            .refresh(&self.target)
+            .await
+            .map_err(|e| BotBackendError::RemoteHostTransport(e))
+    }
+
+    /// 在操作边界使用：先拿一个 host，执行 op；若 op 失败，则刷新一次 host 再重试一次。
+    /// 第二次仍失败则把错误向上透传（由调用方或上层决定是否仅报信息性错误、不推 Crashed）。
+    ///
+    /// 注意（P0 简化）：当前对任意错误（包括 DeploymentError）都做一次刷新重试（宽松策略），
+    /// 因为远端 Native 场景下 launch/stop/observe 失败很大概率与底层 SSH 传输有关；
+    /// 精确的“仅 transport 错误才刷新”可后续在错误类型里携带分类信息后再收紧。
+    async fn with_host_refresh<F, Fut, T, E>(&self, op: F) -> Result<T, BotBackendError>
+    where
+        F: FnOnce(Arc<dyn Host>) -> Fut + Clone + Send,
+        Fut: std::future::Future<Output = Result<T, E>> + Send,
+        E: std::fmt::Debug + Send + 'static,
+    {
+        let host = self.current_host().await?;
+        match op.clone()(host).await {
+            Ok(v) => Ok(v),
+            Err(_e) => {
+                // 刷新后重试一次
+                let host2 = self.refreshed_host().await?;
+                op(host2)
+                    .await
+                    .map_err(|e2| BotBackendError::RemoteHostTransport(format!("{:?}", e2)))
+            }
+        }
+    }
+
     async fn napcat_install_base(&self) -> Result<HostPath, BotBackendError> {
-        let (home, layout) = probe_remote_napcat_layout(self.host.as_ref())
+        // 拿一次当前 host 做探测（install base 通常在启动前调用，不长期持有）
+        let host = self.current_host().await?;
+        let (home, layout) = probe_remote_napcat_layout(host.as_ref())
             .await
             .map_err(|e| BotBackendError::Io(e))?;
         match layout {
@@ -304,9 +357,11 @@ impl BotBackend for RemoteNativeDeploymentBackend {
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
+        // 用刷新包装：传输断连时会尝试 refresh 后重试一次
         let handle = self
-            .deployment
-            .launch(self.host.as_ref(), &bot_config)
+            .with_host_refresh(|h| async move {
+                self.deployment.launch(h.as_ref(), &bot_config).await
+            })
             .await
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
         match handle {
@@ -325,12 +380,18 @@ impl BotBackend for RemoteNativeDeploymentBackend {
                 .as_str()
                 .parse()
                 .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
-            stop_remote_napcat_on_host(self.host.as_ref(), qq_id).await?;
+            // stop_remote_napcat_on_host 直接用 host 做 pgrep/kill，也需要刷新保护
+            let host = self.current_host().await?;
+            stop_remote_napcat_on_host(host.as_ref(), qq_id).await?;
         }
-        self.deployment
-            .stop(self.host.as_ref(), &bot_id, _mode)
-            .await
-            .map_err(|err| BotBackendError::Io(err.to_string()))
+        // deployment.stop 也走刷新包装
+        self.with_host_refresh(|h| {
+            let bid = bot_id.clone();
+            let m = _mode;
+            async move { self.deployment.stop(h.as_ref(), &bid, m).await }
+        })
+        .await
+        .map_err(|err| BotBackendError::Io(err.to_string()))
     }
 
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
@@ -339,14 +400,19 @@ impl BotBackend for RemoteNativeDeploymentBackend {
                 .as_str()
                 .parse()
                 .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
-            if let Some(pid) = remote_napcat_running_pid(self.host.as_ref(), qq_id).await? {
+            // remote_napcat_running_pid 做 pgrep，也需要活连接
+            let host = self.current_host().await?;
+            if let Some(pid) = remote_napcat_running_pid(host.as_ref(), qq_id).await? {
                 return Ok(BotStatus::running(bot_id, pid, 0));
             }
             return Ok(BotStatus::stopped(bot_id));
         }
+        // 通用 observe 走刷新包装；持久失败时上层可根据错误形状决定不推 Crashed
         let state = self
-            .deployment
-            .observe(self.host.as_ref(), &bot_id)
+            .with_host_refresh(|h| {
+                let bid = bot_id.clone();
+                async move { self.deployment.observe(h.as_ref(), &bid).await }
+            })
             .await
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
         Ok(status_for_deployment_state(bot_id, state))
@@ -370,6 +436,7 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         opts: TailOpts,
     ) -> Result<LogSnapshot, BotBackendError> {
         if self.flavor != BotFlavor::NapCat {
+            // 非 NapCat：deployment.tail_log 不直接依赖远端 host 句柄，保持原直连调用
             let snap = self.deployment.tail_log(&bot_id, opts.lines).await;
             return Ok(LogSnapshot {
                 lines: snap.lines,
@@ -383,16 +450,34 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         let install_base = self.napcat_install_base().await?;
         let log_path = napcat_remote_log_path(&install_base, qq_id);
         let path = HostPath::from_posix(&log_path);
-        let bytes = match self.host.read_file(&path).await {
-            Ok(bytes) => bytes,
-            Err(HostError::PathNotFound { .. }) => {
+
+        // 读日志文件走刷新包装：失败（含 transport 类）时刷新 host 后重试一次
+        let bytes = self
+            .with_host_refresh(|h| {
+                let p = path.clone();
+                async move {
+                    match h.read_file(&p).await {
+                        Ok(b) => Ok(b),
+                        Err(HostError::PathNotFound { .. }) => {
+                            Err(HostError::PathNotFound { path: p })
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+            })
+            .await;
+
+        let bytes = match bytes {
+            Ok(b) => b,
+            Err(BotBackendError::Io(msg)) if msg.contains("PathNotFound") => {
                 return Ok(LogSnapshot {
                     lines: Vec::new(),
                     total_lines: 0,
                 });
             }
-            Err(error) => return Err(BotBackendError::Io(error.to_string())),
+            Err(e) => return Err(e),
         };
+
         let text = String::from_utf8_lossy(&bytes);
         let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
         let total_lines = lines.len();
@@ -674,6 +759,7 @@ fn deployment_status(
     BotStatus {
         bot_id,
         state,
+        transport_error: None,
         pid: None,
         started_at: None,
         memory_rss_bytes: None,

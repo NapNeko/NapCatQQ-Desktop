@@ -238,6 +238,22 @@ pub trait Host: Send + Sync {
             operation: "open_tunnel",
         })
     }
+
+    /// 是否支持连接刷新/失效语义。本地/stub 返回 false，远端返回 true。
+    fn supports_refresh(&self) -> bool {
+        false
+    }
+
+    /// 请求该 host 主动失效底层连接（使后续操作快速失败，便于上层观测）。
+    /// 本地/stub 为 no-op；RemoteLinuxHost 实现为 poison 主句柄 + 清 SFTP。
+    async fn invalidate_connection(&self) {}
+
+    /// 廉价活性探测（非权威健康，仅用于自愈触发）。
+    /// 成功返回 true；任何错误/超时返回 false。默认实现对本地恒 true。
+    /// 实现方必须 bounded（建议 2~3s 超时），不得复用长命令超时。
+    async fn is_healthy(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

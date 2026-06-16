@@ -60,6 +60,7 @@ pub async fn connect_remote_host(
         private_key_path: None,
         remember_credential: request.password.is_some(),
         state: ncd_runtime::ServerState::Disconnected,
+        health: None,
         webui_url: request.webui_url.clone(),
     };
 
@@ -97,11 +98,14 @@ pub async fn list_remote_files(
     state: State<'_, AppState>,
     request: ListRemoteFilesRequest,
 ) -> Result<Vec<ncd_host::DirEntry>, String> {
+    // 改用 ensure_connected：未命中会自动尝试建立/恢复连接（单飞 + 冷却）。
+    // 这样能避免拿到一个已死的缓存 host 导致后续 list_dir 立即失败。
+    // 失败时仍返回高层文案“远端主机未连接”，不泄露底层 SSH 细节。
     let host = state
         .server_manager
-        .get_host(&request.remote_id)
+        .ensure_connected(&request.remote_id)
         .await
-        .ok_or_else(|| format!("远端主机未连接: {}", request.remote_id))?;
+        .map_err(|_| format!("远端主机未连接: {}", request.remote_id))?;
     let path = ncd_host::HostPath::from_posix(&request.path);
     host.list_dir(&path).await.map_err(|e| e.to_string())
 }
@@ -111,11 +115,15 @@ pub async fn get_remote_runtime_status(
     state: State<'_, AppState>,
     request: GetRemoteRuntimeStatusRequest,
 ) -> Result<RemoteRuntimeStatusResponse, String> {
+    // 改用 ensure_connected 而非 get_host：
+    // - 保证返回的 host 在此刻是可达的（死缓存会被 ensure 内部自动重连或报错）。
+    // - 失败时仍用“远端主机未连接”文案对齐旧行为。
+    // - 成功后 pgrep 失败只说明 bot 进程不在，不应被误判为“主机未连接”。
     let host = state
         .server_manager
-        .get_host(&request.remote_id)
+        .ensure_connected(&request.remote_id)
         .await
-        .ok_or_else(|| format!("远端主机未连接: {}", request.remote_id))?;
+        .map_err(|_| format!("远端主机未连接: {}", request.remote_id))?;
 
     let bot_id = ncd_runtime::BotId::new(&request.bot_id);
     let cmd = ncd_host::HostCommand::new("pgrep")

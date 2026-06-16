@@ -104,7 +104,7 @@ pub use remote_snowluma_tunnel::{
 };
 pub use secret_store_impl::SecretStoreImpl;
 pub use server_manager::{
-    AuthMethod, InMemoryCredentialStore, KeyringCredentialStore, ProbeReport, ServerCredentialStore,
+    AuthMethod, ConnectionHealth, InMemoryCredentialStore, KeyringCredentialStore, ProbeReport, ServerCredentialStore,
     ServerManager, ServerProfile, ServerState,
 };
 pub use snowluma::{

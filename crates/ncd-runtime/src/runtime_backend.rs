@@ -45,6 +45,11 @@ fn default_tail_lines() -> usize {
 pub struct BotStatus {
     pub bot_id: BotId,
     pub state: BotActorState,
+    /// 传输层可达性问题（仅远程 backend 使用）。
+    /// Some 时，state 反映最后已知应用状态，而非合成 Crashed/Stopped。
+    /// 前端应据此把“远端主机不可达”与“bot 进程退出/Crashed”区分开。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -62,6 +67,7 @@ impl BotStatus {
         Self {
             bot_id: bot_id.into(),
             state: BotActorState::Stopped,
+            transport_error: None,
             pid: None,
             started_at: None,
             memory_rss_bytes: None,
@@ -74,6 +80,7 @@ impl BotStatus {
         Self {
             bot_id: bot_id.into(),
             state: BotActorState::Running,
+            transport_error: None,
             pid: Some(pid),
             started_at: Some(started_at),
             memory_rss_bytes: None,
@@ -184,6 +191,13 @@ pub enum BotBackendError {
     Io(String),
     #[error("json error: {0}")]
     Json(String),
+    /// 远端主机传输层问题（SSH 断连、session poison、连接刷新失败等）。
+    /// 上层（BotManager）在 stop/start/reconcile 等路径应区分此错误：
+    /// - 只发 bot_error（信息性）事件
+    /// - 不调用 mark_crashed
+    /// - actor 状态保持原样（Running/Stopping/Starting 等）
+    #[error("remote host transport error: {0}")]
+    RemoteHostTransport(String),
 }
 
 #[async_trait]

@@ -35,4 +35,11 @@ impl HostResolver for TauriHostResolver {
             RuntimeTarget::Server(id) => self.server_manager.ensure_connected(id).await,
         }
     }
+
+    async fn refresh(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, String> {
+        match target {
+            RuntimeTarget::Local => Ok(Arc::clone(&self.local)),
+            RuntimeTarget::Server(id) => self.server_manager.refresh_host(id).await,
+        }
+    }
 }

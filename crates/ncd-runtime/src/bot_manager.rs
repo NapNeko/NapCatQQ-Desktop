@@ -652,7 +652,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             ));
                             Ok(Arc::new(RemoteNativeDeploymentBackend::new(
                                 deployment,
-                                host,
+                                Arc::clone(&resolver),
+                                config.bot.runtime_target.clone(),
                                 backend_id,
                                 flavor,
                             )))
@@ -1317,6 +1318,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     err = %message,
                     "停止 Bot 失败（后端 stop 报错）"
                 );
+
+                // 传输类错误（远端 SSH 断连、host 刷新失败等）：只发信息性 bot_error，
+                // 不 mark_crashed，actor 状态保持原样（Running/Stopping）。
+                // 这样前端看到的是“远端主机临时不可达”，而不是“bot 崩溃”。
+                if is_remote_transport_error(&err) {
+                    self.event_bus.publish(DomainEvent::bot_error(
+                        bot_id.clone(),
+                        message,
+                        Some("远端主机连接中断，停止操作未完成；连接恢复后可重试".to_string()),
+                    ));
+                    // 不改变 actor 状态，直接返回错误
+                    return Err(err.into());
+                }
+
+                // 非传输类错误：按原有逻辑标记崩溃
                 let crashed = handle.mark_crashed(message.clone()).await?;
                 self.publish_state_change(&crashed, "stop_failed");
                 self.event_bus.publish(DomainEvent::bot_error(
@@ -2861,6 +2877,26 @@ fn set_value_at_dot_path(
             }
         }
         _ => Err(format!("路径 '{dot_path}' 的父级不是 object / array")),
+    }
+}
+
+/// 判断 BotBackendError 是否属于“远端主机传输层问题”。
+/// 优先匹配显式的 RemoteHostTransport 变体；
+/// 对 Io 变体做字符串启发式（包含 disconnected / remote_disconnected / ssh / connection / poisoned / broken pipe 等）。
+fn is_remote_transport_error(err: &BotBackendError) -> bool {
+    match err {
+        BotBackendError::RemoteHostTransport(_) => true,
+        BotBackendError::Io(msg) => {
+            let m = msg.to_ascii_lowercase();
+            m.contains("disconnected")
+                || m.contains("remote_disconnected")
+                || m.contains("ssh")
+                || m.contains("connection")
+                || m.contains("poisoned")
+                || m.contains("broken pipe")
+                || m.contains("transport")
+        }
+        _ => false,
     }
 }
 

@@ -23,6 +23,7 @@ use ncd_host::remote::{
 use ncd_host::{Host, HostError};
 
 use crate::credential_sync::{CredentialSyncLayer, PasswordSlot};
+use crate::events::EventBus;
 
 // ============================================================
 // 数据结构
@@ -56,6 +57,10 @@ pub struct ServerProfile {
     /// 最近一次连接测试结果。
     #[serde(default)]
     pub state: ServerState,
+	    /// 连接健康度细粒度信息（最近成功时间、连续失败计数等）。
+	    /// 可选 + 默认 + 序列化时 None 省略，保证向后兼容。
+	    #[serde(default, skip_serializing_if = "Option::is_none")]
+	    pub health: Option<ConnectionHealth>,
     /// WebUI 端点 URL（用户手填的远端 NapCat WebUI 地址）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webui_url: Option<String>,
@@ -88,6 +93,27 @@ pub enum ServerState {
     /// 连接失败。
     Failed,
 }
+
+	/// 连接健康度细粒度信息（可选，向后兼容）。
+	/// 与 ServerState（粗状态）正交：state 仍表示 Connected/Disconnected/Failed 等，
+	/// health 提供最近成功时间、连续失败计数、最近失败原因等，用于前端展示和抑制策略。
+	#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+	#[serde(rename_all = "camelCase")]
+	#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+	pub struct ConnectionHealth {
+	    /// 最近一次成功连接/探测的时间（ISO8601 或毫秒时间戳字符串）。
+	    #[serde(default, skip_serializing_if = "Option::is_none")]
+	    pub last_success_at: Option<String>,
+	    /// 连续失败次数（成功后归零）。
+	    #[serde(default)]
+	    pub consecutive_failures: u32,
+	    /// 最近一次失败的原因（简短人话）。
+	    #[serde(default, skip_serializing_if = "Option::is_none")]
+	    pub last_failure_reason: Option<String>,
+	    /// 最近一次失败的时间。
+	    #[serde(default, skip_serializing_if = "Option::is_none")]
+	    pub last_failure_at: Option<String>,
+	}
 
 /// test_connection 返回的探测报告。
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -311,6 +337,9 @@ pub struct ServerManager {
     connect_locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
     /// 自动连接失败后冷却，避免 detect 轮询刷 SSH 失败日志。
     auto_connect_cooldown_until: Arc<RwLock<HashMap<String, std::time::Instant>>>,
+    /// 可选的事件总线，用于发布 HostConnectionLost / HostConnectionRecovered。
+    /// 由 Tauri 侧 wiring 时通过 set_event_bus 注入；未注入时不发事件（向后兼容）。
+    event_sink: Option<Arc<dyn EventBus>>,
 }
 
 impl ServerManager {
@@ -326,6 +355,7 @@ impl ServerManager {
             hosts: Arc::new(RwLock::new(HashMap::new())),
             connect_locks: Arc::new(RwLock::new(HashMap::new())),
             auto_connect_cooldown_until: Arc::new(RwLock::new(HashMap::new())),
+            event_sink: None,
         }
     }
 
@@ -683,7 +713,20 @@ impl ServerManager {
             Ok(h) => h,
             Err(err) => {
                 self.update_state(id, ServerState::Failed).await;
+
+                // P0-10: 更新 health 失败信息 + 递增连续失败计数 + 发布 lost 事件
                 let latency_ms = start.elapsed().as_millis() as u64;
+                let now = chrono::Utc::now().to_rfc3339();
+                let err_text = err.to_string();
+                let mut consecutive = 0u32;
+                self.update_health_fields(id, |h| {
+                    h.last_failure_reason = Some(err_text.clone());
+                    h.last_failure_at = Some(now.clone());
+                    h.consecutive_failures = h.consecutive_failures.saturating_add(1);
+                    consecutive = h.consecutive_failures;
+                }).await;
+                self.publish_host_lost(id, Some(err_text), consecutive);
+
                 let (error, host_key_prompt, host_key_mismatch) = classify_connect_error(&err);
                 if log_probe {
                     tracing::warn!(
@@ -736,6 +779,14 @@ impl ServerManager {
             .await
             .insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
+
+        // P0-10: 更新 health 成功时间 + 归零失败计数 + 发布恢复事件
+        let now = chrono::Utc::now().to_rfc3339();
+        self.update_health_fields(id, |h| {
+            h.last_success_at = Some(now.clone());
+            h.consecutive_failures = 0;
+        }).await;
+        self.publish_host_recovered(id, latency_ms);
 
         if log_probe {
             info!(
@@ -801,9 +852,23 @@ impl ServerManager {
 
     /// 丢弃缓存中的 SSH 连接（会话已断或不可信时调用）。
     /// 下次 `ensure_connected` 会重新握手，避免继续复用死连接。
+    ///
+    /// P0-10: 同时更新 health（递增失败计数 + 记原因），并发布 HostConnectionLost 事件。
     pub async fn disconnect_cached_host(&self, id: &str) {
         if self.hosts.write().await.remove(id).is_some() {
             self.update_state(id, ServerState::Disconnected).await;
+
+            // P0-10: health 失败分支 + 发布 lost
+            let now = chrono::Utc::now().to_rfc3339();
+            let mut consecutive = 0u32;
+            self.update_health_fields(id, |h| {
+                h.last_failure_reason = Some("缓存连接被显式断开".to_string());
+                h.last_failure_at = Some(now.clone());
+                h.consecutive_failures = h.consecutive_failures.saturating_add(1);
+                consecutive = h.consecutive_failures;
+            }).await;
+            self.publish_host_lost(id, Some("缓存连接被显式断开".to_string()), consecutive);
+
             info!(
                 target: "ncd_runtime::server_manager",
                 server_id = %id,
@@ -898,6 +963,148 @@ impl ServerManager {
         Arc::clone(map.entry(id.to_string()).or_insert_with(|| Arc::new(Mutex::new(()))))
     }
 
+    // ============================================================
+    // P0-10: 自愈闭环新增 API（get_live_host / refresh_host / mark_unhealthy）
+    // ============================================================
+
+    /// 取"当前应存活"的 host。
+    ///
+    /// - 缓存未命中 → 走 ensure_connected（含单飞 + 自动连 + 冷却）。
+    /// - 缓存命中 → 先做廉价活性探测（is_healthy），成功则返回；失败则 mark_unhealthy + 驱逐 + 走 ensure_connected 重连。
+    /// - 全程受单飞保护（复用/扩展 connect_locks）。
+    ///
+    /// 语义：调用方可信返回的连接在本方法返回时刻是可达的（探测通过）。
+    /// 失败时返回人话错误（与 ensure_connected 一致）。
+    pub async fn get_live_host(&self, id: &str) -> Result<Arc<dyn Host>, String> {
+        // 1. 先查缓存
+        if let Some(_host) = self.get_host(id).await {
+            // 2. 命中缓存 → 做廉价活性探测（带单飞）
+            let lock = self.connect_lock_for(id).await;
+            let _guard = lock.lock().await;
+
+            // 二次检查：等锁期间可能已被别人刷新/驱逐
+            if let Some(host2) = self.get_host(id).await {
+                // 3. 执行 is_healthy（带短超时保护已在 RemoteLinuxHost 内实现）
+                let start = std::time::Instant::now();
+                let healthy = host2.is_healthy().await;
+                let latency = start.elapsed().as_millis() as u64;
+
+                if healthy {
+                    // 探测成功 → 更新 health 成功时间 + 归零失败计数 + 发布恢复事件（若刚恢复）
+                    self.update_health_success(id, latency).await;
+                    return Ok(host2);
+                } else {
+                    // 探测失败 → 标记不健康、驱逐、发 lost 事件，然后走 ensure 重连
+                    self.mark_unhealthy_internal(id, Some("活性探测失败".to_string())).await;
+                    // 继续走到 ensure_connected 分支
+                }
+            }
+        }
+
+        // 缓存未命中或探测失败后已驱逐 → 走标准 ensure 路径（含单飞 + 冷却）
+        self.ensure_connected(id).await
+    }
+
+    /// 强制刷新：无条件驱逐该 server 的缓存连接（若有），然后 ensure_connected。
+    /// 用于 Holder 明确知道当前 host 已死、或用户手动"重新测试连接"后的路径。
+    ///
+    /// 刷新成功后会更新 health 并发布 Recovered 事件。
+    pub async fn refresh_host(&self, id: &str) -> Result<Arc<dyn Host>, String> {
+        // 1. 驱逐旧缓存（若有）
+        if self.hosts.write().await.remove(id).is_some() {
+            info!(
+                target: "ncd_runtime::server_manager",
+                server_id = %id,
+                "refresh_host 驱逐旧缓存连接"
+            );
+        }
+
+        // 2. 走 ensure 建立新连接
+        let host = self.ensure_connected(id).await?;
+
+        // 3. 成功后补一个轻量健康标记（ensure 内部已更新 state，这里只补 health 成功时间）
+        let now = chrono::Utc::now().to_rfc3339();
+        self.update_health_fields(id, |h| {
+            h.last_success_at = Some(now.clone());
+            h.consecutive_failures = 0;
+            // last_failure_* 保留上次失败信息，供前端诊断
+        }).await;
+
+        // 4. 发布恢复事件（刷新成功即视为一次恢复）
+        self.publish_host_recovered(id, 0);
+
+        Ok(host)
+    }
+
+    /// 显式标记该 server 的缓存连接不可用。立即从 hosts 表移除，并把状态置 Disconnected。
+    /// Holder 在观测到可识别的 disconnect 错误后可调用，加速下一次访问触发重连。幂等。
+    ///
+    /// 内部会更新 health（递增连续失败计数 + 记失败原因/时间），并发布 HostConnectionLost 事件。
+    pub async fn mark_unhealthy(&self, id: &str) {
+        self.mark_unhealthy_internal(id, None).await;
+    }
+
+    /// mark_unhealthy 的内部实现，reason 为 None 时使用默认文案。
+    async fn mark_unhealthy_internal(&self, id: &str, reason: Option<String>) {
+        // 1. 驱逐缓存
+        let removed = self.hosts.write().await.remove(id).is_some();
+
+        // 2. 更新 ServerProfile.state
+        self.update_state(id, ServerState::Disconnected).await;
+
+        // 3. 更新 health（递增失败计数 + 记原因/时间）
+        let reason_text = reason.clone().unwrap_or_else(|| "显式标记不健康".to_string());
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut consecutive = 0u32;
+
+        self.update_health_fields(id, |h| {
+            h.last_failure_reason = Some(reason_text.clone());
+            h.last_failure_at = Some(now.clone());
+            h.consecutive_failures = h.consecutive_failures.saturating_add(1);
+            consecutive = h.consecutive_failures;
+        }).await;
+
+        // 4. 发布 lost 事件（仅在确实发生驱逐或状态变更时发，避免重复刷）
+        if removed {
+            self.publish_host_lost(id, Some(reason_text), consecutive);
+        }
+
+        if removed {
+            info!(
+                target: "ncd_runtime::server_manager",
+                server_id = %id,
+                "mark_unhealthy 已驱逐缓存并标记 Disconnected"
+            );
+        }
+    }
+
+    /// 更新某 server 的 health 成功分支：记 last_success_at + 归零 consecutive_failures。
+    async fn update_health_success(&self, id: &str, _latency_ms: u64) {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.update_health_fields(id, |h| {
+            h.last_success_at = Some(now.clone());
+            // 成功即归零连续失败
+            if h.consecutive_failures > 0 {
+                h.consecutive_failures = 0;
+            }
+            // 不清 last_failure_*，留作诊断
+        }).await;
+    }
+
+    /// 通用 health 字段更新器：若 profile 不存在则静默跳过；若 health 为 None 则先初始化。
+    async fn update_health_fields<F>(&self, id: &str, mutator: F)
+    where
+        F: FnOnce(&mut ConnectionHealth),
+    {
+        let mut all = self.repo.load().await;
+        if let Some(p) = all.iter_mut().find(|p| p.id == id) {
+            let mut h = p.health.clone().unwrap_or_default();
+            mutator(&mut h);
+            p.health = Some(h);
+            let _ = self.repo.save(&all).await;
+        }
+    }
+
     // ---- helpers ----
 
     fn build_credentials(
@@ -935,6 +1142,33 @@ impl ServerManager {
         if let Some(p) = all.iter_mut().find(|p| p.id == id) {
             p.state = state;
             let _ = self.repo.save(&all).await;
+        }
+    }
+
+    /// 注入事件总线（Tauri 侧 wiring 时调用）。注入后 ServerManager 会在关键路径
+    /// 发布 HostConnectionLost / HostConnectionRecovered 事件。
+    pub fn set_event_bus(&mut self, bus: Arc<dyn EventBus>) {
+        self.event_sink = Some(bus);
+    }
+
+    /// 发布 HostConnectionLost 事件（若已注入 sink）。
+    fn publish_host_lost(&self, server_id: &str, reason: Option<String>, consecutive: u32) {
+        if let Some(sink) = &self.event_sink {
+            sink.publish(crate::events::DomainEvent::HostConnectionLost {
+                server_id: server_id.to_string(),
+                reason,
+                consecutive_failures: consecutive,
+            });
+        }
+    }
+
+    /// 发布 HostConnectionRecovered 事件（若已注入 sink）。
+    fn publish_host_recovered(&self, server_id: &str, latency_ms: u64) {
+        if let Some(sink) = &self.event_sink {
+            sink.publish(crate::events::DomainEvent::HostConnectionRecovered {
+                server_id: server_id.to_string(),
+                latency_ms,
+            });
         }
     }
 }

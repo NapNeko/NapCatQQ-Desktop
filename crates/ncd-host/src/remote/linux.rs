@@ -113,7 +113,8 @@ pub struct RemoteLinuxHost {
     shell: BashShell,
     /// SSH session 句柄(用 Mutex 串行化,避免多线程同时操作 channel)。
     /// 实际连接保留为 Arc 以便 spawn 出多个 channel 用同一 session。
-    handle: Arc<Mutex<ClientHandle<ClientCallback>>>,
+    /// 用 Option 包装以支持 invalidate 时 poison 主句柄(设为 None 使后续操作快速失败)。
+    handle: Arc<Mutex<Option<ClientHandle<ClientCallback>>>>,
     /// 复用的 SFTP 会话。SFTP 子系统初始化(开 channel + request_subsystem +
     /// 协议版本协商)有好几个往返,原来每次 exists/read_file 都重开一条用完即弃,
     /// 是远端探测慢的大头。这里缓存一条 session 反复用;russh-sftp 的 SftpSession
@@ -221,7 +222,7 @@ impl RemoteLinuxHost {
         Ok(Self {
             id: id_str,
             shell: BashShell,
-            handle: Arc::new(Mutex::new(handle)),
+            handle: Arc::new(Mutex::new(Some(handle))),
             sftp: Arc::new(Mutex::new(None)),
             elevation_password: Arc::new(Mutex::new(None)),
             config,
@@ -255,6 +256,15 @@ impl RemoteLinuxHost {
     /// 丢弃缓存的 SFTP 会话。某次 op 报错（多半连接断了）时调用，下次访问重开。
     async fn invalidate_sftp(&self) {
         *self.sftp.lock().await = None;
+    }
+
+    /// 主动失效主 SSH 句柄：poison 句柄（设为 None），使后续 `channel_open_session` 立即失败。
+    /// 旧 handle 被 drop 时 russh 会尝试关闭底层 session（best-effort）。
+    /// 用于自愈触发：让本对象后续操作快速失败，但不负责从 ServerManager 缓存驱逐。
+    async fn invalidate_main_handle(&self) {
+        let mut guard = self.handle.lock().await;
+        // 直接 take 掉，旧 handle drop 时底层会尝试关闭
+        let _ = guard.take();
     }
 
     /// 主机 id 引用
@@ -487,28 +497,41 @@ impl Host for RemoteLinuxHost {
         let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
 
         let handle = self.handle.clone();
+        let self_for_invalidate = self; // 为了 best-effort invalidate 借用
         let exec_fut = async move {
-            let session = handle.lock().await;
-            let mut channel = session
-                .channel_open_session()
-                .await
-                .map_err(|e| HostError::remote_disconnected(format!("open channel: {e}")))?;
+            let mut guard = handle.lock().await;
+            let session = match guard.as_mut() {
+                Some(s) => s,
+                None => {
+                    return Err(HostError::remote_disconnected("ssh session poisoned"));
+                }
+            };
+            let mut channel = match session.channel_open_session().await {
+                Ok(c) => c,
+                Err(e) => {
+                    // 可识别的致命 session 错误：best-effort poison 本对象，后续操作快速失败
+                    // 注意：不负责从 ServerManager 缓存驱逐
+                    drop(guard);
+                    self_for_invalidate.invalidate_connection().await;
+                    return Err(HostError::remote_disconnected(format!("open channel: {e}")));
+                }
+            };
 
-            channel
-                .exec(true, line.as_bytes())
-                .await
-                .map_err(|e| HostError::remote_disconnected(format!("exec: {e}")))?;
+            if let Err(e) = channel.exec(true, line.as_bytes()).await {
+                self_for_invalidate.invalidate_connection().await;
+                return Err(HostError::remote_disconnected(format!("exec: {e}")));
+            }
 
             // 写 stdin(若指定)
             if let Some(data) = stdin {
-                channel
-                    .data(&data[..])
-                    .await
-                    .map_err(|e| HostError::remote_disconnected(format!("stdin write: {e}")))?;
-                channel
-                    .eof()
-                    .await
-                    .map_err(|e| HostError::remote_disconnected(format!("stdin eof: {e}")))?;
+                if let Err(e) = channel.data(&data[..]).await {
+                    self_for_invalidate.invalidate_connection().await;
+                    return Err(HostError::remote_disconnected(format!("stdin write: {e}")));
+                }
+                if let Err(e) = channel.eof().await {
+                    self_for_invalidate.invalidate_connection().await;
+                    return Err(HostError::remote_disconnected(format!("stdin eof: {e}")));
+                }
             }
 
             collect_channel_output(&mut channel).await
@@ -537,25 +560,35 @@ impl Host for RemoteLinuxHost {
             (inner_line, cmd.stdin)
         };
 
-        let session = self.handle.lock().await;
-        let channel = session
-            .channel_open_session()
-            .await
-            .map_err(|e| HostError::remote_disconnected(format!("open channel: {e}")))?;
-        channel
-            .exec(true, line.as_bytes())
-            .await
-            .map_err(|e| HostError::remote_disconnected(format!("exec: {e}")))?;
+        let session_guard = self.handle.lock().await;
+        let session = match session_guard.as_ref() {
+            Some(s) => s,
+            None => {
+                return Err(HostError::remote_disconnected("ssh session poisoned"));
+            }
+        };
+        let channel = match session.channel_open_session().await {
+            Ok(c) => c,
+            Err(e) => {
+                drop(session_guard);
+                self.invalidate_connection().await;
+                return Err(HostError::remote_disconnected(format!("open channel: {e}")));
+            }
+        };
+        if let Err(e) = channel.exec(true, line.as_bytes()).await {
+            self.invalidate_connection().await;
+            return Err(HostError::remote_disconnected(format!("exec: {e}")));
+        }
 
         if let Some(data) = stdin {
-            channel
-                .data(&data[..])
-                .await
-                .map_err(|e| HostError::remote_disconnected(format!("stdin write: {e}")))?;
-            channel
-                .eof()
-                .await
-                .map_err(|e| HostError::remote_disconnected(format!("stdin eof: {e}")))?;
+            if let Err(e) = channel.data(&data[..]).await {
+                self.invalidate_connection().await;
+                return Err(HostError::remote_disconnected(format!("stdin write: {e}")));
+            }
+            if let Err(e) = channel.eof().await {
+                self.invalidate_connection().await;
+                return Err(HostError::remote_disconnected(format!("stdin eof: {e}")));
+            }
         }
 
         Ok(Box::new(RemoteHostProcess {
@@ -598,27 +631,37 @@ impl Host for RemoteLinuxHost {
         let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
 
         // channel 开启和 stdin 写入在 timeout 外做（通常很快），主循环套 timeout。
-        let session = self.handle.lock().await;
-        let mut channel = session
-            .channel_open_session()
-            .await
-            .map_err(|e| HostError::remote_disconnected(format!("open channel: {e}")))?;
-        drop(session);
+        let session_guard = self.handle.lock().await;
+        let session = match session_guard.as_ref() {
+            Some(s) => s,
+            None => {
+                return Err(HostError::remote_disconnected("ssh session poisoned"));
+            }
+        };
+        let mut channel = match session.channel_open_session().await {
+            Ok(c) => c,
+            Err(e) => {
+                drop(session_guard);
+                self.invalidate_connection().await;
+                return Err(HostError::remote_disconnected(format!("open channel: {e}")));
+            }
+        };
+        drop(session_guard);
 
-        channel
-            .exec(true, line.as_bytes())
-            .await
-            .map_err(|e| HostError::remote_disconnected(format!("exec: {e}")))?;
+        if let Err(e) = channel.exec(true, line.as_bytes()).await {
+            self.invalidate_connection().await;
+            return Err(HostError::remote_disconnected(format!("exec: {e}")));
+        }
 
         if let Some(data) = stdin {
-            channel
-                .data(&data[..])
-                .await
-                .map_err(|e| HostError::remote_disconnected(format!("stdin write: {e}")))?;
-            channel
-                .eof()
-                .await
-                .map_err(|e| HostError::remote_disconnected(format!("stdin eof: {e}")))?;
+            if let Err(e) = channel.data(&data[..]).await {
+                self.invalidate_connection().await;
+                return Err(HostError::remote_disconnected(format!("stdin write: {e}")));
+            }
+            if let Err(e) = channel.eof().await {
+                self.invalidate_connection().await;
+                return Err(HostError::remote_disconnected(format!("stdin eof: {e}")));
+            }
         }
 
         // russh 单路复用流：\n 与 \r 都切逻辑行，docker pull 的 \r 进度才能实时回调。
@@ -688,6 +731,21 @@ impl Host for RemoteLinuxHost {
         RemoteLinuxHost::open_tunnel(self, spec).await
     }
 
+    fn supports_refresh(&self) -> bool { true }
+
+    async fn invalidate_connection(&self) {
+        self.invalidate_main_handle().await;
+        self.invalidate_sftp().await;
+    }
+
+    async fn is_healthy(&self) -> bool {
+        let probe = HostCommand::new("sh").arg("-c").arg("echo ok").timeout(Duration::from_secs(3));
+        match self.run_to_string(probe).await {
+            Ok(out) if out.success() => true,
+            _ => false,
+        }
+    }
+
     // ===== 文件操作(基于 SFTP)=====
 
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
@@ -698,7 +756,7 @@ impl Host for RemoteLinuxHost {
             Err(e) => {
                 let err = sftp_err_to_host(&remote, "read", e);
                 if err.is_disconnect() {
-                    self.invalidate_sftp().await;
+                    self.invalidate_connection().await;
                 }
                 return Err(err);
             }
@@ -725,7 +783,7 @@ impl Host for RemoteLinuxHost {
             Err(e) => {
                 let err = sftp_err_to_host(&remote, "write", e);
                 if err.is_disconnect() {
-                    self.invalidate_sftp().await;
+                    self.invalidate_connection().await;
                 }
                 return Err(err);
             }
@@ -743,7 +801,7 @@ impl Host for RemoteLinuxHost {
             Err(e) => {
                 let err = sftp_err_to_host(&remote, "list", e);
                 if err.is_disconnect() {
-                    self.invalidate_sftp().await;
+                    self.invalidate_connection().await;
                 }
                 return Err(err);
             }
@@ -792,7 +850,7 @@ impl Host for RemoteLinuxHost {
             Err(e) => {
                 let err = sftp_err_to_host(&remote, "remove_file", e);
                 if err.is_disconnect() {
-                    self.invalidate_sftp().await;
+                    self.invalidate_connection().await;
                 }
                 Err(err)
             }
@@ -836,7 +894,7 @@ impl Host for RemoteLinuxHost {
             Err(e) => {
                 let err = sftp_err_to_host(&remote, "exists", e);
                 if err.is_disconnect() {
-                    self.invalidate_sftp().await;
+                    self.invalidate_connection().await;
                 }
                 Err(err)
             }
@@ -861,7 +919,7 @@ impl Host for RemoteLinuxHost {
             Err(e) => {
                 let err = sftp_err_to_host(&remote_str, "upload", e);
                 if err.is_disconnect() {
-                    self.invalidate_sftp().await;
+                    self.invalidate_connection().await;
                 }
                 return Err(err);
             }
@@ -879,7 +937,7 @@ impl Host for RemoteLinuxHost {
             Err(e) => {
                 let err = sftp_err_to_host(&remote_str, "download", e);
                 if err.is_disconnect() {
-                    self.invalidate_sftp().await;
+                    self.invalidate_connection().await;
                 }
                 return Err(err);
             }
@@ -1056,9 +1114,12 @@ fn build_elevated_stdin(password: Option<&str>, cmd_stdin: Option<Vec<u8>>) -> O
 }
 
 async fn open_sftp(
-    handle: &Arc<Mutex<ClientHandle<ClientCallback>>>,
+    handle: &Arc<Mutex<Option<ClientHandle<ClientCallback>>>>,
 ) -> Result<russh_sftp::client::SftpSession, HostError> {
-    let session = handle.lock().await;
+    let session_guard = handle.lock().await;
+    let session = session_guard.as_ref().ok_or_else(|| {
+        HostError::remote_disconnected("ssh session poisoned for sftp")
+    })?;
     let channel = session
         .channel_open_session()
         .await
@@ -1277,7 +1338,14 @@ impl RemoteLinuxHost {
                         tokio::spawn(async move {
                             // 开 direct-tcpip channel
                             let channel = {
-                                let session = h.lock().await;
+                                let session_guard = h.lock().await;
+                                let session = match session_guard.as_ref() {
+                                    Some(s) => s,
+                                    None => {
+                                        tracing::warn!(target: "ncd_host::tunnel", "tunnel open skipped: session poisoned");
+                                        return;
+                                    }
+                                };
                                 session
                                     .channel_open_direct_tcpip(
                                         remote_host_for_conn,

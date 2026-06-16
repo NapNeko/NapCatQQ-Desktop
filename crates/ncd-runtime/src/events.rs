@@ -58,6 +58,12 @@ pub enum DomainEventKind {
     /// 桌面端会话日志追加（设置页 Desktop 日志 Tab）。
     #[serde(rename = "desktop_log_appended")]
     DesktopLogAppended,
+    /// 远端主机连接丢失（传输层）。
+    #[serde(rename = "host_connection_lost")]
+    HostConnectionLost,
+    /// 远端主机连接恢复（传输层）。
+    #[serde(rename = "host_connection_recovered")]
+    HostConnectionRecovered,
 }
 
 /// 描述 NapCat WebUI 登录失效的原因。
@@ -209,6 +215,20 @@ pub enum DomainEvent {
     },
     #[serde(rename = "desktop_log_appended")]
     DesktopLogAppended { line: String },
+    /// 远端主机连接丢失（传输层）。server_id 指向 ServerProfile.id。
+    #[serde(rename = "host_connection_lost")]
+    HostConnectionLost {
+        server_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        consecutive_failures: u32,
+    },
+    /// 远端主机连接恢复（传输层）。
+    #[serde(rename = "host_connection_recovered")]
+    HostConnectionRecovered {
+        server_id: String,
+        latency_ms: u64,
+    },
 }
 
 /// IPC 事件 envelope 版本号(R14:所有发到 webview 的事件 payload 带顶层 v:u32)。
@@ -256,6 +276,8 @@ impl DomainEvent {
             Self::DockerDeployProgress { .. } => DomainEventKind::DockerDeployProgress,
             Self::DockerInstallProgress { .. } => DomainEventKind::DockerInstallProgress,
             Self::DesktopLogAppended { .. } => DomainEventKind::DesktopLogAppended,
+            Self::HostConnectionLost { .. } => DomainEventKind::HostConnectionLost,
+            Self::HostConnectionRecovered { .. } => DomainEventKind::HostConnectionRecovered,
         }
     }
 
@@ -283,6 +305,8 @@ impl DomainEvent {
             Self::DockerDeployProgress { .. } => "docker_deploy_progress",
             Self::DockerInstallProgress { .. } => "docker_install_progress",
             Self::DesktopLogAppended { .. } => "desktop_log_appended",
+            Self::HostConnectionLost { .. } => "host_connection_lost",
+            Self::HostConnectionRecovered { .. } => "host_connection_recovered",
         }
     }
 
@@ -311,6 +335,8 @@ impl DomainEvent {
             // task 级事件，不绑定具体 Bot；前端按 task_id 订阅 / 路由。
             Self::ComponentActionProgress { .. } => None,
             Self::DockerDeployProgress { .. } => None,
+            Self::HostConnectionLost { .. } => None,
+            Self::HostConnectionRecovered { .. } => None,
             Self::DockerInstallProgress { .. } => None,
             Self::DesktopLogAppended { .. } => None,
         }

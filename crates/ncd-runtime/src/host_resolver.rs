@@ -22,6 +22,13 @@ pub trait HostResolver: Send + Sync {
     /// 解析 target -> host。Local 给本机 host;Server(id) 连远端。
     /// 实装应做连接复用(同一 server_id 多次解析共用一条连接)。
     async fn resolve(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, String>;
+
+    /// 强制刷新（默认实现回退到 resolve）。调用方希望拿到一个"新鲜"的 host 实例，
+    /// 用于替换自己持有的旧引用（例如 Holder 观测到传输失败后想换一个活连接）。
+    /// 本地/Stub 实装通常直接回退到 resolve（无缓存可刷）。
+    async fn refresh(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, String> {
+        self.resolve(target).await
+    }
 }
 
 /// 始终返回固定本机 host 的 resolver。用于:还没接入远端的过渡期、纯本机

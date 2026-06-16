@@ -130,10 +130,13 @@ pub fn run() {
     let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = tauri_notifier.clone();
     // ServerManager 提前构造,既给下面 AppState 用,也给 HostResolver 用(让
     // BotManager 能按 runtime_target 把 bot 启到本机 / 远端)。
-    let server_manager = Arc::new(ncd_runtime::ServerManager::new(
+    // P0-10: 注入 event_bus，用于发布 HostConnectionLost / Recovered。
+    let mut server_mgr = ncd_runtime::ServerManager::new(
         &data_root,
         Arc::new(ncd_runtime::KeyringCredentialStore),
-    ));
+    );
+    server_mgr.set_event_bus(Arc::new(event_bus.clone()));
+    let server_manager = Arc::new(server_mgr);
     let host_resolver: Arc<dyn ncd_runtime::HostResolver> =
         Arc::new(bot_host_resolver::TauriHostResolver::new(
             Arc::clone(&server_manager),
