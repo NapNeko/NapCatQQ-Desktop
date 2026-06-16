@@ -96,6 +96,11 @@ export function useServerManager() {
         // 走 onSuccess 分流：报告 success 才绿条，否则红条带后端给的 error 原因。
         onSuccess: (report, args) => {
             queryClient.invalidateQueries({ queryKey: ['servers'] });
+            // 恢复链路增强：除了 invalidate，显式 refetchQueries 强制立即拉新数据。
+            // 解决“在远程页测试连接成功后，Bot 列表徽标和配置页门禁不自动更新”的问题。
+            // 即使 Bot 侧的 observer 当时因为路由等原因不是超级活跃，refetch 也能尽快更新 cache。
+            void queryClient.refetchQueries({ queryKey: ['servers'] });
+
             const label = serverLabel(
                 serversQuery.data?.find((s) => s.id === args.id) ?? { id: args.id },
             );
