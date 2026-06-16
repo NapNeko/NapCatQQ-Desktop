@@ -68,6 +68,7 @@ pub async fn set_app_settings(
     settings.normalize_performance_monitor();
     settings.normalize_task_queue_cleanup();
     settings.normalize_lightweight_prefs();
+    settings.normalize_remote_host_health_probe();
     let payload = serde_json::to_value(&settings)
         .map_err(|e| format!("序列化 app 设置失败: {e}"))?;
     store

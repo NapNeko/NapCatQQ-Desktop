@@ -97,6 +97,22 @@ pub fn clamp_perf_monitor_interval_ms(raw: u64) -> u64 {
     raw.clamp(PERF_MONITOR_INTERVAL_MIN_MS, PERF_MONITOR_INTERVAL_MAX_MS)
 }
 
+/// 远程主机健康探活默认间隔（毫秒）：30s，低频后台探测。
+pub fn default_remote_host_health_probe_interval_ms() -> u64 {
+    30_000
+}
+
+/// 远程主机健康探活间隔范围：10s ~ 5min，避免过于激进或完全无感。
+pub const REMOTE_HOST_HEALTH_PROBE_INTERVAL_MIN_MS: u64 = 10_000;
+pub const REMOTE_HOST_HEALTH_PROBE_INTERVAL_MAX_MS: u64 = 300_000;
+
+pub fn clamp_remote_host_health_probe_interval_ms(raw: u64) -> u64 {
+    raw.clamp(
+        REMOTE_HOST_HEALTH_PROBE_INTERVAL_MIN_MS,
+        REMOTE_HOST_HEALTH_PROBE_INTERVAL_MAX_MS,
+    )
+}
+
 fn default_true() -> bool {
     true
 }
@@ -265,6 +281,20 @@ pub struct AppSettings {
         default = "default_perf_monitor_interval"
     )]
     pub performance_monitor_interval_ms: u64,
+
+    /// 远程主机健康探活开关（后台低频 is_healthy 探测已连接的远端主机）。
+    /// 默认按用户确认为开启低频（30s）。用户可通过设置完全关闭。
+    #[serde(rename = "remoteHostHealthProbeEnabled", default = "default_true")]
+    pub remote_host_health_probe_enabled: bool,
+
+    /// 远程主机健康探活间隔（毫秒）。仅当上开关闭启时生效。
+    /// 范围 10s~5min，默认 30s。
+    #[serde(
+        rename = "remoteHostHealthProbeIntervalMs",
+        default = "default_remote_host_health_probe_interval_ms"
+    )]
+    pub remote_host_health_probe_interval_ms: u64,
+
     /// 任务队列是否在终态后自动从列表移除。
     #[serde(rename = "taskQueueCleanupEnabled", default = "default_task_queue_cleanup_enabled")]
     pub task_queue_cleanup_enabled: bool,
@@ -331,6 +361,11 @@ impl Default for AppSettings {
             poller: WebUiPollerSettings::default(),
             performance_monitor_enabled: true,
             performance_monitor_interval_ms: default_perf_monitor_interval(),
+
+            // 远程主机健康探活：默认开启低频（30s），用户可完全关闭。
+            remote_host_health_probe_enabled: true,
+            remote_host_health_probe_interval_ms: default_remote_host_health_probe_interval_ms(),
+
             task_queue_cleanup_enabled: default_task_queue_cleanup_enabled(),
             task_queue_cleanup_linger_ms: default_task_queue_cleanup_linger_ms(),
             close_action: default_close_action(),
@@ -389,6 +424,14 @@ impl AppSettings {
                 self.task_queue_cleanup_linger_ms = default_task_queue_cleanup_linger_ms();
             }
         }
+    }
+
+    /// 写入前规范化远程主机健康探活间隔。
+    pub fn normalize_remote_host_health_probe(&mut self) {
+        self.remote_host_health_probe_interval_ms =
+            clamp_remote_host_health_probe_interval_ms(
+                self.remote_host_health_probe_interval_ms,
+            );
     }
 }
 
