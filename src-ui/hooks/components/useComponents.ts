@@ -66,12 +66,22 @@ function useKnownHosts(): { hosts: HostInfo[]; servers: ServerProfile[] } {
             display_name: '本机',
             os: detectLocalOs(),
             locality: 'local',
+            // 本机无 transport 问题，显式标 connected 便于上层统一判断
+            state: 'connected',
         };
-        const remotes: HostInfo[] = (serversQuery.data ?? []).map((p) => ({
+        const remotes: HostInfo[] = (serversQuery.data ?? []).map((p: ServerProfile) => ({
             host_id: `remote:${p.id}`,
             display_name: p.name || p.host,
             os: 'linux' as Os,
             locality: 'remote',
+            state: p.state,
+            health: p.health
+                ? {
+                      consecutiveFailures: p.health.consecutiveFailures,
+                      lastFailureReason: p.health.lastFailureReason ?? null,
+                      lastFailureAt: p.health.lastFailureAt ?? null,
+                  }
+                : undefined,
         }));
         return [local, ...remotes];
     }, [serversQuery.data]);

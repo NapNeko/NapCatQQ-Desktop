@@ -1272,6 +1272,7 @@ mod tests {
             private_key_path: None,
             remember_credential: true,
             state: ServerState::Disconnected,
+            health: None,
             webui_url: None,
         }
     }

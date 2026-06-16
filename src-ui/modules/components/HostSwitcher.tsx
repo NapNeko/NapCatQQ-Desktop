@@ -86,8 +86,14 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
 }>(({ machine, active, onSelect }, ref) => {
     const { host } = machine;
     const isRemote = host.locality === 'remote';
+    const isFailed = host.state === 'failed';
     const { installed, total } = machineSummary(machine);
     const tabId = `component-host-tab-${host.host_id}`;
+
+    // 失败时优先展示"连接中断"，不强求显示安装计数（探测被阻断）
+    const statusText = isFailed
+        ? '连接中断'
+        : `${host.os} · ${isRemote ? '远端' : '本机'} · ${installed}/${total}`;
 
     return (
         <button
@@ -97,15 +103,17 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
             id={tabId}
             data-host-id={host.host_id}
             aria-selected={active}
-            aria-label={`${host.display_name}，${host.os}，${isRemote ? '远端' : '本机'}，已安装 ${installed} / ${total}`}
+            aria-label={`${host.display_name}，${host.os}，${isRemote ? '远端' : '本机'}${isFailed ? '，连接中断' : ''}，已安装 ${installed} / ${total}`}
             tabIndex={active ? 0 : -1}
             onClick={onSelect}
             className={cn(
                 'group flex min-w-0 max-w-full flex-col gap-0.5 rounded-md border px-3 py-2 text-left transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
-                active
-                    ? 'border-brand/40 bg-brand/15'
-                    : 'border-border-subtle bg-inset/40 hover:bg-inset/70',
+                isFailed
+                    ? 'border-danger/40 bg-danger/5'
+                    : active
+                      ? 'border-brand/40 bg-brand/15'
+                      : 'border-border-subtle bg-inset/40 hover:bg-inset/70',
             )}
         >
             {/* 圆点和主标题放同一 items-center 行,圆点严格对齐名字中线 —— 不再
@@ -115,13 +123,21 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
                     aria-hidden
                     className={cn(
                         'inline-block h-2 w-2 shrink-0 rounded-full',
-                        isRemote ? 'bg-success shadow-glow-success' : 'bg-brand',
+                        isFailed
+                            ? 'bg-danger'
+                            : isRemote
+                              ? 'bg-success shadow-glow-success'
+                              : 'bg-brand',
                     )}
                 />
                 <span
                     className={cn(
                         'min-w-0 truncate text-[13px] font-medium leading-tight',
-                        active ? 'text-text' : 'text-text-secondary group-hover:text-text',
+                        isFailed
+                            ? 'text-danger'
+                            : active
+                              ? 'text-text'
+                              : 'text-text-secondary group-hover:text-text',
                     )}
                     title={host.display_name}
                 >
@@ -129,8 +145,13 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
                 </span>
             </span>
             {/* 副标题缩进对齐到主标题左缘(圆点 8px + gap 8px = ml-4)。 */}
-            <span className="ml-4 max-w-full truncate text-[10px] uppercase leading-tight tracking-wider text-text-tertiary">
-                {host.os} · {isRemote ? '远端' : '本机'} · {installed}/{total}
+            <span
+                className={cn(
+                    'ml-4 max-w-full truncate text-[10px] uppercase leading-tight tracking-wider',
+                    isFailed ? 'text-danger/80' : 'text-text-tertiary',
+                )}
+            >
+                {statusText}
             </span>
         </button>
     );

@@ -19,11 +19,24 @@ import type {
 } from '../../ipc/types';
 
 /// 主机简化视图，前端只关心 host_id + 显示名 + 平台属性。
+/// 额外携带远端主机的连接状态（state）和简要健康信息（health），
+/// 供 HostSwitcher / 主机卡等在不拉额外查询的情况下做 transport 失败视觉区分。
+/// 本机 host 不填充 state（视为恒可达）。
 export interface HostInfo {
     host_id: string;
     display_name: string;
     os: Os;
     locality: Locality;
+    /** 远端主机的 ServerState（'connected' | 'failed' | 'disconnected' | 'connecting'）。
+     *  仅当 locality === 'remote' 时可能存在。本机或缺失时上层按可达处理。 */
+    state?: string;
+    /** 来自 ServerProfile.health 的精简视图（用于展示连续失败次数、最近失败原因等）。
+     *  可选；存在时表示后端已记录健康细粒度信息。命名对齐生成的 ConnectionHealth（camelCase）。 */
+    health?: {
+        consecutiveFailures?: number;
+        lastFailureReason?: string | null;
+        lastFailureAt?: string | null;
+    };
 }
 
 /// 单主机上某组件的状态。
