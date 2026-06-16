@@ -53,10 +53,11 @@ export function QqDependencyDialog({
         setPhase('installing');
         try {
             const pkgs = missing.map((p: PackageStatus) => p.name);
+            // 首次安装不传 sudo 密码，后端有缓存就用缓存，没有就返 elevation_required
             const res = await componentService.installQqDependencies(hostId, pkgs);
 
             // 检测需要 sudo 密码
-            if (res.elevation_required) {
+            if (res.elevationRequired) {
                 setPhase('review');
                 setShowSudoDialog(true);
                 return;
@@ -80,9 +81,17 @@ export function QqDependencyDialog({
                 await componentService.rememberSudoPassword(serverId, password);
             }
 
-            // 重新尝试安装
+            // 重试安装，把密码传入后端注入 Host
             const pkgs = missing.map((p: PackageStatus) => p.name);
-            const res = await componentService.installQqDependencies(hostId, pkgs);
+            const res = await componentService.installQqDependencies(hostId, pkgs, password);
+
+            // 重试后依然需要密码（理论上不应发生，但防御一下）
+            if (res.elevationRequired) {
+                setErrorMsg('密码错误，请重新输入');
+                setPhase('error');
+                setShowSudoDialog(false);
+                return;
+            }
 
             setResult(res);
             setPhase(res.success ? 'done' : 'error');

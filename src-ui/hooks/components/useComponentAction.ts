@@ -58,8 +58,9 @@ export function useComponentAction(): UseComponentActionResult {
         async (componentId: ComponentId, hostId: string, kind: StepKind) => {
             const taskId = crypto.randomUUID();
             const needsPkgQueue =
-                componentId === 'novnc' &&
-                (kind === 'ensure_installed' || kind === 'force_install');
+                (componentId === 'novnc' &&
+                    (kind === 'ensure_installed' || kind === 'force_install')) ||
+                (componentId === 'qq' && kind === 'ensure_dependencies');
             const queueHint = needsPkgQueue
                 ? '排队等待包管理器（Docker 等 apt 任务完成后自动开始）…'
                 : undefined;

@@ -10,7 +10,7 @@
 // 严守 frontend-layering：仅 import hooks / shared/ui / 自身组件 + domain
 // 纯函数，不直接调 service / @tauri-apps。
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../../shared/ui';
 import { MotionIcon, refreshMotion } from '../../shared/ui/motion';
@@ -18,6 +18,9 @@ import { useComponents } from '../../hooks/components/useComponents';
 import { useComponentAction } from '../../hooks/components/useComponentAction';
 import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
 import { useComponentPageAlerts } from '../../hooks/components/useComponentPageAlerts';
+import { useQqDependencyAlerts } from '../../hooks/components/useQqDependencyAlerts';
+import { componentService } from '../../core/services/component.service';
+import { componentActionStore } from '../../hooks/components/componentActionStore';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
 import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallProgress';
@@ -131,16 +134,73 @@ export const ComponentsPageNext: React.FC = () => {
         [startAction, cancelAction, onTaskTerminal, refetch, hostNameOf],
     );
 
+    const startQqDepsRepair = useCallback(
+        async (hostId: string) => {
+            try {
+                const taskId = await startAction('qq', hostId, 'ensure_dependencies');
+                onTaskTerminal(taskId, (status) => {
+                    if (status === 'success') {
+                        refetch();
+                    }
+                });
+            } catch (err) {
+                globalInfoBarStore.push({
+                    key: `qq-deps-repair:${hostId}`,
+                    tone: 'danger',
+                    title: `QQ 依赖修复失败 · ${hostNameOf(hostId)}`,
+                    content: errorText(err, '无法启动修复任务'),
+                    autoDismissMs: 0,
+                });
+            }
+        },
+        [startAction, onTaskTerminal, refetch, hostNameOf],
+    );
+
+    useQqDependencyAlerts(activeMachine, startQqDepsRepair);
+
     const allEmpty = machines.length === 0;
 
-    // Docker 安装链路自带反馈:成功弹绿条,彻底装不了弹红条(带主机名)。远端密钥
-    // 登录且没缓存密码时,后端返回 needSudoPassword,这里改弹密码输入框,用户填了
-    // 带密码重试,而不是笼统报失败。
+    // Docker / QQ 依赖补全：需要 sudo 时弹密码框，记住后重试。
     const [sudoPrompt, setSudoPrompt] = useState<{
         hostId: string;
         hostName: string;
         reason?: string;
+        purpose: 'docker' | 'qq_deps';
     } | null>(null);
+
+    const componentActionSnap = useSyncExternalStore(
+        componentActionStore.subscribe,
+        componentActionStore.getSnapshot,
+        componentActionStore.getSnapshot,
+    );
+    const qqSudoPromptedRef = useRef<Set<string>>(new Set());
+
+    useEffect(() => {
+        for (const [taskId, progress] of Object.entries(componentActionSnap.tasks)) {
+            if (progress.status !== 'failed') continue;
+            if (qqSudoPromptedRef.current.has(taskId)) continue;
+            const target = componentActionSnap.taskTargets[taskId];
+            if (!target || target.componentId !== 'qq') continue;
+            const msg = [...progress.logs].reverse().find((l) => l.level === 'error')?.message
+                ?? progress.message;
+            if (!msg.includes('elevation_required')) continue;
+            qqSudoPromptedRef.current.add(taskId);
+            globalInfoBarStore.push({
+                key: `qq-deps-sudo:${target.hostId}`,
+                tone: 'warning',
+                title: `需要 sudo 密码 · ${hostNameOf(target.hostId)}`,
+                content: '安装 QQ 系统依赖需要提权，请输入密码后重试。',
+                autoDismissMs: 0,
+            });
+            setSudoPrompt(p => p ?? {
+                hostId: target.hostId,
+                hostName: hostNameOf(target.hostId),
+                reason: msg,
+                purpose: 'qq_deps',
+            });
+            break;
+        }
+    }, [componentActionSnap, hostNameOf]);
 
     // 执行一次安装并按 status 分流。返回 report 给调用方(弹框重试时要据此判断
     // 是否仍需密码)。底层 IPC 失败(连接断等)会抛,交给调用方处理。
@@ -184,7 +244,12 @@ export const ComponentsPageNext: React.FC = () => {
             try {
                 const report = await runInstall(hostId);
                 if (report.status === 'needSudoPassword') {
-                    setSudoPrompt({ hostId, hostName: hostNameOf(hostId), reason: report.message });
+                    setSudoPrompt({
+                        hostId,
+                        hostName: hostNameOf(hostId),
+                        reason: report.message,
+                        purpose: 'docker',
+                    });
                 }
             } catch (err) {
                 globalInfoBarStore.push({
@@ -218,6 +283,15 @@ export const ComponentsPageNext: React.FC = () => {
     const handleSudoConfirm = useCallback(
         async (password: string, remember: boolean) => {
             if (!sudoPrompt) return;
+            if (sudoPrompt.purpose === 'qq_deps') {
+                const serverId = sudoPrompt.hostId.replace(/^remote:/, '');
+                if (remember) {
+                    await componentService.rememberSudoPassword(serverId, password);
+                }
+                setSudoPrompt(null);
+                await startQqDepsRepair(sudoPrompt.hostId);
+                return;
+            }
             const report = await runInstall(sudoPrompt.hostId, {
                 sudoPassword: password,
                 rememberSudo: remember,
@@ -225,11 +299,9 @@ export const ComponentsPageNext: React.FC = () => {
             if (report.status === 'needSudoPassword') {
                 throw new Error(report.message);
             }
-            // installed / alreadyInstalled / manualRequired 都已在 runInstall 里弹了
-            // 对应提示条,这里收起弹框即可。
             setSudoPrompt(null);
         },
-        [sudoPrompt, runInstall],
+        [sudoPrompt, runInstall, startQqDepsRepair],
     );
 
     return (
@@ -312,8 +384,17 @@ export const ComponentsPageNext: React.FC = () => {
             {sudoPrompt && (
                 <SudoPasswordDialog
                     hostName={sudoPrompt.hostName}
-                    reason={sudoPrompt.reason}
-                    isSubmitting={dockerHosts.installingByHost[sudoPrompt.hostId] ?? false}
+                    reason={
+                        sudoPrompt.reason
+                        ?? (sudoPrompt.purpose === 'qq_deps'
+                            ? '安装 QQ 系统依赖需要 sudo 权限'
+                            : undefined)
+                    }
+                    isSubmitting={
+                        sudoPrompt.purpose === 'docker'
+                            ? (dockerHosts.installingByHost[sudoPrompt.hostId] ?? false)
+                            : false
+                    }
                     onConfirm={handleSudoConfirm}
                     onClose={() => setSudoPrompt(null)}
                 />

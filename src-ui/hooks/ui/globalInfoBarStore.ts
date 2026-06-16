@@ -46,6 +46,19 @@ function genId(prefix: string): string {
     return `${prefix}-${nextId++}`;
 }
 
+// 同 key 顶替时判断"内容有没有实质变化"。只比展示字段；title/content 是
+// ReactNode，绝大多数 banner 传字符串，元素值用 Object.is 退化成引用比较即可
+// （引用没变就当没变，变了就刷新，安全）。函数字段（onUserDismiss）不比。
+function sameBarContent(a: InfoBarStackItem, b: InfoBarStackItem): boolean {
+    return (
+        a.tone === b.tone &&
+        Object.is(a.title, b.title) &&
+        Object.is(a.content, b.content) &&
+        a.autoDismissMs === b.autoDismissMs &&
+        a.closable === b.closable
+    );
+}
+
 export const globalInfoBarStore = {
     /** 当前快照（同步），useSyncExternalStore 用。 */
     getSnapshot: store.getSnapshot,
@@ -78,6 +91,14 @@ export const globalInfoBarStore = {
         if (key) {
             const idx = current.bars.findIndex((b) => b.id === item.id);
             if (idx >= 0) {
+                // 同 key 顶替前先比内容：展示字段全等就直接返回，不 setState。
+                // 否则 useComponentPageAlerts 这类 effect 反复 push 同一条失败 banner
+                // 会每次产生新 bars 数组 → store emit → AppNext 重渲染 → 整棵树（含
+                // ComponentsPage）重渲染 → useQueries 返回新数组 → effect 再 push，
+                // 形成无限循环，最终撑爆 Radix Presence 的 ref 组合导致白屏。
+                if (sameBarContent(current.bars[idx], item)) {
+                    return item.id;
+                }
                 const next = current.bars.slice();
                 next[idx] = item;
                 store.setState({ bars: next });

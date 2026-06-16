@@ -50,6 +50,7 @@ import { normalizeRuntimeTargetFromDisk } from '../../../core/domain/bot/runtime
 import type { StatusCommandConfig } from '../../../core/ipc/generated/domain/StatusCommandConfig';
 import { describeSaveResult } from '../../../core/domain/bot/save-result';
 import { useBotDockerStartGate } from '../../../hooks/bot/useBotDockerStartGate';
+import { useBotRuntimeStartGate } from '../../../hooks/bot/useBotRuntimeStartGate';
 import { botService } from '../../../core/services/bot.service';
 import { snowlumaAppService } from '../../../core/services/snowlumaApp.service';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
@@ -90,6 +91,12 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
         [formData],
     );
     const { saveBlock: dockerSaveBlock } = useBotDockerStartGate(dockerGateMap);
+
+    const runtimeGateMap = useMemo(
+        () => ({ __form__: formData }),
+        [formData],
+    );
+    const { saveBlock: runtimeSaveBlock } = useBotRuntimeStartGate(runtimeGateMap);
     const [pristine, setPristine] = useState<BotConfig>(createDefaultBotConfig());
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -277,6 +284,17 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
             return;
         }
 
+        const runtimeBlock = runtimeSaveBlock(finalData);
+        if (runtimeBlock) {
+            pushInfoBar({
+                tone: 'danger',
+                title: '无法保存',
+                content: runtimeBlock,
+                key: 'bot-config-runtime-gate',
+            });
+            return;
+        }
+
         // 先 drift 检测(纯读)。有 drift 就弹 dialog 等用户抉择,这之前绝不写任何
         // 后端配置——否则用户在 dialog 上点取消,SnowLuma 全局配置却已落盘且无法回滚。
         if (isEditMode && botId) {
@@ -326,6 +344,18 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
                 });
                 return;
             }
+            const runtimeBlock = runtimeSaveBlock(pendingSaveData);
+            if (runtimeBlock) {
+                setPendingSaveDrift(null);
+                setPendingSaveData(null);
+                pushInfoBar({
+                    tone: 'danger',
+                    title: '无法保存',
+                    content: runtimeBlock,
+                    key: 'bot-config-runtime-gate',
+                });
+                return;
+            }
             try {
                 await commitSnowlumaIfDirty();
             } catch (e) {
@@ -341,7 +371,7 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
             saveWithDecisions(pendingSaveData, decisions);
             setPendingSaveData(null);
         },
-        [pendingSaveData, saveWithDecisions, snowlumaApp, snowlumaAppPristine, dockerSaveBlock],
+        [pendingSaveData, saveWithDecisions, snowlumaApp, snowlumaAppPristine, dockerSaveBlock, runtimeSaveBlock],
     );
 
     const handleSaveDriftCancel = useCallback(() => {

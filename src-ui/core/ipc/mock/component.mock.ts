@@ -308,6 +308,8 @@ function stepLabel(componentId: ComponentId, kind: StepKind): string {
             return `正在卸载 ${name}`;
         case 'verify':
             return `正在校验 ${name}`;
+        case 'ensure_dependencies':
+            return `正在补全 ${name} 系统依赖`;
     }
 }
 

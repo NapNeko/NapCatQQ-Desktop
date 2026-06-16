@@ -3,4 +3,4 @@
 /**
  * Step 操作类型(StepKind)。
  */
-export type StepKind = "ensure_installed" | "force_install" | "update" | "uninstall" | "verify";
+export type StepKind = "ensure_installed" | "force_install" | "update" | "uninstall" | "verify" | "ensure_dependencies";

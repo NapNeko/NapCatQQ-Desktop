@@ -8,6 +8,7 @@ import type {
     NapCatLoginInvalidationReason,
 } from '../../core/ipc/types';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { isQqSystemDependencyError } from '../components/useQqDependencyAlerts';
 import {
     clearBotSnapshotAlertSuppression,
     getBotSnapshotPrev,
@@ -88,10 +89,19 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             if (!daemonCrashed) clearBotSnapshotAlertSuppression(keyDaemon);
 
             if (lastError && lastError !== prev.lastError) {
+                const brief = briefError(lastError);
+                if (isQqSystemDependencyError(lastError)) {
+                    pushIfNotSuppressed(`bot-qq-deps:${id}`, {
+                        tone: 'warning',
+                        title: `QQ 系统依赖缺失 · ${label}`,
+                        content: `${brief} 请到「组件」页按提示一键修复。`,
+                        autoDismissMs: 0,
+                    });
+                }
                 pushIfNotSuppressed(keyLastError, {
                     tone: 'danger',
                     title: `Bot 异常 · ${label}`,
-                    content: briefError(lastError),
+                    content: brief,
                 });
             }
 

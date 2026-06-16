@@ -73,13 +73,17 @@ export const componentService = {
     },
 
     // QQ 系统依赖安装（仅 Linux 远端）。
+    // sudoPassword: 前端弹框收集到的 sudo 密码，传给后端注入 Host 执行安装。
+    // None 时后端自动从 keyring 找缓存密码。
     installQqDependencies: async (
         hostId: string,
         packages: string[],
+        sudoPassword?: string,
     ): Promise<InstallDependenciesResult> => {
         return invoke<InstallDependenciesResult>('install_qq_dependencies', {
             hostId,
             packages,
+            sudoPassword: sudoPassword ?? null,
         });
     },
 

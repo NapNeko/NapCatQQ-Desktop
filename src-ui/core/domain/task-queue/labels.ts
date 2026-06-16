@@ -12,9 +12,13 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
 };
 
 const STEP_KIND_LABEL: Record<string, string> = {
-    install: '安装',
+    ensure_installed: '安装',
+    force_install: '安装',
     update: '更新',
     uninstall: '卸载',
+    verify: '校验',
+    ensure_dependencies: '补全系统依赖',
+    install: '安装',
 };
 
 export function componentDisplayName(componentId: ComponentId): string {

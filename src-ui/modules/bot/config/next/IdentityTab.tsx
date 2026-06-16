@@ -11,8 +11,13 @@ import {
 } from '../../../../shared/ui';
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
-import { useRemoteHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
-import { formatMissingDirectRunNotice } from '../../../../core/domain/bot/remote-direct-run-deps';
+import { useHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
+import {
+    remoteDirectRunChain,
+    localDirectRunChain,
+    componentIdToDisplayName,
+    formatMissingDirectRunNotice,
+} from '../../../../core/domain/bot/remote-direct-run-deps';
 import { isRuntimeTargetConcreteRemote } from '../../../../core/domain/bot/runtime-target';
 import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';
 import {
@@ -89,19 +94,26 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     const { statusByHost, probingByHost, imageReadyByHost } =
         useDockerHosts(dockerHostIds);
 
-    const componentInstalled = useRemoteHostComponentInstalled(
+    const componentInstalled = useHostComponentInstalled(
         remoteHostId,
         data.backend_type,
     );
+
+    const localInstalled = useHostComponentInstalled('local', data.backend_type);
 
     const missingDirectRunNotice = useMemo(() => {
         if (!isRemote || deploymentType !== 'native' || !remoteHostId) {
             return null;
         }
-        return formatMissingDirectRunNotice(
-            data.backend_type,
-            componentInstalled,
-        );
+        const chain = remoteDirectRunChain(data.backend_type);
+        const missing: string[] = [];
+        for (const id of chain) {
+            if (componentInstalled[id] === false) {
+                missing.push(componentIdToDisplayName(id));
+            }
+        }
+        if (missing.length === 0) return null;
+        return `未安装 ${missing.join('、')}，请安装`;
     }, [
         isRemote,
         deploymentType,
@@ -319,6 +331,27 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                             {missingDirectRunNotice}
                                         </InlineNotice>
                                     )}
+
+                                {/* 本地直接运行提示 */}
+                                {!isRemote && (
+                                    (() => {
+                                        const chain = localDirectRunChain(data.backend_type);
+                                        const missing = chain.filter(
+                                            (id) => localInstalled[id] === false,
+                                        );
+                                        if (missing.length > 0) {
+                                            return (
+                                                <InlineNotice tone="warn">
+                                                    本机缺少 {missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再使用本机直接运行
+                                                </InlineNotice>
+                                            );
+                                        }
+                                        if (chain.some((id) => localInstalled[id] === undefined)) {
+                                            return <InlineNotice tone="neutral">正在检测本机运行时组件...</InlineNotice>;
+                                        }
+                                        return null;
+                                    })()
+                                )}
                             </div>
                         )}
                     </div>
