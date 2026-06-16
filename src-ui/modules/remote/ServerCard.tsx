@@ -71,6 +71,22 @@ export const ServerCard: React.FC<ServerCardProps> = ({
 
     const authLabel = server.authMethod === 'key' ? 'SSH 密钥' : '密码登录';
 
+    // 健康状态摘要：failed 或有连续失败时在 meta 区展示，便于用户在远端页卡片上一眼看到问题。
+    // 优先展示 "连接中断"（当 state=failed），其次连续失败计数，最后失败原因（截断 + title 完整）。
+    const healthLine = (() => {
+      const h = server.health;
+      if (!h) return null;
+      const fails = h.consecutiveFailures ?? 0;
+      if (server.state === 'failed' || fails > 0) {
+        const parts: string[] = [];
+        if (server.state === 'failed') parts.push('连接中断');
+        if (fails > 0) parts.push(`连续失败 ${fails} 次`);
+        if (h.lastFailureReason) parts.push(h.lastFailureReason);
+        return parts.join(' · ');
+      }
+      return null;
+    })();
+
     const stop = (fn: () => void) => (e: React.MouseEvent) => {
         e.stopPropagation();
         fn();
@@ -113,16 +129,29 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                 isTesting ? (
                     <p className="truncate text-xs text-brand">正在测试连接…</p>
                 ) : (
-                    <p
-                        className="truncate font-mono text-xs text-text-secondary"
-                        title={
-                            revealIp
-                                ? `${server.username}@${server.host}:${server.port}`
-                                : undefined
-                        }
-                    >
-                        {sshEndpoint}
-                    </p>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                        <p
+                            className="truncate font-mono text-xs text-text-secondary"
+                            title={
+                                revealIp
+                                    ? `${server.username}@${server.host}:${server.port}`
+                                    : undefined
+                            }
+                        >
+                            {sshEndpoint}
+                        </p>
+                        {healthLine && (
+                            <p
+                                className={cn(
+                                    'truncate text-[10px] leading-tight',
+                                    server.state === 'failed' ? 'text-danger' : 'text-warning',
+                                )}
+                                title={server.health?.lastFailureReason || undefined}
+                            >
+                                {healthLine}
+                            </p>
+                        )}
+                    </div>
                 )
             }
             chips={
