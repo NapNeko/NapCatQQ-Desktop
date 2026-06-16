@@ -2,18 +2,15 @@
 //
 // 职责：
 // - 监听 servers 状态变化（或 host_connection_* 事件），做边沿检测。
-// - 当某远端主机从非 'failed' 变为 'failed' 时，推一条 key 顶替的 danger InfoBar：
-//     key: `host-unreachable:${serverId}`
-//   文案类似“远端主机 ${label} 连接中断，请检查网络或凭据”。
-// - 用户手动关闭该条（onUserDismiss）时，记录抑制，后续相同失败不再重复推（轻微抖动抑制）。
-// - 当主机恢复（state 变回非 failed，或收到 HostConnectionRecovered 事件）时：
-//   - 清除抑制标记
-//   - 主动 dismiss 已存在的同 key InfoBar（如果还在屏幕上）
-// - 轻微抖动场景（consecutive_failures=1 且短时间内恢复）只改状态，不推 InfoBar。
-//   这里简化：只要从 failed 恢复，就清抑制；只在“首次进入 failed”才推。
+// - 进入 failed 时，只有 health.consecutiveFailures >= CONSECUTIVE_FAILURES_INFOBAR_THRESHOLD（当前 2）
+//   才推 danger InfoBar（key: `host-unreachable:${serverId}`）。
+//   低于阈值（短暂抖动、cf=1 即恢复）只改状态/视觉，不推 InfoBar。
+// - 用户手动关闭该条（onUserDismiss）时，记录抑制，后续相同失败不再重复推。
+// - 恢复（state 变回非 failed，或收到 HostConnectionRecovered）时：清除抑制 + 主动 dismiss 同 key 条。
+// - 复用 globalInfoBarStore 的 key 顶替 + onUserDismiss 抑制，与 useComponentPageAlerts 等一致。
+// - 常驻挂载（App 根节点），类似 useHostConnectionEvents。
 //
-// 复用 globalInfoBarStore 的 key 顶替 + onUserDismiss 抑制模式，与 useComponentPageAlerts 等保持一致。
-// 常驻挂载（App 根节点），类似 useHostConnectionEvents。
+// 与 P1 主动探活 walker 协同：后台低频探测会持续递增 consecutiveFailures，真实持续失败才会达到阈值并推送。
 
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -28,7 +25,12 @@ type ServerLike = {
     name?: string | null;
     host?: string | null;
     state: string; // ServerState
+    health?: { consecutiveFailures?: number } | null;
 };
+
+// 连续失败达到此阈值才推 danger InfoBar，低于阈值只改状态/视觉（抖动抑制）。
+// 配合后台 walker（P1 主动探活），连续探测失败才会递增计数，短暂抖动（cf=1 即恢复）不推提示。
+const CONSECUTIVE_FAILURES_INFOBAR_THRESHOLD = 2;
 
 // module-level 抑制集合：key 为 serverId，存在即表示该主机当前被抑制（用户已 dismiss 过本次失败）。
 const suppressed = new Set<string>();
@@ -71,8 +73,9 @@ export function useHostHealthAlerts(): void {
             const key = `host-unreachable:${s.id}`;
 
             if (currState === 'failed' && prevState !== 'failed') {
-                // 首次进入 failed，且未被抑制 → 推 danger 条
-                if (!suppressed.has(s.id)) {
+                // 进入 failed：检查连续失败计数，只有达到阈值才推 InfoBar（短暂抖动 cf=1 不推）。
+                const cf = s.health?.consecutiveFailures ?? 0;
+                if (cf >= CONSECUTIVE_FAILURES_INFOBAR_THRESHOLD && !suppressed.has(s.id)) {
                     pushInfoBar({
                         key,
                         tone: 'danger',
