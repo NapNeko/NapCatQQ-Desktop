@@ -35,6 +35,9 @@ const DOMAIN_EVENT_NAMES = [
     'docker_deploy_progress',
     'docker_install_progress',
     'desktop_log_appended',
+    // remote-ssh-stability P0：Host 连接健康事件（不绑 bot，绑 server_id）
+    'host_connection_lost',
+    'host_connection_recovered',
 ] as const;
 
 export const eventStreamService = {

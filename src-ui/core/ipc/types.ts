@@ -292,6 +292,18 @@ type DomainEventBody =
     | {
         kind: 'desktop_log_appended';
         line: string;
+    }
+    // remote-ssh-stability P0：远端主机传输层连接健康事件（不绑 bot，绑 server_id）
+    | {
+        kind: 'host_connection_lost';
+        server_id: string;
+        reason?: string | null;
+        consecutive_failures: number;
+    }
+    | {
+        kind: 'host_connection_recovered';
+        server_id: string;
+        latency_ms: number;
     };
 
 // 所有发到 webview 的 IPC 事件 payload 都带顶层 v 版本号 envelope(R14:版本化)。

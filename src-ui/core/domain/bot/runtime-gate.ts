@@ -76,17 +76,38 @@ export interface DockerStatusLite {
     probing: boolean;
 }
 
+/**
+ * 远端主机的传输层可达性（仅 remote 场景使用）。
+ * reachable=false 时，启动/保存门禁应优先阻断，并给出“主机连接中断”文案，
+ * 而不是继续往下判断“缺少 NapCat/QQ”等组件级提示。
+ */
+export interface RemoteTransportStatus {
+    reachable: boolean;
+    /** 人类可读的主机标签（name · host 或 id），用于文案。 */
+    label?: string;
+}
+
 export interface RuntimeGateArgs {
     config: BotConfig;
     local?: LocalRuntimeStatus;
     remoteDirect?: RemoteDirectStatus; // 仅当 remote-direct 时使用
     docker?: DockerStatusLite;         // 仅当 remote-docker 时使用
+    /** 仅当涉及远端主机时提供；useBotRuntimeStartGate 负责填充。 */
+    remoteTransport?: RemoteTransportStatus;
 }
 
 /** 计算启动阻断原因（返回非空字符串表示不能启动）。 */
 export function runtimeStartBlockReason(args: RuntimeGateArgs): string | null {
     const req = getRuntimeRequirement(args.config);
     if (!req) return null;
+
+    // 优先检查传输层：远端主机不可达时，直接返回 transport 原因，不再看组件。
+    if ((req.kind === 'remote-direct' || req.kind === 'remote-docker') && args.remoteTransport) {
+        if (!args.remoteTransport.reachable) {
+            const label = args.remoteTransport.label ?? req.hostId;
+            return `远端主机 ${label} 连接中断`;
+        }
+    }
 
     if (req.kind === 'local-direct') {
         const st = args.local;

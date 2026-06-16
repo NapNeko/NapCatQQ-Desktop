@@ -18,6 +18,7 @@ import { useComponentActionEventBridge } from '../hooks/components/useComponentA
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
 import { useDockerInstallProgressBridge } from '../hooks/docker/useDockerInstallProgressBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
+import { useHostConnectionEvents } from '../hooks/remote/useHostConnectionEvents';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
@@ -45,6 +46,7 @@ export const AppNext: React.FC = () => {
     useDockerDeployProgressBridge();
     useDockerInstallProgressBridge();
     useComponentsWarmup();
+    useHostConnectionEvents();
 
     const { servers } = useServerManager();
     const hostLabels = useMemo(() => {

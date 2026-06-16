@@ -11,6 +11,7 @@ import {
     runtimeSaveBlockReason,
     runtimeStartBlockReason,
     type RuntimeGateArgs,
+    type RemoteTransportStatus,
 } from '../../core/domain/bot/runtime-gate';
 import { useHostComponentInstalled } from '../components/useRemoteHostComponentInstalled';
 import { useDockerHosts } from '../docker/useDockerHosts';
@@ -18,6 +19,9 @@ import {
     dockerHostIdForConfig,
 } from '../../core/domain/bot/docker-start-gate';
 import { isRuntimeTargetLocal } from '../../core/domain/bot/runtime-target';
+import { useQuery } from '@tanstack/react-query';
+import { serverService } from '../../core/services/server.service';
+import { isTauri } from '../../core/ipc/transport';
 
 export function useBotRuntimeStartGate(
     configByBot: Record<string, BotConfig | undefined | null>,
@@ -62,7 +66,16 @@ export function useBotRuntimeStartGate(
     const { statusByHost: dockerStatusByHost, probingByHost: dockerProbingByHost } =
         useDockerHosts(dockerHostIds);
 
-    // 4. 构造 gateArgs（纯读 + 计算）
+    // 4. 服务器档案（用于判断远端 host 的 transport 健康 + 取 label）
+    const serversQuery = useQuery({
+        queryKey: ['servers'],
+        queryFn: () => serverService.list(),
+        enabled: isTauri,
+        staleTime: 15_000,
+    });
+    const servers = serversQuery.data ?? [];
+
+    // 5. 构造 gateArgs（纯读 + 计算）
     const gateArgs = useCallback(
         (config: BotConfig): RuntimeGateArgs => {
             const req = getRuntimeRequirement(config);
@@ -82,6 +95,20 @@ export function useBotRuntimeStartGate(
                     installed: st ?? {},
                     probing: st ? Object.values(st).some((v) => v === undefined) : true,
                 };
+
+                // 填充 transport 状态（P0-11）
+                const serverId = req.hostId.startsWith('remote:')
+                    ? req.hostId.slice('remote:'.length)
+                    : req.hostId;
+                const profile = servers.find((p) => p.id === serverId);
+                const reachable = profile ? profile.state !== 'failed' : false;
+                const label = profile
+                    ? (profile.name?.trim() || profile.host?.trim() || profile.id)
+                    : serverId;
+                out.remoteTransport = {
+                    reachable,
+                    label,
+                } satisfies RemoteTransportStatus;
             } else if (req.kind === 'remote-docker') {
                 const hostId = req.hostId;
                 const dockerStatus = dockerStatusByHost[hostId];
@@ -92,11 +119,25 @@ export function useBotRuntimeStartGate(
                     composeAvailable: !!dockerStatus?.composeAvailable,
                     probing,
                 };
+
+                // remote-docker 也需要 transport 检查
+                const serverId = hostId.startsWith('remote:')
+                    ? hostId.slice('remote:'.length)
+                    : hostId;
+                const profile = servers.find((p) => p.id === serverId);
+                const reachable = profile ? profile.state !== 'failed' : false;
+                const label = profile
+                    ? (profile.name?.trim() || profile.host?.trim() || profile.id)
+                    : serverId;
+                out.remoteTransport = {
+                    reachable,
+                    label,
+                } satisfies RemoteTransportStatus;
             }
 
             return out;
         },
-        [statusByHost, dockerStatusByHost, dockerProbingByHost],
+        [statusByHost, dockerStatusByHost, dockerProbingByHost, servers],
     );
 
     const startBlock = useCallback(

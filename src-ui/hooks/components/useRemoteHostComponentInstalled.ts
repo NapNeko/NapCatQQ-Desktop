@@ -14,6 +14,7 @@ import {
     type DirectRunComponentId,
 } from '../../core/domain/bot/remote-direct-run-deps';
 import type { BackendType } from '../../core/ipc/generated/domain/BackendType';
+import { useIsHostReachable } from '../remote/useIsHostReachable';
 
 const ALL_PROBE_IDS: DirectRunComponentId[] = [
     'qq',
@@ -52,6 +53,8 @@ export function useHostComponentInstalled(
         staleTime: 5 * 60 * 1000,
     });
 
+    const isHostReachable = useIsHostReachable(hostId);
+
     const isLocal = isLocalHost(hostId);
     const chain = isLocal
         ? localDirectRunChain(backendType)
@@ -65,7 +68,12 @@ export function useHostComponentInstalled(
                     componentId as ComponentId,
                     hostId!,
                 ),
-            enabled: hostId != null && chain.includes(componentId),
+            // P0-11：transport 不可达时不发探测请求，避免把连接失败误判成“组件缺失”，
+            // 同时减少无效 SSH 往返。enabled 由三部分组成：
+            // - hostId 存在
+            // - 该组件在当前 backend 的依赖链里
+            // - 主机在传输层可达（本机恒 true；远端看 ServerProfile.state !== 'failed'）
+            enabled: hostId != null && chain.includes(componentId) && isHostReachable,
             staleTime: 30 * 1000,
         })),
     });
@@ -99,3 +107,6 @@ export function useHostComponentInstalled(
 
 /** 旧名字兼容导出（历史代码仍可使用）。 */
 export const useRemoteHostComponentInstalled = useHostComponentInstalled;
+
+// 同时导出主机可达性判断，供 UI 层在渲染时优先区分“传输层失败”与“组件缺失”。
+export { useIsHostReachable, isHostReachableFromCache } from '../remote/useIsHostReachable';
