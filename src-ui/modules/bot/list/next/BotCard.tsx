@@ -291,7 +291,7 @@ export function BotCard({
         );
     }
     if (transportFailed) {
-        chips.push(
+        chips.unshift(
             <InfoChip
                 key="remote-unreachable"
                 icon={Activity}

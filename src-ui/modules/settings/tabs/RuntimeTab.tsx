@@ -19,6 +19,7 @@ import {
     InfoBarDismissSliderPresence,
     InfoBarDismissDurationSlider,
     PerformanceMonitorIntervalSlider,
+    RemoteHostHealthProbeIntervalSlider,
     TaskQueueCleanupDurationSlider,
     SettingsSection,
     SettingsTabSections,
@@ -132,14 +133,11 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
 
                 <FieldRow
                     label="探活间隔"
-                    description={`仅在启用时生效。${REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN / 1000}–${REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX / 1000} 秒`}
+                    description={`仅在启用时生效。${REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN / 1000}–${REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX / 1000} 秒，拖动滑块调整。`}
                     isLast
                 >
-                    <BackendNumber
+                    <RemoteHostHealthProbeIntervalSlider
                         value={draft.remoteHostHealthProbeIntervalMs}
-                        min={REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN}
-                        max={REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX}
-                        step={1000}
                         onChange={(v) =>
                             patchDraft({
                                 remoteHostHealthProbeIntervalMs:
@@ -147,7 +145,6 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                             })
                         }
                         disabled={!draft.remoteHostHealthProbeEnabled}
-                        suffix="ms"
                     />
                 </FieldRow>
             </SettingsSection>

@@ -34,6 +34,12 @@ import {
     PERFORMANCE_MONITOR_INTERVAL_MS_MIN,
 } from '../../core/domain/performance/performanceSettings';
 import {
+    clampRemoteHostHealthProbeIntervalMs,
+    REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_DEFAULT,
+    REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX,
+    REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN,
+} from '../../core/domain/remote-host/healthProbeSettings';
+import {
     clampTaskQueueCleanupSliderMs,
     TASK_QUEUE_CLEANUP_SLIDER_MAX,
     TASK_QUEUE_CLEANUP_SLIDER_MIN,
@@ -515,6 +521,53 @@ export function PerformanceMonitorIntervalSlider({
                 disabled={
                     disabled || clamped === PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT
                 }
+                className={
+                    'rounded-sm px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors ' +
+                    'hover:bg-inset hover:text-text disabled:pointer-events-none disabled:opacity-40'
+                }
+            >
+                重置
+            </button>
+        </div>
+    );
+}
+
+/** 远程主机健康探活间隔滑块（P1 主动探活）。范围 10s~5min，步进 1s。 */
+export function RemoteHostHealthProbeIntervalSlider({
+    value,
+    onChange,
+    disabled,
+}: {
+    value: number;
+    onChange: (next: number) => void;
+    disabled?: boolean;
+}) {
+    const clamped = clampRemoteHostHealthProbeIntervalMs(value);
+    return (
+        <div className="flex items-center gap-2">
+            <input
+                type="range"
+                min={REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN}
+                max={REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX}
+                step={1000}
+                value={clamped}
+                disabled={disabled}
+                onChange={(e) =>
+                    onChange(clampRemoteHostHealthProbeIntervalMs(Number(e.target.value)))
+                }
+                className={
+                    'h-1.5 w-36 cursor-pointer appearance-none rounded-pill bg-inset outline-none ' +
+                    'accent-brand ' +
+                    'disabled:pointer-events-none disabled:opacity-50'
+                }
+            />
+            <span className="w-14 text-right font-mono text-[11.5px] tabular-nums text-text-tertiary">
+                {clamped} ms
+            </span>
+            <button
+                type="button"
+                onClick={() => onChange(REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_DEFAULT)}
+                disabled={disabled || clamped === REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_DEFAULT}
                 className={
                     'rounded-sm px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors ' +
                     'hover:bg-inset hover:text-text disabled:pointer-events-none disabled:opacity-40'

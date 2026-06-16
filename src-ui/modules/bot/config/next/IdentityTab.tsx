@@ -332,7 +332,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                     (() => {
                                         if (remoteTransportFailed) {
                                             return (
-                                                <InlineNotice tone="warn">
+                                                <InlineNotice tone="danger">
                                                     远端主机不可达，保存后无法启动组件探测与 Bot。请先在「远程主机」页恢复连接。
                                                 </InlineNotice>
                                             );
@@ -445,15 +445,17 @@ function InlineNotice({
     tone,
     children,
 }: {
-    tone: 'ok' | 'warn' | 'neutral';
+    tone: 'ok' | 'warn' | 'neutral' | 'danger';
     children: ReactNode;
 }) {
     const cls =
         tone === 'ok'
             ? 'bg-success-soft text-success'
-            : tone === 'warn'
-              ? 'bg-warning-soft text-warning'
-              : 'bg-inset text-text-tertiary';
+            : tone === 'danger'
+              ? 'bg-danger-soft text-danger'
+              : tone === 'warn'
+                ? 'bg-warning-soft text-warning'
+                : 'bg-inset text-text-tertiary';
     return (
         <p className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>
             {children}
