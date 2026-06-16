@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, DeploymentType, SnowLumaStartMode};
@@ -32,7 +32,7 @@ use crate::snowluma::daemon::DaemonState;
 use crate::snowluma::error::SnowLumaWebUiError;
 use crate::snowluma::session::{build_webui_json_payload, generate_strong_password};
 use crate::snowluma::status_poller::{PollerDeps, SnowLumaStatusPoller};
-use crate::snowluma::webui_client::{ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
+use crate::snowluma::webui_client::{HookProcessStatus, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use serde_json::json;
 
 async fn host_file_nonempty(host: &dyn Host, path: &str) -> bool {
@@ -48,6 +48,17 @@ async fn read_remote_file_trimmed(host: &dyn Host, path: &str) -> Result<String,
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
     Ok(String::from_utf8_lossy(&bytes).trim().to_string())
+}
+
+async fn read_remote_log_tail(host: &dyn Host, path: &str, max_lines: usize) -> Result<String, BotBackendError> {
+    let bytes = match host.read_file(&HostPath::from_posix(path)).await {
+        Ok(b) => b,
+        Err(_) => return Ok(String::new()),
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<&str> = text.lines().collect();
+    let start = if lines.len() > max_lines { lines.len() - max_lines } else { 0 };
+    Ok(lines[start..].join("\n"))
 }
 
 /// daemon 启动前：全局 config、VNC/WebUI 明文密钥、图形栈探测。
@@ -229,11 +240,102 @@ async fn inject_via_tunnel(
         .login()
         .await
         .map_err(|e| BotBackendError::Io(format!("SnowLuma WebUI login: {e}")))?;
-    client
-        .load_process(qq_pid)
-        .await
-        .map_err(|e| BotBackendError::Io(format!("SnowLuma load_process: {e}")))?;
+
+    // 关键修复：冷启动刚 spawn QQ 后，SnowLuma daemon 侧的扫描器需要时间把该 PID 识别为 Available。
+    // 立即 load_process 极大概率拿到 "server rejected"（success=false，error 常为空）。
+    // 这里 best-effort 等到列表里出现该 PID 且状态不是 Error/Disconnected 再去 load；超时也不阻塞，
+    // 由 load_process 自己失败 + 事后 list_processes 快照一起给出带上下文的错误，便于诊断。
+    wait_process_available(&client, qq_pid, Duration::from_secs(25)).await;
+
+    // 尝试 load。SnowLuma 对已注入的进程返回 success=false + "already loaded" 类消息；
+    // 对刚 spawn 尚未被扫描到的返回 success=false + 空 error。
+    // 我们把 "already" 当成注入成功（调用方后续会建 poller 并依赖状态轮询推进到 Online）。
+    // 其它拒绝场景：若 error 为空则抓一次当前快照，把该 pid 的真实状态（Available / Error / 不存在）带进错误。
+    let load_res = client.load_process(qq_pid).await;
+    match load_res {
+        Ok(_) => {
+            // 成功注入（或 daemon 确认可注入）。
+        }
+        Err(SnowLumaWebUiError::ServerRejected { ref message, .. }) => {
+            let m = message.to_lowercase();
+            if m.contains("already") {
+                // 视为已注入成功。继续用这个已登录的 client 建 poller 即可。
+                // 为了诊断友好，记录一条 info 级别的观察（不作为错误返回）。
+                tracing::info!(
+                    target: "ncd_runtime::remote_snowluma",
+                    pid = qq_pid,
+                    "load_process reported already loaded/injected; proceeding with existing client"
+                );
+            } else {
+                // 非 "already" 的拒绝：丰富错误上下文。
+                let mut msg = format!("SnowLuma load_process: {load_res:?}");
+                // 上面 load_res 已被消费，这里重新构造可读消息；实际上我们用原始 e。
+                // 重新取一次 e 的 Display 更准：
+                let e = SnowLumaWebUiError::ServerRejected {
+                    endpoint: format!("/api/processes/{qq_pid}/load"),
+                    message: message.clone(),
+                };
+                msg = format!("SnowLuma load_process: {e}");
+                if message.trim().is_empty() {
+                    match client.list_processes().await {
+                        Ok(list) => {
+                            if let Some(p) = list.into_iter().find(|p| p.pid == qq_pid) {
+                                msg.push_str(&format!(
+                                    "; observed pid {} in /api/processes: status={:?} error={:?}",
+                                    p.pid, p.status, p.error
+                                ));
+                            } else {
+                                msg.push_str("; pid not present in current /api/processes snapshot");
+                            }
+                        }
+                        Err(list_err) => {
+                            msg.push_str(&format!("; list_processes after rejection also failed: {list_err}"));
+                        }
+                    }
+                }
+                return Err(BotBackendError::Io(msg));
+            }
+        }
+        Err(e) => {
+            // 其它 WebUI 错误（超时、网络、decode 等），同样尝试补快照（仅对 ServerRejected 空消息有意义，这里只透传）。
+            return Err(BotBackendError::Io(format!("SnowLuma load_process: {e}")));
+        }
+    }
+
     Ok(Arc::new(client) as Arc<dyn SnowLumaWebUiClient>)
+}
+
+/// 等待 SnowLuma 的 `/api/processes` 列表出现指定 pid。
+///
+/// 冷启动时我们在远端 DISPLAY 下用 nohup 刚 spawn 了 QQ 进程，SnowLuma daemon
+/// 内部的扫描器（很可能按固定周期遍历 /proc 或遍历 DISPLAY 下的窗口/进程）需要时间
+/// 才能把这个 pid 标记为 "Available"（可注入）。直接在 spawn 后立刻 load_process
+/// 很容易遇到 "server rejected"（success=false，error 常为空）。
+///
+/// 本函数只做 best-effort 等待：
+/// - 出现 Available / Loaded / Online / Connecting / Loading 就返回（上层会尝试 load 或容忍已注入）。
+/// - 明确看到 Error / Disconnected 立即返回（上层会把错误状态一起报出来）。
+/// - 超时不抛错，让上层 load + 事后 list 快照统一产生带上下文的错误，便于用户/日志诊断。
+async fn wait_process_available(client: &dyn SnowLumaWebUiClient, pid: u32, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if Instant::now() >= deadline {
+            return;
+        }
+        if let Ok(list) = client.list_processes().await {
+            if let Some(p) = list.into_iter().find(|p| p.pid == pid) {
+                match p.status {
+                    HookProcessStatus::Error | HookProcessStatus::Disconnected => return,
+                    HookProcessStatus::Available
+                    | HookProcessStatus::Loaded
+                    | HookProcessStatus::Online
+                    | HookProcessStatus::Connecting
+                    | HookProcessStatus::Loading => return,
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(700)).await;
+    }
 }
 
 /// 单台远端主机共享的 SL daemon（单例图形栈 + node）；多 Bot 共用，按 qq_id 分别启停 QQ。
@@ -460,14 +562,27 @@ pub struct RemoteSnowLumaBackend {
     tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     start_modes: Arc<Mutex<HashMap<BotId, SnowLumaStartMode>>>,
     pollers: Arc<Mutex<HashMap<BotId, SnowLumaStatusPoller>>>,
+    /// Shared coordinator for flipping the common `~/Napcat/opt/QQ` tree entry point.
+    /// Passed from BotManager so that NC and SL cold starts on the same server_id
+    /// serialize their package.json main changes.
+    qq_entry_coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
 }
 
 impl RemoteSnowLumaBackend {
-    pub fn new(
+    /// 内部构造器。
+    ///
+    /// 只应由同 crate 内的 `BotManager` 调用。
+    /// 使用 `pub(crate)` 而非 `pub`，以避免把 `pub(crate)` 的 `RemoteQqEntryCoordinator`
+    /// 通过公开 API 泄露出去（这正是编译器 private_interfaces 警告的来源）。
+    ///
+    /// 外部 crate 不应直接构造此类型，所有 backend 都应由 `BotManager::backend_for_config`
+    /// 统一创建。
+    pub(crate) fn new(
         backend_id: impl Into<BotId>,
         daemon: Arc<RemoteSnowLumaDaemon>,
         event_bus: Arc<BroadcastEventBus>,
         tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
+        qq_entry_coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
     ) -> Self {
         Self {
             backend_id: backend_id.into(),
@@ -476,7 +591,26 @@ impl RemoteSnowLumaBackend {
             tunnels,
             start_modes: Arc::new(Mutex::new(HashMap::new())),
             pollers: Arc::new(Mutex::new(HashMap::new())),
+            qq_entry_coordinator,
         }
+    }
+
+    /// 测试专用构造器。
+    /// 保持 `pub(crate)` + `#[cfg(test)]`，仅同 crate 测试代码可访问。
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        backend_id: impl Into<BotId>,
+        daemon: Arc<RemoteSnowLumaDaemon>,
+        event_bus: Arc<BroadcastEventBus>,
+        tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
+    ) -> Self {
+        Self::new(
+            backend_id,
+            daemon,
+            event_bus,
+            tunnels,
+            Arc::new(crate::bot_manager::RemoteQqEntryCoordinator::default()),
+        )
     }
 
     /// 冷启动后再开桌面：远端 QQ 仍在跑时恢复隧道注入与 status poller。
@@ -575,6 +709,22 @@ impl BotBackend for RemoteSnowLumaBackend {
                 }
             }
             SnowLumaStartMode::ColdStart => {
+                // Ensure the shared remote QQ tree is in vanilla mode *before* we launch
+                // a plain QQ for the SnowLuma daemon to inject into. This is serialized
+                // per server_id via the coordinator so that a concurrent NC bot start on
+                // the same host cannot race the package.json write.
+                let install_base = HostPath::from_posix(format!("{}/Napcat", layout.home));
+                if let Err(e) = self
+                    .qq_entry_coordinator
+                    .ensure_for_native(self.daemon.host.as_ref(), self.daemon.server_id(), &install_base)
+                    .await
+                {
+                    self.daemon.release().await;
+                    return Err(BotBackendError::InvalidConfig(format!(
+                        "SnowLuma 冷启动前确保纯净 QQ 入口失败: {e}"
+                    )));
+                }
+
                 match bot_cold_start(host, layout, &qq_id_str, &qq_id_str).await {
                     Ok(pid) => pid,
                     Err(e) => {
@@ -595,6 +745,14 @@ impl BotBackend for RemoteSnowLumaBackend {
             Err(e) => {
                 if start_mode.is_cold() {
                     let _ = bot_stop(host, paths, &qq_id_str).await;
+                    // 失败时带上 bot 启动日志尾部，便于诊断 "QQ 进程立即退出 / 缺库 / ptrace / DISPLAY 问题"。
+                    if let Ok(tail) = read_remote_log_tail(host, &paths.log_bot_path(&qq_id_str), 40).await {
+                        if !tail.trim().is_empty() {
+                            return Err(BotBackendError::Io(format!(
+                                "{e}\n--- 启动日志末尾 (bot log) ---\n{tail}"
+                            )));
+                        }
+                    }
                 }
                 self.daemon.release().await;
                 return Err(e);

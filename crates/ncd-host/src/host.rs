@@ -180,6 +180,14 @@ pub trait Host: Send + Sync {
     /// 本机 Windows / stub 默认忽略:本机提权走 UAC,没有密码字符串这一说。
     async fn set_elevation_password(&self, _password: Option<String>) {}
 
+    /// 这台主机当前是否已注入提权密码。
+    ///
+    /// 调用方据此判断「sudo -n true 失败」时是真能用 sudo -S,还是只能放弃。
+    /// 没注入过密码的实现（本机 Windows / stub）恒返回 false。
+    async fn has_elevation_password(&self) -> bool {
+        false
+    }
+
     /// 探测某个外部命令在主机上是否可用(在 PATH 里)。Linux/macOS 走
     /// `command -v`,Windows 走 `where`。探测本身失败(连接抖动等)按"不存在"
     /// 保守返回 false,让调用方走"装一下"或报错路径,而不是把探测错误当致命。

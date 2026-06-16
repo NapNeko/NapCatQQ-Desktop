@@ -51,6 +51,18 @@ pub trait Component: Send + Sync {
     /// 校验完整性(SHA256 / 数字签名 / 关键文件存在性)。
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError>;
 
+    /// 仅安装系统依赖（如 Linux QQ 运行时库）。默认不支持，QQ 等组件 override。
+    async fn ensure_dependencies(
+        &self,
+        _host: &dyn Host,
+        _ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
+        Err(ActionError::other(format!(
+            "ensure_dependencies not implemented for {:?}",
+            self.id()
+        )))
+    }
+
     /// 拼接启动命令(由 backend 调用,不实际 spawn)。
     fn launch_command(
         &self,

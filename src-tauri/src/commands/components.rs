@@ -93,12 +93,18 @@ pub async fn run_component_action(
         .build();
     plan.validate().map_err(|err| format!("{err}"))?;
 
-    let needs_pkg_lock = component_id == ComponentId::NoVnc
-        && (kind == StepKind::EnsureInstalled || kind == StepKind::ForceInstall);
+    let needs_pkg_lock = (component_id == ComponentId::NoVnc
+        && (kind == StepKind::EnsureInstalled || kind == StepKind::ForceInstall))
+        || (component_id == ComponentId::Qq && kind == StepKind::EnsureDependencies);
 
     let server_id = host_id.strip_prefix("remote:").map(str::to_string);
     let remote_long_install = server_id.is_some()
-        && (kind == StepKind::EnsureInstalled || kind == StepKind::ForceInstall);
+        && matches!(
+            kind,
+            StepKind::EnsureInstalled
+                | StepKind::ForceInstall
+                | StepKind::EnsureDependencies
+        );
 
     let (mut ctx, mut rx) = ncd_component::ActionCtx::new();
     let cancel_token = ctx.cancel_token();
@@ -629,10 +635,15 @@ pub async fn detect_qq_dependencies(
 }
 
 /// 安装 QQ 系统依赖（仅 Linux 远端）。
+///
+/// sudo_password: 前端弹框收集到的 sudo 密码。None 时后端自动从 keyring 找该
+/// 服务器的缓存密码。两边都没有且远端确实需要密码时，返回 elevation_required=true
+/// 让前端弹框。
 #[tauri::command]
 pub async fn install_qq_dependencies(
     host_id: String,
     packages: Vec<String>,
+    sudo_password: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<InstallDependenciesResult, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
@@ -641,11 +652,40 @@ pub async fn install_qq_dependencies(
         return Err("QQ dependencies installation is only supported on Linux".to_string());
     }
 
+    // 有效密码：用户显式输入优先，fallback 到 keyring 缓存的 sudo 密码
+    let effective_password = sudo_password.clone().or_else(|| {
+        host_id
+            .strip_prefix("remote:")
+            .and_then(|id| state.server_manager.sudo_password(id))
+    });
+
+    tracing::info!(
+        "[install_qq_dependencies] host={}, sudo_password={}, effective_password={}",
+        host_id,
+        sudo_password.as_ref().map(|_| "<provided>").unwrap_or("<none>"),
+        effective_password.as_ref().map(|_| "<resolved>").unwrap_or("<none>")
+    );
+
+    // 预判：没有可用密码时先探查 sudo 能力，没有免密 sudo 也没有缓存密码就直接
+    // 返回 elevation_required，避免 installer 在毫无成功可能时执行安装。
+    if effective_password.is_none() {
+        let access = ncd_host::remote::probe_sudo(host.as_ref()).await;
+        if matches!(access, ncd_host::remote::SudoAccess::PasswordRequired) {
+            tracing::info!("[install_qq_dependencies] no password available, returning elevation_required");
+            return Ok(InstallDependenciesResult {
+                success: false,
+                installed: vec![],
+                failed: vec![],
+                elevation_required: true,
+            });
+        }
+    }
+
     let (mut ctx, _rx) = ncd_component::ActionCtx::new();
     let installer = ncd_component::qq_deps::QqDependencyInstaller;
 
     let result = installer
-        .install(host.as_ref(), packages, &mut ctx)
+        .install(host.as_ref(), packages, effective_password.as_deref(), &mut ctx)
         .await
         .map_err(|e| e.to_string())?;
 

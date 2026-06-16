@@ -30,6 +30,8 @@ pub enum StepKind {
     Uninstall,
     /// verify only(不改任何文件)
     Verify,
+    /// 仅安装系统依赖（QQ Linux 运行时库等），不装组件本体
+    EnsureDependencies,
 }
 
 impl StepKind {
@@ -40,6 +42,7 @@ impl StepKind {
             Self::Update => "update",
             Self::Uninstall => "uninstall",
             Self::Verify => "verify",
+            Self::EnsureDependencies => "ensure_dependencies",
         }
     }
 }
@@ -153,6 +156,11 @@ impl DeployBuilder {
     /// 追加一个 verify step。
     pub fn verify(self, name: impl Into<String>, component: Arc<dyn Component>) -> Self {
         self.step(name, StepKind::Verify, component)
+    }
+
+    /// 追加 ensure_dependencies step（仅 QQ 等实现了该能力的组件有效）。
+    pub fn ensure_dependencies(self, name: impl Into<String>, component: Arc<dyn Component>) -> Self {
+        self.step(name, StepKind::EnsureDependencies, component)
     }
 
     /// 追加一个自定义 step。
@@ -309,6 +317,7 @@ mod tests {
         assert_eq!(StepKind::Update.as_str(), "update");
         assert_eq!(StepKind::Uninstall.as_str(), "uninstall");
         assert_eq!(StepKind::Verify.as_str(), "verify");
+        assert_eq!(StepKind::EnsureDependencies.as_str(), "ensure_dependencies");
     }
 
     /// serde 序列化必须与 `as_str()` 字面量保持一致：前端拿到的是
@@ -321,6 +330,7 @@ mod tests {
             StepKind::Update,
             StepKind::Uninstall,
             StepKind::Verify,
+            StepKind::EnsureDependencies,
         ] {
             let serialized = serde_json::to_string(&kind).unwrap();
             let expected = format!("\"{}\"", kind.as_str());

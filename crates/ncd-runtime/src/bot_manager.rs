@@ -46,7 +46,7 @@ use crate::traits::{
 };
 use ncd_domain::{DeploymentType, RuntimeTarget};
 use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
-use ncd_host::Host;
+use ncd_host::{Host, HostPath};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
 
@@ -118,6 +118,139 @@ pub struct BootstrapResult {
     pub skipped: Vec<BotId>,
 }
 
+/// Coordinator for the shared remote QQ installation tree's `package.json` "main" entry point.
+///
+/// On a single remote Linux host (identified by `server_id`), NapCat and SnowLuma flavors
+/// share the same rootless QQ tree (`$HOME/Napcat/opt/QQ`). Starting a bot of either flavor
+/// must atomically switch the `main` field (to `./loadNapCat.js` or `./app_launcher/index.js`)
+/// and, for NapCat, verify that the injection artifacts actually exist.
+///
+/// This coordinator provides per-server_id serialization *only* for the flip + verification
+/// critical section. Actual process launches, daemon bootstrap, tunnels, etc. for different
+/// bots can still run concurrently. This prevents races when `batch_start` (or auto-start on
+/// bootstrap) launches multiple bots (possibly of mixed flavors) on the same SSH host.
+pub(crate) struct RemoteQqEntryCoordinator {
+    per_server: Arc<tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
+}
+
+impl Default for RemoteQqEntryCoordinator {
+    fn default() -> Self {
+        Self {
+            per_server: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+impl RemoteQqEntryCoordinator {
+    /// Run `f` while holding the per-server mutex for `server_id`.
+    /// The critical section inside `f` (read/write of package.json + small existence checks)
+    /// is serialized per remote host. Long-running parts of bot startup (actual spawn, waiting
+    /// for WebUI, poller creation, etc.) happen *outside* the lock.
+    pub(crate) async fn with_server<F, Fut, R>(&self, server_id: &str, f: F) -> R
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = R>,
+    {
+        let inner = {
+            let mut map = self.per_server.lock().await;
+            map.entry(server_id.to_string())
+                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+                .clone()
+        };
+        let _permit = inner.lock().await;
+        f().await
+    }
+
+    /// Ensure the shared QQ tree on this server is in NapCat-injected mode and that the
+    /// artifacts required by `./loadNapCat.js` are present on disk.
+    ///
+    /// This is the *only* place that should flip the tree to NapCat mode for remote native NC bots.
+    /// It is called from `RemoteNativeLaunchTranslator` under the per-server lock.
+    pub(crate) async fn ensure_for_napcat(
+        &self,
+        host: &dyn Host,
+        server_id: &str,
+        install_base: &HostPath,
+    ) -> Result<(), String> {
+        use ncd_component::remote_qq_entry::{set_remote_qq_package_main, QQ_MAIN_NAPCAT_INJECT};
+
+        self.with_server(server_id, || async {
+            let pkg_path = install_base.join("opt/QQ/resources/app/package.json");
+            let desired = QQ_MAIN_NAPCAT_INJECT;
+
+            // Idempotent: only write if actually different.
+            let mut current = None;
+            if let Ok(bytes) = host.read_file(&pkg_path).await {
+                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    current = v.get("main").and_then(|m| m.as_str()).map(str::to_string);
+                }
+            }
+
+            if current.as_deref() != Some(desired) {
+                set_remote_qq_package_main(host, install_base, desired)
+                    .await
+                    .map_err(|e| format!("patch package.json main to napcat-inject failed: {e}"))?;
+            }
+
+            // The key safety check that was missing: without these files the QQ process
+            // will crash immediately with "Cannot find module '/.../loadNapCat.js'".
+            let load_js = install_base.join("opt/QQ/resources/app/loadNapCat.js");
+            if !host.exists(&load_js).await.map_err(|e| e.to_string())? {
+                return Err(format!(
+                    "远端未找到 NapCat 注入入口脚本 {}（server_id={}）。\
+                     请先到「组件」页为该 SSH 主机安装 NapCat 组件（该步骤会写入 loadNapCat.js 并修改 package.json）。",
+                    load_js.as_posix(),
+                    server_id
+                ));
+            }
+
+            let napcat_mjs = install_base.join("opt/QQ/resources/app/app_launcher/napcat/napcat.mjs");
+            if !host.exists(&napcat_mjs).await.map_err(|e| e.to_string())? {
+                return Err(format!(
+                    "远端未找到 NapCat 核心模块 {}。请先在组件页安装 NapCat。",
+                    napcat_mjs.as_posix()
+                ));
+            }
+
+            Ok(())
+        })
+        .await
+    }
+
+    /// Ensure the shared QQ tree on this server is in vanilla/native mode (for SnowLuma cold start).
+    /// SL cold-start launches a plain QQ process that the remote daemon will later ptrace-inject.
+    pub(crate) async fn ensure_for_native(
+        &self,
+        host: &dyn Host,
+        server_id: &str,
+        install_base: &HostPath,
+    ) -> Result<(), String> {
+        use ncd_component::remote_qq_entry::{set_remote_qq_package_main, QQ_MAIN_NATIVE};
+
+        self.with_server(server_id, || async {
+            let pkg_path = install_base.join("opt/QQ/resources/app/package.json");
+            let desired = QQ_MAIN_NATIVE;
+
+            let mut current = None;
+            if let Ok(bytes) = host.read_file(&pkg_path).await {
+                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    current = v.get("main").and_then(|m| m.as_str()).map(str::to_string);
+                }
+            }
+
+            if current.as_deref() != Some(desired) {
+                set_remote_qq_package_main(host, install_base, desired)
+                    .await
+                    .map_err(|e| format!("patch package.json main to native failed: {e}"))?;
+            }
+
+            // The SL path already does a stronger executable check in ensure_remote_daemon_prereqs.
+            Ok(())
+        })
+        .await
+    }
+}
+
 // ─── BotManager ────────────────────────────────────────────────────────────────
 
 /// 编排层：统一管理所有 Bot 的生命周期。
@@ -173,6 +306,10 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// 远端 SnowLuma：按 server_id 共享 daemon（多 Bot 同一 SSH 主机）。
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
     remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
+    /// Per-remote-host coordination for flipping the shared `~/Napcat/opt/QQ` tree's
+    /// package.json `main` between NapCat-injected and vanilla native modes.
+    /// See `RemoteQqEntryCoordinator` for rationale and batch-start safety.
+    remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -201,6 +338,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_sl_daemon_log: Arc::clone(&self.remote_sl_daemon_log),
             remote_snowluma_daemons: Arc::clone(&self.remote_snowluma_daemons),
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
+            remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
         }
     }
 }
@@ -242,6 +380,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_sl_daemon_log: Arc::new(RemoteSnowLumaLogRegistry::new()),
             remote_snowluma_daemons: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
+            remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
         }
     }
 
@@ -483,6 +622,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             let daemon = self
                                 .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
                                 .await?;
+                            let coordinator = Arc::clone(&self.remote_qq_entry_coordinator);
                             let backend_id =
                                 BotId::new(format!("remote-sl-{}", config.bot.qq_id));
                             Ok(Arc::new(RemoteSnowLumaBackend::new(
@@ -490,14 +630,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                                 daemon,
                                 Arc::clone(&self.event_bus),
                                 Arc::clone(&self.remote_snowluma_tunnels),
+                                coordinator,
                             )))
                         }
                         BotFlavor::NapCat => {
+                            let coordinator = Arc::clone(&self.remote_qq_entry_coordinator);
                             let backend_id =
                                 BotId::new(format!("remote-native-{}", config.bot.qq_id));
                             let translator = Arc::new(RemoteNativeLaunchTranslator::new(
                                 Arc::clone(&host),
                                 flavor,
+                                server_id.to_string(),
+                                coordinator,
                             ));
                             let event_sink: Arc<dyn ncd_deploy::NativeRuntimeEventSink> =
                                 Arc::new(EventBusSink::new(Arc::clone(&self.event_bus)));
@@ -731,6 +875,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 daemon,
                 Arc::clone(&self.event_bus),
                 Arc::clone(&self.remote_snowluma_tunnels),
+                Arc::clone(&self.remote_qq_entry_coordinator),
             );
 
             if let Err(err) = sl_backend

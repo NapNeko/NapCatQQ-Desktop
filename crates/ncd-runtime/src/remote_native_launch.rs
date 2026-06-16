@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ncd_component::{Component, LaunchArgs, NapCatComponent, QQ_MAIN_NAPCAT_INJECT, set_remote_qq_package_main};
+use ncd_component::{Component, LaunchArgs, NapCatComponent};
 use ncd_deploy::{DeploymentError, NativeLaunchCommand, NativeLaunchTranslator};
 use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId};
 use ncd_host::{Host, HostCommand, HostPath};
@@ -198,16 +198,48 @@ fn shell_single_quote(s: &str) -> String {
 pub struct RemoteNativeLaunchTranslator {
     host: Arc<dyn Host>,
     flavor: BotFlavor,
+    /// server_id of the remote (used for per-host entry point coordination).
+    server_id: String,
+    /// Shared coordinator so that concurrent batch starts (or mixed NC+SL on the same host)
+    /// serialize the flip of the shared `package.json` main + artifact verification.
+    coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
     cached_layout: tokio::sync::Mutex<Option<(String, RemoteNapcatLayout)>>,
 }
 
 impl RemoteNativeLaunchTranslator {
-    pub fn new(host: Arc<dyn Host>, flavor: BotFlavor) -> Self {
+    /// 内部构造器。
+    ///
+    /// 只应由同 crate 内的 `BotManager` 调用。
+    /// 使用 `pub(crate)` 而非 `pub`，以避免把 `pub(crate)` 的 `RemoteQqEntryCoordinator`
+    /// 通过公开 API 泄露出去（这正是编译器 private_interfaces 警告的来源）。
+    ///
+    /// 外部 crate（例如 src-tauri）不应直接构造此类型，所有 backend 都应由
+    /// `BotManager::backend_for_config` 统一创建。
+    pub(crate) fn new(
+        host: Arc<dyn Host>,
+        flavor: BotFlavor,
+        server_id: String,
+        coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
+    ) -> Self {
         Self {
             host,
             flavor,
+            server_id,
+            coordinator,
             cached_layout: tokio::sync::Mutex::new(None),
         }
+    }
+
+    /// 测试专用构造器。
+    /// 保持 `pub(crate)` + `#[cfg(test)]`，仅同 crate 测试代码可访问。
+    #[cfg(test)]
+    pub(crate) fn new_for_test(host: Arc<dyn Host>, flavor: BotFlavor, server_id: String) -> Self {
+        Self::new(
+            host,
+            flavor,
+            server_id,
+            Arc::new(crate::bot_manager::RemoteQqEntryCoordinator::default()),
+        )
     }
 
     async fn layout(&self) -> Result<(String, RemoteNapcatLayout), DeploymentError> {
@@ -232,6 +264,8 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
                 let (home, layout) = self.layout().await?;
                 let install_base =
                     napcat_install_base(&home, layout).map_err(DeploymentError::LaunchFailed)?;
+
+                // Per-bot config files can be rendered without the entry lock.
                 render_native_napcat_config_on_host(
                     self.host.as_ref(),
                     &bot_id,
@@ -240,13 +274,17 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
                 )
                 .await
                 .map_err(|e| DeploymentError::LaunchFailed(e.to_string()))?;
-                set_remote_qq_package_main(
-                    self.host.as_ref(),
-                    &install_base,
-                    QQ_MAIN_NAPCAT_INJECT,
-                )
-                .await
-                .map_err(DeploymentError::LaunchFailed)?;
+
+                // The critical shared operation: switch the common QQ tree to NapCat-injected
+                // mode *and* verify that loadNapCat.js + napcat/napcat.mjs actually exist.
+                // This is serialized per server_id by the coordinator so batch_start of
+                // multiple (possibly mixed NC+SL) bots on the same remote host cannot race
+                // the package.json write or launch a QQ that will immediately fail the require.
+                self.coordinator
+                    .ensure_for_napcat(self.host.as_ref(), &self.server_id, &install_base)
+                    .await
+                    .map_err(DeploymentError::LaunchFailed)?;
+
                 build_napcat_remote_launch(self.host.as_ref(), config, &install_base).await
             }
             BotFlavor::SnowLuma => Err(DeploymentError::LaunchFailed(

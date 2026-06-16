@@ -171,6 +171,10 @@ async fn run_single_step(
             }
             Ok(false)
         }
+        StepKind::EnsureDependencies => {
+            step.component.ensure_dependencies(host, ctx).await?;
+            Ok(false)
+        }
     }
 }
 

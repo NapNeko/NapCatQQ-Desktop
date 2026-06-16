@@ -573,6 +573,10 @@ impl Host for RemoteLinuxHost {
         *self.elevation_password.lock().await = password;
     }
 
+    async fn has_elevation_password(&self) -> bool {
+        self.elevation_password.lock().await.is_some()
+    }
+
     async fn run_streaming(
         &self,
         cmd: HostCommand,

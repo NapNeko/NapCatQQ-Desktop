@@ -122,7 +122,65 @@ pub fn qq_qqnt_dependencies_v3_2_25() -> QQDependencyManifest {
                 has_t64_variant: false,
                 category: DependencyCategory::Toolchain,
                 description: "CPIO archiver".to_string(),
-            }
+            },
+            // install.sh 静态包补齐（jq/curl/xvfb/xauth/cpio/libnss3/libgbm1 已在上方）
+            SystemDependency {
+                canonical_name: "zip".to_string(),
+                debian_package: "zip".to_string(),
+                rhel_package: "zip".to_string(),
+                has_t64_variant: false,
+                category: DependencyCategory::Toolchain,
+                description: "ZIP archiver".to_string(),
+            },
+            SystemDependency {
+                canonical_name: "unzip".to_string(),
+                debian_package: "unzip".to_string(),
+                rhel_package: "unzip".to_string(),
+                has_t64_variant: false,
+                category: DependencyCategory::Toolchain,
+                description: "ZIP extractor".to_string(),
+            },
+            SystemDependency {
+                canonical_name: "screen".to_string(),
+                debian_package: "screen".to_string(),
+                rhel_package: "screen".to_string(),
+                has_t64_variant: false,
+                category: DependencyCategory::Toolchain,
+                description: "Terminal multiplexer (后台会话)".to_string(),
+            },
+            SystemDependency {
+                canonical_name: "procps".to_string(),
+                debian_package: "procps".to_string(),
+                rhel_package: "procps-ng".to_string(),
+                has_t64_variant: false,
+                category: DependencyCategory::Toolchain,
+                description: "Process utilities (ps/top)".to_string(),
+            },
+            SystemDependency {
+                canonical_name: "rpm2cpio".to_string(),
+                debian_package: "rpm2cpio".to_string(),
+                rhel_package: "rpm".to_string(),
+                has_t64_variant: false,
+                category: DependencyCategory::Toolchain,
+                description: "RPM to CPIO converter".to_string(),
+            },
+            // Dockerfile + legacy Python 都列的 QQ 运行时库
+            SystemDependency {
+                canonical_name: "notify".to_string(),
+                debian_package: "libnotify4".to_string(),
+                rhel_package: "libnotify".to_string(),
+                has_t64_variant: false,
+                category: DependencyCategory::Runtime,
+                description: "Desktop notification".to_string(),
+            },
+            SystemDependency {
+                canonical_name: "secret".to_string(),
+                debian_package: "libsecret-1-0".to_string(),
+                rhel_package: "libsecret".to_string(),
+                has_t64_variant: false,
+                category: DependencyCategory::Runtime,
+                description: "Secret service library".to_string(),
+            },
         ],
     }
 }

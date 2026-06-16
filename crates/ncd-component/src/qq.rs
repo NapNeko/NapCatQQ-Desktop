@@ -163,7 +163,7 @@ impl QQComponent {
     }
 
     /// 确保 Linux QQ 系统依赖已安装（仅 Linux）。
-    async fn ensure_dependencies(
+    pub async fn ensure_linux_dependencies(
         &self,
         host: &dyn Host,
         ctx: &mut ActionCtx,
@@ -189,7 +189,17 @@ impl QQComponent {
 
         let installer = crate::qq_deps::QqDependencyInstaller;
         let missing_names: Vec<String> = report.missing.iter().map(|p| p.name.clone()).collect();
-        let result = installer.install(host, missing_names, ctx).await?;
+        // sudo_password None：期望 Host 连接建立时已从 keyring 注入密码；
+        // 如果 probe 到 PasswordRequired 且 Host 也没有密码则返回 elevation_required，
+        // 但 deploy path 无前端可弹窗，只能记日志让用户看到安装失败。
+        let result = installer.install(host, missing_names, None, ctx).await?;
+
+        if result.elevation_required {
+            return Err(ActionError::install_step(
+                "install_dependencies",
+                "elevation_required: 安装 QQ 系统依赖需要 sudo 密码，请在提示中输入后重试",
+            ));
+        }
 
         if !result.success {
             let failed_list: Vec<String> = result
@@ -293,6 +303,36 @@ impl Component for QQComponent {
         }
     }
 
+    async fn ensure_dependencies(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
+        self.check_target(host)?;
+        if host.os() != Os::Linux {
+            return Err(ActionError::UnsupportedTarget {
+                component: "qq".into(),
+                os: host.os(),
+                locality: host.locality(),
+            });
+        }
+        ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
+        ctx.emit(ProgressKind::StepBegin {
+            step: 1,
+            message: "安装 QQ 系统依赖".into(),
+        })
+        .await;
+        let run = self.ensure_linux_dependencies(host, ctx).await;
+        let ok = run.is_ok();
+        if let Err(ref e) = run {
+            ctx.log(crate::context::ProgressLogLevel::Error, e.to_string())
+                .await;
+        }
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok }).await;
+        ctx.emit(ProgressKind::Finished { ok }).await;
+        run
+    }
+
     fn launch_command(
         &self,
         _host: &dyn Host,
@@ -367,7 +407,7 @@ impl QQComponent {
             message: "check system dependencies".into(),
         })
         .await;
-        self.ensure_dependencies(host, ctx).await?;
+        self.ensure_linux_dependencies(host, ctx).await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
         // ===== Step 2:探测包格式 =====

@@ -130,7 +130,7 @@ impl QqDependencyDetector {
         host: &dyn Host,
         distro: &DistroInfo,
     ) -> Result<(Vec<PackageStatus>, Vec<PackageStatus>), ActionError> {
-        let packages = self.get_package_list(distro);
+        let packages = self.resolve_package_names(host, distro).await?;
         let mut satisfied = Vec::new();
         let mut missing = Vec::new();
 
@@ -185,37 +185,49 @@ impl QqDependencyDetector {
         }
     }
 
-    /// 根据发行版获取包名清单。
-    fn get_package_list(&self, distro: &DistroInfo) -> Vec<String> {
+    /// 根据发行版解析实际要查询 / 安装的包名清单。
+    ///
+    /// Debian 系：对标记 has_t64_variant 的包逐个 `apt-cache show <pkg>t64` 探测，
+    /// 存在 t64 变体就用 t64 名，否则回退原名。这跟官方 install.sh 一致，比按
+    /// 版本号一刀切加后缀稳健——某个小众包若在当前发行版没 t64 变体，强制加后缀
+    /// 会让 dpkg/apt 报 "unable to locate package"。
+    async fn resolve_package_names(
+        &self,
+        host: &dyn Host,
+        distro: &DistroInfo,
+    ) -> Result<Vec<String>, ActionError> {
         match distro.family {
             DistroFamily::Debian => {
-                let is_t64 = self.is_ubuntu_24_or_later(&distro.name, &distro.version);
-                self.manifest
-                    .dependencies
-                    .iter()
-                    .map(|dep| {
-                        if is_t64 && dep.has_t64_variant {
-                            format!("{}t64", dep.debian_package)
-                        } else {
-                            dep.debian_package.clone()
-                        }
-                    })
-                    .collect()
+                let mut names = Vec::with_capacity(self.manifest.dependencies.len());
+                for dep in &self.manifest.dependencies {
+                    if dep.has_t64_variant
+                        && self.t64_variant_available(host, &dep.debian_package).await
+                    {
+                        names.push(format!("{}t64", dep.debian_package));
+                    } else {
+                        names.push(dep.debian_package.clone());
+                    }
+                }
+                Ok(names)
             }
-            DistroFamily::Rhel => self
+            DistroFamily::Rhel => Ok(self
                 .manifest
                 .dependencies
                 .iter()
                 .map(|dep| dep.rhel_package.clone())
-                .collect(),
-            _ => Vec::new(),
+                .collect()),
+            _ => Ok(Vec::new()),
         }
     }
 
-    /// 判断是否 Ubuntu 24.04+（t64 过渡期）。
-    fn is_ubuntu_24_or_later(&self, name: &str, version: &str) -> bool {
-        name == "ubuntu"
-            && (version.starts_with("24.") || version.starts_with("25."))
+    /// `apt-cache show <pkg>t64` 退出码 0 表示该 t64 变体在仓库里存在。
+    async fn t64_variant_available(&self, host: &dyn Host, debian_package: &str) -> bool {
+        let t64_name = format!("{debian_package}t64");
+        let cmd = HostCommand::new("apt-cache").arg("show").arg(&t64_name);
+        matches!(
+            host.run_to_string(cmd).await,
+            Ok(out) if out.success()
+        )
     }
 
     /// 构建安装命令（用于用户复制粘贴）。
