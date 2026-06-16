@@ -16,7 +16,6 @@ import {
     remoteDirectRunChain,
     localDirectRunChain,
     componentIdToDisplayName,
-    formatMissingDirectRunNotice,
 } from '../../../../core/domain/bot/remote-direct-run-deps';
 import { isRuntimeTargetConcreteRemote } from '../../../../core/domain/bot/runtime-target';
 import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';

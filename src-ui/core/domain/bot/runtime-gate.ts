@@ -13,12 +13,13 @@
 //
 // 直接运行所需组件由 remoteDirectRunChain 定义（NapCat: qq+napcat；SnowLuma: nodejs+qq+novnc+snowluma）。
 
-import type { BotConfig } from '../ipc/generated/domain/BotConfig';
-import type { BackendType } from '../ipc/generated/domain/BackendType';
+import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
+import type { BackendType } from '../../ipc/generated/domain/BackendType';
 import {
     remoteDirectRunChain,
     localDirectRunChain,
     componentIdToDisplayName,
+    type DirectRunComponentId,
 } from './remote-direct-run-deps';
 import { isRuntimeTargetLocal } from './runtime-target';
 
@@ -59,12 +60,12 @@ export function describeRuntimeRequirement(req: RuntimeRequirement): string {
 // ========== 状态聚合 ==========
 
 export interface LocalRuntimeStatus {
-    installed: Partial<Record<RemoteDirectRunComponentId, boolean | undefined>>;
+    installed: Partial<Record<DirectRunComponentId, boolean | undefined>>;
     probing: boolean;
 }
 
 export interface RemoteDirectStatus {
-    installed: Partial<Record<RemoteDirectRunComponentId, boolean | undefined>>;
+    installed: Partial<Record<DirectRunComponentId, boolean | undefined>>;
     probing: boolean;
 }
 
