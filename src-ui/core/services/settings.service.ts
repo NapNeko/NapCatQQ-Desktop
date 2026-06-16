@@ -48,6 +48,9 @@ export interface BackendSettings {
     notifyOnBotCrashed: boolean;
     notifyOnLoginKicked: boolean;
     uiPreferences: AppUiPreferences;
+    // P1 主动探活（remote-ssh-stability）：用户可开关的后台远端主机健康探测
+    remoteHostHealthProbeEnabled: boolean;
+    remoteHostHealthProbeIntervalMs: number;
 }
 
 /** 由 BackendSettings 派生的客户端偏好（与 preferencesStore 一致）。 */
@@ -104,6 +107,9 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
         notifyOnBotCrashed: dto.settings.notifyOnBotCrashed ?? true,
         notifyOnLoginKicked: dto.settings.notifyOnLoginKicked ?? true,
         uiPreferences: ui,
+        // P1 主动探活（与 Rust 侧 serde rename 对齐）
+        remoteHostHealthProbeEnabled: dto.settings.remoteHostHealthProbeEnabled ?? true,
+        remoteHostHealthProbeIntervalMs: Number(dto.settings.remoteHostHealthProbeIntervalMs ?? 30_000),
     };
 }
 
@@ -131,6 +137,9 @@ type AppSettingsDtoInvoke = {
         notifyOnBotCrashed: boolean;
         notifyOnLoginKicked: boolean;
         uiPreferences: AppUiPreferences;
+        // P1 主动探活（与 Rust 侧 serde rename 对齐）
+        remoteHostHealthProbeEnabled: boolean;
+        remoteHostHealthProbeIntervalMs: number;
     };
     githubPat: string;
 };
@@ -170,6 +179,9 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             notifyOnBotCrashed: s.notifyOnBotCrashed,
             notifyOnLoginKicked: s.notifyOnLoginKicked,
             uiPreferences: uiPreferencesForInvoke(s.uiPreferences),
+            // P1 主动探活（与 Rust 侧 serde rename 对齐）
+            remoteHostHealthProbeEnabled: s.remoteHostHealthProbeEnabled,
+            remoteHostHealthProbeIntervalMs: Math.round(s.remoteHostHealthProbeIntervalMs),
         },
         githubPat: s.githubPat.trim(),
     };

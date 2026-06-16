@@ -59,4 +59,7 @@ notifyOnLoginKicked: boolean,
 /**
  * 外观 / 动画 / 圆角等 UI 偏好（与 localStorage 双写，启动以磁盘为准）。
  */
-uiPreferences: AppUiPreferences, };
+uiPreferences: AppUiPreferences,
+// P1 主动探活（remote-ssh-stability）：后台低频探测已连接远端主机的连通性
+remoteHostHealthProbeEnabled: boolean,
+remoteHostHealthProbeIntervalMs: bigint, };

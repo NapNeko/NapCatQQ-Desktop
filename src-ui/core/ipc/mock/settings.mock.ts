@@ -20,4 +20,7 @@ export const mockBackendSettings: BackendSettings = {
     notifyOnBotCrashed: true,
     notifyOnLoginKicked: true,
     uiPreferences: defaultAppUiPreferencesFromPrefs(preferencesStore.get()),
+    // P1 主动探活（默认低频开启）
+    remoteHostHealthProbeEnabled: true,
+    remoteHostHealthProbeIntervalMs: 30_000,
 };

@@ -77,6 +77,9 @@ export function draftFromBackendAndPrefs(
         notifyOnBotCrashed: backend.notifyOnBotCrashed,
         notifyOnLoginKicked: backend.notifyOnLoginKicked,
         uiPreferences: backend.uiPreferences,
+        // P1 主动探活
+        remoteHostHealthProbeEnabled: backend.remoteHostHealthProbeEnabled,
+        remoteHostHealthProbeIntervalMs: backend.remoteHostHealthProbeIntervalMs,
         theme: client.theme,
         showMascot: client.showMascot,
         motionEnabled: client.motionEnabled,
@@ -123,6 +126,9 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
             },
             dismiss,
         ),
+        // P1 主动探活
+        remoteHostHealthProbeEnabled: draft.remoteHostHealthProbeEnabled,
+        remoteHostHealthProbeIntervalMs: draft.remoteHostHealthProbeIntervalMs,
     };
 }
 
@@ -158,7 +164,10 @@ export function isSettingsDirty(
         draft.infoBarDismissWarningEnabled !== baseline.infoBarDismissWarningEnabled ||
         draft.infoBarDismissWarningMs !== baseline.infoBarDismissWarningMs ||
         draft.taskQueueCleanupEnabled !== baseline.taskQueueCleanupEnabled ||
-        draft.taskQueueCleanupLingerMs !== baseline.taskQueueCleanupLingerMs
+        draft.taskQueueCleanupLingerMs !== baseline.taskQueueCleanupLingerMs ||
+        // P1 主动探活
+        draft.remoteHostHealthProbeEnabled !== baseline.remoteHostHealthProbeEnabled ||
+        draft.remoteHostHealthProbeIntervalMs !== baseline.remoteHostHealthProbeIntervalMs
     );
 }
 

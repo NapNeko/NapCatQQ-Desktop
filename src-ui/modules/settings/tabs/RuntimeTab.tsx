@@ -5,6 +5,11 @@ import {
     PERFORMANCE_MONITOR_INTERVAL_MS_MAX,
     PERFORMANCE_MONITOR_INTERVAL_MS_MIN,
 } from '../../../core/domain/performance/performanceSettings';
+import {
+    clampRemoteHostHealthProbeIntervalMs,
+    REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX,
+    REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN,
+} from '../../../core/domain/remote-host/healthProbeSettings';
 import { DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED } from '../../../core/domain/ui/infoBarDismiss';
 import { DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS } from '../../../core/domain/task-queue/cleanup';
 import { NumberField, Switch } from '../../../shared/ui';
@@ -105,6 +110,44 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                         onCheckedChange={(v) =>
                             patchDraft({ taskQueueCleanupEnabled: v })
                         }
+                    />
+                </FieldRow>
+            </SettingsSection>
+
+            <SettingsSection
+                title="远程主机健康监控"
+                description="后台定期对已连接的远端主机执行低频探测（is_healthy）。探测失败时自动标记并通知，不影响本机主机。默认开启低频（30 秒一次）。"
+            >
+                <FieldRow
+                    label="启用后台探活"
+                    description="关闭后不再主动探测远端主机连通性；已有的失败状态仍保留，直至下次成功连接或手动测试。"
+                >
+                    <Switch
+                        checked={draft.remoteHostHealthProbeEnabled}
+                        onCheckedChange={(v) =>
+                            patchDraft({ remoteHostHealthProbeEnabled: v })
+                        }
+                    />
+                </FieldRow>
+
+                <FieldRow
+                    label="探活间隔"
+                    description={`仅在启用时生效。${REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN / 1000}–${REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX / 1000} 秒`}
+                    isLast
+                >
+                    <BackendNumber
+                        value={draft.remoteHostHealthProbeIntervalMs}
+                        min={REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN}
+                        max={REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX}
+                        step={1000}
+                        onChange={(v) =>
+                            patchDraft({
+                                remoteHostHealthProbeIntervalMs:
+                                    clampRemoteHostHealthProbeIntervalMs(v),
+                            })
+                        }
+                        disabled={!draft.remoteHostHealthProbeEnabled}
+                        suffix="ms"
                     />
                 </FieldRow>
             </SettingsSection>
