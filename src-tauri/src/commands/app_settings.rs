@@ -11,6 +11,7 @@ use ncd_runtime::{
     AppSettings, AppSettingsDto, ConfigStore, LocalConfigStore, SecretStore, SecretStoreImpl,
 };
 use tauri::State;
+use tokio_util::sync::CancellationToken;
 
 use crate::AppState;
 
@@ -96,7 +97,29 @@ pub async fn set_app_settings(
         .update_desktop_notify_settings(settings.desktop_notify_flags())
         .await;
     *state.desktop_notify.write().await = settings.desktop_notify_flags();
-    *state.app_settings.write().await = settings;
+    *state.app_settings.write().await = settings.clone();
+
+    // P1 主动探活：设置变化时 cancel 旧 walker，按新 enabled 条件 spawn / restart。
+    // 先取消旧任务（若有），再根据新开关决定是否启动新 walker。
+    {
+        // 取消旧 walker
+        let mut guard = state.health_probe_cancel.lock().await;
+        if let Some(token) = guard.take() {
+            token.cancel();
+        }
+
+        if settings.remote_host_health_probe_enabled {
+            let cancel_token = CancellationToken::new();
+            let child = cancel_token.child_token();
+            *guard = Some(cancel_token);
+
+            let sm = std::sync::Arc::clone(&state.server_manager);
+            let settings_arc = std::sync::Arc::clone(&state.app_settings);
+            tauri::async_runtime::spawn(async move {
+                sm.run_health_probe_loop(settings_arc, child).await;
+            });
+        }
+    }
 
     Ok(())
 }

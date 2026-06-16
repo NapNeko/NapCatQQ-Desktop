@@ -12,9 +12,12 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use ncd_domain::AppSettings;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
-use tracing::info;
+use tokio::time::{interval, MissedTickBehavior};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, info};
 use ts_rs::TS;
 
 use ncd_host::remote::{
@@ -1169,6 +1172,98 @@ impl ServerManager {
                 server_id: server_id.to_string(),
                 latency_ms,
             });
+        }
+    }
+
+    // ============================================================
+    // P1 主动探活：后台低频健康 walker（用户可开关）
+    // ============================================================
+
+    /// 后台健康探活主循环。
+    ///
+    /// 每轮读取 `settings` 的 `remote_host_health_probe_enabled` 和 `remote_host_health_probe_interval_ms`。
+    /// - enabled == false 时跳过本轮探测，仅 sleep interval 后继续。
+    /// - 只对落盘状态为 `Connected` 且当前 hosts 缓存命中的主机执行廉价 `is_healthy`。
+    /// - 探测失败时调用 `mark_unhealthy_internal`（会驱逐缓存、更新 state/health、发布 HostConnectionLost）。
+    ///
+    /// 使用 `MissedTickBehavior::Skip` 避免堆积；支持通过 `cancel` 取消。
+    /// 由 Tauri 侧根据 AppSettings 条件 spawn / cancel + restart。
+    pub async fn run_health_probe_loop(
+        &self,
+        settings: Arc<RwLock<AppSettings>>,
+        cancel: CancellationToken,
+    ) {
+        // 初始间隔（会被每轮动态读设置覆盖）
+        let mut ticker = interval(std::time::Duration::from_millis(30_000));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        loop {
+            tokio::select! {
+                _ = cancel.cancelled() => {
+                    info!(
+                        target: "ncd_runtime::server_manager",
+                        "health probe walker 收到取消信号，退出"
+                    );
+                    break;
+                }
+                _ = ticker.tick() => {
+                    // 每轮动态读取设置，决定是否工作 + 当前间隔
+                    let (enabled, interval_ms) = {
+                        let cfg = settings.read().await;
+                        (
+                            cfg.remote_host_health_probe_enabled,
+                            cfg.remote_host_health_probe_interval_ms,
+                        )
+                    };
+
+                    if !enabled {
+                        debug!(
+                            target: "ncd_runtime::server_manager",
+                            "health probe disabled by settings; skip this tick"
+                        );
+                        // 仍需尊重当前 interval（下轮再判断），避免 CPU 空转
+                        ticker = interval(std::time::Duration::from_millis(interval_ms));
+                        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+                        continue;
+                    }
+
+                    // 应用当前 interval（若设置变化）
+                    ticker = interval(std::time::Duration::from_millis(interval_ms));
+                    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+                    // 枚举所有 profiles，筛选 state == Connected
+                    let profiles = self.repo.load().await;
+                    let connected_ids: Vec<String> = profiles
+                        .into_iter()
+                        .filter(|p| p.state == ServerState::Connected)
+                        .map(|p| p.id)
+                        .collect();
+
+                    if connected_ids.is_empty() {
+                        continue;
+                    }
+
+                    // 对每个 connected id：若缓存命中则做廉价 is_healthy；失败则 mark_unhealthy
+                    for id in connected_ids {
+                        // 快速检查缓存
+                        let host_opt = self.hosts.read().await.get(&id).cloned();
+                        let Some(host) = host_opt else {
+                            // 缓存已无，说明已断开或被其他路径驱逐，跳过
+                            continue;
+                        };
+
+                        let start = std::time::Instant::now();
+                        let healthy = host.is_healthy().await;
+                        let _latency = start.elapsed().as_millis() as u64;
+
+                        if !healthy {
+                            // 失败：走内部路径（会驱逐、更新 state/health、发 lost 事件）
+                            self.mark_unhealthy_internal(&id, Some("后台探活失败".to_string()))
+                                .await;
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -53,6 +53,9 @@ pub struct AppState {
     pub(crate) desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
     pub(crate) app_settings: Arc<RwLock<ncd_domain::AppSettings>>,
     pub(crate) lightweight_scheduler: Arc<lightweight_scheduler::LightweightScheduler>,
+    /// 远程主机健康探活 walker 的取消令牌（P1 主动探活）。
+    /// 由启动 wiring 和 set_app_settings 根据 enabled 变化来条件 spawn / cancel + restart。
+    pub(crate) health_probe_cancel: Arc<Mutex<Option<CancellationToken>>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -219,6 +222,7 @@ pub fn run() {
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings_shared),
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
+            health_probe_cancel: Arc::new(Mutex::new(None)),
         })
         .setup(move |app| {
             if startup_tray_only {
@@ -346,6 +350,31 @@ pub fn run() {
                     "ncd::tray",
                     &format!("attach failed: {err}"),
                 );
+            }
+
+            // P1 主动探活：启动期根据初始 AppSettings 决定是否 spawn 后台健康 walker。
+            // 由于 .setup 闭包是 sync 的，这里 spawn 一个一次性 async 任务来做条件判断 + spawn walker。
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Some(state) = app_handle.try_state::<AppState>() {
+                        let enabled = state.app_settings.read().await.remote_host_health_probe_enabled;
+                        if enabled {
+                            let cancel_token = CancellationToken::new();
+                            let child = cancel_token.child_token();
+                            {
+                                let mut guard = state.health_probe_cancel.lock().await;
+                                *guard = Some(cancel_token);
+                            }
+                            let sm = Arc::clone(&state.server_manager);
+                            let settings = Arc::clone(&state.app_settings);
+                            // 注意：这里 spawn 的 walker 任务会一直跑，直到 cancel
+                            tauri::async_runtime::spawn(async move {
+                                sm.run_health_probe_loop(settings, child).await;
+                            });
+                        }
+                    }
+                });
             }
 
             Ok(())
