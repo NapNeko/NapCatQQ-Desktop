@@ -12,6 +12,7 @@ import {
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
 import { useHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
+import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
 import {
     remoteDirectRunChain,
     localDirectRunChain,
@@ -99,6 +100,9 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     );
 
     const localInstalled = useHostComponentInstalled('local', data.backend_type);
+
+    const remoteReachable = useIsHostReachable(remoteHostId);
+    const remoteTransportFailed = isRemote && remoteHostId != null && !remoteReachable;
 
     const missingDirectRunNotice = useMemo(() => {
         if (!isRemote || deploymentType !== 'native' || !remoteHostId) {
@@ -324,12 +328,25 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                     />
                                 )}
 
-                                {isRemote && deploymentType === 'native' &&
-                                    missingDirectRunNotice && (
-                                        <InlineNotice tone="warn">
-                                            {missingDirectRunNotice}
-                                        </InlineNotice>
-                                    )}
+                                {isRemote && deploymentType === 'native' && remoteHostId && (
+                                    (() => {
+                                        if (remoteTransportFailed) {
+                                            return (
+                                                <InlineNotice tone="warn">
+                                                    远端主机不可达，保存后无法启动组件探测与 Bot。请先在「远程主机」页恢复连接。
+                                                </InlineNotice>
+                                            );
+                                        }
+                                        if (missingDirectRunNotice) {
+                                            return (
+                                                <InlineNotice tone="warn">
+                                                    {missingDirectRunNotice}
+                                                </InlineNotice>
+                                            );
+                                        }
+                                        return null;
+                                    })()
+                                )}
 
                                 {/* 本地直接运行提示 */}
                                 {!isRemote && (

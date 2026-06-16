@@ -70,6 +70,8 @@ import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { QrCodeDialog } from './QrCodeDialog';
 import { BotManageCard } from './BotManageCard';
 import { buildBotListCardStatus, botListCardMetaLine } from './botCardPresentation';
+import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
+import { isRuntimeTargetLocal, remoteHostIdFromRuntimeTarget } from '../../../../core/domain/bot/runtime-target';
 
 interface BotCardProps {
     bot: BotActorSnapshot;
@@ -131,6 +133,14 @@ export function BotCard({
 
     const isSL = isSnowLumaFlavor(flavor);
     const hasQrcode = !!qrcodeUrl;
+
+    // P0-12：Transport 层失败检查（优先于 Bot 状态和组件状态）
+    const isRemoteTarget = config?.bot.runtime_target != null && !isRuntimeTargetLocal(config.bot.runtime_target);
+    const remoteHostIdForCheck = isRemoteTarget && config?.bot.runtime_target != null
+        ? remoteHostIdFromRuntimeTarget(config.bot.runtime_target)
+        : null;
+    const remoteReachable = useIsHostReachable(remoteHostIdForCheck);
+    const transportFailed = isRemoteTarget && remoteHostIdForCheck != null && !remoteReachable;
 
     // 状态切换反馈:
     //   - 关键状态转移(starting→running 等) → 状态徽章 pop,而不是整张卡 pop
@@ -211,7 +221,9 @@ export function BotCard({
     });
 
     const cardAccent =
-        isBotStarting(bot.state) || bot.state === 'repairing' ? 'brand' : 'none';
+        transportFailed
+            ? 'danger'
+            : (isBotStarting(bot.state) || bot.state === 'repairing' ? 'brand' : 'none');
 
     const isActive = isBotActive(bot.state);
 
@@ -275,6 +287,17 @@ export function BotCard({
                 icon={Power}
                 label="启动"
                 value={slStartMode.mode === 'cold_start' ? '冷启动' : '热启动'}
+            />,
+        );
+    }
+    if (transportFailed) {
+        chips.push(
+            <InfoChip
+                key="remote-unreachable"
+                icon={Activity}
+                label="远端"
+                value="主机不可达"
+                muted={false}
             />,
         );
     }
@@ -387,9 +410,9 @@ export function BotCard({
                                 </IconButton>
                                 <IconButton
                                     visible={!isActive && canStartBot(bot.state)}
-                                    tooltip="启动 Bot"
+                                    tooltip={transportFailed ? '远端主机不可达，无法启动' : '启动 Bot'}
                                     onClick={stopAction(() => onStart(bot.bot_id))}
-                                    disabled={!canStartBot(bot.state)}
+                                    disabled={!canStartBot(bot.state) || transportFailed}
                                     tone="success"
                                 >
                                     <ToolbarMotionIcon

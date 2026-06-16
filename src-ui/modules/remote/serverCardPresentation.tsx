@@ -15,7 +15,7 @@ export function serverLifecycleBadge(state: ServerState): ServerBadgeSpec {
         case 'connecting':
             return { tone: 'brand', label: '连接中', dot: true };
         case 'failed':
-            return { tone: 'danger', label: '离线', dot: true };
+            return { tone: 'danger', label: '远端不可达', dot: true };
         case 'disconnected':
         default:
             return { tone: 'neutral', label: '未测试', dot: true };
@@ -56,7 +56,7 @@ export function serverStatusLine(
         case 'connecting':
             return { text: '正在连接…', tone: 'brand' };
         case 'failed':
-            return { text: '无法连接，请检查网络或凭据', tone: 'danger' };
+            return { text: '远端主机不可达，请检查网络或凭据', tone: 'danger' };
         case 'disconnected':
         default:
             return null; // 未测试时不显示状态行，避免视觉噪音
