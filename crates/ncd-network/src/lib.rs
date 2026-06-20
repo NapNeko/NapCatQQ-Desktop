@@ -25,6 +25,7 @@ pub mod range;
 pub mod race;
 pub mod retry;
 pub mod speed;
+pub mod verify;
 
 pub use chunked::{download_smart, ChunkedConfig, CHUNKED_THRESHOLD, DEFAULT_CHUNK_PARTS};
 pub use client::shared_client;

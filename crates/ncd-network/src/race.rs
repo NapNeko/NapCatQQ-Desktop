@@ -20,9 +20,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use sha2::{Digest, Sha256};
-use tokio::fs;
-use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio::time::timeout;
@@ -34,6 +31,7 @@ use crate::download::{download_with_resume, DownloadConfig, DEFAULT_IDLE_TIMEOUT
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
 use crate::range::part_path;
+use crate::verify::verify_sha256_if_needed;
 
 #[derive(Debug, Clone)]
 pub struct MirrorRaceConfig {
@@ -179,42 +177,6 @@ pub async fn download_with_mirror_race(
             .map(|e| e.to_string())
             .unwrap_or_else(|| "no further mirrors".into()),
     ))
-}
-
-/// 算 dest 文件的 SHA256（64-hex 小写），与 `expected` 严格比对。
-///
-/// `expected = None` 直接返回字节数（无校验）；空串视为"无 hash 数据"
-/// 也跳过。校验通过返字节数；mismatch 返 [`NetworkError::ChecksumMismatch`]，
-/// 让上层切镜像；IO 失败返对应 [`NetworkError::Io`]。
-async fn verify_sha256_if_needed(
-    dest: &Path,
-    expected: Option<&str>,
-) -> Result<u64, NetworkError> {
-    let metadata = fs::metadata(dest).await?;
-    let size = metadata.len();
-    let expected = match expected {
-        Some(h) if !h.is_empty() => h,
-        _ => return Ok(size),
-    };
-
-    let mut file = fs::File::open(dest).await?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 256 * 1024];
-    loop {
-        let n = file.read(&mut buf).await?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    let actual = hex::encode(hasher.finalize());
-    if !expected.eq_ignore_ascii_case(&actual) {
-        return Err(NetworkError::ChecksumMismatch {
-            expected: expected.to_string(),
-            actual,
-        });
-    }
-    Ok(size)
 }
 
 async fn run_race(

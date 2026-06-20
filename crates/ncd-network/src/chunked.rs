@@ -19,7 +19,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use sha2::{Digest, Sha256};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinSet;
@@ -33,6 +32,7 @@ use crate::download::{
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
 use crate::race::{download_with_mirror_race, MirrorRaceConfig};
+use crate::verify::verify_sha256_if_needed;
 
 /// 切片下载阈值：< 16MB 不切片（启动开销 > 收益）。
 pub const CHUNKED_THRESHOLD: u64 = 16 * 1024 * 1024;
@@ -391,42 +391,6 @@ async fn merge_chunks(dest: &Path, chunk_paths: &[PathBuf]) -> Result<(), Networ
     fs::rename(&part_path, dest).await?;
     cleanup_chunks(chunk_paths).await;
     Ok(())
-}
-
-/// 算 dest 文件的 SHA256（64-hex 小写），与 `expected` 严格比对。
-///
-/// `expected = None` / 空串视为"无 hash 数据"跳过。校验通过返字节数；mismatch
-/// 返 [`NetworkError::ChecksumMismatch`] 让上层切镜像；IO 失败返对应
-/// [`NetworkError::Io`]。
-async fn verify_sha256_if_needed(
-    dest: &Path,
-    expected: Option<&str>,
-) -> Result<u64, NetworkError> {
-    let metadata = fs::metadata(dest).await?;
-    let size = metadata.len();
-    let expected = match expected {
-        Some(h) if !h.is_empty() => h,
-        _ => return Ok(size),
-    };
-
-    let mut file = fs::File::open(dest).await?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 256 * 1024];
-    loop {
-        let n = file.read(&mut buf).await?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    let actual = hex::encode(hasher.finalize());
-    if !expected.eq_ignore_ascii_case(&actual) {
-        return Err(NetworkError::ChecksumMismatch {
-            expected: expected.to_string(),
-            actual,
-        });
-    }
-    Ok(size)
 }
 
 fn spawn_progress_ticker(
