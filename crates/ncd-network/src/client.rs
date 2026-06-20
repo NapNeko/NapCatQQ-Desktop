@@ -7,7 +7,7 @@
 //! - `pool_idle_timeout(60s)`：连接池保活 1 分钟，多镜像 race 后续请求免握手
 //! - `gzip(true)`：API 端点（GitHub releases）默认压缩
 //! - `rustls-tls`：不依赖系统 OpenSSL，Tauri 包体可控
-//! - **系统代理默认开启**：reqwest `default-features = false` 下 `Client::builder()`
+//! - 系统代理默认开启：reqwest `default-features = false` 下 `Client::builder()`
 //!   仍会读 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 环境变量（仅显式 `.no_proxy()`
 //!   才禁用）。国内用户设 `HTTPS_PROXY=http://127.0.0.1:7890` 即可让 GitHub API
 //!   请求走代理。注意：Windows 系统级代理（IE/注册表）reqwest 不读，只读环境变量。
@@ -37,6 +37,7 @@ static SHARED: OnceLock<Client> = OnceLock::new();
 /// 仅在 `reqwest::Client::builder().build()` 失败时 panic。这种失败说明
 /// 进程根本起不来 HTTP 栈，让进程立即崩溃比让每个 caller 处理 Result 更
 /// 合理。
+#[allow(clippy::expect_used, reason = "进程级单例 client 构造失败不可恢复，见 # Panics")]
 pub fn shared_client() -> &'static Client {
     SHARED.get_or_init(|| {
         build_default_client().expect("ncd-network: 共享 reqwest::Client 构造失败")

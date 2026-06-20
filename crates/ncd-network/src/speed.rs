@@ -41,7 +41,9 @@ impl SpeedSampler {
         self.samples.push_back((now, downloaded));
         // 丢弃落出窗口的老样本，但至少保留 1 个供 current_bps 比较。
         while self.samples.len() > 1 {
-            let oldest = self.samples.front().expect("len > 1").0;
+            let Some(&(oldest, _)) = self.samples.front() else {
+                break;
+            };
             if now.saturating_duration_since(oldest) <= self.window {
                 break;
             }

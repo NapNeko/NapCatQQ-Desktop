@@ -12,6 +12,11 @@
 //! 与 legacy Python `_build_constants.py` 的 .gitignore + 构建期注入语义一致：
 //! 仓库 clone 拿不到真实 secret，必须用官方构建产物或在本地配 `.env`。
 
+// build.rs 是构建脚本：main() 返 () 无法用 ?，panic 是中止构建的标准方式；
+// env::set_var 在 Rust 2024 要求 unsafe，单线程构建期无并发风险。两者语义
+// 不同于运行时生产代码，整体豁免。
+#![allow(clippy::panic, unsafe_code)]
+
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -101,12 +106,11 @@ fn load_dotenv(path: &PathBuf) {
 }
 
 fn strip_quotes(s: &str) -> &str {
-    if s.len() >= 2 {
-        if (s.starts_with('"') && s.ends_with('"'))
-            || (s.starts_with('\'') && s.ends_with('\''))
-        {
-            return &s[1..s.len() - 1];
-        }
+    if s.len() >= 2
+        && ((s.starts_with('"') && s.ends_with('"'))
+            || (s.starts_with('\'') && s.ends_with('\'')))
+    {
+        return &s[1..s.len() - 1];
     }
     s
 }

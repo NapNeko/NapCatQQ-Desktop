@@ -111,13 +111,14 @@ impl ProxySigner {
     /// HMAC-SHA256(secret, message) 得到 hex 签名。
     pub fn sign_headers(&self, path: &str) -> HashMap<&'static str, String> {
         let ts = {
-            let offset = *self.offset.lock().expect("offset lock poisoned");
-            now_unix_secs().saturating_add_signed(offset as i64).max(0)
+            let offset = *self.offset.lock().unwrap_or_else(|e| e.into_inner());
+            now_unix_secs().saturating_add_signed(offset)
         };
         let ts_str = ts.to_string();
         let message = format!("{ts_str}.{path}");
+        #[allow(clippy::expect_used, reason = "HMAC 接受任意长度 key（短补零、超长先 hash），new_from_slice 实际不会失败")]
         let mut mac = HmacSha256::new_from_slice(PROXY_SHARED_SECRET.as_bytes())
-            .expect("HMAC key length is valid for any size");
+            .expect("HMAC can take key of any size");
         mac.update(message.as_bytes());
         let sig = hex::encode(mac.finalize().into_bytes());
 
@@ -134,7 +135,7 @@ impl ProxySigner {
     /// 读响应头里的 `X-Server-Time` 校正 offset，返回是否更新成功。
     ///
     /// - 缺失/解析失败 → false
-    /// - 新 offset 与旧差值 < {@link OFFSET_PERSIST_THRESHOLD_SECS} → false（不写盘）
+    /// - 新 offset 与旧差值 < `OFFSET_PERSIST_THRESHOLD_SECS` → false（不写盘）
     /// - 否则更新内存 + 写盘，返回 true（调用方据此决定是否重试一次）
     pub fn update_offset_from_response(&self, headers: &reqwest::header::HeaderMap) -> bool {
         let Some(server_time) = header_server_time(headers) else {
@@ -143,7 +144,7 @@ impl ProxySigner {
         let local = now_unix_secs();
         let new_offset = server_time as i64 - local as i64;
         let updated = {
-            let mut guard = self.offset.lock().expect("offset lock poisoned");
+            let mut guard = self.offset.lock().unwrap_or_else(|e| e.into_inner());
             let prev = *guard;
             if (new_offset - prev).abs() < OFFSET_PERSIST_THRESHOLD_SECS {
                 return false;
@@ -171,7 +172,7 @@ impl ProxySigner {
             return;
         };
         if let Ok(v) = content.trim().parse::<i64>() {
-            *self.offset.get_mut().expect("offset lock poisoned") = v;
+            self.offset = std::sync::Mutex::new(v);
         }
     }
 
