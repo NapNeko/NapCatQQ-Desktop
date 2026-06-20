@@ -8,7 +8,11 @@ import {
     Switch,
     RadioGroup,
     FormSection,
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
 } from '../../../../shared/ui';
+import { GsapPresence } from '../../../../shared/ui/motion/GsapPresence';
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
 import { useHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
@@ -161,8 +165,25 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     const dockerFlavorLabel =
         data.backend_type === 'snowluma' ? 'SnowLuma' : 'NapCat';
 
+    // 当前运行场景的机制说明，收进 Popover 默认折叠，不常驻长文。
+    const sceneExplainer = useMemo(() => {
+        if (!isRemote || !isRuntimeTargetConcreteRemote(data.runtime_target)) {
+            return null;
+        }
+        if (data.backend_type === 'napcat' && deploymentType === 'native') {
+            return 'Bot 启动后桌面经 SSH 隧道打开远端 NapCat WebUI（本机 6099）并轮询登录态；日志打出 WebUI 地址前先用持久化 token 尝试。';
+        }
+        if (data.backend_type === 'snowluma' && deploymentType === 'native') {
+            return '桌面把远端 5099 / 6081 转发到本机回环，列表可开 WebUI 与 noVNC 扫码；登录密码来自远端 secret，打开时复制到剪贴板。冷/热启动由「启动模式」决定。';
+        }
+        if (data.backend_type === 'snowluma' && deploymentType === 'docker') {
+            return '容器内自带 QQ 图形环境，登录在容器内完成；VNC 与 WebUI 密码由桌面写入 compose。列表在隧道就绪后可开 noVNC 扫码与 WebUI。';
+        }
+        return null;
+    }, [isRemote, data.runtime_target, data.backend_type, deploymentType]);
+
     return (
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-14">
             <FormSection
                 title="账号身份"
                 description="QQ 账号、实例显示名与底座类型"
@@ -198,39 +219,113 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 />
             </FormSection>
 
-            {data.backend_type === 'napcat' &&
-                deploymentType === 'native' &&
-                isRemote &&
-                isRuntimeTargetConcreteRemote(data.runtime_target) && (
-                    <FormSection
-                        title="NapCat 远端直接运行"
-                        description="WebUI 在 SSH 主机本机 6099；桌面经隧道打开并轮询登录态"
-                        layout="none"
-                    >
-                        <InlineNotice tone="neutral">
-                            Bot 启动后桌面会建立 SSH 转发并解析远端 NapCat 日志中的 WebUI
-                            地址；列表 WebUI 可用后可在浏览器打开（带 token）。日志尚未打出 WebUI
-                            行时，会暂用与 Docker 相同的持久化 token 尝试登录轮询。
-                        </InlineNotice>
-                    </FormSection>
-                )}
+            <FormSection
+                title="运行场景"
+                description="本机固定直接运行；远程 Linux 可选 Docker"
+                actions={
+                    sceneExplainer ? (
+                        <SceneExplainerPopover>
+                            {sceneExplainer}
+                        </SceneExplainerPopover>
+                    ) : undefined
+                }
+            >
+                <RadioGroup
+                    label="运行宿主"
+                    items={RUNTIME_ITEMS}
+                    value={runtimeMode}
+                    onValueChange={onRuntimeModeChange}
+                    orientation="horizontal"
+                    name="runtime-target"
+                />
 
-            {data.backend_type === 'snowluma' &&
-                deploymentType === 'native' &&
-                isRemote &&
-                isRuntimeTargetConcreteRemote(data.runtime_target) && (
-                    <FormSection
-                        title="SnowLuma 远端直接运行"
-                        description="图形栈在 SSH 主机上；桌面端经隧道打开 WebUI 与 noVNC"
-                        layout="none"
-                    >
-                        <InlineNotice tone="neutral">
-                            启动后桌面会把远端 5099 / 6081 转发到本机回环地址，列表可打开 WebUI
-                            与 noVNC 扫码。登录密码来自远端 secret 文件，打开时会复制到剪贴板。冷/热启动
-                            仍由下方「启动模式」决定。
-                        </InlineNotice>
-                    </FormSection>
+                <GsapPresence visible={isRemote}>
+                    <div className="flex flex-col gap-3">
+                        {!hasRemoteHosts && !serversLoading && (
+                            <InlineNotice tone="warn">
+                                请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
+                            </InlineNotice>
+                        )}
+                        {hasRemoteHosts && serverItems.length > 0 && (
+                            <Select
+                                label="远程主机"
+                                items={serverItems}
+                                value={remoteHostSelectValue}
+                                onValueChange={(v) => onChange({ runtime_target: v })}
+                                placeholder="选择主机"
+                            />
+                        )}
+
+                        <RadioGroup
+                            label="启动方式"
+                            items={DEPLOYMENT_ITEMS}
+                            value={deploymentType}
+                            onValueChange={(v) =>
+                                onChange({ deploymentType: v as DeploymentType })
+                            }
+                            orientation="horizontal"
+                            name="deployment-type"
+                        />
+
+                        <GsapPresence visible={!!showDockerBlock && !!remoteHostId}>
+                            <div>
+                                <DockerReadinessLine
+                                    flavorLabel={dockerFlavorLabel}
+                                    status={remoteHostId ? statusByHost[remoteHostId] : undefined}
+                                    probing={remoteHostId ? probingByHost[remoteHostId] ?? false : false}
+                                    imageReady={
+                                        remoteHostId
+                                            ? imageReadyByHost[remoteHostId]?.[
+                                                  data.backend_type === 'snowluma'
+                                                      ? 'snowluma'
+                                                      : 'napcat'
+                                              ]
+                                            : undefined
+                                    }
+                                />
+                            </div>
+                        </GsapPresence>
+
+                        {isRemote && deploymentType === 'native' && remoteHostId && (
+                            (() => {
+                                if (remoteTransportFailed) {
+                                    return (
+                                        <InlineNotice tone="danger">
+                                            远端主机不可达，保存后无法启动。请先在「远程主机」页恢复连接。
+                                        </InlineNotice>
+                                    );
+                                }
+                                if (missingDirectRunNotice) {
+                                    return (
+                                        <InlineNotice tone="warn">
+                                            {missingDirectRunNotice}
+                                        </InlineNotice>
+                                    );
+                                }
+                                return null;
+                            })()
+                        )}
+                    </div>
+                </GsapPresence>
+
+                {!isRemote && (
+                    (() => {
+                        const chain = localDirectRunChain(data.backend_type);
+                        const missing = chain.filter((id) => localInstalled[id] === false);
+                        if (missing.length > 0) {
+                            return (
+                                <InlineNotice tone="warn">
+                                    本机缺少 {missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再使用本机直接运行
+                                </InlineNotice>
+                            );
+                        }
+                        if (chain.some((id) => localInstalled[id] === undefined)) {
+                            return <InlineNotice tone="neutral">正在检测本机运行时组件…</InlineNotice>;
+                        }
+                        return null;
+                    })()
                 )}
+            </FormSection>
 
             {data.backend_type === 'snowluma' && deploymentType !== 'docker' && (
                 <FormSection
@@ -240,138 +335,6 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                     <SnowLumaStartModeBlock data={data} onChange={onChange} />
                 </FormSection>
             )}
-
-            {data.backend_type === 'snowluma' && deploymentType === 'docker' && (
-                <FormSection
-                    title="SnowLuma Docker"
-                    description="容器内自带 QQ 图形环境，扫码请用远程主机 noVNC（默认端口 6081）"
-                    layout="none"
-                >
-                    <InlineNotice tone="neutral">
-                        Docker 模式下不使用本机冷/热启动；登录在容器内完成。VNC 与 SnowLuma
-                        WebUI 密码由桌面端生成并写入 compose（分别对应 noVNC 与 5099 登录）。
-                        列表卡片在隧道就绪后可打开 noVNC 扫码页与 WebUI。
-                    </InlineNotice>
-                </FormSection>
-            )}
-
-            <FormSection
-                title="运行宿主"
-                description="仅远程 Linux 支持 Docker；本机固定为直接运行"
-                layout="none"
-            >
-                <div className="flex flex-col gap-4">
-                    <RadioGroup
-                        key={`runtime-mode-${runtimeMode}`}
-                        items={RUNTIME_ITEMS}
-                        value={runtimeMode}
-                        onValueChange={onRuntimeModeChange}
-                        orientation="horizontal"
-                        name="runtime-target"
-                    />
-
-                    {isRemote && (
-                        <div className="flex flex-col gap-3 sm:max-w-md">
-                            {!hasRemoteHosts && !serversLoading && (
-                                <InlineNotice tone="warn">
-                                    请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
-                                </InlineNotice>
-                            )}
-                            {hasRemoteHosts && serverItems.length > 0 ? (
-                                <Select
-                                    label="远程主机"
-                                    items={serverItems}
-                                    value={remoteHostSelectValue}
-                                    onValueChange={(v) =>
-                                        onChange({ runtime_target: v })
-                                    }
-                                    placeholder="选择主机"
-                                />
-                            ) : isRemote && hasRemoteHosts ? (
-                                <InlineNotice tone="warn">
-                                    请先在「远程主机」页添加 SSH 主机
-                                </InlineNotice>
-                            ) : null}
-
-                                <div className="space-y-2">
-                                    <span className="text-xs font-medium text-text-secondary">
-                                        启动方式
-                                    </span>
-                                    <RadioGroup
-                                        items={DEPLOYMENT_ITEMS}
-                                        value={deploymentType}
-                                        onValueChange={(v) =>
-                                            onChange({
-                                                deploymentType:
-                                                    v as DeploymentType,
-                                            })
-                                        }
-                                        orientation="horizontal"
-                                        name="deployment-type"
-                                    />
-                                </div>
-
-                                {showDockerBlock && remoteHostId && (
-                                    <DockerReadinessLine
-                                        flavorLabel={dockerFlavorLabel}
-                                        status={statusByHost[remoteHostId]}
-                                        probing={
-                                            probingByHost[remoteHostId] ?? false
-                                        }
-                                        imageReady={
-                                            imageReadyByHost[remoteHostId]?.[
-                                                data.backend_type === 'snowluma'
-                                                    ? 'snowluma'
-                                                    : 'napcat'
-                                            ]
-                                        }
-                                    />
-                                )}
-
-                                {isRemote && deploymentType === 'native' && remoteHostId && (
-                                    (() => {
-                                        if (remoteTransportFailed) {
-                                            return (
-                                                <InlineNotice tone="danger">
-                                                    远端主机不可达，保存后无法启动组件探测与 Bot。请先在「远程主机」页恢复连接。
-                                                </InlineNotice>
-                                            );
-                                        }
-                                        if (missingDirectRunNotice) {
-                                            return (
-                                                <InlineNotice tone="warn">
-                                                    {missingDirectRunNotice}
-                                                </InlineNotice>
-                                            );
-                                        }
-                                        return null;
-                                    })()
-                                )}
-
-                                {/* 本地直接运行提示 */}
-                                {!isRemote && (
-                                    (() => {
-                                        const chain = localDirectRunChain(data.backend_type);
-                                        const missing = chain.filter(
-                                            (id) => localInstalled[id] === false,
-                                        );
-                                        if (missing.length > 0) {
-                                            return (
-                                                <InlineNotice tone="warn">
-                                                    本机缺少 {missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再使用本机直接运行
-                                                </InlineNotice>
-                                            );
-                                        }
-                                        if (chain.some((id) => localInstalled[id] === undefined)) {
-                                            return <InlineNotice tone="neutral">正在检测本机运行时组件...</InlineNotice>;
-                                        }
-                                        return null;
-                                    })()
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </FormSection>
 
             <FormSection
                 title="附加服务"
@@ -460,6 +423,26 @@ function InlineNotice({
         <p className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>
             {children}
         </p>
+    );
+}
+
+function SceneExplainerPopover({ children }: { children: ReactNode }) {
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    className="inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-[11px] text-text-tertiary transition-colors hover:bg-inset hover:text-text"
+                >
+                    了解此模式
+                </button>
+            </PopoverTrigger>
+            <PopoverContent side="bottom" align="end" sideOffset={6}>
+                <p className="max-w-xs text-[12px] leading-relaxed text-text-secondary">
+                    {children}
+                </p>
+            </PopoverContent>
+        </Popover>
     );
 }
 
