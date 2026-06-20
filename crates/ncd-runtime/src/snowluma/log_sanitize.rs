@@ -8,11 +8,11 @@
 //! - 丢弃所有 < 0x20 不可打印控制字符，仅保留 \t (0x09) / \n (0x0A) / \r (0x0D)。
 //! - 丢弃 \x7f (DEL)。
 //! - 保留 UTF-8 多字节序列（任何 ≥ 0x80 的字节原样透出）。
-//! 实现采用纯字节级状态机扫描，不引入 regex crate 依赖
-//! 在最坏情况下与输入长度线性。
-//! 注意：本函数只清洗 CSI 形式的 ANSI 序列（task 描述的 \x1b\[...）
-//! 与 runtime_backend::strip_ansi_escapes 那种处理 OSC/DCS/SOS/PM/APC
-//! 的完整状态机刻意拆开 —— SnowLuma daemon 输出仅使用 CSI 序列，足够。
+//!   实现采用纯字节级状态机扫描，不引入 regex crate 依赖
+//!   在最坏情况下与输入长度线性。
+//!   注意：本函数只清洗 CSI 形式的 ANSI 序列（task 描述的 \x1b\[...）
+//!   与 runtime_backend::strip_ansi_escapes 那种处理 OSC/DCS/SOS/PM/APC
+//!   的完整状态机刻意拆开 —— SnowLuma daemon 输出仅使用 CSI 序列，足够。
 
 /// 清洗 SnowLuma 子进程一行 stdout，剥除 ANSI CSI 序列与非打印控制字符。
 /// # Examples

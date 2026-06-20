@@ -2417,11 +2417,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 订阅运行时事件总线，将 BotProcessExited 转换为 actor 状态机转移：
     /// - 进程正常或异常退出 → 调用 confirm_stopped / mark_crashed
-    /// 防止 UI 残留假 Running。
-    /// 返回的 future 由调用方在合适的运行时上 spawn（例如
-    /// tauri::async_runtime::spawn）。它不依赖 tokio current handle
-    /// 因此可以在 Tauri setup 回调里安全启动；用 tokio::spawn 在
-    /// 没有 tokio 运行时上下文的位置直接跑会 panic。
+    ///   防止 UI 残留假 Running。
+    ///   返回的 future 由调用方在合适的运行时上 spawn（例如
+    ///   tauri::async_runtime::spawn）。它不依赖 tokio current handle
+    ///   因此可以在 Tauri setup 回调里安全启动；用 tokio::spawn 在
+    ///   没有 tokio 运行时上下文的位置直接跑会 panic。
     pub async fn run_runtime_event_listener(self) {
         let mut subscription = self.event_bus.subscribe(EventFilter::kind(
             crate::events::DomainEventKind::BotProcessExited,
@@ -2588,18 +2588,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 处理 NapCatWebuiAvailable 事件：为给定 Bot 创建/替换 NapCatLoginPoller。
     /// 行为：
     /// - repo.get(bot_id) 不到对应配置时直接 return（不报错），避免在
-    /// 配置删除后还接到延迟的 WebuiAvailable 事件时崩溃。
+    ///   配置删除后还接到延迟的 WebuiAvailable 事件时崩溃。
     /// - 从 poller_settings.read().await 取最新值组装 PollerConfig：
     /// - login_check_interval ← settings.bot_login_check_interval_ms
     /// - unlogged_interval 固定 1s
     /// - auth_refresh_period 30 min；auth_refresh_throttle 5s；http_timeout 5s
     /// - offline_auto_restart ← bot_cfg.bot.offline_auto_restart
     /// - offline_notice_enabled = bot_cfg.advanced.offline_notice
-    /// && (settings.offline_webhook_notice || settings.offline_email_notice)
+    ///   && (settings.offline_webhook_notice || settings.offline_email_notice)
     /// - 旧 Poller 先 dispose（取消其 CancellationToken 并触发 Drop 兜底）
-    /// 再插入新实例，保证不会同时存在两个 Poller 抢同一 BotId 的事件。
-    /// restart_handle 通过 Arc::clone(self) as Arc<dyn RestartHandle> 注入
-    /// 利用本类型的 impl RestartHandle for BotManager（见文件末尾）。
+    ///   再插入新实例，保证不会同时存在两个 Poller 抢同一 BotId 的事件。
+    ///   restart_handle 通过 Arc::clone(self) as Arc<dyn RestartHandle> 注入
+    ///   利用本类型的 impl RestartHandle for BotManager（见文件末尾）。
     pub async fn handle_webui_available(self: &Arc<Self>, bot_id: BotId, port: u16, token: String) {
         // 0. 先把 (port, token) 落进 endpoint 表，让保存配置时的热推送可查。
         //    NapCat 多 bot 时 6099 会被先到的占住，后到的自动 +1，token 也是
@@ -2739,11 +2739,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 监听 NapCatWebuiAvailable 与 BotProcessExited 两路事件，分别驱动
     /// Poller 的创建与回收。
     /// - Arc<Self> 作为 receiver：handle_webui_available 需要把
-    /// Arc<BotManager<R, S>> 转成 Arc<dyn RestartHandle> 注入 PollerDeps。
+    ///   Arc<BotManager<R, S>> 转成 Arc<dyn RestartHandle> 注入 PollerDeps。
     /// - tokio::select! 同时消费两路 subscription；任一路关闭都会让 else =>
-    /// 分支退出循环，避免半挂死。
+    ///   分支退出循环，避免半挂死。
     /// - 调用方（Tauri setup 或测试）通过 tauri::async_runtime::spawn /
-    /// tokio::spawn 启动；与 run_runtime_event_listener 风格一致。
+    ///   tokio::spawn 启动；与 run_runtime_event_listener 风格一致。
     pub async fn run_napcat_login_listener(self: Arc<Self>) {
         let mut webui_sub = self
             .event_bus

@@ -69,8 +69,8 @@ pub enum DomainEventKind {
 /// 描述 NapCat WebUI 登录失效的原因。
 /// - Kicked: 在线状态下账号被踢下线（在线 → 离线 + is_login=false）。
 /// - LoggedOut: 用户主动登出或会话过期，从未达到 online=true 即失效。
-/// #[serde(rename_all = "snake_case")] 与前端 NapCatLoginInvalidationReason
-/// 字面量类型 ('kicked' | 'logged_out') 保持字面量一致。
+///   #[serde(rename_all = "snake_case")] 与前端 NapCatLoginInvalidationReason
+///   字面量类型 ('kicked' | 'logged_out') 保持字面量一致。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NapCatLoginInvalidationReason {

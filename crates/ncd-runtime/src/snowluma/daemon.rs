@@ -183,7 +183,7 @@ impl SnowLumaDaemon {
     /// 任意 tokio 任务可调；并发 caller 安全。
     /// - Ready → ref_count += 1，复用现有 client。
     /// - Stopped → 自我提升为 starter，驱动启动序列；成功后切到 Ready 并返回
-    /// client；任何环节失败立即回滚到 Stopped 并返回错误。
+    ///   client；任何环节失败立即回滚到 Stopped 并返回错误。
     /// - Starting → ref_count += 1，等 ready_notify 在 timeout 内唤醒
     ///   唤醒后按最终态决定返回 client / 错误。
     /// - Crashed → 直接返回 SnowLumaDaemonError::Crashed(last_error)。
@@ -424,8 +424,8 @@ impl SnowLumaDaemon {
     /// waiter 路径：等 starter 通过 ready_notify 通知最终态。
     /// 实现策略：循环 tokio::time::timeout(remaining, ready_notify.notified())
     /// + 每轮重新读 inner 状态。命中 Ready/Stopped/Crashed/Stopping 立即按最终态
-    /// 返回；超时则返回 StartTimeout。state 仍为 Starting（spurious wake）
-    /// 则继续下一轮。
+    ///   返回；超时则返回 StartTimeout。state 仍为 Starting（spurious wake）
+    ///   则继续下一轮。
     async fn wait_for_ready(
         &self,
         timeout: Duration,
@@ -744,7 +744,7 @@ fn resolve_daemon_entry(runtime_root: &std::path::Path) -> std::path::PathBuf {
 ///    - Stopping / Stopped → 视为 intentional，目标态 Stopped，不写
 ///      last_error（不污染下次 ensure_running 的错误信号）
 ///    - 其它（Ready / Starting / Crashed）→ 视为意外退出，目标态 Crashed
-/// last_error = Some(format!("node.exe exited: {exit:?}"))。
+///      last_error = Some(format!("node.exe exited: {exit:?}"))。
 /// 6. 清空 node_pid（child 已不在）；快照 state / ref_count / last_error。
 /// 7. drop lock 后再发 SnowLumaDaemonStateChanged{state, ref_count, reason}
 ///    避免在事件订阅者处理回调时持有内部 mutex。

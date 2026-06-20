@@ -6,14 +6,14 @@
 //! （单元测试 helper），避免 trait 重复定义。
 //! 设计要点（与 对齐）：
 //! - SnowLuma 仅在 Windows 工作（runtime_backend::start 在非 Windows 上直接返回
-//! Unsupported），但本 trait 实装跨平台编译可通过：非 Windows 上直接返回
-//! 只含 initial_pid 的集合，避免在 macOS / Linux CI 上把测试拉爆。
+//!   Unsupported），但本 trait 实装跨平台编译可通过：非 Windows 上直接返回
+//!   只含 initial_pid 的集合，避免在 macOS / Linux CI 上把测试拉爆。
 //! - sysinfo::System::new_all() 在 Windows 上枚举所有进程开销可观（数十毫秒）
-//! 必须放进 tokio::task::spawn_blocking 跑，否则会阻塞主 runtime 上的其它
-//! I/O / 计时任务。
+//!   必须放进 tokio::task::spawn_blocking 跑，否则会阻塞主 runtime 上的其它
+//!   I/O / 计时任务。
 //! - 实现失败兜底：sysinfo 找不到 initial_pid、权限不足、API 调用 panic
-//! 等所有异常情况都收敛到「返回单元素集合 {initial_pid}」，不向上抛。
-//! Status poller 允许"暂时拿不到子进程"，下一轮会再 probe。
+//!   等所有异常情况都收敛到「返回单元素集合 {initial_pid}」，不向上抛。
+//!   Status poller 允许"暂时拿不到子进程"，下一轮会再 probe。
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -32,7 +32,7 @@ use crate::snowluma::status_poller::ProcessTreeProbe;
 /// # 平台差异
 /// - Windows：通过 sysinfo 枚举所有进程，按 parent 链路 BFS。
 /// - 非 Windows：直接返回 {initial_pid}。SnowLuma 不在非 Windows 上运行
-/// 保留只是为了让 ncd-core 在非 Windows CI 上仍可 cargo test --lib。
+///   保留只是为了让 ncd-core 在非 Windows CI 上仍可 cargo test --lib。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SysinfoProcessTreeProbe;
 

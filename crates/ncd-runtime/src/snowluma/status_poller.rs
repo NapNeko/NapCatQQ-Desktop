@@ -21,7 +21,7 @@ use ts_rs::TS;
 /// - WaitingForQrScan：processes 命中且 status == Loaded，等待用户扫码 / 输密码。
 /// - LoggedIn：processes 命中且 status == Online，OneBot pipe 已连。
 /// - Disconnected：processes 命中但 status ∈ {Disconnected, Error}
-/// 或 dispose / 连续探测失败兜底。
+///   或 dispose / 连续探测失败兜底。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
@@ -285,11 +285,11 @@ fn is_real_uin(s: &str) -> bool {
 
 /// 严格 UIN 锁定策略：
 /// - 策略 A：任一 process.pid ∈ candidate set 且 is_real_uin(process.uin)
-/// → 锁该 uin。
+///   → 锁该 uin。
 /// - 策略 B（fallback，仅当 processes 完全空时）：qq_instances 恰好 1 条 +
-/// is_real_uin(qq_instances[0].uin) → 锁该 uin。
+///   is_real_uin(qq_instances[0].uin) → 锁该 uin。
 /// - 否则：返回 None，等下一轮重试。
-/// 多 instance（≥ 2）显式拒绝，避免 cross-Bot 误匹配（legacy 复现过）。
+///   多 instance（≥ 2）显式拒绝，避免 cross-Bot 误匹配（legacy 复现过）。
 fn try_lock_uin(
     processes: &[HookProcessInfo],
     qq_instances: &[OneBotInstanceInfo],
@@ -314,7 +314,7 @@ fn try_lock_uin(
 /// 3. 否则任一 matched.status ∈ {Available, Loading, Connecting} → Starting
 /// 4. 否则 matched 非空 + 全部 ∈ {Error, Disconnected} → Disconnected
 /// 5. 否则 matched 空 + qq_instances 含已锁 uin → fallback LoggedIn
-/// （Windows getAllMainProcess bug 兜底）
+///    （Windows getAllMainProcess bug 兜底）
 /// 6. 否则 → None，本轮不发布
 fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<SnowLumaLoginState> {
     if matched

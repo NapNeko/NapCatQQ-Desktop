@@ -4,11 +4,11 @@
 //! 落地内容：SnowLumaRuntimeBackend struct、SnowLumaProcessRecord、
 //! Phase A（COLD spawn QQ.exe / HOT 按 qq_id 自动匹配 PID）。
 //! - ：BotBackend trait impl、Phase C/D（daemon.ensure_running +
-//! client.load_process + spawn poller）、stop / abort_start / zombie reaper /
-//! kill_process_tree / read_config / write_config / tail_log。
+//!   client.load_process + spawn poller）、stop / abort_start / zombie reaper /
+//!   kill_process_tree / read_config / write_config / tail_log。
 //! - ：单元测试。
-//! 红线：所有跨边界类型派生 ts-rs；不使用 serde_json::Value 透传业务字段
-//! 。
+//!   红线：所有跨边界类型派生 ts-rs；不使用 serde_json::Value 透传业务字段
+//!   。
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;

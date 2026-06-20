@@ -105,9 +105,9 @@ pub struct NapCatLaunchPlan {
 /// 字段语义：
 /// - runtime_root：SnowLuma 安装根，含 node.exe 与 daemon entry 脚本。
 /// - snowluma_data_root：SnowLuma 持久化数据根（<data_root>/snowluma）
-/// 存放 app-config.json / session.json / per-Bot onebot_<uin>.json 等。
+///   存放 app-config.json / session.json / per-Bot onebot_<uin>.json 等。
 /// - start_mode：本次启动是 ColdStart（backend spawn QQ.exe）还是 HotStart
-/// （attach 到用户已开的 QQ.exe）。
+///   （attach 到用户已开的 QQ.exe）。
 /// - qq_install_path：仅 ColdStart 路径需要；HotStart 留 None。
 /// - bot_qq_id：渲染 per-Bot OneBot 配置文件名时使用。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,7 +205,7 @@ pub async fn build_runtime_launch_plan(
 /// 构造 SnowLuma 启动计划（COLD / HOT 两路）。
 /// 决策流程：
 /// 1. 从 BotConfig.bot.snowluma_start_mode 读出 start_mode；缺省（None）
-/// 回退到 SnowLumaStartMode::ColdStart（设计文档约定的默认行为）。
+///    回退到 SnowLumaStartMode::ColdStart（设计文档约定的默认行为）。
 /// 2. 任何模式都校验 <runtime_root>/node.exe 是常规文件存在。
 /// 3. ColdStart 解析 QQ install path（Windows 注册表）；HotStart 跳过。
 async fn build_snowluma_launch_plan(
@@ -398,11 +398,11 @@ mod snowluma_plan_tests {
     //! 覆盖：
     //! 1. node.exe 缺失立即返回 SnowLumaNodeMissing。
     //! 2. ColdStart（含 None 默认）携带 qq_install_path = Some(_)（仅
-    //! Windows 平台能解析 QQ install path；非 Windows 退化为 UnsupportedPlatform）。
+    //!    Windows 平台能解析 QQ install path；非 Windows 退化为 UnsupportedPlatform）。
     //! 3. HotStart 跳过 QQ install 解析，qq_install_path = None，PID 由
-    //! backend Phase A 自动按 qq_id 匹配，落盘配置不再持久化 PID。
+    //!    backend Phase A 自动按 qq_id 匹配，落盘配置不再持久化 PID。
     //! 4. into_runtime_config 把 SnowLuma working_dir 设到 snowluma_data_root
-    //! 且 launch_command 为空。
+    //!    且 launch_command 为空。
 
     use super::*;
     use crate::bot_config::{

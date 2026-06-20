@@ -86,7 +86,7 @@ pub fn session_path(snowluma_data_root: &Path) -> PathBuf {
 /// 读取或首启生成 session。
 /// - 文件存在：反序列化返回。
 /// - 文件不存在：generate_strong_password(16) + now_iso8601() 写入；返回 session。
-/// 错误映射：IO → Io(...)，密码生成 / JSON → Password(...)。
+///   错误映射：IO → Io(...)，密码生成 / JSON → Password(...)。
 pub fn load_or_create_session(
     snowluma_data_root: &Path,
 ) -> Result<SnowLumaSession, SnowLumaDaemonError> {
@@ -249,12 +249,12 @@ pub fn write_webui_json(
 
 /// 协调 daemon 启动前的全局配置渲染。
 /// 1. 解析有效密码：override_pwd.trim() 非空 → 用 override；否则
-/// load_or_create_session.password。
+///    load_or_create_session.password。
 /// 2. render_runtime_json(port)。
 /// 3. build_webui_json_payload(effective, must_change=false) + write_webui_json。
 /// 4. 仅当未使用 override 时调用 update_last_rendered（override 模式只是临时
-/// 覆盖，不污染 session 的"上次渲染时间"语义）。
-/// 返回本次启动生效的明文密码，由调用方喂给 SnowLumaWebUiClient。
+///    覆盖，不污染 session 的"上次渲染时间"语义）。
+///    返回本次启动生效的明文密码，由调用方喂给 SnowLumaWebUiClient。
 pub fn render_daemon_globals(
     snowluma_data_root: &Path,
     runtime_root: &Path,

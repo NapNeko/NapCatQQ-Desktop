@@ -17,10 +17,10 @@ use crate::runtime_backend::BotBackendError;
 /// - Status：HTTP 4xx / 5xx 响应（含 endpoint / status / message）。
 /// - Timeout：reqwest 超时。
 /// - Http：网络 / DNS / 连接错误，cause 为字符串化原因（避免暴露 reqwest::Error
-/// 的内部细节）。注： 字段名为 source，但 thiserror v2 会把名为 source
-/// 的字段自动当作 std::error::Error::source 的 underlying；这里 String 不实现
-/// Error，因此沿用语义但改名为 cause 以兼容 thiserror v2。Display 仍输出
-/// ... source: <text> 与 design 文本一致。
+///   的内部细节）。注： 字段名为 source，但 thiserror v2 会把名为 source
+///   的字段自动当作 std::error::Error::source 的 underlying；这里 String 不实现
+///   Error，因此沿用语义但改名为 cause 以兼容 thiserror v2。Display 仍输出
+///   ... source: <text> 与 design 文本一致。
 /// - Decode：JSON 解码失败 / 字段缺失。
 /// - NotReady：wait_ready 全部候选 host 都未就绪，附 last_errors（host → 错误描述）。
 /// - LoginFailed：/api/login 调用失败（含密码错误 / 服务端拒绝）。
@@ -89,9 +89,9 @@ pub enum SnowLumaDaemonError {
 
 /// SnowLumaDaemonError → BotBackendError 转换。
 /// - Crashed / StartTimeout 表达"运行时不可用"语义。当前 BotBackendError 尚未引入
-/// RuntimeUnavailable variant，按 定义的 fallback 规则映射到 Io 并显式
-/// 带上 runtime unavailable: 前缀，保留语义；后续若 BotBackendError 扩展该
-/// variant，本文件内 match 分支可直接升级，调用点无需改动。
+///   RuntimeUnavailable variant，按 定义的 fallback 规则映射到 Io 并显式
+///   带上 runtime unavailable: 前缀，保留语义；后续若 BotBackendError 扩展该
+///   variant，本文件内 match 分支可直接升级，调用点无需改动。
 /// - 其它 variant 透传到 BotBackendError::Io 并保留原 Display。
 impl From<SnowLumaDaemonError> for BotBackendError {
     fn from(err: SnowLumaDaemonError) -> Self {
