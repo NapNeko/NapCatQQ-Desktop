@@ -1,13 +1,8 @@
 //! 单 URL 下载：HTTP Range 续传 + chunk-level idle timeout + 进度节流。
 //!
-//! 与 race / chunked 解耦：本模块只做"给定一个 URL，把字节灌到 .part 文件，
-//! 写完 rename 到 dest"。
-//!
-//! idle timeout：每次 `stream.next()` 包一层 [`tokio::time::timeout`]，超过约定
-//! 时间没字节到达就报 [`NetworkError::IdleTimeout`]。caller（race）据此切镜像。
-//!
-//! 续传：caller 传入的 dest 若已有 `<dest>.part`，本模块自动取其大小作 Range
-//! offset。服务端 200 表示不支持续传，本模块自动 truncate 重下；206 直接 append。
+//! 与 race / chunked 解耦，只做"给定 URL，把字节灌到 .part，写完 rename 到 dest"。
+//! idle timeout 超时报 IdleTimeout，caller（race）据此切镜像。dest 已有 .part 时
+//! 取其大小作 Range offset；200 表示不支持续传则 truncate 重下，206 直接 append。
 
 use std::path::Path;
 use std::sync::Arc;
@@ -52,14 +47,8 @@ impl Default for DownloadConfig {
     }
 }
 
-/// 单 URL 下载主入口。
-///
-/// 行为：
-/// 1. 若 `<dest>.part` 已存在，发 `Range: bytes=N-`
-/// 2. 服务端 206 → append；200 → truncate 后重下
-/// 3. 每个 chunk 检查 cancel + idle timeout
-/// 4. 进度按 250ms 或 1MB 节流推给 sink
-/// 5. 全部下完后 rename `.part` → dest
+/// 单 URL 下载主入口。.part 已存在则发 Range 续传；206 append / 200 truncate 重下；
+/// 写完 rename .part → dest。
 pub async fn download_with_resume(
     url: &str,
     dest: &Path,
@@ -236,11 +225,8 @@ async fn push_update(
     .await;
 }
 
-/// 共享进度状态：chunked 多个并发切片聚合到同一个 sink 时使用。
-///
-/// 单纯 download_with_resume 不需要它。chunked 模块跑 4 片并发，每片往
-/// `add_bytes` 累加，由独立的进度上报任务定时读 `snapshot` 推给 sink，
-/// 避免每片各自往 sink 推导致 UI 闪烁与数字回退。
+/// 共享进度状态：chunked 多片并发聚合到同一 sink。每片往 add_bytes 累加，独立
+/// 任务定时读 snapshot 推 sink，避免每片各推导致 UI 闪烁与数字回退。
 #[derive(Clone, Default)]
 pub struct AggregatedProgress {
     inner: Arc<Mutex<AggregatedInner>>,
@@ -277,13 +263,9 @@ impl AggregatedProgress {
     }
 }
 
-/// 内部 helper：固定 byte range 下载到指定文件（不走 .part 续传协议）。
-///
-/// 给 chunked.rs 用。每个切片调一次，dest 是该切片的临时路径
-/// （例如 `<final-dest>.chunk-0`）。切片范围由 `range` 指定（inclusive 双闭）。
-///
-/// 不带聚合进度时 sink_aggregated 传 None；chunked 模式下传 Some 让本函数
-/// 把每个 chunk 的 bytes 加进去。
+/// 固定 byte range 下载到指定文件（不走 .part 续传），chunked 切片用。
+/// dest 是切片临时路径（如 <final-dest>.chunk-0），range inclusive 双闭。
+/// aggregated 传 Some 时把每个 chunk bytes 加进聚合进度。
 pub(crate) async fn download_byte_range(
     client: &Client,
     url: &str,
@@ -387,10 +369,8 @@ pub(crate) async fn download_byte_range(
     Ok(downloaded)
 }
 
-/// 探测远端文件大小 + 是否支持 Range。
-///
-/// 用 GET + `Range: bytes=0-0` 的方式（HEAD 在 GitHub releases / objects 上
-/// 有镜像不支持）。返回 (total_bytes, accept_ranges)。
+/// 探测远端文件大小 + 是否支持 Range。用 GET + Range: bytes=0-0（HEAD 在
+/// GitHub releases / objects 上有镜像不支持）。返回 (total_bytes, accept_ranges)。
 pub(crate) async fn probe_size_and_range(
     client: &Client,
     url: &str,

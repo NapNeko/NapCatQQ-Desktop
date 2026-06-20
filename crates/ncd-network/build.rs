@@ -1,16 +1,9 @@
 //! 编译期注入中转代理常量（base url + HMAC secret）。
 //!
-//! 读取环境变量 `NCD_PROXY_BASE_URL` 和 `NCD_PROXY_SECRET`，生成
-//! `src/proxy_constants.rs`（被 `.gitignore` 忽略）。两个环境变量都缺失时，
-//! 拷贝 `src/proxy_constants.template.rs` 作为占位 fallback，运行时
-//! `ProxySigner::is_configured()` 返回 false，release 拉取直接走 GitHub 直连。
-//!
-//! 变量来源优先级（高→低）：
-//! 1. 系统环境变量（CI / 手动 export）
-//! 2. workspace 根目录的 `.env` 文件（本地开发，被 .gitignore 忽略）
-//!
-//! 与 legacy Python `_build_constants.py` 的 .gitignore + 构建期注入语义一致：
-//! 仓库 clone 拿不到真实 secret，必须用官方构建产物或在本地配 `.env`。
+//! 读 NCD_PROXY_BASE_URL / NCD_PROXY_SECRET 生成 src/proxy_constants.rs（.gitignore 忽略）。
+//! 都缺失时拷贝 template.rs 占位，运行时 is_configured() 返 false 走 GitHub 直连。
+//! 变量来源：系统环境变量优先，其次 workspace 根 .env。仓库 clone 拿不到真实 secret，
+//! 必须用官方构建产物或本地配 .env。
 
 // build.rs 是构建脚本：main() 返 () 无法用 ?，panic 是中止构建的标准方式；
 // env::set_var 在 Rust 2024 要求 unsafe，单线程构建期无并发风险。两者语义

@@ -1,18 +1,11 @@
 //! GitHub 镜像列表与 URL 改写。
 //!
-//! 内置候选与 legacy `urls.py::MIRROR_SITE` 对齐（按 2026-05-17 国内带宽测速）。
-//! 调用 [`build_mirror_urls`] 把一个原始 GitHub URL 展开成 6 + 1 个候选
-//! （直连 + 6 镜像）；race / chunked 把这个列表作为 mirrors 输入。
-//!
-//! 关键点：
-//! - 镜像前缀是"完整原始 URL 加在前缀后面"的 reverse-proxy 模式，
-//!   形如 `https://gh-proxy.com/https://github.com/...`
-//! - 不是所有镜像都同时支持 github.com / raw.githubusercontent.com /
-//!   objects.githubusercontent.com，但 race 阶段失败的 mirror 自然会被淘汰
+//! build_mirror_urls 把原始 GitHub URL 展开成 6+1 候选（直连 + 6 镜像）。镜像前缀
+//! 是 reverse-proxy 模式（完整原始 URL 加在前缀后面，如 https://gh-proxy.com/https://github.com/...）。
+//! 不是所有镜像都支持 github.com / raw.githubusercontent.com / objects.githubusercontent.com，
+//! race 阶段失败的 mirror 自然淘汰。
 
-/// 内置候选镜像前缀（不含末尾 `/`）。空串表示直连。
-///
-/// 顺序与 legacy `MIRROR_SITE` 完全一致；前两个最稳，作为 race 初始 racer。
+/// 内置候选镜像前缀（不含末尾 /）。空串表示直连。前两个最稳，作为 race 初始 racer。
 pub const DEFAULT_MIRROR_PREFIXES: &[&str] = &[
     "",                          // 0. 直连
     "https://gh.ddlc.top",       // 1. ddlc（国内带宽最优）
@@ -23,10 +16,8 @@ pub const DEFAULT_MIRROR_PREFIXES: &[&str] = &[
     "https://github.akams.cn",   // 6. akams
 ];
 
-/// 把原始 URL 展开成 race 用的镜像 URL 列表。
-///
-/// `prefixes` 为 `None` 时使用 [`DEFAULT_MIRROR_PREFIXES`]。
-/// 直连（空串前缀）保留在最前，国内用户 race 失败后自动 fallback 到直连。
+/// 把原始 URL 展开成 race 用的镜像 URL 列表。prefixes None 时用 DEFAULT_MIRROR_PREFIXES。
+/// 直连（空串前缀）在最前，race 失败后 fallback 到直连。
 pub fn build_mirror_urls(original: &str, prefixes: Option<&[&str]>) -> Vec<String> {
     let prefixes = prefixes.unwrap_or(DEFAULT_MIRROR_PREFIXES);
     let mut out = Vec::with_capacity(prefixes.len());

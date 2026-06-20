@@ -43,7 +43,7 @@ pub fn is_retryable(err: &NetworkError) -> bool {
     }
 }
 
-/// 对异步操作执行重试；`operation` 每次失败应返回可重试的 [`NetworkError`]。
+/// 对异步操作执行重试；operation 每次失败应返回可重试的 NetworkError。
 pub async fn retry_with_backoff<T, F, Fut>(
     policy: &RetryPolicy,
     mut operation: F,

@@ -1,19 +1,11 @@
 //! Mirror Race：多镜像并发探测，谁先吐第一字节用谁。
 //!
-//! 流程（Top-2 阶梯加码 + first-chunk 判赢）：
-//! 1. 启动前 2 个镜像的 probe（不写盘，只发 GET 等首 chunk）
-//! 2. 每 [`MirrorRaceConfig::stagger`] 增加一个 racer，直到镜像耗尽或有胜者
-//! 3. 第一个收到 chunk 的 racer 报告 url，主控 cancel 其他 racer
-//! 4. 主控用 winner url 启动正式下载（[`download_with_resume`]），stage=Streaming
-//! 5. 若中途 idle timeout 或硬错，主控切到下一个未尝试镜像，stage=SwitchingMirror，
-//!    自动从 `.part` 续传
-//! 6. 全部镜像跑挂 → [`NetworkError::AllMirrorsFailed`]
+//! Top-2 阶梯加码：启动前 2 个 probe（不写盘），每 stagger 加 1 个 racer。第一个
+//! 收到 chunk 的为 winner，cancel 其他。winner 走 download_with_resume 正式下载，
+//! 中途 idle timeout/硬错切下个 mirror 从 .part 续传，全挂返 AllMirrorsFailed。
 //!
-//! 不在 race 阶段复用 stream / 字节：
-//! - probe 阶段拿到首 chunk 就 abort 自己（不写盘）
-//! - winner 重新发 GET 走标准 [`download_with_resume`] 路径
-//! - 代价：每个 mirror 多收几十 KB，但代码简洁、正确性强（避免多 racer 抢
-//!   写同一 .part 的并发问题）
+//! 不复用 probe stream：winner 重新发 GET，代价是每 mirror 多收几十 KB，但避免
+//! 多 racer 抢写同一 .part 的并发问题。
 
 use std::path::Path;
 use std::sync::Arc;
@@ -45,7 +37,7 @@ pub struct MirrorRaceConfig {
     pub idle_timeout: Duration,
     /// 期望 SHA256（64-hex 小写）。Some 时每个 mirror 下完后立即校验，
     /// mismatch 视为该镜像投毒（返完整长度的垃圾字节，所有字节级防御失效），
-    /// truncate `.part` 切下一家。None 时跳过校验。
+    /// truncate .part 切下一家。None 时跳过校验。
     pub expected_sha256: Option<String>,
 }
 
@@ -67,10 +59,7 @@ enum RacerOutcome {
     Failed { idx: usize, url: String, err: String },
 }
 
-/// Mirror race 主入口。
-///
-/// `mirrors` 顺序即偏好顺序：前 [`MirrorRaceConfig::initial_parallel`] 个先并发，
-/// 之后按 stagger 节奏依次加入。
+/// Mirror race 主入口。mirrors 顺序即偏好顺序，前 initial_parallel 个先并发，之后按 stagger 依次加入。
 pub async fn download_with_mirror_race(
     mirrors: &[String],
     dest: &Path,

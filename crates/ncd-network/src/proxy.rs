@@ -1,14 +1,8 @@
 //! 中转代理客户端：HMAC-SHA256 签名 + 服务器时间漂移自愈。
 //!
-//! 迁移自 legacy Python `src/core/network/proxy_signer.py`。语义对齐：
-//! - `sign_headers(path)` 生成 `{X-Timestamp, X-Signature, User-Agent}`
-//! - 中转返回 403 时读响应头 `X-Server-Time` 校正本地时钟 offset，重试一次
-//! - offset 持久化到 `<config_dir>/.proxy_clock_offset`（纯文本一行秒数）
-//! - 单例（`OnceLock`），首次构造从磁盘加载 offset
-//!
-//! 构建期注入（见 `build.rs` + `proxy_constants`）：仓库 clone 拿不到真实
-//! secret，`is_configured()` 返回 false，release 拉取直接走 GitHub 直连，
-//! 不发无意义的中转请求。
+//! 403 时读响应头 X-Server-Time 校正本地时钟 offset 并重试一次；offset 持久化到
+//! config_dir/.proxy_clock_offset。构建期注入 secret（build.rs），仓库 clone 拿不到
+//! 真实 secret 时 is_configured() 返 false，release 拉取走 GitHub 直连。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,10 +18,10 @@ type HmacSha256 = Hmac<Sha256>;
 
 const PLACEHOLDER_MARKER: &str = "PLACEHOLDER";
 const OFFSET_FILENAME: &str = ".proxy_clock_offset";
-/// 抖动小于 2 秒不写盘，避免频繁 IO（对齐 Python 实现）。
+/// 抖动小于 2 秒不写盘，避免频繁 IO。
 const OFFSET_PERSIST_THRESHOLD_SECS: i64 = 2;
 
-/// 中转代理中某个仓库的别名（出现在 URL 路径 `/v1/release/{alias}`）。
+/// 中转代理的仓库别名，出现在 URL 路径 /v1/release/{alias}。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReleaseAlias {
     Napcat,
@@ -44,23 +38,18 @@ impl ReleaseAlias {
         }
     }
 
-    /// `/v1/release/{alias}` 形式，供签名。
+    /// 返回 /v1/release/{alias} 供签名。
     pub fn path(self) -> String {
         format!("/v1/release/{}", self.as_str())
     }
 }
 
-/// 中转代理是否已注入真实常量。
-///
-/// base url 为空或 secret 含 `PLACEHOLDER` 标记时视为未配置；release 拉取
-/// 应直接走 GitHub 直连，不发无意义的中转请求。
+/// 中转代理是否已注入真实常量。未配置时 release 拉取走 GitHub 直连。
 pub fn is_proxy_configured() -> bool {
     !PROXY_BASE_URL.is_empty() && !PROXY_SHARED_SECRET.contains(PLACEHOLDER_MARKER)
 }
 
-/// 拼出某个仓库的中转 URL：`{base}/v1/release/{alias}`。
-///
-/// 未配置时返回 None。
+/// 拼中转 URL（{base}/v1/release/{alias}），未配置返 None。
 pub fn proxy_release_url(alias: ReleaseAlias) -> Option<String> {
     if !is_proxy_configured() {
         return None;
@@ -69,22 +58,15 @@ pub fn proxy_release_url(alias: ReleaseAlias) -> Option<String> {
     Some(format!("{base}/v1/release/{}", alias.as_str()))
 }
 
-/// 单例 ProxySigner 句柄。首次拿取时从磁盘加载 offset。
-///
-/// `config_dir` 用于定位 offset 持久化文件；传 None 表示不持久化（测试用）。
-/// 多次调用会返回同一个内部实例（offset 内存态共享）。
+/// 单例 ProxySigner，首次构造从磁盘加载 offset。config_dir 定位持久化文件，None 不持久化（测试用）。
 pub fn proxy_signer(config_dir: Option<PathBuf>) -> &'static ProxySigner {
     static SIGNER: OnceLock<ProxySigner> = OnceLock::new();
     SIGNER.get_or_init(|| ProxySigner::new(config_dir))
 }
 
-/// 中转代理签名器。
-///
-/// 不直接持有 secret 字符串副本（`PROXY_SHARED_SECRET` 是编译期常量），
-/// 只维护本地与服务器之间的时钟 offset（秒，可负）。
+/// 中转代理签名器。只维护本地与服务器时钟 offset（秒，可负）；secret 是编译期常量不持有副本。
 pub struct ProxySigner {
     config_dir: Option<PathBuf>,
-    /// 内部可变性：offset 用 RwLock 单值保护即可。Mutex<i64> 简单够用。
     offset: std::sync::Mutex<i64>,
 }
 
@@ -105,10 +87,7 @@ impl ProxySigner {
         signer
     }
 
-    /// 生成签名头。
-    ///
-    /// `path` 是 `/v1/release/{alias}` 形式。message = `{timestamp}.{path}`，
-    /// HMAC-SHA256(secret, message) 得到 hex 签名。
+    /// 生成签名头。message = {timestamp}.{path}，HMAC-SHA256(secret, message) → hex。
     pub fn sign_headers(&self, path: &str) -> HashMap<&'static str, String> {
         let ts = {
             let offset = *self.offset.lock().unwrap_or_else(|e| e.into_inner());
@@ -132,11 +111,8 @@ impl ProxySigner {
         headers
     }
 
-    /// 读响应头里的 `X-Server-Time` 校正 offset，返回是否更新成功。
-    ///
-    /// - 缺失/解析失败 → false
-    /// - 新 offset 与旧差值 < `OFFSET_PERSIST_THRESHOLD_SECS` → false（不写盘）
-    /// - 否则更新内存 + 写盘，返回 true（调用方据此决定是否重试一次）
+    /// 读响应头 X-Server-Time 校正 offset，返回是否更新成功（更新了调用方可重试一次）。
+    /// 缺失/解析失败或抖动 < OFFSET_PERSIST_THRESHOLD_SECS 时不更新。
     pub fn update_offset_from_response(&self, headers: &reqwest::header::HeaderMap) -> bool {
         let Some(server_time) = header_server_time(headers) else {
             return false;
@@ -199,7 +175,7 @@ pub fn _clear_offset_file(config_dir: &Path) {
     let _ = std::fs::remove_file(config_dir.join(OFFSET_FILENAME));
 }
 
-/// 从 reqwest HeaderMap 抽 `X-Server-Time`（大小写不敏感）。
+/// 从 HeaderMap 抽 X-Server-Time（大小写不敏感）。
 fn header_server_time(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     headers
         .get("X-Server-Time")

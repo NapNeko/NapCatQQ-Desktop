@@ -1,19 +1,11 @@
-//! 全工程共享的 [`reqwest::Client`]。
+//! 全工程共享的 reqwest::Client。
 //!
-//! 默认配置：
-//! - `connect_timeout(10s)`：DNS + TLS 握手不超过 10 秒；超过认为网络层不可达
-//! - 不设总 `timeout`：大文件下载本来就可能跑 30 分钟，总超时与 idle timeout
-//!   是两件事；idle timeout 由 [`crate::download`] 在 chunk 循环里自己计
-//! - `pool_idle_timeout(60s)`：连接池保活 1 分钟，多镜像 race 后续请求免握手
-//! - `gzip(true)`：API 端点（GitHub releases）默认压缩
-//! - `rustls-tls`：不依赖系统 OpenSSL，Tauri 包体可控
-//! - 系统代理默认开启：reqwest `default-features = false` 下 `Client::builder()`
-//!   仍会读 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 环境变量（仅显式 `.no_proxy()`
-//!   才禁用）。国内用户设 `HTTPS_PROXY=http://127.0.0.1:7890` 即可让 GitHub API
-//!   请求走代理。注意：Windows 系统级代理（IE/注册表）reqwest 不读，只读环境变量。
+//! 不设总 timeout（大文件下载可能跑很久，idle timeout 由 download 模块在 chunk
+//! 循环自己计）；rustls-tls 不依赖系统 OpenSSL，Tauri 包体可控。系统代理只读
+//! HTTP_PROXY/HTTPS_PROXY/ALL_PROXY 环境变量，不读 Windows 注册表——国内用户
+//! 设 HTTPS_PROXY=http://127.0.0.1:7890 即可走代理。
 //!
-//! 调用方：除 WebUI 客户端（127.0.0.1，不复用此 client）外，所有外网下载 /
-//! GitHub API 调用都应走本 client，避免每次构造新 client 浪费连接池。
+//! 除 WebUI 客户端（127.0.0.1）外，外网下载 / GitHub API 都走本 client 复用连接池。
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -30,14 +22,10 @@ const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 static SHARED: OnceLock<Client> = OnceLock::new();
 
-/// 拿到全工程共享的 [`Client`]。第一次调用时构造，失败 panic（极少发生，
-/// 通常是 rustls root store 加载失败），之后所有调用返回同一实例。
-///
-/// # Panics
-/// 仅在 `reqwest::Client::builder().build()` 失败时 panic。这种失败说明
-/// 进程根本起不来 HTTP 栈，让进程立即崩溃比让每个 caller 处理 Result 更
-/// 合理。
-#[allow(clippy::expect_used, reason = "进程级单例 client 构造失败不可恢复，见 # Panics")]
+/// 拿全工程共享 Client，首次调用构造，之后返回同一实例。
+/// 构造失败（rustls root store 加载失败等）直接 panic——HTTP 栈起不来进程没法跑，
+/// 比让每个 caller 处理 Result 更合理。
+#[allow(clippy::expect_used, reason = "进程级单例 client 构造失败不可恢复，见 shared_client doc")]
 pub fn shared_client() -> &'static Client {
     SHARED.get_or_init(|| {
         build_default_client().expect("ncd-network: 共享 reqwest::Client 构造失败")

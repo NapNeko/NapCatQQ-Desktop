@@ -42,7 +42,7 @@ pub enum NetworkError {
     /// 流提前结束：服务端在 Content-Length 字节灌完前就 close。
     /// 镜像连接被掐断 / 反代提前 EOF / 服务端崩了等。这是 zip "Could not
     /// find EOCD" 一类下游错误的真根因——文件根本没下完整。caller 应当切
-    /// 下一个 mirror 并 truncate `.part` 重下，因为续传 offset 拼错位是
+    /// 下一个 mirror 并 truncate .part 重下，因为续传 offset 拼错位是
     /// 同样致命的（不同 mirror 缓存内容可能不一致）。
     #[error("truncated: downloaded {downloaded} of {total} bytes")]
     Truncated { downloaded: u64, total: u64 },

@@ -11,11 +11,8 @@ use tokio::io::AsyncReadExt;
 
 use crate::error::NetworkError;
 
-/// 算 dest 文件的 SHA256（64-hex 小写），与 `expected` 严格比对。
-///
-/// `expected = None` / 空串视为"无 hash 数据"跳过，直接返回字节数。校验通过
-/// 返字节数；mismatch 返 [`NetworkError::ChecksumMismatch`] 让上层切镜像；IO
-/// 失败返对应 [`NetworkError::Io`]。
+/// 算 dest 文件的 SHA256（64-hex 小写），与 expected 严格比对。expected 为 None/空串
+/// 视为无 hash 数据跳过，直接返回字节数。mismatch 返 ChecksumMismatch 让上层切镜像。
 pub(crate) async fn verify_sha256_if_needed(
     dest: &Path,
     expected: Option<&str>,

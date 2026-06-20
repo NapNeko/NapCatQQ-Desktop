@@ -1,11 +1,6 @@
-//! 下载进度回调抽象。
-//!
-//! 不直接 import ncd-component::ActionCtx，避免本 crate 反向依赖上层。
-//! 调用方实现一个 [`DownloadProgressSink`] 适配器把 [`ProgressUpdate`]
-//! 翻译成自己的 ProgressKind / 事件即可。
-//!
-//! 节流由本 crate 内部完成（每 250ms 或每 1MB 推一次），sink 实现不需要
-//! 自己再节流。
+//! 下载进度回调抽象。不 import ncd-component 避免本 crate 反向依赖上层，调用方
+//! 实现 DownloadProgressSink 适配器翻译成自己的 ProgressKind/事件。节流由本 crate
+//! 完成（250ms 或 1MB 一次），sink 不用再节流。
 
 use async_trait::async_trait;
 
@@ -24,13 +19,7 @@ pub enum DownloadStage {
     Resuming,
 }
 
-/// 一次进度更新。
-///
-/// 字段语义：
-/// - `downloaded` / `total`：当前文件已经写入磁盘的字节 / 总大小（None 表示
-///   服务端未给 Content-Length，前端只能显示已下载）
-/// - `speed_bps`：滑动窗口算出的瞬时速度，None 表示样本不足
-/// - `mirror_url`：当前胜出的镜像 URL；UI 调试 / 日志用
+/// 一次进度更新。total None 表示服务端未给 Content-Length；speed_bps None 表示样本不足。
 #[derive(Debug, Clone)]
 pub struct ProgressUpdate {
     pub stage: DownloadStage,
@@ -41,14 +30,8 @@ pub struct ProgressUpdate {
     pub message: String,
 }
 
-/// 下载进度接收端。
-///
-/// `tick` 由 download / race / chunked 在节流之后调用，传入最新一帧
-/// `ProgressUpdate`。实现里通常做的事：转 ncd-component::ProgressKind →
-/// emit 到 ActionCtx → 走事件总线推到前端。
-///
-/// `&self` 不是 `&mut self`，因为 sink 需要在多个任务（race / chunked）
-/// 共享并发调用。实现自己用 Mutex / atomic 守护内部状态。
+/// 下载进度接收端。tick 由 download/race/chunked 节流后调用。&self 非 &mut self，
+/// 因为 sink 要在多任务共享并发调用，实现自己用 Mutex/atomic 守内部状态。
 #[async_trait]
 pub trait DownloadProgressSink: Send + Sync {
     async fn tick(&self, update: ProgressUpdate);

@@ -1,19 +1,9 @@
 //! 切片并行下载：≥16MB 文件切 4 片，每片独立 byte range + idle timeout。
 //!
-//! 流程：
-//! 1. 先 [`probe_size_and_range`] 探总大小 + Range 支持
-//! 2. 不支持 Range 或文件 < [`CHUNKED_THRESHOLD`] 字节 → fallback 到
-//!    [`download_with_mirror_race`] 单流下载
-//! 3. 支持 Range → 文件切 [`DEFAULT_CHUNK_PARTS`] 片，每片在 mirrors 里轮询
-//!    选一个 url（轮询而不是 race，因为切片本身就是为了并行带宽，多 racer
-//!    抢字节没意义）
-//! 4. 每片独立 [`download_byte_range`]，写到 `<dest>.chunk-<idx>` 临时文件
-//! 5. 任一片硬错（idle timeout / status 5xx）→ 该片自动切下个 mirror 重试
-//!    （最多换 3 次 mirror）；连续失败则取消整体并清理已下载片
-//! 6. 全部片完成 → 顺序拼接到 `<dest>.part`，rename 到 dest，删除 chunk 临时文件
-//!
-//! 进度聚合：[`AggregatedProgress`] 给所有片共享，单独的 ticker task 每 250ms
-//! 读 snapshot 推给 sink，避免每片自己往 sink 推导致 UI 数字回退。
+//! 不支持 Range 或文件 < CHUNKED_THRESHOLD 时 fallback 到 race 单流。支持时切
+//! DEFAULT_CHUNK_PARTS 片，每片轮询选一个 mirror（切片已并行，多 racer 抢字节
+//! 没意义）。片硬错自动切下个 mirror 重试（最多 3 次），全失败 fallback race。
+//! 进度聚合到 AggregatedProgress，ticker 每 250ms 推 sink 避免 UI 数字回退。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -71,8 +61,6 @@ impl Default for ChunkedConfig {
 }
 
 /// 智能下载入口：先决定要不要切片，再分派到对应实现。
-///
-/// 这是 ncd-component 应该调的顶层函数。
 pub async fn download_smart(
     mirrors: &[String],
     dest: &Path,
