@@ -113,12 +113,12 @@ impl DaemonInner {
 /// `BotManager`。多 SnowLuma flavor Bot 通过 `ensure_running` 共享同一份
 /// `node.exe` + WebUI client。
 /// 并发安全约束：
-/// - 内部可变状态全部由 `inner: Mutex<DaemonInner>` 守护。
-/// - `ready_notify` 用于在 starter 完成（成 / 败）后唤醒所有 Starting 期 waiter。
-/// - `dead_flag: AtomicBool` 由 starter 在准备启动时清零，由 watcher
-/// 在子进程退出时置位；wait_ready 的 `dead_check` 闭包据此 fast-fail。
-/// - `log_tx`：daemon 共享 stdout 行级广播通道（容量 10000）；任何 SL flavor
-/// BotLogPage 通过 `subscribe_logs` 订阅。
+/// - 内部可变状态全部由 inner: Mutex<DaemonInner> 守护。
+/// - ready_notify 用于在 starter 完成（成 / 败）后唤醒所有 Starting 期 waiter。
+/// - dead_flag: AtomicBool 由 starter 在准备启动时清零，由 watcher
+///   在子进程退出时置位；wait_ready 的 dead_check 闭包据此 fast-fail。
+/// - log_tx：daemon 共享 stdout 行级广播通道（容量 10000）；任何 SL flavor
+///   BotLogPage 通过 subscribe_logs 订阅。
 pub struct SnowLumaDaemon {
     snowluma_data_root: PathBuf,
     runtime_root: PathBuf,
