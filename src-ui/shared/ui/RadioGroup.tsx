@@ -93,17 +93,19 @@ function RadioItemView<V extends string>({
     useLayoutEffect(() => {
         const dot = dotRef.current;
         if (!dot) return;
+        // 可见性靠 CSS data-[state=checked]:opacity-100（Radix 受控 value 直接驱动），
+        // GSAP 只做 scale pop，不碰 opacity/visibility，避免受控切换时动画状态残留
+        // 导致多个 indicator 同时可见。
         if (!m.enabled) {
-            gsap.set(dot, { autoAlpha: isSelected ? 1 : 0, scale: isSelected ? 1 : 0.3 });
+            gsap.set(dot, { scale: isSelected ? 1 : 0.3 });
             prevSelectedRef.current = isSelected;
             return;
         }
         if (isSelected) {
             gsap.fromTo(
                 dot,
-                { autoAlpha: 0, scale: 0.3 },
+                { scale: 0.3 },
                 {
-                    autoAlpha: 1,
                     scale: 1,
                     duration: m.duration('fast'),
                     ease: m.ease.pop,
@@ -111,13 +113,12 @@ function RadioItemView<V extends string>({
             );
         } else if (prevSelectedRef.current) {
             gsap.to(dot, {
-                autoAlpha: 0,
                 scale: 0.3,
                 duration: m.duration('fast') * 0.6,
                 ease: m.ease.exit,
             });
         } else {
-            gsap.set(dot, { autoAlpha: 0, scale: 0.3 });
+            gsap.set(dot, { scale: 0.3 });
         }
         prevSelectedRef.current = isSelected;
     }, [isSelected, m]);
@@ -145,8 +146,7 @@ function RadioItemView<V extends string>({
                 <RadixRadio.Indicator forceMount asChild>
                     <span
                         ref={dotRef}
-                        style={{ visibility: 'hidden', opacity: 0 }}
-                        className="h-2 w-2 rounded-full bg-brand"
+                        className="h-2 w-2 rounded-full bg-brand opacity-0 transition-opacity duration-150 data-[state=checked]:opacity-100"
                     />
                 </RadixRadio.Indicator>
             </RadixRadio.Item>
