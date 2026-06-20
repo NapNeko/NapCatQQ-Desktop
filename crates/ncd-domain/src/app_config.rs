@@ -640,17 +640,7 @@ mod tests {
             },
             performance_monitor_enabled: false,
             performance_monitor_interval_ms: 3000,
-            task_queue_cleanup_enabled: default_task_queue_cleanup_enabled(),
-            task_queue_cleanup_linger_ms: default_task_queue_cleanup_linger_ms(),
-            close_action: default_close_action(),
-            after_close_ui_behavior: default_after_close_ui_behavior(),
-            enter_lightweight_delay_secs: default_enter_lightweight_delay_secs(),
-            ui_mode_on_startup: default_ui_mode_on_startup(),
-            minimize_to_tray_counts_as_hidden: true,
-            notify_on_offline: true,
-            notify_on_bot_crashed: true,
-            notify_on_login_kicked: true,
-            ui_preferences: AppUiPreferences::default(),
+            ..AppSettings::default()
         };
         let json = serde_json::to_string(&cfg).expect("serialize 不应失败");
         let back: AppSettings = serde_json::from_str(&json).expect("反序列化失败");

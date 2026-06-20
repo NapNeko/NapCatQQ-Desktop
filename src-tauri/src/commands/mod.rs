@@ -280,6 +280,15 @@ mod tests {
         let poller_settings = Arc::new(tokio::sync::RwLock::new(
             ncd_runtime::WebUiPollerSettings::default(),
         ));
+        let desktop_notify = Arc::new(tokio::sync::RwLock::new(
+            ncd_domain::DesktopNotifySettings::default(),
+        ));
+        let app_settings = Arc::new(tokio::sync::RwLock::new(
+            ncd_domain::AppSettings::default(),
+        ));
+        let lightweight_scheduler = Arc::new(
+            crate::lightweight_scheduler::LightweightScheduler::new(Arc::clone(&app_settings)),
+        );
         let bot_manager = Arc::new(ncd_runtime::BotManager::new(
             repo,
             Arc::clone(&store),
@@ -290,6 +299,7 @@ mod tests {
             webui_client,
             offline_notifier,
             poller_settings,
+            Arc::clone(&desktop_notify),
         ));
         let state = AppState {
             data_root: root.to_path_buf(),
@@ -301,8 +311,13 @@ mod tests {
                 root,
                 Arc::new(ncd_runtime::InMemoryCredentialStore::default()),
             )),
+            package_lock: ncd_runtime::package_lock::PackageManagerLock::new(),
             active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
             host_probe_cache: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            desktop_notify: Arc::clone(&desktop_notify),
+            app_settings: Arc::clone(&app_settings),
+            lightweight_scheduler: Arc::clone(&lightweight_scheduler),
+            health_probe_cancel: Arc::new(tokio::sync::Mutex::new(None)),
         };
         (state, bus)
     }
