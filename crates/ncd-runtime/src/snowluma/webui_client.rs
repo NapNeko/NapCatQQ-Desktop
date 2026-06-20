@@ -781,7 +781,7 @@ mod tests {
         );
     }
 
-    /// `dead_check` 第一轮即返回 true → `wait_ready` 立即 `Ok(())`，不发任何 HTTP。
+    /// dead_check 第一轮即返回 true → wait_ready 立即 Ok(())，不发任何 HTTP。
     #[tokio::test]
     async fn wait_ready_returns_ok_when_dead_check_true() {
         // 用一个明显未监听的端口 1，并配 5s 超时；只要 dead_check 立刻命中
@@ -804,8 +804,8 @@ mod tests {
         );
     }
 
-    /// 全部候选 host 都连不上 → `NotReady`。
-    /// 使用端口 `1`：所有 loopback 候选 (`localhost` / `127.0.0.1` / `[::1]`)
+    /// 全部候选 host 都连不上 → NotReady。
+    /// 使用端口 1：所有 loopback 候选 (localhost / 127.0.0.1 / [::1])
     /// 上 connect 到端口 1 都会立刻 ECONNREFUSED（is_connect），不需要等待
     /// reqwest 的 5s 超时，因此 800ms 足够覆盖至少一轮候选探测 + 500ms sleep。
     /// 不复用 wiremock 释放的端口是为了避免与并发执行的其它测试争抢。
@@ -831,7 +831,7 @@ mod tests {
         }
     }
 
-    /// `LoginRequest` body 字段名锁定：`{"password": "<pwd>"}`。
+    /// LoginRequest body 字段名锁定：{"password": "<pwd>"}。
     #[tokio::test]
     async fn login_serializes_password_in_request_body() {
         let server = MockServer::start().await;
@@ -860,7 +860,7 @@ mod tests {
         // server.drop 时校验 expect(1)，body_partial_json 同时锁定字段名。
     }
 
-    /// `GET /api/processes` 响应是 `{"list": [...]}` wrapped 形态，需要解包。
+    /// GET /api/processes 响应是 {"list": [...]} wrapped 形态，需要解包。
     #[tokio::test]
     async fn list_processes_unwraps_wrapped_list() {
         let server = MockServer::start().await;
@@ -898,8 +898,8 @@ mod tests {
         assert!(matches!(processes[0].status, HookProcessStatus::Loaded));
     }
 
-    /// `POST /api/processes/:pid/load` 成功路径：`success=true` 且 `process` 非空 →
-    /// 返回 `HookProcessInfo`。
+    /// POST /api/processes/:pid/load 成功路径：success=true 且 process 非空 →
+    /// 返回 HookProcessInfo。
     #[tokio::test]
     async fn load_process_success_path() {
         let server = MockServer::start().await;
@@ -937,8 +937,8 @@ mod tests {
         assert!(matches!(info.status, HookProcessStatus::Loaded));
     }
 
-    /// `POST /api/processes/:pid/load` 服务端拒绝路径：`success=false` →
-    /// `ServerRejected { endpoint, message }`。
+    /// POST /api/processes/:pid/load 服务端拒绝路径：success=false →
+    /// ServerRejected { endpoint, message }。
     #[tokio::test]
     async fn load_process_server_rejected() {
         let server = MockServer::start().await;
@@ -976,10 +976,10 @@ mod tests {
         }
     }
 
-    /// 401 自动重试一次：第一次 `/api/processes` 返回 401 → 客户端清 token +
-    /// 重新登录 + 重试 → 第二次返回 200。最终 `Ok(empty list)`。
+    /// 401 自动重试一次：第一次 /api/processes 返回 401 → 客户端清 token +
+    /// 重新登录 + 重试 → 第二次返回 200。最终 Ok(empty list)。
     /// wiremock 默认按 mount 顺序倒序匹配（最新挂的 mock 优先）
-    /// 配合 `up_to_n_times(1)` 实现"第一次走 A，之后走 B"的状态机。
+    /// 配合 up_to_n_times(1) 实现"第一次走 A，之后走 B"的状态机。
     #[tokio::test]
     async fn auto_retries_login_on_401_then_succeeds() {
         let server = MockServer::start().await;
@@ -997,7 +997,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        // 高优先级（后挂载） + `up_to_n_times(1)`：仅命中一次。
+        // 高优先级（后挂载） + up_to_n_times(1)：仅命中一次。
         Mock::given(method("POST"))
             .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "token": "first" })))
@@ -1022,7 +1022,7 @@ mod tests {
         );
     }
 
-    /// `GET /api/auth/state` 反序列化 `mustChangePassword` (camelCase)。
+    /// GET /api/auth/state 反序列化 mustChangePassword (camelCase)。
     #[tokio::test]
     async fn get_auth_state_decodes_must_change_password() {
         let server = MockServer::start().await;
@@ -1047,18 +1047,18 @@ mod tests {
         );
     }
 
-    /// 设置 `HTTP_PROXY` 环境变量后 client 仍走 loopback —— `no_proxy` 起作用。
-    /// 注意：Rust 测试默认并发执行，`std::env::set_var` 会跨测试污染环境
-    /// 因此用 `#[ignore]` 标记，仅在显式 `cargo test -- --ignored
-    /// --test-threads=1` 下运行。
+    /// 设置 HTTP_PROXY 环境变量后 client 仍走 loopback —— no_proxy 起作用。
+    /// 注意：Rust 测试默认并发执行，std::env::set_var 会跨测试污染环境
+    /// 因此用 #[ignore] 标记，仅在显式 cargo test -- --ignored
+    /// --test-threads=1 下运行。
     #[tokio::test]
     #[ignore = "env-var test is racy under parallel test execution; \
  run with --ignored --test-threads=1"]
     async fn no_proxy_env_does_not_break_loopback() {
         let saved = std::env::var("HTTP_PROXY").ok();
         // SAFETY: edition 2024 把 set_var/remove_var 标为 unsafe（其它线程可能
-        // 同时读环境变量）。本测试用 `#[ignore]` 强制 `--test-threads=1` 单线程
-        // 运行，不存在并发读者，操作对外部世界仅留下需还原的 `HTTP_PROXY`
+        // 同时读环境变量）。本测试用 #[ignore] 强制 --test-threads=1 单线程
+        // 运行，不存在并发读者，操作对外部世界仅留下需还原的 HTTP_PROXY
         // 在断言之前已恢复，符合"无外部观察者读到不一致状态"的安全契约。
         unsafe { std::env::set_var("HTTP_PROXY", "http://bogus-proxy.invalid:9") }
 
@@ -1077,7 +1077,7 @@ mod tests {
             .await;
 
         // 还原环境变量再断言，避免断言失败留下脏状态。
-        // SAFETY: 同上 —— `#[ignore]` 强制单线程。
+        // SAFETY: 同上 —— #[ignore] 强制单线程。
         unsafe {
             match saved {
                 Some(v) => std::env::set_var("HTTP_PROXY", v),

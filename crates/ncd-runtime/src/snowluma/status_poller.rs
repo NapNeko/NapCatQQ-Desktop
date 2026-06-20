@@ -1,9 +1,9 @@
-// 本文件只写 `SnowLumaLoginState` enum + `ProcessTreeProbe` async trait 占位
-// `SnowLumaStatusPoller` 主体（构造、主循环、UIN 锁定、状态合成、dispose）
+// 本文件只写 SnowLumaLoginState enum + ProcessTreeProbe async trait 占位
+// SnowLumaStatusPoller 主体（构造、主循环、UIN 锁定、状态合成、dispose）
 // 由 写。
 //
-// 严格红线：`SnowLumaLoginState` 跨 Tauri 边界（DomainEvent::SnowLumaLoginStateChanged
-// 的 `state` 字段）必须 ts-rs 派生 + 导出，避免前后端类型漂移
+// 严格红线：SnowLumaLoginState 跨 Tauri 边界（DomainEvent::SnowLumaLoginStateChanged
+// 的 state 字段）必须 ts-rs 派生 + 导出，避免前后端类型漂移
 // 。
 
 use std::collections::BTreeSet;
@@ -16,11 +16,11 @@ use ts_rs::TS;
 // ---------------------------------------------------------------------------
 
 /// SnowLuma 单个 Bot 在 status poller 视角下合成出来的登录状态。
-/// 4 档语义（与 状态合成表对齐，通过 `snake_case` 序列化跨 Tauri 边界）：
-/// - `Starting`：QQ 进程已起，processes 还未出现自身候选 PID 的条目（注入未生效）。
-/// - `WaitingForQrScan`：processes 命中且 `status == Loaded`，等待用户扫码 / 输密码。
-/// - `LoggedIn`：processes 命中且 `status == Online`，OneBot pipe 已连。
-/// - `Disconnected`：processes 命中但 `status ∈ {Disconnected, Error}`
+/// 4 档语义（与 状态合成表对齐，通过 snake_case 序列化跨 Tauri 边界）：
+/// - Starting：QQ 进程已起，processes 还未出现自身候选 PID 的条目（注入未生效）。
+/// - WaitingForQrScan：processes 命中且 status == Loaded，等待用户扫码 / 输密码。
+/// - LoggedIn：processes 命中且 status == Online，OneBot pipe 已连。
+/// - Disconnected：processes 命中但 status ∈ {Disconnected, Error}
 /// 或 dispose / 连续探测失败兜底。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -37,12 +37,12 @@ pub enum SnowLumaLoginState {
 // ---------------------------------------------------------------------------
 
 /// 给定起始 PID，返回该进程及其所有后代 PID 的集合（含自身）。
-/// 设计目的：把 sysinfo / Windows 进程枚举从 `SnowLumaStatusPoller` 内剥离
-/// 让 poller 单测可以注入 `MockProcessTreeProbe`，避免真实系统调用。
-/// 实现合约（`SysinfoProcessTreeProbe` 落地时复核）：
-/// - 失败（PID 不存在 / 权限不足）必须返回 `BTreeSet::from([initial_pid])`
+/// 设计目的：把 sysinfo / Windows 进程枚举从 SnowLumaStatusPoller 内剥离
+/// 让 poller 单测可以注入 MockProcessTreeProbe，避免真实系统调用。
+/// 实现合约（SysinfoProcessTreeProbe 落地时复核）：
+/// - 失败（PID 不存在 / 权限不足）必须返回 BTreeSet::from([initial_pid])
 /// 不得 panic。
-/// - 非 Windows 平台亦须返回 `BTreeSet::from([initial_pid])`，保持类型签名一致。
+/// - 非 Windows 平台亦须返回 BTreeSet::from([initial_pid])，保持类型签名一致。
 #[async_trait::async_trait]
 pub trait ProcessTreeProbe: Send + Sync {
     async fn collect_descendants(&self, initial_pid: u32) -> BTreeSet<u32>;
@@ -72,7 +72,7 @@ const START_DELAY: Duration = Duration::from_millis(500);
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// 连续 HTTP 失败门限：达到时最多发一次
-/// `Disconnected`，恢复前不再发新状态。
+/// Disconnected，恢复前不再发新状态。
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
 /// per-Bot 主循环依赖（注入边界，便于单测换 mock）。
@@ -83,8 +83,8 @@ pub struct PollerDeps {
 }
 
 /// per-Bot 状态轮询组件句柄。
-/// `spawn` 启动后台 task 驱动主循环；`dispose` 取消其 `CancellationToken`
-/// 主循环当轮 select 结束后退出。`Drop` 兜底——任何路径忘掉显式 `dispose`
+/// spawn 启动后台 task 驱动主循环；dispose 取消其 CancellationToken
+/// 主循环当轮 select 结束后退出。Drop 兜底——任何路径忘掉显式 dispose
 /// 也不会泄漏 task。
 #[allow(dead_code)]
 pub struct SnowLumaStatusPoller {
@@ -104,14 +104,14 @@ impl SnowLumaStatusPoller {
         Self { bot_id, cancel }
     }
 
-    /// 请求主循环退出；多次调用幂等。退出前主循环若 last_state ≠ `Disconnected`
-    /// 会补发一次终止性 `SnowLumaLoginStateChanged{Disconnected}`
+    /// 请求主循环退出；多次调用幂等。退出前主循环若 last_state ≠ Disconnected
+    /// 会补发一次终止性 SnowLumaLoginStateChanged{Disconnected}
     /// 。
     pub fn dispose(&self) {
         self.cancel.cancel();
     }
 
-    /// 当前 Poller 关联的 `BotId`。
+    /// 当前 Poller 关联的 BotId。
     pub fn bot_id(&self) -> &BotId {
         &self.bot_id
     }
@@ -183,7 +183,7 @@ async fn run_poller(
     }
 }
 
-/// 退出前补发一次终止性 `Disconnected`（仅当 last_state ≠ Disconnected）。
+/// 退出前补发一次终止性 Disconnected（仅当 last_state ≠ Disconnected）。
 fn emit_terminal_disconnected_if_needed(
     bot_id: &BotId,
     deps: &PollerDeps,
@@ -199,7 +199,7 @@ fn emit_terminal_disconnected_if_needed(
     }
 }
 
-/// 单轮 tick：并发拉 `/api/processes` + `/api/qq-list` → UIN 锁定 → 状态合成 →
+/// 单轮 tick：并发拉 /api/processes + /api/qq-list → UIN 锁定 → 状态合成 →
 /// PID 集合变化通知。
 async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
     let (proc_res, qq_res) =
@@ -278,17 +278,17 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
 // 纯函数：UIN 锁定 + 状态合成 + 真实性校验
 // ---------------------------------------------------------------------------
 
-/// `is_real_uin`：非空 + 非 "0" + 全 ASCII 数字 + 长度 ≥ 5。
+/// is_real_uin：非空 + 非 "0" + 全 ASCII 数字 + 长度 ≥ 5。
 fn is_real_uin(s: &str) -> bool {
     !s.is_empty() && s != "0" && s.len() >= 5 && s.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// 严格 UIN 锁定策略：
-/// - 策略 A：任一 process.pid ∈ candidate set 且 `is_real_uin(process.uin)`
+/// - 策略 A：任一 process.pid ∈ candidate set 且 is_real_uin(process.uin)
 /// → 锁该 uin。
 /// - 策略 B（fallback，仅当 processes 完全空时）：qq_instances 恰好 1 条 +
-/// `is_real_uin(qq_instances[0].uin)` → 锁该 uin。
-/// - 否则：返回 `None`，等下一轮重试。
+/// is_real_uin(qq_instances[0].uin) → 锁该 uin。
+/// - 否则：返回 None，等下一轮重试。
 /// 多 instance（≥ 2）显式拒绝，避免 cross-Bot 误匹配（legacy 复现过）。
 fn try_lock_uin(
     processes: &[HookProcessInfo],
@@ -309,13 +309,13 @@ fn try_lock_uin(
 }
 
 /// 状态合成：
-/// 1. 任一 matched.status == Online → `LoggedIn`
-/// 2. 否则任一 matched.status == Loaded → `WaitingForQrScan`
-/// 3. 否则任一 matched.status ∈ {Available, Loading, Connecting} → `Starting`
-/// 4. 否则 matched 非空 + 全部 ∈ {Error, Disconnected} → `Disconnected`
-/// 5. 否则 matched 空 + qq_instances 含已锁 uin → fallback `LoggedIn`
-/// （Windows `getAllMainProcess` bug 兜底）
-/// 6. 否则 → `None`，本轮不发布
+/// 1. 任一 matched.status == Online → LoggedIn
+/// 2. 否则任一 matched.status == Loaded → WaitingForQrScan
+/// 3. 否则任一 matched.status ∈ {Available, Loading, Connecting} → Starting
+/// 4. 否则 matched 非空 + 全部 ∈ {Error, Disconnected} → Disconnected
+/// 5. 否则 matched 空 + qq_instances 含已锁 uin → fallback LoggedIn
+/// （Windows getAllMainProcess bug 兜底）
+/// 6. 否则 → None，本轮不发布
 fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<SnowLumaLoginState> {
     if matched
         .iter()

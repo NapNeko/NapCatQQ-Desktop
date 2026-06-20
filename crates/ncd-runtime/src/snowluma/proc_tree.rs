@@ -1,18 +1,18 @@
-//! `ProcessTreeProbe` 的真实系统实现 + 测试用 mock。
+//! ProcessTreeProbe 的真实系统实现 + 测试用 mock。
 //!
-//! `ProcessTreeProbe` trait 本体定义在
-//! [`crate::snowluma::status_poller`] 中。
-//! 本文件仅提供 `SysinfoProcessTreeProbe`（生产实装）与 `MockProcessTreeProbe`
+//! ProcessTreeProbe trait 本体定义在
+//! [crate::snowluma::status_poller] 中。
+//! 本文件仅提供 SysinfoProcessTreeProbe（生产实装）与 MockProcessTreeProbe
 //! （单元测试 helper），避免 trait 重复定义。
 //! 设计要点（与 对齐）：
-//! - SnowLuma 仅在 Windows 工作（`runtime_backend::start` 在非 Windows 上直接返回
-//! `Unsupported`），但本 trait 实装跨平台编译可通过：非 Windows 上直接返回
-//! 只含 `initial_pid` 的集合，避免在 macOS / Linux CI 上把测试拉爆。
-//! - `sysinfo::System::new_all()` 在 Windows 上枚举所有进程开销可观（数十毫秒）
-//! 必须放进 `tokio::task::spawn_blocking` 跑，否则会阻塞主 runtime 上的其它
+//! - SnowLuma 仅在 Windows 工作（runtime_backend::start 在非 Windows 上直接返回
+//! Unsupported），但本 trait 实装跨平台编译可通过：非 Windows 上直接返回
+//! 只含 initial_pid 的集合，避免在 macOS / Linux CI 上把测试拉爆。
+//! - sysinfo::System::new_all() 在 Windows 上枚举所有进程开销可观（数十毫秒）
+//! 必须放进 tokio::task::spawn_blocking 跑，否则会阻塞主 runtime 上的其它
 //! I/O / 计时任务。
-//! - 实现失败兜底：sysinfo 找不到 `initial_pid`、权限不足、API 调用 panic
-//! 等所有异常情况都收敛到「返回单元素集合 `{initial_pid}`」，不向上抛。
+//! - 实现失败兜底：sysinfo 找不到 initial_pid、权限不足、API 调用 panic
+//! 等所有异常情况都收敛到「返回单元素集合 {initial_pid}」，不向上抛。
 //! Status poller 允许"暂时拿不到子进程"，下一轮会再 probe。
 
 use std::collections::{BTreeSet, HashMap};
@@ -25,14 +25,14 @@ use crate::snowluma::status_poller::ProcessTreeProbe;
 // Sysinfo 实装
 // ---------------------------------------------------------------------------
 
-/// 基于 `sysinfo` crate 的 `ProcessTreeProbe` 默认实装。
-/// 无状态结构（`Copy`）：每次 `collect_descendants` 都重新构造一个
-/// `sysinfo::System` 并 `new_all` 刷新。每轮 poller tick 之间不复用
+/// 基于 sysinfo crate 的 ProcessTreeProbe 默认实装。
+/// 无状态结构（Copy）：每次 collect_descendants 都重新构造一个
+/// sysinfo::System 并 new_all 刷新。每轮 poller tick 之间不复用
 /// 避免脏快照（process exit / new spawn）影响 BFS 结果。
 /// # 平台差异
-/// - Windows：通过 sysinfo 枚举所有进程，按 `parent` 链路 BFS。
-/// - 非 Windows：直接返回 `{initial_pid}`。SnowLuma 不在非 Windows 上运行
-/// 保留只是为了让 ncd-core 在非 Windows CI 上仍可 `cargo test --lib`。
+/// - Windows：通过 sysinfo 枚举所有进程，按 parent 链路 BFS。
+/// - 非 Windows：直接返回 {initial_pid}。SnowLuma 不在非 Windows 上运行
+/// 保留只是为了让 ncd-core 在非 Windows CI 上仍可 cargo test --lib。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SysinfoProcessTreeProbe;
 
@@ -61,11 +61,11 @@ impl ProcessTreeProbe for SysinfoProcessTreeProbe {
 
 /// 同步实现入口：在阻塞 pool 中执行的纯计算。
 /// 该函数对所有失败路径（sysinfo 拿不到进程、parent 链断裂、平台不支持）
-/// 都返回 `{initial_pid}` 单元素集合，不向上传播错误。
-/// `#[cfg(windows)]` 路径在非 Windows 平台被裁剪，只剩 fallback 分支。
+/// 都返回 {initial_pid} 单元素集合，不向上传播错误。
+/// #[cfg(windows)] 路径在非 Windows 平台被裁剪，只剩 fallback 分支。
 #[cfg(windows)]
 fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {
-    // sysinfo 0.31：`System::new_all` 内部已经调用 `refresh_processes_specifics`
+    // sysinfo 0.31：System::new_all 内部已经调用 refresh_processes_specifics
     // 拉满了 process snapshot，无须再额外 refresh。
     let system = sysinfo::System::new_all();
     let processes = system.processes();
@@ -122,37 +122,37 @@ fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {
 // 单测 helper：MockProcessTreeProbe
 // ---------------------------------------------------------------------------
 
-/// 单元测试用的 `ProcessTreeProbe` mock。
-/// 上层（`SnowLumaStatusPoller` / `SnowLumaRuntimeBackend`）测试通过它注入
+/// 单元测试用的 ProcessTreeProbe mock。
+/// 上层（SnowLumaStatusPoller / SnowLumaRuntimeBackend）测试通过它注入
 /// 固定的"候选 PID 集合"快照，无需真正起进程。
 /// 用法：
-/// ```ignore
+/// ignore
 /// let mock = MockProcessTreeProbe::with_set([12345, 12346])
 /// let probe: Arc<dyn ProcessTreeProbe> = Arc::new(mock)
-/// ```
-/// 内部用 `std::sync::Mutex<BTreeSet<u32>>`：trait 的 `collect_descendants`
-/// 接收 `&self`，且测试期间允许跨 task / 线程读，因此选标准库 Mutex 而非
-/// `tokio::sync::Mutex`（前者无 await 依赖、对小集合开销可忽略）。
+/// 
+/// 内部用 std::sync::Mutex<BTreeSet<u32>>：trait 的 collect_descendants
+/// 接收 &self，且测试期间允许跨 task / 线程读，因此选标准库 Mutex 而非
+/// tokio::sync::Mutex（前者无 await 依赖、对小集合开销可忽略）。
 #[derive(Debug, Default, Clone)]
 pub struct MockProcessTreeProbe {
     result: std::sync::Arc<std::sync::Mutex<BTreeSet<u32>>>,
 }
 
 impl MockProcessTreeProbe {
-    /// 用空集合构造；调用方可后续 `set` 注入。
+    /// 用空集合构造；调用方可后续 set 注入。
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 用一个 PID 集合直接构造。返回值会忽略 `collect_descendants` 的
-    /// `initial_pid` 入参，按构造时给定的固定集合返回。
+    /// 用一个 PID 集合直接构造。返回值会忽略 collect_descendants 的
+    /// initial_pid 入参，按构造时给定的固定集合返回。
     pub fn with_set<I: IntoIterator<Item = u32>>(pids: I) -> Self {
         Self {
             result: std::sync::Arc::new(std::sync::Mutex::new(pids.into_iter().collect())),
         }
     }
 
-    /// 替换内部固定集合（后续 `collect_descendants` 调用都返回新值）。
+    /// 替换内部固定集合（后续 collect_descendants 调用都返回新值）。
     pub fn set<I: IntoIterator<Item = u32>>(&self, pids: I) {
         if let Ok(mut guard) = self.result.lock() {
             *guard = pids.into_iter().collect();
@@ -205,7 +205,7 @@ mod tests {
         assert!(probe.collect_descendants(12345).await.is_empty());
     }
 
-    /// 非 Windows 平台：sysinfo 路径被裁剪，应该返回 `{initial_pid}`。
+    /// 非 Windows 平台：sysinfo 路径被裁剪，应该返回 {initial_pid}。
     /// 这一条同时保证非 Windows CI 上 trait 实装编译通过。
     #[cfg(not(windows))]
     #[tokio::test]
@@ -215,10 +215,10 @@ mod tests {
         assert_eq!(result, BTreeSet::from([42]));
     }
 
-    /// Windows smoke 测试：用一个几乎不可能存在的 PID（`u32::MAX`）调用真实
+    /// Windows smoke 测试：用一个几乎不可能存在的 PID（u32::MAX）调用真实
     /// sysinfo 路径。期望表现：
     /// - 不 panic（崩溃）
-    /// - 至少返回 `{u32::MAX}`（fallback 单元素集合）
+    /// - 至少返回 {u32::MAX}（fallback 单元素集合）
     /// 不验证集合内容，因为本机进程列表测试时不可控。
     #[cfg(windows)]
     #[tokio::test]

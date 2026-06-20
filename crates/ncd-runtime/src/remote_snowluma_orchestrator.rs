@@ -1,4 +1,4 @@
-//! 远端 SnowLuma daemon / bot 启停：编排委托 [`remote_snowluma_stack`]，Bot 用 `QQComponent` + 短 detach。
+//! 远端 SnowLuma daemon / bot 启停：编排委托 [remote_snowluma_stack]，Bot 用 QQComponent + 短 detach。
 
 use std::time::Duration;
 
@@ -184,7 +184,7 @@ pub async fn try_grant_node_ptrace_cap(host: &dyn Host) {
     }
 }
 
-/// Collect live diagnostics on the remote relevant to a PTRACE_ATTACH failure for `pid`.
+/// Collect live diagnostics on the remote relevant to a PTRACE_ATTACH failure for pid.
 /// Includes: ptrace_scope, node path + getcap, target /proc/<pid>/status (TracerPid, Caps, Uid, etc.),
 /// exe/cwd links, and current user. All reads are best-effort; permission errors are reported as text.
 pub async fn collect_ptrace_diagnostics(host: &dyn Host, pid: u32) -> String {

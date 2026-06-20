@@ -13,8 +13,8 @@ use crate::traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 pub struct LocalBotConfigRepo<S: ConfigStore + 'static> {
     store: Arc<S>,
     secrets: Arc<dyn SecretStore + Send + Sync>,
-    /// 串行化 `upsert` / `delete` 的 read-modify-write 序列，防止并发写入互相覆盖。
-    /// `list` / `get` / `count` 是只读的，不需要持锁。
+    /// 串行化 upsert / delete 的 read-modify-write 序列，防止并发写入互相覆盖。
+    /// list / get / count 是只读的，不需要持锁。
     ///
     /// 注意：写锁覆盖整个 RMW 流程（含 list 内部的迁移/校验/反序列化），并发写吞吐受限。
     /// 当前场景（Desktop 单用户、最多 4 Bot）足够；若未来需要更高并发，可考虑拆分

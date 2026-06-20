@@ -3,24 +3,24 @@
 //! NapCat / SnowLuma 守护进程在不同平台上会输出 ANSI 颜色码、光标移动等
 //! 转义序列以及零散的控制字符（BEL/BS/VT 等），如果直接送进事件总线、
 //! UI 日志面板或文本搜索都会产生 tofu 字符 / 错乱高亮 / 不可读分隔。
-//! 与 legacy Python `SnowLumaDaemon._sanitize_log_text` 行为对齐：
-//! - 剥除 ANSI CSI 序列：`\x1b\[[0-9;]*[a-zA-Z]`（参数仅数字 + `;`，终止字节是字母）。
-//! - 丢弃所有 `< 0x20` 不可打印控制字符，仅保留 `\t` (0x09) / `\n` (0x0A) / `\r` (0x0D)。
-//! - 丢弃 `\x7f` (DEL)。
+//! 与 legacy Python SnowLumaDaemon._sanitize_log_text 行为对齐：
+//! - 剥除 ANSI CSI 序列：\x1b\[[0-9;]*[a-zA-Z]（参数仅数字 + ;，终止字节是字母）。
+//! - 丢弃所有 < 0x20 不可打印控制字符，仅保留 \t (0x09) / \n (0x0A) / \r (0x0D)。
+//! - 丢弃 \x7f (DEL)。
 //! - 保留 UTF-8 多字节序列（任何 ≥ 0x80 的字节原样透出）。
-//! 实现采用纯字节级状态机扫描，不引入 `regex` crate 依赖
+//! 实现采用纯字节级状态机扫描，不引入 regex crate 依赖
 //! 在最坏情况下与输入长度线性。
-//! 注意：本函数只清洗 CSI 形式的 ANSI 序列（task 描述的 `\x1b\[...`）
-//! 与 `runtime_backend::strip_ansi_escapes` 那种处理 OSC/DCS/SOS/PM/APC
+//! 注意：本函数只清洗 CSI 形式的 ANSI 序列（task 描述的 \x1b\[...）
+//! 与 runtime_backend::strip_ansi_escapes 那种处理 OSC/DCS/SOS/PM/APC
 //! 的完整状态机刻意拆开 —— SnowLuma daemon 输出仅使用 CSI 序列，足够。
 
 /// 清洗 SnowLuma 子进程一行 stdout，剥除 ANSI CSI 序列与非打印控制字符。
 /// # Examples
-/// ```
+/// 
 /// use ncd_runtime::snowluma::log_sanitize::sanitize_log_line;
 /// assert_eq!(sanitize_log_line("\x1b[31mred\x1b[0m"), "red");
 /// assert_eq!(sanitize_log_line("plain"), "plain");
-/// ```
+/// 
 pub fn sanitize_log_line(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());

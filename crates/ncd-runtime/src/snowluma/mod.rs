@@ -45,7 +45,7 @@ pub use log_sanitize::sanitize_log_line;
 
 // ---- proc_tree.rs ----
 //
-// `MockProcessTreeProbe` 为单元测试 helper，但被声明为 `pub` 以便 ncd-runtime
+// MockProcessTreeProbe 为单元测试 helper，但被声明为 pub 以便 ncd-runtime
 // 之外的下游 crate（譬如 ncd-tauri 集成测试）复用。
 pub use linux_proc_probe::LinuxSinglePidProbe;
 pub use proc_tree::{MockProcessTreeProbe, SysinfoProcessTreeProbe};

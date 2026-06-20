@@ -492,8 +492,8 @@ fn legacy_websocket_clients(reverse_ws: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-/// Convert string QQID to number in the raw JSON so that `BotConfig` can
-/// deserialize it with plain `u64` (no `deserialize_with` needed).
+/// Convert string QQID to number in the raw JSON so that BotConfig can
+/// deserialize it with plain u64 (no deserialize_with needed).
 fn normalize_qqid(payload: &mut Map<String, Value>) -> Vec<String> {
     let mut rules = Vec::new();
     let bot = match payload.get_mut("bot").and_then(Value::as_object_mut) {
@@ -523,7 +523,7 @@ fn normalize_qqid(payload: &mut Map<String, Value>) -> Vec<String> {
 }
 
 /// Validate that URL fields in connect entries are non-empty.
-/// Replaces the `deserialize_url` serde helper — validation now happens at the Value level.
+/// Replaces the deserialize_url serde helper — validation now happens at the Value level.
 fn normalize_urls(payload: &mut Map<String, Value>) -> Vec<String> {
     let rules = Vec::new();
     let connect = match payload.get_mut("connect").and_then(Value::as_object_mut) {

@@ -1,13 +1,13 @@
 //! SnowLuma runtime backend：把 SnowLuma daemon + per-Bot QQ.exe 注入语义
-//! 包成 `BotBackend` 接口，由 `BotManager` 按 flavor 路由。
+//! 包成 BotBackend 接口，由 BotManager 按 flavor 路由。
 //!
-//! 落地内容：`SnowLumaRuntimeBackend` struct、`SnowLumaProcessRecord`、
+//! 落地内容：SnowLumaRuntimeBackend struct、SnowLumaProcessRecord、
 //! Phase A（COLD spawn QQ.exe / HOT 按 qq_id 自动匹配 PID）。
-//! - ：`BotBackend` trait impl、Phase C/D（`daemon.ensure_running` +
-//! `client.load_process` + spawn poller）、stop / abort_start / zombie reaper /
-//! `kill_process_tree` / read_config / write_config / tail_log。
+//! - ：BotBackend trait impl、Phase C/D（daemon.ensure_running +
+//! client.load_process + spawn poller）、stop / abort_start / zombie reaper /
+//! kill_process_tree / read_config / write_config / tail_log。
 //! - ：单元测试。
-//! 红线：所有跨边界类型派生 ts-rs；不使用 `serde_json::Value` 透传业务字段
+//! 红线：所有跨边界类型派生 ts-rs；不使用 serde_json::Value 透传业务字段
 //! 。
 
 use std::collections::{HashMap, HashSet};
@@ -30,7 +30,7 @@ use crate::snowluma::proc_tree::SysinfoProcessTreeProbe;
 use crate::snowluma::status_poller::{PollerDeps, ProcessTreeProbe, SnowLumaStatusPoller};
 use ncd_domain::snowluma_start_mode::SnowLumaStartMode;
 
-/// `daemon.ensure_running` 总超时。
+/// daemon.ensure_running 总超时。
 const DAEMON_ENSURE_TIMEOUT: Duration = Duration::from_secs(35);
 
 /// per-Bot 注入完成后写入的进程记录。
@@ -57,7 +57,7 @@ pub struct SnowLumaRuntimeBackend {
     pollers: Arc<RwLock<HashMap<BotId, SnowLumaStatusPoller>>>,
     /// COLD 模式 stop 后等 child.wait() 完成的回收池。
     zombies: Arc<RwLock<Vec<tokio::process::Child>>>,
-    /// 可注入 `ProcessTreeProbe`，便于测试覆盖 HotStart PID 校验路径。
+    /// 可注入 ProcessTreeProbe，便于测试覆盖 HotStart PID 校验路径。
     proc_tree: Arc<dyn ProcessTreeProbe>,
 }
 
@@ -122,9 +122,9 @@ fn read_qq_id(config: &BotRuntimeConfig) -> Option<u64> {
 /// HOT 模式：按 qq_id 在系统中自动定位登录此账号的 QQ.exe 主进程 PID。
 ///
 /// 流程：
-/// 1. `qq_login_probe::find_pid_by_qq_id(qq_id)` 走 9210-9219 tencent:// 探测
+/// 1. qq_login_probe::find_pid_by_qq_id(qq_id) 走 9210-9219 tencent:// 探测
 ///    匹配 uin == qq_id 的 PID
-/// 2. 拿到 PID 后用 `ProcessTreeProbe` 二次校验进程仍存活（防止 probe 拿到结
+/// 2. 拿到 PID 后用 ProcessTreeProbe 二次校验进程仍存活（防止 probe 拿到结
 ///    果到 inject 之间有窗口期 PID 退出）
 async fn locate_hot_pid_by_qq_id(
     probe: &Arc<dyn ProcessTreeProbe>,
@@ -150,8 +150,8 @@ async fn locate_hot_pid_by_qq_id(
 }
 
 /// COLD 模式 spawn QQ.exe。
-/// MVP：从 `BotRuntimeConfig.environment["SNOWLUMA_QQ_EXE"]` 读 QQ.exe 路径
-/// 由 `runtime_launch_plan.rs` 在 wiring 阶段注入。缺失时返回 InvalidConfig
+/// MVP：从 BotRuntimeConfig.environment["SNOWLUMA_QQ_EXE"] 读 QQ.exe 路径
+/// 由 runtime_launch_plan.rs 在 wiring 阶段注入。缺失时返回 InvalidConfig
 /// 不再回退到任意位置。
 async fn spawn_cold_qq(
     config: &BotRuntimeConfig,
@@ -480,9 +480,9 @@ impl BotBackend for SnowLumaRuntimeBackend {
 // 由于 SnowLumaRuntimeBackend 主路径强依赖 Windows + 真实 sysinfo + 真起 QQ.exe
 // 端到端 start/stop 测试只能在真机覆盖。本测试模块仅验证：
 // 1) flavor / kind / id 三个 trivial 方法
-// 2) `read_start_mode` 缺失环境变量回落 ColdStart
+// 2) read_start_mode 缺失环境变量回落 ColdStart
 //
-// HotStart 自动按 qq_id 匹配的端到端覆盖见 `qq_login_probe::tests`，那里测了
+// HotStart 自动按 qq_id 匹配的端到端覆盖见 qq_login_probe::tests，那里测了
 // JWT decode / extract 这些纯函数；真机匹配只能在 windows + 真实 QQ.exe 下验。
 // ===========================================================================
 

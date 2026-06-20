@@ -9,9 +9,9 @@ use ssh_key::{Algorithm, LineEnding, PrivateKey};
 
 /// 一对新生成的 ed25519 密钥的可落盘表示。
 pub struct GeneratedKeyPair {
-    /// OpenSSH 格式私钥 PEM（写进 `<data_root>/ssh_keys/<id>`，权限 600）。
+    /// OpenSSH 格式私钥 PEM（写进 <data_root>/ssh_keys/<id>，权限 600）。
     pub private_openssh: String,
-    /// authorized_keys 单行公钥（`ssh-ed25519 AAAA... comment`）。
+    /// authorized_keys 单行公钥（ssh-ed25519 AAAA... comment）。
     pub public_line: String,
 }
 

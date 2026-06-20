@@ -1,15 +1,15 @@
 //! SnowLuma 持久化会话 + 全局配置渲染。
 //!
-//! grep self-check whitelist: `serde_json::Value` 仅在 `build_webui_json_payload`
-//! 输出 JSON 拼接处使用，本模块其它位置禁止出现 `serde_json::Value`。
+//! grep self-check whitelist: serde_json::Value 仅在 build_webui_json_payload
+//! 输出 JSON 拼接处使用，本模块其它位置禁止出现 serde_json::Value。
 //!
 //! 落地能力：
-//! - `SnowLumaSession` 强类型 serde struct（`createdAt` / `lastRenderedAt` 驼峰）。
-//! - `load_or_create_session` / `update_last_rendered` 原子读写 `session.json`。
-//! - `generate_strong_password` 强密码生成（含 4 类字符 + 打乱）。
-//! - `build_webui_json_payload` scrypt(N=16384, r=8, p=1, dklen=64) + 16 字节 salt。
-//! - `render_runtime_json` / `write_webui_json` 原子写盘到 `<runtime_root>/config/`。
-//! - `render_daemon_globals` 协调 override > session 优先级 + 三文件渲染。
+//! - SnowLumaSession 强类型 serde struct（createdAt / lastRenderedAt 驼峰）。
+//! - load_or_create_session / update_last_rendered 原子读写 session.json。
+//! - generate_strong_password 强密码生成（含 4 类字符 + 打乱）。
+//! - build_webui_json_payload scrypt(N=16384, r=8, p=1, dklen=64) + 16 字节 salt。
+//! - render_runtime_json / write_webui_json 原子写盘到 <runtime_root>/config/。
+//! - render_daemon_globals 协调 override > session 优先级 + 三文件渲染。
 
 use std::fs;
 use std::io::Write;
@@ -27,7 +27,7 @@ use ncd_domain::SnowLumaAppConfig;
 // 公共常量
 // ============================================================================
 
-/// 默认强密码长度（与 SnowLuma `webui/auth.ts` 默认 16 对齐）。
+/// 默认强密码长度（与 SnowLuma webui/auth.ts 默认 16 对齐）。
 const DEFAULT_PASSWORD_LEN: usize = 16;
 /// 强密码下限：≥ 10。
 const MIN_PASSWORD_LEN: usize = 10;
@@ -35,10 +35,10 @@ const MIN_PASSWORD_LEN: usize = 10;
 const UPPERCASE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const LOWERCASE: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
 const DIGITS: &[u8] = b"0123456789";
-/// 与 SnowLuma `webui/auth.ts:38-44` 对齐。
+/// 与 SnowLuma webui/auth.ts:38-44 对齐。
 const SPECIALS: &[u8] = b"!@#$%^&*-_=+[]{};:,.<>/?";
 
-// scrypt 参数与 legacy `snowluma_config_renderer.py` 完全对齐：
+// scrypt 参数与 legacy snowluma_config_renderer.py 完全对齐：
 // log2(N) = 14 → N = 16384, r = 8, p = 1, dklen = 64, salt = 16 字节。
 const SCRYPT_LOG_N: u8 = 14;
 const SCRYPT_R: u32 = 8;
@@ -47,7 +47,7 @@ const SCRYPT_DKLEN: usize = 64;
 const SCRYPT_SALT_BYTES: usize = 16;
 
 // ============================================================================
-// SnowLumaSession：`<data_root>/snowluma/session.json` 强类型 wrapper
+// SnowLumaSession：<data_root>/snowluma/session.json 强类型 wrapper
 // ============================================================================
 
 /// SnowLuma 会话密码持久化。内部使用，永远不跨 Tauri 边界，因此故意不派生 ts-rs。
@@ -60,7 +60,7 @@ pub struct SnowLumaSession {
     pub last_rendered_at: String,
 }
 
-/// 返回 `<snowluma_data_root>/app-config.json`。
+/// 返回 <snowluma_data_root>/app-config.json。
 pub fn app_config_path(snowluma_data_root: &Path) -> PathBuf {
     snowluma_data_root.join("app-config.json")
 }
@@ -78,15 +78,15 @@ pub fn load_snowluma_app_config(snowluma_data_root: &Path) -> SnowLumaAppConfig 
     serde_json::from_str(&text).unwrap_or_default()
 }
 
-/// 返回 `<snowluma_data_root>/session.json`。
+/// 返回 <snowluma_data_root>/session.json。
 pub fn session_path(snowluma_data_root: &Path) -> PathBuf {
     snowluma_data_root.join("session.json")
 }
 
 /// 读取或首启生成 session。
 /// - 文件存在：反序列化返回。
-/// - 文件不存在：`generate_strong_password(16)` + `now_iso8601()` 写入；返回 session。
-/// 错误映射：IO → `Io(...)`，密码生成 / JSON → `Password(...)`。
+/// - 文件不存在：generate_strong_password(16) + now_iso8601() 写入；返回 session。
+/// 错误映射：IO → Io(...)，密码生成 / JSON → Password(...)。
 pub fn load_or_create_session(
     snowluma_data_root: &Path,
 ) -> Result<SnowLumaSession, SnowLumaDaemonError> {
@@ -118,7 +118,7 @@ pub fn load_or_create_session(
     Ok(session)
 }
 
-/// 把 `last_rendered_at` 刷成当下时间并原子写回。
+/// 把 last_rendered_at 刷成当下时间并原子写回。
 pub fn update_last_rendered(snowluma_data_root: &Path) -> Result<(), SnowLumaDaemonError> {
     let mut session = load_or_create_session(snowluma_data_root)?;
     session.last_rendered_at = now_iso8601();
@@ -139,10 +139,10 @@ fn write_session(path: &Path, session: &SnowLumaSession) -> Result<(), SnowLumaD
 
 /// 生成强随机密码。
 /// 规则：
-/// - 实际长度 = `len.max(10)`。
+/// - 实际长度 = len.max(10)。
 /// - 至少各含 1 个大写、小写、数字、特殊符号；其余位从四类合集随机抽取。
-/// - 整体 `SliceRandom::shuffle` 打乱，避免 4 个固定首位字符泄漏类别。
-/// - 不含空格（合集里没有 ` `）。
+/// - 整体 SliceRandom::shuffle 打乱，避免 4 个固定首位字符泄漏类别。
+/// - 不含空格（合集里没有  ）。
 #[allow(clippy::expect_used)]
 pub fn generate_strong_password(len: usize) -> String {
     let target_len = len.max(MIN_PASSWORD_LEN);
@@ -177,11 +177,11 @@ pub fn generate_strong_password(len: usize) -> String {
 // webui.json payload + scrypt
 // ============================================================================
 
-/// 构造 `webui.json` 的 5 字段 payload。
-/// 本函数是模块内唯一允许引用 `serde_json::Value` 的位置（见文件头白名单）。
+/// 构造 webui.json 的 5 字段 payload。
+/// 本函数是模块内唯一允许引用 serde_json::Value 的位置（见文件头白名单）。
 /// 错误：
-/// - `password` 空字符串 → `Password("password 不能为空字符串")`。
-/// - scrypt Params / scrypt 计算失败 → `Password("scrypt error: ...")`。
+/// - password 空字符串 → Password("password 不能为空字符串")。
+/// - scrypt Params / scrypt 计算失败 → Password("scrypt error: ...")。
 pub fn build_webui_json_payload(
     password: &str,
     must_change: bool,
@@ -223,7 +223,7 @@ pub fn build_webui_json_payload(
 // runtime.json / webui.json 落盘
 // ============================================================================
 
-/// 写 `<runtime_root>/config/runtime.json`，内容仅 `{ "webuiPort": port }`。
+/// 写 <runtime_root>/config/runtime.json，内容仅 { "webuiPort": port }。
 pub fn render_runtime_json(runtime_root: &Path, port: u16) -> Result<(), SnowLumaDaemonError> {
     let path = runtime_root.join("config").join("runtime.json");
     let mut payload = serde_json::Map::with_capacity(1);
@@ -236,7 +236,7 @@ pub fn render_runtime_json(runtime_root: &Path, port: u16) -> Result<(), SnowLum
     atomic_write(&path, text.as_bytes())
 }
 
-/// 写 `<runtime_root>/config/webui.json`。
+/// 写 <runtime_root>/config/webui.json。
 pub fn write_webui_json(
     runtime_root: &Path,
     payload: &serde_json::Map<String, serde_json::Value>,
@@ -248,13 +248,13 @@ pub fn write_webui_json(
 }
 
 /// 协调 daemon 启动前的全局配置渲染。
-/// 1. 解析有效密码：`override_pwd.trim()` 非空 → 用 override；否则
-/// `load_or_create_session.password`。
-/// 2. `render_runtime_json(port)`。
-/// 3. `build_webui_json_payload(effective, must_change=false)` + `write_webui_json`。
-/// 4. 仅当未使用 override 时调用 `update_last_rendered`（override 模式只是临时
+/// 1. 解析有效密码：override_pwd.trim() 非空 → 用 override；否则
+/// load_or_create_session.password。
+/// 2. render_runtime_json(port)。
+/// 3. build_webui_json_payload(effective, must_change=false) + write_webui_json。
+/// 4. 仅当未使用 override 时调用 update_last_rendered（override 模式只是临时
 /// 覆盖，不污染 session 的"上次渲染时间"语义）。
-/// 返回本次启动生效的明文密码，由调用方喂给 `SnowLumaWebUiClient`。
+/// 返回本次启动生效的明文密码，由调用方喂给 SnowLumaWebUiClient。
 pub fn render_daemon_globals(
     snowluma_data_root: &Path,
     runtime_root: &Path,
@@ -282,7 +282,7 @@ pub fn render_daemon_globals(
 // 内部工具
 // ============================================================================
 
-/// 原子写：写到 `<path>.tmp` 再 `rename`。父目录不存在自动创建。
+/// 原子写：写到 <path>.tmp 再 rename。父目录不存在自动创建。
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), SnowLumaDaemonError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
@@ -332,8 +332,8 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), SnowLumaDaemonError> {
     })
 }
 
-/// 当前时间 ISO 8601 UTC 毫秒精度（`YYYY-MM-DDTHH:MM:SS.mmmZ`）。
-/// 不依赖 `chrono` / `time`：从 `SystemTime` 拿 epoch millis，再用 Howard Hinnant
+/// 当前时间 ISO 8601 UTC 毫秒精度（YYYY-MM-DDTHH:MM:SS.mmmZ）。
+/// 不依赖 chrono / time：从 SystemTime 拿 epoch millis，再用 Howard Hinnant
 /// civil-from-days 算法算出年月日（参考 https://howardhinnant.github.io/date_algorithms.html）。
 fn now_iso8601() -> String {
     let dur = SystemTime::now()
@@ -357,7 +357,7 @@ fn now_iso8601() -> String {
 }
 
 /// Howard Hinnant civil-from-days（输入：自 1970-01-01 起天数；输出：(year, month, day)）。
-/// 与 chrono 的 `NaiveDateTime::from_timestamp` 路径在 1900..=9999 范围内逐字节一致。
+/// 与 chrono 的 NaiveDateTime::from_timestamp 路径在 1900..=9999 范围内逐字节一致。
 fn civil_from_days(z: i64) -> (i32, u32, u32) {
     let z = z + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
@@ -477,7 +477,7 @@ mod tests {
         }
     }
 
-    /// `len < MIN_PASSWORD_LEN` → 钳到 10；`len >= MIN_PASSWORD_LEN` → 原样返回。
+    /// len < MIN_PASSWORD_LEN → 钳到 10；len >= MIN_PASSWORD_LEN → 原样返回。
     #[test]
     fn generate_strong_password_clamps_to_min_length() {
         let short = generate_strong_password(4);
@@ -487,7 +487,7 @@ mod tests {
         assert_eq!(exact.len(), 20);
     }
 
-    /// `generate_strong_password` 输出必须只落在四类字符合集里（含特殊符号集合精确锁定）。
+    /// generate_strong_password 输出必须只落在四类字符合集里（含特殊符号集合精确锁定）。
     #[test]
     fn generate_strong_password_emits_only_whitelisted_chars() {
         let pwd = generate_strong_password(64);
@@ -504,7 +504,7 @@ mod tests {
         }
     }
 
-    /// `SnowLumaSession` 字节级 round-trip：camelCase 字段 + 二次序列化字节相等。
+    /// SnowLumaSession 字节级 round-trip：camelCase 字段 + 二次序列化字节相等。
     #[test]
     fn snowluma_session_round_trips_camel_case_fields() {
         let session = SnowLumaSession {
@@ -546,7 +546,7 @@ mod tests {
         assert_eq!(json1, json2, "round-trip not byte-equal");
     }
 
-    /// 首启写入 `session.json`；再次调用直接读，密码与 createdAt 全部稳定。
+    /// 首启写入 session.json；再次调用直接读，密码与 createdAt 全部稳定。
     #[test]
     fn load_or_create_session_is_idempotent_after_first_call() {
         let temp = ncd_test_support::TempWorkspace::new().expect("tempdir");
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(first.created_at, second.created_at);
         assert_eq!(first.last_rendered_at, second.last_rendered_at);
 
-        // 文件确实落在 `<root>/session.json`。
+        // 文件确实落在 <root>/session.json。
         assert!(session_path(root).exists());
     }
 
@@ -579,8 +579,8 @@ mod tests {
         assert_ne!(hash_a, hash_b, "hashes collided: {hash_a} == {hash_b}");
     }
 
-    /// 验证 `now_iso8601()` 输出（透过 `load_or_create_session.created_at`）严格匹配
-    /// `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`。无 `regex` crate，手写 24 字符校验。
+    /// 验证 now_iso8601() 输出（透过 load_or_create_session.created_at）严格匹配
+    /// ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$。无 regex crate，手写 24 字符校验。
     #[test]
     fn now_iso8601_matches_iso_8601_format() {
         let temp = ncd_test_support::TempWorkspace::new().expect("tempdir");
@@ -590,7 +590,7 @@ mod tests {
     }
 
     /// 手写 ISO 8601 毫秒精度 UTC 校验器：
-    /// 0..=3 位年、`-`、2 位月、`-`、2 位日、`T`、2 位时、`:`、2 位分、`:`、2 位秒、`.`、3 位毫秒、`Z`。
+    /// 0..=3 位年、-、2 位月、-、2 位日、T、2 位时、:、2 位分、:、2 位秒、.、3 位毫秒、Z。
     fn assert_iso8601_millis(s: &str) {
         assert_eq!(s.len(), 24, "expected 24 chars, got {}: {s:?}", s.len());
         let bytes = s.as_bytes();
@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(bytes[23], b'Z', "expected 'Z' at 23 (s={s:?})");
     }
 
-    /// `update_last_rendered` 必须把时间戳推进到 ≥ 原值，并且大概率严格 >（毫秒精度时钟）。
+    /// update_last_rendered 必须把时间戳推进到 ≥ 原值，并且大概率严格 >（毫秒精度时钟）。
     #[test]
     fn update_last_rendered_advances_timestamp() {
         let temp = ncd_test_support::TempWorkspace::new().expect("tempdir");
@@ -642,7 +642,7 @@ mod tests {
         assert_eq!(reloaded.created_at, original.created_at);
     }
 
-    /// `render_daemon_globals` §3.5 优先级：override 非空白 → 用 override；否则 fallback 到
+    /// render_daemon_globals §3.5 优先级：override 非空白 → 用 override；否则 fallback 到
     /// session 密码。无论走哪条分支，runtime.json / webui.json 都应原子落盘。
     #[test]
     fn render_daemon_globals_uses_override_when_present() {
@@ -657,7 +657,7 @@ mod tests {
             .expect("render override");
         assert_eq!(returned, override_pwd);
 
-        // runtime.json 内容锁：仅 `webuiPort` 一个字段且为 5099。
+        // runtime.json 内容锁：仅 webuiPort 一个字段且为 5099。
         let runtime_json = std::fs::read_to_string(runtime.join("config").join("runtime.json"))
             .expect("read runtime.json");
         let parsed: serde_json::Value =

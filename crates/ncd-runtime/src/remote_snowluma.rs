@@ -305,7 +305,7 @@ async fn inject_via_tunnel(
     Ok(Arc::new(client) as Arc<dyn SnowLumaWebUiClient>)
 }
 
-/// 等待 SnowLuma 的 `/api/processes` 列表出现指定 pid。
+/// 等待 SnowLuma 的 /api/processes 列表出现指定 pid。
 ///
 /// 冷启动时我们在远端 DISPLAY 下用 nohup 刚 spawn 了 QQ 进程，SnowLuma daemon
 /// 内部的扫描器（很可能按固定周期遍历 /proc 或遍历 DISPLAY 下的窗口/进程）需要时间
@@ -553,7 +553,7 @@ impl RemoteSnowLumaDaemon {
     }
 }
 
-/// 远端 SnowLuma BotBackend（内联编排，非本机 `SnowLumaDaemon`）。
+/// 远端 SnowLuma BotBackend（内联编排，非本机 SnowLumaDaemon）。
 pub struct RemoteSnowLumaBackend {
     backend_id: BotId,
     daemon: Arc<RemoteSnowLumaDaemon>,
@@ -562,7 +562,7 @@ pub struct RemoteSnowLumaBackend {
     tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     start_modes: Arc<Mutex<HashMap<BotId, SnowLumaStartMode>>>,
     pollers: Arc<Mutex<HashMap<BotId, SnowLumaStatusPoller>>>,
-    /// Shared coordinator for flipping the common `~/Napcat/opt/QQ` tree entry point.
+    /// Shared coordinator for flipping the common ~/Napcat/opt/QQ tree entry point.
     /// Passed from BotManager so that NC and SL cold starts on the same server_id
     /// serialize their package.json main changes.
     qq_entry_coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
@@ -571,11 +571,11 @@ pub struct RemoteSnowLumaBackend {
 impl RemoteSnowLumaBackend {
     /// 内部构造器。
     ///
-    /// 只应由同 crate 内的 `BotManager` 调用。
-    /// 使用 `pub(crate)` 而非 `pub`，以避免把 `pub(crate)` 的 `RemoteQqEntryCoordinator`
+    /// 只应由同 crate 内的 BotManager 调用。
+    /// 使用 pub(crate) 而非 pub，以避免把 pub(crate) 的 RemoteQqEntryCoordinator
     /// 通过公开 API 泄露出去（这正是编译器 private_interfaces 警告的来源）。
     ///
-    /// 外部 crate 不应直接构造此类型，所有 backend 都应由 `BotManager::backend_for_config`
+    /// 外部 crate 不应直接构造此类型，所有 backend 都应由 BotManager::backend_for_config
     /// 统一创建。
     pub(crate) fn new(
         backend_id: impl Into<BotId>,

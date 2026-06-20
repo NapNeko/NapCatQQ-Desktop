@@ -1,4 +1,4 @@
-//! 桌面端会话日志：路径与读盘工具，对齐 legacy `<data_root>/log/{timestamp}.log`。
+//! 桌面端会话日志：路径与读盘工具，对齐 legacy <data_root>/log/{timestamp}.log。
 //!
 //! 写入与 Tauri tracing 层在 src-tauri 接线；本模块只做路径、尾部读取与终端预览格式化。
 
@@ -7,12 +7,12 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-/// 与 legacy `Logger.create_log_file` 一致：`<data_root>/log/`。
+/// 与 legacy Logger.create_log_file 一致：<data_root>/log/。
 pub fn desktop_log_dir(data_root: &Path) -> PathBuf {
     data_root.join("log")
 }
 
-/// 当前会话日志文件：目录下按修改时间取最新 `.log`；无则 None。
+/// 当前会话日志文件：目录下按修改时间取最新 .log；无则 None。
 pub fn resolve_active_log_path(data_root: &Path) -> Option<PathBuf> {
     let dir = desktop_log_dir(data_root);
     if !dir.is_dir() {
@@ -36,7 +36,7 @@ pub fn resolve_active_log_path(data_root: &Path) -> Option<PathBuf> {
     best.map(|(_, p)| p)
 }
 
-/// 删除超过 `retain_days` 天的 `.log` 文件（legacy 默认 7 天）。
+/// 删除超过 retain_days 天的 .log 文件（legacy 默认 7 天）。
 pub fn purge_stale_logs(data_root: &Path, retain_days: u64) -> std::io::Result<()> {
     let dir = desktop_log_dir(data_root);
     if !dir.is_dir() {
@@ -63,7 +63,7 @@ pub fn purge_stale_logs(data_root: &Path, retain_days: u64) -> std::io::Result<(
     Ok(())
 }
 
-/// 从文件尾部读取约 `max_bytes` 字节的 UTF-8 文本（非法字节替换）。
+/// 从文件尾部读取约 max_bytes 字节的 UTF-8 文本（非法字节替换）。
 pub fn read_tail_text(path: &Path, max_bytes: usize) -> std::io::Result<String> {
     let mut file = fs::File::open(path)?;
     let len = file.metadata()?.len();
@@ -101,7 +101,7 @@ fn level_tag_name(level_text: &str) -> Option<String> {
     None
 }
 
-/// 按 legacy 等级名过滤预览行（`EROR` / `WARN` / `INFO` / `DBUG` / `TRCE` / `CRIT`）。
+/// 按 legacy 等级名过滤预览行（EROR / WARN / INFO / DBUG / TRCE / CRIT）。
 pub fn filter_preview_text(full_text: &str, level_filter: Option<&str>) -> String {
     let mut out = String::new();
     let mut current_level: Option<String> = None;

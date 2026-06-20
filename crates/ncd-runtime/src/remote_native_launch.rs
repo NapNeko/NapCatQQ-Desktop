@@ -1,8 +1,8 @@
 //! 远端 Linux「直接运行」启动规划（无 napcat.sh 脚本）。
 //!
-//! 对齐组件页 `RemoteLayout` + `NapCatComponent::launch_command`，在 SSH Host 上
-//! `spawn` 进程；启动前把 onebot/napcat 配置写到远端
-//! `$HOME/Napcat/opt/QQ/.../napcat/config/`（或 system 布局 `/opt/QQ/...`）。
+//! 对齐组件页 RemoteLayout + NapCatComponent::launch_command，在 SSH Host 上
+//! spawn 进程；启动前把 onebot/napcat 配置写到远端
+//! $HOME/Napcat/opt/QQ/.../napcat/config/（或 system 布局 /opt/QQ/...）。
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -17,7 +17,7 @@ use ncd_host::{Host, HostCommand, HostPath};
 use crate::backend_config_renderer::render_napcat_docker_config_payloads;
 use crate::runtime_backend::BotBackendError;
 
-/// 与 `src-tauri/commands/components.rs::RemoteLayout` 同语义。
+/// 与 src-tauri/commands/components.rs::RemoteLayout 同语义。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemoteNapcatLayout {
     System,
@@ -76,7 +76,7 @@ pub fn napcat_remote_log_path(install_base: &HostPath, qq_id: u64) -> String {
     format!("{}/log/napcat_{qq_id}.log", install_base.as_posix())
 }
 
-/// 把 NapCat 派生配置写到远端 config 目录（与 Python `write_bot_runtime_config` 同路径语义）。
+/// 把 NapCat 派生配置写到远端 config 目录（与 Python write_bot_runtime_config 同路径语义）。
 pub async fn render_native_napcat_config_on_host(
     host: &dyn Host,
     bot_id: &BotId,
@@ -130,7 +130,7 @@ async fn read_existing_napcat_config(
     Ok(existing)
 }
 
-/// `xvfb-run -a <qq> --no-sandbox -q <qq_id>`，与 legacy launcher 核心一致（无 bash 脚本）。
+/// xvfb-run -a <qq> --no-sandbox -q <qq_id>，与 legacy launcher 核心一致（无 bash 脚本）。
 async fn build_napcat_remote_launch(
     host: &dyn Host,
     config: &BotConfig,
@@ -203,7 +203,7 @@ pub struct RemoteNativeLaunchTranslator {
     /// server_id of the remote (used for per-host entry point coordination).
     server_id: String,
     /// Shared coordinator so that concurrent batch starts (or mixed NC+SL on the same host)
-    /// serialize the flip of the shared `package.json` main + artifact verification.
+    /// serialize the flip of the shared package.json main + artifact verification.
     coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
     cached_layout: tokio::sync::Mutex<Option<(String, RemoteNapcatLayout)>>,
 }
@@ -211,12 +211,12 @@ pub struct RemoteNativeLaunchTranslator {
 impl RemoteNativeLaunchTranslator {
     /// 内部构造器。
     ///
-    /// 只应由同 crate 内的 `BotManager` 调用。
-    /// 使用 `pub(crate)` 而非 `pub`，以避免把 `pub(crate)` 的 `RemoteQqEntryCoordinator`
+    /// 只应由同 crate 内的 BotManager 调用。
+    /// 使用 pub(crate) 而非 pub，以避免把 pub(crate) 的 RemoteQqEntryCoordinator
     /// 通过公开 API 泄露出去（这正是编译器 private_interfaces 警告的来源）。
     ///
     /// 外部 crate（例如 src-tauri）不应直接构造此类型，所有 backend 都应由
-    /// `BotManager::backend_for_config` 统一创建。
+    /// BotManager::backend_for_config 统一创建。
     pub(crate) fn new(
         host: Arc<dyn Host>,
         flavor: BotFlavor,

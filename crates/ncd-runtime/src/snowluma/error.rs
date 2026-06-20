@@ -1,10 +1,10 @@
 //! SnowLuma 错误类型定义。
 //!
-//! 提供 `SnowLumaWebUiError`、`SnowLumaDaemonError` 与
-//! `From<SnowLumaDaemonError> for BotBackendError` 转换。
+//! 提供 SnowLumaWebUiError、SnowLumaDaemonError 与
+//! From<SnowLumaDaemonError> for BotBackendError 转换。
 //!
-//! 红线：禁止使用 `serde_json::Value`。本文件仅依赖 `thiserror`、
-//! `std::path::PathBuf`、`std::time::Duration`、`std::collections::BTreeMap`，无业务字段透传。
+//! 红线：禁止使用 serde_json::Value。本文件仅依赖 thiserror、
+//! std::path::PathBuf、std::time::Duration、std::collections::BTreeMap，无业务字段透传。
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -14,20 +14,20 @@ use crate::runtime_backend::BotBackendError;
 
 /// SnowLuma WebUI HTTP 客户端错误。
 /// 7 variants，对应 ：
-/// - `Status`：HTTP 4xx / 5xx 响应（含 `endpoint` / `status` / `message`）。
-/// - `Timeout`：reqwest 超时。
-/// - `Http`：网络 / DNS / 连接错误，`cause` 为字符串化原因（避免暴露 reqwest::Error
-/// 的内部细节）。注： 字段名为 `source`，但 thiserror v2 会把名为 `source`
-/// 的字段自动当作 `std::error::Error::source` 的 underlying；这里 `String` 不实现
-/// `Error`，因此沿用语义但改名为 `cause` 以兼容 thiserror v2。Display 仍输出
-/// `... source: <text>` 与 design 文本一致。
-/// - `Decode`：JSON 解码失败 / 字段缺失。
-/// - `NotReady`：`wait_ready` 全部候选 host 都未就绪，附 `last_errors`（host → 错误描述）。
-/// - `LoginFailed`：`/api/login` 调用失败（含密码错误 / 服务端拒绝）。
-/// - `ServerRejected`：`load_process` / `unload_process` 服务端返回 `success == false`。
+/// - Status：HTTP 4xx / 5xx 响应（含 endpoint / status / message）。
+/// - Timeout：reqwest 超时。
+/// - Http：网络 / DNS / 连接错误，cause 为字符串化原因（避免暴露 reqwest::Error
+/// 的内部细节）。注： 字段名为 source，但 thiserror v2 会把名为 source
+/// 的字段自动当作 std::error::Error::source 的 underlying；这里 String 不实现
+/// Error，因此沿用语义但改名为 cause 以兼容 thiserror v2。Display 仍输出
+/// ... source: <text> 与 design 文本一致。
+/// - Decode：JSON 解码失败 / 字段缺失。
+/// - NotReady：wait_ready 全部候选 host 都未就绪，附 last_errors（host → 错误描述）。
+/// - LoginFailed：/api/login 调用失败（含密码错误 / 服务端拒绝）。
+/// - ServerRejected：load_process / unload_process 服务端返回 success == false。
 #[derive(Debug, thiserror::Error)]
 pub enum SnowLumaWebUiError {
-    /// HTTP 4xx / 5xx；`status == 0` 表示无 HTTP 响应(网络层错误)。
+    /// HTTP 4xx / 5xx；status == 0 表示无 HTTP 响应(网络层错误)。
     #[error("snowluma webui {endpoint} status={status}: {message}")]
     Status {
         endpoint: String,
@@ -37,34 +37,34 @@ pub enum SnowLumaWebUiError {
     /// reqwest 超时。
     #[error("snowluma webui {endpoint} timeout")]
     Timeout { endpoint: String },
-    /// 网络 / DNS / 连接错误。`cause` 为字符串化原因。
+    /// 网络 / DNS / 连接错误。cause 为字符串化原因。
     #[error("snowluma webui http error on {endpoint}: {cause}")]
     Http { endpoint: String, cause: String },
     /// JSON 解码失败 / 字段缺失。
     #[error("snowluma webui {endpoint} decode error: {message}")]
     Decode { endpoint: String, message: String },
-    /// `wait_ready` 30s 全部候选 host 都未就绪。
+    /// wait_ready 30s 全部候选 host 都未就绪。
     #[error("snowluma webui not ready after {0:?}; last_errors={1:?}")]
     NotReady(Duration, BTreeMap<String, String>),
-    /// `/api/login` 调用失败（含密码错误 / 服务端拒绝）。
+    /// /api/login 调用失败（含密码错误 / 服务端拒绝）。
     #[error("snowluma webui login failed: {0}")]
     LoginFailed(String),
-    /// `load_process` / `unload_process` 服务端返回 `success == false`。
+    /// load_process / unload_process 服务端返回 success == false。
     #[error("snowluma webui {endpoint} server rejected: {message}")]
     ServerRejected { endpoint: String, message: String },
 }
 
 /// SnowLuma 全局 daemon 错误。
 /// 9 variants，对应 ：
-/// - `WebUi`：透传 `SnowLumaWebUiError`（`#[from]` 自动转换）。
-/// - `NodeMissing`：`node.exe` 路径不存在。
-/// - `EntryMissing`：SnowLuma 入口脚本路径不存在。
-/// - `Spawn`：`tokio::process::Command::spawn` 失败。
-/// - `Crashed`：daemon 当前处于 `Crashed` 状态（`ensure_running` 调用方应直接 fail）。
-/// - `Stopping`：daemon 当前处于 `Stopping` 状态。
-/// - `StartTimeout`：`ensure_running` 总超时。
-/// - `Password`：密码解析失败（session.json 读写 / 强随机生成）。
-/// - `Io`：兜底 IO 错误（路径渲染 / 文件读写）。
+/// - WebUi：透传 SnowLumaWebUiError（#[from] 自动转换）。
+/// - NodeMissing：node.exe 路径不存在。
+/// - EntryMissing：SnowLuma 入口脚本路径不存在。
+/// - Spawn：tokio::process::Command::spawn 失败。
+/// - Crashed：daemon 当前处于 Crashed 状态（ensure_running 调用方应直接 fail）。
+/// - Stopping：daemon 当前处于 Stopping 状态。
+/// - StartTimeout：ensure_running 总超时。
+/// - Password：密码解析失败（session.json 读写 / 强随机生成）。
+/// - Io：兜底 IO 错误（路径渲染 / 文件读写）。
 #[derive(Debug, thiserror::Error)]
 pub enum SnowLumaDaemonError {
     #[error(transparent)]
@@ -87,12 +87,12 @@ pub enum SnowLumaDaemonError {
     Io(String),
 }
 
-/// `SnowLumaDaemonError` → `BotBackendError` 转换。
-/// - `Crashed` / `StartTimeout` 表达"运行时不可用"语义。当前 `BotBackendError` 尚未引入
-/// `RuntimeUnavailable` variant，按 定义的 fallback 规则映射到 `Io` 并显式
-/// 带上 `runtime unavailable:` 前缀，保留语义；后续若 `BotBackendError` 扩展该
-/// variant，本文件内 `match` 分支可直接升级，调用点无需改动。
-/// - 其它 variant 透传到 `BotBackendError::Io` 并保留原 `Display`。
+/// SnowLumaDaemonError → BotBackendError 转换。
+/// - Crashed / StartTimeout 表达"运行时不可用"语义。当前 BotBackendError 尚未引入
+/// RuntimeUnavailable variant，按 定义的 fallback 规则映射到 Io 并显式
+/// 带上 runtime unavailable: 前缀，保留语义；后续若 BotBackendError 扩展该
+/// variant，本文件内 match 分支可直接升级，调用点无需改动。
+/// - 其它 variant 透传到 BotBackendError::Io 并保留原 Display。
 impl From<SnowLumaDaemonError> for BotBackendError {
     fn from(err: SnowLumaDaemonError) -> Self {
         match err {
@@ -152,7 +152,7 @@ mod tests {
         let webui = SnowLumaWebUiError::LoginFailed("bad password".into());
         let webui_text = webui.to_string();
         let daemon: SnowLumaDaemonError = webui.into();
-        // `#[error(transparent)]` 透传 underlying 的 Display。
+        // #[error(transparent)] 透传 underlying 的 Display。
         assert_eq!(daemon.to_string(), webui_text);
         assert!(matches!(daemon, SnowLumaDaemonError::WebUi(_)));
     }

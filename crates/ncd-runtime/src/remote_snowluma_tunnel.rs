@@ -1,6 +1,6 @@
 //! 远端 SnowLuma Native：SSH 本地转发 WebUI(5099) / noVNC(6081)。
 //!
-//! 对齐 legacy `SnowLumaTunnelManager`：多 Bot 同 `server_id` 共享隧道，引用计数归零后关闭。
+//! 对齐 legacy SnowLumaTunnelManager：多 Bot 同 server_id 共享隧道，引用计数归零后关闭。
 
 use std::collections::HashMap;
 

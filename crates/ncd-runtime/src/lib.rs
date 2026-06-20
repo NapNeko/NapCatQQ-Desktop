@@ -41,8 +41,8 @@ pub mod snowluma;
 
 // ===== Layer 1 数据(已迁移到 ncd-domain,此处 re-export 保持向后兼容) =====
 //
-// 这些类型实际定义在 ncd-domain crate。下游代码可继续 `use ncd_runtime::{BotId, ...}`,
-// 但新代码应直接 `use ncd_domain::...`。这些 re-export 只作过渡。
+// 这些类型实际定义在 ncd-domain crate。下游代码可继续 use ncd_runtime::{BotId, ...},
+// 但新代码应直接 use ncd_domain::...。这些 re-export 只作过渡。
 pub use ncd_domain::{
     AdvancedConfig, AppError, AppSettings, AppSettingsDto, AutoRestartSchedule, BackendId,
     BackendKind, BackendType, BackupInfo, BootstrapSnapshot, BootstrapStatus, BotBasicConfig,
@@ -58,7 +58,7 @@ pub use ncd_domain::{
 // StopMode 也来自 ncd-domain 但在 runtime_backend pub use 链已 re-export，
 // 这里就不再重复导出避免 ambiguity。
 
-// 兼容老路径:`ncd_runtime::ids::BotId` / `ncd_runtime::bot_config::...` 这种调用继续可用
+// 兼容老路径:ncd_runtime::ids::BotId / ncd_runtime::bot_config::... 这种调用继续可用
 pub use ncd_domain::{
     app_config, bootstrap, bot_config, errors, ids, kinds, models, release_snapshot, report,
     snowluma_start_mode, version_snapshot,
@@ -120,7 +120,7 @@ pub use traits::{
     PathProbe, RenderError, SecretStore, TransactionReport,
 };
 
-// 兼容老路径:`ncd_runtime::traits::xxx::*` 老调用继续可用
+// 兼容老路径:ncd_runtime::traits::xxx::* 老调用继续可用
 pub use ncd_traits as traits;
 
 #[cfg(test)]

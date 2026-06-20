@@ -1,20 +1,20 @@
 //! NapCat WebUI 登录轮询组件。
 //!
-//! 暴露 [`NapCatLoginPoller`] 与其依赖：[`PollerConfig`]、[`PollerDeps`]、
-//! [`RestartHandle`]。`spawn` 启动后台主循环驱动登录态状态机；`dispose()`
-//! 取消其 `CancellationToken`，主循环当轮 select 结束后退出，退出前补发
-//! 一次 [`crate::events::DomainEvent::NapCatLoginQrcodeRemoved`] 让 UI
+//! 暴露 [NapCatLoginPoller] 与其依赖：[PollerConfig]、[PollerDeps]、
+//! [RestartHandle]。spawn 启动后台主循环驱动登录态状态机；dispose()
+//! 取消其 CancellationToken，主循环当轮 select 结束后退出，退出前补发
+//! 一次 [crate::events::DomainEvent::NapCatLoginQrcodeRemoved] 让 UI
 //! 立即清掉残留二维码。
 //!
-//! 主循环由单一 `tokio::select!` 驱动 `auth_ticker` / `status_ticker` /
-//! `cancel` / `cmd_rx` 4 个分支，`biased` 让取消优先生效；`LoginState` 仅
-//! 由主循环写入，状态转移由 [`apply_login_status`] 与
-//! [`apply_online_status`] 完成。
+//! 主循环由单一 tokio::select! 驱动 auth_ticker / status_ticker /
+//! cancel / cmd_rx 4 个分支，biased 让取消优先生效；LoginState 仅
+//! 由主循环写入，状态转移由 [apply_login_status] 与
+//! [apply_online_status] 完成。
 //!
 //! 复用现有资产：
-//! - `BroadcastEventBus` (`crate::events`)
-//! - `BotId` (`crate::ids`)
-//! - `tokio_util::sync::CancellationToken`（与 `BotActor` 同款取消机制）
+//! - BroadcastEventBus (crate::events)
+//! - BotId (crate::ids)
+//! - tokio_util::sync::CancellationToken（与 BotActor 同款取消机制）
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -33,9 +33,9 @@ use super::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
 
 /// 单个 Poller 的运行参数。
 ///
-/// `unlogged_interval` 固定为 1s，对齐 legacy `_unlogged_interval`；
-/// `login_check_interval` 默认 5s，由 `WebUiPollerSettings.bot_login_check_interval_ms` 决定；
-/// `auth_refresh_period` 默认 30 分钟；`auth_refresh_throttle` 默认 5s。
+/// unlogged_interval 固定为 1s，对齐 legacy _unlogged_interval；
+/// login_check_interval 默认 5s，由 WebUiPollerSettings.bot_login_check_interval_ms 决定；
+/// auth_refresh_period 默认 30 分钟；auth_refresh_throttle 默认 5s。
 #[derive(Debug, Clone)]
 pub struct PollerConfig {
     /// 已登录状态下的轮询间隔。
@@ -46,12 +46,12 @@ pub struct PollerConfig {
     pub auth_refresh_period: Duration,
     /// 401/403 触发的被动 auth 刷新节流。
     pub auth_refresh_throttle: Duration,
-    /// HTTP 请求超时（与 `ReqwestNapCatWebUiClient` 内部 timeout 对齐）。
+    /// HTTP 请求超时（与 ReqwestNapCatWebUiClient 内部 timeout 对齐）。
     pub http_timeout: Duration,
-    /// 离线时是否自动重启 Bot 进程。来自 `BotConfig.bot.offline_auto_restart`。
+    /// 离线时是否自动重启 Bot 进程。来自 BotConfig.bot.offline_auto_restart。
     pub offline_auto_restart: bool,
     /// 是否启用离线通知。来自
-    /// `BotConfig.advanced.offline_notice && (settings.offline_webhook_notice || settings.offline_email_notice)`。
+    /// BotConfig.advanced.offline_notice && (settings.offline_webhook_notice || settings.offline_email_notice)。
     pub offline_notice_enabled: bool,
 }
 
@@ -73,25 +73,25 @@ impl Default for PollerConfig {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) struct LoginState {
-    /// 当前持有的 Bearer credential；`None` 时下一轮 status poll 触发刷新。
+    /// 当前持有的 Bearer credential；None 时下一轮 status poll 触发刷新。
     pub auth: Option<String>,
-    /// 是否处于已登录状态（NapCat WebUI `CheckLoginStatus.isLogin`）。
+    /// 是否处于已登录状态（NapCat WebUI CheckLoginStatus.isLogin）。
     pub is_logged_in: bool,
-    /// 是否在线（NapCat WebUI `GetQQLoginInfo.online`）。
+    /// 是否在线（NapCat WebUI GetQQLoginInfo.online）。
     pub online: bool,
     /// 当前离线区间是否已发过一次离线通知（防重发）。
     pub offline_notice_sent: bool,
-    /// 在线期间检测到 `is_login=false` 的标记（踢线态首阶段）。
+    /// 在线期间检测到 is_login=false 的标记（踢线态首阶段）。
     pub login_invalidated_while_online: bool,
-    /// 踢线后抑制旧二维码直到下次 `online=true`。
+    /// 踢线后抑制旧二维码直到下次 online=true。
     pub suppress_qrcode_until_online: bool,
     /// 上次 auth refresh 触发时间，用于 5s 节流。
     pub last_auth_refresh_attempt_at: Instant,
 }
 
 impl LoginState {
-    /// 构造初始状态。`last_auth_refresh_attempt_at` 设为远早于现在的时刻，
-    /// 保证首次 `RequestAuthRefresh` 不被节流命中。
+    /// 构造初始状态。last_auth_refresh_attempt_at 设为远早于现在的时刻，
+    /// 保证首次 RequestAuthRefresh 不被节流命中。
     #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self {
@@ -110,19 +110,19 @@ impl LoginState {
 
 /// Poller 主循环的内部命令。
 ///
-/// 由 status poll 任务通过 mpsc 发送到主循环；主循环单点写 `LoginState`。
+/// 由 status poll 任务通过 mpsc 发送到主循环；主循环单点写 LoginState。
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum PollerCommand {
     /// status poll 收到 401/403 → 请求主循环触发 auth 刷新（受 5s 节流控制）。
     RequestAuthRefresh,
-    /// 配置（轮询间隔）热更新——预留给后续 `poller_settings` 推送使用。
+    /// 配置（轮询间隔）热更新——预留给后续 poller_settings 推送使用。
     UpdateInterval(Duration),
 }
 
 /// Poller 依赖注入容器。
 ///
-/// 通过 `Arc<dyn ...>` 暴露所有外部能力，方便测试用 mock 替换。
+/// 通过 Arc<dyn ...> 暴露所有外部能力，方便测试用 mock 替换。
 #[allow(dead_code)]
 pub struct PollerDeps {
     pub event_bus: Arc<BroadcastEventBus>,
@@ -133,20 +133,20 @@ pub struct PollerDeps {
 
 /// 重启 Bot 的能力抽象。
 ///
-/// 由 `BotManager` 实现，让 Poller 不直接持有 `BotManager` 引用，
+/// 由 BotManager 实现，让 Poller 不直接持有 BotManager 引用，
 /// 避免循环依赖。
 #[async_trait]
 pub trait RestartHandle: Send + Sync {
     /// 触发指定 Bot 的重启流程。错误由实现方内部消化（例如发布
-    /// `DomainEvent::bot_error`），不抛回 Poller。
+    /// DomainEvent::bot_error），不抛回 Poller。
     async fn restart_bot(&self, bot_id: &BotId);
 }
 
 /// per-Bot 登录轮询组件的句柄。
 ///
-/// `spawn` 会启动一个后台任务驱动状态机；`dispose()` 取消其
-/// `CancellationToken`，主循环当轮 select 结束后退出。
-/// `Drop` 实现作兜底——任何路径忘掉显式 `dispose` 也不会泄漏 task。
+/// spawn 会启动一个后台任务驱动状态机；dispose() 取消其
+/// CancellationToken，主循环当轮 select 结束后退出。
+/// Drop 实现作兜底——任何路径忘掉显式 dispose 也不会泄漏 task。
 #[allow(dead_code)]
 pub struct NapCatLoginPoller {
     bot_id: BotId,
@@ -156,9 +156,9 @@ pub struct NapCatLoginPoller {
 impl NapCatLoginPoller {
     /// 启动后台 Poller 任务。
     ///
-    /// `tokio::spawn` 出来的 task 由 `cancel` 控制生命周期；调用方持有的
-    /// `NapCatLoginPoller` 在 `Drop` 时自动取消，因此即使 caller 忘了显式
-    /// `dispose()` 也不会泄漏后台 task。
+    /// tokio::spawn 出来的 task 由 cancel 控制生命周期；调用方持有的
+    /// NapCatLoginPoller 在 Drop 时自动取消，因此即使 caller 忘了显式
+    /// dispose() 也不会泄漏后台 task。
     pub fn spawn(
         bot_id: BotId,
         port: u16,
@@ -175,15 +175,15 @@ impl NapCatLoginPoller {
         Self { bot_id, cancel }
     }
 
-    /// 取消 Poller 的 `CancellationToken`，请求主循环退出。
+    /// 取消 Poller 的 CancellationToken，请求主循环退出。
     ///
     /// 多次调用幂等。退出前主循环会补发一次
-    /// `DomainEvent::NapCatLoginQrcodeRemoved`，让 UI 立刻清掉残留二维码。
+    /// DomainEvent::NapCatLoginQrcodeRemoved，让 UI 立刻清掉残留二维码。
     pub fn dispose(&self) {
         self.cancel.cancel();
     }
 
-    /// 当前 Poller 关联的 `BotId`。
+    /// 当前 Poller 关联的 BotId。
     pub fn bot_id(&self) -> &BotId {
         &self.bot_id
     }
@@ -202,13 +202,13 @@ impl Drop for NapCatLoginPoller {
 
 /// Poller 后台任务主体。
 ///
-/// - 启动后立即调用一次 `do_auth_refresh` + `do_status_poll`，避免等待
+/// - 启动后立即调用一次 do_auth_refresh + do_status_poll，避免等待
 ///   首个 ticker 触发。
-/// - `tokio::select!` 4 个分支 + `biased;`：取消优先于任何 ticker，
-///   保证 `dispose()` 立即生效。
-/// - `MissedTickBehavior::Delay`：HTTP 比 ticker 慢时，下一个 tick 不堆积，
+/// - tokio::select! 4 个分支 + biased;：取消优先于任何 ticker，
+///   保证 dispose() 立即生效。
+/// - MissedTickBehavior::Delay：HTTP 比 ticker 慢时，下一个 tick 不堆积，
 ///   避免雪崩。
-/// - 退出前补发一次 `NapCatLoginQrcodeRemoved`：UI 残留二维码立即被清掉。
+/// - 退出前补发一次 NapCatLoginQrcodeRemoved：UI 残留二维码立即被清掉。
 async fn run_poller(
     bot_id: BotId,
     port: u16,
@@ -220,14 +220,14 @@ async fn run_poller(
     let mut state = LoginState::new();
 
     // ── auth ticker：30 分钟一次主动刷新 ──
-    // tokio 的 `Interval` 首次 tick 立即返回；这里 `await` 一次把它消费掉，
-    // 让真正的下一次 tick 在 `auth_refresh_period` 之后。
+    // tokio 的 Interval 首次 tick 立即返回；这里 await 一次把它消费掉，
+    // 让真正的下一次 tick 在 auth_refresh_period 之后。
     let mut auth_ticker = interval(cfg.auth_refresh_period);
     auth_ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let _ = auth_ticker.tick().await;
 
     // ── status ticker：未登录 1s / 已登录 5s ──
-    // 同样保留首次 tick 的「立即返回」行为：进入主循环后第一轮 `select!`
+    // 同样保留首次 tick 的「立即返回」行为：进入主循环后第一轮 select!
     // 会再触发一次 status poll，与 legacy QTimer 立即触发对齐。
     let mut status_period = cfg.unlogged_interval;
     let mut status_ticker = interval(status_period);
@@ -236,7 +236,7 @@ async fn run_poller(
     // 容量 8 足够：401/403 节流后任意时刻最多排几条 RequestAuthRefresh。
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<PollerCommand>(8);
 
-    // 立刻触发首次 auth + status，对齐 legacy `QTimer.singleShot(0)`。
+    // 立刻触发首次 auth + status，对齐 legacy QTimer.singleShot(0)。
     do_auth_refresh(&bot_id, port, &token, &cfg, &deps, &mut state).await;
     do_status_poll(&bot_id, port, &cfg, &deps, &mut state, &cmd_tx).await;
     adjust_status_interval(&mut status_ticker, &mut status_period, &state, &cfg);
@@ -273,7 +273,7 @@ async fn run_poller(
                         }
                     }
                     PollerCommand::UpdateInterval(_d) => {
-                        // 当前由 `adjust_status_interval` 在每轮 poll 后修正；
+                        // 当前由 adjust_status_interval 在每轮 poll 后修正；
                         // 预留给配置热更新使用。
                     }
                 }
@@ -282,14 +282,14 @@ async fn run_poller(
     }
 }
 
-/// 根据登录态把 `status_ticker` 切换到正确的周期。
+/// 根据登录态把 status_ticker 切换到正确的周期。
 ///
-/// 未登录 → `cfg.unlogged_interval`（默认 1s）；
-/// 已登录 → `cfg.login_check_interval`（默认 5s）。
+/// 未登录 → cfg.unlogged_interval（默认 1s）；
+/// 已登录 → cfg.login_check_interval（默认 5s）。
 ///
-/// 当目标周期发生变化时，重建 `Interval` 实例（tokio `Interval` 的内部
-/// deadline 在创建时锁定；`reset` 不会改变 period）。新 ticker 的首次 tick
-/// 仍然是「立即」语义，下一轮 `select!` 会立即触发一次 status poll，与
+/// 当目标周期发生变化时，重建 Interval 实例（tokio Interval 的内部
+/// deadline 在创建时锁定；reset 不会改变 period）。新 ticker 的首次 tick
+/// 仍然是「立即」语义，下一轮 select! 会立即触发一次 status poll，与
 /// legacy 立刻使用新间隔的行为一致。
 fn adjust_status_interval(
     status_ticker: &mut Interval,
@@ -312,19 +312,19 @@ fn adjust_status_interval(
 
 /// auth credential 刷新。
 ///
-/// - 节流计时点：在调用 `deps.http.fetch_credential` *之前* 把
-///   `state.last_auth_refresh_attempt_at` 更新为 `Instant::now()`，让 5s
-///   节流（[`run_poller`] 中 `RequestAuthRefresh` 分支判定）从「尝试」
+/// - 节流计时点：在调用 deps.http.fetch_credential *之前* 把
+///   state.last_auth_refresh_attempt_at 更新为 Instant::now()，让 5s
+///   节流（[run_poller] 中 RequestAuthRefresh 分支判定）从「尝试」
 ///   时刻起算——即使本轮 fetch 失败也已经消耗了节流额度，避免 401/403
 ///   立刻再触发同一路径形成雪崩。
-/// - 成功路径：把响应里的 `Credential` 写入 `state.auth = Some(_)`，
-///   下一轮 `do_status_poll` 即可消费；不发布任何 `DomainEvent`，
-///   登录态由后续 `apply_login_status` / `apply_online_status` 推送。
-/// - 失败路径：仅 `tracing::warn!` 记日志，不发布
-///   `DomainEvent::BotError`——HTTP 噪音不应阻断 BotManager 命令路径。
-///   `state.auth` 保持调用前的值不动；caller（`RequestAuthRefresh`
-///   分支）若已先清空 `state.auth`，下一轮 status poll 会再次入队
-///   `RequestAuthRefresh`（受 5s 节流保护）。
+/// - 成功路径：把响应里的 Credential 写入 state.auth = Some(_)，
+///   下一轮 do_status_poll 即可消费；不发布任何 DomainEvent，
+///   登录态由后续 apply_login_status / apply_online_status 推送。
+/// - 失败路径：仅 tracing::warn! 记日志，不发布
+///   DomainEvent::BotError——HTTP 噪音不应阻断 BotManager 命令路径。
+///   state.auth 保持调用前的值不动；caller（RequestAuthRefresh
+///   分支）若已先清空 state.auth，下一轮 status poll 会再次入队
+///   RequestAuthRefresh（受 5s 节流保护）。
 async fn do_auth_refresh(
     bot_id: &BotId,
     port: u16,
@@ -354,18 +354,18 @@ async fn do_auth_refresh(
 ///
 /// 行为分支：
 ///
-/// 1. 没有 auth credential (`state.auth.is_none()`) → 通过
-///    `cmd_tx.try_send(PollerCommand::RequestAuthRefresh)` 让主循环受
+/// 1. 没有 auth credential (state.auth.is_none()) → 通过
+///    cmd_tx.try_send(PollerCommand::RequestAuthRefresh) 让主循环受
 ///    5s 节流保护后刷新；本轮不发任何 HTTP 请求。
-/// 2. 有 auth → 用 `tokio::join!` 并发调用 `check_login_status` +
-///    `check_online_status`，对齐 legacy 的同时刻双查询行为。
-/// 3. 任意一路返回 `Unauthorized` → 通过同样的 `try_send` 命令路径
+/// 2. 有 auth → 用 tokio::join! 并发调用 check_login_status +
+///    check_online_status，对齐 legacy 的同时刻双查询行为。
+/// 3. 任意一路返回 Unauthorized → 通过同样的 try_send 命令路径
 ///    触发 auth 刷新；状态写入仍交给主循环单点完成。
-/// 4. 其它错误 → 仅 `tracing::warn!`，不发布 `BotError`，不堵塞命令
+/// 4. 其它错误 → 仅 tracing::warn!，不发布 BotError，不堵塞命令
 ///    路径。
 ///
-/// 状态写入只发生在 `apply_login_status` / `apply_online_status` 内部
-/// （单飞由 `tokio::select!` 主循环在调用层保证）。
+/// 状态写入只发生在 apply_login_status / apply_online_status 内部
+/// （单飞由 tokio::select! 主循环在调用层保证）。
 async fn do_status_poll(
     bot_id: &BotId,
     port: u16,
@@ -410,22 +410,22 @@ async fn do_status_poll(
     }
 }
 
-/// 把 `CheckLoginStatusData` 应用到 `LoginState` 并发布对应事件。
+/// 把 CheckLoginStatusData 应用到 LoginState 并发布对应事件。
 ///
 /// 三条互斥分支（按出现顺序）：
 ///
-/// 1. `is_login == true` → 清 `login_invalidated_while_online` /
-///    `suppress_qrcode_until_online`，发布 `NapCatLoginQrcodeRemoved`
-///    并 return（绝不再发 `NapCatLoginQrcode`）。
-/// 2. `prev_login == true ∧ state.online == true ∧ is_login == false` →
-///    在线期间被踢：把 `login_invalidated_while_online` 置 `true`，
-///    发布一次 `NapCatLoginInvalidated { reason: Kicked }`。
-/// 3. `is_login == false ∧ qrcode_url 非空 ∧
-///    !login_invalidated_while_online ∧ !suppress_qrcode_until_online` →
-///    发布 `NapCatLoginQrcode` 让前端显示二维码。
+/// 1. is_login == true → 清 login_invalidated_while_online /
+///    suppress_qrcode_until_online，发布 NapCatLoginQrcodeRemoved
+///    并 return（绝不再发 NapCatLoginQrcode）。
+/// 2. prev_login == true ∧ state.online == true ∧ is_login == false →
+///    在线期间被踢：把 login_invalidated_while_online 置 true，
+///    发布一次 NapCatLoginInvalidated { reason: Kicked }。
+/// 3. is_login == false ∧ qrcode_url 非空 ∧
+///    !login_invalidated_while_online ∧ !suppress_qrcode_until_online →
+///    发布 NapCatLoginQrcode 让前端显示二维码。
 ///
-/// 三条分支保证同一调用内不会同时发布 `NapCatLoginQrcode` 与
-/// `NapCatLoginQrcodeRemoved`。
+/// 三条分支保证同一调用内不会同时发布 NapCatLoginQrcode 与
+/// NapCatLoginQrcodeRemoved。
 fn apply_login_status(
     bot_id: &BotId,
     data: CheckLoginStatusData,
@@ -467,26 +467,26 @@ fn apply_login_status(
     }
 }
 
-/// 把 `GetQQLoginInfoData` 应用到 `LoginState` 并触发离线副作用。
+/// 把 GetQQLoginInfoData 应用到 LoginState 并触发离线副作用。
 ///
 /// 行为顺序：
 ///
-/// 1. 总是先发 `NapCatLoginOnline { online }`。
-/// 2. `online == true` → 重置 `offline_notice_sent` /
-///    `login_invalidated_while_online` / `suppress_qrcode_until_online`。
+/// 1. 总是先发 NapCatLoginOnline { online }。
+/// 2. online == true → 重置 offline_notice_sent /
+///    login_invalidated_while_online / suppress_qrcode_until_online。
 ///    return。
-/// 3. `prev_online == false` → 一直离线状态，无副作用（避免离线期间每轮
+/// 3. prev_online == false → 一直离线状态，无副作用（避免离线期间每轮
 ///    都触发 notify / restart）。
-/// 4. `prev_online == true ∧ online == false ∧ kicked` → 踢线导致的离线：
-///    `suppress_qrcode_until_online = true`，清 `login_invalidated_while_online`，
-///    发 `NapCatLoginQrcodeRemoved`。
-/// 5. 普通的「未登录 + 不在线」（`!is_logged_in ∧ !kicked`）→ 等扫码，
+/// 4. prev_online == true ∧ online == false ∧ kicked → 踢线导致的离线：
+///    suppress_qrcode_until_online = true，清 login_invalidated_while_online，
+///    发 NapCatLoginQrcodeRemoved。
+/// 5. 普通的「未登录 + 不在线」（!is_logged_in ∧ !kicked）→ 等扫码，
 ///    无副作用。
-/// 6. 离线分支 + auto_restart：若 `offline_notice_enabled` 且未发过
-///    通知，调一次 `notify(AutoRestart)` 并置 `offline_notice_sent = true`；
-///    随后调 `restart_handle.restart_bot(bot_id)`。
-/// 7. 离线分支 + 非 auto_restart：若 `offline_notice_enabled` 且未发过
-///    通知，调一次 `notify(Manual)` 并置 `offline_notice_sent = true`。
+/// 6. 离线分支 + auto_restart：若 offline_notice_enabled 且未发过
+///    通知，调一次 notify(AutoRestart) 并置 offline_notice_sent = true；
+///    随后调 restart_handle.restart_bot(bot_id)。
+/// 7. 离线分支 + 非 auto_restart：若 offline_notice_enabled 且未发过
+///    通知，调一次 notify(Manual) 并置 offline_notice_sent = true。
 async fn apply_online_status(
     bot_id: &BotId,
     data: GetQQLoginInfoData,
@@ -518,8 +518,8 @@ async fn apply_online_status(
     }
 
     // 步骤 4：踢线后第一轮离线 → 抑制二维码 + 清 invalidation flag + 发
-    // QrcodeRemoved。`suppress_qrcode_until_online` 一直保持
-    // 到下一次 `online == true` 才会被步骤 2 清掉。
+    // QrcodeRemoved。suppress_qrcode_until_online 一直保持
+    // 到下一次 online == true 才会被步骤 2 清掉。
     if kicked {
         state.login_invalidated_while_online = false;
         state.suppress_qrcode_until_online = true;
@@ -625,8 +625,8 @@ mod tests {
 
     // ── 单元测试：adjust_status_interval ──
     //
-    // `tokio::time::interval` 必须在 Tokio runtime 上下文里调用，因此这三个
-    // 测试用 `#[tokio::test]` 而非 `#[test]`。
+    // tokio::time::interval 必须在 Tokio runtime 上下文里调用，因此这三个
+    // 测试用 #[tokio::test] 而非 #[test]。
 
     #[tokio::test]
     async fn adjust_status_interval_keeps_unlogged_period_when_not_logged_in() {
@@ -677,20 +677,20 @@ mod tests {
 
     // ── smoke test：取消时主循环退出并补发 QrcodeRemoved ──
 
-    /// 验证取消语义：`dispose()` 触发的 `cancel.cancelled()` 分支
-    /// （`biased;` 优先）必须在退出前发布且仅发布一次
-    /// `NapCatLoginQrcodeRemoved`。
+    /// 验证取消语义：dispose() 触发的 cancel.cancelled() 分支
+    /// （biased; 优先）必须在退出前发布且仅发布一次
+    /// NapCatLoginQrcodeRemoved。
     ///
-    /// 用 `start_paused = true` 避免真实时间影响 ticker 行为：tokio 的
-    /// `Interval` 首次 tick 在创建时刻立即可用，因此即使时间被冻结，
+    /// 用 start_paused = true 避免真实时间影响 ticker 行为：tokio 的
+    /// Interval 首次 tick 在创建时刻立即可用，因此即使时间被冻结，
     /// 主循环仍能完成「初始 setup → 进入 select! 主循环 → 收到取消信号」
     /// 的全过程。
     #[tokio::test(start_paused = true)]
     async fn run_poller_publishes_qrcode_removed_on_cancellation() {
         // 此 smoke test 关心的是「取消优先于 ticker」的语义，因此 stub client 让
-        // `fetch_credential` 失败 → `state.auth` 始终为 `None` → 初次
-        // `do_status_poll` 走 `RequestAuthRefresh` 命令路径，不发布任何
-        // `DomainEvent`。状态转移分支由 `transition_tests` 模块单独覆盖。
+        // fetch_credential 失败 → state.auth 始终为 None → 初次
+        // do_status_poll 走 RequestAuthRefresh 命令路径，不发布任何
+        // DomainEvent。状态转移分支由 transition_tests 模块单独覆盖。
         struct StubClient;
         #[async_trait]
         impl NapCatWebUiClient for StubClient {
@@ -748,11 +748,11 @@ mod tests {
         );
 
         // 让 spawn 出去的任务跑完初始 setup 并阻塞在 select! 上。
-        // `yield_now` 把当前任务让出给运行时；运行时会调度 poller 任务直到
+        // yield_now 把当前任务让出给运行时；运行时会调度 poller 任务直到
         // 它再次 park，然后回到测试任务。
         tokio::task::yield_now().await;
 
-        // 触发取消；`biased;` 让 cancel 分支在下一次 select! 中优先 fire。
+        // 触发取消；biased; 让 cancel 分支在下一次 select! 中优先 fire。
         poller.dispose();
 
         // sub.next().await 会再次让出执行权，运行时调度 poller 任务，
@@ -773,18 +773,18 @@ mod tests {
     // 单元测试：do_auth_refresh
     // =====================================================================
     //
-    // 直接驱动私有的 `do_auth_refresh`，不走 `run_poller`，用最小可编译的
+    // 直接驱动私有的 do_auth_refresh，不走 run_poller，用最小可编译的
     // mock client 控制返回值，避免 ticker / 取消等其他变量干扰。
 
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    /// 可编程的 mock client：`fetch_credential` 返回值由测试预设。
-    /// `check_login_status` / `check_online_status` 返回 default（auth 测试不会触发）。
+    /// 可编程的 mock client：fetch_credential 返回值由测试预设。
+    /// check_login_status / check_online_status 返回 default（auth 测试不会触发）。
     struct AuthMockClient {
-        /// `Ok(credential)` 或 `Err(NapCatWebUiError)` 序列；按调用顺序消费。
+        /// Ok(credential) 或 Err(NapCatWebUiError) 序列；按调用顺序消费。
         fetch_responses: Mutex<Vec<Result<String, NapCatWebUiError>>>,
-        /// `fetch_credential` 实际被调用的次数，断言节流 / no-op 路径用。
+        /// fetch_credential 实际被调用的次数，断言节流 / no-op 路径用。
         fetch_calls: AtomicUsize,
     }
 
@@ -842,7 +842,7 @@ mod tests {
         async fn restart_bot(&self, _bot_id: &BotId) {}
     }
 
-    /// 构造仅给 `do_auth_refresh` 用的最小 `PollerDeps`。
+    /// 构造仅给 do_auth_refresh 用的最小 PollerDeps。
     fn auth_test_deps(client: Arc<AuthMockClient>) -> (PollerDeps, Arc<BroadcastEventBus>) {
         let bus = Arc::new(BroadcastEventBus::default());
         let deps = PollerDeps {
@@ -854,9 +854,9 @@ mod tests {
         (deps, bus)
     }
 
-    /// `fetch_credential` 成功 → `state.auth = Some(credential)`。
-    /// `last_auth_refresh_attempt_at` 在调用前被刷新，
-    /// 因此调用结束时 `elapsed()` 远小于 `auth_refresh_throttle`。
+    /// fetch_credential 成功 → state.auth = Some(credential)。
+    /// last_auth_refresh_attempt_at 在调用前被刷新，
+    /// 因此调用结束时 elapsed() 远小于 auth_refresh_throttle。
     #[tokio::test]
     async fn do_auth_refresh_success_writes_auth_and_updates_timestamp() {
         let bot_id = BotId::new("auth-success");
@@ -883,8 +883,8 @@ mod tests {
         );
     }
 
-    /// `fetch_credential` 失败仅 `tracing::warn!`，
-    /// 不发布 `DomainEvent::BotError`、不修改 `state.auth`，但 timestamp
+    /// fetch_credential 失败仅 tracing::warn!，
+    /// 不发布 DomainEvent::BotError、不修改 state.auth，但 timestamp
     /// 仍在调用前被刷新（节流计时从「尝试」时刻起算，与失败无关）。
     #[tokio::test]
     async fn do_auth_refresh_failure_leaves_auth_untouched_and_emits_no_bot_error() {
@@ -937,8 +937,8 @@ mod tests {
         assert_eq!(state.auth.as_deref(), Some("new-credential"));
     }
 
-    /// 边界：`Unauthorized` 错误也走 `tracing::warn!` 路径，行为与
-    /// 其它错误一致——`do_auth_refresh` 内部对错误类型不做分支
+    /// 边界：Unauthorized 错误也走 tracing::warn! 路径，行为与
+    /// 其它错误一致——do_auth_refresh 内部对错误类型不做分支
     /// （内部只要求「仅日志」），分流由 caller 负责。
     #[tokio::test]
     async fn do_auth_refresh_unauthorized_error_does_not_modify_auth() {
@@ -958,13 +958,13 @@ mod tests {
         assert_eq!(client.calls(), 1);
     }
 
-    /// 通过模拟 `run_poller` 的 `RequestAuthRefresh`
-    /// 分支语义验证 5s 节流——`do_auth_refresh` 后 timestamp 是「现在」，
-    /// 第二次命令到达时 `elapsed() < throttle` 必命中节流分支被忽略，
-    /// `state.auth` 保持调用前的值不动。
+    /// 通过模拟 run_poller 的 RequestAuthRefresh
+    /// 分支语义验证 5s 节流——do_auth_refresh 后 timestamp 是「现在」，
+    /// 第二次命令到达时 elapsed() < throttle 必命中节流分支被忽略，
+    /// state.auth 保持调用前的值不动。
     ///
-    /// 注：`state.last_auth_refresh_attempt_at` 使用 `std::time::Instant`
-    /// （wall-clock），不受 `tokio::time::pause` 影响，因此本测试只覆盖
+    /// 注：state.last_auth_refresh_attempt_at 使用 std::time::Instant
+    /// （wall-clock），不受 tokio::time::pause 影响，因此本测试只覆盖
     /// 「窗口内必须忽略」语义；「窗口外允许刷新」由端到端测试覆盖
     /// （在那里通过真实时间或专用 mock clock 推进）。
     #[tokio::test]
@@ -1012,9 +1012,9 @@ mod tests {
         );
     }
 
-    /// `auth_ticker` tick 直接调 `do_auth_refresh` 不走节流。
+    /// auth_ticker tick 直接调 do_auth_refresh 不走节流。
     /// 验证「即使 timestamp 刚更新过，再次直接调用 do_auth_refresh 仍会
-    /// 真正执行 fetch」——节流判定不在 `do_auth_refresh` 自身，而在 caller。
+    /// 真正执行 fetch」——节流判定不在 do_auth_refresh 自身，而在 caller。
     #[tokio::test]
     async fn do_auth_refresh_does_not_self_throttle() {
         let bot_id = BotId::new("ticker-bot");
@@ -1030,7 +1030,7 @@ mod tests {
         assert_eq!(client.calls(), 1);
         assert_eq!(state.auth.as_deref(), Some("first"));
 
-        // 立刻再次调用——`do_auth_refresh` 自身不带节流，必须真正 fetch。
+        // 立刻再次调用——do_auth_refresh 自身不带节流，必须真正 fetch。
         // 这对应 auth_ticker 30min tick 直接执行的语义。
         do_auth_refresh(&bot_id, 6099, "tok", &cfg, &deps, &mut state).await;
         assert_eq!(client.calls(), 2);
@@ -1047,11 +1047,11 @@ mod tests {
 // 取消等无关变量。
 //
 // 公共测试基础设施：
-// - `StatusMockClient`：可编程的 login/online 响应序列。
-// - `RecordingNotifier`：记录 `notify(kind)` 调用历史，断言至多一次。
-// - `RecordingRestartHandle`：记录 `restart_bot(bot_id)` 调用次数，断言至多
+// - StatusMockClient：可编程的 login/online 响应序列。
+// - RecordingNotifier：记录 notify(kind) 调用历史，断言至多一次。
+// - RecordingRestartHandle：记录 restart_bot(bot_id) 调用次数，断言至多
 //   一次。
-// - `drain_events(&mut sub)`：用极短超时排空订阅器的当前事件流。
+// - drain_events(&mut sub)：用极短超时排空订阅器的当前事件流。
 #[cfg(test)]
 mod transition_tests {
     use super::*;
@@ -1204,7 +1204,7 @@ mod transition_tests {
     }
 
     /// 排空 bot-scoped 订阅器中已发布的事件。每次循环都用极短超时探测，
-    /// 直到 `next()` 不再立即返回事件为止。
+    /// 直到 next() 不再立即返回事件为止。
     async fn drain_events(sub: &mut crate::events::EventSubscription) -> Vec<DomainEvent> {
         let mut out = Vec::new();
         loop {
@@ -1221,8 +1221,8 @@ mod transition_tests {
     // do_status_poll
     // =====================================================================
 
-    /// `state.auth.is_none()` → 通过 cmd channel 触发
-    /// `RequestAuthRefresh`，不发起任何 HTTP 请求。
+    /// state.auth.is_none() → 通过 cmd channel 触发
+    /// RequestAuthRefresh，不发起任何 HTTP 请求。
     #[tokio::test]
     async fn status_poll_without_auth_requests_refresh_and_skips_http() {
         let bot_id = BotId::new("no-auth");
@@ -1254,7 +1254,7 @@ mod transition_tests {
         assert!(events.is_empty(), "no events expected, got {events:?}");
     }
 
-    /// `state.auth.is_some()` → `tokio::join!` 并发发起两路
+    /// state.auth.is_some() → tokio::join! 并发发起两路
     /// HTTP 请求，每路调用恰好 1 次。
     #[tokio::test]
     async fn status_poll_with_auth_calls_both_endpoints_concurrently() {
@@ -1285,9 +1285,9 @@ mod transition_tests {
         assert!(cmd_rx.try_recv().is_err());
     }
 
-    /// login_res 返回 `Unauthorized` → 触发
-    /// `RequestAuthRefresh`，且本轮不再处理 online_res（不调用
-    /// `apply_login_status` / `apply_online_status`，不发布任何事件）。
+    /// login_res 返回 Unauthorized → 触发
+    /// RequestAuthRefresh，且本轮不再处理 online_res（不调用
+    /// apply_login_status / apply_online_status，不发布任何事件）。
     #[tokio::test]
     async fn status_poll_login_unauthorized_triggers_refresh_and_skips_apply() {
         let bot_id = BotId::new("login-401");
@@ -1323,8 +1323,8 @@ mod transition_tests {
         assert!(!state.online);
     }
 
-    /// login_res 返回非 `Unauthorized` 错误 → 仅 warn，
-    /// 不触发 `RequestAuthRefresh`，不影响 online_res 路径。
+    /// login_res 返回非 Unauthorized 错误 → 仅 warn，
+    /// 不触发 RequestAuthRefresh，不影响 online_res 路径。
     #[tokio::test]
     async fn status_poll_login_other_error_warns_and_continues_to_online() {
         let bot_id = BotId::new("login-500");
@@ -1361,8 +1361,8 @@ mod transition_tests {
         assert!(state.online);
     }
 
-    /// online_res 返回 `Unauthorized` → 触发
-    /// `RequestAuthRefresh`。login_res 已成功 apply，对应的事件正常发布。
+    /// online_res 返回 Unauthorized → 触发
+    /// RequestAuthRefresh。login_res 已成功 apply，对应的事件正常发布。
     #[tokio::test]
     async fn status_poll_online_unauthorized_triggers_refresh() {
         let bot_id = BotId::new("online-401");
@@ -1399,8 +1399,8 @@ mod transition_tests {
     // apply_login_status
     // =====================================================================
 
-    /// `is_login=true` → 清除 invalidation/suppress flag、
-    /// 发布 `NapCatLoginQrcodeRemoved`、return（不再发 Qrcode）。
+    /// is_login=true → 清除 invalidation/suppress flag、
+    /// 发布 NapCatLoginQrcodeRemoved、return（不再发 Qrcode）。
     #[tokio::test]
     async fn apply_login_logged_in_clears_flags_and_emits_qrcode_removed() {
         let bot_id = BotId::new("logged-in");
@@ -1443,9 +1443,9 @@ mod transition_tests {
         }
     }
 
-    /// `prev_login=true ∧ state.online=true ∧
-    /// is_login=false` → 设置 `login_invalidated_while_online=true`、
-    /// 发 `NapCatLoginInvalidated{Kicked}`，且二维码被同一调用抑制。
+    /// prev_login=true ∧ state.online=true ∧
+    /// is_login=false → 设置 login_invalidated_while_online=true、
+    /// 发 NapCatLoginInvalidated{Kicked}，且二维码被同一调用抑制。
     #[tokio::test]
     async fn apply_login_kick_during_online_emits_invalidated_and_suppresses_qrcode() {
         let bot_id = BotId::new("kicked");
@@ -1490,9 +1490,9 @@ mod transition_tests {
         }
     }
 
-    /// `is_login=false ∧ qrcode_url 非空 ∧
-    /// !login_invalidated_while_online ∧ !suppress_qrcode_until_online` →
-    /// 发 `NapCatLoginQrcode`。
+    /// is_login=false ∧ qrcode_url 非空 ∧
+    /// !login_invalidated_while_online ∧ !suppress_qrcode_until_online →
+    /// 发 NapCatLoginQrcode。
     #[tokio::test]
     async fn apply_login_unlogged_with_qrcode_emits_qrcode() {
         let bot_id = BotId::new("first-login");
@@ -1533,8 +1533,8 @@ mod transition_tests {
         }
     }
 
-    /// `login_invalidated_while_online=true` → 必须抑制
-    /// `NapCatLoginQrcode` 事件（即使 qrcode_url 非空）。
+    /// login_invalidated_while_online=true → 必须抑制
+    /// NapCatLoginQrcode 事件（即使 qrcode_url 非空）。
     #[tokio::test]
     async fn apply_login_suppresses_qrcode_when_invalidated_while_online() {
         let bot_id = BotId::new("suppress-by-invalidated");
@@ -1569,8 +1569,8 @@ mod transition_tests {
         );
     }
 
-    /// `suppress_qrcode_until_online=true` → 同样抑制
-    /// `NapCatLoginQrcode`。
+    /// suppress_qrcode_until_online=true → 同样抑制
+    /// NapCatLoginQrcode。
     #[tokio::test]
     async fn apply_login_suppresses_qrcode_when_suppress_until_online() {
         let bot_id = BotId::new("suppress-by-flag");
@@ -1603,7 +1603,7 @@ mod transition_tests {
         );
     }
 
-    /// `is_login=false ∧ qrcode_url=""` → 没有可发的二维码，无事件。
+    /// is_login=false ∧ qrcode_url="" → 没有可发的二维码，无事件。
     #[tokio::test]
     async fn apply_login_unlogged_with_empty_qrcode_emits_nothing() {
         let bot_id = BotId::new("no-qr");
@@ -1636,7 +1636,7 @@ mod transition_tests {
     // apply_online_status
     // =====================================================================
 
-    /// `online=true` → 总是先发 `NapCatLoginOnline{true}`，
+    /// online=true → 总是先发 NapCatLoginOnline{true}，
     /// 然后重置 offline_notice_sent / login_invalidated_while_online /
     /// suppress_qrcode_until_online 三个 flag，return 不触发其它副作用。
     #[tokio::test]
@@ -1686,8 +1686,8 @@ mod transition_tests {
         }
     }
 
-    /// `prev_online=false ∧ online=false` → 持续离线，仅发
-    /// `NapCatLoginOnline{false}`，不触发任何副作用。
+    /// prev_online=false ∧ online=false → 持续离线，仅发
+    /// NapCatLoginOnline{false}，不触发任何副作用。
     #[tokio::test]
     async fn apply_online_persistent_offline_emits_event_only_no_side_effects() {
         let bot_id = BotId::new("persistent-offline");
@@ -1729,9 +1729,9 @@ mod transition_tests {
         assert_eq!(restart.calls(), 0);
     }
 
-    /// `prev_online=true ∧ online=false ∧ kicked=true` →
-    /// `suppress_qrcode_until_online=true`、清 `login_invalidated_while_online`、
-    /// 发 `NapCatLoginQrcodeRemoved`。`offline_auto_restart=true` 时还会
+    /// prev_online=true ∧ online=false ∧ kicked=true →
+    /// suppress_qrcode_until_online=true、清 login_invalidated_while_online、
+    /// 发 NapCatLoginQrcodeRemoved。offline_auto_restart=true 时还会
     /// 触发一次 restart（属于「踢线后自动重启」分支）。
     #[tokio::test]
     async fn apply_online_kicked_then_offline_suppresses_qrcode_and_auto_restarts() {
@@ -1801,8 +1801,8 @@ mod transition_tests {
         assert!(state.offline_notice_sent);
     }
 
-    /// `prev_online=true ∧ online=false ∧ is_logged_in=true ∧
-    /// kicked=false ∧ offline_auto_restart=true` → 发通知（AutoRestart）+
+    /// prev_online=true ∧ online=false ∧ is_logged_in=true ∧
+    /// kicked=false ∧ offline_auto_restart=true → 发通知（AutoRestart）+
     /// restart_bot（普通在线掉线后自动重启）。
     #[tokio::test]
     async fn apply_online_logged_offline_with_auto_restart_notifies_and_restarts() {
@@ -1843,8 +1843,8 @@ mod transition_tests {
         assert_eq!(restart.calls(), 1);
     }
 
-    /// `offline_notice_sent=true` → 不再调 `notify`，
-    /// 但 `auto_restart=true` 仍会调 restart_bot（一次）。
+    /// offline_notice_sent=true → 不再调 notify，
+    /// 但 auto_restart=true 仍会调 restart_bot（一次）。
     #[tokio::test]
     async fn apply_online_offline_with_notice_already_sent_skips_notify() {
         let bot_id = BotId::new("notice-already");
@@ -1882,8 +1882,8 @@ mod transition_tests {
         assert_eq!(restart.calls(), 1, "restart still fires per offline event");
     }
 
-    /// `offline_notice_enabled=false` → 即使首次离线也
-    /// 不调 `notify`，但 `auto_restart=true` 仍触发 restart。
+    /// offline_notice_enabled=false → 即使首次离线也
+    /// 不调 notify，但 auto_restart=true 仍触发 restart。
     #[tokio::test]
     async fn apply_online_offline_with_notice_disabled_skips_notify_but_restarts() {
         let bot_id = BotId::new("notice-disabled");
@@ -1921,8 +1921,8 @@ mod transition_tests {
         assert!(!state.offline_notice_sent);
     }
 
-    /// `offline_auto_restart=false ∧ is_logged_in=true ∧
-    /// offline_notice_enabled=true` → 仅发 Manual 通知，不调 restart_bot。
+    /// offline_auto_restart=false ∧ is_logged_in=true ∧
+    /// offline_notice_enabled=true → 仅发 Manual 通知，不调 restart_bot。
     #[tokio::test]
     async fn apply_online_logged_offline_manual_path_notifies_no_restart() {
         let bot_id = BotId::new("manual-path");
@@ -1961,8 +1961,8 @@ mod transition_tests {
         assert_eq!(restart.calls(), 0, "manual path must NOT restart");
     }
 
-    /// 「未登录 + 不在线 + ¬kicked」 → 等扫码，发 `NapCatLoginOnline{false}`
-    /// 后 return，无任何副作用。即使 `auto_restart=true` 也不应触发 restart。
+    /// 「未登录 + 不在线 + ¬kicked」 → 等扫码，发 NapCatLoginOnline{false}
+    /// 后 return，无任何副作用。即使 auto_restart=true 也不应触发 restart。
     #[tokio::test]
     async fn apply_online_unlogged_offline_no_kick_no_side_effects() {
         let bot_id = BotId::new("unlogged-offline");
@@ -2006,16 +2006,16 @@ mod transition_tests {
 // 属性测试：proptest 覆盖核心不变量
 // =============================================================================
 //
-// 与 `transition_tests` 模块的边界划分：
-// - `transition_tests` 用具体输入断言「单一分支」的预期行为（example-based）。
-// - `property_tests` 用 `proptest` 在输入空间上断言「全称量化的不变量」
+// 与 transition_tests 模块的边界划分：
+// - transition_tests 用具体输入断言「单一分支」的预期行为（example-based）。
+// - property_tests 用 proptest 在输入空间上断言「全称量化的不变量」
 //   （universal invariants）—— 无论输入如何，状态机的输出都满足约束。
 //
 // 性能与可读性权衡：
-// - `cases = 64`：每个 property 64 个生成用例足以覆盖关键路径（主要是 6
+// - cases = 64：每个 property 64 个生成用例足以覆盖关键路径（主要是 6
 //   个布尔 flag 的 2^6=64 组合 + 字符串变体），同时保持单测在秒级完成。
-// - 每个 case 用现场构造的 current-thread tokio runtime 跑 `apply_*` 异步
-//   函数；`apply_login_status` 是同步 fn，但事件抽取需要 `EventSubscription::next`
+// - 每个 case 用现场构造的 current-thread tokio runtime 跑 apply_* 异步
+//   函数；apply_login_status 是同步 fn，但事件抽取需要 EventSubscription::next
 //   的 async 接口，因此统一走 runtime block_on 简化结构。
 
 #[cfg(test)]
@@ -2124,7 +2124,7 @@ mod property_tests {
     // ── 测试基础设施 ──────────────────────────────────────────────────────
 
     /// 为每个 proptest case 现场构造一个 current-thread tokio runtime。
-    /// 仅启用 `time` 驱动——`tokio::time::timeout` 排空事件时需要它。
+    /// 仅启用 time 驱动——tokio::time::timeout 排空事件时需要它。
     fn current_thread_rt() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_current_thread()
             .enable_time()
@@ -2132,7 +2132,7 @@ mod property_tests {
             .expect("build current-thread runtime")
     }
 
-    /// 排空 bot-scoped 订阅器中已发布的事件；和 `transition_tests::drain_events`
+    /// 排空 bot-scoped 订阅器中已发布的事件；和 transition_tests::drain_events
     /// 等价，复制一份避免跨模块可见性扩散。
     async fn drain(sub: &mut EventSubscription) -> Vec<DomainEvent> {
         let mut out = Vec::new();
@@ -2156,7 +2156,7 @@ mod property_tests {
         (deps, bus)
     }
 
-    /// 在 bot 维度订阅，调用 `apply_login_status` 后返回排空的事件序列。
+    /// 在 bot 维度订阅，调用 apply_login_status 后返回排空的事件序列。
     fn run_apply_login(
         bot_id: &BotId,
         state: &mut LoginState,
@@ -2173,7 +2173,7 @@ mod property_tests {
         })
     }
 
-    /// 在 bot 维度订阅，调用 `apply_online_status` 后返回（事件序列, notify 次数, restart 次数）。
+    /// 在 bot 维度订阅，调用 apply_online_status 后返回（事件序列, notify 次数, restart 次数）。
     fn run_apply_online(
         bot_id: &BotId,
         cfg: &PollerConfig,
@@ -2192,7 +2192,7 @@ mod property_tests {
         (events, notifier.count(), restart.count())
     }
 
-    /// 跑一段「连续离线区间」：同一个 state 上施加 N 次 `apply_online_status({online:false})`。
+    /// 跑一段「连续离线区间」：同一个 state 上施加 N 次 apply_online_status({online:false})。
     fn run_offline_window(
         bot_id: &BotId,
         cfg: &PollerConfig,
@@ -2218,7 +2218,7 @@ mod property_tests {
         (notifier.count(), restart.count())
     }
 
-    /// proptest 全局配置——`cases=64` 兼顾覆盖与速度。
+    /// proptest 全局配置——cases=64 兼顾覆盖与速度。
     fn pconfig() -> ProptestConfig {
         ProptestConfig {
             cases: 16,
@@ -2241,10 +2241,10 @@ mod property_tests {
     //   s.is_logged_in == false ∧ data.is_login == false ∧
     //   data.qrcode_url ≠ ∅ ∧ ¬s.suppress_qrcode_until_online ∧
     //   ¬s.login_invalidated_while_online,
-    // 则下一次 `apply_login_status(s, data)` 必发布 `NapCatLoginQrcode{qrcode_url}`。
+    // 则下一次 apply_login_status(s, data) 必发布 NapCatLoginQrcode{qrcode_url}。
     //
-    // 注意：当 `s.is_logged_in == false` 时 `prev_login=false`，kick 分支不
-    // 会被触发，因此 `state.suppress_*` / `state.login_invalidated_*` 不会
+    // 注意：当 s.is_logged_in == false 时 prev_login=false，kick 分支不
+    // 会被触发，因此 state.suppress_* / state.login_invalidated_* 不会
     // 被本次调用改变——前置条件「应用前」 ≡ 「Qrcode 检查时」。
     // ─────────────────────────────────────────────────────────────────────
 
@@ -2300,13 +2300,13 @@ mod property_tests {
     // ─────────────────────────────────────────────────────────────────────
     // Qrcode 与 QrcodeRemoved 互斥
     //
-    // ∀ apply_*：同一调用内不会同时发布 `NapCatLoginQrcode` 与
-    // `NapCatLoginQrcodeRemoved`。
+    // ∀ apply_*：同一调用内不会同时发布 NapCatLoginQrcode 与
+    // NapCatLoginQrcodeRemoved。
     //
     // 验证两个入口各自的互斥不变量：
-    //   - `apply_login_status`：要么发 QrcodeRemoved（is_login=true 分支
+    //   - apply_login_status：要么发 QrcodeRemoved（is_login=true 分支
     //     return），要么发 Qrcode / Invalidated（其它分支），不会同时出现。
-    //   - `apply_online_status`：从不发布 `NapCatLoginQrcode`，因此互斥
+    //   - apply_online_status：从不发布 NapCatLoginQrcode，因此互斥
     //     trivially 成立——但仍生成随机输入跑一遍以防回归。
     // ─────────────────────────────────────────────────────────────────────
 
@@ -2399,9 +2399,9 @@ mod property_tests {
     // ─────────────────────────────────────────────────────────────────────
     // 踢线检测因果性
     //
-    // ∀ (prev_state, next_data): `NapCatLoginInvalidated{Kicked}` 被发布
-    // ⇔ `prev_state.is_logged_in == true ∧ prev_state.online == true ∧
-    //    next_data.is_login == false`。
+    // ∀ (prev_state, next_data): NapCatLoginInvalidated{Kicked} 被发布
+    // ⇔ prev_state.is_logged_in == true ∧ prev_state.online == true ∧
+    //    next_data.is_login == false。
     //
     // 设计要求只是 ⇒（必要条件），但代码实现满足 ⇔（充要）；测试两个
     // 方向以更严格地锁定行为。
@@ -2458,28 +2458,28 @@ mod property_tests {
     // ─────────────────────────────────────────────────────────────────────
     // auth refresh 5s 节流
     //
-    // ∀ 任意 `RequestAuthRefresh` 到达时间序列：被动路径触发的相邻两次
-    // 实际 refresh 间隔必 ≥ `auth_refresh_throttle`（默认 5s）。
+    // ∀ 任意 RequestAuthRefresh 到达时间序列：被动路径触发的相邻两次
+    // 实际 refresh 间隔必 ≥ auth_refresh_throttle（默认 5s）。
     //
-    // 备注（来自 prompt）：`state.last_auth_refresh_attempt_at` 用
-    // `std::time::Instant`（wall-clock），不受 `tokio::time::pause` 影响。
-    // 因此本属性把节流决策抽象成纯函数 `simulate_passive_refresh_throttle`
+    // 备注（来自 prompt）：state.last_auth_refresh_attempt_at 用
+    // std::time::Instant（wall-clock），不受 tokio::time::pause 影响。
+    // 因此本属性把节流决策抽象成纯函数 simulate_passive_refresh_throttle
     // 直接驱动——把任意「到达时间序列 + 节流阈值」喂给它，断言输出的
-    // 实际 refresh 序列两两间隔 ≥ 阈值。这准确镜像了 `run_poller` 中
-    // `RequestAuthRefresh` 分支的判定语义：
+    // 实际 refresh 序列两两间隔 ≥ 阈值。这准确镜像了 run_poller 中
+    // RequestAuthRefresh 分支的判定语义：
     //
-    // ```text
+    // text
     // if arrival - last_attempt >= throttle {
     //     actual_refresh.push(arrival);
     //     last_attempt = arrival;
     // }
-    // ```
+    // 
     // ─────────────────────────────────────────────────────────────────────
 
-    /// 把「`RequestAuthRefresh` 命令到达时间序列」（毫秒时间戳）按节流阈值
-    /// 模拟成「实际 do_auth_refresh 调用时间序列」。复制 `run_poller` 中
-    /// `PollerCommand::RequestAuthRefresh` 分支的判定语义；初始
-    /// `last_attempt` 设为 `None` 模拟 `LoginState::new` 的「过去 1 小时」
+    /// 把「RequestAuthRefresh 命令到达时间序列」（毫秒时间戳）按节流阈值
+    /// 模拟成「实际 do_auth_refresh 调用时间序列」。复制 run_poller 中
+    /// PollerCommand::RequestAuthRefresh 分支的判定语义；初始
+    /// last_attempt 设为 None 模拟 LoginState::new 的「过去 1 小时」
     /// 远过去状态——首次到达必通过节流。
     fn simulate_passive_refresh_throttle(arrivals_ms: &[u64], throttle_ms: u64) -> Vec<u64> {
         let mut last_attempt: Option<u64> = None;
@@ -2534,12 +2534,12 @@ mod property_tests {
     // ─────────────────────────────────────────────────────────────────────
     // 离线通知至多一次
     //
-    // ∀ 一段连续离线区间（一连串 `apply_online_status({online:false})` 调用，
-    // 起始时 prev_online=true）：`notifier.notify(...)` 被调用次数 ≤ 1。
+    // ∀ 一段连续离线区间（一连串 apply_online_status({online:false}) 调用，
+    // 起始时 prev_online=true）：notifier.notify(...) 被调用次数 ≤ 1。
     //
-    // 关键不变量：第一次离线调用后 `state.online=false`，后续调用全部
+    // 关键不变量：第一次离线调用后 state.online=false，后续调用全部
     // 命中「prev_online=false → return」分支，不再进入通知逻辑；同时
-    // `state.offline_notice_sent` 在首轮被置位后封锁后续 notify 调用。
+    // state.offline_notice_sent 在首轮被置位后封锁后续 notify 调用。
     // ─────────────────────────────────────────────────────────────────────
 
     proptest! {
@@ -2586,10 +2586,10 @@ mod property_tests {
     // ─────────────────────────────────────────────────────────────────────
     // 自动重启副作用唯一
     //
-    // ∀ 单次 `apply_online_status` 调用：`restart_handle.restart_bot` 被
+    // ∀ 单次 apply_online_status 调用：restart_handle.restart_bot 被
     // 调用次数 ≤ 1（无论分支组合如何）。
     //
-    // 编译期视角下，函数体内只出现一次 `restart_handle.restart_bot(...).await`
+    // 编译期视角下，函数体内只出现一次 restart_handle.restart_bot(...).await
     // 调用，本属性以运行时观察锁定该结构不变量、防回归。
     // ─────────────────────────────────────────────────────────────────────
 
@@ -2637,7 +2637,7 @@ mod property_tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // 纯函数 example 测试：锁定 `simulate_passive_refresh_throttle` 自身
+    // 纯函数 example 测试：锁定 simulate_passive_refresh_throttle 自身
     // 的边界——proptest 的属性测试如果断言模拟器 bug 也会通过，因此用
     // 几个手工 example 给 simulator 做 sanity check。
     // ─────────────────────────────────────────────────────────────────────

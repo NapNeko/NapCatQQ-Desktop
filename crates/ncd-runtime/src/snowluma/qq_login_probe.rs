@@ -4,29 +4,29 @@
 //!
 //! 主路径 —— Ptlogin2 无弹窗探测。QQ NT 为网页端快捷登录在本地起一个 HTTPS
 //! 服务，监听 4301/4303/4305/4307/4309 之一。GET
-//! `https://127.0.0.1:<port>/pt_get_uins`（伪造 Host/Referer/Cookie，自签证书
+//! https://127.0.0.1:<port>/pt_get_uins（伪造 Host/Referer/Cookie，自签证书
 //! 忽略校验）拿回一段 JSONP，里面是已登录账号列表。全程不碰深链接，QQ 不弹窗。
 //!
 //! 这个接口有个怪脾气：它交替返回"最近两个登录过的账号"和"当前账号"。所以连
 //! 发两次取较短的一组——较短组恰好 1 个时即当前账号，否则放弃转兜底。
 //!
 //! 兜底 —— 旧的 tencent:// 深链接探测。POST /tencent body=
-//! `tencent://snowluma-probe-noop` 到该进程实际监听的 9210-9219 端口，返回的
+//! tencent://snowluma-probe-noop 到该进程实际监听的 9210-9219 端口，返回的
 //! JWT 里有 uin。这条会让个别 QQ 版本弹"深链接解析失败"，所以只在 Ptlogin2
 //! 落空时按 PID 实际端口兜底，不再无差别全段盲扫（盲扫正是上游 PR #73 修掉的
 //! 痛点：既打扰用户又没和指定 PID 严格绑定）。
 //!
-//! body 用伪 action `tencent://snowluma-probe-noop` 而非裸 `tencent://`：实测
+//! body 用伪 action tencent://snowluma-probe-noop 而非裸 tencent://：实测
 //! 空 action 会被某些 QQ 版本解析成"打开主窗口"把 QQ 拉到前台，伪 action 让
 //! deeplink dispatcher 静默丢弃，HTTP 层照常返回 JWT。
 //!
 //! 协议来源:
-//!   - SnowLuma `packages/bridge/src/qq-port-probe.ts`（上游 PR #73 实装）
-//!   - legacy Python `legacy-python/src/core/runtime/q_port_probe.py`
+//!   - SnowLuma packages/bridge/src/qq-port-probe.ts（上游 PR #73 实装）
+//!   - legacy Python legacy-python/src/core/runtime/q_port_probe.py
 //!
-//! 只对外暴露一个高层入口 [`find_pid_by_qq_id`]：枚举主 QQ.exe（过滤 Chromium
+//! 只对外暴露一个高层入口 [find_pid_by_qq_id]：枚举主 QQ.exe（过滤 Chromium
 //! 子进程）→ 对每个 PID 先 Ptlogin2 后深链接探测 → 找到 uin == qq_id 的 PID。
-//! 找不到就返回 `None`，由调用方决定是报 InvalidConfig 还是其他降级路径。
+//! 找不到就返回 None，由调用方决定是报 InvalidConfig 还是其他降级路径。
 
 use std::time::Duration;
 
@@ -36,7 +36,7 @@ use sysinfo::Pid;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-/// 深链接兜底探测的端口范围（QQ NT 处理 `tencent://` 的迷你 HTTP 服务）。
+/// 深链接兜底探测的端口范围（QQ NT 处理 tencent:// 的迷你 HTTP 服务）。
 const PROBE_PORT_START: u16 = 9210;
 const PROBE_PORT_END: u16 = 9219;
 /// QQ NT 网页端快捷登录（Ptlogin2）本地 HTTPS 服务的候选端口。
@@ -62,12 +62,12 @@ pub struct ProbedQqLogin {
 ///
 /// 流程：
 /// 1. sysinfo 枚举所有主 QQ.exe（排除 Chromium 子进程：parent 是 QQ.exe 或
-///    cmdline 含 `--type=`）
+///    cmdline 含 --type=）
 /// 2. 并发对每个 PID 探测：先查 OS TCP 表拿该 PID 实际监听的端口，命中 Ptlogin
 ///    端口走无弹窗 Ptlogin2 探测，落空再按 9210-9219 深链接兜底
 /// 3. 找到 uin == qq_id 的就立即返回；全部探测完没匹配返回 None
 ///
-/// `qq_id` 必须是十进制字符串形态（与 BotConfig.bot.qq_id 转换一致）。
+/// qq_id 必须是十进制字符串形态（与 BotConfig.bot.qq_id 转换一致）。
 pub async fn find_pid_by_qq_id(qq_id: u64) -> Option<ProbedQqLogin> {
     let target = qq_id.to_string();
     let scan = scan_qq_processes().await;
@@ -94,8 +94,8 @@ pub async fn find_pid_by_qq_id(qq_id: u64) -> Option<ProbedQqLogin> {
 
 /// 一次 sysinfo 扫描的结果：主 QQ.exe PID 列表 + QQ.exe 进程总数。
 ///
-/// 进程总数把 Chromium 子进程也算进去，用于 [`probe_pid`] 的污染启发式
-/// （对齐上游 PR #73 的 `getQqProcessCount`）。复用同一次 `refresh_all`
+/// 进程总数把 Chromium 子进程也算进去，用于 [probe_pid] 的污染启发式
+/// （对齐上游 PR #73 的 getQqProcessCount）。复用同一次 refresh_all
 /// 而非另起 tasklist/pgrep，省一次进程枚举。
 struct QqProcessScan {
     main_pids: Vec<u32>,
@@ -104,9 +104,9 @@ struct QqProcessScan {
 
 /// 枚举当前系统中所有"主"QQ.exe 进程并统计 QQ.exe 总数，过滤 Chromium 子进程。
 ///
-/// 过滤规则（与 legacy Python `enumerate_qq_processes` 同款）：
-/// 1. parent name 也是 `QQ.exe` → Chromium fork 的子进程
-/// 2. cmdline 任意 arg 含 `--type=` → Chromium 标 renderer / GPU / utility
+/// 过滤规则（与 legacy Python enumerate_qq_processes 同款）：
+/// 1. parent name 也是 QQ.exe → Chromium fork 的子进程
+/// 2. cmdline 任意 arg 含 --type= → Chromium 标 renderer / GPU / utility
 async fn scan_qq_processes() -> QqProcessScan {
     tokio::task::spawn_blocking(|| {
         let mut sys = sysinfo::System::new_all();
@@ -133,7 +133,7 @@ async fn scan_qq_processes() -> QqProcessScan {
                     continue;
                 }
             }
-            // 规则 2：cmdline 含 `--type=`
+            // 规则 2：cmdline 含 --type=
             let has_chromium_type = process
                 .cmd()
                 .iter()
@@ -156,7 +156,7 @@ async fn scan_qq_processes() -> QqProcessScan {
     })
 }
 
-/// 对单个 PID 做完整探测。`total_qq_count` 是全系统 QQ.exe 进程数（含 Chromium
+/// 对单个 PID 做完整探测。total_qq_count 是全系统 QQ.exe 进程数（含 Chromium
 /// 子进程），用于污染启发式判断。
 ///
 /// 两级策略（对齐上游 PR #73）：
@@ -249,7 +249,7 @@ fn listening_ports_for_pid(pid: u32) -> Vec<u16> {
 // 主路径：Ptlogin2 无弹窗探测
 // ---------------------------------------------------------------------------
 
-/// Ptlogin2 `/pt_get_uins` 返回的单个账号条目（只关心 uin，nickName 等字段忽略）。
+/// Ptlogin2 /pt_get_uins 返回的单个账号条目（只关心 uin，nickName 等字段忽略）。
 /// uin 在不同 QQ 版本里可能是字符串也可能是数字，两者都接。
 #[derive(Debug, Deserialize)]
 struct PtloginAccount {
@@ -277,7 +277,7 @@ impl UinField {
 }
 
 impl PtloginAccount {
-    /// 取 uin，空则回退 account（对齐上游 `account.uin || account.account`）。
+    /// 取 uin，空则回退 account（对齐上游 account.uin || account.account）。
     fn uin_string(&self) -> String {
         if let Some(u) = self.uin.as_ref().map(UinField::as_string) {
             if !u.is_empty() {
@@ -289,7 +289,7 @@ impl PtloginAccount {
 }
 
 /// 构造忽略自签证书的 HTTPS 客户端。Ptlogin2 本地服务用 QQ 自签证书，必须
-/// `danger_accept_invalid_certs`；本地回环不经代理，显式 `no_proxy`。
+/// danger_accept_invalid_certs；本地回环不经代理，显式 no_proxy。
 fn build_ptlogin_client() -> Option<reqwest::Client> {
     reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
@@ -299,7 +299,7 @@ fn build_ptlogin_client() -> Option<reqwest::Client> {
         .ok()
 }
 
-/// 双发包对齐：连发两次 `/pt_get_uins`，取较短的一组。Ptlogin 接口交替返回
+/// 双发包对齐：连发两次 /pt_get_uins，取较短的一组。Ptlogin 接口交替返回
 /// "最近两个登录过的账号"和"当前账号"，较短组恰好 1 条时即当前登录账号；其余
 /// 情况（2+0 / 都是 2 / 空）放弃，由调用方降级到深链接兜底。
 async fn try_ptlogin(client: &reqwest::Client, pid: u32, port: u16) -> Option<ProbedQqLogin> {
@@ -321,7 +321,7 @@ fn select_current_uin(res1: &[PtloginAccount], res2: &[PtloginAccount]) -> Optio
     None
 }
 
-/// 向 `https://127.0.0.1:<port>/pt_get_uins` 发一次 GET，伪造请求头骗过本地
+/// 向 https://127.0.0.1:<port>/pt_get_uins 发一次 GET，伪造请求头骗过本地
 /// 服务的来源校验，解析 JSONP 返回账号列表。任何错误都吞成空列表（探测语义）。
 async fn fetch_ptlogin(client: &reqwest::Client, port: u16) -> Vec<PtloginAccount> {
     let url = format!("https://127.0.0.1:{port}/pt_get_uins?callback=ptui_getuins_CB&pt_local_tk=0");
@@ -340,9 +340,9 @@ async fn fetch_ptlogin(client: &reqwest::Client, port: u16) -> Vec<PtloginAccoun
     parse_ptlogin_accounts(&text)
 }
 
-/// 从 JSONP 文本里抠出账号数组。复刻上游切片逻辑：取第一个 `[` 到其后第一个
-/// `]` 之间的内容，包成数组解析。形如
-/// `var var_sso_uin_list=[{...},{...}];ptui_getuins_CB(...)`。解析失败给空列表。
+/// 从 JSONP 文本里抠出账号数组。复刻上游切片逻辑：取第一个 [ 到其后第一个
+/// ] 之间的内容，包成数组解析。形如
+/// var var_sso_uin_list=[{...},{...}];ptui_getuins_CB(...)。解析失败给空列表。
 fn parse_ptlogin_accounts(text: &str) -> Vec<PtloginAccount> {
     let Some(open) = text.find('[') else {
         return Vec::new();
@@ -396,7 +396,7 @@ async fn probe_one_port(pid: u32, port: u16) -> Option<ProbedQqLogin> {
 }
 
 /// 在响应文本里搜第一段 JWT（三段式 base64url + 点分隔）。
-/// 不引入 regex，手写扫描：找以 `eyJ` 开头的 token，到第二个 `.` 后的非
+/// 不引入 regex，手写扫描：找以 eyJ 开头的 token，到第二个 . 后的非
 /// base64url 字符停下。base64url 字符集：A-Z a-z 0-9 - _
 fn extract_jwt(text: &str) -> Option<&str> {
     let bytes = text.as_bytes();
@@ -455,7 +455,7 @@ struct JwtPayloadData {
 
 fn decode_jwt_payload(token: &str) -> Option<JwtPayload> {
     let segment = token.split('.').nth(1)?;
-    // JWT 通常省略 base64url 尾部 `=` padding，手动补齐。
+    // JWT 通常省略 base64url 尾部 = padding，手动补齐。
     let mut padded = segment.to_string();
     while padded.len() % 4 != 0 {
         padded.push('=');

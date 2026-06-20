@@ -24,9 +24,9 @@ use crate::native_deployment_adapter::EventBusSink;
 pub struct SnowLumaDockerEndpoints {
     pub webui_local_port: u16,
     pub novnc_local_port: u16,
-    /// noVNC / VNC（compose `VNC_PASSWD`）
+    /// noVNC / VNC（compose VNC_PASSWD）
     pub vnc_password: String,
-    /// SnowLuma WebUI 登录（`SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD`）
+    /// SnowLuma WebUI 登录（SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD）
     pub webui_password: String,
 }
 

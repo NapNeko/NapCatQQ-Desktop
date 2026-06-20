@@ -172,7 +172,7 @@ impl SnowLumaDaemon {
 
     /// 取最近的日志行快照（按时间顺序），用于把 node 启动失败前的 stderr 拼进
     /// 用户可见的错误消息。也供 BotLogPage 一开页时拉历史用。容量上限是
-    /// [`RECENT_LOG_CAPACITY`]（1000 行），按时间顺序返回。
+    /// [RECENT_LOG_CAPACITY]（1000 行），按时间顺序返回。
     pub fn snapshot_recent_log(&self) -> Vec<String> {
         match self.recent_log.lock() {
             Ok(buf) => buf.iter().cloned().collect(),
@@ -181,8 +181,8 @@ impl SnowLumaDaemon {
     }
 
     /// 任意 tokio 任务可调；并发 caller 安全。
-    /// - `Ready` → ref_count += 1，复用现有 client。
-    /// - `Stopped` → 自我提升为 starter，驱动启动序列；成功后切到 Ready 并返回
+    /// - Ready → ref_count += 1，复用现有 client。
+    /// - Stopped → 自我提升为 starter，驱动启动序列；成功后切到 Ready 并返回
     /// client；任何环节失败立即回滚到 Stopped 并返回错误。
     /// - Starting → ref_count += 1，等 ready_notify 在 timeout 内唤醒
     ///   唤醒后按最终态决定返回 client / 错误。
@@ -249,7 +249,7 @@ impl SnowLumaDaemon {
     }
 
     /// starter 路径：渲染配置 → spawn node.exe → 构造 client → wait_ready → login。
-    /// 任意失败立即调 `rollback_to_stopped` 重置内部状态、清 ref_count 并发事件。
+    /// 任意失败立即调 rollback_to_stopped 重置内部状态、清 ref_count 并发事件。
     async fn run_starter(
         self: &Arc<Self>,
         _timeout: Duration,
@@ -286,7 +286,7 @@ impl SnowLumaDaemon {
 
         // === 3. spawn node.exe entry.js ===
         // TODO( / SnowLuma 安装布局对齐): 实际入口应来自 PathProbe /
-        // `runtime_launch_plan`；当前 task 阶段无 wiring，按"runtime_root 下的
+        // runtime_launch_plan；当前 task 阶段无 wiring，按"runtime_root 下的
         // entry.js"硬编码一个占位入口，正式落地由 wiring task 修正。
         let node_exe = self.runtime_root.join("node.exe");
         let entry_js = resolve_daemon_entry(&self.runtime_root);
@@ -314,7 +314,7 @@ impl SnowLumaDaemon {
 
         // : spawn stdout reader（订阅 log_tx + 发布 SnowLumaDaemonLog）。
         // 把 stdout 句柄交给独立 tokio 任务，逐行 ANSI/控制字符清洗后既走
-        // `log_tx` 让前端 BotLogPage 订阅，也走 event_bus 发 `SnowLumaDaemonLog`。
+        // log_tx 让前端 BotLogPage 订阅，也走 event_bus 发 SnowLumaDaemonLog。
         // EOF 时任务自然结束。
         if let Some(stdout) = child.stdout.take() {
             spawn_stdout_reader(
@@ -476,7 +476,7 @@ impl SnowLumaDaemon {
         }
     }
 
-    /// starter 失败回滚：把内部状态压回 `Stopped` + 清 ref_count + 发事件 + 唤醒
+    /// starter 失败回滚：把内部状态压回 Stopped + 清 ref_count + 发事件 + 唤醒
     /// waiter，最后把传入的错误透传给调用方。
     async fn rollback_to_stopped(&self, err: SnowLumaDaemonError) -> SnowLumaDaemonError {
         // 给 stdout/stderr reader 一点时间 flush 缓冲（node 退出后 pipe EOF 还需要
@@ -524,7 +524,7 @@ impl SnowLumaDaemon {
         err
     }
 
-    /// `ref_count -= 1`；持久 daemon 模型下不触发 terminate。
+    /// ref_count -= 1；持久 daemon 模型下不触发 terminate。
     pub async fn release(&self) {
         let mut inner = self.inner.lock().await;
         if inner.ref_count > 0 {
@@ -628,7 +628,7 @@ impl SnowLumaDaemon {
     }
 }
 
-/// `ensure_running` 状态决策内部用的小 enum。
+/// ensure_running 状态决策内部用的小 enum。
 enum StarterRole {
     Starter,
     Waiter,
@@ -667,7 +667,7 @@ fn spawn_stdout_reader(
     });
 }
 
-/// 与 `spawn_stdout_reader` 同语义，专门转发 stderr。前缀加 `[stderr]` 便于排查。
+/// 与 spawn_stdout_reader 同语义，专门转发 stderr。前缀加 [stderr] 便于排查。
 fn spawn_stderr_reader(
     stderr: tokio::process::ChildStderr,
     log_tx: broadcast::Sender<String>,
@@ -827,7 +827,7 @@ mod tests {
 
     #[test]
     fn daemon_state_serializes_as_snake_case() {
-        // 防字面量漂移： / 9.1 的前端事件 payload `state` 字段
+        // 防字面量漂移： / 9.1 的前端事件 payload state 字段
         // 严格依赖这五个 snake_case 字面量；这里 lock 一遍。
         assert_eq!(
             serde_json::to_string(&DaemonState::Stopped).unwrap(),
@@ -880,7 +880,7 @@ mod tests {
     //
     // 完整 starter / waiter / rollback / crash / shutdown 行为覆盖由
     // 接手；本 task 仅验证：
-    // 1) `new` 不做任何 IO 即可构造，初始 state == Stopped。
+    // 1) new 不做任何 IO 即可构造，初始 state == Stopped。
     // 2) 初始 ref_count == 0。
     // -----------------------------------------------------------------------
 
@@ -921,9 +921,9 @@ mod tests {
         assert_eq!(daemon.ref_count().await, 0);
     }
 
-    /// 编译期断言：`SnowLumaWebUiClientFactory` 直接以 `Arc<dyn SnowLumaWebUiClient>`
+    /// 编译期断言：SnowLumaWebUiClientFactory 直接以 Arc<dyn SnowLumaWebUiClient>
     /// 暴露 client（ 占位的关联类型已经在 移除）。这里通过让
-    /// 一个 stub factory 真正参与 `Arc::new` 装箱来锁定签名形态。
+    /// 一个 stub factory 真正参与 Arc::new 装箱来锁定签名形态。
     #[tokio::test]
     async fn factory_trait_uses_dyn_client_directly() {
         let factory: Arc<dyn SnowLumaWebUiClientFactory> = Arc::new(StubFactory);
@@ -933,7 +933,7 @@ mod tests {
         assert!(result.is_err(), "stub factory always errors");
     }
 
-    /// `subscribe_logs` 应当直接返回一个 broadcast Receiver；不需要 daemon 已启动。
+    /// subscribe_logs 应当直接返回一个 broadcast Receiver；不需要 daemon 已启动。
     #[tokio::test]
     async fn daemon_subscribe_logs_does_not_require_start() {
         let daemon = build_smoke_daemon();
@@ -944,13 +944,13 @@ mod tests {
     // spawn_stdout_reader smoke 测试（ deliverable）
     //
     // 通过真起一个会立刻 echo 一行的小子进程，把 ChildStdout 喂给
-    // `spawn_stdout_reader`，断言：
-    // 1) `log_tx` 订阅者收到清洗后的行
-    // 2) `event_bus` 上能收到 `SnowLumaDaemonLog` variant
+    // spawn_stdout_reader，断言：
+    // 1) log_tx 订阅者收到清洗后的行
+    // 2) event_bus 上能收到 SnowLumaDaemonLog variant
     // 3) 子进程退出后 reader 任务自然结束（无 panic、无 hang）。
     //
-    // SnowLuma daemon 本身仅 Windows 落地，但 `spawn_stdout_reader` 自身是平台无关的
-    // 所以本 smoke 测试在两平台都跑：Windows 用 `cmd /C echo`，其它走 `echo`。
+    // SnowLuma daemon 本身仅 Windows 落地，但 spawn_stdout_reader 自身是平台无关的
+    // 所以本 smoke 测试在两平台都跑：Windows 用 cmd /C echo，其它走 echo。
     // -----------------------------------------------------------------------
 
     #[tokio::test]
@@ -966,7 +966,7 @@ mod tests {
         // 用一个一定能立即 echo 一行并退出的小子进程：
         // - Windows: cmd /C echo hello-snowluma
         // - 其它: /bin/sh -c "echo hello-snowluma"
-        // `echo` 行尾换行让 `lines.next_line()` 立刻拿到一整行。
+        // echo 行尾换行让 lines.next_line() 立刻拿到一整行。
         #[cfg(windows)]
         let mut child = tokio::process::Command::new("cmd")
             .args(["/C", "echo hello-snowluma"])
@@ -1029,7 +1029,7 @@ mod tests {
     //
     // Follow-up：watch_exit 真实 child 监听路径无法在 Mock 层构造（child 是
     // tokio::process::Child 句柄），留给真起 node.exe 的端到端集成测试覆盖
-    // `watch_exit_emits_crashed_when_child_unexpectedly_exits` 行为。
+    // watch_exit_emits_crashed_when_child_unexpectedly_exits 行为。
     // -----------------------------------------------------------------------
 
     use crate::events::{DomainEventKind, EventFilter};
@@ -1037,10 +1037,10 @@ mod tests {
     use tempfile::tempdir;
     use tokio::sync::Mutex as TokioMutex;
 
-    /// MockSnowLumaWebUiClient：用 `Arc<TokioMutex<MockBehavior>>` 控制每个
+    /// MockSnowLumaWebUiClient：用 Arc<TokioMutex<MockBehavior>> 控制每个
     /// trait 方法的返回值。其它 daemon 测试不需要的方法返回简单 Ok / 空。
     /// 注：当前 的几个落地测试（spawn 失败 / 并发 / release / shutdown）
-    /// 都跑不到 `wait_ready` / `login`，因为 spawn 阶段就已失败；mock 仍保留以
+    /// 都跑不到 wait_ready / login，因为 spawn 阶段就已失败；mock 仍保留以
     /// 便后续 task 在 Ready 路径覆盖中复用，并满足 trait 完备性编译要求。
     #[derive(Default)]
     struct MockBehavior {
@@ -1126,7 +1126,7 @@ mod tests {
             }
     }
 
-    /// `SnowLumaWebUiError` 不实现 `Clone`（含 `BTreeMap` 字段）；测试里需要
+    /// SnowLumaWebUiError 不实现 Clone（含 BTreeMap 字段）；测试里需要
     /// 在多次调用之间复用同一个错误模板，这里手写一份字面 clone。
     fn clone_webui_error(e: &SnowLumaWebUiError) -> SnowLumaWebUiError {
         match e {
@@ -1161,7 +1161,7 @@ mod tests {
         }
     }
 
-    /// 返回 `MockSnowLumaWebUiClient` 的工厂；shared 行为容器让测试用例可在
+    /// 返回 MockSnowLumaWebUiClient 的工厂；shared 行为容器让测试用例可在
     /// daemon 构造之后再调整 mock 返回值。
     struct MockFactory {
         behavior: Arc<TokioMutex<MockBehavior>>,
@@ -1182,10 +1182,10 @@ mod tests {
 
     /// 构造 daemon + tempdir 持有句柄。runtime_root 为空目录，spawn 时找不到
     /// node.exe 必然失败 —— 这是测试 spawn 失败回滚路径的关键。
-    /// 同时 snowluma_data_root 也用 tempdir，保证 `render_daemon_globals`
+    /// 同时 snowluma_data_root 也用 tempdir，保证 render_daemon_globals
     /// 写 session.json / runtime.json / webui.json 不污染真实数据根。
     /// 返回 (daemon, runtime_dir, snowluma_dir, behavior)；测试函数应把 dir
-    /// 句柄绑到 `_runtime_dir` / `_snowluma_dir` 保活到测试结束。
+    /// 句柄绑到 _runtime_dir / _snowluma_dir 保活到测试结束。
     fn build_test_daemon() -> (
         Arc<SnowLumaDaemon>,
         tempfile::TempDir,
@@ -1208,7 +1208,7 @@ mod tests {
         (daemon, runtime_dir, snowluma_dir, behavior)
     }
 
-    /// runtime_root 不含 node.exe → `Command::spawn` 失败 → starter 路径在
+    /// runtime_root 不含 node.exe → Command::spawn 失败 → starter 路径在
     /// step 3 早 fail → rollback_to_stopped → state == Stopped、ref_count == 0、
     /// last_error 非空。事件序列：先 Starting，再 Stopped(reason=Some)。
     #[tokio::test]
@@ -1262,7 +1262,7 @@ mod tests {
         }
     }
 
-    /// 3 个并发 caller 同时调 `ensure_running`：starter 路径 spawn 失败 →
+    /// 3 个并发 caller 同时调 ensure_running：starter 路径 spawn 失败 →
     /// rollback_to_stopped → ref_count 归零 + ready_notify 唤醒 waiter。三个
     /// caller 全部得到 Err；最终 state == Stopped、ref_count == 0。
     /// 这是 并发 caller 行为的反向覆盖（正向 Ready 路径需要真实
@@ -1292,7 +1292,7 @@ mod tests {
     }
 
     /// release 在 ref_count == 0 时是安全的：多次调用不 panic、不 underflow
-    /// ref_count 仍然 == 0（`saturating_sub` 语义）。
+    /// ref_count 仍然 == 0（saturating_sub 语义）。
     #[tokio::test]
     async fn daemon_release_is_safe_when_ref_count_is_zero() {
         let daemon = build_smoke_daemon();

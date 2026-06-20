@@ -689,9 +689,9 @@ async fn snowluma_start_returns_not_implemented_without_running() {
 
     manager.upsert_bot_config(config).await.unwrap();
 
-    // Test planner 在 SnowLuma 分支显式返回 `SnowLumaInvalidStartMode`，
+    // Test planner 在 SnowLuma 分支显式返回 SnowLumaInvalidStartMode，
     // 模拟"SnowLuma 启动链路尚未在 BotManager wiring 内打通"的场景。
-    // 在 `RuntimeLaunchPlanError` 的 `SnowLumaNotImplemented` 被移除之后，本测试
+    // 在 RuntimeLaunchPlanError 的 SnowLumaNotImplemented 被移除之后，本测试
     // 仅锁定"start_bot 应当因为启动计划构造失败而把 actor 转 Crashed"这一行为。
     let err = manager.start_bot(&bot_id).await.unwrap_err();
     let err_message = err.to_string();

@@ -1,7 +1,7 @@
 //! ServerManager：远端主机档案管理 + 凭据存储 + 连接测试。
 //!
 //! 这个模块负责：
-//! 1. ServerProfile CRUD（JSON 持久化到 `<data_root>/config/servers.json`）
+//! 1. ServerProfile CRUD（JSON 持久化到 <data_root>/config/servers.json）
 //! 2. 凭据（密码 / 私钥密码）走 keyring 系统凭据库，不落盘
 //! 3. 连接测试（SSH 握手 + 基本信息探测）
 //! 4. 活跃 Host 连接缓存
@@ -152,7 +152,7 @@ pub struct HostKeyPrompt {
     pub key_kind: String,
     /// base64 编码的原始公钥(写 known_hosts 用,前端原样回传 confirm_host_key)。
     pub key_b64: String,
-    /// 供用户核对的指纹,OpenSSH 风格 `SHA256:<base64-no-pad>`。
+    /// 供用户核对的指纹,OpenSSH 风格 SHA256:<base64-no-pad>。
     pub fingerprint: String,
 }
 
@@ -168,8 +168,8 @@ const KEYRING_SERVICE: &str = "napcatqq-desktop";
 
 /// 系统凭据库操作。测试时可 mock。
 ///
-/// 两类凭据分开存:SSH 登录密码(account `ssh:<id>`)与 sudo 提权密码
-/// (account `sudo:<id>`)。多数云主机两者相同,但密钥登录的机器只有后者,
+/// 两类凭据分开存:SSH 登录密码(account ssh:<id>)与 sudo 提权密码
+/// (account sudo:<id>)。多数云主机两者相同,但密钥登录的机器只有后者,
 /// 分开存才能各自独立增删。
 pub trait ServerCredentialStore: Send + Sync {
     fn get_password(&self, server_id: &str) -> Option<String>;
@@ -284,7 +284,7 @@ impl ServerCredentialStore for InMemoryCredentialStore {
 // ServerProfileRepo：JSON 持久化
 // ============================================================
 
-/// servers.json 路径固定在 `<data_root>/config/servers.json`。
+/// servers.json 路径固定在 <data_root>/config/servers.json。
 struct ServerProfileRepo {
     path: PathBuf,
 }
@@ -324,9 +324,9 @@ impl ServerProfileRepo {
 pub struct ServerManager {
     repo: ServerProfileRepo,
     sync: CredentialSyncLayer,
-    /// 生成的免密私钥落盘目录：`<data_root>/ssh_keys/`。
+    /// 生成的免密私钥落盘目录：<data_root>/ssh_keys/。
     key_dir: PathBuf,
-    /// TOFU host key 数据库路径:`<data_root>/secrets/known_hosts`。生产 SSH 连接
+    /// TOFU host key 数据库路径:<data_root>/secrets/known_hosts。生产 SSH 连接
     /// 用 AcceptOnFirstUse 策略校验 host key,未知主机要用户确认后写到这里。
     known_hosts_path: PathBuf,
     /// 活跃 SSH 连接缓存：server_id → Arc<dyn Host>。
@@ -462,8 +462,8 @@ impl ServerManager {
     /// 密码登录 → 自动配置免密。
     ///
     /// 流程：用密码连一次远端 → 本地生成 ed25519 密钥对 → 把公钥追加进远端
-    /// `~/.ssh/authorized_keys`（去重，已存在则不重复加）→ 私钥落盘到
-    /// `<data_root>/ssh_keys/<id>` → 档案切到 Key 认证、指向该私钥。之后连接
+    /// ~/.ssh/authorized_keys（去重，已存在则不重复加）→ 私钥落盘到
+    /// <data_root>/ssh_keys/<id> → 档案切到 Key 认证、指向该私钥。之后连接
     /// 走密钥免密，不再需要密码。
     ///
     /// 失败保持档案原样（仍是密码认证），返回人话错误。
@@ -678,9 +678,9 @@ impl ServerManager {
         self.sync.sync_elevation_to_host(id, host).await;
     }
 
-    /// 测试 SSH 连接：握手 + 认证 + 执行 `uname -a` 拿 OS 信息。
+    /// 测试 SSH 连接：握手 + 认证 + 执行 uname -a 拿 OS 信息。
     ///
-    /// `log_probe`：为 false 时不写「正在测试 SSH」类 INFO（`ensure_connected` 自动重试用）。
+    /// log_probe：为 false 时不写「正在测试 SSH」类 INFO（ensure_connected 自动重试用）。
     pub async fn test_connection(
         &self,
         id: &str,
@@ -854,7 +854,7 @@ impl ServerManager {
     }
 
     /// 丢弃缓存中的 SSH 连接（会话已断或不可信时调用）。
-    /// 下次 `ensure_connected` 会重新握手，避免继续复用死连接。
+    /// 下次 ensure_connected 会重新握手，避免继续复用死连接。
     ///
     /// P0-10: 同时更新 health（递增失败计数 + 记原因），并发布 HostConnectionLost 事件。
     pub async fn disconnect_cached_host(&self, id: &str) {
@@ -1181,12 +1181,12 @@ impl ServerManager {
 
     /// 后台健康探活主循环。
     ///
-    /// 每轮读取 `settings` 的 `remote_host_health_probe_enabled` 和 `remote_host_health_probe_interval_ms`。
+    /// 每轮读取 settings 的 remote_host_health_probe_enabled 和 remote_host_health_probe_interval_ms。
     /// - enabled == false 时跳过本轮探测，仅 sleep interval 后继续。
-    /// - 只对落盘状态为 `Connected` 且当前 hosts 缓存命中的主机执行廉价 `is_healthy`。
-    /// - 探测失败时调用 `mark_unhealthy_internal`（会驱逐缓存、更新 state/health、发布 HostConnectionLost）。
+    /// - 只对落盘状态为 Connected 且当前 hosts 缓存命中的主机执行廉价 is_healthy。
+    /// - 探测失败时调用 mark_unhealthy_internal（会驱逐缓存、更新 state/health、发布 HostConnectionLost）。
     ///
-    /// 使用 `MissedTickBehavior::Skip` 避免堆积；支持通过 `cancel` 取消。
+    /// 使用 MissedTickBehavior::Skip 避免堆积；支持通过 cancel 取消。
     /// 由 Tauri 侧根据 AppSettings 条件 spawn / cancel + restart。
     pub async fn run_health_probe_loop(
         &self,
@@ -1334,7 +1334,7 @@ fn classify_connect_error(err: &HostError) -> (String, Option<HostKeyPrompt>, bo
     }
 }
 
-/// 算 OpenSSH 风格公钥指纹 `SHA256:<base64-no-pad(sha256(raw_key))>`。
+/// 算 OpenSSH 风格公钥指纹 SHA256:<base64-no-pad(sha256(raw_key))>。
 /// 入参是 known_hosts 那段 base64 公钥;解码失败退回带原串的占位(仅展示用,不致命)。
 fn ssh_key_fingerprint(key_b64: &str) -> String {
     use base64::Engine;

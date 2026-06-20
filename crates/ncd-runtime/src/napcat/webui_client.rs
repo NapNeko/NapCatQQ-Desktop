@@ -2,25 +2,25 @@
 //!
 //! 提供：
 //! - 三个 endpoint 的强类型请求/响应 payload 与统一错误枚举
-//!   [`NapCatWebUiError`]。
-//! - [`NapCatWebUiClient`] trait（三个 async 方法）与默认实现
-//!   [`ReqwestNapCatWebUiClient`]（`reqwest` + `rustls-tls`，仅访问
-//!   `127.0.0.1`）。
+//!   [NapCatWebUiError]。
+//! - [NapCatWebUiClient] trait（三个 async 方法）与默认实现
+//!   [ReqwestNapCatWebUiClient]（reqwest + rustls-tls，仅访问
+//!   127.0.0.1）。
 //!
-//! 所有 payload 使用 `serde::Deserialize` 派生强类型 struct，不通过
+//! 所有 payload 使用 serde::Deserialize 派生强类型 struct，不通过
 //! dynamic JSON 透传。
 //!
 //! 字段级 serde rename 严格对齐 NapCat WebUI legacy JSON：
-//! - [`AuthLoginData::credential`] ↔ JSON `Credential`（PascalCase）
-//! - [`CheckLoginStatusData::is_login`] ↔ JSON `isLogin`（camelCase）
-//! - [`CheckLoginStatusData::qrcode_url`] ↔ JSON `qrcodeurl`（小写无分隔符）
+//! - [AuthLoginData::credential] ↔ JSON Credential（PascalCase）
+//! - [CheckLoginStatusData::is_login] ↔ JSON isLogin（camelCase）
+//! - [CheckLoginStatusData::qrcode_url] ↔ JSON qrcodeurl（小写无分隔符）
 //!
 //! 安全边界：
-//! - [`ReqwestNapCatWebUiClient::webui_url`] 仅拼接 `http://127.0.0.1:{port}`，
-//!   禁止跨主机；调用方传入的 `path` 直接拼接，不做 host override。
+//! - [ReqwestNapCatWebUiClient::webui_url] 仅拼接 http://127.0.0.1:{port}，
+//!   禁止跨主机；调用方传入的 path 直接拼接，不做 host override。
 //! - token 仅在内存中以参数形式流转，不持久化。
 //!
-//! [`napcat_login_poller::PollerDeps`]: crate::napcat::login_poller::PollerDeps
+//! [napcat_login_poller::PollerDeps]: crate::napcat::login_poller::PollerDeps
 
 use std::time::Duration;
 
@@ -35,19 +35,19 @@ use thiserror::Error;
 
 /// NapCat WebUI HTTP 客户端的统一错误枚举。
 ///
-/// 每个 variant 对应 [`crate::napcat::login_poller::NapCatLoginPoller`] 状态机的一个分支：
-/// - [`NapCatWebUiError::Unauthorized`]：caller 必须触发 auth refresh（受 5s 节流）。
-/// - [`NapCatWebUiError::Status`]：其它非 2xx，仅记日志。
-/// - [`NapCatWebUiError::Throttled`]:刷新节流命中（仅 `fetch_credential` 路径）。
-/// - [`NapCatWebUiError::Timeout`]：reqwest 超时。
-/// - [`NapCatWebUiError::Http`]：reqwest 网络层错误。
-/// - [`NapCatWebUiError::Decode`]：JSON 反序列化失败 / 字段缺失。
-/// - [`NapCatWebUiError::NotLogin`]：QQ 未登录（NapCat 业务码 -1 + message="Not Login"），
-///   `set_ob11_config` 路径专用，调用方应降级提示「保存成功，登录后下次重启生效」。
-/// - [`NapCatWebUiError::BusinessCode`]：NapCat 业务码 != 0 的其它错误。
+/// 每个 variant 对应 [crate::napcat::login_poller::NapCatLoginPoller] 状态机的一个分支：
+/// - [NapCatWebUiError::Unauthorized]：caller 必须触发 auth refresh（受 5s 节流）。
+/// - [NapCatWebUiError::Status]：其它非 2xx，仅记日志。
+/// - [NapCatWebUiError::Throttled]:刷新节流命中（仅 fetch_credential 路径）。
+/// - [NapCatWebUiError::Timeout]：reqwest 超时。
+/// - [NapCatWebUiError::Http]：reqwest 网络层错误。
+/// - [NapCatWebUiError::Decode]：JSON 反序列化失败 / 字段缺失。
+/// - [NapCatWebUiError::NotLogin]：QQ 未登录（NapCat 业务码 -1 + message="Not Login"），
+///   set_ob11_config 路径专用，调用方应降级提示「保存成功，登录后下次重启生效」。
+/// - [NapCatWebUiError::BusinessCode]：NapCat 业务码 != 0 的其它错误。
 ///
-/// 设计决策：本枚举不实现 `From<NapCatWebUiError> for BotManagerError`
-/// —— Poller 内部消化所有错误，只在彻底放弃时把摘要发 `BotError`。
+/// 设计决策：本枚举不实现 From<NapCatWebUiError> for BotManagerError
+/// —— Poller 内部消化所有错误，只在彻底放弃时把摘要发 BotError。
 #[derive(Debug, Error)]
 pub enum NapCatWebUiError {
     /// HTTP 401 / 403：当前 credential 无效，需要触发 auth 刷新。
@@ -56,7 +56,7 @@ pub enum NapCatWebUiError {
     /// 其它非 200 状态码。
     #[error("napcat webui returned status {0}")]
     Status(u16),
-    /// 5s 内已请求过 → 节流命中（仅 `fetch_credential` 路径用得到）。
+    /// 5s 内已请求过 → 节流命中（仅 fetch_credential 路径用得到）。
     #[error("napcat webui auth refresh throttled")]
     Throttled,
     /// reqwest 超时（与客户端 5s timeout 对齐）。
@@ -68,21 +68,21 @@ pub enum NapCatWebUiError {
     /// JSON 反序列化失败 / 字段缺失。
     #[error("napcat webui decode error: {0}")]
     Decode(String),
-    /// QQ 未登录（NapCat 业务码 -1 + message="Not Login"）。`set_ob11_config`
+    /// QQ 未登录（NapCat 业务码 -1 + message="Not Login"）。set_ob11_config
     /// 在 QQ 没扫码登录时返回此错误；调用方应降级提示「保存成功，待下次启动生效」。
     #[error("napcat webui rejected: QQ not login")]
     NotLogin,
-    /// NapCat 业务码 != 0 的其它错误。`code` 是 NapCat 自家的业务码（通常是 -1），
-    /// `message` 是 server 返回的描述。
+    /// NapCat 业务码 != 0 的其它错误。code 是 NapCat 自家的业务码（通常是 -1），
+    /// message 是 server 返回的描述。
     #[error("napcat webui business error (code {code}): {message}")]
     BusinessCode { code: i64, message: String },
 }
 
 impl From<reqwest::Error> for NapCatWebUiError {
-    /// 把 [`reqwest::Error`] 分流到 [`NapCatWebUiError::Timeout`] 或
-    /// [`NapCatWebUiError::Http`]。状态码错误（401/403/4xx/5xx）不在此处转换——
-    /// caller 必须先用 [`reqwest::Response::status`] 显式判定后再调
-    /// [`reqwest::Response::json`]，否则会丢失 `Unauthorized` / `Status` 语义。
+    /// 把 [reqwest::Error] 分流到 [NapCatWebUiError::Timeout] 或
+    /// [NapCatWebUiError::Http]。状态码错误（401/403/4xx/5xx）不在此处转换——
+    /// caller 必须先用 [reqwest::Response::status] 显式判定后再调
+    /// [reqwest::Response::json]，否则会丢失 Unauthorized / Status 语义。
     fn from(err: reqwest::Error) -> Self {
         if err.is_timeout() {
             Self::Timeout
@@ -96,57 +96,57 @@ impl From<reqwest::Error> for NapCatWebUiError {
 // Payloads
 // =============================================================================
 
-/// `POST /api/auth/login` 请求体。
+/// POST /api/auth/login 请求体。
 ///
-/// `hash` 字段由 [`crate::napcat::login_poller`] 计算 `sha256(token + ".napcat")` hex
+/// hash 字段由 [crate::napcat::login_poller] 计算 sha256(token + ".napcat") hex
 /// 后传入；本 struct 不做哈希计算，保持 IO 与业务分离。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AuthLoginRequest {
     pub hash: String,
 }
 
-/// `POST /api/auth/login` 响应体（顶层）。
+/// POST /api/auth/login 响应体（顶层）。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AuthLoginResponse {
     pub data: AuthLoginData,
 }
 
-/// `POST /api/auth/login` 响应体的 `data` 字段。
+/// POST /api/auth/login 响应体的 data 字段。
 ///
-/// `Credential` 字段使用 PascalCase serde rename，对齐 NapCat WebUI legacy JSON。
+/// Credential 字段使用 PascalCase serde rename，对齐 NapCat WebUI legacy JSON。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AuthLoginData {
     #[serde(rename = "Credential")]
     pub credential: String,
 }
 
-/// `POST /api/QQLogin/CheckLoginStatus` 响应体（顶层）。
+/// POST /api/QQLogin/CheckLoginStatus 响应体（顶层）。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct CheckLoginStatusResponse {
     pub data: CheckLoginStatusData,
 }
 
-/// `POST /api/QQLogin/CheckLoginStatus` 响应体的 `data` 字段。
+/// POST /api/QQLogin/CheckLoginStatus 响应体的 data 字段。
 ///
-/// 两字段都带 `default`：NapCat 早期版本可能省略字段而非返回 `false`/`""`。
+/// 两字段都带 default：NapCat 早期版本可能省略字段而非返回 false/""。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 pub struct CheckLoginStatusData {
     /// 当前账号是否已登录。
     #[serde(rename = "isLogin", default)]
     pub is_login: bool,
-    /// 二维码 URL；通常是 `data:image/png;base64,...` data URL，少数版本是普通 URL。
+    /// 二维码 URL；通常是 data:image/png;base64,... data URL，少数版本是普通 URL。
     /// 后端透传字符串，不解码、不验证（设计 D4）。
     #[serde(rename = "qrcodeurl", default)]
     pub qrcode_url: String,
 }
 
-/// `POST /api/QQLogin/GetQQLoginInfo` 响应体（顶层）。
+/// POST /api/QQLogin/GetQQLoginInfo 响应体（顶层）。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct GetQQLoginInfoResponse {
     pub data: GetQQLoginInfoData,
 }
 
-/// `POST /api/QQLogin/GetQQLoginInfo` 响应体的 `data` 字段。
+/// POST /api/QQLogin/GetQQLoginInfo 响应体的 data 字段。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 pub struct GetQQLoginInfoData {
     /// 当前账号是否在线（NapCat 返回的实时在线指示）。
@@ -161,39 +161,39 @@ pub struct GetQQLoginInfoData {
 /// NapCat WebUI HTTP 客户端 trait。
 ///
 /// 三个 async 方法对应 NapCat WebUI 三个端点：
-/// - [`fetch_credential`](Self::fetch_credential): `POST /api/auth/login`，
+/// - [fetch_credential](Self::fetch_credential): POST /api/auth/login，
 ///   返回 Bearer credential。
-/// - [`check_login_status`](Self::check_login_status):
-///   `POST /api/QQLogin/CheckLoginStatus`，返回 `{is_login, qrcode_url}`。
-/// - [`check_online_status`](Self::check_online_status):
-///   `POST /api/QQLogin/GetQQLoginInfo`，返回 `{online}`。
+/// - [check_login_status](Self::check_login_status):
+///   POST /api/QQLogin/CheckLoginStatus，返回 {is_login, qrcode_url}。
+/// - [check_online_status](Self::check_online_status):
+///   POST /api/QQLogin/GetQQLoginInfo，返回 {online}。
 ///
-/// trait 设计为 object-safe（`async_trait` 装箱 future），方便测试用
-/// `Arc<dyn NapCatWebUiClient>` 注入 mock。
+/// trait 设计为 object-safe（async_trait 装箱 future），方便测试用
+/// Arc<dyn NapCatWebUiClient> 注入 mock。
 #[async_trait]
 pub trait NapCatWebUiClient: Send + Sync {
-    /// 计算 `sha256(token + ".napcat")` hex，POST 到
-    /// `http://127.0.0.1:{port}/api/auth/login`，并返回响应 `data.Credential`。
+    /// 计算 sha256(token + ".napcat") hex，POST 到
+    /// http://127.0.0.1:{port}/api/auth/login，并返回响应 data.Credential。
     async fn fetch_credential(&self, port: u16, token: &str) -> Result<String, NapCatWebUiError>;
 
-    /// 携带 `Authorization: Bearer {auth}` POST 到
-    /// `http://127.0.0.1:{port}/api/QQLogin/CheckLoginStatus`，返回 `data`。
+    /// 携带 Authorization: Bearer {auth} POST 到
+    /// http://127.0.0.1:{port}/api/QQLogin/CheckLoginStatus，返回 data。
     async fn check_login_status(
         &self,
         port: u16,
         auth: &str,
     ) -> Result<CheckLoginStatusData, NapCatWebUiError>;
 
-    /// 携带 `Authorization: Bearer {auth}` POST 到
-    /// `http://127.0.0.1:{port}/api/QQLogin/GetQQLoginInfo`，返回 `data`。
+    /// 携带 Authorization: Bearer {auth} POST 到
+    /// http://127.0.0.1:{port}/api/QQLogin/GetQQLoginInfo，返回 data。
     async fn check_online_status(
         &self,
         port: u16,
         auth: &str,
     ) -> Result<GetQQLoginInfoData, NapCatWebUiError>;
 
-    /// 热推送 OneBot11 配置。携带 `Authorization: Bearer {auth}` POST 到
-    /// `http://127.0.0.1:{port}/api/OB11Config/SetConfig`，body = `{ "config": <json_string> }`。
+    /// 热推送 OneBot11 配置。携带 Authorization: Bearer {auth} POST 到
+    /// http://127.0.0.1:{port}/api/OB11Config/SetConfig，body = { "config": <json_string> }。
     /// NapCat 后端要求 QQ 已登录,否则返回 "Not Login"。
     async fn set_ob11_config(
         &self,
@@ -207,15 +207,15 @@ pub trait NapCatWebUiClient: Send + Sync {
 // ReqwestNapCatWebUiClient
 // =============================================================================
 
-/// [`NapCatWebUiClient`] 的默认实现，基于 [`reqwest::Client`]。
+/// [NapCatWebUiClient] 的默认实现，基于 [reqwest::Client]。
 ///
 /// 客户端配置：
-/// - `timeout(5s)` —— 与 [`NapCatWebUiError::Timeout`] 语义对齐。
-/// - `pool_idle_timeout(30s)` —— 复用连接，减少握手开销。
-/// - 仅 `rustls-tls`（`Cargo.toml` 中 `default-features = false`），
+/// - timeout(5s) —— 与 [NapCatWebUiError::Timeout] 语义对齐。
+/// - pool_idle_timeout(30s) —— 复用连接，减少握手开销。
+/// - 仅 rustls-tls（Cargo.toml 中 default-features = false），
 ///   不依赖 OpenSSL，Tauri 包体不需要打包系统 SSL。
 ///
-/// 所有请求只允许走 `127.0.0.1`（[`Self::webui_url`]）。
+/// 所有请求只允许走 127.0.0.1（[Self::webui_url]）。
 pub struct ReqwestNapCatWebUiClient {
     client: reqwest::Client,
 }
@@ -225,8 +225,8 @@ impl ReqwestNapCatWebUiClient {
     ///
     /// # Errors
     ///
-    /// 当 `reqwest::Client::builder().build()` 失败（极少发生，通常是
-    /// rustls root store 加载失败）时返回 [`NapCatWebUiError::Http`]。
+    /// 当 reqwest::Client::builder().build() 失败（极少发生，通常是
+    /// rustls root store 加载失败）时返回 [NapCatWebUiError::Http]。
     pub fn new() -> Result<Self, NapCatWebUiError> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
@@ -237,21 +237,21 @@ impl ReqwestNapCatWebUiClient {
         Ok(Self { client })
     }
 
-    /// 仅拼接 `http://127.0.0.1:{port}{path}`，禁止跨主机。
+    /// 仅拼接 http://127.0.0.1:{port}{path}，禁止跨主机。
     ///
-    /// `path` 由本模块内部 hardcoded 字面量传入（三个 NapCat WebUI 端点），
+    /// path 由本模块内部 hardcoded 字面量传入（三个 NapCat WebUI 端点），
     /// 不接受 caller 注入。
     fn webui_url(port: u16, path: &str) -> String {
         format!("http://127.0.0.1:{port}{path}")
     }
 
-    /// 把 HTTP 状态码分流到 [`NapCatWebUiError::Unauthorized`] /
-    /// [`NapCatWebUiError::Status`]。
+    /// 把 HTTP 状态码分流到 [NapCatWebUiError::Unauthorized] /
+    /// [NapCatWebUiError::Status]。
     ///
-    /// - 401 / 403 → [`NapCatWebUiError::Unauthorized`]（caller 必须触发
+    /// - 401 / 403 → [NapCatWebUiError::Unauthorized]（caller 必须触发
     ///   auth 刷新）。
-    /// - 其它非 2xx → [`NapCatWebUiError::Status`]（仅记日志）。
-    /// - 2xx → `None`（caller 继续解析 JSON）。
+    /// - 其它非 2xx → [NapCatWebUiError::Status]（仅记日志）。
+    /// - 2xx → None（caller 继续解析 JSON）。
     fn handle_unauth(status: reqwest::StatusCode) -> Option<NapCatWebUiError> {
         match status.as_u16() {
             401 | 403 => Some(NapCatWebUiError::Unauthorized(status.as_u16())),
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn auth_login_response_rejects_lowercase_credential_field() {
-        // 严格对齐 legacy JSON 字段名 `Credential`（PascalCase），小写应失败。
+        // 严格对齐 legacy JSON 字段名 Credential（PascalCase），小写应失败。
         let json = r#"{"data":{"credential":"bearer-token-xyz"}}"#;
         let result: Result<AuthLoginResponse, _> = serde_json::from_str(json);
         assert!(
@@ -656,11 +656,11 @@ mod tests {
 
     // -------- sha256 hash legacy parity (任务 2.3) --------
 
-    /// 固定输入 `"abc"` + `".napcat"` → 期望 sha256 hex 对齐 legacy。
+    /// 固定输入 "abc" + ".napcat" → 期望 sha256 hex 对齐 legacy。
     ///
-    /// 期望值由 `python -c "import hashlib;
-    /// print(hashlib.sha256(b'abc.napcat').hexdigest())"` 计算得出，
-    /// 等价于 `hashlib.sha256((token + ".napcat").encode()).hexdigest()`
+    /// 期望值由 python -c "import hashlib;
+    /// print(hashlib.sha256(b'abc.napcat').hexdigest())" 计算得出，
+    /// 等价于 hashlib.sha256((token + ".napcat").encode()).hexdigest()
     /// 行为。
     ///
     /// 这里直接复算 hash 而不经过 HTTP 调用 —— sha256 字面量断言放在最低层
@@ -683,12 +683,12 @@ mod tests {
 
     // -------- wiremock end-to-end (任务 2.3) --------
     //
-    // 这一组测试用 wiremock 起一个绑定在 `127.0.0.1:0`（随机端口）的假服务，
-    // 通过 [`wiremock::MockServer::address`] 取出端口后调用
-    // [`ReqwestNapCatWebUiClient`] 的三个方法。所有请求都只发往 `127.0.0.1`。
+    // 这一组测试用 wiremock 起一个绑定在 127.0.0.1:0（随机端口）的假服务，
+    // 通过 [wiremock::MockServer::address] 取出端口后调用
+    // [ReqwestNapCatWebUiClient] 的三个方法。所有请求都只发往 127.0.0.1。
     //
     // wiremock 0.6 默认 builder 使用
-    // `TcpListener::bind("127.0.0.1:0")`（见 wiremock src/mock_server/builder.rs:107），
+    // TcpListener::bind("127.0.0.1:0")（见 wiremock src/mock_server/builder.rs:107），
     // 因此满足"仅访问 127.0.0.1"约束。
 
     use wiremock::matchers::{body_partial_json, header, method, path};

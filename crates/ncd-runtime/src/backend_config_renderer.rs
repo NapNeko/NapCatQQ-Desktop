@@ -13,12 +13,12 @@ use crate::traits::config_store::JsonTransaction;
 
 // ==================== Deep merge helper ====================
 //
-// 把 `existing` 中 `known_keys` 之外的字段保留下来合进 `rendered`。两层都按 JSON
+// 把 existing 中 known_keys 之外的字段保留下来合进 rendered。两层都按 JSON
 // object merge 处理，不递归更深的层级——内层结构（network、bypass）由 schema 完全
 // 拥有，用户在子层加字段不在保留范围内（避免破坏 NapCat 反序列化）。
 //
 // 我们关心的"未知字段保留"边界仅限**顶层**：用户最常见的需求是给 onebot11 加
-// `imageDownloadProxy`、给 napcat 加 `autoTimeSync` 这种顶层扩展字段。
+// imageDownloadProxy、给 napcat 加 autoTimeSync 这种顶层扩展字段。
 fn merge_unknown_top_level(
     rendered: Value,
     existing: Option<&Value>,
@@ -161,8 +161,8 @@ fn napcat_build_napcat_payload(config: &BotConfig) -> Value {
 // ==================== NapCat Renderer ====================
 
 /// onebot11_<qq>.json 顶层"已知" key 集合（renderer 输出范围）。
-/// 用户在派生文件里加这个集合之外的字段（如 `imageDownloadProxy`）会在
-/// `render_with_existing` 里被保留下来，每次启动重新渲染时不会丢。
+/// 用户在派生文件里加这个集合之外的字段（如 imageDownloadProxy）会在
+/// render_with_existing 里被保留下来，每次启动重新渲染时不会丢。
 const NAPCAT_ONEBOT_KNOWN_KEYS: &[&str] = &[
     "network",
     "musicSignUrl",
@@ -182,9 +182,9 @@ const NAPCAT_NAPCAT_KNOWN_KEYS: &[&str] = &[
     "bypass",
 ];
 
-/// Renders `BotConfig` into NapCat-specific JSON files:
-/// - `onebot11_<qq>.json` — OneBot network + musicSignUrl + enableLocalFile2Url + parseMultMsg
-/// - `napcat_<qq>.json`   — log / packet / bypass settings
+/// Renders BotConfig into NapCat-specific JSON files:
+/// - onebot11_<qq>.json — OneBot network + musicSignUrl + enableLocalFile2Url + parseMultMsg
+/// - napcat_<qq>.json   — log / packet / bypass settings
 pub struct NapCatConfigRenderer {
     config_dir: PathBuf,
 }
@@ -302,7 +302,7 @@ pub fn render_napcat_docker_config_payloads(
     ]
 }
 
-/// SnowLuma 容器 named volume `/app/snowluma-data/config` 下的 onebot 配置。
+/// SnowLuma 容器 named volume /app/snowluma-data/config 下的 onebot 配置。
 pub fn render_snowluma_docker_config_payloads(
     bot_id: &BotId,
     config: &BotConfig,
@@ -343,20 +343,20 @@ fn snowluma_status_command_json(sc: &ncd_domain::bot_config::StatusCommandConfig
 /// SnowLuma reconnectIntervalMs lower bound (upstream enforces max(1000, value)).
 const SNOWLUMA_MIN_RECONNECT_MS: u32 = 1000;
 
-/// Full implementation — renders `BotConfig` into SnowLuma-specific JSON:
-/// - `onebot_<qq>.json` — networks (httpServers/httpClients/wsServers/wsClients) + musicSignUrl
+/// Full implementation — renders BotConfig into SnowLuma-specific JSON:
+/// - onebot_<qq>.json — networks (httpServers/httpClients/wsServers/wsClients) + musicSignUrl
 ///
-/// This is a complete port of legacy `snowluma_config_renderer.py`, not a placeholder.
+/// This is a complete port of legacy snowluma_config_renderer.py, not a placeholder.
 /// All field mappings and fallback logic are production-ready.
 ///
 /// Field mapping differences from NapCat ConnectConfig:
-/// - `enable` → `enabled`
-/// - `token` → `accessToken`
-/// - `messagePostFormat` → `messageFormat`
-/// - `websocketServers` → `wsServers`
-/// - `websocketClients` → `wsClients`
-/// - `httpSseServers` / `plugins` → silently dropped (SnowLuma unsupported)
-/// - WS client `reconnectInterval` → `reconnectIntervalMs` (clamped ≥ 1000)
+/// - enable → enabled
+/// - token → accessToken
+/// - messagePostFormat → messageFormat
+/// - websocketServers → wsServers
+/// - websocketClients → wsClients
+/// - httpSseServers / plugins → silently dropped (SnowLuma unsupported)
+/// - WS client reconnectInterval → reconnectIntervalMs (clamped ≥ 1000)
 pub struct SnowLumaConfigRenderer {
     config_dir: PathBuf,
 }
@@ -536,7 +536,7 @@ impl BackendConfigRenderer for SnowLumaConfigRenderer {
 
 // ==================== Factory ====================
 
-/// Create the appropriate renderer for a given `BackendType`.
+/// Create the appropriate renderer for a given BackendType.
 pub fn create_renderer(
     backend_type: BackendType,
     config_dir: impl Into<PathBuf>,
@@ -562,8 +562,8 @@ pub fn output_paths_for_backend(
 // ==================== Dispatch Renderer ====================
 
 /// A composite renderer that dispatches to the appropriate backend renderer
-/// based on `config.bot.backend_type`. Used by `BotManager` which holds a single
-/// `Arc<dyn BackendConfigRenderer>`.
+/// based on config.bot.backend_type. Used by BotManager which holds a single
+/// Arc<dyn BackendConfigRenderer>.
 pub struct DispatchRenderer {
     napcat: NapCatConfigRenderer,
     snowluma: SnowLumaConfigRenderer,

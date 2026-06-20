@@ -1,7 +1,7 @@
-//! 远端 SnowLuma 图形栈：Rust 分步编排 + 短 `bash -c` detach（无内联 mega-script）。
+//! 远端 SnowLuma 图形栈：Rust 分步编排 + 短 bash -c detach（无内联 mega-script）。
 //!
-//! SSH `Host::spawn` 的 exec channel 关闭后长驻进程会随 channel 结束（`ProcessId.native == 0`），
-//! 因此 daemon 各角色用 `run_to_string` 投递 `nohup setsid … &` + pid 文件，不用单次 spawn。
+//! SSH Host::spawn 的 exec channel 关闭后长驻进程会随 channel 结束（ProcessId.native == 0），
+//! 因此 daemon 各角色用 run_to_string 投递 nohup setsid … & + pid 文件，不用单次 spawn。
 
 use std::time::Duration;
 
@@ -17,7 +17,7 @@ fn display_str(num: i32) -> String {
     format!(":{num}")
 }
 
-/// 远端内联脚本依赖 bash（flock、nohup 数组等）；`/bin/sh` 为 dash 时会失败。
+/// 远端内联脚本依赖 bash（flock、nohup 数组等）；/bin/sh 为 dash 时会失败。
 pub async fn resolve_remote_bash(host: &dyn Host) -> Result<String, BotBackendError> {
     let cmd = HostCommand::new("sh").arg("-c").arg("command -v bash");
     let out = host
@@ -359,7 +359,7 @@ echo '{{"running":false,"ready":false}}' > {status}
     Ok(())
 }
 
-/// 启动完整图形栈 + node（`RemoteSnowlumaStackOrchestrator` 入口）。
+/// 启动完整图形栈 + node（RemoteSnowlumaStackOrchestrator 入口）。
 pub async fn ensure_stack_running(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
     let paths = &layout.paths;
     if is_stack_ready(host, paths).await? {

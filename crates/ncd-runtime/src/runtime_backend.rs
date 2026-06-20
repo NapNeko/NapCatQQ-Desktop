@@ -11,7 +11,7 @@ use crate::ids::BotId;
 use crate::kinds::{BackendKind, BotFlavor, RuntimeTarget};
 
 // StopMode 已下沉到 ncd-domain (2026-05-29 远端架构重构 P1.a)。
-// 本模块通过 pub use 让既有 `crate::runtime_backend::StopMode` 路径继续可用。
+// 本模块通过 pub use 让既有 crate::runtime_backend::StopMode 路径继续可用。
 // 新代码请直接 use ncd_domain::StopMode。
 pub use ncd_domain::StopMode;
 
@@ -25,7 +25,7 @@ pub struct ProcessHandle {
 pub struct BotStartCtx {
     pub config: BotRuntimeConfig,
     /// BotManager 已从 repo 加载的完整配置。Docker 启动必须带此字段，避免再从
-    /// `config_path` 反推 data_root 去读 `config/bot.json`（路径不一致时会误报
+    /// config_path 反推 data_root 去读 config/bot.json（路径不一致时会误报
     /// ConfigNotFound）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_config: Option<BotConfig>,

@@ -16,8 +16,8 @@ pub enum DomainEventKind {
     BotLogAppended,
     BotError,
     TaskProgress,
-    // serde 默认 snake_case 会把 `NapCat...` 切成 `nap_cat_...`；这里
-    // 显式 rename，与 `DomainEvent::tauri_event_name` 单一来源对齐。
+    // serde 默认 snake_case 会把 NapCat... 切成 nap_cat_...；这里
+    // 显式 rename，与 DomainEvent::tauri_event_name 单一来源对齐。
     #[serde(rename = "napcat_webui_available")]
     NapCatWebuiAvailable,
     BotProcessExited,
@@ -29,8 +29,8 @@ pub enum DomainEventKind {
     NapCatLoginOnline,
     #[serde(rename = "napcat_login_invalidated")]
     NapCatLoginInvalidated,
-    // SnowLuma 系列：避免 `rename_all = "snake_case"` 把 `SnowLuma...` 切成
-    // `snow_luma_...`，每个 variant 显式 rename。
+    // SnowLuma 系列：避免 rename_all = "snake_case" 把 SnowLuma... 切成
+    // snow_luma_...，每个 variant 显式 rename。
     #[serde(rename = "snowluma_daemon_state_changed")]
     SnowLumaDaemonStateChanged,
     #[serde(rename = "snowluma_bot_injected")]
@@ -67,10 +67,10 @@ pub enum DomainEventKind {
 }
 
 /// 描述 NapCat WebUI 登录失效的原因。
-/// - `Kicked`: 在线状态下账号被踢下线（在线 → 离线 + `is_login=false`）。
-/// - `LoggedOut`: 用户主动登出或会话过期，从未达到 `online=true` 即失效。
-/// `#[serde(rename_all = "snake_case")]` 与前端 `NapCatLoginInvalidationReason`
-/// 字面量类型 (`'kicked' | 'logged_out'`) 保持字面量一致。
+/// - Kicked: 在线状态下账号被踢下线（在线 → 离线 + is_login=false）。
+/// - LoggedOut: 用户主动登出或会话过期，从未达到 online=true 即失效。
+/// #[serde(rename_all = "snake_case")] 与前端 NapCatLoginInvalidationReason
+/// 字面量类型 ('kicked' | 'logged_out') 保持字面量一致。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NapCatLoginInvalidationReason {
@@ -110,9 +110,9 @@ pub enum DomainEvent {
     },
     /// NapCat WebUI 已就绪：从 NapCat stdout 解析得到的登录入口。
     //
-    // 注意：serde 默认 snake_case 会把 `NapCatWebuiAvailable` 切成
-    // `nap_cat_webui_available`（连续大写字母都算单词边界）。这里显式
-    // rename，与 `tauri_event_name` 保持单一字面量来源。
+    // 注意：serde 默认 snake_case 会把 NapCatWebuiAvailable 切成
+    // nap_cat_webui_available（连续大写字母都算单词边界）。这里显式
+    // rename，与 tauri_event_name 保持单一字面量来源。
     #[serde(rename = "napcat_webui_available")]
     NapCatWebuiAvailable {
         bot_id: BotId,
@@ -128,14 +128,14 @@ pub enum DomainEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
-    /// NapCat WebUI 登录二维码可用：通常是 `data:image/png;base64,...`
+    /// NapCat WebUI 登录二维码可用：通常是 data:image/png;base64,...
     /// 也可能是普通 URL；后端透传，不做解析。
     #[serde(rename = "napcat_login_qrcode")]
     NapCatLoginQrcode { bot_id: BotId, qrcode_url: String },
     /// NapCat WebUI 登录二维码应当从 UI 上移除（已扫码登录、被踢、Poller dispose 等场景）。
     #[serde(rename = "napcat_login_qrcode_removed")]
     NapCatLoginQrcodeRemoved { bot_id: BotId },
-    /// NapCat WebUI 在线状态变化（来自 `GetQQLoginInfo.online`）。
+    /// NapCat WebUI 在线状态变化（来自 GetQQLoginInfo.online）。
     #[serde(rename = "napcat_login_online")]
     NapCatLoginOnline { bot_id: BotId, online: bool },
     /// NapCat WebUI 登录失效（被踢 / 主动登出）。
@@ -147,13 +147,13 @@ pub enum DomainEvent {
     // ------------------------------------------------------------------
     // SnowLuma 系列 6 个 variant
     //
-    // 每个 variant 显式 `#[serde(rename = "snowluma_xxx")]`：避免顶层
-    // `rename_all = "snake_case"` 把 `SnowLuma...` 切成 `snow_luma_...`
+    // 每个 variant 显式 #[serde(rename = "snowluma_xxx")]：避免顶层
+    // rename_all = "snake_case" 把 SnowLuma... 切成 snow_luma_...
     // 。
     // ------------------------------------------------------------------
     /// SnowLuma daemon 状态机切换。
-    /// `state` 复用 `crates/ncd-core/src/snowluma/daemon.rs` 中的 ts-rs
-    /// 派生 enum；`ref_count` 仅作监控信号；`reason` 在 Crashed 时携带
+    /// state 复用 crates/ncd-core/src/snowluma/daemon.rs 中的 ts-rs
+    /// 派生 enum；ref_count 仅作监控信号；reason 在 Crashed 时携带
     /// daemon 最近一次错误描述。
     #[serde(rename = "snowluma_daemon_state_changed")]
     SnowLumaDaemonStateChanged {
@@ -161,16 +161,16 @@ pub enum DomainEvent {
         ref_count: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
-        /// `local` = 本机 node daemon；远端为 SSH `server_id`。级联崩溃只影响同作用域 Bot。
+        /// local = 本机 node daemon；远端为 SSH server_id。级联崩溃只影响同作用域 Bot。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         server_id: Option<String>,
     },
-    /// `/api/processes/:pid/load` 注入成功后发布（物理就绪）。
-    /// 不等同于 QQ 已登录在线（业务就绪由 `SnowLumaLoginStateChanged` 表达）。
+    /// /api/processes/:pid/load 注入成功后发布（物理就绪）。
+    /// 不等同于 QQ 已登录在线（业务就绪由 SnowLumaLoginStateChanged 表达）。
     #[serde(rename = "snowluma_bot_injected")]
     SnowLumaBotInjected { bot_id: BotId, qq_pid: u32 },
     /// SnowLumaStatusPoller 首次锁定 UIN 时发布。
-    /// UIN 为字符串（与 `/api/qq-list` / `/api/processes` payload 字段类型对齐）。
+    /// UIN 为字符串（与 /api/qq-list / /api/processes payload 字段类型对齐）。
     #[serde(rename = "snowluma_uin_detected")]
     SnowLumaUinDetected { bot_id: BotId, uin: String },
     /// SnowLumaStatusPoller 合成出的 4 档登录态变化事件。
@@ -180,28 +180,28 @@ pub enum DomainEvent {
         state: SnowLumaLoginState,
     },
     /// 已锁定 UIN 关联的 PID 集合发生变化（升序），由 manager 据此回写
-    /// `ancillary_pids`。
+    /// ancillary_pids。
     #[serde(rename = "snowluma_pid_set_changed")]
     SnowLumaPidSetChanged { bot_id: BotId, pids: Vec<u32> },
     /// SnowLuma daemon 共享的 node.exe stdout 单行（已经过 ANSI / 控制
     /// 字符清洗）。多 SL Bot 共享同一份 daemon stdout，故本 variant 不
-    /// 携带 `bot_id`，订阅方根据需要广播给所有 SL flavor BotLogPage。
+    /// 携带 bot_id，订阅方根据需要广播给所有 SL flavor BotLogPage。
     #[serde(rename = "snowluma_daemon_log")]
     SnowLumaDaemonLog { line: String },
     #[serde(rename = "snowluma_docker_endpoints_ready")]
     SnowLumaDockerEndpointsReady { bot_id: BotId },
     /// Components 页：组件 install / update / uninstall / verify 任务进度。
-    /// `task_id` 由 backend 生成（uuid v4），`event` 直接复用
-    /// `ncd_component::ProgressEvent`，不再发明 progress 类型。
+    /// task_id 由 backend 生成（uuid v4），event 直接复用
+    /// ncd_component::ProgressEvent，不再发明 progress 类型。
     #[serde(rename = "component_action_progress")]
     ComponentActionProgress {
         task_id: String,
         event: ProgressEvent,
     },
     /// Docker 部署进度。部署是一条 5 步流水（探测 → 写 compose → 拉镜像 →
-    /// 起容器 → 回读地址），`event` 直接复用 `ncd_component::ProgressEvent`，
+    /// 起容器 → 回读地址），event 直接复用 ncd_component::ProgressEvent，
     /// 拉镜像步骤填 downloaded_bytes / total_bytes / speed_bps 表达实时进度。
-    /// `task_id` 由前端生成（crypto.randomUUID），后端原样回带，前端按它路由。
+    /// task_id 由前端生成（crypto.randomUUID），后端原样回带，前端按它路由。
     #[serde(rename = "docker_deploy_progress")]
     DockerDeployProgress {
         task_id: String,
@@ -236,10 +236,10 @@ pub enum DomainEvent {
 pub const DOMAIN_EVENT_ENVELOPE_VERSION: u32 = 1;
 
 impl DomainEvent {
-    /// 序列化成带顶层 `v` envelope 的 JSON 字符串,供 Tauri 层 emit 到 webview。
+    /// 序列化成带顶层 v envelope 的 JSON 字符串,供 Tauri 层 emit 到 webview。
     ///
-    /// DomainEvent 是内部 tag(`kind`)枚举,序列化成 object 后注入 `v` 字段,得到
-    /// `{"v":1,"kind":"...",...payload}`。前端 listen 解析后即可按 v 分流。绝不在
+    /// DomainEvent 是内部 tag(kind)枚举,序列化成 object 后注入 v 字段,得到
+    /// {"v":1,"kind":"...",...payload}。前端 listen 解析后即可按 v 分流。绝不在
     /// IPC 边界发不带版本号的裸事件(R14:版本化)。
     pub fn to_envelope_json(&self) -> Result<String, serde_json::Error> {
         let mut value = serde_json::to_value(self)?;
@@ -446,7 +446,7 @@ impl DomainEvent {
     // SnowLuma 系列 helper 构造器
     // ------------------------------------------------------------------
 
-    /// 本机 SnowLuma daemon 事件作用域（与远端 `server_id` 区分，避免级联误伤）。
+    /// 本机 SnowLuma daemon 事件作用域（与远端 server_id 区分，避免级联误伤）。
     pub const SNOWLUMA_DAEMON_SCOPE_LOCAL: &str = "local";
 
     pub fn snowluma_daemon_state_changed(
@@ -498,8 +498,8 @@ impl DomainEvent {
         Self::SnowLumaDaemonLog { line: line.into() }
     }
 
-    /// 构造 `ComponentActionProgress` 事件。`task_id` 由 backend 生成（uuid v4），
-    /// `event` 由 ncd-component 自身的进度通道吐出，原样转发到前端。
+    /// 构造 ComponentActionProgress 事件。task_id 由 backend 生成（uuid v4），
+    /// event 由 ncd-component 自身的进度通道吐出，原样转发到前端。
     pub fn component_action_progress(task_id: impl Into<String>, event: ProgressEvent) -> Self {
         Self::ComponentActionProgress {
             task_id: task_id.into(),
@@ -507,8 +507,8 @@ impl DomainEvent {
         }
     }
 
-    /// 构造 `DockerDeployProgress` 事件。`task_id` 由前端生成，后端原样回带；
-    /// `event` 由 docker 部署流水各阶段吐出（复用 ProgressEvent / ProgressKind）。
+    /// 构造 DockerDeployProgress 事件。task_id 由前端生成，后端原样回带；
+    /// event 由 docker 部署流水各阶段吐出（复用 ProgressEvent / ProgressKind）。
     pub fn docker_deploy_progress(task_id: impl Into<String>, event: ProgressEvent) -> Self {
         Self::DockerDeployProgress {
             task_id: task_id.into(),
@@ -685,15 +685,15 @@ mod tests {
     // 事件名稳定性测试
     //
     // 1) 4 个新 variant 字节级 round-trip：序列化后再反序列化必须等价。
-    // 2) 4 个新 variant 的 `tauri_event_name` 字面量值锁定。
+    // 2) 4 个新 variant 的 tauri_event_name 字面量值锁定。
     // 3) 跨文件契约：4 个 tauri_event_name 必须全部出现在前端
-    // `event-stream.service.ts` 的 `DOMAIN_EVENT_NAMES` 数组中
-    // （编译期 `include_str!` 取出文本后 grep）。
+    // event-stream.service.ts 的 DOMAIN_EVENT_NAMES 数组中
+    // （编译期 include_str! 取出文本后 grep）。
     // ------------------------------------------------------------------
 
     /// 编译期把前端事件清单嵌入测试二进制，避免运行时 IO 与路径漂移。
-    /// 路径相对于本文件 (`crates/ncd-runtime/src/events.rs`) → 仓库根
-    /// → `src-ui/core/services/event-stream.service.ts`。
+    /// 路径相对于本文件 (crates/ncd-runtime/src/events.rs) → 仓库根
+    /// → src-ui/core/services/event-stream.service.ts。
     const FRONTEND_EVENTS_TS: &str =
         include_str!("../../../src-ui/core/services/event-stream.service.ts");
 
@@ -750,7 +750,7 @@ mod tests {
         );
     }
 
-    /// 4 个新 variant 的 `tauri_event_name` 字面量值锁定
+    /// 4 个新 variant 的 tauri_event_name 字面量值锁定
     /// 任何一处 typo 都会让此测试失败。
     #[test]
     fn napcat_login_event_name_literals_are_stable() {
@@ -781,8 +781,8 @@ mod tests {
     }
 
     /// 前后端事件契约一一对应。
-    /// 4 个新 `tauri_event_name` 必须在前端 `event-stream.service.ts` 的
-    /// `DOMAIN_EVENT_NAMES` 数组中出现为单/双引号字符串字面量。这样可避免
+    /// 4 个新 tauri_event_name 必须在前端 event-stream.service.ts 的
+    /// DOMAIN_EVENT_NAMES 数组中出现为单/双引号字符串字面量。这样可避免
     /// 误把出现在注释或别的标识符中的子串当作匹配。
     #[test]
     fn napcat_login_event_names_are_present_in_frontend_events_ts() {
@@ -805,8 +805,8 @@ mod tests {
         }
     }
 
-    /// 反向防呆：所有 DomainEvent variant 的 `tauri_event_name` 都必须
-    /// 出现在前端 `event-stream.service.ts` 中，否则前端无法订阅到对应事件。
+    /// 反向防呆：所有 DomainEvent variant 的 tauri_event_name 都必须
+    /// 出现在前端 event-stream.service.ts 中，否则前端无法订阅到对应事件。
     /// 这条断言锁定了「Rust → DOMAIN_EVENT_NAMES」单向覆盖，但允许
     /// DOMAIN_EVENT_NAMES 含 DomainEvent 之外的额外通道（按任务说明）。
     #[test]
@@ -875,8 +875,8 @@ mod tests {
     //
     //
     // 1) 6 个 variant 字节级 round-trip：序列化后再反序列化必须等价。
-    // 2) 6 个 variant `tauri_event_name` 字面量值锁定，防 typo / 防
-    // `rename_all = "snake_case"` 把 `SnowLuma` 切成 `snow_luma`。
+    // 2) 6 个 variant tauri_event_name 字面量值锁定，防 typo / 防
+    // rename_all = "snake_case" 把 SnowLuma 切成 snow_luma。
     // 3) 跨文件契约：6 个 tauri_event_name 必须全部出现在前端
     // event-stream.service.ts 的 DOMAIN_EVENT_NAMES 数组。
     // ------------------------------------------------------------------
@@ -934,8 +934,8 @@ mod tests {
         assert_round_trip(DomainEvent::snowluma_daemon_log("hello world"));
     }
 
-    /// 6 个 SL variant 的 `tauri_event_name` 字面量值锁定
-    /// 任何一处 typo（包括 `snow_luma_xxx` 这种 snake_case 误切）都会失败。
+    /// 6 个 SL variant 的 tauri_event_name 字面量值锁定
+    /// 任何一处 typo（包括 snow_luma_xxx 这种 snake_case 误切）都会失败。
     #[test]
     fn snowluma_event_name_literals_are_stable() {
         let cases: [(DomainEvent, &str); 6] = [
@@ -975,8 +975,8 @@ mod tests {
     }
 
     /// 前后端事件契约一一对应（SnowLuma 系列）。
-    /// 6 个新 `tauri_event_name` 必须在前端 `event-stream.service.ts` 的
-    /// `DOMAIN_EVENT_NAMES` 中出现为单/双引号字符串字面量。
+    /// 6 个新 tauri_event_name 必须在前端 event-stream.service.ts 的
+    /// DOMAIN_EVENT_NAMES 中出现为单/双引号字符串字面量。
     #[test]
     fn snowluma_event_names_are_present_in_frontend_events_ts() {
         let names = [
