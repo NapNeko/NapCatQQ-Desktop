@@ -53,18 +53,18 @@ pub enum DaemonState {
 // ---------------------------------------------------------------------------
 
 /// SnowLuma WebUI 客户端工厂 trait。
-/// `SnowLumaDaemon::ensure_running` 在 starter 路径里：
-/// 1. 渲染 `webui.json` + `runtime.json`
-/// 2. spawn `node.exe entry.js`
-/// 3. 调本 trait 的 `create(password)` 拿到一个新 `Arc<dyn SnowLumaWebUiClient>`
-/// 4. 在该 client 上调 `wait_ready` + `login`
+/// SnowLumaDaemon::ensure_running 在 starter 路径里：
+/// 1. 渲染 webui.json + runtime.json
+/// 2. spawn node.exe entry.js
+/// 3. 调本 trait 的 create(password) 拿到一个新 Arc<dyn SnowLumaWebUiClient>
+/// 4. 在该 client 上调 wait_ready + login
 ///
-/// 把客户端构造抽到 trait 后，`SnowLumaDaemon` 单测可以注入
-/// `MockSnowLumaWebUiClientFactory`，不依赖真实 reqwest / wiremock。
+/// 把客户端构造抽到 trait 后，SnowLumaDaemon 单测可以注入
+/// MockSnowLumaWebUiClientFactory，不依赖真实 reqwest / wiremock。
 #[async_trait]
 pub trait SnowLumaWebUiClientFactory: Send + Sync {
     /// 用 daemon 当前生效的密码与 WebUI 端口构造一个新的 WebUI client。
-    /// `password` / `port` 来自 `render_daemon_globals`（已读 `app-config.json`）。
+    /// password / port 来自 render_daemon_globals（已读 app-config.json）。
     async fn create(
         &self,
         password: String,
@@ -72,22 +72,18 @@ pub trait SnowLumaWebUiClientFactory: Send + Sync {
     ) -> Result<Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError>;
 }
 
-// ---------------------------------------------------------------------------
-// DaemonInner —— 私有可变状态
-// ---------------------------------------------------------------------------
-
-/// `SnowLumaDaemon` 内部受 `tokio::sync::Mutex` 保护的可变状态。
+/// SnowLumaDaemon 内部受 tokio::sync::Mutex 保护的可变状态。
 struct DaemonInner {
     state: DaemonState,
-    /// 当前 `ensure_running` 引用计数；持久 daemon 模型下仅作监控信号
+    /// 当前 ensure_running 引用计数；持久 daemon 模型下仅作监控信号
     /// 不再驱动 terminate。
     ref_count: u32,
     node_pid: Option<u32>,
-    /// `tokio::process::Child`：starter 路径写入；`shutdown` / `watch_exit`
-    /// 取出后做 `wait` / `kill`。
+    /// tokio::process::Child：starter 路径写入；shutdown / watch_exit
+    /// 取出后做 wait / kill。
     node_child: Option<tokio::process::Child>,
     webui_client: Option<Arc<dyn SnowLumaWebUiClient>>,
-    /// 最近一次启动失败 / crash 的原因；并发 caller 等 `ready_notify` 唤醒后
+    /// 最近一次启动失败 / crash 的原因；并发 caller 等 ready_notify 唤醒后
     /// 取这个字段决定返回什么 error variant。
     last_error: Option<String>,
 }
@@ -110,8 +106,8 @@ impl DaemonInner {
 
 /// SnowLuma 全局 daemon。
 /// 一个 App 进程内仅一份实例，由 Tauri setup 阶段构造并注入
-/// `BotManager`。多 SnowLuma flavor Bot 通过 `ensure_running` 共享同一份
-/// `node.exe` + WebUI client。
+/// BotManager。多 SnowLuma flavor Bot 通过 ensure_running 共享同一份
+/// node.exe + WebUI client。
 /// 并发安全约束：
 /// - 内部可变状态全部由 inner: Mutex<DaemonInner> 守护。
 /// - ready_notify 用于在 starter 完成（成 / 败）后唤醒所有 Starting 期 waiter。
@@ -142,16 +138,16 @@ const LOG_CHANNEL_CAPACITY: usize = 10_000;
 /// 启动到登录 + 几次配置 hot reload 的输出，再多对内存压力开始显现，按需调。
 const RECENT_LOG_CAPACITY: usize = 1000;
 
-/// `wait_ready` 单轮总超时。
+/// wait_ready 单轮总超时。
 const WAIT_READY_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// `shutdown` 等子进程退出的总超时。
+/// shutdown 等子进程退出的总超时。
 const SHUTDOWN_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 impl SnowLumaDaemon {
-    /// 构造一个全新的、状态为 `Stopped` 的 daemon 实例。
+    /// 构造一个全新的、状态为 Stopped 的 daemon 实例。
     /// 不做任何 IO；不 spawn 任何 task。真正的 spawn 发生在首个
-    /// `ensure_running` 调用。
+    /// ensure_running 调用。
     pub fn new(
         snowluma_data_root: PathBuf,
         runtime_root: PathBuf,
@@ -188,10 +184,10 @@ impl SnowLumaDaemon {
     /// - `Ready` → ref_count += 1，复用现有 client。
     /// - `Stopped` → 自我提升为 starter，驱动启动序列；成功后切到 Ready 并返回
     /// client；任何环节失败立即回滚到 Stopped 并返回错误。
-    /// - `Starting` → ref_count += 1，等 `ready_notify` 在 `timeout` 内唤醒
-    /// 唤醒后按最终态决定返回 client / 错误。
-    /// - `Crashed` → 直接返回 `SnowLumaDaemonError::Crashed(last_error)`。
-    /// - `Stopping` → 直接返回 `SnowLumaDaemonError::Stopping`。
+    /// - Starting → ref_count += 1，等 ready_notify 在 timeout 内唤醒
+    ///   唤醒后按最终态决定返回 client / 错误。
+    /// - Crashed → 直接返回 SnowLumaDaemonError::Crashed(last_error)。
+    /// - Stopping → 直接返回 SnowLumaDaemonError::Stopping。
     pub async fn ensure_running(
         self: &Arc<Self>,
         timeout: Duration,
@@ -754,12 +750,12 @@ fn resolve_daemon_entry(runtime_root: &std::path::Path) -> std::path::PathBuf {
 /// - `Stopping` / `Stopped` → 视为 intentional，目标态 `Stopped`，不写
 /// `last_error`（不污染下次 `ensure_running` 的错误信号）
 /// - 其它（Ready / Starting / Crashed）→ 视为意外退出，目标态 `Crashed`
-/// `last_error = Some(format!("node.exe exited: {exit:?}"))`。
-/// 6. 清空 `node_pid`（child 已不在）；快照 state / ref_count / last_error。
-/// 7. drop lock 后再发 `SnowLumaDaemonStateChanged{state, ref_count, reason}`
-/// 避免在事件订阅者处理回调时持有内部 mutex。
-/// 8. `ready_notify.notify_waiters()`：解开任何因 starter 死掉但 ready_notify
-/// 没被 starter 喊到的 waiter（fail-safe）。
+/// last_error = Some(format!("node.exe exited: {exit:?}"))。
+/// 6. 清空 node_pid（child 已不在）；快照 state / ref_count / last_error。
+/// 7. drop lock 后再发 SnowLumaDaemonStateChanged{state, ref_count, reason}
+///    避免在事件订阅者处理回调时持有内部 mutex。
+/// 8. ready_notify.notify_waiters()：解开任何因 starter 死掉但 ready_notify
+///    没被 starter 喊到的 waiter（fail-safe）。
 async fn watch_exit(daemon: Weak<SnowLumaDaemon>) {
     let Some(daemon) = daemon.upgrade() else {
         return;
