@@ -118,16 +118,16 @@ pub struct BootstrapResult {
     pub skipped: Vec<BotId>,
 }
 
-/// Coordinator for the shared remote QQ installation tree's `package.json` "main" entry point.
+/// Coordinator for the shared remote QQ installation tree's package.json "main" entry point.
 ///
-/// On a single remote Linux host (identified by `server_id`), NapCat and SnowLuma flavors
-/// share the same rootless QQ tree (`$HOME/Napcat/opt/QQ`). Starting a bot of either flavor
-/// must atomically switch the `main` field (to `./loadNapCat.js` or `./app_launcher/index.js`)
+/// On a single remote Linux host (identified by server_id), NapCat and SnowLuma flavors
+/// share the same rootless QQ tree ($HOME/Napcat/opt/QQ). Starting a bot of either flavor
+/// must atomically switch the main field (to ./loadNapCat.js or ./app_launcher/index.js)
 /// and, for NapCat, verify that the injection artifacts actually exist.
 ///
-/// This coordinator provides per-server_id serialization *only* for the flip + verification
+/// This coordinator provides per-server_id serialization only for the flip + verification
 /// critical section. Actual process launches, daemon bootstrap, tunnels, etc. for different
-/// bots can still run concurrently. This prevents races when `batch_start` (or auto-start on
+/// bots can still run concurrently. This prevents races when batch_start (or auto-start on
 /// bootstrap) launches multiple bots (possibly of mixed flavors) on the same SSH host.
 pub(crate) struct RemoteQqEntryCoordinator {
     per_server: Arc<tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
@@ -142,10 +142,10 @@ impl Default for RemoteQqEntryCoordinator {
 }
 
 impl RemoteQqEntryCoordinator {
-    /// Run `f` while holding the per-server mutex for `server_id`.
-    /// The critical section inside `f` (read/write of package.json + small existence checks)
+    /// Run f while holding the per-server mutex for server_id.
+    /// The critical section inside f (read/write of package.json + small existence checks)
     /// is serialized per remote host. Long-running parts of bot startup (actual spawn, waiting
-    /// for WebUI, poller creation, etc.) happen *outside* the lock.
+    /// for WebUI, poller creation, etc.) happen outside the lock.
     pub(crate) async fn with_server<F, Fut, R>(&self, server_id: &str, f: F) -> R
     where
         F: FnOnce() -> Fut,
@@ -162,10 +162,10 @@ impl RemoteQqEntryCoordinator {
     }
 
     /// Ensure the shared QQ tree on this server is in NapCat-injected mode and that the
-    /// artifacts required by `./loadNapCat.js` are present on disk.
+    /// artifacts required by ./loadNapCat.js are present on disk.
     ///
-    /// This is the *only* place that should flip the tree to NapCat mode for remote native NC bots.
-    /// It is called from `RemoteNativeLaunchTranslator` under the per-server lock.
+    /// This is the only place that should flip the tree to NapCat mode for remote native NC bots.
+    /// It is called from RemoteNativeLaunchTranslator under the per-server lock.
     pub(crate) async fn ensure_for_napcat(
         &self,
         host: &dyn Host,
@@ -254,12 +254,13 @@ impl RemoteQqEntryCoordinator {
 // ─── BotManager ────────────────────────────────────────────────────────────────
 
 /// 编排层：统一管理所有 Bot 的生命周期。
-/// - 每个 Bot 对应一个 `BotActorHandle`（状态机）。
-/// - `BotConfigRepo` 负责持久化配置。
-/// - `BackendConfigRenderer` 负责生成后端运行时配置文件。
-/// - `BroadcastEventBus` 负责事件广播给前端。
-/// `BotManager` 自身不持有可变业务状态，所有可变状态都封装在
-/// `actors` map（由 `RwLock` 保护）和各 `BotActorHandle` 内部。
+/// - 每个 Bot 对应一个 BotActorHandle（状态机）。
+/// - BotConfigRepo 负责持久化配置。
+/// - BackendConfigRenderer 负责生成后端运行时配置文件。
+/// - BroadcastEventBus 负责事件广播给前端。
+///
+/// BotManager 自身不持有可变业务状态，所有可变状态都封装在
+/// actors map（由 RwLock 保护）和各 BotActorHandle 内部。
 pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     repo: Arc<R>,
     store: Arc<S>,
@@ -268,33 +269,33 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     launch_planner: Arc<dyn RuntimeLaunchPlanner>,
     event_bus: Arc<BroadcastEventBus>,
     actors: Arc<RwLock<HashMap<BotId, BotActorHandle>>>,
-    /// per-Bot WebUI 登录轮询组件，由 `run_napcat_login_listener` 在收到
-    /// `NapCatWebuiAvailable` 事件时插入；`BotProcessExited` / `delete_bot`
-    /// / `shutdown_all` 时移除并 `dispose`。
+    /// per-Bot WebUI 登录轮询组件，由 run_napcat_login_listener 在收到
+    /// NapCatWebuiAvailable 事件时插入；BotProcessExited / delete_bot
+    /// / shutdown_all 时移除并 dispose。
     login_pollers: Arc<RwLock<HashMap<BotId, NapCatLoginPoller>>>,
     /// per-Bot NapCat WebUI 端点 (port + token) 的内存表。
     /// NapCat 多 bot 启动时端口会自动 +1，webui.json 不能区分，必须从每个 bot
-    /// 自己的 stdout 抓 `WebUi User Panel Url`。本表的写/删时机与 `login_pollers`
+    /// 自己的 stdout 抓 WebUi User Panel Url。本表的写/删时机与 login_pollers
     /// 完全对齐，供配置热推送在保存配置时反查 (port, token)。
     napcat_endpoints: NapCatEndpointTable,
     /// NapCat WebUI HTTP 客户端依赖，可注入 mock 用于测试。
     webui_client: Arc<dyn NapCatWebUiClient>,
-    /// 离线通知通道依赖，可注入 mock；默认 wiring 走 `NoopOfflineNotifier`。
+    /// 离线通知通道依赖，可注入 mock；默认 wiring 走 NoopOfflineNotifier。
     offline_notifier: Arc<dyn OfflineNotifier>,
-    /// App 级 Poller 设置，热更新通过 `poller_settings.write()` 即可生效
-    /// 下次 `handle_webui_available` 创建 Poller 时读取最新值。
+    /// App 级 Poller 设置，热更新通过 poller_settings.write() 即可生效
+    /// 下次 handle_webui_available 创建 Poller 时读取最新值。
     poller_settings: Arc<RwLock<WebUiPollerSettings>>,
     /// 桌面 Toast 开关（与 app-settings.json 同步）。
     desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
-    /// SnowLuma flavor backend（可选）。`None` 时所有 bot 走 `backend`（NapCat 路径）。
-    /// 由 wiring 阶段构造并通过 `with_snowluma_backend` 注入。
+    /// SnowLuma flavor backend（可选）。None 时所有 bot 走 backend（NapCat 路径）。
+    /// 由 wiring 阶段构造并通过 with_snowluma_backend 注入。
     snowluma_backend: Option<Arc<dyn BotBackend>>,
-    /// SnowLuma 全局 daemon 句柄（可选），用于 `shutdown_all` 关闭 daemon、
-    /// `run_snowluma_listener` 监听 daemon Crashed 级联级 actor。
+    /// SnowLuma 全局 daemon 句柄（可选），用于 shutdown_all 关闭 daemon、
+    /// run_snowluma_listener 监听 daemon Crashed 级联级 actor。
     snowluma_daemon: Option<Arc<crate::snowluma::SnowLumaDaemon>>,
     /// 把 BotConfig 的 runtime_target 解析成 host（本机 / 远端 SSH）。
     /// None 时走旧路径（backend 自带的本机 host，行为同历史版本）；生产侧由
-    /// `with_host_resolver` 注入 TauriHostResolver 后,启动时按 target 取 host。
+    /// with_host_resolver 注入 TauriHostResolver 后,启动时按 target 取 host。
     host_resolver: Option<Arc<dyn crate::host_resolver::HostResolver>>,
     /// Docker NapCat WebUI token 的凭据存储。DockerDeployment 要求上层显式传入
     /// token，不能从 QQ 号或容器名派生；这里按 Bot 持久化，保证重启后 token 稳定。
@@ -306,9 +307,9 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// 远端 SnowLuma：按 server_id 共享 daemon（多 Bot 同一 SSH 主机）。
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
     remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
-    /// Per-remote-host coordination for flipping the shared `~/Napcat/opt/QQ` tree's
-    /// package.json `main` between NapCat-injected and vanilla native modes.
-    /// See `RemoteQqEntryCoordinator` for rationale and batch-start safety.
+    /// Per-remote-host coordination for flipping the shared ~/Napcat/opt/QQ tree's
+    /// package.json main between NapCat-injected and vanilla native modes.
+    /// See RemoteQqEntryCoordinator for rationale and batch-start safety.
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
 }
 
@@ -418,8 +419,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 热更新 App 级轮询设置。运行中的 Poller 在下次创建（启动 / 重启）时
-    /// 从 `poller_settings` 读最新值；已在跑的 Poller 不强制重建，避免抖动。
-    /// 设置页 `set_app_settings` 写盘后调用此方法让内存值同步。
+    /// 从 poller_settings 读最新值；已在跑的 Poller 不强制重建，避免抖动。
+    /// 设置页 set_app_settings 写盘后调用此方法让内存值同步。
     pub async fn update_poller_settings(&self, settings: WebUiPollerSettings) {
         *self.poller_settings.write().await = settings;
     }
@@ -428,8 +429,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         *self.desktop_notify.write().await = settings;
     }
 
-    /// 按 flavor 选择 backend：`SnowLuma` 时优先用注入的 SL backend，否则
-    /// 回落到默认 `backend`（向后兼容：未注入 SL 时与历史行为一致）。
+    /// 按 flavor 选择 backend：SnowLuma 时优先用注入的 SL backend，否则
+    /// 回落到默认 backend（向后兼容：未注入 SL 时与历史行为一致）。
     fn backend_for(&self, flavor: BotFlavor) -> Arc<dyn BotBackend> {
         match flavor {
             BotFlavor::SnowLuma => self
@@ -497,7 +498,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         crate::snowluma::session::generate_strong_password(16)
     }
 
-    /// stop / restart / delete 必须按完整 BotConfig 路由 backend；`backend_for_config`
+    /// stop / restart / delete 必须按完整 BotConfig 路由 backend；backend_for_config
     /// 失败时不得静默回落本机 baked backend，否则远端 Docker 会假停/假删。
     async fn backend_for_lifecycle(
         &self,
@@ -1083,8 +1084,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 启动时从持久化配置恢复所有 Bot Actor，并自动启动标记了 `auto_start` 的 Bot。
-    /// 返回 `BootstrapResult`，其中 `skipped` 包含超出 4 开上限而未注册的 Bot ID。
+    /// 启动时从持久化配置恢复所有 Bot Actor，并自动启动标记了 auto_start 的 Bot。
+    /// 返回 BootstrapResult，其中 skipped 包含超出 4 开上限而未注册的 Bot ID。
     pub async fn bootstrap(&self) -> Result<BootstrapResult, BotManagerError> {
         let configs = self.repo.list().await?;
         info!(
@@ -1149,12 +1150,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(BootstrapResult { started, skipped })
     }
 
-    // ─── 单 Bot 操作 ──────────────────────────────────────────────────────
-
     /// 启动前检测派生配置文件 drift。
     ///
-    /// 返回 `None`：派生文件不存在或跟 BotConfig 完全一致,可以直接启动。
-    /// 返回 `Some(drift)`：有差异,前端应弹 ConfigDriftDialog 让用户抉择。
+    /// 返回 None：派生文件不存在或跟 BotConfig 完全一致,可以直接启动。
+    /// 返回 Some(drift)：有差异,前端应弹 ConfigDriftDialog 让用户抉择。
     pub async fn detect_config_drift(
         &self,
         bot_id: &BotId,
@@ -1173,9 +1172,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 带用户决议启动 Bot。
     ///
     /// decisions 来自前端 ConfigDriftDialog,包含：
-    /// - `AcceptExternal { file, path, value }`：渲染输出时把对应 path 覆盖为外部值
-    /// - `DropAdded { file, path }`：不保留新增字段（覆盖时这些字段不出现在 existing 里即可）
-    /// - `KeepAdded` / `UseInternal`：无需特别处理(默认行为)
+    /// - AcceptExternal { file, path, value }：渲染输出时把对应 path 覆盖为外部值
+    /// - DropAdded { file, path }：不保留新增字段（覆盖时这些字段不出现在 existing 里即可）
+    /// - KeepAdded / UseInternal：无需特别处理(默认行为)
     pub async fn start_bot_with_decisions(
         &self,
         bot_id: &BotId,
@@ -1347,14 +1346,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 重启指定 Bot。
     /// 6 状态分支语义：
-    /// - `Running | Starting`：`actor.request_restart()`（标记 `pending_restart` 并转 `Stopping`）
-    /// → `backend.stop(Force)` → 等 actor 经 `confirm_stopped` 转入 `Starting` → `start_bot`
-    /// - `Stopped | Crashed`：直接 `start_bot`
-    /// - `Stopping`：`actor.request_restart()` 标 `pending_restart` → 等 actor 转入 `Starting` → `start_bot`
-    /// - `Repairing`：返回 `BotManagerError::InvalidState`
-    /// 设计：复用 `BotActor` 现有的 `pending_restart` 机制，不新增状态机分支。
-    /// 错误返回给调用方；`RestartHandle::restart_bot` impl 会把
-    /// 错误转为 `DomainEvent::bot_error` 发布给前端。
+    /// - Running | Starting：actor.request_restart()（标记 pending_restart 并转 Stopping）
+    ///   → backend.stop(Force) → 等 actor 经 confirm_stopped 转入 Starting → start_bot
+    /// - Stopped | Crashed：直接 start_bot
+    /// - Stopping：actor.request_restart() 标 pending_restart → 等 actor 转入 Starting → start_bot
+    /// - Repairing：返回 BotManagerError::InvalidState
+    ///
+    /// 设计：复用 BotActor 现有的 pending_restart 机制，不新增状态机分支。
+    /// 错误返回给调用方；RestartHandle::restart_bot impl 会把
+    /// 错误转为 DomainEvent::bot_error 发布给前端。
     pub async fn restart_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到重启 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
@@ -1522,10 +1522,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 策略：先持久化 bot.json（source of truth），再写派生文件。
     /// - 如果 bot.json 写入失败，派生文件不会被写入，状态完全未变。
     /// - 如果派生文件写入失败，bot.json 已是最新，派生文件可在下次启动时重新生成
-    /// 不会造成不可恢复的不一致。
+    ///   不会造成不可恢复的不一致。
     /// - 新增时：检查 4 开上限，持久化，写派生文件，创建 Actor。
     /// - 更新时：持久化，写派生文件，热推送（通过 restart 通知 Actor 重新加载）。
-    /// - 如果 backend_type 发生切换（NapCat ↔ SnowLuma），必须用**旧** backend
+    /// - 如果 backend_type 发生切换（NapCat ↔ SnowLuma），必须用旧 backend
     ///   停掉运行中的进程，再用**新** backend 启动，避免老进程留尸。
     pub async fn upsert_bot_config(
         &self,
