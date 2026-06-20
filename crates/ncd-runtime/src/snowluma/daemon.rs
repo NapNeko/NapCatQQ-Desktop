@@ -421,10 +421,10 @@ impl SnowLumaDaemon {
         }
     }
 
-    /// waiter 路径：等 starter 通过 `ready_notify` 通知最终态。
-    /// 实现策略：循环 `tokio::time::timeout(remaining, ready_notify.notified())`
+    /// waiter 路径：等 starter 通过 ready_notify 通知最终态。
+    /// 实现策略：循环 tokio::time::timeout(remaining, ready_notify.notified())
     /// + 每轮重新读 inner 状态。命中 Ready/Stopped/Crashed/Stopping 立即按最终态
-    /// 返回；超时则返回 `StartTimeout`。state 仍为 Starting（spurious wake）
+    /// 返回；超时则返回 StartTimeout。state 仍为 Starting（spurious wake）
     /// 则继续下一轮。
     async fn wait_for_ready(
         &self,
@@ -595,13 +595,13 @@ impl SnowLumaDaemon {
     }
 
     /// 订阅 daemon 共享的 node.exe stdout 行流。
-    /// spawn 的 stdout reader 把行清洗后 `log_tx.send(..)`，订阅者
-    /// 通过本方法拿 `Receiver` 收行。
+    /// spawn 的 stdout reader 把行清洗后 log_tx.send(..)，订阅者
+    /// 通过本方法拿 Receiver 收行。
     pub fn subscribe_logs(&self) -> broadcast::Receiver<String> {
         self.log_tx.subscribe()
     }
 
-    /// 仅在 `Ready` 状态下返回当前生效的 WebUI client clone；其它状态返回相应
+    /// 仅在 Ready 状态下返回当前生效的 WebUI client clone；其它状态返回相应
     /// 错误（runtime_backend stop 路径 / 健康检查会用到）。
     pub async fn current_client(
         &self,
