@@ -118,7 +118,7 @@ impl QqDependencyDetector {
             });
         }
 
-        // 简化：假设其他库都已满足
+        // ldd 只报缺失库，其余视为已满足（不逐一枚举已装项）
         let satisfied = vec![];
 
         Ok((satisfied, missing))

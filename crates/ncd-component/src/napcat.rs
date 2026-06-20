@@ -128,7 +128,7 @@ impl NapCatComponent {
         self
     }
 
-    // ===== 路径 helpers(对齐官方 install.sh 路径常量)=====
+    // 路径 helpers(对齐官方 install.sh 路径常量)
 
     /// QQ_BASE_PATH = `$INSTALL_BASE_DIR/opt/QQ`
     fn qq_base_path(&self) -> HostPath {
@@ -389,9 +389,7 @@ impl Component for NapCatComponent {
 }
 
 
-// ============================================================
 // install 实装(独立 impl block,复用上面 trait 的字段)
-// ============================================================
 
 impl NapCatComponent {
     /// Linux verify(原 verify 实装,挪到独立方法以便 trait verify 按 mode 分发)。
@@ -464,7 +462,7 @@ impl NapCatComponent {
 
         self.ensure_linux_qq_installed(host).await?;
 
-        // ===== Step 1:下载 NapCat.Shell.zip 到本地 =====
+        // Step 1:下载 NapCat.Shell.zip 到本地
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "download NapCat.Shell.zip".into(),
@@ -488,7 +486,7 @@ impl NapCatComponent {
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // ===== Step 2:上传到远端 =====
+        // Step 2:上传到远端
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "upload to host".into(),
@@ -503,7 +501,7 @@ impl NapCatComponent {
         let _ = tokio::fs::remove_file(&local_tmp).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 3:解压到 staging =====
+        // Step 3:解压到 staging
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "extract zip to staging".into(),
@@ -519,7 +517,7 @@ impl NapCatComponent {
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // ===== Step 4:拷贝到 napcat_dir + chmod +x =====
+        // Step 4:拷贝到 napcat_dir + chmod +x
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
             message: "install to target_folder/napcat".into(),
@@ -558,7 +556,7 @@ impl NapCatComponent {
         let _ = host.remove_file(&remote_zip).await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
 
-        // ===== Step 5:写 loadNapCat.js =====
+        // Step 5:写 loadNapCat.js
         ctx.emit(ProgressKind::StepBegin {
             step: 5,
             message: "write loadNapCat.js".into(),
@@ -589,7 +587,7 @@ impl NapCatComponent {
         }
         ctx.emit(ProgressKind::StepEnd { step: 5, ok: true }).await;
 
-        // ===== Step 6:改 QQ package.json 的 main 字段 =====
+        // Step 6:改 QQ package.json 的 main 字段
         ctx.emit(ProgressKind::StepBegin {
             step: 6,
             message: "patch QQ package.json main field".into(),
@@ -715,7 +713,7 @@ impl NapCatComponent {
     ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
-        // ===== Step 1:下载 zip 到本地 =====
+        // Step 1:下载 zip 到本地
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "download NapCat.Shell.zip".into(),
@@ -739,7 +737,7 @@ impl NapCatComponent {
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // ===== Step 2:上传(本机即 copy)到 install_base_dir 旁的 tmp =====
+        // Step 2:上传(本机即 copy)到 install_base_dir 旁的 tmp
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "stage zip on host".into(),
@@ -754,7 +752,7 @@ impl NapCatComponent {
         let _ = tokio::fs::remove_file(&local_tmp).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 3:清旧文件,保留 config/ log/ =====
+        // Step 3:清旧文件,保留 config/ log/
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "remove old files (preserve config/ log/)".into(),
@@ -764,7 +762,7 @@ impl NapCatComponent {
         self.remove_old_files_windows(host).await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // ===== Step 4:解压到 install_base_dir(扁平) =====
+        // Step 4:解压到 install_base_dir(扁平)
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
             message: "extract zip".into(),
@@ -1076,13 +1074,11 @@ mod tests {
         assert!(v > 1_000_000_000_000);
     }
 
-    // ============================================================
     // Windows 本机端到端测试(只在 Windows 上编译)
     //
     // 用真 LocalWindowsHost + tempdir 模拟"用户已装 NapCat / 未装 / 残留旧
     // 文件 / 保留 config|log"四种场景。不涉及网络下载;install 本身的
     // 端到端在真机 tauri:dev 跑。
-    // ============================================================
 
     #[cfg(windows)]
     mod windows_e2e {

@@ -278,9 +278,7 @@ impl Component for SnowLumaComponent {
     }
 }
 
-// ============================================================
 // Linux / Windows 分支实装(独立 impl block 拆分关注点)
-// ============================================================
 
 impl SnowLumaComponent {
     /// Linux detect：先确认入口 `<snowluma_dir>/index.mjs` 存在，再尝试从
@@ -357,7 +355,7 @@ impl SnowLumaComponent {
             .unwrap_or("snowluma.tar.gz");
         let remote_archive = self.workspace_dir.join(archive_filename);
 
-        // ===== Step 1:获取 tarball(优先 preloaded,fallback 到镜像下载)=====
+        // Step 1:获取 tarball(优先 preloaded,fallback 到镜像下载)
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "obtain framework tarball".into(),
@@ -425,7 +423,7 @@ impl SnowLumaComponent {
         }
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // ===== Step 2:tar 解压 + strip-components=1 =====
+        // Step 2:tar 解压 + strip-components=1
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "extract framework tarball".into(),
@@ -452,7 +450,7 @@ impl SnowLumaComponent {
         }
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 3:校验 entry 存在 =====
+        // Step 3:校验 entry 存在
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "verify framework entry".into(),
@@ -567,13 +565,13 @@ impl SnowLumaComponent {
     /// Windows install(对齐 legacy `SnowLumaInstall`):
     /// 1) 下载 `SnowLuma-<tag>-win-x64.zip` 到本地临时目录(走镜像 fallback);
     /// 2) 上传到 host(本机 = copy);
-    /// 3) extract_archive 到 install_dir,**保留** `config/` `data/` 现有文件;
+    /// 3) extract_archive 到 install_dir,保留 `config/` `data/` 现有文件;
     ///    Windows 端 ncd-host 的 zip 解压不支持 strip-components,所以包装目录
     ///    的剥离由本方法在解压后做(legacy `_detect_wrapper_prefix`);
     /// 4) verify entry / node.exe / package.json 三件套;
     /// 5) 写 `.installed_tag` 让后续 detect 锁定版本号。
     ///
-    /// **不**做 legacy 的 `_init_or_update_password`(那是 webui 密码同步,
+    /// 不做 legacy 的 `_init_or_update_password`(那是 webui 密码同步,
     /// 属于 ncd-runtime 的 SnowLuma daemon 编排,不在 ncd-component 边界)。
     async fn install_windows(
         &self,
@@ -598,7 +596,7 @@ impl SnowLumaComponent {
         let _ = host.remove_dir_all(&stage_dir).await;
         host.create_dir_all(&stage_dir).await?;
 
-        // ===== Step 1:下载 zip(镜像 fallback)=====
+        // Step 1:下载 zip(镜像 fallback)
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: format!("download SnowLuma-{tag}-win-x64.zip"),
@@ -632,7 +630,7 @@ impl SnowLumaComponent {
         }
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // ===== Step 2:上传到 host stage =====
+        // Step 2:上传到 host stage
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "stage zip on host".into(),
@@ -643,7 +641,7 @@ impl SnowLumaComponent {
         let _ = tokio::fs::remove_file(&local_tmp).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 3:解压 + 探测包装目录 + 复制到 install_dir(保留 config/data) =====
+        // Step 3:解压 + 探测包装目录 + 复制到 install_dir(保留 config/data)
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "extract zip (preserve config/ data/)".into(),
@@ -660,7 +658,7 @@ impl SnowLumaComponent {
         let _ = host.remove_dir_all(&stage_dir).await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // ===== Step 4:校验三件套 =====
+        // Step 4:校验三件套
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
             message: "verify install artifacts".into(),
@@ -677,7 +675,7 @@ impl SnowLumaComponent {
         }
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
 
-        // ===== Step 5:写 .installed_tag =====
+        // Step 5:写 .installed_tag
         ctx.emit(ProgressKind::StepBegin {
             step: 5,
             message: "write .installed_tag".into(),
@@ -961,9 +959,7 @@ mod tests {
         );
     }
 
-    // ============================================================
     // Windows 模式纯结构断言(任意平台都能跑,不依赖真文件系统)
-    // ============================================================
 
     #[test]
     fn windows_constructor_uses_flat_install_dir() {
@@ -1028,9 +1024,7 @@ mod tests {
         );
     }
 
-    // ============================================================
     // Windows 本机端到端测试(只在 Windows 上编译)
-    // ============================================================
 
     #[cfg(windows)]
     mod windows_e2e {

@@ -13,6 +13,8 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 
+type LoggerFn = Arc<dyn Fn(&str) + Send + Sync>;
+
 /// 进度事件类型。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -117,7 +119,7 @@ pub struct ActionCtx {
     /// 取消信号
     pub(crate) cancel: CancellationToken,
     /// 日志回调(可选,默认走 tracing)
-    pub(crate) logger: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    pub(crate) logger: Option<LoggerFn>,
 }
 
 impl ActionCtx {

@@ -216,7 +216,7 @@ impl Component for NodeJsComponent {
         self.check_target(host)?;
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
-        // ===== Step 1:下载 tarball =====
+        // Step 1:下载 tarball
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "download node.js tarball".into(),
@@ -237,7 +237,7 @@ impl Component for NodeJsComponent {
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // ===== Step 2:上传到目标 host =====
+        // Step 2:上传到目标 host
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "upload tarball to host".into(),
@@ -254,7 +254,7 @@ impl Component for NodeJsComponent {
         let _ = tokio::fs::remove_file(&local_tmp).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 3:解压到临时位置 =====
+        // Step 3:解压到临时位置
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "extract tarball".into(),
@@ -270,7 +270,7 @@ impl Component for NodeJsComponent {
         host.extract_archive(&remote_tar, &stage_dir, ArchiveKind::TarXz).await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // ===== Step 4:把 stage/<root>/* 移到 install_dir =====
+        // Step 4:把 stage/<root>/* 移到 install_dir
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
             message: "install to target dir".into(),

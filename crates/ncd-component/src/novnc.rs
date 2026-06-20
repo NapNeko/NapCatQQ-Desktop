@@ -190,7 +190,7 @@ impl Component for NoVncComponent {
         self.check_target(host)?;
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
 
-        // ===== Step 1:探测包管理器 =====
+        // Step 1:探测包管理器
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "detect package manager".into(),
@@ -200,7 +200,7 @@ impl Component for NoVncComponent {
         ctx.info(format!("package manager: {mgr:?}")).await;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // ===== Step 2:刷新包索引 =====
+        // Step 2:刷新包索引
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "refresh package index".into(),
@@ -233,7 +233,7 @@ impl Component for NoVncComponent {
         }
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 3:装图形栈 =====
+        // Step 3:装图形栈
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: format!("install graphics stack ({mgr:?})"),

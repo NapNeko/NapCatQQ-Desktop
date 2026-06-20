@@ -354,9 +354,7 @@ impl Component for QQComponent {
     }
 }
 
-// ============================================================
 // 平台分发实装：Linux rootless 解包 + Windows 官方静默安装
-// ============================================================
 
 impl QQComponent {
     /// Linux detect：读 `<install_base>/opt/QQ/resources/app/package.json`
@@ -401,7 +399,7 @@ impl QQComponent {
     ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
-        // ===== Step 1: 检测并安装系统依赖 =====
+        // Step 1: 检测并安装系统依赖
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "check system dependencies".into(),
@@ -410,7 +408,7 @@ impl QQComponent {
         self.ensure_linux_dependencies(host, ctx).await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // ===== Step 2:探测包格式 =====
+        // Step 2:探测包格式
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "detect package format".into(),
@@ -420,7 +418,7 @@ impl QQComponent {
         ctx.info(format!("package format: {pkg_format:?}")).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 3:下载 QQ 包到本地 =====
+        // Step 3:下载 QQ 包到本地
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "download QQ package".into(),
@@ -445,7 +443,7 @@ impl QQComponent {
         // Layer 1: 尝试远程直接下载
         if host.locality() == ncd_host::Locality::Remote {
             for mirror_url in &mirrors {
-                if let Ok(_) = host.download_url(mirror_url, &remote_pkg).await {
+                if host.download_url(mirror_url, &remote_pkg).await.is_ok() {
                     ctx.info("远程直接下载成功").await;
                     remote_download_ok = true;
                     break;
@@ -476,7 +474,7 @@ impl QQComponent {
 
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // ===== Step 4:rootless 解压 =====
+        // Step 4:rootless 解压
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
             message: "extract QQ".into(),
@@ -584,7 +582,7 @@ impl QQComponent {
         Ok(report)
     }
 
-    // ===== Windows 本机实装 =====
+    // Windows 本机实装
 
     /// Windows detect：注册表 `HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT` 的
     /// `Install` 值拿安装根。新版 QQNT 把客户端按版本分目录放在
@@ -669,7 +667,7 @@ impl QQComponent {
     ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
 
-        // ===== Step 1:拉 pcConfig.json 解析下载地址 =====
+        // Step 1:拉 pcConfig.json 解析下载地址
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "fetch QQ pcConfig.json".into(),
@@ -680,7 +678,7 @@ impl QQComponent {
             .await;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // ===== Step 2:下载 NSIS 安装包到本地临时目录 =====
+        // Step 2:下载 NSIS 安装包到本地临时目录
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "download QQ installer".into(),
@@ -698,7 +696,7 @@ impl QQComponent {
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // ===== Step 3:静默安装 =====
+        // Step 3:静默安装
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "run installer /s".into(),
@@ -784,12 +782,9 @@ fn parse_qq_package_version(bytes: &[u8]) -> Option<String> {
 }
 
 /// 解析 `reg query ... /v Install` 的 stdout，抽出 `Install REG_SZ <path>`
-/// 里的 path。形如：
-///
-/// ```text
-/// HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Tencent\QQNT
-///     Install    REG_SZ    C:\Program Files\Tencent\QQNT
-/// ```
+/// 里的 path。stdout 形如（第二行带前导缩进）：
+///     HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Tencent\QQNT
+///         Install    REG_SZ    C:\Program Files\Tencent\QQNT
 fn parse_reg_install_value(stdout: &str) -> Option<String> {
     for line in stdout.lines() {
         let trimmed = line.trim();

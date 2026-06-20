@@ -6,15 +6,12 @@ use ts_rs::TS;
 /// Component 标识。
 ///
 /// 跨边界时各 variant 的字面量（serde / ts-rs）锁定为：
-///
-/// | Rust variant   | wire format    |
-/// |---|---|
-/// | `NapCat`       | `napcat`       |
-/// | `SnowLuma`     | `snowluma`     |
-/// | `Qq`           | `qq`           |
-/// | `NodeJs`       | `nodejs`       |
-/// | `NoVnc`        | `novnc`        |
-/// | `DesktopSelf`  | `desktop_self` |
+/// - `NapCat` → `napcat`
+/// - `SnowLuma` → `snowluma`
+/// - `Qq` → `qq`
+/// - `NodeJs` → `nodejs`
+/// - `NoVnc` → `novnc`
+/// - `DesktopSelf` → `desktop_self`
 ///
 /// 与项目内 `napcat_*` / `snowluma_*` 事件名风格保持一致；不直接走 serde
 /// 的 `rename_all = "snake_case"`，因为它会把 `NapCat` 切成 `nap_cat`、

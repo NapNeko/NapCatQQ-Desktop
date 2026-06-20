@@ -42,7 +42,7 @@ impl QqDependencyInstaller {
             });
         }
 
-        // 检查提权能力（返回 SudoAccess，不再直接报错）
+        // 探测提权能力（SudoAccess），上层按结果决定注入密码还是弹窗
         let sudo_access = self.check_sudo_access(host).await?;
 
         // host 已注入的提权密码也算可用:deploy path（ensure_dependencies）不再传
@@ -80,7 +80,7 @@ impl QqDependencyInstaller {
             }
         }
 
-        // 关键改进：一次性探测包管理器类型，避免重复探测
+        // 探测一次包管理器类型，后续每个包安装复用，避免重复 command -v
         let pkg_mgr = self.detect_package_manager(host).await;
 
         // 刷新包索引
@@ -91,7 +91,7 @@ impl QqDependencyInstaller {
         let mut installed = Vec::new();
         let mut failed = Vec::new();
 
-        // 批量安装（简化实现：逐个安装）
+        // 逐个安装，单个失败记入 failed 不中断其余包
         for (idx, pkg) in missing.iter().enumerate() {
             ctx.emit(crate::context::ProgressKind::StepProgress {
                 step: 0,
@@ -132,12 +132,12 @@ impl QqDependencyInstaller {
     /// 探测包管理器类型（一次性探测，避免重复）。
     async fn detect_package_manager(&self, host: &dyn Host) -> PackageManagerType {
         let cmd_check_apt = HostCommand::new("command").arg("-v").arg("apt-get");
-        if host.run_to_string(cmd_check_apt).await.map_or(false, |o| o.success()) {
+        if host.run_to_string(cmd_check_apt).await.is_ok_and(|o| o.success()) {
             return PackageManagerType::Apt;
         }
 
         let cmd_check_dnf = HostCommand::new("command").arg("-v").arg("dnf");
-        if host.run_to_string(cmd_check_dnf).await.map_or(false, |o| o.success()) {
+        if host.run_to_string(cmd_check_dnf).await.is_ok_and(|o| o.success()) {
             return PackageManagerType::Dnf;
         }
 

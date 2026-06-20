@@ -87,7 +87,7 @@ impl DownloadHelper {
     /// 生成）。第一个 URL 用作进度上报里的 "primary" 标识。
     ///
     /// `expected_sha256`：Some 时下载完成后立即在 ncd-network 内部校验 sha256；
-    /// mismatch **会切下家**而不是直接报 ChecksumMismatch（堵代理"返完整长度
+    /// mismatch 会切下家而不是直接报 ChecksumMismatch（堵代理"返完整长度
     /// 的垃圾字节"投毒洞，前 4 轮字节级防御都防不住）。所有镜像都失败才返
     /// AllMirrorsFailed。None 跳过校验（兼容上游 release 还没 digest 的老仓库）。
     pub async fn download_with_mirrors(
@@ -119,11 +119,17 @@ impl DownloadHelper {
         let sink: Arc<dyn DownloadProgressSink> =
             Arc::new(CtxSink::new(ctx.clone(), step, mirrors[0].clone()));
 
-        let mut cfg = ChunkedConfig::default();
+        let sha = expected_sha256.map(|s| s.to_string());
         // sha256 同时塞 chunked + race fallback，保证 race fallback 链路也能
         // 检出投毒（race 自己也会校验）。
-        cfg.expected_sha256 = expected_sha256.map(|s| s.to_string());
-        cfg.race_cfg.expected_sha256 = expected_sha256.map(|s| s.to_string());
+        let cfg = ChunkedConfig {
+            expected_sha256: sha.clone(),
+            race_cfg: MirrorRaceConfig {
+                expected_sha256: sha,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         match download_smart(mirrors, dest_path, sink, ctx.cancel_token(), cfg).await {
             Ok(_) => {}
             Err(NetworkError::Cancelled) => return Err(ActionError::Cancelled),
@@ -174,8 +180,10 @@ impl DownloadHelper {
         let sink: Arc<dyn DownloadProgressSink> =
             Arc::new(CtxSink::new(ctx.clone(), step, mirrors[0].clone()));
 
-        let mut race_cfg = MirrorRaceConfig::default();
-        race_cfg.expected_sha256 = expected_sha256.map(|s| s.to_string());
+        let race_cfg = MirrorRaceConfig {
+            expected_sha256: expected_sha256.map(|s| s.to_string()),
+            ..Default::default()
+        };
         match download_with_mirror_race(
             mirrors,
             dest_path,
