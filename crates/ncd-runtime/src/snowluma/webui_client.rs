@@ -663,16 +663,12 @@ impl SnowLumaWebUiClientFactory for ReqwestSnowLumaWebUiClientFactory {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-//
 // 单元测试分两组：
-// 1. 纯函数 / 构造器 smoke check（ deliverable，无 IO）。
-// 2. wiremock 端到端（ deliverable）：起 `127.0.0.1:0` 假服务
-// 覆盖 host probing / `LoginRequest` body 字段 / wrapped list 解包 /
-// `ProcessActionResponse` 成功 + 拒绝路径 / 401 自动重试 / `dead_check`
-// 立即返回 / `NotReady` 超时 / `no_proxy` 行为。
-// ---------------------------------------------------------------------------
+// 1. 纯函数 / 构造器 smoke check（无 IO）。
+// 2. wiremock 端到端：起 127.0.0.1:0 假服务
+//    覆盖 host probing / LoginRequest body 字段 / wrapped list 解包 /
+//    ProcessActionResponse 成功 + 拒绝路径 / 401 自动重试 / dead_check
+//    立即返回 / NotReady 超时 / no_proxy 行为。
 
 #[cfg(test)]
 mod tests {
@@ -741,18 +737,17 @@ mod tests {
     // -----------------------------------------------------------------------
     // wiremock 端到端
     //
-    // 起一个绑定在 `127.0.0.1:0`（OS 分配端口）的假 SnowLuma WebUI 服务
-    // 验证 `ReqwestSnowLumaWebUiClient` 在真实 HTTP 链路上的行为。
+    // 起一个绑定在 127.0.0.1:0（OS 分配端口）的假 SnowLuma WebUI 服务
+    // 验证 ReqwestSnowLumaWebUiClient 在真实 HTTP 链路上的行为。
     //
-    // wiremock 0.6 默认 `MockServer::start().await` 监听 `127.0.0.1`，与本
-    // 客户端的 host guard（仅放行 `localhost` / `127.0.0.1` / `[::1]`）天然匹配。
-    // -----------------------------------------------------------------------
+    // wiremock 0.6 默认 MockServer::start().await 监听 127.0.0.1，与本
+    // 客户端的 host guard（仅放行 localhost / 127.0.0.1 / [::1]）天然匹配。
 
     use serde_json::json;
     use wiremock::matchers::{body_partial_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    /// 取出 wiremock 在 `127.0.0.1` 上分配到的随机端口。
+    /// 取出 wiremock 在 127.0.0.1 上分配到的随机端口。
     fn mock_server_port(server: &MockServer) -> u16 {
         let addr = server.address();
         assert_eq!(
@@ -763,7 +758,7 @@ mod tests {
         addr.port()
     }
 
-    /// `/api/status` 任意 HTTP 响应即视为 ready。这里直接 200 OK。
+    /// /api/status 任意 HTTP 响应即视为 ready。这里直接 200 OK。
     #[tokio::test]
     async fn wait_ready_succeeds_when_status_endpoint_responds() {
         let server = MockServer::start().await;
