@@ -533,12 +533,12 @@ impl SnowLumaDaemon {
     }
 
     /// 显式优雅关闭。
-    /// 仅 `Ready` / `Starting` 状态下生效；其它状态早 return（幂等）。
-    /// 1. 切 `Stopping` + 取出 client / child。
-    /// 2. `client.logout()` fire-and-forget（忽略错误）。
-    /// 3. `child.start_kill()` + `tokio::time::timeout(5s, child.wait())`
-    /// 超时则 `child.kill().await`。
-    /// 4. 切 `Stopped` + 清 ref_count + 清字段 + 发事件 + 唤醒 waiter。
+    /// 仅 Ready / Starting 状态下生效；其它状态早 return（幂等）。
+    /// 1. 切 Stopping + 取出 client / child。
+    /// 2. client.logout() fire-and-forget（忽略错误）。
+    /// 3. child.start_kill() + tokio::time::timeout(5s, child.wait())
+    ///    超时则 child.kill().await。
+    /// 4. 切 Stopped + 清 ref_count + 清字段 + 发事件 + 唤醒 waiter。
     pub async fn shutdown(&self) {
         let (client, child_opt) = {
             let mut inner = self.inner.lock().await;
@@ -634,19 +634,16 @@ enum StarterRole {
     Waiter,
 }
 
-// ---------------------------------------------------------------------------
-// stdout reader
-// ---------------------------------------------------------------------------
-
 /// spawn 一个长生命周期 tokio 任务，逐行读取 SnowLuma node.exe 的 stdout
 /// 按 做 ANSI / 控制字符清洗后：
-/// 1. 通过 `log_tx`（broadcast 容量 10000）广播给所有 `subscribe_logs` 订阅者
-/// SL flavor BotLogPage 会消费这个 channel。
-/// 2. 通过 `bus.publish(DomainEvent::snowluma_daemon_log(line))` 发到全局事件总线
-/// 供前端通用日志面板 / 调试通道订阅（events.rs 中已落地的
-/// `SnowLumaDaemonLog { line }` variant）。
-/// 空行（清洗后为 `""`）直接丢弃，避免污染日志面板。EOF（子进程关闭 stdout）
-/// 时 `next_line` 返回 `Ok(None)`，循环自然退出，任务结束；watch_exit
+/// 1. 通过 log_tx（broadcast 容量 10000）广播给所有 subscribe_logs 订阅者
+///    SL flavor BotLogPage 会消费这个 channel。
+/// 2. 通过 bus.publish(DomainEvent::snowluma_daemon_log(line)) 发到全局事件总线
+///    供前端通用日志面板 / 调试通道订阅（events.rs 中已落地的
+///    SnowLumaDaemonLog { line } variant）。
+///
+/// 空行（清洗后为 ""）直接丢弃，避免污染日志面板。EOF（子进程关闭 stdout）
+/// 时 next_line 返回 Ok(None)，循环自然退出，任务结束；watch_exit
 /// 会负责子进程退出后的状态切换，本 reader 不发 Crashed 事件。
 fn spawn_stdout_reader(
     stdout: tokio::process::ChildStdout,
@@ -703,10 +700,10 @@ fn push_recent(recent: &Arc<std::sync::Mutex<std::collections::VecDeque<String>>
     }
 }
 
-/// 从 `runtime_root` 推断 daemon 入口脚本路径。
-/// SnowLuma 的真实入口在不同打包版本下命名不一（`entry.js` / `index.js` /
-/// `dist/index.js` / `napcat.mjs` 等）。这里按一组候选名按顺序探测
-/// 命中第一个真实文件就用；都不存在则保守地回落到 `entry.js` 让 spawn 报错时
+/// 从 runtime_root 推断 daemon 入口脚本路径。
+/// SnowLuma 的真实入口在不同打包版本下命名不一（entry.js / index.js /
+/// dist/index.js / napcat.mjs 等）。这里按一组候选名按顺序探测
+/// 命中第一个真实文件就用；都不存在则保守地回落到 entry.js 让 spawn 报错时
 /// 携带能识别的路径文本（用户能立即知道是哪条）。
 fn resolve_daemon_entry(runtime_root: &std::path::Path) -> std::path::PathBuf {
     const CANDIDATES: &[&str] = &[
@@ -729,27 +726,24 @@ fn resolve_daemon_entry(runtime_root: &std::path::Path) -> std::path::PathBuf {
     runtime_root.join("index.mjs")
 }
 
-// ---------------------------------------------------------------------------
-// exit watcher
-// ---------------------------------------------------------------------------
-
 /// 监听 node.exe 子进程退出，按 把 daemon 状态机推进到
-/// `Stopped`（intentional shutdown 路径）或 `Crashed`（意外退出路径）。
-/// 为什么用 `Weak<SnowLumaDaemon>`：daemon 本身持 `Arc<Self>` 并把 child 句柄
-/// 通过 `inner.node_child` 持有；如果 watcher 也持 `Arc<SnowLumaDaemon>`，会与
+/// Stopped（intentional shutdown 路径）或 Crashed（意外退出路径）。
+///
+/// 为什么用 Weak<SnowLumaDaemon>：daemon 本身持 Arc<Self> 并把 child 句柄
+/// 通过 inner.node_child 持有；如果 watcher 也持 Arc<SnowLumaDaemon>，会与
 /// daemon 内部任何持 watcher 句柄的对象（未来扩展）形成循环引用。当下虽未触发
-/// leak，但用 `Weak` 是 显式约定，便于将来 `JoinHandle` 落到 inner
-/// 时不踩坑。
+/// leak，但用 Weak 是显式约定，便于将来 JoinHandle 落到 inner 时不踩坑。
+///
 /// 流程：
-/// 1. `daemon.upgrade()` 失败 → daemon 已被 drop，直接 return。
-/// 2. 锁 inner 取出 `node_child`（`take`）；若为 `None` —— 通常是 starter 失败
-/// 回滚 / 手动 `shutdown` 已经把 child 取走 —— 直接 return。
-/// 3. `child.wait().await` 阻塞等子进程退出，捕获 ExitStatus。
-/// 4. `dead_flag.store(true)`：任何还在等 `wait_ready` 的轮询会 fast-fail。
+/// 1. daemon.upgrade() 失败 → daemon 已被 drop，直接 return。
+/// 2. 锁 inner 取出 node_child（take）；若为 None —— 通常是 starter 失败
+///    回滚 / 手动 shutdown 已经把 child 取走 —— 直接 return。
+/// 3. child.wait().await 阻塞等子进程退出，捕获 ExitStatus。
+/// 4. dead_flag.store(true)：任何还在等 wait_ready 的轮询会 fast-fail。
 /// 5. 重新锁 inner：根据当前 state 判断 was_intentional：
-/// - `Stopping` / `Stopped` → 视为 intentional，目标态 `Stopped`，不写
-/// `last_error`（不污染下次 `ensure_running` 的错误信号）
-/// - 其它（Ready / Starting / Crashed）→ 视为意外退出，目标态 `Crashed`
+///    - Stopping / Stopped → 视为 intentional，目标态 Stopped，不写
+///      last_error（不污染下次 ensure_running 的错误信号）
+///    - 其它（Ready / Starting / Crashed）→ 视为意外退出，目标态 Crashed
 /// last_error = Some(format!("node.exe exited: {exit:?}"))。
 /// 6. 清空 node_pid（child 已不在）；快照 state / ref_count / last_error。
 /// 7. drop lock 后再发 SnowLumaDaemonStateChanged{state, ref_count, reason}
