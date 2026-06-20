@@ -461,7 +461,9 @@ impl SnowLumaConfigRenderer {
 
         if no_servers {
             let mut networks = Self::build_fallback_networks();
-            let obj = networks.as_object_mut().unwrap();
+            let Some(obj) = networks.as_object_mut() else {
+                return networks;
+            };
             obj["httpClients"] = json!(
                 connect
                     .http_clients

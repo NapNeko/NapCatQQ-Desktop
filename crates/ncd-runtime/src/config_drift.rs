@@ -378,11 +378,11 @@ fn sort_network_adapter_arrays(map: &mut serde_json::Map<String, Value>) {
     }
 }
 
-fn sort_adapter_array_by_name(arr: &mut Vec<Value>) {
+fn sort_adapter_array_by_name(arr: &mut [Value]) {
     for item in arr.iter_mut() {
         normalize_values_for_drift(item);
     }
-    arr.sort_by(|a, b| adapter_sort_key(a).cmp(&adapter_sort_key(b)));
+    arr.sort_by_key(adapter_sort_key);
 }
 
 fn adapter_sort_key(v: &Value) -> String {

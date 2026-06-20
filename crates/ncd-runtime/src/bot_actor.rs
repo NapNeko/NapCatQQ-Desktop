@@ -180,7 +180,7 @@ impl BotActorHandle {
         self.inner
             .cancellation_token
             .lock()
-            .expect("cancellation token lock")
+            .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
 
@@ -581,7 +581,7 @@ fn reset_token(
     snapshot: &mut BotActorSnapshot,
     cancellation_token: &Arc<Mutex<CancellationToken>>,
 ) {
-    let mut guard = cancellation_token.lock().expect("cancellation token lock");
+    let mut guard = cancellation_token.lock().unwrap_or_else(|e| e.into_inner());
     *guard = CancellationToken::new();
     snapshot.token_generation = snapshot.token_generation.saturating_add(1);
 }
@@ -589,7 +589,7 @@ fn reset_token(
 fn cancel_current_token(cancellation_token: &Arc<Mutex<CancellationToken>>) {
     cancellation_token
         .lock()
-        .expect("cancellation token lock")
+        .unwrap_or_else(|e| e.into_inner())
         .cancel();
 }
 

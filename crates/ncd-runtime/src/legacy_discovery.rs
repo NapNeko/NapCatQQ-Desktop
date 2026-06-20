@@ -41,7 +41,7 @@ impl<'a> LegacyDiscovery<'a> {
                 selections.push(selection);
             }
         }
-        selections.sort_by(|left, right| selection_score(right).cmp(&selection_score(left)));
+        selections.sort_by_key(|right| std::cmp::Reverse(selection_score(right)));
         info!(
             target: "ncd_runtime::legacy_discovery",
             candidates = selections.len(),

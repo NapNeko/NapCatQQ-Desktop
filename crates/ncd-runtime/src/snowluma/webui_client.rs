@@ -325,14 +325,8 @@ impl ReqwestSnowLumaWebUiClient {
         Ok(builder)
     }
 
-    /// 带鉴权的 JSON 请求 helper：自动处理 401 重试。
-    /// 流程：
-    /// 1. 若 `inner.token` 为 None → 先 `login`。
-    /// 2. 发请求；收到 401 → 清空 token + 重新 `login` + 重试一次。
-    /// 3. 仍 401 → `Status { status: 401, ... }`；其它非 2xx → `Status { ... }`。
-    /// 4. 2xx → JSON 解码。
-    /// 当前 trait 的 8 个端点中没有需要 JSON request body 的鉴权请求，因此本
-    /// helper 仅支持无 body 的 GET / POST。`login` 直接走专用路径。
+    /// 带鉴权的 JSON 请求 helper：自动处理 401 重试。trait 的 8 个端点中没有需要
+    /// JSON request body 的鉴权请求，因此仅支持无 body 的 GET / POST；login 走专用路径。
     async fn authed_request_json<T: DeserializeOwned>(
         &self,
         method: Method,
@@ -653,6 +647,37 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
     }
 }
 
+// ReqwestSnowLumaWebUiClientFactory：默认 wiring 用的 factory。
+use crate::snowluma::daemon::SnowLumaWebUiClientFactory;
+
+/// port 在每次 create 时由 daemon 传入（与 app-config.json 的 snowlumaWebuiPort
+/// 一致），构造时占位端口即可。
+pub struct ReqwestSnowLumaWebUiClientFactory;
+
+impl Default for ReqwestSnowLumaWebUiClientFactory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReqwestSnowLumaWebUiClientFactory {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl SnowLumaWebUiClientFactory for ReqwestSnowLumaWebUiClientFactory {
+    async fn create(
+        &self,
+        password: String,
+        port: u16,
+    ) -> Result<std::sync::Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError> {
+        let client = ReqwestSnowLumaWebUiClient::new(port, password)?;
+        Ok(std::sync::Arc::new(client))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 //
@@ -666,6 +691,7 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
 
 #[cfg(test)]
 mod tests {
+    #![allow(unsafe_code)]
     use super::*;
 
     #[test]
@@ -1083,33 +1109,5 @@ mod tests {
             result.is_ok(),
             "no_proxy must bypass HTTP_PROXY env var: {result:?}"
         );
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ReqwestSnowLumaWebUiClientFactory：默认 wiring 用的 factory。
-// ---------------------------------------------------------------------------
-
-use crate::snowluma::daemon::SnowLumaWebUiClientFactory;
-
-/// 默认 `SnowLumaWebUiClientFactory`：`port` 在每次 `create` 时由 daemon 传入
-/// （与 `app-config.json` 的 `snowlumaWebuiPort` 一致），构造时占位端口即可。
-pub struct ReqwestSnowLumaWebUiClientFactory;
-
-impl ReqwestSnowLumaWebUiClientFactory {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl SnowLumaWebUiClientFactory for ReqwestSnowLumaWebUiClientFactory {
-    async fn create(
-        &self,
-        password: String,
-        port: u16,
-    ) -> Result<std::sync::Arc<dyn SnowLumaWebUiClient>, SnowLumaWebUiError> {
-        let client = ReqwestSnowLumaWebUiClient::new(port, password)?;
-        Ok(std::sync::Arc::new(client))
     }
 }

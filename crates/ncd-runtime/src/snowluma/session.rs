@@ -143,6 +143,7 @@ fn write_session(path: &Path, session: &SnowLumaSession) -> Result<(), SnowLumaD
 /// - 至少各含 1 个大写、小写、数字、特殊符号；其余位从四类合集随机抽取。
 /// - 整体 `SliceRandom::shuffle` 打乱，避免 4 个固定首位字符泄漏类别。
 /// - 不含空格（合集里没有 ` `）。
+#[allow(clippy::expect_used)]
 pub fn generate_strong_password(len: usize) -> String {
     let target_len = len.max(MIN_PASSWORD_LEN);
     let mut rng = thread_rng();

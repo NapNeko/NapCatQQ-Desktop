@@ -107,6 +107,7 @@ impl DockerBotSessionRegistry {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn start_session(
         &self,
         bot_id: BotId,

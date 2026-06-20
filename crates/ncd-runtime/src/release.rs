@@ -90,9 +90,9 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
     );
 
     let (napcat, snowluma, desktop) = tokio::join!(
-        fetch_one(&client, ReleaseAlias::Napcat, NAPCAT_RELEASES_URL, token),
-        fetch_one(&client, ReleaseAlias::Snowluma, SNOWLUMA_RELEASES_URL, token),
-        fetch_one(&client, ReleaseAlias::Ncd, DESKTOP_RELEASES_URL, token),
+        fetch_one(client, ReleaseAlias::Napcat, NAPCAT_RELEASES_URL, token),
+        fetch_one(client, ReleaseAlias::Snowluma, SNOWLUMA_RELEASES_URL, token),
+        fetch_one(client, ReleaseAlias::Ncd, DESKTOP_RELEASES_URL, token),
     );
 
     let failed: Vec<&str> = [
@@ -274,7 +274,7 @@ async fn try_proxy(
 
     // 首次尝试。
     match proxy_fetch_attempt(client, proxy_url, signer.sign_headers(&path)).await {
-        Ok(info) => return ProxyOutcome::Ok(info),
+        Ok(info) => ProxyOutcome::Ok(info),
         Err((err, resp_headers)) => {
             // 403：读 X-Server-Time 校正时钟后重试一次（对齐 legacy Python）。
             if matches!(err, NetworkError::Status(403)) {
@@ -317,7 +317,7 @@ async fn try_proxy(
                     }
                 }
             }
-            return ProxyOutcome::Failed(err);
+            ProxyOutcome::Failed(err)
         }
     }
 }
@@ -377,7 +377,6 @@ async fn try_github(
     let url_owned = url.to_string();
     let token_owned = token.map(|s| s.to_string());
     retry_with_backoff(&policy, || {
-        let client = client;
         let url = url_owned.clone();
         let token = token_owned.as_deref();
         async move { github_fetch_attempt(client, &url, token).await }

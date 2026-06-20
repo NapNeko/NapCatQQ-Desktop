@@ -62,7 +62,7 @@ impl SecretStoreImpl {
         let mut key = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut key);
 
-        fs::write(&key_path, &key).map_err(|_| SecretError::Unavailable)?;
+        fs::write(&key_path, key).map_err(|_| SecretError::Unavailable)?;
 
         #[cfg(unix)]
         {

@@ -1,14 +1,4 @@
-//! SnowLuma daemon 主体。
-//!
-//! 本文件落地：
-//! 1. `DaemonState` enum：5 档状态机；ts-rs 派生导出到前端。
-//! 2. `SnowLumaWebUiClientFactory` trait：直接以
-//!    `Arc<dyn SnowLumaWebUiClient>` 暴露 client。
-//! 3. `DaemonInner` 私有 struct + `SnowLumaDaemon` 主体（构造 / `ensure_running`
-//!    / `release` / `shutdown` / `state` / `ref_count` / `subscribe_logs` /
-//!    `current_client`）。
-//!
-//! 红线：本文件不引入 `serde_json::Value`，所有跨边界 enum 派生 ts-rs。
+//! SnowLuma daemon 主体。红线：不引入 serde_json::Value，跨边界 enum 派生 ts-rs。
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -34,18 +24,19 @@ use crate::snowluma::webui_client::SnowLumaWebUiClient;
 // DaemonState---------------------------------------------------------------------------
 
 /// SnowLuma daemon 5 档状态机。
-/// - `Stopped`：未启动 / 已正常退出 / 启动失败回滚后的稳态。
-/// - `Starting`：首启 caller 正在驱动 `render_globals → spawn node.exe →
-/// wait_ready → login`，并发 caller 等 `ready_notify`。
-/// - `Ready`：node.exe 起好 + WebUI 就绪 + 已登录，`ensure_running` 返回
-/// `Arc<dyn SnowLumaWebUiClient>`。
-/// - `Stopping`：`shutdown` 显式调用中，正在 logout + kill node child。
-/// - `Crashed`：node.exe 意外退出，`ensure_running` 直接返回 `Crashed` 错误
-/// 依赖此 daemon 的所有 SL flavor actor 由 `BotManager::run_snowluma_listener`
-/// 级联转 `Crashed`。
-/// `#[serde(rename_all = "snake_case")]` 把 variant 序列化成
-/// `"stopped" / "starting" / "ready" / "stopping" / "crashed"`
-/// 与前端 `src-ui/core/ipc/types.ts` 的 SL `DomainEvent` payload 严格对齐。
+/// - Stopped：未启动 / 已正常退出 / 启动失败回滚后的稳态。
+/// - Starting：首启 caller 正在驱动 render_globals → spawn node.exe →
+///   wait_ready → login，并发 caller 等 ready_notify。
+/// - Ready：node.exe 起好 + WebUI 就绪 + 已登录，ensure_running 返回
+///   Arc<dyn SnowLumaWebUiClient>。
+/// - Stopping：shutdown 显式调用中，正在 logout + kill node child。
+/// - Crashed：node.exe 意外退出，ensure_running 直接返回 Crashed 错误，
+///   依赖此 daemon 的所有 SL flavor actor 由 BotManager::run_snowluma_listener
+///   级联转 Crashed。
+///
+/// serde rename_all = "snake_case" 把 variant 序列化成 stopped / starting /
+/// ready / stopping / crashed，与前端 src-ui/core/ipc/types.ts 的 SL
+/// DomainEvent payload 严格对齐。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]

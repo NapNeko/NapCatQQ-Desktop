@@ -143,7 +143,7 @@ impl RuntimeLaunchPlan {
         match self {
             RuntimeLaunchPlan::NapCat(plan) => {
                 cfg.launch_command = std::iter::once(plan.program.to_string_lossy().to_string())
-                    .chain(plan.args.into_iter())
+                    .chain(plan.args)
                     .collect();
                 cfg.working_dir = Some(plan.working_dir);
                 cfg.environment = plan.environment;

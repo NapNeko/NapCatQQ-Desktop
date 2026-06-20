@@ -72,13 +72,11 @@ impl NativeLaunchTranslator for RuntimeLaunchPlannerAdapter {
         let cfg = BotRuntimeConfig::default_path("/tmp", bot_id);
         let cfg = plan.into_runtime_config(cfg);
 
-        if cfg.launch_command.is_empty() {
+        let Some((program, args)) = cfg.launch_command.split_first() else {
             return Err(DeploymentError::LaunchFailed(
                 "launch plan produced empty command (SnowLuma backend uses daemon, not direct spawn)".into(),
             ));
-        }
-
-        let (program, args) = cfg.launch_command.split_first().unwrap();
+        };
         Ok(NativeLaunchCommand {
             program: program.clone(),
             args: args.to_vec(),
@@ -292,7 +290,7 @@ impl RemoteNativeDeploymentBackend {
         self.resolver
             .resolve(&self.target)
             .await
-            .map_err(|e| BotBackendError::RemoteHostTransport(e))
+            .map_err(BotBackendError::RemoteHostTransport)
     }
 
     /// 通过 resolver 取得一个“新鲜”host（会触发底层刷新/重连）。
@@ -300,7 +298,7 @@ impl RemoteNativeDeploymentBackend {
         self.resolver
             .refresh(&self.target)
             .await
-            .map_err(|e| BotBackendError::RemoteHostTransport(e))
+            .map_err(BotBackendError::RemoteHostTransport)
     }
 
     /// 在操作边界使用：先拿一个 host，执行 op；若 op 失败，则刷新一次 host 再重试一次。
@@ -333,7 +331,7 @@ impl RemoteNativeDeploymentBackend {
         let host = self.current_host().await?;
         let (home, layout) = probe_remote_napcat_layout(host.as_ref())
             .await
-            .map_err(|e| BotBackendError::Io(e))?;
+            .map_err(BotBackendError::Io)?;
         match layout {
             RemoteNapcatLayout::System => Ok(HostPath::from_posix("/")),
             RemoteNapcatLayout::Rootless => Ok(HostPath::from_posix(format!("{home}/Napcat"))),

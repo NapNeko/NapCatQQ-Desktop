@@ -260,13 +260,15 @@ if [ -f {log} ]; then mv -f {log} "{log}.prev" 2>/dev/null || true; fi
 
     let install_base = HostPath::from_posix(format!("{}/Napcat", layout.home));
     let qq = QQComponent::default_v3_2_25(install_base);
-    let mut launch_args = LaunchArgs::default();
-    launch_args.extra_args = vec![
-        "--no-sandbox".into(),
-        "--disable-gpu-sandbox".into(),
-        "-q".into(),
-        qq_id.to_string(),
-    ];
+    let mut launch_args = LaunchArgs {
+        extra_args: vec![
+            "--no-sandbox".into(),
+            "--disable-gpu-sandbox".into(),
+            "-q".into(),
+            qq_id.to_string(),
+        ],
+        ..Default::default()
+    };
     launch_args.extra_env.push((
         "DISPLAY".to_string(),
         display_str(DEFAULT_DISPLAY_NUM),

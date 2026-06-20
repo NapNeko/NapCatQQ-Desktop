@@ -2136,11 +2136,8 @@ mod property_tests {
     /// 等价，复制一份避免跨模块可见性扩散。
     async fn drain(sub: &mut EventSubscription) -> Vec<DomainEvent> {
         let mut out = Vec::new();
-        loop {
-            match tokio::time::timeout(Duration::from_millis(5), sub.next()).await {
-                Ok(Some(ev)) => out.push(ev),
-                _ => break,
-            }
+        while let Ok(Some(ev)) = tokio::time::timeout(Duration::from_millis(5), sub.next()).await {
+            out.push(ev);
         }
         out
     }

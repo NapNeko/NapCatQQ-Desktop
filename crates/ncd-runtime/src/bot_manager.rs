@@ -344,6 +344,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repo: Arc<R>,
         store: Arc<S>,
@@ -438,8 +439,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             _ => Arc::clone(&self.backend),
         }
     }
-
-    /// 远端 SL：`remote_snowluma_daemons` 按 server_id 单例 daemon；多 Bot 共用图形栈，按 qq_id 冷/热注入。
 
     fn docker_webui_secret_key(qq_id: u64) -> String {
         format!("bot:{qq_id}:napcat_docker_webui_token")
@@ -652,7 +651,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             ));
                             Ok(Arc::new(RemoteNativeDeploymentBackend::new(
                                 deployment,
-                                Arc::clone(&resolver),
+                                Arc::clone(resolver),
                                 config.bot.runtime_target.clone(),
                                 backend_id,
                                 flavor,
@@ -664,6 +663,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
+    /// 远端 SL：remote_snowluma_daemons 按 server_id 单例 daemon；多 Bot 共用图形栈，按 qq_id 冷/热注入。
     async fn remote_snowluma_daemon_for_server(
         &self,
         server_id: &str,
@@ -671,20 +671,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     ) -> Result<Arc<RemoteSnowLumaDaemon>, BotManagerError> {
         let sid = server_id.to_string();
         let mut guard = self.remote_snowluma_daemons.lock().await;
-        if !guard.contains_key(&sid) {
-            let daemon = Arc::new(
-                RemoteSnowLumaDaemon::new(
-                    sid.clone(),
-                    Arc::clone(&host),
-                    Arc::clone(&self.remote_snowluma_tunnels),
-                    Arc::clone(&self.event_bus),
-                )
-                .await
-                .map_err(|e| BotManagerError::Render(e.to_string()))?,
-            );
-            guard.insert(sid.clone(), daemon);
+        if let Some(daemon) = guard.get(&sid) {
+            return Ok(Arc::clone(daemon));
         }
-        Ok(Arc::clone(guard.get(&sid).expect("just inserted")))
+        let daemon = Arc::new(
+            RemoteSnowLumaDaemon::new(
+                sid.clone(),
+                Arc::clone(&host),
+                Arc::clone(&self.remote_snowluma_tunnels),
+                Arc::clone(&self.event_bus),
+            )
+            .await
+            .map_err(|e| BotManagerError::Render(e.to_string()))?,
+        );
+        guard.insert(sid, Arc::clone(&daemon));
+        Ok(daemon)
     }
 
     // ─── bootstrap ─────────────────────────────────────────────────────────
@@ -1103,10 +1104,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     skipped.push(bot_id);
                     continue;
                 }
-                if !actors.contains_key(&bot_id) {
-                    let handle = BotActorHandle::spawn(bot_id.clone());
-                    actors.insert(bot_id, handle);
-                }
+                actors
+                    .entry(bot_id.clone())
+                    .or_insert_with(|| BotActorHandle::spawn(bot_id.clone()));
             }
         }
 
@@ -1625,15 +1625,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let handle = self.get_actor(&bot_id).await?;
             let current = handle.snapshot();
             if current.state == BotActorState::Running || current.state == BotActorState::Starting {
-                let backend_switched = matches!(
-                    previous_backend_type,
-                    Some(prev) if prev != target_backend
-                );
-                if backend_switched {
+                if let Some(prev) = previous_backend_type.filter(|p| *p != target_backend) {
                     // backend 切换:必须停旧 + 起新,没法热推送(NapCat ↔ SL 协议完全不同)
-                    let prev_flavor = map_backend_flavor(
-                        previous_backend_type.expect("backend_switched => previous Some"),
-                    );
+                    let prev_flavor = map_backend_flavor(prev);
                     let snapshot = self
                         .restart_bot_with_backend_switch(&bot_id, prev_flavor)
                         .await?;
@@ -1825,12 +1819,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 本机 runtime_target 且处于活跃态的 Bot 数量（退出拦截用）。
     pub async fn count_local_active_bots(&self) -> Result<usize, BotManagerError> {
-        Ok(self.count_active_bots_by_host(|t| t.is_local()).await?)
+        self.count_active_bots_by_host(|t| t.is_local()).await
     }
 
     /// 远端 runtime_target 且处于活跃态的 Bot 数量（退出提示用，不拦截退出）。
     pub async fn count_remote_active_bots(&self) -> Result<usize, BotManagerError> {
-        Ok(self.count_active_bots_by_host(|t| !t.is_local()).await?)
+        self.count_active_bots_by_host(|t| !t.is_local()).await
     }
 
     async fn count_active_bots_by_host(
@@ -1858,10 +1852,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             target: "ncd_runtime::bot_manager",
             "桌面退出：停止本机 Bot，远端保持运行"
         );
-        let configs = match self.repo.list().await {
-            Ok(c) => c,
-            Err(_) => Vec::new(),
-        };
+        let configs = self.repo.list().await.unwrap_or_default();
         let snapshots: Vec<BotActorSnapshot> = {
             let actors = self.actors.read().await;
             actors.values().map(|h| h.snapshot()).collect()
@@ -2487,7 +2478,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             // 已运行中却收到退出事件：进程被外部 kill 或自身崩溃。
             BotActorState::Running => {
                 let detail = match (exit_code, reason.as_deref()) {
-                    (Some(code), _) if code == 0 => "process exited with code 0".to_string(),
+                    (Some(0), _) => "process exited with code 0".to_string(),
                     (Some(code), _) => format!("process exited with code {code}"),
                     (None, Some(reason)) => format!("process terminated: {reason}"),
                     (None, None) => "process terminated by signal".to_string(),

@@ -122,9 +122,8 @@ async fn open_tunnel_preferred(
     remote_port: u16,
 ) -> Result<TunnelHandle, HostError> {
     let spec_fixed = TunnelSpec::local_to_remote(preferred_local, remote_port);
-    match host.open_tunnel(spec_fixed).await {
-        Ok(h) => return Ok(h),
-        Err(_) => {}
+    if let Ok(h) = host.open_tunnel(spec_fixed).await {
+        return Ok(h);
     }
     let spec_ephemeral = TunnelSpec {
         local_host: "127.0.0.1".to_string(),

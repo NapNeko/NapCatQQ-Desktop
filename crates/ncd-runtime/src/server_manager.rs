@@ -246,36 +246,36 @@ pub struct InMemoryCredentialStore {
 
 impl ServerCredentialStore for InMemoryCredentialStore {
     fn get_password(&self, server_id: &str) -> Option<String> {
-        self.store.lock().unwrap().get(&format!("ssh:{server_id}")).cloned()
+        self.store.lock().ok()?.get(&format!("ssh:{server_id}")).cloned()
     }
 
     fn set_password(&self, server_id: &str, password: &str) -> Result<(), String> {
         self.store
             .lock()
-            .unwrap()
+            .map_err(|e| e.to_string())?
             .insert(format!("ssh:{server_id}"), password.to_string());
         Ok(())
     }
 
     fn delete_password(&self, server_id: &str) -> Result<(), String> {
-        self.store.lock().unwrap().remove(&format!("ssh:{server_id}"));
+        self.store.lock().map_err(|e| e.to_string())?.remove(&format!("ssh:{server_id}"));
         Ok(())
     }
 
     fn get_sudo_password(&self, server_id: &str) -> Option<String> {
-        self.store.lock().unwrap().get(&format!("sudo:{server_id}")).cloned()
+        self.store.lock().ok()?.get(&format!("sudo:{server_id}")).cloned()
     }
 
     fn set_sudo_password(&self, server_id: &str, password: &str) -> Result<(), String> {
         self.store
             .lock()
-            .unwrap()
+            .map_err(|e| e.to_string())?
             .insert(format!("sudo:{server_id}"), password.to_string());
         Ok(())
     }
 
     fn delete_sudo_password(&self, server_id: &str) -> Result<(), String> {
-        self.store.lock().unwrap().remove(&format!("sudo:{server_id}"));
+        self.store.lock().map_err(|e| e.to_string())?.remove(&format!("sudo:{server_id}"));
         Ok(())
     }
 }

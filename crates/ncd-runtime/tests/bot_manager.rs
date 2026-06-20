@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -280,14 +281,16 @@ fn docker_local_blocked_config(qq_id: u64, name: &str) -> BotConfig {
     config
 }
 
-fn make_manager_with_local_resolver(
-    root: &std::path::Path,
-) -> (
+type ManagerFixture = (
     Arc<LocalConfigStore>,
     Arc<LocalBotConfigRepo<LocalConfigStore>>,
     Arc<FakeBackend>,
     BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>,
-) {
+);
+
+fn make_manager_with_local_resolver(
+    root: &std::path::Path,
+) -> ManagerFixture {
     let (store, repo, backend, manager) = make_manager(root);
     let local_host: Arc<dyn ncd_host::Host> = Arc::new(LocalWindowsHost::new());
     let resolver: Arc<dyn HostResolver> = Arc::new(LocalOnlyHostResolver::new(local_host));
@@ -300,9 +303,6 @@ fn make_manager_with_local_resolver(
     (store, repo, backend, manager)
 }
 
-/// 默认 wiring：一个本地 `ReqwestNapCatWebUiClient` + `NoopOfflineNotifier`
-/// + 默认 `WebUiPollerSettings`。测试不真正发起 WebUI 请求，仅占位填充
-/// `BotManager::new` 新增的 4 个依赖（design.md §15.1）。
 fn default_webui_client() -> Arc<dyn ncd_runtime::NapCatWebUiClient> {
     Arc::new(ReqwestNapCatWebUiClient::new().expect("构造默认 webui client 失败"))
 }
@@ -321,12 +321,7 @@ fn default_desktop_notify() -> Arc<tokio::sync::RwLock<DesktopNotifySettings>> {
 
 fn make_manager(
     root: &std::path::Path,
-) -> (
-    Arc<LocalConfigStore>,
-    Arc<LocalBotConfigRepo<LocalConfigStore>>,
-    Arc<FakeBackend>,
-    BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>,
-) {
+) -> ManagerFixture {
     let store = Arc::new(LocalConfigStore::new(root));
     let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
@@ -354,12 +349,7 @@ fn make_manager(
 fn make_manager_with_planner(
     root: &std::path::Path,
     planner: Arc<dyn RuntimeLaunchPlanner>,
-) -> (
-    Arc<LocalConfigStore>,
-    Arc<LocalBotConfigRepo<LocalConfigStore>>,
-    Arc<FakeBackend>,
-    BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>,
-) {
+) -> ManagerFixture {
     let store = Arc::new(LocalConfigStore::new(root));
     let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
@@ -825,7 +815,7 @@ async fn batch_start_reports_napcat_missing_runtime_component() {
         .await
         .unwrap();
 
-    let result = manager.batch_start(&[bot_id.clone()]).await.unwrap();
+    let result = manager.batch_start(std::slice::from_ref(&bot_id)).await.unwrap();
     assert!(result.succeeded.is_empty());
     assert_eq!(result.failed.len(), 1);
     assert_eq!(result.failed[0].0, bot_id);

@@ -58,6 +58,7 @@ mod tests {
     //!   subscriber；`#[tokio::test]` 默认 current_thread runtime，跨 await
     //!   仍在同一线程，subscriber 不会丢失。
 
+    #![allow(clippy::unwrap_in_result, clippy::expect_used)]
     use super::*;
     use crate::ids::BotId;
 

@@ -97,6 +97,7 @@ pub enum PasswordSlot {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_in_result)]
     use super::*;
     use std::collections::HashMap;
     use std::sync::Mutex;

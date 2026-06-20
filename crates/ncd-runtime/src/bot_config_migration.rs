@@ -108,6 +108,7 @@ fn migrate_bot_entry(
     Ok(rules)
 }
 
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 fn ensure_connect_shape(payload: &mut Map<String, Value>) -> Vec<String> {
     let mut rules = Vec::new();
     let connect = payload
@@ -174,6 +175,7 @@ fn ensure_connect_shape(payload: &mut Map<String, Value>) -> Vec<String> {
     rules
 }
 
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 fn normalize_advanced(payload: &mut Map<String, Value>) -> Vec<String> {
     let mut rules = Vec::new();
     let advanced = payload
@@ -218,6 +220,7 @@ fn normalize_advanced(payload: &mut Map<String, Value>) -> Vec<String> {
     rules
 }
 
+#[allow(clippy::expect_used)]
 fn normalize_bot_fields(
     payload: &mut Map<String, Value>,
     index: usize,
@@ -505,13 +508,11 @@ fn normalize_qqid(payload: &mut Map<String, Value>) -> Vec<String> {
                     rules.push("bot.QQID string -> number".to_string());
                 }
             }
-            Value::Number(n) => {
-                if n.as_u64().is_none() {
-                    if let Some(i) = n.as_i64() {
-                        if let Ok(u) = u64::try_from(i) {
-                            bot.insert("QQID".to_string(), Value::from(u));
-                            rules.push("bot.QQID i64 -> u64".to_string());
-                        }
+            Value::Number(n) if n.as_u64().is_none() => {
+                if let Some(i) = n.as_i64() {
+                    if let Ok(u) = u64::try_from(i) {
+                        bot.insert("QQID".to_string(), Value::from(u));
+                        rules.push("bot.QQID i64 -> u64".to_string());
                     }
                 }
             }

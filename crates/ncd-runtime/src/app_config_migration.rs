@@ -220,6 +220,7 @@ fn nested<'a>(payload: &'a Map<String, Value>, path: &[&str]) -> Option<&'a Valu
     current.get(path[path.len() - 1])
 }
 
+#[allow(clippy::expect_used)]
 fn write_nested(
     payload: &mut Map<String, Value>,
     path: &[&str],
@@ -278,12 +279,8 @@ fn take_nested(payload: &mut Map<String, Value>, path: &[&str]) -> Option<Value>
 fn cleanup_empty_sections(payload: &mut Map<String, Value>) {
     let empty: Vec<String> = payload
         .iter()
-        .filter_map(|(key, value)| {
-            value
-                .as_object()
-                .is_some_and(Map::is_empty)
-                .then(|| key.clone())
-        })
+        .filter(|(_, value)| value.as_object().is_some_and(Map::is_empty))
+        .map(|(key, _)| key.clone())
         .collect();
     for key in empty {
         payload.remove(&key);

@@ -138,8 +138,10 @@ async fn build_napcat_remote_launch(
 ) -> Result<NativeLaunchCommand, DeploymentError> {
     let qq_id = config.bot.qq_id;
     let component = NapCatComponent::new(install_base.clone());
-    let mut launch_args = LaunchArgs::default();
-    launch_args.extra_args = vec!["--no-sandbox".into(), "-q".into(), qq_id.to_string()];
+    let launch_args = LaunchArgs {
+        extra_args: vec!["--no-sandbox".into(), "-q".into(), qq_id.to_string()],
+        ..Default::default()
+    };
     let qq_cmd = component
         .launch_command(host, &launch_args)
         .map_err(|e| DeploymentError::LaunchFailed(e.to_string()))?;
@@ -228,18 +230,6 @@ impl RemoteNativeLaunchTranslator {
             coordinator,
             cached_layout: tokio::sync::Mutex::new(None),
         }
-    }
-
-    /// 测试专用构造器。
-    /// 保持 `pub(crate)` + `#[cfg(test)]`，仅同 crate 测试代码可访问。
-    #[cfg(test)]
-    pub(crate) fn new_for_test(host: Arc<dyn Host>, flavor: BotFlavor, server_id: String) -> Self {
-        Self::new(
-            host,
-            flavor,
-            server_id,
-            Arc::new(crate::bot_manager::RemoteQqEntryCoordinator::default()),
-        )
     }
 
     async fn layout(&self) -> Result<(String, RemoteNapcatLayout), DeploymentError> {

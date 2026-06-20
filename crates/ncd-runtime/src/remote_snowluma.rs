@@ -595,24 +595,6 @@ impl RemoteSnowLumaBackend {
         }
     }
 
-    /// 测试专用构造器。
-    /// 保持 `pub(crate)` + `#[cfg(test)]`，仅同 crate 测试代码可访问。
-    #[cfg(test)]
-    pub(crate) fn new_for_test(
-        backend_id: impl Into<BotId>,
-        daemon: Arc<RemoteSnowLumaDaemon>,
-        event_bus: Arc<BroadcastEventBus>,
-        tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
-    ) -> Self {
-        Self::new(
-            backend_id,
-            daemon,
-            event_bus,
-            tunnels,
-            Arc::new(crate::bot_manager::RemoteQqEntryCoordinator::default()),
-        )
-    }
-
     /// 冷启动后再开桌面：远端 QQ 仍在跑时恢复隧道注入与 status poller。
     pub async fn attach_reconciled_running(
         &self,
@@ -676,9 +658,7 @@ impl BotBackend for RemoteSnowLumaBackend {
         let bot_id = ctx.config.bot_id.clone();
         let start_mode = resolve_start_mode(config);
 
-        if let Err(e) = self.daemon.ensure_running().await {
-            return Err(e);
-        }
+        self.daemon.ensure_running().await?;
 
         let paths = self.daemon.paths();
         if let Err(e) = render_native_snowluma_config_on_host(
