@@ -23,8 +23,8 @@ impl QqDependencyDetector {
     /// 检测 QQ 依赖状态。
     ///
     /// 策略：
-    /// - 若 `qq_binary` 为 Some：用 ldd 检测动态库加载（最准确）
-    /// - 若 `qq_binary` 为 None：用包管理器查询预定义清单
+    /// - 若 qq_binary 为 Some：用 ldd 检测动态库加载（最准确）
+    /// - 若 qq_binary 为 None：用包管理器查询预定义清单
     pub async fn detect(
         &self,
         host: &dyn Host,
@@ -187,7 +187,7 @@ impl QqDependencyDetector {
 
     /// 根据发行版解析实际要查询 / 安装的包名清单。
     ///
-    /// Debian 系：对标记 has_t64_variant 的包逐个 `apt-cache show <pkg>t64` 探测，
+    /// Debian 系：对标记 has_t64_variant 的包逐个 apt-cache show <pkg>t64 探测，
     /// 存在 t64 变体就用 t64 名，否则回退原名。这跟官方 install.sh 一致，比按
     /// 版本号一刀切加后缀稳健——某个小众包若在当前发行版没 t64 变体，强制加后缀
     /// 会让 dpkg/apt 报 "unable to locate package"。
@@ -220,7 +220,7 @@ impl QqDependencyDetector {
         }
     }
 
-    /// `apt-cache show <pkg>t64` 退出码 0 表示该 t64 变体在仓库里存在。
+    /// apt-cache show <pkg>t64 退出码 0 表示该 t64 变体在仓库里存在。
     async fn t64_variant_available(&self, host: &dyn Host, debian_package: &str) -> bool {
         let t64_name = format!("{debian_package}t64");
         let cmd = HostCommand::new("apt-cache").arg("show").arg(&t64_name);

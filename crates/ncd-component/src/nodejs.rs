@@ -1,20 +1,20 @@
-//! `NodeJsComponent`:Node.js runtime 组件。
+//! NodeJsComponent:Node.js runtime 组件。
 //!
 //! 作为第一个完整 Component 实装,跑通 Component trait 的全套能力,后续
 //! component 照本模板扩展。
 //!
 //! 支持矩阵:
-//! - `(Linux, Local)` / `(Linux, Remote)`:从 nodejs.org 下载 tar.xz 解压
-//! - `(Windows, Local)`:tar.xz 在 Windows 上解压暂未实装
-//!   (`HostError::Unsupported`),后续按需补 zip 形式的 node Windows 包
+//! - (Linux, Local) / (Linux, Remote):从 nodejs.org 下载 tar.xz 解压
+//! - (Windows, Local):tar.xz 在 Windows 上解压暂未实装
+//!   (HostError::Unsupported),后续按需补 zip 形式的 node Windows 包
 //!
 //! 探测策略:
-//! 1. 目标安装目录 `<install_dir>/bin/node` 存在 + `node --version` 输出
-//! 2. PATH 中有 `node`(回退到系统 node)
+//! 1. 目标安装目录 <install_dir>/bin/node 存在 + node --version 输出
+//! 2. PATH 中有 node(回退到系统 node)
 //!
 //! 默认下载源:
-//! `https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz`
-//! 可通过 `NodeJsComponent::with_url(...)` 覆盖镜像。
+//! https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz
+//! 可通过 NodeJsComponent::with_url(...) 覆盖镜像。
 
 use std::sync::Arc;
 
@@ -33,15 +33,15 @@ use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 /// Node.js component 配置。
 #[derive(Debug, Clone)]
 pub struct NodeJsComponent {
-    /// 期望版本(无 `v` 前缀,如 "20.10.0")
+    /// 期望版本(无 v 前缀,如 "20.10.0")
     pub version: String,
-    /// 安装目录(如 `/opt/napcat/runtime/node` 或 `$HOME/Napcat/usr/node`)
+    /// 安装目录(如 /opt/napcat/runtime/node 或 $HOME/Napcat/usr/node)
     pub install_dir: HostPath,
     /// 下载源 URL(默认 nodejs.org 官方)
     pub download_url_template: Option<String>,
     /// 期望 SHA256(可选,提供则严格校验)
     pub expected_sha256: Option<String>,
-    /// 临时目录(下载 tarball 用,默认 `/tmp/`)
+    /// 临时目录(下载 tarball 用,默认 /tmp/)
     pub tmp_dir: HostPath,
 }
 
@@ -111,7 +111,7 @@ impl NodeJsComponent {
     }
 
     fn extract_root_subdir(&self, host: &dyn Host) -> String {
-        // tar.xz 解压后会有一层 `node-v20.10.0-linux-x64/` 子目录,需要去除
+        // tar.xz 解压后会有一层 node-v20.10.0-linux-x64/ 子目录,需要去除
         let platform = match host.os() {
             Os::Linux => "linux",
             Os::MacOs => "darwin",
@@ -126,7 +126,7 @@ impl NodeJsComponent {
         format!("node-v{}-{platform}-{arch}", self.version)
     }
 
-    /// 组件元数据，给 `list_components` Tauri command 使用。
+    /// 组件元数据，给 list_components Tauri command 使用。
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::NodeJs,
@@ -280,7 +280,7 @@ impl Component for NodeJsComponent {
         let _ = host.remove_dir_all(&self.install_dir).await;
         host.create_dir_all(&self.install_dir).await?;
         let root_subdir = stage_dir.join(self.extract_root_subdir(host));
-        // 用 shell 把内容 mv 过去:`mv stage/root_subdir/* install_dir/`
+        // 用 shell 把内容 mv 过去:mv stage/root_subdir/* install_dir/
         let mv_cmd = HostCommand::new("sh").arg("-c").arg(format!(
             "mv {}/* {}/ && mv {}/.* {}/ 2>/dev/null; true",
             root_subdir.as_posix(),

@@ -6,16 +6,16 @@ use ts_rs::TS;
 /// Component 标识。
 ///
 /// 跨边界时各 variant 的字面量（serde / ts-rs）锁定为：
-/// - `NapCat` → `napcat`
-/// - `SnowLuma` → `snowluma`
-/// - `Qq` → `qq`
-/// - `NodeJs` → `nodejs`
-/// - `NoVnc` → `novnc`
-/// - `DesktopSelf` → `desktop_self`
+/// - NapCat → napcat
+/// - SnowLuma → snowluma
+/// - Qq → qq
+/// - NodeJs → nodejs
+/// - NoVnc → novnc
+/// - DesktopSelf → desktop_self
 ///
-/// 与项目内 `napcat_*` / `snowluma_*` 事件名风格保持一致；不直接走 serde
-/// 的 `rename_all = "snake_case"`，因为它会把 `NapCat` 切成 `nap_cat`、
-/// `Qq` 切成 `qq` 也算巧合，但 `NapCat` 不行，所以统一都用显式 rename。
+/// 与项目内 napcat_* / snowluma_* 事件名风格保持一致；不直接走 serde
+/// 的 rename_all = "snake_case"，因为它会把 NapCat 切成 nap_cat、
+/// Qq 切成 qq 也算巧合，但 NapCat 不行，所以统一都用显式 rename。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum ComponentId {
@@ -105,9 +105,9 @@ pub struct LaunchArgs {
 
 /// 组件分类。
 ///
-/// - `Framework`：用户主动选择安装的 Bot 框架（NapCat / SnowLuma）。
-/// - `RuntimeDep`：Framework 依赖的运行时（QQ / NodeJs / NoVnc）。
-/// - `SelfApp`：Desktop 自身（仅本地，自更新走 ncd-update）。
+/// - Framework：用户主动选择安装的 Bot 框架（NapCat / SnowLuma）。
+/// - RuntimeDep：Framework 依赖的运行时（QQ / NodeJs / NoVnc）。
+/// - SelfApp：Desktop 自身（仅本地，自更新走 ncd-update）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -117,10 +117,10 @@ pub enum ComponentCategory {
     SelfApp,
 }
 
-/// `(Os, Locality)` 组合的强类型表达。
+/// (Os, Locality) 组合的强类型表达。
 ///
-/// `Component::supported_targets` 暴露的是 `&'static [(Os, Locality)]`，跨边界
-/// 时拍扁成本结构以保留字段名（前端按 `os` / `locality` 字段访问）。
+/// Component::supported_targets 暴露的是 &'static [(Os, Locality)]，跨边界
+/// 时拍扁成本结构以保留字段名（前端按 os / locality 字段访问）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct SupportedTarget {
@@ -142,7 +142,7 @@ impl From<(ncd_host::Os, ncd_host::Locality)> for SupportedTarget {
 
 /// 组件元数据。Components 页直接消费的清单数据。
 ///
-/// 字段都由各 Component 实装的 `info()` 静态方法写死；前端不做任何派生
+/// 字段都由各 Component 实装的 info() 静态方法写死；前端不做任何派生
 /// （比如 i18n 文案就由后端写死中文 + 简短描述）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -163,9 +163,9 @@ pub struct ComponentInfo {
 
 /// 1 个 component 在 1 台 host 上的探测结果。
 ///
-/// `detect_component` Tauri command 出参；前端按字段渲染"是否已装 / 哪个
+/// detect_component Tauri command 出参；前端按字段渲染"是否已装 / 哪个
 /// 版本 / 该 host 是否支持本 component"。任一字段缺失都不影响其它字段
-/// 的解释（比如 `supported=false` 时 `detected` 必为 None，但前端仍可
+/// 的解释（比如 supported=false 时 detected 必为 None，但前端仍可
 /// 显示 host_id）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -176,7 +176,7 @@ pub struct ComponentDetectResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detected: Option<DetectedVersion>,
     /// 当前 host 是否在 component 的 supported_targets 中；不支持时
-    /// `detected` 始终为 None。
+    /// detected 始终为 None。
     pub supported: bool,
 }
 
@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(s, "\"desktop_self\"");
     }
 
-    /// 锁定每个 ComponentId variant 的 wire 字面量与 `as_str()` 一致；
+    /// 锁定每个 ComponentId variant 的 wire 字面量与 as_str() 一致；
     /// 同时锁定 round-trip 等价。任何 typo（包括误用 serde 默认 snake_case
     /// 把 NapCat 切成 nap_cat）都会让此测试失败。
     #[test]

@@ -1,7 +1,7 @@
-//! `Component` / `Action` trait 定义。
+//! Component / Action trait 定义。
 //!
 //! Component 描述"是什么 + 怎么装 / 启",但不直接 spawn 进程或调 SSH,只通过
-//! [`ncd_host::Host`] 提供的能力实现操作。
+//! [ncd_host::Host] 提供的能力实现操作。
 
 use async_trait::async_trait;
 
@@ -11,7 +11,7 @@ use crate::context::ActionCtx;
 use crate::error::ActionError;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
-/// `Component` trait:可装可启的"组件"统一接口。
+/// Component trait:可装可启的"组件"统一接口。
 #[async_trait]
 pub trait Component: Send + Sync {
     /// 组件标识。
@@ -24,7 +24,7 @@ pub trait Component: Send + Sync {
     fn supported_targets(&self) -> &'static [(Os, Locality)];
 
     /// 探测目标 Host 上是否已装,装的是哪个版本。
-    /// `Ok(None)` 表示未安装,`Ok(Some(_))` 表示已装,`Err(_)` 是探测出错。
+    /// Ok(None) 表示未安装,Ok(Some(_)) 表示已装,Err(_) 是探测出错。
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError>;
 
     /// 装(可能涉及下载 + 校验 + 解压 + 启动初始化)。
@@ -36,7 +36,7 @@ pub trait Component: Send + Sync {
         self.install(host, ctx).await
     }
 
-    /// 卸载。默认实现返回 `Other("uninstall not implemented")`,各 component 按需 override。
+    /// 卸载。默认实现返回 Other("uninstall not implemented"),各 component 按需 override。
     async fn uninstall(
         &self,
         _host: &dyn Host,
@@ -86,10 +86,10 @@ pub trait Component: Send + Sync {
     }
 }
 
-/// `Action` trait:对单个 Component 的具体操作。
+/// Action trait:对单个 Component 的具体操作。
 ///
 /// Component trait 上的 detect/install/... 已经直接对应 5 种 Action;本 trait
-/// 主要在 `ncd-deploy` 中拼接 Plan 时使用。
+/// 主要在 ncd-deploy 中拼接 Plan 时使用。
 #[async_trait]
 pub trait Action: Send + Sync {
     /// Action 名称(用于日志 / 进度上报)。

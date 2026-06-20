@@ -1,11 +1,11 @@
-//! `DownloadHelper`：HTTP 下载 + SHA256 校验 + 多镜像 race + 切片并行。
+//! DownloadHelper：HTTP 下载 + SHA256 校验 + 多镜像 race + 切片并行。
 //!
 //! 单 URL 路径走 ncd_network::download_with_resume（idle timeout + Range
-//! 续传）；调用 [`DownloadHelper::download_with_mirrors`] 走 ncd_network 的
+//! 续传）；调用 [DownloadHelper::download_with_mirrors] 走 ncd_network 的
 //! mirror race + ≥16MB 切片并行下载。SHA256 在所有路径下载完成后做。
 //!
 //! 设计：
-//! - 进度桥接：实现一个 `CtxSink`，把 ncd_network::ProgressUpdate 翻成
+//! - 进度桥接：实现一个 CtxSink，把 ncd_network::ProgressUpdate 翻成
 //!   ProgressKind::StepProgress + speed_bps，emit 到 ActionCtx
 //! - 校验失败：删除已落盘的 dest 文件，再返回 ChecksumMismatch
 //! - 取消：cancel token 来自 ctx，原子传递给 ncd_network
@@ -83,10 +83,10 @@ impl DownloadHelper {
 
     /// 多镜像下载：自动 race 选 winner，stall 时切镜像，≥16MB 自动切片。
     ///
-    /// `mirrors`：候选 URL 列表（一般用 `ncd_network::build_mirror_urls(原始 URL)`
+    /// mirrors：候选 URL 列表（一般用 ncd_network::build_mirror_urls(原始 URL)
     /// 生成）。第一个 URL 用作进度上报里的 "primary" 标识。
     ///
-    /// `expected_sha256`：Some 时下载完成后立即在 ncd-network 内部校验 sha256；
+    /// expected_sha256：Some 时下载完成后立即在 ncd-network 内部校验 sha256；
     /// mismatch 会切下家而不是直接报 ChecksumMismatch（堵代理"返完整长度
     /// 的垃圾字节"投毒洞，前 4 轮字节级防御都防不住）。所有镜像都失败才返
     /// AllMirrorsFailed。None 跳过校验（兼容上游 release 还没 digest 的老仓库）。
@@ -150,7 +150,7 @@ impl DownloadHelper {
     /// 多镜像下载，但强制只走 race + 单流（不切片）。给小文件 / 不支持 Range
     /// 的端点（部分镜像 reverse-proxy 会丢 Range header）专用。
     ///
-    /// sha256 校验语义同 [`Self::download_with_mirrors`]：mismatch 切下家。
+    /// sha256 校验语义同 [Self::download_with_mirrors]：mismatch 切下家。
     pub async fn download_with_mirrors_no_chunk(
         &self,
         mirrors: &[String],

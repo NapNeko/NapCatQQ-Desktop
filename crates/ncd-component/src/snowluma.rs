@@ -1,21 +1,21 @@
-//! `SnowLumaComponent`:SnowLuma framework lite tarball 部署组件。
+//! SnowLumaComponent:SnowLuma framework lite tarball 部署组件。
 //!
-//! 对齐 legacy `install_snowluma.sh.j2` L300-L360 的安装步骤。
+//! 对齐 legacy install_snowluma.sh.j2 L300-L360 的安装步骤。
 //!
 //! 安装流程:
 //! 1. 下载 lite tarball(GitHub release + 国内镜像 fallback,本 component 内置 fallback 列表)
-//! 2. 上传到 `<workspace_dir>/<FRAMEWORK_FILENAME>`
-//! 3. `tar -xzf $ARCHIVE -C $SNOWLUMA_DIR --strip-components=1`(注意 strip-components=1)
-//! 4. 校验 `$SNOWLUMA_DIR/index.mjs` 存在
+//! 2. 上传到 <workspace_dir>/<FRAMEWORK_FILENAME>
+//! 3. tar -xzf $ARCHIVE -C $SNOWLUMA_DIR --strip-components=1(注意 strip-components=1)
+//! 4. 校验 $SNOWLUMA_DIR/index.mjs 存在
 //!
 //! 路径约定(对齐 legacy):
-//! - `WORKSPACE_DIR`:`$HOME/Napcat/snowluma-workspace`(上层注入)
-//! - `SNOWLUMA_DIR`:`<workspace>/snowluma`(framework 解压根)
-//! - 入口文件:`<snowluma_dir>/index.mjs`
+//! - WORKSPACE_DIR:$HOME/Napcat/snowluma-workspace(上层注入)
+//! - SNOWLUMA_DIR:<workspace>/snowluma(framework 解压根)
+//! - 入口文件:<snowluma_dir>/index.mjs
 //!
 //! 镜像 fallback:与 legacy 完全一致,GitHub 直连 + 6 个国内镜像
-//! (`gh.ddlc.top` / `gh-proxy.com` / `ghfast.top` / `cors.isteed.cc` /
-//! `ghproxy.cc` / `github.akams.cn`)。
+//! (gh.ddlc.top / gh-proxy.com / ghfast.top / cors.isteed.cc /
+//! ghproxy.cc / github.akams.cn)。
 
 use async_trait::async_trait;
 
@@ -41,8 +41,8 @@ pub const DEFAULT_MIRROR_PREFIXES: &[&str] = &[
 /// SnowLuma 部署模式。
 ///
 /// Linux 走 lite tarball + tar 解压(legacy install_snowluma.sh.j2 路径),
-/// Windows 走 `SnowLuma-<tag>-win-x64.zip` 扁平 zip 解压(legacy
-/// SnowLumaInstall),`node.exe` / `index.mjs` / `package.json` 三件套直
+/// Windows 走 SnowLuma-<tag>-win-x64.zip 扁平 zip 解压(legacy
+/// SnowLumaInstall),node.exe / index.mjs / package.json 三件套直
 /// 接落在 install_dir 根下。
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PlatformMode {
@@ -53,14 +53,14 @@ enum PlatformMode {
 /// SnowLuma framework component 配置。
 #[derive(Debug, Clone)]
 pub struct SnowLumaComponent {
-    /// SnowLuma 的工作目录(workspace dir),如 `$HOME/Napcat/snowluma-workspace`
+    /// SnowLuma 的工作目录(workspace dir),如 $HOME/Napcat/snowluma-workspace
     pub workspace_dir: HostPath,
-    /// framework 解压根(默认 `<workspace>/snowluma`)
+    /// framework 解压根(默认 <workspace>/snowluma)
     pub snowluma_dir: HostPath,
     /// GitHub release URL(直连形式),如
-    /// `https://github.com/SnowLuma/SnowLuma/releases/download/v1.2.3/SnowLuma-v1.2.3-linux-x64-lite.tar.gz`
+    /// https://github.com/SnowLuma/SnowLuma/releases/download/v1.2.3/SnowLuma-v1.2.3-linux-x64-lite.tar.gz
     pub framework_url: String,
-    /// 镜像前缀列表(默认使用 [`DEFAULT_MIRROR_PREFIXES`])
+    /// 镜像前缀列表(默认使用 [DEFAULT_MIRROR_PREFIXES])
     pub mirror_prefixes: Vec<String>,
     /// 期望 SHA256(可选)
     pub expected_sha256: Option<String>,
@@ -69,16 +69,16 @@ pub struct SnowLumaComponent {
     /// 平台模式,决定 detect / install / verify 走 Linux tarball 还是
     /// Windows zip 路径。
     mode: PlatformMode,
-    /// Windows 模式下的 release tag(如 `v1.7.5`)。Linux 模式下为 None。
-    /// 用于:1) 探测 install_dir 下的 `.installed_tag` 是否一致;
-    /// 2) install 完成后写回 `.installed_tag`(对齐 legacy
-    /// `SnowLumaInstall.write_installed_tag`)。
+    /// Windows 模式下的 release tag(如 v1.7.5)。Linux 模式下为 None。
+    /// 用于:1) 探测 install_dir 下的 .installed_tag 是否一致;
+    /// 2) install 完成后写回 .installed_tag(对齐 legacy
+    /// SnowLumaInstall.write_installed_tag)。
     windows_tag: Option<String>,
 }
 
 impl SnowLumaComponent {
     /// 创建一个 Linux framework component 描述(lite tarball)。
-    /// `workspace_dir`:SL workspace 根;`snowluma_dir`:framework 解压根。
+    /// workspace_dir:SL workspace 根;snowluma_dir:framework 解压根。
     pub fn new(
         workspace_dir: HostPath,
         framework_url: impl Into<String>,
@@ -100,13 +100,13 @@ impl SnowLumaComponent {
     }
 
     /// 创建 Windows 扁平 zip 部署的 SnowLuma component(legacy
-    /// `SnowLumaInstall` 同款)。
+    /// SnowLumaInstall 同款)。
     ///
-    /// `install_dir`:扁平 zip 解压根(典型 `<data_root>/snowluma/`),
-    /// `node.exe` / `index.mjs` / `package.json` 直接落在该目录之下。
-    /// `tag`:GitHub release tag 含 `v` 前缀(如 `"v1.7.5"`),用于:
-    ///   1) 拼接默认 zip 文件名 / URL(`SnowLuma-<tag>-win-x64.zip`);
-    ///   2) install 完成后写 `.installed_tag`,detect 走该文件优先,
+    /// install_dir:扁平 zip 解压根(典型 <data_root>/snowluma/),
+    /// node.exe / index.mjs / package.json 直接落在该目录之下。
+    /// tag:GitHub release tag 含 v 前缀(如 "v1.7.5"),用于:
+    ///   1) 拼接默认 zip 文件名 / URL(SnowLuma-<tag>-win-x64.zip);
+    ///   2) install 完成后写 .installed_tag,detect 走该文件优先,
     ///      legacy 同款。
     ///
     /// 调用方应该传入与 release service 一致的 tag(例如从 GitHub releases
@@ -158,26 +158,26 @@ impl SnowLumaComponent {
     }
 
     /// 入口文件:
-    /// - Linux 模式:`<snowluma_dir>/index.mjs`(lite tarball 解压根)
-    /// - Windows 模式:`<install_dir>/index.mjs`(扁平 zip 解压根,
-    ///   `snowluma_dir == install_dir`)
+    /// - Linux 模式:<snowluma_dir>/index.mjs(lite tarball 解压根)
+    /// - Windows 模式:<install_dir>/index.mjs(扁平 zip 解压根,
+    ///   snowluma_dir == install_dir)
     pub fn entry_path(&self) -> HostPath {
         self.snowluma_dir.join("index.mjs")
     }
 
-    /// Windows 安装根下的 `node.exe`(legacy SnowLuma release 自带 portable Node)。
+    /// Windows 安装根下的 node.exe(legacy SnowLuma release 自带 portable Node)。
     fn node_exe_path(&self) -> HostPath {
         self.snowluma_dir.join("node.exe")
     }
 
     /// Windows / Linux 都会有的 package.json(SnowLuma release 自带)。
-    /// detect 在 `.installed_tag` 缺失时走它的 `version` 字段 fallback。
+    /// detect 在 .installed_tag 缺失时走它的 version 字段 fallback。
     fn package_json_path(&self) -> HostPath {
         self.snowluma_dir.join("package.json")
     }
 
     /// Windows install 完成后写 + detect 优先读的 tag 文件
-    /// (legacy `SnowLumaInstall.write_installed_tag`)。
+    /// (legacy SnowLumaInstall.write_installed_tag)。
     fn installed_tag_path(&self) -> HostPath {
         self.snowluma_dir.join(".installed_tag")
     }
@@ -197,7 +197,7 @@ impl SnowLumaComponent {
             .collect()
     }
 
-    /// 组件元数据，给 `list_components` Tauri command 使用。
+    /// 组件元数据，给 list_components Tauri command 使用。
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::SnowLuma,
@@ -271,7 +271,7 @@ impl Component for SnowLumaComponent {
         _host: &dyn Host,
         args: &LaunchArgs,
     ) -> Result<HostCommand, ActionError> {
-        // 启动命令:`node <snowluma_dir>/index.mjs`
+        // 启动命令:node <snowluma_dir>/index.mjs
         // 实际 daemon 可能用绝对 node 路径(node 由 NodeJsComponent 装在 workspace/node/),
         // 这里只给基础命令,daemon 拼装层会替换 node 路径。
         Ok(self.launch_command_inner(args))
@@ -281,8 +281,8 @@ impl Component for SnowLumaComponent {
 // Linux / Windows 分支实装(独立 impl block 拆分关注点)
 
 impl SnowLumaComponent {
-    /// Linux detect：先确认入口 `<snowluma_dir>/index.mjs` 存在，再尝试从
-    /// 同目录的 `package.json` 读 `version` 字段拿真实版本号；缺 package.json
+    /// Linux detect：先确认入口 <snowluma_dir>/index.mjs 存在，再尝试从
+    /// 同目录的 package.json 读 version 字段拿真实版本号；缺 package.json
     /// 或字段时回退到 "installed" 占位（lite tarball 旧版本可能没有）。
     async fn detect_linux(
         &self,
@@ -470,9 +470,9 @@ impl SnowLumaComponent {
         Ok(())
     }
 
-    /// Windows detect:扁平 zip 部署。优先读 `.installed_tag`(legacy
-    /// `SnowLumaInstall.write_installed_tag` 写的),fallback 读
-    /// `package.json` 的 `version` 字段。entry / node.exe / package.json
+    /// Windows detect:扁平 zip 部署。优先读 .installed_tag(legacy
+    /// SnowLumaInstall.write_installed_tag 写的),fallback 读
+    /// package.json 的 version 字段。entry / node.exe / package.json
     /// 任一缺失都视为未安装。
     async fn detect_windows(
         &self,
@@ -496,9 +496,9 @@ impl SnowLumaComponent {
                 let tag = String::from_utf8_lossy(&bytes).trim().to_string();
                 if !tag.is_empty() {
                     // 与 release_snapshot::ReleaseInfo.version（strip_v_prefix）
-                    // 对齐：UI 直接拿来跟 latest 字符串相等比较时不会因为 `v`
-                    // 前缀差异误报 "有更新"。`.installed_tag` 文件本身保留
-                    // 原样 tag（含 `v`），兼容 legacy SnowLumaInstall。
+                    // 对齐：UI 直接拿来跟 latest 字符串相等比较时不会因为 v
+                    // 前缀差异误报 "有更新"。.installed_tag 文件本身保留
+                    // 原样 tag（含 v），兼容 legacy SnowLumaInstall。
                     let normalized = tag.strip_prefix('v').unwrap_or(&tag).to_string();
                     return Ok(Some(DetectedVersion {
                         version: normalized,
@@ -562,16 +562,16 @@ impl SnowLumaComponent {
         Ok(report)
     }
 
-    /// Windows install(对齐 legacy `SnowLumaInstall`):
-    /// 1) 下载 `SnowLuma-<tag>-win-x64.zip` 到本地临时目录(走镜像 fallback);
+    /// Windows install(对齐 legacy SnowLumaInstall):
+    /// 1) 下载 SnowLuma-<tag>-win-x64.zip 到本地临时目录(走镜像 fallback);
     /// 2) 上传到 host(本机 = copy);
-    /// 3) extract_archive 到 install_dir,保留 `config/` `data/` 现有文件;
+    /// 3) extract_archive 到 install_dir,保留 config/ data/ 现有文件;
     ///    Windows 端 ncd-host 的 zip 解压不支持 strip-components,所以包装目录
-    ///    的剥离由本方法在解压后做(legacy `_detect_wrapper_prefix`);
+    ///    的剥离由本方法在解压后做(legacy _detect_wrapper_prefix);
     /// 4) verify entry / node.exe / package.json 三件套;
-    /// 5) 写 `.installed_tag` 让后续 detect 锁定版本号。
+    /// 5) 写 .installed_tag 让后续 detect 锁定版本号。
     ///
-    /// 不做 legacy 的 `_init_or_update_password`(那是 webui 密码同步,
+    /// 不做 legacy 的 _init_or_update_password(那是 webui 密码同步,
     /// 属于 ncd-runtime 的 SnowLuma daemon 编排,不在 ncd-component 边界)。
     async fn install_windows(
         &self,
@@ -689,9 +689,9 @@ impl SnowLumaComponent {
         Ok(())
     }
 
-    /// 探测解压根下是否存在唯一一层包装目录(`SnowLuma-vX-win-x64/`),是则返回
+    /// 探测解压根下是否存在唯一一层包装目录(SnowLuma-vX-win-x64/),是则返回
     /// 该子目录,否则返回 extract_root 自身。等价于 legacy
-    /// `_detect_wrapper_prefix` 的纯文件系统版。
+    /// _detect_wrapper_prefix 的纯文件系统版。
     async fn resolve_extracted_payload_root(
         &self,
         host: &dyn Host,
@@ -706,7 +706,7 @@ impl SnowLumaComponent {
     }
 
     /// 把 payload_root 下所有内容复制到 install_dir,跳过 install_dir 下已有的
-    /// `config/` `data/`(legacy 同款,保留用户运行期数据)。
+    /// config/ data/(legacy 同款,保留用户运行期数据)。
     async fn copy_extracted_into_install(
         &self,
         host: &dyn Host,
@@ -727,7 +727,7 @@ impl SnowLumaComponent {
     }
 
     /// Windows uninstall:删 install_dir 下除 config/ data/ 外所有文件和目录,
-    /// 包括 `.installed_tag`(让后续 detect 必须靠新 install 写回)。
+    /// 包括 .installed_tag(让后续 detect 必须靠新 install 写回)。
     async fn uninstall_windows(&self, host: &dyn Host) -> Result<(), ActionError> {
         if !host.exists(&self.snowluma_dir).await? {
             return Ok(());
@@ -775,8 +775,8 @@ impl SnowLumaComponent {
     }
 }
 
-/// 递归复制 src 目录树到 dst,保留 dst 下名字落在 `preserve_top_level` 列表
-/// 中的"顶层"目录已有内容(legacy `SnowLumaInstall.unzip_file` 同款语义,但
+/// 递归复制 src 目录树到 dst,保留 dst 下名字落在 preserve_top_level 列表
+/// 中的"顶层"目录已有内容(legacy SnowLumaInstall.unzip_file 同款语义,但
 /// 仅适用于 Linux/Windows 双平台都能跑通的 Host trait 文件操作)。
 ///
 /// 保留规则只看顶层(直接挂在 install_dir 下),深层同名子目录正常覆盖。
@@ -918,7 +918,7 @@ mod tests {
 
     #[test]
     fn mirror_urls_no_trailing_slash_collision() {
-        // 即使前缀末尾带 `/`,拼出的 URL 也只有一个 `/`
+        // 即使前缀末尾带 /,拼出的 URL 也只有一个 /
         let c = SnowLumaComponent::new(
             HostPath::from_posix("/x"),
             "https://github.com/foo/bar.tar.gz",

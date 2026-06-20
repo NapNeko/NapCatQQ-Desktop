@@ -3,11 +3,11 @@
 /**
  * 日志级别(对齐 tracing 风格)。
  *
- * 命名说明：本 enum 跟 [`ncd_domain::bot_config::LogLevel`] 不同——后者是
+ * 命名说明：本 enum 跟 [ncd_domain::bot_config::LogLevel] 不同——后者是
  * "bot 配置文件里写要 console_log_level 用 info" 的选项语义；本 enum 是
  * "ProgressEvent 里这条日志的级别" 的事件语义。两者跨边界场景不同，2026-05-29
- * 远端架构重构 P1.a fix 改名 `ProgressLogLevel` 解决 ts-rs 派生时同名互相覆盖
- * 的问题，避免前端 `LogLevel.ts` 被静默缩成 3 档（debug/info/error）丢掉
+ * 远端架构重构 P1.a fix 改名 ProgressLogLevel 解决 ts-rs 派生时同名互相覆盖
+ * 的问题，避免前端 LogLevel.ts 被静默缩成 3 档（debug/info/error）丢掉
  * trace/warn。
  */
 export type ProgressLogLevel = "trace" | "debug" | "info" | "warn" | "error";

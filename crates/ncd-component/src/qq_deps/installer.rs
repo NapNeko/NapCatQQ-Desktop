@@ -23,7 +23,7 @@ pub struct QqDependencyInstaller;
 impl QqDependencyInstaller {
     /// 自动安装缺失依赖。
     ///
-    /// 会检查 sudo 权限；`sudo_password` 对齐 Docker 安装流程——前端弹窗收集到的密码
+    /// 会检查 sudo 权限；sudo_password 对齐 Docker 安装流程——前端弹窗收集到的密码
     /// 直接传入，先注入 Host 再继续安装。None 时 probe 到 PasswordRequired 就返回
     /// elevation_required 标志让上层弹窗。
     pub async fn install(

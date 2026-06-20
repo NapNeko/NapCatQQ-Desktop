@@ -5,9 +5,9 @@ import type { DetectedVersion } from "./DetectedVersion";
 /**
  * 1 个 component 在 1 台 host 上的探测结果。
  *
- * `detect_component` Tauri command 出参；前端按字段渲染"是否已装 / 哪个
+ * detect_component Tauri command 出参；前端按字段渲染"是否已装 / 哪个
  * 版本 / 该 host 是否支持本 component"。任一字段缺失都不影响其它字段
- * 的解释（比如 `supported=false` 时 `detected` 必为 None，但前端仍可
+ * 的解释（比如 supported=false 时 detected 必为 None，但前端仍可
  * 显示 host_id）。
  */
 export type ComponentDetectResult = { component_id: ComponentId, host_id: string, 
@@ -17,6 +17,6 @@ export type ComponentDetectResult = { component_id: ComponentId, host_id: string
 detected?: DetectedVersion | null, 
 /**
  * 当前 host 是否在 component 的 supported_targets 中；不支持时
- * `detected` 始终为 None。
+ * detected 始终为 None。
  */
 supported: boolean, };

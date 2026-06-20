@@ -3,9 +3,9 @@ import type { Locality } from "./Locality";
 import type { Os } from "./Os";
 
 /**
- * `(Os, Locality)` 组合的强类型表达。
+ * (Os, Locality) 组合的强类型表达。
  *
- * `Component::supported_targets` 暴露的是 `&'static [(Os, Locality)]`，跨边界
- * 时拍扁成本结构以保留字段名（前端按 `os` / `locality` 字段访问）。
+ * Component::supported_targets 暴露的是 &'static [(Os, Locality)]，跨边界
+ * 时拍扁成本结构以保留字段名（前端按 os / locality 字段访问）。
  */
 export type SupportedTarget = { os: Os, locality: Locality, };

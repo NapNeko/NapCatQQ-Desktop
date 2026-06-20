@@ -3,8 +3,8 @@
 /**
  * 组件分类。
  *
- * - `Framework`：用户主动选择安装的 Bot 框架（NapCat / SnowLuma）。
- * - `RuntimeDep`：Framework 依赖的运行时（QQ / NodeJs / NoVnc）。
- * - `SelfApp`：Desktop 自身（仅本地，自更新走 ncd-update）。
+ * - Framework：用户主动选择安装的 Bot 框架（NapCat / SnowLuma）。
+ * - RuntimeDep：Framework 依赖的运行时（QQ / NodeJs / NoVnc）。
+ * - SelfApp：Desktop 自身（仅本地，自更新走 ncd-update）。
  */
 export type ComponentCategory = "framework" | "runtime_dep" | "self_app";

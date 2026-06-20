@@ -1,16 +1,16 @@
-//! `DesktopSelfComponent`:Desktop 自身的组件描述。
+//! DesktopSelfComponent:Desktop 自身的组件描述。
 //!
-//! Desktop 自更新走 `tauri-plugin-updater` + 业务包装层 `ncd-update`,不复用
-//! `Component::install` 流程(因为自更新涉及"自杀 + 重生",必须走平台原生 updater)。
+//! Desktop 自更新走 tauri-plugin-updater + 业务包装层 ncd-update,不复用
+//! Component::install 流程(因为自更新涉及"自杀 + 重生",必须走平台原生 updater)。
 //!
 //! 本 component 在 ncd-component 这层只提供:
-//! - `detect`:读当前进程 exe 的版本号(从 cargo metadata 注入,通过
-//!   `env!("CARGO_PKG_VERSION")`)
-//! - `verify`:检查 exe 是否在期望路径
-//! - `launch_command`:返回 self exe 路径(用于 ncd-update 在 SelfUpdate 后重启)
-//! - `install` / `update` / `uninstall`:返回 `Unsupported`,引导调用方走 ncd-update
+//! - detect:读当前进程 exe 的版本号(从 cargo metadata 注入,通过
+//!   env!("CARGO_PKG_VERSION"))
+//! - verify:检查 exe 是否在期望路径
+//! - launch_command:返回 self exe 路径(用于 ncd-update 在 SelfUpdate 后重启)
+//! - install / update / uninstall:返回 Unsupported,引导调用方走 ncd-update
 //!
-//! 仅本地 + 自动 OS 检测:`supported_targets` 只声明 (任意 Os, Local) 三种,
+//! 仅本地 + 自动 OS 检测:supported_targets 只声明 (任意 Os, Local) 三种,
 //! Remote 永远拒绝。
 
 use async_trait::async_trait;
@@ -25,7 +25,7 @@ use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 /// Desktop self component。
 #[derive(Debug, Clone)]
 pub struct DesktopSelfComponent {
-    /// Desktop 当前版本(由调用方注入,通常是 `env!("CARGO_PKG_VERSION")`)
+    /// Desktop 当前版本(由调用方注入,通常是 env!("CARGO_PKG_VERSION"))
     pub current_version: String,
     /// 当前 exe 的绝对路径(本地探测用)
     pub exe_path: HostPath,
@@ -54,7 +54,7 @@ impl DesktopSelfComponent {
         Ok(Self::new(env!("CARGO_PKG_VERSION"), host_path))
     }
 
-    /// 组件元数据，给 `list_components` Tauri command 使用。
+    /// 组件元数据，给 list_components Tauri command 使用。
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::DesktopSelf,

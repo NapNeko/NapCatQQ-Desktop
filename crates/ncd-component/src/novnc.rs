@@ -1,7 +1,7 @@
-//! `NoVncComponent`:noVNC + 图形栈组件(SnowLuma 远端 VNC 接入用)。
+//! NoVncComponent:noVNC + 图形栈组件(SnowLuma 远端 VNC 接入用)。
 //!
-//! 对齐 legacy `install_snowluma.sh.j2` 的"图形栈"安装步骤,装一整套:
-//! `Xvfb / fluxbox / x11vnc / novnc / websockify` + dbus-x11。
+//! 对齐 legacy install_snowluma.sh.j2 的"图形栈"安装步骤,装一整套:
+//! Xvfb / fluxbox / x11vnc / novnc / websockify + dbus-x11。
 //!
 //! 安装策略:不下载二进制,走 apt / dnf 装系统包(legacy 验证过的策略,
 //! SnowLuma 远端 VNC 接入必备)。
@@ -9,18 +9,18 @@
 //! 包列表
 //!
 //! Debian / Ubuntu(apt):
-//! - `dbus-x11`(D-Bus session)
-//! - `fluxbox`(轻量窗口管理器)
-//! - `xvfb`(虚拟 framebuffer)
-//! - `x11vnc`(把 X server 暴露成 VNC)
-//! - `novnc`(浏览器端 HTML5 VNC client)
-//! - `websockify`(VNC ↔ WebSocket 桥接)
+//! - dbus-x11(D-Bus session)
+//! - fluxbox(轻量窗口管理器)
+//! - xvfb(虚拟 framebuffer)
+//! - x11vnc(把 X server 暴露成 VNC)
+//! - novnc(浏览器端 HTML5 VNC client)
+//! - websockify(VNC ↔ WebSocket 桥接)
 //!
 //! RHEL / CentOS / Fedora(dnf):
-//! - `dbus-x11` `fluxbox` `openbox` `xorg-x11-server-Xvfb` `x11vnc`
-//! - `novnc` `python3-websockify`(在 EPEL)
+//! - dbus-x11 fluxbox openbox xorg-x11-server-Xvfb x11vnc
+//! - novnc python3-websockify(在 EPEL)
 //!
-//! 探测:检查 `command -v websockify` && `command -v x11vnc` 是否同时存在。
+//! 探测:检查 command -v websockify && command -v x11vnc 是否同时存在。
 //! noVNC 是 web 资源不是 binary,但 websockify 是 noVNC 的运行时依赖,所以用它代理探测。
 
 use async_trait::async_trait;
@@ -81,9 +81,9 @@ impl NoVncComponent {
         ))
     }
 
-    /// 拼接 apt / dnf install 命令。提权交给 Host:use_sudo 时打 `.elevated()` 标,
+    /// 拼接 apt / dnf install 命令。提权交给 Host:use_sudo 时打 .elevated() 标,
     /// Host 层按注入的提权密码决定 sudo -S(有密码)还是 sudo -n(免密)。命令体本身
-    /// 不含 sudo,不再写死 `sudo -n`——那在无免密 sudo 的机器上必败。
+    /// 不含 sudo,不再写死 sudo -n——那在无免密 sudo 的机器上必败。
     fn build_install_command(&self, mgr: PkgMgr) -> HostCommand {
         let pkgs_apt = "dbus-x11 fluxbox xvfb x11vnc novnc websockify";
         let pkgs_dnf =
@@ -115,7 +115,7 @@ impl NoVncComponent {
         cmd.timeout(Duration::from_secs(300))
     }
 
-    /// use_sudo 时给命令打 `.elevated()` 标(提权细节由 Host 注入的密码决定),否则
+    /// use_sudo 时给命令打 .elevated() 标(提权细节由 Host 注入的密码决定),否则
     /// 原样返回。Component 不自己拼 sudo,提权逻辑收敛到 Host 层。
     fn maybe_elevated(&self, cmd: HostCommand) -> HostCommand {
         if self.use_sudo {
@@ -125,7 +125,7 @@ impl NoVncComponent {
         }
     }
 
-    /// 组件元数据，给 `list_components` Tauri command 使用。
+    /// 组件元数据，给 list_components Tauri command 使用。
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::NoVnc,

@@ -1,21 +1,21 @@
-﻿//! `NapCatComponent`:NapCat.Shell 注入式组件。
+﻿//! NapCatComponent:NapCat.Shell 注入式组件。
 //!
 //! 对齐 NapCat-Installer-main 官方一键脚本(install.sh L456-L770)。
 //!
 //! 安装流程:
-//! 1. 下载 `NapCat.Shell.zip`(默认
-//!    `https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip`)
-//! 2. 上传到远端 `<tmp>/`
-//! 3. 解压到 `<tmp>/NapCat/`(中间 staging,匹配官方 `unzip -d ./NapCat`)
-//! 4. 拷贝到 `<install_base>/opt/QQ/resources/app/app_launcher/napcat/`(target_folder)
-//! 5. 赋权 `chmod -R +x`
+//! 1. 下载 NapCat.Shell.zip(默认
+//!    https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip)
+//! 2. 上传到远端 <tmp>/
+//! 3. 解压到 <tmp>/NapCat/(中间 staging,匹配官方 unzip -d ./NapCat)
+//! 4. 拷贝到 <install_base>/opt/QQ/resources/app/app_launcher/napcat/(target_folder)
+//! 5. 赋权 chmod -R +x
 //! 6. 写 loadNapCat.js(官方 install.sh L741)
-//! 7. 改 QQ package.json 的 `main` 字段为 `./loadNapCat.js`
+//! 7. 改 QQ package.json 的 main 字段为 ./loadNapCat.js
 //!
-//! 探测:检查 `<install_base>/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs`
-//! 是否存在。版本号从 `napcat.mjs` 内容里 grep `napCatVersion = ... "<x.y.z>"` 拿
-//! (legacy 的做法,见 `legacy-python/src/core/remote/deployment.py`
-//! `_NAPCAT_VERSION_PATTERN`)。
+//! 探测:检查 <install_base>/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs
+//! 是否存在。版本号从 napcat.mjs 内容里 grep napCatVersion = ... "<x.y.z>" 拿
+//! (legacy 的做法,见 legacy-python/src/core/remote/deployment.py
+//! _NAPCAT_VERSION_PATTERN)。
 
 use async_trait::async_trait;
 
@@ -34,10 +34,10 @@ pub const DEFAULT_NAPCAT_URL: &str =
 
 /// NapCat 部署模式。
 ///
-/// Linux 走"注入式":NapCat 装到 LinuxQQ 的 `resources/app/app_launcher/napcat/`,
+/// Linux 走"注入式":NapCat 装到 LinuxQQ 的 resources/app/app_launcher/napcat/,
 /// 入口 mjs 嵌套在 QQ 安装根之下;还要写 loadNapCat.js + patch package.json。
 ///
-/// Windows 走"扁平 zip 解压":安装目录是 `<data_root>/napcat/`,napcat.mjs 直接落
+/// Windows 走"扁平 zip 解压":安装目录是 <data_root>/napcat/,napcat.mjs 直接落
 /// 在根下,不存在嵌套结构。配合 NapCatWinBootMain.exe 注入(注入器是 backend 关心
 /// 的事,不在本 Component 边界)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,8 +51,8 @@ enum PlatformMode {
 pub struct NapCatComponent {
     /// 安装根目录。
     ///
-    /// Linux 模式:对齐官方 `$HOME/Napcat`,NapCat 注入到此目录下的 QQ 子树。
-    /// Windows 模式:扁平 zip 解压根,典型为 `<data_root>/napcat/`。
+    /// Linux 模式:对齐官方 $HOME/Napcat,NapCat 注入到此目录下的 QQ 子树。
+    /// Windows 模式:扁平 zip 解压根,典型为 <data_root>/napcat/。
     pub install_base_dir: HostPath,
     /// 下载 URL(默认 GitHub latest)
     pub download_url: String,
@@ -71,8 +71,8 @@ pub struct NapCatComponent {
 impl NapCatComponent {
     /// 创建一个 Linux 注入式 NapCat component(对齐官方 install.sh)。
     ///
-    /// `install_base_dir` 是 LinuxQQ 安装根(典型 `$HOME/Napcat`),NapCat
-    /// 会注入到 `<install_base_dir>/opt/QQ/resources/app/app_launcher/napcat/`。
+    /// install_base_dir 是 LinuxQQ 安装根(典型 $HOME/Napcat),NapCat
+    /// 会注入到 <install_base_dir>/opt/QQ/resources/app/app_launcher/napcat/。
     pub fn new(install_base_dir: HostPath) -> Self {
         Self {
             install_base_dir,
@@ -86,13 +86,13 @@ impl NapCatComponent {
 
     /// 创建一个 Windows 扁平 zip 部署的 NapCat component。
     ///
-    /// `install_dir` 是扁平解压根(典型 `<data_root>/napcat/`),napcat.mjs
+    /// install_dir 是扁平解压根(典型 <data_root>/napcat/),napcat.mjs
     /// 直接落在该目录之下。Windows 没有 LinuxQQ 注入这层语义,所以 install
     /// 不写 loadNapCat.js / 不 patch QQ package.json,只做"下载 → 清旧 →
     /// 解压"三步。
     ///
-    /// 临时目录默认 `<install_dir>/_tmp`,与 legacy
-    /// `PathFunc.tmp_path = runtime_path/tmp` 同源(legacy 在 ProgramData
+    /// 临时目录默认 <install_dir>/_tmp,与 legacy
+    /// PathFunc.tmp_path = runtime_path/tmp 同源(legacy 在 ProgramData
     /// 下也是与 napcat_path 同级 runtime/ 的子目录)。
     pub fn for_windows(install_dir: HostPath) -> Self {
         let tmp_dir = install_dir.join("_tmp");
@@ -130,22 +130,22 @@ impl NapCatComponent {
 
     // 路径 helpers(对齐官方 install.sh 路径常量)
 
-    /// QQ_BASE_PATH = `$INSTALL_BASE_DIR/opt/QQ`
+    /// QQ_BASE_PATH = $INSTALL_BASE_DIR/opt/QQ
     fn qq_base_path(&self) -> HostPath {
         self.install_base_dir.join("opt/QQ")
     }
 
-    /// TARGET_FOLDER = `$QQ_BASE_PATH/resources/app/app_launcher`
+    /// TARGET_FOLDER = $QQ_BASE_PATH/resources/app/app_launcher
     fn target_folder(&self) -> HostPath {
         self.qq_base_path().join("resources/app/app_launcher")
     }
 
-    /// NapCat 注入的根目录:`$TARGET_FOLDER/napcat/`
+    /// NapCat 注入的根目录:$TARGET_FOLDER/napcat/
     fn napcat_dir(&self) -> HostPath {
         self.target_folder().join("napcat")
     }
 
-    /// NapCat 入口文件:`$TARGET_FOLDER/napcat/napcat.mjs`
+    /// NapCat 入口文件:$TARGET_FOLDER/napcat/napcat.mjs
     fn napcat_mjs(&self) -> HostPath {
         self.napcat_dir().join("napcat.mjs")
     }
@@ -163,7 +163,7 @@ impl NapCatComponent {
     // Windows 扁平模式下,napcat.mjs 直接落在 install_base_dir 根下;
     // 没有 opt/QQ/... 嵌套层级。
 
-    /// Windows 模式入口文件:`<install_base_dir>/napcat.mjs`
+    /// Windows 模式入口文件:<install_base_dir>/napcat.mjs
     fn windows_napcat_mjs(&self) -> HostPath {
         self.install_base_dir.join("napcat.mjs")
     }
@@ -176,9 +176,9 @@ impl NapCatComponent {
         }
     }
 
-    /// 组件元数据，给 `list_components` Tauri command 使用。
+    /// 组件元数据，给 list_components Tauri command 使用。
     ///
-    /// `supported_targets` 必须与 `Component::supported_targets` 返回值一致；
+    /// supported_targets 必须与 Component::supported_targets 返回值一致；
     /// 单测里有断言锁定。Windows 走扁平 zip 解压（与 legacy NapCatInstall
     /// 同款），Linux 走 NapCat 注入 LinuxQQ resources/app 的官方一键脚本路径。
     pub fn info() -> crate::types::ComponentInfo {
@@ -198,7 +198,7 @@ impl NapCatComponent {
 }
 
 
-/// 从 `napcat.mjs` 内容提取版本号。兼容新旧两种产物格式。
+/// 从 napcat.mjs 内容提取版本号。兼容新旧两种产物格式。
 pub fn parse_napcat_version(content: &str) -> Option<String> {
     if let Some(v) = parse_version_minified(content) {
         return Some(v);
@@ -372,8 +372,8 @@ impl Component for NapCatComponent {
         _host: &dyn Host,
         args: &LaunchArgs,
     ) -> Result<HostCommand, ActionError> {
-        // NapCat 通过 LinuxQQ 启动:`<install_base>/opt/QQ/qq <extra_args>`
-        // backend 一般会再加 `--no-sandbox -q <qqid>` 等参数,这里只给基础命令
+        // NapCat 通过 LinuxQQ 启动:<install_base>/opt/QQ/qq <extra_args>
+        // backend 一般会再加 --no-sandbox -q <qqid> 等参数,这里只给基础命令
         let mut cmd = HostCommand::new(self.qq_base_path().join("qq").as_posix());
         for a in &args.extra_args {
             cmd = cmd.arg(a);
@@ -538,7 +538,7 @@ impl NapCatComponent {
                 format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
             ));
         }
-        // 官方 install.sh L730:`cp -r -f ./NapCat/* TARGET_FOLDER/napcat/`
+        // 官方 install.sh L730:cp -r -f ./NapCat/* TARGET_FOLDER/napcat/
         let cp_cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
             "cp -r -f {}/* {}/ && chmod -R +x {}/",
             shell_quote(stage_dir.as_posix()),
@@ -627,7 +627,7 @@ impl NapCatComponent {
         Ok(())
     }
 
-    /// 把 QQ 的 `package.json` 中 `main` 字段改成 `./loadNapCat.js`。
+    /// 把 QQ 的 package.json 中 main 字段改成 ./loadNapCat.js。
     /// 使用纯文本读 + serde_json 改 + 写回(不依赖远端 jq,提升跨发行版兼容性)。
     async fn patch_qq_main(&self, host: &dyn Host) -> Result<(), ActionError> {
         let path = self.qq_package_json();
@@ -683,9 +683,9 @@ impl NapCatComponent {
         Ok(())
     }
 
-    /// System 布局(requires_sudo)下给命令打 `.elevated()` 标,提权细节(用 sudo -S
+    /// System 布局(requires_sudo)下给命令打 .elevated() 标,提权细节(用 sudo -S
     /// 喂密码还是 sudo -n 免密)由 Host 层按它注入的提权密码统一决定;Rootless 布局
-    /// 不需要提权,原样返回。Component 不再自己拼 `sudo -n`——那样在无免密 sudo 的
+    /// 不需要提权,原样返回。Component 不再自己拼 sudo -n——那样在无免密 sudo 的
     /// 机器上必败,且把提权逻辑泄漏到了组件层。
     fn maybe_elevated(&self, cmd: HostCommand) -> HostCommand {
         if self.requires_sudo {
@@ -695,10 +695,10 @@ impl NapCatComponent {
         }
     }
 
-    /// Windows 扁平 zip 部署。对齐 legacy `NapCatInstall`(installers.py):
+    /// Windows 扁平 zip 部署。对齐 legacy NapCatInstall(installers.py):
     /// 1) 下载 NapCat.Shell.zip 到本地临时目录
     /// 2) 上传到目标 host 的 tmp_dir(本地等同 copy)
-    /// 3) `remove_old_file`:删 install_base_dir 下除 config/ log/ 外所有
+    /// 3) remove_old_file:删 install_base_dir 下除 config/ log/ 外所有
     ///    内容(避免新版残留旧文件,但保留用户配置和日志)
     /// 4) extract_archive 直接解压到 install_base_dir(无 strip-components)
     /// 5) 删临时 zip
@@ -779,8 +779,8 @@ impl NapCatComponent {
         Ok(())
     }
 
-    /// 对齐 legacy `NapCatInstall.remove_old_file`:遍历 install_base_dir,
-    /// 子目录里只放过 `config` 和 `log` 的保留(用户运行期改的配置 / 日志),
+    /// 对齐 legacy NapCatInstall.remove_old_file:遍历 install_base_dir,
+    /// 子目录里只放过 config 和 log 的保留(用户运行期改的配置 / 日志),
     /// 其余文件和子目录全删。tmp_dir 名单保留(本次 install 流程刚把 zip
     /// 落在那里,如果它就是 install_base_dir 下的 _tmp 子目录)。
     async fn remove_old_files_windows(&self, host: &dyn Host) -> Result<(), ActionError> {
@@ -822,9 +822,9 @@ impl NapCatComponent {
 
     /// Linux uninstall：删 NapCat 注入物 + 还原 QQ package.json。
     /// 与 install 流程对应：
-    /// 1) 删 napcat_dir（`<base>/opt/QQ/.../napcat/`）
+    /// 1) 删 napcat_dir（<base>/opt/QQ/.../napcat/）
     /// 2) 删 loadNapCat.js
-    /// 3) 把 package.json 的 main 字段还原成 `./app_launcher/index.js`（QQ 默认）
+    /// 3) 把 package.json 的 main 字段还原成 ./app_launcher/index.js（QQ 默认）
     async fn uninstall_linux(&self, host: &dyn Host) -> Result<(), ActionError> {
         let napcat_dir = self.napcat_dir();
         let load_script = self.load_script_path();
@@ -869,7 +869,7 @@ impl NapCatComponent {
             if let Ok(bytes) = host.read_file(&pkg_json).await {
                 if let Ok(mut json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                     if let Some(obj) = json.as_object_mut() {
-                        // 恢复 QQ 自带默认值。官方 QQ Linux 的 main 是 `./app_launcher/index.js`。
+                        // 恢复 QQ 自带默认值。官方 QQ Linux 的 main 是 ./app_launcher/index.js。
                         obj.insert(
                             "main".to_string(),
                             serde_json::Value::String("./app_launcher/index.js".to_string()),
@@ -906,8 +906,8 @@ impl NapCatComponent {
     }
 }
 
-/// 把 POSIX 路径包成单引号字面量，避免空格 / `$` / `'` 等元字符注入。
-/// Bash 单引号内除 `'` 外所有字符按字面量；内部 `'` 替换成 `'\''`。
+/// 把 POSIX 路径包成单引号字面量，避免空格 / $ / ' 等元字符注入。
+/// Bash 单引号内除 ' 外所有字符按字面量；内部 ' 替换成 '\''。
 fn shell_quote(s: &str) -> String {
     let escaped = s.replace('\'', r"'\''");
     format!("'{escaped}'")

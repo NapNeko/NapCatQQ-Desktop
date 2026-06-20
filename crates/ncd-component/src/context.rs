@@ -1,9 +1,9 @@
-//! `ActionCtx`:Action 执行上下文(进度上报 + 取消 + 日志注入)。
+//! ActionCtx:Action 执行上下文(进度上报 + 取消 + 日志注入)。
 //!
 //! 统一进度反馈,杜绝 legacy 的 Qt Signal vs LogLineCallback 双套。
 //!
-//! 上层(`ncd-deploy` / Tauri Command)通过 `ActionCtx` 拿到 ProgressEvent 流,
-//! 转发到 `BroadcastEventBus`,前端订阅。
+//! 上层(ncd-deploy / Tauri Command)通过 ActionCtx 拿到 ProgressEvent 流,
+//! 转发到 BroadcastEventBus,前端订阅。
 
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -60,11 +60,11 @@ pub enum ProgressKind {
 
 /// 日志级别(对齐 tracing 风格)。
 ///
-/// 命名说明：本 enum 跟 [`ncd_domain::bot_config::LogLevel`] 不同——后者是
+/// 命名说明：本 enum 跟 [ncd_domain::bot_config::LogLevel] 不同——后者是
 /// "bot 配置文件里写要 console_log_level 用 info" 的选项语义；本 enum 是
 /// "ProgressEvent 里这条日志的级别" 的事件语义。两者跨边界场景不同，2026-05-29
-/// 远端架构重构 P1.a fix 改名 `ProgressLogLevel` 解决 ts-rs 派生时同名互相覆盖
-/// 的问题，避免前端 `LogLevel.ts` 被静默缩成 3 档（debug/info/error）丢掉
+/// 远端架构重构 P1.a fix 改名 ProgressLogLevel 解决 ts-rs 派生时同名互相覆盖
+/// 的问题，避免前端 LogLevel.ts 被静默缩成 3 档（debug/info/error）丢掉
 /// trace/warn。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(rename_all = "snake_case")]
@@ -109,9 +109,9 @@ impl ProgressEvent {
     }
 }
 
-/// `ActionCtx`:Action 执行期间的辅助上下文。
+/// ActionCtx:Action 执行期间的辅助上下文。
 ///
-/// 字段全部 `Arc<...>` 让 ActionCtx 可以低成本 clone 给子任务。
+/// 字段全部 Arc<...> 让 ActionCtx 可以低成本 clone 给子任务。
 #[derive(Clone)]
 pub struct ActionCtx {
     /// 进度事件发送端(满后会阻塞 push 端,保证 UI 不丢消息)

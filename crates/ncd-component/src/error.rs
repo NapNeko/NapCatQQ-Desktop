@@ -1,8 +1,8 @@
-//! `ActionError`:Component / Action 操作的统一错误。
+//! ActionError:Component / Action 操作的统一错误。
 //!
 //! 设计原则:
 //! - 所有 Component 操作的错误都映射到本枚举,避免每个 component 一套自己的 error
-//! - 与 [`ncd_host::HostError`] 正交:Host 错误是"机器无法完成操作",
+//! - 与 [ncd_host::HostError] 正交:Host 错误是"机器无法完成操作",
 //!   ActionError 是"业务流程出错"(版本不匹配 / SHA256 不一致 / 部署步骤失败 / ...)
 
 use ncd_host::HostError;

@@ -6,7 +6,7 @@ import type { SupportedTarget } from "./SupportedTarget";
 /**
  * 组件元数据。Components 页直接消费的清单数据。
  *
- * 字段都由各 Component 实装的 `info()` 静态方法写死；前端不做任何派生
+ * 字段都由各 Component 实装的 info() 静态方法写死；前端不做任何派生
  * （比如 i18n 文案就由后端写死中文 + 简短描述）。
  */
 export type ComponentInfo = { id: ComponentId, 
