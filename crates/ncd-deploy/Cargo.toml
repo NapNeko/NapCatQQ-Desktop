@@ -29,3 +29,6 @@ async-trait = "0.1"
 bytes = "1"
 serde_yaml = "0.9"
 ncd-test-support = { path = "../ncd-test-support" }
+
+[lints]
+workspace = true

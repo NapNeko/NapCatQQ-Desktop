@@ -34,3 +34,6 @@ russh-sftp = "2"
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
 tempfile = "3"
+
+[lints]
+workspace = true

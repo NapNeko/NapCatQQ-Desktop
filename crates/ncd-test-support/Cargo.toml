@@ -10,3 +10,6 @@ path = "src/lib.rs"
 [dependencies]
 ncd-domain = { path = "../ncd-domain" }
 ncd-traits = { path = "../ncd-traits" }
+
+[lints]
+workspace = true

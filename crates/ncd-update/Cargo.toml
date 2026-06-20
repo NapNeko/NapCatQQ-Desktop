@@ -27,3 +27,6 @@ chrono = { version = "0.4", features = ["serde"] }
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
 tempfile = "3"
+
+[lints]
+workspace = true

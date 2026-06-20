@@ -24,6 +24,26 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 
+[workspace.lints.rust]
+unsafe_code = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# 错误处理：生产路径禁止 unwrap/expect/panic，逼出 ? + 上下文。
+# 测试代码由 clippy.toml 的 allow-*-in-tests 统一豁免。
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unimplemented = "warn"
+unwrap_in_result = "warn"
+
+# 残留调试/占位/直接 stdout 输出（GUI 应用走 log，不该 println!）
+dbg_macro = "warn"
+todo = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+
 [profile.release]
 lto = "fat"
 codegen-units = 1

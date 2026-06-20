@@ -12,3 +12,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 ts-rs = { version = "12", features = ["serde-compat"] }
+
+[lints]
+workspace = true

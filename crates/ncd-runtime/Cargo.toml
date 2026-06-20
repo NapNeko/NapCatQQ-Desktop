@@ -56,3 +56,6 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 tokio = { version = "1", features = ["test-util"] }
 # `proptest` 用于 `napcat_login_poller` 的属性测试 (Property 1/2/3/4/6/7)。
 proptest = "1"
+
+[lints]
+workspace = true

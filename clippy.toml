@@ -1,0 +1,7 @@
+# 测试代码豁免 unwrap/expect/panic/indexing/dbg：集中精力先清生产路径，
+# 测试里这些是惯用写法。clippy 按文件路径 / cfg(test) 判定。
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-dbg-in-tests = true
