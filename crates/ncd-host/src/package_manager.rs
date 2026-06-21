@@ -1,9 +1,9 @@
-//! `PackageManager`:包管理器抽象。
+//! PackageManager:包管理器抽象。
 //!
 //! 设计要点:
 //! - 不是所有 Host 都有 PackageManager(LocalWindows 默认 None,可选启用 winget)
 //! - 各 PackageManager 自己知道怎么探测包是否已装、怎么 install
-//! - 上层 Component(如 `QQComponent`)只问 host.pkg_manager() 拿一个,然后调用 trait
+//! - 上层 Component(如 QQComponent)只问 host.pkg_manager() 拿一个,然后调用 trait
 //!
 //! 当前 trait 已定义、stub 实装为空,具体行为后续逐步落地。
 

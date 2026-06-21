@@ -1,6 +1,6 @@
 //! SSH 凭证类型。
 //!
-//! 红线:凭证不进版本库,只在内存或受保护的 SecretStore 中流转。`SshKey`
+//! 红线:凭证不进版本库,只在内存或受保护的 SecretStore 中流转。SshKey
 //! 提供从文件路径或字节加载,但禁止 Display / Debug 暴露密钥内容。
 
 use std::fmt;
@@ -36,7 +36,7 @@ impl fmt::Debug for SshKey {
 /// SSH 认证凭证。
 #[derive(Debug, Clone)]
 pub enum SshCredentials {
-    /// 密码认证(简单场景或测试,生产推荐用 `Key`)
+    /// 密码认证(简单场景或测试,生产推荐用 Key)
     Password { username: String, password: String },
     /// 私钥认证
     Key { username: String, key: SshKey },

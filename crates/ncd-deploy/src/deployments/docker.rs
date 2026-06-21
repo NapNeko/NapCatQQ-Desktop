@@ -6,7 +6,7 @@
 //! 部署形态(deployment_type=docker),由 BotManager 在 start_bot 时按 bot 配置驱动,
 //! 容器纳入 bot 状态机。两者共用底层 DockerCli + compose 渲染,但入口和归属不同。
 //!
-//! 容器命名:`ncbot-<qq>` / `slbot-<qq>`（按口味），区别于组件页 `napcat`/`snowluma` 演示容器。
+//! 容器命名:ncbot-<qq> / slbot-<qq>（按口味），区别于组件页 napcat/snowluma 演示容器。
 //! compose 项目目录:远端 $HOME/.napcat-bots/<name>。探不到 HOME 直接失败,
 //! 避免把生产数据静默落到 /tmp。
 //!
@@ -14,7 +14,7 @@
 //!
 //! NapCat / SnowLuma 均走官方 compose 语义(见 docker/compose.rs 与 SnowLuma.Docker.Framework)。
 //! NapCat 可预写 onebot/napcat 到 bind 目录; SnowLuma 写 onebot_<qq>.json 到 named volume。
-//! 容器命名：NapCat `ncbot-<qq>`，SnowLuma `slbot-<qq>`。
+//! 容器命名：NapCat ncbot-<qq>，SnowLuma slbot-<qq>。
 //! compose 项目目录:远端 $HOME/.napcat-bots/<name>。
 
 use async_trait::async_trait;
@@ -85,7 +85,7 @@ impl DockerDeployment {
         }
     }
 
-    /// bot 容器名：NapCat `ncbot-<qq>`，SnowLuma `slbot-<qq>`。
+    /// bot 容器名：NapCat ncbot-<qq>，SnowLuma slbot-<qq>。
     pub fn container_name(config: &BotConfig) -> String {
         bot_docker_container_name(config.bot.backend_type, config.bot.qq_id)
     }
@@ -152,7 +152,7 @@ impl Default for DockerDeployment {
     }
 }
 
-/// docker compose `.env` 行：含空格、`#`、`:` 等时加双引号并转义。
+/// docker compose .env 行：含空格、#、: 等时加双引号并转义。
 fn dotenv_value(raw: &str) -> String {
     let needs_quote = raw.is_empty()
         || raw.bytes().any(|b| b.is_ascii_whitespace())
@@ -477,7 +477,7 @@ impl Deployment for DockerDeployment {
     }
 }
 
-/// NapCat `ncbot-<qq>`，SnowLuma `slbot-<qq>`。
+/// NapCat ncbot-<qq>，SnowLuma slbot-<qq>。
 pub fn bot_docker_container_name(backend: BackendType, qq_id: u64) -> String {
     match backend {
         BackendType::SnowLuma => format!("slbot-{qq_id}"),
@@ -583,7 +583,7 @@ mod tests {
     struct MockHost {
         home: Option<String>,
         require_elevated: bool,
-        /// launch 幂等测试：`docker ps` 在 compose up 之前返回空，之后返回 running 容器。
+        /// launch 幂等测试：docker ps 在 compose up 之前返回空，之后返回 running 容器。
         compose_up_done: Arc<Mutex<bool>>,
         commands: Arc<Mutex<Vec<HostCommand>>>,
         writes: Arc<Mutex<Vec<RecordedWrite>>>,

@@ -1,7 +1,7 @@
 //! 外接部署：对接用户已经在跑的 OneBot 服务（Lagrange / NapCat-CLI / 其它实装）。
 //!
-//! P1.a 占位。`supports` 当前一律返回 false（让 UI 在 P5 实装前不暴露这个
-//! 选项），所有方法返回 `Unsupported`。
+//! P1.a 占位。supports 当前一律返回 false（让 UI 在 P5 实装前不暴露这个
+//! 选项），所有方法返回 Unsupported。
 //!
 //! P5 阶段计划：
 //! - install: HTTP probe 用户给的 endpoint 是否可达

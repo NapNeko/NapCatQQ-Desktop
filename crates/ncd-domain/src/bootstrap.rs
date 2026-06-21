@@ -30,8 +30,8 @@ pub struct BootstrapSnapshot {
     pub schema_version: SchemaVersion,
     pub report: MigrationReport,
     /// 当前数据根绝对路径（已 to_string_lossy）。装配方在
-    /// `src-tauri/src/bootstrap.rs::build_snapshot_for_data_root`，由
-    /// `resolve_data_root()` 决定来源。`#[serde(default)]` 让历史快照缓存
+    /// src-tauri/src/bootstrap.rs::build_snapshot_for_data_root，由
+    /// resolve_data_root() 决定来源。#[serde(default)] 让历史快照缓存
     /// 缺失时反序列化回空字符串，向后兼容。
     #[serde(default)]
     pub data_root: String,
@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(snapshot.status, BootstrapStatus::Failed);
     }
 
-    /// 历史快照缓存（schema 演进前写入，没有 `data_root` / `local_versions`
+    /// 历史快照缓存（schema 演进前写入，没有 data_root / local_versions
     /// 两个字段）必须可以反序列化回 BootstrapSnapshot：data_root 回落为空
     /// 字符串，local_versions 回落为默认值。
     #[test]

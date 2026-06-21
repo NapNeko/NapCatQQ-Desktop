@@ -1,10 +1,10 @@
-//! `UpdateOrchestrator`:Desktop 自更新业务编排器。
+//! UpdateOrchestrator:Desktop 自更新业务编排器。
 //!
-//! 提供 5 个核心方法 `check` / `precheck` / `resume_after_update` /
-//! `record_failure` / `detect_pending_failures`。
+//! 提供 5 个核心方法 check / precheck / resume_after_update /
+//! record_failure / detect_pending_failures。
 //!
-//! `install_with_graceful_shutdown` 当前只保存 resume snapshot 然后调
-//! `provider.download_and_install`;待 BotManager 重构完成后再接入"先 graceful
+//! install_with_graceful_shutdown 当前只保存 resume snapshot 然后调
+//! provider.download_and_install;待 BotManager 重构完成后再接入"先 graceful
 //! stop 在跑 bot / SnowLuma daemon 再调用 provider"的完整链路。
 
 use std::path::PathBuf;
@@ -22,11 +22,11 @@ use crate::provider::UpdateProvider;
 use crate::resume::{ResumeStore, UpdateResumePoint};
 use crate::types::{AvailableUpdate, PrecheckReport, RecordedFailure};
 
-/// `UpdateOrchestrator`:协调自更新流程。
+/// UpdateOrchestrator:协调自更新流程。
 pub struct UpdateOrchestrator {
     provider: Arc<dyn UpdateProvider>,
     resume_store: ResumeStore,
-    /// 失败记录文件(JSONL),在 `data_root/update-failures.jsonl`
+    /// 失败记录文件(JSONL),在 data_root/update-failures.jsonl
     failures_path: PathBuf,
     /// 当前 desktop schema 版本(注入,用于 precheck 比较)
     current_schema: SchemaVersion,
@@ -36,8 +36,8 @@ pub struct UpdateOrchestrator {
 
 impl UpdateOrchestrator {
     /// 创建 orchestrator。
-    /// - `provider`:更新源(实装为 tauri-plugin-updater wrapper / Mock)
-    /// - `data_root`:数据根目录(`<data_root>/update-resume.json` 与 `update-failures.jsonl`)
+    /// - provider:更新源(实装为 tauri-plugin-updater wrapper / Mock)
+    /// - data_root:数据根目录(<data_root>/update-resume.json 与 update-failures.jsonl)
     pub fn new(
         provider: Arc<dyn UpdateProvider>,
         data_root: &std::path::Path,
@@ -152,7 +152,7 @@ impl UpdateOrchestrator {
     // ===== 4. resume_after_update =====
 
     /// 新版进程启动时调用。读取 resume snapshot,返回 Some 表示刚升级,
-    /// 上层(BotManager / SnowLumaDaemon)按 snapshot 还原状态后调 [`Self::clear_resume`]。
+    /// 上层(BotManager / SnowLumaDaemon)按 snapshot 还原状态后调 [Self::clear_resume]。
     pub async fn resume_after_update(&self) -> Result<Option<UpdateResumePoint>, UpdateError> {
         self.resume_store.load().await
     }
@@ -164,7 +164,7 @@ impl UpdateOrchestrator {
 
     // ===== 5. record_failure / detect_pending_failures =====
 
-    /// 记录一次失败,追加到 `update-failures.jsonl`。
+    /// 记录一次失败,追加到 update-failures.jsonl。
     pub async fn record_failure(
         &self,
         phase: impl Into<String>,

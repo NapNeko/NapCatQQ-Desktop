@@ -1,4 +1,4 @@
-//! 嵌入 Windows manifest 显式声明 `asInvoker`,
+//! 嵌入 Windows manifest 显式声明 asInvoker,
 //! 防止 Windows installer detection heuristic 因 binary 名含 "update" 触发 UAC。
 //!
 //! 见 https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests
@@ -26,7 +26,7 @@ fn main() {
     fs::write(&manifest_path, manifest).expect("write manifest");
 
     // 仅对 MSVC linker 有效;mingw 上 cargo 会忽略
-    // `rustc-link-arg` 对该 crate 所有产物(lib / test / bin)生效
+    // rustc-link-arg 对该 crate 所有产物(lib / test / bin)生效
     println!(
         "cargo:rustc-link-arg=/MANIFEST:EMBED"
     );

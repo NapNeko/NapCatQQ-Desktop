@@ -4,8 +4,8 @@
 //! （GitHub PAT，走 keyring 不明文落盘）。设置页一次 get / 一次 set，前端不需要
 //! 关心两套存储的差异——DTO 把 PAT 当普通字段，command 层负责拆分落盘。
 //!
-//! 路径权威性：app-settings.json 落在 `LocalConfigStore::config_dir()`，即
-//! `<data_root>/runtime/config/`，与 config.json / bot.json 同级，不另起数据根。
+//! 路径权威性：app-settings.json 落在 LocalConfigStore::config_dir()，即
+//! <data_root>/runtime/config/，与 config.json / bot.json 同级，不另起数据根。
 
 use ncd_runtime::{
     AppSettings, AppSettingsDto, ConfigStore, LocalConfigStore, SecretStore, SecretStoreImpl,
@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::AppState;
 
-/// GitHub PAT 在 SecretStore 里的 key。与 SSH 凭证的 `ssh:{id}` 命名风格一致。
+/// GitHub PAT 在 SecretStore 里的 key。与 SSH 凭证的 ssh:{id} 命名风格一致。
 const GITHUB_PAT_SECRET_KEY: &str = "app:github_pat";
 
 /// app-settings.json 在 config_dir 下的文件名。
@@ -31,7 +31,7 @@ fn secret_store(state: &AppState) -> SecretStoreImpl {
 
 /// 读取 App 设置。
 ///
-/// app-settings.json 不存在（旧用户首次进设置页）时返回 `AppSettings::default()`，
+/// app-settings.json 不存在（旧用户首次进设置页）时返回 AppSettings::default()，
 /// 不报错。PAT 读 SecretStore，keyring 不可用 / 未设置时回落空串。
 #[tauri::command]
 pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsDto, String> {
@@ -137,7 +137,7 @@ pub fn sync_close_action_preference(
 }
 
 /// 从磁盘加载 AppSettings；文件缺失或解析失败一律回落 Default，不抛错。
-/// 供 command 与启动期共用（启动期通过 `read_app_settings` 包装）。
+/// 供 command 与启动期共用（启动期通过 read_app_settings 包装）。
 fn load_app_settings_from(store: &LocalConfigStore, path: &std::path::Path) -> AppSettings {
     match store.read_json(path) {
         Ok(value) => serde_json::from_value(value).unwrap_or_default(),
@@ -146,7 +146,7 @@ fn load_app_settings_from(store: &LocalConfigStore, path: &std::path::Path) -> A
 }
 
 /// 启动期读取 AppSettings：给 lib.rs 在构造 BotManager 前加载磁盘值用。
-/// 与 `get_app_settings` 共用同一份回落语义。
+/// 与 get_app_settings 共用同一份回落语义。
 pub fn read_app_settings(data_root: &std::path::Path) -> AppSettings {
     let store = LocalConfigStore::new(data_root);
     let path = store.config_dir().join(APP_SETTINGS_FILE);

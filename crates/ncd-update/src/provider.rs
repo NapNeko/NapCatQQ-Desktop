@@ -1,6 +1,6 @@
-//! `UpdateProvider`:更新源抽象。
+//! UpdateProvider:更新源抽象。
 //!
-//! 实际的 `tauri-plugin-updater` 集成由 `src-tauri` 实装,本 trait 让
+//! 实际的 tauri-plugin-updater 集成由 src-tauri 实装,本 trait 让
 //! ncd-update 自己也能用 mock provider 测试,不依赖 Tauri runtime。
 
 use async_trait::async_trait;
@@ -13,7 +13,7 @@ use crate::types::AvailableUpdate;
 /// 更新源抽象。
 #[async_trait]
 pub trait UpdateProvider: Send + Sync {
-    /// 检查指定通道是否有更新。`Ok(None)` 表示没有更新。
+    /// 检查指定通道是否有更新。Ok(None) 表示没有更新。
     async fn check(&self, channel: UpdateChannel) -> Result<Option<AvailableUpdate>, UpdateError>;
 
     /// 下载 + 验签 + 安装。安装成功后调用方应主动 quit 当前进程
@@ -21,11 +21,11 @@ pub trait UpdateProvider: Send + Sync {
     async fn download_and_install(&self, update: &AvailableUpdate) -> Result<(), UpdateError>;
 }
 
-/// `MockUpdateProvider`:测试用 provider。
+/// MockUpdateProvider:测试用 provider。
 pub struct MockUpdateProvider {
-    /// 下次 `check` 返回的结果(成功 / 失败可注入)
+    /// 下次 check 返回的结果(成功 / 失败可注入)
     next_check: Mutex<Option<Result<Option<AvailableUpdate>, UpdateError>>>,
-    /// 下次 `download_and_install` 返回的结果
+    /// 下次 download_and_install 返回的结果
     next_install: Mutex<Option<Result<(), UpdateError>>>,
     /// 调用计数
     pub check_calls: std::sync::atomic::AtomicU32,

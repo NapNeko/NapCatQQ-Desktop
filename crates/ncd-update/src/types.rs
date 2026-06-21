@@ -6,7 +6,7 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// 一次可用的更新信息(由 [`UpdateProvider::check`] 返回)。
+/// 一次可用的更新信息(由 [UpdateProvider::check] 返回)。
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/update/")]
 pub struct AvailableUpdate {
@@ -83,7 +83,7 @@ impl PrecheckReport {
     }
 }
 
-/// 更新失败 telemetry 记录(写到 `data_root/update-failures.jsonl`)。
+/// 更新失败 telemetry 记录(写到 data_root/update-failures.jsonl)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordedFailure {
     /// 时间戳

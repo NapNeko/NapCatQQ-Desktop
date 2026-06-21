@@ -1,15 +1,15 @@
-//! `HostShell`:shell escape 与命令拼接抽象。
+//! HostShell:shell escape 与命令拼接抽象。
 //!
 //! 设计要点:
-//! - 本地 Host 把 [`HostCommand`](crate::HostCommand) 直接传给 `tokio::process::Command`,
-//!   不需要 shell;但远端 Host 走 SSH 后必须把 `program + args` 拼成 shell 字符串发送,
-//!   此时 shell escape 就是关键(防止 args 中的空格 / 引号 / `$` 注入)
-//! - 三种 shell:`BashShell`(Linux/macOS 远端默认)/ `PowerShellShell`(Windows 优先)/
-//!   `CmdShell`(legacy Windows bat 兼容)
+//! - 本地 Host 把 [HostCommand](crate::HostCommand) 直接传给 tokio::process::Command,
+//!   不需要 shell;但远端 Host 走 SSH 后必须把 program + args 拼成 shell 字符串发送,
+//!   此时 shell escape 就是关键(防止 args 中的空格 / 引号 / $ 注入)
+//! - 三种 shell:BashShell(Linux/macOS 远端默认)/ PowerShellShell(Windows 优先)/
+//!   CmdShell(legacy Windows bat 兼容)
 //! - 各 shell 的 escape 规则不同,本 trait 抽象单一接口
 //!
-//! `HostShell::escape` 输出必须是单个 shell token,调用方拼接
-//! `program + " " + args.join(" ")` 时直接安全。
+//! HostShell::escape 输出必须是单个 shell token,调用方拼接
+//! program + " " + args.join(" ") 时直接安全。
 
 use crate::command::HostCommand;
 
@@ -21,27 +21,27 @@ pub enum ShellKind {
     Cmd,
 }
 
-/// `HostShell`:shell 能力抽象。
+/// HostShell:shell 能力抽象。
 pub trait HostShell: Send + Sync {
     fn kind(&self) -> ShellKind;
 
     /// 把单个参数 escape 成安全的 shell token。
-    /// - Bash:用单引号包裹,内部 `'` 替换成 `'\''`
-    /// - PowerShell:用单引号包裹,内部 `'` 替换成 `''`
-    /// - Cmd:用 `"` 包裹,内部 `"` 替换成 `""`,部分元字符 `^` 转义
+    /// - Bash:用单引号包裹,内部 ' 替换成 '\''
+    /// - PowerShell:用单引号包裹,内部 ' 替换成 ''
+    /// - Cmd:用 " 包裹,内部 " 替换成 "",部分元字符 ^ 转义
     fn escape(&self, arg: &str) -> String;
 
     /// 行分隔符。
     fn line_separator(&self) -> &'static str;
 
-    /// 把 [`HostCommand`] 拼成完整的 shell 命令字符串(供 SSH 通道直接执行)。
+    /// 把 [HostCommand] 拼成完整的 shell 命令字符串(供 SSH 通道直接执行)。
     fn build_command_line(&self, cmd: &HostCommand) -> String {
         let mut parts = Vec::with_capacity(cmd.args.len() + 1);
 
         // 环境变量前缀(Bash / PowerShell 都支持 inline env,但语法不同)
-        // Bash: `K1=v1 K2=v2 program args...`
-        // PowerShell: 必须用 `$env:K1='v1'; ...; & program args`
-        // Cmd: `set K1=v1 && program args`
+        // Bash: K1=v1 K2=v2 program args...
+        // PowerShell: 必须用 $env:K1='v1'; ...; & program args
+        // Cmd: set K1=v1 && program args
         // 这里默认 Bash 风格,PowerShellShell / CmdShell 各自重写本方法
         for (k, v) in &cmd.environment {
             parts.push(format!("{}={}", k, self.escape(v)));
@@ -79,7 +79,7 @@ impl HostShell for BashShell {
         if safe {
             arg.to_string()
         } else {
-            // 单引号包裹,内部 `'` 替换为 `'\''`
+            // 单引号包裹,内部 ' 替换为 '\''
             let escaped = arg.replace('\'', "'\\''");
             format!("'{escaped}'")
         }
@@ -112,7 +112,7 @@ impl HostShell for PowerShellShell {
         if safe {
             arg.to_string()
         } else {
-            // PowerShell 单引号字面量,内部 `'` 双写
+            // PowerShell 单引号字面量,内部 ' 双写
             let escaped = arg.replace('\'', "''");
             format!("'{escaped}'")
         }
@@ -123,7 +123,7 @@ impl HostShell for PowerShellShell {
     }
 
     fn build_command_line(&self, cmd: &HostCommand) -> String {
-        // PowerShell:`$env:K='v'; & 'program' 'arg1' 'arg2'`
+        // PowerShell:$env:K='v'; & 'program' 'arg1' 'arg2'
         let mut parts = Vec::new();
         for (k, v) in &cmd.environment {
             parts.push(format!("$env:{}={};", k, self.escape(v)));
@@ -152,8 +152,8 @@ impl HostShell for CmdShell {
         if arg.is_empty() {
             return "\"\"".to_string();
         }
-        // cmd 转义最复杂,最稳的做法:用 `"` 包裹,内部 `"` → `""`,
-        // `^ & | < > ( )` 等元字符在双引号内已经被禁用所以不用单独转
+        // cmd 转义最复杂,最稳的做法:用 " 包裹,内部 " → "",
+        // ^ & | < > ( ) 等元字符在双引号内已经被禁用所以不用单独转
         if arg.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '=')) {
             arg.to_string()
         } else {
@@ -167,7 +167,7 @@ impl HostShell for CmdShell {
     }
 
     fn build_command_line(&self, cmd: &HostCommand) -> String {
-        // cmd:`set K=v && program arg1 arg2`
+        // cmd:set K=v && program arg1 arg2
         let mut parts = Vec::new();
         for (k, v) in &cmd.environment {
             parts.push(format!("set {}={} &&", k, v));

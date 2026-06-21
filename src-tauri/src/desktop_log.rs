@@ -1,4 +1,4 @@
-//! 桌面会话日志：tracing 落盘（对齐 legacy `<data_root>/log/*.log`）。
+//! 桌面会话日志：tracing 落盘（对齐 legacy <data_root>/log/*.log）。
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;

@@ -1,6 +1,6 @@
 //! 将 tracing target 压成 legacy position 段的可读短名。
 
-/// `ncd_runtime::bot_manager` → `bot_manager`
+/// ncd_runtime::bot_manager → bot_manager
 pub fn short_module_from_target(target: &str) -> String {
     let t = target.trim();
     if t.is_empty() {

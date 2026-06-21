@@ -1,15 +1,15 @@
-//! `RemoteWindowsHost`:接口预留 stub。
+//! RemoteWindowsHost:接口预留 stub。
 //!
-//! 把"远端 Windows 主机"接口预留出来,所有方法返回 [`HostError::Unsupported`],
+//! 把"远端 Windows 主机"接口预留出来,所有方法返回 [HostError::Unsupported],
 //! 真实实装留给未来(走 OpenSSH Server + PowerShell session)。
 //!
 //! 当前状态:
-//! - 类型定义、`Host` trait 实装框架已就位
-//! - 所有方法返回 `HostError::Unsupported { operation: "RemoteWindowsHost: ..." }`
-//! - 集成测试用 `#[ignore = "RemoteWindowsHost real impl pending"]` 占位
+//! - 类型定义、Host trait 实装框架已就位
+//! - 所有方法返回 HostError::Unsupported { operation: "RemoteWindowsHost: ..." }
+//! - 集成测试用 #[ignore = "RemoteWindowsHost real impl pending"] 占位
 //!
 //! 这样做的好处:
-//! - 上层 Component 代码可以提前 `match host.os()` 写好分支,不用等接口落地才能开工
+//! - 上层 Component 代码可以提前 match host.os() 写好分支,不用等接口落地才能开工
 //! - 编译期就能拒绝调用方"假设 RemoteWindowsHost 已实装"的错误用法
 //! - 实装时只要把每个方法的 unimplemented 替换成真实代码,trait 签名零变更
 
@@ -38,7 +38,7 @@ pub struct RemoteWindowsHost {
 
 impl RemoteWindowsHost {
     /// 创建 stub,不实际建立任何 SSH 连接。
-    /// 实装时本方法会换成 `connect()` 走 SSH 握手。
+    /// 实装时本方法会换成 connect() 走 SSH 握手。
     pub fn new_stub(id: impl Into<String>, config: ConnectionConfig) -> Self {
         Self {
             id: id.into(),

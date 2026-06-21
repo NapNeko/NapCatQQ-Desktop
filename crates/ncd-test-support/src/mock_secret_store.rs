@@ -190,7 +190,7 @@ impl From<MockSecretStoreError> for SecretError {
 
 impl SecretStore for MockSecretStore {
     fn get(&self, key: &str) -> Result<Option<String>, SecretError> {
-        // 注意:这里调用的是 inherent method `get`(返回 MockSecretStoreError),
+        // 注意:这里调用的是 inherent method get(返回 MockSecretStoreError),
         // 通过 ? 自动转换到 SecretError
         Self::get(self, key).map_err(SecretError::from)
     }

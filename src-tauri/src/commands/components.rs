@@ -1,14 +1,14 @@
 //! Components 页 Tauri 命令薄壳层。
 //!
 //! 暴露 4 个命令给前端：
-//! - `list_components`：返回所有 6 个 ComponentInfo 元数据（顺序：Framework
+//! - list_components：返回所有 6 个 ComponentInfo 元数据（顺序：Framework
 //!   → RuntimeDep → SelfApp）。
-//! - `detect_component`：在指定 host 上探测某 component 的安装版本。
-//! - `run_component_action`：把单 step DeployPlan 跑起来，进度走
-//!   `DomainEvent::ComponentActionProgress`，立即返回 task_id。
-//! - `cancel_component_action`：用 task_id 找到 cancel token 并 cancel。
+//! - detect_component：在指定 host 上探测某 component 的安装版本。
+//! - run_component_action：把单 step DeployPlan 跑起来，进度走
+//!   DomainEvent::ComponentActionProgress，立即返回 task_id。
+//! - cancel_component_action：用 task_id 找到 cancel token 并 cancel。
 //!
-//! 所有错误都用 `format!("{}", err)` 转 String，不向前端泄漏 ActionError /
+//! 所有错误都用 format!("{}", err) 转 String，不向前端泄漏 ActionError /
 //! DeployError 的 enum 结构。
 
 use std::sync::Arc;
@@ -301,7 +301,7 @@ async fn cached_host_probe(
 
 /// 一条 shell 命令同时拿 $HOME 和 system 布局标记，省掉原来"1 次 echo + 最多 2
 /// 次 SFTP stat"分多趟的往返。输出两行：HOME、system 标记存在与否
-/// （`test -e ... && echo 1 || echo 0`）。system 不存在时一律按 rootless 处理，
+/// （test -e ... && echo 1 || echo 0）。system 不存在时一律按 rootless 处理，
 /// 所以不必再单独探 rootless 标记。
 async fn probe_remote_host(host: &dyn Host) -> RemoteHostProbe {
     let script = "echo \"$HOME\"; \
@@ -329,7 +329,7 @@ async fn probe_remote_host(host: &dyn Host) -> RemoteHostProbe {
 /// 把 component_id 实例化成具体 Component。
 ///
 /// NapCat / SnowLuma 在 Windows 本机走"扁平 zip 部署"分支(legacy 同款),
-/// 安装目录从 `state.data_root` 派生(对齐 `bootstrap::resolve_data_root`,
+/// 安装目录从 state.data_root 派生(对齐 bootstrap::resolve_data_root,
 /// 红线 §4.1)。其余组件保持 Linux 默认假设 —— Components 页 v1 只在
 /// Windows 本机和 Linux 远端两条路径上验证过,中间 case 留作后续工单。
 fn build_component_for_host(
@@ -361,7 +361,7 @@ fn build_component_for_host(
     let component: Arc<dyn Component> = match id {
         ComponentId::NapCat => {
             if host.os() == ncd_host::Os::Windows {
-                // legacy `PathFunc.napcat_path = data_path/runtime/NapCatQQ`。
+                // legacy PathFunc.napcat_path = data_path/runtime/NapCatQQ。
                 let install = data_root_host.join("runtime").join("NapCatQQ");
                 let mut comp = NapCatComponent::for_windows(install);
                 if let Some(sha) = snapshot
@@ -384,7 +384,7 @@ fn build_component_for_host(
         }
         ComponentId::SnowLuma => {
             if host.os() == ncd_host::Os::Windows {
-                // legacy `PathFunc.snowluma_path = data_path/runtime/SnowLuma`;
+                // legacy PathFunc.snowluma_path = data_path/runtime/SnowLuma;
                 // tag 来源优先级：release 缓存的 latest tag → 已装版本 fallback
                 // → 空串（install 阶段会拒绝）。已装版本不能直接拿来拼装 URL，
                 // 因为它是当前安装的旧版，需要装的是 latest（这是 EOCD 调查
@@ -491,7 +491,7 @@ fn require_remote_home(remote_home: Option<&str>) -> Result<&str, String> {
     })
 }
 
-/// GitHub SnowLuma release 路径段必须带 `v` 前缀；`package.json` 的 version 常是 `1.9.5`。
+/// GitHub SnowLuma release 路径段必须带 v 前缀；package.json 的 version 常是 1.9.5。
 fn normalize_github_release_tag(raw: &str) -> String {
     let t = raw.trim();
     if t.is_empty() {
@@ -531,8 +531,8 @@ fn asset_sha256(info: &ReleaseInfo, name: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-/// 把 std::path::PathBuf(`AppState.data_root`)转成 HostPath,按 host 当前
-/// 平台决定字符串风格。data_root 由 `bootstrap::resolve_data_root` 决定,
+/// 把 std::path::PathBuf(AppState.data_root)转成 HostPath,按 host 当前
+/// 平台决定字符串风格。data_root 由 bootstrap::resolve_data_root 决定,
 /// 不会自己再次推断 —— 严格遵守路径落盘红线。
 fn data_root_to_host_path(data_root: &std::path::Path, os: ncd_host::Os) -> HostPath {
     let s = data_root.to_string_lossy();

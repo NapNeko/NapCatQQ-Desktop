@@ -1,13 +1,13 @@
-//! `Host` trait:跨主机操作的统一接口。
+//! Host trait:跨主机操作的统一接口。
 //!
 //! 把"一台机器"抽象成统一接口,上层 Component / Deploy / Backend 通过它完成
 //! 所有"跑命令、传文件、装组件"操作。
 //!
 //! 实装矩阵:
-//! - `LocalWindowsHost`:本地 Windows 实装(基于 std::fs + tokio::process)
-//! - `RemoteLinuxHost`:远端 Linux 实装(基于 russh + russh-sftp)
-//! - `RemoteWindowsHost`:接口 stub,所有方法返回 `HostError::Unsupported`
-//! - 未来 `LocalLinuxHost` / `LocalMacOsHost` / `DockerHost` / `AgentHost`
+//! - LocalWindowsHost:本地 Windows 实装(基于 std::fs + tokio::process)
+//! - RemoteLinuxHost:远端 Linux 实装(基于 russh + russh-sftp)
+//! - RemoteWindowsHost:接口 stub,所有方法返回 HostError::Unsupported
+//! - 未来 LocalLinuxHost / LocalMacOsHost / DockerHost / AgentHost
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -56,7 +56,7 @@ pub enum Locality {
     Remote,
 }
 
-/// 流式命令输出的来源通道。`run_streaming` 回调每行时带上，调用方据此区分
+/// 流式命令输出的来源通道。run_streaming 回调每行时带上，调用方据此区分
 /// stdout / stderr（docker pull 进度走 stdout，compose 日志走 stderr）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StreamSource {
@@ -67,7 +67,7 @@ pub enum StreamSource {
 /// 跨平台主机统一接口。
 ///
 /// 调用方使用模式:
-/// ```ignore
+/// ignore
 /// async fn install_napcat(host: &dyn Host) -> Result<(), HostError> {
 ///     match host.os() {
 ///         Os::Windows => host.spawn(HostCommand::new("powershell")
@@ -80,7 +80,7 @@ pub enum StreamSource {
 ///     };
 ///     Ok(())
 /// }
-/// ```
+/// 
 #[async_trait]
 pub trait Host: Send + Sync {
     // ===== 身份信息(实装时探测一次缓存) =====
@@ -107,7 +107,7 @@ pub trait Host: Send + Sync {
     // ===== 文件操作 =====
 
     /// 读文件全部内容到内存。
-    /// 调用方应保证文件 < 64 MB,大文件请用 [`Self::download`]。
+    /// 调用方应保证文件 < 64 MB,大文件请用 [Self::download]。
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError>;
 
     /// 写文件(覆盖或新建)。
@@ -140,7 +140,7 @@ pub trait Host: Send + Sync {
     /// - 远程 Linux：优先使用 wget/curl 直接下载
     /// - 远程 Windows Stub：返回 Unsupported
     ///
-    /// 默认实现返回 `Unsupported`，让调用方 fallback 到"本地下载→upload"。
+    /// 默认实现返回 Unsupported，让调用方 fallback 到"本地下载→upload"。
     async fn download_url(
         &self,
         _url: &str,
@@ -161,18 +161,18 @@ pub trait Host: Send + Sync {
 
     // ===== 进程操作 =====
 
-    /// 启动进程,返回 [`HostProcess`] 句柄。
+    /// 启动进程,返回 [HostProcess] 句柄。
     /// 句柄被消费即等待退出;调用方可保留句柄做 streaming I/O。
     async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError>;
 
-    /// 启动进程并等待结束,返回完整 [`CommandOutput`]。
+    /// 启动进程并等待结束,返回完整 [CommandOutput]。
     /// 适用于短命令 + 全量 stdout 收集场景。
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError>;
 
-    /// 注入提权密码,作为这台主机后续所有 `HostCommand::elevated` 命令的固有能力。
+    /// 注入提权密码,作为这台主机后续所有 HostCommand::elevated 命令的固有能力。
     ///
-    /// 远端 Linux 上,有密码就让 elevated 命令走 `sudo -S`(密码喂 stdin),没有就
-    /// 退回 `sudo -n`(免密 / root 直接过,需要密码时立刻失败而非挂起)。调用方
+    /// 远端 Linux 上,有密码就让 elevated 命令走 sudo -S(密码喂 stdin),没有就
+    /// 退回 sudo -n(免密 / root 直接过,需要密码时立刻失败而非挂起)。调用方
     /// (ServerManager)在连接建立后从 keyring 注入一次,docker 弹框拿到新密码时
     /// 再覆盖。这样装 unzip、写 /opt/QQ、apt 装包等所有提权操作共用同一份密码,
     /// 不必每条命令各自塞。
@@ -189,7 +189,7 @@ pub trait Host: Send + Sync {
     }
 
     /// 探测某个外部命令在主机上是否可用(在 PATH 里)。Linux/macOS 走
-    /// `command -v`,Windows 走 `where`。探测本身失败(连接抖动等)按"不存在"
+    /// command -v,Windows 走 where。探测本身失败(连接抖动等)按"不存在"
     /// 保守返回 false,让调用方走"装一下"或报错路径,而不是把探测错误当致命。
     async fn command_exists(&self, command: &str) -> bool {
         let probe = match self.os() {
@@ -200,20 +200,20 @@ pub trait Host: Send + Sync {
     }
 
     /// 运行命令并把 stdout / stderr 逐行流式回调，适合 docker pull / compose up
-    /// 这类「跑得久、要实时进度」的命令。`on_line(source, line)` 每收到完整一行
+    /// 这类「跑得久、要实时进度」的命令。on_line(source, line) 每收到完整一行
     /// （已去掉行尾换行）就被调用一次，调用方在回调里做解析 / 转进度事件。命令
-    /// 结束后返回 [`CommandOutput`]，其中 stdout/stderr 是回调过的全部行重新拼回
+    /// 结束后返回 [CommandOutput]，其中 stdout/stderr 是回调过的全部行重新拼回
     /// （调用方通常只看 exit_code，行内容已经在回调里处理过）。
     ///
-    /// 回调收的是 owned `String` 而非 `&str`：trait 走 `#[async_trait]`，`&str`
-    /// 在 `Box<dyn FnMut(..., &str)>` 里会被固定一个生命周期，编译器会认为 box 的
+    /// 回调收的是 owned String 而非 &str：trait 走 #[async_trait]，&str
+    /// 在 Box<dyn FnMut(..., &str)> 里会被固定一个生命周期，编译器会认为 box 的
     /// 析构可能用到它，逼着每行的借用活到函数尾——owned String 没有借用，彻底绕开。
     /// 行很小，这点 alloc 可忽略。
     ///
-    /// 默认实装回退到 [`Self::run_to_string`]：一次性跑完，再把 stdout/stderr 按
+    /// 默认实装回退到 [Self::run_to_string]：一次性跑完，再把 stdout/stderr 按
     /// 行补发一遍回调。这样没实现流式的 Host（stub / 未来主机）行为正确，只是
     /// 进度变成「跑完一次性出」。真正的流式由 LocalWindowsHost / RemoteLinuxHost
-    /// override。回调是 `FnMut + Send`，因为调用方常在闭包里改可变状态（layer 表）。
+    /// override。回调是 FnMut + Send，因为调用方常在闭包里改可变状态（layer 表）。
     async fn run_streaming(
         &self,
         cmd: HostCommand,

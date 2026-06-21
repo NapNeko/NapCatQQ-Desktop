@@ -49,7 +49,7 @@ impl JsonTransaction {
     }
 
     /// Merge another transaction into this one.
-    /// Writes and deletes from `other` are appended to `self`.
+    /// Writes and deletes from other are appended to self.
     pub fn merge(&mut self, other: JsonTransaction) {
         self.writes.extend(other.writes);
         self.deletes.extend(other.deletes);

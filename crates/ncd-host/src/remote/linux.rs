@@ -1,4 +1,4 @@
-//! `RemoteLinuxHost`:基于 russh + russh-sftp 的远端 Linux 主机实装。
+//! RemoteLinuxHost:基于 russh + russh-sftp 的远端 Linux 主机实装。
 //!
 //! 中档能力:
 //! - 密码 / 私钥认证(ed25519 + RSA)
@@ -8,11 +8,11 @@
 //! - 连接复用(单一 SSH session 复用)+ Keepalive
 //!
 //! 安全:
-//! - 凭证(密码 / 私钥)由 [`SshCredentials`](super::credentials::SshCredentials) 持有,
+//! - 凭证(密码 / 私钥)由 [SshCredentials](super::credentials::SshCredentials) 持有,
 //!   不在日志中打印
-//! - Host key 校验由 [`HostKeyPolicy`](super::host_key::HostKeyPolicy) 控制
+//! - Host key 校验由 [HostKeyPolicy](super::host_key::HostKeyPolicy) 控制
 //! - SFTP 路径不做"路径越界"检查 —— 远端 Linux 上调用方有完整 POSIX 权限,
-//!   越界由远端 OS 拒绝(权限不足 → `HostError::PermissionDenied`)
+//!   越界由远端 OS 拒绝(权限不足 → HostError::PermissionDenied)
 
 use std::path::Path;
 use std::sync::Arc;
@@ -101,7 +101,7 @@ impl Handler for ClientCallback {
 pub enum SudoAccess {
     /// 当前账号就是 root(id -u == 0),根本不走 sudo。
     RootAlready,
-    /// 非 root 但配了 NOPASSWD,`sudo -n` 直接过。
+    /// 非 root 但配了 NOPASSWD,sudo -n 直接过。
     Passwordless,
     /// sudo 需要密码,装之前得先拿到用户密码。
     PasswordRequired,
@@ -258,7 +258,7 @@ impl RemoteLinuxHost {
         *self.sftp.lock().await = None;
     }
 
-    /// 主动失效主 SSH 句柄：poison 句柄（设为 None），使后续 `channel_open_session` 立即失败。
+    /// 主动失效主 SSH 句柄：poison 句柄（设为 None），使后续 channel_open_session 立即失败。
     /// 旧 handle 被 drop 时 russh 会尝试关闭底层 session（best-effort）。
     /// 用于自愈触发：让本对象后续操作快速失败，但不负责从 ServerManager 缓存驱逐。
     async fn invalidate_main_handle(&self) {
@@ -454,7 +454,7 @@ impl Host for RemoteLinuxHost {
 
     fn arch(&self) -> Arch {
         // 远端架构应在 connect 时探测一次缓存,这里简化:默认 X86_64,
-        // 实际部署逻辑会在 ncd-component 自己跑 `uname -m` 决策。
+        // 实际部署逻辑会在 ncd-component 自己跑 uname -m 决策。
         Arch::X86_64
     }
 
@@ -471,7 +471,7 @@ impl Host for RemoteLinuxHost {
     }
 
     fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-        // 暂不实装 apt PackageManager,Component 直接走 spawn(`apt-get install ...`)。
+        // 暂不实装 apt PackageManager,Component 直接走 spawn(apt-get install ...)。
         // 后续可统一加 AptPackageManager / DnfPackageManager。
         None
     }
@@ -481,7 +481,7 @@ impl Host for RemoteLinuxHost {
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
         let inner_line = build_remote_command_line(&self.shell, &cmd);
         // elevated 时由 host 注入提权密码(set_elevation_password 存的那份):有密码走
-        // sudo -S,把 `密码\n` 拼在真实 stdin 前面一起喂过去——sudo -S 读首行当密码,
+        // sudo -S,把 密码\n 拼在真实 stdin 前面一起喂过去——sudo -S 读首行当密码,
         // 余下字节透传给内层命令(如 tee 收文件内容)。没密码退回 sudo -n。
         // 非 elevated 路径行为不变:line 是内层命令,stdin 原样透传。
         let (line, stdin) = if cmd.elevated {
@@ -825,7 +825,7 @@ impl Host for RemoteLinuxHost {
     }
 
     async fn create_dir_all(&self, path: &HostPath) -> Result<(), HostError> {
-        // SFTP 协议没有原生 -p,需要逐级 mkdir。简单做法:跑 `mkdir -p`
+        // SFTP 协议没有原生 -p,需要逐级 mkdir。简单做法:跑 mkdir -p
         // 走 SFTP 不可靠(权限错可能让 mkdir 半路成功),改 exec 更稳。
         let remote = self.to_remote(path);
         let escaped = self.shell.escape(&remote);
@@ -858,7 +858,7 @@ impl Host for RemoteLinuxHost {
     }
 
     async fn remove_dir_all(&self, path: &HostPath) -> Result<(), HostError> {
-        // 同 create_dir_all,走 `rm -rf` 更稳(SFTP 没有 -r remove)。
+        // 同 create_dir_all,走 rm -rf 更稳(SFTP 没有 -r remove)。
         // 安全约束:测试时调用方应保证传入 path 在白名单内。
         let remote = self.to_remote(path);
         // 防御:绝不递归删 / 与 /home / /root
@@ -1072,11 +1072,11 @@ fn build_remote_command_line(shell: &dyn HostShell, cmd: &HostCommand) -> String
 }
 
 /// 把内层命令行包成 sudo 提权命令。inner_line 可能含 cd && 这类 shell 语法,
-/// 所以整体丢给 `sh -c <inner>` 跑,而不是让 sudo 直接 exec 单个程序。
+/// 所以整体丢给 sh -c <inner> 跑,而不是让 sudo 直接 exec 单个程序。
 /// has_password 决定喂密码的方式:
-///   true  → `sudo -S -p '' sh -c <inner>`,-S 从 stdin 读密码,-p '' 清空提示符
+///   true  → sudo -S -p '' sh -c <inner>,-S 从 stdin 读密码,-p '' 清空提示符
 ///           避免提示文字混进 stderr 干扰输出解析(密码字节另由调用方走 stdin 送)。
-///   false → `sudo -n -p '' sh -c <inner>`,-n 非交互:免密(NOPASSWD/root)直接过,
+///   false → sudo -n -p '' sh -c <inner>,-n 非交互:免密(NOPASSWD/root)直接过,
 ///           真要密码时立刻失败而不是挂起等输入。
 /// inner 用 shell.escape 转义成单个 token,内部空格 / 分号 / 引号都被安全包裹。
 fn wrap_with_sudo(inner_line: &str, shell: &dyn HostShell, has_password: bool) -> String {
@@ -1097,7 +1097,7 @@ fn ensure_trailing_newline(pw: &[u8]) -> Vec<u8> {
     }
 }
 
-/// 拼 elevated 命令喂给 SSH channel 的 stdin。有提权密码时 `密码\n` 打头(sudo -S
+/// 拼 elevated 命令喂给 SSH channel 的 stdin。有提权密码时 密码\n 打头(sudo -S
 /// 读首行当密码),后面接命令本身的 stdin(如 tee 收的文件内容)透传给内层命令;
 /// 没密码时(免密/root,走 sudo -n)原样返回命令 stdin。
 fn build_elevated_stdin(password: Option<&str>, cmd_stdin: Option<Vec<u8>>) -> Option<Vec<u8>> {
@@ -1457,7 +1457,7 @@ mod tests {
 
     #[test]
     fn elevated_stdin_password_only_when_no_inner_stdin() {
-        // 有密码但命令没有 stdin(如 apt-get install):只喂 `密码\n`。
+        // 有密码但命令没有 stdin(如 apt-get install):只喂 密码\n。
         let out = build_elevated_stdin(Some("hunter2"), None);
         assert_eq!(out.unwrap(), b"hunter2\n");
     }

@@ -1,9 +1,9 @@
 //! Host key 校验策略。
 //!
-//! 首次连接未知主机的处理由 `HostKeyPolicy` 控制:
-//! - `Strict { known_hosts_path }`:严格模式,不在 known_hosts 里就拒
-//! - `Insecure`:测试 / 容器 / 同 LAN 受信网络专用,生产禁用
-//! - `AcceptOnFirstUse`:未知主机先拒绝并返回可确认错误,上层确认后再写入 known_hosts
+//! 首次连接未知主机的处理由 HostKeyPolicy 控制:
+//! - Strict { known_hosts_path }:严格模式,不在 known_hosts 里就拒
+//! - Insecure:测试 / 容器 / 同 LAN 受信网络专用,生产禁用
+//! - AcceptOnFirstUse:未知主机先拒绝并返回可确认错误,上层确认后再写入 known_hosts
 
 use std::path::PathBuf;
 use tokio::fs;
@@ -28,13 +28,13 @@ impl HostKeyPolicy {
         }
     }
 
-    /// 默认的用户级 known_hosts(`<data_root>/secrets/known_hosts`)
+    /// 默认的用户级 known_hosts(<data_root>/secrets/known_hosts)
     pub fn strict_in(data_root: &std::path::Path) -> Self {
         Self::Strict {
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
         }
     }
-    /// TOFU 模式的用户级 known_hosts(`<data_root>/secrets/known_hosts`)。
+    /// TOFU 模式的用户级 known_hosts(<data_root>/secrets/known_hosts)。
     pub fn accept_on_first_use_in(data_root: &std::path::Path) -> Self {
         Self::AcceptOnFirstUse {
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
@@ -52,7 +52,7 @@ pub enum HostKeyCheck {
 
 /// 解析 OpenSSH 风格 known_hosts 文件。
 ///
-/// 简化版只支持精确 host:port 匹配,不支持 hostname hash(`|1|...|...`)
+/// 简化版只支持精确 host:port 匹配,不支持 hostname hash(|1|...|...)
 /// 与 wildcard。生产场景 known_hosts 由 ncd-update 派生写入,不复用 OpenSSH 的
 /// 历史文件,故无需兼容旧风格。
 pub struct KnownHostsStore {
@@ -86,7 +86,7 @@ impl KnownHostsStore {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            // OpenSSH 行:`<host[,host2]> <key-type> <base64-key> [comment]`
+            // OpenSSH 行:<host[,host2]> <key-type> <base64-key> [comment]
             let mut parts = line.split_whitespace();
             let hosts = match parts.next() {
                 Some(h) => h,
@@ -125,7 +125,7 @@ impl KnownHostsStore {
         ))
     }
 
-    /// 把新条目追加到 known_hosts(`AcceptOnFirstUse` 用,实装时调用)。
+    /// 把新条目追加到 known_hosts(AcceptOnFirstUse 用,实装时调用)。
     pub async fn append(
         &self,
         host: &str,
@@ -163,7 +163,7 @@ fn matches_host(entry: &str, target_full: &str, target_bare: &str) -> bool {
     if entry == target_full {
         return true;
     }
-    // 22 端口的简写形式:`example.com` 也认作 `example.com:22`
+    // 22 端口的简写形式:example.com 也认作 example.com:22
     if entry == target_bare {
         return true;
     }

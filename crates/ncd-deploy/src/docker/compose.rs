@@ -61,8 +61,8 @@ fn escape_yaml_double_quoted(s: &str) -> String {
 
 /// 渲染 compose 文件文本。
 ///
-/// `secret` 是调用方生成的凭据:NapCat 当 WEBUI_TOKEN,SnowLuma 当 VNC_PASSWD。
-/// `uid` / `gid` 写进对应的 *_UID / *_GID 环境变量(Linux 文件属主对齐);
+/// secret 是调用方生成的凭据:NapCat 当 WEBUI_TOKEN,SnowLuma 当 VNC_PASSWD。
+/// uid / gid 写进对应的 *_UID / *_GID 环境变量(Linux 文件属主对齐);
 /// 本地 Windows Docker Desktop 传 0 即可。
 pub fn render_compose(spec: &DockerDeploySpec, secret: &str, uid: u32, gid: u32) -> String {
     render_compose_with_secret(spec, ComposeSecret::Literal(secret), uid, gid, None)

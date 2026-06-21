@@ -1,6 +1,6 @@
 //! Resume snapshot:自更新前持久化的 bot/daemon 状态,新版启动时还原。
 //!
-//! 由 [`UpdateOrchestrator::resume_after_update`](crate::UpdateOrchestrator::resume_after_update)
+//! 由 [UpdateOrchestrator::resume_after_update](crate::UpdateOrchestrator::resume_after_update)
 //! 读取消费。
 
 use std::path::PathBuf;
@@ -70,7 +70,7 @@ pub struct ResumeStore {
 }
 
 impl ResumeStore {
-    /// 默认路径:`<data_root>/update-resume.json`。
+    /// 默认路径:<data_root>/update-resume.json。
     pub fn new(data_root: &std::path::Path) -> Self {
         Self {
             snapshot_path: data_root.join("update-resume.json"),
@@ -95,7 +95,7 @@ impl ResumeStore {
         Ok(())
     }
 
-    /// 读取 resume snapshot。文件不存在返回 `Ok(None)`。
+    /// 读取 resume snapshot。文件不存在返回 Ok(None)。
     pub async fn load(&self) -> Result<Option<UpdateResumePoint>, UpdateError> {
         match fs::read(&self.snapshot_path).await {
             Ok(bytes) => {

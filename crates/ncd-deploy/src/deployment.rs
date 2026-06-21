@@ -7,7 +7,7 @@
 //! - Deployment:NativeDeployment / DockerDeployment / ExternalDeployment
 //!
 //! 两者两两组合，比如 RemoteLinuxHost + DockerDeployment = "用 SSH 在远端跑
-//! docker compose"。组合不合法时由 [`Deployment::supports`] 静态判定，让 UI
+//! docker compose"。组合不合法时由 [Deployment::supports] 静态判定，让 UI
 //! 在用户连进去之前就能区分能不能选。
 //!
 //! 详见仓库内远端架构重构开发文档。
@@ -81,7 +81,7 @@ pub enum DeploymentState {
 /// launch 返回的部署句柄。形态特定的 metadata 通过 enum 表达。
 ///
 /// 用 enum 而非 trait object：BotActor 状态机层只关心"是否在跑 + PID-like
-/// 信息"，三种形态都能塌缩到 [`crate::result::DeployOutcome`] 类似的简单结构。
+/// 信息"，三种形态都能塌缩到 [crate::result::DeployOutcome] 类似的简单结构。
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -112,12 +112,12 @@ pub enum DeploymentHandle {
 /// install / launch 时把进度往外吐的 sink。
 ///
 /// 设计为 trait object 让 ServerManager 实装能把 sink 包装成
-/// `event_bus.publish(DomainEvent::DeploymentProgress { ... })`，测试时给 mock
+/// event_bus.publish(DomainEvent::DeploymentProgress { ... })，测试时给 mock
 /// sink 收集进度断言。
 pub trait DeploymentProgressSink: Send + Sync {
-    /// 报告一次进度。`stage` 标识当前在哪个阶段（"download" / "extract" /
-    /// "render-config" / "launch" 等），`message` 是给用户看的文案，
-    /// `percent` 0-100。
+    /// 报告一次进度。stage 标识当前在哪个阶段（"download" / "extract" /
+    /// "render-config" / "launch" 等），message 是给用户看的文案，
+    /// percent 0-100。
     fn report(&self, stage: &str, message: &str, percent: u8);
 
     /// 一行原始日志。用户看 console 时实时上报。
@@ -138,10 +138,10 @@ impl DeploymentProgressSink for NullProgressSink {
 
 /// 原生进程启动命令——NativeDeployment 真正用得上的字段。
 ///
-/// 调用方把 `BotConfig` 喂给 `NativeLaunchTranslator`，
-/// 拿到一个 `NativeLaunchCommand`，然后 NativeDeployment 用 `host.spawn` 起进程。
+/// 调用方把 BotConfig 喂给 NativeLaunchTranslator，
+/// 拿到一个 NativeLaunchCommand，然后 NativeDeployment 用 host.spawn 起进程。
 ///
-/// 字段刻意比 `BotRuntimeConfig` 简化：丢掉 config_path / log_path / runtime_target
+/// 字段刻意比 BotRuntimeConfig 简化：丢掉 config_path / log_path / runtime_target
 /// 这些 spawn 不直接消费的元数据，只保留"起进程要敲的命令 + 工作目录 + 环境变量"
 /// 三件套。这样：
 /// - 跟 BotRuntimeConfig 解耦

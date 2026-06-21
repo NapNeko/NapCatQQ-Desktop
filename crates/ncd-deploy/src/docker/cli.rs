@@ -4,7 +4,7 @@
 //! 命令参数全部走 HostCommand::arg 分开传,由 shell 层做转义,杜绝把用户输入
 //! (容器名 / 端口)拼进命令字符串导致注入。
 //!
-//! 解析策略:用 `--format '{{json .}}'` 让 docker 自己吐 JSON,逐行 serde 解析,
+//! 解析策略:用 --format '{{json .}}' 让 docker 自己吐 JSON,逐行 serde 解析,
 //! 不靠脆弱的列宽切分。
 
 use std::collections::HashMap;
@@ -123,7 +123,7 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// `docker version --format '{{.Client.Version}}'`,失败返回 None。
+    /// docker version --format '{{.Client.Version}}',失败返回 None。
     /// 客户端版本不连 daemon,无需提权,固定裸跑——它是"装没装 docker"的判据。
     async fn docker_client_version(&self) -> Option<String> {
         // 先尝试普通命令
@@ -180,7 +180,7 @@ impl<'h> DockerCli<'h> {
         false
     }
 
-    /// 跑一次 `docker info --format '{{.ServerVersion}}'`,elevated 决定要不要 sudo。
+    /// 跑一次 docker info --format '{{.ServerVersion}}',elevated 决定要不要 sudo。
     async fn docker_info_once(&self, elevated: bool) -> bool {
         let mut cmd = HostCommand::new("docker")
             .arg("info")
@@ -192,7 +192,7 @@ impl<'h> DockerCli<'h> {
         matches!(self.host.run_to_string(cmd).await, Ok(out) if out.success())
     }
 
-    /// `docker compose version`,compose v2 插件存在时退出码 0。按 elevated 标志跑。
+    /// docker compose version,compose v2 插件存在时退出码 0。按 elevated 标志跑。
     async fn docker_compose_ok(&self) -> bool {
         let cmd = self.docker_cmd().arg("compose").arg("version");
         matches!(self.host.run_to_string(cmd).await, Ok(out) if out.success())
@@ -200,7 +200,7 @@ impl<'h> DockerCli<'h> {
 }
 
 impl<'h> DockerCli<'h> {
-    /// 列所有容器(含已停止)。`docker ps -a --format '{{json .}}'` 逐行 JSON。
+    /// 列所有容器(含已停止)。docker ps -a --format '{{json .}}' 逐行 JSON。
     pub async fn list_containers(&self) -> Result<Vec<ContainerInfo>, DockerCliError> {
         let cmd = self
             .docker_cmd()
@@ -219,7 +219,7 @@ impl<'h> DockerCli<'h> {
         parse_ps_json(&out.stdout)
     }
 
-    /// 列本地镜像(含悬空)。`docker images --format '{{json .}}'` 逐行 JSON。
+    /// 列本地镜像(含悬空)。docker images --format '{{json .}}' 逐行 JSON。
     pub async fn list_images(&self) -> Result<Vec<ImageInfo>, DockerCliError> {
         let cmd = self
             .docker_cmd()
@@ -237,7 +237,7 @@ impl<'h> DockerCli<'h> {
         parse_images_json(&out.stdout)
     }
 
-    /// 删除本地镜像。`image_ref` 可为 repo:tag 或 id;`force` 时加 `-f`。
+    /// 删除本地镜像。image_ref 可为 repo:tag 或 id;force 时加 -f。
     pub async fn remove_image(&self, image_ref: &str, force: bool) -> Result<(), DockerCliError> {
         let mut cmd = self.docker_cmd().arg("rmi");
         if force {
@@ -343,7 +343,7 @@ impl<'h> DockerCli<'h> {
 }
 
 impl<'h> DockerCli<'h> {
-    /// `docker compose up -d`,在 project_dir 下跑(compose 会读那里的
+    /// docker compose up -d,在 project_dir 下跑(compose 会读那里的
     /// docker-compose.yml)。pull 由 compose 自己按需做;这里加 --pull missing
     /// 让首次部署自动拉镜像。
     pub async fn compose_up(&self, project_dir: &str) -> Result<(), DockerCliError> {
@@ -368,7 +368,7 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
-    /// `docker compose down`,可选 -v 连卷一起删(彻底清理时用)。
+    /// docker compose down,可选 -v 连卷一起删(彻底清理时用)。
     pub async fn compose_down(
         &self,
         project_dir: &str,
@@ -394,11 +394,11 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
-    /// `docker pull <image>` 流式版本。`on_line` 每收到一行就被调用，调用方
-    /// 可在回调里更新 `PullProgress` 并推进度事件。命令结束后返回 CommandOutput。
-    /// 失败（exit code 非 0）时返回 `DockerCliError::CommandFailed`。
+    /// docker pull <image> 流式版本。on_line 每收到一行就被调用，调用方
+    /// 可在回调里更新 PullProgress 并推进度事件。命令结束后返回 CommandOutput。
+    /// 失败（exit code 非 0）时返回 DockerCliError::CommandFailed。
     ///
-    /// 不加 `--progress=plain`：部分远端（apt 装的老版 docker/cli）会直接 exit 125
+    /// 不加 --progress=plain：部分远端（apt 装的老版 docker/cli）会直接 exit 125
     /// unknown flag。非 TTY 下 pull 仍会按行输出 layer 进度，PullProgress 可解析。
     pub async fn pull_streaming(
         &self,
@@ -421,12 +421,12 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
-    /// 带镜像站 fallback 的拉取:按 `candidates` 顺序逐个 `docker pull`,第一个
-    /// 成功的即采用;若它不是 `official_image`(走了镜像站前缀),再 `docker tag`
-    /// 回官方名,这样后续 `docker compose up`(compose.yml 写的是官方名)能命中
+    /// 带镜像站 fallback 的拉取:按 candidates 顺序逐个 docker pull,第一个
+    /// 成功的即采用;若它不是 official_image(走了镜像站前缀),再 docker tag
+    /// 回官方名,这样后续 docker compose up(compose.yml 写的是官方名)能命中
     /// 本地缓存,不会再去 Docker Hub 直连。全部候选都失败才返回最后一次的错误。
     ///
-    /// `new_line_cb` 是回调工厂:每开始尝试一个候选就调一次,参数是候选的
+    /// new_line_cb 是回调工厂:每开始尝试一个候选就调一次,参数是候选的
     /// 0-based 序号和镜像引用,返回该次拉取专用的逐行回调。每个候选独立计数,
     /// 避免上一个站失败的 layer 状态串进下一个站。
     pub async fn pull_with_fallback<F, L, M>(
@@ -482,7 +482,7 @@ impl<'h> DockerCli<'h> {
         }))
     }
 
-    /// 本地是否已有指定镜像引用(`docker image inspect` 成功即视为存在)。
+    /// 本地是否已有指定镜像引用(docker image inspect 成功即视为存在)。
     pub async fn image_exists(&self, image_ref: &str) -> Result<bool, DockerCliError> {
         let cmd = self
             .docker_cmd()
@@ -493,7 +493,7 @@ impl<'h> DockerCli<'h> {
         Ok(out.success())
     }
 
-    /// `docker tag <src> <dst>`。给镜像打一个别名引用,不重新拉取。
+    /// docker tag <src> <dst>。给镜像打一个别名引用,不重新拉取。
     async fn retag(&self, src: &str, dst: &str) -> Result<(), DockerCliError> {
         let cmd = self.docker_cmd().arg("tag").arg(src).arg(dst);
         let out = self.host.run_to_string(cmd).await?;
@@ -508,8 +508,8 @@ impl<'h> DockerCli<'h> {
     }
 }
 
-/// `docker pull` 输出里单个 layer 的阶段。
-/// docker 在非 TTY 下每行格式：`<layerId>: <phase text>`。
+/// docker pull 输出里单个 layer 的阶段。
+/// docker 在非 TTY 下每行格式：<layerId>: <phase text>。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LayerPhase {
     PullingFsLayer,
@@ -572,7 +572,7 @@ impl LayerPhase {
         }
     }
 
-    /// 下载/解压行上的进度后缀,供 UI 展示 `[====] 12MB/50MB`。
+    /// 下载/解压行上的进度后缀,供 UI 展示 [====] 12MB/50MB。
     fn detail_from_line(phase: &Self, phase_text: &str) -> Option<String> {
         match phase {
             Self::Downloading => phase_text
@@ -604,10 +604,10 @@ impl LayerPhase {
     }
 }
 
-/// `docker pull` 进度状态。维护一张 layerId → phase 表，提供 (completed, total)
+/// docker pull 进度状态。维护一张 layerId → phase 表，提供 (completed, total)
 /// 计数供调用方换算百分比。
 ///
-/// 用法：每收到一行就调 `update(line)`，然后读 `summary()` / `layer_snapshots()`。
+/// 用法：每收到一行就调 update(line)，然后读 summary() / layer_snapshots()。
 pub struct PullProgress {
     layers: HashMap<String, (LayerPhase, Option<String>)>,
 }
@@ -721,7 +721,7 @@ impl Default for PullProgress {
     }
 }
 
-/// 解析 `docker ps --format '{{json .}}'` 的多行 JSON 输出。
+/// 解析 docker ps --format '{{json .}}' 的多行 JSON 输出。
 /// 每行一个容器对象;空行跳过;单行解析失败时整体报 ParseFailed。
 fn parse_ps_json(stdout: &str) -> Result<Vec<ContainerInfo>, DockerCliError> {
     let mut out = Vec::new();
@@ -737,7 +737,7 @@ fn parse_ps_json(stdout: &str) -> Result<Vec<ContainerInfo>, DockerCliError> {
     Ok(out)
 }
 
-/// `docker ps --format '{{json .}}'` 单行的字段子集。docker 这个格式的字段名
+/// docker ps --format '{{json .}}' 单行的字段子集。docker 这个格式的字段名
 /// 是固定的(ID / Names / Image / State / Status / Ports)。
 #[derive(serde::Deserialize)]
 struct PsLine {
@@ -783,7 +783,7 @@ impl PsLine {
     }
 }
 
-/// 解析 `docker images --format '{{json .}}'` 的多行 JSON 输出。
+/// 解析 docker images --format '{{json .}}' 的多行 JSON 输出。
 fn parse_images_json(stdout: &str) -> Result<Vec<ImageInfo>, DockerCliError> {
     let mut out = Vec::new();
     for line in stdout.lines() {

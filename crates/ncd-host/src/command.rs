@@ -1,11 +1,11 @@
-//! `HostCommand`:跨平台命令构建器。
+//! HostCommand:跨平台命令构建器。
 //!
 //! 设计要点:
-//! - 不用 `std::process::Command`,因为它已经绑定本机进程模型,远端 SSH 用不了
-//! - 命令的 `program` 与 `args` 单独存,落地由 [`HostShell`](crate::HostShell) 做
-//!   shell escape(本地 `tokio::process` 直接传 args list,远端 SSH 拼成 shell 字符串)
-//! - 环境变量用 `BTreeMap` 保证序列化字节稳定(对齐字节级 round-trip 红线)
-//! - `working_dir` 用 [`HostPath`](crate::HostPath) 而非 `PathBuf`,跨平台
+//! - 不用 std::process::Command,因为它已经绑定本机进程模型,远端 SSH 用不了
+//! - 命令的 program 与 args 单独存,落地由 [HostShell](crate::HostShell) 做
+//!   shell escape(本地 tokio::process 直接传 args list,远端 SSH 拼成 shell 字符串)
+//! - 环境变量用 BTreeMap 保证序列化字节稳定(对齐字节级 round-trip 红线)
+//! - working_dir 用 [HostPath](crate::HostPath) 而非 PathBuf,跨平台
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -13,22 +13,22 @@ use std::time::Duration;
 use crate::path::HostPath;
 
 /// 默认命令等待上限。短命令避免无限挂起,长生命周期进程要显式选择
-/// [`HostProcessWaitPolicy::NoTimeout`]。
+/// [HostProcessWaitPolicy::NoTimeout]。
 pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 
-/// `HostProcess::wait` 的等待策略。
+/// HostProcess::wait 的等待策略。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostProcessWaitPolicy {
-    /// 使用命令超时；未设置时使用 [`DEFAULT_COMMAND_TIMEOUT`]。
+    /// 使用命令超时；未设置时使用 [DEFAULT_COMMAND_TIMEOUT]。
     Default,
-    /// `HostProcess::wait` 使用指定上限。
+    /// HostProcess::wait 使用指定上限。
     Timeout(Duration),
-    /// `HostProcess::wait` 不设置超时,适合 NapCat / SnowLuma 这类长生命周期进程。
+    /// HostProcess::wait 不设置超时,适合 NapCat / SnowLuma 这类长生命周期进程。
     NoTimeout,
 }
 
 impl HostProcessWaitPolicy {
-    /// 解析成 `tokio::time::timeout` 可消费的上限。
+    /// 解析成 tokio::time::timeout 可消费的上限。
     pub fn resolve_timeout(self, command_timeout: Option<Duration>) -> Option<Duration> {
         match self {
             Self::Default => Some(command_timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT)),
@@ -41,7 +41,7 @@ impl HostProcessWaitPolicy {
 /// 跨平台命令描述。
 ///
 /// 使用建议:
-/// ```ignore
+/// ignore
 /// let cmd = HostCommand::new("git")
 ///     .arg("clone")
 ///     .arg("--depth=1")
@@ -50,7 +50,7 @@ impl HostProcessWaitPolicy {
 ///     .env("GIT_TERMINAL_PROMPT", "0")
 ///     .timeout(Duration::from_secs(60));
 /// host.spawn(cmd).await?
-/// ```
+/// 
 #[derive(Debug, Clone)]
 pub struct HostCommand {
     pub program: String,
@@ -61,7 +61,7 @@ pub struct HostCommand {
     pub wait_policy: HostProcessWaitPolicy,
     /// 是否需要提权运行(LocalWindows = UAC,Linux = sudo)
     pub elevated: bool,
-    /// stdin 输入(如 `echo "yes" | sudo apt install`)。None = 不传 stdin。
+    /// stdin 输入(如 echo "yes" | sudo apt install)。None = 不传 stdin。
     pub stdin: Option<Vec<u8>>,
 }
 
@@ -121,25 +121,25 @@ impl HostCommand {
         self
     }
 
-    /// 设置超时(`None` 表示使用 Host 默认上限)。
+    /// 设置超时(None 表示使用 Host 默认上限)。
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
-    /// 单独设置 `HostProcess::wait` 的超时,不影响 `run_to_string` / `run_streaming`。
+    /// 单独设置 HostProcess::wait 的超时,不影响 run_to_string / run_streaming。
     pub fn wait_timeout(mut self, timeout: Duration) -> Self {
         self.wait_policy = HostProcessWaitPolicy::Timeout(timeout);
         self
     }
 
-    /// 让 `HostProcess::wait` 不设置超时。只应用于 `spawn` 返回的进程句柄。
+    /// 让 HostProcess::wait 不设置超时。只应用于 spawn 返回的进程句柄。
     pub fn no_wait_timeout(mut self) -> Self {
         self.wait_policy = HostProcessWaitPolicy::NoTimeout;
         self
     }
 
-    /// 标记为长生命周期进程,等价于 [`Self::no_wait_timeout`]。
+    /// 标记为长生命周期进程,等价于 [Self::no_wait_timeout]。
     pub fn long_running(self) -> Self {
         self.no_wait_timeout()
     }
@@ -157,12 +157,12 @@ impl HostCommand {
     }
 }
 
-/// 命令执行结果(`Host::run_to_string` / `HostProcess::wait` 返回值)。
+/// 命令执行结果(Host::run_to_string / HostProcess::wait 返回值)。
 #[derive(Debug, Clone)]
 pub struct CommandOutput {
     /// 退出码,None 表示进程被信号杀死
     pub exit_code: Option<i32>,
-    /// stdout(全量收集,适用于短命令;长输出用 `Host::spawn` + 流式读)
+    /// stdout(全量收集,适用于短命令;长输出用 Host::spawn + 流式读)
     pub stdout: String,
     /// stderr(同上)
     pub stderr: String,

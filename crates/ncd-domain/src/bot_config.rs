@@ -451,7 +451,7 @@ pub struct BotConfig {
     pub bot: BotBasicConfig,
     pub connect: ConnectConfig,
     pub advanced: AdvancedConfig,
-    /// SnowLuma `onebot_<uin>.json` 的 statusCommand；NapCat 不序列化。
+    /// SnowLuma onebot_<uin>.json 的 statusCommand；NapCat 不序列化。
     #[serde(default, rename = "statusCommand", skip_serializing_if = "Option::is_none")]
     #[ts(optional, rename = "statusCommand")]
     pub status_command: Option<StatusCommandConfig>,
@@ -505,7 +505,7 @@ impl BotConfig {
     /// 启动阶段才报错。不放进 validate() 是因为有些链路(如生命周期路由健壮性测试)
     /// 需要存下"会被运行期拒绝"的配置。当前矩阵限制:
     /// - Docker + 本机:不支持(Docker Desktop 安装链路太麻烦,本机只走直接运行)
-    /// - 直接运行 + 远端 SSH:已支持(NapCat / SnowLuma Native,见 `remote_native_launch` / `remote_snowluma`)
+    /// - 直接运行 + 远端 SSH:已支持(NapCat / SnowLuma Native,见 remote_native_launch / remote_snowluma)
     pub fn validate_runtime_matrix(&self) -> Result<(), BotConfigError> {
         let is_docker = matches!(self.bot.deployment_type, DeploymentType::Docker);
         let is_local = self.bot.runtime_target.is_local();
@@ -625,15 +625,15 @@ fn default_o3_hook_mode() -> O3HookMode {
 
 #[cfg(test)]
 mod snowluma_start_mode_tests {
-    //! `BotBasicConfig.snowluma_start_mode` 字节级 round-trip 锁定。
+    //! BotBasicConfig.snowluma_start_mode 字节级 round-trip 锁定。
     //! 字段约定（ / / ）：
-    //! - JSON key 必须是驼峰 `snowlumaStartMode`（与 legacy `autoRestartSchedule`
+    //! - JSON key 必须是驼峰 snowlumaStartMode（与 legacy autoRestartSchedule
     //! 等已有字段保持驼峰一致）。
-    //! - 字段 `Option<SnowLumaStartMode>` 默认值为 `None`，缺省时禁止出现
-    //! 在序列化输出中（`skip_serializing_if = "Option::is_none"`），保证
+    //! - 字段 Option<SnowLumaStartMode> 默认值为 None，缺省时禁止出现
+    //! 在序列化输出中（skip_serializing_if = "Option::is_none"），保证
     //! 纯 NapCat 用户的配置不会引入新字段。
-    //! - `SnowLumaStartMode` 复用 `snowluma::launch_plan` 已有 enum，通过
-    //! `#[serde(tag = "mode", rename_all = "snake_case")]` 序列化。
+    //! - SnowLumaStartMode 复用 snowluma::launch_plan 已有 enum，通过
+    //! #[serde(tag = "mode", rename_all = "snake_case")] 序列化。
     //! 三个用例分别覆盖 None / ColdStart / HotStart，任一字段 / 字面量漂移
     //! 都会让对应测试失败。
     use super::*;
@@ -652,8 +652,8 @@ mod snowluma_start_mode_tests {
         }
     }
 
-    /// 缺省（`None`）时序列化不得出现 `snowlumaStartMode` key
-    /// 反序列化忽略缺省字段后字段值仍为 `None`。
+    /// 缺省（None）时序列化不得出现 snowlumaStartMode key
+    /// 反序列化忽略缺省字段后字段值仍为 None。
     #[test]
     fn snowluma_start_mode_none_is_omitted_in_serialization() {
         let config = make_basic_config(None);
@@ -669,7 +669,7 @@ mod snowluma_start_mode_tests {
         assert_eq!(decoded.snowluma_start_mode, None);
     }
 
-    /// `Some(ColdStart)` 序列化形态：`{"snowlumaStartMode":{"mode":"cold_start"}, ...}`。
+    /// Some(ColdStart) 序列化形态：{"snowlumaStartMode":{"mode":"cold_start"}, ...}。
     #[test]
     fn snowluma_start_mode_cold_start_is_byte_stable() {
         let config = make_basic_config(Some(SnowLumaStartMode::ColdStart));
@@ -692,8 +692,8 @@ mod snowluma_start_mode_tests {
         assert_eq!(json.as_bytes(), json_again.as_bytes());
     }
 
-    /// `Some(HotStart)` 序列化形态：
-    /// `{"snowlumaStartMode":{"mode":"hot_start"}, ...}`。
+    /// Some(HotStart) 序列化形态：
+    /// {"snowlumaStartMode":{"mode":"hot_start"}, ...}。
     /// HotStart 不再带 attach_pid 字段，PID 由 backend 在 start 时自动按 qq_id 匹配。
     #[test]
     fn snowluma_start_mode_hot_start_is_byte_stable() {

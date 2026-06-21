@@ -1,15 +1,15 @@
-//! 六段行：`时间 | [LEVEL] | type | source | position | message`
+//! 六段行：时间 | [LEVEL] | type | source | position | message
 
 use chrono::Local;
 
 use crate::facet::{LogSource, LogType};
 
-/// Legacy 等级标签（与 `ncd-runtime::desktop_log::filter_preview_text` 一致）。
+/// Legacy 等级标签（与 ncd-runtime::desktop_log::filter_preview_text 一致）。
 pub fn level_tag(level: &str) -> String {
     format!("[{level}]")
 }
 
-/// 用当前本地时间格式化一行（含末尾 `\n`）。
+/// 用当前本地时间格式化一行（含末尾 \n）。
 pub fn format_line(
     level: &str,
     log_type: LogType,
@@ -45,7 +45,7 @@ pub fn format_line_with_time(
     )
 }
 
-/// UI preview：`时间 | 等级 | [来源] 模块 | 消息`（比旧版三段多一列模块，便于读懂）。
+/// UI preview：时间 | 等级 | [来源] 模块 | 消息（比旧版三段多一列模块，便于读懂）。
 pub fn preview_line(line: &str) -> String {
     let newline = if line.ends_with('\n') { "\n" } else { "" };
     let raw = line.trim_end_matches('\n');

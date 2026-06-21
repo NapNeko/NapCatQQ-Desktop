@@ -1,8 +1,8 @@
 //! 配置导入导出命令。
 //!
-//! 导出：将应用配置 / Bot 配置 / 远端档案（不含密钥）打成 ZIP，含 `export_meta.json`。
-//! 导入：从 ZIP 或扁平目录读取 `config.json` / `bot.json` / `servers.json`，校验后原子写回。
-//! 预览：`preview_config_import` 只扫描来源，不写盘，供导入向导展示。
+//! 导出：将应用配置 / Bot 配置 / 远端档案（不含密钥）打成 ZIP，含 export_meta.json。
+//! 导入：从 ZIP 或扁平目录读取 config.json / bot.json / servers.json，校验后原子写回。
+//! 预览：preview_config_import 只扫描来源，不写盘，供导入向导展示。
 
 use std::fs::{self, File};
 use std::io::Write;
@@ -40,7 +40,7 @@ pub struct ConfigExportResult {
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct ConfigImportPreview {
     pub source_path: String,
-    /// `zip` | `directory`
+    /// zip | directory
     pub source_kind: String,
     pub files_found: Vec<String>,
     pub warnings: Vec<String>,
@@ -83,7 +83,7 @@ fn add_json_to_zip<W: Write + std::io::Seek>(
     Ok(())
 }
 
-/// 导出当前配置为 ZIP。`dest_path` 为完整 `.zip` 路径；父目录不存在则创建。
+/// 导出当前配置为 ZIP。dest_path 为完整 .zip 路径；父目录不存在则创建。
 #[tauri::command]
 pub async fn export_config(
     state: State<'_, AppState>,

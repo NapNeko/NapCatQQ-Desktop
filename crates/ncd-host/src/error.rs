@@ -1,7 +1,7 @@
-//! `HostError`:跨主机操作的统一错误枚举。
+//! HostError:跨主机操作的统一错误枚举。
 //!
 //! 设计原则:
-//! - 错误必须能在 `LocalHost` / `RemoteHost` / 未来的 `DockerHost` 之间通用
+//! - 错误必须能在 LocalHost / RemoteHost / 未来的 DockerHost 之间通用
 //! - 错误不包含 SSH / Windows API 的低层细节,只暴露语义类别
 //! - 每个 variant 提供足够上下文(路径、命令、退出码)用于诊断,但不泄漏密钥
 
@@ -9,7 +9,7 @@ use std::io;
 
 use crate::path::HostPath;
 
-/// `HostError`:[`Host`](crate::Host) trait 所有方法的统一错误类型。
+/// HostError:[Host](crate::Host) trait 所有方法的统一错误类型。
 #[derive(Debug, thiserror::Error)]
 pub enum HostError {
     /// IO 错误(本地文件系统、SSH 通道字节流、SFTP 等)
@@ -67,7 +67,7 @@ pub enum HostError {
     },
 
     /// 远端连接失败(SSH 握手 / 认证 / 隧道)
-    /// 仅 `RemoteHost` 实装可能产生
+    /// 仅 RemoteHost 实装可能产生
     #[error("remote connection failed: {reason}")]
     RemoteConnection { reason: String },
 

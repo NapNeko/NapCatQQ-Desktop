@@ -1,11 +1,11 @@
-//! `DeployPlan`:多 Component 部署计划。
+//! DeployPlan:多 Component 部署计划。
 //!
 //! 设计要点:
 //! - 顺序执行:plan 内的 step 按 push 顺序执行(调用方负责依赖排序)
 //! - 每个 step 都是 Component + StepKind 二元组
-//! - 失败回滚走 `rollback_on_failure` 字段触发
-//! - enum dispatch 通过 `Arc<dyn Component>` 走动态分发,plan 可序列化的元数据
-//!   保留在 `name` / `kind`
+//! - 失败回滚走 rollback_on_failure 字段触发
+//! - enum dispatch 通过 Arc<dyn Component> 走动态分发,plan 可序列化的元数据
+//!   保留在 name / kind
 
 use std::sync::Arc;
 
@@ -53,7 +53,7 @@ pub struct DeployStep {
     pub name: String,
     /// 操作类型
     pub kind: StepKind,
-    /// 目标 Component(`Arc<dyn Component>` 让 plan 可在多 task 间共享)
+    /// 目标 Component(Arc<dyn Component> 让 plan 可在多 task 间共享)
     pub component: Arc<dyn Component>,
     /// 失败时是否中断 plan(默认 true,某些"可选"step 可设 false 让 plan 继续)
     pub fail_fast: bool,
@@ -320,7 +320,7 @@ mod tests {
         assert_eq!(StepKind::EnsureDependencies.as_str(), "ensure_dependencies");
     }
 
-    /// serde 序列化必须与 `as_str()` 字面量保持一致：前端拿到的是
+    /// serde 序列化必须与 as_str() 字面量保持一致：前端拿到的是
     /// 同一份 snake_case 字符串。任何漂移会破坏 Tauri command 入参解析。
     #[test]
     fn step_kind_serde_aligns_with_as_str() {

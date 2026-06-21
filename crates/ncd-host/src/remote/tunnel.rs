@@ -3,8 +3,8 @@
 //! 把远端 host:port 暴露为本地 127.0.0.1:local_port,用于 SnowLuma 远端
 //! WebUI / VNC 访问。
 //!
-//! 实装在 `linux.rs` 中走 russh 的 direct-tcpip channel +
-//! `tokio::io::copy_bidirectional` 双向泵。本节只放数据类型。
+//! 实装在 linux.rs 中走 russh 的 direct-tcpip channel +
+//! tokio::io::copy_bidirectional 双向泵。本节只放数据类型。
 
 use std::sync::Arc;
 

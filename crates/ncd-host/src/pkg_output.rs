@@ -1,7 +1,7 @@
 //! apt / dnf / yum 安装过程 stdout 行解析，供流式进度与日志摘要使用。
 //!
-//! Debian 在非 TTY 下多为 `Get:` / `Fetched` / `Setting up`；RHEL 系为
-//! `Downloading` / `Installing` / `Complete`。解析只做启发式，不追求精确包计数。
+//! Debian 在非 TTY 下多为 Get: / Fetched / Setting up；RHEL 系为
+//! Downloading / Installing / Complete。解析只做启发式，不追求精确包计数。
 
 /// 包管理器输出族（由行内容推断，不依赖事先知道是 apt 还是 dnf）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +30,7 @@ pub struct PkgLineParse {
     pub phase: PkgPhase,
     /// 给 UI / 任务队列的短摘要（已截断）。
     pub summary: String,
-    /// 建议进度 0–100；`None` 表示只记日志、不推高百分比。
+    /// 建议进度 0–100；None 表示只记日志、不推高百分比。
     pub suggest_percent: Option<u8>,
 }
 
@@ -44,7 +44,7 @@ pub fn truncate_pkg_line(s: &str, max_chars: usize) -> String {
     out
 }
 
-/// 解析一行包管理器输出。空行返回 `None`。
+/// 解析一行包管理器输出。空行返回 None。
 pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
     let t = line.trim();
     if t.is_empty() {
@@ -189,7 +189,7 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
     None
 }
 
-/// 结合行号做兜底百分比（与 [`parse_pkg_mgr_line`] 未命中时兼容旧逻辑）。
+/// 结合行号做兜底百分比（与 [parse_pkg_mgr_line] 未命中时兼容旧逻辑）。
 pub fn fallback_percent_from_line_no(line_no: u32, line: &str) -> u8 {
     if let Some(p) = parse_pkg_mgr_line(line) {
         if let Some(pct) = p.suggest_percent {

@@ -19,13 +19,13 @@ use ts_rs::TS;
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DockerStatus {
-    /// docker 二进制是否存在且能跑 `docker version`。
+    /// docker 二进制是否存在且能跑 docker version。
     pub installed: bool,
     /// docker 客户端版本号(如 "27.3.1");探测不到留空。
     pub version: String,
-    /// `docker compose version` 是否可用(compose v2 插件)。
+    /// docker compose version 是否可用(compose v2 插件)。
     pub compose_available: bool,
-    /// docker daemon 是否在跑(`docker info` 成功)。装了但没起 daemon 时为 false。
+    /// docker daemon 是否在跑(docker info 成功)。装了但没起 daemon 时为 false。
     pub daemon_running: bool,
 }
 
@@ -46,7 +46,7 @@ impl DockerStatus {
     }
 }
 
-/// 容器运行状态。对齐 `docker ps` 的 State 字段语义。
+/// 容器运行状态。对齐 docker ps 的 State 字段语义。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -66,7 +66,7 @@ pub enum ContainerState {
 }
 
 impl ContainerState {
-    /// 从 `docker ps` 的 State 字符串解析。未知值落到 Other。
+    /// 从 docker ps 的 State 字符串解析。未知值落到 Other。
     pub fn parse(raw: &str) -> Self {
         match raw.trim().to_ascii_lowercase().as_str() {
             "running" => Self::Running,
@@ -90,7 +90,7 @@ impl ContainerState {
     }
 }
 
-/// 一个已存在容器的概要信息。来自 `docker ps -a` 逐行 JSON 解析。
+/// 一个已存在容器的概要信息。来自 docker ps -a 逐行 JSON 解析。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -109,20 +109,20 @@ pub struct ContainerInfo {
     pub ports: Vec<String>,
 }
 
-/// 本地镜像概要。来自 `docker images --format '{{json .}}'` 逐行解析。
+/// 本地镜像概要。来自 docker images --format '{{json .}}' 逐行解析。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ImageInfo {
     /// 镜像 id 短码(12 位)。
     pub id: String,
-    /// 仓库名;`<none>` 表示悬空层。
+    /// 仓库名;<none> 表示悬空层。
     pub repository: String,
-    /// 标签;`<none>` 常见于悬空镜像。
+    /// 标签;<none> 常见于悬空镜像。
     pub tag: String,
-    /// 人类可读大小(如 `1.2GB`),与 docker CLI 一致。
+    /// 人类可读大小(如 1.2GB),与 docker CLI 一致。
     pub size: String,
-    /// 创建时间文案(如 `2 weeks ago`)。
+    /// 创建时间文案(如 2 weeks ago)。
     pub created_since: String,
 }
 
@@ -131,7 +131,7 @@ pub struct ImageInfo {
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ImageRemoveOptions {
-    /// 为 true 时加 `docker rmi -f`,用于仍有容器引用时强制删。
+    /// 为 true 时加 docker rmi -f,用于仍有容器引用时强制删。
     #[serde(default)]
     pub force: bool,
 }
@@ -168,7 +168,7 @@ impl DockerFlavor {
     /// 拉镜像时按优先级尝试的镜像引用列表。
     ///
     /// Hub 官方名优先（走 daemon registry-mirrors）；SnowLuma 在 Hub 500 时尽早试
-    /// `docker.1ms.run`（用户实测可拉满 ~933MB），再 GHCR，其余 Hub 反代；不试 GHCR
+    /// docker.1ms.run（用户实测可拉满 ~933MB），再 GHCR，其余 Hub 反代；不试 GHCR
     /// 加速前缀（not found/403 居多）。
     pub fn pull_candidates(self) -> Vec<String> {
         let official = self.default_image();
@@ -195,11 +195,11 @@ impl DockerFlavor {
     }
 }
 
-/// Docker Hub 国内反代镜像站主机名(按优先级)。拉取时拼成 `<host>/<官方镜像路径>`,
+/// Docker Hub 国内反代镜像站主机名(按优先级)。拉取时拼成 <host>/<官方镜像路径>,
 /// 无需改远端 daemon.json。公共站存活期不稳定,故多站 + 官方直连兜底;换站只改这里。
 ///
-/// 含社区常用站与用户提供的 2026 可用源(毫秒/轩辕/渡渡鸟等)。`1ms.run` 与
-/// `docker.1ms.run` 同属毫秒镜像,文档写法不一,两条都试。
+/// 含社区常用站与用户提供的 2026 可用源(毫秒/轩辕/渡渡鸟等)。1ms.run 与
+/// docker.1ms.run 同属毫秒镜像,文档写法不一,两条都试。
 pub const DOCKER_HUB_MIRRORS: &[&str] = &[
     "docker.1ms.run",
     "1ms.run",
@@ -210,7 +210,7 @@ pub const DOCKER_HUB_MIRRORS: &[&str] = &[
     "dockerproxy.net",
 ];
 
-/// GHCR 国内加速前缀（拼在 `ghcr.io/...` 路径前，见各站 ghcr 文档）。
+/// GHCR 国内加速前缀（拼在 ghcr.io/... 路径前，见各站 ghcr 文档）。
 /// 仅 SnowLuma 拉取候选使用；NapCat 镜像在 Docker Hub。
 pub const GHCR_MIRROR_PREFIXES: &[&str] = &["ghcr.1ms.run", "ghcr.m.daocloud.io"];
 
@@ -351,7 +351,7 @@ pub enum DockerSpecError {
     NoPorts,
 }
 
-/// 组件页「拉镜像」完成后的回读结果。不创建容器;Bot 启动时再按配置起 `ncbot-<qq>`。
+/// 组件页「拉镜像」完成后的回读结果。不创建容器;Bot 启动时再按配置起 ncbot-<qq>。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -362,10 +362,10 @@ pub struct DockerImageReady {
     pub image: String,
 }
 
-/// 历史 IPC 名保留别名,语义同 [`DockerImageReady`]。
+/// 历史 IPC 名保留别名,语义同 [DockerImageReady]。
 pub type DeployedContainer = DockerImageReady;
 
-/// `docker pull` 单层进度快照,随 StepProgress 推到前端任务队列。
+/// docker pull 单层进度快照,随 StepProgress 推到前端任务队列。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -374,7 +374,7 @@ pub struct DockerPullLayerSnapshot {
     pub id: String,
     /// 阶段文案:等待 / 下载中 / 校验 / 解压中 / 完成 等。
     pub phase: String,
-    /// 下载进度后缀,如 `[====>    ] 12.5MB/50MB`;无则 None。
+    /// 下载进度后缀,如 [====>    ] 12.5MB/50MB;无则 None。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     /// 该层是否已计入整体 completed 计数。

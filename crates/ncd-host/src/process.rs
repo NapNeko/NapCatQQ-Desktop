@@ -1,11 +1,11 @@
-//! `HostProcess`:跨平台进程句柄抽象。
+//! HostProcess:跨平台进程句柄抽象。
 //!
 //! 设计要点:
-//! - 本地 Host 实装包 `tokio::process::Child`
-//! - 远端 Host 实装包 SSH channel(由 `russh::Channel` 间接持有)
+//! - 本地 Host 实装包 tokio::process::Child
+//! - 远端 Host 实装包 SSH channel(由 russh::Channel 间接持有)
 //! - 不直接暴露平台原生 PID(因为远端 Linux 的 PID 跟本地 Windows 不在同一空间),
-//!   通过 `ProcessId` newtype 表达,内含原生数值 + 来源主机标识
-//! - `wait()` 一次性消费句柄返回退出结果;长流式读由 Host 实装在 spawn 时通过回调注入
+//!   通过 ProcessId newtype 表达,内含原生数值 + 来源主机标识
+//! - wait() 一次性消费句柄返回退出结果;长流式读由 Host 实装在 spawn 时通过回调注入
 
 use std::fmt;
 
@@ -36,7 +36,7 @@ pub enum ExitStatus {
     Exited(i32),
     /// 被信号杀死(Linux),Windows 上对应被 TerminateProcess
     Killed,
-    /// 进程仍在运行(`HostProcess::try_wait` 返回值)
+    /// 进程仍在运行(HostProcess::try_wait 返回值)
     Running,
 }
 
@@ -55,9 +55,9 @@ impl ExitStatus {
 
 /// 跨平台进程句柄。
 ///
-/// 由 [`Host::spawn`](crate::Host::spawn) 返回。具体实装:
-/// - `LocalWindowsHost::spawn` → 包 `tokio::process::Child`
-/// - `RemoteLinuxHost::spawn` → 包 `russh::Channel`
+/// 由 [Host::spawn](crate::Host::spawn) 返回。具体实装:
+/// - LocalWindowsHost::spawn → 包 tokio::process::Child
+/// - RemoteLinuxHost::spawn → 包 russh::Channel
 #[async_trait::async_trait]
 pub trait HostProcess: Send + Sync {
     /// 进程 ID。
@@ -71,34 +71,34 @@ pub trait HostProcess: Send + Sync {
     async fn try_wait(&mut self) -> Result<ExitStatus, HostError>;
 
     /// 强制终止进程。
-    /// - 本地:对应 `Child::kill`(Windows TerminateProcess / Linux SIGKILL)
+    /// - 本地:对应 Child::kill(Windows TerminateProcess / Linux SIGKILL)
     /// - 远端:对应 SSH channel signal SIGKILL,如果不支持回退 close channel
     async fn kill(&mut self) -> Result<(), HostError>;
 
     /// 写 stdin(当 spawn 时指定了 stdin pipe)。
-    /// 若进程未开 stdin pipe,返回 `HostError::Unsupported`。
+    /// 若进程未开 stdin pipe,返回 HostError::Unsupported。
     async fn write_stdin(&mut self, data: &[u8]) -> Result<(), HostError>;
 
     /// 关闭 stdin(发送 EOF)。
     async fn close_stdin(&mut self) -> Result<(), HostError>;
 
-    /// 取走 stdout 流式句柄。返回的 `AsyncRead` 给调用方做"边运行边读"的
+    /// 取走 stdout 流式句柄。返回的 AsyncRead 给调用方做"边运行边读"的
     /// 长流处理（NapCat / SnowLuma 这类需要从 stdout 解析 WebUI URL 或者
     /// 实时输出日志的场景必备）。
     ///
     /// 语义：
-    /// - 调用一次后流被消费，再次调用返回 `None`
+    /// - 调用一次后流被消费，再次调用返回 None
     /// - spawn 时若 stdout 没有 piped（例如 elevated 模式 stdio 被重定向），
-    ///   实装可返回 `None`
-    /// - 远端 SSH 实装暂不支持时返回 `None`，调用方应回退到 `wait()` 路径
+    ///   实装可返回 None
+    /// - 远端 SSH 实装暂不支持时返回 None，调用方应回退到 wait() 路径
     ///
-    /// 默认实装返回 `None`，让现有 stub / 远端实装保持向后兼容。NativeDeployment
+    /// 默认实装返回 None，让现有 stub / 远端实装保持向后兼容。NativeDeployment
     /// 调用 take_stdout 拿到 None 时会回退到一次性 wait(child) 路径。
     fn take_stdout(&mut self) -> Option<Box<dyn AsyncRead + Send + Unpin>> {
         None
     }
 
-    /// 取走 stderr 流式句柄，语义同 [`Self::take_stdout`]。
+    /// 取走 stderr 流式句柄，语义同 [Self::take_stdout]。
     fn take_stderr(&mut self) -> Option<Box<dyn AsyncRead + Send + Unpin>> {
         None
     }

@@ -43,11 +43,11 @@ pub struct AppState {
     /// 包管理器全局锁，防止同一主机的 apt/dnf 并发冲突。
     pub(crate) package_lock: ncd_runtime::package_lock::PackageManagerLock,
     /// Components 页活跃 task 注册表，task_id → CancellationToken。
-    /// `run_component_action` 启动时插入；plan 完成 / 取消时移除。
+    /// run_component_action 启动时插入；plan 完成 / 取消时移除。
     pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
     /// 远端主机布局探测缓存：host_id → (home, layout)。
     /// detect_component 对同一台机器的 home/layout 探测结果是稳定的，缓存后
-    /// 5 个并发组件 detect 只探一次，不再各跑一遍 `echo $HOME` + layout 检查。
+    /// 5 个并发组件 detect 只探一次，不再各跑一遍 echo $HOME + layout 检查。
     /// run_component_action 会清掉对应条目，因为安装可能改变布局。
     pub(crate) host_probe_cache: Arc<Mutex<HashMap<String, commands::components::RemoteHostProbe>>>,
     pub(crate) desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
@@ -114,9 +114,9 @@ pub fn run() {
             ncd_runtime::BotFlavor::NapCat,
         ));
     // NapCat WebUI 登录轮询所需依赖（design.md §15.1）。
-    // - `ReqwestNapCatWebUiClient` 走 rustls-tls，仅访问 127.0.0.1。
-    // - `NoopOfflineNotifier` 是占位实现，真实通道由后续 Spec 接入。
-    // - `WebUiPollerSettings` 默认轮询 5s + 关闭离线通知，调用方可热更新。
+    // - ReqwestNapCatWebUiClient 走 rustls-tls，仅访问 127.0.0.1。
+    // - NoopOfflineNotifier 是占位实现，真实通道由后续 Spec 接入。
+    // - WebUiPollerSettings 默认轮询 5s + 关闭离线通知，调用方可热更新。
     let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> = Arc::new(
         ReqwestNapCatWebUiClient::new()
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
@@ -164,9 +164,9 @@ pub fn run() {
 
     // SnowLuma daemon + backend wiring。
     //
-    // 路径起源严格来自 `bootstrap::resolve_data_root()`：
-    // - SnowLuma 持久化数据根：`<data_root>/snowluma/`
-    // - SnowLuma 安装根：`<data_root>/runtime/snowluma`（与 `runtime_launch_plan`
+    // 路径起源严格来自 bootstrap::resolve_data_root()：
+    // - SnowLuma 持久化数据根：<data_root>/snowluma/
+    // - SnowLuma 安装根：<data_root>/runtime/snowluma（与 runtime_launch_plan
     // 建图时使用的 runtime_root 同源；后续如果 PathProbe 暴露 SnowLuma
     // 单独路径，再切到 PathProbe 输出）。
     let snowluma_data_root = data_root.join("snowluma");
@@ -317,8 +317,8 @@ pub fn run() {
             });
             // NapCat WebUI 登录轮询监听（design.md §15.3 / §15.4）：
             // 同时订阅 NapCatWebuiAvailable / BotProcessExited 两路事件，分别
-            // 驱动 NapCatLoginPoller 的创建与回收。`run_napcat_login_listener`
-            // 需要 `Arc<Self>` 作为接收者（用于 cast 到 `Arc<dyn RestartHandle>`）。
+            // 驱动 NapCatLoginPoller 的创建与回收。run_napcat_login_listener
+            // 需要 Arc<Self> 作为接收者（用于 cast 到 Arc<dyn RestartHandle>）。
             tauri::async_runtime::spawn(async move {
                 bot_manager_login_listener.run_napcat_login_listener().await;
             });

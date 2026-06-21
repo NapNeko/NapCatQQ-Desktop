@@ -1,20 +1,20 @@
-//! `LocalWindowsHost`:本地 Windows 实装。
+//! LocalWindowsHost:本地 Windows 实装。
 //!
-//! 把 [`Host`](crate::Host) trait 在本地 Windows 上跑通。
+//! 把 [Host](crate::Host) trait 在本地 Windows 上跑通。
 //!
 //! 实装映射:
-//! - 文件 IO:`tokio::fs`
-//! - 进程:`tokio::process::Command`
-//! - 解压 zip:`zip` crate
-//! - 解压 tar.gz:`tar` + `flate2`
-//! - 解压 tar.xz:`HostError::Unsupported`(暂不实装,后续按需补)
-//! - 解压 msi:走 `msiexec /a` 静默提取(简化版)
-//! - 提权:`HostCommand::elevated` 走 ShellExecuteW("runas") —— 暂返回
-//!   `Unsupported`,完整提权链留给 `ncd-update` crate 的 `DesktopSelfComponent::SelfUpdate`。
+//! - 文件 IO:tokio::fs
+//! - 进程:tokio::process::Command
+//! - 解压 zip:zip crate
+//! - 解压 tar.gz:tar + flate2
+//! - 解压 tar.xz:HostError::Unsupported(暂不实装,后续按需补)
+//! - 解压 msi:走 msiexec /a 静默提取(简化版)
+//! - 提权:HostCommand::elevated 走 ShellExecuteW("runas") —— 暂返回
+//!   Unsupported,完整提权链留给 ncd-update crate 的 DesktopSelfComponent::SelfUpdate。
 //!
 //! 注意:
-//! - 本实装只在 `target_os = "windows"` 下编译(由 `local/mod.rs` 的 `#[cfg(windows)]` 控制)
-//! - PackageManager 默认返回 `None`(暂不接 winget / choco,后续统一处理)
+//! - 本实装只在 target_os = "windows" 下编译(由 local/mod.rs 的 #[cfg(windows)] 控制)
+//! - PackageManager 默认返回 None(暂不接 winget / choco,后续统一处理)
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -37,14 +37,14 @@ use crate::subprocess::hide_console_window;
 
 /// 本地 Windows 主机。
 ///
-/// 调用 [`LocalWindowsHost::new`] 拿到一个零状态实例。
+/// 调用 [LocalWindowsHost::new] 拿到一个零状态实例。
 pub struct LocalWindowsHost {
     id: String,
     shell: PowerShellShell,
 }
 
 impl LocalWindowsHost {
-    /// 创建新实例。`id` 默认为 `"local"`,跨 Host 区分日志用。
+    /// 创建新实例。id 默认为 "local",跨 Host 区分日志用。
     pub fn new() -> Self {
         Self {
             id: "local".to_string(),
@@ -707,7 +707,7 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| format!("zip entry {i}: {e}"))?;
         let raw_name = entry.name().to_string();
-        // 路径越界保护:禁止 `..` 跳出
+        // 路径越界保护:禁止 .. 跳出
         if raw_name.contains("..") {
             return Err(format!("zip entry escapes dest: {raw_name}"));
         }

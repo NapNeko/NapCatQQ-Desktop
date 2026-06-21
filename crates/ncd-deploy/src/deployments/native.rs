@@ -2,21 +2,21 @@
 //!
 //! 实现路径：
 //!
-//! 1. `launch` 用 [`NativeLaunchTranslator`] 把 `BotConfig` 翻译成
-//!    [`NativeLaunchCommand`]（程序 + 参数 + 工作目录 + 环境变量）。
-//! 2. 通过 [`Host::spawn`] 启子进程，拿到 [`HostProcess`]。
+//! 1. launch 用 [NativeLaunchTranslator] 把 BotConfig 翻译成
+//!    [NativeLaunchCommand]（程序 + 参数 + 工作目录 + 环境变量）。
+//! 2. 通过 [Host::spawn] 启子进程，拿到 [HostProcess]。
 //! 3. take_stdout / take_stderr 启异步 reader 任务，把每行解码 + 清 ANSI 后
-//!    写进内存缓冲（10000 行环形）+ 同步追加到 `<log_dir>/<bot_id>.log`，
-//!    再通过 [`NativeRuntimeEventSink`] 广播 BotLogAppended / NapCatWebuiAvailable。
+//!    写进内存缓冲（10000 行环形）+ 同步追加到 <log_dir>/<bot_id>.log，
+//!    再通过 [NativeRuntimeEventSink] 广播 BotLogAppended / NapCatWebuiAvailable。
 //! 4. 启 exit watcher：进程退出时清 processes / logs 记录，广播
 //!    BotProcessExited。
-//! 5. `stop` 走平台 kill 命令（Windows taskkill /F /T、其它 kill -9 进程组），
+//! 5. stop 走平台 kill 命令（Windows taskkill /F /T、其它 kill -9 进程组），
 //!    保证 NapCatWinBootMain → QQ.exe 注入链能整个清掉。
 //!
 //! install / uninstall 继续留 Unsupported；那是组件层（ncd-component）的
 //! 职责，后续把 component 接进来再做。
 //!
-//! 事件桥接：调用方注入 [`NativeRuntimeEventSink`]，把日志/退出/WebUI 事件
+//! 事件桥接：调用方注入 [NativeRuntimeEventSink]，把日志/退出/WebUI 事件
 //! 转发到自己的事件总线。ncd-deploy 不直接依赖 events 模块，避免
 //! 循环依赖。
 
@@ -44,14 +44,14 @@ use crate::deployment::{
 /// 原生部署的运行时事件桥接。
 ///
 /// 调用方实装本 trait 把日志 / 退出 / WebUI 端点等事件转发到自己的事件总线。
-/// NativeDeployment 持有 `Arc<dyn>`，在 launch / log reader / exit watcher
+/// NativeDeployment 持有 Arc<dyn>，在 launch / log reader / exit watcher
 /// 中调用对应方法。
 ///
 /// 走 trait 而不是直接 import 上游事件模块：避免 ncd-deploy 反向依赖上游 crate，
 /// trait 让两边解耦，调用方在装配时桥接。
 pub trait NativeRuntimeEventSink: Send + Sync {
     /// 发布一行 bot 日志。
-    /// `channel` 取 "stdout" / "stderr"。
+    /// channel 取 "stdout" / "stderr"。
     fn publish_log_line(&self, bot_id: &BotId, line: &str, channel: &str);
 
     /// 发布 NapCat WebUI 可用事件（从 stdout 解析出端口 + token）。
@@ -124,7 +124,7 @@ pub struct NativeDeployment {
     translator: Arc<dyn NativeLaunchTranslator>,
     /// 事件桥接：把运行时事件转发到调用方的事件总线。
     event_sink: Arc<dyn NativeRuntimeEventSink>,
-    /// 日志根目录。每个 bot 的日志写到 `<log_root>/bots/<bot_id>.log`。
+    /// 日志根目录。每个 bot 的日志写到 <log_root>/bots/<bot_id>.log。
     /// 为 None 时只走内存缓冲不落盘。
     log_root: Option<PathBuf>,
     /// 当前在跑的进程档案：bot_id -> ManagedProcess。
@@ -138,8 +138,8 @@ pub struct NativeDeployment {
 impl NativeDeployment {
     /// 构造一个原生部署实例。
     ///
-    /// `translator` 把 BotConfig 翻译成进程命令行；`event_sink` 桥接事件总线；
-    /// `log_root` 为 None 时不落盘日志（仅供单测）。
+    /// translator 把 BotConfig 翻译成进程命令行；event_sink 桥接事件总线；
+    /// log_root 为 None 时不落盘日志（仅供单测）。
     pub fn new(
         translator: Arc<dyn NativeLaunchTranslator>,
         event_sink: Arc<dyn NativeRuntimeEventSink>,
@@ -191,7 +191,7 @@ impl std::fmt::Debug for NativeDeployment {
 /// 按 GBK / UTF-8 解码 NapCat 子进程的一行原始字节，并清洗 ANSI 转义。
 ///
 /// NapCatWinBootMain.exe 在中文 Windows 上输出 GBK；其它平台默认 UTF-8。
-/// Linux 上 NapCat 通过 logger 输出会带颜色转义（如 `\x1b[32m`），
+/// Linux 上 NapCat 通过 logger 输出会带颜色转义（如 \x1b[32m），
 /// 直接渲染会在 UI 上残留 tofu 字符并干扰日志高亮。
 fn decode_log_line(raw: &[u8]) -> String {
     let decoded = if let Ok(s) = std::str::from_utf8(raw) {
@@ -270,7 +270,7 @@ pub fn strip_ansi_escapes(input: &str) -> String {
 }
 
 /// 从一行 NapCat stdout 解析出 WebUI 登录入口的 (port, token)。
-/// 远端 nohup 日志可能带 ANSI、或仅含 `/webui?token=` 片段（对齐 legacy launcher grep）。
+/// 远端 nohup 日志可能带 ANSI、或仅含 /webui?token= 片段（对齐 legacy launcher grep）。
 pub fn parse_napcat_webui_line(line: &str) -> Option<(u16, String)> {
     let cleaned = strip_ansi_escapes(line);
     if let Some(p) = parse_napcat_webui_line_strict(&cleaned) {
@@ -295,7 +295,7 @@ fn parse_napcat_webui_line_strict(line: &str) -> Option<(u16, String)> {
     Some((port, token))
 }
 
-/// 日志行未带完整 `[info] [NapCat]` 前缀时，按 `/webui?token=` 宽松解析（远端文件 tail 常见）。
+/// 日志行未带完整 [info] [NapCat] 前缀时，按 /webui?token= 宽松解析（远端文件 tail 常见）。
 fn parse_napcat_webui_line_loose(line: &str) -> Option<(u16, String)> {
     let marker = "/webui?token=";
     let idx = line.find(marker)?;
@@ -661,11 +661,11 @@ impl Deployment for NativeDeployment {
     }
 }
 
-/// 把宿主上原生 `PathBuf` 转成 `HostPath`。
+/// 把宿主上原生 PathBuf 转成 HostPath。
 ///
 /// - 远端 host 拿到这个 PathBuf 一般是没意义的（路径属于本机文件系统，
 ///   远端结构可能完全不同）；调用方应在翻译阶段就保证路径属于目标 host。
-/// - 这里的转换只是把 `\` / `/` 规范成 HostPath 内部的 POSIX 表达。
+/// - 这里的转换只是把 \ / 规范成 HostPath 内部的 POSIX 表达。
 fn host_path_from_native(path: &Path, os: Os) -> HostPath {
     let s = path.to_string_lossy();
     match os {
@@ -674,7 +674,7 @@ fn host_path_from_native(path: &Path, os: Os) -> HostPath {
     }
 }
 
-/// 把 `HostError` 转成可读的错误消息字符串。
+/// 把 HostError 转成可读的错误消息字符串。
 fn host_err_msg(err: HostError) -> String {
     err.to_string()
 }
@@ -683,7 +683,7 @@ fn host_err_msg(err: HostError) -> String {
 // 给 BotManager / 日志页用的辅助方法
 // ============================================================
 
-/// `tail_log` 返回的快照：最近 N 行 + 累计总行数。
+/// tail_log 返回的快照：最近 N 行 + 累计总行数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeLogSnapshot {
     pub lines: Vec<String>,
@@ -691,7 +691,7 @@ pub struct NativeLogSnapshot {
 }
 
 impl NativeDeployment {
-    /// 取当前内存里的日志快照。`limit > 0` 时只返回末尾 `limit` 行。
+    /// 取当前内存里的日志快照。limit > 0 时只返回末尾 limit 行。
     pub async fn tail_log(&self, bot_id: &BotId, limit: usize) -> NativeLogSnapshot {
         let guard = self.logs.lock().await;
         let Some(buffer) = guard.get(bot_id) else {

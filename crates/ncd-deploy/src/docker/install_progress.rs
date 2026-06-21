@@ -1,7 +1,7 @@
-//! Docker 安装进度：复用 [`ncd_component::ProgressKind`]，经 Tauri 推到前端。
+//! Docker 安装进度：复用 [ncd_component::ProgressKind]，经 Tauri 推到前端。
 //!
-//! Step 3 按 [`super::install::docker_install_phases`] 分段执行，每段走
-//! [`super::pkg_install_emit::run_pkg_with_emit`]（与组件装包同源 apt/dnf 解析 + 静默心跳）。
+//! Step 3 按 [super::install::docker_install_phases] 分段执行，每段走
+//! [super::pkg_install_emit::run_pkg_with_emit]（与组件装包同源 apt/dnf 解析 + 静默心跳）。
 
 use std::sync::Arc;
 
@@ -57,7 +57,7 @@ fn finish_install(emit: &InstallProgressEmit, ok: bool) {
     emit(ProgressKind::Finished { ok });
 }
 
-/// 带进度回调的安装入口。`emit` 由 Tauri 层接到 EventBus。
+/// 带进度回调的安装入口。emit 由 Tauri 层接到 EventBus。
 pub async fn install_docker_with_progress(
     host: &dyn Host,
     sudo_password: Option<&str>,

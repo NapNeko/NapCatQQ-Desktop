@@ -16,7 +16,7 @@ use ncd_host::Host;
 use super::cli::DockerCliError;
 use super::install_progress::InstallProgressEmit;
 
-/// 兼容旧调用方的别名。结构化结果统一用 [`DockerInstallReport`]。
+/// 兼容旧调用方的别名。结构化结果统一用 [DockerInstallReport]。
 pub type DockerInstallOutcome = DockerInstallReport;
 
 /// Docker Desktop for Windows 下载页。

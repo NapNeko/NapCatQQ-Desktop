@@ -10,7 +10,7 @@ use crate::AppState;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DesktopLogLevelFilter {
-    /// legacy 等级名：`EROR` / `WARN` / `INFO` / `DBUG` / `TRCE` / `CRIT`；空或省略表示全部。
+    /// legacy 等级名：EROR / WARN / INFO / DBUG / TRCE / CRIT；空或省略表示全部。
     pub level: Option<String>,
 }
 
