@@ -2,6 +2,6 @@
 import type { DistroFamily } from "./DistroFamily";
 
 /**
- * 发行版信息。
+ * 发行版信息
  */
 export type DistroInfo = { family: DistroFamily, name: string, version: string, };

@@ -2,6 +2,6 @@
 import type { DockerFlavor } from "./DockerFlavor";
 
 /**
- * 组件页「拉镜像」请求。只选框架口味;不创建容器,端口与容器名由 Bot 启动时决定。
+ * 组件页「拉镜像」请求只选框架口味;不创建容器,端口与容器名由 Bot 启动时决定
  */
 export type DockerPullSpec = { flavor: DockerFlavor, };

@@ -3,26 +3,26 @@ import type { DockerInstallStatus } from "./DockerInstallStatus";
 import type { DockerStatus } from "./DockerStatus";
 
 /**
- * docker_install 命令回给前端的结构化结果。
+ * docker_install 命令回给前端的结构化结果
  *
  * 不再裸返回一句 String:前端要靠 status 区分"装好了弹绿条""需要 sudo 密码弹
- * 输入框""彻底装不了弹红条",光凭文案没法可靠分流。message 是给用户看的人话,
- * download_url 仅 Windows/macOS 引导手动装时给下载入口。
+ * 输入框""彻底装不了弹红条",光凭文案没法可靠分流message 是给用户看的人话,
+ * download_url 仅 Windows/macOS 引导手动装时给下载入口
  */
 export type DockerInstallReport = { 
 /**
- * 本次安装尝试的结果分类。
+ * 本次安装尝试的结果分类
  */
 status: DockerInstallStatus, 
 /**
- * 给用户展示的人话文案(成功提示 / 失败原因 / 需要密码的说明)。
+ * 给用户展示的人话文案(成功提示 / 失败原因 / 需要密码的说明)
  */
 message: string, 
 /**
- * 可选下载入口(Windows/macOS 不能静默装时给 Docker Desktop 链接)。
+ * 可选下载入口(Windows/macOS 不能静默装时给 Docker Desktop 链接)
  */
 downloadUrl?: string | null, 
 /**
- * 安装流程结束时的探测快照，供前端立刻刷新 Docker 行，无需等下一轮 probe 或重启应用。
+ * 安装流程结束时的探测快照,供前端立刻刷新 Docker 行,无需等下一轮 probe 或重启应用
  */
 probedStatus?: DockerStatus | null, };

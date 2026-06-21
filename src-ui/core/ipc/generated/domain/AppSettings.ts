@@ -3,63 +3,58 @@ import type { AppUiPreferences } from "./AppUiPreferences";
 import type { WebUiPollerSettings } from "./WebUiPollerSettings";
 
 /**
- * 设置页可读写的 App 级聚合配置。
- *
- * 与按子系统拆开的 `WebUiPollerSettings` / `SnowLumaAppConfig` 不同，本结构
- * 是设置页一次性读写的"非敏感偏好集合"，序列化到
- * `<data_root>/runtime/config/app-settings.json`。GitHub PAT 这类敏感凭证
- * 不在此结构内，由 SecretStore（keyring）单独承载，避免明文落盘。
- *
- * `poller` 直接复用 `WebUiPollerSettings`：其中
- * `bot_login_check_interval_ms` 是后端登录轮询真正消费的字段，启动时由
- * `set_app_settings` 写回的值会在下次 Poller 创建时生效。两个离线通知开关
- * 当前后端为 noop 实现，设置页不暴露，保留字段仅为 round-trip 兼容。
+ * 设置页 App 级配置聚合
  */
 export type AppSettings = { 
 /**
- * WebUI 登录轮询设置（含 Bot 登录检查间隔）。
+ * WebUI 登录轮询设置
  */
 poller: WebUiPollerSettings, 
 /**
- * 主页性能监控开关。对齐 legacy `Performance.MonitorEnabled`。
+ * 主页性能监控开关
  */
 performanceMonitorEnabled: boolean, 
 /**
- * 主页性能监控采样间隔（毫秒）。对齐 legacy `Performance.MonitorInterval`。
+ * 主页性能监控采样间隔（毫秒）
  */
 performanceMonitorInterval: bigint, 
 /**
- * 任务队列是否在终态后自动从列表移除。
+ * 远程主机健康探活开关
+ */
+remoteHostHealthProbeEnabled: boolean, 
+/**
+ * 远程主机健康探活间隔（毫秒）
+ */
+remoteHostHealthProbeIntervalMs: bigint, 
+/**
+ * 任务队列终态自动清理开关
  */
 taskQueueCleanupEnabled: boolean, 
 /**
- * 终态后保留时长（毫秒）；`task_queue_cleanup_enabled == false` 时落盘为 0。
+ * 终态后保留时长（毫秒）
  */
 taskQueueCleanupLingerMs: bigint, 
 /**
- * 主窗口关闭按钮行为：`close` 退出程序，`tray` 隐藏到托盘。与前端 `preferencesStore.closeAction` 对齐。
+ * 主窗口关闭按钮行为：close 退出程序，tray 隐藏到托盘
  */
 closeAction: string, 
 /**
- * 关窗且 close_action=tray 时：hide | delayed_lightweight | immediate_lightweight
+ * 关窗行为：hide / delayed_lightweight / immediate_lightweight
  */
 afterCloseUiBehavior: string, enterLightweightDelaySecs: number, uiModeOnStartup: string, minimizeToTrayCountsAsHidden: boolean, 
 /**
- * 桌面 Toast：NapCat 登录态离线（Poller 路径）。
+ * 桌面 Toast：NapCat 登录态离线
  */
 notifyOnOffline: boolean, 
 /**
- * 桌面 Toast：Bot 进程异常退出。
+ * 桌面 Toast：Bot 进程异常退出
  */
 notifyOnBotCrashed: boolean, 
 /**
- * 桌面 Toast：QQ 被踢下线等登录失效。
+ * 桌面 Toast：QQ 被踢下线
  */
 notifyOnLoginKicked: boolean, 
 /**
- * 外观 / 动画 / 圆角等 UI 偏好（与 localStorage 双写，启动以磁盘为准）。
+ * 外观偏好
  */
-uiPreferences: AppUiPreferences,
-// P1 主动探活（remote-ssh-stability）：后台低频探测已连接远端主机的连通性
-remoteHostHealthProbeEnabled: boolean,
-remoteHostHealthProbeIntervalMs: bigint, };
+uiPreferences: AppUiPreferences, };

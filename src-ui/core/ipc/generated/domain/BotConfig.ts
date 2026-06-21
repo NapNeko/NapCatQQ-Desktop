@@ -6,6 +6,6 @@ import type { StatusCommandConfig } from "./StatusCommandConfig";
 
 export type BotConfig = { bot: BotBasicConfig, connect: ConnectConfig, advanced: AdvancedConfig, 
 /**
- * SnowLuma `onebot_<uin>.json` 的 statusCommand；NapCat 不序列化。
+ * SnowLuma onebot_<uin>.json 的 statusCommand;NapCat 不序列化
  */
 statusCommand?: StatusCommandConfig, };

@@ -2,30 +2,30 @@
 import type { ContainerState } from "./ContainerState";
 
 /**
- * 一个已存在容器的概要信息。来自 `docker ps -a` 逐行 JSON 解析。
+ * 一个已存在容器的概要信息来自 docker ps -a 逐行 JSON 解析
  */
 export type ContainerInfo = { 
 /**
- * 容器短 id(12 位)。
+ * 容器短 id(12 位)
  */
 id: string, 
 /**
- * 容器名。
+ * 容器名
  */
 name: string, 
 /**
- * 镜像名(含 tag)。
+ * 镜像名(含 tag)
  */
 image: string, 
 /**
- * 解析后的运行状态。
+ * 解析后的运行状态
  */
 state: ContainerState, 
 /**
- * docker 原始 status 文案(如 "Up 3 hours" / "Exited (0) 2 minutes ago")。
+ * docker 原始 status 文案(如 "Up 3 hours" / "Exited (0) 2 minutes ago")
  */
 status: string, 
 /**
- * 端口映射文案(如 "0.0.0.0:6099->6099/tcp"),逐条拆好给 UI。
+ * 端口映射文案(如 "0.0.0.0:6099->6099/tcp"),逐条拆好给 UI
  */
 ports: Array<string>, };

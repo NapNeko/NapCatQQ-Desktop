@@ -3,7 +3,7 @@ import type { DistroInfo } from "./DistroInfo";
 import type { PackageStatus } from "./PackageStatus";
 
 /**
- * QQ 依赖检测报告。
+ * QQ 依赖检测报告
  */
 export type QqDependencyReport = { 
 /**
@@ -19,6 +19,6 @@ missing: Array<PackageStatus>,
  */
 distroInfo: DistroInfo, 
 /**
- * 用户可执行的安装命令（用于复制粘贴）
+ * 用户可执行的安装命令(用于复制粘贴)
  */
 installCommand: string | null, };

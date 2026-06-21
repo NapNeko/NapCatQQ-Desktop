@@ -2,7 +2,7 @@
 import type { FailedPackage } from "./FailedPackage";
 
 /**
- * 依赖安装结果。
+ * 依赖安装结果
  */
 export type InstallDependenciesResult = { success: boolean, 
 /**

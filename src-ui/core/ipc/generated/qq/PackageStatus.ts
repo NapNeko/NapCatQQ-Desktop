@@ -2,6 +2,6 @@
 import type { DetectionMethod } from "./DetectionMethod";
 
 /**
- * 包状态。
+ * 包状态
  */
 export type PackageStatus = { name: string, installedVersion: string | null, detectionMethod: DetectionMethod, };

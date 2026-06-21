@@ -2,33 +2,33 @@
 import type { DependencyCategory } from "./DependencyCategory";
 
 /**
- * 跨发行版依赖项定义。
+ * 跨发行版依赖项定义
  *
- * 用通用名（canonical_name）作为主键，映射到各发行版的具体包名。
- * t64 变体通过运行时检测选择。
+ * 用通用名(canonical_name)作为主键,映射到各发行版的具体包名
+ * t64 变体通过运行时检测选择
  */
 export type SystemDependency = { 
 /**
- * 通用名（人类可读的语义标识）。
+ * 通用名(人类可读的语义标识)
  */
 canonicalName: string, 
 /**
- * Debian/Ubuntu 包名。
+ * Debian/Ubuntu 包名
  */
 debianPackage: string, 
 /**
- * RHEL/CentOS/Fedora 包名。
+ * RHEL/CentOS/Fedora 包名
  */
 rhelPackage: string, 
 /**
- * 是否支持 t64 变体（仅 Debian/Ubuntu）。
+ * 是否支持 t64 变体(仅 Debian/Ubuntu)
  */
 hasT64Variant: boolean, 
 /**
- * 依赖分类。
+ * 依赖分类
  */
 category: DependencyCategory, 
 /**
- * 人类可读描述。
+ * 人类可读描述
  */
 description: string, };

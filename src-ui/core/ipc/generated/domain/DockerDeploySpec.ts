@@ -3,23 +3,23 @@ import type { DockerFlavor } from "./DockerFlavor";
 import type { PortMapping } from "./PortMapping";
 
 /**
- * Bot 启动 / compose 渲染用的完整部署参数(容器名、端口、可选 QQ)。
+ * Bot 启动 / compose 渲染用的完整部署参数(容器名,端口,可选 QQ)
  */
 export type DockerDeploySpec = { 
 /**
- * 部署口味。
+ * 部署口味
  */
 flavor: DockerFlavor, 
 /**
- * 容器名(也用作 compose project 名 + 子目录名)。必须是合法的 docker
- * 名字符集 [a-zA-Z0-9][a-zA-Z0-9_.-]*。
+ * 容器名(也用作 compose project 名 + 子目录名)必须是合法的 docker
+ * 名字符集 [a-zA-Z0-9][a-zA-Z0-9_.-]*
  */
 containerName: string, 
 /**
- * 端口映射列表。前端给默认值,高级用户可改宿主机端口避免冲突。
+ * 端口映射列表前端给默认值,高级用户可改宿主机端口避免冲突
  */
 ports: Array<PortMapping>, 
 /**
- * 可选:绑定登录的 QQ 号(NapCat 的 ACCOUNT env)。0 / None 表示不预绑。
+ * 可选:绑定登录的 QQ 号(NapCat 的 ACCOUNT env)0 / None 表示不预绑
  */
 qqId?: bigint | null, };
