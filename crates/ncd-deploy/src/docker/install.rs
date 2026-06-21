@@ -20,23 +20,17 @@ use super::install_progress::InstallProgressEmit;
 pub type DockerInstallOutcome = DockerInstallReport;
 
 /// 装 Docker 时分阶段执行的脚本(按顺序),每段独立超时,失败即停
-// 6 个多行 shell 脚本用 push 块比 vec![] 元素更可读
-#[allow(clippy::vec_init_then_push)]
-pub(crate) fn docker_install_phases() -> Vec<(&'static str, String)> {
-    let mut phases: Vec<(&'static str, String)> = Vec::new();
-
-    phases.push((
+pub(crate) const DOCKER_INSTALL_PHASES: &[(&str, &str)] = &[
+    (
         "apt_prep",
         r#"set -e
 export DEBIAN_FRONTEND=noninteractive
 if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
 apt-get update
 apt-get install -y ca-certificates curl gnupg
-"#
-        .to_string(),
-    ));
-
-    phases.push((
+"#,
+    ),
+    (
         "apt_repo",
         r#"set -e
 if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
@@ -50,22 +44,18 @@ chmod a+r /etc/apt/keyrings/docker.gpg
 CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
 ARCH="$(dpkg --print-architecture)"
 echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] $ALI/linux/$DISTRO $CODENAME stable" > /etc/apt/sources.list.d/docker.list
-"#
-        .to_string(),
-    ));
-
-    phases.push((
+"#,
+    ),
+    (
         "apt_install",
         r#"set -e
 if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-"#
-        .to_string(),
-    ));
-
-    phases.push((
+"#,
+    ),
+    (
         "dnf_install",
         r#"set -e
 if command -v apt-get >/dev/null 2>&1; then exit 0; fi
@@ -75,11 +65,9 @@ dnf install -y dnf-plugins-core
 dnf config-manager --add-repo "$ALI/linux/centos/docker-ce.repo"
 sed -i "s#download.docker.com#mirrors.aliyun.com/docker-ce#g" /etc/yum.repos.d/docker-ce.repo
 dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-"#
-        .to_string(),
-    ));
-
-    phases.push((
+"#,
+    ),
+    (
         "yum_install",
         r#"set -e
 if command -v apt-get >/dev/null 2>&1; then exit 0; fi
@@ -90,11 +78,9 @@ yum install -y yum-utils
 yum-config-manager --add-repo "$ALI/linux/centos/docker-ce.repo"
 sed -i "s#download.docker.com#mirrors.aliyun.com/docker-ce#g" /etc/yum.repos.d/docker-ce.repo
 yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-"#
-        .to_string(),
-    ));
-
-    phases.push((
+"#,
+    ),
+    (
         "pkgmgr_check",
         r#"set -e
 if command -v apt-get >/dev/null 2>&1; then exit 0; fi
@@ -102,12 +88,9 @@ if command -v dnf >/dev/null 2>&1; then exit 0; fi
 if command -v yum >/dev/null 2>&1; then exit 0; fi
 echo "未识别到 apt-get / dnf / yum 包管理器,无法自动安装 Docker" >&2
 exit 1
-"#
-        .to_string(),
-    ));
-
-    phases
-}
+"#,
+    ),
+];
 
 /// 安装成功后写入 registry 加速(非交互),仅当尚无 daemon.json 或备份后覆盖
 pub(crate) fn write_registry_mirrors_script() -> String {
@@ -146,9 +129,9 @@ pub async fn install_docker(
 /// 兼容单测:合并脚本文本(逻辑与分阶段一致)
 #[cfg(test)]
 pub(crate) fn aliyun_install_script() -> String {
-    docker_install_phases()
-        .into_iter()
-        .map(|(_, s)| s)
+    DOCKER_INSTALL_PHASES
+        .iter()
+        .map(|(_, s)| *s)
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -243,7 +226,7 @@ mod tests {
 
     #[test]
     fn apt_phases_do_not_use_qq_silent() {
-        for (name, script) in docker_install_phases() {
+        for (name, script) in DOCKER_INSTALL_PHASES.iter() {
             if name.starts_with("apt_") {
                 assert!(
                     !script.contains("-qq"),
@@ -255,6 +238,6 @@ mod tests {
 
     #[test]
     fn phases_are_non_empty() {
-        assert!(docker_install_phases().len() >= 5);
+        assert!(DOCKER_INSTALL_PHASES.len() >= 5);
     }
 }

@@ -1,6 +1,6 @@
 //! Docker 安装进度:复用 [ncd_component::ProgressKind],经 Tauri 推到前端
 //!
-//! Step 3 按 [super::install::docker_install_phases] 分段执行,每段走
+//! Step 3 按 [super::install::DOCKER_INSTALL_PHASES] 分段执行,每段走
 //! [super::pkg_install_emit::run_pkg_with_emit](与组件装包同源 apt/dnf 解析 + 静默心跳)
 
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use tracing::{error, info, warn};
 
 use super::cli::{DockerCli, DockerCliError};
 use super::install::{
-    docker_install_phases, looks_like_bad_sudo_password, write_registry_mirrors_script,
+    DOCKER_INSTALL_PHASES, looks_like_bad_sudo_password, write_registry_mirrors_script,
 };
 use super::pkg_install_emit::run_pkg_with_emit;
 
@@ -222,13 +222,13 @@ async fn install_docker_linux_with_progress(
         "分阶段安装 docker-ce（阿里云源）"
     );
 
-    for (phase_name, script) in docker_install_phases() {
+    for (phase_name, script) in DOCKER_INSTALL_PHASES.iter() {
         let spec = phase_spec(phase_name);
         emit_log(&emit, ProgressLogLevel::Info, format!("→ {}", spec.idle));
 
         let cmd = HostCommand::new("sh")
             .arg("-c")
-            .arg(script)
+            .arg(*script)
             .elevated()
             .timeout(std::time::Duration::from_secs(spec.timeout_secs));
 
