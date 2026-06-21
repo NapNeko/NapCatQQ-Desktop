@@ -129,21 +129,23 @@ fn render_napcat(spec: &DockerDeploySpec, secret: ComposeSecret<'_>, uid: u32, g
         _ => String::new(),
     };
     format!(
-        "services:\n\
-         \x20 napcat:\n\
-         \x20   image: {image}\n\
-         \x20   container_name: {name}\n\
-         \x20   restart: always\n\
-         \x20   environment:\n\
-         \x20     NAPCAT_UID: \"{uid}\"\n\
-         \x20     NAPCAT_GID: \"{gid}\"\n\
-         \x20     WEBUI_TOKEN: {token}\n\
-         {account_line}\
-         \x20   ports:\n\
-         {ports}\
-         \x20   volumes:\n\
-         \x20     - ./napcat/config:/app/napcat/config\n\
-         \x20     - ./ntqq:/app/.config/QQ\n"
+        "\
+services:
+  napcat:
+    image: {image}
+    container_name: {name}
+    restart: always
+    environment:
+      NAPCAT_UID: \"{uid}\"
+      NAPCAT_GID: \"{gid}\"
+      WEBUI_TOKEN: {token}
+{account_line}\
+    ports:
+{ports}\
+    volumes:
+      - ./napcat/config:/app/napcat/config
+      - ./ntqq:/app/.config/QQ
+"
     )
 }
 
@@ -168,33 +170,33 @@ fn render_snowluma(
         .unwrap_or_default();
     // SnowLuma 必须的安全选项 + named volume,照官方 docker-compose.yml
     format!(
-        "services:\n\
-         \x20 snowluma:\n\
-         \x20   image: \"{image}\"\n\
-         \x20   container_name: {name}\n\
-         \x20   restart: unless-stopped\n\
-         \x20   shm_size: 1gb\n\
-         \x20   cap_add:\n\
-         \x20     - SYS_PTRACE\n\
-         \x20   security_opt:\n\
-         \x20     - \"seccomp=unconfined\"\n\
-         \x20   environment:\n\
-         \x20     SNOWLUMA_UID: \"{uid}\"\n\
-         \x20     SNOWLUMA_GID: \"{gid}\"\n\
-         \x20     VNC_PASSWD: {vnc_passwd}\n\
-         {webui_env}\
-         \x20     SNOWLUMA_WEBUI_PORT: \"5099\"\n\
-         \x20     SNOWLUMA_HOOK_AUTOLOAD: \"1\"\n\
-         \x20   ports:\n\
-         {ports}\
-         \x20   volumes:\n\
-         \x20     - {name}-data:/app/snowluma-data\n\
-         \x20     - {name}-qq-config:/app/.config\n\
-         \x20     - {name}-qq-data:/app/.local/share\n\
-         volumes:\n\
-         \x20 {name}-data:\n\
-         \x20 {name}-qq-config:\n\
-         \x20 {name}-qq-data:\n"
+        "\
+services:
+  snowluma:
+    image: \"{image}\"
+    container_name: {name}
+    restart: unless-stopped
+    shm_size: 1gb
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - \"seccomp=unconfined\"
+    environment:
+      SNOWLUMA_UID: \"{uid}\"
+      SNOWLUMA_GID: \"{gid}\"
+      VNC_PASSWD: {vnc_passwd}
+{webui_env}      SNOWLUMA_WEBUI_PORT: \"5099\"
+      SNOWLUMA_HOOK_AUTOLOAD: \"1\"
+    ports:
+{ports}    volumes:
+      - {name}-data:/app/snowluma-data
+      - {name}-qq-config:/app/.config
+      - {name}-qq-data:/app/.local/share
+volumes:
+  {name}-data:
+  {name}-qq-config:
+  {name}-qq-data:
+"
     )
 }
 

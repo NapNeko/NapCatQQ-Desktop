@@ -21,98 +21,17 @@ pub type DockerInstallOutcome = DockerInstallReport;
 
 /// 装 Docker 时分阶段执行的脚本(按顺序),每段独立超时,失败即停
 pub(crate) const DOCKER_INSTALL_PHASES: &[(&str, &str)] = &[
-    (
-        "apt_prep",
-        r#"set -e
-export DEBIAN_FRONTEND=noninteractive
-if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
-apt-get update
-apt-get install -y ca-certificates curl gnupg
-"#,
-    ),
-    (
-        "apt_repo",
-        r#"set -e
-if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
-ALI="https://mirrors.aliyun.com/docker-ce"
-install -m 0755 -d /etc/apt/keyrings
-. /etc/os-release
-DISTRO="$ID"
-case "$DISTRO" in ubuntu|debian) : ;; *) DISTRO=ubuntu ;; esac
-curl -fsSL "$ALI/linux/$DISTRO/gpg" | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
-ARCH="$(dpkg --print-architecture)"
-echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] $ALI/linux/$DISTRO $CODENAME stable" > /etc/apt/sources.list.d/docker.list
-"#,
-    ),
-    (
-        "apt_install",
-        r#"set -e
-if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-"#,
-    ),
-    (
-        "dnf_install",
-        r#"set -e
-if command -v apt-get >/dev/null 2>&1; then exit 0; fi
-if ! command -v dnf >/dev/null 2>&1; then exit 0; fi
-ALI="https://mirrors.aliyun.com/docker-ce"
-dnf install -y dnf-plugins-core
-dnf config-manager --add-repo "$ALI/linux/centos/docker-ce.repo"
-sed -i "s#download.docker.com#mirrors.aliyun.com/docker-ce#g" /etc/yum.repos.d/docker-ce.repo
-dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-"#,
-    ),
-    (
-        "yum_install",
-        r#"set -e
-if command -v apt-get >/dev/null 2>&1; then exit 0; fi
-if command -v dnf >/dev/null 2>&1; then exit 0; fi
-if ! command -v yum >/dev/null 2>&1; then exit 0; fi
-ALI="https://mirrors.aliyun.com/docker-ce"
-yum install -y yum-utils
-yum-config-manager --add-repo "$ALI/linux/centos/docker-ce.repo"
-sed -i "s#download.docker.com#mirrors.aliyun.com/docker-ce#g" /etc/yum.repos.d/docker-ce.repo
-yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-"#,
-    ),
-    (
-        "pkgmgr_check",
-        r#"set -e
-if command -v apt-get >/dev/null 2>&1; then exit 0; fi
-if command -v dnf >/dev/null 2>&1; then exit 0; fi
-if command -v yum >/dev/null 2>&1; then exit 0; fi
-echo "未识别到 apt-get / dnf / yum 包管理器,无法自动安装 Docker" >&2
-exit 1
-"#,
-    ),
+    ("apt_prep", include_str!("../../scripts/docker/apt_prep.sh")),
+    ("apt_repo", include_str!("../../scripts/docker/apt_repo.sh")),
+    ("apt_install", include_str!("../../scripts/docker/apt_install.sh")),
+    ("dnf_install", include_str!("../../scripts/docker/dnf_install.sh")),
+    ("yum_install", include_str!("../../scripts/docker/yum_install.sh")),
+    ("pkgmgr_check", include_str!("../../scripts/docker/pkgmgr_check.sh")),
 ];
 
 /// 安装成功后写入 registry 加速(非交互),仅当尚无 daemon.json 或备份后覆盖
-pub(crate) fn write_registry_mirrors_script() -> String {
-    r#"set -e
-mkdir -p /etc/docker
-if [ -f /etc/docker/daemon.json ] && [ ! -f /etc/docker/daemon.json.ncd_bak ]; then
-  cp /etc/docker/daemon.json /etc/docker/daemon.json.ncd_bak
-fi
-cat > /etc/docker/daemon.json <<'EOF'
-{
-  "registry-mirrors": [
-    "https://docker.1ms.run",
-    "https://docker.m.daocloud.io"
-  ]
-}
-EOF
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl daemon-reload 2>/dev/null || true
-  systemctl restart docker 2>/dev/null || true
-fi
-"#
-    .to_string()
+pub(crate) fn write_registry_mirrors_script() -> &'static str {
+    include_str!("../../scripts/docker/write_registry_mirrors.sh")
 }
 
 /// 在 host 上确保 docker 可用,没有就尝试装(无进度回调,供测试/旧调用方)
