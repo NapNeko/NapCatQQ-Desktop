@@ -15,6 +15,6 @@ keyKind: string,
  */
 keyB64: string, 
 /**
- * 供用户核对的指纹,OpenSSH 风格 `SHA256:<base64-no-pad>`。
+ * 供用户核对的指纹,OpenSSH 风格 SHA256:<base64-no-pad>。
  */
 fingerprint: string, };
